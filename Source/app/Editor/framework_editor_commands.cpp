@@ -17,6 +17,7 @@ namespace
             return character < 128 ? static_cast<char>(std::tolower(character)) :
                 static_cast<char>(character);
         });
+
         return text;
     }
 

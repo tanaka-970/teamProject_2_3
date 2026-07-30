@@ -12,6 +12,7 @@ namespace ReplayEngine::Scene
     {
         std::string NormalizeIdentifier(const std::string& source)
         {
+            // UTF-8文字は保持し、ASCIIの区切り文字だけを単一の下線へ畳み込む。
             std::string result;
             bool pending_separator = false;
             for (const unsigned char character : source)
@@ -59,6 +60,7 @@ namespace ReplayEngine::Scene
 
     SceneEntity& SceneDocument::ImportEntity(const SceneEntity& source)
     {
+        // 複製元の内容は保ちつつ、文書内IDと識別子だけを新しく割り当てる。
         SceneEntity entity = source;
         entity.id = next_id_++;
         entity.identifier = MakeUniqueIdentifier(source.name + "_copy");
@@ -129,6 +131,7 @@ namespace ReplayEngine::Scene
 
     void SceneDocument::RebuildNextId()
     {
+        // 外部ファイル由来の重複識別子を修復しながら最大IDの次を求める。
         next_id_ = 1;
         std::vector<std::string> used_identifiers;
         for (SceneEntity& entity : entities_)

@@ -58,6 +58,7 @@ namespace
 
 ReplayEngine::Scene::SceneDocument& framework::active_scene_document() noexcept
 {
+    // 編集中は作業コピーを使い、プレイ中は確定済みの実行用コピーを使う。
     return edit_mode_active ? editor_scene_document : runtime_scene_document;
 }
 
@@ -124,6 +125,7 @@ void framework::paste_copied_entities()
     {
         auto& entity = editor_scene_document.ImportEntity(source);
         entity.name += " コピー";
+        // 貼り付けたEntityが元の位置に完全に重ならないよう少しずらす。
         if (entity.transform)
         {
             entity.transform->position.x += 0.5f;
@@ -214,6 +216,7 @@ void framework::handle_viewport_selection()
 
     viewport_drag_selecting = false;
     const bool additive = ImGui::GetIO().KeyShift;
+    // 4ピクセルを超えた操作をクリックではなく矩形選択として扱う。
     if (drag_distance_squared > 16.0f)
     {
         if (!additive) selected_scene_entity_ids.clear();
@@ -221,6 +224,7 @@ void framework::handle_viewport_selection()
         const float maximum_x = (std::max)(drag_start.x, mouse.x);
         const float minimum_y = (std::min)(drag_start.y, mouse.y);
         const float maximum_y = (std::max)(drag_start.y, mouse.y);
+        // Entityの原点を画面へ投影し、選択矩形内に入ったものを集める。
         for (const auto& entity : editor_scene_document.Entities())
         {
             if (!entity.active || !entity.transform) continue;
@@ -245,6 +249,7 @@ void framework::handle_viewport_selection()
         return;
     }
 
+    // 単一クリックでは画面座標をワールド空間のピッキングレイへ変換する。
     const XMVECTOR near_point = XMVector3Unproject(
         XMVectorSet(mouse_x, mouse_y, 0.0f, 1.0f), 0.0f, 0.0f,
         static_cast<float>(client_width), static_cast<float>(client_height),
@@ -369,6 +374,7 @@ void framework::load_scene_document(bool choose_path)
         scene_document_status = "読込失敗: " + error;
         return;
     }
+    // 読み込み成功後にだけ編集文書を差し替え、関連する編集状態を初期化する。
     editor_scene_document = std::move(loaded);
     for (auto& entity : editor_scene_document.Entities())
     {
@@ -443,6 +449,7 @@ void framework::load_prefab()
 
 void framework::sync_selected_entity_to_stage()
 {
+    // 表示中のStageインスタンスで行った調整を保存対象のEntityへ戻す。
     auto* entity = editor_scene_document.Find(active_stage_placement_id);
     if (!entity || !game_scene) return;
     const Stage& stage = game_scene->Gameplay().GetStage();
@@ -460,6 +467,7 @@ void framework::sync_selected_entity_to_stage()
 
 void framework::store_stage_shader_layers(ReplayEngine::Scene::ModelRendererData& renderer) const
 {
+    // 実行用レイヤーをシーン保存用の単純なデータ構造へ変換する。
     renderer.shader_layers.clear();
     renderer.shader_layers.reserve(stage_shader_layers.Layers().size());
     for (const auto& source : stage_shader_layers.Layers())
@@ -525,6 +533,7 @@ void framework::draw_transform_gizmo_controls()
     }
     if (changed)
     {
+        // 連続操作の各確定値を文書スナップショットとしてUndo履歴へ残す。
         scene_undo_stack.Commit("Transformを編集", before, editor_scene_document);
         if (game_scene)
         {

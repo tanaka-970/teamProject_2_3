@@ -22,6 +22,7 @@ namespace
     {
         using namespace DirectX;
 
+        // Moller-Trumbore法でレイと三角形の交点を直接求める。
         const XMVECTOR e1 = XMVectorSubtract(v1, v0);
         const XMVECTOR e2 = XMVectorSubtract(v2, v0);
         const XMVECTOR p = XMVector3Cross(direction, e2);
@@ -52,6 +53,7 @@ namespace
             return false;
         }
 
+        // 面の頂点順に関係なく、法線をレイの進行方向と逆向きにそろえる。
         XMVECTOR normal = XMVector3Normalize(XMVector3Cross(e1, e2));
         if (XMVectorGetX(XMVector3Dot(normal, direction)) > 0.0f)
         {
@@ -107,6 +109,7 @@ namespace GameRaycast
             (std::min)(origin.x, end.x), (std::min)(origin.y, end.y), (std::min)(origin.z, end.z) };
         const XMFLOAT3 bounds_max{
             (std::max)(origin.x, end.x), (std::max)(origin.y, end.y), (std::max)(origin.z, end.z) };
+        // レイ区間のAABBで空間分割を絞り、全三角形との総当たりを避ける。
         std::vector<std::uint32_t> candidates;
         collision_mesh.CollectTriangles(bounds_min, bounds_max, candidates);
         for (std::uint32_t triangle_index : candidates)
@@ -174,6 +177,7 @@ namespace GameRaycast
             (std::max)(start.x, end.x) + radius,
             (std::max)(start.y, end.y) + radius,
             (std::max)(start.z, end.z) + radius };
+        // 半径分だけ広げた掃引AABBを使い、接触し得る三角形だけを検査する。
         std::vector<std::uint32_t> candidates;
         collision_mesh.CollectTriangles(bounds_min, bounds_max, candidates);
         for (std::uint32_t triangle_index : candidates)

@@ -22,6 +22,7 @@ namespace ReplayEngine::Assets
 
         std::string PathKey(const std::filesystem::path& path)
         {
+            // Windows上のパス比較で大文字小文字の違いを同一視する。
             std::string key = path.generic_u8string();
             std::transform(key.begin(), key.end(), key.begin(),
                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
@@ -36,6 +37,7 @@ namespace ReplayEngine::Assets
 
     std::filesystem::path AssetDatabase::NormalizeProjectPath(const std::filesystem::path& path)
     {
+        // プロジェクト内のアセットは移動可能性を保つため相対パスで記録する。
         std::error_code error;
         const auto absolute = std::filesystem::absolute(path, error).lexically_normal();
         if (error) return path.lexically_normal();
@@ -53,6 +55,7 @@ namespace ReplayEngine::Assets
 
     std::string AssetDatabase::MakeGuid(const std::filesystem::path& normalized_path)
     {
+        // 同じ正規化パスから常に同じGUIDを生成して参照を安定させる。
         const std::string key = PathKey(normalized_path);
         const std::uint64_t high = Hash(key, 1469598103934665603ull);
         const std::uint64_t low = Hash(key, 1099511628211ull ^ 0x9e3779b97f4a7c15ull);
@@ -144,6 +147,7 @@ namespace ReplayEngine::Assets
         const auto normalized = NormalizeProjectPath(source);
         if (const AssetRecord* found = FindByPath(normalized))
         {
+            // 再登録時はGUIDを維持し、既存シーンからの参照切れを防ぐ。
             AssetRecord* mutable_record = &records_[static_cast<std::size_t>(found - records_.data())];
             mutable_record->kind = kind;
             if (mutable_record->display_name.empty())

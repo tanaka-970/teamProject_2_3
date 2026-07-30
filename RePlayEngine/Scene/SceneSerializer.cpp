@@ -55,6 +55,7 @@ namespace ReplayEngine::Scene
             error = "シーンファイルを作成できません";
             return false;
         }
+        // 小数点表記を実行環境のロケールに依存させない。
         stream.imbue(std::locale::classic());
         stream << "REPLAY_SCENE " << scene_format_version << '\n';
         stream << "SCENE " << std::quoted(scene.SceneIdentifier()) << ' '
@@ -168,6 +169,7 @@ namespace ReplayEngine::Scene
             error = "未対応のシーンバージョンです";
             return false;
         }
+        // 途中で失敗しても呼び出し元のシーンを壊さないよう一時領域へ読み込む。
         SceneDocument loaded;
         if (version >= 3)
         {
@@ -217,6 +219,7 @@ namespace ReplayEngine::Scene
                 }
             }
 
+            // END_ENTITYまでコンポーネント名を読み、存在する項目だけを復元する。
             std::string token;
             while (stream >> token)
             {
@@ -339,6 +342,7 @@ namespace ReplayEngine::Scene
             }
             loaded.Entities().push_back(std::move(entity));
         }
+        // 読み込んだIDと識別子を検査し、次回追加用のIDも再構築する。
         loaded.RebuildNextId();
         scene = std::move(loaded);
         return true;

@@ -12,6 +12,7 @@ namespace ReplayEngine::Assets
         constexpr std::uint32_t cache_magic = 0x43415052;
         constexpr std::uint32_t cache_container_version = 1;
 
+        // ヘッダーに種類と元データの指紋を持たせ、古いキャッシュの誤読を防ぐ。
         struct CacheHeader
         {
             std::uint32_t magic = cache_magic;
@@ -62,6 +63,7 @@ namespace ReplayEngine::Assets
 
         std::uint64_t Fingerprint(const std::vector<std::uint8_t>& bytes)
         {
+            // 内容ベースのハッシュにより、更新日時に依存せず変更を検出する。
             std::uint64_t hash = 1469598103934665603ull;
             for (std::uint8_t byte : bytes)
             {
@@ -85,6 +87,7 @@ namespace ReplayEngine::Assets
         entry.format_version = format_version;
         entry.kind = kind;
 
+        // 変換形式の更新時は別ファイルになるようバージョンを名前に含める。
         std::ostringstream name;
         name << std::hex << std::setfill('0') << std::setw(16) << entry.source_fingerprint
             << "_v" << std::dec << format_version << ".replaycache";
@@ -105,6 +108,7 @@ namespace ReplayEngine::Assets
             return false;
         }
 
+        // 検証情報をペイロードより先に書き、読み込み時の判定を軽くする。
         CacheHeader header{};
         header.asset_kind = static_cast<std::uint32_t>(kind);
         header.format_version = format_version;
@@ -136,6 +140,7 @@ namespace ReplayEngine::Assets
         std::ifstream stream(entry.cache_path, std::ios::binary);
         if (!stream) return false;
 
+        // ペイロードを返す前に種類、形式、元ファイルの一致をまとめて検証する。
         CacheHeader header{};
         stream.read(reinterpret_cast<char*>(&header), sizeof(header));
         if (!stream || header.magic != cache_magic ||

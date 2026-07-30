@@ -24,6 +24,7 @@ namespace ReplayEngine::Assets
     {
         if (pending_count_.load() == 0)
         {
+            // 新しいバッチの進捗が前回の完了数を引き継がないようにする。
             total_count_.store(0);
             completed_count_.store(0);
         }
@@ -47,6 +48,7 @@ namespace ReplayEngine::Assets
     {
         std::deque<CompletedJob> ready;
         {
+            // コールバック実行中にワーカースレッドを待たせないようキューだけ交換する。
             std::lock_guard<std::mutex> lock(mutex_);
             ready.swap(completed_);
         }
@@ -60,6 +62,7 @@ namespace ReplayEngine::Assets
 
     void AsyncAssetManager::CancelPending()
     {
+        // 実行中のジョブは止めず、まだ取得されていないジョブだけを破棄する。
         std::lock_guard<std::mutex> lock(mutex_);
         pending_count_.fetch_sub(static_cast<std::uint64_t>(jobs_.size()));
         jobs_.clear();
@@ -78,6 +81,7 @@ namespace ReplayEngine::Assets
         {
             Job job{};
             {
+                // 停止要求か新規ジョブが届くまでワーカースレッドを休止する。
                 std::unique_lock<std::mutex> lock(mutex_);
                 condition_.wait(lock, [this] { return stopping_ || !jobs_.empty(); });
                 if (stopping_ && jobs_.empty()) return;
@@ -114,6 +118,7 @@ namespace ReplayEngine::Assets
                 }
             }
             {
+                // GPU生成を含む完了処理はPumpMainThreadまで遅延させる。
                 std::lock_guard<std::mutex> lock(mutex_);
                 completed_.push_back({ std::move(result), std::move(job.completion) });
             }
