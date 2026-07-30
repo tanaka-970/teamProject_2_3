@@ -1,0 +1,43 @@
+﻿#pragma once
+
+#include "AssetCache.h"
+
+#include <filesystem>
+#include <string>
+#include <vector>
+
+namespace ReplayEngine::Assets
+{
+    struct AssetRecord
+    {
+        std::string guid;
+        std::string display_name;
+        std::filesystem::path source_path;
+        std::filesystem::path cache_path;
+        AssetKind kind = AssetKind::Unknown;
+    };
+
+    class AssetDatabase final
+    {
+    public:
+        explicit AssetDatabase(std::filesystem::path database_path =
+            std::filesystem::path("resources") / "AssetDatabase.replaydb");
+
+        bool Load(std::string& error);
+        bool Save(std::string& error) const;
+        const AssetRecord& Register(const std::filesystem::path& source,
+            AssetKind kind, const std::filesystem::path& cache = {});
+        bool Remove(const std::string& guid);
+        const AssetRecord* FindByGuid(const std::string& guid) const noexcept;
+        const AssetRecord* FindByPath(const std::filesystem::path& path) const noexcept;
+        const std::vector<AssetRecord>& Records() const noexcept { return records_; }
+
+        static std::filesystem::path NormalizeProjectPath(const std::filesystem::path& path);
+
+    private:
+        static std::string MakeGuid(const std::filesystem::path& normalized_path);
+
+        std::filesystem::path database_path_;
+        std::vector<AssetRecord> records_;
+    };
+}

@@ -1,0 +1,810 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source">
+      <UniqueIdentifier>{11111111-1111-4111-8111-111111111111}</UniqueIdentifier>
+      <Extensions>cpp;c;cxx;h;hpp</Extensions>
+    </Filter>
+    <Filter Include="Source\App">
+      <UniqueIdentifier>{22222222-2222-4222-8222-222222222222}</UniqueIdentifier>
+      <Extensions>cpp;h</Extensions>
+    </Filter>
+    <Filter Include="Source\App\Runtime">
+      <UniqueIdentifier>{f1111111-1111-4111-8111-111111111111}</UniqueIdentifier>
+      <Extensions>cpp;h</Extensions>
+    </Filter>
+    <Filter Include="Source\App\Editor">
+      <UniqueIdentifier>{f2222222-2222-4222-8222-222222222222}</UniqueIdentifier>
+      <Extensions>cpp;h</Extensions>
+    </Filter>
+    <Filter Include="Source\App\Editor\ImGui">
+      <UniqueIdentifier>{aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa}</UniqueIdentifier>
+      <Extensions>cpp;h</Extensions>
+    </Filter>
+    <Filter Include="Source\App\Rendering">
+      <UniqueIdentifier>{f3333333-3333-4333-8333-333333333333}</UniqueIdentifier>
+      <Extensions>cpp;h</Extensions>
+    </Filter>
+    <Filter Include="Source\Core">
+      <UniqueIdentifier>{33333333-3333-4333-8333-333333333333}</UniqueIdentifier>
+      <Extensions>cpp;h</Extensions>
+    </Filter>
+    <Filter Include="Source\Game">
+      <UniqueIdentifier>{44444444-4444-4444-8444-444444444444}</UniqueIdentifier>
+      <Extensions>cpp;h</Extensions>
+    </Filter>
+    <Filter Include="Source\Mesh">
+      <UniqueIdentifier>{55555555-5555-4555-8555-555555555555}</UniqueIdentifier>
+      <Extensions>cpp;h</Extensions>
+    </Filter>
+    <Filter Include="Source\Render">
+      <UniqueIdentifier>{66666666-6666-4666-8666-666666666666}</UniqueIdentifier>
+      <Extensions>cpp;h</Extensions>
+    </Filter>
+    <Filter Include="Shader">
+      <UniqueIdentifier>{77777777-7777-4777-8777-777777777777}</UniqueIdentifier>
+      <Extensions>hlsl</Extensions>
+    </Filter>
+    <Filter Include="Shader\Includes">
+      <UniqueIdentifier>{88888888-8888-4888-8888-888888888888}</UniqueIdentifier>
+      <Extensions>hlsli</Extensions>
+    </Filter>
+    <Filter Include="Shader\Materials">
+      <UniqueIdentifier>{9e512dfc-a8c8-4c45-9144-f766a21dc8b3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shader\Materials\StylizedCharacter">
+      <UniqueIdentifier>{21a5c0e8-4990-4213-b003-10dfe07b6f9c}</UniqueIdentifier>
+      <Extensions>hlsl;hlsli</Extensions>
+    </Filter>
+    <Filter Include="Shader\PostEffects">
+      <UniqueIdentifier>{8d8eaed5-553a-43b1-b956-e115824f35c8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shader\PostEffects\Pixelation">
+      <UniqueIdentifier>{05dc0a7e-7a6b-4c08-94dd-e98fc197fcf2}</UniqueIdentifier>
+      <Extensions>hlsl;hlsli</Extensions>
+    </Filter>
+    <Filter Include="RePlayEngine">
+      <UniqueIdentifier>{b1111111-1111-4111-8111-111111111111}</UniqueIdentifier>
+      <Extensions>cpp;h;hlsl;hlsli</Extensions>
+    </Filter>
+    <Filter Include="RePlayEngine\Core\Components">
+      <UniqueIdentifier>{b2222222-2222-4222-8222-222222222222}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Presentation">
+      <UniqueIdentifier>{b3333333-3333-4333-8333-333333333333}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Rendering\Deferred">
+      <UniqueIdentifier>{b4444444-4444-4444-8444-444444444444}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Rendering\Passes">
+      <UniqueIdentifier>{c1111111-1111-4111-8111-111111111111}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Rendering\RenderGraph">
+      <UniqueIdentifier>{c2222222-2222-4222-8222-222222222222}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Rendering\ShaderStack">
+      <UniqueIdentifier>{d245a164-e87d-4d91-a709-90fdb1895701}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Rendering\ShaderPresets">
+      <UniqueIdentifier>{798b8835-cc0d-428c-a8ed-ec979c50d9a2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Rendering\Materials">
+      <UniqueIdentifier>{5ee51099-1cef-49e6-9edf-4ce66a8f8b59}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Assets">
+      <UniqueIdentifier>{c3333333-3333-4333-8333-333333333333}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Editor">
+      <UniqueIdentifier>{e1111111-1111-4111-8111-111111111111}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Editor\Commands">
+      <UniqueIdentifier>{e3333333-3333-4333-8333-333333333333}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Editor\Gizmo">
+      <UniqueIdentifier>{e4444444-4444-4444-8444-444444444444}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Editor\ShaderEditing">
+      <UniqueIdentifier>{9358bb20-9f60-4d9c-a9d7-3f40ba741aa6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Editor\Rendering">
+      <UniqueIdentifier>{23c5c4f9-8df4-41b3-8314-85e0567d6e2f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Scene">
+      <UniqueIdentifier>{b5555555-5555-4555-8555-555555555555}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Physics">
+      <UniqueIdentifier>{d1111111-1111-4111-8111-111111111111}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Shaders">
+      <UniqueIdentifier>{f4444444-4444-4444-8444-444444444444}</UniqueIdentifier>
+      <Extensions>hlsl;hlsli</Extensions>
+    </Filter>
+    <Filter Include="RePlayEngine\Shaders\TeamDeferred">
+      <UniqueIdentifier>{f5555555-5555-4555-8555-555555555555}</UniqueIdentifier>
+      <Extensions>hlsl</Extensions>
+    </Filter>
+    <Filter Include="RePlayEngine\Shaders\TeamDeferred\Includes">
+      <UniqueIdentifier>{f6666666-6666-4666-8666-666666666666}</UniqueIdentifier>
+      <Extensions>hlsli</Extensions>
+    </Filter>
+    <Filter Include="Resources">
+      <UniqueIdentifier>{f7777777-7777-4777-8777-777777777777}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Resources\RePlayEngine">
+      <UniqueIdentifier>{f8888888-8888-4888-8888-888888888888}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Resources\RePlayEngine\BootLogo">
+      <UniqueIdentifier>{f9999999-9999-4999-8999-999999999999}</UniqueIdentifier>
+      <Extensions>png;jpg;jpeg;dds;tga</Extensions>
+    </Filter>
+    <Filter Include="Resources\Shaders">
+      <UniqueIdentifier>{3c786e31-e9da-4528-b9db-91db99455983}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Resources\Shaders\Presets">
+      <UniqueIdentifier>{ad9cf121-8513-4d71-a984-0d3a4d8478da}</UniqueIdentifier>
+      <Extensions>replayshader</Extensions>
+    </Filter>
+    <Filter Include="プロジェクト設定">
+      <UniqueIdentifier>{fa111111-1111-4111-8111-111111111111}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Source\render\csm_renderer.cpp">
+      <Filter>Source\Render</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\Deferred\deferred_renderer.cpp">
+      <Filter>RePlayEngine\Rendering\Deferred</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\Passes\PostProcessPass.cpp">
+      <Filter>RePlayEngine\Rendering\Passes</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\Passes\BloomPass.cpp">
+      <Filter>RePlayEngine\Rendering\Passes</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Assets\ImageAsset.cpp">
+      <Filter>RePlayEngine\Assets</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Presentation\BootLogoComponent.cpp">
+      <Filter>RePlayEngine\Presentation</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Assets\AssetCache.cpp">
+      <Filter>RePlayEngine\Assets</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Assets\AssetDatabase.cpp"><Filter>RePlayEngine\Assets</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Assets\AsyncAssetManager.cpp"><Filter>RePlayEngine\Assets</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\Commands\UndoStack.cpp"><Filter>RePlayEngine\Editor\Commands</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\Gizmo\TransformGizmo.cpp"><Filter>RePlayEngine\Editor\Gizmo</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\Gizmo\ViewportPicker.cpp"><Filter>RePlayEngine\Editor\Gizmo</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\ShaderEditing\CharacterMaterialEditor.cpp"><Filter>RePlayEngine\Editor\ShaderEditing</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\ShaderEditing\ShaderStackEditor.cpp"><Filter>RePlayEngine\Editor\ShaderEditing</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\ShaderEditing\ShaderPresetEditor.cpp"><Filter>RePlayEngine\Editor\ShaderEditing</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\Rendering\PostProcessEditor.cpp"><Filter>RePlayEngine\Editor\Rendering</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Physics\MeshCollisionCooker.cpp"><Filter>RePlayEngine\Physics</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Scene\SceneDocument.cpp"><Filter>RePlayEngine\Scene</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Scene\SceneSerializer.cpp"><Filter>RePlayEngine\Scene</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Scene\PrefabSerializer.cpp"><Filter>RePlayEngine\Scene</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\ShaderPresets\ShaderPresetSerializer.cpp"><Filter>RePlayEngine\Rendering\ShaderPresets</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\ShaderPresets\BuiltInShaderPresets.cpp"><Filter>RePlayEngine\Rendering\ShaderPresets</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\Materials\CharacterMaterialGpuData.cpp"><Filter>RePlayEngine\Rendering\Materials</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Scene\BootLogoScene.cpp">
+      <Filter>RePlayEngine\Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scene\LoadingScene.cpp">
+      <Filter>RePlayEngine\Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\core\framebuffer.cpp">
+      <Filter>Source\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\core\fullscreen_quad.cpp">
+      <Filter>Source\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\mesh\geometric_primitive.cpp">
+      <Filter>Source\Mesh</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\mesh\gltf_model.cpp">
+      <Filter>Source\Mesh</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\render\lights_manager.cpp">
+      <Filter>Source\Render</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\render\pbr_renderer.cpp">
+      <Filter>Source\Render</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\render\particle_system.cpp">
+      <Filter>Source\Render</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\render\toon_renderer.cpp">
+      <Filter>Source\Render</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\render\trail.cpp">
+      <Filter>Source\Render</Filter>
+    </ClCompile>
+    <ClCompile Include="imgui\imgui.cpp">
+      <Filter>Source\App\Editor\ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="imgui\imgui_draw.cpp">
+      <Filter>Source\App\Editor\ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="imgui\imgui_impl_dx11.cpp">
+      <Filter>Source\App\Editor\ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="imgui\imgui_impl_win32.cpp">
+      <Filter>Source\App\Editor\ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="imgui\imgui_ja_gryph_ranges.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="imgui\imgui_widgets.cpp">
+      <Filter>Source\App\Editor\ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Runtime\main.cpp">
+      <Filter>Source\App\Runtime</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Runtime\framework.cpp">
+      <Filter>Source\App\Runtime</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_asset_browser.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_editor_commands.cpp"><Filter>Source\App\Editor</Filter></ClCompile>
+    <ClCompile Include="Source\app\Runtime\framework_initialize.cpp">
+      <Filter>Source\App\Runtime</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_editor.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_inspector.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_scene_document.cpp"><Filter>Source\App\Editor</Filter></ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_shader_stack.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_character_material.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_post_process.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Runtime\framework_update.cpp">
+      <Filter>Source\App\Runtime</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Rendering\framework_render.cpp">
+      <Filter>Source\App\Rendering</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\core\shader.cpp">
+      <Filter>Source\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\mesh\skinned_mesh.cpp">
+      <Filter>Source\Mesh</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\mesh\sprite.cpp">
+      <Filter>Source\Mesh</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\mesh\sprite_batch.cpp">
+      <Filter>Source\Mesh</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\mesh\static_mesh.cpp">
+      <Filter>Source\Mesh</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\core\texture.cpp">
+      <Filter>Source\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\game\camera.cpp">
+      <Filter>Source\Game</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\game\free_camera_controller.cpp">
+      <Filter>Source\Game</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\game\player.cpp">
+      <Filter>Source\Game</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\game\raycast.cpp">
+      <Filter>Source\Game</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\game\stage.cpp">
+      <Filter>Source\Game</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Physics\SphereCast.cpp">
+      <Filter>RePlayEngine\Physics</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Physics\MeshColliderComponent.cpp">
+      <Filter>RePlayEngine\Physics</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Physics\GravityComponent.cpp">
+      <Filter>RePlayEngine\Physics</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\game\scene_game.cpp">
+      <Filter>Source\Game</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\game\game_scene.cpp">
+      <Filter>Source\Game</Filter>
+    </ClCompile>
+    <ClInclude Include="Source\render\csm_renderer.h">
+      <Filter>Source\Render</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\render\deferred_renderer.h">
+      <Filter>Source\Render</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\Deferred\deferred_renderer.h">
+      <Filter>RePlayEngine\Rendering\Deferred</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\Passes\PostProcessPass.h">
+      <Filter>RePlayEngine\Rendering\Passes</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\Passes\BloomPass.h">
+      <Filter>RePlayEngine\Rendering\Passes</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\RenderGraph\RenderGraph.h">
+      <Filter>RePlayEngine\Rendering\RenderGraph</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\ShaderStack\ShaderLayerStack.h">
+      <Filter>RePlayEngine\Rendering\ShaderStack</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\ShaderPresets\ShaderPresetSerializer.h">
+      <Filter>RePlayEngine\Rendering\ShaderPresets</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\ShaderPresets\BuiltInShaderPresets.h">
+      <Filter>RePlayEngine\Rendering\ShaderPresets</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\Materials\CharacterMaterialProfile.h">
+      <Filter>RePlayEngine\Rendering\Materials</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\Materials\CharacterMaterialGpuData.h">
+      <Filter>RePlayEngine\Rendering\Materials</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Assets\ImageAsset.h">
+      <Filter>RePlayEngine\Assets</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Presentation\BootLogoComponent.h">
+      <Filter>RePlayEngine\Presentation</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Assets\AssetCache.h">
+      <Filter>RePlayEngine\Assets</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Assets\AssetDatabase.h"><Filter>RePlayEngine\Assets</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Assets\AsyncAssetManager.h"><Filter>RePlayEngine\Assets</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\Commands\UndoStack.h"><Filter>RePlayEngine\Editor\Commands</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\Gizmo\TransformGizmo.h"><Filter>RePlayEngine\Editor\Gizmo</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\Gizmo\ViewportPicker.h"><Filter>RePlayEngine\Editor\Gizmo</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\ShaderEditing\CharacterMaterialEditor.h"><Filter>RePlayEngine\Editor\ShaderEditing</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\ShaderEditing\ShaderStackEditor.h"><Filter>RePlayEngine\Editor\ShaderEditing</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\ShaderEditing\ShaderPresetEditor.h"><Filter>RePlayEngine\Editor\ShaderEditing</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\Rendering\PostProcessEditor.h"><Filter>RePlayEngine\Editor\Rendering</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Core\Components\IComponent.h">
+      <Filter>RePlayEngine\Core\Components</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Core\Components\GameObject.h">
+      <Filter>RePlayEngine\Core\Components</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Core\Components\TransformComponent.h">
+      <Filter>RePlayEngine\Core\Components</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Core\Components\SphereColliderComponent.h">
+      <Filter>RePlayEngine\Core\Components</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Core\Components\MeshColliderComponent.h">
+      <Filter>RePlayEngine\Core\Components</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Core\Components\GravityComponent.h">
+      <Filter>RePlayEngine\Core\Components</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Core\Components\AnimationComponent.h"><Filter>RePlayEngine\Core\Components</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Core\Components\ModelRendererComponent.h"><Filter>RePlayEngine\Core\Components</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Physics\SphereCast.h">
+      <Filter>RePlayEngine\Physics</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Physics\MeshCollisionCooker.h"><Filter>RePlayEngine\Physics</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Scene\IScene.h">
+      <Filter>RePlayEngine\Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Scene\SceneManager.h">
+      <Filter>RePlayEngine\Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Scene\BootLogoScene.h">
+      <Filter>RePlayEngine\Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Scene\LoadingScene.h">
+      <Filter>RePlayEngine\Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Scene\SceneDocument.h"><Filter>RePlayEngine\Scene</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Scene\SceneSerializer.h"><Filter>RePlayEngine\Scene</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Scene\PrefabSerializer.h"><Filter>RePlayEngine\Scene</Filter></ClInclude>
+    <ClInclude Include="Source\core\framebuffer.h">
+      <Filter>Source\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\app\framework.h">
+      <Filter>Source\App</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\core\fullscreen_quad.h">
+      <Filter>Source\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\mesh\geometric_primitive.h">
+      <Filter>Source\Mesh</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\mesh\gltf_model.h">
+      <Filter>Source\Mesh</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\core\high_resolution_timer.h">
+      <Filter>Source\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui\imconfig.h">
+      <Filter>Source\App\Editor\ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui\imgui.h">
+      <Filter>Source\App\Editor\ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui\imgui_impl_dx11.h">
+      <Filter>Source\App\Editor\ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui\imgui_impl_win32.h">
+      <Filter>Source\App\Editor\ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui\imgui_internal.h">
+      <Filter>Source\App\Editor\ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui\imstb_rectpack.h">
+      <Filter>Source\App\Editor\ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui\imstb_textedit.h">
+      <Filter>Source\App\Editor\ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui\imstb_truetype.h">
+      <Filter>Source\App\Editor\ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\render\lights_manager.h">
+      <Filter>Source\Render</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\core\misc.h">
+      <Filter>Source\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\render\pbr_renderer.h">
+      <Filter>Source\Render</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\render\particle_system.h">
+      <Filter>Source\Render</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\render\shading_model.h">
+      <Filter>Source\Render</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\core\shader.h">
+      <Filter>Source\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\mesh\skinned_mesh.h">
+      <Filter>Source\Mesh</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\mesh\sprite.h">
+      <Filter>Source\Mesh</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\mesh\sprite_batch.h">
+      <Filter>Source\Mesh</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\mesh\static_mesh.h">
+      <Filter>Source\Mesh</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\core\texture.h">
+      <Filter>Source\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\render\toon_renderer.h">
+      <Filter>Source\Render</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\render\trail.h">
+      <Filter>Source\Render</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\game\camera.h">
+      <Filter>Source\Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\game\free_camera_controller.h">
+      <Filter>Source\Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\game\game_input.h">
+      <Filter>Source\Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\game\player.h">
+      <Filter>Source\Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\game\raycast.h">
+      <Filter>Source\Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\game\scene_game.h">
+      <Filter>Source\Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\game\game_scene.h">
+      <Filter>Source\Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\game\stage.h">
+      <Filter>Source\Game</Filter>
+    </ClInclude>
+    <None Include=".editorconfig">
+      <Filter>プロジェクト設定</Filter>
+    </None>
+    <None Include=".gitattributes">
+      <Filter>プロジェクト設定</Filter>
+    </None>
+    <None Include=".gitignore">
+      <Filter>プロジェクト設定</Filter>
+    </None>
+    <None Include="RePlayEngine\Shaders\TeamDeferred\DeferredDebugPS.hlsl">
+      <Filter>RePlayEngine\Shaders\TeamDeferred</Filter>
+    </None>
+    <None Include="RePlayEngine\Shaders\TeamDeferred\DeferredDirectionalPS.hlsl">
+      <Filter>RePlayEngine\Shaders\TeamDeferred</Filter>
+    </None>
+    <None Include="RePlayEngine\Shaders\TeamDeferred\DeferredEmissivePS.hlsl">
+      <Filter>RePlayEngine\Shaders\TeamDeferred</Filter>
+    </None>
+    <None Include="RePlayEngine\Shaders\TeamDeferred\DeferredFlatOverlayPS.hlsl">
+      <Filter>RePlayEngine\Shaders\TeamDeferred</Filter>
+    </None>
+    <None Include="RePlayEngine\Shaders\TeamDeferred\DeferredFogPS.hlsl">
+      <Filter>RePlayEngine\Shaders\TeamDeferred</Filter>
+    </None>
+    <None Include="RePlayEngine\Shaders\TeamDeferred\DeferredIndirectPS.hlsl">
+      <Filter>RePlayEngine\Shaders\TeamDeferred</Filter>
+    </None>
+    <None Include="RePlayEngine\Shaders\TeamDeferred\DeferredLighting.hlsli">
+      <Filter>RePlayEngine\Shaders\TeamDeferred\Includes</Filter>
+    </None>
+    <None Include="RePlayEngine\Shaders\TeamDeferred\DeferredLightingVS.hlsl">
+      <Filter>RePlayEngine\Shaders\TeamDeferred</Filter>
+    </None>
+    <None Include="RePlayEngine\Shaders\TeamDeferred\DeferredLocalExposurePS.hlsl">
+      <Filter>RePlayEngine\Shaders\TeamDeferred</Filter>
+    </None>
+    <None Include="RePlayEngine\Shaders\TeamDeferred\DeferredPointPS.hlsl">
+      <Filter>RePlayEngine\Shaders\TeamDeferred</Filter>
+    </None>
+    <None Include="RePlayEngine\Shaders\TeamDeferred\DeferredSpotPS.hlsl">
+      <Filter>RePlayEngine\Shaders\TeamDeferred</Filter>
+    </None>
+    <None Include="RePlayEngine\Shaders\TeamDeferred\GBuffer.hlsli">
+      <Filter>RePlayEngine\Shaders\TeamDeferred\Includes</Filter>
+    </None>
+    <None Include="RePlayEngine\Shaders\TeamDeferred\GBufferInstancedVS.hlsl">
+      <Filter>RePlayEngine\Shaders\TeamDeferred</Filter>
+    </None>
+    <None Include="RePlayEngine\Shaders\TeamDeferred\GBufferModel.hlsli">
+      <Filter>RePlayEngine\Shaders\TeamDeferred\Includes</Filter>
+    </None>
+    <None Include="RePlayEngine\Shaders\TeamDeferred\GBufferPS.hlsl">
+      <Filter>RePlayEngine\Shaders\TeamDeferred</Filter>
+    </None>
+    <None Include="RePlayEngine\Shaders\TeamDeferred\GBufferVS.hlsl">
+      <Filter>RePlayEngine\Shaders\TeamDeferred</Filter>
+    </None>
+    <None Include="RePlayEngine\Shaders\TeamDeferred\Scene.hlsli">
+      <Filter>RePlayEngine\Shaders\TeamDeferred\Includes</Filter>
+    </None>
+    <None Include="RePlayEngine\Shaders\TeamDeferred\ShadingModels.hlsli">
+      <Filter>RePlayEngine\Shaders\TeamDeferred\Includes</Filter>
+    </None>
+    <None Include="RePlayEngine\Shaders\TeamDeferred\Skinning.hlsli">
+      <Filter>RePlayEngine\Shaders\TeamDeferred\Includes</Filter>
+    </None>
+    <None Include="RePlayEngine\Shaders\TeamDeferred\TerrainCarve.hlsli">
+      <Filter>RePlayEngine\Shaders\TeamDeferred\Includes</Filter>
+    </None>
+    <None Include="Shader\csm_common.hlsli">
+      <Filter>Shader\Includes</Filter>
+    </None>
+    <None Include="Shader\fullscreen_quad.hlsli">
+      <Filter>Shader\Includes</Filter>
+    </None>
+    <None Include="Shader\gbuffer_common.hlsli">
+      <Filter>Shader\Includes</Filter>
+    </None>
+    <None Include="Shader\geometric_primitive.hlsli">
+      <Filter>Shader\Includes</Filter>
+    </None>
+    <None Include="Shader\lights_common.hlsli">
+      <Filter>Shader\Includes</Filter>
+    </None>
+    <None Include="Shader\particle.hlsli">
+      <Filter>Shader\Includes</Filter>
+    </None>
+    <None Include="Shader\pbr_brdf.hlsli">
+      <Filter>Shader\Includes</Filter>
+    </None>
+    <None Include="Shader\pbr_common.hlsli">
+      <Filter>Shader\Includes</Filter>
+    </None>
+    <None Include="Shader\shading_model_hlsl.hlsli">
+      <Filter>Shader\Includes</Filter>
+    </None>
+    <None Include="Shader\skinned_mesh.hlsli">
+      <Filter>Shader\Includes</Filter>
+    </None>
+    <None Include="Shader\sprite.hlsli">
+      <Filter>Shader\Includes</Filter>
+    </None>
+    <None Include="Shader\static_mesh.hlsli">
+      <Filter>Shader\Includes</Filter>
+    </None>
+    <None Include="Shader\toon_common.hlsli">
+      <Filter>Shader\Includes</Filter>
+    </None>
+    <None Include="Shader\Materials\StylizedCharacter\stylized_character_common.hlsli">
+      <Filter>Shader\Materials\StylizedCharacter</Filter>
+    </None>
+    <None Include="resources\Shaders\Presets\WutheringStylized.replayshader">
+      <Filter>Resources\Shaders\Presets</Filter>
+    </None>
+    <None Include="resources\Shaders\Presets\EndfieldLayered.replayshader">
+      <Filter>Resources\Shaders\Presets</Filter>
+    </None>
+    <None Include="resources\Shaders\Presets\SoftAnime.replayshader">
+      <Filter>Resources\Shaders\Presets</Filter>
+    </None>
+    <None Include="resources\Shaders\Presets\GraphicCel.replayshader">
+      <Filter>Resources\Shaders\Presets</Filter>
+    </None>
+    <None Include="resources\Shaders\Presets\CrystalToon.replayshader">
+      <Filter>Resources\Shaders\Presets</Filter>
+    </None>
+    <None Include="resources\Shaders\Presets\MoonlitCrystal.replayshader">
+      <Filter>Resources\Shaders\Presets</Filter>
+    </None>
+    <Image Include="resources\RePlayEngine\BootLogo\BootNote.png">
+      <Filter>Resources\RePlayEngine\BootLogo</Filter>
+    </Image>
+    <Image Include="resources\RePlayEngine\BootLogo\BootStar.png">
+      <Filter>Resources\RePlayEngine\BootLogo</Filter>
+    </Image>
+    <Image Include="resources\RePlayEngine\BootLogo\EngineLogoMark.png">
+      <Filter>Resources\RePlayEngine\BootLogo</Filter>
+    </Image>
+    <Image Include="resources\RePlayEngine\BootLogo\EngineLogoText.png">
+      <Filter>Resources\RePlayEngine\BootLogo</Filter>
+    </Image>
+    <FxCompile Include="Shader\PostEffects\Pixelation\object_pixelate_ps.hlsl">
+      <Filter>Shader\PostEffects\Pixelation</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\Materials\StylizedCharacter\skinned_mesh_stylized_character_ps.hlsl">
+      <Filter>Shader\Materials\StylizedCharacter</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\Materials\StylizedCharacter\static_mesh_stylized_character_ps.hlsl">
+      <Filter>Shader\Materials\StylizedCharacter</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\blur_ps.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\final_pass_ps.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\fullscreen_quad_ps.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\fullscreen_quad_vs.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\geometric_primitive_ps.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\geometric_primitive_vs.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\luminance_extraction_ps.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\skinned_mesh_ps.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\skinned_mesh_pbr_ps.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\skinned_mesh_pbr_stage_ps.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\skinned_mesh_vs.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\shadow_caster_skinned_mesh_vs.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\shadow_caster_static_mesh_vs.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\sprite_ps.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\sprite_masked_ps.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\sprite_solid_ps.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\sprite_vs.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\static_mesh_ps.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\static_mesh_pbr_ps.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\static_mesh_vs.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\wire_frame.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\csm_caster_gs.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\csm_caster_skinned_vs.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\csm_caster_static_vs.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\decal_ps.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\decal_vs.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\deferred_lighting_ps.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\depth_of_field_ps.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\fog_ps.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\gaussian_blur_downsample_ps.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\gaussian_blur_upsample_ps.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\initialize_particle_cs.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\integrate_particle_cs.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\outline_ps.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\particle_gs.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\particle_ps.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\particle_vs.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\skinned_mesh_outline_vs.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\skinned_mesh_toon_ps.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\skinned_mesh_gbuffer_ps.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\skinned_mesh_unlit_ps.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\static_mesh_gbuffer_ps.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\static_mesh_outline_vs.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\static_mesh_toon_ps.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\static_mesh_unlit_ps.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\trail_ps.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\trail_vs.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+  </ItemGroup>
+</Project>

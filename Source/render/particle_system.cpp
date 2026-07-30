@@ -1,0 +1,110 @@
+﻿#include "particle_system.h"
+#include "shader.h"
+#include "misc.h"
+#include <vector>
+#include <cstdio>
+
+using namespace DirectX;
+using Microsoft::WRL::ComPtr;
+
+bool particle_system::initialize(ID3D11Device* device)
+{
+    HRESULT hr = S_OK;
+
+    // パーティクル用 StructuredBuffer
+    D3D11_BUFFER_DESC bd{};
+    bd.ByteWidth = sizeof(particle) * MAX_COUNT;
+    bd.Usage = D3D11_USAGE_DEFAULT;
+    bd.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+    bd.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+    bd.StructureByteStride = sizeof(particle);
+    hr = device->CreateBuffer(&bd, nullptr, particle_buffer.GetAddressOf());
+    if (FAILED(hr)) return false;
+
+    D3D11_SHADER_RESOURCE_VIEW_DESC svd{};
+    svd.Format = DXGI_FORMAT_UNKNOWN;
+    svd.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+    svd.Buffer.FirstElement = 0;
+    svd.Buffer.NumElements  = MAX_COUNT;
+    device->CreateShaderResourceView(particle_buffer.Get(), &svd, particle_srv.GetAddressOf());
+
+    D3D11_UNORDERED_ACCESS_VIEW_DESC uvd{};
+    uvd.Format = DXGI_FORMAT_UNKNOWN;
+    uvd.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
+    uvd.Buffer.FirstElement = 0;
+    uvd.Buffer.NumElements  = MAX_COUNT;
+    device->CreateUnorderedAccessView(particle_buffer.Get(), &uvd, particle_uav.GetAddressOf());
+
+    // 定数バッファ
+    D3D11_BUFFER_DESC cb{};
+    cb.ByteWidth = sizeof(particle_constants);
+    cb.Usage = D3D11_USAGE_DEFAULT;
+    cb.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+    device->CreateBuffer(&cb, nullptr, constant_buffer.GetAddressOf());
+
+    // Compute shaders
+    create_cs_from_cso(device, "initialize_particle_cs.cso", initialize_cs.GetAddressOf());
+    create_cs_from_cso(device, "integrate_particle_cs.cso",  integrate_cs.GetAddressOf());
+
+    // VS/GS/PS
+    create_vs_from_cso(device, "particle_vs.cso", particle_vs.GetAddressOf(), nullptr, nullptr, 0);
+    create_gs_from_cso(device, "particle_gs.cso", particle_gs.GetAddressOf());
+    create_ps_from_cso(device, "particle_ps.cso", particle_ps.GetAddressOf());
+
+    initialized = (initialize_cs && integrate_cs);
+    return initialized;
+}
+
+void particle_system::simulate(ID3D11DeviceContext* ctx, float delta_time)
+{
+    if (!initialized) return;
+
+    static bool first_run = true;
+    constants.simulation_time.x = delta_time;
+    constants.simulation_time.y += delta_time;
+    // spawn_count = rate * delta_time
+    constants.simulation_time.w = constants.spawn_origin.w * delta_time;
+    ctx->UpdateSubresource(constant_buffer.Get(), 0, nullptr, &constants, 0, 0);
+    ctx->CSSetConstantBuffers(6, 1, constant_buffer.GetAddressOf());
+
+    UINT initial_counts = 0;
+    ctx->CSSetUnorderedAccessViews(0, 1, particle_uav.GetAddressOf(), &initial_counts);
+
+    if (first_run)
+    {
+        ctx->CSSetShader(initialize_cs.Get(), nullptr, 0);
+        ctx->Dispatch((MAX_COUNT + THREADS - 1) / THREADS, 1, 1);
+        first_run = false;
+    }
+
+    ctx->CSSetShader(integrate_cs.Get(), nullptr, 0);
+    ctx->Dispatch((MAX_COUNT + THREADS - 1) / THREADS, 1, 1);
+
+    // UAV detach
+    ID3D11UnorderedAccessView* null_uav[1] = { nullptr };
+    ctx->CSSetUnorderedAccessViews(0, 1, null_uav, nullptr);
+    ctx->CSSetShader(nullptr, nullptr, 0);
+}
+
+void particle_system::render(ID3D11DeviceContext* ctx)
+{
+    if (!initialized) return;
+
+    ctx->IASetInputLayout(nullptr);
+    ctx->IASetVertexBuffers(0, 0, nullptr, nullptr, nullptr);
+    ctx->IASetIndexBuffer(nullptr, DXGI_FORMAT_UNKNOWN, 0);
+    ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_POINTLIST);
+
+    ctx->VSSetShader(particle_vs.Get(), nullptr, 0);
+    ctx->GSSetShader(particle_gs.Get(), nullptr, 0);
+    ctx->PSSetShader(particle_ps.Get(), nullptr, 0);
+
+    ctx->VSSetShaderResources(0, 1, particle_srv.GetAddressOf());
+
+    ctx->Draw(MAX_COUNT, 0);
+
+    // detach
+    ID3D11ShaderResourceView* null_srv[1] = { nullptr };
+    ctx->VSSetShaderResources(0, 1, null_srv);
+    ctx->GSSetShader(nullptr, nullptr, 0);
+}
