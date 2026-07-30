@@ -12,6 +12,7 @@ on:
       - '*.md'
       - LICENSE
       - '.azuredevops/**'
+      - '.github/*.md'
       - '.nuget/*'
       - build/*.cmd
       - build/*.json
@@ -24,6 +25,7 @@ on:
       - '*.md'
       - LICENSE
       - '.azuredevops/**'
+      - '.github/*.md'
       - '.nuget/*'
       - build/*.cmd
       - build/*.json
@@ -69,6 +71,12 @@ jobs:
             arch: amd64_x86
           - toolver: '14'
             build_type: x86-Release-Clang
+            arch: amd64_x86
+          - toolver: '14'
+            build_type: x64-VS
+            arch: amd64
+          - toolver: '14'
+            build_type: x86-VS
             arch: amd64_x86
 
     steps:
