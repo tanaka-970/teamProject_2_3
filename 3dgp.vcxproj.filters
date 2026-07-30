@@ -338,6 +338,9 @@
     <ClInclude Include="RePlayEngine\Assets\AsyncAssetManager.h">
       <Filter>RePlayEngine\Assets</Filter>
     </ClInclude>
+    <ClInclude Include="RePlayEngine\Assets\ConcurrentResourceCache.h">
+      <Filter>RePlayEngine\Assets</Filter>
+    </ClInclude>
     <ClInclude Include="RePlayEngine\Editor\Commands\UndoStack.h">
       <Filter>RePlayEngine\Editor\Commands</Filter>
     </ClInclude>

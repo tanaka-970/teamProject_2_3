@@ -10,6 +10,9 @@ using namespace Microsoft::WRL;
 
 #include <string>
 #include <map>
+#include <condition_variable>
+#include <memory>
+#include <mutex>
 using namespace std;
 #include <filesystem> // 追加
 #include "DDSTextureLoader.h" // 追加（プロジェクトに含まれている前提）
@@ -18,56 +21,88 @@ using namespace std;
 #include <iomanip>
 
 static map<wstring, ComPtr<ID3D11ShaderResourceView>> resources;
+struct texture_load_state
+{
+	condition_variable ready;
+	bool completed{ false };
+	HRESULT result{ E_FAIL };
+	ComPtr<ID3D11ShaderResourceView> resource;
+};
+static map<wstring, shared_ptr<texture_load_state>> loading_resources;
+static mutex resources_mutex;
+
 HRESULT load_texture_from_file(ID3D11Device* device, const wchar_t* filename, ID3D11ShaderResourceView** shader_resource_view, D3D11_TEXTURE2D_DESC* texture2d_desc)
 {
-	HRESULT hr{ S_OK };
-	ComPtr<ID3D11Resource> resource;
-
-	auto it = resources.find(filename);
-	if (it != resources.end())
+	if (!device || !filename || !shader_resource_view) return E_INVALIDARG;
+	const wstring key = std::filesystem::path(filename).lexically_normal().wstring();
+	shared_ptr<texture_load_state> loading;
+	ComPtr<ID3D11ShaderResourceView> loaded_view;
+	bool should_load = false;
 	{
-		*shader_resource_view = it->second.Get();
-		(*shader_resource_view)->AddRef();
-		(*shader_resource_view)->GetResource(resource.GetAddressOf());
-	}
-	else
-	{
-		// 1: 元のパスから DDS 用のパスを作成
-		std::filesystem::path dds_filename(filename);
-		// 2: 拡張子を .dds に変更
-		dds_filename.replace_extension("dds");
-		if (std::filesystem::exists(dds_filename))
+		unique_lock<mutex> lock(resources_mutex);
+		if (const auto cached = resources.find(key); cached != resources.end())
 		{
-			hr = CreateDDSTextureFromFile(device, dds_filename.c_str(), resource.GetAddressOf(), shader_resource_view);
-			_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+			loaded_view = cached->second;
+		}
+		else if (const auto active = loading_resources.find(key); active != loading_resources.end())
+		{
+			loading = active->second;
+			loading->ready.wait(lock, [&loading] { return loading->completed; });
+			if (FAILED(loading->result)) return loading->result;
+			loaded_view = loading->resource;
 		}
 		else
 		{
-			hr = CreateWICTextureFromFile(device, filename, resource.GetAddressOf(), shader_resource_view);
-			_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+			loading = make_shared<texture_load_state>();
+			loading_resources.emplace(key, loading);
+			should_load = true;
 		}
-		resources.insert(make_pair(filename, *shader_resource_view));
+	}
 
+	HRESULT hr = S_OK;
+	ComPtr<ID3D11Resource> loaded_resource;
+	if (should_load)
+	{
+		std::filesystem::path dds_filename(filename);
+		dds_filename.replace_extension("dds");
+		if (std::filesystem::exists(dds_filename))
+			hr = CreateDDSTextureFromFile(device, dds_filename.c_str(),
+				loaded_resource.GetAddressOf(), loaded_view.GetAddressOf());
+		else
+			hr = CreateWICTextureFromFile(device, filename,
+				loaded_resource.GetAddressOf(), loaded_view.GetAddressOf());
 
-		//hr = CreateWICTextureFromFile(device, filename, resource.GetAddressOf(), shader_resource_view);
-		//_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
-		//resources.insert(make_pair(filename, *shader_resource_view));
+		{
+			lock_guard<mutex> lock(resources_mutex);
+			loading->result = hr;
+			loading->resource = loaded_view;
+			loading->completed = true;
+			if (SUCCEEDED(hr)) resources[key] = loaded_view;
+			loading_resources.erase(key);
+		}
+		loading->ready.notify_all();
+		if (FAILED(hr)) return hr;
+	}
+	else
+	{
+		loaded_view->GetResource(loaded_resource.GetAddressOf());
 	}
 
 	ComPtr<ID3D11Texture2D> texture2d;
-	hr = resource.Get()->QueryInterface<ID3D11Texture2D>(texture2d.GetAddressOf());
-	_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
-	texture2d->GetDesc(texture2d_desc);
-
-	return hr;
+	hr = loaded_resource.As(&texture2d);
+	if (FAILED(hr)) return hr;
+	if (texture2d_desc) texture2d->GetDesc(texture2d_desc);
+	return loaded_view.CopyTo(shader_resource_view);
 }
 void release_all_textures()
 {
+	lock_guard<mutex> lock(resources_mutex);
 	resources.clear();
 }
 // UNIT.16
 HRESULT make_dummy_texture(ID3D11Device* device, ID3D11ShaderResourceView** shader_resource_view, DWORD value/*0xAABBGGRR*/, UINT dimension)
 {
+	lock_guard<mutex> lock(resources_mutex);
 	HRESULT hr{ S_OK };
 
 	wstringstream keyname;

@@ -530,6 +530,7 @@ void framework::draw_workspace_panel()
 
 void framework::draw_editor()
 {
+    editor_session_active = true;
     ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->Pos);
     ImGui::SetNextWindowSize(viewport->Size);

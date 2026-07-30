@@ -7,9 +7,28 @@
 #include <commdlg.h>
 #include <algorithm>
 #include <filesystem>
+#include <fstream>
+#include <iomanip>
 
 namespace
 {
+    constexpr int EditorSessionVersion = 1;
+
+    std::filesystem::path EditorSessionFolder()
+    {
+        return std::filesystem::path("Saved") / "EditorSession";
+    }
+
+    std::filesystem::path EditorSessionStatePath()
+    {
+        return EditorSessionFolder() / "session.ini";
+    }
+
+    std::filesystem::path EditorSessionScenePath()
+    {
+        return EditorSessionFolder() / "LastSession.replayscene";
+    }
+
     std::filesystem::path BrowseSceneFile(HWND owner, bool save,
         const wchar_t* title, const wchar_t* extension, const wchar_t* filter)
     {
@@ -358,21 +377,22 @@ void framework::create_scene_document(const std::string& name)
     save_scene_document(false);
 }
 
-void framework::load_scene_document(bool choose_path)
+bool framework::load_scene_document(bool choose_path,
+    ReplayEngine::Scene::EntityId preferred_entity_id)
 {
     std::filesystem::path path = current_scene_path;
     if (choose_path)
     {
         path = BrowseSceneFile(hwnd, false, L"シーンを開く", L"replayscene",
             L"RePlayシーン (*.replayscene)\0*.replayscene\0\0");
-        if (path.empty()) return;
+        if (path.empty()) return false;
     }
     ReplayEngine::Scene::SceneDocument loaded;
     std::string error;
     if (!ReplayEngine::Scene::SceneSerializer::Load(loaded, path, error))
     {
         scene_document_status = "読込失敗: " + error;
-        return;
+        return false;
     }
     // 読み込み成功後にだけ編集文書を差し替え、関連する編集状態を初期化する。
     editor_scene_document = std::move(loaded);
@@ -385,8 +405,10 @@ void framework::load_scene_document(bool choose_path)
     runtime_scene_document.Clear();
     scene_undo_stack.Clear();
     current_scene_path = path;
-    selected_scene_entity_id = editor_scene_document.Entities().empty()
-        ? 0 : editor_scene_document.Entities().front().id;
+    selected_scene_entity_id = preferred_entity_id != 0 &&
+        editor_scene_document.Find(preferred_entity_id) != nullptr
+        ? preferred_entity_id
+        : (editor_scene_document.Entities().empty() ? 0 : editor_scene_document.Entities().front().id);
     selected_scene_entity_ids.clear();
     if (selected_scene_entity_id != 0) selected_scene_entity_ids.push_back(selected_scene_entity_id);
     active_stage_placement_id = selected_scene_entity_id;
@@ -413,6 +435,96 @@ void framework::load_scene_document(bool choose_path)
                 entity->mesh_collider->cell_size);
     }
     scene_document_status = "読み込みました: " + path.generic_string();
+    return true;
+}
+
+void framework::save_editor_session()
+{
+    if (!editor_session_active) return;
+
+    std::error_code directory_error;
+    std::filesystem::create_directories(EditorSessionFolder(), directory_error);
+    if (directory_error) return;
+
+    if (active_stage_placement_id != 0) sync_selected_entity_to_stage();
+    std::string scene_error;
+    if (!ReplayEngine::Scene::SceneSerializer::Save(
+        editor_scene_document, EditorSessionScenePath(), scene_error)) return;
+
+    std::ofstream state(EditorSessionStatePath(), std::ios::trunc);
+    if (!state) return;
+    state << "REPLAY_EDITOR_SESSION " << EditorSessionVersion << '\n';
+    state << "SCENE_PATH " << std::quoted(current_scene_path.generic_string()) << '\n';
+    state << "WORKSPACE " << static_cast<int>(active_editor_workspace) << '\n';
+    state << "SELECTION " << static_cast<int>(selected_editor_object) << '\n';
+    state << "ENTITY " << selected_scene_entity_id << '\n';
+    state << "EDIT_MODE " << (edit_mode_active ? 1 : 0) << '\n';
+    state << "CAMERA " << camera_position.x << ' ' << camera_position.y << ' '
+        << camera_position.z << ' ' << camera_position.w << '\n';
+}
+
+void framework::restore_editor_session()
+{
+    std::ifstream state(EditorSessionStatePath());
+    if (!state || !std::filesystem::exists(EditorSessionScenePath())) return;
+
+    std::string signature;
+    int version = 0;
+    if (!(state >> signature >> version) || signature != "REPLAY_EDITOR_SESSION" ||
+        version != EditorSessionVersion) return;
+
+    std::string scene_path;
+    int workspace = static_cast<int>(editor_workspace::general);
+    int selection = static_cast<int>(editor_selection::world);
+    ReplayEngine::Scene::EntityId entity_id = 0;
+    int edit_mode = 1;
+    std::string key;
+    while (state >> key)
+    {
+        if (key == "SCENE_PATH") state >> std::quoted(scene_path);
+        else if (key == "WORKSPACE") state >> workspace;
+        else if (key == "SELECTION") state >> selection;
+        else if (key == "ENTITY") state >> entity_id;
+        else if (key == "EDIT_MODE") state >> edit_mode;
+        else if (key == "CAMERA") state >> camera_position.x >> camera_position.y
+            >> camera_position.z >> camera_position.w;
+        else
+        {
+            std::string ignored;
+            std::getline(state, ignored);
+        }
+    }
+
+    const auto original_scene_path = scene_path.empty()
+        ? std::filesystem::path("resources/Scenes/Main.replayscene")
+        : std::filesystem::path(scene_path);
+    current_scene_path = EditorSessionScenePath();
+    if (!load_scene_document(false, entity_id))
+    {
+        current_scene_path = original_scene_path;
+        return;
+    }
+    current_scene_path = original_scene_path;
+
+    const int last_workspace = static_cast<int>(editor_workspace::shader_adjustment);
+    const int last_selection = static_cast<int>(editor_selection::post_process);
+    workspace = std::clamp(workspace, 0, last_workspace);
+    selection = std::clamp(selection, 0, last_selection);
+    active_editor_workspace = static_cast<editor_workspace>(workspace);
+    selected_editor_object = static_cast<editor_selection>(selection);
+    if (selected_editor_object == editor_selection::scene_entity &&
+        editor_scene_document.Find(entity_id) == nullptr)
+        selected_editor_object = editor_selection::world;
+
+    edit_mode_active = edit_mode != 0;
+    if (edit_mode_active) runtime_scene_document.Clear();
+    else runtime_scene_document = editor_scene_document;
+    editor_mode = true;
+    editor_session_active = true;
+    editor_layout_checked = false;
+    editor_layout_dirty = false;
+    scene_document_status = "前回の編集セッションを復元しました: " +
+        current_scene_path.generic_string();
 }
 
 void framework::save_selected_prefab()

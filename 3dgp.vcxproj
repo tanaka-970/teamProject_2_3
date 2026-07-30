@@ -279,6 +279,7 @@
     <ClInclude Include="RePlayEngine\Assets\AssetCache.h" />
     <ClInclude Include="RePlayEngine\Assets\AssetDatabase.h" />
     <ClInclude Include="RePlayEngine\Assets\AsyncAssetManager.h" />
+    <ClInclude Include="RePlayEngine\Assets\ConcurrentResourceCache.h" />
     <ClInclude Include="RePlayEngine\Editor\Commands\UndoStack.h" />
     <ClInclude Include="RePlayEngine\Editor\Gizmo\TransformGizmo.h" />
     <ClInclude Include="RePlayEngine\Editor\Gizmo\ViewportPicker.h" />

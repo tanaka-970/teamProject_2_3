@@ -246,8 +246,11 @@ bool framework::initialize()
     });
     loading_scene->AddTask("Player model", [this]
     {
-        skinned_meshes[0] = std::make_unique<skinned_mesh>(
-            device.Get(), ".\\resources\\AnimationModel\\AllAnimation1.fbx");
+        const std::filesystem::path path = ".\\resources\\AnimationModel\\AllAnimation1.fbx";
+        skinned_meshes[0] = skinned_mesh_cache.Load(path, [this, path]
+        {
+            return std::make_shared<skinned_mesh>(device.Get(), path.string().c_str());
+        });
         return skinned_meshes[0] != nullptr;
     });
     loading_scene->AddTask("IBL images", [this]
@@ -272,6 +275,7 @@ bool framework::initialize()
             static_cast<float>(SCREEN_WIDTH) / static_cast<float>(SCREEN_HEIGHT), idle, walk, jump);
         game_scene = next_scene.get();
         animation_clip_index = idle >= 0 ? idle : 0;
+        restore_editor_session();
         return next_scene;
     });
 

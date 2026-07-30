@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <thread>
 #include <windows.h>
 
 namespace ReplayEngine::Scene
@@ -23,51 +24,64 @@ namespace ReplayEngine::Scene
         star_ = std::make_unique<sprite>(device,
             L"resources\\RePlayEngine\\BootLogo\\BootStar.png", "sprite_masked_ps.cso");
         initialized_ = solid_ && solid_->valid();
-        StartNextTask();
+        StartTasks();
         return initialized_;
     }
 
-    void LoadingScene::StartNextTask()
+    void LoadingScene::StartTasks()
     {
-        if (task_running_ || completed_tasks_ >= tasks_.size()) return;
-        Task task = tasks_[completed_tasks_].task;
+        if (task_running_ || tasks_.empty()) return;
+        const unsigned hardware = std::thread::hardware_concurrency();
+        const size_t available = hardware > 1 ? hardware - 1 : 1;
+        const size_t worker_count = (std::min)(tasks_.size(),
+            (std::max)(size_t{ 2 }, (std::min)(size_t{ 12 }, available)));
+
+        next_task_.store(0);
+        completed_tasks_.store(0);
         task_running_ = true;
-        active_task_ = std::async(std::launch::async, [task = std::move(task)]()
+        workers_.reserve(worker_count);
+        for (size_t worker_index = 0; worker_index < worker_count; ++worker_index)
         {
-            const HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-            bool result = false;
-            try { result = task(); }
-            catch (...) { result = false; }
-            if (SUCCEEDED(com)) CoUninitialize();
-            return result;
-        });
+            workers_.push_back(std::async(std::launch::async, [this]()
+            {
+                const HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+                bool worker_succeeded = true;
+                for (;;)
+                {
+                    const size_t index = next_task_.fetch_add(1);
+                    if (index >= tasks_.size()) break;
+                    bool task_succeeded = false;
+                    try { task_succeeded = tasks_[index].task(); }
+                    catch (...) { task_succeeded = false; }
+                    worker_succeeded = task_succeeded && worker_succeeded;
+                    completed_tasks_.fetch_add(1);
+                }
+                if (SUCCEEDED(com)) CoUninitialize();
+                return worker_succeeded;
+            }));
+        }
     }
 
     void LoadingScene::Update(float elapsed_time)
     {
-        time_ += (std::max)(0.0f, elapsed_time);
         spinner_ += elapsed_time * 120.0f;
-        if (!task_running_)
-        {
-            StartNextTask();
-            return;
-        }
-        if (active_task_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) return;
-        succeeded_ = active_task_.get() && succeeded_;
+        if (!task_running_) return;
+        for (auto& worker : workers_)
+            if (worker.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) return;
+        for (auto& worker : workers_) succeeded_ = worker.get() && succeeded_;
+        workers_.clear();
         task_running_ = false;
-        ++completed_tasks_;
-        StartNextTask();
     }
 
     float LoadingScene::Progress() const noexcept
     {
         if (tasks_.empty()) return 1.0f;
-        return static_cast<float>(completed_tasks_) / static_cast<float>(tasks_.size());
+        return static_cast<float>(completed_tasks_.load()) / static_cast<float>(tasks_.size());
     }
 
     bool LoadingScene::IsFinished() const noexcept
     {
-        return initialized_ && !task_running_ && completed_tasks_ >= tasks_.size() && time_ >= 0.75f;
+        return initialized_ && !task_running_ && completed_tasks_.load() >= tasks_.size();
     }
 
     void LoadingScene::Render(const RenderContext& context)

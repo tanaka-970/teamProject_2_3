@@ -29,6 +29,7 @@ namespace ReplayEngine::Assets
     {
     public:
         using Completion = std::function<void(AsyncAssetResult&&)>;
+        using Work = std::function<void(AsyncAssetResult&)>;
 
         AsyncAssetManager();
         ~AsyncAssetManager();
@@ -37,6 +38,8 @@ namespace ReplayEngine::Assets
 
         std::uint64_t QueueFile(const std::filesystem::path& path,
             AssetKind kind, Completion completion);
+        std::uint64_t QueueTask(const std::filesystem::path& path,
+            AssetKind kind, Work work, Completion completion);
         void PumpMainThread();
         void CancelPending();
 
@@ -51,6 +54,7 @@ namespace ReplayEngine::Assets
             std::uint64_t ticket = 0;
             std::filesystem::path path;
             AssetKind kind = AssetKind::Unknown;
+            Work work;
             Completion completion;
         };
         struct CompletedJob
@@ -65,7 +69,7 @@ namespace ReplayEngine::Assets
         std::condition_variable condition_;
         std::deque<Job> jobs_;
         std::deque<CompletedJob> completed_;
-        std::thread worker_;
+        std::vector<std::thread> workers_;
         bool stopping_ = false;
         std::atomic<std::uint64_t> next_ticket_{ 1 };
         std::atomic<std::uint64_t> total_count_{ 0 };

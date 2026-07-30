@@ -45,6 +45,7 @@ extern ImWchar glyphRangesJapanese[];
 #include "../../RePlayEngine/Rendering/Materials/CharacterMaterialGpuData.h"
 #include "../../RePlayEngine/Assets/AssetDatabase.h"
 #include "../../RePlayEngine/Assets/AsyncAssetManager.h"
+#include "../../RePlayEngine/Assets/ConcurrentResourceCache.h"
 #include "../../RePlayEngine/Editor/Commands/UndoStack.h"
 #include "../../RePlayEngine/Editor/Gizmo/TransformGizmo.h"
 #include "../../RePlayEngine/Editor/Gizmo/ViewportPicker.h"
@@ -120,9 +121,9 @@ public:
     float animation_speed{ 1.0f };
     bool animation_loop{ true };
 
-    std::unique_ptr<static_mesh> static_meshes[8];
-    std::unique_ptr<skinned_mesh> skinned_meshes[8];
-    std::unique_ptr<gltf_model> stage_gltf_model;
+    std::shared_ptr<static_mesh> static_meshes[8];
+    std::shared_ptr<skinned_mesh> skinned_meshes[8];
+    std::shared_ptr<gltf_model> stage_gltf_model;
     Microsoft::WRL::ComPtr<ID3D11PixelShader> static_mesh_unlit_ps;
     Microsoft::WRL::ComPtr<ID3D11PixelShader> skinned_mesh_unlit_ps;
     Microsoft::WRL::ComPtr<ID3D11PixelShader> static_mesh_gbuffer_ps;
@@ -196,6 +197,9 @@ public:
     std::string      selected_stage_cache_path;
     std::string      stage_asset_status{ "未選択" };
     ReplayEngine::Assets::AssetDatabase asset_database;
+    ReplayEngine::Assets::ConcurrentResourceCache<static_mesh> static_mesh_cache;
+    ReplayEngine::Assets::ConcurrentResourceCache<skinned_mesh> skinned_mesh_cache;
+    ReplayEngine::Assets::ConcurrentResourceCache<gltf_model> gltf_model_cache;
     ReplayEngine::Assets::AsyncAssetManager async_asset_manager;
     ReplayEngine::Scene::SceneDocument editor_scene_document;
     ReplayEngine::Scene::SceneDocument runtime_scene_document;
@@ -268,6 +272,7 @@ public:
         }
 
 #ifdef USE_IMGUI
+        save_editor_session();
         ImGui_ImplDX11_Shutdown();
         ImGui_ImplWin32_Shutdown();
         ImGui::DestroyContext();
@@ -438,7 +443,10 @@ private:
     void paste_copied_entities();
     void duplicate_selected_entities();
     void save_scene_document(bool choose_path);
-    void load_scene_document(bool choose_path);
+    bool load_scene_document(bool choose_path,
+        ReplayEngine::Scene::EntityId preferred_entity_id = 0);
+    void save_editor_session();
+    void restore_editor_session();
     void create_scene_document(const std::string& name);
     void save_selected_prefab();
     void load_prefab();
@@ -516,6 +524,7 @@ private:
     bool editor_layout_checked{ false };
     bool editor_layout_dirty{ false };
     bool editor_hide_requested{ false };
+    bool editor_session_active{ false };
     bool edit_mode_active{ false };
     bool search_input_active{ false };
     bool focus_search_requested{ false };

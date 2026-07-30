@@ -80,3 +80,6 @@ vcpkg_installed/
 Testing/
 .cache/
 /.vs/3dgp
+
+# Per-user editor recovery state
+/Saved/
