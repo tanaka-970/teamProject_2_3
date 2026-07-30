@@ -43,6 +43,18 @@
 build/
 Build/
 build-*/
+/3dgp/x64/
+/x64/
+
+# Compiled shader output
+/Shader/compiled/
+
+# Visual Studio incremental build metadata
+*.tlog
+*.lastbuildstate
+*.recipe
+*.idb
+unsuccessfulbuild
 
 # CMake generated files
 CMakeFiles/
