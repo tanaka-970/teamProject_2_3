@@ -50,6 +50,7 @@ private:
 class UIManager
 {
 public:
+	//各SceneクラスのInitalizeでdeviceを代入してください
 	void Initalize(ID3D11Device* device);
 
 	std::vector<UI>& GetUI() { return mUIs; }
