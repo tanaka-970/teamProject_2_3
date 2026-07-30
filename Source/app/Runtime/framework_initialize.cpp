@@ -250,12 +250,6 @@ bool framework::initialize()
             device.Get(), ".\\resources\\AnimationModel\\AllAnimation1.fbx");
         return skinned_meshes[0] != nullptr;
     });
-    loading_scene->AddTask("Debug mesh", [this]
-    {
-        static_meshes[0] = std::make_unique<static_mesh>(
-            device.Get(), L".\\resources\\cube.obj", true);
-        return static_meshes[0] != nullptr;
-    });
     loading_scene->AddTask("IBL images", [this]
     {
         pbr.load_ibl(device.Get(), L".\\resources\\ibl\\diffuse_iem.dds",
