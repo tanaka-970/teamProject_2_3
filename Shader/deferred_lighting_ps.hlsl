@@ -101,10 +101,14 @@ float4 main(VS_OUT pin) : SV_TARGET
     // SSAOは1(遮蔽なし)、SSRは重み0(未使用)へ読み替える。
     PbrScreenSpaceInputs screen = pbr_default_screen_inputs();
     {
-        float4 occlusion_sample = ss_ambient_occlusion.Load(int3(pixel_position, 0));
+        // SSAOは半解像度で走ることがあるため、ピクセル座標ではなくUVで読む。
+        float4 occlusion_sample =
+            ss_ambient_occlusion.SampleLevel(pbr_sampler_linear, sampled_uv, 0);
         screen.ambient_occlusion = occlusion_sample.g > 0.0f ? saturate(occlusion_sample.r) : 1.0f;
 
-        float4 reflection_sample = ss_reflection.Load(int3(pixel_position, 0));
+        // SSRも半解像度で走ることがあるためUVで読む。
+        float4 reflection_sample =
+            ss_reflection.SampleLevel(pbr_sampler_linear, sampled_uv, 0);
         screen.reflection_color  = reflection_sample.rgb;
         screen.reflection_weight = saturate(reflection_sample.a);
     }

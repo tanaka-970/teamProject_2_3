@@ -10,6 +10,7 @@
 
 #include"texture.h"
 #include"../render/motion_vector_context.h"
+#include"../../RePlayEngine/Rendering/RenderStats.h"
 #include <cstring>
 #include <filesystem>
 #include <stdexcept>
@@ -719,6 +720,8 @@ void skinned_mesh::render(ID3D11DeviceContext* immediate_context,
             immediate_context->PSSetShaderResources(0, 1, material.shader_resource_views[0].GetAddressOf());
             immediate_context->PSSetShaderResources(1, 1, material.shader_resource_views[1].GetAddressOf());
 
+            ReplayEngine::Rendering::Stats().CountDrawIndexed(
+                subset.index_count, static_cast<uint32_t>(mesh.vertices.size()));
             immediate_context->DrawIndexed(subset.index_count, subset.start_index_location, 0);
         }
     }

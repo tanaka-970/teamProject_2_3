@@ -7,7 +7,8 @@
 
 namespace ReplayEngine::Rendering
 {
-    bool SsaoPass::Initialize(ID3D11Device* device, uint32_t width, uint32_t height)
+    bool SsaoPass::Initialize(ID3D11Device* device, uint32_t width, uint32_t height,
+        uint32_t resolution_divisor)
     {
         initialized_ = false;
         occlusion_shader_.Reset();
@@ -15,11 +16,18 @@ namespace ReplayEngine::Rendering
         constants_.Reset();
         if (!device || width < 2 || height < 2) return false;
 
+        // AOは低周波なので半解像度でも見た目がほとんど変わらず、
+        // ピクセルシェーダーの負荷が1/4になる。フルスクリーンパスが
+        // 積み上がるとPS実行回数が支配的になるため効果が大きい。
+        const uint32_t divisor = (std::max)(1u, resolution_divisor);
+        const uint32_t pass_width = (std::max)(2u, width / divisor);
+        const uint32_t pass_height = (std::max)(2u, height / divisor);
+
         // R=可視性, G=ビュー空間深度。ブラーが深度差を見るため2ch必要。
         constexpr DXGI_FORMAT format = DXGI_FORMAT_R16G16_FLOAT;
-        if (!occlusion_.Create(device, width, height, format)) return false;
-        if (!blur_.Create(device, width, height, format)) return false;
-        if (!resolved_.Create(device, width, height, format)) return false;
+        if (!occlusion_.Create(device, pass_width, pass_height, format)) return false;
+        if (!blur_.Create(device, pass_width, pass_height, format)) return false;
+        if (!resolved_.Create(device, pass_width, pass_height, format)) return false;
 
         D3D11_BUFFER_DESC buffer{};
         buffer.ByteWidth = sizeof(Constants);
@@ -27,6 +35,8 @@ namespace ReplayEngine::Rendering
         buffer.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
         if (FAILED(device->CreateBuffer(&buffer, nullptr, constants_.GetAddressOf())))
             return false;
+
+        states_.Initialize(device);
 
         create_ps_from_cso(device, "ssao_ps.cso", occlusion_shader_.GetAddressOf());
         create_ps_from_cso(device, "ssao_blur_ps.cso", blur_shader_.GetAddressOf());
@@ -47,6 +57,11 @@ namespace ReplayEngine::Rendering
             (std::max)(fade_end, fade_start + 1.0f), blur_direction_x, blur_direction_y };
         data.params3 = { (std::max)(blur_sharpness, 0.01f), normal_bias,
             enabled ? 1.0f : 0.0f, 0.0f };
+        // 半解像度で走るときは、ピクセル半径やタップ間隔をこの解像度基準にする。
+        const float target_width = static_cast<float>((std::max)(occlusion_.width, 1u));
+        const float target_height = static_cast<float>((std::max)(occlusion_.height, 1u));
+        data.target_size = { target_width, target_height,
+            1.0f / target_width, 1.0f / target_height };
         context->UpdateSubresource(constants_.Get(), 0, nullptr, &data, 0, 0);
         context->PSSetConstantBuffers(kConstantSlot, 1, constants_.GetAddressOf());
     }
@@ -57,6 +72,10 @@ namespace ReplayEngine::Rendering
         ID3D11ShaderResourceView* world_normal)
     {
         if (!initialized_ || !context || !depth || !world_normal) return nullptr;
+
+        // シェーダーレイヤーがADD/MULTIPLYを残していることがあるため、
+        // 必ず不透明ブレンドへ戻してから描く。
+        states_.ApplyOpaque(context);
 
         // 遮蔽率の生成。深度とG-Buffer法線を t0/t1 に置く。
         UploadConstants(context, 1.0f, 0.0f);

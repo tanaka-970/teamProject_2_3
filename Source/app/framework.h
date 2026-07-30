@@ -1,4 +1,4 @@
-ï»¿#pragma once
+#pragma once
 
 #include <windows.h>
 #include <tchar.h>
@@ -17,6 +17,8 @@
 #include "imgui/imgui_impl_win32.h"
 extern LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 extern ImWchar glyphRangesJapanese[];
+#include <chrono>
+#include <fstream>
 #endif
 
 #include <d3d11.h>
@@ -44,6 +46,8 @@ extern ImWchar glyphRangesJapanese[];
 #include "../../RePlayEngine/Rendering/Passes/TaaPass.h"
 #include "../../RePlayEngine/Rendering/Deferred/TiledDeferredPass.h"
 #include "../../RePlayEngine/Rendering/FrameConstants.h"
+#include "../../RePlayEngine/Rendering/RenderStats.h"
+#include "../../RePlayEngine/Rendering/Frustum.h"
 #include "../render/motion_vector_context.h"
 #include "../../RePlayEngine/Rendering/RenderGraph/RenderGraph.h"
 #include "../../RePlayEngine/Rendering/ShaderStack/ShaderLayerStack.h"
@@ -151,8 +155,8 @@ public:
     Microsoft::WRL::ComPtr<ID3D11Buffer> shader_layer_cb;
     Microsoft::WRL::ComPtr<ID3D11Buffer> character_material_cb;
 
-    // ãƒ¢ãƒ‡ãƒ«æ¯ã®ã‚·ã‚§ãƒ¼ãƒ‡ã‚£ãƒ³ã‚°è¨­å®š (skinned_meshes[i] ã¨å¯¾å¿œ)
-    // 0=FBXæ¨™æº–ã€1=PBRã€2=ãƒˆã‚¥ãƒ¼ãƒ³ã€3=ã‚¢ãƒ³ãƒªãƒƒãƒˆã€4=ãƒ”ã‚¯ã‚»ãƒ¬ãƒ¼ã‚·ãƒ§ãƒ³
+    // ƒ‚ƒfƒ‹–ˆ‚ÌƒVƒF[ƒfƒBƒ“ƒOİ’è (skinned_meshes[i] ‚Æ‘Î‰)
+    // 0=FBX•W€A1=PBRA2=ƒgƒD[ƒ“A3=ƒAƒ“ƒŠƒbƒgA4=ƒsƒNƒZƒŒ[ƒVƒ‡ƒ“
     int shading_per_skinned[8] { 1, 1, 1, 1, 1, 1, 1, 1 };
     int shading_per_static [8] { 1, 1, 1, 1, 1, 1, 1, 1 };
     bool outline_per_skinned[8] { false, false, false, false, false, false, false, false };
@@ -166,7 +170,7 @@ public:
     float pixelate_grid_per_static[8] { 6, 6, 6, 6, 6, 6, 6, 6 };
     float pixelate_strength_per_static[8] { 1, 1, 1, 1, 1, 1, 1, 1 };
 
-    // UIã‹ã‚‰å…¨ä½“ã¸é©ç”¨ã™ã‚‹æç”»æ–¹å¼ã€‚shading_per_skinned[0] ã¨åŒæœŸã™ã‚‹ã€‚
+    // UI‚©‚ç‘S‘Ì‚Ö“K—p‚·‚é•`‰æ•û®Bshading_per_skinned[0] ‚Æ“¯Šú‚·‚éB
     int shading_model_override { 1 };
 
     pbr_renderer pbr;
@@ -186,26 +190,35 @@ public:
     ReplayEngine::Rendering::TaaPass taa_pass;
     ReplayEngine::Rendering::TiledDeferredPass tiled_deferred;
 
-    // SSAO/SSR/TAAãŒå…±æœ‰ã™ã‚‹ãƒ•ãƒ¬ãƒ¼ãƒ å®šæ•°ã€‚b9ã¸è¼‰ã›ã‚‹ã€‚
+    // SSAO/SSR/TAA‚ª‹¤—L‚·‚éƒtƒŒ[ƒ€’è”Bb9‚ÖÚ‚¹‚éB
     ReplayEngine::Rendering::FrameConstants frame_constants{};
     Microsoft::WRL::ComPtr<ID3D11Buffer> frame_constants_cb;
-    // TAAã®å†æŠ•å½±ã«ä½¿ã†å‰ãƒ•ãƒ¬ãƒ¼ãƒ ã®ãƒ“ãƒ¥ãƒ¼å°„å½±è¡Œåˆ—ã€‚åˆå›ã¯ä»Šãƒ•ãƒ¬ãƒ¼ãƒ ã§åŸ‹ã‚ã‚‹ã€‚
+    // TAA‚ÌÄ“Š‰e‚Ég‚¤‘OƒtƒŒ[ƒ€‚Ìƒrƒ…[Ë‰es—ñB‰‰ñ‚Í¡ƒtƒŒ[ƒ€‚Å–„‚ß‚éB
     DirectX::XMFLOAT4X4 previous_view_projection{};
     bool previous_view_projection_valid{ false };
-    // å°„å½±è¡Œåˆ—ã¸åŠ ç®—ã—ãŸTAAã‚¸ãƒƒã‚¿ãƒ¼(NDC)ã€‚ãƒ¢ãƒ¼ã‚·ãƒ§ãƒ³ãƒ™ã‚¯ã‚¿ãƒ¼ã§æ‰“ã¡æ¶ˆã™ã®ã«ä½¿ã†ã€‚
+    // Ë‰es—ñ‚Ö‰ÁZ‚µ‚½TAAƒWƒbƒ^[(NDC)Bƒ‚[ƒVƒ‡ƒ“ƒxƒNƒ^[‚Å‘Å‚¿Á‚·‚Ì‚Ég‚¤B
     DirectX::XMFLOAT2 taa_jitter_ndc{ 0.0f, 0.0f };
     DirectX::XMFLOAT2 previous_taa_jitter_ndc{ 0.0f, 0.0f };
     unsigned int frame_index{ 0 };
     bool enable_ssao{ true };
     bool enable_ssr{ true };
     bool enable_taa{ true };
+    // [“xƒvƒŠƒpƒXBG-Buffer‚ÌPSÀs‚ğÅ‘O–Ê‚Ì1‰ñ‚É—}‚¦‚éB
+    // ’¸“_ˆ—‚ª2‰ñ‚É‚È‚é‚½‚ßALOD‚Æ•¹—p‚·‚é‘O’ñB
+    bool enable_depth_prepass{ true };
+    // •`‰æ“ŒvƒI[ƒo[ƒŒƒC‚Ì•\¦BF4‚ÅØ‚è‘Ö‚¦‚éB
+    bool show_render_stats{ true };
+    // åˆå›ãƒ•ãƒ¬ãƒ¼ãƒ ã ã‘çµ±è¨ˆã‚¦ã‚£ãƒ³ãƒ‰ã‚¦ã®ä½ç½®ã‚’å¼·åˆ¶ã™ã‚‹ãŸã‚ã®ãƒ•ãƒ©ã‚°ã€‚
+    // imgui.ini ã«æ®‹ã£ãŸæ—§åº§æ¨™(ã‚¤ãƒ³ã‚¹ãƒšã‚¯ã‚¿ã¨é‡ãªã‚‹ä½ç½®)ã«
+    // å¼•ã£å¼µã‚‰ã‚Œã‚‹ã®ã‚’é˜²ãã€‚
+    bool stats_window_placed_{ false };
 
     GameScene*       game_scene{ nullptr };
     bool             enable_scene_game{ true };
     bool             editor_mode{ false };
 
-    // ã‚¹ãƒ†ãƒ¼ã‚¸ã®æç”»æ–¹å¼ã¯ skinned[0] ã¨åˆ†é›¢ã™ã‚‹ã€‚0ã¯FBXæ¨™æº–ã§ä¸Šæ›¸ãã—ãªã„ã€‚
-    // 0=FBXæ¨™æº–ã€1=PBRã€2=ãƒˆã‚¥ãƒ¼ãƒ³ã€3=ã‚¢ãƒ³ãƒªãƒƒãƒˆã€4=ãƒ”ã‚¯ã‚»ãƒ¬ãƒ¼ã‚·ãƒ§ãƒ³
+    // ƒXƒe[ƒW‚Ì•`‰æ•û®‚Í skinned[0] ‚Æ•ª—£‚·‚éB0‚ÍFBX•W€‚Åã‘‚«‚µ‚È‚¢B
+    // 0=FBX•W€A1=PBRA2=ƒgƒD[ƒ“A3=ƒAƒ“ƒŠƒbƒgA4=ƒsƒNƒZƒŒ[ƒVƒ‡ƒ“
     int              shading_per_stage{ 1 };
     bool             outline_per_stage{ false };
     ReplayEngine::Rendering::ShaderLayerStack stage_shader_layers;
@@ -219,7 +232,7 @@ public:
     bool             stage_asset_placed{ false };
     std::string      selected_stage_asset_path;
     std::string      selected_stage_cache_path;
-    std::string      stage_asset_status{ "æœªé¸æŠ" };
+    std::string      stage_asset_status{ "–¢‘I‘ğ" };
     ReplayEngine::Assets::AssetDatabase asset_database;
     ReplayEngine::Assets::ConcurrentResourceCache<static_mesh> static_mesh_cache;
     ReplayEngine::Assets::ConcurrentResourceCache<skinned_mesh> skinned_mesh_cache;
@@ -236,15 +249,15 @@ public:
     std::vector<ReplayEngine::Scene::SceneEntity> copied_scene_entities;
     std::string      selected_stage_asset_guid;
     std::filesystem::path current_scene_path{ "resources/Scenes/Main.replayscene" };
-    std::string      scene_document_status{ "æ–°è¦ã‚·ãƒ¼ãƒ³" };
-    std::string      shader_preset_status{ "ãƒ—ãƒªã‚»ãƒƒãƒˆæœªé¸æŠ" };
+    std::string      scene_document_status{ "V‹KƒV[ƒ“" };
+    std::string      shader_preset_status{ "ƒvƒŠƒZƒbƒg–¢‘I‘ğ" };
     bool             async_stage_load_active{ false };
 
     bool             enable_deferred { true };
     bool             enable_particles{ false };
     bool             enable_trail    { false };
 
-    // ãƒ€ãƒŸãƒ¼æ³•ç·šãƒ†ã‚¯ã‚¹ãƒãƒ£ (æ³•ç·šãƒãƒƒãƒ—ãŒç„¡ã„ãƒãƒ†ãƒªã‚¢ãƒ«ç”¨ãƒ•ã‚©ãƒ¼ãƒ«ãƒãƒƒã‚¯)
+    // ƒ_ƒ~[–@üƒeƒNƒXƒ`ƒƒ (–@üƒ}ƒbƒv‚ª–³‚¢ƒ}ƒeƒŠƒAƒ‹—pƒtƒH[ƒ‹ƒoƒbƒN)
     Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> dummy_normal_srv;
 
     int toon_preset_index{ 0 };
@@ -257,10 +270,34 @@ public:
     framework(framework&&) noexcept = delete;
     framework& operator=(framework&&) noexcept = delete;
 
+    // I—¹——R‚Æå—v‚Èisó‹µ‚ğ Saved/engine_log.txt ‚Ö’Ç‹L‚·‚éB
+    // u‚È‚º—‚¿‚½‚©v‚ª•ª‚©‚ç‚È‚¢‚ÆŒ´ˆö‚ÌØ‚è•ª‚¯‚ª‚Å‚«‚È‚¢‚½‚ßA
+    // —áŠO‚âˆÙíI—¹‚¾‚¯‚Å‚È‚­³íI—¹‚ÌŒo˜H‚àc‚·B
+    static void log_shutdown_reason(const char* reason)
+    {
+        std::error_code error;
+        std::filesystem::create_directories("Saved", error);
+        std::ofstream log("Saved/engine_log.txt", std::ios::app);
+        if (!log) return;
+        const auto now = std::chrono::system_clock::to_time_t(
+            std::chrono::system_clock::now());
+        tm local{};
+        localtime_s(&local, &now);
+        char stamp[32]{};
+        strftime(stamp, sizeof(stamp), "%H:%M:%S", &local);
+        log << "[" << stamp << "] " << reason << '\n';
+    }
+
     int run()
     {
         MSG msg{};
-        if (!initialize()) return 0;
+        log_shutdown_reason("=== ‹N“® ===");
+        if (!initialize())
+        {
+            log_shutdown_reason("initialize() ‚ª false ‚ğ•Ô‚µ‚½‚½‚ßI—¹");
+            return 0;
+        }
+        log_shutdown_reason("initialize() Š®—¹");
 
 #ifdef USE_IMGUI
         IMGUI_CHECKVERSION();
@@ -290,10 +327,26 @@ public:
             {
                 tictoc.tick();
                 calculate_frame_stats();
-                update(tictoc.time_interval());
-                render(tictoc.time_interval());
+                // •`‰æ’†‚Ì–¢•ß‘¨—áŠO‚ÅÃ‚©‚É—‚¿‚é‚ÆŒ´ˆö‚ª’Ç‚¦‚È‚¢‚½‚ßA
+                // ‚±‚±‚Å•ß‚Ü‚¦‚Ä——R‚ğc‚·B
+                try
+                {
+                    update(tictoc.time_interval());
+                    render(tictoc.time_interval());
+                }
+                catch (const std::exception& exception)
+                {
+                    log_shutdown_reason((std::string("—áŠO: ") + exception.what()).c_str());
+                    throw;
+                }
+                catch (...)
+                {
+                    log_shutdown_reason("•s–¾‚È—áŠO");
+                    throw;
+                }
             }
         }
+        log_shutdown_reason("ƒƒbƒZ[ƒWƒ‹[ƒv‚ğ”²‚¯‚½ (WM_QUIT)");
 
 #ifdef USE_IMGUI
         save_editor_session();
@@ -378,6 +431,11 @@ public:
             set_edit_mode(!edit_mode_active);
             return 0;
         }
+        if (msg == WM_KEYDOWN && wparam == VK_F4)
+        {
+            show_render_stats = !show_render_stats;
+            return 0;
+        }
 #endif
         if ((msg == WM_SYSKEYDOWN && wparam == VK_RETURN && (lparam & (1LL << 29))) ||
             (msg == WM_KEYDOWN && wparam == VK_F11))
@@ -394,7 +452,8 @@ public:
         switch (msg)
         {
         case WM_PAINT: { PAINTSTRUCT ps; BeginPaint(hwnd, &ps); EndPaint(hwnd, &ps); break; }
-        case WM_DESTROY: PostQuitMessage(0); break;
+        case WM_CLOSE: log_shutdown_reason("WM_CLOSE"); return DefWindowProc(hwnd, msg, wparam, lparam);
+        case WM_DESTROY: log_shutdown_reason("WM_DESTROY"); PostQuitMessage(0); break;
         case WM_CREATE:  break;
         case WM_SIZE:
             if (wparam != SIZE_MINIMIZED)
@@ -416,6 +475,7 @@ public:
             }
             if (wparam == VK_ESCAPE)
             {
+                log_shutdown_reason("ESCƒL[");
                 PostMessage(hwnd, WM_CLOSE, 0, 0);
             }
             break;
@@ -433,7 +493,7 @@ private:
     void render(float elapsed_time);
     bool uninitialize();
     void store_object_world(DirectX::XMFLOAT4X4& world) const;
-    // SSAO/SSR/TAAãŒå…±æœ‰ã™ã‚‹ãƒ•ãƒ¬ãƒ¼ãƒ å®šæ•°ã‚’ä½œã£ã¦b9ã¸è¼‰ã›ã‚‹ã€‚
+    // SSAO/SSR/TAA‚ª‹¤—L‚·‚éƒtƒŒ[ƒ€’è”‚ğì‚Á‚Äb9‚ÖÚ‚¹‚éB
     void update_frame_constants(const DirectX::XMMATRIX& view,
         const DirectX::XMMATRIX& projection, float elapsed_time);
     ID3D11PixelShader* skinned_forward_shader(int shading) const;
@@ -453,8 +513,10 @@ private:
         ReplayEngine::Rendering::ShaderLayerStack& layers, float& pixel_grid,
         float& pixelate_strength);
     void draw_screen_effect_stack();
-    // SSAO / SSR / TAA / CSM ã®æœ‰åŠ¹åŒ–ã¨èª¿æ•´é …ç›®ã€‚
+    // SSAO / SSR / TAA / CSM ‚Ì—LŒø‰»‚Æ’²®€–ÚB
     void draw_screen_space_settings();
+    // ƒ|ƒŠƒSƒ“”Eƒhƒ[ƒR[ƒ‹”‚È‚Ç‚Ì•`‰æ“ŒvƒI[ƒo[ƒŒƒCB
+    void draw_render_stats_overlay();
     void draw_character_material_controls(const char* id, int& base_shader, bool& outline_pass,
         ReplayEngine::Rendering::ShaderLayerStack& layers,
         ReplayEngine::Rendering::CharacterMaterialProfile& profile, float& pixel_grid,
@@ -462,8 +524,8 @@ private:
     bool browse_stage_asset();
     bool load_stage_asset(const std::wstring& filename);
     bool load_stage_asset_now(const std::wstring& filename);
-    // ãƒ¯ãƒ¼ã‚«ãƒ¼ã‚¹ãƒ¬ãƒƒãƒ‰ã‹ã‚‰å‘¼ã¹ã‚‹ãƒ¢ãƒ‡ãƒ«å…ˆèª­ã¿ã€‚ã‚­ãƒ£ãƒƒã‚·ãƒ¥ã¸è¼‰ã›ã‚‹ã ã‘ã§
-    // frameworkã®è¡¨ç¤ºçŠ¶æ…‹ã¯è§¦ã‚‰ãªã„ãŸã‚ã€ä¸¦åˆ—ãƒ­ãƒ¼ãƒ‰ä¸­ã«å®‰å…¨ã«ä½¿ãˆã‚‹ã€‚
+    // ƒ[ƒJ[ƒXƒŒƒbƒh‚©‚çŒÄ‚×‚éƒ‚ƒfƒ‹æ“Ç‚İBƒLƒƒƒbƒVƒ…‚ÖÚ‚¹‚é‚¾‚¯‚Å
+    // framework‚Ì•\¦ó‘Ô‚ÍG‚ç‚È‚¢‚½‚ßA•À—ñƒ[ƒh’†‚ÉˆÀ‘S‚Ég‚¦‚éB
     bool prewarm_model_asset(const std::filesystem::path& path);
     void draw_stage_placement_controls();
     void draw_scene_document_toolbar();
@@ -557,17 +619,17 @@ private:
     bool editor_layout_dirty{ false };
     bool editor_hide_requested{ false };
     bool editor_session_active{ false };
-    // ã“ã®ãƒ•ãƒ¬ãƒ¼ãƒ ã§ImGui::NewFrame()ã‚’é€šã—ãŸã‹ã€‚
-    // ãƒ­ãƒ¼ãƒ‰å®Œäº†ãƒ•ãƒ¬ãƒ¼ãƒ ã®ã‚ˆã†ã«update()ãŒæ—©æœŸreturnã—ãŸç›´å¾Œã«editor_modeãŒ
-    // ç«‹ã¤å ´åˆãŒã‚ã‚Šã€NewFrameç„¡ã—ã§Render()ã™ã‚‹ã¨ImGuiãŒassertã™ã‚‹ãŸã‚ã€
-    // NewFrameã¨Render/EndFrameã®å¯¾ã‚’ã“ã®ãƒ•ãƒ©ã‚°ã§ä¿è¨¼ã™ã‚‹ã€‚
+    // ‚±‚ÌƒtƒŒ[ƒ€‚ÅImGui::NewFrame()‚ğ’Ê‚µ‚½‚©B
+    // ƒ[ƒhŠ®—¹ƒtƒŒ[ƒ€‚Ì‚æ‚¤‚Éupdate()‚ª‘Šúreturn‚µ‚½’¼Œã‚Éeditor_mode‚ª
+    // —§‚Âê‡‚ª‚ ‚èANewFrame–³‚µ‚ÅRender()‚·‚é‚ÆImGui‚ªassert‚·‚é‚½‚ßA
+    // NewFrame‚ÆRender/EndFrame‚Ì‘Î‚ğ‚±‚Ìƒtƒ‰ƒO‚Å•ÛØ‚·‚éB
     bool imgui_frame_active{ false };
     bool edit_mode_active{ false };
     bool search_input_active{ false };
     bool focus_search_requested{ false };
     char editor_search_text[256]{};
     char editor_command_text[256]{};
-    std::string editor_command_result{ "help ã§ã‚³ãƒãƒ³ãƒ‰ä¸€è¦§ã‚’è¡¨ç¤º" };
+    std::string editor_command_result{ "help ‚ÅƒRƒ}ƒ“ƒhˆê——‚ğ•\¦" };
     bool viewport_drag_selecting{ false };
     POINT viewport_drag_start{};
 };

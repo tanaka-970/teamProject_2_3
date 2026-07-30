@@ -69,7 +69,7 @@ namespace ReplayEngine::Rendering
         uint32_t TileCountY() const noexcept { return tile_count_y_; }
 
         // エディタから触る値。
-        bool enabled = true;           // UIでOFFにすればPS版と見比べられる
+        bool enabled = false;          // 既定はOFF。UIでONにしてPS版と見比べる
         bool debug_heatmap = false;    // タイルあたりのライト数を色で可視化
         float heatmap_scale = 32.0f;   // 赤になるライト数
 

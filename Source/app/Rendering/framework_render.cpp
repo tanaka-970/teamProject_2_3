@@ -164,6 +164,9 @@ void framework::render(float elapsed_time)
     apply_pending_resize();
     if (!render_target_view || !depth_stencil_view || !framebuffers[0]) return;
 
+    // 描画統計の計測開始。CPUカウンタを0に戻し、GPUクエリを開く。
+    ReplayEngine::Rendering::Stats().BeginFrame(immediate_context.Get());
+
     // 前フレームのRTV/SRV参照を先に外し、同じリソースを入出力へ同時設定する競合を防ぐ。
     ID3D11RenderTargetView* null_rtvs[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT]{};
     immediate_context->OMSetRenderTargets(_countof(null_rtvs), null_rtvs, 0);
@@ -202,6 +205,9 @@ void framework::render(float elapsed_time)
             depth_stencil_states[(size_t)DEPTH_STATE::ZT_OFF_ZW_OFF].Get(), 0);
         immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
         scene_manager.Render({ immediate_context.Get(), viewport.Width, viewport.Height });
+        // 早期returnでもクエリを閉じる。開いたままにすると次フレームで
+        // 二重Beginになりクエリが壊れる。
+        ReplayEngine::Rendering::Stats().EndFrame(immediate_context.Get());
         swap_chain->Present(0, 0);
         return;
     }
@@ -267,8 +273,21 @@ void framework::render(float elapsed_time)
     immediate_context->VSSetConstantBuffers(1, 1, constant_buffers[0].GetAddressOf());
     immediate_context->PSSetConstantBuffers(1, 1, constant_buffers[0].GetAddressOf());
 
-    // SSAO/SSR/TAAが参照するカメラ行列群をb9へ載せる。
+    // SSAO/SSR/TAAが参照するカメラ行列群をb4へ載せる。
     update_frame_constants(V, P, elapsed_time);
+
+    // 視錐台カリング用の平面をこのフレームのビュー射影から作る。
+    // 各メッシュは描画直前にこれを参照して画面外のプリミティブを捨てる。
+    {
+        auto& culling = ReplayEngine::Rendering::Culling();
+        culling.BeginFrame();
+        culling.frustum.BuildFromViewProjection(scene.view_projection);
+        // 自動LODは画面上の投影サイズで段を決めるので、行列と画面高さを渡す。
+        DirectX::XMStoreFloat4x4(&culling.view_projection, P);
+        culling.screen_height = static_cast<float>(SCREEN_HEIGHT);
+        culling.camera_position = { scene.camera_position.x,
+            scene.camera_position.y, scene.camera_position.z };
+    }
 
     const float original_pbr_shadow_enable = pbr.light.shadow_params.w;
     const bool pbr_shadow_enabled =
@@ -477,15 +496,58 @@ void framework::render(float elapsed_time)
     const bool deferred_active = deferred.initialized;
     if (deferred_active)
     {
-        // Deferred経路は材質情報をGBufferへ集約し、照明パスで一括して色を決定する。
-        FLOAT deferred_clear[]{ background_color.x, background_color.y, background_color.z, background_color.w };
-        deferred.gbuffer_begin(immediate_context.Get(), deferred_clear);
-        immediate_context->OMSetBlendState(blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
-        immediate_context->OMSetDepthStencilState(depth_stencil_states[(size_t)DEPTH_STATE::ZT_ON_ZW_ON].Get(), 0);
-        immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
-
         DirectX::XMFLOAT4X4 world;
         store_object_world(world);
+
+        // --- 深度プリパス -------------------------------------------------
+        // 深度だけを先に埋めてから、G-Buffer本描画をDepthFunc=EQUALで走らせる。
+        // 柱が重なるシーンではG-Buffer PS(テクスチャ3枚サンプル)の実行回数が
+        // 手前の1回だけになる。頂点処理は2回になるので、LODとの併用が前提。
+        const bool use_depth_prepass = enable_depth_prepass && deferred.depth_equal_state;
+        if (use_depth_prepass)
+        {
+            deferred.depth_prepass_begin(immediate_context.Get());
+            immediate_context->OMSetBlendState(
+                blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
+            immediate_context->OMSetDepthStencilState(
+                depth_stencil_states[(size_t)DEPTH_STATE::ZT_ON_ZW_ON].Get(), 0);
+            immediate_context->RSSetState(
+                rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+
+            // 深度だけなのでピクセルシェーダーは外す(bind_pixel_shader=false)。
+            // モーションベクターもここでは書かない。
+            if (skinned_meshes[0])
+                skinned_meshes[0]->render(immediate_context.Get(), world, material_color,
+                    active_keyframe, nullptr, nullptr, nullptr, false, false);
+            if (enable_static_meshes && static_meshes[0])
+                static_meshes[0]->render(immediate_context.Get(), world, material_color,
+                    nullptr, nullptr, nullptr, false, false);
+            if (enable_scene_game && game_scene && enable_stage_render)
+            {
+                DirectX::XMFLOAT4X4 stage_world;
+                DirectX::XMStoreFloat4x4(&stage_world,
+                    DirectX::XMLoadFloat4x4(&game_scene->Gameplay().GetStage().GetTransform()));
+                if (skinned_mesh* stage_model = game_scene->Gameplay().GetStage().GetModel())
+                    stage_model->render(immediate_context.Get(), stage_world, material_color,
+                        nullptr, nullptr, nullptr, nullptr, false, false);
+                // Sponzaのような大きなglTFステージが最大のオーバードロー源なので、
+                // ここを深度プリパスへ通すのが一番効く。
+                else if (stage_gltf_model)
+                    stage_gltf_model->render(immediate_context.Get(), stage_world,
+                        material_color, nullptr, false, true);
+            }
+            // 深度プリパスの描画数は統計へ混ぜない(同じ形状を二重に数えないため)。
+        }
+
+        // Deferred経路は材質情報をGBufferへ集約し、照明パスで一括して色を決定する。
+        FLOAT deferred_clear[]{ background_color.x, background_color.y, background_color.z, background_color.w };
+        deferred.gbuffer_begin(immediate_context.Get(), deferred_clear, !use_depth_prepass);
+        immediate_context->OMSetBlendState(blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
+        // プリパス済みなら EQUAL 比較で最前面だけを通す。
+        immediate_context->OMSetDepthStencilState(use_depth_prepass
+            ? deferred.depth_equal_state.Get()
+            : depth_stencil_states[(size_t)DEPTH_STATE::ZT_ON_ZW_ON].Get(), 0);
+        immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
         if (skinned_meshes[0])
         {
             bind_gbuffer_material(player_uses_pixelate ? SHADING_MODEL_PIXELATE
@@ -822,6 +884,17 @@ void framework::render(float elapsed_time)
             immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
         }
 
+        // シェーダーレイヤー(追加パス)はブレンドをALPHA/ADD/MULTIPLYへ変えるため、
+        // 後続のフルスクリーンパスへ持ち越さないよう必ず不透明へ戻す。
+        // ここを忘れると、TAAが加算合成になって履歴が累積し、
+        // シーンビューが固まったように見える。
+        immediate_context->OMSetBlendState(
+            blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
+        immediate_context->OMSetDepthStencilState(
+            depth_stencil_states[(size_t)DEPTH_STATE::ZT_OFF_ZW_OFF].Get(), 0);
+        immediate_context->RSSetState(
+            rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+
         // TAAはトーンマップ前のHDRで解く。明部のエイリアスも正しく平均化され、
         // かつジッター済みの複数フレームが実質的なスーパーサンプリングになる。
         ID3D11ShaderResourceView* lit_srv = deferred.lit_srv.Get();
@@ -1041,6 +1114,9 @@ void framework::render(float elapsed_time)
         }
     }
 #endif
+
+    // GPUクエリを閉じて、揃った計測結果を回収する。
+    ReplayEngine::Rendering::Stats().EndFrame(immediate_context.Get());
 
     // 次フレームの再投影用に今フレームのビュー射影を残し、
     // ジッター/ノイズ列を進めるためのフレーム番号を更新する。

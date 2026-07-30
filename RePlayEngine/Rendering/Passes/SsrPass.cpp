@@ -7,7 +7,8 @@
 
 namespace ReplayEngine::Rendering
 {
-    bool SsrPass::Initialize(ID3D11Device* device, uint32_t width, uint32_t height)
+    bool SsrPass::Initialize(ID3D11Device* device, uint32_t width, uint32_t height,
+        uint32_t resolution_divisor)
     {
         initialized_ = false;
         history_valid_ = false;
@@ -16,10 +17,15 @@ namespace ReplayEngine::Rendering
         constants_.Reset();
         if (!device || width < 2 || height < 2) return false;
 
+        const uint32_t divisor = (std::max)(1u, resolution_divisor);
+        const uint32_t pass_width = (std::max)(2u, width / divisor);
+        const uint32_t pass_height = (std::max)(2u, height / divisor);
+
         // 反射色はHDRのまま扱う。信頼度をアルファに入れるので4ch必要。
         constexpr DXGI_FORMAT format = DXGI_FORMAT_R16G16B16A16_FLOAT;
-        if (!trace_.Create(device, width, height, format)) return false;
-        if (!resolved_.Create(device, width, height, format)) return false;
+        if (!trace_.Create(device, pass_width, pass_height, format)) return false;
+        if (!resolved_.Create(device, pass_width, pass_height, format)) return false;
+        // 履歴は lit テクスチャから CopyResource するため、必ずフル解像度。
         if (!history_.Create(device, width, height, format)) return false;
 
         D3D11_BUFFER_DESC buffer{};
@@ -28,6 +34,8 @@ namespace ReplayEngine::Rendering
         buffer.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
         if (FAILED(device->CreateBuffer(&buffer, nullptr, constants_.GetAddressOf())))
             return false;
+
+        states_.Initialize(device);
 
         create_ps_from_cso(device, "ssr_trace_ps.cso", trace_shader_.GetAddressOf());
         create_ps_from_cso(device, "ssr_resolve_ps.cso", resolve_shader_.GetAddressOf());
@@ -48,6 +56,11 @@ namespace ReplayEngine::Rendering
             (std::max)(ray_bias, 0.0f), history_valid_ ? 1.0f : 0.0f };
         data.params3 = { static_cast<float>(std::clamp(resolve_tap_count, 1, 16)),
             4.0f, 0.0f, 0.0f };
+        // 半解像度で走るときは、ステップ幅やresolve半径をこの解像度基準にする。
+        const float target_width = static_cast<float>((std::max)(trace_.width, 1u));
+        const float target_height = static_cast<float>((std::max)(trace_.height, 1u));
+        data.target_size = { target_width, target_height,
+            1.0f / target_width, 1.0f / target_height };
         context->UpdateSubresource(constants_.Get(), 0, nullptr, &data, 0, 0);
         context->PSSetConstantBuffers(kConstantSlot, 1, constants_.GetAddressOf());
     }
@@ -62,6 +75,9 @@ namespace ReplayEngine::Rendering
         // 履歴が無い初回フレームは反射源が存在しないので何も出さない。
         if (!enabled || !history_valid_) return nullptr;
 
+        // シェーダーレイヤーがADD/MULTIPLYを残していることがあるため、
+        // 必ず不透明ブレンドへ戻してから描く。
+        states_.ApplyOpaque(context);
         UploadConstants(context);
 
         ID3D11ShaderResourceView* trace_inputs[4]{

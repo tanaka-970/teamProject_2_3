@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../RenderTexture.h"
+#include "../PassStates.h"
 
 #include <d3d11.h>
 #include <wrl.h>
@@ -70,6 +71,9 @@ namespace ReplayEngine::Rendering
         RenderTexture history_;   // 前フレームの合成結果
         Microsoft::WRL::ComPtr<ID3D11PixelShader> resolve_shader_;
         Microsoft::WRL::ComPtr<ID3D11Buffer> constants_;
+        // 直前のパスが残したブレンド設定に影響されないようにする。
+        // 加算のまま合成すると履歴が累積して画面が固まって見える。
+        PassStates states_;
         DirectX::XMFLOAT2 current_jitter_{ 0.0f, 0.0f };
         DirectX::XMFLOAT2 previous_jitter_{ 0.0f, 0.0f };
         bool initialized_ = false;

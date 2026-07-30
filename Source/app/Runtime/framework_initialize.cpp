@@ -218,6 +218,8 @@ bool framework::initialize()
     ssr_pass.Initialize(device.Get(), SCREEN_WIDTH, SCREEN_HEIGHT);
     taa_pass.Initialize(device.Get(), SCREEN_WIDTH, SCREEN_HEIGHT);
     tiled_deferred.Initialize(device.Get(), SCREEN_WIDTH, SCREEN_HEIGHT);
+    // ポリゴン数計測用のパイプライン統計クエリ。
+    ReplayEngine::Rendering::Stats().Initialize(device.Get());
     lights.initialize(device.Get());
     lights.data.light_counts.x = 1;
     lights.data.point_lights[0].position = { 3.0f, 4.0f, -24.0f, 18.0f };

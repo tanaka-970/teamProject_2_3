@@ -39,7 +39,8 @@ float4 main(VS_OUT pin) : SV_TARGET
     const float3 V = normalize(-P);
 
     // ワールド半径をピクセル半径へ。projection._22 = 1/tan(fovY/2)。
-    const float projection_scale = 0.5f * frame_screen_size.y * frame_projection._22;
+    // 半解像度で走る場合はAOパス自身の高さを使う(そうしないと半径が倍になる)。
+    const float projection_scale = 0.5f * ssao_target_size.y * frame_projection._22;
     const float world_radius = max(ssao_params0.x, 1.0e-3f);
     float pixel_radius = world_radius * projection_scale / max(view_z, 1.0e-4f);
     pixel_radius = clamp(pixel_radius, ssao_params1.w, ssao_params1.z);
@@ -97,7 +98,7 @@ float4 main(VS_OUT pin) : SV_TARGET
                 const float t = (float(step) + step_noise + 0.5f) / float(step_count);
                 const float sample_pixel_distance = max(t * t * pixel_radius, 1.0f);
                 const float2 sample_uv =
-                    uv + direction * sample_pixel_distance * frame_screen_size.zw;
+                    uv + direction * sample_pixel_distance * ssao_target_size.zw;
                 if (any(sample_uv < 0.0f) || any(sample_uv > 1.0f)) break;
 
                 const float sample_device_z =

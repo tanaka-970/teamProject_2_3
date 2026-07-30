@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../RenderTexture.h"
+#include "../PassStates.h"
 
 #include <d3d11.h>
 #include <wrl.h>
@@ -26,11 +27,17 @@ namespace ReplayEngine::Rendering
             DirectX::XMFLOAT4 params1{ 0.65f, 1.0f, 0.12f, 5.0f };
             DirectX::XMFLOAT4 params2{ 1.0f, 12.0f, 1.0f, 0.0f };
             DirectX::XMFLOAT4 params3{ 8.0f, 4.0f, 0.0f, 0.0f };
+            // SSRパス自身の解像度 (x=w, y=h, z=1/w, w=1/h)。半解像度対応に使う。
+            DirectX::XMFLOAT4 target_size{ 1.0f, 1.0f, 1.0f, 1.0f };
         };
 
         static constexpr uint32_t kConstantSlot = 13;
 
-        bool Initialize(ID3D11Device* device, uint32_t width, uint32_t height);
+        // resolution_divisor=2 で半解像度。反射はラフネスでぼかす前提なので
+        // 半分でも見た目の劣化が小さく、レイマーチの負荷が1/4になる。
+        // 履歴(反射ソース)は lit テクスチャからのコピーなのでフル解像度のまま。
+        bool Initialize(ID3D11Device* device, uint32_t width, uint32_t height,
+            uint32_t resolution_divisor = 2);
         // 反射色(rgb)と信頼度(a)を返す。履歴が無い初回フレームはnullptr。
         ID3D11ShaderResourceView* Execute(ID3D11DeviceContext* context,
             fullscreen_quad& quad,
@@ -67,6 +74,8 @@ namespace ReplayEngine::Rendering
         Microsoft::WRL::ComPtr<ID3D11PixelShader> trace_shader_;
         Microsoft::WRL::ComPtr<ID3D11PixelShader> resolve_shader_;
         Microsoft::WRL::ComPtr<ID3D11Buffer> constants_;
+        // 直前のパスが残したブレンド設定に影響されないようにする。
+        PassStates states_;
         bool initialized_ = false;
         bool history_valid_ = false;
     };

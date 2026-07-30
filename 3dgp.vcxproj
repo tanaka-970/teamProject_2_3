@@ -93,7 +93,8 @@
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>.;.\Source\app;.\Source\core;.\Source\mesh;.\Source\render;.\cereal-master\include;.\DirectXTK-main\Inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
-      <AdditionalOptions>/utf-8 /validate-charset %(AdditionalOptions)</AdditionalOptions>
+      <!-- /FS: 荳ｦ蛻励ン繝ｫ繝峨〒隍・焚縺ｮCL.EXE縺悟酔縺榔DB縺ｸ譖ｸ縺上→縺阪・遶ｶ蜷・C1041)繧帝亟縺・-->
+      <AdditionalOptions>/utf-8 /validate-charset /FS %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -121,7 +122,8 @@
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>.;.\Source\app;.\Source\core;.\Source\mesh;.\Source\render;.\cereal-master\include;.\DirectXTK-main\Inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalOptions>/utf-8 /validate-charset %(AdditionalOptions)</AdditionalOptions>
+      <!-- /FS: 荳ｦ蛻励ン繝ｫ繝峨〒隍・焚縺ｮCL.EXE縺悟酔縺榔DB縺ｸ譖ｸ縺上→縺阪・遶ｶ蜷・C1041)繧帝亟縺・-->
+      <AdditionalOptions>/utf-8 /validate-charset /FS %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -147,7 +149,8 @@
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>.;.\Source\app;.\Source\core;.\Source\mesh;.\Source\render;.\cereal-master\include;.\DirectXTK-main\Inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
-      <AdditionalOptions>/utf-8 /validate-charset %(AdditionalOptions)</AdditionalOptions>
+      <!-- /FS: 荳ｦ蛻励ン繝ｫ繝峨〒隍・焚縺ｮCL.EXE縺悟酔縺榔DB縺ｸ譖ｸ縺上→縺阪・遶ｶ蜷・C1041)繧帝亟縺・-->
+      <AdditionalOptions>/utf-8 /validate-charset /FS %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -172,9 +175,13 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <!-- Debug|x64縺ｨ蜷後§C++17縺ｨUSE_IMGUI繧呈欠螳壹☆繧九ゅ％縺薙′谺縺代※縺・ｋ縺ｨ
+           nested namespace 繧・std::clamp 縺御ｽｿ縺医★縲√お繝・ぅ繧ｿUI繧よｶ医∴繧九・-->
+      <PreprocessorDefinitions>NDEBUG;_WINDOWS;USE_IMGUI;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <LanguageStandard>stdcpp17</LanguageStandard>
       <SDLCheck>true</SDLCheck>
-      <AdditionalOptions>/utf-8 /validate-charset %(AdditionalOptions)</AdditionalOptions>
+      <!-- /FS: 荳ｦ蛻励ン繝ｫ繝峨〒隍・焚縺ｮCL.EXE縺悟酔縺榔DB縺ｸ譖ｸ縺上→縺阪・遶ｶ蜷・C1041)繧帝亟縺・-->
+      <AdditionalOptions>/utf-8 /validate-charset /FS %(AdditionalOptions)</AdditionalOptions>
       <AdditionalIncludeDirectories>.;.\Source\app;.\Source\core;.\Source\mesh;.\Source\render;.\cereal-master\include;.\DirectXTK-main\Inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
@@ -182,7 +189,9 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>.\DirectXTK-main\Bin\Desktop_2019\x64\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <!-- 繧ｽ繝ｪ繝･繝ｼ繧ｷ繝ｧ繝ｳ蜷梧｢ｱ縺ｮDirectXTK縺ｯ Desktop_2026 讒区・縺ｧ蜃ｺ蜉帙＆繧後ｋ縲・
+           2019縺ｮ繝代せ縺ｫ縺ｯRelease繝薙Ν繝画ｸ医∩lib縺檎┌縺・◆繧∽ｸ｡譁ｹ繧剃ｸｦ縺ｹ繧九・-->
+      <AdditionalLibraryDirectories>.\DirectXTK-main\Bin\Desktop_2026\x64\Release;.\DirectXTK-main\Bin\Desktop_2019\x64\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>d3d11.lib;dxgi.lib;DirectXTK.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <FxCompile>
@@ -201,11 +210,15 @@
     <ClCompile Include="RePlayEngine\Rendering\Passes\TaaPass.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Deferred\TiledDeferredPass.cpp" />
     <ClCompile Include="Source\app\Editor\framework_screen_space.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_render_stats.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\RenderStats.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\MeshSimplifier.cpp" />
     <ClCompile Include="RePlayEngine\Assets\ImageAsset.cpp" />
     <ClCompile Include="RePlayEngine\Presentation\BootLogoComponent.cpp" />
     <ClCompile Include="RePlayEngine\Assets\AssetCache.cpp" />
     <ClCompile Include="RePlayEngine\Assets\AssetDatabase.cpp" />
     <ClCompile Include="RePlayEngine\Assets\AsyncAssetManager.cpp" />
+    <ClCompile Include="RePlayEngine\Assets\TextureCompressor.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Commands\UndoStack.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Gizmo\TransformGizmo.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Gizmo\ViewportPicker.cpp" />
@@ -226,6 +239,7 @@
     <ClCompile Include="Source\core\fullscreen_quad.cpp" />
     <ClCompile Include="Source\mesh\geometric_primitive.cpp" />
     <ClCompile Include="Source\mesh\gltf_model.cpp" />
+    <ClCompile Include="Source\mesh\gltf_model_cache.cpp" />
     <ClCompile Include="Source\render\lights_manager.cpp" />
     <ClCompile Include="Source\render\pbr_renderer.cpp" />
     <ClCompile Include="Source\render\particle_system.cpp" />
@@ -273,6 +287,10 @@
     <ClInclude Include="RePlayEngine\Rendering\Deferred\deferred_renderer.h" />
     <ClInclude Include="RePlayEngine\Rendering\Passes\PostProcessPass.h" />
     <ClInclude Include="RePlayEngine\Rendering\FrameConstants.h" />
+    <ClInclude Include="RePlayEngine\Rendering\RenderStats.h" />
+    <ClInclude Include="RePlayEngine\Rendering\PassStates.h" />
+    <ClInclude Include="RePlayEngine\Rendering\MeshSimplifier.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Frustum.h" />
     <ClInclude Include="RePlayEngine\Rendering\RenderTexture.h" />
     <ClInclude Include="RePlayEngine\Rendering\Passes\BloomPass.h" />
     <ClInclude Include="RePlayEngine\Rendering\Passes\SsaoPass.h" />
@@ -292,6 +310,7 @@
     <ClInclude Include="RePlayEngine\Assets\AsyncAssetManager.h" />
     <ClInclude Include="RePlayEngine\Assets\ConcurrentResourceCache.h" />
     <ClInclude Include="RePlayEngine\Assets\ParallelLoader.h" />
+    <ClInclude Include="RePlayEngine\Assets\TextureCompressor.h" />
     <ClInclude Include="RePlayEngine\Editor\Commands\UndoStack.h" />
     <ClInclude Include="RePlayEngine\Editor\Gizmo\TransformGizmo.h" />
     <ClInclude Include="RePlayEngine\Editor\Gizmo\ViewportPicker.h" />

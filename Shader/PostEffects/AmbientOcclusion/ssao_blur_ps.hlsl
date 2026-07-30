@@ -17,7 +17,7 @@ static const float SSAO_BLUR_WEIGHTS[SSAO_BLUR_RADIUS + 1] =
 float4 main(VS_OUT pin) : SV_TARGET
 {
     const float2 uv = pin.texcoord;
-    const float2 direction = ssao_params2.zw * frame_screen_size.zw;
+    const float2 direction = ssao_params2.zw * ssao_target_size.zw;
 
     const float2 center = ssao_source.SampleLevel(ssao_sampler_point, uv, 0).rg;
     const float center_visibility = center.r;

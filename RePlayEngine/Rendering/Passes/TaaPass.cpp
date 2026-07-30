@@ -46,6 +46,8 @@ namespace ReplayEngine::Rendering
         if (FAILED(device->CreateBuffer(&buffer, nullptr, constants_.GetAddressOf())))
             return false;
 
+        states_.Initialize(device);
+
         create_ps_from_cso(device, "taa_resolve_ps.cso", resolve_shader_.GetAddressOf());
 
         initialized_ = resolve_shader_ != nullptr;
@@ -90,6 +92,9 @@ namespace ReplayEngine::Rendering
             return scene_color;
         }
 
+        // ここが最重要: シェーダーレイヤーがADD/MULTIPLYを残していると、
+        // 履歴が毎フレーム累積してシーンビューが固まったように見える。
+        states_.ApplyOpaque(context);
         UploadConstants(context);
 
         ID3D11ShaderResourceView* inputs[4]{

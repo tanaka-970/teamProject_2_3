@@ -5,6 +5,9 @@
 
 Texture2D base_color_map : register(t0);
 Texture2D normal_map     : register(t1);
+// glTFのORMテクスチャ (R=Occlusion, G=Roughness, B=Metalness)。
+// 未バインドなら0が返るので、そのときは材質定数の値を使う。
+Texture2D orm_map        : register(t2);
 SamplerState sampler_lin : register(s1);
 
 cbuffer MATERIAL_OVERRIDE : register(b9)
@@ -40,6 +43,17 @@ GBufferOut main(VS_OUT pin)
     d.roughness = max(mat_params.y, 0.045f);
     d.metalness = mat_params.x;
     d.occlusion_strength = mat_params.z;
+
+    // ORMテクスチャがあれば材質定数より優先する。glTFのマテリアルをそのまま
+    // 反映できるので、金属/粗さの分布がSSRやPBRへ正しく効く。
+    float4 orm = orm_map.Sample(sampler_lin, pin.texcoord);
+    if (any(orm.rgb > 0.0f))
+    {
+        d.occlusion = max(orm.r, 0.001f);
+        d.roughness = max(orm.g, 0.045f);
+        d.metalness = saturate(orm.b);
+    }
+
     d.velocity = compute_motion_vector(pin.current_clip, pin.previous_clip);
 
     GBufferOut output = EncodeGBuffer(d);

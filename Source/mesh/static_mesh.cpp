@@ -8,6 +8,7 @@
 #include <filesystem>
 #include "texture.h"
 #include "../render/motion_vector_context.h"
+#include "../../RePlayEngine/Rendering/RenderStats.h"
 
 using namespace DirectX;
 static_mesh::static_mesh(ID3D11Device* device, const wchar_t* obj_filename, bool flipping_v_coordinates/*UNIT.14*/)
@@ -441,6 +442,7 @@ void static_mesh::render(ID3D11DeviceContext* immediate_context,
 		{
 			if (material.name == subset.usemtl)
 			{
+				ReplayEngine::Rendering::Stats().CountDrawIndexed(subset.index_count);
 				immediate_context->DrawIndexed(subset.index_count, subset.index_start, 0);
 			}
 		}

@@ -62,7 +62,7 @@ float4 main(VS_OUT pin) : SV_TARGET
         const float2 rotated = float2(
             offset.x * cos_rotation - offset.y * sin_rotation,
             offset.x * sin_rotation + offset.y * cos_rotation);
-        const float2 sample_uv = uv + rotated * radius_pixels * frame_screen_size.zw;
+        const float2 sample_uv = uv + rotated * radius_pixels * ssr_target_size.zw;
         if (any(sample_uv < 0.0f) || any(sample_uv > 1.0f)) continue;
 
         const float sample_device_z = scene_depth.SampleLevel(ssr_sampler_point, sample_uv, 0).r;

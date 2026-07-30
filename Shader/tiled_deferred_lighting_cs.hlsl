@@ -196,10 +196,14 @@ void main(uint3 group_id : SV_GroupID,
     // スクリーン空間入力。未バインドなら「効果なし」へ読み替える。
     PbrScreenSpaceInputs screen = pbr_default_screen_inputs();
     {
-        const float4 occlusion_sample = ss_ambient_occlusion.Load(int3(pixel, 0));
+        // SSAOは半解像度で走ることがあるため、ピクセル座標ではなくUVで読む。
+        const float4 occlusion_sample =
+            ss_ambient_occlusion.SampleLevel(pbr_sampler_linear, uv, 0);
         screen.ambient_occlusion = occlusion_sample.g > 0.0f
             ? saturate(occlusion_sample.r) : 1.0f;
-        const float4 reflection_sample = ss_reflection.Load(int3(pixel, 0));
+        // SSRも半解像度で走ることがあるためUVで読む。
+        const float4 reflection_sample =
+            ss_reflection.SampleLevel(pbr_sampler_linear, uv, 0);
         screen.reflection_color = reflection_sample.rgb;
         screen.reflection_weight = saturate(reflection_sample.a);
     }

@@ -28,5 +28,6 @@ void framework::update(float elapsed_time)
     ImGui::NewFrame();
     imgui_frame_active = true;
     draw_editor();
+    draw_render_stats_overlay();
 #endif
 }

@@ -80,7 +80,8 @@ float4 main(VS_OUT pin) : SV_TARGET
     const float inv_z_end = 1.0f / max(ray_end.z, 1.0e-4f);
 
     // 画面上の移動量からステップ数を決める。stride はピクセル単位。
-    const float2 pixel_delta = (end_uv - start_uv) * frame_screen_size.xy;
+    // ステップ数はSSRパスの解像度で数える(半解像度なら半分のステップで足りる)。
+    const float2 pixel_delta = (end_uv - start_uv) * ssr_target_size.xy;
     const float pixel_distance = length(pixel_delta);
     if (pixel_distance < 1.0f) return float4(0, 0, 0, 0);
 

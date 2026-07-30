@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../RenderTexture.h"
+#include "../PassStates.h"
 
 #include <d3d11.h>
 #include <wrl.h>
@@ -26,11 +27,18 @@ namespace ReplayEngine::Rendering
             DirectX::XMFLOAT4 params1{ 4.0f, 8.0f, 96.0f, 2.0f };
             DirectX::XMFLOAT4 params2{ 60.0f, 140.0f, 1.0f, 0.0f };
             DirectX::XMFLOAT4 params3{ 1.0f, 0.35f, 1.0f, 0.0f };
+            // AOパス自身の解像度 (x=w, y=h, z=1/w, w=1/h)。半解像度対応に使う。
+            DirectX::XMFLOAT4 target_size{ 1.0f, 1.0f, 1.0f, 1.0f };
         };
 
         static constexpr uint32_t kConstantSlot = 12;
 
-        bool Initialize(ID3D11Device* device, uint32_t width, uint32_t height);
+        // resolution_divisor=2 で半解像度。SSAOは低周波なので半分でも
+        // 見た目はほぼ落ちず、ピクセルシェーダー負荷が1/4になる。
+        bool Initialize(ID3D11Device* device, uint32_t width, uint32_t height,
+            uint32_t resolution_divisor = 2);
+        uint32_t Width() const noexcept { return occlusion_.width; }
+        uint32_t Height() const noexcept { return occlusion_.height; }
         // depth と world normal から遮蔽率を作り、ブラー後のSRVを返す。
         ID3D11ShaderResourceView* Execute(ID3D11DeviceContext* context,
             fullscreen_quad& quad,
@@ -63,6 +71,8 @@ namespace ReplayEngine::Rendering
         Microsoft::WRL::ComPtr<ID3D11PixelShader> occlusion_shader_;
         Microsoft::WRL::ComPtr<ID3D11PixelShader> blur_shader_;
         Microsoft::WRL::ComPtr<ID3D11Buffer> constants_;
+        // 直前のパスが残したブレンド設定に影響されないようにする。
+        PassStates states_;
         bool initialized_ = false;
     };
 }

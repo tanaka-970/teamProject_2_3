@@ -10,6 +10,9 @@ cbuffer SSR_CONSTANT_BUFFER : register(b13)
     float4 ssr_params1; // x=max_roughness, y=intensity, z=edge_fade, w=refine_step
     float4 ssr_params2; // x=enable, y=resolve_radius(pixel), z=ray_bias, w=history_valid
     float4 ssr_params3; // x=resolve_tap_count, y=roughness_lod_scale, z/w=予約
+    // SSRパス自体の解像度。frame_screen_sizeはフル解像度なので、
+    // 半解像度で走るときはこちらでステップ幅やタップ間隔を決める。
+    float4 ssr_target_size; // x=w, y=h, z=1/w, w=1/h
 };
 
 SamplerState ssr_sampler_point  : register(s0);

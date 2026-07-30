@@ -104,6 +104,17 @@ bool deferred_renderer::initialize(ID3D11Device* device, UINT w, UINT h)
     bd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
     if (FAILED(device->CreateBuffer(&bd, nullptr, deferred_cb_buffer.GetAddressOf()))) return false;
 
+    // 深度プリパス後のG-Buffer描画用。既に書かれた深度と一致する
+    // ピクセルだけを通し、深度は書き換えない。
+    {
+        D3D11_DEPTH_STENCIL_DESC dsd{};
+        dsd.DepthEnable = TRUE;
+        dsd.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+        dsd.DepthFunc = D3D11_COMPARISON_EQUAL;
+        if (FAILED(device->CreateDepthStencilState(&dsd, depth_equal_state.GetAddressOf())))
+            return false;
+    }
+
     create_vs_from_cso(device, "fullscreen_quad_vs.cso",
         fullscreen_vs.GetAddressOf(), nullptr, nullptr, 0);
     create_ps_from_cso(device, "deferred_lighting_ps.cso", lighting_ps.GetAddressOf());
@@ -112,7 +123,19 @@ bool deferred_renderer::initialize(ID3D11Device* device, UINT w, UINT h)
     return true;
 }
 
-void deferred_renderer::gbuffer_begin(ID3D11DeviceContext* ctx, FLOAT clear[4])
+void deferred_renderer::depth_prepass_begin(ID3D11DeviceContext* ctx)
+{
+    if (!initialized || !ctx) return;
+
+    // 深度バッファだけを対象にする。RTVは付けない。
+    ctx->ClearDepthStencilView(depth_dsv.Get(), D3D11_CLEAR_DEPTH, 1.0f, 0);
+    ctx->RSSetViewports(1, &viewport);
+    ID3D11RenderTargetView* no_rtvs[GBUFFER_COUNT]{};
+    ctx->OMSetRenderTargets(GBUFFER_COUNT, no_rtvs, depth_dsv.Get());
+}
+
+void deferred_renderer::gbuffer_begin(ID3D11DeviceContext* ctx, FLOAT clear[4],
+                                      bool clear_depth)
 {
     if (!initialized) return;
 
@@ -124,7 +147,9 @@ void deferred_renderer::gbuffer_begin(ID3D11DeviceContext* ctx, FLOAT clear[4])
         ctx->ClearRenderTargetView(rtvs[i], i == 0 ? clear : zero);
     }
 
-    ctx->ClearDepthStencilView(depth_dsv.Get(), D3D11_CLEAR_DEPTH, 1.0f, 0);
+    // 深度プリパスの結果を使う場合はクリアしない。
+    if (clear_depth)
+        ctx->ClearDepthStencilView(depth_dsv.Get(), D3D11_CLEAR_DEPTH, 1.0f, 0);
     ctx->RSSetViewports(1, &viewport);
     ctx->OMSetRenderTargets(GBUFFER_COUNT, rtvs, depth_dsv.Get());
 }

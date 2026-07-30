@@ -83,3 +83,14 @@ Testing/
 
 # Per-user editor recovery state
 /Saved/
+
+# 大容量の外部ステージアセット (Intel Sponza, CC-BY 4.0)
+# 約1.2GBあるのでリポジトリには入れない。各自ダウンロードして
+# resources/Stage/Sponza へ配置する(手順は README を参照)。
+/resources/Stage/Sponza/
+
+# 実行時に自動生成されるアセットキャッシュ。
+# メッシュ展開結果・LOD・モデルキャッシュで数百MBになり、
+# GitHubの100MB/ファイル制限も超えるため共有しない。
+# 削除しても初回起動で作り直される。
+/resources/.replay_cache/
