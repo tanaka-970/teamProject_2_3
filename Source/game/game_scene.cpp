@@ -7,12 +7,13 @@ GameScene::GameScene(skinned_mesh* player_mesh, skinned_mesh* stage_mesh, float 
 {
 }
 
-bool GameScene::Initialize(ID3D11Device*)
+bool GameScene::Initialize(ID3D11Device*device)
 {
     gameplay_.Initialize(player_mesh_, stage_mesh_, aspect_);
     gameplay_.SetAnimationClipMapping(idle_clip_, walk_clip_, jump_clip_);
     Player& player = gameplay_.GetPlayer();
     player.ResetPlacement();
+    uiManager.Initalize(device);
         // 任意モデルの欠落だけでシーン管理全体を無効にしない。
         // 個別の失敗はロード画面へ通知し、エディタでは残りの空間を確認できるようにする。
     return true;

@@ -12,6 +12,7 @@
 class UI
 {
 public:
+	
 	void Render(ID3D11DeviceContext* dc, sprite::AlphaMode mode);
 	void SetSprite(std::shared_ptr<sprite> sprite){mSprite = sprite;}
 	// 表示位置・サイズ
@@ -49,7 +50,7 @@ private:
 class UIManager
 {
 public:
-	void Initalize();
+	void Initalize(ID3D11Device* device);
 
 	std::vector<UI>& GetUI() { return mUIs; }
 	void ClearAllUi() 

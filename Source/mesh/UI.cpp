@@ -2,6 +2,7 @@
 #include<sprite.h>
 #include<d3d11.h>
 #include <string>
+#include <crtdbg.h>
 //白抜き->Sprite::AlphaMode::White
 // 黒抜き->Sprite::AlphaMode::Black
 //そのまま->Sprite::AlphaMode::UseTextureAlpha
@@ -24,8 +25,9 @@ void UIManager::AddNewUI(const wchar_t* filepath,
 	float angle,
 	float r, float g, float b, float a)
 {
+	
 	//コードの不備でDeviceがnullptrだった場合の保険
-	if (!mDevice) { Initalize(); }
+	_ASSERTE(mDevice != nullptr);
 	mUIs.emplace_back();
 	mUIs.back().SetSprite(GetOrLoadSprite(filepath));
 	mUIs.back().SetTransform(dx, dy, dz, dw, dh);
@@ -62,8 +64,7 @@ void UIManager::ClearUnusedSpriteCache()
 		}
 	}
 }
-void UIManager::Initalize()
+void UIManager::Initalize(ID3D11Device* device)
 {
-	/*mDevice = Graphics::Instance().GetDevice(); */
-	
+	mDevice = device;
 }

@@ -2,7 +2,7 @@
 
 #include "scene_game.h"
 #include "../../RePlayEngine/Scene/IScene.h"
-
+#include "UI.h"
 class skinned_mesh;
 
 // ゲーム側が所有するシーン。描画パスの分割中は互換レンダラーを使うが、
@@ -29,4 +29,5 @@ private:
     int walk_clip_ = -1;
     int jump_clip_ = -1;
     SceneGame gameplay_;
+    UIManager uiManager;
 };

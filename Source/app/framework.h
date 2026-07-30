@@ -26,7 +26,7 @@ extern ImWchar glyphRangesJapanese[];
 #include "static_mesh.h"
 #include "framebuffer.h"
 #include "fullscreen_quad.h"
-
+#include "UI.h"
 #include "pbr_renderer.h"
 #include "toon_renderer.h"
 #include "csm_renderer.h"
@@ -171,6 +171,7 @@ public:
     ReplayEngine::Rendering::BloomPass bloom_pass;
 
     GameScene*       game_scene{ nullptr };
+    UIManager        uiManager;
     bool             enable_scene_game{ true };
     bool             editor_mode{ false };
 
