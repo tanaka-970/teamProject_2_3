@@ -66,4 +66,7 @@ public:
                     const D3D11_VIEWPORT& restore_vp);
     void bind_resources(ID3D11DeviceContext* ctx);
     void unbind_resources(ID3D11DeviceContext* ctx);
+    // タイルドDeferredのコンピュートシェーダー向け(スロットはステージごとに独立)。
+    void bind_compute_resources(ID3D11DeviceContext* ctx);
+    void unbind_compute_resources(ID3D11DeviceContext* ctx);
 };

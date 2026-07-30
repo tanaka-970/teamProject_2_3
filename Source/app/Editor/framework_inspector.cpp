@@ -315,6 +315,7 @@ void framework::draw_inspector()
                 if (render_graph.RequiresDeferred()) enable_deferred = true;
             }
         }
+        draw_screen_space_settings();
         break;
 
     case editor_selection::post_process:

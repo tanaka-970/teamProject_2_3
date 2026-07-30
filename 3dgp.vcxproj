@@ -199,6 +199,8 @@
     <ClCompile Include="RePlayEngine\Rendering\Passes\SsaoPass.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Passes\SsrPass.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Passes\TaaPass.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Deferred\TiledDeferredPass.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_screen_space.cpp" />
     <ClCompile Include="RePlayEngine\Assets\ImageAsset.cpp" />
     <ClCompile Include="RePlayEngine\Presentation\BootLogoComponent.cpp" />
     <ClCompile Include="RePlayEngine\Assets\AssetCache.cpp" />
@@ -276,6 +278,7 @@
     <ClInclude Include="RePlayEngine\Rendering\Passes\SsaoPass.h" />
     <ClInclude Include="RePlayEngine\Rendering\Passes\SsrPass.h" />
     <ClInclude Include="RePlayEngine\Rendering\Passes\TaaPass.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Deferred\TiledDeferredPass.h" />
     <ClInclude Include="RePlayEngine\Rendering\RenderGraph\RenderGraph.h" />
     <ClInclude Include="RePlayEngine\Rendering\ShaderStack\ShaderLayerStack.h" />
     <ClInclude Include="RePlayEngine\Rendering\ShaderPresets\ShaderPresetSerializer.h" />
@@ -378,6 +381,7 @@
     <None Include="Shader\PostEffects\AmbientOcclusion\ssao_common.hlsli" />
     <None Include="Shader\PostEffects\Reflection\ssr_common.hlsli" />
     <None Include="Shader\motion_vector_common.hlsli" />
+    <None Include="Shader\tiled_light_common.hlsli" />
     <None Include="Shader\motion_vector_skinning.hlsli" />
     <None Include="Shader\fullscreen_quad.hlsli" />
     <None Include="Shader\gbuffer_common.hlsli" />
@@ -411,6 +415,12 @@
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\tiled_deferred_lighting_cs.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Compute</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Compute</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Compute</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Compute</ShaderType>
     </FxCompile>
     <FxCompile Include="Shader\PostEffects\TemporalAA\taa_resolve_ps.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>

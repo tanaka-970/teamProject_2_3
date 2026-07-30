@@ -557,9 +557,62 @@ void framework::render(float elapsed_time)
         immediate_context->PSSetConstantBuffers(1, 1, constant_buffers[0].GetAddressOf());
 
         // GBufferをSRVへ切り替えた後、ライト計算結果をDeferred側の出力へ書く。
-        deferred.lighting_pass(immediate_context.Get(), scene.view_projection,
-                               background_color, render_graph.DeferredDebugMode(),
-                               ambient_occlusion, screen_reflection);
+        // タイルド版が有効なときはコンピュートシェーダーへ差し替える。
+        // デバッグ表示中はPS版のみが対応しているのでそちらを使う。
+        const bool use_tiled = tiled_deferred.enabled && tiled_deferred.Initialized() &&
+            render_graph.DeferredDebugMode() == 0;
+        if (use_tiled)
+        {
+            // 定数バッファ配列(b10)の点光源/スポットをStructuredBufferへ移す。
+            // CS側ではb10を貼らないため、二重計上にはならない。
+            tiled_deferred.ClearLights();
+            for (int i = 0; i < lights.data.light_counts.x && i < lights_manager::POINT_LIGHT_MAX; ++i)
+            {
+                const auto& point = lights.data.point_lights[i];
+                tiled_deferred.AddPointLight(
+                    { point.position.x, point.position.y, point.position.z },
+                    point.position.w,
+                    { point.color.x, point.color.y, point.color.z }, point.color.w);
+            }
+            for (int i = 0; i < lights.data.light_counts.y && i < lights_manager::SPOT_LIGHT_MAX; ++i)
+            {
+                const auto& spot = lights.data.spot_lights[i];
+                tiled_deferred.AddSpotLight(
+                    { spot.position.x, spot.position.y, spot.position.z },
+                    spot.position.w,
+                    { spot.direction.x, spot.direction.y, spot.direction.z },
+                    spot.direction.w, spot.color.w,
+                    { spot.color.x, spot.color.y, spot.color.z }, spot.params.x);
+            }
+
+            // CSはPSとスロットが独立しているので、必要なものを貼り直す。
+            immediate_context->CSSetConstantBuffers(1, 1, constant_buffers[0].GetAddressOf());
+            immediate_context->CSSetConstantBuffers(4, 1, frame_constants_cb.GetAddressOf());
+            immediate_context->CSSetSamplers(0, 1,
+                sampler_states[(size_t)SAMPLER_STATE::POINT].GetAddressOf());
+            immediate_context->CSSetSamplers(1, 1,
+                sampler_states[(size_t)SAMPLER_STATE::LINEAR].GetAddressOf());
+            immediate_context->CSSetSamplers(2, 1,
+                sampler_states[(size_t)SAMPLER_STATE::ANISOTROPIC].GetAddressOf());
+            pbr.bind_compute_resources(immediate_context.Get());
+            csm.bind_compute_resources(immediate_context.Get());
+
+            ID3D11ShaderResourceView* gbuffer_views[4]{
+                deferred.gbuffer_srv[0].Get(), deferred.gbuffer_srv[1].Get(),
+                deferred.gbuffer_srv[2].Get(), deferred.gbuffer_srv[3].Get() };
+            tiled_deferred.Dispatch(immediate_context.Get(), deferred.lit_uav.Get(),
+                gbuffer_views, deferred.depth_srv.Get(),
+                ambient_occlusion, screen_reflection);
+
+            pbr.unbind_compute_resources(immediate_context.Get());
+            csm.unbind_compute_resources(immediate_context.Get());
+        }
+        else
+        {
+            deferred.lighting_pass(immediate_context.Get(), scene.view_projection,
+                                   background_color, render_graph.DeferredDebugMode(),
+                                   ambient_occlusion, screen_reflection);
+        }
 
         // 次フレームのSSR用に、照明直後のHDRカラーを履歴として確保する。
         if (enable_ssr && ssr_pass.Initialized() && render_graph.DeferredDebugMode() == 0)

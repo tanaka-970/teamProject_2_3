@@ -261,3 +261,17 @@ void csm_renderer::unbind_resources(ID3D11DeviceContext* ctx)
     ID3D11ShaderResourceView* null_srv[1] = { nullptr };
     ctx->PSSetShaderResources(12, 1, null_srv);
 }
+
+void csm_renderer::bind_compute_resources(ID3D11DeviceContext* ctx)
+{
+    ctx->CSSetSamplers(5, 1, comparison_sampler.GetAddressOf());
+    ctx->CSSetSamplers(6, 1, point_sampler.GetAddressOf());
+    ctx->CSSetShaderResources(12, 1, shadow_srv.GetAddressOf());
+    ctx->CSSetConstantBuffers(5, 1, csm_cb.GetAddressOf());
+}
+
+void csm_renderer::unbind_compute_resources(ID3D11DeviceContext* ctx)
+{
+    ID3D11ShaderResourceView* null_srv[1] = { nullptr };
+    ctx->CSSetShaderResources(12, 1, null_srv);
+}

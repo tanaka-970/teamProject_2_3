@@ -97,7 +97,9 @@ float3 ibl_radiance_lambertian(float3 N, float3 V, float roughness,
     float NoV = clamp(dot(N, V), 0.0f, 1.0f);
 
     float2 f_ab = env_dfg(NoV, roughness);
-    float3 irradiance = pbr_diffuse_iem.Sample(pbr_sampler_linear, N).rgb;
+    // SampleLevel(0)で読む。IEMは畳み込み済みなのでミップは不要で、
+    // コンピュートシェーダーからも同じ関数が使える。
+    float3 irradiance = pbr_diffuse_iem.SampleLevel(pbr_sampler_linear, N, 0).rgb;
 
     float3 Fr     = max(1.0f - roughness, f0) - f0;
     float3 k_S    = f0 + Fr * pow(1.0f - NoV, 5.0f);
@@ -122,7 +124,9 @@ void ibl_multiscatter(float3 N, float3 V, float roughness,
     pbr_specular_pmrem.GetDimensions(0, width, height, mip_count);
     float lod = roughness * float(max(mip_count - 1, 1));
 
-    float3 irradiance = pbr_diffuse_iem.Sample(pbr_sampler_linear, N).rgb;
+    // SampleLevel(0)で読む。IEMは畳み込み済みなのでミップは不要で、
+    // コンピュートシェーダーからも同じ関数が使える。
+    float3 irradiance = pbr_diffuse_iem.SampleLevel(pbr_sampler_linear, N, 0).rgb;
     float3 radiance   = pbr_specular_pmrem.SampleLevel(pbr_sampler_linear, R, lod).rgb;
 
     float3 Fr     = max(1.0f - roughness, f0) - f0;
@@ -151,7 +155,7 @@ float3 ibl_radiance_ggx(float3 N, float3 V, float roughness, float3 f0)
     float3 specular_light = pbr_specular_pmrem.SampleLevel(pbr_sampler_linear, R, lod).rgb;
 
     float2 brdf_sample_point = clamp(float2(NoV, roughness), 0.0f, 1.0f);
-    float2 f_ab = pbr_lut_ggx.Sample(pbr_sampler_linear, brdf_sample_point).rg;
+    float2 f_ab = pbr_lut_ggx.SampleLevel(pbr_sampler_linear, brdf_sample_point, 0).rg;
 
     float3 Fr     = max(1.0f - roughness, f0) - f0;
     float3 k_S    = f0 + Fr * pow(1.0f - NoV, 5.0f);

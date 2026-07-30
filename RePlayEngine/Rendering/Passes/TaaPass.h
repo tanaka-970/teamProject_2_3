@@ -24,7 +24,7 @@ namespace ReplayEngine::Rendering
         // TAA_CONSTANT_BUFFER(b12) と並びを一致させる。
         struct Constants
         {
-            DirectX::XMFLOAT4 params0{ 0.9f, 1.25f, 0.15f, 1.0f };
+            DirectX::XMFLOAT4 params0{ 0.88f, 1.0f, 0.35f, 1.0f };
             DirectX::XMFLOAT4 params1{ 0.0f, 1.0f, 48.0f, 0.0f };
         };
 
@@ -55,9 +55,11 @@ namespace ReplayEngine::Rendering
         bool HistoryValid() const noexcept { return history_valid_; }
 
         // エディタから触る調整値。
-        float blend = 0.9f;           // 履歴の比率。高いほど安定するが残像が増える
-        float variance_gamma = 1.25f; // クリップ範囲の広さ。小さいほどゴーストに強い
-        float sharpness = 0.15f;      // TAA後のシャープ化量
+        // 既定値はボケを最小にする方向へ寄せている。履歴を上げると
+        // エッジは滑らかになるが、代わりに解像感が落ちて残像も出やすい。
+        float blend = 0.88f;          // 履歴の比率。高いほど安定するが残像が増える
+        float variance_gamma = 1.0f;  // クリップ範囲の広さ。小さいほどゴーストに強い
+        float sharpness = 0.35f;      // TAA後のシャープ化量
         float max_velocity = 48.0f;   // これ以上速い動きは履歴を大きく捨てる
         bool  enabled = true;
 

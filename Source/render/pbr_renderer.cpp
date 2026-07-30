@@ -203,3 +203,28 @@ void pbr_renderer::unbind_pbr_resources(ID3D11DeviceContext* ctx)
     ctx->PSSetShaderResources(4, 1, null_shadow);
     ctx->PSSetShaderResources(33, 3, null_ibl);
 }
+
+void pbr_renderer::bind_compute_resources(ID3D11DeviceContext* ctx)
+{
+    ctx->CSSetSamplers(4, 1, shadow_sampler_state.GetAddressOf());
+    ctx->CSSetShaderResources(4, 1, shadow_srv.GetAddressOf());
+
+    ID3D11ShaderResourceView* ibl[3] = {
+        diffuse_iem_srv.Get(),
+        specular_pmrem_srv.Get(),
+        lut_ggx_srv.Get()
+    };
+    ctx->CSSetShaderResources(33, 3, ibl);
+
+    // b2=LIGHT, b3=SHADOW。ピクセルシェーダー版と同じ内容を使う。
+    ID3D11Buffer* buffers[2] = { light_cb.Get(), shadow_cb.Get() };
+    ctx->CSSetConstantBuffers(2, 2, buffers);
+}
+
+void pbr_renderer::unbind_compute_resources(ID3D11DeviceContext* ctx)
+{
+    ID3D11ShaderResourceView* null_shadow[1] = { nullptr };
+    ID3D11ShaderResourceView* null_ibl[3] = { nullptr, nullptr, nullptr };
+    ctx->CSSetShaderResources(4, 1, null_shadow);
+    ctx->CSSetShaderResources(33, 3, null_ibl);
+}

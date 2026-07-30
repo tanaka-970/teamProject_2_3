@@ -42,6 +42,7 @@ extern ImWchar glyphRangesJapanese[];
 #include "../../RePlayEngine/Rendering/Passes/SsaoPass.h"
 #include "../../RePlayEngine/Rendering/Passes/SsrPass.h"
 #include "../../RePlayEngine/Rendering/Passes/TaaPass.h"
+#include "../../RePlayEngine/Rendering/Deferred/TiledDeferredPass.h"
 #include "../../RePlayEngine/Rendering/FrameConstants.h"
 #include "../render/motion_vector_context.h"
 #include "../../RePlayEngine/Rendering/RenderGraph/RenderGraph.h"
@@ -183,6 +184,7 @@ public:
     ReplayEngine::Rendering::SsaoPass ssao_pass;
     ReplayEngine::Rendering::SsrPass ssr_pass;
     ReplayEngine::Rendering::TaaPass taa_pass;
+    ReplayEngine::Rendering::TiledDeferredPass tiled_deferred;
 
     // SSAO/SSR/TAAが共有するフレーム定数。b9へ載せる。
     ReplayEngine::Rendering::FrameConstants frame_constants{};
@@ -451,6 +453,8 @@ private:
         ReplayEngine::Rendering::ShaderLayerStack& layers, float& pixel_grid,
         float& pixelate_strength);
     void draw_screen_effect_stack();
+    // SSAO / SSR / TAA / CSM の有効化と調整項目。
+    void draw_screen_space_settings();
     void draw_character_material_controls(const char* id, int& base_shader, bool& outline_pass,
         ReplayEngine::Rendering::ShaderLayerStack& layers,
         ReplayEngine::Rendering::CharacterMaterialProfile& profile, float& pixel_grid,

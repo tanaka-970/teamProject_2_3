@@ -30,9 +30,11 @@ public:
     Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> depth_srv;
 
     // ライティング結果 (HDR)
+    // タイルドDeferredのコンピュートシェーダーから書けるようUAVも持つ。
     Microsoft::WRL::ComPtr<ID3D11Texture2D>          lit_tex;
     Microsoft::WRL::ComPtr<ID3D11RenderTargetView>   lit_rtv;
     Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> lit_srv;
+    Microsoft::WRL::ComPtr<ID3D11UnorderedAccessView> lit_uav;
 
     Microsoft::WRL::ComPtr<ID3D11Buffer>             deferred_cb_buffer;
     Microsoft::WRL::ComPtr<ID3D11VertexShader>       fullscreen_vs;

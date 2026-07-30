@@ -51,11 +51,16 @@ cbuffer SHADOW_CONSTANT_BUFFER : register(b3)
     row_major float4x4 light_view_projection;
 };
 
+// Sample()はスクリーン空間微分を必要とするためコンピュートシェーダーでは使えない。
+// タイルドDeferredのCSからこのヘッダを読むときは PBR_COMPUTE_SHADER を定義して
+// ピクセルシェーダー専用の関数を除外する。
+#ifndef PBR_COMPUTE_SHADER
 float3 unpack_normal_map(float3 N, float3 T, float3 B, float2 uv)
 {
     float3 n = pbr_normal_map.Sample(pbr_sampler_linear, uv).xyz;
     n = n * 2.0f - 1.0f;
     return normalize(n.x * T + n.y * B + n.z * N);
 }
+#endif
 
 #endif // __PBR_COMMON_HLSLI__

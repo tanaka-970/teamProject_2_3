@@ -89,10 +89,13 @@ bool deferred_renderer::initialize(ID3D11Device* device, UINT w, UINT h)
         td.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
         td.SampleDesc.Count = 1;
         td.Usage = D3D11_USAGE_DEFAULT;
-        td.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+        // タイルドDeferredはコンピュートシェーダーからUAVで書き込む。
+        td.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE |
+            D3D11_BIND_UNORDERED_ACCESS;
         if (FAILED(device->CreateTexture2D(&td, nullptr, lit_tex.GetAddressOf()))) return false;
         if (FAILED(device->CreateRenderTargetView(lit_tex.Get(), nullptr, lit_rtv.GetAddressOf()))) return false;
         if (FAILED(device->CreateShaderResourceView(lit_tex.Get(), nullptr, lit_srv.GetAddressOf()))) return false;
+        if (FAILED(device->CreateUnorderedAccessView(lit_tex.Get(), nullptr, lit_uav.GetAddressOf()))) return false;
     }
 
     D3D11_BUFFER_DESC bd{};
