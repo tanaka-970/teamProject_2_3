@@ -42,7 +42,7 @@ void framework::execute_editor_command(const std::string& command)
     if (name == "help" || name == "ヘルプ")
     {
         editor_command_result =
-            "deferred [on/off/toggle] | stage [pbr/toon/unlit/default] | "
+            "deferred [on/off/toggle] | stage [pbr/toon/unlit/pixelate/default] | "
             "outline [on/off/toggle] | bloom [on/off/toggle] | save | undo | redo | "
             "copy | paste | duplicate | placements | "
             "workspace [general/placement/modeling/animation/rendering] | fullscreen";
@@ -61,10 +61,11 @@ void framework::execute_editor_command(const std::string& command)
         if (argument == "pbr") shading_per_stage = SHADING_MODEL_PBR;
         else if (argument == "toon") shading_per_stage = SHADING_MODEL_TOON;
         else if (argument == "unlit") shading_per_stage = SHADING_MODEL_UNLIT;
+        else if (argument == "pixelate") shading_per_stage = SHADING_MODEL_PIXELATE;
         else if (argument == "default") shading_per_stage = SHADING_MODEL_FBX_DEFAULT;
         else
         {
-            editor_command_result = "使い方: stage [pbr/toon/unlit/default]";
+            editor_command_result = "使い方: stage [pbr/toon/unlit/pixelate/default]";
             return;
         }
         enable_stage_shader = true;

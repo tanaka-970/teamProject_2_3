@@ -35,10 +35,11 @@ namespace ReplayEngine::Editor
     ShaderStackEditorResult ShaderStackEditor::Draw(const char* id, int& base_shader,
         bool& outline_pass, Rendering::ShaderLayerStack& layers,
         bool& advanced_mode, DirectX::XMFLOAT4& outline_color,
-        DirectX::XMFLOAT4& outline_parameters)
+        DirectX::XMFLOAT4& outline_parameters, float& pixel_grid,
+        float& pixelate_strength)
     {
         using namespace Rendering;
-        const char* shading_names[] = { "FBX標準", "PBR", "トゥーン", "アンリット" };
+        const char* shading_names[] = { "FBX標準", "PBR", "トゥーン", "アンリット", "ピクセレーション" };
         const char* blend_names[] = { "アルファ", "加算", "乗算" };
 
         ImGui::PushID(id);
@@ -78,6 +79,23 @@ namespace ReplayEngine::Editor
         ImGui::Separator();
         ImGui::TextUnformatted("Pass 1  Surface");
         ImGui::Combo("基本シェーダー", &base_shader, shading_names, IM_ARRAYSIZE(shading_names));
+        if (base_shader == 4)
+        {
+            ImGui::Spacing();
+            ImGui::TextColored(ImVec4(0.35f, 0.72f, 1.0f, 1.0f), "ドット表現の調整");
+            ImGui::TextDisabled("密度を下げるほど大きく粗いドットになります");
+            if (ImGui::SmallButton("粗い  16")) pixel_grid = 16.0f;
+            ImGui::SameLine();
+            if (ImGui::SmallButton("標準  48")) pixel_grid = 48.0f;
+            ImGui::SameLine();
+            if (ImGui::SmallButton("細かい  128")) pixel_grid = 128.0f;
+            ImGui::SetNextItemWidth(-1.0f);
+            ImGui::SliderFloat("ドット密度##BasePixelGrid", &pixel_grid, 4.0f, 256.0f, "%.0f");
+            ImGui::SetNextItemWidth(-1.0f);
+            ImGui::SliderFloat("効果の強さ##BasePixelStrength", &pixelate_strength,
+                0.0f, 1.0f, "%.2f");
+            ImGui::Separator();
+        }
 
         if (layers.CanAdd())
         {
@@ -175,7 +193,8 @@ namespace ReplayEngine::Editor
         ShaderStackEditorResult result{};
         result.requires_pbr = base_shader == 1 || layers.Contains(ShaderLayerType::Pbr);
         result.requires_toon = base_shader == 2 || layers.Contains(ShaderLayerType::Toon);
-        result.requires_unlit = base_shader == 3 || layers.Contains(ShaderLayerType::Unlit);
+        result.requires_unlit = base_shader == 3 || base_shader == 4 ||
+            layers.Contains(ShaderLayerType::Unlit);
         result.requires_outline = outline_pass;
         return result;
     }

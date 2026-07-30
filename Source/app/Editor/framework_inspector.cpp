@@ -27,29 +27,35 @@ void framework::draw_shader_adjustment_workspace()
             {
                 ImGui::ColorEdit4("基本色", &material_color.x);
                 draw_shader_stack("shader_workspace_player", shading_per_skinned[0],
-                    outline_per_skinned[0], shader_layers_skinned[0]);
+                    outline_per_skinned[0], shader_layers_skinned[0],
+                    pixelate_grid_per_skinned[0], pixelate_strength_per_skinned[0]);
                 draw_character_material_controls("shader_workspace_player_material",
                     shading_per_skinned[0], outline_per_skinned[0], shader_layers_skinned[0],
-                    character_profiles_skinned[0]);
+                    character_profiles_skinned[0], pixelate_grid_per_skinned[0],
+                    pixelate_strength_per_skinned[0]);
                 shading_model_override = shading_per_skinned[0];
             }
             else if (target == 1)
             {
                 ImGui::Checkbox("ステージシェーダーを使う", &enable_stage_shader);
                 draw_shader_stack("shader_workspace_stage", shading_per_stage,
-                    outline_per_stage, stage_shader_layers);
+                    outline_per_stage, stage_shader_layers,
+                    stage_pixelate_grid, stage_pixelate_strength);
                 draw_character_material_controls("shader_workspace_stage_material", shading_per_stage,
-                    outline_per_stage, stage_shader_layers, stage_character_profile);
+                    outline_per_stage, stage_shader_layers, stage_character_profile,
+                    stage_pixelate_grid, stage_pixelate_strength);
                 if (stage_asset_placed && active_stage_placement_id != 0) sync_selected_entity_to_stage();
             }
             else
             {
                 ImGui::Checkbox("静的メッシュを表示", &enable_static_meshes);
                 draw_shader_stack("shader_workspace_static", shading_per_static[0],
-                    outline_per_static[0], shader_layers_static[0]);
+                    outline_per_static[0], shader_layers_static[0],
+                    pixelate_grid_per_static[0], pixelate_strength_per_static[0]);
                 draw_character_material_controls("shader_workspace_static_material",
                     shading_per_static[0], outline_per_static[0], shader_layers_static[0],
-                    character_profiles_static[0]);
+                    character_profiles_static[0], pixelate_grid_per_static[0],
+                    pixelate_strength_per_static[0]);
             }
             ImGui::EndTabItem();
         }

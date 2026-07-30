@@ -6,6 +6,6 @@
 #define SHADING_MODEL_PBR         1
 #define SHADING_MODEL_TOON        2
 #define SHADING_MODEL_UNLIT       3
-#define SHADING_MODEL_HOLOGRAM    4
+#define SHADING_MODEL_PIXELATE    4
 
 #endif

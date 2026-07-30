@@ -460,6 +460,8 @@ void framework::sync_selected_entity_to_stage()
     if (entity->model_renderer)
     {
         entity->model_renderer->shading_model = shading_per_stage;
+        entity->model_renderer->pixelate_grid = stage_pixelate_grid;
+        entity->model_renderer->pixelate_strength = stage_pixelate_strength;
         entity->model_renderer->outline = outline_per_stage;
         store_stage_shader_layers(*entity->model_renderer);
     }
@@ -487,6 +489,8 @@ void framework::store_stage_shader_layers(ReplayEngine::Scene::ModelRendererData
 
 void framework::restore_stage_shader_layers(const ReplayEngine::Scene::ModelRendererData& renderer)
 {
+    stage_pixelate_grid = renderer.pixelate_grid;
+    stage_pixelate_strength = renderer.pixelate_strength;
     stage_shader_layers.Clear();
     for (const auto& source : renderer.shader_layers)
     {
@@ -665,7 +669,7 @@ void framework::draw_scene_entity_inspector()
                 ImGui::TextWrapped("配置元: %s", asset->source_path.generic_u8string().c_str());
             ImGui::Checkbox("表示", &entity->model_renderer->visible);
             ImGui::ColorEdit4("色", &entity->model_renderer->tint.x);
-            ImGui::SliderInt("シェーディング", &entity->model_renderer->shading_model, 0, 3);
+            ImGui::SliderInt("シェーディング", &entity->model_renderer->shading_model, 0, 4);
             ImGui::Checkbox("輪郭線", &entity->model_renderer->outline);
             if (ImGui::Button("削除##ModelRenderer"))
             {

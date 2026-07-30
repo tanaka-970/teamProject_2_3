@@ -36,6 +36,8 @@ namespace ReplayEngine::Scene
         std::string asset_name;
         DirectX::XMFLOAT4 tint{ 1.0f, 1.0f, 1.0f, 1.0f };
         int shading_model = 1;
+        float pixelate_grid = 48.0f;
+        float pixelate_strength = 1.0f;
         bool outline = false;
         bool visible = true;
         std::vector<ShaderLayerData> shader_layers;

@@ -144,7 +144,7 @@ public:
     Microsoft::WRL::ComPtr<ID3D11Buffer> character_material_cb;
 
     // モデル毎のシェーディング設定 (skinned_meshes[i] と対応)
-    // 0=FBX標準、1=PBR、2=トゥーン、3=アンリット
+    // 0=FBX標準、1=PBR、2=トゥーン、3=アンリット、4=ピクセレーション
     int shading_per_skinned[8] { 1, 1, 1, 1, 1, 1, 1, 1 };
     int shading_per_static [8] { 1, 1, 1, 1, 1, 1, 1, 1 };
     bool outline_per_skinned[8] { false, false, false, false, false, false, false, false };
@@ -153,6 +153,10 @@ public:
     ReplayEngine::Rendering::ShaderLayerStack shader_layers_static[8];
     ReplayEngine::Rendering::CharacterMaterialProfile character_profiles_skinned[8];
     ReplayEngine::Rendering::CharacterMaterialProfile character_profiles_static[8];
+    float pixelate_grid_per_skinned[8] { 48, 48, 48, 48, 48, 48, 48, 48 };
+    float pixelate_strength_per_skinned[8] { 1, 1, 1, 1, 1, 1, 1, 1 };
+    float pixelate_grid_per_static[8] { 48, 48, 48, 48, 48, 48, 48, 48 };
+    float pixelate_strength_per_static[8] { 1, 1, 1, 1, 1, 1, 1, 1 };
 
     // UIから全体へ適用する描画方式。shading_per_skinned[0] と同期する。
     int shading_model_override { 1 };
@@ -175,11 +179,13 @@ public:
     bool             editor_mode{ false };
 
     // ステージの描画方式は skinned[0] と分離する。0はFBX標準で上書きしない。
-    // 0=FBX標準、1=PBR、2=トゥーン、3=アンリット
+    // 0=FBX標準、1=PBR、2=トゥーン、3=アンリット、4=ピクセレーション
     int              shading_per_stage{ 1 };
     bool             outline_per_stage{ false };
     ReplayEngine::Rendering::ShaderLayerStack stage_shader_layers;
     ReplayEngine::Rendering::CharacterMaterialProfile stage_character_profile;
+    float            stage_pixelate_grid{ 48.0f };
+    float            stage_pixelate_strength{ 1.0f };
     bool             enable_stage_shader{ true }; // false = always FBX default
     bool             enable_stage_render{ false };
     bool             stage_texture_wrap{ true };
@@ -410,11 +416,13 @@ private:
     void draw_inspector();
     void draw_shader_adjustment_workspace();
     void draw_shader_stack(const char* id, int& base_shader, bool& outline_pass,
-        ReplayEngine::Rendering::ShaderLayerStack& layers);
+        ReplayEngine::Rendering::ShaderLayerStack& layers, float& pixel_grid,
+        float& pixelate_strength);
     void draw_screen_effect_stack();
     void draw_character_material_controls(const char* id, int& base_shader, bool& outline_pass,
         ReplayEngine::Rendering::ShaderLayerStack& layers,
-        ReplayEngine::Rendering::CharacterMaterialProfile& profile);
+        ReplayEngine::Rendering::CharacterMaterialProfile& profile, float& pixel_grid,
+        float& pixelate_strength);
     bool browse_stage_asset();
     bool load_stage_asset(const std::wstring& filename);
     bool load_stage_asset_now(const std::wstring& filename);

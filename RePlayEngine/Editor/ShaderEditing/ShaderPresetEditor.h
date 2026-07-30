@@ -14,6 +14,7 @@ namespace ReplayEngine::Editor
     public:
         static void Draw(HWND owner, int& base_shader, bool& outline_pass,
             Rendering::ShaderLayerStack& layers,
-            Rendering::CharacterMaterialProfile& profile, std::string& status);
+            Rendering::CharacterMaterialProfile& profile, float& pixel_grid,
+            float& pixelate_strength, std::string& status);
     };
 }

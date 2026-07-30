@@ -2,7 +2,7 @@
 //  pbr_common.hlsli
 //  PBR + IBL + Shadow の "追加" 定数バッファ / サンプラー / テクスチャ。
 //  既存 skinned_mesh.hlsli / static_mesh.hlsli の cbuffer はそのまま流用するため
-//  ここでは SCENE_CONSTANT_BUFFER(b1) / OBJECT_CONSTANT_BUFFER(b0) は定義しない。
+//  ここでは SCENE_CONSTANT_BUFFER(b1) / OBJECT_CONSTANT_BUFFER(b0) は定義しないのでよろしく。
 //
 //  使い方:
 //    #include "skinned_mesh.hlsli"  または "static_mesh.hlsli"
@@ -10,7 +10,7 @@
 //
 //  追加スロット:
 //    t2  = metallic-roughness (B=metal, G=rough, R=AO) glTF ORM
-//    t3  = emissive map
+//    t3  = emissive map光るやつ
 //    t4  = shadow map (R32_FLOAT depth)
 //    t33 = diffuse IEM   (TextureCube)
 //    t34 = specular PMREM(TextureCube)

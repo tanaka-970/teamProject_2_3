@@ -12,7 +12,7 @@ namespace ReplayEngine::Scene
 {
     namespace
     {
-        constexpr int scene_format_version = 6;
+        constexpr int scene_format_version = 7;
         constexpr std::size_t max_scene_entities = 100000;
 
         bool Expect(std::istream& stream, const char* expected, std::string& error)
@@ -79,7 +79,8 @@ namespace ReplayEngine::Scene
                 stream << "MODEL_RENDERER " << std::quoted(value.asset_guid)
                     << ' ' << std::quoted(value.asset_name)
                     << ' ' << value.tint.x << ' ' << value.tint.y << ' ' << value.tint.z << ' ' << value.tint.w
-                    << ' ' << value.shading_model << ' ' << value.outline << ' ' << value.visible << '\n';
+                    << ' ' << value.shading_model << ' ' << value.outline << ' ' << value.visible
+                    << ' ' << value.pixelate_grid << ' ' << value.pixelate_strength << '\n';
                 for (const auto& layer : value.shader_layers)
                 {
                     stream << "SHADER_LAYER " << layer.type << ' ' << layer.blend << ' '
@@ -240,6 +241,10 @@ namespace ReplayEngine::Scene
                     if (!(stream
                         >> value.tint.x >> value.tint.y >> value.tint.z >> value.tint.w
                         >> value.shading_model >> value.outline >> value.visible)) return false;
+                    if (version >= 7 &&
+                        !(stream >> value.pixelate_grid >> value.pixelate_strength)) return false;
+                    value.pixelate_grid = std::clamp(value.pixelate_grid, 4.0f, 256.0f);
+                    value.pixelate_strength = std::clamp(value.pixelate_strength, 0.0f, 1.0f);
                     entity.model_renderer = value;
                 }
                 else if (token == "MESH_COLLIDER")

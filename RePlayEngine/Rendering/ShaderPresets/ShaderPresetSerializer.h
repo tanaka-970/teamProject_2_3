@@ -12,6 +12,8 @@ namespace ReplayEngine::Rendering
     {
         std::string name{ "Shader Preset" };
         int base_shader = 1;
+        float pixelate_grid = 48.0f;
+        float pixelate_strength = 1.0f;
         bool outline = false;
         ShaderLayerStack layers;
         CharacterMaterialProfile character;

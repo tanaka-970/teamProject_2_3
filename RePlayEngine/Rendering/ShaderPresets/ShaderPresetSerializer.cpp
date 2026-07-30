@@ -52,9 +52,10 @@ namespace ReplayEngine::Rendering
         }
         stream.imbue(std::locale::classic());
         const auto& value = preset.character;
-        stream << "REPLAY_SHADER_PRESET 2\n";
+        stream << "REPLAY_SHADER_PRESET 3\n";
         stream << "NAME " << std::quoted(preset.name) << '\n';
-        stream << "SURFACE " << preset.base_shader << ' ' << preset.outline << '\n';
+        stream << "SURFACE " << preset.base_shader << ' ' << preset.outline << ' '
+            << preset.pixelate_grid << ' ' << preset.pixelate_strength << '\n';
         stream << "GENERAL " << std::quoted(value.name) << ' ' << value.toon_threshold << ' '
             << value.toon_softness << ' ' << value.shadow_strength << ' ' << value.saturation << '\n';
         stream << "ARTISTIC "; WriteColor(stream, value.artistic.top_color); stream << ' ';
@@ -113,7 +114,7 @@ namespace ReplayEngine::Rendering
         stream.imbue(std::locale::classic());
         if (!Expect(stream, "REPLAY_SHADER_PRESET", error)) return false;
         int version = 0;
-        if (!(stream >> version) || version < 1 || version > 2)
+        if (!(stream >> version) || version < 1 || version > 3)
         {
             error = "未対応のシェーダープリセットです";
             return false;
@@ -125,6 +126,8 @@ namespace ReplayEngine::Rendering
             loaded.name.size() > 128) return false;
         if (!Expect(stream, "SURFACE", error) ||
             !(stream >> loaded.base_shader >> loaded.outline)) return false;
+        if (version >= 3 &&
+            !(stream >> loaded.pixelate_grid >> loaded.pixelate_strength)) return false;
         if (!Expect(stream, "GENERAL", error) ||
             !(stream >> std::quoted(value.name) >> value.toon_threshold >> value.toon_softness
                 >> value.shadow_strength >> value.saturation) || value.name.size() > 128) return false;
@@ -189,7 +192,9 @@ namespace ReplayEngine::Rendering
             destination.parameter = layer.parameter;
             destination.tint = layer.tint;
         }
-        loaded.base_shader = std::clamp(loaded.base_shader, 0, 3);
+        loaded.base_shader = std::clamp(loaded.base_shader, 0, 4);
+        loaded.pixelate_grid = std::clamp(loaded.pixelate_grid, 4.0f, 256.0f);
+        loaded.pixelate_strength = std::clamp(loaded.pixelate_strength, 0.0f, 1.0f);
         value.toon_threshold = std::clamp(value.toon_threshold, 0.0f, 1.0f);
         value.toon_softness = std::clamp(value.toon_softness, 0.001f, 0.5f);
         value.shadow_strength = std::clamp(value.shadow_strength, 0.0f, 1.0f);

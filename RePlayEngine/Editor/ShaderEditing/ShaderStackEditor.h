@@ -20,6 +20,7 @@ namespace ReplayEngine::Editor
         static ShaderStackEditorResult Draw(const char* id, int& base_shader,
             bool& outline_pass, Rendering::ShaderLayerStack& layers,
             bool& advanced_mode, DirectX::XMFLOAT4& outline_color,
-            DirectX::XMFLOAT4& outline_parameters);
+            DirectX::XMFLOAT4& outline_parameters, float& pixel_grid,
+            float& pixelate_strength);
     };
 }

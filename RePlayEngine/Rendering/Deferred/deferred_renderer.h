@@ -4,6 +4,7 @@
 #include <wrl.h>
 #include <DirectXMath.h>
 
+
 class deferred_renderer
 {
 public:

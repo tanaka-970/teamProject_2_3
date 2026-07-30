@@ -35,9 +35,12 @@ namespace ReplayEngine::Editor
 
         void ApplyPreset(Rendering::ShaderPreset preset, int& base_shader,
             bool& outline_pass, Rendering::ShaderLayerStack& layers,
-            Rendering::CharacterMaterialProfile& profile)
+            Rendering::CharacterMaterialProfile& profile, float& pixel_grid,
+            float& pixelate_strength)
         {
             base_shader = preset.base_shader;
+            pixel_grid = preset.pixelate_grid;
+            pixelate_strength = preset.pixelate_strength;
             outline_pass = preset.outline;
             layers = std::move(preset.layers);
             profile = std::move(preset.character);
@@ -46,7 +49,8 @@ namespace ReplayEngine::Editor
 
     void ShaderPresetEditor::Draw(HWND owner, int& base_shader, bool& outline_pass,
         Rendering::ShaderLayerStack& layers,
-        Rendering::CharacterMaterialProfile& profile, std::string& status)
+        Rendering::CharacterMaterialProfile& profile, float& pixel_grid,
+        float& pixelate_strength, std::string& status)
     {
         using namespace Rendering;
         if (ImGui::Button("新規プリセット（空）"))
@@ -66,41 +70,41 @@ namespace ReplayEngine::Editor
         if (ImGui::Button("鳴潮風"))
         {
             ApplyPreset(BuiltInShaderPresets::WutheringStylized(),
-                base_shader, outline_pass, layers, profile);
+                base_shader, outline_pass, layers, profile, pixel_grid, pixelate_strength);
             status = "内蔵プリセット: 鳴潮風Stylized PBR";
         }
         ImGui::SameLine();
         if (ImGui::Button("エンドフィールド風"))
         {
             ApplyPreset(BuiltInShaderPresets::EndfieldLayered(),
-                base_shader, outline_pass, layers, profile);
+                base_shader, outline_pass, layers, profile, pixel_grid, pixelate_strength);
             status = "内蔵プリセット: エンドフィールド風Layered PBR";
         }
         ImGui::SameLine();
         if (ImGui::Button("Crystal Toon"))
         {
             ApplyPreset(BuiltInShaderPresets::CrystalToon(),
-                base_shader, outline_pass, layers, profile);
+                base_shader, outline_pass, layers, profile, pixel_grid, pixelate_strength);
             status = "内蔵プリセット: Crystal Toon";
         }
         if (ImGui::Button("柔光アニメ"))
         {
             ApplyPreset(BuiltInShaderPresets::SoftAnime(),
-                base_shader, outline_pass, layers, profile);
+                base_shader, outline_pass, layers, profile, pixel_grid, pixelate_strength);
             status = "内蔵プリセット: 柔光アニメ";
         }
         ImGui::SameLine();
         if (ImGui::Button("硬質グラフィックセル"))
         {
             ApplyPreset(BuiltInShaderPresets::GraphicCel(),
-                base_shader, outline_pass, layers, profile);
+                base_shader, outline_pass, layers, profile, pixel_grid, pixelate_strength);
             status = "内蔵プリセット: 硬質グラフィックセル";
         }
         ImGui::SameLine();
         if (ImGui::Button("月光クリスタル"))
         {
             ApplyPreset(BuiltInShaderPresets::MoonlitCrystal(),
-                base_shader, outline_pass, layers, profile);
+                base_shader, outline_pass, layers, profile, pixel_grid, pixelate_strength);
             status = "内蔵プリセット: 月光クリスタル";
         }
 
@@ -112,6 +116,8 @@ namespace ReplayEngine::Editor
                 ShaderPreset preset{};
                 preset.name = profile.name;
                 preset.base_shader = base_shader;
+                preset.pixelate_grid = pixel_grid;
+                preset.pixelate_strength = pixelate_strength;
                 preset.outline = outline_pass;
                 preset.layers = layers;
                 preset.character = profile;
@@ -130,7 +136,8 @@ namespace ReplayEngine::Editor
                 std::string error;
                 if (ShaderPresetSerializer::Load(preset, path, error))
                 {
-                    ApplyPreset(std::move(preset), base_shader, outline_pass, layers, profile);
+                    ApplyPreset(std::move(preset), base_shader, outline_pass, layers, profile,
+                        pixel_grid, pixelate_strength);
                     status = "読み込みました: " + path.generic_u8string();
                 }
                 else status = "読込失敗: " + error;
