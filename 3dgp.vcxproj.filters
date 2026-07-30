@@ -141,6 +141,9 @@
     <Filter Include="Source\Game\Camera">
       <UniqueIdentifier>{3dc6720d-9190-4a0b-8dda-2cd5fca6d4bc}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source\Game\UI">
+      <UniqueIdentifier>{3b1e36f9-008b-4881-89aa-d8a20b1082af}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Source\render\csm_renderer.cpp">
@@ -794,6 +797,9 @@
     <ClCompile Include="Source\game\free_camera_controller.cpp">
       <Filter>Source\Game\Camera</Filter>
     </ClCompile>
+    <ClCompile Include="Source\mesh\UI.cpp">
+      <Filter>Source\Game\UI</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="RePlayEngine\Core\Components\AnimationComponent.h">
@@ -867,6 +873,9 @@
     </ClInclude>
     <ClInclude Include="Source\game\free_camera_controller.h">
       <Filter>Source\Game\Camera</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\mesh\UI.h">
+      <Filter>Source\Game\UI</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
