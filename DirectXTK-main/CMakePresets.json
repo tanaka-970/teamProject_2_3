@@ -15,6 +15,15 @@
       "installDir": "${sourceDir}/out/install/${presetName}"
     },
     {
+      "name": "vsbase",
+      "displayName": "Visual Studio Basic Config",
+      "description": "Basic build using Visual Studio generator",
+      "generator": "Visual Studio 17 2022",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "installDir": "${sourceDir}/out/install/${presetName}"
+    },
+    {
       "name": "x64",
       "architecture": {
         "value": "x64",
@@ -258,6 +267,9 @@
     { "name": "arm64-Release"   , "description": "MSVC for ARM64 (Release) for Windows 10", "inherits": [ "base", "ARM64", "Release", "MSVC", "Win10" ] },
     { "name": "arm64ec-Debug"   , "description": "MSVC for ARM64EC (Debug) for Windows 10", "inherits": [ "base", "ARM64EC", "Debug", "MSVC", "Win10" ] },
     { "name": "arm64ec-Release" , "description": "MSVC for ARM64EC (Release) for Windows 10", "inherits": [ "base", "ARM64EC", "Release", "MSVC", "Win10" ] },
+
+    { "name": "x64-VS"  , "description": "MSVC for x64 w/ Visual Studio generator", "inherits": [ "vsbase", "x64", "MSVC" ] },
+    { "name": "x86-VS"  , "description": "MSVC for x86 w/ Visual Studio generator", "inherits": [ "vsbase", "x86", "MSVC" ] },
 
     { "name": "x64-Debug-UWP"    , "description": "MSVC for x64 (Debug) for UWP", "inherits": [ "base", "x64", "Debug", "MSVC", "UWP" ] },
     { "name": "x64-Release-UWP"  , "description": "MSVC for x64 (Release) for UWP", "inherits": [ "base", "x64", "Release", "MSVC", "UWP" ] },

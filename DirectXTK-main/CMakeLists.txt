@@ -3,7 +3,11 @@
 
 cmake_minimum_required (VERSION 3.21)
 
-set(DIRECTXTK_VERSION 1.9.2)
+if(POLICY CMP0162)
+   cmake_policy(SET CMP0162 NEW)
+endif()
+
+set(DIRECTXTK_VERSION 1.9.3)
 
 if(XBOX_CONSOLE_TARGET STREQUAL "durango")
   set(CMAKE_TRY_COMPILE_TARGET_TYPE "STATIC_LIBRARY")
@@ -258,6 +262,7 @@ if(NOT USE_PREBUILT_SHADERS)
     else()
         find_program(DIRECTX_FXC_TOOL FXC.EXE
           HINTS "C:/Program Files (x86)/Windows Kits/10/bin/${CMAKE_SYSTEM_VERSION}/${DIRECTX_HOST_ARCH}"
+                "C:/Program Files (x86)/Windows Kits/10/bin/${CMAKE_SYSTEM_VERSION}.0/${DIRECTX_HOST_ARCH}"
                 "C:/Program Files (x86)/Windows Kits/10/bin/${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}/${DIRECTX_HOST_ARCH}")
         message(STATUS "Using LegacyShaderCompiler found in ${DIRECTX_FXC_TOOL}")
     endif()
@@ -271,6 +276,10 @@ if(NOT USE_PREBUILT_SHADERS)
         USES_TERMINAL)
 endif()
 
+add_library(${PROJECT_NAME})
+
+target_sources(${PROJECT_NAME} PRIVATE ${LIBRARY_HEADERS} ${LIBRARY_SOURCES})
+
 if(WIN32 AND BUILD_SHARED_LIBS)
   message(STATUS "Build library as a DLL")
 
@@ -278,7 +287,7 @@ if(WIN32 AND BUILD_SHARED_LIBS)
       "${CMAKE_CURRENT_SOURCE_DIR}/build/DirectXTK.rc.in"
       "${CMAKE_CURRENT_BINARY_DIR}/DirectXTK.rc" @ONLY)
 
-  add_library(${PROJECT_NAME} SHARED ${LIBRARY_SOURCES} ${LIBRARY_HEADERS} "${CMAKE_CURRENT_BINARY_DIR}/DirectXTK.rc")
+  target_sources(${PROJECT_NAME} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/DirectXTK.rc")
 
   target_compile_definitions(${PROJECT_NAME} PRIVATE DIRECTX_TOOLKIT_EXPORT)
   target_compile_definitions(${PROJECT_NAME} INTERFACE DIRECTX_TOOLKIT_IMPORT)
@@ -290,8 +299,6 @@ if(WIN32 AND BUILD_SHARED_LIBS)
   if(MINGW AND BUILD_XINPUT)
     target_link_libraries(${PROJECT_NAME} PRIVATE xinput1_4.lib)
   endif()
-else()
-  add_library(${PROJECT_NAME} ${LIBRARY_SOURCES} ${LIBRARY_HEADERS})
 endif()
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${COMPILED_SHADERS} Src)
@@ -435,7 +442,10 @@ if(directxmath_FOUND)
     endforeach()
 endif()
 
-if(TOOL_EXES)
+if (BUILD_TOOLS AND (CMAKE_GENERATOR MATCHES "Visual Studio"))
+  message(STATUS "Building tools: MakeSpriteFont;${TOOL_EXES}")
+  add_subdirectory(MakeSpriteFont)
+elseif(TOOL_EXES)
   message(STATUS "Building tools: ${TOOL_EXES}")
 endif()
 
