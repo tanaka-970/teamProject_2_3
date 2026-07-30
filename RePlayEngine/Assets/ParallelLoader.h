@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <algorithm>
 #include <atomic>
@@ -13,7 +13,7 @@
 // - 各ワーカーはテクスチャ読込(WIC/DDS=COM)に備えて CoInitializeEx を呼ぶ。
 // - ID3D11Device::Create系はスレッドセーフなのでモデル/テクスチャ生成に使える。
 //   即時コンテキスト(ID3D11DeviceContext)は絶対に触らないこと。
-// - job 内の例外は呼び出し側で吸収しておくこと(ここでは捕捉しない)。
+// - job 内の例外は呼び出し側で吸収しておくこと(ここでは捕捉しない。)。
 namespace ReplayEngine::Assets
 {
     namespace ParallelLoader
