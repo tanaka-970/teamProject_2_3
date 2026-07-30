@@ -16,6 +16,9 @@ struct VS_OUT
 	float4 world_normal : NORMAL;
 	float4 color : COLOR;
 	float2 texcoord : TEXCOORD;
+	// TAAのモーションベクター用。現/前フレームのクリップ座標をそのまま渡す。
+	float4 current_clip : TEXCOORD1;
+	float4 previous_clip : TEXCOORD2;
 };
 #endif
 

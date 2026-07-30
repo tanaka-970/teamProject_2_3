@@ -36,11 +36,11 @@ namespace ReplayEngine::Scene
         void StartTasks();
 
         std::vector<Entry> tasks_;
-        std::vector<std::future<bool>> workers_;
+        std::future<bool> loader_;
         std::unique_ptr<sprite> solid_;
         std::unique_ptr<sprite> star_;
-        std::atomic<size_t> next_task_{ 0 };
         std::atomic<size_t> completed_tasks_{ 0 };
+        std::atomic<bool> failed_{ false };
         float spinner_ = 0.0f;
         bool task_running_ = false;
         bool initialized_ = false;

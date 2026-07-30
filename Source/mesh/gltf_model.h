@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <d3d11.h>
 #include <wrl.h>
@@ -9,8 +9,8 @@
 #include <vector>
 #include "../../RePlayEngine/Physics/SphereCast.h"
 
-// glTF 2.0／GLBの静的メッシュ資産。従来のメタデータだけの仮実装を置き換える。
-// スキンとアニメーションは能力情報として保持し、実行時再生は別コンポーネントで扱う。
+// glTF 2.0�^GLB�̐ÓI���b�V�����Y�B�]���̃��^�f�[�^�����̉�������u��������B
+// �X�L���ƃA�j���[�V�����͔\�͏��Ƃ��ĕێ����A���s���Đ��͕ʃR���|�[�l���g�ň����B
 class gltf_model
 {
 public:
@@ -27,10 +27,13 @@ public:
         return collision_triangles_;
     }
 
+    // write_motion_vectors ��G-Buffer�p�X�ł̂� true �ɂ���B
+    // �O�t���[���̃��[���h�s���VS(b6)�֍ڂ��A������1�t���[���i�߂�B
     void render(ID3D11DeviceContext* context,
         const DirectX::XMFLOAT4X4& world,
         const DirectX::XMFLOAT4& tint = { 1, 1, 1, 1 },
-        ID3D11PixelShader* alternative_pixel_shader = nullptr);
+        ID3D11PixelShader* alternative_pixel_shader = nullptr,
+        bool write_motion_vectors = false);
 
 private:
     struct Vertex
@@ -71,6 +74,11 @@ private:
     Microsoft::WRL::ComPtr<ID3D11PixelShader> pixel_shader_;
     Microsoft::WRL::ComPtr<ID3D11InputLayout> input_layout_;
     Microsoft::WRL::ComPtr<ID3D11Buffer> constant_buffer_;
+    // TAA�̃��[�V�����x�N�^�[�p: b6=�O�t���[���̃��[���h/�r���[�ˉe�B
+    Microsoft::WRL::ComPtr<ID3D11Buffer> motion_object_constant_buffer_;
+    std::vector<DirectX::XMFLOAT4X4> previous_primitive_worlds_;
+    unsigned long long motion_frame_id_{ 0 };
+    bool motion_history_valid_{ false };
     std::string error_;
     bool loaded_ = false;
     bool has_skins_ = false;

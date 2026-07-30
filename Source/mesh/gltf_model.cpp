@@ -1,4 +1,4 @@
-﻿#include "gltf_model.h"
+#include "gltf_model.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -7,6 +7,7 @@
 
 #include "shader.h"
 #include "texture.h"
+#include "../render/motion_vector_context.h"
 
 #include <algorithm>
 #include <cctype>
@@ -156,6 +157,10 @@ bool gltf_model::Load(ID3D11Device* device, const std::string& filename)
     constant_desc.Usage = D3D11_USAGE_DEFAULT;
     constant_desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
     if (FAILED(device->CreateBuffer(&constant_desc, nullptr, constant_buffer_.GetAddressOf()))) return false;
+    // TAAのモーションベクター用の定数バッファ(b6)。
+    constant_desc.ByteWidth = sizeof(motion_vectors::ObjectConstants);
+    if (FAILED(device->CreateBuffer(&constant_desc, nullptr,
+        motion_object_constant_buffer_.GetAddressOf()))) return false;
     make_dummy_texture(device, white_texture_.GetAddressOf(), 0xffffffff, 4);
 
     std::vector<Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>> image_views(model.images.size());
@@ -245,8 +250,8 @@ bool gltf_model::Load(ID3D11Device* device, const std::string& filename)
             if (!has_normals) GenerateNormals(vertices, indices);
 
             Primitive primitive{};
-        // glTFの右手座標系を取り込むとき、頂点をX軸で反転する。
-        // 移動と回転の整合性を保つため、ノード変換も同じ軸で反転する。
+        // glTF�̉E����W�n����荞�ނƂ��A���_��X���Ŕ��]����B
+        // �ړ��Ɖ�]�̐�������ۂ��߁A�m�[�h�ϊ����������Ŕ��]����B
             const XMMATRIX reflection = XMMatrixScaling(-1.0f, 1.0f, 1.0f);
             XMStoreFloat4x4(&primitive.node_transform,
                 reflection * globals[node_index] * reflection);
@@ -289,9 +294,16 @@ bool gltf_model::Load(ID3D11Device* device, const std::string& filename)
 }
 
 void gltf_model::render(ID3D11DeviceContext* context, const XMFLOAT4X4& world,
-    const XMFLOAT4& tint, ID3D11PixelShader* alternative_pixel_shader)
+    const XMFLOAT4& tint, ID3D11PixelShader* alternative_pixel_shader,
+    bool write_motion_vectors)
 {
     if (!loaded_ || !context) return;
+    const motion_vectors::FrameContext& motion_frame = motion_vectors::Frame();
+    const bool emit_motion = write_motion_vectors && motion_object_constant_buffer_;
+    const bool advance_motion_history =
+        emit_motion && motion_frame_id_ != motion_frame.frame_id;
+    if (emit_motion) previous_primitive_worlds_.resize(primitives_.size());
+    size_t motion_primitive_index = 0;
     context->IASetInputLayout(input_layout_.Get());
     context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     context->VSSetShader(vertex_shader_.Get(), nullptr, 0);
@@ -314,6 +326,37 @@ void gltf_model::render(ID3D11DeviceContext* context, const XMFLOAT4X4& world,
         context->UpdateSubresource(constant_buffer_.Get(), 0, nullptr, &constants, 0, 0);
         context->VSSetConstantBuffers(0, 1, constant_buffer_.GetAddressOf());
         context->PSSetConstantBuffers(0, 1, constant_buffer_.GetAddressOf());
+
+        if (emit_motion)
+        {
+            // 剛体なのでプリミティブごとの前フレームのワールド行列を渡すだけでよい。
+            const bool has_history = motion_history_valid_ &&
+                motion_primitive_index < previous_primitive_worlds_.size();
+            motion_vectors::ObjectConstants motion_object{};
+            motion_object.previous_world = has_history
+                ? previous_primitive_worlds_[motion_primitive_index] : constants.world;
+            motion_object.previous_view_projection = motion_frame.previous_view_projection;
+            motion_object.params = { motion_frame.enabled && has_history ? 1.0f : 0.0f,
+                motion_frame.current_jitter.x, motion_frame.current_jitter.y, 0.0f };
+            motion_object.params2 = { motion_frame.previous_jitter.x,
+                motion_frame.previous_jitter.y, 0.0f, 0.0f };
+            context->UpdateSubresource(
+                motion_object_constant_buffer_.Get(), 0, nullptr, &motion_object, 0, 0);
+            context->VSSetConstantBuffers(
+                6, 1, motion_object_constant_buffer_.GetAddressOf());
+
+            if (advance_motion_history)
+                previous_primitive_worlds_[motion_primitive_index] = constants.world;
+            ++motion_primitive_index;
+        }
+
         context->DrawIndexed(primitive.index_count, 0, 0);
+    }
+
+    // 同一フレーム内で二度呼ばれても履歴は一度だけ進める。
+    if (advance_motion_history)
+    {
+        motion_frame_id_ = motion_frame.frame_id;
+        motion_history_valid_ = true;
     }
 }

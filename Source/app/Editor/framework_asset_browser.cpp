@@ -83,6 +83,42 @@ bool framework::browse_stage_asset()
     return load_stage_asset(filename);
 }
 
+bool framework::prewarm_model_asset(const std::filesystem::path& path)
+{
+    std::error_code error;
+    if (path.empty() || !std::filesystem::exists(path, error)) return false;
+
+    const std::wstring extension = LowerExtension(path);
+    try
+    {
+        if (extension == L".glb" || extension == L".gltf")
+        {
+            const auto model = gltf_model_cache.Load(path, [this, path]
+            {
+                return std::make_shared<gltf_model>(device.Get(), path.string());
+            });
+            return model && model->IsLoaded();
+        }
+        if (extension == L".fbx" || extension == L".cereal")
+        {
+            // .fbxはランタイム変換を避け、隣の.cerealキャッシュがある場合だけ載せる。
+            auto cache = path;
+            cache.replace_extension(L".cereal");
+            if (!std::filesystem::exists(cache, error)) return false;
+            return skinned_mesh_cache.Load(path, [this, path]
+            {
+                return std::make_shared<skinned_mesh>(device.Get(), path.string().c_str());
+            }) != nullptr;
+        }
+    }
+    catch (...)
+    {
+        // 先読みは失敗しても本来のロードで再試行できるため、ここで握り潰す。
+        return false;
+    }
+    return false;
+}
+
 bool framework::load_stage_asset(const std::wstring& filename)
 {
     const std::filesystem::path path(filename);

@@ -1,6 +1,7 @@
 // 静的メッシュの材質情報をG-Bufferへ書き込むピクセルシェーダー。
 #include "static_mesh.hlsli"
 #include "gbuffer_common.hlsli"
+#include "motion_vector_common.hlsli"
 
 Texture2D base_color_map : register(t0);
 Texture2D normal_map     : register(t1);
@@ -39,6 +40,7 @@ GBufferOut main(VS_OUT pin)
     d.roughness = max(mat_params.y, 0.045f);
     d.metalness = mat_params.x;
     d.occlusion_strength = mat_params.z;
+    d.velocity = compute_motion_vector(pin.current_clip, pin.previous_clip);
 
     GBufferOut output = EncodeGBuffer(d);
     if (shading_model == SHADING_MODEL_PIXELATE)

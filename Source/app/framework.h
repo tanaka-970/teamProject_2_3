@@ -39,6 +39,11 @@ extern ImWchar glyphRangesJapanese[];
 #include "../../RePlayEngine/Scene/SceneManager.h"
 #include "../../RePlayEngine/Rendering/Passes/PostProcessPass.h"
 #include "../../RePlayEngine/Rendering/Passes/BloomPass.h"
+#include "../../RePlayEngine/Rendering/Passes/SsaoPass.h"
+#include "../../RePlayEngine/Rendering/Passes/SsrPass.h"
+#include "../../RePlayEngine/Rendering/Passes/TaaPass.h"
+#include "../../RePlayEngine/Rendering/FrameConstants.h"
+#include "../render/motion_vector_context.h"
 #include "../../RePlayEngine/Rendering/RenderGraph/RenderGraph.h"
 #include "../../RePlayEngine/Rendering/ShaderStack/ShaderLayerStack.h"
 #include "../../RePlayEngine/Rendering/Materials/CharacterMaterialProfile.h"
@@ -175,6 +180,23 @@ public:
     ReplayEngine::Rendering::RenderGraph render_graph;
     ReplayEngine::Rendering::PostProcessPass post_process;
     ReplayEngine::Rendering::BloomPass bloom_pass;
+    ReplayEngine::Rendering::SsaoPass ssao_pass;
+    ReplayEngine::Rendering::SsrPass ssr_pass;
+    ReplayEngine::Rendering::TaaPass taa_pass;
+
+    // SSAO/SSR/TAAが共有するフレーム定数。b9へ載せる。
+    ReplayEngine::Rendering::FrameConstants frame_constants{};
+    Microsoft::WRL::ComPtr<ID3D11Buffer> frame_constants_cb;
+    // TAAの再投影に使う前フレームのビュー射影行列。初回は今フレームで埋める。
+    DirectX::XMFLOAT4X4 previous_view_projection{};
+    bool previous_view_projection_valid{ false };
+    // 射影行列へ加算したTAAジッター(NDC)。モーションベクターで打ち消すのに使う。
+    DirectX::XMFLOAT2 taa_jitter_ndc{ 0.0f, 0.0f };
+    DirectX::XMFLOAT2 previous_taa_jitter_ndc{ 0.0f, 0.0f };
+    unsigned int frame_index{ 0 };
+    bool enable_ssao{ true };
+    bool enable_ssr{ true };
+    bool enable_taa{ true };
 
     GameScene*       game_scene{ nullptr };
     bool             enable_scene_game{ true };
@@ -409,6 +431,9 @@ private:
     void render(float elapsed_time);
     bool uninitialize();
     void store_object_world(DirectX::XMFLOAT4X4& world) const;
+    // SSAO/SSR/TAAが共有するフレーム定数を作ってb9へ載せる。
+    void update_frame_constants(const DirectX::XMMATRIX& view,
+        const DirectX::XMMATRIX& projection, float elapsed_time);
     ID3D11PixelShader* skinned_forward_shader(int shading) const;
     ID3D11PixelShader* static_forward_shader(int shading) const;
     unsigned int deferred_shading_model(int shading) const;
@@ -433,6 +458,9 @@ private:
     bool browse_stage_asset();
     bool load_stage_asset(const std::wstring& filename);
     bool load_stage_asset_now(const std::wstring& filename);
+    // ワーカースレッドから呼べるモデル先読み。キャッシュへ載せるだけで
+    // frameworkの表示状態は触らないため、並列ロード中に安全に使える。
+    bool prewarm_model_asset(const std::filesystem::path& path);
     void draw_stage_placement_controls();
     void draw_scene_document_toolbar();
     void draw_scene_entity_inspector();
@@ -525,6 +553,11 @@ private:
     bool editor_layout_dirty{ false };
     bool editor_hide_requested{ false };
     bool editor_session_active{ false };
+    // このフレームでImGui::NewFrame()を通したか。
+    // ロード完了フレームのようにupdate()が早期returnした直後にeditor_modeが
+    // 立つ場合があり、NewFrame無しでRender()するとImGuiがassertするため、
+    // NewFrameとRender/EndFrameの対をこのフラグで保証する。
+    bool imgui_frame_active{ false };
     bool edit_mode_active{ false };
     bool search_input_active{ false };
     bool focus_search_requested{ false };

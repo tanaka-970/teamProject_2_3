@@ -36,6 +36,8 @@ bool deferred_renderer::initialize(ID3D11Device* device, UINT w, UINT h)
         DXGI_FORMAT_R16G16B16A16_FLOAT,
         DXGI_FORMAT_R16G16B16A16_FLOAT,
         DXGI_FORMAT_R8G8B8A8_UNORM,
+        // モーションベクターは符号付きで1ピクセル未満の精度が必要なのでfloat。
+        DXGI_FORMAT_R16G16_FLOAT,
     };
 
     for (UINT i = 0; i < GBUFFER_COUNT; ++i)
@@ -133,7 +135,9 @@ void deferred_renderer::gbuffer_end(ID3D11DeviceContext* ctx)
 void deferred_renderer::lighting_pass(ID3D11DeviceContext* ctx,
                                       const XMFLOAT4X4& view_projection,
                                       const XMFLOAT4& clear_color,
-                                      int debug_mode)
+                                      int debug_mode,
+                                      ID3D11ShaderResourceView* ambient_occlusion,
+                                      ID3D11ShaderResourceView* screen_reflection)
 {
     if (!initialized || !lighting_ps || !fullscreen_vs) return;
 
@@ -152,6 +156,8 @@ void deferred_renderer::lighting_pass(ID3D11DeviceContext* ctx,
     ctx->ClearRenderTargetView(lit_rtv.Get(), clear);
     ctx->RSSetViewports(1, &viewport);
 
+    // t4/t5 は PBR のシャドウマップ等が使うため空けておき、
+    // t6=深度, t7=SSAO, t8=SSR の順で追加のスクリーン空間入力を渡す。
     ID3D11ShaderResourceView* srvs[] = {
         gbuffer_srv[0].Get(),
         gbuffer_srv[1].Get(),
@@ -160,6 +166,8 @@ void deferred_renderer::lighting_pass(ID3D11DeviceContext* ctx,
         nullptr,
         nullptr,
         depth_srv.Get(),
+        ambient_occlusion,
+        screen_reflection,
     };
     ctx->PSSetShaderResources(0, _countof(srvs), srvs);
 

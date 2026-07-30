@@ -10,6 +10,8 @@ struct GBufferOut
     float4 emissive   : SV_TARGET1;
     float4 normal     : SV_TARGET2;
     float4 parameter  : SV_TARGET3;
+    // TAA用のスクリーン空間移動量(UV単位)。「前フレームUV = 現UV - velocity」。
+    float2 velocity   : SV_TARGET4;
 };
 
 struct GBufferData
@@ -22,6 +24,7 @@ struct GBufferData
     float  roughness;
     float  metalness;
     float  occlusion_strength;
+    float2 velocity;
 };
 
 GBufferOut EncodeGBuffer(GBufferData d)
@@ -31,6 +34,7 @@ GBufferOut EncodeGBuffer(GBufferData d)
     o.emissive   = float4(d.emissive, 1.0f);
     o.normal     = float4(d.world_normal * 0.5f + 0.5f, 1.0f);
     o.parameter  = float4(d.occlusion, d.roughness, d.metalness, d.occlusion_strength);
+    o.velocity   = d.velocity;
     return o;
 }
 

@@ -41,6 +41,71 @@ void framework::store_object_world(DirectX::XMFLOAT4X4& world) const
     DirectX::XMStoreFloat4x4(&world, C * S * R * T);
 }
 
+void framework::update_frame_constants(const DirectX::XMMATRIX& view,
+    const DirectX::XMMATRIX& projection, float elapsed_time)
+{
+    if (!frame_constants_cb) return;
+
+    const DirectX::XMMATRIX view_projection = view * projection;
+    DirectX::XMStoreFloat4x4(&frame_constants.view, view);
+    DirectX::XMStoreFloat4x4(&frame_constants.projection, projection);
+    DirectX::XMStoreFloat4x4(&frame_constants.view_projection, view_projection);
+    DirectX::XMStoreFloat4x4(&frame_constants.inv_view,
+        DirectX::XMMatrixInverse(nullptr, view));
+    DirectX::XMStoreFloat4x4(&frame_constants.inv_projection,
+        DirectX::XMMatrixInverse(nullptr, projection));
+    DirectX::XMStoreFloat4x4(&frame_constants.inv_view_projection,
+        DirectX::XMMatrixInverse(nullptr, view_projection));
+
+    // 初回フレームは前フレームが無いので、今フレームで埋めて再投影を無効化する。
+    if (!previous_view_projection_valid)
+    {
+        DirectX::XMStoreFloat4x4(&previous_view_projection, view_projection);
+        previous_view_projection_valid = true;
+    }
+    frame_constants.prev_view_projection = previous_view_projection;
+
+    const DirectX::XMFLOAT4X4& p = frame_constants.projection;
+    // projection._22 = 1/tan(fovY/2)、_11 = 1/(tan(fovY/2)*aspect)。
+    const float tan_half_fov_y = p._22 != 0.0f ? 1.0f / p._22 : 1.0f;
+    const float aspect = p._11 != 0.0f ? p._22 / p._11 : 1.0f;
+    // LH透視射影は _33 = far/(far-near)、_43 = -near*far/(far-near)。
+    const float near_plane = p._33 != 0.0f ? -p._43 / p._33 : 0.1f;
+    const float far_plane = (p._33 - 1.0f) != 0.0f ? p._43 / (p._33 - 1.0f) : 10000.0f;
+
+    frame_constants.camera_position = enable_scene_game && game_scene
+        ? DirectX::XMFLOAT4(game_scene->Gameplay().GetCamera().GetEye().x,
+            game_scene->Gameplay().GetCamera().GetEye().y,
+            game_scene->Gameplay().GetCamera().GetEye().z, 1.0f)
+        : camera_position;
+    const float width = static_cast<float>(SCREEN_WIDTH);
+    const float height = static_cast<float>(SCREEN_HEIGHT);
+    frame_constants.screen_size = { width, height, 1.0f / width, 1.0f / height };
+    frame_constants.camera_planes = { near_plane, far_plane, tan_half_fov_y, aspect };
+    frame_constants.frame_params = { static_cast<float>(frame_index), elapsed_time, 0.0f, 0.0f };
+
+    // TAAのジッター量(NDC)。射影行列へ加算済みの値をそのまま共有し、
+    // モーションベクター側で打ち消せるようにしておく。
+    frame_constants.jitter = { taa_jitter_ndc.x, taa_jitter_ndc.y,
+        previous_taa_jitter_ndc.x, previous_taa_jitter_ndc.y };
+
+    // メッシュ側がモーションベクターを書くために必要なフレーム共通の情報。
+    motion_vectors::FrameContext& motion_frame = motion_vectors::Frame();
+    motion_frame.previous_view_projection = previous_view_projection;
+    motion_frame.current_jitter = taa_jitter_ndc;
+    motion_frame.previous_jitter = previous_taa_jitter_ndc;
+    motion_frame.enabled = previous_view_projection_valid;
+    motion_frame.frame_id = frame_index + 1; // 0は「未描画」を表すため使わない
+
+    immediate_context->UpdateSubresource(frame_constants_cb.Get(), 0, nullptr,
+        &frame_constants, 0, 0);
+    // b4はこのフレーム定数の専用スロット。他のパスが上書きしないため、
+    // フレーム先頭で一度貼れば SSAO/SSR/TAA/タイルド照明すべてから読める。
+    ID3D11Buffer* buffers[1]{ frame_constants_cb.Get() };
+    immediate_context->PSSetConstantBuffers(4, 1, buffers);
+    immediate_context->CSSetConstantBuffers(4, 1, buffers);
+}
+
 ID3D11PixelShader* framework::skinned_forward_shader(int shading) const
 {
     // nullptrは各メッシュが持つ標準ピクセルシェーダーを使う指定になる。
@@ -121,6 +186,14 @@ void framework::render(float elapsed_time)
 
     if (scene_manager.IsExclusive())
     {
+#ifdef USE_IMGUI
+        // 排他シーン中はエディタUIを出さない。NewFrame済みなら破棄して対を保つ。
+        if (imgui_frame_active)
+        {
+            imgui_frame_active = false;
+            ImGui::EndFrame();
+        }
+#endif
         // 起動ロゴやロード画面はゲーム側の描画パイプラインを通さず、画面全体へ直接描く。
         immediate_context->OMSetRenderTargets(1, render_target_view.GetAddressOf(), nullptr);
         immediate_context->OMSetBlendState(
@@ -154,6 +227,29 @@ void framework::render(float elapsed_time)
         V = DirectX::XMMatrixLookAtLH(eye, focus, up);
     }
 
+    // TAAのサブピクセルジッターを射影行列へ入れる。以降の全パスがこのPを使うので、
+    // G-Buffer/影/前方描画すべてが同じ標本位置になる。
+    previous_taa_jitter_ndc = taa_jitter_ndc;
+    taa_jitter_ndc = { 0.0f, 0.0f };
+    if (enable_taa && taa_pass.Initialized() && taa_pass.enabled &&
+        render_graph.DeferredDebugMode() == 0)
+    {
+        const DirectX::XMFLOAT2 pixel_offset = taa_pass.CurrentJitter(frame_index);
+        // ピクセル単位のオフセットをNDCへ。NDCは幅2なので 2/解像度 を掛ける。
+        taa_jitter_ndc = {
+            pixel_offset.x * 2.0f / static_cast<float>(SCREEN_WIDTH),
+            pixel_offset.y * 2.0f / static_cast<float>(SCREEN_HEIGHT) };
+
+        // row_major・mul(v, P)の規約では clip.x += jitter.x * clip.w になるよう
+        // _31/_32 へ加算する(clip.w = view z)。
+        DirectX::XMFLOAT4X4 jittered;
+        DirectX::XMStoreFloat4x4(&jittered, P);
+        jittered._31 += taa_jitter_ndc.x;
+        jittered._32 += taa_jitter_ndc.y;
+        P = DirectX::XMLoadFloat4x4(&jittered);
+    }
+    taa_pass.SetJitter(taa_jitter_ndc);
+
     // 以降の全描画パスが共有するカメラと主光源の定数を一度だけ更新する。
     scene_constants scene{};
     DirectX::XMStoreFloat4x4(&scene.view_projection, V * P);
@@ -170,6 +266,9 @@ void framework::render(float elapsed_time)
     immediate_context->UpdateSubresource(constant_buffers[0].Get(), 0, 0, &scene, 0, 0);
     immediate_context->VSSetConstantBuffers(1, 1, constant_buffers[0].GetAddressOf());
     immediate_context->PSSetConstantBuffers(1, 1, constant_buffers[0].GetAddressOf());
+
+    // SSAO/SSR/TAAが参照するカメラ行列群をb9へ載せる。
+    update_frame_constants(V, P, elapsed_time);
 
     const float original_pbr_shadow_enable = pbr.light.shadow_params.w;
     const bool pbr_shadow_enabled =
@@ -392,8 +491,10 @@ void framework::render(float elapsed_time)
             bind_gbuffer_material(player_uses_pixelate ? SHADING_MODEL_PIXELATE
                 : deferred_shading_model(shading_per_skinned[0]), false,
                 player_pixelate_settings.parameter, player_pixelate_settings.strength);
+            // 最後の引数がモーションベクター出力の指定。G-Bufferパスだけで真にする。
             skinned_meshes[0]->render(immediate_context.Get(), world, material_color,
-                                      active_keyframe, skinned_mesh_gbuffer_ps.Get());
+                                      active_keyframe, skinned_mesh_gbuffer_ps.Get(),
+                                      nullptr, nullptr, true, true);
         }
         if (enable_static_meshes && static_meshes[0])
         {
@@ -401,7 +502,8 @@ void framework::render(float elapsed_time)
                 : deferred_shading_model(shading_per_static[0]), false,
                 static_pixelate_settings.parameter, static_pixelate_settings.strength);
             static_meshes[0]->render(immediate_context.Get(), world, material_color,
-                                     static_mesh_gbuffer_ps.Get());
+                                     static_mesh_gbuffer_ps.Get(),
+                                     nullptr, nullptr, true, true);
         }
 
         if (enable_scene_game && game_scene && enable_stage_render)
@@ -416,7 +518,7 @@ void framework::render(float elapsed_time)
                     : deferred_shading_model(shading_per_stage), true,
                     stage_pixelate_settings.parameter, stage_pixelate_settings.strength);
                 stage_model->render(immediate_context.Get(), stage_world, material_color,
-                    nullptr, skinned_mesh_gbuffer_ps.Get());
+                    nullptr, skinned_mesh_gbuffer_ps.Get(), nullptr, nullptr, true, true);
             }
             else if (stage_gltf_model)
             {
@@ -424,14 +526,44 @@ void framework::render(float elapsed_time)
                     : deferred_shading_model(shading_per_stage), true,
                     stage_pixelate_settings.parameter, stage_pixelate_settings.strength);
                 stage_gltf_model->render(immediate_context.Get(), stage_world, material_color,
-                    static_mesh_gbuffer_ps.Get());
+                    static_mesh_gbuffer_ps.Get(), true);
             }
         }
 
         deferred.gbuffer_end(immediate_context.Get());
+
+        // 照明の前にSSAOを解く。G-Bufferの深度と法線だけで完結するパス。
+        ID3D11ShaderResourceView* ambient_occlusion = nullptr;
+        if (enable_ssao && ssao_pass.Initialized())
+        {
+            ssao_pass.enabled = true;
+            ambient_occlusion = ssao_pass.Execute(immediate_context.Get(),
+                *bit_block_transfer, deferred.depth_srv.Get(),
+                deferred.gbuffer_srv[2].Get());
+        }
+
+        // SSRも照明前に解き、PBRの鏡面項へ差し込む。反射源は前フレームの
+        // ライティング結果なので、この時点で参照しても自己参照にならない。
+        ID3D11ShaderResourceView* screen_reflection = nullptr;
+        if (enable_ssr && ssr_pass.Initialized())
+        {
+            ssr_pass.enabled = true;
+            screen_reflection = ssr_pass.Execute(immediate_context.Get(),
+                *bit_block_transfer, deferred.depth_srv.Get(),
+                deferred.gbuffer_srv[2].Get(), deferred.gbuffer_srv[3].Get());
+        }
+
+        // スクリーン空間パスがb1を触るため、共有シーン定数だけ貼り直す。
+        immediate_context->PSSetConstantBuffers(1, 1, constant_buffers[0].GetAddressOf());
+
         // GBufferをSRVへ切り替えた後、ライト計算結果をDeferred側の出力へ書く。
         deferred.lighting_pass(immediate_context.Get(), scene.view_projection,
-                               background_color, render_graph.DeferredDebugMode());
+                               background_color, render_graph.DeferredDebugMode(),
+                               ambient_occlusion, screen_reflection);
+
+        // 次フレームのSSR用に、照明直後のHDRカラーを履歴として確保する。
+        if (enable_ssr && ssr_pass.Initialized() && render_graph.DeferredDebugMode() == 0)
+            ssr_pass.CaptureHistory(immediate_context.Get(), deferred.lit_tex.Get());
 
         const bool draw_shader_layers = render_graph.DeferredDebugMode() == 0 &&
             (shader_layers_skinned[0].HasEnabledLayers() ||
@@ -637,6 +769,23 @@ void framework::render(float elapsed_time)
             immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
         }
 
+        // TAAはトーンマップ前のHDRで解く。明部のエイリアスも正しく平均化され、
+        // かつジッター済みの複数フレームが実質的なスーパーサンプリングになる。
+        ID3D11ShaderResourceView* lit_srv = deferred.lit_srv.Get();
+        if (enable_taa && taa_pass.Initialized() && render_graph.DeferredDebugMode() == 0)
+        {
+            taa_pass.enabled = true;
+            ID3D11ShaderResourceView* resolved = taa_pass.Execute(
+                immediate_context.Get(), *bit_block_transfer, lit_srv,
+                deferred.depth_srv.Get(),
+                deferred.gbuffer_srv[deferred_renderer::GBUFFER_VELOCITY_INDEX].Get());
+            if (resolved) lit_srv = resolved;
+        }
+        else if (taa_pass.Initialized())
+        {
+            taa_pass.InvalidateHistory();
+        }
+
         immediate_context->OMSetRenderTargets(1,
             framebuffers[0]->render_target_view.GetAddressOf(),
             framebuffers[0]->depth_stencil_view.Get());
@@ -644,7 +793,6 @@ void framework::render(float elapsed_time)
         immediate_context->OMSetDepthStencilState(depth_stencil_states[(size_t)DEPTH_STATE::ZT_OFF_ZW_OFF].Get(), 0);
         immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
         // 後段のエフェクトを共通化するため、照明結果を通常の中間バッファへ戻す。
-        ID3D11ShaderResourceView* lit_srv = deferred.lit_srv.Get();
         bit_block_transfer->blit(immediate_context.Get(), &lit_srv, 0, 1);
     }
     else
@@ -823,8 +971,11 @@ void framework::render(float elapsed_time)
     immediate_context->PSSetShaderResources(0, _countof(null_post_srvs), null_post_srvs);
 
 #ifdef USE_IMGUI
-    if (editor_mode)
+    // update()でNewFrameを通したフレームだけ描く。ロード完了フレームのように
+    // 途中でeditor_modeが立った場合は次フレームからUIを出す。
+    if (imgui_frame_active)
     {
+        imgui_frame_active = false;
         // エディタUIはポスト処理後に描き、ゲーム画面の色補正から除外する。
         ImGui::Render();
         ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
@@ -838,6 +989,11 @@ void framework::render(float elapsed_time)
     }
 #endif
 
+    // 次フレームの再投影用に今フレームのビュー射影を残し、
+    // ジッター/ノイズ列を進めるためのフレーム番号を更新する。
+    previous_view_projection = frame_constants.view_projection;
+    previous_view_projection_valid = true;
+    ++frame_index;
 
     swap_chain->Present(0, 0);
 }

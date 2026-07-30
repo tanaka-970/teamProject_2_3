@@ -210,6 +210,13 @@ bool framework::initialize()
     post_process.Initialize(device.Get());
     bloom_pass.Initialize(device.Get(), SCREEN_WIDTH, SCREEN_HEIGHT);
     enable_deferred = deferred.initialize(device.Get(), SCREEN_WIDTH, SCREEN_HEIGHT);
+
+    // SSAO/SSR/TAAが共有するフレーム定数バッファ(b9)。
+    cbd.ByteWidth = sizeof(ReplayEngine::Rendering::FrameConstants);
+    device->CreateBuffer(&cbd, nullptr, frame_constants_cb.GetAddressOf());
+    ssao_pass.Initialize(device.Get(), SCREEN_WIDTH, SCREEN_HEIGHT);
+    ssr_pass.Initialize(device.Get(), SCREEN_WIDTH, SCREEN_HEIGHT);
+    taa_pass.Initialize(device.Get(), SCREEN_WIDTH, SCREEN_HEIGHT);
     lights.initialize(device.Get());
     lights.data.light_counts.x = 1;
     lights.data.point_lights[0].position = { 3.0f, 4.0f, -24.0f, 18.0f };
@@ -260,6 +267,20 @@ bool framework::initialize()
             L".\\resources\\ibl\\lut_ggx.dds");
         return true;
     });
+    // AssetDatabaseのモデルは1件ずつ独立したタスクにして、ロード画面の
+    // ワーカー群へそのまま流す。セッション復元やステージ切り替えは
+    // ConcurrentResourceCacheのヒットで待たされなくなる。
+    for (const auto& record : asset_database.Records())
+    {
+        if (record.kind != ReplayEngine::Assets::AssetKind::Model) continue;
+        const std::filesystem::path source = record.source_path;
+        loading_scene->AddTask("Prewarm " + record.display_name, [this, source]
+        {
+            prewarm_model_asset(source);
+            // 先読みは最適化なので、失敗してもロード全体は成功扱いにする。
+            return true;
+        });
+    }
     scene_manager.QueueScene(std::move(loading_scene), device.Get());
 
     scene_manager.QueueSceneFactory([this]() -> std::unique_ptr<ReplayEngine::Scene::IScene>

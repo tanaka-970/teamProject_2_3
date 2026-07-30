@@ -8,7 +8,10 @@
 class deferred_renderer
 {
 public:
-    static constexpr UINT GBUFFER_COUNT = 4;
+    // 0=base color+shading model, 1=emissive, 2=normal, 3=material params,
+    // 4=motion vector (TAA用のスクリーン空間移動量)
+    static constexpr UINT GBUFFER_COUNT = 5;
+    static constexpr UINT GBUFFER_VELOCITY_INDEX = 4;
 
     struct deferred_cb
     {
@@ -42,8 +45,12 @@ public:
     bool initialize(ID3D11Device* device, UINT w, UINT h);
     void gbuffer_begin(ID3D11DeviceContext* ctx, FLOAT clear[4]);
     void gbuffer_end(ID3D11DeviceContext* ctx);
+    // ambient_occlusion / screen_reflection は無ければ nullptr でよい。
+    // シェーダー側は未バインドを「効果なし」として扱う。
     void lighting_pass(ID3D11DeviceContext* ctx,
                        const DirectX::XMFLOAT4X4& view_projection,
                        const DirectX::XMFLOAT4& clear_color,
-                       int debug_mode);
+                       int debug_mode,
+                       ID3D11ShaderResourceView* ambient_occlusion = nullptr,
+                       ID3D11ShaderResourceView* screen_reflection = nullptr);
 };

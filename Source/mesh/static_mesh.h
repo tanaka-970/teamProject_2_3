@@ -64,6 +64,12 @@ private:
 	Microsoft::WRL::ComPtr<ID3D11PixelShader> pixel_shader;
 	Microsoft::WRL::ComPtr<ID3D11InputLayout> input_layout;
 	Microsoft::WRL::ComPtr<ID3D11Buffer> constant_buffer;
+	// TAAのモーションベクター用: b6=前フレームのワールド/ビュー射影。
+	Microsoft::WRL::ComPtr<ID3D11Buffer> motion_object_constant_buffer;
+	// 剛体なので前フレームのワールド行列だけ保持すればよい。
+	DirectX::XMFLOAT4X4 previous_world{ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 };
+	unsigned long long motion_frame_id{ 0 };
+	bool motion_history_valid{ false };
 
 public:
 	static_mesh(ID3D11Device* device, const wchar_t* obj_filename, bool flipping_v_coordinates/*UNIT.14*/);
@@ -75,7 +81,9 @@ public:
 		ID3D11PixelShader* alternative_pixel_shader = nullptr,
 		ID3D11VertexShader* alternative_vertex_shader = nullptr,
 		ID3D11InputLayout* alternative_input_layout = nullptr,
-		bool bind_pixel_shader = true);
+		bool bind_pixel_shader = true,
+		// trueのときだけ前フレーム姿勢をVSへ載せ、履歴を更新する。
+		bool write_motion_vectors = false);
 
 protected:
 	void create_com_buffers(ID3D11Device* device, vertex* vertices, size_t vertex_count, uint32_t* indices, size_t index_count);

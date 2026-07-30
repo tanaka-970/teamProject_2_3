@@ -1,10 +1,10 @@
 #include "LoadingScene.h"
 
+#include "../Assets/ParallelLoader.h"
 #include "../../Source/mesh/sprite.h"
 
 #include <algorithm>
 #include <chrono>
-#include <thread>
 #include <windows.h>
 
 namespace ReplayEngine::Scene
@@ -31,45 +31,35 @@ namespace ReplayEngine::Scene
     void LoadingScene::StartTasks()
     {
         if (task_running_ || tasks_.empty()) return;
-        const unsigned hardware = std::thread::hardware_concurrency();
-        const size_t available = hardware > 1 ? hardware - 1 : 1;
-        const size_t worker_count = (std::min)(tasks_.size(),
-            (std::max)(size_t{ 2 }, (std::min)(size_t{ 12 }, available)));
-
-        next_task_.store(0);
         completed_tasks_.store(0);
+        failed_.store(false);
         task_running_ = true;
-        workers_.reserve(worker_count);
-        for (size_t worker_index = 0; worker_index < worker_count; ++worker_index)
+        // 監督スレッドを1本だけ立て、その中でParallelLoaderがタスクを全ワーカーへ配る。
+        // メインスレッドはこのfutureを覗くだけなので、描画が止まらない。
+        loader_ = std::async(std::launch::async, [this]()
         {
-            workers_.push_back(std::async(std::launch::async, [this]()
+            const HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+            Assets::ParallelLoader::Run(tasks_.size(), [this](size_t index)
             {
-                const HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-                bool worker_succeeded = true;
-                for (;;)
-                {
-                    const size_t index = next_task_.fetch_add(1);
-                    if (index >= tasks_.size()) break;
-                    bool task_succeeded = false;
-                    try { task_succeeded = tasks_[index].task(); }
-                    catch (...) { task_succeeded = false; }
-                    worker_succeeded = task_succeeded && worker_succeeded;
-                    completed_tasks_.fetch_add(1);
-                }
-                if (SUCCEEDED(com)) CoUninitialize();
-                return worker_succeeded;
-            }));
-        }
+                // 例外をワーカーへ漏らすと残りのタスクが流れないためここで吸収する。
+                bool task_succeeded = false;
+                try { task_succeeded = tasks_[index].task(); }
+                catch (...) { task_succeeded = false; }
+                if (!task_succeeded) failed_.store(true);
+                completed_tasks_.fetch_add(1);
+            });
+            if (SUCCEEDED(com)) CoUninitialize();
+            return !failed_.load();
+        });
     }
 
     void LoadingScene::Update(float elapsed_time)
     {
         spinner_ += elapsed_time * 120.0f;
         if (!task_running_) return;
-        for (auto& worker : workers_)
-            if (worker.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) return;
-        for (auto& worker : workers_) succeeded_ = worker.get() && succeeded_;
-        workers_.clear();
+        if (!loader_.valid()) { task_running_ = false; return; }
+        if (loader_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) return;
+        succeeded_ = loader_.get() && succeeded_;
         task_running_ = false;
     }
 
