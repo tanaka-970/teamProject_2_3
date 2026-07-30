@@ -2,6 +2,7 @@
 
 void framework::update(float elapsed_time)
 {
+
     async_asset_manager.PumpMainThread();
     if (game_scene)
     {
