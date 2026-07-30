@@ -45,16 +45,35 @@ float3 reconstruct_world(float2 uv, float z)
 
 float4 main(VS_OUT pin) : SV_TARGET
 {
-    float4 base = gb_base.Sample(pbr_sampler_linear, pin.texcoord);
-    float4 emi  = gb_emi.Sample(pbr_sampler_linear, pin.texcoord);
-    float4 nor  = gb_normal.Sample(pbr_sampler_linear, pin.texcoord);
-    float4 par  = gb_param.Sample(pbr_sampler_linear, pin.texcoord);
-    float  z    = gb_depth.Sample(pbr_sampler_linear, pin.texcoord).r;
+    int2 render_size = max(int2(rt_size.xy), int2(1, 1));
+    int2 pixel_position = clamp(int2(pin.position.xy), int2(0, 0), render_size - 1);
+    float4 base = gb_base.Load(int3(pixel_position, 0));
+    float4 emi  = gb_emi.Load(int3(pixel_position, 0));
+    float4 nor  = gb_normal.Load(int3(pixel_position, 0));
+    float4 par  = gb_param.Load(int3(pixel_position, 0));
+    float  z    = gb_depth.Load(int3(pixel_position, 0)).r;
+
+    uint original_shading_model = (uint) round(base.a * 255.0f);
+    float2 sampled_uv = pin.texcoord;
+    if (original_shading_model == SHADING_MODEL_PIXELATE)
+    {
+        float pixel_size = max(emi.a, 1.0f);
+        float strength = saturate(nor.a);
+        float2 cell_center = (floor(pin.position.xy / pixel_size) + 0.5f) * pixel_size;
+        int2 sampled_position = clamp(int2(lerp(pin.position.xy, cell_center, strength)),
+            int2(0, 0), render_size - 1);
+        base = gb_base.Load(int3(sampled_position, 0));
+        emi = gb_emi.Load(int3(sampled_position, 0));
+        nor = gb_normal.Load(int3(sampled_position, 0));
+        par = gb_param.Load(int3(sampled_position, 0));
+        z = gb_depth.Load(int3(sampled_position, 0)).r;
+        sampled_uv = (float2(sampled_position) + 0.5f) / rt_size.xy;
+    }
 
     if (z >= 0.9999f) return float4(base.rgb, 1); // background
 
     GBufferData g = DecodeGBuffer(base, emi, nor, par);
-    float3 wp = reconstruct_world(pin.texcoord, z);
+    float3 wp = reconstruct_world(sampled_uv, z);
 
     int debug_mode = (int) round(rt_size.z);
     if (debug_mode == 1) return float4(g.base_color, 1);

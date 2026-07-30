@@ -66,7 +66,7 @@ namespace ReplayEngine::Editor
             layers.Clear();
             auto& pixelate = layers.Add(ShaderLayerType::Pixelate);
             pixelate.opacity = 0.35f;
-            pixelate.parameter = 80.0f;
+            pixelate.parameter = 6.0f;
             layers.Add(ShaderLayerType::Outline);
         }
         ImGui::SameLine();
@@ -82,17 +82,20 @@ namespace ReplayEngine::Editor
         if (base_shader == 4)
         {
             ImGui::Spacing();
-            ImGui::TextColored(ImVec4(0.35f, 0.72f, 1.0f, 1.0f), "ドット表現の調整");
-            ImGui::TextDisabled("密度を下げるほど大きく粗いドットになります");
-            if (ImGui::SmallButton("粗い  16")) pixel_grid = 16.0f;
+            ImGui::TextColored(ImVec4(0.35f, 0.72f, 1.0f, 1.0f), "四角ピクセルの調整");
+            ImGui::TextColored(ImVec4(0.45f, 0.95f, 0.55f, 1.0f), "適用中: モデル色の低解像度化");
+            ImGui::TextDisabled("サイズを上げるほど四角いブロックが大きくなります");
+            if (ImGui::SmallButton("細かい  3px")) pixel_grid = 3.0f;
             ImGui::SameLine();
-            if (ImGui::SmallButton("標準  48")) pixel_grid = 48.0f;
+            if (ImGui::SmallButton("標準  6px")) pixel_grid = 6.0f;
             ImGui::SameLine();
-            if (ImGui::SmallButton("細かい  128")) pixel_grid = 128.0f;
+            if (ImGui::SmallButton("粗い  12px")) pixel_grid = 12.0f;
+            ImGui::TextUnformatted("四角ピクセルサイズ (px)");
             ImGui::SetNextItemWidth(-1.0f);
-            ImGui::SliderFloat("ドット密度##BasePixelGrid", &pixel_grid, 4.0f, 256.0f, "%.0f");
+            ImGui::SliderFloat("##BasePixelSize", &pixel_grid, 1.0f, 24.0f, "%.1f px");
+            ImGui::TextUnformatted("効果の強さ");
             ImGui::SetNextItemWidth(-1.0f);
-            ImGui::SliderFloat("効果の強さ##BasePixelStrength", &pixelate_strength,
+            ImGui::SliderFloat("##BasePixelStrength", &pixelate_strength,
                 0.0f, 1.0f, "%.2f");
             ImGui::Separator();
         }
@@ -167,6 +170,14 @@ namespace ReplayEngine::Editor
                     ImGui::SliderFloat("輪郭幅", &outline_parameters.x, 0.0f, 0.10f, "%.3f");
                     ImGui::SliderFloat("距離補正", &outline_parameters.y, 0.0f, 0.10f, "%.3f");
                 }
+                else if (layer.type == ShaderLayerType::Pixelate)
+                {
+                    ImGui::TextDisabled("モデル色を四角いセル単位で低解像度化します");
+                    ImGui::SliderFloat("四角ピクセルサイズ", &layer.parameter,
+                        1.0f, 24.0f, "%.1f px");
+                    ImGui::SliderFloat("ピクセル化強度", &layer.strength,
+                        0.0f, 1.0f, "%.2f");
+                }
                 else
                 {
                     int blend = static_cast<int>(layer.blend);
@@ -174,11 +185,6 @@ namespace ReplayEngine::Editor
                         layer.blend = static_cast<ShaderLayerBlend>(blend);
                     ImGui::SliderFloat("不透明度", &layer.opacity, 0.0f, 1.0f, "%.2f");
                     ImGui::ColorEdit3("色", &layer.tint.x);
-                    if (layer.type == ShaderLayerType::Pixelate)
-                    {
-                        ImGui::SliderFloat("ピクセル粒度", &layer.parameter, 4.0f, 512.0f, "%.0f");
-                        ImGui::SliderFloat("ピクセル化強度", &layer.strength, 0.0f, 1.0f, "%.2f");
-                    }
                 }
                 ImGui::TreePop();
             }

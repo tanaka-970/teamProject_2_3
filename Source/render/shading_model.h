@@ -7,7 +7,7 @@ enum class shading_model : uint32_t
     pbr         = 1,   // Cook-Torrance / GGX / IBL
     toon        = 2,   // 3階調ランプ + リム + 異方性ハイライト
     unlit       = 3,   // ライティング無し、ベースカラーのみ
-    pixelate    = 4,   // UVを格子状に丸めたドット表現
+    pixelate    = 4,   // モデル色を画面上の四角いセル単位で低解像度化
 };
 
 // HLSL側にもこの定義をミラーするためのマクロ

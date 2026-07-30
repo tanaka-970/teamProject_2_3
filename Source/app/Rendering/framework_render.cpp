@@ -74,12 +74,13 @@ unsigned int framework::deferred_shading_model(int shading) const
     case SHADING_MODEL_PBR:   return use_pbr_skin ? SHADING_MODEL_PBR : SHADING_MODEL_UNLIT;
     case SHADING_MODEL_TOON:  return enable_toon_shader ? SHADING_MODEL_TOON : SHADING_MODEL_UNLIT;
     case SHADING_MODEL_UNLIT: return enable_unlit_shader ? SHADING_MODEL_UNLIT : SHADING_MODEL_FBX_DEFAULT;
-    case SHADING_MODEL_PIXELATE: return SHADING_MODEL_UNLIT;
+    case SHADING_MODEL_PIXELATE: return SHADING_MODEL_PBR;
     default:                  return SHADING_MODEL_UNLIT;
     }
 }
 
-void framework::bind_gbuffer_material(unsigned int shading, bool stage_surface)
+void framework::bind_gbuffer_material(unsigned int shading, bool stage_surface,
+    float pixelate_size, float pixelate_strength)
 {
     material_override_constants constants{};
     constants.mat_params = stage_surface
@@ -87,6 +88,8 @@ void framework::bind_gbuffer_material(unsigned int shading, bool stage_surface)
         : DirectX::XMFLOAT4{ 0.0f, 0.55f, 1.0f, 0.0f };
     constants.shading_model = shading;
     constants.texture_contrast = stage_surface ? stage_texture_contrast : 1.0f;
+    constants.pixelate_size = pixelate_size;
+    constants.pixelate_strength = pixelate_strength;
     immediate_context->UpdateSubresource(material_override_cb.Get(), 0, nullptr, &constants, 0, 0);
     immediate_context->PSSetConstantBuffers(9, 1, material_override_cb.GetAddressOf());
 }
@@ -343,6 +346,33 @@ void framework::render(float elapsed_time)
         pixelate_grid_per_static[0], pixelate_strength_per_static[0]);
     const auto stage_pixelate_layer = make_base_pixelate_layer(
         stage_pixelate_grid, stage_pixelate_strength);
+    const auto find_pixelate_layer = [](const ReplayEngine::Rendering::ShaderLayerStack& stack)
+        -> const ReplayEngine::Rendering::ShaderLayer*
+    {
+        for (const auto& layer : stack.Layers())
+        {
+            if (layer.enabled &&
+                layer.type == ReplayEngine::Rendering::ShaderLayerType::Pixelate)
+                return &layer;
+        }
+        return nullptr;
+    };
+    const auto* player_added_pixelate = find_pixelate_layer(shader_layers_skinned[0]);
+    const auto* static_added_pixelate = find_pixelate_layer(shader_layers_static[0]);
+    const auto* stage_added_pixelate = find_pixelate_layer(stage_shader_layers);
+    const bool player_uses_pixelate = shading_per_skinned[0] == SHADING_MODEL_PIXELATE ||
+        player_added_pixelate != nullptr;
+    const bool static_uses_pixelate = shading_per_static[0] == SHADING_MODEL_PIXELATE ||
+        static_added_pixelate != nullptr;
+    const bool stage_uses_pixelate =
+        (enable_stage_shader && shading_per_stage == SHADING_MODEL_PIXELATE) ||
+        stage_added_pixelate != nullptr;
+    const auto& player_pixelate_settings = player_added_pixelate
+        ? *player_added_pixelate : player_pixelate_layer;
+    const auto& static_pixelate_settings = static_added_pixelate
+        ? *static_added_pixelate : static_pixelate_layer;
+    const auto& stage_pixelate_settings = stage_added_pixelate
+        ? *stage_added_pixelate : stage_pixelate_layer;
 
     // 通常描画はDeferredへ統一する。Forward+は将来別経路として追加する。
     const bool deferred_active = deferred.initialized;
@@ -359,13 +389,17 @@ void framework::render(float elapsed_time)
         store_object_world(world);
         if (skinned_meshes[0])
         {
-            bind_gbuffer_material(deferred_shading_model(shading_per_skinned[0]));
+            bind_gbuffer_material(player_uses_pixelate ? SHADING_MODEL_PIXELATE
+                : deferred_shading_model(shading_per_skinned[0]), false,
+                player_pixelate_settings.parameter, player_pixelate_settings.strength);
             skinned_meshes[0]->render(immediate_context.Get(), world, material_color,
                                       active_keyframe, skinned_mesh_gbuffer_ps.Get());
         }
         if (enable_static_meshes && static_meshes[0])
         {
-            bind_gbuffer_material(deferred_shading_model(shading_per_static[0]));
+            bind_gbuffer_material(static_uses_pixelate ? SHADING_MODEL_PIXELATE
+                : deferred_shading_model(shading_per_static[0]), false,
+                static_pixelate_settings.parameter, static_pixelate_settings.strength);
             static_meshes[0]->render(immediate_context.Get(), world, material_color,
                                      static_mesh_gbuffer_ps.Get());
         }
@@ -378,13 +412,17 @@ void framework::render(float elapsed_time)
             skinned_mesh* stage_model = game_scene->Gameplay().GetStage().GetModel();
             if (stage_model)
             {
-                bind_gbuffer_material(deferred_shading_model(shading_per_stage), true);
+                bind_gbuffer_material(stage_uses_pixelate ? SHADING_MODEL_PIXELATE
+                    : deferred_shading_model(shading_per_stage), true,
+                    stage_pixelate_settings.parameter, stage_pixelate_settings.strength);
                 stage_model->render(immediate_context.Get(), stage_world, material_color,
                     nullptr, skinned_mesh_gbuffer_ps.Get());
             }
             else if (stage_gltf_model)
             {
-                bind_gbuffer_material(deferred_shading_model(shading_per_stage), true);
+                bind_gbuffer_material(stage_uses_pixelate ? SHADING_MODEL_PIXELATE
+                    : deferred_shading_model(shading_per_stage), true,
+                    stage_pixelate_settings.parameter, stage_pixelate_settings.strength);
                 stage_gltf_model->render(immediate_context.Get(), stage_world, material_color,
                     static_mesh_gbuffer_ps.Get());
             }
@@ -421,12 +459,6 @@ void framework::render(float elapsed_time)
                 const bool wireframe = layer.type == ReplayEngine::Rendering::ShaderLayerType::Wireframe;
                 immediate_context->RSSetState(rasterizer_states[(size_t)(wireframe
                     ? RASTER_STATE::WIREFRAME_CULL_NONE : RASTER_STATE::CULL_NONE)].Get());
-                if (layer.type == ReplayEngine::Rendering::ShaderLayerType::Pixelate)
-                {
-                    const auto constants = ReplayEngine::Rendering::ShaderLayerGpuData::FromLayer(layer);
-                    immediate_context->UpdateSubresource(shader_layer_cb.Get(), 0, nullptr, &constants, 0, 0);
-                    immediate_context->PSSetConstantBuffers(10, 1, shader_layer_cb.GetAddressOf());
-                }
                 if (layer.type == ReplayEngine::Rendering::ShaderLayerType::StylizedCharacter)
                 {
                     const auto constants =
@@ -473,15 +505,10 @@ void framework::render(float elapsed_time)
 
             if (skinned_meshes[0])
             {
-                if (shading_per_skinned[0] == SHADING_MODEL_PIXELATE)
-                {
-                    prepare_layer(player_pixelate_layer, character_profiles_skinned[0]);
-                    skinned_meshes[0]->render(immediate_context.Get(), world, material_color,
-                        active_keyframe, object_pixelate_ps.Get());
-                }
                 for (const auto& layer : shader_layers_skinned[0].Layers())
                 {
                     if (!layer.enabled) continue;
+                    if (layer.type == ReplayEngine::Rendering::ShaderLayerType::Pixelate) continue;
                     if (layer.type == ReplayEngine::Rendering::ShaderLayerType::Outline)
                     {
                         immediate_context->OMSetBlendState(
@@ -502,15 +529,10 @@ void framework::render(float elapsed_time)
             }
             if (enable_static_meshes && static_meshes[0])
             {
-                if (shading_per_static[0] == SHADING_MODEL_PIXELATE)
-                {
-                    prepare_layer(static_pixelate_layer, character_profiles_static[0]);
-                    static_meshes[0]->render(immediate_context.Get(), world, material_color,
-                        object_pixelate_ps.Get());
-                }
                 for (const auto& layer : shader_layers_static[0].Layers())
                 {
                     if (!layer.enabled) continue;
+                    if (layer.type == ReplayEngine::Rendering::ShaderLayerType::Pixelate) continue;
                     if (layer.type == ReplayEngine::Rendering::ShaderLayerType::Outline)
                     {
                         immediate_context->OMSetBlendState(
@@ -534,19 +556,10 @@ void framework::render(float elapsed_time)
                 DirectX::XMFLOAT4X4 stage_world;
                 DirectX::XMStoreFloat4x4(&stage_world,
                     DirectX::XMLoadFloat4x4(&game_scene->Gameplay().GetStage().GetTransform()));
-                if (enable_stage_shader && shading_per_stage == SHADING_MODEL_PIXELATE)
-                {
-                    prepare_layer(stage_pixelate_layer, stage_character_profile);
-                    if (skinned_mesh* stage_model = game_scene->Gameplay().GetStage().GetModel())
-                        stage_model->render(immediate_context.Get(), stage_world, material_color,
-                            nullptr, object_pixelate_ps.Get());
-                    else if (stage_gltf_model)
-                        stage_gltf_model->render(immediate_context.Get(), stage_world, material_color,
-                            object_pixelate_ps.Get());
-                }
                 for (const auto& layer : stage_shader_layers.Layers())
                 {
                     if (!layer.enabled) continue;
+                    if (layer.type == ReplayEngine::Rendering::ShaderLayerType::Pixelate) continue;
                     if (layer.type == ReplayEngine::Rendering::ShaderLayerType::Outline)
                     {
                         if (skinned_mesh* stage_model = game_scene->Gameplay().GetStage().GetModel())

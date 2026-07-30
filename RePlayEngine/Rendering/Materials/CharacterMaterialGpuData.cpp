@@ -5,8 +5,9 @@ namespace ReplayEngine::Rendering
     ShaderLayerGpuData ShaderLayerGpuData::FromLayer(const ShaderLayer& layer) noexcept
     {
         ShaderLayerGpuData value{};
-        value.pixel_grid = layer.parameter;
+        value.pixel_size = layer.parameter;
         value.pixelate_strength = layer.strength;
+        value.pixelate_opacity = layer.opacity;
         return value;
     }
 

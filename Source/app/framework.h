@@ -136,7 +136,8 @@ public:
         DirectX::XMFLOAT4 mat_params{ 0.0f, 0.55f, 1.0f, 0.0f };
         unsigned int shading_model{ 1 };
         float texture_contrast{ 1.0f };
-        DirectX::XMUINT2 padding{ 0, 0 };
+        float pixelate_size{ 6.0f };
+        float pixelate_strength{ 1.0f };
     };
     Microsoft::WRL::ComPtr<ID3D11Buffer> material_override_cb;
 
@@ -153,9 +154,9 @@ public:
     ReplayEngine::Rendering::ShaderLayerStack shader_layers_static[8];
     ReplayEngine::Rendering::CharacterMaterialProfile character_profiles_skinned[8];
     ReplayEngine::Rendering::CharacterMaterialProfile character_profiles_static[8];
-    float pixelate_grid_per_skinned[8] { 48, 48, 48, 48, 48, 48, 48, 48 };
+    float pixelate_grid_per_skinned[8] { 6, 6, 6, 6, 6, 6, 6, 6 };
     float pixelate_strength_per_skinned[8] { 1, 1, 1, 1, 1, 1, 1, 1 };
-    float pixelate_grid_per_static[8] { 48, 48, 48, 48, 48, 48, 48, 48 };
+    float pixelate_grid_per_static[8] { 6, 6, 6, 6, 6, 6, 6, 6 };
     float pixelate_strength_per_static[8] { 1, 1, 1, 1, 1, 1, 1, 1 };
 
     // UIから全体へ適用する描画方式。shading_per_skinned[0] と同期する。
@@ -184,7 +185,7 @@ public:
     bool             outline_per_stage{ false };
     ReplayEngine::Rendering::ShaderLayerStack stage_shader_layers;
     ReplayEngine::Rendering::CharacterMaterialProfile stage_character_profile;
-    float            stage_pixelate_grid{ 48.0f };
+    float            stage_pixelate_grid{ 6.0f };
     float            stage_pixelate_strength{ 1.0f };
     bool             enable_stage_shader{ true }; // false = always FBX default
     bool             enable_stage_render{ false };
@@ -406,7 +407,8 @@ private:
     ID3D11PixelShader* skinned_forward_shader(int shading) const;
     ID3D11PixelShader* static_forward_shader(int shading) const;
     unsigned int deferred_shading_model(int shading) const;
-    void bind_gbuffer_material(unsigned int shading_model, bool stage_surface = false);
+    void bind_gbuffer_material(unsigned int shading_model, bool stage_surface = false,
+        float pixelate_size = 6.0f, float pixelate_strength = 1.0f);
     void apply_toon_preset(int preset);
     void reset_editor_values();
     void draw_editor();

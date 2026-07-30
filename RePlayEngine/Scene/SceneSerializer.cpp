@@ -243,7 +243,7 @@ namespace ReplayEngine::Scene
                         >> value.shading_model >> value.outline >> value.visible)) return false;
                     if (version >= 7 &&
                         !(stream >> value.pixelate_grid >> value.pixelate_strength)) return false;
-                    value.pixelate_grid = std::clamp(value.pixelate_grid, 4.0f, 256.0f);
+                    value.pixelate_grid = std::clamp(value.pixelate_grid, 1.0f, 24.0f);
                     value.pixelate_strength = std::clamp(value.pixelate_strength, 0.0f, 1.0f);
                     entity.model_renderer = value;
                 }
@@ -273,7 +273,10 @@ namespace ReplayEngine::Scene
                     }
                     value.opacity = std::clamp(value.opacity, 0.0f, 1.0f);
                     value.strength = std::clamp(value.strength, 0.0f, 1.0f);
-                    value.parameter = std::clamp(value.parameter, 1.0f, 512.0f);
+                    if (value.type == static_cast<std::uint32_t>(Rendering::ShaderLayerType::Pixelate))
+                        value.parameter = std::clamp(value.parameter, 1.0f, 24.0f);
+                    else
+                        value.parameter = std::clamp(value.parameter, 1.0f, 512.0f);
                     entity.model_renderer->shader_layers.push_back(value);
                 }
                 else if (token == "CHARACTER_PROFILE" && version >= 5)

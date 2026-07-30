@@ -11,7 +11,8 @@ cbuffer MATERIAL_OVERRIDE : register(b9)
     float4 mat_params; // x=metallic y=roughness z=occlusion w=emissive
     uint   shading_model;
     float  texture_contrast;
-    uint2  padding_;
+    float  pixelate_size;
+    float  pixelate_strength;
 };
 
 GBufferOut main(VS_OUT pin)
@@ -39,5 +40,11 @@ GBufferOut main(VS_OUT pin)
     d.metalness = mat_params.x;
     d.occlusion_strength = mat_params.z;
 
-    return EncodeGBuffer(d);
+    GBufferOut output = EncodeGBuffer(d);
+    if (shading_model == SHADING_MODEL_PIXELATE)
+    {
+        output.emissive.a = max(pixelate_size, 1.0f);
+        output.normal.a = saturate(pixelate_strength);
+    }
+    return output;
 }

@@ -183,7 +183,10 @@ namespace ReplayEngine::Rendering
             }
             layer.opacity = std::clamp(layer.opacity, 0.0f, 1.0f);
             layer.strength = std::clamp(layer.strength, 0.0f, 1.0f);
-            layer.parameter = std::clamp(layer.parameter, 1.0f, 512.0f);
+            if (type == static_cast<std::uint32_t>(ShaderLayerType::Pixelate))
+                layer.parameter = std::clamp(layer.parameter, 1.0f, 24.0f);
+            else
+                layer.parameter = std::clamp(layer.parameter, 1.0f, 512.0f);
             auto& destination = loaded.layers.Add(static_cast<ShaderLayerType>(type));
             destination.blend = static_cast<ShaderLayerBlend>(blend);
             destination.enabled = layer.enabled;
@@ -193,7 +196,7 @@ namespace ReplayEngine::Rendering
             destination.tint = layer.tint;
         }
         loaded.base_shader = std::clamp(loaded.base_shader, 0, 4);
-        loaded.pixelate_grid = std::clamp(loaded.pixelate_grid, 4.0f, 256.0f);
+        loaded.pixelate_grid = std::clamp(loaded.pixelate_grid, 1.0f, 24.0f);
         loaded.pixelate_strength = std::clamp(loaded.pixelate_strength, 0.0f, 1.0f);
         value.toon_threshold = std::clamp(value.toon_threshold, 0.0f, 1.0f);
         value.toon_softness = std::clamp(value.toon_softness, 0.001f, 0.5f);
