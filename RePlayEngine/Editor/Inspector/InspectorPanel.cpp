@@ -1,6 +1,8 @@
-#include "InspectorPanel.h"
+﻿#include "InspectorPanel.h"
 
 #include "PropertyDrawer.h"
+#include "PlayerCompositionValidator.h"
+#include "../../Object/Registry/ComponentRegistry.h"
 #include "../Core/EditorContext.h"
 #include "../../Object/GameObject/GameObject.h"
 #include "../../Object/Registry/ComponentRegistry.h"
@@ -9,6 +11,7 @@
 
 #include "imgui/imgui.h"
 
+#include <algorithm>
 #include <cstring>
 #include <string>
 
@@ -60,6 +63,7 @@ namespace ReplayEngine::Editor
         }
 
         DrawGameObjectHeader(context, *object);
+        DrawPlayerComposition(context, *object);
         ImGui::Separator();
 
         // 添字で回す。描画中に Component が追加されても、この回の走査は
@@ -153,6 +157,111 @@ namespace ReplayEngine::Editor
             ImGui::TextColored(ImVec4(0.35f, 0.75f, 1.0f, 1.0f),
                 "%zu 個を選択中（主選択を表示）", context.Selection().Count());
         }
+    }
+
+    void InspectorPanel::DrawPlayerComposition(EditorContext& context, GameObject& object)
+    {
+        Scene::Scene* scene = context.GetScene();
+        if (scene == nullptr) return;
+
+        const auto result = PlayerCompositionValidator::Validate(*scene, object);
+
+        // 操作対象でもなく、操作系 Component も 1 つも無い GameObject には出さない。
+        // 通常の床や小物の Inspector が診断で埋まらないようにする。
+        const bool relevant = result.is_controlled ||
+            result.missing_required < static_cast<int>(
+                std::count_if(result.requirements.begin(), result.requirements.end(),
+                    [](const PlayerCompositionValidator::Requirement& r) { return r.required; }));
+        if (!relevant) return;
+
+        if (!ImGui::CollapsingHeader("操作対象としての構成", ImGuiTreeNodeFlags_DefaultOpen)) return;
+
+        ImGui::Indent();
+
+        if (result.is_controlled)
+        {
+            ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.5f, 1.0f), "操作対象: この GameObject");
+        }
+        else
+        {
+            ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f),
+                "操作対象ではありません（controlledObjectId が別を指しています）");
+        }
+
+        for (const auto& requirement : result.requirements)
+        {
+            if (requirement.present)
+            {
+                ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.5f, 1.0f), "OK");
+                ImGui::SameLine();
+                ImGui::TextUnformatted(requirement.display_name.c_str());
+            }
+            else
+            {
+                const ImVec4 color = requirement.required
+                    ? ImVec4(1.0f, 0.45f, 0.35f, 1.0f) : ImVec4(0.75f, 0.75f, 0.4f, 1.0f);
+                ImGui::TextColored(color, requirement.required ? "必須" : "任意");
+                ImGui::SameLine();
+                ImGui::TextUnformatted(requirement.display_name.c_str());
+                ImGui::TextDisabled("        %s", requirement.missing_effect.c_str());
+            }
+        }
+
+        const bool editable = context.CanEdit();
+        ImGui::Spacing();
+
+        if (!result.is_controlled)
+        {
+            if (!editable) ImGui::TextDisabled("実行中は操作対象を変更できません");
+            else if (ImGui::Button("操作対象に設定"))
+            {
+                context.BeginEdit("操作対象を変更");
+                scene->Services().SetControlledObject(object.ID());
+                context.CommitEdit();
+                context.SetStatus(object.Name() + " を操作対象にしました");
+            }
+            ImGui::SameLine();
+        }
+
+        if (!result.complete && editable)
+        {
+            // ユーザーが明示的に押したときだけ追加する。
+            // 削除した Component を勝手に復活させない。
+            if (ImGui::Button("不足 Component を追加"))
+            {
+                context.BeginEdit("不足 Component を追加");
+                int added = 0;
+                for (const auto& requirement : result.requirements)
+                {
+                    if (!requirement.required || requirement.present) continue;
+                    const auto* info = Core::ComponentRegistry::Find(requirement.type_name);
+                    if (info == nullptr) continue;
+                    // AddComponent は重複禁止型なら既存を返すので二重追加にならない。
+                    if (object.FindComponent(info->type_id) != nullptr) continue;
+                    if (object.AddComponent(info->type_id) != nullptr) ++added;
+                }
+                if (added > 0)
+                {
+                    context.CommitEdit();
+                    context.SetStatus(std::to_string(added) + " 個の Component を追加しました");
+                }
+                else
+                {
+                    context.CancelEdit();
+                }
+            }
+            ImGui::SameLine();
+        }
+
+        if (ImGui::Button("構成を再検証"))
+        {
+            context.SetStatus(result.complete
+                ? "構成は揃っています"
+                : "必須 Component が " + std::to_string(result.missing_required) + " 個不足しています");
+        }
+
+        ImGui::Unindent();
+        ImGui::Spacing();
     }
 
     void InspectorPanel::DrawComponent(EditorContext& context, Core::Component& component)

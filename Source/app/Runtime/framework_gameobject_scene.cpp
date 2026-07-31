@@ -81,6 +81,23 @@ const ReplayEngine::Scene::Scene& framework::active_object_scene() const noexcep
 // 更新
 // ---------------------------------------------------------------------------
 
+bool framework::object_runtime_active() const noexcept
+{
+    // ゲームロジック（入力・物理）を動かしてよいか。
+    //
+    // 【今回の不具合の原因】
+    //   以前はここが object_scene_play_mode（F5）だけを見ていた。
+    //   そのため Editor を開いて F5 を押すまで入力も物理も一切動かず、
+    //   「PlayerController があるのに動かない」状態になっていた。
+    //
+    // 正しい条件は「編集中でないこと」。
+    //   Editor 非表示（通常のゲーム実行） -> 動く
+    //   Editor 表示 + Edit Mode           -> 止まる（GameObject を編集中）
+    //   Editor 表示 + Play Mode (F5)      -> 動く
+    const bool editing = editor_mode && edit_mode_active && !object_scene_play_mode;
+    return !editing;
+}
+
 void framework::refresh_object_scene_services()
 {
     ReplayEngine::Scene::Scene& scene = active_object_scene();
@@ -102,15 +119,22 @@ void framework::refresh_object_scene_services()
     ReplayEngine::Scene::SceneServices& services = scene.Services();
     services.SetCameraBasis(&object_camera_bridge);
     services.SetPhysics(&object_collision_bridge);
-    services.SetPlaying(object_scene_play_mode);
+    services.SetPlaying(object_runtime_active());
 
-    // 操作対象を確定する。PlayerController を持つ GameObject が 1 体だけ選ばれる。
+    // 操作対象を確定する。
+    // 保存されていた ID を優先し、それが使えない場合だけ自動選出する。
+    player_control_system.SetControlledObject(services.ControlledObject());
     const ReplayEngine::Core::ObjectID controlled = player_control_system.Resolve(scene);
     services.SetControlledObject(controlled);
 
-    // 新 Player が成立している間は、旧 Player を更新も描画もしない。
-    // これが二重更新・二重描画を防ぐ唯一のスイッチ。
-    object_player_active = controlled.Valid();
+    // 【重要】旧 Player を出すかどうかは Component の有無では決めない。
+    //
+    //   以前は「PlayerController があるか」で切り替えていたため、
+    //   Controller を削除した瞬間に旧 Player が復活し、二体表示になっていた。
+    //
+    //   移行状態（Scene に保存される）だけで判定する。
+    //   Component を消しても移行状態は取り消されないので、旧 Player は二度と出ない。
+    object_player_active = services.PlayerMigration().Migrated();
     if (game_scene != nullptr)
     {
         game_scene->Gameplay().SetLegacyPlayerActive(!object_player_active);
@@ -121,8 +145,8 @@ void framework::update_object_fixed_step(float elapsed_time)
 {
     ReplayEngine::Scene::Scene& scene = active_object_scene();
 
-    // Edit Mode 中は物理を進めない。Play 中だけ固定時間で更新する。
-    if (!object_scene_play_mode)
+    // 編集中は物理を進めない。実行中だけ固定時間で更新する。
+    if (!object_runtime_active())
     {
         // 停止中に時間を貯め込まない。再開時にまとめて進むのを防ぐ。
         object_fixed_accumulator = 0.0f;
@@ -164,8 +188,7 @@ void framework::update_object_scene(float elapsed_time)
 
     // 編集中（F3 で停止中）は Component を更新しない。
     // Editor で置いた GameObject が編集中に勝手に動くのを防ぐ。
-    const bool editing_paused = editor_mode && edit_mode_active && !object_scene_play_mode;
-    if (!editing_paused)
+    if (object_runtime_active())
     {
         // 順序: Update（入力・意思決定）→ FixedUpdate（物理）→ LateUpdate → カメラ
         // 入力は Update で読み、FixedUpdate がその値を消費する。
@@ -324,6 +347,9 @@ void framework::enter_object_play_mode()
     SceneSerialization::ApplySceneData(snapshot, object_scene_runtime, report);
     object_scene_runtime.Start();
 
+    // Play 開始時に貯まっていた時間を捨てる。開始直後に物理が飛ぶのを防ぐ。
+    object_fixed_accumulator = 0.0f;
+
     object_scene_play_mode = true;
     object_editor_context.SetPlayMode(true);
     object_editor_context.AttachScene(&object_scene_runtime);
@@ -337,6 +363,8 @@ void framework::exit_object_play_mode()
     // 実行用 Scene を捨てる。編集 Scene には一切触れていないので、
     // Play 前の状態がそのまま残っている。
     object_scene_runtime.Clear();
+
+    object_fixed_accumulator = 0.0f;
 
     object_scene_play_mode = false;
     object_editor_context.SetPlayMode(false);
@@ -516,17 +544,13 @@ bool framework::convert_legacy_player_to_gameobject()
         return false;
     }
 
-    // 既に PlayerController を持つ GameObject があれば重複作成しない。
-    for (std::size_t index = 0; index < object_scene.GameObjectCount(); ++index)
+    // 移行済みなら二度と変換しない。
+    // Component を消していても移行状態は残るので、ここで確実に弾かれる。
+    if (object_scene.Services().PlayerMigration().Migrated())
     {
-        const ReplayEngine::Core::GameObject* existing = object_scene.GameObjectAt(index);
-        if (existing == nullptr || existing->PendingDestroy()) continue;
-        if (existing->GetComponent<Components::PlayerControllerComponent>() != nullptr)
-        {
-            object_editor_context.SetStatus("Player GameObject は既に存在します: " + existing->Name());
-            player_control_system.SetControlledObject(existing->ID());
-            return false;
-        }
+        object_editor_context.SetStatus("旧 Player は変換済みです（Player ObjectID: " +
+            object_scene.Services().PlayerMigration().MigratedObject().ToString() + "）");
+        return false;
     }
 
     object_editor_context.BeginEdit("旧 Player を GameObject へ変換");
@@ -541,15 +565,16 @@ bool framework::convert_legacy_player_to_gameobject()
     // 旧 Player の現在値を初期値として引き継ぐ。
     const Player* legacy = game_scene != nullptr ? &game_scene->Gameplay().GetPlayer() : nullptr;
 
+    // GameObject の Scale は 1.0 のままにする。
+    // モデル固有の縮小（旧 Player の 0.01）は描画 Component 側の補正へ移す。
+    // こうすると Collider の半径やギズモが実寸の単位になり、扱いやすい。
     ReplayEngine::Core::Transform& transform = player->GetTransform();
-    if (legacy != nullptr)
-    {
-        transform.SetLocal(legacy->GetPosition(), legacy->GetAngle(), legacy->GetScale());
-    }
-    else
-    {
-        transform.SetLocal({ 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 0.01f, 0.01f, 0.01f });
-    }
+    const DirectX::XMFLOAT3 model_scale = legacy != nullptr
+        ? legacy->GetScale() : DirectX::XMFLOAT3{ 0.01f, 0.01f, 0.01f };
+    transform.SetLocal(
+        legacy != nullptr ? legacy->GetPosition() : DirectX::XMFLOAT3{ 0.0f, 0.0f, 0.0f },
+        legacy != nullptr ? legacy->GetAngle() : DirectX::XMFLOAT3{ 0.0f, 0.0f, 0.0f },
+        DirectX::XMFLOAT3{ 1.0f, 1.0f, 1.0f });
 
     auto* renderer = player->AddComponent<Components::SkinnedMeshRendererComponent>();
     if (renderer != nullptr && legacy != nullptr)
@@ -558,6 +583,9 @@ bool framework::convert_legacy_player_to_gameobject()
             legacy->GetVisualPitchDeg(),
             legacy->GetVisualYawOffsetDeg(),
             legacy->GetVisualRollDeg() };
+        // 旧 Player が GameObject の Scale として使っていた縮小を、
+        // モデル座標系の補正としてこちらへ移す。見た目は完全に同じになる。
+        renderer->local_scale_multiplier = model_scale;
         renderer->shading_model = shading_per_skinned[0];
         renderer->outline = outline_per_skinned[0];
         renderer->tint = material_color;
@@ -620,9 +648,14 @@ bool framework::convert_legacy_player_to_gameobject()
         camera_target->follow_lag = gameplay.follow_lag;
     }
 
+    // 移行完了を Scene 単位の状態として記録する。
+    // これ以降、Component を削除しても旧 Player は復活しない。
+    object_scene.Services().PlayerMigration().MarkMigrated(player->ID());
+    object_scene.Services().SetControlledObject(player->ID());
+    player_control_system.SetControlledObject(player->ID());
+
     object_editor_context.CommitEdit();
     object_editor_context.Selection().Select(player->ID(), false);
-    player_control_system.SetControlledObject(player->ID());
     object_editor_context.SetStatus(
         "旧 Player を GameObject へ変換しました。Ctrl+S で保存してください。");
     return true;

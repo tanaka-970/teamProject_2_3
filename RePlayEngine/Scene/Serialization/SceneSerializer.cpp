@@ -1,4 +1,4 @@
-#include "SceneSerializer.h"
+﻿#include "SceneSerializer.h"
 
 #include <fstream>
 #include <iomanip>
@@ -231,6 +231,14 @@ namespace ReplayEngine::Scene::Serialization
 
         stream << magic_token << ' ' << SceneData::current_version << '\n';
         stream << "SCENE " << std::quoted(data.scene_name) << '\n';
+
+        // v8 で追加。Scene 単位の状態。
+        // 操作対象を Component の有無ではなくここで決めることで、
+        // Component を削除しても旧 Player が復活しない。
+        stream << "SCENE_STATE " << data.controlled_object.Value() << ' '
+            << (data.legacy_player_migrated ? 1 : 0) << ' '
+            << data.migrated_player_object.Value() << '\n';
+
         stream << "OBJECT_COUNT " << data.objects.size() << '\n';
 
         for (const GameObjectData& object : data.objects)
@@ -299,6 +307,23 @@ namespace ReplayEngine::Scene::Serialization
         {
             error = "Scene 名を読み取れません。";
             return false;
+        }
+
+        // v8 で追加した Scene 単位の状態。v7 には存在しないので読み飛ばす。
+        if (version >= 8)
+        {
+            if (!Expect(stream, "SCENE_STATE", error)) return false;
+            Core::ObjectID::ValueType controlled = 0;
+            int migrated = 0;
+            Core::ObjectID::ValueType migrated_object = 0;
+            if (!(stream >> controlled >> migrated >> migrated_object))
+            {
+                error = "Scene 状態を読み取れません。";
+                return false;
+            }
+            data.controlled_object = Core::ObjectID(controlled);
+            data.legacy_player_migrated = migrated != 0;
+            data.migrated_player_object = Core::ObjectID(migrated_object);
         }
 
         if (!Expect(stream, "OBJECT_COUNT", error)) return false;

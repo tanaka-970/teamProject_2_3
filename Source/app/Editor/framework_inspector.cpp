@@ -1,5 +1,8 @@
 ﻿#include "framework.h"
 #include "skinned_mesh.h"
+#include "../../RePlayEngine/Components/Gameplay/CharacterMotorComponent.h"
+#include "../../RePlayEngine/Components/Gameplay/PlayerControllerComponent.h"
+#include "../../RePlayEngine/Components/Gameplay/PlayerInputComponent.h"
 
 #include <string>
 
@@ -126,6 +129,8 @@ void framework::draw_inspector()
         ImGui::Checkbox("ゲームシーン", &enable_scene_game);
         ImGui::Checkbox("パーティクル", &enable_particles);
         ImGui::Checkbox("軌跡", &enable_trail);
+        ImGui::Separator();
+        draw_player_diagnostics();
         break;
 
     case editor_selection::camera:

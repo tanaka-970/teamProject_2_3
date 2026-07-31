@@ -1,5 +1,8 @@
 ﻿#include "framework.h"
 #include "../../RePlayEngine/Scene/Legacy/LegacySceneDocumentSerializer.h"
+#include "../../RePlayEngine/Components/Gameplay/CharacterMotorComponent.h"
+#include "../../RePlayEngine/Components/Gameplay/PlayerControllerComponent.h"
+#include "../../RePlayEngine/Components/Gameplay/PlayerInputComponent.h"
 #include "shader.h"
 #include "texture.h"
 #include "skinned_mesh.h"
@@ -327,7 +330,13 @@ void framework::draw_scene_hierarchy()
     {
         item("ワールド", editor_selection::world);
         item("メインカメラ", editor_selection::camera);
-        item("プレイヤー", editor_selection::player);
+        // 移行後は旧 Player の固定項目を出さない。
+        // Player は下の GameObject ツリーへ通常の GameObject として現れる。
+        // 同じ Player を 2 か所で編集できる状態を残さないため。
+        if (!object_player_active)
+        {
+            item("Legacy 旧プレイヤー（未変換）", editor_selection::player);
+        }
         item(stage_asset_placed ? "ステージ（配置済み）" : "ステージ素材（未配置）",
             editor_selection::stage);
         if (ImGui::TreeNodeEx("ライト", ImGuiTreeNodeFlags_DefaultOpen))
@@ -348,16 +357,22 @@ void framework::draw_scene_hierarchy()
     // framework 側は「選択が変わったらインスペクターの表示先を切り替える」だけ。
     if (ImGui::TreeNodeEx("GameObject", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        // 旧 Player がまだ GameObject 化されていない場合だけ変換ボタンを出す。
-        // 一度変換したら Scene ファイルが正式な構成元になるので、二度と出ない。
-        if (!object_player_active && !object_scene_play_mode)
+        // 移行状態で判定する。Component の有無では判定しない。
+        // 一度変換したら二度と変換ボタンを出さない。
+        const auto& migration = active_object_scene().Services().PlayerMigration();
+        if (migration.Migrated())
+        {
+            ImGui::TextDisabled("旧 Player は変換済みです（Player ObjectID: %s）",
+                migration.MigratedObject().ToString().c_str());
+        }
+        else if (!object_scene_play_mode)
         {
             if (ImGui::Button("旧 Player を GameObject へ変換"))
             {
                 convert_legacy_player_to_gameobject();
             }
-            ImGui::Separator();
         }
+        ImGui::Separator();
 
         object_editor_context.SetPlayMode(object_scene_play_mode);
         object_editor_context.AttachScene(&active_object_scene());
@@ -571,6 +586,7 @@ void framework::draw_editor()
     if (ImGui::BeginMenuBar())
     {
         draw_editor_toolbar();
+        draw_runtime_mode_banner();
         ImGui::EndMenuBar();
     }
 
@@ -621,4 +637,107 @@ void framework::draw_editor()
     draw_workspace_panel();
     draw_search_results();
     handle_viewport_selection();
+}
+
+
+// ---------------------------------------------------------------------------
+// 実行モード表示と Player 診断
+// ---------------------------------------------------------------------------
+//
+// 「動かない原因が入力なのか Edit Mode なのか分からない」状態を解消するための表示。
+
+void framework::draw_runtime_mode_banner()
+{
+    ImGui::Separator();
+
+    if (object_scene_play_mode)
+    {
+        ImGui::TextColored(ImVec4(0.4f, 0.95f, 0.5f, 1.0f), "PLAY MODE");
+        ImGui::TextDisabled("実行シーンで動作中 / 入力有効");
+    }
+    else if (object_runtime_active())
+    {
+        ImGui::TextColored(ImVec4(0.4f, 0.85f, 1.0f, 1.0f), "RUNNING");
+        ImGui::TextDisabled("編集シーンをそのまま実行中 / 入力有効");
+    }
+    else
+    {
+        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "EDIT MODE");
+        ImGui::TextDisabled("編集中 / 物理と入力は停止 (F3 で切替、F5 で Play)");
+    }
+
+#ifdef _DEBUG
+    // ウィンドウがアクティブでないと GetAsyncKeyState が拾えないことがある。
+    if (::GetForegroundWindow() != hwnd)
+    {
+        ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.4f, 1.0f),
+            "ゲーム画面をクリックすると入力を受け取ります");
+    }
+#endif
+}
+
+void framework::draw_player_diagnostics()
+{
+#ifdef _DEBUG
+    // Debug ビルドでのみ表示する。Release へ診断処理を残さない。
+    if (!ImGui::CollapsingHeader("Player Runtime Diagnostics")) return;
+
+    namespace Components = ReplayEngine::Components;
+    const ReplayEngine::Scene::Scene& scene = active_object_scene();
+
+    ImGui::Text("Mode: %s", object_scene_play_mode ? "Play"
+        : (object_runtime_active() ? "Running" : "Edit"));
+    ImGui::Text("Runtime active: %s", object_runtime_active() ? "true" : "false");
+    ImGui::Text("Legacy migrated: %s", scene.Services().PlayerMigration().Migrated() ? "true" : "false");
+    ImGui::Text("Legacy Player Update: %s",
+        (game_scene && game_scene->Gameplay().LegacyPlayerActive()) ? "true" : "false");
+    ImGui::Text("Legacy Player Render: %s", object_player_active ? "false" : "true");
+    ImGui::Text("Fixed accumulator: %.4f", object_fixed_accumulator);
+    ImGui::Text("Render items: %zu", object_render_items.Size());
+
+    const ReplayEngine::Core::ObjectID controlled = scene.Services().ControlledObject();
+    const ReplayEngine::Core::GameObject* target =
+        controlled.Valid() ? scene.FindGameObjectByID(controlled) : nullptr;
+
+    if (target == nullptr)
+    {
+        ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.4f, 1.0f), "Controlled Object: なし");
+        return;
+    }
+
+    ImGui::Text("Controlled Object: %s (ObjectID %s)",
+        target->Name().c_str(), controlled.ToString().c_str());
+
+    if (const auto* input = target->GetComponent<Components::PlayerInputComponent>())
+    {
+        ImGui::Text("Input enabled: %s", input->ActiveInHierarchy() ? "true" : "false");
+        ImGui::Text("Input X/Y: %.2f / %.2f", input->MoveX(), input->MoveY());
+        ImGui::Text("Jump latched: %s", input->JumpLatched() ? "true" : "false");
+    }
+    else ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.4f, 1.0f), "Player Input: なし");
+
+    if (const auto* controller = target->GetComponent<Components::PlayerControllerComponent>())
+    {
+        ImGui::Text("Controller enabled: %s", controller->ActiveInHierarchy() ? "true" : "false");
+        if (!controller->HasRequiredComponents())
+            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.4f, 1.0f), "  %s",
+                controller->MissingRequirementText());
+    }
+    else ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.4f, 1.0f), "Player Controller: なし");
+
+    if (const auto* motor = target->GetComponent<Components::CharacterMotorComponent>())
+    {
+        ImGui::Text("Motor enabled: %s", motor->ActiveInHierarchy() ? "true" : "false");
+        const auto& velocity = motor->Velocity();
+        ImGui::Text("Velocity: %.2f / %.2f / %.2f", velocity.x, velocity.y, velocity.z);
+        ImGui::Text("Grounded: %s", motor->Grounded() ? "true" : "false");
+        ImGui::Text("Vertical physics: %s", motor->vertical_physics ? "true" : "false");
+    }
+    else ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.4f, 1.0f), "Character Motor: なし");
+
+    const auto position = target->GetTransform().WorldPosition();
+    ImGui::Text("Position: %.2f / %.2f / %.2f", position.x, position.y, position.z);
+    ImGui::Text("Collision available: %s",
+        object_collision_bridge.CollisionAvailable() ? "true" : "false");
+#endif
 }

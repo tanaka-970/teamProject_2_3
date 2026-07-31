@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../../Core/ObjectID/ObjectID.h"
 
@@ -41,8 +41,18 @@ namespace ReplayEngine::Scene
         // 戻り値は確定した操作対象。見つからなければ無効 ID。
         Core::ObjectID Resolve(const Scene& scene);
 
-        // 操作対象として妥当か（存在する / 削除予約されていない / Controller を持つ）。
-        static bool IsControllable(const Scene& scene, Core::ObjectID id);
+        // 操作対象として保持し続けてよいか。
+        //
+        // 【重要】Controller の有無は条件に入れない。
+        //   Controller を削除したら「操作できなくなる」だけで、
+        //   操作対象の指定そのものは外れない。GameObject も表示も残る。
+        //   ここで Controller を要求すると、削除した瞬間に別の GameObject へ
+        //   勝手に乗り移ってしまう。
+        static bool IsValidTarget(const Scene& scene, Core::ObjectID id);
+
+        // 実際に操作できる状態か（Controller を持っているか）。
+        // 診断表示と、自動選出の候補判定に使う。
+        static bool HasController(const Scene& scene, Core::ObjectID id);
 
     private:
         Core::ObjectID controlled_;

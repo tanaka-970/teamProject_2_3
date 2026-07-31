@@ -498,6 +498,8 @@ private:
     void reset_editor_values();
     void draw_editor();
     void draw_editor_toolbar();
+    void draw_runtime_mode_banner();
+    void draw_player_diagnostics();
     void draw_search_results();
     void draw_scene_hierarchy();
     void draw_inspector();
@@ -546,6 +548,7 @@ private:
     void draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shader,
         bool gbuffer_pass);
     void clear_object_mesh_cache() noexcept;
+    bool object_runtime_active() const noexcept;
     void update_object_fixed_step(float elapsed_time);
     void update_object_camera_follow(float elapsed_time);
     void refresh_object_scene_services();

@@ -1123,5 +1123,14 @@
     <ClInclude Include="Source\game\legacy_camera_basis_bridge.h">
       <Filter>Source\Game</Filter>
     </ClInclude>
+    <ClCompile Include="RePlayEngine\Editor\Inspector\PlayerCompositionValidator.cpp">
+      <Filter>RePlayEngine\Editor\Inspector</Filter>
+    </ClCompile>
+    <ClInclude Include="RePlayEngine\Scene\Services\ScenePlayerMigrationState.h">
+      <Filter>RePlayEngine\Scene\Services</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\Inspector\PlayerCompositionValidator.h">
+      <Filter>RePlayEngine\Editor\Inspector</Filter>
+    </ClInclude>
 </ItemGroup>
 </Project>

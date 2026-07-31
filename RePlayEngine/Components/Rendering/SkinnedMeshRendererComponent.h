@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../../Object/Component/Component.h"
 #include "../../Rendering/Adapter/IRenderSubmitter.h"
@@ -58,8 +58,25 @@ namespace ReplayEngine::Components
         bool cast_shadow = true;
         bool visible = true;
 
-        // 見た目の姿勢補正（度）。旧 Player の既定値を引き継ぐ。
+        // ---- モデル座標系の補正 --------------------------------------------
+        //
+        // これは「このモデルをどう描くか」の設定であり、GameObject の論理的な
+        // 位置・向き・大きさとは別物。Player 固有の処理としてハードコードしない。
+        //
+        // 旧 Player は position/angle とは別に visual_pitch(90) / yaw(188.5) / roll(180)
+        // を持ち、さらに scale 0.01 を GameObject 側の縮尺として使っていた。
+        // 縮尺をここへ移すことで、GameObject の Scale は 1.0 のまま扱える
+        // （Collider の半径やギズモが直感的な単位になる）。
+
+        // 姿勢補正（度）。旧 Player の既定値を引き継ぐ。
         DirectX::XMFLOAT3 visual_rotation_offset{ 90.0f, 188.5f, 180.0f };
+
+        // モデル座標系での位置ずらし。原点がモデルの足元でない場合に使う。
+        DirectX::XMFLOAT3 local_position_offset{ 0.0f, 0.0f, 0.0f };
+
+        // GameObject の Scale へ掛ける倍率。
+        // 旧 Player の 0.01 相当をここへ持たせると、GameObject 側は 1.0 で済む。
+        DirectX::XMFLOAT3 local_scale_multiplier{ 1.0f, 1.0f, 1.0f };
 
         // FBX の座標系補正を掛けるか。
         // 既存 Renderer の fbx_coordinate_transform と同じ行列を提出前に適用する。

@@ -1,7 +1,8 @@
-#pragma once
+﻿#pragma once
 
 #include "ICameraBasisProvider.h"
 #include "IPhysicsQueryService.h"
+#include "ScenePlayerMigrationState.h"
 #include "../../Core/ObjectID/ObjectID.h"
 
 namespace ReplayEngine::Scene
@@ -35,6 +36,11 @@ namespace ReplayEngine::Scene
         Core::ObjectID ControlledObject() const noexcept { return controlled_object_; }
         void SetControlledObject(Core::ObjectID id) noexcept { controlled_object_ = id; }
 
+        // 旧 Player から GameObject への移行状態。
+        // Component の有無とは独立しており、Component を消しても取り消されない。
+        ScenePlayerMigrationState& PlayerMigration() noexcept { return migration_; }
+        const ScenePlayerMigrationState& PlayerMigration() const noexcept { return migration_; }
+
         // Play Mode 中かどうか。
         // 入力を受け付けてよいか、物理を進めてよいかの判断に使う。
         bool Playing() const noexcept { return playing_; }
@@ -46,12 +52,15 @@ namespace ReplayEngine::Scene
             physics_ = nullptr;
             controlled_object_ = Core::ObjectID::Invalid();
             playing_ = false;
+            // 移行状態はここでリセットしない。Scene の内容に属する情報なので、
+            // サービス参照の付け替えでは消えてはいけない。
         }
 
     private:
         const ICameraBasisProvider* camera_basis_ = nullptr;
         const IPhysicsQueryService* physics_ = nullptr;
         Core::ObjectID controlled_object_;
+        ScenePlayerMigrationState migration_;
         bool playing_ = false;
     };
 }

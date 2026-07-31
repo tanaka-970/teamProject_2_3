@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "SceneData.h"
 
@@ -20,7 +20,8 @@ namespace ReplayEngine::Scene::Serialization
     // WriteJson / ReadJson を並べるだけでよく、SceneData 側は変更不要。
     //
     // 対応バージョン:
-    //   v7 のみ。v1〜v6 は旧 SceneDocument 形式で、構造が根本的に違うため非対応とする。
+    //   v7 と v8。v1〜v6 は旧 SceneDocument 形式で、構造が根本的に違うため非対応とする。
+    //   v8 で「旧 Player の移行状態」と「操作対象 ObjectID」を追加した。
     //   旧形式を読み込もうとした場合はクラッシュさせず、
     //   作り直しを促す明確なエラーメッセージを返す。
     //   将来 v8 へ移行できるよう、バージョン判定の入口自体は必ず通す設計にしてある。
@@ -54,7 +55,9 @@ namespace ReplayEngine::Scene::Serialization
 
         static bool IsSupportedVersion(int version) noexcept
         {
-            return version == SceneData::current_version;
+            // v7 も読める。v7 には Scene 単位の状態が無いので、既定値として扱う。
+            return version >= SceneData::minimum_supported_version &&
+                version <= SceneData::current_version;
         }
 
         // 旧バージョンを読もうとしたときのメッセージ。Editor の表示と揃えるため関数化する。

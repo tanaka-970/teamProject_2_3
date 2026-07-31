@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../../Core/ObjectID/ObjectID.h"
 #include "../../Object/Component/ComponentTypeID.h"
@@ -73,17 +73,33 @@ namespace ReplayEngine::Scene::Serialization
         // 現在のファイル形式バージョン。
         // v1〜v6 は旧 SceneDocument 形式で、互換性を持たせない方針。
         // 将来 v8 へ上げる余地を残すため、読み込み側はバージョン判定を必ず通す。
-        static constexpr int current_version = 7;
+        // v8 で「旧 Player の移行状態」と「操作対象 ObjectID」を追加した。
+        // v7 も読める（その場合は移行状態なし・操作対象なしとして扱う）。
+        static constexpr int current_version = 8;
+        static constexpr int minimum_supported_version = 7;
 
         int version = current_version;
         std::string scene_name{ "Scene" };
         std::vector<GameObjectData> objects;
+
+        // ---- Scene 単位の状態 (v8 以降) ------------------------------------
+        //
+        // 操作対象。Component の有無ではなく、この ID が操作対象を決める。
+        Core::ObjectID controlled_object;
+
+        // 旧 Player から GameObject への移行が済んでいるか。
+        // Component を削除しても false へ戻らない。旧 Player を二度と復活させないための印。
+        bool legacy_player_migrated = false;
+        Core::ObjectID migrated_player_object;
 
         void Clear()
         {
             version = current_version;
             scene_name = "Scene";
             objects.clear();
+            controlled_object = Core::ObjectID::Invalid();
+            legacy_player_migrated = false;
+            migrated_player_object = Core::ObjectID::Invalid();
         }
     };
 

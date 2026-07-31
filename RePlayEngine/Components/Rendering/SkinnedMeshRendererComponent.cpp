@@ -1,4 +1,4 @@
-#include "SkinnedMeshRendererComponent.h"
+﻿#include "SkinnedMeshRendererComponent.h"
 
 #include "AnimatorComponent.h"
 #include "../../Object/GameObject/GameObject.h"
@@ -38,14 +38,21 @@ namespace ReplayEngine::Components
 
         constexpr float radians_per_degree = DirectX::XM_PI / 180.0f;
 
-        const DirectX::XMMATRIX scaling =
-            DirectX::XMMatrixScaling(scale.x, scale.y, scale.z);
+        // 縮尺は GameObject の Scale × モデル補正倍率。
+        const DirectX::XMMATRIX scaling = DirectX::XMMatrixScaling(
+            scale.x * local_scale_multiplier.x,
+            scale.y * local_scale_multiplier.y,
+            scale.z * local_scale_multiplier.z);
+
         const DirectX::XMMATRIX rotation = DirectX::XMMatrixRotationRollPitchYaw(
             visual_rotation_offset.x * radians_per_degree + euler.x,
             visual_rotation_offset.y * radians_per_degree + euler.y,
             visual_rotation_offset.z * radians_per_degree + euler.z);
-        const DirectX::XMMATRIX translation =
-            DirectX::XMMatrixTranslation(position.x, position.y, position.z);
+
+        const DirectX::XMMATRIX translation = DirectX::XMMatrixTranslation(
+            position.x + local_position_offset.x,
+            position.y + local_position_offset.y,
+            position.z + local_position_offset.z);
 
         DirectX::XMMATRIX world = scaling * rotation * translation;
 

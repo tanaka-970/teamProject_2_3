@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../ComponentBrowser/AddComponentPanel.h"
 
@@ -33,6 +33,10 @@ namespace ReplayEngine::Editor
 
     private:
         void DrawGameObjectHeader(EditorContext& context, Core::GameObject& object);
+
+        // 操作対象としての構成診断。
+        // 型ごとの専用 Editor ではなく、PlayerCompositionValidator の表を描くだけ。
+        void DrawPlayerComposition(EditorContext& context, Core::GameObject& object);
         void DrawComponent(EditorContext& context, Core::Component& component);
 
         AddComponentPanel add_component_panel_;

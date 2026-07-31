@@ -1,4 +1,4 @@
-#include "PropertyDrawer.h"
+﻿#include "PropertyDrawer.h"
 
 #include "../../Assets/AssetDatabase.h"
 #include "../../Object/Component/Component.h"
@@ -89,38 +89,101 @@ namespace ReplayEngine::Editor
             return true;
         }
 
-        // AssetDatabase に登録されている Asset を選ぶコンボ。
-        // 選ばれた場合は GUID を返す。
-        bool DrawAssetPicker(const char* label, const Assets::AssetDatabase& database,
-            std::string& guid)
+        // Asset 参照の共通描画。
+        //
+        // 生の GUID（1bd1358040255f5bd18f3be0d79fbe3c のような文字列）を
+        // 通常の Inspector へ出さない。表示するのは Asset 名とパスだけ。
+        // GUID は折り畳みの「詳細」の中にのみ置く。
+        //
+        // Component ごとの専用処理ではなく、AssetPath 型の Property すべてに効く。
+        bool DrawAssetReference(const char* label, const Assets::AssetDatabase* database,
+            std::string& guid, bool read_only)
         {
-            const Assets::AssetRecord* current = database.FindByGuid(guid);
-            const char* preview = current != nullptr
-                ? current->display_name.c_str()
-                : (guid.empty() ? "(未設定)" : "(見つからない Asset)");
-
             bool changed = false;
-            if (ImGui::BeginCombo(label, preview))
+
+            const Assets::AssetRecord* current =
+                database != nullptr ? database->FindByGuid(guid) : nullptr;
+
+            // 選択欄。名前だけを見せる。
+            const char* preview = "(未設定)";
+            if (!guid.empty())
             {
-                if (ImGui::Selectable("(未設定)", guid.empty()))
+                preview = current != nullptr ? current->display_name.c_str() : "Missing Asset";
+            }
+
+            if (database != nullptr)
+            {
+                const DisabledScope disabled(read_only);
+                if (ImGui::BeginCombo(label, preview))
+                {
+                    if (ImGui::Selectable("(未設定)", guid.empty()))
+                    {
+                        guid.clear();
+                        changed = true;
+                    }
+                    for (const Assets::AssetRecord& record : database->Records())
+                    {
+                        const bool selected = record.guid == guid;
+                        ImGui::PushID(record.guid.c_str());
+                        if (ImGui::Selectable(record.display_name.c_str(), selected))
+                        {
+                            guid = record.guid;
+                            changed = true;
+                        }
+                        if (selected) ImGui::SetItemDefaultFocus();
+                        ImGui::PopID();
+                    }
+                    ImGui::EndCombo();
+                }
+            }
+            else
+            {
+                // AssetDatabase が無い場合だけ手入力にする。
+                if (DrawTextField(label, guid, read_only)) changed = true;
+            }
+
+            // 状態表示。パスか、欠損の警告。
+            if (guid.empty())
+            {
+                ImGui::TextDisabled("  Asset が未指定です");
+            }
+            else if (current != nullptr)
+            {
+                ImGui::TextDisabled("  %s", current->source_path.generic_string().c_str());
+            }
+            else
+            {
+                ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.35f, 1.0f),
+                    "  GUID に対応する Asset が見つかりません");
+            }
+
+            // 解除ボタン。
+            if (!guid.empty() && !read_only)
+            {
+                if (ImGui::SmallButton("解除"))
                 {
                     guid.clear();
                     changed = true;
                 }
-                for (const Assets::AssetRecord& record : database.Records())
-                {
-                    const bool selected = record.guid == guid;
-                    ImGui::PushID(record.guid.c_str());
-                    if (ImGui::Selectable(record.display_name.c_str(), selected))
-                    {
-                        guid = record.guid;
-                        changed = true;
-                    }
-                    if (selected) ImGui::SetItemDefaultFocus();
-                    ImGui::PopID();
-                }
-                ImGui::EndCombo();
+                ImGui::SameLine();
             }
+
+            // GUID は詳細の中だけ。通常表示には出さない。
+            if (!guid.empty())
+            {
+                if (ImGui::TreeNode("詳細##AssetDetail"))
+                {
+                    ImGui::TextDisabled("Asset ID");
+                    ImGui::TextWrapped("%s", guid.c_str());
+                    if (ImGui::SmallButton("コピー")) ImGui::SetClipboardText(guid.c_str());
+                    ImGui::TreePop();
+                }
+            }
+            else
+            {
+                ImGui::NewLine();
+            }
+
             return changed;
         }
 
@@ -232,23 +295,7 @@ namespace ReplayEngine::Editor
         case PropertyType::AssetPath:
         {
             std::string value = current.AsString();
-            if (assets != nullptr)
-            {
-                if (DrawAssetPicker(label.c_str(), *assets, value))
-                {
-                    desc.Apply(component, PropertyValue::MakeAssetPath(value));
-                    changed = true;
-                }
-                // GUID を直接確認・貼り付けできるように、下へ生の文字列も出す。
-                ImGui::SetNextItemWidth(-1.0f);
-                const std::string raw_label = label + "_raw";
-                if (DrawTextField(raw_label.c_str(), value, desc.read_only))
-                {
-                    desc.Apply(component, PropertyValue::MakeAssetPath(std::move(value)));
-                    changed = true;
-                }
-            }
-            else if (DrawTextField(label.c_str(), value, desc.read_only))
+            if (DrawAssetReference(label.c_str(), assets, value, desc.read_only))
             {
                 desc.Apply(component, PropertyValue::MakeAssetPath(std::move(value)));
                 changed = true;

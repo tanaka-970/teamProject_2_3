@@ -1,4 +1,4 @@
-#include "PlayerControlSystem.h"
+﻿#include "PlayerControlSystem.h"
 
 #include "../Runtime/Scene.h"
 #include "../../Components/Gameplay/PlayerControllerComponent.h"
@@ -6,20 +6,25 @@
 
 namespace ReplayEngine::Scene
 {
-    bool PlayerControlSystem::IsControllable(const Scene& scene, Core::ObjectID id)
+    bool PlayerControlSystem::IsValidTarget(const Scene& scene, Core::ObjectID id)
     {
         if (!id.Valid()) return false;
-
         const Core::GameObject* object = scene.FindGameObjectByID(id);
-        if (object == nullptr || object->PendingDestroy()) return false;
+        return object != nullptr && !object->PendingDestroy();
+    }
 
+    bool PlayerControlSystem::HasController(const Scene& scene, Core::ObjectID id)
+    {
+        if (!IsValidTarget(scene, id)) return false;
+        const Core::GameObject* object = scene.FindGameObjectByID(id);
         return object->GetComponent<Components::PlayerControllerComponent>() != nullptr;
     }
 
     Core::ObjectID PlayerControlSystem::Resolve(const Scene& scene)
     {
-        // 今の対象が使えるならそのまま。
-        if (IsControllable(scene, controlled_)) return controlled_;
+        // 指定された対象がまだ存在するならそのまま維持する。
+        // Controller を消しても乗り移らない（操作が止まるだけ）。
+        if (IsValidTarget(scene, controlled_)) return controlled_;
 
         controlled_ = Core::ObjectID::Invalid();
 

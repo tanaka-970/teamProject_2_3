@@ -1,4 +1,4 @@
-#include "SceneData.h"
+﻿#include "SceneData.h"
 
 #include "../Runtime/Scene.h"
 #include "../../Object/Registry/ComponentRegistry.h"
@@ -20,6 +20,12 @@ namespace ReplayEngine::Scene::Serialization
     {
         output.Clear();
         output.scene_name = scene.Name();
+
+        // Scene 単位の状態。Component の有無とは独立して保存する。
+        output.controlled_object = scene.Services().ControlledObject();
+        output.legacy_player_migrated = scene.Services().PlayerMigration().Migrated();
+        output.migrated_player_object = scene.Services().PlayerMigration().MigratedObject();
+
         output.objects.reserve(scene.GameObjectCount());
 
         for (std::size_t index = 0; index < scene.GameObjectCount(); ++index)
@@ -190,6 +196,22 @@ namespace ReplayEngine::Scene::Serialization
             BuildComponents(object_data, *found->second, report);
         }
 
+        // Scene 単位の状態を復元する。
+        //
+        // 操作対象 ObjectID は、ID が採番し直された場合に備えて必ず対応表を通す。
+        // これを忘れると Play 開始時に操作対象を見失う。
+        const auto remap = [&saved_to_object](Core::ObjectID saved) -> Core::ObjectID
+        {
+            if (!saved.Valid()) return Core::ObjectID::Invalid();
+            const auto found = saved_to_object.find(saved);
+            return found != saved_to_object.end()
+                ? found->second->ID() : Core::ObjectID::Invalid();
+        };
+
+        scene.Services().SetControlledObject(remap(data.controlled_object));
+        scene.Services().PlayerMigration().Restore(
+            data.legacy_player_migrated, remap(data.migrated_player_object));
+
         // 予約状態が残っていないことを保証してから読み込みを終える。
         scene.ProcessPendingOperations();
 
@@ -239,6 +261,9 @@ namespace ReplayEngine::Scene::Serialization
     {
         report.Clear();
         if (data.objects.empty()) return nullptr;
+
+        // Prefab の中に入っていた操作対象 ID や移行状態は「配置先 Scene の情報」なので
+        // 一切持ち込まない。配置後に Scene 側で決める。
 
         // Scene は消さない。既存の内容へ追加する。
         // ID は必ず採番し直すので、同じ Prefab を何度置いても衝突しない。

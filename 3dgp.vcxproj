@@ -303,6 +303,7 @@
     <ClCompile Include="RePlayEngine\Components\Rendering\MeshRendererComponent.cpp" />
     <ClCompile Include="Source\game\legacy_stage_collision_bridge.cpp" />
     <ClCompile Include="Source\game\legacy_camera_basis_bridge.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Inspector\PlayerCompositionValidator.cpp" />
 </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\render\csm_renderer.h" />
@@ -421,6 +422,8 @@
     <ClInclude Include="RePlayEngine\Components\Rendering\SkinnedMeshRendererComponent.h" />
     <ClInclude Include="Source\game\legacy_stage_collision_bridge.h" />
     <ClInclude Include="Source\game\legacy_camera_basis_bridge.h" />
+    <ClInclude Include="RePlayEngine\Scene\Services\ScenePlayerMigrationState.h" />
+    <ClInclude Include="RePlayEngine\Editor\Inspector\PlayerCompositionValidator.h" />
 </ItemGroup>
   <ItemGroup>
     <None Include=".editorconfig" />
