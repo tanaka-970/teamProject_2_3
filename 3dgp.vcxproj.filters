@@ -147,7 +147,31 @@
     <Filter Include="プロジェクト設定">
       <UniqueIdentifier>{fa111111-1111-4111-8111-111111111111}</UniqueIdentifier>
     </Filter>
-  </ItemGroup>
+      <Filter Include="RePlayEngine\Core">
+      <UniqueIdentifier>{146b8938-e3d7-41ff-89a2-8624967d8e68}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Core\ObjectID">
+      <UniqueIdentifier>{e24db6d7-022d-47eb-80f5-b42ba8049989}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Core\Threading">
+      <UniqueIdentifier>{cdd0f611-0732-4fb2-8c9c-60d7a399c03e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Core\Math">
+      <UniqueIdentifier>{c4a8515a-8542-4f76-850c-e5728848c78e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Object">
+      <UniqueIdentifier>{c1b5af21-6d31-41d9-8360-1297dc837d6a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Object\Component">
+      <UniqueIdentifier>{285f282c-42cb-422f-8871-4427dd61ff6d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Object\GameObject">
+      <UniqueIdentifier>{91e2c766-f971-40c7-8552-411b82d004d3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Object\Registry">
+      <UniqueIdentifier>{a9820df5-496e-4453-8926-cdd697c280ad}</UniqueIdentifier>
+    </Filter>
+</ItemGroup>
   <ItemGroup>
     <ClCompile Include="Source\render\csm_renderer.cpp">
       <Filter>Source\Render</Filter>
@@ -806,5 +830,44 @@
     <FxCompile Include="Shader\trail_vs.hlsl">
       <Filter>Shader</Filter>
     </FxCompile>
-  </ItemGroup>
+      <ClCompile Include="RePlayEngine\Core\ObjectID\ObjectID.cpp">
+      <Filter>RePlayEngine\Core\ObjectID</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Core\Math\Transform.cpp">
+      <Filter>RePlayEngine\Core\Math</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Object\Component\Component.cpp">
+      <Filter>RePlayEngine\Object\Component</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Object\GameObject\GameObject.cpp">
+      <Filter>RePlayEngine\Object\GameObject</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Object\Registry\ComponentRegistry.cpp">
+      <Filter>RePlayEngine\Object\Registry</Filter>
+    </ClCompile>
+    <ClInclude Include="RePlayEngine\Core\ObjectID\ObjectID.h">
+      <Filter>RePlayEngine\Core\ObjectID</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Core\Threading\ThreadPolicy.h">
+      <Filter>RePlayEngine\Core\Threading</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Core\Math\Transform.h">
+      <Filter>RePlayEngine\Core\Math</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Object\Component\ComponentTypeID.h">
+      <Filter>RePlayEngine\Object\Component</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Object\Component\Component.h">
+      <Filter>RePlayEngine\Object\Component</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Object\GameObject\GameObject.h">
+      <Filter>RePlayEngine\Object\GameObject</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Object\Registry\ComponentTypeInfo.h">
+      <Filter>RePlayEngine\Object\Registry</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Object\Registry\ComponentRegistry.h">
+      <Filter>RePlayEngine\Object\Registry</Filter>
+    </ClInclude>
+</ItemGroup>
 </Project>

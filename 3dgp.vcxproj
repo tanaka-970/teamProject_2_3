@@ -261,7 +261,12 @@
     <ClCompile Include="RePlayEngine\Physics\GravityComponent.cpp" />
     <ClCompile Include="Source\game\scene_game.cpp" />
     <ClCompile Include="Source\game\game_scene.cpp" />
-  </ItemGroup>
+      <ClCompile Include="RePlayEngine\Core\ObjectID\ObjectID.cpp" />
+    <ClCompile Include="RePlayEngine\Core\Math\Transform.cpp" />
+    <ClCompile Include="RePlayEngine\Object\Component\Component.cpp" />
+    <ClCompile Include="RePlayEngine\Object\GameObject\GameObject.cpp" />
+    <ClCompile Include="RePlayEngine\Object\Registry\ComponentRegistry.cpp" />
+</ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\render\csm_renderer.h" />
     <ClInclude Include="Source\render\deferred_renderer.h" />
@@ -338,7 +343,15 @@
     <ClInclude Include="Source\game\scene_game.h" />
     <ClInclude Include="Source\game\game_scene.h" />
     <ClInclude Include="Source\game\stage.h" />
-  </ItemGroup>
+      <ClInclude Include="RePlayEngine\Core\ObjectID\ObjectID.h" />
+    <ClInclude Include="RePlayEngine\Core\Threading\ThreadPolicy.h" />
+    <ClInclude Include="RePlayEngine\Core\Math\Transform.h" />
+    <ClInclude Include="RePlayEngine\Object\Component\ComponentTypeID.h" />
+    <ClInclude Include="RePlayEngine\Object\Component\Component.h" />
+    <ClInclude Include="RePlayEngine\Object\GameObject\GameObject.h" />
+    <ClInclude Include="RePlayEngine\Object\Registry\ComponentTypeInfo.h" />
+    <ClInclude Include="RePlayEngine\Object\Registry\ComponentRegistry.h" />
+</ItemGroup>
   <ItemGroup>
     <None Include=".editorconfig" />
     <None Include=".gitattributes" />
