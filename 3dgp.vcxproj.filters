@@ -222,6 +222,15 @@
     <Filter Include="RePlayEngine\Scene\Legacy">
       <UniqueIdentifier>{9ffec2b4-e3db-4b4a-8416-868338113f64}</UniqueIdentifier>
     </Filter>
+    <Filter Include="RePlayEngine\Scene\Services">
+      <UniqueIdentifier>{29522b67-4031-4b2a-8029-c9b11a28aa85}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Components\Physics">
+      <UniqueIdentifier>{63e903bd-8748-4696-8d55-c24adc3f32a6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Components\Camera">
+      <UniqueIdentifier>{0519d005-9a2c-470f-87e5-4ca27653fb37}</UniqueIdentifier>
+    </Filter>
 </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Source\render\csm_renderer.cpp">
@@ -1041,6 +1050,78 @@
     </ClInclude>
     <ClInclude Include="RePlayEngine\Scene\Serialization\PrefabSerializer.h">
       <Filter>RePlayEngine\Scene\Serialization</Filter>
+    </ClInclude>
+    <ClCompile Include="RePlayEngine\Scene\Services\PlayerControlSystem.cpp">
+      <Filter>RePlayEngine\Scene\Services</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\Physics\SphereColliderComponent.cpp">
+      <Filter>RePlayEngine\Components\Physics</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\Gameplay\CharacterMotorComponent.cpp">
+      <Filter>RePlayEngine\Components\Gameplay</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\Gameplay\PlayerInputComponent.cpp">
+      <Filter>RePlayEngine\Components\Gameplay</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\Gameplay\PlayerControllerComponent.cpp">
+      <Filter>RePlayEngine\Components\Gameplay</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\Rendering\AnimatorComponent.cpp">
+      <Filter>RePlayEngine\Components\Rendering</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\Rendering\SkinnedMeshRendererComponent.cpp">
+      <Filter>RePlayEngine\Components\Rendering</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\Rendering\MeshRendererComponent.cpp">
+      <Filter>RePlayEngine\Components\Rendering</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\game\legacy_stage_collision_bridge.cpp">
+      <Filter>Source\Game</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\game\legacy_camera_basis_bridge.cpp">
+      <Filter>Source\Game</Filter>
+    </ClCompile>
+    <ClInclude Include="RePlayEngine\Scene\Services\ICameraBasisProvider.h">
+      <Filter>RePlayEngine\Scene\Services</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Scene\Services\IPhysicsQueryService.h">
+      <Filter>RePlayEngine\Scene\Services</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Scene\Services\SceneServices.h">
+      <Filter>RePlayEngine\Scene\Services</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Scene\Services\PlayerControlSystem.h">
+      <Filter>RePlayEngine\Scene\Services</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\Adapter\IRenderSubmitter.h">
+      <Filter>RePlayEngine\Rendering\Adapter</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Physics\SphereColliderComponent.h">
+      <Filter>RePlayEngine\Components\Physics</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Gameplay\CharacterMotorComponent.h">
+      <Filter>RePlayEngine\Components\Gameplay</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Gameplay\PlayerInputComponent.h">
+      <Filter>RePlayEngine\Components\Gameplay</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Gameplay\PlayerControllerComponent.h">
+      <Filter>RePlayEngine\Components\Gameplay</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Camera\CameraTargetComponent.h">
+      <Filter>RePlayEngine\Components\Camera</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Rendering\AnimatorComponent.h">
+      <Filter>RePlayEngine\Components\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Rendering\SkinnedMeshRendererComponent.h">
+      <Filter>RePlayEngine\Components\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\game\legacy_stage_collision_bridge.h">
+      <Filter>Source\Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\game\legacy_camera_basis_bridge.h">
+      <Filter>Source\Game</Filter>
     </ClInclude>
 </ItemGroup>
 </Project>

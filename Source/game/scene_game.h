@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "camera.h"
 #include "free_camera_controller.h"
@@ -26,6 +26,18 @@ public:
     void ResetAnimationClipMapping();
     void SetLegacyStageActive(bool active);
 
+    // 新 Player GameObject が操作対象になっている間は false を渡す。
+    // 旧 Player の Update とカメラ追従を止め、二重更新・二重描画を防ぐ。
+    void SetLegacyPlayerActive(bool active) noexcept { legacy_player_active_ = active; }
+    bool LegacyPlayerActive() const noexcept { return legacy_player_active_; }
+
+    // CameraTargetComponent の設定でカメラを追従させる。
+    // 呼び出し側は GameObject の位置と設定値だけを渡す。
+    // カメラ側は Player 具象型を知らない。
+    void FollowCameraTarget(const DirectX::XMFLOAT3& target_position,
+        const DirectX::XMFLOAT3& look_at_offset,
+        float distance, float height, float lag, float delta_time);
+
     Camera& GetCamera() { return camera; }
     Player& GetPlayer() { return player; }
     Stage&  GetStage()  { return stage;  }
@@ -45,6 +57,9 @@ public:
     float camera_pitch_offset  = 0.0f;
 
 private:
+    // カメラ回転入力（右ドラッグ / IJKL）。旧経路と新経路で共有する。
+    void UpdateCameraRotationInput(float delta_time);
+
     Camera               camera;
     FreeCameraController controller;
     Player               player;
@@ -53,4 +68,5 @@ private:
     int default_walk_clip_ = -1;
     int default_jump_clip_ = -1;
     bool legacy_stage_active_ = false;
+    bool legacy_player_active_ = true;
 };

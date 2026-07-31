@@ -189,8 +189,13 @@ void framework::render(float elapsed_time)
     if (enable_particles) particles.simulate(immediate_context.Get(), elapsed_time);
     if (enable_trail)     test_trail.update(elapsed_time);
 
+    // 新 Player GameObject が操作対象になっている間は、旧 Player 用の
+    // skinned_meshes[0] を描画しない。描画は SkinnedMeshRendererComponent が提出する。
+    // これが二重描画を防ぐ唯一のスイッチ。
+    const bool draw_legacy_player = !object_player_active;
+
     const skinned_mesh::animation::keyframe* active_keyframe = nullptr;
-    if (skinned_meshes[0] && !skinned_meshes[0]->animation_clips.empty())
+    if (draw_legacy_player && skinned_meshes[0] && !skinned_meshes[0]->animation_clips.empty())
     {
         const int clip_count = static_cast<int>(skinned_meshes[0]->animation_clips.size());
 
@@ -242,7 +247,7 @@ void framework::render(float elapsed_time)
     }
 
     if (csm.constants.params.w > 0.5f &&
-        (skinned_meshes[0] || (enable_static_meshes && static_meshes[0])))
+        ((draw_legacy_player && skinned_meshes[0]) || (enable_static_meshes && static_meshes[0])))
     {
         // カスケードシャドウ用深度を先に作る。終了時に元のRTVとViewportを復元する。
         D3D11_VIEWPORT main_vp = viewport;
@@ -271,7 +276,7 @@ void framework::render(float elapsed_time)
             render_target_view.Get(), depth_stencil_view.Get(), main_vp);
     }
 
-    if (pbr_shadow_enabled && (skinned_meshes[0] || (enable_static_meshes && static_meshes[0])))
+    if (pbr_shadow_enabled && ((draw_legacy_player && skinned_meshes[0]) || (enable_static_meshes && static_meshes[0])))
     {
         // PBR固有のシャドウマップはCSMと別リソースなので、必要な場合だけ生成する。
         D3D11_VIEWPORT main_vp = viewport;
@@ -339,7 +344,7 @@ void framework::render(float elapsed_time)
 
         DirectX::XMFLOAT4X4 world;
         store_object_world(world);
-        if (skinned_meshes[0])
+        if (draw_legacy_player && skinned_meshes[0])
         {
             bind_gbuffer_material(deferred_shading_model(shading_per_skinned[0]));
             skinned_meshes[0]->render(immediate_context.Get(), world, material_color,
@@ -605,7 +610,7 @@ void framework::render(float elapsed_time)
         DirectX::XMFLOAT4X4 world;
         store_object_world(world);
 
-        if (skinned_meshes[0])
+        if (draw_legacy_player && skinned_meshes[0])
         {
             skinned_meshes[0]->render(immediate_context.Get(), world, material_color,
                                       active_keyframe, skinned_forward_shader(shading_per_skinned[0]));
@@ -658,11 +663,20 @@ void framework::render(float elapsed_time)
             if (scene_item.mesh_asset.empty()) continue;
             skinned_mesh* scene_mesh = resolve_object_mesh(scene_item.mesh_asset);
             if (scene_mesh == nullptr) continue;
+
+            // Animator が決めたクリップと時刻から姿勢を求める。
+            // クリップ長を知っているのは Renderer 側なので、ループ処理もここで解決する。
+            const skinned_mesh::animation::keyframe* item_keyframe =
+                scene_item.skinned
+                    ? resolve_object_keyframe(*scene_mesh, scene_item.clip_index,
+                        scene_item.animation_time)
+                    : nullptr;
+
             scene_mesh->render(immediate_context.Get(), scene_item.world, scene_item.tint,
-                nullptr, skinned_forward_shader(scene_item.shading_model));
+                item_keyframe, skinned_forward_shader(scene_item.shading_model));
         }
 
-        if (skinned_meshes[0] && enable_outline_shader && outline_per_skinned[0])
+        if (draw_legacy_player && skinned_meshes[0] && enable_outline_shader && outline_per_skinned[0])
         {
             // アウトラインは表面描画後に背面を膨らませて重ねる。
             toon.bind_outline_pass(immediate_context.Get(), true);

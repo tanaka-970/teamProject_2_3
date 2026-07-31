@@ -44,6 +44,24 @@ namespace ReplayEngine::Rendering
 
         bool outline = false;
         bool cast_shadow = true;
+
+        // ---- スキンメッシュ用 ----------------------------------------------
+        //
+        // AnimatorComponent が決めたクリップと再生位置。
+        // 実際のキーフレーム抽出とボーン行列の計算は既存 Renderer が行う。
+        // ここは「どのクリップを、どの時刻で描くか」という指示だけを運ぶ。
+
+        // true ならスキンメッシュとして扱う。false は静的メッシュ。
+        bool skinned = false;
+
+        // 再生するクリップ番号。-1 なら Renderer 側の現在値を維持する。
+        int clip_index = -1;
+
+        // クリップ先頭からの経過秒。
+        float animation_time = 0.0f;
+
+        // false なら時間を進めず、その姿勢で止める。
+        bool animation_playing = true;
     };
 
     // 1 フレーム分の描画提出リスト。

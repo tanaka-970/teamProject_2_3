@@ -61,6 +61,9 @@ extern ImWchar glyphRangesJapanese[];
 #include "../../RePlayEngine/Editor/Hierarchy/HierarchyPanel.h"
 #include "../../RePlayEngine/Editor/Inspector/InspectorPanel.h"
 #include "../../RePlayEngine/Rendering/Adapter/RenderItem.h"
+#include "../../RePlayEngine/Scene/Services/PlayerControlSystem.h"
+#include "../game/legacy_camera_basis_bridge.h"
+#include "../game/legacy_stage_collision_bridge.h"
 
 #include <unordered_map>
 #include <unordered_set>
@@ -253,6 +256,24 @@ public:
 
     std::filesystem::path object_scene_path{ "resources/Scenes/TrainingStage.replayscene" };
     bool             object_scene_play_mode{ false };
+
+    // 操作対象を型ではなく ObjectID で持つ。
+    // 人型からメカ・ドローンへ変えても GameObject のクラス型は変わらない。
+    ReplayEngine::Scene::PlayerControlSystem player_control_system;
+
+    // 【移行用】Gameplay Component から Camera / Stage 具象型を隠すための橋渡し。
+    // 削除条件はそれぞれのヘッダーへ記載してある。
+    LegacyCameraBasisBridge      object_camera_bridge;
+    LegacyStageCollisionBridge   object_collision_bridge;
+
+    // 固定時間更新（CharacterMotor の物理用）。
+    float            object_fixed_time_step{ 1.0f / 60.0f };
+    float            object_fixed_accumulator{ 0.0f };
+    int              object_max_fixed_substeps{ 5 };
+
+    // 新 Player GameObject が操作対象になっている間は、旧 Player を更新も描画もしない。
+    // 二重更新・二重描画を防ぐ唯一のスイッチ。
+    bool             object_player_active{ false };
 
     bool             enable_deferred { true };
     bool             enable_particles{ false };
@@ -525,6 +546,12 @@ private:
     void draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shader,
         bool gbuffer_pass);
     void clear_object_mesh_cache() noexcept;
+    void update_object_fixed_step(float elapsed_time);
+    void update_object_camera_follow(float elapsed_time);
+    void refresh_object_scene_services();
+    bool convert_legacy_player_to_gameobject();
+    const skinned_mesh::animation::keyframe* resolve_object_keyframe(
+        skinned_mesh& mesh, int clip_index, float animation_time) const;
     void draw_project_panel();
     void draw_console_panel();
     void execute_editor_command(const std::string& command);

@@ -136,8 +136,75 @@ void SceneGame::SetLegacyStageActive(bool active)
     stage.GetCollisionMesh().SetEnabled(active);
 }
 
+void SceneGame::FollowCameraTarget(const DirectX::XMFLOAT3& target_position,
+    const DirectX::XMFLOAT3& look_at_offset,
+    float distance, float height, float lag, float delta_time)
+{
+    // カメラの回転入力は旧来どおりここで受ける。
+    // 追従対象の位置と設定値だけを外から受け取り、Player 具象型には触れない。
+    UpdateCameraRotationInput(delta_time);
+
+    const DirectX::XMFLOAT3 focus{
+        target_position.x + look_at_offset.x,
+        target_position.y + look_at_offset.y,
+        target_position.z + look_at_offset.z };
+
+    const float yaw = camera_yaw_offset;
+    const float pitch = camera_pitch_offset;
+    const float cp = cosf(pitch);
+    const DirectX::XMFLOAT3 desired{
+        focus.x - sinf(yaw) * cp * distance,
+        focus.y + height + sinf(pitch) * distance,
+        focus.z - cosf(yaw) * cp * distance
+    };
+
+    const auto& current_eye = camera.GetEye();
+    const float t = 1.0f - expf(-lag * delta_time);
+    const DirectX::XMFLOAT3 new_eye{
+        current_eye.x + (desired.x - current_eye.x) * t,
+        current_eye.y + (desired.y - current_eye.y) * t,
+        current_eye.z + (desired.z - current_eye.z) * t
+    };
+    camera.SetLookAt(new_eye, focus, { 0, 1, 0 });
+}
+
+void SceneGame::UpdateCameraRotationInput(float dt)
+{
+    // Mouse right-drag rotates the camera ONLY.
+    {
+        static POINT prevPos{};
+        POINT cur; GetCursorPos(&cur);
+        POINT delta{ cur.x - prevPos.x, cur.y - prevPos.y };
+        prevPos = cur;
+        if (GetAsyncKeyState(VK_RBUTTON) & 0x8000)
+        {
+            const float k = 0.006f;
+            camera_yaw_offset   += delta.x * k;
+            camera_pitch_offset += -delta.y * k;
+        }
+    }
+
+    const float key_rotate_speed = 1.8f * dt;
+    if (GetAsyncKeyState('J') & 0x8000) camera_yaw_offset -= key_rotate_speed;
+    if (GetAsyncKeyState('L') & 0x8000) camera_yaw_offset += key_rotate_speed;
+    if (GetAsyncKeyState('I') & 0x8000) camera_pitch_offset += key_rotate_speed;
+    if (GetAsyncKeyState('K') & 0x8000) camera_pitch_offset -= key_rotate_speed;
+    const float lim = 1.40f;
+    if (camera_pitch_offset >  lim) camera_pitch_offset =  lim;
+    if (camera_pitch_offset < -lim) camera_pitch_offset = -lim;
+}
+
 void SceneGame::Update(float dt)
 {
+    // 新 Player GameObject が操作対象になっている間は、旧 Player を一切更新しない。
+    // 更新も接地解決もカメラ追従も、すべて Component 側が担当する。
+    // これにより同じプレイヤーが二重に Update されることがない。
+    if (!legacy_player_active_)
+    {
+        stage.Update(dt);
+        return;
+    }
+
     // Player movement uses the previous camera orientation, then the camera
     // follows the updated player position. This matches the GP3 sample flow.
     if (legacy_stage_active_) UpdatePlayerGroundFromStage(player, stage);
@@ -177,28 +244,7 @@ void SceneGame::Update(float dt)
     // Camera
     if (follow_player)
     {
-        // Mouse right-drag rotates the camera ONLY (player is not affected).
-        {
-            static POINT prevPos{};
-            POINT cur; GetCursorPos(&cur);
-            POINT delta{ cur.x - prevPos.x, cur.y - prevPos.y };
-            prevPos = cur;
-            if (GetAsyncKeyState(VK_RBUTTON) & 0x8000)
-            {
-                const float k = 0.006f;
-                camera_yaw_offset   += delta.x * k;
-                camera_pitch_offset += -delta.y * k;
-            }
-        }
-
-        const float key_rotate_speed = 1.8f * dt;
-        if (GetAsyncKeyState('J') & 0x8000) camera_yaw_offset -= key_rotate_speed;
-        if (GetAsyncKeyState('L') & 0x8000) camera_yaw_offset += key_rotate_speed;
-        if (GetAsyncKeyState('I') & 0x8000) camera_pitch_offset += key_rotate_speed;
-        if (GetAsyncKeyState('K') & 0x8000) camera_pitch_offset -= key_rotate_speed;
-        const float lim = 1.40f;
-        if (camera_pitch_offset >  lim) camera_pitch_offset =  lim;
-        if (camera_pitch_offset < -lim) camera_pitch_offset = -lim;
+        UpdateCameraRotationInput(dt);
 
         // Simple chase camera: target = player position + height
         const auto& p = player.GetPosition();

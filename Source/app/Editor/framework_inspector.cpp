@@ -149,8 +149,31 @@ void framework::draw_inspector()
     case editor_selection::player:
         ImGui::TextUnformatted("プレイヤー");
         ImGui::Separator();
-        if (enable_scene_game && game_scene)
+        if (object_player_active)
         {
+            // 新 Player GameObject が正式経路。
+            // 移動・アニメーション・当たり判定の設定はすべて Component 側にあるので、
+            // ここには同じ項目を残さない（新旧で二重に編集できる状態を作らない）。
+            ImGui::TextWrapped(
+                "プレイヤーは GameObject + Component 構成へ移行済みです。"
+                "設定は階層の GameObject > Player を選び、インスペクターで編集してください。");
+            if (ImGui::Button("Player GameObject を選択"))
+            {
+                object_editor_context.Selection().Select(
+                    active_object_scene().Services().ControlledObject(), false);
+                selected_editor_object = editor_selection::game_object;
+            }
+        }
+        else if (enable_scene_game && game_scene)
+        {
+            ImGui::TextWrapped(
+                "まだ旧 Player 経路です。下のボタンで GameObject へ変換すると、"
+                "以降は Component 構成として編集・保存できます。");
+            if (ImGui::Button("旧 Player を GameObject へ変換"))
+            {
+                convert_legacy_player_to_gameobject();
+            }
+            ImGui::Separator();
             game_scene->Gameplay().DrawPlayerGUI();
         }
         else

@@ -293,6 +293,16 @@
     <ClCompile Include="Source\app\Runtime\framework_gameobject_scene.cpp" />
     <ClCompile Include="RePlayEngine\Scene\Legacy\LegacySceneDocumentSerializer.cpp" />
     <ClCompile Include="RePlayEngine\Scene\Serialization\PrefabSerializer.cpp" />
+    <ClCompile Include="RePlayEngine\Scene\Services\PlayerControlSystem.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Physics\SphereColliderComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Gameplay\CharacterMotorComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Gameplay\PlayerInputComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Gameplay\PlayerControllerComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Rendering\AnimatorComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Rendering\SkinnedMeshRendererComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Rendering\MeshRendererComponent.cpp" />
+    <ClCompile Include="Source\game\legacy_stage_collision_bridge.cpp" />
+    <ClCompile Include="Source\game\legacy_camera_basis_bridge.cpp" />
 </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\render\csm_renderer.h" />
@@ -397,6 +407,20 @@
     <ClInclude Include="RePlayEngine\Rendering\Adapter\SceneRenderCollector.h" />
     <ClInclude Include="RePlayEngine\Scene\Legacy\LegacySceneDocumentSerializer.h" />
     <ClInclude Include="RePlayEngine\Scene\Serialization\PrefabSerializer.h" />
+    <ClInclude Include="RePlayEngine\Scene\Services\ICameraBasisProvider.h" />
+    <ClInclude Include="RePlayEngine\Scene\Services\IPhysicsQueryService.h" />
+    <ClInclude Include="RePlayEngine\Scene\Services\SceneServices.h" />
+    <ClInclude Include="RePlayEngine\Scene\Services\PlayerControlSystem.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Adapter\IRenderSubmitter.h" />
+    <ClInclude Include="RePlayEngine\Components\Physics\SphereColliderComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Gameplay\CharacterMotorComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Gameplay\PlayerInputComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Gameplay\PlayerControllerComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Camera\CameraTargetComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Rendering\AnimatorComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Rendering\SkinnedMeshRendererComponent.h" />
+    <ClInclude Include="Source\game\legacy_stage_collision_bridge.h" />
+    <ClInclude Include="Source\game\legacy_camera_basis_bridge.h" />
 </ItemGroup>
   <ItemGroup>
     <None Include=".editorconfig" />

@@ -348,6 +348,17 @@ void framework::draw_scene_hierarchy()
     // framework 側は「選択が変わったらインスペクターの表示先を切り替える」だけ。
     if (ImGui::TreeNodeEx("GameObject", ImGuiTreeNodeFlags_DefaultOpen))
     {
+        // 旧 Player がまだ GameObject 化されていない場合だけ変換ボタンを出す。
+        // 一度変換したら Scene ファイルが正式な構成元になるので、二度と出ない。
+        if (!object_player_active && !object_scene_play_mode)
+        {
+            if (ImGui::Button("旧 Player を GameObject へ変換"))
+            {
+                convert_legacy_player_to_gameobject();
+            }
+            ImGui::Separator();
+        }
+
         object_editor_context.SetPlayMode(object_scene_play_mode);
         object_editor_context.AttachScene(&active_object_scene());
 

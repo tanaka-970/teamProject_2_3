@@ -1,6 +1,7 @@
-#pragma once
+﻿#pragma once
 
 #include "../../Object/Component/Component.h"
+#include "../../Rendering/Adapter/IRenderSubmitter.h"
 
 #include <DirectXMath.h>
 
@@ -25,12 +26,20 @@ namespace ReplayEngine::Components
     //   GPU リソースのポインタではなく AssetDatabase の GUID を保持する。
     //   Scene ファイルへ保存されるのもこの GUID で、
     //   読み込み時に AssetDatabase から実体を引き直す。
-    class MeshRendererComponent final : public Core::Component
+    class MeshRendererComponent final
+        : public Core::Component
+        , public Rendering::IRenderSubmitter
     {
         REPLAY_COMPONENT_BODY(MeshRendererComponent)
 
     public:
         MeshRendererComponent() = default;
+
+        // IRenderSubmitter。GameObject のワールド行列をそのまま提出する。
+        // 見た目の姿勢補正やアニメーションは扱わない
+        // （それが必要なら SkinnedMeshRendererComponent を使う）。
+        bool BuildRenderItem(const Core::GameObject& owner,
+            Rendering::RenderItem& out) const override;
 
         // 実際に描くべきか。Component の有効状態と visible の両方を見る。
         bool ShouldRender() const noexcept
