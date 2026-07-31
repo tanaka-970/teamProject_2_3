@@ -102,6 +102,17 @@ sprite::sprite(ID3D11Device* device, const wchar_t* filename, const char* pixel_
 
     hr = device->CreateBuffer(&buffer_desc, &subresource_data, vertex_buffer.GetAddressOf());
     _ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+    
+    //アルファモードバッファに設定を書き込み。
+    D3D11_BUFFER_DESC cbDesc = {};
+    cbDesc.ByteWidth = sizeof(DirectX::XMFLOAT4); // 16バイト境界
+    cbDesc.Usage = D3D11_USAGE_DYNAMIC;
+    cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;//定数バッファとして扱うという意味
+    cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+    hr = device->CreateBuffer(&cbDesc, nullptr, alphaModeBuffer.GetAddressOf());
+    _ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+    
     // ③頂点シェーダーオブジェクトの生成
     {
         const char* cso_name{ "Shader\\compiled\\sprite_vs.cso" };
@@ -268,7 +279,15 @@ void sprite::render(ID3D11DeviceContext* immediate_context,
         vertices[0].color = vertices[1].color = vertices[2].color = vertices[3].color = { r, g, b, a };
     }
     immediate_context->Unmap(vertex_buffer.Get(), 0);
-
+    // アルファモードを定数バッファへ書き込み
+    D3D11_MAPPED_SUBRESOURCE mapped;
+    immediate_context->Map(alphaModeBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+    {
+        int* data = static_cast<int*>(mapped.pData);
+        data[0] = static_cast<int>(mAlphaMode);
+        //追加のアルファモード設定を追加する場合は、この下で()[0]以外に書き込む。
+    }
+    immediate_context->Unmap(alphaModeBuffer.Get(), 0);
     // ⑤ 描画の実行
     UINT stride{ sizeof(vertex) };
     UINT offset{ 0 };

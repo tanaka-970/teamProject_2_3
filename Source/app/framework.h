@@ -28,7 +28,7 @@ extern ImWchar glyphRangesJapanese[];
 #include "static_mesh.h"
 #include "framebuffer.h"
 #include "fullscreen_quad.h"
-
+#include "UI.h"
 #include "pbr_renderer.h"
 #include "toon_renderer.h"
 #include "csm_renderer.h"
@@ -214,6 +214,7 @@ public:
     bool stats_window_placed_{ false };
 
     GameScene*       game_scene{ nullptr };
+    UIManager        uiManager;
     bool             enable_scene_game{ true };
     bool             editor_mode{ false };
 
