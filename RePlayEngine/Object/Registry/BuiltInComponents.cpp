@@ -10,6 +10,8 @@
 #include "../../Components/Gameplay/PlayerControllerComponent.h"
 #include "../../Components/Gameplay/PlayerInputComponent.h"
 #include "../../Components/Gameplay/RotatorComponent.h"
+#include "../../Components/Physics/BoxColliderComponent.h"
+#include "../../Components/Physics/CapsuleColliderComponent.h"
 #include "../../Components/Physics/MeshColliderComponent.h"
 #include "../../Components/Physics/SphereColliderComponent.h"
 #include "../../Components/Rendering/AnimatorComponent.h"
@@ -21,7 +23,9 @@ namespace ReplayEngine::Core
     namespace
     {
         using Components::AnimatorComponent;
+        using Components::BoxColliderComponent;
         using Components::CameraTargetComponent;
+        using Components::CapsuleColliderComponent;
         using Components::CharacterMotorComponent;
         using Components::HealthComponent;
         using Components::MeshColliderComponent;
@@ -221,6 +225,47 @@ namespace ReplayEngine::Core
                 MakeProperty("playing", &AnimatorComponent::playing).Display("再生"));
         }
 
+        // すべての Collider に共通するプロパティ。
+        //
+        // 形状ごとに同じ 5 行を書き写すと、片方だけ直し忘れる事故が起きる。
+        // 共通部分はここ 1 か所にまとめ、形状ごとの登録から呼ぶ。
+        // 登録先の型が違うだけなのでテンプレートで足りる。
+        template<class T>
+        void RegisterColliderCommon()
+        {
+            PropertyRegistry::Register<T>(
+                MakeProperty("collider_key", &T::collider_key)
+                    .Display("Collider 番号").ReadOnly().HiddenInEditor()
+                    .Tooltip("GameObject の中でこの Collider を指す番号。"
+                        "Character Motor の参照に使われる。自動で振られる。"));
+
+            PropertyRegistry::Register<T>(
+                MakeProperty("center_offset", &T::center_offset)
+                    .Display("中心オフセット").Step(0.01));
+
+            PropertyRegistry::Register<T>(
+                MakeProperty("collision_layer", &T::collision_layer)
+                    .Display("レイヤー").AsCollisionLayer()
+                    .Tooltip("この Collider が属するレイヤー。"));
+
+            PropertyRegistry::Register<T>(
+                MakeProperty("collision_mask", &T::collision_mask)
+                    .Display("衝突する相手").AsCollisionMask()
+                    .Tooltip("衝突を受け付けるレイヤー。"
+                        "双方が互いを含んでいるときだけ衝突する。"));
+
+            PropertyRegistry::Register<T>(
+                MakeProperty("is_trigger", &T::is_trigger)
+                    .Display("トリガー")
+                    .Tooltip("true なら通り抜ける。押し戻しと接地からは必ず除外される。"
+                        "代わりに OnTriggerEnter / Stay / Exit が届く。"));
+
+            PropertyRegistry::Register<T>(
+                MakeProperty("debug_draw", &T::debug_draw)
+                    .Display("形状を表示")
+                    .Tooltip("Editor の Scene View へ形状を描く。"));
+        }
+
         void RegisterSphereCollider()
         {
             ComponentRegistry::Register<SphereColliderComponent>(
@@ -228,13 +273,11 @@ namespace ReplayEngine::Core
                     .WithTooltip("球状の衝突形状。中心は Owner の Transform から求める。")
                     .AllowMultipleInstances());
 
+            RegisterColliderCommon<SphereColliderComponent>();
+
             PropertyRegistry::Register<SphereColliderComponent>(
                 MakeProperty("radius", &SphereColliderComponent::radius)
                     .Display("半径").Range(0.01, 100.0).Step(0.01));
-
-            PropertyRegistry::Register<SphereColliderComponent>(
-                MakeProperty("center_offset", &SphereColliderComponent::center_offset)
-                    .Display("中心オフセット").Step(0.01));
 
             PropertyRegistry::Register<SphereColliderComponent>(
                 MakeProperty("skin_width", &SphereColliderComponent::skin_width)
@@ -245,6 +288,46 @@ namespace ReplayEngine::Core
                     .Display("歩ける傾斜のしきい値").Range(-1.0, 1.0).Step(0.01));
         }
 
+        void RegisterBoxCollider()
+        {
+            ComponentRegistry::Register<BoxColliderComponent>(
+                ComponentTypeInfo::Describe("Box Collider", "Physics")
+                    .WithTooltip("直方体の衝突形状。"
+                        "GameObject の位置・回転・拡大率をすべて反映する。")
+                    .AllowMultipleInstances());
+
+            RegisterColliderCommon<BoxColliderComponent>();
+
+            PropertyRegistry::Register<BoxColliderComponent>(
+                MakeProperty("size", &BoxColliderComponent::size)
+                    .Display("サイズ").Step(0.01)
+                    .Tooltip("辺の長さ。半分の長さではない。"));
+        }
+
+        void RegisterCapsuleCollider()
+        {
+            ComponentRegistry::Register<CapsuleColliderComponent>(
+                ComponentTypeInfo::Describe("Capsule Collider", "Physics")
+                    .WithTooltip("カプセルの衝突形状。キャラクターの移動用に向く。")
+                    .AllowMultipleInstances());
+
+            RegisterColliderCommon<CapsuleColliderComponent>();
+
+            PropertyRegistry::Register<CapsuleColliderComponent>(
+                MakeProperty("radius", &CapsuleColliderComponent::radius)
+                    .Display("半径").Range(0.01, 100.0).Step(0.01));
+
+            PropertyRegistry::Register<CapsuleColliderComponent>(
+                MakeProperty("height", &CapsuleColliderComponent::height)
+                    .Display("高さ").Range(0.01, 200.0).Step(0.01)
+                    .Tooltip("両端の半球を含めた全長。"
+                        "直径を下回る値を入れると、判定は直径まで切り上げられ警告が出る。"));
+
+            PropertyRegistry::Register<CapsuleColliderComponent>(
+                MakeProperty("axis", &CapsuleColliderComponent::axis)
+                    .Display("軸").AsEnum({ "X", "Y", "Z" }));
+        }
+
         void RegisterMeshCollider()
         {
             ComponentRegistry::Register<MeshColliderComponent>(
@@ -252,6 +335,8 @@ namespace ReplayEngine::Core
                     .WithTooltip("三角形メッシュの衝突形状（静的環境用）。"
                         "Cook データは AssetGUID 単位で共有される。")
                     .AllowMultipleInstances());
+
+            RegisterColliderCommon<MeshColliderComponent>();
 
             PropertyRegistry::Register<MeshColliderComponent>(
                 MakeProperty("mesh_source", &MeshColliderComponent::mesh_source)
@@ -274,18 +359,11 @@ namespace ReplayEngine::Core
                     .Display("両面に当たる"));
 
             PropertyRegistry::Register<MeshColliderComponent>(
-                MakeProperty("is_trigger", &MeshColliderComponent::is_trigger)
-                    .Display("トリガー")
-                    .Tooltip("true なら通り抜ける。押し戻しへは使われない。"));
-
-            PropertyRegistry::Register<MeshColliderComponent>(
-                MakeProperty("collision_layer", &MeshColliderComponent::collision_layer)
-                    .Display("レイヤー").Range(0.0, 31.0).Step(1.0));
-
-            PropertyRegistry::Register<MeshColliderComponent>(
-                MakeProperty("collision_mask", &MeshColliderComponent::collision_mask)
-                    .Display("衝突マスク")
-                    .Tooltip("-1 ですべてのレイヤーと衝突する。完全な Layer Matrix は未実装。"));
+                MakeProperty("debug_draw_wireframe",
+                    &MeshColliderComponent::debug_draw_wireframe)
+                    .Display("三角形を表示")
+                    .Tooltip("既定は境界ボックスのみ。"
+                        "有効にすると衝突三角形そのものを描く（重い）。"));
         }
 
         void RegisterCharacterMotor()
@@ -293,6 +371,15 @@ namespace ReplayEngine::Core
             ComponentRegistry::Register<CharacterMotorComponent>(
                 ComponentTypeInfo::Describe("Character Motor", "Gameplay")
                     .WithTooltip("移動・重力・ジャンプ・接地。プレイヤーと敵の双方から使える。"));
+
+            // 移動用 Collider は明示的に選ぶ。暗黙の自動選択はしない。
+            // 一覧には Sphere / Capsule / Box だけが出る（Mesh と Trigger は除外）。
+            PropertyRegistry::Register<CharacterMotorComponent>(
+                MakeProperty("primary_collider_key",
+                    &CharacterMotorComponent::primary_collider_key)
+                    .Display("移動用 Collider").AsColliderReference()
+                    .Tooltip("移動・接地・押し戻しに使う Collider。"
+                        "未設定だと地形との当たり判定を行わない。"));
 
             PropertyRegistry::Register<CharacterMotorComponent>(
                 MakeProperty("move_speed", &CharacterMotorComponent::move_speed)
@@ -411,6 +498,8 @@ namespace ReplayEngine::Core
         RegisterSkinnedMeshRenderer();
         RegisterAnimator();
         RegisterSphereCollider();
+        RegisterBoxCollider();
+        RegisterCapsuleCollider();
         RegisterMeshCollider();
         RegisterCharacterMotor();
         RegisterPlayerInput();

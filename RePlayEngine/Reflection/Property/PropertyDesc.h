@@ -72,6 +72,27 @@ namespace ReplayEngine::Reflection
         PropertyDesc& AsQuaternion() { type = PropertyType::Quaternion; return *this; }
         PropertyDesc& AsAssetPath() { type = PropertyType::AssetPath; return *this; }
 
+        // 内部は int のまま、Inspector での意味だけを変える。
+        //   Layer 番号        -> AsCollisionLayer()     … Layer 名の一覧から選ぶ
+        //   Layer のビット列  -> AsCollisionMask()      … Layer 名のチェックボックス
+        //   collider_key      -> AsColliderReference()  … 同じ GameObject の Collider を選ぶ
+        // どれも整数を直接いじらせないための指定。
+        PropertyDesc& AsCollisionLayer()
+        {
+            type = PropertyType::CollisionLayer;
+            return *this;
+        }
+        PropertyDesc& AsCollisionMask()
+        {
+            type = PropertyType::CollisionMask;
+            return *this;
+        }
+        PropertyDesc& AsColliderReference()
+        {
+            type = PropertyType::ColliderReference;
+            return *this;
+        }
+
         PropertyDesc& AsEnum(std::vector<std::string> labels)
         {
             type = PropertyType::Enum;

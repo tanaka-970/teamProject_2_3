@@ -1,7 +1,10 @@
 ﻿#include "PropertyDrawer.h"
 
 #include "../../Assets/AssetDatabase.h"
+#include "../../Components/Physics/ColliderComponent.h"
 #include "../../Object/Component/Component.h"
+#include "../../Object/GameObject/GameObject.h"
+#include "../../Physics/CollisionLayers.h"
 #include "../../Reflection/Property/PropertyDesc.h"
 #include "../../Reflection/Registry/PropertyRegistry.h"
 #include "../../Scene/Runtime/Scene.h"
@@ -65,6 +68,42 @@ namespace ReplayEngine::Editor
         float MaximumOrDefault(const PropertyDesc& desc, float fallback) noexcept
         {
             return desc.has_range ? static_cast<float>(desc.maximum) : fallback;
+        }
+
+        // Layer マスクを人が読める要約にする。
+        // 「31」ではなく「Default, Player, Enemy」と出す。
+        std::string MaskSummary(int mask)
+        {
+            if (mask == 0) return "なし";
+            if ((mask & Physics::CollisionLayers::all_layers_mask) ==
+                Physics::CollisionLayers::all_layers_mask)
+            {
+                return "すべて";
+            }
+
+            std::string summary;
+            int shown = 0;
+            for (int layer = 0; layer < Physics::CollisionLayers::count; ++layer)
+            {
+                if ((mask & Physics::CollisionLayers::MaskBit(layer)) == 0) continue;
+                if (shown >= 3)
+                {
+                    summary += " ...";
+                    break;
+                }
+                if (!summary.empty()) summary += ", ";
+                summary += Physics::CollisionLayers::Name(layer);
+                ++shown;
+            }
+            return summary;
+        }
+
+        // Collider 1 つ分の表示名。「形状名 #キー」の形にする。
+        // 同じ形状が複数付いていても見分けられる。
+        std::string ColliderLabel(const Components::ColliderComponent& collider)
+        {
+            return std::string(Components::ToString(collider.Shape())) +
+                " #" + std::to_string(collider.collider_key);
         }
 
         // std::string を ImGui::InputText で編集するための固定長バッファ。
@@ -386,6 +425,121 @@ namespace ReplayEngine::Editor
             else
             {
                 ImGui::TextDisabled("ObjectID %s", value.ToString().c_str());
+            }
+            break;
+        }
+        case PropertyType::CollisionLayer:
+        {
+            // 整数を直接見せない。Layer 名の一覧から選ぶ。
+            const int value = Physics::CollisionLayers::ClampLayer(current.AsInt());
+            if (ImGui::BeginCombo(label.c_str(), Physics::CollisionLayers::Name(value)))
+            {
+                for (int layer = 0; layer < Physics::CollisionLayers::count; ++layer)
+                {
+                    const bool selected = layer == value;
+                    if (ImGui::Selectable(Physics::CollisionLayers::Name(layer), selected))
+                    {
+                        desc.Apply(component, PropertyValue::MakeCollisionLayer(layer));
+                        changed = true;
+                    }
+                    if (selected) ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+            break;
+        }
+        case PropertyType::CollisionMask:
+        {
+            // ビット列も整数では見せない。Layer 名のチェックボックスにする。
+            int value = current.AsInt();
+
+            // 旧データ互換: -1 は「すべて」の意味だったので、全ビット立てへ直す。
+            if (value == -1) value = Physics::CollisionLayers::all_layers_mask;
+
+            const std::string summary = MaskSummary(value);
+            if (ImGui::BeginCombo(label.c_str(), summary.c_str()))
+            {
+                if (ImGui::Selectable("すべて", false))
+                {
+                    desc.Apply(component, PropertyValue::MakeCollisionMask(
+                        Physics::CollisionLayers::all_layers_mask));
+                    changed = true;
+                }
+                if (ImGui::Selectable("なし", false))
+                {
+                    desc.Apply(component, PropertyValue::MakeCollisionMask(0));
+                    changed = true;
+                }
+                ImGui::Separator();
+
+                for (int layer = 0; layer < Physics::CollisionLayers::count; ++layer)
+                {
+                    const int bit = Physics::CollisionLayers::MaskBit(layer);
+                    bool enabled = (value & bit) != 0;
+                    if (ImGui::Checkbox(Physics::CollisionLayers::Name(layer), &enabled))
+                    {
+                        const int updated = enabled ? (value | bit) : (value & ~bit);
+                        desc.Apply(component, PropertyValue::MakeCollisionMask(updated));
+                        changed = true;
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            break;
+        }
+        case PropertyType::ColliderReference:
+        {
+            // 同じ GameObject に付いている Collider の一覧から選ぶ。
+            // Component 名でも GameObject 名でもなく collider_key を保存する。
+            const int value = current.AsInt();
+            Core::GameObject* owner = component.Owner();
+
+            std::string preview = "(未設定)";
+            const Components::ColliderComponent* selected_collider = nullptr;
+            if (owner != nullptr && value > 0)
+            {
+                selected_collider = Components::FindColliderByKey(*owner, value);
+                preview = selected_collider != nullptr
+                    ? ColliderLabel(*selected_collider) : std::string("Missing Collider");
+            }
+
+            if (ImGui::BeginCombo(label.c_str(), preview.c_str()))
+            {
+                if (ImGui::Selectable("(未設定)", value <= 0))
+                {
+                    desc.Apply(component, PropertyValue::MakeColliderReference(0));
+                    changed = true;
+                }
+                if (owner != nullptr)
+                {
+                    for (std::size_t index = 0; index < owner->ComponentCount(); ++index)
+                    {
+                        const auto* collider = dynamic_cast<const Components::ColliderComponent*>(
+                            owner->ComponentAt(index));
+                        if (collider == nullptr || collider->PendingDestroy()) continue;
+
+                        // 候補を制限する。
+                        // Mesh Collider と Trigger Collider は移動用に使えないので出さない。
+                        if (!collider->UsableAsCharacterShape()) continue;
+                        if (collider->is_trigger) continue;
+
+                        const bool is_selected = collider->collider_key == value;
+                        if (ImGui::Selectable(ColliderLabel(*collider).c_str(), is_selected))
+                        {
+                            desc.Apply(component, PropertyValue::MakeColliderReference(
+                                collider->collider_key));
+                            changed = true;
+                        }
+                        if (is_selected) ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
+            }
+
+            if (value > 0 && selected_collider == nullptr)
+            {
+                ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.25f, 1.0f),
+                    u8"⚠ 移動用 Collider が設定されていません");
             }
             break;
         }

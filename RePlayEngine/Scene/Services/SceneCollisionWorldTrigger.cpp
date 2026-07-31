@@ -1,0 +1,255 @@
+// SceneCollisionWorld のうち「Trigger の重なり判定とイベント配送」だけを持つ。
+//
+// 【Enter / Stay / Exit の作り方】
+//   接触しているペアを覚えておき、フレーム番号で「今回も見えたか」を判定する。
+//     初めて見えた   -> Enter
+//     前回も見えた   -> Stay
+//     今回見えなかった -> Exit（そしてペアを捨てる）
+//   接触している間ずっと Enter が飛ぶことはない。
+//
+// 【削除への強さ】
+//   ペアが持つのは ObjectID と ColliderID だけ。生ポインタは持たない。
+//   配送のたびに Scene から引き直すので、途中で削除されても
+//   「引けなかった」で終わるだけ。無効ポインタへ触ることがない。
+
+#include "SceneCollisionWorld.h"
+
+#include "../Runtime/Scene.h"
+#include "../../Components/Physics/BoxColliderComponent.h"
+#include "../../Components/Physics/CapsuleColliderComponent.h"
+#include "../../Components/Physics/SphereColliderComponent.h"
+#include "../../Object/GameObject/GameObject.h"
+#include "../../Physics/CollisionLayers.h"
+#include "../../Physics/ShapeSweep.h"
+
+#include <cmath>
+
+using namespace DirectX;
+
+namespace ReplayEngine::Scene
+{
+    namespace Layers = Physics::CollisionLayers;
+
+    bool SceneCollisionWorld::Overlaps(const Components::ColliderComponent& trigger,
+        const Components::ColliderComponent& other) const
+    {
+        // 相手を「動かない球（または線分）」とみなし、
+        // 移動量 0 のスイープを掛けて「開始時点で重なっているか」を見る。
+        //
+        // Trigger 側が Mesh / Box の場合はローカル空間の三角形へ落ちるので、
+        // 相手の形は球で近似する。近似は必ず本来より大きい側へ倒してあるので、
+        // 「Trigger の中に入ったのに反応しない」ことは起きない
+        // （代わりに、ごくわずかに早く反応することがある）。
+        XMFLOAT3 probe_center{ 0.0f, 0.0f, 0.0f };
+        float probe_radius = 0.0f;
+
+        switch (other.Shape())
+        {
+        case Components::ColliderShape::Sphere:
+        {
+            const auto& sphere = static_cast<const Components::SphereColliderComponent&>(other);
+            probe_center = sphere.WorldCenter();
+            probe_radius = sphere.EffectiveRadius();
+            break;
+        }
+        case Components::ColliderShape::Capsule:
+        {
+            const auto& capsule =
+                static_cast<const Components::CapsuleColliderComponent&>(other);
+            XMFLOAT3 segment_start{};
+            XMFLOAT3 segment_end{};
+            capsule.WorldSegment(segment_start, segment_end);
+
+            // Trigger 側も球なら、近似せずカプセル対球として厳密に解く。
+            if (trigger.Shape() == Components::ColliderShape::Sphere)
+            {
+                const auto& sphere =
+                    static_cast<const Components::SphereColliderComponent&>(trigger);
+                const XMFLOAT3 center = sphere.WorldCenter();
+                Physics::SphereCastHit hit{};
+                return Physics::SweepSphereAgainstCapsule(center, center,
+                    sphere.EffectiveRadius(), segment_start, segment_end,
+                    capsule.EffectiveRadius(), hit);
+            }
+
+            // それ以外は線分を内包する球で近似する。
+            const float half_length = 0.5f * std::sqrt(
+                (segment_end.x - segment_start.x) * (segment_end.x - segment_start.x) +
+                (segment_end.y - segment_start.y) * (segment_end.y - segment_start.y) +
+                (segment_end.z - segment_start.z) * (segment_end.z - segment_start.z));
+            probe_center = XMFLOAT3{
+                (segment_start.x + segment_end.x) * 0.5f,
+                (segment_start.y + segment_end.y) * 0.5f,
+                (segment_start.z + segment_end.z) * 0.5f };
+            probe_radius = capsule.EffectiveRadius() + half_length;
+            break;
+        }
+        case Components::ColliderShape::Box:
+        {
+            const auto& box = static_cast<const Components::BoxColliderComponent&>(other);
+            const XMFLOAT3 half = box.WorldHalfExtents();
+            probe_center = box.WorldCenter();
+            // 外接球で近似する。取りこぼすより多めに拾う方を選ぶ。
+            probe_radius = std::sqrt(half.x * half.x + half.y * half.y + half.z * half.z);
+            break;
+        }
+        case Components::ColliderShape::Mesh:
+        {
+            XMFLOAT3 minimum{};
+            XMFLOAT3 maximum{};
+            if (!other.ComputeWorldBounds(minimum, maximum)) return false;
+            probe_center = XMFLOAT3{
+                (minimum.x + maximum.x) * 0.5f,
+                (minimum.y + maximum.y) * 0.5f,
+                (minimum.z + maximum.z) * 0.5f };
+            probe_radius = 0.5f * std::sqrt(
+                (maximum.x - minimum.x) * (maximum.x - minimum.x) +
+                (maximum.y - minimum.y) * (maximum.y - minimum.y) +
+                (maximum.z - minimum.z) * (maximum.z - minimum.z));
+            break;
+        }
+        }
+
+        if (probe_radius <= 0.0f) return false;
+
+        Physics::SphereCastHit hit{};
+        // 移動量 0 のスイープ。当たったなら開始時点で重なっている。
+        return SweepSingleCollider(trigger, probe_center, probe_center, probe_radius, hit);
+    }
+
+    void SceneCollisionWorld::DispatchTriggerEvents()
+    {
+        if (scene_ == nullptr) return;
+        if (trigger_collider_count_ == 0 && pairs_.empty()) return;
+
+        ++trigger_frame_;
+
+        // ---- 現フレームの接触を調べる ----------------------------------------
+        for (const Registration& trigger_entry : entries_)
+        {
+            if (!trigger_entry.active || !trigger_entry.trigger) continue;
+            if (!trigger_entry.bounds_valid) continue;
+
+            const Components::ColliderComponent* trigger = Resolve(trigger_entry);
+            if (trigger == nullptr || !trigger->ActiveInHierarchy()) continue;
+
+            for (const Registration& other_entry : entries_)
+            {
+                if (!other_entry.active || other_entry.trigger) continue;
+                if (!other_entry.bounds_valid) continue;
+
+                // 同じ GameObject 同士は無視する。
+                // 自分の当たり判定が自分の Trigger を叩き続けるのは無意味なため。
+                if (other_entry.object == trigger_entry.object) continue;
+
+                if (!Layers::Interact(trigger_entry.layer, trigger_entry.mask,
+                    other_entry.layer, other_entry.mask))
+                {
+                    continue;
+                }
+
+                if (!Physics::BoundsOverlap(trigger_entry.bounds_min, trigger_entry.bounds_max,
+                    other_entry.bounds_min, other_entry.bounds_max))
+                {
+                    continue;
+                }
+
+                const Components::ColliderComponent* other = Resolve(other_entry);
+                if (other == nullptr || !other->ActiveInHierarchy()) continue;
+
+                if (!Overlaps(*trigger, *other)) continue;
+
+                // 既知のペアなら Stay、初見なら Enter。
+                Pair* existing = nullptr;
+                for (Pair& pair : pairs_)
+                {
+                    if (pair.trigger_collider == trigger_entry.collider &&
+                        pair.other_collider == other_entry.collider)
+                    {
+                        existing = &pair;
+                        break;
+                    }
+                }
+
+                Core::TriggerContact contact;
+                contact.trigger_object = trigger_entry.object;
+                contact.trigger_collider = trigger_entry.collider;
+                contact.other_object = other_entry.object;
+                contact.other_collider = other_entry.collider;
+
+                if (existing != nullptr)
+                {
+                    existing->last_seen = trigger_frame_;
+                    DispatchToPair(contact, ContactPhase::Stay);
+                }
+                else
+                {
+                    Pair pair;
+                    pair.trigger_object = trigger_entry.object;
+                    pair.trigger_collider = trigger_entry.collider;
+                    pair.other_object = other_entry.object;
+                    pair.other_collider = other_entry.collider;
+                    pair.last_seen = trigger_frame_;
+                    pairs_.push_back(pair);
+                    DispatchToPair(contact, ContactPhase::Enter);
+                }
+            }
+        }
+
+        // ---- 今フレーム見えなかったペアは Exit -------------------------------
+        //
+        // GameObject や Collider が削除された場合もここで片付く。
+        // 配送先は ObjectID から引き直すので、既に消えていれば何も起きない。
+        for (std::size_t index = 0; index < pairs_.size();)
+        {
+            if (pairs_[index].last_seen == trigger_frame_)
+            {
+                ++index;
+                continue;
+            }
+
+            Core::TriggerContact contact;
+            contact.trigger_object = pairs_[index].trigger_object;
+            contact.trigger_collider = pairs_[index].trigger_collider;
+            contact.other_object = pairs_[index].other_object;
+            contact.other_collider = pairs_[index].other_collider;
+
+            // 先にペアを外してから配送する。
+            // 配送先が Destroy を呼んでも、既に外れているので二重 Exit にならない。
+            pairs_.erase(pairs_.begin() + static_cast<std::ptrdiff_t>(index));
+            DispatchToPair(contact, ContactPhase::Exit);
+        }
+    }
+
+    void SceneCollisionWorld::DispatchToPair(const Core::TriggerContact& contact,
+        ContactPhase phase) const
+    {
+        DispatchToObject(contact.trigger_object, contact, phase);
+        DispatchToObject(contact.other_object, contact, phase);
+    }
+
+    void SceneCollisionWorld::DispatchToObject(Core::ObjectID target,
+        const Core::TriggerContact& contact, ContactPhase phase) const
+    {
+        if (scene_ == nullptr || !target.Valid()) return;
+
+        Core::GameObject* object = scene_->FindGameObjectByID(target);
+        if (object == nullptr || !object->ActiveInHierarchy()) return;
+
+        // 添字で回す。配送中に Component が増えても添字は壊れない
+        // （削除は予約のみで、実体は同期点まで残る）。
+        for (std::size_t index = 0; index < object->ComponentCount(); ++index)
+        {
+            Core::Component* component = object->ComponentAt(index);
+            if (component == nullptr || component->PendingDestroy()) continue;
+            if (!component->ActiveInHierarchy()) continue;
+
+            switch (phase)
+            {
+            case ContactPhase::Enter: component->OnTriggerEnter(contact); break;
+            case ContactPhase::Stay:  component->OnTriggerStay(contact);  break;
+            case ContactPhase::Exit:  component->OnTriggerExit(contact);  break;
+            }
+        }
+    }
+}

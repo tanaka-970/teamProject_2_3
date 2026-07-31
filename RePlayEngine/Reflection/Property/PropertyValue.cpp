@@ -283,11 +283,27 @@ namespace ReplayEngine::Reflection
 
         case PropertyType::Int:
         case PropertyType::Enum:
+        case PropertyType::CollisionLayer:
+        case PropertyType::CollisionMask:
+        case PropertyType::ColliderReference:
+            // 内部表現がどれも int なので、意味の付け替えとして相互に通す。
+            // 古い Scene が生の int で保存していた値も、そのまま読める。
             if (type_ == PropertyType::Bool || type_ == PropertyType::Int ||
                 type_ == PropertyType::Enum || type_ == PropertyType::Float ||
-                type_ == PropertyType::Double)
+                type_ == PropertyType::Double ||
+                type_ == PropertyType::CollisionLayer ||
+                type_ == PropertyType::CollisionMask ||
+                type_ == PropertyType::ColliderReference)
             {
-                out = target == PropertyType::Enum ? MakeEnum(AsInt()) : MakeInt(AsInt());
+                const int raw = AsInt();
+                switch (target)
+                {
+                case PropertyType::Enum:              out = MakeEnum(raw); break;
+                case PropertyType::CollisionLayer:    out = MakeCollisionLayer(raw); break;
+                case PropertyType::CollisionMask:     out = MakeCollisionMask(raw); break;
+                case PropertyType::ColliderReference: out = MakeColliderReference(raw); break;
+                default:                              out = MakeInt(raw); break;
+                }
                 return true;
             }
             return false;

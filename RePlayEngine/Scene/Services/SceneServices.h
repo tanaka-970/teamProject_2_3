@@ -2,6 +2,7 @@
 
 #include "ICameraBasisProvider.h"
 #include "IPhysicsQueryService.h"
+#include "LegacyStageMigrationState.h"
 #include "ScenePlayerMigrationState.h"
 #include "../../Core/ObjectID/ObjectID.h"
 
@@ -41,6 +42,29 @@ namespace ReplayEngine::Scene
         ScenePlayerMigrationState& PlayerMigration() noexcept { return migration_; }
         const ScenePlayerMigrationState& PlayerMigration() const noexcept { return migration_; }
 
+        // ---- 衝突まわりの Scene 単位の設定 ----------------------------------
+        //
+        // 【なぜ Scene が持つのか】
+        //   Backend Mode を Collider ごとの Property にすると、
+        //   同じ Scene の中に「Legacy を見る Collider」と「見ない Collider」が
+        //   混在してしまい、二重衝突の管理が破綻する。
+        //   Scene に 1 つだけ持たせて、SceneCollisionWorld が読む形にしてある。
+        //
+        //   実体はここ（Scene の状態）にあり、SceneCollisionWorld へは
+        //   framework が毎フレーム流し込む。Scene ファイルへ保存されるのもここ。
+        //
+        // 0 = Legacy Only / 1 = Hybrid / 2 = Scene Colliders Only
+        int CollisionBackendMode() const noexcept { return collision_backend_mode_; }
+        void SetCollisionBackendMode(int mode) noexcept { collision_backend_mode_ = mode; }
+
+        // 旧 Stage の衝突から MeshCollider へ移行した「移行元」の集合。
+        // 単一 bool ではないので、一部だけ移行した状態も表せる。
+        LegacyStageMigrationState& LegacyStageMigration() noexcept { return legacy_stage_; }
+        const LegacyStageMigrationState& LegacyStageMigration() const noexcept
+        {
+            return legacy_stage_;
+        }
+
         // Play Mode 中かどうか。
         // 入力を受け付けてよいか、物理を進めてよいかの判断に使う。
         bool Playing() const noexcept { return playing_; }
@@ -52,8 +76,8 @@ namespace ReplayEngine::Scene
             physics_ = nullptr;
             controlled_object_ = Core::ObjectID::Invalid();
             playing_ = false;
-            // 移行状態はここでリセットしない。Scene の内容に属する情報なので、
-            // サービス参照の付け替えでは消えてはいけない。
+            // 移行状態と Backend Mode はここでリセットしない。
+            // Scene の内容に属する情報なので、サービス参照の付け替えでは消えてはいけない。
         }
 
     private:
@@ -61,6 +85,8 @@ namespace ReplayEngine::Scene
         const IPhysicsQueryService* physics_ = nullptr;
         Core::ObjectID controlled_object_;
         ScenePlayerMigrationState migration_;
+        LegacyStageMigrationState legacy_stage_;
+        int collision_backend_mode_ = 1;   // Hybrid
         bool playing_ = false;
     };
 }

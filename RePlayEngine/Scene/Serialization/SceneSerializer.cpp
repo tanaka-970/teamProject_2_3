@@ -58,6 +58,10 @@ namespace ReplayEngine::Scene::Serialization
                 break;
             case PropertyType::Int:
             case PropertyType::Enum:
+            case PropertyType::CollisionLayer:
+            case PropertyType::CollisionMask:
+            case PropertyType::ColliderReference:
+                // どれも内部表現は int。書式は同じで、型名だけが違う。
                 stream << value.AsInt();
                 break;
             case PropertyType::Float:
@@ -125,11 +129,25 @@ namespace ReplayEngine::Scene::Serialization
             }
             case PropertyType::Int:
             case PropertyType::Enum:
+            case PropertyType::CollisionLayer:
+            case PropertyType::CollisionMask:
+            case PropertyType::ColliderReference:
             {
                 int raw = 0;
                 if (!(stream >> raw)) { error = "int を読み取れません。"; return false; }
-                bag.Set(name, type == PropertyType::Enum
-                    ? PropertyValue::MakeEnum(raw) : PropertyValue::MakeInt(raw));
+                switch (type)
+                {
+                case PropertyType::Enum:
+                    bag.Set(name, PropertyValue::MakeEnum(raw)); break;
+                case PropertyType::CollisionLayer:
+                    bag.Set(name, PropertyValue::MakeCollisionLayer(raw)); break;
+                case PropertyType::CollisionMask:
+                    bag.Set(name, PropertyValue::MakeCollisionMask(raw)); break;
+                case PropertyType::ColliderReference:
+                    bag.Set(name, PropertyValue::MakeColliderReference(raw)); break;
+                default:
+                    bag.Set(name, PropertyValue::MakeInt(raw)); break;
+                }
                 return true;
             }
             case PropertyType::Float:
@@ -239,6 +257,16 @@ namespace ReplayEngine::Scene::Serialization
             << (data.legacy_player_migrated ? 1 : 0) << ' '
             << data.migrated_player_object.Value() << '\n';
 
+        // v9 で追加。衝突の問い合わせ先と、旧 Stage の移行済み集合。
+        // Backend Mode は Scene に 1 つだけ持ち、Component へは重複させない。
+        stream << "COLLISION_STATE " << data.collision_backend_mode << ' '
+            << data.migrated_legacy_sources.size();
+        for (const std::uint64_t source : data.migrated_legacy_sources)
+        {
+            stream << ' ' << source;
+        }
+        stream << '\n';
+
         stream << "OBJECT_COUNT " << data.objects.size() << '\n';
 
         for (const GameObjectData& object : data.objects)
@@ -324,6 +352,34 @@ namespace ReplayEngine::Scene::Serialization
             data.controlled_object = Core::ObjectID(controlled);
             data.legacy_player_migrated = migrated != 0;
             data.migrated_player_object = Core::ObjectID(migrated_object);
+        }
+
+        // v9 で追加した衝突まわりの状態。
+        // v7 / v8 には存在しないので、既定値のまま読み進める。
+        //   Backend Mode = Hybrid（開く前と同じ挙動から始まる）
+        //   移行済み集合 = 空（旧 Stage は未移行として扱う）
+        if (version >= 9)
+        {
+            if (!Expect(stream, "COLLISION_STATE", error)) return false;
+            std::size_t source_count = 0;
+            if (!(stream >> data.collision_backend_mode >> source_count) ||
+                source_count > maximum_objects)
+            {
+                error = "衝突の設定を読み取れません。";
+                return false;
+            }
+            data.migrated_legacy_sources.clear();
+            data.migrated_legacy_sources.reserve(source_count);
+            for (std::size_t index = 0; index < source_count; ++index)
+            {
+                std::uint64_t source = 0;
+                if (!(stream >> source))
+                {
+                    error = "移行済み Legacy Stage の一覧を読み取れません。";
+                    return false;
+                }
+                data.migrated_legacy_sources.push_back(source);
+            }
         }
 
         if (!Expect(stream, "OBJECT_COUNT", error)) return false;

@@ -62,6 +62,8 @@ extern ImWchar glyphRangesJapanese[];
 #include "../../RePlayEngine/Editor/Inspector/InspectorPanel.h"
 #include "../../RePlayEngine/Rendering/Adapter/RenderItem.h"
 #include "../../RePlayEngine/Scene/Services/PlayerControlSystem.h"
+#include "../../RePlayEngine/Scene/Services/SceneCollisionWorld.h"
+#include "../../RePlayEngine/Editor/Debug/ColliderDebugDraw.h"
 #include "../game/legacy_camera_basis_bridge.h"
 #include "../game/legacy_stage_collision_bridge.h"
 
@@ -553,6 +555,24 @@ private:
     void update_object_camera_follow(float elapsed_time);
     void refresh_object_scene_services();
     bool convert_legacy_player_to_gameobject();
+
+    // --- 衝突 (Source/app/Runtime/framework_collision_world.cpp) ------------
+    // Scene の切り替えと Play / Edit の切り替えに合わせて衝突世界をつなぎ替える。
+    void initialize_collision_world();
+    void attach_collision_world(ReplayEngine::Scene::Scene& scene);
+    void detach_collision_world();
+    void refresh_collision_world();
+    void dispatch_collision_triggers();
+
+    // --- 衝突メッシュの供給 (framework_collision_mesh_source.cpp) -----------
+    // AssetGUID -> ローカル空間の三角形。Cook キャッシュから呼ばれる。
+    bool load_collision_triangles(const ReplayEngine::Physics::CookKey& key,
+        std::vector<ReplayEngine::Physics::Triangle>& out_local_triangles);
+    std::string resolve_asset_revision(const std::string& asset_guid) const;
+
+    // --- 衝突の可視化と診断 (Source/app/Editor/framework_collider_debug.cpp) -
+    void draw_collider_debug_overlay();
+    void draw_collision_diagnostics_panel();
     const skinned_mesh::animation::keyframe* resolve_object_keyframe(
         skinned_mesh& mesh, int clip_index, float animation_time) const;
     void draw_project_panel();
