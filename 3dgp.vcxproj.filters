@@ -1028,5 +1028,8 @@
     <ClInclude Include="RePlayEngine\Rendering\Adapter\SceneRenderCollector.h">
       <Filter>RePlayEngine\Rendering\Adapter</Filter>
     </ClInclude>
+    <ClCompile Include="Source\app\Runtime\framework_gameobject_scene.cpp">
+      <Filter>Source\App\Runtime</Filter>
+    </ClCompile>
 </ItemGroup>
 </Project>

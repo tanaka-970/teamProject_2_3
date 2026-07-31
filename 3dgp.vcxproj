@@ -284,6 +284,7 @@
     <ClCompile Include="RePlayEngine\Editor\Inspector\PropertyDrawer.cpp" />
     <ClCompile Include="RePlayEngine\Editor\ComponentBrowser\AddComponentPanel.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Adapter\SceneRenderCollector.cpp" />
+    <ClCompile Include="Source\app\Runtime\framework_gameobject_scene.cpp" />
 </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\render\csm_renderer.h" />
