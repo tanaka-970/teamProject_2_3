@@ -270,6 +270,12 @@
     <ClCompile Include="RePlayEngine\Reflection\Property\PropertyBag.cpp" />
     <ClCompile Include="RePlayEngine\Reflection\Registry\PropertyRegistry.cpp" />
     <ClCompile Include="RePlayEngine\Scene\Runtime\Scene.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Core\TransformComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Gameplay\RotatorComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Gameplay\HealthComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponents.cpp" />
+    <ClCompile Include="RePlayEngine\Scene\Serialization\SceneData.cpp" />
+    <ClCompile Include="RePlayEngine\Scene\Serialization\SceneSerializer.cpp" />
 </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\render\csm_renderer.h" />
@@ -298,8 +304,6 @@
     <ClInclude Include="RePlayEngine\Core\Components\AnimationComponent.h" />
     <ClInclude Include="RePlayEngine\Core\Components\ModelRendererComponent.h" />
     <ClInclude Include="RePlayEngine\Core\Components\IComponent.h" />
-    <ClInclude Include="RePlayEngine\Core\Components\GameObject.h" />
-    <ClInclude Include="RePlayEngine\Core\Components\TransformComponent.h" />
     <ClInclude Include="RePlayEngine\Core\Components\SphereColliderComponent.h" />
     <ClInclude Include="RePlayEngine\Core\Components\MeshColliderComponent.h" />
     <ClInclude Include="RePlayEngine\Core\Components\GravityComponent.h" />
@@ -360,6 +364,13 @@
     <ClInclude Include="RePlayEngine\Reflection\Property\PropertyBag.h" />
     <ClInclude Include="RePlayEngine\Reflection\Registry\PropertyRegistry.h" />
     <ClInclude Include="RePlayEngine\Scene\Runtime\Scene.h" />
+    <ClInclude Include="RePlayEngine\Components\Core\TransformComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Rendering\MeshRendererComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Gameplay\RotatorComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Gameplay\HealthComponent.h" />
+    <ClInclude Include="RePlayEngine\Object\Registry\BuiltInComponents.h" />
+    <ClInclude Include="RePlayEngine\Scene\Serialization\SceneData.h" />
+    <ClInclude Include="RePlayEngine\Scene\Serialization\SceneSerializer.h" />
 </ItemGroup>
   <ItemGroup>
     <None Include=".editorconfig" />

@@ -1,0 +1,131 @@
+#pragma once
+
+#include "../../Core/ObjectID/ObjectID.h"
+#include "../../Object/Component/ComponentTypeID.h"
+#include "../../Reflection/Property/PropertyBag.h"
+
+#include <DirectXMath.h>
+
+#include <string>
+#include <vector>
+
+namespace ReplayEngine::Scene
+{
+    class Scene;
+}
+
+namespace ReplayEngine::Scene::Serialization
+{
+    // Scene とファイルの間に挟む中間データ。
+    //
+    // なぜ中間層を置くか:
+    //   1. Scene クラスへファイル入出力を持ち込まないため。
+    //      Scene の責任は GameObject の所有と実行時管理だけに保つ。
+    //   2. 将来 JSON 出力を足すとき、SceneData から先を差し替えるだけで済むため。
+    //      Scene -> SceneData の変換はそのまま使い回せる。
+    //   3. Play Mode の複製に使えるため。
+    //      編集 Scene から SceneData を取り、実行用 Scene へ流し込めば、
+    //      Play 中の変更が編集 Scene へ戻らない。
+    //   4. 保存中にワーカースレッドが Scene を触らないようにできるため。
+    //      メインスレッドで SceneData を作り、書き出しだけを後回しにできる形にしてある。
+    //      （今回は書き出しも同期実行。並列化はしていない。）
+    //
+    // SceneData は素のデータだけを持ち、GPU リソースも生ポインタも保持しない。
+
+    struct ComponentData
+    {
+        // 保存の主キー。ComponentRegistry へ登録した型名と一致する。
+        std::string type_name;
+
+        // 読み込み時に type_name から引き直す補助キー。ファイルには書かない。
+        Core::ComponentTypeID type_id = Core::invalid_component_type_id;
+
+        bool enabled = true;
+
+        Reflection::PropertyBag properties;
+    };
+
+    struct GameObjectData
+    {
+        Core::ObjectID id;
+
+        // 無効 ID なら Scene 直下。
+        Core::ObjectID parent_id;
+
+        std::string name{ "GameObject" };
+        bool enabled = true;
+
+        // ローカル値。回転はラジアンのオイラー角（Transform の内部表現と同じ）。
+        DirectX::XMFLOAT3 position{ 0.0f, 0.0f, 0.0f };
+        DirectX::XMFLOAT3 rotation{ 0.0f, 0.0f, 0.0f };
+        DirectX::XMFLOAT3 scale{ 1.0f, 1.0f, 1.0f };
+
+        std::vector<ComponentData> components;
+    };
+
+    struct SceneData
+    {
+        // 現在のファイル形式バージョン。
+        // v1〜v6 は旧 SceneDocument 形式で、互換性を持たせない方針。
+        // 将来 v8 へ上げる余地を残すため、読み込み側はバージョン判定を必ず通す。
+        static constexpr int current_version = 7;
+
+        int version = current_version;
+        std::string scene_name{ "Scene" };
+        std::vector<GameObjectData> objects;
+
+        void Clear()
+        {
+            version = current_version;
+            scene_name = "Scene";
+            objects.clear();
+        }
+    };
+
+    // 読み込み時に起きた「致命的ではない問題」の報告。
+    //
+    // 未登録の Component、未知のプロパティ、存在しない親などは
+    // Scene 全体の読み込みを止めず、ここへ記録して続行する。
+    struct SceneLoadReport
+    {
+        std::vector<std::string> warnings;
+        int skipped_components = 0;   // 未登録で生成できなかった Component
+        int repaired_parents = 0;     // 親が見つからず Scene 直下へ寄せた GameObject
+        int repaired_ids = 0;         // ID が重複して採番し直した GameObject
+        int unknown_properties = 0;   // 定義が見つからず無視したプロパティ
+
+        bool Clean() const noexcept { return warnings.empty(); }
+        void Clear() noexcept
+        {
+            warnings.clear();
+            skipped_components = 0;
+            repaired_parents = 0;
+            repaired_ids = 0;
+            unknown_properties = 0;
+        }
+    };
+
+    // Scene の現在の状態を SceneData へ写し取る（メインスレッドで実行すること）。
+    //
+    // 削除予約中の GameObject / Component は保存しない。
+    // ComponentRegistry で serializable=false の型も保存しない
+    // （TransformComponent は GameObject 側の transform として保存済みのため）。
+    void CaptureScene(const Scene& scene, SceneData& output);
+
+    // SceneData の内容で Scene を作り直す（メインスレッドで実行すること）。
+    //
+    // 手順:
+    //   1. Scene を読み込み中にして更新を止める
+    //   2. 既存の GameObject を全消去
+    //   3. 保存された ObjectID のまま全 GameObject を生成
+    //   4. 保存 ID から実 ID への対応表を作る（重複で採番し直した場合に備える）
+    //   5. 親子関係を復元する
+    //   6. ComponentRegistry で Component を生成する（ここで OnAttach が呼ばれる）
+    //   7. PropertyRegistry でプロパティを反映する
+    //   8. 読み込み中を解除する
+    //
+    // OnStart / OnEnable はここでは呼ばれない。呼び出し側が Scene::Start() を呼ぶ。
+    // 読み込みが途中で中断されることはなく、常に true を返す。
+    // 問題があった箇所は report へ記録される。
+    bool ApplySceneData(const SceneData& data, Scene& scene, SceneLoadReport& report);
+}

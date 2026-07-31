@@ -190,4 +190,37 @@ namespace ReplayEngine::Reflection
 
         return desc;
     }
+
+    // メンバ変数に直接対応しないプロパティ用。
+    // 値の実体が別の場所にある場合（TransformComponent が GameObject の Transform を
+    // 指しているような場合）や、単位変換を挟む場合に使う。
+    //
+    //   MakeAccessorProperty<TransformComponent>("position", PropertyType::Vector3,
+    //       [](const TransformComponent& c) { return PropertyValue::MakeVector3(c.Position()); },
+    //       [](TransformComponent& c, const PropertyValue& v) { c.SetPosition(v.AsVector3()); });
+    template<class C, class GetFn, class SetFn>
+    PropertyDesc MakeAccessorProperty(std::string name, PropertyType type,
+        GetFn get, SetFn set)
+    {
+        static_assert(std::is_base_of_v<Core::Component, C>,
+            "C must derive from ReplayEngine::Core::Component");
+
+        PropertyDesc desc;
+        desc.name = std::move(name);
+        desc.type = type;
+
+        desc.getter = [get](const Core::Component& component) -> PropertyValue
+        {
+            if (component.TypeID() != C::StaticTypeID()) return PropertyValue{};
+            return get(static_cast<const C&>(component));
+        };
+
+        desc.setter = [set](Core::Component& component, const PropertyValue& value)
+        {
+            if (component.TypeID() != C::StaticTypeID()) return;
+            set(static_cast<C&>(component), value);
+        };
+
+        return desc;
+    }
 }

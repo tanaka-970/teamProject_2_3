@@ -1,5 +1,7 @@
 #include "Scene.h"
 
+#include "../../Object/Registry/ComponentRegistry.h"
+
 #include <algorithm>
 
 namespace ReplayEngine::Scene
@@ -38,6 +40,14 @@ namespace ReplayEngine::Scene
         objects_.push_back(std::unique_ptr<GameObject>(new GameObject(id, name, this)));
         GameObject* created = objects_.back().get();
         id_lookup_.emplace(id, created);
+
+        // 組み込み扱いの Component を自動で付ける（現状は TransformComponent のみ）。
+        // ここで型名を直接書かず ComponentRegistry の built_in フラグを見ることで、
+        // 組み込み Component が増えても Scene 側の変更が不要になる。
+        for (const Core::ComponentTypeInfo& info : Core::ComponentRegistry::All())
+        {
+            if (info.built_in) created->AddComponent(info.type_id);
+        }
         return created;
     }
 

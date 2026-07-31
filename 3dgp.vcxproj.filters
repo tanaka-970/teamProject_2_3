@@ -183,6 +183,21 @@
     <Filter Include="RePlayEngine\Scene\Runtime">
       <UniqueIdentifier>{4f219783-b84f-4f34-8423-20262681d406}</UniqueIdentifier>
     </Filter>
+    <Filter Include="RePlayEngine\Components">
+      <UniqueIdentifier>{676f9621-892a-4fac-80cc-fd0952a36072}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Components\Core">
+      <UniqueIdentifier>{f7847eae-e12a-40e2-8477-e720e054573c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Components\Rendering">
+      <UniqueIdentifier>{48de1350-5dbe-4d82-8ef7-8ca4ded883ea}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Components\Gameplay">
+      <UniqueIdentifier>{4fca5de2-8fda-49bd-8ea7-9e2a383b7323}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Scene\Serialization">
+      <UniqueIdentifier>{35ca2ab8-28d1-4203-8c32-b298098da48c}</UniqueIdentifier>
+    </Filter>
 </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Source\render\csm_renderer.cpp">
@@ -408,12 +423,6 @@
     <ClInclude Include="RePlayEngine\Editor\ShaderEditing\ShaderPresetEditor.h"><Filter>RePlayEngine\Editor\ShaderEditing</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Editor\Rendering\PostProcessEditor.h"><Filter>RePlayEngine\Editor\Rendering</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Core\Components\IComponent.h">
-      <Filter>RePlayEngine\Core\Components</Filter>
-    </ClInclude>
-    <ClInclude Include="RePlayEngine\Core\Components\GameObject.h">
-      <Filter>RePlayEngine\Core\Components</Filter>
-    </ClInclude>
-    <ClInclude Include="RePlayEngine\Core\Components\TransformComponent.h">
       <Filter>RePlayEngine\Core\Components</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Core\Components\SphereColliderComponent.h">
@@ -907,6 +916,45 @@
     </ClCompile>
     <ClInclude Include="RePlayEngine\Scene\Runtime\Scene.h">
       <Filter>RePlayEngine\Scene\Runtime</Filter>
+    </ClInclude>
+    <ClCompile Include="RePlayEngine\Components\Core\TransformComponent.cpp">
+      <Filter>RePlayEngine\Components\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\Gameplay\RotatorComponent.cpp">
+      <Filter>RePlayEngine\Components\Gameplay</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\Gameplay\HealthComponent.cpp">
+      <Filter>RePlayEngine\Components\Gameplay</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponents.cpp">
+      <Filter>RePlayEngine\Object\Registry</Filter>
+    </ClCompile>
+    <ClInclude Include="RePlayEngine\Components\Core\TransformComponent.h">
+      <Filter>RePlayEngine\Components\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Rendering\MeshRendererComponent.h">
+      <Filter>RePlayEngine\Components\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Gameplay\RotatorComponent.h">
+      <Filter>RePlayEngine\Components\Gameplay</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Gameplay\HealthComponent.h">
+      <Filter>RePlayEngine\Components\Gameplay</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Object\Registry\BuiltInComponents.h">
+      <Filter>RePlayEngine\Object\Registry</Filter>
+    </ClInclude>
+    <ClCompile Include="RePlayEngine\Scene\Serialization\SceneData.cpp">
+      <Filter>RePlayEngine\Scene\Serialization</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scene\Serialization\SceneSerializer.cpp">
+      <Filter>RePlayEngine\Scene\Serialization</Filter>
+    </ClCompile>
+    <ClInclude Include="RePlayEngine\Scene\Serialization\SceneData.h">
+      <Filter>RePlayEngine\Scene\Serialization</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Scene\Serialization\SceneSerializer.h">
+      <Filter>RePlayEngine\Scene\Serialization</Filter>
     </ClInclude>
 </ItemGroup>
 </Project>
