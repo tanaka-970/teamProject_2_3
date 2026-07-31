@@ -128,4 +128,15 @@ namespace ReplayEngine::Scene::Serialization
     // 読み込みが途中で中断されることはなく、常に true を返す。
     // 問題があった箇所は report へ記録される。
     bool ApplySceneData(const SceneData& data, Scene& scene, SceneLoadReport& report);
+
+    // GameObject を複製する。
+    //
+    // 複製先には必ず新しい ObjectID が振られる。保存 ID をそのまま持ち回らない。
+    // Component は ComponentRegistry で作り直し、値は PropertyRegistry で写す。
+    // 型ごとの複製処理を書かずに済むので、Component が増えてもここは変更不要。
+    //
+    // include_children が true なら子孫も再帰的に複製し、階層構造を保つ。
+    // 失敗した場合は nullptr を返す。
+    Core::GameObject* DuplicateGameObject(Scene& scene,
+        const Core::GameObject& source, bool include_children);
 }

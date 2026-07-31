@@ -181,4 +181,70 @@ namespace ReplayEngine::Scene::Serialization
         scene.EndLoad();
         return true;
     }
+
+    namespace
+    {
+        // 1 体ぶんの複製。親の指定は呼び出し側が行う。
+        GameObject* DuplicateSingle(Scene& scene, const GameObject& source,
+            const std::string& name_override)
+        {
+            GameObject* clone = scene.CreateGameObject(
+                name_override.empty() ? source.Name() : name_override);
+            if (clone == nullptr) return nullptr;
+
+            clone->SetEnabled(source.Enabled());
+
+            const Core::Transform& source_transform = source.GetTransform();
+            clone->GetTransform().SetLocal(
+                source_transform.LocalPosition(),
+                source_transform.LocalRotationEuler(),
+                source_transform.LocalScale());
+
+            for (std::size_t slot = 0; slot < source.ComponentCount(); ++slot)
+            {
+                const Core::Component* original = source.ComponentAt(slot);
+                if (original == nullptr || original->PendingDestroy()) continue;
+
+                const ComponentTypeInfo* info = ComponentRegistry::Find(original->TypeID());
+
+                // 組み込み Component は GameObject 生成時に自動で付いている。
+                // Transform の値は上でコピー済みなので、ここでは触らない。
+                if (info != nullptr && info->built_in) continue;
+
+                Core::Component* copy = ComponentRegistry::Create(original->TypeID(), *clone);
+                if (copy == nullptr) continue;
+
+                copy->SetEnabled(original->Enabled());
+                PropertyRegistry::CopyValues(*original, *copy);
+            }
+            return clone;
+        }
+    }
+
+    GameObject* DuplicateGameObject(Scene& scene, const GameObject& source,
+        bool include_children)
+    {
+        GameObject* clone = DuplicateSingle(scene, source, source.Name() + " コピー");
+        if (clone == nullptr) return nullptr;
+
+        // 元と同じ親へぶら下げる。ローカル値のまま付けるので見た目の相対位置は変わらない。
+        if (source.Parent() != nullptr) clone->SetParent(source.Parent(), false);
+
+        if (!include_children) return clone;
+
+        // 子リストは複製中に変化しないよう控えを取ってから回す。
+        const std::vector<GameObject*> children = source.Children();
+        for (const GameObject* child : children)
+        {
+            if (child == nullptr || child->PendingDestroy()) continue;
+
+            GameObject* child_clone = DuplicateGameObject(scene, *child, true);
+            if (child_clone == nullptr) continue;
+
+            // 子の名前には「コピー」を付けない。付くのは複製の起点だけでよい。
+            child_clone->SetName(child->Name());
+            child_clone->SetParent(clone, false);
+        }
+        return clone;
+    }
 }
