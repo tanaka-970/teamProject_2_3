@@ -1,6 +1,7 @@
-#pragma once
+﻿#pragma once
 
 #include "../../Object/GameObject/GameObject.h"
+#include "../Services/SceneServices.h"
 
 #include <cstddef>
 #include <memory>
@@ -111,6 +112,13 @@ namespace ReplayEngine::Scene
         void EndLoad() noexcept { loading_ = false; }
         bool Loading() const noexcept { return loading_; }
 
+        // ---- 外部サービス --------------------------------------------------
+        //
+        // カメラの向き・地形問い合わせ・操作対象 ObjectID を Component へ渡す窓口。
+        // 実体は framework が所有し、ここは非所有参照だけを持つ。
+        SceneServices& Services() noexcept { return services_; }
+        const SceneServices& Services() const noexcept { return services_; }
+
         Core::ObjectIDGenerator& IDGenerator() noexcept { return id_generator_; }
         const Core::ObjectIDGenerator& IDGenerator() const noexcept { return id_generator_; }
 
@@ -130,6 +138,8 @@ namespace ReplayEngine::Scene
         std::unordered_map<Core::ObjectID, Core::GameObject*> id_lookup_;
 
         Core::ObjectIDGenerator id_generator_;
+
+        SceneServices services_;
 
         bool started_ = false;
         bool loading_ = false;
