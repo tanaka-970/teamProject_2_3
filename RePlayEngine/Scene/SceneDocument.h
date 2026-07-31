@@ -73,13 +73,13 @@ namespace ReplayEngine::Scene
     // 2D UI要素。将来のUIアニメーション(AEライク)ツールの土台。
     //
     // 設計意図:
-    //   - Transformを anchor / position / scale / rotation / opacity へ分解する。
-    //     sizeとscaleを分けているのは、親子でscaleを継承させるため。
-    //     既存UIクラスのように実サイズ直指定だと階層変形が成立しない。
-    //   - anchorは0..1の正規化座標。回転とスケールの基準点になる。
-    //     AEのアンカーポイントに相当し、これが無いと端を軸にした開閉ができない。
-    //   - 親子はEntityIdで参照する。ポインタで持つとvector再確保で壊れるため。
-    //   - 後からキーフレームを載せられるよう、アニメート対象の値は
+    //  　 Transformを anchor / position / scale / rotation / opacity へ分解する。
+    //  　 sizeとscaleを分けているのは、親子でscaleを継承させるため。
+    //  　 既存UIクラスのように実サイズ直指定だと階層変形が成立しない。
+    //  　 anchorは0..1の正規化座標。回転とスケールの基準点になる。
+    //  　 AEのアンカーポイントに相当し、これが無いと端を軸にした開閉ができない所感ね
+    //  　 親子はEntityIdで参照する。ポインタで持つとvector再確保で壊れる。
+    //  　 後からキーフレームを載せられるよう、アニメート対象の値は
     //     すべてこの構造体の中に平坦に置いてある。
     struct UIElementData
     {
