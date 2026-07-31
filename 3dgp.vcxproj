@@ -266,6 +266,10 @@
     <ClCompile Include="RePlayEngine\Object\Component\Component.cpp" />
     <ClCompile Include="RePlayEngine\Object\GameObject\GameObject.cpp" />
     <ClCompile Include="RePlayEngine\Object\Registry\ComponentRegistry.cpp" />
+    <ClCompile Include="RePlayEngine\Reflection\Property\PropertyValue.cpp" />
+    <ClCompile Include="RePlayEngine\Reflection\Property\PropertyBag.cpp" />
+    <ClCompile Include="RePlayEngine\Reflection\Registry\PropertyRegistry.cpp" />
+    <ClCompile Include="RePlayEngine\Scene\Runtime\Scene.cpp" />
 </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\render\csm_renderer.h" />
@@ -351,6 +355,11 @@
     <ClInclude Include="RePlayEngine\Object\GameObject\GameObject.h" />
     <ClInclude Include="RePlayEngine\Object\Registry\ComponentTypeInfo.h" />
     <ClInclude Include="RePlayEngine\Object\Registry\ComponentRegistry.h" />
+    <ClInclude Include="RePlayEngine\Reflection\Property\PropertyValue.h" />
+    <ClInclude Include="RePlayEngine\Reflection\Property\PropertyDesc.h" />
+    <ClInclude Include="RePlayEngine\Reflection\Property\PropertyBag.h" />
+    <ClInclude Include="RePlayEngine\Reflection\Registry\PropertyRegistry.h" />
+    <ClInclude Include="RePlayEngine\Scene\Runtime\Scene.h" />
 </ItemGroup>
   <ItemGroup>
     <None Include=".editorconfig" />

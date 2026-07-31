@@ -171,6 +171,18 @@
     <Filter Include="RePlayEngine\Object\Registry">
       <UniqueIdentifier>{a9820df5-496e-4453-8926-cdd697c280ad}</UniqueIdentifier>
     </Filter>
+    <Filter Include="RePlayEngine\Reflection">
+      <UniqueIdentifier>{936133bc-0e6f-4560-8a24-71ce3467bc20}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Reflection\Property">
+      <UniqueIdentifier>{606218fd-c1b0-4148-8f69-777acc61db54}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Reflection\Registry">
+      <UniqueIdentifier>{e2efe5a5-8aca-4f37-8ce5-7f596419afda}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Scene\Runtime">
+      <UniqueIdentifier>{4f219783-b84f-4f34-8423-20262681d406}</UniqueIdentifier>
+    </Filter>
 </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Source\render\csm_renderer.cpp">
@@ -868,6 +880,33 @@
     </ClInclude>
     <ClInclude Include="RePlayEngine\Object\Registry\ComponentRegistry.h">
       <Filter>RePlayEngine\Object\Registry</Filter>
+    </ClInclude>
+    <ClCompile Include="RePlayEngine\Reflection\Property\PropertyValue.cpp">
+      <Filter>RePlayEngine\Reflection\Property</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Reflection\Property\PropertyBag.cpp">
+      <Filter>RePlayEngine\Reflection\Property</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Reflection\Registry\PropertyRegistry.cpp">
+      <Filter>RePlayEngine\Reflection\Registry</Filter>
+    </ClCompile>
+    <ClInclude Include="RePlayEngine\Reflection\Property\PropertyValue.h">
+      <Filter>RePlayEngine\Reflection\Property</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Reflection\Property\PropertyDesc.h">
+      <Filter>RePlayEngine\Reflection\Property</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Reflection\Property\PropertyBag.h">
+      <Filter>RePlayEngine\Reflection\Property</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Reflection\Registry\PropertyRegistry.h">
+      <Filter>RePlayEngine\Reflection\Registry</Filter>
+    </ClInclude>
+    <ClCompile Include="RePlayEngine\Scene\Runtime\Scene.cpp">
+      <Filter>RePlayEngine\Scene\Runtime</Filter>
+    </ClCompile>
+    <ClInclude Include="RePlayEngine\Scene\Runtime\Scene.h">
+      <Filter>RePlayEngine\Scene\Runtime</Filter>
     </ClInclude>
 </ItemGroup>
 </Project>
