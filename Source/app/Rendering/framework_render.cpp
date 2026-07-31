@@ -309,7 +309,8 @@ void framework::render(float elapsed_time)
     immediate_context->OMSetDepthStencilState(depth_stencil_states[(size_t)DEPTH_STATE::ZT_ON_ZW_ON].Get(), 0);
     immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
 
-    if (draw_background_image)
+    // 背景画像は任意アセット。読み込めていない場合は sprite_batches[0] が空になる。
+    if (draw_background_image && sprite_batches[0])
     {
         // 背景画像は深度を書かず、3Dオブジェクトより先に中間バッファへ敷く。
         sprite_batches[0]->begin(immediate_context.Get());
@@ -651,8 +652,10 @@ void framework::render(float elapsed_time)
 
         // GameObject / Component 基盤の描画（Forward 経路）。
         // Component ごとの描画方式を反映するため、Shader は 1 件ずつ選び直す。
+        // Asset 未指定・解決不可・読み込み失敗の GameObject は静かに飛ばす。
         for (const ReplayEngine::Rendering::RenderItem& scene_item : object_render_items.Items())
         {
+            if (scene_item.mesh_asset.empty()) continue;
             skinned_mesh* scene_mesh = resolve_object_mesh(scene_item.mesh_asset);
             if (scene_mesh == nullptr) continue;
             scene_mesh->render(immediate_context.Get(), scene_item.world, scene_item.tint,

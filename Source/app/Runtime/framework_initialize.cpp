@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <filesystem>
 #include <initializer_list>
 #include <string>
 
@@ -238,11 +239,23 @@ bool framework::initialize()
     scene_manager.SetScene(
         std::make_unique<ReplayEngine::Scene::BootLogoScene>(), device.Get());
     auto loading_scene = std::make_unique<ReplayEngine::Scene::LoadingScene>();
+    // 任意アセットの読み込みは「無ければスキップして続行」に統一する。
+    // 実行に必須ではないファイルの不足で起動が止まらないようにするため。
+    // 失敗は OutputDebugString へ理由付きで出す（Visual Studio の出力ウィンドウで読める）。
     loading_scene->AddTask("UI image", [this]
     {
-        sprite_batches[0] = std::make_unique<sprite_batch>(
-            device.Get(), L".\\resources\\screenshot.jpg", 1);
-        return sprite_batches[0] != nullptr;
+        const wchar_t* ui_image = L".\\resources\\screenshot.jpg";
+        std::error_code filesystem_error;
+        if (!std::filesystem::exists(ui_image, filesystem_error) || filesystem_error)
+        {
+            OutputDebugStringW(L"[Assets] 背景画像が見つかりません: "
+                L".\\resources\\screenshot.jpg （背景表示は無効のまま続行します）\n");
+            sprite_batches[0].reset();
+            draw_background_image = false;
+            return true;
+        }
+        sprite_batches[0] = std::make_unique<sprite_batch>(device.Get(), ui_image, 1);
+        return true;
     });
     loading_scene->AddTask("Player model", [this]
     {
@@ -252,9 +265,30 @@ bool framework::initialize()
     });
     loading_scene->AddTask("Debug mesh", [this]
     {
-        static_meshes[0] = std::make_unique<static_mesh>(
-            device.Get(), L".\\resources\\cube.obj", true);
-        return static_meshes[0] != nullptr;
+        // static_mesh は .obj 専用。構築前に can_load で検証し、
+        // 失敗を assert ではなくログとして上へ返す。
+        const wchar_t* debug_mesh = L".\\resources\\cube.obj";
+        std::wstring reason;
+        if (!static_mesh::can_load(debug_mesh, &reason))
+        {
+            OutputDebugStringW((L"[Assets] デバッグ用メッシュを読み込めません: " +
+                reason + L" （静的メッシュ表示は無効のまま続行します）\n").c_str());
+            static_meshes[0].reset();
+            enable_static_meshes = false;
+            return true;
+        }
+
+        auto candidate = std::make_unique<static_mesh>(device.Get(), debug_mesh, true);
+        if (!candidate->is_loaded())
+        {
+            OutputDebugStringW((L"[Assets] デバッグ用メッシュの解析に失敗しました: " +
+                candidate->load_error() + L"\n").c_str());
+            static_meshes[0].reset();
+            enable_static_meshes = false;
+            return true;
+        }
+        static_meshes[0] = std::move(candidate);
+        return true;
     });
     loading_scene->AddTask("IBL images", [this]
     {

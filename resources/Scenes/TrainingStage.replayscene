@@ -1,0 +1,26 @@
+REPLAY_SCENE 7
+SCENE "TrainingStage"
+OBJECT_COUNT 1
+OBJECT
+  ID 1
+  NAME "GameObject"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 1.9500000476837158 0 0 0 0 0.039999999105930328 0.05000000074505806 0.029999999329447746
+  COMPONENT_COUNT 2
+  COMPONENT "MeshRendererComponent" 1
+    PROPERTY_COUNT 7
+    PROPERTY "mesh_asset" asset "1bd1358040255f5bd18f3be0d79fbe3c"
+    PROPERTY "material_asset" asset ""
+    PROPERTY "tint" color 1 1 1 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+  COMPONENT "RotatorComponent" 1
+    PROPERTY_COUNT 2
+    PROPERTY "axis" vec3 0 1 0
+    PROPERTY "degrees_per_second" float 90
+  END_COMPONENT
+END_OBJECT

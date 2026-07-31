@@ -65,7 +65,27 @@ private:
 	Microsoft::WRL::ComPtr<ID3D11InputLayout> input_layout;
 	Microsoft::WRL::ComPtr<ID3D11Buffer> constant_buffer;
 
+	// 読み込み結果。コンストラクタが最後まで到達したときだけ true になる。
+	bool loaded_{ false };
+	std::wstring load_error_;
+
 public:
+	// 読み込み前にパスを検証する。
+	//
+	// 呼び出し側はこれで弾いてから構築すること。
+	// 存在しない .obj を渡すと、以前は
+	//   1) _ASSERT_EXPR(fin, "OBJ file not found.") が出て
+	//   2) それを無視すると、空のまま subsets.rbegin()-> を実行して
+	//      「can't decrement value-initialized vector iterator」が続けて出る
+	// という二段構えの停止になっていた。
+	//
+	// out_reason には失敗理由が入る。Editor のログへそのまま出せる。
+	static bool can_load(const wchar_t* obj_filename, std::wstring* out_reason = nullptr);
+
+	// 構築が成功したか。false の場合、描画してはいけない。
+	bool is_loaded() const noexcept { return loaded_; }
+	const std::wstring& load_error() const noexcept { return load_error_; }
+
 	static_mesh(ID3D11Device* device, const wchar_t* obj_filename, bool flipping_v_coordinates/*UNIT.14*/);
 	virtual ~static_mesh() = default;
 

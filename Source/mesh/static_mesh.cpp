@@ -1,14 +1,57 @@
-#include "shader.h"
+﻿#include "shader.h"
 #include "misc.h"
 #include "static_mesh.h"
 
 #include <fstream>
 #include <vector>
+#include <cwctype>
 
 #include <filesystem>
 #include "texture.h"
 
 using namespace DirectX;
+
+bool static_mesh::can_load(const wchar_t* obj_filename, std::wstring* out_reason)
+{
+	const auto fail = [out_reason](std::wstring reason)
+	{
+		if (out_reason != nullptr) *out_reason = std::move(reason);
+		return false;
+	};
+
+	if (obj_filename == nullptr || obj_filename[0] == L'\0')
+	{
+		return fail(L"パスが空です");
+	}
+
+	const std::filesystem::path path(obj_filename);
+
+	// static_mesh は Wavefront OBJ 専用。FBX や glTF を渡されても解釈できない。
+	std::wstring extension = path.extension().wstring();
+	for (wchar_t& character : extension)
+	{
+		character = static_cast<wchar_t>(::towlower(character));
+	}
+	if (extension != L".obj")
+	{
+		return fail(L"static_mesh が対応するのは .obj のみです（渡された拡張子: " +
+			(extension.empty() ? std::wstring(L"なし") : extension) + L"）: " + path.wstring());
+	}
+
+	std::error_code filesystem_error;
+	if (!std::filesystem::exists(path, filesystem_error) || filesystem_error)
+	{
+		return fail(L"ファイルが見つかりません: " + path.wstring());
+	}
+	if (std::filesystem::is_directory(path, filesystem_error))
+	{
+		return fail(L"ディレクトリが指定されています: " + path.wstring());
+	}
+
+	if (out_reason != nullptr) out_reason->clear();
+	return true;
+}
+
 static_mesh::static_mesh(ID3D11Device* device, const wchar_t* obj_filename, bool flipping_v_coordinates/*UNIT.14*/)
 {
 	std::vector<vertex> vertices;
@@ -20,8 +63,25 @@ static_mesh::static_mesh(ID3D11Device* device, const wchar_t* obj_filename, bool
 	std::vector<XMFLOAT2> texcoords;
 	std::vector<std::wstring> mtl_filenames;
 
+	// 読み込めないパスはここで打ち切る。
+	// 以前はそのまま先へ進み、空の subsets に対して rbegin()-> を実行して
+	// 「can't decrement value-initialized vector iterator」で二次障害になっていた。
+	if (!can_load(obj_filename, &load_error_))
+	{
+		OutputDebugStringW((L"[static_mesh] 読み込みを中止しました: " + load_error_ + L"\n").c_str());
+		return;
+	}
+
 	std::wifstream fin(obj_filename);
-	_ASSERT_EXPR(fin, L"'OBJ file not found.");
+	if (!fin)
+	{
+		// can_load を通った＝ファイルは存在するのに開けない場合。
+		// 権限やロックなど本当に想定外の状況なので、ここは assert を残す。
+		_ASSERT_EXPR(fin, L"OBJ file exists but could not be opened.");
+		load_error_ = L"OBJ ファイルを開けません: " + std::wstring(obj_filename);
+		OutputDebugStringW((L"[static_mesh] " + load_error_ + L"\n").c_str());
+		return;
+	}
 	wchar_t command[256];
 	while (fin)
 	{
@@ -177,21 +237,53 @@ static_mesh::static_mesh(ID3D11Device* device, const wchar_t* obj_filename, bool
 	}
 	fin.close();
 
-	std::vector<subset>::reverse_iterator iterator = subsets.rbegin();
-	iterator->index_count = static_cast<uint32_t>(indices.size()) - iterator->index_start;
-	for (iterator = subsets.rbegin() + 1; iterator != subsets.rend(); ++iterator)
+	// subsets が空のまま rbegin() を参照すると、MSVC のデバッグイテレータが
+	// 「can't decrement value-initialized vector iterator」で停止する。
+	// usemtl が 1 つも無い OBJ や、途中で解析が止まった場合に起こり得るので必ず確認する。
+	if (!subsets.empty())
 	{
-		iterator->index_count = (iterator - 1)->index_start - iterator->index_start;
+		std::vector<subset>::reverse_iterator iterator = subsets.rbegin();
+		iterator->index_count = static_cast<uint32_t>(indices.size()) - iterator->index_start;
+		for (iterator = subsets.rbegin() + 1; iterator != subsets.rend(); ++iterator)
+		{
+			iterator->index_count = (iterator - 1)->index_start - iterator->index_start;
+		}
 	}
 
-	std::filesystem::path mtl_filename(obj_filename);
-	mtl_filename.replace_filename(std::filesystem::path(mtl_filenames[0]).filename());
+	// 頂点が 1 つも取れていない OBJ で先へ進むと、
+	// 0 バイトの頂点バッファ作成に失敗して別の assert になる。ここで打ち切る。
+	if (vertices.empty())
+	{
+		load_error_ = L"OBJ に頂点がありません: " + std::wstring(obj_filename);
+		OutputDebugStringW((L"[static_mesh] " + load_error_ + L"\n").c_str());
+		return;
+	}
 
-	fin.open(mtl_filename);
+	// mtllib が書かれていない OBJ もある。空 vector への添字アクセスを避ける。
+	bool material_library_opened = false;
+	if (!mtl_filenames.empty())
+	{
+		std::filesystem::path mtl_filename(obj_filename);
+		mtl_filename.replace_filename(std::filesystem::path(mtl_filenames[0]).filename());
+		fin.open(mtl_filename);
+		material_library_opened = static_cast<bool>(fin);
+	}
 
-	while (fin)
+	while (material_library_opened && fin)
 	{
 		fin >> command;
+
+		// newmtl より前に map_Kd / Ka / Kd / Ks などが現れる壊れた .mtl があると、
+		// 空の materials に対して rbegin()-> を実行して
+		// 「can't decrement value-initialized vector iterator」で停止する。
+		// 現在のマテリアルが無い間は、newmtl 以外の行を読み飛ばす。
+		const bool has_current_material = !materials.empty();
+		if (!has_current_material && 0 != wcscmp(command, L"newmtl"))
+		{
+			fin.ignore(1024, L'\n');
+			continue;
+		}
+
 		if (0 == wcscmp(command, L"map_Kd"))
 		{
 			// map_Kd - options args filename
@@ -357,6 +449,10 @@ static_mesh::static_mesh(ID3D11Device* device, const wchar_t* obj_filename, bool
 		bounding_box[1].y = std::max<float>(bounding_box[1].y, v.position.y);
 		bounding_box[1].z = std::max<float>(bounding_box[1].z, v.position.z);
 	}
+
+	// ここまで到達したときだけ描画可能とみなす。
+	// 呼び出し側は is_loaded() が false のメッシュを描画してはいけない。
+	loaded_ = true;
 }
 
 void static_mesh::render(ID3D11DeviceContext* immediate_context,

@@ -63,6 +63,7 @@ extern ImWchar glyphRangesJapanese[];
 #include "../../RePlayEngine/Rendering/Adapter/RenderItem.h"
 
 #include <unordered_map>
+#include <unordered_set>
 
 class gltf_model;
 
@@ -238,9 +239,17 @@ public:
     ReplayEngine::Editor::InspectorPanel    object_inspector_panel;
     ReplayEngine::Rendering::RenderItemList object_render_items;
 
-    // Asset GUID -> メッシュ実体。値が null なら「読み込めなかった」ことを表す。
-    // 毎フレームの再検索を避けるための単純なキャッシュ。
+    // Asset GUID -> メッシュ実体。
+    // 読み込めた Asset だけを入れる。null や壊れたエントリは決して登録しない。
     std::unordered_map<std::string, std::unique_ptr<skinned_mesh>> object_mesh_cache;
+
+    // 読み込みに失敗した Asset GUID。
+    // 失敗をキャッシュ本体へ入れず別に持つことで、
+    //   - キャッシュには常に有効なメッシュしか入らない
+    //   - 毎フレーム同じ Asset を探し直さない
+    //   - 同じ警告をログへ出し続けない
+    // の 3 つを同時に満たす。
+    std::unordered_set<std::string> object_mesh_failures;
 
     std::filesystem::path object_scene_path{ "resources/Scenes/TrainingStage.replayscene" };
     bool             object_scene_play_mode{ false };

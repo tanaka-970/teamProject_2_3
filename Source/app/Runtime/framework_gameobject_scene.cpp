@@ -1,4 +1,4 @@
-// GameObject / Component 基盤と既存 framework の接続部。
+﻿// GameObject / Component 基盤と既存 framework の接続部。
 //
 // この 1 ファイルへ新基盤との橋渡しをまとめている理由:
 //   framework 側の既存ファイル（描画・入力・エディタ）への変更を最小限に抑え、
@@ -19,6 +19,7 @@
 #include "../../RePlayEngine/Scene/Serialization/SceneData.h"
 #include "../../RePlayEngine/Scene/Serialization/SceneSerializer.h"
 
+#include <cctype>
 #include <filesystem>
 
 namespace
@@ -232,32 +233,66 @@ void framework::exit_object_play_mode()
 
 skinned_mesh* framework::resolve_object_mesh(const std::string& asset_guid)
 {
-    if (asset_guid.empty() || !device) return nullptr;
+    // 1) Asset 未指定。Editor で MeshRenderer を付けただけの状態はこれになる。
+    //    正常な状態なので警告も出さず、静かに描画対象から外す。
+    if (asset_guid.empty()) return nullptr;
+    if (!device) return nullptr;
 
+    // 2) 読み込み済みならそれを返す。キャッシュには有効なメッシュしか入らない。
     const auto cached = object_mesh_cache.find(asset_guid);
     if (cached != object_mesh_cache.end()) return cached->second.get();
 
+    // 3) 一度失敗した Asset は再試行しない。ログも一度きりで済む。
+    if (object_mesh_failures.find(asset_guid) != object_mesh_failures.end()) return nullptr;
+
+    // 失敗を記録してログへ出す。以降このフレームでは何も返さない。
+    const auto give_up = [this, &asset_guid](const std::string& reason) -> skinned_mesh*
+    {
+        object_mesh_failures.insert(asset_guid);
+        const std::string message = "[Mesh] " + reason + " (GUID: " + asset_guid + ")";
+        OutputDebugStringA((message + "\n").c_str());
+        // Editor のステータス欄にも出して、原因が画面から分かるようにする。
+        object_editor_context.SetStatus(message);
+        return nullptr;
+    };
+
+    // 4) GUID が AssetDatabase で解決できるか。
+    //    古い Scene ファイルや EditorSession に残った GUID はここで弾かれる。
     const ReplayEngine::Assets::AssetRecord* record = asset_database.FindByGuid(asset_guid);
     if (record == nullptr)
     {
-        // 見つからない Asset は「空」として記録し、毎フレーム検索し直さないようにする。
-        object_mesh_cache.emplace(asset_guid, nullptr);
-        return nullptr;
+        return give_up("Asset がプロジェクトに登録されていません");
     }
 
-    // FBX / cereal キャッシュのみ対応する。
-    // glTF は既存のステージ描画側が別経路で扱っており、今回は接続しない。
-    std::filesystem::path source = record->source_path;
+    // 5) 対応拡張子かどうか。
+    //    skinned_mesh が読めるのは FBX と、その .cereal キャッシュだけ。
+    //    .obj は static_mesh 用、.glb / .gltf は既存のステージ経路が扱うので、
+    //    ここへ渡すと必ず失敗する。渡す前に弾く。
+    const std::filesystem::path source = record->source_path;
+    std::string extension = source.extension().string();
+    for (char& character : extension)
+    {
+        character = static_cast<char>(::tolower(static_cast<unsigned char>(character)));
+    }
+    if (extension != ".fbx" && extension != ".cereal")
+    {
+        return give_up("この形式は GameObject の描画へ接続していません（" +
+            (extension.empty() ? std::string("拡張子なし") : extension) + "）: " +
+            source.generic_string());
+    }
+
+    // 6) 実ファイルが存在するか。
+    //    skinned_mesh は .cereal キャッシュを読むので、そちらの有無を見る。
     std::filesystem::path cache = source;
     cache.replace_extension(L".cereal");
 
     std::error_code filesystem_error;
     if (!std::filesystem::exists(cache, filesystem_error) || filesystem_error)
     {
-        object_mesh_cache.emplace(asset_guid, nullptr);
-        return nullptr;
+        return give_up("実行用の .cereal キャッシュが見つかりません: " + cache.generic_string());
     }
 
+    // 7) ここまで通ってから構築する。
     std::unique_ptr<skinned_mesh> loaded;
     try
     {
@@ -265,12 +300,17 @@ skinned_mesh* framework::resolve_object_mesh(const std::string& asset_guid)
     }
     catch (...)
     {
-        // 既存プロジェクトは例外を前提にしていないため、ここで握り潰して
+        // 既存プロジェクトは例外を前提にしていないため、ここで受け止めて
         // 「描けない Asset」として扱う。Scene 全体の描画は継続する。
-        object_mesh_cache.emplace(asset_guid, nullptr);
-        return nullptr;
+        return give_up("メッシュの読み込みに失敗しました: " + source.generic_string());
     }
 
+    if (!loaded)
+    {
+        return give_up("メッシュを構築できませんでした: " + source.generic_string());
+    }
+
+    // 8) 成功したものだけをキャッシュへ入れる。
     skinned_mesh* raw = loaded.get();
     object_mesh_cache.emplace(asset_guid, std::move(loaded));
     return raw;
@@ -283,6 +323,9 @@ void framework::draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shade
 
     for (const ReplayEngine::Rendering::RenderItem& item : object_render_items.Items())
     {
+        // Asset 未指定・解決不可・読み込み失敗のいずれでも nullptr が返る。
+        // その場合はこの GameObject を描かずに次へ進むだけで、実行は継続する。
+        if (item.mesh_asset.empty()) continue;
         skinned_mesh* mesh = resolve_object_mesh(item.mesh_asset);
         if (mesh == nullptr) continue;
 
@@ -298,4 +341,5 @@ void framework::draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shade
 void framework::clear_object_mesh_cache() noexcept
 {
     object_mesh_cache.clear();
+    object_mesh_failures.clear();
 }
