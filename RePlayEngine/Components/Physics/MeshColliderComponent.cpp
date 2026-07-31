@@ -5,6 +5,7 @@
 #include "../../Object/GameObject/GameObject.h"
 
 #include <algorithm>
+#include <cfloat>
 #include <cmath>
 
 using namespace DirectX;
@@ -13,32 +14,15 @@ namespace ReplayEngine::Components
 {
     namespace
     {
-        // ColliderID の採番。ObjectID だけでは、同じ GameObject に
-        // Collider が複数付いている場合を区別できないため別に振る。
-        // プロセス内で一意であればよく、保存はしない。
-        Scene::ColliderID NextColliderID() noexcept
-        {
-            static Scene::ColliderID next = 1;
-            return next++;
-        }
-
         constexpr float scale_epsilon = 1.0e-4f;
     }
 
-    void MeshColliderComponent::OnAttach()
-    {
-        collider_id_ = NextColliderID();
-        XMStoreFloat4x4(&world_, XMMatrixIdentity());
-        XMStoreFloat4x4(&inverse_world_, XMMatrixIdentity());
-        transform_valid_ = false;
-    }
-
-    void MeshColliderComponent::OnDetach()
+    void MeshColliderComponent::OnColliderDetach()
     {
         // 共有参照を手放す。他の Collider が同じ Cook データを使っていれば残る。
+        // 誰も使っていなければ、ここで実体が解放される（キャッシュは weak_ptr のみ）。
         cooked_.reset();
-        cooked_asset_guid_.clear();
-        collider_id_ = Scene::invalid_collider_id;
+        cooked_key_ = Physics::CookKey{};
     }
 
     std::string MeshColliderComponent::ResolveMeshAssetGuid() const
@@ -61,39 +45,50 @@ namespace ReplayEngine::Components
         return std::string();
     }
 
-    bool MeshColliderComponent::EnsureCooked(Physics::CookedMeshCollisionCache& cache,
-        const Physics::CookedMeshCollisionCache::Loader& loader)
+    Physics::CookKey MeshColliderComponent::BuildCookKey(
+        const std::string& content_revision) const
     {
-        const std::string guid = ResolveMeshAssetGuid();
-        if (guid.empty())
+        Physics::CookKey key;
+        key.asset_guid = ResolveMeshAssetGuid();
+        key.content_revision = content_revision;
+        key.settings.cell_size = cook_cell_size;
+        key.settings.double_sided = double_sided;
+        key.settings.sub_mesh_index = -1;
+        return key;
+    }
+
+    bool MeshColliderComponent::EnsureCooked(Physics::CookedMeshCollisionCache& cache,
+        const Physics::CookedMeshCollisionCache::Loader& loader,
+        const std::string& content_revision)
+    {
+        const Physics::CookKey key = BuildCookKey(content_revision);
+        if (key.asset_guid.empty())
         {
             cooked_.reset();
-            cooked_asset_guid_.clear();
+            cooked_key_ = Physics::CookKey{};
             UpdateStatus();
             return false;
         }
 
-        Physics::CookedMeshCollisionData::Settings settings;
-        settings.cell_size = cook_cell_size;
-        settings.double_sided = double_sided;
+        // 同じキーなら作り直さない。
+        // ここに Transform は入っていないので、動かしただけでは Cook が走らない。
+        if (cooked_ != nullptr && cooked_key_ == key) return cooked_->Valid();
 
-        // 同じ Asset かつ同じ Cook 設定なら作り直さない。
-        if (cooked_ != nullptr && cooked_asset_guid_ == guid &&
-            cooked_->CookSettings() == settings)
-        {
-            return true;
-        }
+        cooked_ = cache.Acquire(key, loader);
+        cooked_key_ = cooked_ != nullptr ? key : Physics::CookKey{};
 
-        cooked_ = cache.Acquire(guid, settings, loader);
-        cooked_asset_guid_ = cooked_ != nullptr ? guid : std::string();
+        // Cook が入れ替わったので Bounds も作り直す必要がある。
+        transform_valid_ = false;
+        RefreshTransformIfChanged();
+
         UpdateStatus();
         return cooked_ != nullptr && cooked_->Valid();
     }
 
-    void MeshColliderComponent::RefreshTransformIfChanged()
+    bool MeshColliderComponent::RefreshTransformIfChanged()
     {
         const Core::GameObject* owner = Owner();
-        if (owner == nullptr) return;
+        if (owner == nullptr) return false;
 
         const Core::Transform& transform = owner->GetTransform();
         const XMFLOAT3 position = transform.LocalPosition();
@@ -108,7 +103,7 @@ namespace ReplayEngine::Components
         if (transform_valid_ && same(position, cached_position_) &&
             same(rotation, cached_rotation_) && same(scale, cached_scale_))
         {
-            return;
+            return false;
         }
 
         cached_position_ = position;
@@ -144,6 +139,8 @@ namespace ReplayEngine::Components
         local_radius_scale_ = 1.0f / minimum;
 
         // ワールド空間の AABB。Broad Phase の粗い絞り込みに使う。
+        world_bounds_min_ = { 0.0f, 0.0f, 0.0f };
+        world_bounds_max_ = { 0.0f, 0.0f, 0.0f };
         if (cooked_ != nullptr && cooked_->Valid())
         {
             const XMFLOAT3& local_min = cooked_->LocalBoundsMin();
@@ -174,6 +171,15 @@ namespace ReplayEngine::Components
         }
 
         UpdateStatus();
+        return true;
+    }
+
+    bool MeshColliderComponent::ComputeWorldBounds(XMFLOAT3& minimum, XMFLOAT3& maximum) const
+    {
+        if (cooked_ == nullptr || !cooked_->Valid()) return false;
+        minimum = world_bounds_min_;
+        maximum = world_bounds_max_;
+        return true;
     }
 
     void MeshColliderComponent::UpdateStatus()

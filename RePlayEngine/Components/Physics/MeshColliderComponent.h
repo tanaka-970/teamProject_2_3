@@ -1,8 +1,7 @@
 #pragma once
 
-#include "../../Object/Component/Component.h"
+#include "ColliderComponent.h"
 #include "../../Physics/CookedMeshCollision.h"
-#include "../../Scene/Services/IPhysicsQueryService.h"
 
 #include <memory>
 #include <string>
@@ -12,8 +11,9 @@ namespace ReplayEngine::Components
     // 三角形メッシュの衝突形状（静的環境用）。
     //
     // 【所有と共有の分け方】
-    //   Cook データ（三角形と加速構造）は AssetGUID 単位で共有される不変オブジェクト。
+    //   Cook データ（三角形と加速構造）は CookKey 単位で共有される不変オブジェクト。
     //   ローカル座標で保持され、複数の MeshCollider が同じ実体を参照する。
+    //   実体の所有者はこの Component（shared_ptr）。キャッシュは weak_ptr しか持たない。
     //
     //   このクラスが持つのは「そのインスタンス固有の情報」だけ。
     //     World Transform / Inverse World Transform / World Bounds /
@@ -29,14 +29,19 @@ namespace ReplayEngine::Components
     //   3. Hit の位置と法線を World へ戻す
     //
     // 【Transform について】
-    //   自前の座標は持たない。Owner の Transform を毎フレーム読み、
-    //   変化していたら World / Inverse World / World Bounds を作り直す。
+    //   自前の座標は持たない。Owner の Transform が変わったときだけ
+    //   World / Inverse World / World Bounds を作り直す。
     //   Cook はやり直さない（ローカル形状は変わらないため）。
+    //
+    // 【Dirty の分け方】
+    //   Transform が変わった         -> World / Inverse / Bounds だけ作り直す
+    //   Asset / Cook 設定が変わった  -> Cook データを取り直す（次の必要時）
+    //   この 2 つは独立している。片方の変更でもう片方をやり直さない。
     //
     // 【今回の範囲外】
     //   動く MeshCollider / 変形する MeshCollider / SkinnedMesh 衝突 /
     //   毎フレーム Cook / 剛体シミュレーション / Convex Decomposition。
-    class MeshColliderComponent final : public Core::Component
+    class MeshColliderComponent final : public ColliderComponent
     {
         REPLAY_COMPONENT_BODY(MeshColliderComponent)
 
@@ -53,8 +58,15 @@ namespace ReplayEngine::Components
 
         MeshColliderComponent() = default;
 
-        void OnAttach() override;
-        void OnDetach() override;
+        ColliderShape Shape() const noexcept override { return ColliderShape::Mesh; }
+
+        bool ComputeWorldBounds(DirectX::XMFLOAT3& minimum,
+            DirectX::XMFLOAT3& maximum) const override;
+
+        // 静的地形用。Character Motor の移動用 Collider には選べない。
+        bool UsableAsCharacterShape() const noexcept override { return false; }
+
+        std::string StatusMessage() const override { return status_; }
 
         // ---- 実行時の準備（SceneCollisionWorld から呼ばれる）-----------------
 
@@ -62,14 +74,29 @@ namespace ReplayEngine::Components
         // Renderer 参照モードで Renderer が無い / Asset 未指定なら空文字。
         std::string ResolveMeshAssetGuid() const;
 
+        // 今の設定から Cook キーを組み立てる。revision は呼び出し側が解決する。
+        Physics::CookKey BuildCookKey(const std::string& content_revision) const;
+
         // Cook データを取得または解決する。取得できなければ false。
         // 無効な状態のまま衝突対象へ登録させないための入口。
+        //
+        // Cook が必要かどうかはキーの一致で判断する。
+        // Transform が変わっただけでは Cook は走らない。
         bool EnsureCooked(Physics::CookedMeshCollisionCache& cache,
-            const Physics::CookedMeshCollisionCache::Loader& loader);
+            const Physics::CookedMeshCollisionCache::Loader& loader,
+            const std::string& content_revision);
 
         // Owner の Transform が変わっていたら World / Inverse World / Bounds を更新する。
         // Cook はやり直さない。毎フレーム呼んでよい。
-        void RefreshTransformIfChanged();
+        // 実際に作り直したときだけ true を返す。
+        bool RefreshTransformIfChanged();
+
+        // Cook をやり直させる。Asset を差し替えたときに呼ぶ。
+        void MarkCookDirty() noexcept
+        {
+            cooked_.reset();
+            cooked_key_ = Physics::CookKey{};
+        }
 
         // 衝突対象として使える状態か。
         bool ReadyForQuery() const noexcept
@@ -78,8 +105,6 @@ namespace ReplayEngine::Components
         }
 
         // ---- 読み取り -------------------------------------------------------
-
-        Scene::ColliderID GetColliderID() const noexcept { return collider_id_; }
 
         const std::shared_ptr<const Physics::CookedMeshCollisionData>& Cooked() const noexcept
         {
@@ -100,9 +125,6 @@ namespace ReplayEngine::Components
         // ローカルへ移すときの半径の倍率。非一様なら安全側（大きめ）に倒す。
         float LocalRadiusScale() const noexcept { return local_radius_scale_; }
 
-        // 直近の状態説明。Inspector の警告表示に使う。空なら問題なし。
-        const std::string& StatusMessage() const noexcept { return status_; }
-
         // ---- 保存される設定 -------------------------------------------------
 
         // MeshSource_Renderer / MeshSource_Custom
@@ -118,21 +140,18 @@ namespace ReplayEngine::Components
         // 裏面にも当たるか。
         bool double_sided = true;
 
-        // 通り抜けるが接触は検出したい場合。
-        // Trigger は押し戻しへ使わない（CharacterMotor の壁解決から除外される）。
-        bool is_trigger = false;
-
-        // 所属レイヤーと、衝突を受け付けるレイヤーのビットマスク。
-        // 完全な Layer Matrix は未実装。単純なビット AND のみ。
-        int collision_layer = 0;
-        int collision_mask = -1;   // -1 = すべてのレイヤーと衝突する
+        // 既定表示は Bounds のみ。必要なときだけ三角形を出す。
+        bool debug_draw_wireframe = false;
 
     private:
+        void OnColliderDetach() override;
         void UpdateStatus();
 
         // 実行時のみの状態。保存しない。
         std::shared_ptr<const Physics::CookedMeshCollisionData> cooked_;
-        Scene::ColliderID collider_id_ = Scene::invalid_collider_id;
+
+        // 最後に Cook したキー。これと一致しないときだけ Cook をやり直す。
+        Physics::CookKey cooked_key_;
 
         DirectX::XMFLOAT4X4 world_{};
         DirectX::XMFLOAT4X4 inverse_world_{};
@@ -148,9 +167,6 @@ namespace ReplayEngine::Components
         bool uniform_scale_ = true;
         bool negative_scale_ = false;
         float local_radius_scale_ = 1.0f;
-
-        // 最後に Cook した Asset。変わったら取り直す。
-        std::string cooked_asset_guid_;
 
         std::string status_;
     };

@@ -91,5 +91,27 @@ namespace ReplayEngine::Scene
         virtual bool SweepSphere(const DirectX::XMFLOAT3& start,
             const DirectX::XMFLOAT3& end, float radius,
             float maximum_normal_y, SphereSweepHit& hit) const = 0;
+
+        // ---- Layer / Mask を考慮した版 --------------------------------------
+        //
+        // 既定の実装は layer / mask を無視して、上のフィルタ無し版へ委譲する。
+        // 旧 Stage のように Layer の概念を持たない実装は、この既定のままでよい。
+        //
+        // 純粋仮想にしないのは、Layer に対応していない実装へ
+        // 「対応しているふり」を強制しないため。
+        virtual bool SweepSphereFiltered(const DirectX::XMFLOAT3& start,
+            const DirectX::XMFLOAT3& end, float radius, float maximum_normal_y,
+            int /*layer*/, int /*mask*/, SphereSweepHit& hit) const
+        {
+            return SweepSphere(start, end, radius, maximum_normal_y, hit);
+        }
+
+        virtual bool QueryGroundFiltered(const DirectX::XMFLOAT3& origin, float radius,
+            float up_offset, float down_distance, float walkable_normal_y,
+            int /*layer*/, int /*mask*/, GroundHit& hit) const
+        {
+            return QueryGround(origin, radius, up_offset, down_distance,
+                walkable_normal_y, hit);
+        }
     };
 }

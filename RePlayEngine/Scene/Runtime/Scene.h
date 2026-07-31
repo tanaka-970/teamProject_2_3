@@ -4,6 +4,7 @@
 #include "../Services/SceneServices.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -119,6 +120,25 @@ namespace ReplayEngine::Scene
         SceneServices& Services() noexcept { return services_; }
         const SceneServices& Services() const noexcept { return services_; }
 
+        // ---- 構成の世代番号 ------------------------------------------------
+        //
+        // GameObject / Component の「顔ぶれ」が変わるたびに 1 増える。
+        // Transform の値が変わっただけでは増えない。
+        //
+        // 何のためにあるか:
+        //   Collider の登録表（SceneCollisionWorld）が、毎フレーム Scene 全体を
+        //   走査せずに済ませるため。世代が変わったフレームだけ再走査して
+        //   登録表を突き合わせ、変わっていないフレームは登録済みのぶんしか触らない。
+        //
+        //   Component から登録表へ直接通知する方式にしなかった理由:
+        //   Component の OnEnable は Scene の同期点で走るが、そのとき
+        //   framework がサービスを張り替え済みとは限らない。通知先が居ない瞬間に
+        //   登録が落ちると「消したはずの Collider が残る」より厄介な
+        //   「有るはずの Collider が無い」不具合になる。
+        //   世代番号なら通知先の有無に依存しない。
+        std::uint32_t StructureGeneration() const noexcept { return structure_generation_; }
+        void BumpStructureGeneration() noexcept { ++structure_generation_; }
+
         Core::ObjectIDGenerator& IDGenerator() noexcept { return id_generator_; }
         const Core::ObjectIDGenerator& IDGenerator() const noexcept { return id_generator_; }
 
@@ -140,6 +160,9 @@ namespace ReplayEngine::Scene
         Core::ObjectIDGenerator id_generator_;
 
         SceneServices services_;
+
+        // 構成が変わるたびに増える。オーバーフローしても等値比較しか使わないので問題ない。
+        std::uint32_t structure_generation_ = 1;
 
         bool started_ = false;
         bool loading_ = false;

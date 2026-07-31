@@ -11,6 +11,58 @@
 
 namespace ReplayEngine::Physics
 {
+    // Cook 結果に影響する設定。キーの一部になる。
+    struct CookSettings
+    {
+        // XZ グリッド 1 セルのローカル空間での大きさ。
+        float cell_size = 4.0f;
+
+        // 裏面にも当たるか。false なら表面のみ。
+        bool double_sided = true;
+
+        // メッシュの一部だけを衝突に使う場合の添字。-1 で全体。
+        int sub_mesh_index = -1;
+
+        bool operator==(const CookSettings& other) const noexcept
+        {
+            return cell_size == other.cell_size &&
+                double_sided == other.double_sided &&
+                sub_mesh_index == other.sub_mesh_index;
+        }
+        bool operator!=(const CookSettings& other) const noexcept { return !(*this == other); }
+    };
+
+    // Cook キャッシュの主キー。
+    //
+    // 【AssetGUID だけにしない理由】
+    //   1. 同じ GUID でも Asset を再インポートすれば中身が変わる。
+    //      GUID だけをキーにすると、古い形で当たり続ける。
+    //   2. cell_size / double_sided / sub_mesh_index が変われば別物になる。
+    //      同じ Cook 結果を使い回してはいけない。
+    //
+    //   content_revision には「更新時刻 + ファイルサイズ」や content hash など、
+    //   実体が変われば必ず変わる文字列を入れる。空文字は「不明」を意味し、
+    //   その場合キャッシュは効くが再インポート検出はできない（呼び出し側が
+    //   Invalidate を呼ぶ必要がある）。
+    struct CookKey
+    {
+        std::string asset_guid;
+        std::string content_revision;
+        CookSettings settings;
+
+        bool operator==(const CookKey& other) const noexcept
+        {
+            return asset_guid == other.asset_guid &&
+                content_revision == other.content_revision &&
+                settings == other.settings;
+        }
+    };
+
+    struct CookKeyHash
+    {
+        std::size_t operator()(const CookKey& key) const noexcept;
+    };
+
     // Cook 済みの衝突形状。
     //
     // 【最重要】保持するのは「ローカル座標」の三角形と加速構造。
@@ -31,28 +83,15 @@ namespace ReplayEngine::Physics
     class CookedMeshCollisionData final
     {
     public:
-        struct Settings
-        {
-            // XZ グリッド 1 セルのローカル空間での大きさ。
-            float cell_size = 4.0f;
+        using Settings = CookSettings;
 
-            // 裏面にも当たるか。false なら表面のみ。
-            bool double_sided = true;
-
-            bool operator==(const Settings& other) const noexcept
-            {
-                return cell_size == other.cell_size && double_sided == other.double_sided;
-            }
-        };
-
-        // ローカル座標の三角形から Cook する。失敗しても nullptr は返さず、
-        // 三角形 0 個の「空の Cook データ」を返す（Valid() が false になる）。
+        // ローカル座標の三角形から Cook する。
         static std::shared_ptr<const CookedMeshCollisionData> Build(
-            std::string asset_guid, std::vector<Triangle> local_triangles,
-            const Settings& settings);
+            CookKey key, std::vector<Triangle> local_triangles);
 
-        const std::string& AssetGuid() const noexcept { return asset_guid_; }
-        const Settings& CookSettings() const noexcept { return settings_; }
+        const CookKey& Key() const noexcept { return key_; }
+        const std::string& AssetGuid() const noexcept { return key_.asset_guid; }
+        const CookSettings& CookSettings() const noexcept { return key_.settings; }
 
         bool Valid() const noexcept { return !triangles_.empty(); }
         std::size_t TriangleCount() const noexcept { return triangles_.size(); }
@@ -75,8 +114,7 @@ namespace ReplayEngine::Physics
         void CellRange(float min_x, float max_x, float min_z, float max_z,
             int& x0, int& x1, int& z0, int& z1) const noexcept;
 
-        std::string asset_guid_;
-        Settings settings_;
+        CookKey key_;
 
         std::vector<Triangle> triangles_;                 // ローカル座標
         std::vector<std::vector<std::uint32_t>> cells_;   // XZ グリッド
@@ -92,46 +130,66 @@ namespace ReplayEngine::Physics
         mutable std::uint32_t current_stamp_ = 0;
     };
 
-    // AssetGUID -> Cook データの共有キャッシュ。
+    // Cook データの共有キャッシュ。
     //
-    // 同じ Asset を使う MeshCollider が何体あっても、Cook は 1 回だけ。
-    // 三角形の実体も 1 つだけ。各 Collider は自分の Transform を持ち、
-    // 共有参照だけを保持する。
+    // 【所有権】
+    //   キャッシュは所有しない。weak_ptr しか持たない。
+    //   実体の所有者は MeshColliderComponent（shared_ptr）だけ。
+    //
+    //   こうしている理由:
+    //     shared_ptr を永久保持すると、Scene を切り替えても Cook 済み三角形が
+    //     解放されず、使っていない Asset のぶんだけメモリが増え続ける。
+    //     weak_ptr なら「最後の Collider が消えた瞬間」に実体も消える。
+    //     参照が生きている間は Acquire が同じ実体を返すので、共有は保たれる。
+    //
+    //   Collect() で期限切れのエントリを掃除し、Clear() で表ごと捨てる。
+    //   Scene の切り替えと Project の終了では Clear() を呼ぶこと。
     //
     // Singleton にはしない。framework が値メンバとして 1 つ所有する。
     class CookedMeshCollisionCache final
     {
     public:
-        // ローカル三角形を読み込む関数。キャッシュに無いときだけ呼ばれる。
+        // ローカル三角形を読み込む関数。生存中の実体が無いときだけ呼ばれる。
         // 読み込めなければ false を返す。
-        using Loader = std::function<bool(const std::string& asset_guid,
+        using Loader = std::function<bool(const CookKey& key,
             std::vector<Triangle>& out_local_triangles)>;
 
         // Cook データを取得する。無ければ loader で読み込んで Cook する。
         // 読み込めなかった場合は nullptr を返す（無効な Collider を作らせない）。
         std::shared_ptr<const CookedMeshCollisionData> Acquire(
-            const std::string& asset_guid,
-            const CookedMeshCollisionData::Settings& settings,
-            const Loader& loader);
+            const CookKey& key, const Loader& loader);
 
         // 特定の Asset を捨てる。再インポート後の再 Cook に使う。
+        // 同じ GUID を持つエントリを設定違い・revision 違いも含めてすべて消す。
         void Invalidate(const std::string& asset_guid);
 
         void Clear() noexcept;
 
-        std::size_t EntryCount() const noexcept { return entries_.size(); }
+        // 期限切れ（参照が 0 になった）エントリを取り除く。
+        // 戻り値は取り除いた件数。
+        std::size_t Collect();
 
-        // 読み込みに失敗した Asset。同じものを毎フレーム試さないための記録。
-        bool Failed(const std::string& asset_guid) const;
+        // 生存しているエントリの数。期限切れは数えない。
+        std::size_t LiveEntryCount() const;
+
+        // 表に載っているエントリの数（期限切れを含む）。診断用。
+        std::size_t TableSize() const noexcept { return entries_.size(); }
+
+        // Cook を実行した回数。「共有できているか」の確認に使う。
+        std::size_t CookCount() const noexcept { return cook_count_; }
+
+        // 読み込みに失敗したキー。同じものを毎フレーム試さないための記録。
+        bool Failed(const CookKey& key) const;
 
     private:
-        struct Entry
-        {
-            CookedMeshCollisionData::Settings settings;
-            std::shared_ptr<const CookedMeshCollisionData> data;
-        };
+        // 所有しない。実体は MeshColliderComponent が持つ。
+        std::unordered_map<CookKey, std::weak_ptr<const CookedMeshCollisionData>,
+            CookKeyHash> entries_;
 
-        std::unordered_map<std::string, Entry> entries_;
-        std::unordered_map<std::string, bool> failures_;
+        // 失敗もキー単位で覚える。
+        // Asset を作り直せば content_revision が変わるので、自然に再試行される。
+        std::unordered_map<CookKey, bool, CookKeyHash> failures_;
+
+        std::size_t cook_count_ = 0;
     };
 }

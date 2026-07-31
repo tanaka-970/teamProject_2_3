@@ -390,7 +390,7 @@
     <ClCompile Include="RePlayEngine\Physics\SphereCast.cpp">
       <Filter>RePlayEngine\Physics</Filter>
     </ClCompile>
-    <ClCompile Include="RePlayEngine\Physics\MeshColliderComponent.cpp">
+    <ClCompile Include="RePlayEngine\Physics\LegacyMeshColliderComponent.cpp">
       <Filter>RePlayEngine\Physics</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Physics\GravityComponent.cpp">
@@ -1131,6 +1131,24 @@
     </ClInclude>
     <ClInclude Include="RePlayEngine\Editor\Inspector\PlayerCompositionValidator.h">
       <Filter>RePlayEngine\Editor\Inspector</Filter>
+    </ClInclude>
+    <ClCompile Include="RePlayEngine\Physics\CookedMeshCollision.cpp">
+      <Filter>RePlayEngine\Physics</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\Physics\MeshColliderComponent.cpp">
+      <Filter>RePlayEngine\Components\Physics</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scene\Services\SceneCollisionWorld.cpp">
+      <Filter>RePlayEngine\Scene\Services</Filter>
+    </ClCompile>
+    <ClInclude Include="RePlayEngine\Physics\CookedMeshCollision.h">
+      <Filter>RePlayEngine\Physics</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Physics\MeshColliderComponent.h">
+      <Filter>RePlayEngine\Components\Physics</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Scene\Services\SceneCollisionWorld.h">
+      <Filter>RePlayEngine\Scene\Services</Filter>
     </ClInclude>
 </ItemGroup>
 </Project>

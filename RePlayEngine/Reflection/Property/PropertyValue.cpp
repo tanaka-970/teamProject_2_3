@@ -31,6 +31,9 @@ namespace ReplayEngine::Reflection
             { PropertyType::Enum,            "enum" },
             { PropertyType::AssetPath,       "asset" },
             { PropertyType::ObjectReference, "objref" },
+            { PropertyType::CollisionLayer,    "layer" },
+            { PropertyType::CollisionMask,     "layermask" },
+            { PropertyType::ColliderReference, "colliderref" },
         };
     }
 
@@ -140,6 +143,30 @@ namespace ReplayEngine::Reflection
     {
         PropertyValue result;
         result.type_ = PropertyType::Enum;
+        result.storage_ = value;
+        return result;
+    }
+
+    PropertyValue PropertyValue::MakeCollisionLayer(int value)
+    {
+        PropertyValue result;
+        result.type_ = PropertyType::CollisionLayer;
+        result.storage_ = value;
+        return result;
+    }
+
+    PropertyValue PropertyValue::MakeCollisionMask(int value)
+    {
+        PropertyValue result;
+        result.type_ = PropertyType::CollisionMask;
+        result.storage_ = value;
+        return result;
+    }
+
+    PropertyValue PropertyValue::MakeColliderReference(int value)
+    {
+        PropertyValue result;
+        result.type_ = PropertyType::ColliderReference;
         result.storage_ = value;
         return result;
     }

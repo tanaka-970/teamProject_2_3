@@ -48,6 +48,9 @@ namespace ReplayEngine::Scene
         {
             if (info.built_in) created->AddComponent(info.type_id);
         }
+
+        // 顔ぶれが変わった。登録表を持つ側が次のフレームで突き合わせ直す。
+        BumpStructureGeneration();
         return created;
     }
 
@@ -56,6 +59,7 @@ namespace ReplayEngine::Scene
         if (object == nullptr) return;
         if (object->GetScene() != this) return;
         object->Destroy();   // 予約のみ。子も再帰的に予約される。
+        BumpStructureGeneration();
     }
 
     void Scene::DestroyGameObject(ObjectID id) noexcept
@@ -74,6 +78,10 @@ namespace ReplayEngine::Scene
 
         id_lookup_.clear();
         objects_.clear();
+
+        // Scene の中身が総入れ替えになった。
+        // 登録表側は古い ObjectID / ColliderID を必ず捨てる必要がある。
+        BumpStructureGeneration();
         started_ = false;
     }
 
@@ -232,6 +240,8 @@ namespace ReplayEngine::Scene
             if (object != nullptr && object->PendingDestroy()) doomed.push_back(object);
         }
         if (doomed.empty()) return;
+
+        BumpStructureGeneration();
 
         const auto depth_of = [](const GameObject* object) noexcept
         {

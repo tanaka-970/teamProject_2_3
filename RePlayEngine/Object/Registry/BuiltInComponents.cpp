@@ -10,6 +10,7 @@
 #include "../../Components/Gameplay/PlayerControllerComponent.h"
 #include "../../Components/Gameplay/PlayerInputComponent.h"
 #include "../../Components/Gameplay/RotatorComponent.h"
+#include "../../Components/Physics/MeshColliderComponent.h"
 #include "../../Components/Physics/SphereColliderComponent.h"
 #include "../../Components/Rendering/AnimatorComponent.h"
 #include "../../Components/Rendering/MeshRendererComponent.h"
@@ -23,6 +24,7 @@ namespace ReplayEngine::Core
         using Components::CameraTargetComponent;
         using Components::CharacterMotorComponent;
         using Components::HealthComponent;
+        using Components::MeshColliderComponent;
         using Components::MeshRendererComponent;
         using Components::PlayerControllerComponent;
         using Components::PlayerInputComponent;
@@ -243,6 +245,49 @@ namespace ReplayEngine::Core
                     .Display("歩ける傾斜のしきい値").Range(-1.0, 1.0).Step(0.01));
         }
 
+        void RegisterMeshCollider()
+        {
+            ComponentRegistry::Register<MeshColliderComponent>(
+                ComponentTypeInfo::Describe("Mesh Collider", "Physics")
+                    .WithTooltip("三角形メッシュの衝突形状（静的環境用）。"
+                        "Cook データは AssetGUID 単位で共有される。")
+                    .AllowMultipleInstances());
+
+            PropertyRegistry::Register<MeshColliderComponent>(
+                MakeProperty("mesh_source", &MeshColliderComponent::mesh_source)
+                    .Display("メッシュの取得元")
+                    .AsEnum({ "Renderer のメッシュ", "衝突専用メッシュ" })
+                    .Tooltip("Renderer 側を使うか、衝突専用の低ポリメッシュを指定するか。"));
+
+            PropertyRegistry::Register<MeshColliderComponent>(
+                MakeProperty("mesh_asset", &MeshColliderComponent::mesh_asset)
+                    .Display("衝突専用メッシュ").AsAssetPath()
+                    .Tooltip("「衝突専用メッシュ」を選んだときだけ使う AssetGUID。"));
+
+            PropertyRegistry::Register<MeshColliderComponent>(
+                MakeProperty("cook_cell_size", &MeshColliderComponent::cook_cell_size)
+                    .Display("セルサイズ").Range(0.05, 100.0).Step(0.1)
+                    .Tooltip("空間分割の粗さ。小さいほど絞り込みが効くがメモリを使う。"));
+
+            PropertyRegistry::Register<MeshColliderComponent>(
+                MakeProperty("double_sided", &MeshColliderComponent::double_sided)
+                    .Display("両面に当たる"));
+
+            PropertyRegistry::Register<MeshColliderComponent>(
+                MakeProperty("is_trigger", &MeshColliderComponent::is_trigger)
+                    .Display("トリガー")
+                    .Tooltip("true なら通り抜ける。押し戻しへは使われない。"));
+
+            PropertyRegistry::Register<MeshColliderComponent>(
+                MakeProperty("collision_layer", &MeshColliderComponent::collision_layer)
+                    .Display("レイヤー").Range(0.0, 31.0).Step(1.0));
+
+            PropertyRegistry::Register<MeshColliderComponent>(
+                MakeProperty("collision_mask", &MeshColliderComponent::collision_mask)
+                    .Display("衝突マスク")
+                    .Tooltip("-1 ですべてのレイヤーと衝突する。完全な Layer Matrix は未実装。"));
+        }
+
         void RegisterCharacterMotor()
         {
             ComponentRegistry::Register<CharacterMotorComponent>(
@@ -366,6 +411,7 @@ namespace ReplayEngine::Core
         RegisterSkinnedMeshRenderer();
         RegisterAnimator();
         RegisterSphereCollider();
+        RegisterMeshCollider();
         RegisterCharacterMotor();
         RegisterPlayerInput();
         RegisterPlayerController();

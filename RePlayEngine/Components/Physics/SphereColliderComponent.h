@@ -1,8 +1,6 @@
 #pragma once
 
-#include "../../Object/Component/Component.h"
-
-#include <DirectXMath.h>
+#include "ColliderComponent.h"
 
 namespace ReplayEngine::Components
 {
@@ -15,26 +13,35 @@ namespace ReplayEngine::Components
     //
     // Transform について:
     //   自前の座標を一切持たない。中心は必ず
-    //     Owner の Transform のワールド位置 + center_offset
+    //     Owner の Transform のワールド位置 + center_offset（基底が持つ）
     //   で求める。Collider が Transform を二重所有しないための決まり。
     //
     // 責任:
     //   形状パラメータを持つことだけ。
-    //   実際の判定は IPhysicsQueryService が、移動の解決は CharacterMotorComponent が行う。
-    class SphereColliderComponent final : public Core::Component
+    //   実際の判定は SceneCollisionWorld が、移動の解決は CharacterMotorComponent が行う。
+    class SphereColliderComponent final : public ColliderComponent
     {
         REPLAY_COMPONENT_BODY(SphereColliderComponent)
 
     public:
-        SphereColliderComponent() = default;
+        SphereColliderComponent();
 
-        // Owner のワールド位置へ center_offset を足した、判定に使う球の中心。
-        // Owner が居ない場合は原点を返す（Inspector 描画中に消えても落ちない）。
-        DirectX::XMFLOAT3 WorldCenter() const noexcept;
+        ColliderShape Shape() const noexcept override { return ColliderShape::Sphere; }
+
+        bool ComputeWorldBounds(DirectX::XMFLOAT3& minimum,
+            DirectX::XMFLOAT3& maximum) const override;
+
+        // Character Motor の移動用 Collider として選べる。
+        bool UsableAsCharacterShape() const noexcept override { return true; }
+
+        std::string StatusMessage() const override;
+
+        // Owner の拡縮を反映した実効半径。
+        // 非一様な拡縮では最大軸を採る。すり抜けるより、少し早めに当たる方が安全なため。
+        float EffectiveRadius() const noexcept;
 
         // 旧実装と同じ既定値。挙動を変えないためそのまま引き継ぐ。
         float radius = 0.38f;
-        DirectX::XMFLOAT3 center_offset{ 0.0f, 0.38f, 0.0f };
 
         // 壁へ押し戻す際に残す余白。0 だと面に貼り付いて再衝突し続ける。
         float skin_width = 0.015f;

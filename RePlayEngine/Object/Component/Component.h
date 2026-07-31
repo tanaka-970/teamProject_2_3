@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ComponentTypeID.h"
+#include "TriggerContact.h"
 #include "../../Core/Threading/ThreadPolicy.h"
 
 namespace ReplayEngine::Reflection { class PropertyBag; }
@@ -63,6 +64,21 @@ namespace ReplayEngine::Core
         virtual void OnFixedUpdate(float /*fixed_delta_time*/) {}
         virtual void OnLateUpdate(float /*delta_time*/) {}
         virtual void OnDetach() {}
+
+        // ---- Trigger イベント ------------------------------------------------
+        //
+        // 同じ接触ペアに対して
+        //   未接触 -> Enter、接触継続 -> Stay、接触終了 -> Exit
+        // の順で 1 回ずつ届く。接触している間ずっと Enter が届くことはない。
+        //
+        // 引数はすべて ObjectID / ColliderID。生ポインタは渡らない。
+        // 受け取った側は Scene から引き直して、生きているかを必ず確かめること。
+        //
+        // 呼ばれるのは Trigger 側と、Trigger へ入った側の「両方」の GameObject。
+        // どちらの立場かは contact.trigger_object と Owner()->ID() を見て判断する。
+        virtual void OnTriggerEnter(const TriggerContact& /*contact*/) {}
+        virtual void OnTriggerStay(const TriggerContact& /*contact*/) {}
+        virtual void OnTriggerExit(const TriggerContact& /*contact*/) {}
 
         // ---- スレッド区分 --------------------------------------------------
         // 既定は MainThreadOnly。現時点では Scene が区分によらずメインスレッドで

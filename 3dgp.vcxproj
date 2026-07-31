@@ -263,7 +263,7 @@
     <ClCompile Include="Source\game\raycast.cpp" />
     <ClCompile Include="Source\game\stage.cpp" />
     <ClCompile Include="RePlayEngine\Physics\SphereCast.cpp" />
-    <ClCompile Include="RePlayEngine\Physics\MeshColliderComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Physics\LegacyMeshColliderComponent.cpp" />
     <ClCompile Include="RePlayEngine\Physics\GravityComponent.cpp" />
     <ClCompile Include="Source\game\scene_game.cpp" />
     <ClCompile Include="Source\game\game_scene.cpp" />
@@ -304,6 +304,9 @@
     <ClCompile Include="Source\game\legacy_stage_collision_bridge.cpp" />
     <ClCompile Include="Source\game\legacy_camera_basis_bridge.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Inspector\PlayerCompositionValidator.cpp" />
+    <ClCompile Include="RePlayEngine\Physics\CookedMeshCollision.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Physics\MeshColliderComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Scene\Services\SceneCollisionWorld.cpp" />
 </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\render\csm_renderer.h" />
@@ -424,6 +427,9 @@
     <ClInclude Include="Source\game\legacy_camera_basis_bridge.h" />
     <ClInclude Include="RePlayEngine\Scene\Services\ScenePlayerMigrationState.h" />
     <ClInclude Include="RePlayEngine\Editor\Inspector\PlayerCompositionValidator.h" />
+    <ClInclude Include="RePlayEngine\Physics\CookedMeshCollision.h" />
+    <ClInclude Include="RePlayEngine\Components\Physics\MeshColliderComponent.h" />
+    <ClInclude Include="RePlayEngine\Scene\Services\SceneCollisionWorld.h" />
 </ItemGroup>
   <ItemGroup>
     <None Include=".editorconfig" />

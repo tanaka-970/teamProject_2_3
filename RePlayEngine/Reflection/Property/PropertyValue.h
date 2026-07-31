@@ -29,6 +29,12 @@ namespace ReplayEngine::Reflection
         Enum,            // 内部は int。表示は PropertyDesc の enum_labels を使う
         AssetPath,       // 内部は string。Asset の GUID かプロジェクト相対パス
         ObjectReference, // 内部は ObjectID。GameObject 間参照
+
+        // 以下 3 つは内部表現がすべて int だが、Inspector での描き方が違う。
+        // 整数を直接いじらせないために型を分けている。
+        CollisionLayer,    // 内部は int。Layer 名の一覧から選ぶ
+        CollisionMask,     // 内部は int のビット列。Layer 名のチェックボックス
+        ColliderReference, // 内部は int（collider_key）。同じ GameObject の Collider を選ぶ
     };
 
     const char* ToString(PropertyType type) noexcept;
@@ -68,6 +74,9 @@ namespace ReplayEngine::Reflection
         static PropertyValue MakeEnum(int value);
         static PropertyValue MakeAssetPath(std::string value);
         static PropertyValue MakeObjectReference(Core::ObjectID value);
+        static PropertyValue MakeCollisionLayer(int value);
+        static PropertyValue MakeCollisionMask(int value);
+        static PropertyValue MakeColliderReference(int value);
 
         PropertyType Type() const noexcept { return type_; }
 

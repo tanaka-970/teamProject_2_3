@@ -1,6 +1,7 @@
 #include "GameObject.h"
 
 #include "../Registry/ComponentRegistry.h"
+#include "../../Scene/Runtime/Scene.h"
 
 #include <algorithm>
 
@@ -49,7 +50,13 @@ namespace ReplayEngine::Core
     void GameObject::SetEnabled(bool enabled) noexcept
     {
         // Component の OnEnable / OnDisable は Scene の同期点でまとめて反映される。
+        if (enabled_ == enabled) return;
         enabled_ = enabled;
+
+        // 無効化された GameObject の Collider は問い合わせ対象から外れる必要がある。
+        // Component 側の OnDisable でも世代は進むが、そちらは同期点まで遅れるため、
+        // ここでも即座に進めておく。
+        if (scene_ != nullptr) scene_->BumpStructureGeneration();
     }
 
     bool GameObject::ActiveInHierarchy() const noexcept
@@ -160,6 +167,10 @@ namespace ReplayEngine::Core
         // OnAttach の中でさらに AddComponent が呼ばれても、raw はヒープ上の実体を指しており
         // vector の再確保では動かないため安全。
         raw->AttachTo(this);
+
+        // Component の顔ぶれが変わった。
+        // Collider の登録表がこの世代番号だけを見て突き合わせ直す。
+        if (scene_ != nullptr) scene_->BumpStructureGeneration();
         return true;
     }
 
@@ -194,6 +205,7 @@ namespace ReplayEngine::Core
         if (!ComponentRegistry::IsRemovable(component->TypeID())) return false;
 
         component->MarkPendingDestroy();
+        if (scene_ != nullptr) scene_->BumpStructureGeneration();
         return true;
     }
 

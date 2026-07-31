@@ -1,4 +1,4 @@
-#include "legacy_stage_collision_bridge.h"
+﻿#include "legacy_stage_collision_bridge.h"
 
 #include "raycast.h"
 #include "stage.h"
@@ -24,6 +24,7 @@ bool LegacyStageCollisionBridge::QueryGround(const DirectX::XMFLOAT3& origin, fl
 
     hit.position = result.position;
     hit.normal = result.normal;
+    hit.source.backend = ReplayEngine::Scene::CollisionBackend::LegacyStage;
     hit.valid = true;
     return true;
 }
@@ -46,6 +47,7 @@ bool LegacyStageCollisionBridge::SweepSphere(const DirectX::XMFLOAT3& start,
     hit.center = result.center;
     hit.normal = result.normal;
     hit.fraction = result.fraction;
+    hit.source.backend = ReplayEngine::Scene::CollisionBackend::LegacyStage;
     hit.valid = true;
     return true;
 }

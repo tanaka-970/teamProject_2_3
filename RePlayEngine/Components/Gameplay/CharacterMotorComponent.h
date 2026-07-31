@@ -1,12 +1,15 @@
 #pragma once
 
 #include "../../Object/Component/Component.h"
+#include "../../Scene/Services/IPhysicsQueryService.h"
 
 #include <DirectXMath.h>
 
+#include <string>
+
 namespace ReplayEngine::Components
 {
-    class SphereColliderComponent;
+    class ColliderComponent;
 
     // キャラクターの移動・重力・ジャンプ・接地を担当する。
     //
@@ -25,6 +28,19 @@ namespace ReplayEngine::Components
     //   速度と位置の積分は OnFixedUpdate（固定 1/60 秒）で行う。
     //   移動要求は OnUpdate 側（可変フレーム）から積まれ、
     //   次の FixedUpdate でまとめて消費される。
+    //
+    // ---------------------------------------------------------------------
+    // 【Primary Collider について】
+    //   移動に使う Collider は Inspector から明示的に選ぶ。
+    //   「同じ GameObject にある最初の Collider」のような暗黙の自動選択はしない。
+    //   Collider が複数ある構成（本体 + 攻撃判定 + 検知範囲）で、
+    //   どれが移動用なのかがコードを読まないと分からない状態を避けるため。
+    //
+    //   参照は collider_key（GameObject 内で一意・Scene へ保存される番号）で持つ。
+    //   Component 名でも GameObject 名でもないので、名前を変えても壊れない。
+    //
+    //   Mesh Collider と Trigger Collider は選べない。
+    //   Inspector 側でも候補に出さないし、ここでも受け付けない。
     class CharacterMotorComponent final : public Core::Component
     {
         REPLAY_COMPONENT_BODY(CharacterMotorComponent)
@@ -61,6 +77,29 @@ namespace ReplayEngine::Components
         // 直近に受け取った移動方向。Controller が向きを決めるのに使う。
         const DirectX::XMFLOAT3& LastMoveDirection() const noexcept { return last_move_direction_; }
 
+        // ---- Primary Collider ------------------------------------------------
+
+        // 実際に使う Collider。見つからない・使えない形状なら nullptr。
+        ColliderComponent* ResolvePrimaryCollider() const;
+
+        // Inspector へ出す警告。空なら問題なし。
+        std::string PrimaryColliderStatus() const;
+
+        // 旧 Player 変換のときだけ使う。既存の Sphere Collider を Primary にする。
+        void SetPrimaryCollider(const ColliderComponent& collider) noexcept;
+
+        // ---- 診断 -------------------------------------------------------------
+
+        const Scene::CollisionSourceInfo& LastGroundSource() const noexcept
+        {
+            return last_ground_source_;
+        }
+        const Scene::CollisionSourceInfo& LastWallSource() const noexcept
+        {
+            return last_wall_source_;
+        }
+        bool HasGround() const noexcept { return has_ground_; }
+
         // ---- 保存されるパラメータ（PropertyRegistry へ登録）------------------
         // 既定値は旧 Player の値をそのまま引き継いでいる。挙動を変えないため。
 
@@ -84,17 +123,44 @@ namespace ReplayEngine::Components
         // Inspector から true にすれば重力とジャンプが有効になる。
         bool vertical_physics = false;
 
+        // 移動に使う Collider の collider_key。0 は未設定。
+        // Inspector では番号ではなく Collider 名の一覧から選ぶ。
+        int primary_collider_key = 0;
+
     private:
-        SphereColliderComponent* FindCollider() const;
-        void ResolveGround(const DirectX::XMFLOAT3& position, float radius,
-            float walkable_normal_y);
-        void ResolveWalls(const DirectX::XMFLOAT3& previous_position);
+        // 形状から「移動判定に使う球」を求める。
+        //
+        // 問い合わせ窓口が球のスイープしか持たないため、
+        // 形状ごとに安全側の球へ落として使う。
+        //   Sphere  … そのまま
+        //   Capsule … 半径はそのまま。接地は下側の半球、壁は中央の球を使う
+        //   Box     … 内接球（最小の半辺長）。角は拾えないが、
+        //              すり抜けは起きない側の近似になる
+        struct MotionSphere
+        {
+            // Owner のワールド位置からの相対。
+            DirectX::XMFLOAT3 ground_offset{ 0.0f, 0.0f, 0.0f };
+            DirectX::XMFLOAT3 wall_offset{ 0.0f, 0.0f, 0.0f };
+            float radius = 0.38f;
+            float skin_width = 0.015f;
+            float walkable_normal_y = 0.25f;
+            int layer = 0;
+            int mask = -1;
+            bool valid = false;
+        };
+        MotionSphere BuildMotionSphere() const;
+
+        void ResolveGround(const MotionSphere& shape);
+        void ResolveWalls(const MotionSphere& shape,
+            const DirectX::XMFLOAT3& previous_position);
 
         // 実行時のみの状態。保存しない。
         DirectX::XMFLOAT3 velocity_{ 0.0f, 0.0f, 0.0f };
         DirectX::XMFLOAT3 ground_normal_{ 0.0f, 1.0f, 0.0f };
         DirectX::XMFLOAT3 pending_move_{ 0.0f, 0.0f, 0.0f };
         DirectX::XMFLOAT3 last_move_direction_{ 0.0f, 0.0f, 0.0f };
+        Scene::CollisionSourceInfo last_ground_source_;
+        Scene::CollisionSourceInfo last_wall_source_;
         float ground_height_ = 0.0f;
         bool grounded_ = true;
         bool jump_requested_ = false;

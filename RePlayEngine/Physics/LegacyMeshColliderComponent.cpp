@@ -1,3 +1,8 @@
+﻿// 【Legacy】旧 ReplayEngine::Core::MeshColliderComponent の実装。
+// 新基盤は Components/Physics/MeshColliderComponent（ローカル Cook 共有方式）。
+// これは旧 Stage がまだ使っているため残している。Stage 移行完了時に削除する。
+// ファイル名を分けているのは、MSVC が obj をフラットに出す構成で
+// 同名 .cpp が衝突するのを避けるため。
 #include "../Core/Components/MeshColliderComponent.h"
 
 #include <algorithm>

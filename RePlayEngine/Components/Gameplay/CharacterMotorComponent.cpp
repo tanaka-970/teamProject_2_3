@@ -1,9 +1,13 @@
 #include "CharacterMotorComponent.h"
 
+#include "../Physics/BoxColliderComponent.h"
+#include "../Physics/CapsuleColliderComponent.h"
+#include "../Physics/ColliderComponent.h"
 #include "../Physics/SphereColliderComponent.h"
 #include "../../Object/GameObject/GameObject.h"
 #include "../../Scene/Runtime/Scene.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace ReplayEngine::Components
@@ -24,6 +28,8 @@ namespace ReplayEngine::Components
         pending_move_ = { 0.0f, 0.0f, 0.0f };
         jump_requested_ = false;
         grounded_ = true;
+        last_ground_source_ = Scene::CollisionSourceInfo{};
+        last_wall_source_ = Scene::CollisionSourceInfo{};
     }
 
     void CharacterMotorComponent::OnDisable()
@@ -54,11 +60,119 @@ namespace ReplayEngine::Components
         return Length2D(velocity_);
     }
 
-    SphereColliderComponent* CharacterMotorComponent::FindCollider() const
+    // -----------------------------------------------------------------------
+    // Primary Collider
+    // -----------------------------------------------------------------------
+
+    ColliderComponent* CharacterMotorComponent::ResolvePrimaryCollider() const
     {
         Core::GameObject* owner = Owner();
-        return owner != nullptr ? owner->GetComponent<SphereColliderComponent>() : nullptr;
+        if (owner == nullptr) return nullptr;
+
+        // 未設定のときに勝手に別の Collider を選ばない。
+        // 「なんとなく動いているが、どれで動いているか分からない」状態を作らない。
+        ColliderComponent* collider = FindColliderByKey(*owner, primary_collider_key);
+        if (collider == nullptr) return nullptr;
+
+        // Mesh や Trigger は移動用として使えないので、指定されていても受け付けない。
+        if (!collider->UsableAsCharacterShape()) return nullptr;
+        if (collider->is_trigger) return nullptr;
+        return collider;
     }
+
+    void CharacterMotorComponent::SetPrimaryCollider(const ColliderComponent& collider) noexcept
+    {
+        primary_collider_key = collider.collider_key;
+    }
+
+    std::string CharacterMotorComponent::PrimaryColliderStatus() const
+    {
+        if (primary_collider_key <= 0)
+        {
+            return "移動用 Collider が設定されていません。"
+                "地形との当たり判定は行われず、重力と接地も働きません。";
+        }
+
+        Core::GameObject* owner = Owner();
+        if (owner == nullptr) return std::string();
+
+        ColliderComponent* collider = FindColliderByKey(*owner, primary_collider_key);
+        if (collider == nullptr)
+        {
+            return "指定されていた Collider が見つかりません（Missing Collider）。"
+                "削除されたか、別の GameObject へ移された可能性があります。";
+        }
+        if (!collider->UsableAsCharacterShape())
+        {
+            return "この形状は移動用 Collider に使えません。"
+                "Sphere / Capsule / Box のいずれかを選んでください。";
+        }
+        if (collider->is_trigger)
+        {
+            return "Trigger の Collider は移動用に使えません。"
+                "Trigger を外すか、別の Collider を選んでください。";
+        }
+        return std::string();
+    }
+
+    CharacterMotorComponent::MotionSphere CharacterMotorComponent::BuildMotionSphere() const
+    {
+        MotionSphere shape;
+
+        const ColliderComponent* collider = ResolvePrimaryCollider();
+        if (collider == nullptr || !collider->ActiveInHierarchy()) return shape;
+
+        shape.layer = collider->collision_layer;
+        shape.mask = collider->collision_mask;
+        shape.ground_offset = collider->center_offset;
+        shape.wall_offset = collider->center_offset;
+
+        switch (collider->Shape())
+        {
+        case ColliderShape::Sphere:
+        {
+            const auto& sphere = static_cast<const SphereColliderComponent&>(*collider);
+            shape.radius = sphere.EffectiveRadius();
+            shape.skin_width = sphere.skin_width;
+            shape.walkable_normal_y = sphere.walkable_normal_y;
+            shape.valid = shape.radius > 0.0f;
+            break;
+        }
+        case ColliderShape::Capsule:
+        {
+            const auto& capsule = static_cast<const CapsuleColliderComponent&>(*collider);
+            shape.radius = capsule.EffectiveRadius();
+
+            // 接地は「一番下の半球」で見る。
+            // 中心で見ると、カプセルの下半分ぶん床へめり込んだ位置で接地判定になる。
+            const float half_cylinder =
+                std::max(0.0f, capsule.EffectiveHeight() * 0.5f - capsule.EffectiveRadius());
+            shape.ground_offset.y -= half_cylinder;
+            shape.valid = shape.radius > 0.0f;
+            break;
+        }
+        case ColliderShape::Box:
+        {
+            const auto& box = static_cast<const BoxColliderComponent&>(*collider);
+            const DirectX::XMFLOAT3 half = box.WorldHalfExtents();
+
+            // 内接球。角は拾えないが、本来より小さい球なので
+            // 「本当は当たらない場所で止まる」ことはない。
+            shape.radius = std::min({ half.x, half.y, half.z });
+            shape.ground_offset.y -= std::max(0.0f, half.y - shape.radius);
+            shape.valid = shape.radius > 0.0f;
+            break;
+        }
+        case ColliderShape::Mesh:
+            // ここへは来ない（ResolvePrimaryCollider が弾く）。
+            break;
+        }
+        return shape;
+    }
+
+    // -----------------------------------------------------------------------
+    // 更新
+    // -----------------------------------------------------------------------
 
     void CharacterMotorComponent::OnFixedUpdate(float fixed_delta_time)
     {
@@ -115,9 +229,7 @@ namespace ReplayEngine::Components
 
         // ---- 垂直方向 -------------------------------------------------------
 
-        const SphereColliderComponent* collider = FindCollider();
-        const float radius = collider != nullptr ? collider->radius : 0.38f;
-        const float walkable = collider != nullptr ? collider->walkable_normal_y : 0.25f;
+        const MotionSphere shape = BuildMotionSphere();
 
         if (vertical_physics)
         {
@@ -152,17 +264,15 @@ namespace ReplayEngine::Components
 
         // ---- 地形との解決 ---------------------------------------------------
         // 順序は旧 SceneGame と同じ「壁 -> 接地」。
-        ResolveWalls(previous_position);
-        ResolveGround(transform.LocalPosition(), radius, walkable);
+        ResolveWalls(shape, previous_position);
+        ResolveGround(shape);
     }
 
-    void CharacterMotorComponent::ResolveWalls(const DirectX::XMFLOAT3& previous_position)
+    void CharacterMotorComponent::ResolveWalls(const MotionSphere& shape,
+        const DirectX::XMFLOAT3& previous_position)
     {
         Core::GameObject* owner = Owner();
-        if (owner == nullptr) return;
-
-        const SphereColliderComponent* collider = FindCollider();
-        if (collider == nullptr || !collider->ActiveInHierarchy()) return;
+        if (owner == nullptr || !shape.valid) return;
 
         Scene::Scene* scene = GetScene();
         if (scene == nullptr) return;
@@ -173,36 +283,37 @@ namespace ReplayEngine::Components
         const DirectX::XMFLOAT3 current = transform.LocalPosition();
 
         const DirectX::XMFLOAT3 start{
-            previous_position.x + collider->center_offset.x,
-            previous_position.y + collider->center_offset.y,
-            previous_position.z + collider->center_offset.z };
+            previous_position.x + shape.wall_offset.x,
+            previous_position.y + shape.wall_offset.y,
+            previous_position.z + shape.wall_offset.z };
         const DirectX::XMFLOAT3 end{
-            current.x + collider->center_offset.x,
-            current.y + collider->center_offset.y,
-            current.z + collider->center_offset.z };
+            current.x + shape.wall_offset.x,
+            current.y + shape.wall_offset.y,
+            current.z + shape.wall_offset.z };
 
         // 床は下向きキャストが扱うので、ここでは壁だけを対象にする。
+        // Trigger は SceneCollisionWorld 側で除外される。
         Scene::SphereSweepHit hit{};
-        if (!physics->SweepSphere(start, end, collider->radius,
-            collider->walkable_normal_y - 0.001f, hit))
+        if (!physics->SweepSphereFiltered(start, end, shape.radius,
+            shape.walkable_normal_y - 0.001f, shape.layer, shape.mask, hit))
         {
             return;
         }
 
+        last_wall_source_ = hit.source;
+
         // 面から skin_width だけ離した位置へ押し戻す。
         transform.SetLocalPosition(DirectX::XMFLOAT3{
-            hit.center.x + hit.normal.x * collider->skin_width - collider->center_offset.x,
-            hit.center.y + hit.normal.y * collider->skin_width - collider->center_offset.y,
-            hit.center.z + hit.normal.z * collider->skin_width - collider->center_offset.z });
+            hit.center.x + hit.normal.x * shape.skin_width - shape.wall_offset.x,
+            hit.center.y + hit.normal.y * shape.skin_width - shape.wall_offset.y,
+            hit.center.z + hit.normal.z * shape.skin_width - shape.wall_offset.z });
     }
 
-    void CharacterMotorComponent::ResolveGround(const DirectX::XMFLOAT3& position,
-        float radius, float walkable_normal_y)
+    void CharacterMotorComponent::ResolveGround(const MotionSphere& shape)
     {
         Core::GameObject* owner = Owner();
         if (owner == nullptr) return;
 
-        const SphereColliderComponent* collider = FindCollider();
         const Scene::Scene* scene = GetScene();
         const Scene::IPhysicsQueryService* physics =
             scene != nullptr ? scene->Services().Physics() : nullptr;
@@ -211,15 +322,23 @@ namespace ReplayEngine::Components
         ground_height_ = fallback_ground_y;
         ground_normal_ = { 0.0f, 1.0f, 0.0f };
 
-        if (collider != nullptr && collider->ActiveInHierarchy() &&
-            physics != nullptr && physics->CollisionAvailable())
+        if (shape.valid && physics != nullptr && physics->CollisionAvailable())
         {
+            const DirectX::XMFLOAT3 local = owner->GetTransform().LocalPosition();
+            const DirectX::XMFLOAT3 origin{
+                local.x + shape.ground_offset.x,
+                local.y + shape.ground_offset.y,
+                local.z + shape.ground_offset.z };
+
             Scene::GroundHit hit{};
-            if (physics->QueryGround(position, radius, 80.0f, 300.0f, walkable_normal_y, hit))
+            if (physics->QueryGroundFiltered(origin, shape.radius, 80.0f, 300.0f,
+                shape.walkable_normal_y, shape.layer, shape.mask, hit))
             {
                 has_ground_ = true;
-                ground_height_ = hit.position.y;
+                // 接地点は中心オフセットぶん戻して、GameObject の足元の高さへ直す。
+                ground_height_ = hit.position.y - shape.ground_offset.y;
                 ground_normal_ = hit.normal;
+                last_ground_source_ = hit.source;
             }
         }
 

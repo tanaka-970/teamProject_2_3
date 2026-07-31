@@ -1,7 +1,9 @@
 #include "CookedMeshCollision.h"
 
 #include <algorithm>
+#include <cfloat>
 #include <cmath>
+#include <cstring>
 
 using namespace DirectX;
 
@@ -11,18 +13,38 @@ namespace ReplayEngine::Physics
     {
         constexpr float minimum_cell_size = 0.05f;
         constexpr int maximum_cells_per_axis = 512;
+
+        void HashCombine(std::size_t& seed, std::size_t value) noexcept
+        {
+            seed ^= value + 0x9e3779b97f4a7c15ull + (seed << 6) + (seed >> 2);
+        }
+    }
+
+    std::size_t CookKeyHash::operator()(const CookKey& key) const noexcept
+    {
+        std::size_t seed = std::hash<std::string>{}(key.asset_guid);
+        HashCombine(seed, std::hash<std::string>{}(key.content_revision));
+
+        // float をそのまま hash すると -0.0 と 0.0 が別になるなど扱いが面倒なので、
+        // ビット列を整数として扱う。値が一致すれば必ず同じハッシュになる。
+        std::uint32_t cell_bits = 0;
+        std::memcpy(&cell_bits, &key.settings.cell_size, sizeof(cell_bits));
+        HashCombine(seed, static_cast<std::size_t>(cell_bits));
+        HashCombine(seed, key.settings.double_sided ? 1u : 0u);
+        HashCombine(seed, static_cast<std::size_t>(
+            static_cast<std::uint32_t>(key.settings.sub_mesh_index)));
+        return seed;
     }
 
     std::shared_ptr<const CookedMeshCollisionData> CookedMeshCollisionData::Build(
-        std::string asset_guid, std::vector<Triangle> local_triangles,
-        const Settings& settings)
+        CookKey key, std::vector<Triangle> local_triangles)
     {
         // コンストラクタが private なので make_shared は使えない。
         // shared_ptr へ即座に載せるので所有権は明確。
         std::shared_ptr<CookedMeshCollisionData> data(new CookedMeshCollisionData());
-        data->asset_guid_ = std::move(asset_guid);
-        data->settings_ = settings;
-        data->settings_.cell_size = std::max(minimum_cell_size, settings.cell_size);
+        data->key_ = std::move(key);
+        data->key_.settings.cell_size =
+            std::max(minimum_cell_size, data->key_.settings.cell_size);
         data->triangles_ = std::move(local_triangles);
         data->BuildGrid();
         return data;
@@ -56,7 +78,7 @@ namespace ReplayEngine::Physics
             }
         }
 
-        const float cell = settings_.cell_size;
+        const float cell = key_.settings.cell_size;
         const float width = std::max(0.0f, bounds_max_.x - bounds_min_.x);
         const float depth = std::max(0.0f, bounds_max_.z - bounds_min_.z);
 
@@ -95,7 +117,7 @@ namespace ReplayEngine::Physics
     void CookedMeshCollisionData::CellRange(float min_x, float max_x, float min_z, float max_z,
         int& x0, int& x1, int& z0, int& z1) const noexcept
     {
-        const float cell = settings_.cell_size;
+        const float cell = key_.settings.cell_size;
         x0 = static_cast<int>((min_x - bounds_min_.x) / cell);
         x1 = static_cast<int>((max_x - bounds_min_.x) / cell);
         z0 = static_cast<int>((min_z - bounds_min_.z) / cell);
@@ -149,51 +171,59 @@ namespace ReplayEngine::Physics
     // -----------------------------------------------------------------------
 
     std::shared_ptr<const CookedMeshCollisionData> CookedMeshCollisionCache::Acquire(
-        const std::string& asset_guid,
-        const CookedMeshCollisionData::Settings& settings,
-        const Loader& loader)
+        const CookKey& key, const Loader& loader)
     {
-        if (asset_guid.empty()) return nullptr;
+        if (key.asset_guid.empty()) return nullptr;
 
-        // 一度失敗した Asset は再試行しない。毎フレーム同じ読み込みを走らせないため。
-        const auto failure = failures_.find(asset_guid);
+        // 一度失敗したキーは再試行しない。毎フレーム同じ読み込みを走らせないため。
+        // Asset を作り直せば content_revision が変わり、別キーとして再試行される。
+        const auto failure = failures_.find(key);
         if (failure != failures_.end() && failure->second) return nullptr;
 
-        const auto found = entries_.find(asset_guid);
+        const auto found = entries_.find(key);
         if (found != entries_.end())
         {
-            // Cook 設定が変わっていたら作り直す。
-            if (found->second.settings == settings) return found->second.data;
+            // まだ誰かが握っていれば、その実体を共有する。
+            if (auto alive = found->second.lock()) return alive;
+
+            // 期限切れ。参照が 0 になっていたので作り直す。
             entries_.erase(found);
         }
 
         if (!loader)
         {
-            failures_[asset_guid] = true;
+            failures_[key] = true;
             return nullptr;
         }
 
         std::vector<Triangle> local_triangles;
-        if (!loader(asset_guid, local_triangles) || local_triangles.empty())
+        if (!loader(key, local_triangles) || local_triangles.empty())
         {
             // 無効な Collider を作らせない。呼び出し側は nullptr を見て登録を諦める。
-            failures_[asset_guid] = true;
+            failures_[key] = true;
             return nullptr;
         }
 
-        Entry entry;
-        entry.settings = settings;
-        entry.data = CookedMeshCollisionData::Build(
-            asset_guid, std::move(local_triangles), settings);
+        auto data = CookedMeshCollisionData::Build(key, std::move(local_triangles));
+        ++cook_count_;
 
-        const auto inserted = entries_.emplace(asset_guid, std::move(entry));
-        return inserted.first->second.data;
+        // 表には weak_ptr だけを残す。所有者は呼び出し側の Collider。
+        entries_[key] = data;
+        return data;
     }
 
     void CookedMeshCollisionCache::Invalidate(const std::string& asset_guid)
     {
-        entries_.erase(asset_guid);
-        failures_.erase(asset_guid);
+        for (auto iterator = entries_.begin(); iterator != entries_.end();)
+        {
+            iterator = iterator->first.asset_guid == asset_guid
+                ? entries_.erase(iterator) : std::next(iterator);
+        }
+        for (auto iterator = failures_.begin(); iterator != failures_.end();)
+        {
+            iterator = iterator->first.asset_guid == asset_guid
+                ? failures_.erase(iterator) : std::next(iterator);
+        }
     }
 
     void CookedMeshCollisionCache::Clear() noexcept
@@ -202,9 +232,37 @@ namespace ReplayEngine::Physics
         failures_.clear();
     }
 
-    bool CookedMeshCollisionCache::Failed(const std::string& asset_guid) const
+    std::size_t CookedMeshCollisionCache::Collect()
     {
-        const auto found = failures_.find(asset_guid);
+        std::size_t removed = 0;
+        for (auto iterator = entries_.begin(); iterator != entries_.end();)
+        {
+            if (iterator->second.expired())
+            {
+                iterator = entries_.erase(iterator);
+                ++removed;
+            }
+            else
+            {
+                ++iterator;
+            }
+        }
+        return removed;
+    }
+
+    std::size_t CookedMeshCollisionCache::LiveEntryCount() const
+    {
+        std::size_t count = 0;
+        for (const auto& entry : entries_)
+        {
+            if (!entry.second.expired()) ++count;
+        }
+        return count;
+    }
+
+    bool CookedMeshCollisionCache::Failed(const CookKey& key) const
+    {
+        const auto found = failures_.find(key);
         return found != failures_.end() && found->second;
     }
 }
