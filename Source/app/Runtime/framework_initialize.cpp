@@ -226,7 +226,9 @@ bool framework::initialize()
     lights.data.point_lights[0].position = { 3.0f, 4.0f, -24.0f, 18.0f };
     lights.data.point_lights[0].color = { 0.55f, 0.75f, 1.0f, 2.0f };
 
-    // 法線テクスチャを持たない材質で使うダミー法線を作る。
+    // 法線テクスチャを持たない材質で使うダミー法線を作る。kwjkshhakjwhhwhhsbkkwhiiwnzkkhjsowjjw
+
+    //iiwjjwjisu
     {
         uint8_t pixel[4] = { 128, 128, 255, 255 };
         D3D11_TEXTURE2D_DESC td2{};

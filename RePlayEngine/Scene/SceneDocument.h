@@ -70,6 +70,45 @@ namespace ReplayEngine::Scene
         bool playing = true;
     };
 
+    // 2D UI要素。将来のUIアニメーション(AEライク)ツールの土台。
+    //
+    // 設計意図:
+    //   - Transformを anchor / position / scale / rotation / opacity へ分解する。
+    //     sizeとscaleを分けているのは、親子でscaleを継承させるため。
+    //     既存UIクラスのように実サイズ直指定だと階層変形が成立しない。
+    //   - anchorは0..1の正規化座標。回転とスケールの基準点になる。
+    //     AEのアンカーポイントに相当し、これが無いと端を軸にした開閉ができない。
+    //   - 親子はEntityIdで参照する。ポインタで持つとvector再確保で壊れるため。
+    //   - 後からキーフレームを載せられるよう、アニメート対象の値は
+    //     すべてこの構造体の中に平坦に置いてある。
+    struct UIElementData
+    {
+        // 親のEntityId。0ならルート(キャンバス直下)。
+        EntityId parent = 0;
+        // 同じ親の中での描画順。小さいほど奥。
+        int order = 0;
+
+        // --- Transform (アニメート対象) ---
+        DirectX::XMFLOAT2 anchor{ 0.5f, 0.5f };    // 0..1 正規化
+        DirectX::XMFLOAT2 position{ 0.0f, 0.0f };  // 親空間のピクセル
+        DirectX::XMFLOAT2 size{ 100.0f, 100.0f };  // 元サイズ(ピクセル)
+        DirectX::XMFLOAT2 scale{ 1.0f, 1.0f };     // 倍率。親から継承する
+        float rotation = 0.0f;                     // degree
+        float opacity = 1.0f;                      // 親から継承する
+
+        // --- 見た目 ---
+        // 画像はAssetDatabaseのGUIDで参照する。生パスを持つと
+        // ファイル移動で壊れ、キャッシュ共有もできない。
+        std::string sprite_guid;
+        std::string sprite_name;
+        DirectX::XMFLOAT4 color{ 1.0f, 1.0f, 1.0f, 1.0f };
+        // UV切り抜き (x, y, w, h)。ピクセル単位。w<=0なら画像全体。
+        DirectX::XMFLOAT4 uv_rect{ 0.0f, 0.0f, 0.0f, 0.0f };
+        // 0=テクスチャのアルファ, 1=白抜き, 2=黒抜き (sprite::AlphaModeと対応)
+        int alpha_mode = 0;
+        bool visible = true;
+    };
+
     struct SceneEntity
     {
         EntityId id = 0;
@@ -81,6 +120,7 @@ namespace ReplayEngine::Scene
         std::optional<MeshColliderData> mesh_collider;
         std::optional<GravityData> gravity;
         std::optional<AnimationData> animation;
+        std::optional<UIElementData> ui_element;
     };
 
     class SceneDocument final

@@ -12,7 +12,8 @@ namespace ReplayEngine::Scene
 {
     namespace
     {
-        constexpr int scene_format_version = 7;
+        // 8: UI_ELEMENT を追加。旧バージョンのデータもそのまま読める。
+        constexpr int scene_format_version = 8;
         constexpr std::size_t max_scene_entities = 100000;
 
         bool Expect(std::istream& stream, const char* expected, std::string& error)
@@ -142,6 +143,25 @@ namespace ReplayEngine::Scene
                 const auto& value = *entity.animation;
                 stream << "ANIMATION " << value.clip_index << ' ' << value.speed
                     << ' ' << value.loop << ' ' << value.playing << '\n';
+            }
+            if (entity.ui_element)
+            {
+                // 並びは UIElementData の宣言順に合わせる。
+                // 読み込み側(version>=8)と1対1で対応させること。
+                const auto& value = *entity.ui_element;
+                stream << "UI_ELEMENT " << value.parent << ' ' << value.order
+                    << ' ' << value.anchor.x << ' ' << value.anchor.y
+                    << ' ' << value.position.x << ' ' << value.position.y
+                    << ' ' << value.size.x << ' ' << value.size.y
+                    << ' ' << value.scale.x << ' ' << value.scale.y
+                    << ' ' << value.rotation << ' ' << value.opacity
+                    << ' ' << std::quoted(value.sprite_guid)
+                    << ' ' << std::quoted(value.sprite_name)
+                    << ' ' << value.color.x << ' ' << value.color.y
+                    << ' ' << value.color.z << ' ' << value.color.w
+                    << ' ' << value.uv_rect.x << ' ' << value.uv_rect.y
+                    << ' ' << value.uv_rect.z << ' ' << value.uv_rect.w
+                    << ' ' << value.alpha_mode << ' ' << value.visible << '\n';
             }
             stream << "END_ENTITY\n";
         }
@@ -341,6 +361,25 @@ namespace ReplayEngine::Scene
                     AnimationData value{};
                     if (!(stream >> value.clip_index >> value.speed >> value.loop >> value.playing)) return false;
                     entity.animation = value;
+                }
+                else if (token == "UI_ELEMENT" && version >= 8)
+                {
+                    // 保存側と並びを1対1で対応させること。
+                    UIElementData value{};
+                    if (!(stream >> value.parent >> value.order
+                        >> value.anchor.x >> value.anchor.y
+                        >> value.position.x >> value.position.y
+                        >> value.size.x >> value.size.y
+                        >> value.scale.x >> value.scale.y
+                        >> value.rotation >> value.opacity
+                        >> std::quoted(value.sprite_guid)
+                        >> std::quoted(value.sprite_name)
+                        >> value.color.x >> value.color.y
+                        >> value.color.z >> value.color.w
+                        >> value.uv_rect.x >> value.uv_rect.y
+                        >> value.uv_rect.z >> value.uv_rect.w
+                        >> value.alpha_mode >> value.visible)) return false;
+                    entity.ui_element = value;
                 }
                 else
                 {

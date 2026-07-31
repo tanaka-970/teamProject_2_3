@@ -93,7 +93,7 @@
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>.;.\Source\app;.\Source\core;.\Source\mesh;.\Source\render;.\cereal-master\include;.\DirectXTK-main\Inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
-      <!-- /FS: 並列ビルドで褁E��のCL.EXEが同じPDBへ書くとき�E競吁EC1041)を防ぁE-->
+      <!-- /FS: 並列ビルドで褁E�E��E�のCL.EXEが同じPDBへ書くとき�E競吁EC1041)を防ぁE-->
       <AdditionalOptions>/utf-8 /validate-charset /FS %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
@@ -122,7 +122,7 @@
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>.;.\Source\app;.\Source\core;.\Source\mesh;.\Source\render;.\cereal-master\include;.\DirectXTK-main\Inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <!-- /FS: 並列ビルドで褁E��のCL.EXEが同じPDBへ書くとき�E競吁EC1041)を防ぁE-->
+      <!-- /FS: 並列ビルドで褁E�E��E�のCL.EXEが同じPDBへ書くとき�E競吁EC1041)を防ぁE-->
       <AdditionalOptions>/utf-8 /validate-charset /FS %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
@@ -149,7 +149,7 @@
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>.;.\Source\app;.\Source\core;.\Source\mesh;.\Source\render;.\cereal-master\include;.\DirectXTK-main\Inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
-      <!-- /FS: 並列ビルドで褁E��のCL.EXEが同じPDBへ書くとき�E競吁EC1041)を防ぁE-->
+      <!-- /FS: 並列ビルドで褁E�E��E�のCL.EXEが同じPDBへ書くとき�E競吁EC1041)を防ぁE-->
       <AdditionalOptions>/utf-8 /validate-charset /FS %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
@@ -175,12 +175,12 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <!-- Debug|x64と同じC++17とUSE_IMGUIを指定する。ここが欠けてぁE��と
-           nested namespace めEstd::clamp が使えず、エチE��タUIも消える、E-->
+      <!-- Debug|x64と同じC++17とUSE_IMGUIを指定する。ここが欠けてぁE�E��E�と
+           nested namespace めEstd::clamp が使えず、エチE�E��E�タUIも消える、E-->
       <PreprocessorDefinitions>NDEBUG;_WINDOWS;USE_IMGUI;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <SDLCheck>true</SDLCheck>
-      <!-- /FS: 並列ビルドで褁E��のCL.EXEが同じPDBへ書くとき�E競吁EC1041)を防ぁE-->
+      <!-- /FS: 並列ビルドで褁E�E��E�のCL.EXEが同じPDBへ書くとき�E競吁EC1041)を防ぁE-->
       <AdditionalOptions>/utf-8 /validate-charset /FS %(AdditionalOptions)</AdditionalOptions>
       <AdditionalIncludeDirectories>.;.\Source\app;.\Source\core;.\Source\mesh;.\Source\render;.\cereal-master\include;.\DirectXTK-main\Inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
@@ -190,7 +190,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <!-- ソリューション同梱のDirectXTKは Desktop_2026 構�Eで出力される、E
-           2019のパスにはReleaseビルド済みlibが無ぁE��め両方を並べる、E-->
+           2019のパスにはReleaseビルド済みlibが無ぁE�E��E�め両方を並べる、E-->
       <AdditionalLibraryDirectories>.\DirectXTK-main\Bin\Desktop_2026\x64\Release;.\DirectXTK-main\Bin\Desktop_2019\x64\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>d3d11.lib;dxgi.lib;DirectXTK.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
@@ -230,6 +230,7 @@
     <ClCompile Include="RePlayEngine\Physics\MeshCollisionCooker.cpp" />
     <ClCompile Include="RePlayEngine\Scene\SceneDocument.cpp" />
     <ClCompile Include="RePlayEngine\Scene\SceneSerializer.cpp" />
+    <ClCompile Include="RePlayEngine\Scene\UIHierarchy.cpp" />
     <ClCompile Include="RePlayEngine\Scene\PrefabSerializer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\ShaderPresets\ShaderPresetSerializer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\ShaderPresets\BuiltInShaderPresets.cpp" />
@@ -335,6 +336,7 @@
     <ClInclude Include="RePlayEngine\Scene\BootLogoScene.h" />
     <ClInclude Include="RePlayEngine\Scene\LoadingScene.h" />
     <ClInclude Include="RePlayEngine\Scene\SceneDocument.h" />
+    <ClInclude Include="RePlayEngine\Scene\UIHierarchy.h" />
     <ClInclude Include="RePlayEngine\Scene\SceneSerializer.h" />
     <ClInclude Include="RePlayEngine\Scene\PrefabSerializer.h" />
     <ClInclude Include="Source\core\framebuffer.h" />
