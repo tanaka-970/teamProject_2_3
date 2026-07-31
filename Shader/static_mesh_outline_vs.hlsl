@@ -29,5 +29,8 @@ VS_OUT main(VS_IN vin)
     vout.world_normal   = float4(wn, 0.0f);
     vout.texcoord       = vin.texcoord;
     vout.color          = outline_color;
+    // 輪郭パスはモーションベクターを書かないので、動きゼロとして埋める。
+    vout.current_clip   = vout.position;
+    vout.previous_clip  = vout.position;
     return vout;
 }

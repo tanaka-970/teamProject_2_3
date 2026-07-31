@@ -1,6 +1,7 @@
 // スキンメッシュの材質情報をG-Bufferへ書き込むピクセルシェーダー。
 #include "skinned_mesh.hlsli"
 #include "gbuffer_common.hlsli"
+#include "motion_vector_common.hlsli"
 
 Texture2D base_color_map : register(t0);
 Texture2D normal_map     : register(t1);
@@ -11,7 +12,8 @@ cbuffer MATERIAL_OVERRIDE : register(b9)
     float4 mat_params; // x=metallic y=roughness z=occlusion w=emissive
     uint   shading_model;
     float  texture_contrast;
-    uint2  padding_;
+    float  pixelate_size;
+    float  pixelate_strength;
 };
 
 GBufferOut main(VS_OUT pin)
@@ -38,6 +40,13 @@ GBufferOut main(VS_OUT pin)
     d.roughness = max(mat_params.y, 0.045f);
     d.metalness = mat_params.x;
     d.occlusion_strength = mat_params.z;
+    d.velocity = compute_motion_vector(pin.current_clip, pin.previous_clip);
 
-    return EncodeGBuffer(d);
+    GBufferOut output = EncodeGBuffer(d);
+    if (shading_model == SHADING_MODEL_PIXELATE)
+    {
+        output.emissive.a = max(pixelate_size, 1.0f);
+        output.normal.a = saturate(pixelate_strength);
+    }
+    return output;
 }

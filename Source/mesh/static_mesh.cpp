@@ -7,6 +7,8 @@
 
 #include <filesystem>
 #include "texture.h"
+#include "../render/motion_vector_context.h"
+#include "../../RePlayEngine/Rendering/RenderStats.h"
 
 using namespace DirectX;
 static_mesh::static_mesh(ID3D11Device* device, const wchar_t* obj_filename, bool flipping_v_coordinates/*UNIT.14*/)
@@ -319,6 +321,12 @@ static_mesh::static_mesh(ID3D11Device* device, const wchar_t* obj_filename, bool
 	hr = device->CreateBuffer(&buffer_desc, nullptr, constant_buffer.GetAddressOf());
 	_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
 
+	// TAAのモーションベクター用の定数バッファ(b6)。
+	buffer_desc.ByteWidth = sizeof(motion_vectors::ObjectConstants);
+	hr = device->CreateBuffer(&buffer_desc, nullptr,
+		motion_object_constant_buffer.GetAddressOf());
+	_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+
 	if (materials.size() == 0)
 	{
 		for (const subset& subset : subsets)
@@ -365,8 +373,34 @@ void static_mesh::render(ID3D11DeviceContext* immediate_context,
 	ID3D11PixelShader* alternative_pixel_shader,
 	ID3D11VertexShader* alternative_vertex_shader,
 	ID3D11InputLayout* alternative_input_layout,
-	bool bind_pixel_shader)
+	bool bind_pixel_shader,
+	bool write_motion_vectors)
 {
+	if (write_motion_vectors && motion_object_constant_buffer)
+	{
+		// 剛体なので前フレームのワールド行列を渡すだけでモーションベクターが出る。
+		const motion_vectors::FrameContext& motion_frame = motion_vectors::Frame();
+		motion_vectors::ObjectConstants motion_object{};
+		motion_object.previous_world = motion_history_valid ? previous_world : world;
+		motion_object.previous_view_projection = motion_frame.previous_view_projection;
+		motion_object.params = { motion_frame.enabled && motion_history_valid ? 1.0f : 0.0f,
+			motion_frame.current_jitter.x, motion_frame.current_jitter.y, 0.0f };
+		motion_object.params2 = { motion_frame.previous_jitter.x,
+			motion_frame.previous_jitter.y, 0.0f, 0.0f };
+		immediate_context->UpdateSubresource(
+			motion_object_constant_buffer.Get(), 0, nullptr, &motion_object, 0, 0);
+		immediate_context->VSSetConstantBuffers(
+			6, 1, motion_object_constant_buffer.GetAddressOf());
+
+		// 同一フレーム内で二度呼ばれても履歴は一度だけ進める。
+		if (motion_frame_id != motion_frame.frame_id)
+		{
+			motion_frame_id = motion_frame.frame_id;
+			previous_world = world;
+			motion_history_valid = true;
+		}
+	}
+
 	uint32_t stride{ sizeof(vertex) };
 	uint32_t offset{ 0 };
 	immediate_context->IASetVertexBuffers(0, 1, vertex_buffer.GetAddressOf(), &stride, &offset);
@@ -408,6 +442,7 @@ void static_mesh::render(ID3D11DeviceContext* immediate_context,
 		{
 			if (material.name == subset.usemtl)
 			{
+				ReplayEngine::Rendering::Stats().CountDrawIndexed(subset.index_count);
 				immediate_context->DrawIndexed(subset.index_count, subset.index_start, 0);
 			}
 		}

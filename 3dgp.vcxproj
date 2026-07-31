@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -93,7 +93,8 @@
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>.;.\Source\app;.\Source\core;.\Source\mesh;.\Source\render;.\cereal-master\include;.\DirectXTK-main\Inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
-      <AdditionalOptions>/utf-8 /validate-charset %(AdditionalOptions)</AdditionalOptions>
+      <!-- /FS: 並列ビルドで褁E�E��E�のCL.EXEが同じPDBへ書くとき�E競吁EC1041)を防ぁE-->
+      <AdditionalOptions>/utf-8 /validate-charset /FS %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -121,7 +122,8 @@
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>.;.\Source\app;.\Source\core;.\Source\mesh;.\Source\render;.\cereal-master\include;.\DirectXTK-main\Inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalOptions>/utf-8 /validate-charset %(AdditionalOptions)</AdditionalOptions>
+      <!-- /FS: 並列ビルドで褁E�E��E�のCL.EXEが同じPDBへ書くとき�E競吁EC1041)を防ぁE-->
+      <AdditionalOptions>/utf-8 /validate-charset /FS %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -147,7 +149,8 @@
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>.;.\Source\app;.\Source\core;.\Source\mesh;.\Source\render;.\cereal-master\include;.\DirectXTK-main\Inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
-      <AdditionalOptions>/utf-8 /validate-charset %(AdditionalOptions)</AdditionalOptions>
+      <!-- /FS: 並列ビルドで褁E�E��E�のCL.EXEが同じPDBへ書くとき�E競吁EC1041)を防ぁE-->
+      <AdditionalOptions>/utf-8 /validate-charset /FS %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -172,9 +175,13 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <!-- Debug|x64と同じC++17とUSE_IMGUIを指定する。ここが欠けてぁE�E��E�と
+           nested namespace めEstd::clamp が使えず、エチE�E��E�タUIも消える、E-->
+      <PreprocessorDefinitions>NDEBUG;_WINDOWS;USE_IMGUI;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <LanguageStandard>stdcpp17</LanguageStandard>
       <SDLCheck>true</SDLCheck>
-      <AdditionalOptions>/utf-8 /validate-charset %(AdditionalOptions)</AdditionalOptions>
+      <!-- /FS: 並列ビルドで褁E�E��E�のCL.EXEが同じPDBへ書くとき�E競吁EC1041)を防ぁE-->
+      <AdditionalOptions>/utf-8 /validate-charset /FS %(AdditionalOptions)</AdditionalOptions>
       <AdditionalIncludeDirectories>.;.\Source\app;.\Source\core;.\Source\mesh;.\Source\render;.\cereal-master\include;.\DirectXTK-main\Inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
@@ -182,7 +189,9 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>.\DirectXTK-main\Bin\Desktop_2019\x64\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <!-- ソリューション同梱のDirectXTKは Desktop_2026 構�Eで出力される、E
+           2019のパスにはReleaseビルド済みlibが無ぁE�E��E�め両方を並べる、E-->
+      <AdditionalLibraryDirectories>.\DirectXTK-main\Bin\Desktop_2026\x64\Release;.\DirectXTK-main\Bin\Desktop_2019\x64\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>d3d11.lib;dxgi.lib;DirectXTK.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <FxCompile>
@@ -197,11 +206,20 @@
     <ClCompile Include="RePlayEngine\Rendering\Deferred\deferred_renderer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Passes\PostProcessPass.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Passes\BloomPass.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Passes\SsaoPass.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Passes\SsrPass.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Passes\TaaPass.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Deferred\TiledDeferredPass.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_screen_space.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_render_stats.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\RenderStats.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\MeshSimplifier.cpp" />
     <ClCompile Include="RePlayEngine\Assets\ImageAsset.cpp" />
     <ClCompile Include="RePlayEngine\Presentation\BootLogoComponent.cpp" />
     <ClCompile Include="RePlayEngine\Assets\AssetCache.cpp" />
     <ClCompile Include="RePlayEngine\Assets\AssetDatabase.cpp" />
     <ClCompile Include="RePlayEngine\Assets\AsyncAssetManager.cpp" />
+    <ClCompile Include="RePlayEngine\Assets\TextureCompressor.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Commands\UndoStack.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Gizmo\TransformGizmo.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Gizmo\ViewportPicker.cpp" />
@@ -212,6 +230,7 @@
     <ClCompile Include="RePlayEngine\Physics\MeshCollisionCooker.cpp" />
     <ClCompile Include="RePlayEngine\Scene\SceneDocument.cpp" />
     <ClCompile Include="RePlayEngine\Scene\SceneSerializer.cpp" />
+    <ClCompile Include="RePlayEngine\Scene\UIHierarchy.cpp" />
     <ClCompile Include="RePlayEngine\Scene\PrefabSerializer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\ShaderPresets\ShaderPresetSerializer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\ShaderPresets\BuiltInShaderPresets.cpp" />
@@ -222,6 +241,7 @@
     <ClCompile Include="Source\core\fullscreen_quad.cpp" />
     <ClCompile Include="Source\mesh\geometric_primitive.cpp" />
     <ClCompile Include="Source\mesh\gltf_model.cpp" />
+    <ClCompile Include="Source\mesh\gltf_model_cache.cpp" />
     <ClCompile Include="Source\render\lights_manager.cpp" />
     <ClCompile Include="Source\render\pbr_renderer.cpp" />
     <ClCompile Include="Source\render\particle_system.cpp" />
@@ -269,7 +289,17 @@
     <ClInclude Include="Source\render\deferred_renderer.h" />
     <ClInclude Include="RePlayEngine\Rendering\Deferred\deferred_renderer.h" />
     <ClInclude Include="RePlayEngine\Rendering\Passes\PostProcessPass.h" />
+    <ClInclude Include="RePlayEngine\Rendering\FrameConstants.h" />
+    <ClInclude Include="RePlayEngine\Rendering\RenderStats.h" />
+    <ClInclude Include="RePlayEngine\Rendering\PassStates.h" />
+    <ClInclude Include="RePlayEngine\Rendering\MeshSimplifier.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Frustum.h" />
+    <ClInclude Include="RePlayEngine\Rendering\RenderTexture.h" />
     <ClInclude Include="RePlayEngine\Rendering\Passes\BloomPass.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Passes\SsaoPass.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Passes\SsrPass.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Passes\TaaPass.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Deferred\TiledDeferredPass.h" />
     <ClInclude Include="RePlayEngine\Rendering\RenderGraph\RenderGraph.h" />
     <ClInclude Include="RePlayEngine\Rendering\ShaderStack\ShaderLayerStack.h" />
     <ClInclude Include="RePlayEngine\Rendering\ShaderPresets\ShaderPresetSerializer.h" />
@@ -281,6 +311,9 @@
     <ClInclude Include="RePlayEngine\Assets\AssetCache.h" />
     <ClInclude Include="RePlayEngine\Assets\AssetDatabase.h" />
     <ClInclude Include="RePlayEngine\Assets\AsyncAssetManager.h" />
+    <ClInclude Include="RePlayEngine\Assets\ConcurrentResourceCache.h" />
+    <ClInclude Include="RePlayEngine\Assets\ParallelLoader.h" />
+    <ClInclude Include="RePlayEngine\Assets\TextureCompressor.h" />
     <ClInclude Include="RePlayEngine\Editor\Commands\UndoStack.h" />
     <ClInclude Include="RePlayEngine\Editor\Gizmo\TransformGizmo.h" />
     <ClInclude Include="RePlayEngine\Editor\Gizmo\ViewportPicker.h" />
@@ -303,6 +336,7 @@
     <ClInclude Include="RePlayEngine\Scene\BootLogoScene.h" />
     <ClInclude Include="RePlayEngine\Scene\LoadingScene.h" />
     <ClInclude Include="RePlayEngine\Scene\SceneDocument.h" />
+    <ClInclude Include="RePlayEngine\Scene\UIHierarchy.h" />
     <ClInclude Include="RePlayEngine\Scene\SceneSerializer.h" />
     <ClInclude Include="RePlayEngine\Scene\PrefabSerializer.h" />
     <ClInclude Include="Source\core\framebuffer.h" />
@@ -366,6 +400,12 @@
     <None Include="RePlayEngine\Shaders\TeamDeferred\Skinning.hlsli" />
     <None Include="RePlayEngine\Shaders\TeamDeferred\TerrainCarve.hlsli" />
     <None Include="Shader\csm_common.hlsli" />
+    <None Include="Shader\frame_common.hlsli" />
+    <None Include="Shader\PostEffects\AmbientOcclusion\ssao_common.hlsli" />
+    <None Include="Shader\PostEffects\Reflection\ssr_common.hlsli" />
+    <None Include="Shader\motion_vector_common.hlsli" />
+    <None Include="Shader\tiled_light_common.hlsli" />
+    <None Include="Shader\motion_vector_skinning.hlsli" />
     <None Include="Shader\fullscreen_quad.hlsli" />
     <None Include="Shader\gbuffer_common.hlsli" />
     <None Include="Shader\geometric_primitive.hlsli" />
@@ -394,6 +434,42 @@
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Shader\PostEffects\Pixelation\object_pixelate_ps.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\tiled_deferred_lighting_cs.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Compute</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Compute</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Compute</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Compute</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\PostEffects\TemporalAA\taa_resolve_ps.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\PostEffects\Reflection\ssr_trace_ps.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\PostEffects\Reflection\ssr_resolve_ps.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\PostEffects\AmbientOcclusion\ssao_ps.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\PostEffects\AmbientOcclusion\ssao_blur_ps.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>

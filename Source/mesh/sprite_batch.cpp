@@ -27,17 +27,9 @@ sprite_batch::sprite_batch(ID3D11Device* device, const wchar_t* filename, size_t
     //};
     {
         //③画像ファイルのロードとシェーダーリソースビューオブジェクトの生成
-
-        ComPtr<ID3D11Resource> resource;
-        hr = DirectX::CreateWICTextureFromFile(device, filename, resource.GetAddressOf(), shader_resource_view.GetAddressOf());
-        _ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
-
-        // テクスチャ情報の取得
-        ComPtr<ID3D11Texture2D> texture2d;
-        hr = resource.As(&texture2d); // QueryInterfaceの代わり
-        _ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
-
-        texture2d->GetDesc(&this->texture2d_desc);
+        hr = load_texture_from_file(device, filename,
+            shader_resource_view.GetAddressOf(), &texture2d_desc);
+		_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
     }
     // ②頂点バッファオブジェクトの生成
     D3D11_BUFFER_DESC buffer_desc{};

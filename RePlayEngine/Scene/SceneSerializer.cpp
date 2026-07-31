@@ -12,7 +12,8 @@ namespace ReplayEngine::Scene
 {
     namespace
     {
-        constexpr int scene_format_version = 6;
+        // 8: UI_ELEMENT を追加。旧バージョンのデータもそのまま読める。
+        constexpr int scene_format_version = 8;
         constexpr std::size_t max_scene_entities = 100000;
 
         bool Expect(std::istream& stream, const char* expected, std::string& error)
@@ -55,6 +56,7 @@ namespace ReplayEngine::Scene
             error = "シーンファイルを作成できません";
             return false;
         }
+        // 小数点表記を実行環境のロケールに依存させない。
         stream.imbue(std::locale::classic());
         stream << "REPLAY_SCENE " << scene_format_version << '\n';
         stream << "SCENE " << std::quoted(scene.SceneIdentifier()) << ' '
@@ -78,7 +80,8 @@ namespace ReplayEngine::Scene
                 stream << "MODEL_RENDERER " << std::quoted(value.asset_guid)
                     << ' ' << std::quoted(value.asset_name)
                     << ' ' << value.tint.x << ' ' << value.tint.y << ' ' << value.tint.z << ' ' << value.tint.w
-                    << ' ' << value.shading_model << ' ' << value.outline << ' ' << value.visible << '\n';
+                    << ' ' << value.shading_model << ' ' << value.outline << ' ' << value.visible
+                    << ' ' << value.pixelate_grid << ' ' << value.pixelate_strength << '\n';
                 for (const auto& layer : value.shader_layers)
                 {
                     stream << "SHADER_LAYER " << layer.type << ' ' << layer.blend << ' '
@@ -141,6 +144,25 @@ namespace ReplayEngine::Scene
                 stream << "ANIMATION " << value.clip_index << ' ' << value.speed
                     << ' ' << value.loop << ' ' << value.playing << '\n';
             }
+            if (entity.ui_element)
+            {
+                // 並びは UIElementData の宣言順に合わせる。
+                // 読み込み側(version>=8)と1対1で対応させること。
+                const auto& value = *entity.ui_element;
+                stream << "UI_ELEMENT " << value.parent << ' ' << value.order
+                    << ' ' << value.anchor.x << ' ' << value.anchor.y
+                    << ' ' << value.position.x << ' ' << value.position.y
+                    << ' ' << value.size.x << ' ' << value.size.y
+                    << ' ' << value.scale.x << ' ' << value.scale.y
+                    << ' ' << value.rotation << ' ' << value.opacity
+                    << ' ' << std::quoted(value.sprite_guid)
+                    << ' ' << std::quoted(value.sprite_name)
+                    << ' ' << value.color.x << ' ' << value.color.y
+                    << ' ' << value.color.z << ' ' << value.color.w
+                    << ' ' << value.uv_rect.x << ' ' << value.uv_rect.y
+                    << ' ' << value.uv_rect.z << ' ' << value.uv_rect.w
+                    << ' ' << value.alpha_mode << ' ' << value.visible << '\n';
+            }
             stream << "END_ENTITY\n";
         }
         if (!stream)
@@ -168,6 +190,7 @@ namespace ReplayEngine::Scene
             error = "未対応のシーンバージョンです";
             return false;
         }
+        // 途中で失敗しても呼び出し元のシーンを壊さないよう一時領域へ読み込む。
         SceneDocument loaded;
         if (version >= 3)
         {
@@ -217,6 +240,7 @@ namespace ReplayEngine::Scene
                 }
             }
 
+            // END_ENTITYまでコンポーネント名を読み、存在する項目だけを復元する。
             std::string token;
             while (stream >> token)
             {
@@ -237,6 +261,10 @@ namespace ReplayEngine::Scene
                     if (!(stream
                         >> value.tint.x >> value.tint.y >> value.tint.z >> value.tint.w
                         >> value.shading_model >> value.outline >> value.visible)) return false;
+                    if (version >= 7 &&
+                        !(stream >> value.pixelate_grid >> value.pixelate_strength)) return false;
+                    value.pixelate_grid = std::clamp(value.pixelate_grid, 1.0f, 24.0f);
+                    value.pixelate_strength = std::clamp(value.pixelate_strength, 0.0f, 1.0f);
                     entity.model_renderer = value;
                 }
                 else if (token == "MESH_COLLIDER")
@@ -265,7 +293,10 @@ namespace ReplayEngine::Scene
                     }
                     value.opacity = std::clamp(value.opacity, 0.0f, 1.0f);
                     value.strength = std::clamp(value.strength, 0.0f, 1.0f);
-                    value.parameter = std::clamp(value.parameter, 1.0f, 512.0f);
+                    if (value.type == static_cast<std::uint32_t>(Rendering::ShaderLayerType::Pixelate))
+                        value.parameter = std::clamp(value.parameter, 1.0f, 24.0f);
+                    else
+                        value.parameter = std::clamp(value.parameter, 1.0f, 512.0f);
                     entity.model_renderer->shader_layers.push_back(value);
                 }
                 else if (token == "CHARACTER_PROFILE" && version >= 5)
@@ -331,6 +362,25 @@ namespace ReplayEngine::Scene
                     if (!(stream >> value.clip_index >> value.speed >> value.loop >> value.playing)) return false;
                     entity.animation = value;
                 }
+                else if (token == "UI_ELEMENT" && version >= 8)
+                {
+                    // 保存側と並びを1対1で対応させること。
+                    UIElementData value{};
+                    if (!(stream >> value.parent >> value.order
+                        >> value.anchor.x >> value.anchor.y
+                        >> value.position.x >> value.position.y
+                        >> value.size.x >> value.size.y
+                        >> value.scale.x >> value.scale.y
+                        >> value.rotation >> value.opacity
+                        >> std::quoted(value.sprite_guid)
+                        >> std::quoted(value.sprite_name)
+                        >> value.color.x >> value.color.y
+                        >> value.color.z >> value.color.w
+                        >> value.uv_rect.x >> value.uv_rect.y
+                        >> value.uv_rect.z >> value.uv_rect.w
+                        >> value.alpha_mode >> value.visible)) return false;
+                    entity.ui_element = value;
+                }
                 else
                 {
                     error = "未知のコンポーネントです: " + token;
@@ -339,6 +389,7 @@ namespace ReplayEngine::Scene
             }
             loaded.Entities().push_back(std::move(entity));
         }
+        // 読み込んだIDと識別子を検査し、次回追加用のIDも再構築する。
         loaded.RebuildNextId();
         scene = std::move(loaded);
         return true;

@@ -335,6 +335,24 @@
     <ClInclude Include="RePlayEngine\Assets\AsyncAssetManager.h">
       <Filter>RePlayEngine\Assets</Filter>
     </ClInclude>
+    <ClInclude Include="RePlayEngine\Assets\ConcurrentResourceCache.h">
+      <Filter>RePlayEngine\Assets</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Assets\ParallelLoader.h">
+      <Filter>RePlayEngine\Assets</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\FrameConstants.h">
+      <Filter>RePlayEngine\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\RenderTexture.h">
+      <Filter>RePlayEngine\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\Passes\SsaoPass.h">
+      <Filter>RePlayEngine\Rendering\Passes</Filter>
+    </ClInclude>
+    <ClCompile Include="RePlayEngine\Rendering\Passes\SsaoPass.cpp">
+      <Filter>RePlayEngine\Rendering\Passes</Filter>
+    </ClCompile>
     <ClInclude Include="RePlayEngine\Editor\Commands\UndoStack.h">
       <Filter>RePlayEngine\Editor\Commands</Filter>
     </ClInclude>

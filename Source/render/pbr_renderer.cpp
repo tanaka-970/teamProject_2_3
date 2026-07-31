@@ -44,6 +44,7 @@ bool pbr_renderer::initialize(ID3D11Device* device)
     hr = device->CreateBuffer(&buffer_desc, nullptr, stage_material_cb.GetAddressOf());
     _ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
 
+    // 同じ深度テクスチャをDSVとSRVの両方で使えるようTypelessで作成する。
     D3D11_TEXTURE2D_DESC texture_desc{};
     texture_desc.Width = shadow_map_size;
     texture_desc.Height = shadow_map_size;
@@ -135,6 +136,7 @@ void pbr_renderer::update_light_vp(const XMFLOAT4& light_direction,
     XMVECTOR focus = XMLoadFloat3(&scene_center);
     XMVECTOR eye = focus - dir * (scene_radius * 2.0f);
     XMVECTOR up = XMVectorSet(0, 1, 0, 0);
+    // 光方向と上方向が平行に近い場合はLookAt行列が退化しない軸へ切り替える。
     if (std::fabs(XMVectorGetY(dir)) > 0.99f)
     {
         up = XMVectorSet(0, 0, 1, 0);
@@ -160,6 +162,7 @@ void pbr_renderer::update_constants(ID3D11DeviceContext* ctx)
 
 void pbr_renderer::shadow_begin(ID3D11DeviceContext* ctx)
 {
+    // DSVとして再利用する前に同じテクスチャのSRVバインドを解除する。
     ID3D11ShaderResourceView* null_srv[1] = { nullptr };
     ctx->PSSetShaderResources(4, 1, null_srv);
 
@@ -194,8 +197,34 @@ void pbr_renderer::bind_pbr_resources(ID3D11DeviceContext* ctx)
 
 void pbr_renderer::unbind_pbr_resources(ID3D11DeviceContext* ctx)
 {
+    // 次のパスで同じリソースを書き込み対象にできるよう読み取りスロットを空ける。
     ID3D11ShaderResourceView* null_shadow[1] = { nullptr };
     ID3D11ShaderResourceView* null_ibl[3] = { nullptr, nullptr, nullptr };
     ctx->PSSetShaderResources(4, 1, null_shadow);
     ctx->PSSetShaderResources(33, 3, null_ibl);
+}
+
+void pbr_renderer::bind_compute_resources(ID3D11DeviceContext* ctx)
+{
+    ctx->CSSetSamplers(4, 1, shadow_sampler_state.GetAddressOf());
+    ctx->CSSetShaderResources(4, 1, shadow_srv.GetAddressOf());
+
+    ID3D11ShaderResourceView* ibl[3] = {
+        diffuse_iem_srv.Get(),
+        specular_pmrem_srv.Get(),
+        lut_ggx_srv.Get()
+    };
+    ctx->CSSetShaderResources(33, 3, ibl);
+
+    // b2=LIGHT, b3=SHADOW。ピクセルシェーダー版と同じ内容を使う。
+    ID3D11Buffer* buffers[2] = { light_cb.Get(), shadow_cb.Get() };
+    ctx->CSSetConstantBuffers(2, 2, buffers);
+}
+
+void pbr_renderer::unbind_compute_resources(ID3D11DeviceContext* ctx)
+{
+    ID3D11ShaderResourceView* null_shadow[1] = { nullptr };
+    ID3D11ShaderResourceView* null_ibl[3] = { nullptr, nullptr, nullptr };
+    ctx->CSSetShaderResources(4, 1, null_shadow);
+    ctx->CSSetShaderResources(33, 3, null_ibl);
 }

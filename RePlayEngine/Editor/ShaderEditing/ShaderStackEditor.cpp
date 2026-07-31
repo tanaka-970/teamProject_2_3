@@ -35,10 +35,11 @@ namespace ReplayEngine::Editor
     ShaderStackEditorResult ShaderStackEditor::Draw(const char* id, int& base_shader,
         bool& outline_pass, Rendering::ShaderLayerStack& layers,
         bool& advanced_mode, DirectX::XMFLOAT4& outline_color,
-        DirectX::XMFLOAT4& outline_parameters)
+        DirectX::XMFLOAT4& outline_parameters, float& pixel_grid,
+        float& pixelate_strength)
     {
         using namespace Rendering;
-        const char* shading_names[] = { "FBX標準", "PBR", "トゥーン", "アンリット" };
+        const char* shading_names[] = { "FBX標準", "PBR", "トゥーン", "アンリット", "ピクセレーション" };
         const char* blend_names[] = { "アルファ", "加算", "乗算" };
 
         ImGui::PushID(id);
@@ -65,7 +66,7 @@ namespace ReplayEngine::Editor
             layers.Clear();
             auto& pixelate = layers.Add(ShaderLayerType::Pixelate);
             pixelate.opacity = 0.35f;
-            pixelate.parameter = 80.0f;
+            pixelate.parameter = 6.0f;
             layers.Add(ShaderLayerType::Outline);
         }
         ImGui::SameLine();
@@ -78,6 +79,26 @@ namespace ReplayEngine::Editor
         ImGui::Separator();
         ImGui::TextUnformatted("Pass 1  Surface");
         ImGui::Combo("基本シェーダー", &base_shader, shading_names, IM_ARRAYSIZE(shading_names));
+        if (base_shader == 4)
+        {
+            ImGui::Spacing();
+            ImGui::TextColored(ImVec4(0.35f, 0.72f, 1.0f, 1.0f), "四角ピクセルの調整");
+            ImGui::TextColored(ImVec4(0.45f, 0.95f, 0.55f, 1.0f), "適用中: モデル色の低解像度化");
+            ImGui::TextDisabled("サイズを上げるほど四角いブロックが大きくなります");
+            if (ImGui::SmallButton("細かい  3px")) pixel_grid = 3.0f;
+            ImGui::SameLine();
+            if (ImGui::SmallButton("標準  6px")) pixel_grid = 6.0f;
+            ImGui::SameLine();
+            if (ImGui::SmallButton("粗い  12px")) pixel_grid = 12.0f;
+            ImGui::TextUnformatted("四角ピクセルサイズ (px)");
+            ImGui::SetNextItemWidth(-1.0f);
+            ImGui::SliderFloat("##BasePixelSize", &pixel_grid, 1.0f, 24.0f, "%.1f px");
+            ImGui::TextUnformatted("効果の強さ");
+            ImGui::SetNextItemWidth(-1.0f);
+            ImGui::SliderFloat("##BasePixelStrength", &pixelate_strength,
+                0.0f, 1.0f, "%.2f");
+            ImGui::Separator();
+        }
 
         if (layers.CanAdd())
         {
@@ -149,6 +170,14 @@ namespace ReplayEngine::Editor
                     ImGui::SliderFloat("輪郭幅", &outline_parameters.x, 0.0f, 0.10f, "%.3f");
                     ImGui::SliderFloat("距離補正", &outline_parameters.y, 0.0f, 0.10f, "%.3f");
                 }
+                else if (layer.type == ShaderLayerType::Pixelate)
+                {
+                    ImGui::TextDisabled("モデル色を四角いセル単位で低解像度化します");
+                    ImGui::SliderFloat("四角ピクセルサイズ", &layer.parameter,
+                        1.0f, 24.0f, "%.1f px");
+                    ImGui::SliderFloat("ピクセル化強度", &layer.strength,
+                        0.0f, 1.0f, "%.2f");
+                }
                 else
                 {
                     int blend = static_cast<int>(layer.blend);
@@ -156,11 +185,6 @@ namespace ReplayEngine::Editor
                         layer.blend = static_cast<ShaderLayerBlend>(blend);
                     ImGui::SliderFloat("不透明度", &layer.opacity, 0.0f, 1.0f, "%.2f");
                     ImGui::ColorEdit3("色", &layer.tint.x);
-                    if (layer.type == ShaderLayerType::Pixelate)
-                    {
-                        ImGui::SliderFloat("ピクセル粒度", &layer.parameter, 4.0f, 512.0f, "%.0f");
-                        ImGui::SliderFloat("ピクセル化強度", &layer.strength, 0.0f, 1.0f, "%.2f");
-                    }
                 }
                 ImGui::TreePop();
             }
@@ -175,7 +199,8 @@ namespace ReplayEngine::Editor
         ShaderStackEditorResult result{};
         result.requires_pbr = base_shader == 1 || layers.Contains(ShaderLayerType::Pbr);
         result.requires_toon = base_shader == 2 || layers.Contains(ShaderLayerType::Toon);
-        result.requires_unlit = base_shader == 3 || layers.Contains(ShaderLayerType::Unlit);
+        result.requires_unlit = base_shader == 3 || base_shader == 4 ||
+            layers.Contains(ShaderLayerType::Unlit);
         result.requires_outline = outline_pass;
         return result;
     }

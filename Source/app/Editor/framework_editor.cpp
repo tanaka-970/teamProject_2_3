@@ -103,6 +103,8 @@ void framework::reset_editor_values()
     post.vignette_strength = 0.138f;
     post.fxaa_enable = 1.0f;
     shading_model_override = shading_per_skinned[0] = shading_per_static[0] = SHADING_MODEL_PBR;
+    pixelate_grid_per_skinned[0] = pixelate_grid_per_static[0] = stage_pixelate_grid = 6.0f;
+    pixelate_strength_per_skinned[0] = pixelate_strength_per_static[0] = stage_pixelate_strength = 1.0f;
     outline_per_skinned[0] = outline_per_static[0] = false;
     shader_layers_skinned[0].Clear();
     shader_layers_static[0].Clear();
@@ -528,6 +530,7 @@ void framework::draw_workspace_panel()
 
 void framework::draw_editor()
 {
+    editor_session_active = true;
     ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->Pos);
     ImGui::SetNextWindowSize(viewport->Size);

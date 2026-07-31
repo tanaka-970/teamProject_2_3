@@ -36,6 +36,8 @@ bool deferred_renderer::initialize(ID3D11Device* device, UINT w, UINT h)
         DXGI_FORMAT_R16G16B16A16_FLOAT,
         DXGI_FORMAT_R16G16B16A16_FLOAT,
         DXGI_FORMAT_R8G8B8A8_UNORM,
+        // モーションベクターは符号付きで1ピクセル未満の精度が必要なのでfloat。
+        DXGI_FORMAT_R16G16_FLOAT,
     };
 
     for (UINT i = 0; i < GBUFFER_COUNT; ++i)
@@ -87,10 +89,13 @@ bool deferred_renderer::initialize(ID3D11Device* device, UINT w, UINT h)
         td.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
         td.SampleDesc.Count = 1;
         td.Usage = D3D11_USAGE_DEFAULT;
-        td.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+        // タイルドDeferredはコンピュートシェーダーからUAVで書き込む。
+        td.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE |
+            D3D11_BIND_UNORDERED_ACCESS;
         if (FAILED(device->CreateTexture2D(&td, nullptr, lit_tex.GetAddressOf()))) return false;
         if (FAILED(device->CreateRenderTargetView(lit_tex.Get(), nullptr, lit_rtv.GetAddressOf()))) return false;
         if (FAILED(device->CreateShaderResourceView(lit_tex.Get(), nullptr, lit_srv.GetAddressOf()))) return false;
+        if (FAILED(device->CreateUnorderedAccessView(lit_tex.Get(), nullptr, lit_uav.GetAddressOf()))) return false;
     }
 
     D3D11_BUFFER_DESC bd{};
@@ -98,6 +103,17 @@ bool deferred_renderer::initialize(ID3D11Device* device, UINT w, UINT h)
     bd.Usage = D3D11_USAGE_DEFAULT;
     bd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
     if (FAILED(device->CreateBuffer(&bd, nullptr, deferred_cb_buffer.GetAddressOf()))) return false;
+
+    // 深度プリパス後のG-Buffer描画用。既に書かれた深度と一致する
+    // ピクセルだけを通し、深度は書き換えない。
+    {
+        D3D11_DEPTH_STENCIL_DESC dsd{};
+        dsd.DepthEnable = TRUE;
+        dsd.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+        dsd.DepthFunc = D3D11_COMPARISON_EQUAL;
+        if (FAILED(device->CreateDepthStencilState(&dsd, depth_equal_state.GetAddressOf())))
+            return false;
+    }
 
     create_vs_from_cso(device, "fullscreen_quad_vs.cso",
         fullscreen_vs.GetAddressOf(), nullptr, nullptr, 0);
@@ -107,7 +123,19 @@ bool deferred_renderer::initialize(ID3D11Device* device, UINT w, UINT h)
     return true;
 }
 
-void deferred_renderer::gbuffer_begin(ID3D11DeviceContext* ctx, FLOAT clear[4])
+void deferred_renderer::depth_prepass_begin(ID3D11DeviceContext* ctx)
+{
+    if (!initialized || !ctx) return;
+
+    // 深度バッファだけを対象にする。RTVは付けない。
+    ctx->ClearDepthStencilView(depth_dsv.Get(), D3D11_CLEAR_DEPTH, 1.0f, 0);
+    ctx->RSSetViewports(1, &viewport);
+    ID3D11RenderTargetView* no_rtvs[GBUFFER_COUNT]{};
+    ctx->OMSetRenderTargets(GBUFFER_COUNT, no_rtvs, depth_dsv.Get());
+}
+
+void deferred_renderer::gbuffer_begin(ID3D11DeviceContext* ctx, FLOAT clear[4],
+                                      bool clear_depth)
 {
     if (!initialized) return;
 
@@ -119,7 +147,9 @@ void deferred_renderer::gbuffer_begin(ID3D11DeviceContext* ctx, FLOAT clear[4])
         ctx->ClearRenderTargetView(rtvs[i], i == 0 ? clear : zero);
     }
 
-    ctx->ClearDepthStencilView(depth_dsv.Get(), D3D11_CLEAR_DEPTH, 1.0f, 0);
+    // 深度プリパスの結果を使う場合はクリアしない。
+    if (clear_depth)
+        ctx->ClearDepthStencilView(depth_dsv.Get(), D3D11_CLEAR_DEPTH, 1.0f, 0);
     ctx->RSSetViewports(1, &viewport);
     ctx->OMSetRenderTargets(GBUFFER_COUNT, rtvs, depth_dsv.Get());
 }
@@ -133,7 +163,9 @@ void deferred_renderer::gbuffer_end(ID3D11DeviceContext* ctx)
 void deferred_renderer::lighting_pass(ID3D11DeviceContext* ctx,
                                       const XMFLOAT4X4& view_projection,
                                       const XMFLOAT4& clear_color,
-                                      int debug_mode)
+                                      int debug_mode,
+                                      ID3D11ShaderResourceView* ambient_occlusion,
+                                      ID3D11ShaderResourceView* screen_reflection)
 {
     if (!initialized || !lighting_ps || !fullscreen_vs) return;
 
@@ -152,6 +184,8 @@ void deferred_renderer::lighting_pass(ID3D11DeviceContext* ctx,
     ctx->ClearRenderTargetView(lit_rtv.Get(), clear);
     ctx->RSSetViewports(1, &viewport);
 
+    // t4/t5 は PBR のシャドウマップ等が使うため空けておき、
+    // t6=深度, t7=SSAO, t8=SSR の順で追加のスクリーン空間入力を渡す。
     ID3D11ShaderResourceView* srvs[] = {
         gbuffer_srv[0].Get(),
         gbuffer_srv[1].Get(),
@@ -160,6 +194,8 @@ void deferred_renderer::lighting_pass(ID3D11DeviceContext* ctx,
         nullptr,
         nullptr,
         depth_srv.Get(),
+        ambient_occlusion,
+        screen_reflection,
     };
     ctx->PSSetShaderResources(0, _countof(srvs), srvs);
 

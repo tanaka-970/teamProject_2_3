@@ -2,6 +2,7 @@
 
 #include "IScene.h"
 
+#include <atomic>
 #include <functional>
 #include <future>
 #include <memory>
@@ -32,14 +33,14 @@ namespace ReplayEngine::Scene
 
     private:
         struct Entry { std::string name; Task task; };
-        void StartNextTask();
+        void StartTasks();
 
         std::vector<Entry> tasks_;
-        std::future<bool> active_task_;
+        std::future<bool> loader_;
         std::unique_ptr<sprite> solid_;
         std::unique_ptr<sprite> star_;
-        size_t completed_tasks_ = 0;
-        float time_ = 0.0f;
+        std::atomic<size_t> completed_tasks_{ 0 };
+        std::atomic<bool> failed_{ false };
         float spinner_ = 0.0f;
         bool task_running_ = false;
         bool initialized_ = false;

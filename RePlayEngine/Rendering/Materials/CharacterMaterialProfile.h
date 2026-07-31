@@ -26,7 +26,7 @@ namespace ReplayEngine::Rendering
             float front_fill = 0.18f;
             bool enabled = true;
         } face;
-
+        
         struct HairSettings
         {
             DirectX::XMFLOAT4 highlight_color{ 0.75f, 0.86f, 1.0f, 1.0f };

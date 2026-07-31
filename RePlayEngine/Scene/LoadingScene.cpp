@@ -1,5 +1,6 @@
 #include "LoadingScene.h"
 
+#include "../Assets/ParallelLoader.h"
 #include "../../Source/mesh/sprite.h"
 
 #include <algorithm>
@@ -23,51 +24,54 @@ namespace ReplayEngine::Scene
         star_ = std::make_unique<sprite>(device,
             L"resources\\RePlayEngine\\BootLogo\\BootStar.png", "sprite_masked_ps.cso");
         initialized_ = solid_ && solid_->valid();
-        StartNextTask();
+        StartTasks();
         return initialized_;
     }
 
-    void LoadingScene::StartNextTask()
+    void LoadingScene::StartTasks()
     {
-        if (task_running_ || completed_tasks_ >= tasks_.size()) return;
-        Task task = tasks_[completed_tasks_].task;
+        if (task_running_ || tasks_.empty()) return;
+        completed_tasks_.store(0);
+        failed_.store(false);
         task_running_ = true;
-        active_task_ = std::async(std::launch::async, [task = std::move(task)]()
+        // 監督スレッドを1本だけ立て、その中でParallelLoaderがタスクを全ワーカーへ配る。
+        // メインスレッドはこのfutureを覗くだけなので、描画が止まらない。
+        loader_ = std::async(std::launch::async, [this]()
         {
             const HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-            bool result = false;
-            try { result = task(); }
-            catch (...) { result = false; }
+            Assets::ParallelLoader::Run(tasks_.size(), [this](size_t index)
+            {
+                // 例外をワーカーへ漏らすと残りのタスクが流れないためここで吸収する。
+                bool task_succeeded = false;
+                try { task_succeeded = tasks_[index].task(); }
+                catch (...) { task_succeeded = false; }
+                if (!task_succeeded) failed_.store(true);
+                completed_tasks_.fetch_add(1);
+            });
             if (SUCCEEDED(com)) CoUninitialize();
-            return result;
+            return !failed_.load();
         });
     }
 
     void LoadingScene::Update(float elapsed_time)
     {
-        time_ += (std::max)(0.0f, elapsed_time);
         spinner_ += elapsed_time * 120.0f;
-        if (!task_running_)
-        {
-            StartNextTask();
-            return;
-        }
-        if (active_task_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) return;
-        succeeded_ = active_task_.get() && succeeded_;
+        if (!task_running_) return;
+        if (!loader_.valid()) { task_running_ = false; return; }
+        if (loader_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) return;
+        succeeded_ = loader_.get() && succeeded_;
         task_running_ = false;
-        ++completed_tasks_;
-        StartNextTask();
     }
 
     float LoadingScene::Progress() const noexcept
     {
         if (tasks_.empty()) return 1.0f;
-        return static_cast<float>(completed_tasks_) / static_cast<float>(tasks_.size());
+        return static_cast<float>(completed_tasks_.load()) / static_cast<float>(tasks_.size());
     }
 
     bool LoadingScene::IsFinished() const noexcept
     {
-        return initialized_ && !task_running_ && completed_tasks_ >= tasks_.size() && time_ >= 0.75f;
+        return initialized_ && !task_running_ && completed_tasks_.load() >= tasks_.size();
     }
 
     void LoadingScene::Render(const RenderContext& context)

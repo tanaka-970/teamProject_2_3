@@ -1,5 +1,6 @@
 // G-Bufferを読み、光源と材質から最終照明色を計算するピクセルシェーダー。
 #include "fullscreen_quad.hlsli"
+#include "frame_common.hlsli"
 #include "gbuffer_common.hlsli"
 #include "toon_common.hlsli"
 #include "csm_common.hlsli"
@@ -32,6 +33,10 @@ Texture2D gb_emi    : register(t1);
 Texture2D gb_normal : register(t2);
 Texture2D gb_param  : register(t3);
 Texture2D gb_depth  : register(t6);
+// t7 = SSAO (R=可視性, G=view z)、t8 = SSR (rgb=反射色, a=信頼度)。
+// 未バインドなら 0 が返るので、下で「効果なし」へ読み替える。
+Texture2D ss_ambient_occlusion : register(t7);
+Texture2D ss_reflection        : register(t8);
 
 // PBR評価はシーン定数を参照するため、カメラと平行光源の宣言後に読み込む。
 #include "pbr_brdf.hlsli"
@@ -45,16 +50,35 @@ float3 reconstruct_world(float2 uv, float z)
 
 float4 main(VS_OUT pin) : SV_TARGET
 {
-    float4 base = gb_base.Sample(pbr_sampler_linear, pin.texcoord);
-    float4 emi  = gb_emi.Sample(pbr_sampler_linear, pin.texcoord);
-    float4 nor  = gb_normal.Sample(pbr_sampler_linear, pin.texcoord);
-    float4 par  = gb_param.Sample(pbr_sampler_linear, pin.texcoord);
-    float  z    = gb_depth.Sample(pbr_sampler_linear, pin.texcoord).r;
+    int2 render_size = max(int2(rt_size.xy), int2(1, 1));
+    int2 pixel_position = clamp(int2(pin.position.xy), int2(0, 0), render_size - 1);
+    float4 base = gb_base.Load(int3(pixel_position, 0));
+    float4 emi  = gb_emi.Load(int3(pixel_position, 0));
+    float4 nor  = gb_normal.Load(int3(pixel_position, 0));
+    float4 par  = gb_param.Load(int3(pixel_position, 0));
+    float  z    = gb_depth.Load(int3(pixel_position, 0)).r;
+
+    uint original_shading_model = (uint) round(base.a * 255.0f);
+    float2 sampled_uv = pin.texcoord;
+    if (original_shading_model == SHADING_MODEL_PIXELATE)
+    {
+        float pixel_size = max(emi.a, 1.0f);
+        float strength = saturate(nor.a);
+        float2 cell_center = (floor(pin.position.xy / pixel_size) + 0.5f) * pixel_size;
+        int2 sampled_position = clamp(int2(lerp(pin.position.xy, cell_center, strength)),
+            int2(0, 0), render_size - 1);
+        base = gb_base.Load(int3(sampled_position, 0));
+        emi = gb_emi.Load(int3(sampled_position, 0));
+        nor = gb_normal.Load(int3(sampled_position, 0));
+        par = gb_param.Load(int3(sampled_position, 0));
+        z = gb_depth.Load(int3(sampled_position, 0)).r;
+        sampled_uv = (float2(sampled_position) + 0.5f) / rt_size.xy;
+    }
 
     if (z >= 0.9999f) return float4(base.rgb, 1); // background
 
     GBufferData g = DecodeGBuffer(base, emi, nor, par);
-    float3 wp = reconstruct_world(pin.texcoord, z);
+    float3 wp = reconstruct_world(sampled_uv, z);
 
     int debug_mode = (int) round(rt_size.z);
     if (debug_mode == 1) return float4(g.base_color, 1);
@@ -72,6 +96,34 @@ float4 main(VS_OUT pin) : SV_TARGET
     float3 H = normalize(L + V);
     float3 direct_light = directional_color.rgb * max(directional_color.a, 0.0f);
     float ambient_strength = 0.04f + ibl_params.x * 0.08f;
+
+    // スクリーン空間入力を集める。テクスチャ未バインド時は 0 が来るため、
+    // SSAOは1(遮蔽なし)、SSRは重み0(未使用)へ読み替える。
+    PbrScreenSpaceInputs screen = pbr_default_screen_inputs();
+    {
+        // SSAOは半解像度で走ることがあるため、ピクセル座標ではなくUVで読む。
+        float4 occlusion_sample =
+            ss_ambient_occlusion.SampleLevel(pbr_sampler_linear, sampled_uv, 0);
+        screen.ambient_occlusion = occlusion_sample.g > 0.0f ? saturate(occlusion_sample.r) : 1.0f;
+
+        // SSRも半解像度で走ることがあるためUVで読む。
+        float4 reflection_sample =
+            ss_reflection.SampleLevel(pbr_sampler_linear, sampled_uv, 0);
+        screen.reflection_color  = reflection_sample.rgb;
+        screen.reflection_weight = saturate(reflection_sample.a);
+    }
+    if (debug_mode == 5) return float4(screen.ambient_occlusion.xxx, 1);
+    if (debug_mode == 6) return float4(screen.reflection_color, 1);
+
+    // 影はCSMを優先し、CSMが無効なときだけ従来の単一シャドウマップへ落とす。
+    // 回転シードをピクセル毎に変えることでPCFのパターンを散らす。
+    const float view_z = mul(float4(wp, 1.0f), frame_view).z;
+    const float shadow_rotation_seed =
+        interleaved_gradient_noise(pin.position.xy, frame_params.x);
+    const float shadow_visibility = csm_params.w >= 0.5f
+        ? csm_sample_shadow_hq(wp, N, view_z, saturate(dot(N, L)), shadow_rotation_seed)
+        : sample_shadow(wp);
+    if (debug_mode == 7) return float4(shadow_visibility.xxx, 1);
 
     float3 color = 0;
     if (g.shading_model == SHADING_MODEL_UNLIT)
@@ -91,17 +143,19 @@ float4 main(VS_OUT pin) : SV_TARGET
                            specular_tint,
                            toon_params,
                            specular_params);
-        color += g.base_color * ambient_strength * 0.5f;
+        // トゥーンでも影とAOは共通のものを使い、PBRと陰の位置がずれないようにする。
+        color *= lerp(1.0f, shadow_visibility, 0.85f);
+        color += g.base_color * ambient_strength * 0.5f * screen.ambient_occlusion;
         color += evaluate_point_lights(wp, N, V, g.base_color, g.roughness, g.metalness);
         color += evaluate_spot_lights(wp, N, V, g.base_color);
         color += g.emissive;
     }
     else // PBR (デフォルト)
     {
-        // 簡易: Direct + Lambert+GGX (フル PBR は pbr_brdf.hlsli の evaluate_pbr を流用)
-        color = evaluate_pbr(g.base_color, g.emissive,
+        // マルチスキャッタIBL + SSAO/SSR + CSMを合わせたフルPBR評価。
+        color = evaluate_pbr_ex(g.base_color, g.emissive,
             g.metalness, g.roughness, g.occlusion,
-            N, V, wp);
+            N, V, wp, shadow_visibility, screen);
     }
     return float4(color, 1.0f);
 }

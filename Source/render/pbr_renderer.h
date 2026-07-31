@@ -79,4 +79,9 @@ public:
 
     void bind_pbr_resources(ID3D11DeviceContext* ctx);
     void unbind_pbr_resources(ID3D11DeviceContext* ctx);
+
+    // タイルドDeferredのコンピュートシェーダー向け。
+    // D3D11はステージごとにスロットが独立しているため、PS用とは別に貼る必要がある。
+    void bind_compute_resources(ID3D11DeviceContext* ctx);
+    void unbind_compute_resources(ID3D11DeviceContext* ctx);
 };

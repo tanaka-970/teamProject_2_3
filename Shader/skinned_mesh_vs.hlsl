@@ -1,9 +1,16 @@
 // ボーン変形を適用してスキンメッシュ頂点を画面へ変換する頂点シェーダー。
 #include "skinned_mesh.hlsli"
+#include "motion_vector_skinning.hlsli"
 VS_OUT main(VS_IN vin)
 {
 	VS_OUT vout;
-    
+
+	// 前フレームのボーン姿勢でも同じ頂点をスキニングしておく。
+	// アニメーションによる動きをモーションベクターへ載せるために必要。
+	const float4 previous_local = skin_previous_position(
+		float4(vin.position.xyz, 1.0f), vin.bone_weights, vin.bone_indices);
+	vout.previous_clip = mul(mul(previous_local, previous_world), previous_view_projection);
+
 	vin.normal.w = 0;
 	float sigma = vin.tangent.w;
 	vin.tangent.w = 0;
@@ -35,7 +42,7 @@ VS_OUT main(VS_IN vin)
 
 	vout.texcoord = vin.texcoord;
 	vout.color = material_color;
+	vout.current_clip = vout.position;
 
- 
 	return vout;
 }

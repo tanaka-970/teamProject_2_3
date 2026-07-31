@@ -1,5 +1,6 @@
 // 静的メッシュ頂点をワールド座標と画面座標へ変換する頂点シェーダー。
 #include "static_mesh.hlsli"
+#include "motion_vector_common.hlsli"
 
 #if 0
 VS_OUT main(float4 position : POSITION, float4 normal : NORMAL, float2 texcoord : TEXCOORD/*UNIT.14*/)
@@ -32,6 +33,10 @@ VS_OUT main(float4 position : POSITION, float4 normal : NORMAL, float2 texcoord 
 
 	vout.color = material_color;
 	vout.texcoord = texcoord;
+
+	// 剛体なので前フレームのワールド行列を掛け直すだけでよい。
+	vout.current_clip = vout.position;
+	vout.previous_clip = mul(mul(position, previous_world), previous_view_projection);
 
 	return vout;
 }

@@ -218,6 +218,14 @@ public:
         DirectX::XMFLOAT4X4 bone_transforms[MAX_BONES]{ { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 } };
     };
 
+    // TAAのモーションベクター用に、前フレームのボーン姿勢だけを載せる定数バッファ。
+    // 16KBあるためG-Bufferパス(モーションベクターを書く描画)だけでバインドする。
+    struct motion_bone_constants
+    {
+        DirectX::XMFLOAT4X4 bone_transforms[MAX_BONES]{
+            { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 } };
+    };
+
     struct mesh
     {
         uint64_t unique_id{ 0 };
@@ -225,6 +233,12 @@ public:
         int64_t node_index{ 0 };
         std::vector<vertex> vertices;
         std::vector<uint32_t> indices;
+
+        // モーションベクター用の前フレーム姿勢。フレームIDで多重更新を防ぐ。
+        DirectX::XMFLOAT4X4 previous_world{ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 };
+        std::vector<DirectX::XMFLOAT4X4> previous_bone_transforms;
+        unsigned long long motion_frame_id{ 0 };
+        bool motion_history_valid{ false };
 
 
         DirectX::XMFLOAT3 bounding_box[2]
@@ -300,6 +314,9 @@ private:
     Microsoft::WRL::ComPtr<ID3D11PixelShader> pixel_shader;
     Microsoft::WRL::ComPtr<ID3D11InputLayout> input_layout;
     Microsoft::WRL::ComPtr<ID3D11Buffer> constant_buffer;
+    // モーションベクター用: b6=前フレームのワールド/ビュー射影、b8=前フレームのボーン。
+    Microsoft::WRL::ComPtr<ID3D11Buffer> motion_object_constant_buffer;
+    Microsoft::WRL::ComPtr<ID3D11Buffer> motion_bone_constant_buffer;
 
 public:
     skinned_mesh(ID3D11Device* device, const char* fbx_filename,
@@ -328,7 +345,10 @@ public:
         ID3D11PixelShader* alternative_pixel_shader = nullptr,
         ID3D11VertexShader* alternative_vertex_shader = nullptr,
         ID3D11InputLayout* alternative_input_layout = nullptr,
-        bool bind_pixel_shader = true); // 引数追加　
+        bool bind_pixel_shader = true, // 引数追加
+        // trueのときだけ前フレーム姿勢をVSへ載せ、履歴を更新する。
+        // G-Bufferパスで1回だけ渡すこと(複数回渡すと前フレーム姿勢が壊れる)。
+        bool write_motion_vectors = false);
 protected:
     scene scene_view;
 public:

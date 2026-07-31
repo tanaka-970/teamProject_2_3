@@ -7,9 +7,28 @@
 #include <commdlg.h>
 #include <algorithm>
 #include <filesystem>
+#include <fstream>
+#include <iomanip>
 
 namespace
 {
+    constexpr int EditorSessionVersion = 1;
+
+    std::filesystem::path EditorSessionFolder()
+    {
+        return std::filesystem::path("Saved") / "EditorSession";
+    }
+
+    std::filesystem::path EditorSessionStatePath()
+    {
+        return EditorSessionFolder() / "session.ini";
+    }
+
+    std::filesystem::path EditorSessionScenePath()
+    {
+        return EditorSessionFolder() / "LastSession.replayscene";
+    }
+
     std::filesystem::path BrowseSceneFile(HWND owner, bool save,
         const wchar_t* title, const wchar_t* extension, const wchar_t* filter)
     {
@@ -58,6 +77,7 @@ namespace
 
 ReplayEngine::Scene::SceneDocument& framework::active_scene_document() noexcept
 {
+    // 編集中は作業コピーを使い、プレイ中は確定済みの実行用コピーを使う。
     return edit_mode_active ? editor_scene_document : runtime_scene_document;
 }
 
@@ -124,6 +144,7 @@ void framework::paste_copied_entities()
     {
         auto& entity = editor_scene_document.ImportEntity(source);
         entity.name += " コピー";
+        // 貼り付けたEntityが元の位置に完全に重ならないよう少しずらす。
         if (entity.transform)
         {
             entity.transform->position.x += 0.5f;
@@ -214,6 +235,7 @@ void framework::handle_viewport_selection()
 
     viewport_drag_selecting = false;
     const bool additive = ImGui::GetIO().KeyShift;
+    // 4ピクセルを超えた操作をクリックではなく矩形選択として扱う。
     if (drag_distance_squared > 16.0f)
     {
         if (!additive) selected_scene_entity_ids.clear();
@@ -221,6 +243,7 @@ void framework::handle_viewport_selection()
         const float maximum_x = (std::max)(drag_start.x, mouse.x);
         const float minimum_y = (std::min)(drag_start.y, mouse.y);
         const float maximum_y = (std::max)(drag_start.y, mouse.y);
+        // Entityの原点を画面へ投影し、選択矩形内に入ったものを集める。
         for (const auto& entity : editor_scene_document.Entities())
         {
             if (!entity.active || !entity.transform) continue;
@@ -245,6 +268,7 @@ void framework::handle_viewport_selection()
         return;
     }
 
+    // 単一クリックでは画面座標をワールド空間のピッキングレイへ変換する。
     const XMVECTOR near_point = XMVector3Unproject(
         XMVectorSet(mouse_x, mouse_y, 0.0f, 1.0f), 0.0f, 0.0f,
         static_cast<float>(client_width), static_cast<float>(client_height),
@@ -353,22 +377,24 @@ void framework::create_scene_document(const std::string& name)
     save_scene_document(false);
 }
 
-void framework::load_scene_document(bool choose_path)
+bool framework::load_scene_document(bool choose_path,
+    ReplayEngine::Scene::EntityId preferred_entity_id)
 {
     std::filesystem::path path = current_scene_path;
     if (choose_path)
     {
         path = BrowseSceneFile(hwnd, false, L"シーンを開く", L"replayscene",
             L"RePlayシーン (*.replayscene)\0*.replayscene\0\0");
-        if (path.empty()) return;
+        if (path.empty()) return false;
     }
     ReplayEngine::Scene::SceneDocument loaded;
     std::string error;
     if (!ReplayEngine::Scene::SceneSerializer::Load(loaded, path, error))
     {
         scene_document_status = "読込失敗: " + error;
-        return;
+        return false;
     }
+    // 読み込み成功後にだけ編集文書を差し替え、関連する編集状態を初期化する。
     editor_scene_document = std::move(loaded);
     for (auto& entity : editor_scene_document.Entities())
     {
@@ -379,8 +405,10 @@ void framework::load_scene_document(bool choose_path)
     runtime_scene_document.Clear();
     scene_undo_stack.Clear();
     current_scene_path = path;
-    selected_scene_entity_id = editor_scene_document.Entities().empty()
-        ? 0 : editor_scene_document.Entities().front().id;
+    selected_scene_entity_id = preferred_entity_id != 0 &&
+        editor_scene_document.Find(preferred_entity_id) != nullptr
+        ? preferred_entity_id
+        : (editor_scene_document.Entities().empty() ? 0 : editor_scene_document.Entities().front().id);
     selected_scene_entity_ids.clear();
     if (selected_scene_entity_id != 0) selected_scene_entity_ids.push_back(selected_scene_entity_id);
     active_stage_placement_id = selected_scene_entity_id;
@@ -407,6 +435,96 @@ void framework::load_scene_document(bool choose_path)
                 entity->mesh_collider->cell_size);
     }
     scene_document_status = "読み込みました: " + path.generic_string();
+    return true;
+}
+
+void framework::save_editor_session()
+{
+    if (!editor_session_active) return;
+
+    std::error_code directory_error;
+    std::filesystem::create_directories(EditorSessionFolder(), directory_error);
+    if (directory_error) return;
+
+    if (active_stage_placement_id != 0) sync_selected_entity_to_stage();
+    std::string scene_error;
+    if (!ReplayEngine::Scene::SceneSerializer::Save(
+        editor_scene_document, EditorSessionScenePath(), scene_error)) return;
+
+    std::ofstream state(EditorSessionStatePath(), std::ios::trunc);
+    if (!state) return;
+    state << "REPLAY_EDITOR_SESSION " << EditorSessionVersion << '\n';
+    state << "SCENE_PATH " << std::quoted(current_scene_path.generic_string()) << '\n';
+    state << "WORKSPACE " << static_cast<int>(active_editor_workspace) << '\n';
+    state << "SELECTION " << static_cast<int>(selected_editor_object) << '\n';
+    state << "ENTITY " << selected_scene_entity_id << '\n';
+    state << "EDIT_MODE " << (edit_mode_active ? 1 : 0) << '\n';
+    state << "CAMERA " << camera_position.x << ' ' << camera_position.y << ' '
+        << camera_position.z << ' ' << camera_position.w << '\n';
+}
+
+void framework::restore_editor_session()
+{
+    std::ifstream state(EditorSessionStatePath());
+    if (!state || !std::filesystem::exists(EditorSessionScenePath())) return;
+
+    std::string signature;
+    int version = 0;
+    if (!(state >> signature >> version) || signature != "REPLAY_EDITOR_SESSION" ||
+        version != EditorSessionVersion) return;
+
+    std::string scene_path;
+    int workspace = static_cast<int>(editor_workspace::general);
+    int selection = static_cast<int>(editor_selection::world);
+    ReplayEngine::Scene::EntityId entity_id = 0;
+    int edit_mode = 1;
+    std::string key;
+    while (state >> key)
+    {
+        if (key == "SCENE_PATH") state >> std::quoted(scene_path);
+        else if (key == "WORKSPACE") state >> workspace;
+        else if (key == "SELECTION") state >> selection;
+        else if (key == "ENTITY") state >> entity_id;
+        else if (key == "EDIT_MODE") state >> edit_mode;
+        else if (key == "CAMERA") state >> camera_position.x >> camera_position.y
+            >> camera_position.z >> camera_position.w;
+        else
+        {
+            std::string ignored;
+            std::getline(state, ignored);
+        }
+    }
+
+    const auto original_scene_path = scene_path.empty()
+        ? std::filesystem::path("resources/Scenes/Main.replayscene")
+        : std::filesystem::path(scene_path);
+    current_scene_path = EditorSessionScenePath();
+    if (!load_scene_document(false, entity_id))
+    {
+        current_scene_path = original_scene_path;
+        return;
+    }
+    current_scene_path = original_scene_path;
+
+    const int last_workspace = static_cast<int>(editor_workspace::shader_adjustment);
+    const int last_selection = static_cast<int>(editor_selection::post_process);
+    workspace = std::clamp(workspace, 0, last_workspace);
+    selection = std::clamp(selection, 0, last_selection);
+    active_editor_workspace = static_cast<editor_workspace>(workspace);
+    selected_editor_object = static_cast<editor_selection>(selection);
+    if (selected_editor_object == editor_selection::scene_entity &&
+        editor_scene_document.Find(entity_id) == nullptr)
+        selected_editor_object = editor_selection::world;
+
+    edit_mode_active = edit_mode != 0;
+    if (edit_mode_active) runtime_scene_document.Clear();
+    else runtime_scene_document = editor_scene_document;
+    editor_mode = true;
+    editor_session_active = true;
+    editor_layout_checked = false;
+    editor_layout_dirty = false;
+    scene_document_status = "前回の編集セッションを復元しました: " +
+        current_scene_path.generic_string();
 }
 
 void framework::save_selected_prefab()
@@ -443,6 +561,7 @@ void framework::load_prefab()
 
 void framework::sync_selected_entity_to_stage()
 {
+    // 表示中のStageインスタンスで行った調整を保存対象のEntityへ戻す。
     auto* entity = editor_scene_document.Find(active_stage_placement_id);
     if (!entity || !game_scene) return;
     const Stage& stage = game_scene->Gameplay().GetStage();
@@ -453,6 +572,8 @@ void framework::sync_selected_entity_to_stage()
     if (entity->model_renderer)
     {
         entity->model_renderer->shading_model = shading_per_stage;
+        entity->model_renderer->pixelate_grid = stage_pixelate_grid;
+        entity->model_renderer->pixelate_strength = stage_pixelate_strength;
         entity->model_renderer->outline = outline_per_stage;
         store_stage_shader_layers(*entity->model_renderer);
     }
@@ -460,6 +581,7 @@ void framework::sync_selected_entity_to_stage()
 
 void framework::store_stage_shader_layers(ReplayEngine::Scene::ModelRendererData& renderer) const
 {
+    // 実行用レイヤーをシーン保存用の単純なデータ構造へ変換する。
     renderer.shader_layers.clear();
     renderer.shader_layers.reserve(stage_shader_layers.Layers().size());
     for (const auto& source : stage_shader_layers.Layers())
@@ -479,6 +601,8 @@ void framework::store_stage_shader_layers(ReplayEngine::Scene::ModelRendererData
 
 void framework::restore_stage_shader_layers(const ReplayEngine::Scene::ModelRendererData& renderer)
 {
+    stage_pixelate_grid = renderer.pixelate_grid;
+    stage_pixelate_strength = renderer.pixelate_strength;
     stage_shader_layers.Clear();
     for (const auto& source : renderer.shader_layers)
     {
@@ -525,6 +649,7 @@ void framework::draw_transform_gizmo_controls()
     }
     if (changed)
     {
+        // 連続操作の各確定値を文書スナップショットとしてUndo履歴へ残す。
         scene_undo_stack.Commit("Transformを編集", before, editor_scene_document);
         if (game_scene)
         {
@@ -656,7 +781,7 @@ void framework::draw_scene_entity_inspector()
                 ImGui::TextWrapped("配置元: %s", asset->source_path.generic_u8string().c_str());
             ImGui::Checkbox("表示", &entity->model_renderer->visible);
             ImGui::ColorEdit4("色", &entity->model_renderer->tint.x);
-            ImGui::SliderInt("シェーディング", &entity->model_renderer->shading_model, 0, 3);
+            ImGui::SliderInt("シェーディング", &entity->model_renderer->shading_model, 0, 4);
             ImGui::Checkbox("輪郭線", &entity->model_renderer->outline);
             if (ImGui::Button("削除##ModelRenderer"))
             {

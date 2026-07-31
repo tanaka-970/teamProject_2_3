@@ -47,21 +47,100 @@ float3 brdf_specular_ggx(float3 f0, float3 f90, float alpha_roughness,
 
 #ifndef PBR_BRDF_CORE_ONLY
 
+// ---------------------------------------------------------------------------
+// エネルギー保存とオクルージョンの補正項
+// ---------------------------------------------------------------------------
+
+// 分割和近似のDFG項。LUTが無い環境でも破綻しないよう解析近似を用意しておく。
+float2 env_dfg_analytic(float NoV, float roughness)
+{
+    // Karis の環境BRDF近似 (Mobile向け, "Physically Based Shading on Mobile")
+    const float4 c0 = float4(-1.0f, -0.0275f, -0.572f, 0.022f);
+    const float4 c1 = float4(1.0f, 0.0425f, 1.04f, -0.04f);
+    float4 r = roughness * c0 + c1;
+    float a004 = min(r.x * r.x, exp2(-9.28f * NoV)) * r.x + r.y;
+    return float2(-1.04f, 1.04f) * a004 + r.zw;
+}
+
+float2 env_dfg(float NoV, float roughness)
+{
+    float2 uv = clamp(float2(NoV, roughness), 0.0f, 1.0f);
+    float2 f_ab = pbr_lut_ggx.SampleLevel(pbr_sampler_linear, uv, 0).rg;
+    // LUT未バインド時は0が返るため、そのときだけ解析近似へ落とす。
+    return (f_ab.x + f_ab.y) <= 1.0e-5f ? env_dfg_analytic(NoV, roughness) : f_ab;
+}
+
+// 直接光の鏡面反射に対するマルチスキャッタ補正。
+// 単散乱GGXはラフな金属で目に見えて暗くなるため、失われたエネルギーを戻す。
+float3 specular_energy_compensation(float3 f0, float2 f_ab)
+{
+    return 1.0f + f0 * (1.0f / max(f_ab.x, 1.0e-4f) - 1.0f);
+}
+
+// Lagarde の specular occlusion。AOをそのまま鏡面へ掛けると
+// ラフネスが低い面で不自然に暗くなるので、NoVとラフネスで効き方を変える。
+float specular_occlusion(float NoV, float ao, float roughness)
+{
+    return saturate(pow(abs(NoV) + ao, exp2(-16.0f * roughness - 1.0f)) - 1.0f + ao);
+}
+
+// 反射ベクトルが面の裏側を向いたときのリークを潰す(horizon occlusion)。
+float horizon_occlusion(float3 R, float3 N, float fade)
+{
+    float horizon = saturate(1.0f + fade * dot(R, N));
+    return horizon * horizon;
+}
+
 float3 ibl_radiance_lambertian(float3 N, float3 V, float roughness,
                                float3 diffuse_color, float3 f0)
 {
     float NoV = clamp(dot(N, V), 0.0f, 1.0f);
 
-    float2 brdf_sample_point = clamp(float2(NoV, roughness), 0.0f, 1.0f);
-    float2 f_ab = pbr_lut_ggx.Sample(pbr_sampler_linear, brdf_sample_point).rg;
-
-    float3 irradiance = pbr_diffuse_iem.Sample(pbr_sampler_linear, N).rgb;
+    float2 f_ab = env_dfg(NoV, roughness);
+    // SampleLevel(0)で読む。IEMは畳み込み済みなのでミップは不要で、
+    // コンピュートシェーダーからも同じ関数が使える。
+    float3 irradiance = pbr_diffuse_iem.SampleLevel(pbr_sampler_linear, N, 0).rgb;
 
     float3 Fr     = max(1.0f - roughness, f0) - f0;
     float3 k_S    = f0 + Fr * pow(1.0f - NoV, 5.0f);
     float3 FssEss = k_S * f_ab.x + f_ab.y;
 
     return diffuse_color * (1.0f - FssEss) * irradiance / PI;
+}
+
+// Fdez-Agüera のマルチスキャッタIBL。拡散と鏡面を同時に解き、
+// 単散乱で失われるエネルギーを多重散乱項として拡散側へ戻す。
+// 金属のラフ面が黒ずむ / 誘電体が暗くなる問題が消える。
+void ibl_multiscatter(float3 N, float3 V, float roughness,
+                      float3 diffuse_color, float3 f0,
+                      out float3 out_diffuse, out float3 out_specular)
+{
+    float  NoV = clamp(dot(N, V), 0.0f, 1.0f);
+    float3 R   = reflect(-V, N);
+
+    float2 f_ab = env_dfg(NoV, roughness);
+
+    uint width = 1, height = 1, mip_count = 1;
+    pbr_specular_pmrem.GetDimensions(0, width, height, mip_count);
+    float lod = roughness * float(max(mip_count - 1, 1));
+
+    // SampleLevel(0)で読む。IEMは畳み込み済みなのでミップは不要で、
+    // コンピュートシェーダーからも同じ関数が使える。
+    float3 irradiance = pbr_diffuse_iem.SampleLevel(pbr_sampler_linear, N, 0).rgb;
+    float3 radiance   = pbr_specular_pmrem.SampleLevel(pbr_sampler_linear, R, lod).rgb;
+
+    float3 Fr     = max(1.0f - roughness, f0) - f0;
+    float3 k_S    = f0 + Fr * pow(1.0f - NoV, 5.0f);
+    float3 FssEss = k_S * f_ab.x + f_ab.y;
+
+    // 単散乱で取りこぼした割合 Ems と、平均フレネル Favg から多重散乱を求める。
+    float  Ems  = 1.0f - (f_ab.x + f_ab.y);
+    float3 Favg = f0 + (1.0f - f0) / 21.0f;
+    float3 Fms  = FssEss * Favg / (1.0f - Ems * Favg);
+    float3 k_D  = diffuse_color * (1.0f - FssEss - Fms * Ems);
+
+    out_diffuse  = (Fms * Ems + k_D) * irradiance;
+    out_specular = FssEss * radiance;
 }
 
 float3 ibl_radiance_ggx(float3 N, float3 V, float roughness, float3 f0)
@@ -76,7 +155,7 @@ float3 ibl_radiance_ggx(float3 N, float3 V, float roughness, float3 f0)
     float3 specular_light = pbr_specular_pmrem.SampleLevel(pbr_sampler_linear, R, lod).rgb;
 
     float2 brdf_sample_point = clamp(float2(NoV, roughness), 0.0f, 1.0f);
-    float2 f_ab = pbr_lut_ggx.Sample(pbr_sampler_linear, brdf_sample_point).rg;
+    float2 f_ab = pbr_lut_ggx.SampleLevel(pbr_sampler_linear, brdf_sample_point, 0).rg;
 
     float3 Fr     = max(1.0f - roughness, f0) - f0;
     float3 k_S    = f0 + Fr * pow(1.0f - NoV, 5.0f);
@@ -150,9 +229,27 @@ float sample_shadow(float3 world_position)
     return visibility;
 }
 
-float3 evaluate_pbr(float3 base_color, float3 emissive,
-                    float metallic, float roughness, float occlusion,
-                    float3 N, float3 V, float3 world_position)
+// スクリーン空間の追加入力。使わない側は既定値のまま渡せばよい。
+struct PbrScreenSpaceInputs
+{
+    float  ambient_occlusion;   // 1=遮蔽なし
+    float3 reflection_color;    // SSRの色
+    float  reflection_weight;   // SSRの信頼度 0..1
+};
+
+PbrScreenSpaceInputs pbr_default_screen_inputs()
+{
+    PbrScreenSpaceInputs inputs;
+    inputs.ambient_occlusion = 1.0f;
+    inputs.reflection_color  = float3(0.0f, 0.0f, 0.0f);
+    inputs.reflection_weight = 0.0f;
+    return inputs;
+}
+
+float3 evaluate_pbr_ex(float3 base_color, float3 emissive,
+                       float metallic, float roughness, float occlusion,
+                       float3 N, float3 V, float3 world_position,
+                       float shadow, PbrScreenSpaceInputs screen)
 {
     // perceptual -> alpha
     float alpha_roughness = max(roughness * roughness, 0.0025f);
@@ -170,27 +267,64 @@ float3 evaluate_pbr(float3 base_color, float3 emissive,
     float  NoH = clamp(dot(N, H), 0.0f, 1.0f);
     float  VoH = clamp(dot(V, H), 0.0f, 1.0f);
 
+    // マルチスキャッタ補正は直接光と鏡面IBLで共通に使う。
+    float2 f_ab = env_dfg(NoV, roughness);
+    float3 energy_compensation = specular_energy_compensation(f0, f_ab);
+
     float3 direct = float3(0.0f, 0.0f, 0.0f);
     if (NoL > 0.0f && NoV > 0.0f)
     {
         float3 diff = brdf_lambertian(f0, f90, diffuse_color, VoH);
-        float3 spec = brdf_specular_ggx(f0, f90, alpha_roughness, VoH, NoL, NoV, NoH);
+        float3 spec = brdf_specular_ggx(f0, f90, alpha_roughness, VoH, NoL, NoV, NoH)
+                    * energy_compensation;
         direct = (diff + spec) * NoL * directional_color.rgb * directional_color.a;
     }
 
-    float shadow = sample_shadow(world_position);
     direct *= shadow;
     direct += evaluate_point_lights(world_position, N, V, base_color, roughness, metallic);
     direct += evaluate_spot_lights(world_position, N, V, base_color);
 
-    float3 ibl_diff = ibl_radiance_lambertian(N, V, roughness, diffuse_color, f0) * ibl_params.x;
-    float3 ibl_spec = ibl_radiance_ggx(N, V, roughness, f0)                       * ibl_params.y;
-    float3 indirect = ibl_diff + ibl_spec;
+    // 間接光はマルチスキャッタIBLで拡散/鏡面を同時に解く。
+    float3 ibl_diffuse, ibl_specular;
+    ibl_multiscatter(N, V, roughness, diffuse_color, f0, ibl_diffuse, ibl_specular);
+    ibl_diffuse  *= ibl_params.x;
+    ibl_specular *= ibl_params.y;
 
-    // AO
-    indirect *= lerp(1.0f, occlusion, ibl_params.z);
+    // AOはマップとSSAOの両方を掛け合わせ、拡散と鏡面で効き方を分ける。
+    float ao = saturate(occlusion * screen.ambient_occlusion);
+    float ao_strength = saturate(ibl_params.z);
+    float diffuse_ao = lerp(1.0f, ao, ao_strength);
+    float spec_ao = lerp(1.0f, specular_occlusion(NoV, ao, roughness), ao_strength);
+
+    float3 R = reflect(-V, N);
+    float horizon = horizon_occlusion(R, N, 1.0f);
+
+    ibl_diffuse  *= diffuse_ao;
+    ibl_specular *= spec_ao * horizon;
+
+    // SSRはIBLの鏡面項を置き換える形で合成する(二重計上を避ける)。
+    float reflection_weight = saturate(screen.reflection_weight);
+    if (reflection_weight > 0.0f)
+    {
+        float2 reflect_f_ab = f_ab;
+        float3 FssEss = f0 * reflect_f_ab.x + reflect_f_ab.y;
+        float3 screen_specular = screen.reflection_color * FssEss
+                               * energy_compensation * spec_ao * horizon * ibl_params.y;
+        ibl_specular = lerp(ibl_specular, screen_specular, reflection_weight);
+    }
+
+    float3 indirect = ibl_diffuse + ibl_specular;
 
     return (direct + indirect + emissive) * max(ibl_params.w, 0.0f);
+}
+
+float3 evaluate_pbr(float3 base_color, float3 emissive,
+                    float metallic, float roughness, float occlusion,
+                    float3 N, float3 V, float3 world_position)
+{
+    return evaluate_pbr_ex(base_color, emissive, metallic, roughness, occlusion,
+        N, V, world_position, sample_shadow(world_position),
+        pbr_default_screen_inputs());
 }
 
 #endif // PBR_BRDF_CORE_ONLY

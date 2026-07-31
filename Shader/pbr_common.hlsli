@@ -2,7 +2,7 @@
 //  pbr_common.hlsli
 //  PBR + IBL + Shadow の "追加" 定数バッファ / サンプラー / テクスチャ。
 //  既存 skinned_mesh.hlsli / static_mesh.hlsli の cbuffer はそのまま流用するため
-//  ここでは SCENE_CONSTANT_BUFFER(b1) / OBJECT_CONSTANT_BUFFER(b0) は定義しない。
+//  ここでは SCENE_CONSTANT_BUFFER(b1) / OBJECT_CONSTANT_BUFFER(b0) は定義しないのでよろしく。
 //
 //  使い方:
 //    #include "skinned_mesh.hlsli"  または "static_mesh.hlsli"
@@ -10,7 +10,7 @@
 //
 //  追加スロット:
 //    t2  = metallic-roughness (B=metal, G=rough, R=AO) glTF ORM
-//    t3  = emissive map
+//    t3  = emissive map光るやつ
 //    t4  = shadow map (R32_FLOAT depth)
 //    t33 = diffuse IEM   (TextureCube)
 //    t34 = specular PMREM(TextureCube)
@@ -51,11 +51,16 @@ cbuffer SHADOW_CONSTANT_BUFFER : register(b3)
     row_major float4x4 light_view_projection;
 };
 
+// Sample()はスクリーン空間微分を必要とするためコンピュートシェーダーでは使えない。
+// タイルドDeferredのCSからこのヘッダを読むときは PBR_COMPUTE_SHADER を定義して
+// ピクセルシェーダー専用の関数を除外する。
+#ifndef PBR_COMPUTE_SHADER
 float3 unpack_normal_map(float3 N, float3 T, float3 B, float2 uv)
 {
     float3 n = pbr_normal_map.Sample(pbr_sampler_linear, uv).xyz;
     n = n * 2.0f - 1.0f;
     return normalize(n.x * T + n.y * B + n.z * N);
 }
+#endif
 
 #endif // __PBR_COMMON_HLSLI__

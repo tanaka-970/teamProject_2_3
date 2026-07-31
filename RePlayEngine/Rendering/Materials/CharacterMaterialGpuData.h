@@ -9,9 +9,10 @@ namespace ReplayEngine::Rendering
 {
     struct alignas(16) ShaderLayerGpuData
     {
-        float pixel_grid = 64.0f;
+        float pixel_size = 6.0f;
         float pixelate_strength = 1.0f;
-        DirectX::XMFLOAT2 padding{ 0.0f, 0.0f };
+        float pixelate_opacity = 1.0f;
+        float use_gbuffer_color = 0.0f;
 
         static ShaderLayerGpuData FromLayer(const ShaderLayer& layer) noexcept;
     };

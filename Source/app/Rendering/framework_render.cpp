@@ -41,6 +41,71 @@ void framework::store_object_world(DirectX::XMFLOAT4X4& world) const
     DirectX::XMStoreFloat4x4(&world, C * S * R * T);
 }
 
+void framework::update_frame_constants(const DirectX::XMMATRIX& view,
+    const DirectX::XMMATRIX& projection, float elapsed_time)
+{
+    if (!frame_constants_cb) return;
+
+    const DirectX::XMMATRIX view_projection = view * projection;
+    DirectX::XMStoreFloat4x4(&frame_constants.view, view);
+    DirectX::XMStoreFloat4x4(&frame_constants.projection, projection);
+    DirectX::XMStoreFloat4x4(&frame_constants.view_projection, view_projection);
+    DirectX::XMStoreFloat4x4(&frame_constants.inv_view,
+        DirectX::XMMatrixInverse(nullptr, view));
+    DirectX::XMStoreFloat4x4(&frame_constants.inv_projection,
+        DirectX::XMMatrixInverse(nullptr, projection));
+    DirectX::XMStoreFloat4x4(&frame_constants.inv_view_projection,
+        DirectX::XMMatrixInverse(nullptr, view_projection));
+
+    // 初回フレームは前フレームが無いので、今フレームで埋めて再投影を無効化する。
+    if (!previous_view_projection_valid)
+    {
+        DirectX::XMStoreFloat4x4(&previous_view_projection, view_projection);
+        previous_view_projection_valid = true;
+    }
+    frame_constants.prev_view_projection = previous_view_projection;
+
+    const DirectX::XMFLOAT4X4& p = frame_constants.projection;
+    // projection._22 = 1/tan(fovY/2)、_11 = 1/(tan(fovY/2)*aspect)。
+    const float tan_half_fov_y = p._22 != 0.0f ? 1.0f / p._22 : 1.0f;
+    const float aspect = p._11 != 0.0f ? p._22 / p._11 : 1.0f;
+    // LH透視射影は _33 = far/(far-near)、_43 = -near*far/(far-near)。
+    const float near_plane = p._33 != 0.0f ? -p._43 / p._33 : 0.1f;
+    const float far_plane = (p._33 - 1.0f) != 0.0f ? p._43 / (p._33 - 1.0f) : 10000.0f;
+
+    frame_constants.camera_position = enable_scene_game && game_scene
+        ? DirectX::XMFLOAT4(game_scene->Gameplay().GetCamera().GetEye().x,
+            game_scene->Gameplay().GetCamera().GetEye().y,
+            game_scene->Gameplay().GetCamera().GetEye().z, 1.0f)
+        : camera_position;
+    const float width = static_cast<float>(SCREEN_WIDTH);
+    const float height = static_cast<float>(SCREEN_HEIGHT);
+    frame_constants.screen_size = { width, height, 1.0f / width, 1.0f / height };
+    frame_constants.camera_planes = { near_plane, far_plane, tan_half_fov_y, aspect };
+    frame_constants.frame_params = { static_cast<float>(frame_index), elapsed_time, 0.0f, 0.0f };
+
+    // TAAのジッター量(NDC)。射影行列へ加算済みの値をそのまま共有し、
+    // モーションベクター側で打ち消せるようにしておく。
+    frame_constants.jitter = { taa_jitter_ndc.x, taa_jitter_ndc.y,
+        previous_taa_jitter_ndc.x, previous_taa_jitter_ndc.y };
+
+    // メッシュ側がモーションベクターを書くために必要なフレーム共通の情報。
+    motion_vectors::FrameContext& motion_frame = motion_vectors::Frame();
+    motion_frame.previous_view_projection = previous_view_projection;
+    motion_frame.current_jitter = taa_jitter_ndc;
+    motion_frame.previous_jitter = previous_taa_jitter_ndc;
+    motion_frame.enabled = previous_view_projection_valid;
+    motion_frame.frame_id = frame_index + 1; // 0は「未描画」を表すため使わない
+
+    immediate_context->UpdateSubresource(frame_constants_cb.Get(), 0, nullptr,
+        &frame_constants, 0, 0);
+    // b4はこのフレーム定数の専用スロット。他のパスが上書きしないため、
+    // フレーム先頭で一度貼れば SSAO/SSR/TAA/タイルド照明すべてから読める。
+    ID3D11Buffer* buffers[1]{ frame_constants_cb.Get() };
+    immediate_context->PSSetConstantBuffers(4, 1, buffers);
+    immediate_context->CSSetConstantBuffers(4, 1, buffers);
+}
+
 ID3D11PixelShader* framework::skinned_forward_shader(int shading) const
 {
     // nullptrは各メッシュが持つ標準ピクセルシェーダーを使う指定になる。
@@ -49,6 +114,7 @@ ID3D11PixelShader* framework::skinned_forward_shader(int shading) const
     case SHADING_MODEL_PBR:   return use_pbr_skin ? pbr.skinned_mesh_ps() : nullptr;
     case SHADING_MODEL_TOON:  return enable_toon_shader ? toon.skinned_mesh_ps() : nullptr;
     case SHADING_MODEL_UNLIT: return enable_unlit_shader ? skinned_mesh_unlit_ps.Get() : nullptr;
+    case SHADING_MODEL_PIXELATE: return object_pixelate_ps.Get();
     default:                  return nullptr;
     }
 }
@@ -60,6 +126,7 @@ ID3D11PixelShader* framework::static_forward_shader(int shading) const
     case SHADING_MODEL_PBR:   return use_pbr_skin ? pbr.static_mesh_ps() : nullptr;
     case SHADING_MODEL_TOON:  return enable_toon_shader ? toon.static_mesh_ps() : nullptr;
     case SHADING_MODEL_UNLIT: return enable_unlit_shader ? static_mesh_unlit_ps.Get() : nullptr;
+    case SHADING_MODEL_PIXELATE: return object_pixelate_ps.Get();
     default:                  return nullptr;
     }
 }
@@ -72,11 +139,13 @@ unsigned int framework::deferred_shading_model(int shading) const
     case SHADING_MODEL_PBR:   return use_pbr_skin ? SHADING_MODEL_PBR : SHADING_MODEL_UNLIT;
     case SHADING_MODEL_TOON:  return enable_toon_shader ? SHADING_MODEL_TOON : SHADING_MODEL_UNLIT;
     case SHADING_MODEL_UNLIT: return enable_unlit_shader ? SHADING_MODEL_UNLIT : SHADING_MODEL_FBX_DEFAULT;
+    case SHADING_MODEL_PIXELATE: return SHADING_MODEL_PBR;
     default:                  return SHADING_MODEL_UNLIT;
     }
 }
 
-void framework::bind_gbuffer_material(unsigned int shading, bool stage_surface)
+void framework::bind_gbuffer_material(unsigned int shading, bool stage_surface,
+    float pixelate_size, float pixelate_strength)
 {
     material_override_constants constants{};
     constants.mat_params = stage_surface
@@ -84,6 +153,8 @@ void framework::bind_gbuffer_material(unsigned int shading, bool stage_surface)
         : DirectX::XMFLOAT4{ 0.0f, 0.55f, 1.0f, 0.0f };
     constants.shading_model = shading;
     constants.texture_contrast = stage_surface ? stage_texture_contrast : 1.0f;
+    constants.pixelate_size = pixelate_size;
+    constants.pixelate_strength = pixelate_strength;
     immediate_context->UpdateSubresource(material_override_cb.Get(), 0, nullptr, &constants, 0, 0);
     immediate_context->PSSetConstantBuffers(9, 1, material_override_cb.GetAddressOf());
 }
@@ -92,6 +163,9 @@ void framework::render(float elapsed_time)
 {
     apply_pending_resize();
     if (!render_target_view || !depth_stencil_view || !framebuffers[0]) return;
+
+    // 描画統計の計測開始。CPUカウンタを0に戻し、GPUクエリを開く。
+    ReplayEngine::Rendering::Stats().BeginFrame(immediate_context.Get());
 
     // 前フレームのRTV/SRV参照を先に外し、同じリソースを入出力へ同時設定する競合を防ぐ。
     ID3D11RenderTargetView* null_rtvs[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT]{};
@@ -115,6 +189,14 @@ void framework::render(float elapsed_time)
 
     if (scene_manager.IsExclusive())
     {
+#ifdef USE_IMGUI
+        // 排他シーン中はエディタUIを出さない。NewFrame済みなら破棄して対を保つ。
+        if (imgui_frame_active)
+        {
+            imgui_frame_active = false;
+            ImGui::EndFrame();
+        }
+#endif
         // 起動ロゴやロード画面はゲーム側の描画パイプラインを通さず、画面全体へ直接描く。
         immediate_context->OMSetRenderTargets(1, render_target_view.GetAddressOf(), nullptr);
         immediate_context->OMSetBlendState(
@@ -123,6 +205,9 @@ void framework::render(float elapsed_time)
             depth_stencil_states[(size_t)DEPTH_STATE::ZT_OFF_ZW_OFF].Get(), 0);
         immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
         scene_manager.Render({ immediate_context.Get(), viewport.Width, viewport.Height });
+        // 早期returnでもクエリを閉じる。開いたままにすると次フレームで
+        // 二重Beginになりクエリが壊れる。
+        ReplayEngine::Rendering::Stats().EndFrame(immediate_context.Get());
         swap_chain->Present(0, 0);
         return;
     }
@@ -148,6 +233,29 @@ void framework::render(float elapsed_time)
         V = DirectX::XMMatrixLookAtLH(eye, focus, up);
     }
 
+    // TAAのサブピクセルジッターを射影行列へ入れる。以降の全パスがこのPを使うので、
+    // G-Buffer/影/前方描画すべてが同じ標本位置になる。
+    previous_taa_jitter_ndc = taa_jitter_ndc;
+    taa_jitter_ndc = { 0.0f, 0.0f };
+    if (enable_taa && taa_pass.Initialized() && taa_pass.enabled &&
+        render_graph.DeferredDebugMode() == 0)
+    {
+        const DirectX::XMFLOAT2 pixel_offset = taa_pass.CurrentJitter(frame_index);
+        // ピクセル単位のオフセットをNDCへ。NDCは幅2なので 2/解像度 を掛ける。
+        taa_jitter_ndc = {
+            pixel_offset.x * 2.0f / static_cast<float>(SCREEN_WIDTH),
+            pixel_offset.y * 2.0f / static_cast<float>(SCREEN_HEIGHT) };
+
+        // row_major・mul(v, P)の規約では clip.x += jitter.x * clip.w になるよう
+        // _31/_32 へ加算する(clip.w = view z)。
+        DirectX::XMFLOAT4X4 jittered;
+        DirectX::XMStoreFloat4x4(&jittered, P);
+        jittered._31 += taa_jitter_ndc.x;
+        jittered._32 += taa_jitter_ndc.y;
+        P = DirectX::XMLoadFloat4x4(&jittered);
+    }
+    taa_pass.SetJitter(taa_jitter_ndc);
+
     // 以降の全描画パスが共有するカメラと主光源の定数を一度だけ更新する。
     scene_constants scene{};
     DirectX::XMStoreFloat4x4(&scene.view_projection, V * P);
@@ -164,6 +272,22 @@ void framework::render(float elapsed_time)
     immediate_context->UpdateSubresource(constant_buffers[0].Get(), 0, 0, &scene, 0, 0);
     immediate_context->VSSetConstantBuffers(1, 1, constant_buffers[0].GetAddressOf());
     immediate_context->PSSetConstantBuffers(1, 1, constant_buffers[0].GetAddressOf());
+
+    // SSAO/SSR/TAAが参照するカメラ行列群をb4へ載せる。
+    update_frame_constants(V, P, elapsed_time);
+
+    // 視錐台カリング用の平面をこのフレームのビュー射影から作る。
+    // 各メッシュは描画直前にこれを参照して画面外のプリミティブを捨てる。
+    {
+        auto& culling = ReplayEngine::Rendering::Culling();
+        culling.BeginFrame();
+        culling.frustum.BuildFromViewProjection(scene.view_projection);
+        // 自動LODは画面上の投影サイズで段を決めるので、行列と画面高さを渡す。
+        DirectX::XMStoreFloat4x4(&culling.view_projection, P);
+        culling.screen_height = static_cast<float>(SCREEN_HEIGHT);
+        culling.camera_position = { scene.camera_position.x,
+            scene.camera_position.y, scene.camera_position.z };
+    }
 
     const float original_pbr_shadow_enable = pbr.light.shadow_params.w;
     const bool pbr_shadow_enabled =
@@ -325,30 +449,123 @@ void framework::render(float elapsed_time)
     toon.bind_resources(immediate_context.Get());
     immediate_context->PSSetShaderResources(1, 1, dummy_normal_srv.GetAddressOf());
 
+    const auto make_base_pixelate_layer = [](float grid, float strength)
+    {
+        ReplayEngine::Rendering::ShaderLayer layer{};
+        layer.type = ReplayEngine::Rendering::ShaderLayerType::Pixelate;
+        layer.opacity = 1.0f;
+        layer.strength = strength;
+        layer.parameter = grid;
+        return layer;
+    };
+    const auto player_pixelate_layer = make_base_pixelate_layer(
+        pixelate_grid_per_skinned[0], pixelate_strength_per_skinned[0]);
+    const auto static_pixelate_layer = make_base_pixelate_layer(
+        pixelate_grid_per_static[0], pixelate_strength_per_static[0]);
+    const auto stage_pixelate_layer = make_base_pixelate_layer(
+        stage_pixelate_grid, stage_pixelate_strength);
+    const auto find_pixelate_layer = [](const ReplayEngine::Rendering::ShaderLayerStack& stack)
+        -> const ReplayEngine::Rendering::ShaderLayer*
+    {
+        for (const auto& layer : stack.Layers())
+        {
+            if (layer.enabled &&
+                layer.type == ReplayEngine::Rendering::ShaderLayerType::Pixelate)
+                return &layer;
+        }
+        return nullptr;
+    };
+    const auto* player_added_pixelate = find_pixelate_layer(shader_layers_skinned[0]);
+    const auto* static_added_pixelate = find_pixelate_layer(shader_layers_static[0]);
+    const auto* stage_added_pixelate = find_pixelate_layer(stage_shader_layers);
+    const bool player_uses_pixelate = shading_per_skinned[0] == SHADING_MODEL_PIXELATE ||
+        player_added_pixelate != nullptr;
+    const bool static_uses_pixelate = shading_per_static[0] == SHADING_MODEL_PIXELATE ||
+        static_added_pixelate != nullptr;
+    const bool stage_uses_pixelate =
+        (enable_stage_shader && shading_per_stage == SHADING_MODEL_PIXELATE) ||
+        stage_added_pixelate != nullptr;
+    const auto& player_pixelate_settings = player_added_pixelate
+        ? *player_added_pixelate : player_pixelate_layer;
+    const auto& static_pixelate_settings = static_added_pixelate
+        ? *static_added_pixelate : static_pixelate_layer;
+    const auto& stage_pixelate_settings = stage_added_pixelate
+        ? *stage_added_pixelate : stage_pixelate_layer;
+
     // 通常描画はDeferredへ統一する。Forward+は将来別経路として追加する。
     const bool deferred_active = deferred.initialized;
     if (deferred_active)
     {
-        // Deferred経路は材質情報をGBufferへ集約し、照明パスで一括して色を決定する。
-        FLOAT deferred_clear[]{ background_color.x, background_color.y, background_color.z, background_color.w };
-        deferred.gbuffer_begin(immediate_context.Get(), deferred_clear);
-        immediate_context->OMSetBlendState(blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
-        immediate_context->OMSetDepthStencilState(depth_stencil_states[(size_t)DEPTH_STATE::ZT_ON_ZW_ON].Get(), 0);
-        immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
-
         DirectX::XMFLOAT4X4 world;
         store_object_world(world);
+
+        // --- 深度プリパス -------------------------------------------------
+        // 深度だけを先に埋めてから、G-Buffer本描画をDepthFunc=EQUALで走らせる。
+        // 柱が重なるシーンではG-Buffer PS(テクスチャ3枚サンプル)の実行回数が
+        // 手前の1回だけになる。頂点処理は2回になるので、LODとの併用が前提。
+        const bool use_depth_prepass = enable_depth_prepass && deferred.depth_equal_state;
+        if (use_depth_prepass)
+        {
+            deferred.depth_prepass_begin(immediate_context.Get());
+            immediate_context->OMSetBlendState(
+                blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
+            immediate_context->OMSetDepthStencilState(
+                depth_stencil_states[(size_t)DEPTH_STATE::ZT_ON_ZW_ON].Get(), 0);
+            immediate_context->RSSetState(
+                rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+
+            // 深度だけなのでピクセルシェーダーは外す(bind_pixel_shader=false)。
+            // モーションベクターもここでは書かない。
+            if (skinned_meshes[0])
+                skinned_meshes[0]->render(immediate_context.Get(), world, material_color,
+                    active_keyframe, nullptr, nullptr, nullptr, false, false);
+            if (enable_static_meshes && static_meshes[0])
+                static_meshes[0]->render(immediate_context.Get(), world, material_color,
+                    nullptr, nullptr, nullptr, false, false);
+            if (enable_scene_game && game_scene && enable_stage_render)
+            {
+                DirectX::XMFLOAT4X4 stage_world;
+                DirectX::XMStoreFloat4x4(&stage_world,
+                    DirectX::XMLoadFloat4x4(&game_scene->Gameplay().GetStage().GetTransform()));
+                if (skinned_mesh* stage_model = game_scene->Gameplay().GetStage().GetModel())
+                    stage_model->render(immediate_context.Get(), stage_world, material_color,
+                        nullptr, nullptr, nullptr, nullptr, false, false);
+                // Sponzaのような大きなglTFステージが最大のオーバードロー源なので、
+                // ここを深度プリパスへ通すのが一番効く。
+                else if (stage_gltf_model)
+                    stage_gltf_model->render(immediate_context.Get(), stage_world,
+                        material_color, nullptr, false, true);
+            }
+            // 深度プリパスの描画数は統計へ混ぜない(同じ形状を二重に数えないため)。
+        }
+
+        // Deferred経路は材質情報をGBufferへ集約し、照明パスで一括して色を決定する。
+        FLOAT deferred_clear[]{ background_color.x, background_color.y, background_color.z, background_color.w };
+        deferred.gbuffer_begin(immediate_context.Get(), deferred_clear, !use_depth_prepass);
+        immediate_context->OMSetBlendState(blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
+        // プリパス済みなら EQUAL 比較で最前面だけを通す。
+        immediate_context->OMSetDepthStencilState(use_depth_prepass
+            ? deferred.depth_equal_state.Get()
+            : depth_stencil_states[(size_t)DEPTH_STATE::ZT_ON_ZW_ON].Get(), 0);
+        immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
         if (skinned_meshes[0])
         {
-            bind_gbuffer_material(deferred_shading_model(shading_per_skinned[0]));
+            bind_gbuffer_material(player_uses_pixelate ? SHADING_MODEL_PIXELATE
+                : deferred_shading_model(shading_per_skinned[0]), false,
+                player_pixelate_settings.parameter, player_pixelate_settings.strength);
+            // 最後の引数がモーションベクター出力の指定。G-Bufferパスだけで真にする。
             skinned_meshes[0]->render(immediate_context.Get(), world, material_color,
-                                      active_keyframe, skinned_mesh_gbuffer_ps.Get());
+                                      active_keyframe, skinned_mesh_gbuffer_ps.Get(),
+                                      nullptr, nullptr, true, true);
         }
         if (enable_static_meshes && static_meshes[0])
         {
-            bind_gbuffer_material(deferred_shading_model(shading_per_static[0]));
+            bind_gbuffer_material(static_uses_pixelate ? SHADING_MODEL_PIXELATE
+                : deferred_shading_model(shading_per_static[0]), false,
+                static_pixelate_settings.parameter, static_pixelate_settings.strength);
             static_meshes[0]->render(immediate_context.Get(), world, material_color,
-                                     static_mesh_gbuffer_ps.Get());
+                                     static_mesh_gbuffer_ps.Get(),
+                                     nullptr, nullptr, true, true);
         }
 
         if (enable_scene_game && game_scene && enable_stage_render)
@@ -359,27 +576,117 @@ void framework::render(float elapsed_time)
             skinned_mesh* stage_model = game_scene->Gameplay().GetStage().GetModel();
             if (stage_model)
             {
-                bind_gbuffer_material(deferred_shading_model(shading_per_stage), true);
+                bind_gbuffer_material(stage_uses_pixelate ? SHADING_MODEL_PIXELATE
+                    : deferred_shading_model(shading_per_stage), true,
+                    stage_pixelate_settings.parameter, stage_pixelate_settings.strength);
                 stage_model->render(immediate_context.Get(), stage_world, material_color,
-                    nullptr, skinned_mesh_gbuffer_ps.Get());
+                    nullptr, skinned_mesh_gbuffer_ps.Get(), nullptr, nullptr, true, true);
             }
             else if (stage_gltf_model)
             {
-                bind_gbuffer_material(deferred_shading_model(shading_per_stage), true);
+                bind_gbuffer_material(stage_uses_pixelate ? SHADING_MODEL_PIXELATE
+                    : deferred_shading_model(shading_per_stage), true,
+                    stage_pixelate_settings.parameter, stage_pixelate_settings.strength);
                 stage_gltf_model->render(immediate_context.Get(), stage_world, material_color,
-                    static_mesh_gbuffer_ps.Get());
+                    static_mesh_gbuffer_ps.Get(), true);
             }
         }
 
         deferred.gbuffer_end(immediate_context.Get());
+
+        // 照明の前にSSAOを解く。G-Bufferの深度と法線だけで完結するパス。
+        ID3D11ShaderResourceView* ambient_occlusion = nullptr;
+        if (enable_ssao && ssao_pass.Initialized())
+        {
+            ssao_pass.enabled = true;
+            ambient_occlusion = ssao_pass.Execute(immediate_context.Get(),
+                *bit_block_transfer, deferred.depth_srv.Get(),
+                deferred.gbuffer_srv[2].Get());
+        }
+
+        // SSRも照明前に解き、PBRの鏡面項へ差し込む。反射源は前フレームの
+        // ライティング結果なので、この時点で参照しても自己参照にならない。
+        ID3D11ShaderResourceView* screen_reflection = nullptr;
+        if (enable_ssr && ssr_pass.Initialized())
+        {
+            ssr_pass.enabled = true;
+            screen_reflection = ssr_pass.Execute(immediate_context.Get(),
+                *bit_block_transfer, deferred.depth_srv.Get(),
+                deferred.gbuffer_srv[2].Get(), deferred.gbuffer_srv[3].Get());
+        }
+
+        // スクリーン空間パスがb1を触るため、共有シーン定数だけ貼り直す。
+        immediate_context->PSSetConstantBuffers(1, 1, constant_buffers[0].GetAddressOf());
+
         // GBufferをSRVへ切り替えた後、ライト計算結果をDeferred側の出力へ書く。
-        deferred.lighting_pass(immediate_context.Get(), scene.view_projection,
-                               background_color, render_graph.DeferredDebugMode());
+        // タイルド版が有効なときはコンピュートシェーダーへ差し替える。
+        // デバッグ表示中はPS版のみが対応しているのでそちらを使う。
+        const bool use_tiled = tiled_deferred.enabled && tiled_deferred.Initialized() &&
+            render_graph.DeferredDebugMode() == 0;
+        if (use_tiled)
+        {
+            // 定数バッファ配列(b10)の点光源/スポットをStructuredBufferへ移す。
+            // CS側ではb10を貼らないため、二重計上にはならない。
+            tiled_deferred.ClearLights();
+            for (int i = 0; i < lights.data.light_counts.x && i < lights_manager::POINT_LIGHT_MAX; ++i)
+            {
+                const auto& point = lights.data.point_lights[i];
+                tiled_deferred.AddPointLight(
+                    { point.position.x, point.position.y, point.position.z },
+                    point.position.w,
+                    { point.color.x, point.color.y, point.color.z }, point.color.w);
+            }
+            for (int i = 0; i < lights.data.light_counts.y && i < lights_manager::SPOT_LIGHT_MAX; ++i)
+            {
+                const auto& spot = lights.data.spot_lights[i];
+                tiled_deferred.AddSpotLight(
+                    { spot.position.x, spot.position.y, spot.position.z },
+                    spot.position.w,
+                    { spot.direction.x, spot.direction.y, spot.direction.z },
+                    spot.direction.w, spot.color.w,
+                    { spot.color.x, spot.color.y, spot.color.z }, spot.params.x);
+            }
+
+            // CSはPSとスロットが独立しているので、必要なものを貼り直す。
+            immediate_context->CSSetConstantBuffers(1, 1, constant_buffers[0].GetAddressOf());
+            immediate_context->CSSetConstantBuffers(4, 1, frame_constants_cb.GetAddressOf());
+            immediate_context->CSSetSamplers(0, 1,
+                sampler_states[(size_t)SAMPLER_STATE::POINT].GetAddressOf());
+            immediate_context->CSSetSamplers(1, 1,
+                sampler_states[(size_t)SAMPLER_STATE::LINEAR].GetAddressOf());
+            immediate_context->CSSetSamplers(2, 1,
+                sampler_states[(size_t)SAMPLER_STATE::ANISOTROPIC].GetAddressOf());
+            pbr.bind_compute_resources(immediate_context.Get());
+            csm.bind_compute_resources(immediate_context.Get());
+
+            ID3D11ShaderResourceView* gbuffer_views[4]{
+                deferred.gbuffer_srv[0].Get(), deferred.gbuffer_srv[1].Get(),
+                deferred.gbuffer_srv[2].Get(), deferred.gbuffer_srv[3].Get() };
+            tiled_deferred.Dispatch(immediate_context.Get(), deferred.lit_uav.Get(),
+                gbuffer_views, deferred.depth_srv.Get(),
+                ambient_occlusion, screen_reflection);
+
+            pbr.unbind_compute_resources(immediate_context.Get());
+            csm.unbind_compute_resources(immediate_context.Get());
+        }
+        else
+        {
+            deferred.lighting_pass(immediate_context.Get(), scene.view_projection,
+                                   background_color, render_graph.DeferredDebugMode(),
+                                   ambient_occlusion, screen_reflection);
+        }
+
+        // 次フレームのSSR用に、照明直後のHDRカラーを履歴として確保する。
+        if (enable_ssr && ssr_pass.Initialized() && render_graph.DeferredDebugMode() == 0)
+            ssr_pass.CaptureHistory(immediate_context.Get(), deferred.lit_tex.Get());
 
         const bool draw_shader_layers = render_graph.DeferredDebugMode() == 0 &&
             (shader_layers_skinned[0].HasEnabledLayers() ||
                 shader_layers_static[0].HasEnabledLayers() ||
-                stage_shader_layers.HasEnabledLayers());
+                stage_shader_layers.HasEnabledLayers() ||
+                shading_per_skinned[0] == SHADING_MODEL_PIXELATE ||
+                shading_per_static[0] == SHADING_MODEL_PIXELATE ||
+                (enable_stage_shader && shading_per_stage == SHADING_MODEL_PIXELATE));
         if (draw_shader_layers)
         {
             // Surfaceとは別の材質パスをDeferred照明結果へ順番どおりに合成する。
@@ -399,12 +706,6 @@ void framework::render(float elapsed_time)
                 const bool wireframe = layer.type == ReplayEngine::Rendering::ShaderLayerType::Wireframe;
                 immediate_context->RSSetState(rasterizer_states[(size_t)(wireframe
                     ? RASTER_STATE::WIREFRAME_CULL_NONE : RASTER_STATE::CULL_NONE)].Get());
-                if (layer.type == ReplayEngine::Rendering::ShaderLayerType::Pixelate)
-                {
-                    const auto constants = ReplayEngine::Rendering::ShaderLayerGpuData::FromLayer(layer);
-                    immediate_context->UpdateSubresource(shader_layer_cb.Get(), 0, nullptr, &constants, 0, 0);
-                    immediate_context->PSSetConstantBuffers(10, 1, shader_layer_cb.GetAddressOf());
-                }
                 if (layer.type == ReplayEngine::Rendering::ShaderLayerType::StylizedCharacter)
                 {
                     const auto constants =
@@ -454,6 +755,7 @@ void framework::render(float elapsed_time)
                 for (const auto& layer : shader_layers_skinned[0].Layers())
                 {
                     if (!layer.enabled) continue;
+                    if (layer.type == ReplayEngine::Rendering::ShaderLayerType::Pixelate) continue;
                     if (layer.type == ReplayEngine::Rendering::ShaderLayerType::Outline)
                     {
                         immediate_context->OMSetBlendState(
@@ -477,6 +779,7 @@ void framework::render(float elapsed_time)
                 for (const auto& layer : shader_layers_static[0].Layers())
                 {
                     if (!layer.enabled) continue;
+                    if (layer.type == ReplayEngine::Rendering::ShaderLayerType::Pixelate) continue;
                     if (layer.type == ReplayEngine::Rendering::ShaderLayerType::Outline)
                     {
                         immediate_context->OMSetBlendState(
@@ -503,6 +806,7 @@ void framework::render(float elapsed_time)
                 for (const auto& layer : stage_shader_layers.Layers())
                 {
                     if (!layer.enabled) continue;
+                    if (layer.type == ReplayEngine::Rendering::ShaderLayerType::Pixelate) continue;
                     if (layer.type == ReplayEngine::Rendering::ShaderLayerType::Outline)
                     {
                         if (skinned_mesh* stage_model = game_scene->Gameplay().GetStage().GetModel())
@@ -580,6 +884,34 @@ void framework::render(float elapsed_time)
             immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
         }
 
+        // シェーダーレイヤー(追加パス)はブレンドをALPHA/ADD/MULTIPLYへ変えるため、
+        // 後続のフルスクリーンパスへ持ち越さないよう必ず不透明へ戻す。
+        // ここを忘れると、TAAが加算合成になって履歴が累積し、
+        // シーンビューが固まったように見える。
+        immediate_context->OMSetBlendState(
+            blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
+        immediate_context->OMSetDepthStencilState(
+            depth_stencil_states[(size_t)DEPTH_STATE::ZT_OFF_ZW_OFF].Get(), 0);
+        immediate_context->RSSetState(
+            rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+
+        // TAAはトーンマップ前のHDRで解く。明部のエイリアスも正しく平均化され、
+        // かつジッター済みの複数フレームが実質的なスーパーサンプリングになる。
+        ID3D11ShaderResourceView* lit_srv = deferred.lit_srv.Get();
+        if (enable_taa && taa_pass.Initialized() && render_graph.DeferredDebugMode() == 0)
+        {
+            taa_pass.enabled = true;
+            ID3D11ShaderResourceView* resolved = taa_pass.Execute(
+                immediate_context.Get(), *bit_block_transfer, lit_srv,
+                deferred.depth_srv.Get(),
+                deferred.gbuffer_srv[deferred_renderer::GBUFFER_VELOCITY_INDEX].Get());
+            if (resolved) lit_srv = resolved;
+        }
+        else if (taa_pass.Initialized())
+        {
+            taa_pass.InvalidateHistory();
+        }
+
         immediate_context->OMSetRenderTargets(1,
             framebuffers[0]->render_target_view.GetAddressOf(),
             framebuffers[0]->depth_stencil_view.Get());
@@ -587,7 +919,6 @@ void framework::render(float elapsed_time)
         immediate_context->OMSetDepthStencilState(depth_stencil_states[(size_t)DEPTH_STATE::ZT_OFF_ZW_OFF].Get(), 0);
         immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
         // 後段のエフェクトを共通化するため、照明結果を通常の中間バッファへ戻す。
-        ID3D11ShaderResourceView* lit_srv = deferred.lit_srv.Get();
         bit_block_transfer->blit(immediate_context.Get(), &lit_srv, 0, 1);
     }
     else
@@ -595,11 +926,21 @@ void framework::render(float elapsed_time)
         // Forward経路はオブジェクトごとにシェーダーを選び、その場で最終色まで計算する。
         immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
 
+        const auto bind_pixelate_settings = [this](const ReplayEngine::Rendering::ShaderLayer& layer)
+        {
+            const auto constants = ReplayEngine::Rendering::ShaderLayerGpuData::FromLayer(layer);
+            immediate_context->UpdateSubresource(
+                shader_layer_cb.Get(), 0, nullptr, &constants, 0, 0);
+            immediate_context->PSSetConstantBuffers(10, 1, shader_layer_cb.GetAddressOf());
+        };
+
         DirectX::XMFLOAT4X4 world;
         store_object_world(world);
 
         if (skinned_meshes[0])
         {
+            if (shading_per_skinned[0] == SHADING_MODEL_PIXELATE)
+                bind_pixelate_settings(player_pixelate_layer);
             skinned_meshes[0]->render(immediate_context.Get(), world, material_color,
                                       active_keyframe, skinned_forward_shader(shading_per_skinned[0]));
         }
@@ -612,6 +953,8 @@ void framework::render(float elapsed_time)
             skinned_mesh* stage_model = game_scene->Gameplay().GetStage().GetModel();
             if (stage_model)
             {
+                if (enable_stage_shader && shading_per_stage == SHADING_MODEL_PIXELATE)
+                    bind_pixelate_settings(stage_pixelate_layer);
                 // ステージ用シェーダーは独立して切り替え、無効時はFBX標準PSを使う。
                 ID3D11PixelShader* stage_ps = enable_stage_shader
                     ? (shading_per_stage == SHADING_MODEL_PBR && use_pbr_skin
@@ -628,17 +971,23 @@ void framework::render(float elapsed_time)
             }
             else if (stage_gltf_model)
             {
+                if (enable_stage_shader && shading_per_stage == SHADING_MODEL_PIXELATE)
+                    bind_pixelate_settings(stage_pixelate_layer);
                 ID3D11PixelShader* stage_ps = nullptr;
                 if (enable_stage_shader && shading_per_stage == SHADING_MODEL_TOON)
                     stage_ps = toon.static_mesh_ps();
                 else if (enable_stage_shader && shading_per_stage == SHADING_MODEL_UNLIT)
                     stage_ps = static_mesh_unlit_ps.Get();
+                else if (enable_stage_shader && shading_per_stage == SHADING_MODEL_PIXELATE)
+                    stage_ps = object_pixelate_ps.Get();
                 stage_gltf_model->render(immediate_context.Get(), stage_world, material_color, stage_ps);
             }
         }
 
         if (enable_static_meshes && static_meshes[0])
         {
+            if (shading_per_static[0] == SHADING_MODEL_PIXELATE)
+                bind_pixelate_settings(static_pixelate_layer);
             static_meshes[0]->render(immediate_context.Get(), world, material_color,
                                      static_forward_shader(shading_per_static[0]));
         }
@@ -748,8 +1097,11 @@ void framework::render(float elapsed_time)
     immediate_context->PSSetShaderResources(0, _countof(null_post_srvs), null_post_srvs);
 
 #ifdef USE_IMGUI
-    if (editor_mode)
+    // update()でNewFrameを通したフレームだけ描く。ロード完了フレームのように
+    // 途中でeditor_modeが立った場合は次フレームからUIを出す。
+    if (imgui_frame_active)
     {
+        imgui_frame_active = false;
         // エディタUIはポスト処理後に描き、ゲーム画面の色補正から除外する。
         ImGui::Render();
         ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
@@ -763,6 +1115,14 @@ void framework::render(float elapsed_time)
     }
 #endif
 
+    // GPUクエリを閉じて、揃った計測結果を回収する。
+    ReplayEngine::Rendering::Stats().EndFrame(immediate_context.Get());
+
+    // 次フレームの再投影用に今フレームのビュー射影を残し、
+    // ジッター/ノイズ列を進めるためのフレーム番号を更新する。
+    previous_view_projection = frame_constants.view_projection;
+    previous_view_projection_valid = true;
+    ++frame_index;
 
     swap_chain->Present(0, 0);
 }

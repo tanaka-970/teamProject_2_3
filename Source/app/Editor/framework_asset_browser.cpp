@@ -83,12 +83,78 @@ bool framework::browse_stage_asset()
     return load_stage_asset(filename);
 }
 
+bool framework::prewarm_model_asset(const std::filesystem::path& path)
+{
+    std::error_code error;
+    if (path.empty() || !std::filesystem::exists(path, error)) return false;
+
+    const std::wstring extension = LowerExtension(path);
+    try
+    {
+        if (extension == L".glb" || extension == L".gltf")
+        {
+            const auto model = gltf_model_cache.Load(path, [this, path]
+            {
+                return std::make_shared<gltf_model>(device.Get(), path.string());
+            });
+            return model && model->IsLoaded();
+        }
+        if (extension == L".fbx" || extension == L".cereal")
+        {
+            // .fbxはランタイム変換を避け、隣の.cerealキャッシュがある場合だけ載せる。
+            auto cache = path;
+            cache.replace_extension(L".cereal");
+            if (!std::filesystem::exists(cache, error)) return false;
+            return skinned_mesh_cache.Load(path, [this, path]
+            {
+                return std::make_shared<skinned_mesh>(device.Get(), path.string().c_str());
+            }) != nullptr;
+        }
+    }
+    catch (...)
+    {
+        // 先読みは失敗しても本来のロードで再試行できるため、ここで握り潰す。
+        return false;
+    }
+    return false;
+}
+
 bool framework::load_stage_asset(const std::wstring& filename)
 {
     const std::filesystem::path path(filename);
     async_stage_load_active = true;
-    stage_asset_status = "モデルを非同期で確認しています...";
-    async_asset_manager.QueueFile(path, ReplayEngine::Assets::AssetKind::Model,
+    stage_asset_status = "モデルを並列ロードしています...";
+    async_asset_manager.QueueTask(path, ReplayEngine::Assets::AssetKind::Model,
+        [this, path](ReplayEngine::Assets::AsyncAssetResult& result)
+        {
+            const std::wstring extension = LowerExtension(path);
+            if (extension == L".glb" || extension == L".gltf")
+            {
+                auto candidate = gltf_model_cache.Load(path, [this, path]
+                {
+                    return std::make_shared<gltf_model>(device.Get(), path.string());
+                });
+                if (!candidate || !candidate->IsLoaded())
+                    result.error = candidate ? candidate->Error() : "glTFモデルを生成できません";
+                return;
+            }
+            if (extension == L".fbx" || extension == L".cereal")
+            {
+                auto cache = path;
+                cache.replace_extension(L".cereal");
+                if (!std::filesystem::exists(cache))
+                {
+                    result.error = "同じ場所に実行用.cerealキャッシュが必要です";
+                    return;
+                }
+                skinned_mesh_cache.Load(path, [this, path]
+                {
+                    return std::make_shared<skinned_mesh>(device.Get(), path.string().c_str());
+                });
+                return;
+            }
+            result.error = "未対応のモデル形式です";
+        },
         [this](ReplayEngine::Assets::AsyncAssetResult&& result)
         {
             async_stage_load_active = false;
@@ -112,7 +178,10 @@ bool framework::load_stage_asset_now(const std::wstring& filename)
     {
         if (extension == L".glb" || extension == L".gltf")
         {
-            auto candidate = std::make_unique<gltf_model>(device.Get(), path.string());
+            auto candidate = gltf_model_cache.Load(path, [this, path]
+            {
+                return std::make_shared<gltf_model>(device.Get(), path.string());
+            });
             if (!candidate->IsLoaded())
             {
                 stage_asset_status = "読み込み失敗: " + candidate->Error();
@@ -134,7 +203,10 @@ bool framework::load_stage_asset_now(const std::wstring& filename)
                 return false;
             }
 
-            auto candidate = std::make_unique<skinned_mesh>(device.Get(), path.string().c_str());
+            auto candidate = skinned_mesh_cache.Load(path, [this, path]
+            {
+                return std::make_shared<skinned_mesh>(device.Get(), path.string().c_str());
+            });
             skinned_meshes[1] = std::move(candidate);
             stage_gltf_model.reset();
             if (game_scene) game_scene->Gameplay().GetStage().SetModel(skinned_meshes[1].get());

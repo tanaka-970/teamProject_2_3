@@ -14,6 +14,9 @@ namespace ReplayEngine::Rendering
         GBufferNormal,
         GBufferMaterial,
         Depth,
+        AmbientOcclusion,
+        ScreenReflection,
+        ShadowVisibility,
         Count
     };
 
@@ -49,13 +52,17 @@ namespace ReplayEngine::Rendering
             case RenderOutput::GBufferNormal: return 2;
             case RenderOutput::GBufferMaterial: return 3;
             case RenderOutput::Depth: return 4;
+            case RenderOutput::AmbientOcclusion: return 5;
+            case RenderOutput::ScreenReflection: return 6;
+            case RenderOutput::ShadowVisibility: return 7;
             default: return 0;
             }
         }
 
         static constexpr const char* Names() noexcept
         {
-            return "Final\0HDR Scene\0Bloom\0Deferred Lit\0GBuffer Base Color\0GBuffer Normal\0GBuffer Material\0Depth\0";
+            return "Final\0HDR Scene\0Bloom\0Deferred Lit\0GBuffer Base Color\0GBuffer Normal\0"
+                   "GBuffer Material\0Depth\0SSAO\0SSR\0Shadow Visibility\0";
         }
 
     private:
