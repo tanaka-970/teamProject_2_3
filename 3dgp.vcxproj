@@ -192,6 +192,7 @@
     </FxCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Source\mesh\UI.cpp" />
     <ClCompile Include="Source\render\csm_renderer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Deferred\deferred_renderer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Passes\PostProcessPass.cpp" />
@@ -263,6 +264,7 @@
     <ClCompile Include="Source\game\game_scene.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Source\mesh\UI.h" />
     <ClInclude Include="Source\render\csm_renderer.h" />
     <ClInclude Include="Source\render\deferred_renderer.h" />
     <ClInclude Include="RePlayEngine\Rendering\Deferred\deferred_renderer.h" />
@@ -696,6 +698,3 @@
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
 </Project>
-
-
-

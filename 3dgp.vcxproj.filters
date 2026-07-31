@@ -126,6 +126,24 @@
     <Filter Include="プロジェクト設定">
       <UniqueIdentifier>{fa111111-1111-4111-8111-111111111111}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source\Game\Player">
+      <UniqueIdentifier>{eaa13e15-9d64-4e72-9fe7-422c4331a0f7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Game\stage">
+      <UniqueIdentifier>{31e8dde3-da2d-4cee-9ee3-4950360cdc1f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Game\raycast">
+      <UniqueIdentifier>{9ef95583-2e1d-420b-9623-de2691a28259}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Game\Scene">
+      <UniqueIdentifier>{fab74a19-6a87-4a93-bf50-8477b96e9ab8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Game\Camera">
+      <UniqueIdentifier>{3dc6720d-9190-4a0b-8dda-2cd5fca6d4bc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Game\UI">
+      <UniqueIdentifier>{3b1e36f9-008b-4881-89aa-d8a20b1082af}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Source\render\csm_renderer.cpp">
@@ -287,21 +305,6 @@
     <ClCompile Include="Source\core\texture.cpp">
       <Filter>Source\Core</Filter>
     </ClCompile>
-    <ClCompile Include="Source\game\camera.cpp">
-      <Filter>Source\Game</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\game\free_camera_controller.cpp">
-      <Filter>Source\Game</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\game\player.cpp">
-      <Filter>Source\Game</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\game\raycast.cpp">
-      <Filter>Source\Game</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\game\stage.cpp">
-      <Filter>Source\Game</Filter>
-    </ClCompile>
     <ClCompile Include="RePlayEngine\Physics\SphereCast.cpp">
       <Filter>RePlayEngine\Physics</Filter>
     </ClCompile>
@@ -310,12 +313,6 @@
     </ClCompile>
     <ClCompile Include="RePlayEngine\Physics\GravityComponent.cpp">
       <Filter>RePlayEngine\Physics</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\game\scene_game.cpp">
-      <Filter>Source\Game</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\game\game_scene.cpp">
-      <Filter>Source\Game</Filter>
     </ClCompile>
     <ClInclude Include="Source\render\csm_renderer.h">
       <Filter>Source\Render</Filter>
@@ -467,28 +464,7 @@
     <ClInclude Include="Source\render\trail.h">
       <Filter>Source\Render</Filter>
     </ClInclude>
-    <ClInclude Include="Source\game\camera.h">
-      <Filter>Source\Game</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\game\free_camera_controller.h">
-      <Filter>Source\Game</Filter>
-    </ClInclude>
     <ClInclude Include="Source\game\game_input.h">
-      <Filter>Source\Game</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\game\player.h">
-      <Filter>Source\Game</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\game\raycast.h">
-      <Filter>Source\Game</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\game\scene_game.h">
-      <Filter>Source\Game</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\game\game_scene.h">
-      <Filter>Source\Game</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\game\stage.h">
       <Filter>Source\Game</Filter>
     </ClInclude>
     <None Include=".editorconfig">
@@ -800,6 +776,30 @@
     <ClCompile Include="RePlayEngine\Rendering\ShaderPresets\ShaderPresetSerializer.cpp">
       <Filter>Source</Filter>
     </ClCompile>
+    <ClCompile Include="Source\game\player.cpp">
+      <Filter>Source\Game\Player</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\game\stage.cpp">
+      <Filter>Source\Game\stage</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\game\raycast.cpp">
+      <Filter>Source\Game\raycast</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\game\game_scene.cpp">
+      <Filter>Source\Game\Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\game\scene_game.cpp">
+      <Filter>Source\Game\Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\game\camera.cpp">
+      <Filter>Source\Game\Camera</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\game\free_camera_controller.cpp">
+      <Filter>Source\Game\Camera</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\mesh\UI.cpp">
+      <Filter>Source\Game\UI</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="RePlayEngine\Core\Components\AnimationComponent.h">
@@ -852,6 +852,30 @@
     </ClInclude>
     <ClInclude Include="RePlayEngine\Core\Components\TransformComponent.h">
       <Filter>Source</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\game\player.h">
+      <Filter>Source\Game\Player</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\game\stage.h">
+      <Filter>Source\Game\stage</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\game\raycast.h">
+      <Filter>Source\Game\raycast</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\game\game_scene.h">
+      <Filter>Source\Game\Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\game\scene_game.h">
+      <Filter>Source\Game\Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\game\camera.h">
+      <Filter>Source\Game\Camera</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\game\free_camera_controller.h">
+      <Filter>Source\Game\Camera</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\mesh\UI.h">
+      <Filter>Source\Game\UI</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

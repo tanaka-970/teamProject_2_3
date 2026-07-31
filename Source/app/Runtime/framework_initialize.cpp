@@ -211,6 +211,7 @@ bool framework::initialize()
     bloom_pass.Initialize(device.Get(), SCREEN_WIDTH, SCREEN_HEIGHT);
     enable_deferred = deferred.initialize(device.Get(), SCREEN_WIDTH, SCREEN_HEIGHT);
     lights.initialize(device.Get());
+    uiManager.Initalize(device.Get());
     lights.data.light_counts.x = 1;
     lights.data.point_lights[0].position = { 3.0f, 4.0f, -24.0f, 18.0f };
     lights.data.point_lights[0].color = { 0.55f, 0.75f, 1.0f, 2.0f };
