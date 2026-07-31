@@ -1,105 +1,157 @@
 #pragma once
 
 #include "../../Object/Component/Component.h"
-#include "../../Physics/SphereCast.h"
+#include "../../Physics/CookedMeshCollision.h"
+#include "../../Scene/Services/IPhysicsQueryService.h"
 
-#include <cstdint>
+#include <memory>
 #include <string>
-#include <vector>
 
 namespace ReplayEngine::Components
 {
-    // 三角形メッシュの衝突形状。
+    // 三角形メッシュの衝突形状（静的環境用）。
     //
-    // 旧 ReplayEngine::Core::MeshColliderComponent（Stage へ値メンバとして埋め込まれていたもの）
-    // を、新しい Component 基盤へ移したもの。名前空間が Core -> Components なので
-    // 完全修飾名が重複せず、移行期間中は旧クラスと併存できる。
+    // 【所有と共有の分け方】
+    //   Cook データ（三角形と加速構造）は AssetGUID 単位で共有される不変オブジェクト。
+    //   ローカル座標で保持され、複数の MeshCollider が同じ実体を参照する。
     //
-    // 責任:
-    //   クック済み三角形を保持し、XZ グリッドで絞り込んで返すことだけ。
-    //   実際のスイープ判定は Physics::CastSphereAgainstTriangles が行い、
-    //   移動の解決は CharacterMotorComponent が行う。
+    //   このクラスが持つのは「そのインスタンス固有の情報」だけ。
+    //     World Transform / Inverse World Transform / World Bounds /
+    //     ColliderID / Layer / Mask / Trigger / enabled / Cook データへの共有参照
     //
-    // Transform について:
-    //   三角形は「ワールド空間へ変換済み」の状態で保持する。
-    //   Owner の Transform が変わったら Rebuild が必要になるため、
-    //   Transform のバージョンを控えて自動で作り直す。
-    //   自前の座標データを持つわけではないので、二重所有にはならない。
+    //   ワールド空間へ変換済みの三角形は一切持たない。
+    //   持つと、同じ Asset を別の場所へ 2 つ置いたときに共有できなくなる。
     //
-    // Asset について:
-    //   クック結果のキャッシュパスを保存する。三角形そのものは保存しない。
-    //   読み込み時にキャッシュから読み直す。
+    // 【問い合わせの流れ】
+    //   1. ワールドのクエリ（球の始点・終点・半径）を Inverse World で
+    //      このコライダーのローカル空間へ変換する
+    //   2. Cook データのローカル三角形へ判定する
+    //   3. Hit の位置と法線を World へ戻す
+    //
+    // 【Transform について】
+    //   自前の座標は持たない。Owner の Transform を毎フレーム読み、
+    //   変化していたら World / Inverse World / World Bounds を作り直す。
+    //   Cook はやり直さない（ローカル形状は変わらないため）。
+    //
+    // 【今回の範囲外】
+    //   動く MeshCollider / 変形する MeshCollider / SkinnedMesh 衝突 /
+    //   毎フレーム Cook / 剛体シミュレーション / Convex Decomposition。
     class MeshColliderComponent final : public Core::Component
     {
         REPLAY_COMPONENT_BODY(MeshColliderComponent)
 
     public:
+        // 衝突用メッシュをどこから取るか。
+        enum MeshSource
+        {
+            // 同じ GameObject の MeshRenderer / SkinnedMeshRenderer が指す Asset を使う。
+            MeshSource_Renderer = 0,
+
+            // このコンポーネントの mesh_asset を使う（衝突専用の低ポリメッシュなど）。
+            MeshSource_Custom = 1,
+        };
+
         MeshColliderComponent() = default;
 
-        void OnStart() override;
-        void OnPropertyChanged(const char* property_name) override;
+        void OnAttach() override;
+        void OnDetach() override;
 
-        // ---- 形状の構築 -----------------------------------------------------
+        // ---- 実行時の準備（SceneCollisionWorld から呼ばれる）-----------------
 
-        // モデル座標系の三角形を渡す。内部で Owner の Transform を掛けて保持する。
-        void Build(std::vector<Physics::Triangle> local_triangles);
+        // 実際に使う Asset GUID を返す。
+        // Renderer 参照モードで Renderer が無い / Asset 未指定なら空文字。
+        std::string ResolveMeshAssetGuid() const;
 
-        void Clear() noexcept;
+        // Cook データを取得または解決する。取得できなければ false。
+        // 無効な状態のまま衝突対象へ登録させないための入口。
+        bool EnsureCooked(Physics::CookedMeshCollisionCache& cache,
+            const Physics::CookedMeshCollisionCache::Loader& loader);
 
-        bool Valid() const noexcept { return !world_triangles_.empty(); }
-        std::size_t TriangleCount() const noexcept { return world_triangles_.size(); }
+        // Owner の Transform が変わっていたら World / Inverse World / Bounds を更新する。
+        // Cook はやり直さない。毎フレーム呼んでよい。
+        void RefreshTransformIfChanged();
 
-        // Owner の Transform が変わっていたら作り直す。毎フレーム呼んでよい。
-        void RefreshIfTransformChanged();
-
-        // ---- 問い合わせ -----------------------------------------------------
-
-        // AABB と重なるセルの三角形添字を集める。重複は除かれる。
-        void CollectTriangles(const DirectX::XMFLOAT3& aabb_min,
-            const DirectX::XMFLOAT3& aabb_max,
-            std::vector<std::uint32_t>& indices) const;
-
-        const Physics::Triangle& TriangleAt(std::size_t index) const
+        // 衝突対象として使える状態か。
+        bool ReadyForQuery() const noexcept
         {
-            return world_triangles_.at(index);
+            return cooked_ != nullptr && cooked_->Valid() && ActiveInHierarchy();
         }
 
-        const std::vector<Physics::Triangle>& Triangles() const noexcept
+        // ---- 読み取り -------------------------------------------------------
+
+        Scene::ColliderID GetColliderID() const noexcept { return collider_id_; }
+
+        const std::shared_ptr<const Physics::CookedMeshCollisionData>& Cooked() const noexcept
         {
-            return world_triangles_;
+            return cooked_;
         }
+
+        const DirectX::XMFLOAT4X4& WorldMatrix() const noexcept { return world_; }
+        const DirectX::XMFLOAT4X4& InverseWorldMatrix() const noexcept { return inverse_world_; }
+        const DirectX::XMFLOAT3& WorldBoundsMin() const noexcept { return world_bounds_min_; }
+        const DirectX::XMFLOAT3& WorldBoundsMax() const noexcept { return world_bounds_max_; }
+
+        // 一様な拡縮か。非一様だと球の半径をローカルへ正確に移せない。
+        bool UniformScale() const noexcept { return uniform_scale_; }
+
+        // 負の拡縮が含まれるか。面の裏表が反転するため法線を反転する必要がある。
+        bool NegativeScale() const noexcept { return negative_scale_; }
+
+        // ローカルへ移すときの半径の倍率。非一様なら安全側（大きめ）に倒す。
+        float LocalRadiusScale() const noexcept { return local_radius_scale_; }
+
+        // 直近の状態説明。Inspector の警告表示に使う。空なら問題なし。
+        const std::string& StatusMessage() const noexcept { return status_; }
 
         // ---- 保存される設定 -------------------------------------------------
 
-        // クック済み衝突データのキャッシュパス（プロジェクト相対）。
-        std::string cooked_path;
+        // MeshSource_Renderer / MeshSource_Custom
+        int mesh_source = MeshSource_Renderer;
 
-        // XZ グリッドの 1 セルの大きさ。小さいほど絞り込みが効くがメモリを食う。
-        float cell_size = 4.0f;
+        // MeshSource_Custom のときに使う AssetGUID。
+        // GameObject 名や Asset 名ではなく GUID で参照する。
+        std::string mesh_asset;
+
+        // Cook 時の XZ グリッドのセルサイズ（ローカル空間）。
+        float cook_cell_size = 4.0f;
+
+        // 裏面にも当たるか。
+        bool double_sided = true;
+
+        // 通り抜けるが接触は検出したい場合。
+        // Trigger は押し戻しへ使わない（CharacterMotor の壁解決から除外される）。
+        bool is_trigger = false;
+
+        // 所属レイヤーと、衝突を受け付けるレイヤーのビットマスク。
+        // 完全な Layer Matrix は未実装。単純なビット AND のみ。
+        int collision_layer = 0;
+        int collision_mask = -1;   // -1 = すべてのレイヤーと衝突する
 
     private:
-        void RebuildGrid();
-        void CellRange(float min_x, float max_x, float min_z, float max_z,
-            int& x0, int& x1, int& z0, int& z1) const noexcept;
+        void UpdateStatus();
 
-        // 実行時のみの状態。保存しない（cooked_path から読み直す）。
-        std::vector<Physics::Triangle> local_triangles_;
-        std::vector<Physics::Triangle> world_triangles_;
-        std::vector<std::vector<std::uint32_t>> cells_;
+        // 実行時のみの状態。保存しない。
+        std::shared_ptr<const Physics::CookedMeshCollisionData> cooked_;
+        Scene::ColliderID collider_id_ = Scene::invalid_collider_id;
 
-        float min_x_ = 0.0f;
-        float min_z_ = 0.0f;
-        int cell_count_x_ = 0;
-        int cell_count_z_ = 0;
+        DirectX::XMFLOAT4X4 world_{};
+        DirectX::XMFLOAT4X4 inverse_world_{};
+        DirectX::XMFLOAT3 world_bounds_min_{ 0.0f, 0.0f, 0.0f };
+        DirectX::XMFLOAT3 world_bounds_max_{ 0.0f, 0.0f, 0.0f };
 
-        // 重複除去用。const 関数から使うので mutable。
-        mutable std::vector<std::uint32_t> visit_stamps_;
-        mutable std::uint32_t current_stamp_ = 0;
+        // 最後に Transform を反映したときの値。変化検出に使う。
+        DirectX::XMFLOAT3 cached_position_{ 0.0f, 0.0f, 0.0f };
+        DirectX::XMFLOAT3 cached_rotation_{ 0.0f, 0.0f, 0.0f };
+        DirectX::XMFLOAT3 cached_scale_{ 1.0f, 1.0f, 1.0f };
+        bool transform_valid_ = false;
 
-        // 最後に構築したときの Transform。変化を検出して作り直す。
-        DirectX::XMFLOAT3 built_position_{ 0.0f, 0.0f, 0.0f };
-        DirectX::XMFLOAT3 built_rotation_{ 0.0f, 0.0f, 0.0f };
-        DirectX::XMFLOAT3 built_scale_{ 1.0f, 1.0f, 1.0f };
-        bool built_ = false;
+        bool uniform_scale_ = true;
+        bool negative_scale_ = false;
+        float local_radius_scale_ = 1.0f;
+
+        // 最後に Cook した Asset。変わったら取り直す。
+        std::string cooked_asset_guid_;
+
+        std::string status_;
     };
 }
