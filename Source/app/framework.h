@@ -213,7 +213,10 @@ public:
     std::vector<ReplayEngine::Scene::EntityId> selected_scene_entity_ids;
     std::vector<ReplayEngine::Scene::SceneEntity> copied_scene_entities;
     std::string      selected_stage_asset_guid;
-    std::filesystem::path current_scene_path{ "resources/Scenes/Main.replayscene" };
+    // 旧ステージ配置記録 (SceneDocument) の保存先。
+    // 新しい GameObject シーンは object_scene_path (.replayscene) を使う。
+    // 同じ拡張子だと v7 リーダーが旧ファイルを開いて拒否する事故が起きるため分けている。
+    std::filesystem::path current_scene_path{ "resources/Scenes/Main.replaystage" };
     std::string      scene_document_status{ "新規シーン" };
     std::string      shader_preset_status{ "プリセット未選択" };
     bool             async_stage_load_active{ false };

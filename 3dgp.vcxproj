@@ -94,6 +94,7 @@
       <AdditionalIncludeDirectories>.;.\Source\app;.\Source\core;.\Source\mesh;.\Source\render;.\cereal-master\include;.\DirectXTK-main\Inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <AdditionalOptions>/utf-8 /validate-charset %(AdditionalOptions)</AdditionalOptions>
+      <ObjectFileName>$(IntDir)%(RelativeDir)</ObjectFileName>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -121,6 +122,11 @@
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>.;.\Source\app;.\Source\core;.\Source\mesh;.\Source\render;.\cereal-master\include;.\DirectXTK-main\Inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <!-- 別フォルダの同名 .cpp が同じ .obj へ出力されて上書きし合うのを防ぐ。
+           これが無いと RePlayEngine\Scene\SceneSerializer.cpp と
+           RePlayEngine\Scene\Serialization\SceneSerializer.cpp が
+           どちらも SceneSerializer.obj になり LNK2001 が発生する。 -->
+      <ObjectFileName>$(IntDir)%(RelativeDir)</ObjectFileName>
       <AdditionalOptions>/utf-8 /validate-charset %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
@@ -148,6 +154,7 @@
       <AdditionalIncludeDirectories>.;.\Source\app;.\Source\core;.\Source\mesh;.\Source\render;.\cereal-master\include;.\DirectXTK-main\Inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <AdditionalOptions>/utf-8 /validate-charset %(AdditionalOptions)</AdditionalOptions>
+      <ObjectFileName>$(IntDir)%(RelativeDir)</ObjectFileName>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -176,6 +183,7 @@
       <SDLCheck>true</SDLCheck>
       <AdditionalOptions>/utf-8 /validate-charset %(AdditionalOptions)</AdditionalOptions>
       <AdditionalIncludeDirectories>.;.\Source\app;.\Source\core;.\Source\mesh;.\Source\render;.\cereal-master\include;.\DirectXTK-main\Inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <ObjectFileName>$(IntDir)%(RelativeDir)</ObjectFileName>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -210,8 +218,6 @@
     <ClCompile Include="RePlayEngine\Editor\Rendering\PostProcessEditor.cpp" />
     <ClCompile Include="RePlayEngine\Physics\MeshCollisionCooker.cpp" />
     <ClCompile Include="RePlayEngine\Scene\SceneDocument.cpp" />
-    <ClCompile Include="RePlayEngine\Scene\SceneSerializer.cpp" />
-    <ClCompile Include="RePlayEngine\Scene\PrefabSerializer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\ShaderPresets\ShaderPresetSerializer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\ShaderPresets\BuiltInShaderPresets.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Materials\CharacterMaterialGpuData.cpp" />
@@ -285,6 +291,8 @@
     <ClCompile Include="RePlayEngine\Editor\ComponentBrowser\AddComponentPanel.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Adapter\SceneRenderCollector.cpp" />
     <ClCompile Include="Source\app\Runtime\framework_gameobject_scene.cpp" />
+    <ClCompile Include="RePlayEngine\Scene\Legacy\LegacySceneDocumentSerializer.cpp" />
+    <ClCompile Include="RePlayEngine\Scene\Serialization\PrefabSerializer.cpp" />
 </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\render\csm_renderer.h" />
@@ -323,8 +331,6 @@
     <ClInclude Include="RePlayEngine\Scene\BootLogoScene.h" />
     <ClInclude Include="RePlayEngine\Scene\LoadingScene.h" />
     <ClInclude Include="RePlayEngine\Scene\SceneDocument.h" />
-    <ClInclude Include="RePlayEngine\Scene\SceneSerializer.h" />
-    <ClInclude Include="RePlayEngine\Scene\PrefabSerializer.h" />
     <ClInclude Include="Source\core\framebuffer.h" />
     <ClInclude Include="Source\app\framework.h" />
     <ClInclude Include="Source\core\fullscreen_quad.h" />
@@ -389,6 +395,8 @@
     <ClInclude Include="RePlayEngine\Editor\ComponentBrowser\AddComponentPanel.h" />
     <ClInclude Include="RePlayEngine\Rendering\Adapter\RenderItem.h" />
     <ClInclude Include="RePlayEngine\Rendering\Adapter\SceneRenderCollector.h" />
+    <ClInclude Include="RePlayEngine\Scene\Legacy\LegacySceneDocumentSerializer.h" />
+    <ClInclude Include="RePlayEngine\Scene\Serialization\PrefabSerializer.h" />
 </ItemGroup>
   <ItemGroup>
     <None Include=".editorconfig" />

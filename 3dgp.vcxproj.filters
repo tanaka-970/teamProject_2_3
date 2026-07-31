@@ -219,6 +219,9 @@
     <Filter Include="RePlayEngine\Rendering\Adapter">
       <UniqueIdentifier>{9a04e18f-e000-4e5f-8ae8-554958271567}</UniqueIdentifier>
     </Filter>
+    <Filter Include="RePlayEngine\Scene\Legacy">
+      <UniqueIdentifier>{9ffec2b4-e3db-4b4a-8416-868338113f64}</UniqueIdentifier>
+    </Filter>
 </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Source\render\csm_renderer.cpp">
@@ -253,8 +256,6 @@
     <ClCompile Include="RePlayEngine\Editor\Rendering\PostProcessEditor.cpp"><Filter>RePlayEngine\Editor\Rendering</Filter></ClCompile>
     <ClCompile Include="RePlayEngine\Physics\MeshCollisionCooker.cpp"><Filter>RePlayEngine\Physics</Filter></ClCompile>
     <ClCompile Include="RePlayEngine\Scene\SceneDocument.cpp"><Filter>RePlayEngine\Scene</Filter></ClCompile>
-    <ClCompile Include="RePlayEngine\Scene\SceneSerializer.cpp"><Filter>RePlayEngine\Scene</Filter></ClCompile>
-    <ClCompile Include="RePlayEngine\Scene\PrefabSerializer.cpp"><Filter>RePlayEngine\Scene</Filter></ClCompile>
     <ClCompile Include="RePlayEngine\Rendering\ShaderPresets\ShaderPresetSerializer.cpp"><Filter>RePlayEngine\Rendering\ShaderPresets</Filter></ClCompile>
     <ClCompile Include="RePlayEngine\Rendering\ShaderPresets\BuiltInShaderPresets.cpp"><Filter>RePlayEngine\Rendering\ShaderPresets</Filter></ClCompile>
     <ClCompile Include="RePlayEngine\Rendering\Materials\CharacterMaterialGpuData.cpp"><Filter>RePlayEngine\Rendering\Materials</Filter></ClCompile>
@@ -474,8 +475,6 @@
       <Filter>RePlayEngine\Scene</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Scene\SceneDocument.h"><Filter>RePlayEngine\Scene</Filter></ClInclude>
-    <ClInclude Include="RePlayEngine\Scene\SceneSerializer.h"><Filter>RePlayEngine\Scene</Filter></ClInclude>
-    <ClInclude Include="RePlayEngine\Scene\PrefabSerializer.h"><Filter>RePlayEngine\Scene</Filter></ClInclude>
     <ClInclude Include="Source\core\framebuffer.h">
       <Filter>Source\Core</Filter>
     </ClInclude>
@@ -1031,5 +1030,17 @@
     <ClCompile Include="Source\app\Runtime\framework_gameobject_scene.cpp">
       <Filter>Source\App\Runtime</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Scene\Legacy\LegacySceneDocumentSerializer.cpp">
+      <Filter>RePlayEngine\Scene\Legacy</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scene\Serialization\PrefabSerializer.cpp">
+      <Filter>RePlayEngine\Scene\Serialization</Filter>
+    </ClCompile>
+    <ClInclude Include="RePlayEngine\Scene\Legacy\LegacySceneDocumentSerializer.h">
+      <Filter>RePlayEngine\Scene\Legacy</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Scene\Serialization\PrefabSerializer.h">
+      <Filter>RePlayEngine\Scene\Serialization</Filter>
+    </ClInclude>
 </ItemGroup>
 </Project>

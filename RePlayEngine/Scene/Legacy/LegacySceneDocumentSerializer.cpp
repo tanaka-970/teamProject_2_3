@@ -1,6 +1,6 @@
-﻿#include "SceneSerializer.h"
+#include "LegacySceneDocumentSerializer.h"
 
-#include "../Rendering/ShaderStack/ShaderLayerStack.h"
+#include "../../Rendering/ShaderStack/ShaderLayerStack.h"
 
 #include <algorithm>
 #include <fstream>
@@ -8,7 +8,7 @@
 #include <locale>
 #include <utility>
 
-namespace ReplayEngine::Scene
+namespace ReplayEngine::Scene::Legacy
 {
     namespace
     {
@@ -37,7 +37,7 @@ namespace ReplayEngine::Scene
         }
     }
 
-    bool SceneSerializer::Save(const SceneDocument& scene,
+    bool LegacySceneDocumentSerializer::Save(const SceneDocument& scene,
         const std::filesystem::path& path, std::string& error)
     {
         std::error_code filesystem_error;
@@ -151,7 +151,7 @@ namespace ReplayEngine::Scene
         return true;
     }
 
-    bool SceneSerializer::Load(SceneDocument& scene,
+    bool LegacySceneDocumentSerializer::Load(SceneDocument& scene,
         const std::filesystem::path& path, std::string& error)
     {
         std::ifstream stream(path, std::ios::binary);

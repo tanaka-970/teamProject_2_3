@@ -134,6 +134,24 @@ namespace ReplayEngine::Scene::Serialization
     // 問題があった箇所は report へ記録される。
     bool ApplySceneData(const SceneData& data, Scene& scene, SceneLoadReport& report);
 
+    // 指定した GameObject とその子孫だけを SceneData へ写し取る。
+    //
+    // 起点の GameObject は親なし（Scene 直下）として書き出すため、
+    // どの階層のオブジェクトを渡しても独立した部分木になる。Prefab 保存に使う。
+    // root が見つからない場合は false を返し、output は空のまま。
+    bool CaptureGameObjectSubtree(const Scene& scene, Core::ObjectID root, SceneData& output);
+
+    // SceneData の内容を「既存の Scene へ追加」する。
+    //
+    // ApplySceneData との違い:
+    //   ApplySceneData       … Scene を消してから、保存 ObjectID のまま復元する（Scene 読み込み）
+    //   InstantiateSceneData … Scene を消さずに追加し、ObjectID は必ず採番し直す（Prefab 配置）
+    //
+    // ID を振り直すのは、同じ Prefab を 2 回配置したときに衝突させないため。
+    // 戻り値は最初に見つかった親なし GameObject（部分木の起点）。何も作れなければ nullptr。
+    Core::GameObject* InstantiateSceneData(const SceneData& data, Scene& scene,
+        SceneLoadReport& report);
+
     // GameObject を複製する。
     //
     // 複製先には必ず新しい ObjectID が振られる。保存 ID をそのまま持ち回らない。

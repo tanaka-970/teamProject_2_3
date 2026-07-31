@@ -1,4 +1,5 @@
 ﻿#include "framework.h"
+#include "../../RePlayEngine/Scene/Legacy/LegacySceneDocumentSerializer.h"
 #include "shader.h"
 #include "texture.h"
 #include "skinned_mesh.h"
@@ -394,7 +395,12 @@ void framework::draw_project_panel()
             std::vector<std::filesystem::path> scene_paths;
             for (const auto& entry : std::filesystem::directory_iterator(scene_folder, scene_error))
             {
-                if (scene_error || !entry.is_regular_file() || entry.path().extension() != ".replayscene")
+                // ここが列挙するのは旧ステージ配置記録 (.replaystage)。
+                // 新しい GameObject シーン (.replayscene) は
+                // load_object_scene / save_object_scene が扱うため、ここへは出さない。
+                if (scene_error || !entry.is_regular_file() ||
+                    entry.path().extension() !=
+                        ReplayEngine::Scene::Legacy::LegacySceneDocumentSerializer::file_extension)
                     continue;
                 scene_paths.push_back(entry.path());
             }

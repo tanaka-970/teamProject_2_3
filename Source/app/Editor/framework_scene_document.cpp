@@ -1,8 +1,11 @@
 ﻿#include "framework.h"
 #include "gltf_model.h"
 #include "skinned_mesh.h"
-#include "../../RePlayEngine/Scene/PrefabSerializer.h"
-#include "../../RePlayEngine/Scene/SceneSerializer.h"
+// 旧ステージ配置記録（SceneDocument）専用のシリアライザ。
+// GameObject / Component の保存は v7 の Scene/Serialization/SceneSerializer が担当する。
+#include "../../RePlayEngine/Scene/Legacy/LegacySceneDocumentSerializer.h"
+// Prefab は v7 の SceneData 方式へ移行済み。
+#include "../../RePlayEngine/Scene/Serialization/PrefabSerializer.h"
 
 #include <commdlg.h>
 #include <algorithm>
@@ -312,14 +315,14 @@ void framework::save_scene_document(bool choose_path)
 {
     if (choose_path)
     {
-        const auto selected = BrowseSceneFile(hwnd, true, L"シーンを保存", L"replayscene",
-            L"RePlayシーン (*.replayscene)\0*.replayscene\0\0");
+        const auto selected = BrowseSceneFile(hwnd, true, L"ステージ配置記録を保存", L"replaystage",
+            L"RePlayステージ配置 (*.replaystage)\0*.replaystage\0\0");
         if (selected.empty()) return;
         current_scene_path = selected;
         editor_scene_document.SetSceneName(selected.stem().u8string());
     }
     std::string error;
-    if (ReplayEngine::Scene::SceneSerializer::Save(
+    if (ReplayEngine::Scene::Legacy::LegacySceneDocumentSerializer::Save(
         editor_scene_document, current_scene_path, error))
         scene_document_status = std::to_string(editor_scene_document.Entities().size()) +
             "個の配置記録を保存しました: " + current_scene_path.generic_string();
@@ -335,9 +338,12 @@ void framework::create_scene_document(const std::string& name)
     std::filesystem::create_directories(folder, error);
     std::string safe_name = SafePrefabName(scene_name);
     if (safe_name.empty()) safe_name = "Scene";
-    std::filesystem::path scene_path = folder / (safe_name + ".replayscene");
+    // 旧ステージ配置記録の拡張子。新しい GameObject シーンの .replayscene とは分ける。
+    const std::string legacy_extension =
+        ReplayEngine::Scene::Legacy::LegacySceneDocumentSerializer::file_extension;
+    std::filesystem::path scene_path = folder / (safe_name + legacy_extension);
     for (std::uint32_t number = 2; std::filesystem::exists(scene_path); ++number)
-        scene_path = folder / (safe_name + "_" + std::to_string(number) + ".replayscene");
+        scene_path = folder / (safe_name + "_" + std::to_string(number) + legacy_extension);
 
     editor_scene_document.Clear();
     editor_scene_document.SetSceneName(scene_name);
@@ -358,13 +364,13 @@ void framework::load_scene_document(bool choose_path)
     std::filesystem::path path = current_scene_path;
     if (choose_path)
     {
-        path = BrowseSceneFile(hwnd, false, L"シーンを開く", L"replayscene",
-            L"RePlayシーン (*.replayscene)\0*.replayscene\0\0");
+        path = BrowseSceneFile(hwnd, false, L"ステージ配置記録を開く", L"replaystage",
+            L"RePlayステージ配置 (*.replaystage)\0*.replaystage\0\0");
         if (path.empty()) return;
     }
     ReplayEngine::Scene::SceneDocument loaded;
     std::string error;
-    if (!ReplayEngine::Scene::SceneSerializer::Load(loaded, path, error))
+    if (!ReplayEngine::Scene::Legacy::LegacySceneDocumentSerializer::Load(loaded, path, error))
     {
         scene_document_status = "読込失敗: " + error;
         return;
@@ -409,36 +415,80 @@ void framework::load_scene_document(bool choose_path)
     scene_document_status = "読み込みました: " + path.generic_string();
 }
 
+// Prefab は v7 の SceneData 方式へ移行済み。
+// 対象は GameObject / Component 基盤の Scene であり、旧 SceneDocument ではない。
+// 保存内容は Component 構成とプロパティを含む部分木で、
+// ComponentRegistry と PropertyRegistry を通るため型ごとの分岐は存在しない。
 void framework::save_selected_prefab()
 {
-    const auto* entity = editor_scene_document.Find(selected_scene_entity_id);
-    if (!entity) return;
+    namespace Serialization = ReplayEngine::Scene::Serialization;
+
+    if (object_scene_play_mode)
+    {
+        object_editor_context.SetStatus("実行中は Prefab を保存できません");
+        return;
+    }
+
+    ReplayEngine::Scene::Scene& scene = object_scene;
+    const ReplayEngine::Core::GameObject* target =
+        object_editor_context.Selection().ResolvePrimary(scene);
+    if (target == nullptr)
+    {
+        object_editor_context.SetStatus("Prefab にする GameObject が選択されていません");
+        return;
+    }
+
     const auto path = std::filesystem::path("resources/Prefabs") /
-        (SafePrefabName(entity->name) + ".replayprefab");
+        (SafePrefabName(target->Name()) + Serialization::PrefabSerializer::file_extension);
+
     std::string error;
-    if (ReplayEngine::Scene::PrefabSerializer::Save(*entity, path, error))
-        scene_document_status = "Prefabを保存しました: " + path.generic_string();
+    if (Serialization::PrefabSerializer::Save(scene, target->ID(), path, error))
+        object_editor_context.SetStatus("Prefab を保存しました: " + path.generic_string());
     else
-        scene_document_status = "Prefab保存失敗: " + error;
+        object_editor_context.SetStatus("Prefab 保存失敗: " + error);
 }
 
 void framework::load_prefab()
 {
+    namespace Serialization = ReplayEngine::Scene::Serialization;
+
+    if (object_scene_play_mode)
+    {
+        object_editor_context.SetStatus("実行中は Prefab を配置できません");
+        return;
+    }
+
     const auto path = BrowseSceneFile(hwnd, false, L"Prefabを配置", L"replayprefab",
         L"RePlay Prefab (*.replayprefab)\0*.replayprefab\0\0");
     if (path.empty()) return;
-    const auto before = editor_scene_document;
+
+    // 配置は 1 操作として Undo できるようにする。
+    object_editor_context.BeginEdit("Prefab を配置");
+
     std::string error;
-    const auto id = ReplayEngine::Scene::PrefabSerializer::Instantiate(
-        editor_scene_document, path, error);
-    if (id == 0)
+    Serialization::SceneLoadReport report;
+    const ReplayEngine::Core::ObjectID id =
+        Serialization::PrefabSerializer::Instantiate(object_scene, path, error, &report);
+
+    if (!id.Valid())
     {
-        scene_document_status = "Prefab読込失敗: " + error;
+        object_editor_context.CancelEdit();
+        object_editor_context.SetStatus("Prefab 読込失敗: " + error);
         return;
     }
-    scene_undo_stack.Commit("Prefabを配置", before, editor_scene_document);
-    select_scene_entity(id, false);
-    scene_document_status = "Prefabを配置しました";
+
+    object_editor_context.CommitEdit();
+    object_editor_context.Selection().Select(id, false);
+    selected_editor_object = editor_selection::game_object;
+
+    std::string status = "Prefab を配置しました";
+    if (!report.Clean())
+    {
+        status += "（警告 " + std::to_string(report.warnings.size()) + " 件）";
+        for (const std::string& warning : report.warnings)
+            OutputDebugStringA(("[Prefab] " + warning + "\n").c_str());
+    }
+    object_editor_context.SetStatus(status);
 }
 
 void framework::sync_selected_entity_to_stage()
