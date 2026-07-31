@@ -82,8 +82,12 @@ namespace
         {
             XMFLOAT4X4 source{};
             float* dst = &source._11;
+            // glTFのmatrixは列優先(要素12,13,14が平行移動)。これをXMFLOAT4X4へ
+            // 順に詰めると、行ベクトル規約のDirectXMath行列としてそのまま正しい。
+            // ここで転置すると平行移動が_14/_24/_34(w成分)へ移り、
+            // 頂点が射影除算で無限遠に飛ぶので転置してはいけない。
             for (size_t i = 0; i < 16; ++i) dst[i] = static_cast<float>(node.matrix[i]);
-            return XMMatrixTranspose(XMLoadFloat4x4(&source));
+            return XMLoadFloat4x4(&source);
         }
         const XMMATRIX scale = node.scale.size() == 3
             ? XMMatrixScaling(static_cast<float>(node.scale[0]), static_cast<float>(node.scale[1]), static_cast<float>(node.scale[2]))
