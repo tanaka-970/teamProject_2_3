@@ -124,6 +124,13 @@ void framework::apply_pending_resize()
     resize_back_buffers(pending_client_width, pending_client_height);
 }
 
-bool framework::uninitialize() { return true; }
+bool framework::uninitialize()
+{
+    // GameObject シーンが抱えているメッシュを、D3D デバイスより先に手放す。
+    // ComPtr の破棄順に依存せず、明示的に解放しておく。
+    clear_object_mesh_cache();
+    return true;
+}
+
 framework::~framework() {}
 

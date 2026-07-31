@@ -98,25 +98,14 @@ void framework::update_object_scene(float elapsed_time)
 }
 
 // ---------------------------------------------------------------------------
-// Editor パネル
-// ---------------------------------------------------------------------------
-
-void framework::draw_object_scene_panels()
-{
-#ifdef USE_IMGUI
-    // Play 中かどうかを Editor 側へ伝える。
-    // これにより Inspector と Hierarchy が構造変更を受け付けなくなる。
-    object_editor_context.SetPlayMode(object_scene_play_mode);
-    object_editor_context.AttachScene(&active_object_scene());
-
-    object_hierarchy_panel.Draw(object_editor_context);
-    object_inspector_panel.Draw(object_editor_context);
-#endif
-}
-
-// ---------------------------------------------------------------------------
 // 保存・読み込み
 // ---------------------------------------------------------------------------
+//
+// Editor パネルの描画はここでは行わない。
+// 既存の「階層」「インスペクター」ウィンドウの中へ埋め込む形にしてあり、
+// HierarchyPanel::DrawContents / InspectorPanel::DrawContents を
+// framework_editor.cpp と framework_inspector.cpp から直接呼んでいる。
+// 同じ内容のウィンドウを新旧で二重に出さないため、この配置にしている。
 
 bool framework::save_object_scene(bool choose_path)
 {

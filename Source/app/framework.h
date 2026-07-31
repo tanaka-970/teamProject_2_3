@@ -503,7 +503,6 @@ private:
     // 実装はすべて Source/app/Runtime/framework_gameobject_scene.cpp にある。
     void initialize_object_scene();
     void update_object_scene(float elapsed_time);
-    void draw_object_scene_panels();
     bool save_object_scene(bool choose_path);
     bool load_object_scene(bool choose_path);
     void enter_object_play_mode();
