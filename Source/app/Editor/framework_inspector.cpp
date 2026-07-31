@@ -224,6 +224,13 @@ void framework::draw_inspector()
         draw_scene_entity_inspector();
         break;
 
+    case editor_selection::game_object:
+        // GameObject / Component の編集は専用パネルへ委譲する。
+        // ここに Component 型ごとの分岐は書かない。
+        // 表示内容は ComponentRegistry と PropertyRegistry から自動生成される。
+        object_inspector_panel.DrawContents(object_editor_context);
+        break;
+
     case editor_selection::directional_light:
         ImGui::TextUnformatted("平行光源 / PBR");
         ImGui::Separator();

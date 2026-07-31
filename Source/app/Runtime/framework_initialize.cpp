@@ -281,5 +281,10 @@ bool framework::initialize()
         return next_scene;
     });
 
+    // GameObject / Component 基盤の初期化。
+    // Component 型の登録・編集用 Scene の準備・既定 Scene ファイルの読み込みを行う。
+    // AssetDatabase の読み込み後に呼ぶ必要がある（Asset 参照を解決するため）。
+    initialize_object_scene();
+
     return true;
 }

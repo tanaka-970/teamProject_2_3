@@ -276,6 +276,14 @@
     <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponents.cpp" />
     <ClCompile Include="RePlayEngine\Scene\Serialization\SceneData.cpp" />
     <ClCompile Include="RePlayEngine\Scene\Serialization\SceneSerializer.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Core\EditorContext.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Selection\EditorSelection.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Commands\SceneEditHistory.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Hierarchy\HierarchyPanel.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Inspector\InspectorPanel.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Inspector\PropertyDrawer.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\ComponentBrowser\AddComponentPanel.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Adapter\SceneRenderCollector.cpp" />
 </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\render\csm_renderer.h" />
@@ -371,6 +379,15 @@
     <ClInclude Include="RePlayEngine\Object\Registry\BuiltInComponents.h" />
     <ClInclude Include="RePlayEngine\Scene\Serialization\SceneData.h" />
     <ClInclude Include="RePlayEngine\Scene\Serialization\SceneSerializer.h" />
+    <ClInclude Include="RePlayEngine\Editor\Core\EditorContext.h" />
+    <ClInclude Include="RePlayEngine\Editor\Selection\EditorSelection.h" />
+    <ClInclude Include="RePlayEngine\Editor\Commands\SceneEditHistory.h" />
+    <ClInclude Include="RePlayEngine\Editor\Hierarchy\HierarchyPanel.h" />
+    <ClInclude Include="RePlayEngine\Editor\Inspector\InspectorPanel.h" />
+    <ClInclude Include="RePlayEngine\Editor\Inspector\PropertyDrawer.h" />
+    <ClInclude Include="RePlayEngine\Editor\ComponentBrowser\AddComponentPanel.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Adapter\RenderItem.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Adapter\SceneRenderCollector.h" />
 </ItemGroup>
   <ItemGroup>
     <None Include=".editorconfig" />

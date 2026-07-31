@@ -14,6 +14,11 @@ namespace ReplayEngine::Scene
     class Scene;
 }
 
+namespace ReplayEngine::Core
+{
+    class GameObject;
+}
+
 namespace ReplayEngine::Scene::Serialization
 {
     // Scene とファイルの間に挟む中間データ。

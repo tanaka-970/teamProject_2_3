@@ -329,19 +329,6 @@ void framework::draw_scene_hierarchy()
         item("プレイヤー", editor_selection::player);
         item(stage_asset_placed ? "ステージ（配置済み）" : "ステージ素材（未配置）",
             editor_selection::stage);
-        for (const auto& entity : active_scene_document().Entities())
-        {
-            ImGui::PushID(static_cast<int>(entity.id));
-            const bool selected = selected_editor_object == editor_selection::scene_entity &&
-                std::find(selected_scene_entity_ids.begin(), selected_scene_entity_ids.end(), entity.id) !=
-                    selected_scene_entity_ids.end();
-            const std::string hierarchy_label = entity.name + "  [" + entity.identifier + "]";
-            if (ImGui::Selectable(hierarchy_label.c_str(), selected))
-            {
-                select_scene_entity(entity.id, ImGui::GetIO().KeyShift);
-            }
-            ImGui::PopID();
-        }
         if (ImGui::TreeNodeEx("ライト", ImGuiTreeNodeFlags_DefaultOpen))
         {
             item("平行光源", editor_selection::directional_light);
@@ -352,6 +339,28 @@ void framework::draw_scene_hierarchy()
         item("ポスト処理", editor_selection::post_process);
         ImGui::TreePop();
     }
+
+    ImGui::Separator();
+
+    // GameObject / Component 基盤のツリー。
+    // 表示・選択・作成・削除・複製・親子変更は HierarchyPanel が担当する。
+    // framework 側は「選択が変わったらインスペクターの表示先を切り替える」だけ。
+    if (ImGui::TreeNodeEx("GameObject", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        object_editor_context.SetPlayMode(object_scene_play_mode);
+        object_editor_context.AttachScene(&active_object_scene());
+
+        const ReplayEngine::Core::ObjectID before = object_editor_context.Selection().Primary();
+        object_hierarchy_panel.DrawContents(object_editor_context);
+        const ReplayEngine::Core::ObjectID after = object_editor_context.Selection().Primary();
+
+        if (after.Valid() && after != before)
+        {
+            selected_editor_object = editor_selection::game_object;
+        }
+        ImGui::TreePop();
+    }
+
     ImGui::End();
 }
 

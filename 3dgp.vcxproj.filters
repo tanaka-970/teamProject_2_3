@@ -198,6 +198,27 @@
     <Filter Include="RePlayEngine\Scene\Serialization">
       <UniqueIdentifier>{35ca2ab8-28d1-4203-8c32-b298098da48c}</UniqueIdentifier>
     </Filter>
+    <Filter Include="RePlayEngine\Editor\Core">
+      <UniqueIdentifier>{11b9316a-4daf-4a52-8cac-2313562a5117}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Editor\Selection">
+      <UniqueIdentifier>{7bbce5ba-7106-42a9-84e9-ba5f87ed7f17}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Editor\Hierarchy">
+      <UniqueIdentifier>{b573948f-e0a6-4798-8f32-ae75ec15f6d1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Editor\Inspector">
+      <UniqueIdentifier>{4c1c7df1-26d8-4c20-8c53-5a4cad79c0fe}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Editor\ComponentBrowser">
+      <UniqueIdentifier>{fec22a4f-590b-4d12-889d-875c28d987d4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Rendering">
+      <UniqueIdentifier>{fd056eea-eede-4062-834b-439ea812d298}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Rendering\Adapter">
+      <UniqueIdentifier>{9a04e18f-e000-4e5f-8ae8-554958271567}</UniqueIdentifier>
+    </Filter>
 </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Source\render\csm_renderer.cpp">
@@ -955,6 +976,57 @@
     </ClInclude>
     <ClInclude Include="RePlayEngine\Scene\Serialization\SceneSerializer.h">
       <Filter>RePlayEngine\Scene\Serialization</Filter>
+    </ClInclude>
+    <ClCompile Include="RePlayEngine\Editor\Core\EditorContext.cpp">
+      <Filter>RePlayEngine\Editor\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\Selection\EditorSelection.cpp">
+      <Filter>RePlayEngine\Editor\Selection</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\Commands\SceneEditHistory.cpp">
+      <Filter>RePlayEngine\Editor\Commands</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\Hierarchy\HierarchyPanel.cpp">
+      <Filter>RePlayEngine\Editor\Hierarchy</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\Inspector\InspectorPanel.cpp">
+      <Filter>RePlayEngine\Editor\Inspector</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\Inspector\PropertyDrawer.cpp">
+      <Filter>RePlayEngine\Editor\Inspector</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\ComponentBrowser\AddComponentPanel.cpp">
+      <Filter>RePlayEngine\Editor\ComponentBrowser</Filter>
+    </ClCompile>
+    <ClInclude Include="RePlayEngine\Editor\Core\EditorContext.h">
+      <Filter>RePlayEngine\Editor\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\Selection\EditorSelection.h">
+      <Filter>RePlayEngine\Editor\Selection</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\Commands\SceneEditHistory.h">
+      <Filter>RePlayEngine\Editor\Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\Hierarchy\HierarchyPanel.h">
+      <Filter>RePlayEngine\Editor\Hierarchy</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\Inspector\InspectorPanel.h">
+      <Filter>RePlayEngine\Editor\Inspector</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\Inspector\PropertyDrawer.h">
+      <Filter>RePlayEngine\Editor\Inspector</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\ComponentBrowser\AddComponentPanel.h">
+      <Filter>RePlayEngine\Editor\ComponentBrowser</Filter>
+    </ClInclude>
+    <ClCompile Include="RePlayEngine\Rendering\Adapter\SceneRenderCollector.cpp">
+      <Filter>RePlayEngine\Rendering\Adapter</Filter>
+    </ClCompile>
+    <ClInclude Include="RePlayEngine\Rendering\Adapter\RenderItem.h">
+      <Filter>RePlayEngine\Rendering\Adapter</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\Adapter\SceneRenderCollector.h">
+      <Filter>RePlayEngine\Rendering\Adapter</Filter>
     </ClInclude>
 </ItemGroup>
 </Project>

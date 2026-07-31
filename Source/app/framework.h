@@ -51,6 +51,19 @@ extern ImWchar glyphRangesJapanese[];
 #include "../../RePlayEngine/Scene/SceneDocument.h"
 #include "../../RePlayEngine/Physics/MeshCollisionCooker.h"
 
+// --- GameObject / Component 基盤 -------------------------------------------
+// 既存の SceneDocument / SceneManager とは責任が違う。
+//   SceneManager  … 起動ロゴ / ロード画面 / ゲームという画面遷移
+//   SceneDocument … 旧エディタのステージ配置記録（段階移行のため当面残す）
+//   Scene (下記)  … GameObject の入れ物。今回の新基盤。
+#include "../../RePlayEngine/Scene/Runtime/Scene.h"
+#include "../../RePlayEngine/Editor/Core/EditorContext.h"
+#include "../../RePlayEngine/Editor/Hierarchy/HierarchyPanel.h"
+#include "../../RePlayEngine/Editor/Inspector/InspectorPanel.h"
+#include "../../RePlayEngine/Rendering/Adapter/RenderItem.h"
+
+#include <unordered_map>
+
 class gltf_model;
 
 CONST LONG SCREEN_WIDTH{ 1600 };
@@ -205,6 +218,30 @@ public:
     std::string      shader_preset_status{ "プリセット未選択" };
     bool             async_stage_load_active{ false };
 
+    // --- GameObject / Component 基盤 ---------------------------------------
+    //
+    // 所有関係:
+    //   framework が編集用 Scene と実行用 Scene の 2 つを値で所有する。
+    //   Scene が GameObject を、GameObject が Component を unique_ptr で所有する。
+    //   EditorContext と各パネルは Scene を非所有参照するだけ。
+    //
+    // Play Mode:
+    //   Play 開始時に編集 Scene を SceneData 経由で実行用 Scene へ複製する。
+    //   Play 中の変更は実行用 Scene だけに入るため、編集内容が汚れない。
+    ReplayEngine::Scene::Scene              object_scene;
+    ReplayEngine::Scene::Scene              object_scene_runtime;
+    ReplayEngine::Editor::EditorContext     object_editor_context;
+    ReplayEngine::Editor::HierarchyPanel    object_hierarchy_panel;
+    ReplayEngine::Editor::InspectorPanel    object_inspector_panel;
+    ReplayEngine::Rendering::RenderItemList object_render_items;
+
+    // Asset GUID -> メッシュ実体。値が null なら「読み込めなかった」ことを表す。
+    // 毎フレームの再検索を避けるための単純なキャッシュ。
+    std::unordered_map<std::string, std::unique_ptr<skinned_mesh>> object_mesh_cache;
+
+    std::filesystem::path object_scene_path{ "resources/Scenes/TrainingStage.replayscene" };
+    bool             object_scene_play_mode{ false };
+
     bool             enable_deferred { true };
     bool             enable_particles{ false };
     bool             enable_trail    { false };
@@ -284,7 +321,21 @@ public:
                 (lparam & 0x40000000) == 0 && !ImGui::GetIO().WantTextInput;
             if (shortcut_pressed && wparam == 'S')
             {
-                save_scene_document((GetKeyState(VK_SHIFT) & 0x8000) != 0);
+                const bool choose_path = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+                // 旧ステージ配置記録と新しい GameObject シーンの両方を保存する。
+                // 保存先ファイルが別なので互いに上書きしない。
+                save_scene_document(choose_path);
+                save_object_scene(choose_path);
+                return 0;
+            }
+            // GameObject / Component 基盤の Undo / Redo。
+            // GameObject を選択している間はこちらが優先される。
+            if (msg == WM_KEYDOWN && control_down && !ImGui::GetIO().WantTextInput &&
+                (wparam == 'Z' || wparam == 'Y') &&
+                selected_editor_object == editor_selection::game_object)
+            {
+                if (wparam == 'Z') object_editor_context.Undo();
+                else object_editor_context.Redo();
                 return 0;
             }
             if (msg == WM_KEYDOWN && (GetKeyState(VK_CONTROL) & 0x8000) &&
@@ -340,6 +391,15 @@ public:
         if (msg == WM_KEYDOWN && wparam == VK_F3 && editor_mode)
         {
             set_edit_mode(!edit_mode_active);
+            return 0;
+        }
+        // F5 で GameObject シーンの実行 / 停止を切り替える。
+        // 実行中は編集用 Scene を複製した実行用 Scene が動くため、
+        // Play 中の位置や体力の変化が編集内容へ書き戻らない。
+        if (msg == WM_KEYDOWN && wparam == VK_F5 && editor_mode)
+        {
+            if (object_scene_play_mode) exit_object_play_mode();
+            else enter_object_play_mode();
             return 0;
         }
 #endif
@@ -438,6 +498,22 @@ private:
     void restore_stage_shader_layers(const ReplayEngine::Scene::ModelRendererData& renderer);
     ReplayEngine::Scene::SceneDocument& active_scene_document() noexcept;
     const ReplayEngine::Scene::SceneDocument& active_scene_document() const noexcept;
+
+    // --- GameObject / Component 基盤との接続 -------------------------------
+    // 実装はすべて Source/app/Runtime/framework_gameobject_scene.cpp にある。
+    void initialize_object_scene();
+    void update_object_scene(float elapsed_time);
+    void draw_object_scene_panels();
+    bool save_object_scene(bool choose_path);
+    bool load_object_scene(bool choose_path);
+    void enter_object_play_mode();
+    void exit_object_play_mode();
+    ReplayEngine::Scene::Scene& active_object_scene() noexcept;
+    const ReplayEngine::Scene::Scene& active_object_scene() const noexcept;
+    skinned_mesh* resolve_object_mesh(const std::string& asset_guid);
+    void draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shader,
+        bool gbuffer_pass);
+    void clear_object_mesh_cache() noexcept;
     void draw_project_panel();
     void draw_console_panel();
     void execute_editor_command(const std::string& command);
@@ -487,6 +563,9 @@ private:
         player,
         stage,
         scene_entity,
+        // 新しい GameObject / Component 基盤で選択された GameObject。
+        // 旧 scene_entity（SceneDocument のステージ配置記録）とは別物。
+        game_object,
         directional_light,
         point_lights,
         rendering,

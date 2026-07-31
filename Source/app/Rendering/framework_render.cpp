@@ -371,6 +371,12 @@ void framework::render(float elapsed_time)
             }
         }
 
+        // GameObject / Component 基盤が提出した描画対象を GBuffer へ描く。
+        // 提出リストは update_object_scene() が毎フレーム作り直す。
+        // 対象は MeshRendererComponent を持つ GameObject だけで、
+        // 上で描いた skinned_meshes[0] や旧 Stage とは対象が重ならない（二重描画しない）。
+        draw_object_scene_meshes(skinned_mesh_gbuffer_ps.Get(), true);
+
         deferred.gbuffer_end(immediate_context.Get());
         // GBufferをSRVへ切り替えた後、ライト計算結果をDeferred側の出力へ書く。
         deferred.lighting_pass(immediate_context.Get(), scene.view_projection,
@@ -641,6 +647,16 @@ void framework::render(float elapsed_time)
         {
             static_meshes[0]->render(immediate_context.Get(), world, material_color,
                                      static_forward_shader(shading_per_static[0]));
+        }
+
+        // GameObject / Component 基盤の描画（Forward 経路）。
+        // Component ごとの描画方式を反映するため、Shader は 1 件ずつ選び直す。
+        for (const ReplayEngine::Rendering::RenderItem& scene_item : object_render_items.Items())
+        {
+            skinned_mesh* scene_mesh = resolve_object_mesh(scene_item.mesh_asset);
+            if (scene_mesh == nullptr) continue;
+            scene_mesh->render(immediate_context.Get(), scene_item.world, scene_item.tint,
+                nullptr, skinned_forward_shader(scene_item.shading_model));
         }
 
         if (skinned_meshes[0] && enable_outline_shader && outline_per_skinned[0])

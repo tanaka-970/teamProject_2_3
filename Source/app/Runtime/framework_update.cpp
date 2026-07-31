@@ -19,6 +19,11 @@ void framework::update(float elapsed_time)
         scene_manager.Update(elapsed_time);
     }
 
+    // GameObject / Component 基盤の更新。
+    // 既存の scene_manager (画面遷移) とは別系統で、二重更新にはならない。
+    // 内部で Edit Mode 中は Component を止める判定を行っている。
+    update_object_scene(elapsed_time);
+
 #ifdef USE_IMGUI
     if (!editor_mode) return;
     ImGui_ImplDX11_NewFrame();
