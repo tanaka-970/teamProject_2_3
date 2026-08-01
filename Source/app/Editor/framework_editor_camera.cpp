@@ -35,7 +35,7 @@ bool framework::using_editor_camera() const noexcept
     // 「どちらの View を描いているか」で決めるだけでよい。
     // 呼び出し側はすべてこの関数を通っているため、他は変更不要になる。
     if (!editor_mode) return false;
-    return !object_runtime_active();
+    return active_editor_view == editor_view::scene;
 }
 
 DirectX::XMMATRIX framework::viewport_view_matrix() const
@@ -123,11 +123,11 @@ void framework::update_editor_camera(float elapsed_time)
         local_x < static_cast<float>(client_width) &&
         local_y < static_cast<float>(client_height);
 
-    input.viewport_hovered = inside_client && !io.WantCaptureMouse;
-    input.viewport_focused = ::GetForegroundWindow() == hwnd;
+    input.viewport_hovered = inside_client && scene_view_hovered;
+    input.viewport_focused = scene_view_focused && ::GetForegroundWindow() == hwnd;
 
     // ---- Editor UI が入力を取っているか -----------------------------------
-    input.ui_wants_mouse = io.WantCaptureMouse;
+    input.ui_wants_mouse = io.WantCaptureMouse && !scene_view_hovered;
     input.ui_wants_keyboard = io.WantCaptureKeyboard;
     input.ui_text_input_active = io.WantTextInput || search_input_active;
     input.ui_popup_open = ImGui::IsPopupOpen(static_cast<const char*>(nullptr),

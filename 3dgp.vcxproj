@@ -300,6 +300,8 @@
     <ClCompile Include="RePlayEngine\Components\Core\TransformComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Gameplay\RotatorComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Gameplay\HealthComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Gameplay\StageGameplayCommon.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Gameplay\StageGameplayComponents.cpp" />
     <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponents.cpp" />
     <ClCompile Include="RePlayEngine\Scene\Serialization\SceneData.cpp" />
     <ClCompile Include="RePlayEngine\Scene\Serialization\SceneSerializer.cpp" />
@@ -326,6 +328,8 @@
     <ClCompile Include="Source\game\legacy_camera_basis_bridge.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Inspector\PlayerCompositionValidator.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorViewportCamera.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Style\EditorStyle.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Migration\LegacyStageConverter.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorCameraController.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorCameraStateStore.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorSelectionBounds.cpp" />
@@ -448,6 +452,8 @@
     <ClInclude Include="RePlayEngine\Components\Rendering\MeshRendererComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\RotatorComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\HealthComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Gameplay\StageGameplayCommon.h" />
+    <ClInclude Include="RePlayEngine\Components\Gameplay\StageGameplayComponents.h" />
     <ClInclude Include="RePlayEngine\Object\Registry\BuiltInComponents.h" />
     <ClInclude Include="RePlayEngine\Scene\Serialization\SceneData.h" />
     <ClInclude Include="RePlayEngine\Scene\Serialization\SceneSerializer.h" />
@@ -466,6 +472,7 @@
     <ClInclude Include="RePlayEngine\Scene\Services\IPhysicsQueryService.h" />
     <ClInclude Include="RePlayEngine\Scene\Services\SceneServices.h" />
     <ClInclude Include="RePlayEngine\Scene\Services\PlayerControlSystem.h" />
+    <ClInclude Include="RePlayEngine\Scene\Services\RespawnService.h" />
     <ClInclude Include="RePlayEngine\Rendering\Adapter\IRenderSubmitter.h" />
     <ClInclude Include="RePlayEngine\Components\Physics\SphereColliderComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\CharacterMotorComponent.h" />
@@ -478,6 +485,8 @@
     <ClInclude Include="Source\game\legacy_camera_basis_bridge.h" />
     <ClInclude Include="RePlayEngine\Editor\Inspector\PlayerCompositionValidator.h" />
     <ClInclude Include="RePlayEngine\Editor\Viewport\EditorViewportCamera.h" />
+    <ClInclude Include="RePlayEngine\Editor\Style\EditorStyle.h" />
+    <ClInclude Include="RePlayEngine\Editor\Migration\LegacyStageConverter.h" />
     <ClInclude Include="RePlayEngine\Editor\Viewport\EditorCameraController.h" />
     <ClInclude Include="RePlayEngine\Editor\Viewport\EditorCameraStateStore.h" />
     <ClInclude Include="RePlayEngine\Editor\Viewport\EditorSelectionBounds.h" />

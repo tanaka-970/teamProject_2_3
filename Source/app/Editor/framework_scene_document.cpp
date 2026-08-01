@@ -177,7 +177,7 @@ void framework::duplicate_selected_entities()
 
 void framework::handle_viewport_selection()
 {
-    if (!edit_mode_active || !game_scene) return;
+    if (!edit_mode_active || !game_scene || !scene_view_hovered) return;
 
     // 編集カメラがマウスを掴んでいるフレームは選択処理を動かさない。
     // カメラ操作とギズモ操作・矩形選択が同時に走らないようにする。
@@ -219,7 +219,7 @@ void framework::handle_viewport_selection()
         mouse_x < static_cast<float>(client_width) &&
         mouse_y < static_cast<float>(client_height);
 
-    if (!viewport_drag_selecting && !ImGui::GetIO().WantCaptureMouse &&
+    if (!viewport_drag_selecting && scene_view_hovered &&
         inside_viewport && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
     {
         viewport_drag_selecting = true;

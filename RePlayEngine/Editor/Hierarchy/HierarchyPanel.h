@@ -23,6 +23,11 @@ namespace ReplayEngine::Editor
         void Draw(EditorContext& context);
         void DrawContents(EditorContext& context);
 
+        // Main Menu / Shortcut からも Hierarchy と同じ安全な経路を使う。
+        void CreateEmpty(EditorContext& context) { CreateEmptyGameObject(context, nullptr); }
+        void DuplicateSelection(EditorContext& context) { DuplicateSelected(context); }
+        void DestroySelection(EditorContext& context) { DestroySelected(context); }
+
     private:
         void DrawNode(EditorContext& context, Core::GameObject& object, int depth);
         void DrawContextMenu(EditorContext& context, Core::GameObject* object);

@@ -323,6 +323,7 @@ public:
 
     std::filesystem::path object_scene_path{ "resources/Scenes/TrainingStage.replayscene" };
     bool             object_scene_play_mode{ false };
+    bool             object_scene_paused{ false };
 
     // 操作対象を型ではなく ObjectID で持つ。
     // 人型からメカ・ドローンへ変えても GameObject のクラス型は変わらない。
@@ -507,9 +508,8 @@ public:
             if (shortcut_pressed && wparam == 'S')
             {
                 const bool choose_path = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
-                // 旧ステージ配置記録と新しい GameObject シーンの両方を保存する。
-                // 保存先ファイルが別なので互いに上書きしない。
-                save_scene_document(choose_path);
+                // 標準保存は GameObject Scene だけを対象にする。
+                // 旧 .replaystage を同時更新して二重の正本を作らない。
                 save_object_scene(choose_path);
                 return 0;
             }
@@ -539,7 +539,17 @@ public:
             }
             if (shortcut_pressed && wparam == 'D')
             {
-                duplicate_selected_entities();
+                if (selected_editor_object == editor_selection::game_object)
+                    object_hierarchy_panel.DuplicateSelection(object_editor_context);
+                else
+                    duplicate_selected_entities();
+                return 0;
+            }
+            if (msg == WM_KEYDOWN && wparam == VK_DELETE &&
+                !ImGui::GetIO().WantTextInput &&
+                selected_editor_object == editor_selection::game_object)
+            {
+                object_hierarchy_panel.DestroySelection(object_editor_context);
                 return 0;
             }
             if (msg == WM_KEYDOWN && control_down &&
@@ -624,6 +634,21 @@ public:
                 }
             }
             break;
+        case WM_DPICHANGED:
+#ifdef USE_IMGUI
+            if (ImGui::GetCurrentContext() != nullptr)
+            {
+                configure_editor_style();
+                editor_layout_dirty = true;
+            }
+#endif
+            if (const RECT* suggested = reinterpret_cast<const RECT*>(lparam))
+            {
+                SetWindowPos(hwnd, nullptr, suggested->left, suggested->top,
+                    suggested->right - suggested->left, suggested->bottom - suggested->top,
+                    SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+            break;
         case WM_KEYDOWN:
             if (scene_manager.OnKeyDown(wparam))
             {
@@ -663,7 +688,9 @@ private:
     void apply_toon_preset(int preset);
     void reset_editor_values();
     void draw_editor();
+    void draw_editor_main_menu();
     void draw_editor_toolbar();
+    void draw_scene_view_panel();
     void draw_runtime_mode_banner();
 
     // 操作対象 GameObject の実行時診断。旧 Player の項目は持たない。
@@ -878,12 +905,31 @@ private:
         rendering,
         shader_adjustment
     };
+    enum class editor_view
+    {
+        scene,
+        game
+    };
     editor_selection selected_editor_object{ editor_selection::world };
     editor_workspace active_editor_workspace{ editor_workspace::general };
+    editor_view active_editor_view{ editor_view::scene };
     bool editor_layout_checked{ false };
     bool editor_layout_dirty{ false };
     bool editor_hide_requested{ false };
     bool editor_session_active{ false };
+    bool show_hierarchy_panel{ true };
+    bool show_inspector_panel{ true };
+    bool show_project_panel{ true };
+    bool show_console_panel{ true };
+    bool show_workspace_panel{ true };
+    bool show_scene_view{ true };
+    bool scene_view_hovered{ false };
+    bool scene_view_focused{ false };
+    float scene_view_min_x{ 0.0f };
+    float scene_view_min_y{ 0.0f };
+    float scene_view_max_x{ 0.0f };
+    float scene_view_max_y{ 0.0f };
+    int scene_view_draw_mode{ 0 };
     // このフレームでImGui::NewFrame()を通したか。
     // ロード完了フレームのようにupdate()が早期returnした直後にeditor_modeが
     // 立つ場合があり、NewFrame無しでRender()するとImGuiがassertするため、

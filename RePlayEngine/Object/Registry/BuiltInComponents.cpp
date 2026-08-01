@@ -10,6 +10,7 @@
 #include "../../Components/Gameplay/PlayerControllerComponent.h"
 #include "../../Components/Gameplay/PlayerInputComponent.h"
 #include "../../Components/Gameplay/RotatorComponent.h"
+#include "../../Components/Gameplay/StageGameplayComponents.h"
 #include "../../Components/Physics/BoxColliderComponent.h"
 #include "../../Components/Physics/CapsuleColliderComponent.h"
 #include "../../Components/Physics/MeshColliderComponent.h"
@@ -35,6 +36,12 @@ namespace ReplayEngine::Core
         using Components::RotatorComponent;
         using Components::SkinnedMeshRendererComponent;
         using Components::SphereColliderComponent;
+        using Components::SpawnPointComponent;
+        using Components::CheckpointComponent;
+        using Components::GoalComponent;
+        using Components::KillVolumeComponent;
+        using Components::JumpPadComponent;
+        using Components::DamageAreaComponent;
         using Components::TransformComponent;
 
         using Reflection::MakeAccessorProperty;
@@ -519,6 +526,111 @@ namespace ReplayEngine::Core
                 MakeProperty("priority", &CameraTargetComponent::priority)
                     .Display("優先度").Range(-100.0, 100.0).Step(1.0));
         }
+
+        void RegisterStageGameplay()
+        {
+            ComponentRegistry::Register<SpawnPointComponent>(
+                ComponentTypeInfo::Describe("Spawn Point", "Gameplay")
+                    .WithTooltip("開始地点またはチェックポイント未通過時の復帰地点。"));
+            PropertyRegistry::Register<SpawnPointComponent>(
+                MakeProperty("spawn_id", &SpawnPointComponent::spawn_id)
+                    .Display("スポーンID").Step(1.0));
+            PropertyRegistry::Register<SpawnPointComponent>(
+                MakeProperty("team", &SpawnPointComponent::team)
+                    .Display("チーム").Step(1.0));
+            PropertyRegistry::Register<SpawnPointComponent>(
+                MakeProperty("priority", &SpawnPointComponent::priority)
+                    .Display("優先度").Step(1.0));
+            PropertyRegistry::Register<SpawnPointComponent>(
+                MakeProperty("debug_draw", &SpawnPointComponent::debug_draw)
+                    .Display("Scene Viewに表示"));
+
+            ComponentRegistry::Register<CheckpointComponent>(
+                ComponentTypeInfo::Describe("Checkpoint", "Gameplay")
+                    .WithTooltip("Triggerへ入った対象の復帰地点を更新する。"));
+            PropertyRegistry::Register<CheckpointComponent>(
+                MakeProperty("checkpoint_id", &CheckpointComponent::checkpoint_id)
+                    .Display("チェックポイントID").Step(1.0));
+            PropertyRegistry::Register<CheckpointComponent>(
+                MakeProperty("respawn_position_offset",
+                    &CheckpointComponent::respawn_position_offset)
+                    .Display("復帰位置オフセット").Step(0.05));
+            PropertyRegistry::Register<CheckpointComponent>(
+                MakeProperty("respawn_rotation", &CheckpointComponent::respawn_rotation)
+                    .Display("復帰時の回転").Step(0.5));
+            PropertyRegistry::Register<CheckpointComponent>(
+                MakeProperty("target_mask", &CheckpointComponent::target_mask)
+                    .Display("反応する対象").AsCollisionMask());
+            PropertyRegistry::Register<CheckpointComponent>(
+                MakeProperty("one_shot", &CheckpointComponent::one_shot)
+                    .Display("一度だけ"));
+
+            ComponentRegistry::Register<GoalComponent>(
+                ComponentTypeInfo::Describe("Goal", "Gameplay")
+                    .WithTooltip("到達イベントを発行する。Scene遷移は行わない。"));
+            PropertyRegistry::Register<GoalComponent>(
+                MakeProperty("goal_id", &GoalComponent::goal_id)
+                    .Display("ゴールID").Step(1.0));
+            PropertyRegistry::Register<GoalComponent>(
+                MakeProperty("target_mask", &GoalComponent::target_mask)
+                    .Display("反応する対象").AsCollisionMask());
+            PropertyRegistry::Register<GoalComponent>(
+                MakeProperty("one_shot", &GoalComponent::one_shot).Display("一度だけ"));
+            PropertyRegistry::Register<GoalComponent>(
+                MakeProperty("completion_event", &GoalComponent::completion_event)
+                    .Display("完了イベント"));
+
+            ComponentRegistry::Register<KillVolumeComponent>(
+                ComponentTypeInfo::Describe("Kill Volume", "Gameplay")
+                    .WithTooltip("対象へダメージを与え、設定時は復帰地点へ戻す。"));
+            PropertyRegistry::Register<KillVolumeComponent>(
+                MakeProperty("target_mask", &KillVolumeComponent::target_mask)
+                    .Display("反応する対象").AsCollisionMask());
+            PropertyRegistry::Register<KillVolumeComponent>(
+                MakeProperty("respawn_at_checkpoint",
+                    &KillVolumeComponent::respawn_at_checkpoint)
+                    .Display("チェックポイントへ復帰"));
+            PropertyRegistry::Register<KillVolumeComponent>(
+                MakeProperty("damage_amount", &KillVolumeComponent::damage_amount)
+                    .Display("ダメージ").Range(0.0, 1000000.0).Step(1.0));
+
+            ComponentRegistry::Register<JumpPadComponent>(
+                ComponentTypeInfo::Describe("Jump Pad", "Gameplay")
+                    .WithTooltip("Character Motorへ指定方向の速度を加えるTrigger。"));
+            PropertyRegistry::Register<JumpPadComponent>(
+                MakeProperty("direction", &JumpPadComponent::direction)
+                    .Display("射出方向").Step(0.01));
+            PropertyRegistry::Register<JumpPadComponent>(
+                MakeProperty("force", &JumpPadComponent::force)
+                    .Display("力").Range(0.0, 1000.0).Step(0.1));
+            PropertyRegistry::Register<JumpPadComponent>(
+                MakeProperty("target_mask", &JumpPadComponent::target_mask)
+                    .Display("反応する対象").AsCollisionMask());
+            PropertyRegistry::Register<JumpPadComponent>(
+                MakeProperty("one_shot", &JumpPadComponent::one_shot).Display("一度だけ"));
+            PropertyRegistry::Register<JumpPadComponent>(
+                MakeProperty("cooldown", &JumpPadComponent::cooldown)
+                    .Display("再使用待ち時間 (秒)").Range(0.0, 60.0).Step(0.05));
+            PropertyRegistry::Register<JumpPadComponent>(
+                MakeProperty("debug_draw", &JumpPadComponent::debug_draw)
+                    .Display("Scene Viewに表示"));
+
+            ComponentRegistry::Register<DamageAreaComponent>(
+                ComponentTypeInfo::Describe("Damage Area", "Gameplay")
+                    .WithTooltip("Trigger内のHealthへ一定間隔でダメージを与える。"));
+            PropertyRegistry::Register<DamageAreaComponent>(
+                MakeProperty("damage", &DamageAreaComponent::damage)
+                    .Display("ダメージ").Range(0.0, 1000000.0).Step(1.0));
+            PropertyRegistry::Register<DamageAreaComponent>(
+                MakeProperty("interval", &DamageAreaComponent::interval)
+                    .Display("間隔 (秒)").Range(0.0, 60.0).Step(0.05));
+            PropertyRegistry::Register<DamageAreaComponent>(
+                MakeProperty("target_mask", &DamageAreaComponent::target_mask)
+                    .Display("反応する対象").AsCollisionMask());
+            PropertyRegistry::Register<DamageAreaComponent>(
+                MakeProperty("one_shot", &DamageAreaComponent::one_shot)
+                    .Display("一度だけ"));
+        }
     }
 
     void RegisterBuiltInComponents()
@@ -542,5 +654,6 @@ namespace ReplayEngine::Core
         RegisterCameraTarget();
         RegisterRotator();
         RegisterHealth();
+        RegisterStageGameplay();
     }
 }

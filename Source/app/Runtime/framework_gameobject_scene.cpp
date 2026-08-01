@@ -161,6 +161,7 @@ bool framework::object_runtime_active() const noexcept
     //   Editor 表示 + Edit Mode           -> 止まる（GameObject を編集中）
     //   Editor 表示 + Play Mode (F5)      -> 動く
     const bool editing = editor_mode && edit_mode_active && !object_scene_play_mode;
+    if (object_scene_play_mode && object_scene_paused) return false;
     return !editing;
 }
 
@@ -459,6 +460,7 @@ void framework::enter_object_play_mode()
     object_fixed_accumulator = 0.0f;
 
     object_scene_play_mode = true;
+    object_scene_paused = false;
     object_editor_context.SetPlayMode(true);
     object_editor_context.AttachScene(&object_scene_runtime);
     object_editor_context.SetStatus("実行中（編集シーンは保持されています）");
@@ -480,6 +482,7 @@ void framework::exit_object_play_mode()
     object_fixed_accumulator = 0.0f;
 
     object_scene_play_mode = false;
+    object_scene_paused = false;
     object_editor_context.SetPlayMode(false);
     object_editor_context.AttachScene(&object_scene);
     object_editor_context.SetStatus("編集モードへ戻りました");

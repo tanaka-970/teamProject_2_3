@@ -73,6 +73,12 @@
     <Filter Include="RePlayEngine\Editor\Rendering">
       <UniqueIdentifier>{23c5c4f9-8df4-41b3-8314-85e0567d6e2f}</UniqueIdentifier>
     </Filter>
+    <Filter Include="RePlayEngine\Editor\Style">
+      <UniqueIdentifier>{de8d5c16-b5f0-4fe8-a1b0-5fa2b4b587bc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Editor\Migration">
+      <UniqueIdentifier>{66140235-63d4-4f1c-8866-f70dd5f35145}</UniqueIdentifier>
+    </Filter>
     <Filter Include="RePlayEngine\Scene">
       <UniqueIdentifier>{b5555555-5555-4555-8555-555555555555}</UniqueIdentifier>
     </Filter>
@@ -507,6 +513,12 @@
     <ClCompile Include="RePlayEngine\Components\Gameplay\HealthComponent.cpp">
       <Filter>RePlayEngine\Components\Gameplay</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\Gameplay\StageGameplayCommon.cpp">
+      <Filter>RePlayEngine\Components\Gameplay</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\Gameplay\StageGameplayComponents.cpp">
+      <Filter>RePlayEngine\Components\Gameplay</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponents.cpp">
       <Filter>RePlayEngine\Object\Registry</Filter>
     </ClCompile>
@@ -584,6 +596,12 @@
     </ClCompile>
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorViewportCamera.cpp">
       <Filter>RePlayEngine\Editor\Viewport</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\Style\EditorStyle.cpp">
+      <Filter>RePlayEngine\Editor\Style</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\Migration\LegacyStageConverter.cpp">
+      <Filter>RePlayEngine\Editor\Migration</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorCameraController.cpp">
       <Filter>RePlayEngine\Editor\Viewport</Filter>
@@ -950,6 +968,12 @@
     <ClInclude Include="RePlayEngine\Components\Gameplay\HealthComponent.h">
       <Filter>RePlayEngine\Components\Gameplay</Filter>
     </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Gameplay\StageGameplayCommon.h">
+      <Filter>RePlayEngine\Components\Gameplay</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Gameplay\StageGameplayComponents.h">
+      <Filter>RePlayEngine\Components\Gameplay</Filter>
+    </ClInclude>
     <ClInclude Include="RePlayEngine\Object\Registry\BuiltInComponents.h">
       <Filter>RePlayEngine\Object\Registry</Filter>
     </ClInclude>
@@ -1004,6 +1028,9 @@
     <ClInclude Include="RePlayEngine\Scene\Services\PlayerControlSystem.h">
       <Filter>RePlayEngine\Scene\Services</Filter>
     </ClInclude>
+    <ClInclude Include="RePlayEngine\Scene\Services\RespawnService.h">
+      <Filter>RePlayEngine\Scene\Services</Filter>
+    </ClInclude>
     <ClInclude Include="RePlayEngine\Rendering\Adapter\IRenderSubmitter.h">
       <Filter>RePlayEngine\Rendering\Adapter</Filter>
     </ClInclude>
@@ -1039,6 +1066,12 @@
     </ClInclude>
     <ClInclude Include="RePlayEngine\Editor\Viewport\EditorViewportCamera.h">
       <Filter>RePlayEngine\Editor\Viewport</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\Style\EditorStyle.h">
+      <Filter>RePlayEngine\Editor\Style</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\Migration\LegacyStageConverter.h">
+      <Filter>RePlayEngine\Editor\Migration</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Editor\Viewport\EditorCameraController.h">
       <Filter>RePlayEngine\Editor\Viewport</Filter>

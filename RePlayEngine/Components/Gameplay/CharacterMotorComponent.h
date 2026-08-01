@@ -65,6 +65,16 @@ namespace ReplayEngine::Components
         // 位置を直接指定する（テレポート）。速度は保持したままにする。
         void Teleport(const DirectX::XMFLOAT3& world_position);
 
+        // JumpPad など汎用 Gameplay Component から速度を加える。
+        // Player 型や入力系には依存せず、次の FixedUpdate で通常の衝突解決を通る。
+        void ApplyImpulse(const DirectX::XMFLOAT3& impulse) noexcept
+        {
+            velocity_.x += impulse.x;
+            velocity_.y += impulse.y;
+            velocity_.z += impulse.z;
+            grounded_ = false;
+        }
+
         // ---- 公開状態（Animator などが読む）--------------------------------
 
         bool Grounded() const noexcept { return grounded_; }

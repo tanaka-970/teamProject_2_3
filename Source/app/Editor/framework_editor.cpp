@@ -3,6 +3,8 @@
 #include "../../RePlayEngine/Components/Gameplay/CharacterMotorComponent.h"
 #include "../../RePlayEngine/Components/Gameplay/PlayerControllerComponent.h"
 #include "../../RePlayEngine/Components/Gameplay/PlayerInputComponent.h"
+#include "../../RePlayEngine/Editor/Style/EditorStyle.h"
+#include "../../RePlayEngine/Editor/Migration/LegacyStageConverter.h"
 #include "shader.h"
 #include "texture.h"
 #include "skinned_mesh.h"
@@ -122,23 +124,10 @@ void framework::reset_editor_values()
 
 void framework::configure_editor_style()
 {
-    ImGuiStyle& style = ImGui::GetStyle();
-    style.WindowRounding = 2.0f;
-    style.ChildRounding = 2.0f;
-    style.FrameRounding = 2.0f;
-    style.PopupRounding = 2.0f;
-    style.TabRounding = 2.0f;
-    style.WindowBorderSize = 1.0f;
-    style.FramePadding = { 7.0f, 5.0f };
-    style.ItemSpacing = { 8.0f, 6.0f };
-    style.Colors[ImGuiCol_WindowBg] = { 0.075f, 0.082f, 0.094f, 1.0f };
-    style.Colors[ImGuiCol_TitleBg] = { 0.055f, 0.061f, 0.071f, 1.0f };
-    style.Colors[ImGuiCol_TitleBgActive] = { 0.075f, 0.20f, 0.34f, 1.0f };
-    style.Colors[ImGuiCol_Header] = { 0.10f, 0.30f, 0.48f, 0.78f };
-    style.Colors[ImGuiCol_HeaderHovered] = { 0.13f, 0.39f, 0.62f, 0.86f };
-    style.Colors[ImGuiCol_Button] = { 0.10f, 0.27f, 0.42f, 1.0f };
-    style.Colors[ImGuiCol_ButtonHovered] = { 0.13f, 0.39f, 0.62f, 1.0f };
-    style.Colors[ImGuiCol_TabActive] = { 0.10f, 0.31f, 0.50f, 1.0f };
+    const float dpi = hwnd != nullptr
+        ? static_cast<float>(GetDpiForWindow(hwnd)) / 96.0f : 1.0f;
+    ReplayEngine::Editor::EditorStyle::Apply(dpi);
+    ImGui::GetIO().FontGlobalScale = dpi;
 }
 
 void framework::set_editor_workspace(editor_workspace workspace)
@@ -192,52 +181,223 @@ void framework::set_edit_mode(bool enabled)
     }
 }
 
+void framework::draw_editor_main_menu()
+{
+    if (ImGui::BeginMenu("File"))
+    {
+        if (ImGui::MenuItem("New Empty Scene")) create_object_scene(u8"新しいシーン", false);
+        if (ImGui::MenuItem("New Default Scene")) create_object_scene(u8"新しいシーン", true);
+        if (ImGui::MenuItem("Open Scene...", "Ctrl+O")) load_object_scene(true);
+        ImGui::Separator();
+        if (ImGui::MenuItem("Save", "Ctrl+S")) save_object_scene(false);
+        if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S")) save_object_scene(true);
+        ImGui::Separator();
+        if (ImGui::MenuItem("Exit")) PostMessage(hwnd, WM_CLOSE, 0, 0);
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Edit"))
+    {
+        if (ImGui::MenuItem("Undo", "Ctrl+Z", false,
+            object_editor_context.CanEdit() && object_editor_context.History().CanUndo()))
+            object_editor_context.Undo();
+        if (ImGui::MenuItem("Redo", "Ctrl+Y", false,
+            object_editor_context.CanEdit() && object_editor_context.History().CanRedo()))
+            object_editor_context.Redo();
+        ImGui::Separator();
+        if (ImGui::MenuItem("Duplicate", "Ctrl+D", false,
+            object_editor_context.CanEdit() && !object_editor_context.Selection().Empty()))
+            object_hierarchy_panel.DuplicateSelection(object_editor_context);
+        if (ImGui::MenuItem("Delete", "Delete", false,
+            object_editor_context.CanEdit() && !object_editor_context.Selection().Empty()))
+            object_hierarchy_panel.DestroySelection(object_editor_context);
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("GameObject"))
+    {
+        if (ImGui::MenuItem("Create Empty", nullptr, false, object_editor_context.CanEdit()))
+            object_hierarchy_panel.CreateEmpty(object_editor_context);
+        if (ImGui::MenuItem("Set As Controlled Object", nullptr, false,
+            object_editor_context.CanEdit() && !object_editor_context.Selection().Empty()))
+        {
+            object_editor_context.BeginEdit("操作対象を変更");
+            object_scene.Services().SetControlledObject(object_editor_context.Selection().Primary());
+            object_editor_context.CommitEdit();
+        }
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Component"))
+    {
+        if (ImGui::MenuItem("Open Inspector", nullptr, false,
+            !object_editor_context.Selection().Empty()))
+        {
+            show_inspector_panel = true;
+            selected_editor_object = editor_selection::game_object;
+        }
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Assets"))
+    {
+        if (ImGui::MenuItem("Import Model...")) browse_stage_asset();
+        if (ImGui::MenuItem("Place Prefab...")) load_prefab();
+        if (ImGui::MenuItem("Show Project Browser")) show_project_panel = true;
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Window"))
+    {
+        ImGui::MenuItem("Scene / Game View", nullptr, &show_scene_view);
+        ImGui::MenuItem("Hierarchy", nullptr, &show_hierarchy_panel);
+        ImGui::MenuItem("Inspector", nullptr, &show_inspector_panel);
+        ImGui::MenuItem("Project / Assets", nullptr, &show_project_panel);
+        ImGui::MenuItem("Console", nullptr, &show_console_panel);
+        ImGui::MenuItem("Workspace", nullptr, &show_workspace_panel);
+        ImGui::MenuItem("Collision Diagnostics", nullptr, &show_collision_diagnostics);
+        ImGui::Separator();
+        if (ImGui::MenuItem("Reset Layout")) editor_layout_dirty = true;
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Play"))
+    {
+        if (ImGui::MenuItem("Play", "F5", false, !object_scene_play_mode))
+            enter_object_play_mode();
+        if (ImGui::MenuItem(object_scene_paused ? "Resume" : "Pause", nullptr,
+            false, object_scene_play_mode)) object_scene_paused = !object_scene_paused;
+        if (ImGui::MenuItem("Stop", "Shift+F5", false, object_scene_play_mode))
+            exit_object_play_mode();
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Help"))
+    {
+        ImGui::TextDisabled("RePlayEngine Editor / C++17 / Direct3D 11");
+        ImGui::Separator();
+        ImGui::TextWrapped("SceneをGameObjectとComponentの組み合わせで制作します。");
+        ImGui::EndMenu();
+    }
+}
+
 void framework::draw_editor_toolbar()
 {
-    const char* workspaces[] = {
-        "基本", "配置", "モデリング", "アニメーション", "レンダリング", "シェーダー調整"
-    };
-    int workspace = static_cast<int>(active_editor_workspace);
-    ImGui::SetNextItemWidth(130.0f);
-    if (ImGui::Combo("##Workspace", &workspace, workspaces, IM_ARRAYSIZE(workspaces)))
-    {
-        set_editor_workspace(static_cast<editor_workspace>(workspace));
-    }
+    if (ImGui::Button("New")) create_object_scene(u8"新しいシーン", false);
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("New Empty Scene");
     ImGui::SameLine();
-    draw_scene_document_toolbar();
+    if (ImGui::Button("Open")) load_object_scene(true);
     ImGui::SameLine();
-    if (ImGui::Button("シーン初期化")) reset_editor_values();
+    if (ImGui::Button(object_editor_context.Dirty() ? "Save *" : "Save"))
+        save_object_scene(false);
     ImGui::SameLine();
-    if (ImGui::Button(edit_mode_active ? "編集モード: ON  F3" : "プレイモード  F3"))
-    {
-        set_edit_mode(!edit_mode_active);
-    }
+    if (ImGui::Button("Undo")) object_editor_context.Undo();
     ImGui::SameLine();
-    if (ImGui::Button(is_fullscreen() ? "ウィンドウ表示  F11" : "全画面表示  F11")) toggle_fullscreen();
-    ImGui::SameLine();
-    if (ImGui::Button("ゲーム表示  F1")) editor_hide_requested = true;
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(220.0f);
-    if (focus_search_requested)
-    {
-        ImGui::SetKeyboardFocusHere();
-        focus_search_requested = false;
-    }
-    ImGui::InputTextWithHint(
-        "##FeatureSearch", "機能を検索...", editor_search_text, IM_ARRAYSIZE(editor_search_text));
-    search_input_active = ImGui::IsItemActive();
-    if (ImGui::IsItemActivated()) set_edit_mode(true);
-    if (search_input_active && ImGui::IsKeyPressed(VK_ESCAPE))
-    {
-        editor_search_text[0] = '\0';
-        ImGui::ClearActiveID();
-        search_input_active = false;
-    }
+    if (ImGui::Button("Redo")) object_editor_context.Redo();
+
     ImGui::SameLine();
     ImGui::Separator();
     ImGui::SameLine();
-    ImGui::Text("%ux%u  |  %.1f FPS  |  %.2f ms", client_width, client_height,
-        ImGui::GetIO().Framerate, 1000.0f / (ImGui::GetIO().Framerate > 0.0f ? ImGui::GetIO().Framerate : 1.0f));
+    if (ImGui::Button("Move [W]"))
+        transform_gizmo.SetOperation(ReplayEngine::Editor::GizmoOperation::Translate);
+    ImGui::SameLine();
+    if (ImGui::Button("Rotate [E]"))
+        transform_gizmo.SetOperation(ReplayEngine::Editor::GizmoOperation::Rotate);
+    ImGui::SameLine();
+    if (ImGui::Button("Scale [R]"))
+        transform_gizmo.SetOperation(ReplayEngine::Editor::GizmoOperation::Scale);
+    ImGui::SameLine();
+    bool snap = transform_gizmo.SnapEnabled();
+    if (ImGui::Checkbox("Snap", &snap)) transform_gizmo.SetSnapEnabled(snap);
+
+    ImGui::SameLine();
+    ImGui::Separator();
+    ImGui::SameLine();
+    if (!object_scene_play_mode)
+    {
+        if (ImGui::Button("Play")) enter_object_play_mode();
+    }
+    else
+    {
+        if (ImGui::Button(object_scene_paused ? "Resume" : "Pause"))
+            object_scene_paused = !object_scene_paused;
+        ImGui::SameLine();
+        if (ImGui::Button("Stop")) exit_object_play_mode();
+    }
+
+    if (ImGui::GetContentRegionAvail().x > 280.0f)
+    {
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(200.0f);
+        if (focus_search_requested)
+        {
+            ImGui::SetKeyboardFocusHere();
+            focus_search_requested = false;
+        }
+        ImGui::InputTextWithHint("##FeatureSearch", "Search...", editor_search_text,
+            IM_ARRAYSIZE(editor_search_text));
+        search_input_active = ImGui::IsItemActive();
+    }
+}
+
+void framework::draw_scene_view_panel()
+{
+    scene_view_hovered = false;
+    scene_view_focused = false;
+    if (!show_scene_view) return;
+
+    ImGui::SetNextWindowBgAlpha(0.0f);
+    if (!ImGui::Begin("Scene View", &show_scene_view, ImGuiWindowFlags_NoBackground))
+    {
+        ImGui::End();
+        return;
+    }
+
+    if (ImGui::BeginTabBar("SceneGameTabs"))
+    {
+        if (ImGui::BeginTabItem("Scene"))
+        {
+            active_editor_view = editor_view::scene;
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("Game"))
+        {
+            active_editor_view = editor_view::game;
+            ImGui::EndTabItem();
+        }
+        ImGui::EndTabBar();
+    }
+
+    if (active_editor_view == editor_view::scene)
+    {
+        const char* modes[] = { "Shaded", "Unlit", "Wireframe", "Shaded Wireframe", "Collision" };
+        ImGui::SetNextItemWidth(150.0f);
+        ImGui::Combo("##SceneDrawMode", &scene_view_draw_mode, modes, IM_ARRAYSIZE(modes));
+        ImGui::SameLine();
+        ImGui::Checkbox("Collider", &show_collider_debug_draw);
+        ImGui::SameLine();
+        ImGui::TextDisabled("Perspective | %s | %s",
+            transform_gizmo.SnapEnabled() ? "Snap" : "Free",
+            object_scene_play_mode ? (object_scene_paused ? "Paused" : "Playing") : "Editing");
+    }
+    else
+    {
+        ImGui::TextDisabled("Runtime Camera | Free Aspect");
+        if (!object_scene_play_mode)
+        {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1.0f, 0.72f, 0.25f, 1.0f),
+                "PlayでRuntime Sceneをプレビュー");
+        }
+    }
+
+    const ImVec2 minimum = ImGui::GetCursorScreenPos();
+    ImVec2 size = ImGui::GetContentRegionAvail();
+    if (size.x < 1.0f) size.x = 1.0f;
+    if (size.y < 1.0f) size.y = 1.0f;
+    ImGui::InvisibleButton("##SceneViewportSurface", size);
+    const ImVec2 maximum{ minimum.x + size.x, minimum.y + size.y };
+    scene_view_min_x = minimum.x;
+    scene_view_min_y = minimum.y;
+    scene_view_max_x = maximum.x;
+    scene_view_max_y = maximum.y;
+    scene_view_hovered = ImGui::IsItemHovered();
+    scene_view_focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
+
+    ImGui::End();
 }
 
 void framework::draw_search_results()
@@ -438,6 +598,65 @@ void framework::draw_project_panel()
             }
         }
         ImGui::Separator();
+        if (ImGui::Button("Convert Legacy Stage To GameObjects"))
+        {
+            ReplayEngine::Editor::LegacyStageConverter::Result result;
+            std::string error;
+            object_editor_context.BeginEdit("Legacy StageをGameObjectへ変換");
+            if (!ReplayEngine::Editor::LegacyStageConverter::Convert(
+                editor_scene_document, object_scene, result, error))
+            {
+                object_editor_context.CancelEdit();
+                object_editor_context.SetStatus("Legacy変換失敗: " + error);
+            }
+            else if (result.already_converted)
+            {
+                object_editor_context.CancelEdit();
+                object_editor_context.SetStatus("Legacy Stageは変換済みです（二重変換しません）");
+            }
+            else
+            {
+                object_editor_context.CommitEdit();
+                object_editor_context.Selection().Select(result.stage_root, false);
+                selected_editor_object = editor_selection::game_object;
+
+                std::string stem = editor_scene_document.SceneName();
+                for (char& character : stem)
+                {
+                    if (character == '<' || character == '>' || character == ':' ||
+                        character == '"' || character == '/' || character == '\\' ||
+                        character == '|' || character == '?' || character == '*') character = '_';
+                }
+                if (stem.empty()) stem = "LegacyStage";
+                std::filesystem::path converted = std::filesystem::path("resources/Scenes") /
+                    (stem + "_Converted.replayscene");
+                std::error_code filesystem_error;
+                for (int suffix = 2; std::filesystem::exists(converted, filesystem_error) &&
+                    !filesystem_error; ++suffix)
+                {
+                    converted = std::filesystem::path("resources/Scenes") /
+                        (stem + "_Converted_" + std::to_string(suffix) + ".replayscene");
+                }
+
+                if (ReplayEngine::Editor::LegacyStageConverter::SaveAndVerify(
+                    object_scene, converted, error))
+                {
+                    object_scene_path = converted;
+                    object_editor_context.SetScenePath(converted);
+                    object_editor_context.ClearDirty();
+                    object_editor_context.SetStatus("Legacy Stageを変換・再読込検証しました: " +
+                        std::to_string(result.mappings.size()) + " objects / " +
+                        std::to_string(result.collider_count) + " colliders");
+                }
+                else
+                {
+                    object_editor_context.SetStatus("変換Scene保存失敗（原本は維持）: " + error);
+                }
+            }
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("旧データを変更せず、Scene v9のGameObjectへ一方向変換します");
+        ImGui::Separator();
     }
     // GameObject シーン (.replayscene) の操作。
     // 上の「シーン」欄が扱う旧ステージ配置記録 (.replaystage) とは別物。
@@ -591,6 +810,8 @@ void framework::draw_editor()
 
     if (ImGui::BeginMenuBar())
     {
+        draw_editor_main_menu();
+        ImGui::Separator();
         draw_editor_toolbar();
         draw_runtime_mode_banner();
         ImGui::EndMenuBar();
@@ -631,19 +852,21 @@ void framework::draw_editor()
             ImGui::DockBuilderDockWindow("プロジェクト", bottom);
             ImGui::DockBuilderDockWindow("コンソール", bottom);
             ImGui::DockBuilderDockWindow("ワークスペース", bottom);
+            ImGui::DockBuilderDockWindow("Scene View", center);
             ImGui::DockBuilderFinish(dockspace_id);
         }
     }
     ImGui::End();
 
-    draw_scene_hierarchy();
-    draw_inspector();
-    draw_project_panel();
-    draw_console_panel();
-    draw_workspace_panel();
+    draw_scene_view_panel();
+    if (show_hierarchy_panel) draw_scene_hierarchy();
+    if (show_inspector_panel) draw_inspector();
+    if (show_project_panel) draw_project_panel();
+    if (show_console_panel) draw_console_panel();
+    if (show_workspace_panel) draw_workspace_panel();
     draw_collision_diagnostics_panel();
     draw_search_results();
-    handle_viewport_selection();
+    if (active_editor_view == editor_view::scene) handle_viewport_selection();
 
     // Collider の可視化は最後に描く。
     // 背景の描画リストへ積むので、パネルの下に隠れず、
@@ -664,8 +887,12 @@ void framework::draw_runtime_mode_banner()
 
     if (object_scene_play_mode)
     {
-        ImGui::TextColored(ImVec4(0.4f, 0.95f, 0.5f, 1.0f), "PLAY MODE");
-        ImGui::TextDisabled("実行シーンで動作中 / 入力有効");
+        const ImVec4 color = object_scene_paused
+            ? ImVec4(1.0f, 0.75f, 0.25f, 1.0f)
+            : ImVec4(0.4f, 0.95f, 0.5f, 1.0f);
+        ImGui::TextColored(color, object_scene_paused ? "PAUSED" : "PLAY MODE");
+        ImGui::TextDisabled(object_scene_paused
+            ? "実行シーンを一時停止中" : "実行シーンで動作中 / 入力有効");
     }
     else if (object_runtime_active())
     {
