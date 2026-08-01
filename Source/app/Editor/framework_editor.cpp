@@ -250,6 +250,7 @@ void framework::draw_editor_main_menu()
         ImGui::MenuItem("Project / Assets", nullptr, &show_project_panel);
         ImGui::MenuItem("Console", nullptr, &show_console_panel);
         ImGui::MenuItem("Workspace", nullptr, &show_workspace_panel);
+        ImGui::MenuItem("Validation / Diagnostics", nullptr, &show_validation_panel);
         ImGui::MenuItem("Collision Diagnostics", nullptr, &show_collision_diagnostics);
         ImGui::Separator();
         if (ImGui::MenuItem("Reset Layout")) editor_layout_dirty = true;
@@ -302,6 +303,9 @@ void framework::draw_editor_toolbar()
     ImGui::SameLine();
     bool snap = transform_gizmo.SnapEnabled();
     if (ImGui::Checkbox("Snap", &snap)) transform_gizmo.SetSnapEnabled(snap);
+    ImGui::SameLine();
+    if (ImGui::Button(gizmo_local_space ? "Local" : "World"))
+        gizmo_local_space = !gizmo_local_space;
 
     ImGui::SameLine();
     ImGui::Separator();
@@ -369,7 +373,10 @@ void framework::draw_scene_view_panel()
         ImGui::SameLine();
         ImGui::Checkbox("Collider", &show_collider_debug_draw);
         ImGui::SameLine();
-        ImGui::TextDisabled("Perspective | %s | %s",
+        ImGui::Checkbox("Grid", &show_scene_grid);
+        ImGui::SameLine();
+        ImGui::TextDisabled("Perspective | %s | %s | %s",
+            gizmo_local_space ? "Local" : "World",
             transform_gizmo.SnapEnabled() ? "Snap" : "Free",
             object_scene_play_mode ? (object_scene_paused ? "Paused" : "Playing") : "Editing");
     }
@@ -396,6 +403,20 @@ void framework::draw_scene_view_panel()
     scene_view_max_y = maximum.y;
     scene_view_hovered = ImGui::IsItemHovered();
     scene_view_focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
+
+    if (active_editor_view == editor_view::scene && ImGui::BeginDragDropTarget())
+    {
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("REPLAY_ASSET_GUID"))
+        {
+            if (payload->Data != nullptr && payload->DataSize > 1)
+            {
+                const std::string guid(static_cast<const char*>(payload->Data));
+                if (const auto* asset = asset_database.FindByGuid(guid))
+                    place_asset_in_object_scene(*asset, asset_drop_add_collider);
+            }
+        }
+        ImGui::EndDragDropTarget();
+    }
 
     ImGui::End();
 }
@@ -688,14 +709,93 @@ void framework::draw_project_panel()
             ImGui::TextWrapped("キャッシュ: %s", selected_stage_cache_path.c_str());
     }
     ImGui::Separator();
-    ImGui::Text("登録アセット: %zu", asset_database.Records().size());
-    for (const auto& asset : asset_database.Records())
+    ImGui::Text("Assets: %zu", asset_database.Records().size());
+    ImGui::SetNextItemWidth(-150.0f);
+    ImGui::InputTextWithHint("##AssetSearch", "Search assets...",
+        asset_search_text, IM_ARRAYSIZE(asset_search_text));
+    ImGui::SameLine();
+    const char* asset_filters[] = { "All", "Model", "Prefab", "Scene", "Other" };
+    ImGui::SetNextItemWidth(140.0f);
+    ImGui::Combo("##AssetTypeFilter", &asset_type_filter,
+        asset_filters, IM_ARRAYSIZE(asset_filters));
+
+    std::string asset_query = asset_search_text;
+    std::transform(asset_query.begin(), asset_query.end(), asset_query.begin(),
+        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+    if (ImGui::BeginChild("AssetBrowserList", ImVec2(0.0f, 210.0f), true))
     {
-        ImGui::BulletText("%s  [%s]", asset.display_name.c_str(), asset.guid.substr(0, 8).c_str());
-        ImGui::Indent();
-        ImGui::TextDisabled("%s", asset.source_path.generic_u8string().c_str());
-        ImGui::Unindent();
+        for (const auto& asset : asset_database.Records())
+        {
+            const std::string extension = asset.source_path.extension().u8string();
+            int type = 4;
+            const char* icon = "[ASSET]";
+            if (asset.kind == ReplayEngine::Assets::AssetKind::Model)
+            {
+                type = 1;
+                icon = "[MESH]";
+            }
+            else if (extension == ".replayprefab")
+            {
+                type = 2;
+                icon = "[PREFAB]";
+            }
+            else if (extension == ".replayscene")
+            {
+                type = 3;
+                icon = "[SCENE]";
+            }
+            if (asset_type_filter != 0 && asset_type_filter != type) continue;
+
+            std::string searchable = asset.display_name + " " +
+                asset.source_path.generic_u8string();
+            std::transform(searchable.begin(), searchable.end(), searchable.begin(),
+                [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            if (!asset_query.empty() && searchable.find(asset_query) == std::string::npos)
+                continue;
+
+            std::error_code exists_error;
+            const bool missing = !std::filesystem::exists(asset.source_path, exists_error) || exists_error;
+            std::string label = std::string(icon) + " " +
+                (asset.display_name.empty() ? asset.source_path.stem().u8string() : asset.display_name);
+            if (missing) label += "  [MISSING]";
+
+            ImGui::PushID(asset.guid.c_str());
+            if (missing) ImGui::PushStyleColor(ImGuiCol_Text,
+                ReplayEngine::Editor::EditorStyle::Tokens().missing);
+            const bool selected = selected_asset_guid == asset.guid;
+            if (ImGui::Selectable(label.c_str(), selected,
+                ImGuiSelectableFlags_AllowDoubleClick))
+            {
+                selected_asset_guid = asset.guid;
+                if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && !missing &&
+                    (type == 1 || type == 2))
+                    place_asset_in_object_scene(asset, asset_drop_add_collider);
+            }
+            if (missing) ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", asset.source_path.generic_u8string().c_str());
+
+            if (!missing && (type == 1 || type == 2) && ImGui::BeginDragDropSource())
+            {
+                ImGui::SetDragDropPayload("REPLAY_ASSET_GUID", asset.guid.c_str(),
+                    asset.guid.size() + 1);
+                ImGui::TextUnformatted(label.c_str());
+                ImGui::EndDragDropSource();
+            }
+            ImGui::PopID();
+        }
+        ImGui::EndChild();
     }
+
+    ImGui::Checkbox("Model配置時にMesh Colliderを追加", &asset_drop_add_collider);
+    ImGui::SameLine();
+    const auto* selected_asset = selected_asset_guid.empty()
+        ? nullptr : asset_database.FindByGuid(selected_asset_guid);
+    if (selected_asset != nullptr && ImGui::Button("選択AssetをSceneへ配置"))
+        place_asset_in_object_scene(*selected_asset, asset_drop_add_collider);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Colliderは左の設定が有効な場合だけ明示的に追加します");
     ImGui::Separator();
     ImGui::Text("シーン配置記録: %zu", editor_scene_document.Entities().size());
     for (const auto& entity : editor_scene_document.Entities())
@@ -852,6 +952,7 @@ void framework::draw_editor()
             ImGui::DockBuilderDockWindow("プロジェクト", bottom);
             ImGui::DockBuilderDockWindow("コンソール", bottom);
             ImGui::DockBuilderDockWindow("ワークスペース", bottom);
+            ImGui::DockBuilderDockWindow("Validation & Diagnostics", bottom);
             ImGui::DockBuilderDockWindow("Scene View", center);
             ImGui::DockBuilderFinish(dockspace_id);
         }
@@ -864,6 +965,9 @@ void framework::draw_editor()
     if (show_project_panel) draw_project_panel();
     if (show_console_panel) draw_console_panel();
     if (show_workspace_panel) draw_workspace_panel();
+    if (show_validation_panel)
+        object_validation_panel.Draw(object_editor_context, &asset_database,
+            &object_collision_world, object_render_items.Size());
     draw_collision_diagnostics_panel();
     draw_search_results();
     if (active_editor_view == editor_view::scene) handle_viewport_selection();

@@ -79,6 +79,9 @@
     <Filter Include="RePlayEngine\Editor\Migration">
       <UniqueIdentifier>{66140235-63d4-4f1c-8866-f70dd5f35145}</UniqueIdentifier>
     </Filter>
+    <Filter Include="RePlayEngine\Editor\Validation">
+      <UniqueIdentifier>{c34f60c3-43b6-4631-a961-573bc2dd8d44}</UniqueIdentifier>
+    </Filter>
     <Filter Include="RePlayEngine\Scene">
       <UniqueIdentifier>{b5555555-5555-4555-8555-555555555555}</UniqueIdentifier>
     </Filter>
@@ -474,6 +477,9 @@
     <ClCompile Include="Source\app\Editor\framework_editor_camera.cpp">
       <Filter>Source\App\Editor</Filter>
     </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_gizmo.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Physics\LegacyMeshColliderComponent.cpp">
       <Filter>RePlayEngine\Physics</Filter>
     </ClCompile>
@@ -602,6 +608,12 @@
     </ClCompile>
     <ClCompile Include="RePlayEngine\Editor\Migration\LegacyStageConverter.cpp">
       <Filter>RePlayEngine\Editor\Migration</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\Validation\SceneValidator.cpp">
+      <Filter>RePlayEngine\Editor\Validation</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\Validation\ValidationPanel.cpp">
+      <Filter>RePlayEngine\Editor\Validation</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorCameraController.cpp">
       <Filter>RePlayEngine\Editor\Viewport</Filter>
@@ -1072,6 +1084,12 @@
     </ClInclude>
     <ClInclude Include="RePlayEngine\Editor\Migration\LegacyStageConverter.h">
       <Filter>RePlayEngine\Editor\Migration</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\Validation\SceneValidator.h">
+      <Filter>RePlayEngine\Editor\Validation</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\Validation\ValidationPanel.h">
+      <Filter>RePlayEngine\Editor\Validation</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Editor\Viewport\EditorCameraController.h">
       <Filter>RePlayEngine\Editor\Viewport</Filter>

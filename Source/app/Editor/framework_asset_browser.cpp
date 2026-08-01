@@ -2,8 +2,13 @@
 #include "gltf_model.h"
 #include "skinned_mesh.h"
 #include "../../RePlayEngine/Assets/AssetCache.h"
+#include "../../RePlayEngine/Components/Physics/MeshColliderComponent.h"
+#include "../../RePlayEngine/Components/Rendering/MeshRendererComponent.h"
+#include "../../RePlayEngine/Object/GameObject/GameObject.h"
+#include "../../RePlayEngine/Scene/Serialization/PrefabSerializer.h"
 
 #include <commdlg.h>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <regex>
@@ -59,6 +64,99 @@ namespace
         }
         return true;
     }
+}
+
+bool framework::place_asset_in_object_scene(const ReplayEngine::Assets::AssetRecord& asset,
+    bool add_mesh_collider)
+{
+    if (object_scene_play_mode)
+    {
+        object_editor_context.SetStatus("Play中はAssetを配置できません");
+        return false;
+    }
+
+    const std::wstring extension = LowerExtension(asset.source_path);
+    if (extension == L".replayprefab")
+    {
+        object_editor_context.BeginEdit("Prefabを配置");
+        std::string error;
+        ReplayEngine::Scene::Serialization::SceneLoadReport report;
+        const ReplayEngine::Core::ObjectID root =
+            ReplayEngine::Scene::Serialization::PrefabSerializer::Instantiate(
+                object_scene, asset.source_path, error, &report);
+        if (!root.Valid())
+        {
+            object_editor_context.CancelEdit();
+            object_editor_context.SetStatus("Prefab配置失敗: " + error);
+            return false;
+        }
+        object_editor_context.CommitEdit();
+        object_editor_context.Selection().Select(root, false);
+        selected_editor_object = editor_selection::game_object;
+        object_editor_context.SetStatus("Prefabを配置しました: " + asset.display_name);
+        return true;
+    }
+
+    if (asset.kind != ReplayEngine::Assets::AssetKind::Model)
+    {
+        object_editor_context.SetStatus("このAsset TypeはScene Viewへ配置できません");
+        return false;
+    }
+
+    object_editor_context.BeginEdit("Mesh Assetを配置");
+    ReplayEngine::Core::GameObject* object = object_scene.CreateGameObject(
+        asset.display_name.empty() ? asset.source_path.stem().u8string() : asset.display_name);
+    if (object == nullptr)
+    {
+        object_editor_context.CancelEdit();
+        object_editor_context.SetStatus("GameObjectを作成できませんでした");
+        return false;
+    }
+
+    auto* renderer = object->AddComponent<ReplayEngine::Components::MeshRendererComponent>();
+    if (renderer == nullptr)
+    {
+        object_scene.DestroyGameObject(object);
+        object_scene.ProcessPendingOperations();
+        object_editor_context.CancelEdit();
+        object_editor_context.SetStatus("Mesh Rendererを追加できませんでした");
+        return false;
+    }
+    renderer->mesh_asset = asset.guid;
+
+    const DirectX::XMFLOAT3 eye = editor_camera.Position();
+    const DirectX::XMFLOAT3 forward = editor_camera.Forward();
+    DirectX::XMFLOAT3 position{
+        eye.x + forward.x * 5.0f,
+        eye.y + forward.y * 5.0f,
+        eye.z + forward.z * 5.0f
+    };
+    if (transform_gizmo.SnapEnabled())
+    {
+        const float step = transform_gizmo.SnapStep();
+        position.x = std::round(position.x / step) * step;
+        position.y = std::round(position.y / step) * step;
+        position.z = std::round(position.z / step) * step;
+    }
+    object->GetTransform().SetLocalPosition(position);
+
+    if (add_mesh_collider)
+    {
+        auto* collider = object->AddComponent<ReplayEngine::Components::MeshColliderComponent>();
+        if (collider != nullptr)
+        {
+            collider->mesh_source =
+                ReplayEngine::Components::MeshColliderComponent::MeshSource_Renderer;
+            collider->collision_layer = ReplayEngine::Physics::CollisionLayers::Environment;
+            collider->is_trigger = false;
+        }
+    }
+
+    object_editor_context.CommitEdit();
+    object_editor_context.Selection().Select(object->ID(), false);
+    selected_editor_object = editor_selection::game_object;
+    object_editor_context.SetStatus("Assetを配置しました: " + asset.display_name);
+    return true;
 }
 
 bool framework::browse_stage_asset()

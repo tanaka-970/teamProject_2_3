@@ -1,0 +1,283 @@
+#include "framework.h"
+
+#include "../../RePlayEngine/Object/GameObject/GameObject.h"
+
+#include <algorithm>
+#include <cmath>
+
+namespace
+{
+    bool ProjectPoint(const DirectX::XMFLOAT3& world, DirectX::FXMMATRIX view,
+        DirectX::FXMMATRIX projection, float width, float height,
+        const POINT& client_origin, ImVec2& screen)
+    {
+        if (width <= 0.0f || height <= 0.0f) return false;
+        DirectX::XMFLOAT3 projected;
+        DirectX::XMStoreFloat3(&projected, DirectX::XMVector3Project(
+            DirectX::XMLoadFloat3(&world), 0.0f, 0.0f, width, height,
+            0.0f, 1.0f, projection, view, DirectX::XMMatrixIdentity()));
+        if (!std::isfinite(projected.x) || !std::isfinite(projected.y) ||
+            projected.z < 0.0f || projected.z > 1.0f) return false;
+        screen = ImVec2(projected.x + static_cast<float>(client_origin.x),
+            projected.y + static_cast<float>(client_origin.y));
+        return true;
+    }
+
+    float DistanceToSegment(const ImVec2& point, const ImVec2& first,
+        const ImVec2& second) noexcept
+    {
+        const float dx = second.x - first.x;
+        const float dy = second.y - first.y;
+        const float length_squared = dx * dx + dy * dy;
+        if (length_squared <= 0.0001f) return 100000.0f;
+        float amount = ((point.x - first.x) * dx + (point.y - first.y) * dy) /
+            length_squared;
+        amount = (std::max)(0.0f, (std::min)(amount, 1.0f));
+        const float px = point.x - (first.x + dx * amount);
+        const float py = point.y - (first.y + dy * amount);
+        return std::sqrt(px * px + py * py);
+    }
+
+    float SnapDelta(float value, bool enabled, float step) noexcept
+    {
+        if (!enabled || step <= 0.0f) return value;
+        return std::round(value / step) * step;
+    }
+}
+
+void framework::draw_scene_grid_overlay()
+{
+    if (!show_scene_grid || active_editor_view != editor_view::scene ||
+        !show_scene_view || scene_grid_step <= 0.0f) return;
+
+    POINT client_origin{ 0, 0 };
+    ClientToScreen(hwnd, &client_origin);
+    const DirectX::XMMATRIX view = viewport_view_matrix();
+    const DirectX::XMMATRIX projection = viewport_projection_matrix();
+    const DirectX::XMFLOAT3 eye = editor_camera.Position();
+    const float step = (std::max)(scene_grid_step, 0.01f);
+    const float center_x = std::floor(eye.x / step) * step;
+    const float center_z = std::floor(eye.z / step) * step;
+    constexpr int half_lines = 20;
+
+    ImDrawList* draw_list = ImGui::GetForegroundDrawList();
+    draw_list->PushClipRect(ImVec2(scene_view_min_x, scene_view_min_y),
+        ImVec2(scene_view_max_x, scene_view_max_y), true);
+    for (int index = -half_lines; index <= half_lines; ++index)
+    {
+        const float offset = static_cast<float>(index) * step;
+        const DirectX::XMFLOAT3 x_first{ center_x - half_lines * step, 0.0f, center_z + offset };
+        const DirectX::XMFLOAT3 x_second{ center_x + half_lines * step, 0.0f, center_z + offset };
+        const DirectX::XMFLOAT3 z_first{ center_x + offset, 0.0f, center_z - half_lines * step };
+        const DirectX::XMFLOAT3 z_second{ center_x + offset, 0.0f, center_z + half_lines * step };
+        ImVec2 first;
+        ImVec2 second;
+        const ImU32 color = index == 0
+            ? IM_COL32(105, 120, 140, 145) : IM_COL32(72, 82, 96, 90);
+        if (ProjectPoint(x_first, view, projection, static_cast<float>(client_width),
+            static_cast<float>(client_height), client_origin, first) &&
+            ProjectPoint(x_second, view, projection, static_cast<float>(client_width),
+                static_cast<float>(client_height), client_origin, second))
+            draw_list->AddLine(first, second, color, index == 0 ? 1.5f : 1.0f);
+        if (ProjectPoint(z_first, view, projection, static_cast<float>(client_width),
+            static_cast<float>(client_height), client_origin, first) &&
+            ProjectPoint(z_second, view, projection, static_cast<float>(client_width),
+                static_cast<float>(client_height), client_origin, second))
+            draw_list->AddLine(first, second, color, index == 0 ? 1.5f : 1.0f);
+    }
+    draw_list->PopClipRect();
+}
+
+bool framework::draw_object_transform_gizmo()
+{
+    if (active_editor_view != editor_view::scene || !show_scene_view) return false;
+
+    ReplayEngine::Scene::Scene& scene = active_object_scene();
+    ReplayEngine::Core::GameObject* primary =
+        object_editor_context.Selection().ResolvePrimary(scene);
+    if (primary == nullptr) return false;
+
+    POINT client_origin{ 0, 0 };
+    ClientToScreen(hwnd, &client_origin);
+    const DirectX::XMMATRIX view = viewport_view_matrix();
+    const DirectX::XMMATRIX projection = viewport_projection_matrix();
+    const DirectX::XMFLOAT3 center_world = primary->GetTransform().WorldPosition();
+    ImVec2 center_screen;
+    if (!ProjectPoint(center_world, view, projection, static_cast<float>(client_width),
+        static_cast<float>(client_height), client_origin, center_screen)) return object_gizmo_dragging;
+
+    DirectX::XMFLOAT3 axes[3] = {
+        { 1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, 1.0f }
+    };
+    if (gizmo_local_space)
+    {
+        const DirectX::XMMATRIX world = primary->GetTransform().WorldMatrix();
+        for (int axis = 0; axis < 3; ++axis)
+        {
+            DirectX::XMVECTOR transformed = DirectX::XMVector3TransformNormal(
+                DirectX::XMLoadFloat3(&axes[axis]), world);
+            const float length = DirectX::XMVectorGetX(DirectX::XMVector3Length(transformed));
+            if (std::isfinite(length) && length > 0.0001f)
+                DirectX::XMStoreFloat3(&axes[axis], DirectX::XMVectorScale(transformed, 1.0f / length));
+        }
+    }
+
+    const DirectX::XMFLOAT3 eye = viewport_eye_position();
+    const float dx = center_world.x - eye.x;
+    const float dy = center_world.y - eye.y;
+    const float dz = center_world.z - eye.z;
+    const float camera_distance = std::sqrt(dx * dx + dy * dy + dz * dz);
+    const float handle_length = (std::max)(0.5f, camera_distance * 0.10f);
+
+    ImVec2 endpoints[3];
+    bool endpoint_valid[3]{};
+    float pixel_lengths[3]{};
+    for (int axis = 0; axis < 3; ++axis)
+    {
+        const DirectX::XMFLOAT3 endpoint_world{
+            center_world.x + axes[axis].x * handle_length,
+            center_world.y + axes[axis].y * handle_length,
+            center_world.z + axes[axis].z * handle_length
+        };
+        endpoint_valid[axis] = ProjectPoint(endpoint_world, view, projection,
+            static_cast<float>(client_width), static_cast<float>(client_height),
+            client_origin, endpoints[axis]);
+        if (endpoint_valid[axis])
+        {
+            const float sx = endpoints[axis].x - center_screen.x;
+            const float sy = endpoints[axis].y - center_screen.y;
+            pixel_lengths[axis] = std::sqrt(sx * sx + sy * sy);
+        }
+    }
+
+    const ImVec2 mouse = ImGui::GetMousePos();
+    int hovered_axis = -1;
+    float nearest_handle = 9.0f;
+    for (int axis = 0; axis < 3; ++axis)
+    {
+        if (!endpoint_valid[axis]) continue;
+        const float distance = DistanceToSegment(mouse, center_screen, endpoints[axis]);
+        if (distance < nearest_handle)
+        {
+            nearest_handle = distance;
+            hovered_axis = axis;
+        }
+    }
+
+    static const ImU32 colors[3] = {
+        IM_COL32(235, 75, 75, 255), IM_COL32(80, 220, 105, 255), IM_COL32(75, 135, 245, 255)
+    };
+    ImDrawList* draw_list = ImGui::GetForegroundDrawList();
+    draw_list->PushClipRect(ImVec2(scene_view_min_x, scene_view_min_y),
+        ImVec2(scene_view_max_x, scene_view_max_y), true);
+    for (int axis = 0; axis < 3; ++axis)
+    {
+        if (!endpoint_valid[axis]) continue;
+        const bool highlighted = (object_gizmo_dragging && object_gizmo_axis == axis) ||
+            (!object_gizmo_dragging && hovered_axis == axis);
+        draw_list->AddLine(center_screen, endpoints[axis],
+            highlighted ? IM_COL32(255, 220, 80, 255) : colors[axis], highlighted ? 5.0f : 3.0f);
+        draw_list->AddCircleFilled(endpoints[axis], highlighted ? 6.0f : 4.0f,
+            highlighted ? IM_COL32(255, 220, 80, 255) : colors[axis]);
+    }
+    draw_list->AddCircleFilled(center_screen, 4.0f, IM_COL32(235, 235, 240, 255));
+    draw_list->PopClipRect();
+
+    if (!object_gizmo_dragging && scene_view_hovered && hovered_axis >= 0 &&
+        ImGui::IsMouseClicked(ImGuiMouseButton_Left) && object_editor_context.CanEdit())
+    {
+        object_gizmo_dragging = true;
+        object_gizmo_axis = hovered_axis;
+        object_gizmo_start_mouse_x = mouse.x;
+        object_gizmo_start_mouse_y = mouse.y;
+        object_gizmo_world_axis = axes[hovered_axis];
+        const float pixel_length = (std::max)(pixel_lengths[hovered_axis], 1.0f);
+        object_gizmo_screen_axis_x = (endpoints[hovered_axis].x - center_screen.x) / pixel_length;
+        object_gizmo_screen_axis_y = (endpoints[hovered_axis].y - center_screen.y) / pixel_length;
+        object_gizmo_world_per_pixel = handle_length / pixel_length;
+        object_gizmo_states.clear();
+        for (const ReplayEngine::Core::ObjectID id : object_editor_context.Selection().All())
+        {
+            ReplayEngine::Core::GameObject* object = scene.FindGameObjectByID(id);
+            if (object == nullptr || object->PendingDestroy()) continue;
+            ObjectGizmoState state;
+            state.id = id;
+            state.world_position = object->GetTransform().WorldPosition();
+            state.local_rotation = object->GetTransform().LocalRotationEuler();
+            state.local_scale = object->GetTransform().LocalScale();
+            object_gizmo_states.push_back(state);
+        }
+        const char* label = transform_gizmo.Operation() == ReplayEngine::Editor::GizmoOperation::Translate
+            ? "Gizmoで移動" : transform_gizmo.Operation() == ReplayEngine::Editor::GizmoOperation::Rotate
+            ? "Gizmoで回転" : "Gizmoで拡縮";
+        object_editor_context.BeginEdit(label);
+        return true;
+    }
+
+    if (!object_gizmo_dragging) return hovered_axis >= 0 && scene_view_hovered;
+
+    if (ImGui::IsKeyPressed(VK_ESCAPE))
+    {
+        for (const ObjectGizmoState& state : object_gizmo_states)
+        {
+            if (ReplayEngine::Core::GameObject* object = scene.FindGameObjectByID(state.id))
+            {
+                object->GetTransform().SetWorldPosition(state.world_position);
+                object->GetTransform().SetLocalRotationEuler(state.local_rotation);
+                object->GetTransform().SetLocalScale(state.local_scale);
+            }
+        }
+        object_editor_context.CancelEdit();
+        object_gizmo_dragging = false;
+        object_gizmo_axis = -1;
+        object_editor_context.SetStatus("Gizmo操作を取り消しました");
+        return true;
+    }
+
+    const float screen_delta =
+        (mouse.x - object_gizmo_start_mouse_x) * object_gizmo_screen_axis_x +
+        (mouse.y - object_gizmo_start_mouse_y) * object_gizmo_screen_axis_y;
+    float delta = transform_gizmo.Operation() == ReplayEngine::Editor::GizmoOperation::Rotate
+        ? screen_delta * 0.5f : screen_delta * object_gizmo_world_per_pixel;
+    delta = SnapDelta(delta, transform_gizmo.SnapEnabled(), transform_gizmo.SnapStep());
+
+    for (const ObjectGizmoState& state : object_gizmo_states)
+    {
+        ReplayEngine::Core::GameObject* object = scene.FindGameObjectByID(state.id);
+        if (object == nullptr || object->PendingDestroy()) continue;
+        if (transform_gizmo.Operation() == ReplayEngine::Editor::GizmoOperation::Translate)
+        {
+            object->GetTransform().SetWorldPosition({
+                state.world_position.x + object_gizmo_world_axis.x * delta,
+                state.world_position.y + object_gizmo_world_axis.y * delta,
+                state.world_position.z + object_gizmo_world_axis.z * delta });
+        }
+        else if (transform_gizmo.Operation() == ReplayEngine::Editor::GizmoOperation::Rotate)
+        {
+            DirectX::XMFLOAT3 rotation = state.local_rotation;
+            const float radians = DirectX::XMConvertToRadians(delta);
+            if (object_gizmo_axis == 0) rotation.x += radians;
+            if (object_gizmo_axis == 1) rotation.y += radians;
+            if (object_gizmo_axis == 2) rotation.z += radians;
+            object->GetTransform().SetLocalRotationEuler(rotation);
+        }
+        else
+        {
+            DirectX::XMFLOAT3 scale = state.local_scale;
+            float* component = object_gizmo_axis == 0 ? &scale.x :
+                object_gizmo_axis == 1 ? &scale.y : &scale.z;
+            *component += delta;
+            if (std::abs(*component) < 0.001f) *component = *component < 0.0f ? -0.001f : 0.001f;
+            object->GetTransform().SetLocalScale(scale);
+        }
+    }
+
+    if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+    {
+        object_editor_context.CommitEdit();
+        object_gizmo_dragging = false;
+        object_gizmo_axis = -1;
+        object_editor_context.SetStatus("Gizmo操作を確定しました");
+    }
+    return true;
+}

@@ -183,6 +183,10 @@ void framework::handle_viewport_selection()
     // カメラ操作とギズモ操作・矩形選択が同時に走らないようにする。
     if (editor_camera_consumed_input) return;
 
+    draw_scene_grid_overlay();
+    // GizmoハンドルがHover/Drag中ならPickingへ入力を渡さない。
+    if (draw_object_transform_gizmo()) return;
+
     POINT client_origin{ 0, 0 };
     ClientToScreen(hwnd, &client_origin);
     using namespace DirectX;
@@ -243,10 +247,47 @@ void framework::handle_viewport_selection()
     if (!ImGui::IsMouseReleased(ImGuiMouseButton_Left)) return;
 
     viewport_drag_selecting = false;
-    const bool additive = ImGui::GetIO().KeyShift;
+    const bool additive = ImGui::GetIO().KeyShift || ImGui::GetIO().KeyCtrl;
     // 4ピクセルを超えた操作をクリックではなく矩形選択として扱う。
     if (drag_distance_squared > 16.0f)
     {
+        ReplayEngine::Scene::Scene& object_scene_view = active_object_scene();
+        if (!additive) object_editor_context.Selection().Clear();
+        bool selected_game_object = false;
+        const float go_minimum_x = (std::min)(drag_start.x, mouse.x);
+        const float go_maximum_x = (std::max)(drag_start.x, mouse.x);
+        const float go_minimum_y = (std::min)(drag_start.y, mouse.y);
+        const float go_maximum_y = (std::max)(drag_start.y, mouse.y);
+        for (std::size_t index = 0; index < object_scene_view.GameObjectCount(); ++index)
+        {
+            const ReplayEngine::Core::GameObject* object = object_scene_view.GameObjectAt(index);
+            if (object == nullptr || object->PendingDestroy() || !object->ActiveInHierarchy()) continue;
+            const DirectX::XMFLOAT3 world = object->GetTransform().WorldPosition();
+            const XMVECTOR projected = XMVector3Project(XMLoadFloat3(&world),
+                0.0f, 0.0f, static_cast<float>(client_width), static_cast<float>(client_height),
+                0.0f, 1.0f, projection, view, XMMatrixIdentity());
+            XMFLOAT3 screen{};
+            XMStoreFloat3(&screen, projected);
+            const float screen_x = screen.x + static_cast<float>(client_origin.x);
+            const float screen_y = screen.y + static_cast<float>(client_origin.y);
+            if (screen.z >= 0.0f && screen.z <= 1.0f &&
+                screen_x >= go_minimum_x && screen_x <= go_maximum_x &&
+                screen_y >= go_minimum_y && screen_y <= go_maximum_y)
+            {
+                object_editor_context.Selection().Select(object->ID(), true);
+                selected_game_object = true;
+            }
+        }
+        if (selected_game_object)
+        {
+            selected_scene_entity_ids.clear();
+            selected_scene_entity_id = 0;
+            selected_editor_object = editor_selection::game_object;
+            object_editor_context.SetStatus(std::to_string(
+                object_editor_context.Selection().Count()) + "個を選択しました");
+            return;
+        }
+
         if (!additive) selected_scene_entity_ids.clear();
         const float minimum_x = (std::min)(drag_start.x, mouse.x);
         const float maximum_x = (std::max)(drag_start.x, mouse.x);
@@ -290,12 +331,29 @@ void framework::handle_viewport_selection()
     XMFLOAT3 direction{};
     XMStoreFloat3(&origin, near_point);
     XMStoreFloat3(&direction, XMVector3Normalize(far_point - near_point));
+
+    const ReplayEngine::Core::ObjectID picked_object =
+        ReplayEngine::Editor::ViewportPicker::Pick(
+            active_object_scene(), origin, direction);
+    if (picked_object.Valid())
+    {
+        object_editor_context.Selection().Select(picked_object, additive);
+        selected_scene_entity_ids.clear();
+        selected_scene_entity_id = 0;
+        selected_editor_object = editor_selection::game_object;
+        return;
+    }
+
     const auto picked = ReplayEngine::Editor::ViewportPicker::Pick(
         editor_scene_document, origin, direction);
     if (picked != 0)
+    {
+        if (!additive) object_editor_context.Selection().Clear();
         select_scene_entity(picked, additive);
+    }
     else if (!additive)
     {
+        object_editor_context.Selection().Clear();
         selected_scene_entity_ids.clear();
         selected_scene_entity_id = 0;
         selected_editor_object = editor_selection::world;

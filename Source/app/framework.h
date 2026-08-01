@@ -76,6 +76,7 @@ extern ImWchar glyphRangesJapanese[];
 #include "../../RePlayEngine/Scene/Services/PlayerControlSystem.h"
 #include "../../RePlayEngine/Scene/Services/SceneCollisionWorld.h"
 #include "../../RePlayEngine/Editor/Debug/ColliderDebugDraw.h"
+#include "../../RePlayEngine/Editor/Validation/ValidationPanel.h"
 #include "../../RePlayEngine/Editor/Viewport/EditorViewportCamera.h"
 #include "../../RePlayEngine/Editor/Viewport/EditorCameraController.h"
 #include "../../RePlayEngine/Editor/Viewport/EditorCameraStateStore.h"
@@ -307,6 +308,7 @@ public:
     ReplayEngine::Editor::EditorContext     object_editor_context;
     ReplayEngine::Editor::HierarchyPanel    object_hierarchy_panel;
     ReplayEngine::Editor::InspectorPanel    object_inspector_panel;
+    ReplayEngine::Editor::ValidationPanel   object_validation_panel;
     ReplayEngine::Rendering::RenderItemList object_render_items;
 
     // Asset GUID -> メッシュ実体。
@@ -656,6 +658,14 @@ public:
             }
             if (wparam == VK_ESCAPE)
             {
+                if (editor_mode)
+                {
+                    // EditorではEscを操作解除へ使う。終了はFile > ExitまたはWM_CLOSE。
+                    if (object_gizmo_dragging || editor_camera_controller.MouseCaptured() ||
+                        ImGui::IsPopupOpen(static_cast<const char*>(nullptr),
+                            ImGuiPopupFlags_AnyPopup)) return 0;
+                    return 0;
+                }
                 log_shutdown_reason("ESCキー");
                 PostMessage(hwnd, WM_CLOSE, 0, 0);
             }
@@ -718,10 +728,14 @@ private:
     // frameworkの表示状態は触らないため、並列ロード中に安全に使える。
     bool prewarm_model_asset(const std::filesystem::path& path);
     void draw_stage_placement_controls();
+    bool place_asset_in_object_scene(const ReplayEngine::Assets::AssetRecord& asset,
+        bool add_mesh_collider);
     void draw_scene_document_toolbar();
     void draw_scene_entity_inspector();
     void draw_transform_gizmo_controls();
     void handle_viewport_selection();
+    void draw_scene_grid_overlay();
+    bool draw_object_transform_gizmo();
     void select_scene_entity(ReplayEngine::Scene::EntityId id, bool additive);
     void copy_selected_entities();
     void paste_copied_entities();
@@ -922,6 +936,7 @@ private:
     bool show_project_panel{ true };
     bool show_console_panel{ true };
     bool show_workspace_panel{ true };
+    bool show_validation_panel{ true };
     bool show_scene_view{ true };
     bool scene_view_hovered{ false };
     bool scene_view_focused{ false };
@@ -930,6 +945,29 @@ private:
     float scene_view_max_x{ 0.0f };
     float scene_view_max_y{ 0.0f };
     int scene_view_draw_mode{ 0 };
+    char asset_search_text[192]{};
+    int asset_type_filter{ 0 };
+    std::string selected_asset_guid;
+    bool asset_drop_add_collider{ false };
+    bool gizmo_local_space{ false };
+    bool show_scene_grid{ true };
+    float scene_grid_step{ 1.0f };
+    struct ObjectGizmoState
+    {
+        ReplayEngine::Core::ObjectID id;
+        DirectX::XMFLOAT3 world_position{};
+        DirectX::XMFLOAT3 local_rotation{};
+        DirectX::XMFLOAT3 local_scale{ 1.0f, 1.0f, 1.0f };
+    };
+    std::vector<ObjectGizmoState> object_gizmo_states;
+    bool object_gizmo_dragging{ false };
+    int object_gizmo_axis{ -1 };
+    float object_gizmo_start_mouse_x{ 0.0f };
+    float object_gizmo_start_mouse_y{ 0.0f };
+    float object_gizmo_screen_axis_x{ 1.0f };
+    float object_gizmo_screen_axis_y{ 0.0f };
+    float object_gizmo_world_per_pixel{ 0.01f };
+    DirectX::XMFLOAT3 object_gizmo_world_axis{ 1.0f, 0.0f, 0.0f };
     // このフレームでImGui::NewFrame()を通したか。
     // ロード完了フレームのようにupdate()が早期returnした直後にeditor_modeが
     // 立つ場合があり、NewFrame無しでRender()するとImGuiがassertするため、

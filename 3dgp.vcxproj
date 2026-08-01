@@ -267,6 +267,7 @@
     <ClCompile Include="Source\app\Editor\framework_inspector.cpp" />
     <ClCompile Include="Source\app\Editor\framework_project_settings.cpp" />
     <ClCompile Include="Source\app\Editor\framework_editor_camera.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_gizmo.cpp" />
     <ClCompile Include="Source\app\Editor\framework_scene_document.cpp" />
     <ClCompile Include="Source\app\Editor\framework_shader_stack.cpp" />
     <ClCompile Include="Source\app\Editor\framework_character_material.cpp" />
@@ -330,6 +331,8 @@
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorViewportCamera.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Style\EditorStyle.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Migration\LegacyStageConverter.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Validation\SceneValidator.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Validation\ValidationPanel.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorCameraController.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorCameraStateStore.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorSelectionBounds.cpp" />
@@ -487,6 +490,8 @@
     <ClInclude Include="RePlayEngine\Editor\Viewport\EditorViewportCamera.h" />
     <ClInclude Include="RePlayEngine\Editor\Style\EditorStyle.h" />
     <ClInclude Include="RePlayEngine\Editor\Migration\LegacyStageConverter.h" />
+    <ClInclude Include="RePlayEngine\Editor\Validation\SceneValidator.h" />
+    <ClInclude Include="RePlayEngine\Editor\Validation\ValidationPanel.h" />
     <ClInclude Include="RePlayEngine\Editor\Viewport\EditorCameraController.h" />
     <ClInclude Include="RePlayEngine\Editor\Viewport\EditorCameraStateStore.h" />
     <ClInclude Include="RePlayEngine\Editor\Viewport\EditorSelectionBounds.h" />
