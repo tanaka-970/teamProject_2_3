@@ -63,4 +63,5 @@ private:
     Camera               camera;
     FreeCameraController controller;
     Stage                stage;
+    bool                 legacy_stage_active = false;
 };

@@ -185,9 +185,7 @@ bool framework::initialize()
     ReplayEngine::Rendering::Stats().Initialize(device.Get());
     lights.initialize(device.Get());
     uiManager.Initalize(device.Get());
-    lights.data.light_counts.x = 1;
-    lights.data.point_lights[0].position = { 3.0f, 4.0f, -24.0f, 18.0f };
-    lights.data.point_lights[0].color = { 0.55f, 0.75f, 1.0f, 2.0f };
+    lights.data.light_counts = { 0, 0, 0, 0 };
 
     // 法線テクスチャを持たない材質で使うダミー法線を作る。kwjkshhakjwhhwhhsbkkwhiiwnzkkhjsowjjw
 

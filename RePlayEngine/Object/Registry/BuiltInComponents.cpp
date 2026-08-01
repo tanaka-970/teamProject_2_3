@@ -16,6 +16,7 @@
 #include "../../Components/Physics/MeshColliderComponent.h"
 #include "../../Components/Physics/SphereColliderComponent.h"
 #include "../../Components/Rendering/AnimatorComponent.h"
+#include "../../Components/Rendering/LightComponents.h"
 #include "../../Components/Rendering/MeshRendererComponent.h"
 #include "../../Components/Rendering/SkinnedMeshRendererComponent.h"
 
@@ -31,6 +32,9 @@ namespace ReplayEngine::Core
         using Components::HealthComponent;
         using Components::MeshColliderComponent;
         using Components::MeshRendererComponent;
+        using Components::DirectionalLightComponent;
+        using Components::PointLightComponent;
+        using Components::SpotLightComponent;
         using Components::PlayerControllerComponent;
         using Components::PlayerInputComponent;
         using Components::RotatorComponent;
@@ -527,6 +531,51 @@ namespace ReplayEngine::Core
                     .Display("優先度").Range(-100.0, 100.0).Step(1.0));
         }
 
+        void RegisterLights()
+        {
+            ComponentRegistry::Register<DirectionalLightComponent>(
+                ComponentTypeInfo::Describe("Directional Light", "Lighting")
+                    .WithTooltip("GameObjectの回転方向から照らす平行光源。Scene内の先頭1つを使用。"));
+            PropertyRegistry::Register<DirectionalLightComponent>(
+                MakeProperty("color", &DirectionalLightComponent::color).Display("色").AsColor());
+            PropertyRegistry::Register<DirectionalLightComponent>(
+                MakeProperty("intensity", &DirectionalLightComponent::intensity)
+                    .Display("強さ").Range(0.0, 100.0).Step(0.05));
+            PropertyRegistry::Register<DirectionalLightComponent>(
+                MakeProperty("cast_shadows", &DirectionalLightComponent::cast_shadows)
+                    .Display("影を落とす"));
+
+            ComponentRegistry::Register<PointLightComponent>(
+                ComponentTypeInfo::Describe("Point Light", "Lighting")
+                    .WithTooltip("Transform位置を中心に全方向へ照らす。"));
+            PropertyRegistry::Register<PointLightComponent>(
+                MakeProperty("color", &PointLightComponent::color).Display("色").AsColor());
+            PropertyRegistry::Register<PointLightComponent>(
+                MakeProperty("intensity", &PointLightComponent::intensity)
+                    .Display("強さ").Range(0.0, 100.0).Step(0.05));
+            PropertyRegistry::Register<PointLightComponent>(
+                MakeProperty("range", &PointLightComponent::range)
+                    .Display("範囲").Range(0.01, 10000.0).Step(0.1));
+
+            ComponentRegistry::Register<SpotLightComponent>(
+                ComponentTypeInfo::Describe("Spot Light", "Lighting")
+                    .WithTooltip("Transform位置と回転で円錐状に照らす。"));
+            PropertyRegistry::Register<SpotLightComponent>(
+                MakeProperty("color", &SpotLightComponent::color).Display("色").AsColor());
+            PropertyRegistry::Register<SpotLightComponent>(
+                MakeProperty("intensity", &SpotLightComponent::intensity)
+                    .Display("強さ").Range(0.0, 100.0).Step(0.05));
+            PropertyRegistry::Register<SpotLightComponent>(
+                MakeProperty("range", &SpotLightComponent::range)
+                    .Display("範囲").Range(0.01, 10000.0).Step(0.1));
+            PropertyRegistry::Register<SpotLightComponent>(
+                MakeProperty("inner_angle_degrees", &SpotLightComponent::inner_angle_degrees)
+                    .Display("内側角度").Range(0.1, 179.0).Step(0.5));
+            PropertyRegistry::Register<SpotLightComponent>(
+                MakeProperty("outer_angle_degrees", &SpotLightComponent::outer_angle_degrees)
+                    .Display("外側角度").Range(0.1, 179.0).Step(0.5));
+        }
+
         void RegisterStageGameplay()
         {
             ComponentRegistry::Register<SpawnPointComponent>(
@@ -642,6 +691,7 @@ namespace ReplayEngine::Core
         // 複製・Undo/Redo・Prefab のすべてへ反映される。
         RegisterTransform();
         RegisterMeshRenderer();
+        RegisterLights();
         RegisterSkinnedMeshRenderer();
         RegisterAnimator();
         RegisterSphereCollider();

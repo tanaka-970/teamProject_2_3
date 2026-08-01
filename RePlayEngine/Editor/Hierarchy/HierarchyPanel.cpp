@@ -1,12 +1,16 @@
 #include "HierarchyPanel.h"
 
 #include "../Core/EditorContext.h"
+#include "../../Assets/AssetDatabase.h"
 #include "../../Object/GameObject/GameObject.h"
+#include "../../Object/Registry/ComponentRegistry.h"
 #include "../../Scene/Runtime/Scene.h"
 #include "../../Scene/Serialization/SceneData.h"
 
 #include "imgui/imgui.h"
 
+#include <algorithm>
+#include <cctype>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -27,6 +31,25 @@ namespace ReplayEngine::Editor
                 ? static_cast<int>(text.size()) : size - 1;
             std::memcpy(buffer, text.data(), static_cast<std::size_t>(length));
             buffer[length] = '\0';
+        }
+
+        std::string LowerAscii(std::string text)
+        {
+            std::transform(text.begin(), text.end(), text.begin(), [](unsigned char value)
+            {
+                return static_cast<char>(std::tolower(value));
+            });
+            return text;
+        }
+
+        void CollectPreorder(GameObject& object, std::vector<GameObject*>& out, int depth = 0)
+        {
+            if (depth > maximum_depth || object.PendingDestroy()) return;
+            out.push_back(&object);
+            for (GameObject* child : object.Children())
+            {
+                if (child != nullptr) CollectPreorder(*child, out, depth + 1);
+            }
         }
     }
 
@@ -54,6 +77,11 @@ namespace ReplayEngine::Editor
             ImGui::SameLine();
             ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f), "[実行中]");
         }
+        ImGui::Separator();
+
+        ImGui::SetNextItemWidth(-1.0f);
+        ImGui::InputTextWithHint("##HierarchySearch", "Search GameObjects / Components...",
+            search_buffer_, search_buffer_size);
         ImGui::Separator();
 
         if (editable)
@@ -138,6 +166,7 @@ namespace ReplayEngine::Editor
     void HierarchyPanel::DrawNode(EditorContext& context, GameObject& object, int depth)
     {
         if (depth > maximum_depth) return;
+        if (!NodeMatchesFilter(object)) return;
 
         ImGui::PushID(static_cast<int>(object.ID().Value()));
 
@@ -181,20 +210,76 @@ namespace ReplayEngine::Editor
 
         ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow |
             ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_DefaultOpen;
+        if (search_buffer_[0] != '\0') flags |= ImGuiTreeNodeFlags_DefaultOpen;
         if (selected) flags |= ImGuiTreeNodeFlags_Selected;
         if (!has_children) flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
 
         // 無効な GameObject は薄く表示する。
         const bool dimmed = !object.ActiveInHierarchy();
+        const Assets::AssetDatabase* database = context.GetAssetDatabase();
+        const bool missing_prefab = object.IsPrefabInstance() &&
+            (database == nullptr || database->FindByGuid(object.PrefabSourceGUID()) == nullptr);
+        const bool prefab = object.IsPrefabInstance();
         if (dimmed) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.55f, 0.55f, 1.0f));
+        else if (missing_prefab) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.30f, 0.25f, 1.0f));
+        else if (prefab) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.35f, 0.65f, 1.0f, 1.0f));
 
-        const bool opened = ImGui::TreeNodeEx("##Node", flags, "%s", object.Name().c_str());
+        std::string node_label;
+        if (object.IsPrefabRoot()) node_label += "[Prefab] ";
+        else if (object.IsPrefabInstance()) node_label += "[P] ";
+        if (context.GetScene() != nullptr &&
+            context.GetScene()->Services().ControlledObject() == object.ID()) node_label += "[Controlled] ";
+        node_label += object.Name();
+        if (missing_prefab) node_label += " [Missing]";
 
-        if (dimmed) ImGui::PopStyleColor();
+        const bool opened = ImGui::TreeNodeEx("##Node", flags, "%s", node_label.c_str());
+
+        if (dimmed || missing_prefab || prefab) ImGui::PopStyleColor();
 
         if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
         {
-            context.Selection().Select(object.ID(), ImGui::GetIO().KeyShift);
+            const ImGuiIO& io = ImGui::GetIO();
+            if (io.KeyCtrl)
+            {
+                context.Selection().Toggle(object.ID());
+                selection_anchor_ = object.ID();
+            }
+            else if (io.KeyShift && selection_anchor_.Valid())
+            {
+                Scene::Scene* scene = context.GetScene();
+                std::vector<GameObject*> ordered;
+                if (scene != nullptr)
+                {
+                    for (GameObject* root : scene->RootGameObjects())
+                    {
+                        if (root != nullptr) CollectPreorder(*root, ordered);
+                    }
+                }
+
+                auto anchor = std::find_if(ordered.begin(), ordered.end(), [this](const GameObject* item)
+                {
+                    return item != nullptr && item->ID() == selection_anchor_;
+                });
+                auto current = std::find(ordered.begin(), ordered.end(), &object);
+                if (anchor != ordered.end() && current != ordered.end())
+                {
+                    if (anchor > current) std::swap(anchor, current);
+                    context.Selection().Clear();
+                    for (auto it = anchor; it <= current; ++it)
+                    {
+                        if (*it != nullptr) context.Selection().Select((*it)->ID(), true);
+                    }
+                }
+                else
+                {
+                    context.Selection().Select(object.ID(), true);
+                }
+            }
+            else
+            {
+                context.Selection().Select(object.ID(), false);
+                selection_anchor_ = object.ID();
+            }
         }
 
         HandleDragAndDrop(context, object);
@@ -223,6 +308,29 @@ namespace ReplayEngine::Editor
         }
 
         ImGui::PopID();
+    }
+
+    bool HierarchyPanel::NodeMatchesFilter(const GameObject& object) const
+    {
+        if (search_buffer_[0] == '\0') return true;
+
+        const std::string needle = LowerAscii(search_buffer_);
+        if (LowerAscii(object.Name()).find(needle) != std::string::npos) return true;
+
+        for (std::size_t index = 0; index < object.ComponentCount(); ++index)
+        {
+            const Core::Component* component = object.ComponentAt(index);
+            if (component == nullptr || component->PendingDestroy()) continue;
+            const Core::ComponentTypeInfo* info = Core::ComponentRegistry::Find(component->TypeID());
+            const std::string label = info != nullptr ? info->DisplayName() : component->TypeName();
+            if (LowerAscii(label).find(needle) != std::string::npos) return true;
+        }
+
+        for (const GameObject* child : object.Children())
+        {
+            if (child != nullptr && !child->PendingDestroy() && NodeMatchesFilter(*child)) return true;
+        }
+        return false;
     }
 
     void HierarchyPanel::HandleDragAndDrop(EditorContext& context, GameObject& object)

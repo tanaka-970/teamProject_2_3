@@ -7,6 +7,7 @@
 #include "../../Components/Physics/ColliderComponent.h"
 #include "../../Components/Physics/MeshColliderComponent.h"
 #include "../../Components/Rendering/MeshRendererComponent.h"
+#include "../../Components/Rendering/LightComponents.h"
 #include "../../Components/Rendering/SkinnedMeshRendererComponent.h"
 #include "../../Object/GameObject/GameObject.h"
 #include "../../Physics/CollisionLayers.h"
@@ -65,6 +66,9 @@ namespace ReplayEngine::Editor
         std::vector<ValidationIssue> issues;
         std::unordered_set<Core::ObjectID::ValueType> ids;
         int collider_count = 0;
+        int directional_light_count = 0;
+        int point_light_count = 0;
+        int spot_light_count = 0;
 
         const Core::ObjectID controlled = scene.Services().ControlledObject();
         if (!controlled.Valid())
@@ -119,6 +123,12 @@ namespace ReplayEngine::Editor
                 const Core::Component* component = object->ComponentAt(component_index);
                 if (component == nullptr || component->PendingDestroy()) continue;
                 if (IsTriggerGameplay(component)) gameplay_needs_trigger = true;
+                if (dynamic_cast<const Components::DirectionalLightComponent*>(component))
+                    ++directional_light_count;
+                if (dynamic_cast<const Components::PointLightComponent*>(component))
+                    ++point_light_count;
+                if (dynamic_cast<const Components::SpotLightComponent*>(component))
+                    ++spot_light_count;
 
                 if (const auto* collider = dynamic_cast<const Components::ColliderComponent*>(component))
                 {
@@ -194,6 +204,14 @@ namespace ReplayEngine::Editor
                     object->Name() + ": Gameplay ComponentにTrigger Colliderがありません。",
                     "Box/Sphere/Capsule Colliderを追加しTriggerを有効にしてください。", object->ID());
             }
+
+            if (object->IsPrefabInstance() && assets != nullptr &&
+                assets->FindByGuid(object->PrefabSourceGUID()) == nullptr)
+            {
+                Add(issues, ValidationSeverity::Error, "PREFAB_SOURCE_MISSING",
+                    object->Name() + ": Prefab Sourceが見つかりません。",
+                    "Assetを再登録するかPrefabをUnpackしてください。", object->ID());
+            }
         }
 
         if (collider_count == 0)
@@ -202,13 +220,27 @@ namespace ReplayEngine::Editor
                 "Scene Colliderが0件です。", "床・壁などへColliderを追加してください。");
         }
 
+        if (directional_light_count > 1)
+        {
+            Add(issues, ValidationSeverity::Warning, "LIGHT_DIRECTIONAL_MULTIPLE",
+                "Directional Lightが複数あります。先頭の有効な1つだけを使用します。",
+                "不要なDirectional Lightを無効化または削除してください。");
+        }
+        if (point_light_count > 8 || spot_light_count > 4)
+        {
+            Add(issues, ValidationSeverity::Warning, "LIGHT_LIMIT_EXCEEDED",
+                "GPUへ送れるPoint/Spot Light数を超えています。",
+                "Pointは8、Spotは4以下にしてください。");
+        }
+
         if (scene.Services().CollisionBackendMode() != 2)
         {
             Add(issues, ValidationSeverity::Warning, "LEGACY_COLLISION_ACTIVE",
                 "Collision BackendにLegacy互換経路が残っています。",
                 "Legacy Stageを変換後、Scene Colliders Onlyへ切り替えてください。");
         }
-        if (!scene.Services().LegacyStageMigration().IsMigrated(
+        if (scene.Services().CollisionBackendMode() != 2 &&
+            !scene.Services().LegacyStageMigration().IsMigrated(
             Scene::LegacyStageMigrationState::stage_source_id))
         {
             Add(issues, ValidationSeverity::Warning, "LEGACY_STAGE_UNMIGRATED",

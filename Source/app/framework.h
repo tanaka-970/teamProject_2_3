@@ -326,6 +326,11 @@ public:
     std::filesystem::path object_scene_path{ "resources/Scenes/TrainingStage.replayscene" };
     bool             object_scene_play_mode{ false };
     bool             object_scene_paused{ false };
+    float            object_autosave_elapsed{ 0.0f };
+    std::filesystem::path object_recovery_path;
+    bool             object_recovery_available{ false };
+    bool             object_recovery_prompt_opened{ false };
+    std::string      object_autosave_status;
 
     // 操作対象を型ではなく ObjectID で持つ。
     // 人型からメカ・ドローンへ変えても GameObject のクラス型は変わらない。
@@ -765,6 +770,9 @@ private:
     void update_object_scene(float elapsed_time);
     bool save_object_scene(bool choose_path);
     bool load_object_scene(bool choose_path);
+    bool autosave_object_scene();
+    void check_object_scene_recovery();
+    void draw_object_scene_recovery_prompt();
     void enter_object_play_mode();
     void exit_object_play_mode();
     ReplayEngine::Scene::Scene& active_object_scene() noexcept;
@@ -780,6 +788,7 @@ private:
     void update_object_fixed_step(float elapsed_time);
     void update_object_camera_follow(float elapsed_time);
     void refresh_object_scene_services();
+    void sync_object_lights();
 
     // --- 新規 Scene 作成 ---------------------------------------------------
     //

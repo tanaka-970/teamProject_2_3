@@ -47,6 +47,9 @@ namespace ReplayEngine::Scene::Serialization
             data.position = transform.LocalPosition();
             data.rotation = transform.LocalRotationEuler();
             data.scale = transform.LocalScale();
+            data.prefab_source_guid = object->PrefabSourceGUID();
+            data.prefab_local_id = object->PrefabLocalID();
+            data.prefab_instance_root = object->PrefabInstanceRoot();
 
             for (std::size_t slot = 0; slot < object->ComponentCount(); ++slot)
             {
@@ -76,7 +79,8 @@ namespace ReplayEngine::Scene::Serialization
         // GameObject 1 体ぶんの Component を SceneData から作り直す。
         // ApplySceneData と InstantiateSceneData で共通に使う。
         void BuildComponents(const GameObjectData& source, GameObject& target,
-            SceneLoadReport& report)
+            SceneLoadReport& report,
+            const std::unordered_map<ObjectID, GameObject*>* object_remap = nullptr)
         {
             for (const ComponentData& component_data : source.components)
             {
@@ -103,8 +107,24 @@ namespace ReplayEngine::Scene::Serialization
 
                 component->SetEnabled(component_data.enabled);
 
+                Reflection::PropertyBag remapped_properties = component_data.properties;
+                if (object_remap != nullptr)
+                {
+                    for (const Reflection::PropertyBag::Entry& entry : component_data.properties.Entries())
+                    {
+                        if (entry.value.Type() != Reflection::PropertyType::ObjectReference) continue;
+                        const ObjectID saved_reference = entry.value.AsObjectReference();
+                        ObjectID actual_reference = ObjectID::Invalid();
+                        const auto found_reference = object_remap->find(saved_reference);
+                        if (found_reference != object_remap->end() && found_reference->second != nullptr)
+                            actual_reference = found_reference->second->ID();
+                        remapped_properties.Set(entry.name,
+                            Reflection::PropertyValue::MakeObjectReference(actual_reference));
+                    }
+                }
+
                 std::vector<std::string> unknown;
-                PropertyRegistry::Apply(*component, component_data.properties, &unknown);
+                PropertyRegistry::Apply(*component, remapped_properties, &unknown);
                 for (const std::string& name : unknown)
                 {
                     ++report.unknown_properties;
@@ -160,6 +180,28 @@ namespace ReplayEngine::Scene::Serialization
             saved_to_object.emplace(object_data.id, created);
         }
 
+        // v10 Prefab metadata. Scene ObjectID may have been repaired, so the
+        // instance-root reference must pass through the same remap table.
+        for (const GameObjectData& object_data : data.objects)
+        {
+            const auto object_found = saved_to_object.find(object_data.id);
+            if (object_found == saved_to_object.end()) continue;
+            if (object_data.prefab_source_guid.empty())
+            {
+                object_found->second->ClearPrefabInstanceInfo();
+                continue;
+            }
+            const auto root_found = saved_to_object.find(object_data.prefab_instance_root);
+            if (root_found == saved_to_object.end())
+            {
+                object_found->second->ClearPrefabInstanceInfo();
+                report.warnings.push_back("Prefab instance rootが見つからないためUnpack扱いにしました: " + object_data.name);
+                continue;
+            }
+            object_found->second->SetPrefabInstanceInfo(object_data.prefab_source_guid,
+                object_data.prefab_local_id, root_found->second->ID());
+        }
+
         // 5) 親子関係を復元する。
         //    ワールド姿勢の維持はしない。保存されているのはローカル値であり、
         //    そのまま親へぶら下げるのが元の見た目と一致する。
@@ -196,7 +238,7 @@ namespace ReplayEngine::Scene::Serialization
         {
             const auto found = saved_to_object.find(object_data.id);
             if (found == saved_to_object.end()) continue;
-            BuildComponents(object_data, *found->second, report);
+            BuildComponents(object_data, *found->second, report, &saved_to_object);
         }
 
         // Scene 単位の状態を復元する。
@@ -269,7 +311,7 @@ namespace ReplayEngine::Scene::Serialization
     }
 
     GameObject* InstantiateSceneData(const SceneData& data, Scene& scene,
-        SceneLoadReport& report)
+        SceneLoadReport& report, const std::string& prefab_source_guid)
     {
         report.Clear();
         if (data.objects.empty()) return nullptr;
@@ -323,11 +365,127 @@ namespace ReplayEngine::Scene::Serialization
         {
             const auto found = saved_to_object.find(object_data.id);
             if (found == saved_to_object.end()) continue;
-            BuildComponents(object_data, *found->second, report);
+            BuildComponents(object_data, *found->second, report, &saved_to_object);
+        }
+
+        if (root != nullptr && !prefab_source_guid.empty())
+        {
+            for (const GameObjectData& object_data : data.objects)
+            {
+                const auto found = saved_to_object.find(object_data.id);
+                if (found == saved_to_object.end()) continue;
+                found->second->SetPrefabInstanceInfo(prefab_source_guid,
+                    object_data.id.Value(), root->ID());
+            }
         }
 
         scene.ProcessPendingOperations();
         return root;
+    }
+
+    bool ApplyPrefabInstanceData(const SceneData& data, Scene& scene,
+        Core::ObjectID instance_root, const std::string& prefab_source_guid,
+        SceneLoadReport& report)
+    {
+        report.Clear();
+        GameObject* root = scene.FindGameObjectByID(instance_root);
+        if (root == nullptr || root->PendingDestroy() || data.objects.empty() ||
+            prefab_source_guid.empty()) return false;
+
+        std::vector<GameObject*> current_subtree;
+        std::vector<GameObject*> stack{ root };
+        while (!stack.empty())
+        {
+            GameObject* current = stack.back();
+            stack.pop_back();
+            if (current == nullptr || current->PendingDestroy()) continue;
+            current_subtree.push_back(current);
+            for (GameObject* child : current->Children()) stack.push_back(child);
+        }
+
+        std::unordered_map<std::uint64_t, GameObject*> existing_by_local;
+        for (GameObject* current : current_subtree)
+        {
+            if (current->PrefabSourceGUID() == prefab_source_guid &&
+                current->PrefabInstanceRoot() == instance_root && current->PrefabLocalID() != 0)
+                existing_by_local.emplace(current->PrefabLocalID(), current);
+        }
+
+        const GameObjectData* asset_root = nullptr;
+        for (const GameObjectData& object_data : data.objects)
+        {
+            if (!object_data.parent_id.Valid()) { asset_root = &object_data; break; }
+        }
+        if (asset_root == nullptr) return false;
+
+        std::unordered_map<ObjectID, GameObject*> local_to_object;
+        local_to_object.reserve(data.objects.size());
+        for (const GameObjectData& object_data : data.objects)
+        {
+            GameObject* target = nullptr;
+            if (object_data.id == asset_root->id)
+            {
+                target = root;
+            }
+            else
+            {
+                const auto existing = existing_by_local.find(object_data.id.Value());
+                if (existing != existing_by_local.end()) target = existing->second;
+            }
+            if (target == nullptr) target = scene.CreateGameObject(object_data.name);
+            if (target == nullptr) continue;
+
+            target->SetName(object_data.name);
+            ApplyObjectBasics(object_data, *target);
+            target->SetPrefabInstanceInfo(prefab_source_guid, object_data.id.Value(), instance_root);
+            local_to_object.emplace(object_data.id, target);
+        }
+
+        // Move matching children to their asset parents before deleting override-only
+        // parents, otherwise recursive destruction could remove a valid matching child.
+        for (const GameObjectData& object_data : data.objects)
+        {
+            const auto child = local_to_object.find(object_data.id);
+            if (child == local_to_object.end()) continue;
+            if (!object_data.parent_id.Valid()) continue; // root keeps its external parent
+            const auto parent = local_to_object.find(object_data.parent_id);
+            if (parent != local_to_object.end()) child->second->SetParent(parent->second, false);
+        }
+
+        std::unordered_set<GameObject*> target_objects;
+        for (const auto& entry : local_to_object) target_objects.insert(entry.second);
+        for (GameObject* current : current_subtree)
+        {
+            if (target_objects.find(current) == target_objects.end()) current->Destroy();
+        }
+
+        // Replace every serializable, non-built-in Component with the asset version.
+        for (const GameObjectData& object_data : data.objects)
+        {
+            const auto found = local_to_object.find(object_data.id);
+            if (found == local_to_object.end()) continue;
+            GameObject* target = found->second;
+            std::vector<Core::Component*> removal;
+            for (std::size_t slot = 0; slot < target->ComponentCount(); ++slot)
+            {
+                Core::Component* component = target->ComponentAt(slot);
+                if (component == nullptr || component->PendingDestroy()) continue;
+                const ComponentTypeInfo* info = ComponentRegistry::Find(component->TypeID());
+                if (info != nullptr && !info->built_in && info->serializable)
+                    removal.push_back(component);
+            }
+            for (Core::Component* component : removal) target->RemoveComponent(component);
+        }
+        scene.ProcessPendingOperations();
+
+        for (const GameObjectData& object_data : data.objects)
+        {
+            const auto found = local_to_object.find(object_data.id);
+            if (found != local_to_object.end())
+                BuildComponents(object_data, *found->second, report, &local_to_object);
+        }
+        scene.ProcessPendingOperations();
+        return true;
     }
 
     namespace

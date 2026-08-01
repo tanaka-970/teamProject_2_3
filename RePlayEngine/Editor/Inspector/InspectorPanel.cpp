@@ -2,18 +2,23 @@
 
 #include "PropertyDrawer.h"
 #include "PlayerCompositionValidator.h"
+#include "../../Assets/AssetDatabase.h"
 #include "../../Object/Registry/ComponentRegistry.h"
 #include "../Core/EditorContext.h"
 #include "../../Object/GameObject/GameObject.h"
 #include "../../Object/Registry/ComponentRegistry.h"
 #include "../../Reflection/Registry/PropertyRegistry.h"
 #include "../../Scene/Runtime/Scene.h"
+#include "../../Scene/Serialization/PrefabSerializer.h"
 
 #include "imgui/imgui.h"
+#include "imgui/imgui_internal.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <string>
+#include <vector>
 
 namespace ReplayEngine::Editor
 {
@@ -29,6 +34,51 @@ namespace ReplayEngine::Editor
                 ? static_cast<int>(text.size()) : size - 1;
             std::memcpy(buffer, text.data(), static_cast<std::size_t>(length));
             buffer[length] = '\0';
+        }
+
+        bool NearlyEqual(float a, float b) noexcept
+        {
+            return std::fabs(a - b) <= 0.00001f;
+        }
+
+        bool PropertyValuesEqual(const Reflection::PropertyValue& a,
+            const Reflection::PropertyValue& b)
+        {
+            if (a.Type() != b.Type()) return false;
+            using Reflection::PropertyType;
+            switch (a.Type())
+            {
+            case PropertyType::Bool: return a.AsBool() == b.AsBool();
+            case PropertyType::Int:
+            case PropertyType::Enum:
+            case PropertyType::CollisionLayer:
+            case PropertyType::CollisionMask:
+            case PropertyType::ColliderReference: return a.AsInt() == b.AsInt();
+            case PropertyType::Float: return NearlyEqual(a.AsFloat(), b.AsFloat());
+            case PropertyType::Double: return std::fabs(a.AsDouble() - b.AsDouble()) <= 0.0000001;
+            case PropertyType::String:
+            case PropertyType::AssetPath: return a.AsString() == b.AsString();
+            case PropertyType::ObjectReference: return a.AsObjectReference() == b.AsObjectReference();
+            case PropertyType::Vector2:
+            {
+                const auto x = a.AsVector2(); const auto y = b.AsVector2();
+                return NearlyEqual(x.x, y.x) && NearlyEqual(x.y, y.y);
+            }
+            case PropertyType::Vector3:
+            {
+                const auto x = a.AsVector3(); const auto y = b.AsVector3();
+                return NearlyEqual(x.x, y.x) && NearlyEqual(x.y, y.y) && NearlyEqual(x.z, y.z);
+            }
+            case PropertyType::Vector4:
+            case PropertyType::Quaternion:
+            case PropertyType::Color:
+            {
+                const auto x = a.AsVector4(); const auto y = b.AsVector4();
+                return NearlyEqual(x.x, y.x) && NearlyEqual(x.y, y.y) &&
+                    NearlyEqual(x.z, y.z) && NearlyEqual(x.w, y.w);
+            }
+            }
+            return false;
         }
     }
 
@@ -60,6 +110,22 @@ namespace ReplayEngine::Editor
             ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f), "実行中（読み取り専用）");
             ImGui::TextDisabled("プレイ中の変更は編集シーンへ保存されません");
             ImGui::Separator();
+        }
+
+        if (context.Selection().Count() > 1)
+        {
+            std::vector<GameObject*> objects;
+            objects.reserve(context.Selection().Count());
+            for (const Core::ObjectID id : context.Selection().All())
+            {
+                GameObject* selected = scene->FindGameObjectByID(id);
+                if (selected != nullptr && !selected->PendingDestroy()) objects.push_back(selected);
+            }
+            if (objects.size() > 1)
+            {
+                DrawMultiSelection(context, objects);
+                return;
+            }
         }
 
         DrawGameObjectHeader(context, *object);
@@ -141,11 +207,9 @@ namespace ReplayEngine::Editor
             context.CommitEdit();
         }
 
-        ImGui::TextDisabled("ObjectID %s", object.ID().ToString().c_str());
         if (object.Parent() != nullptr)
         {
-            ImGui::TextDisabled("親: %s (ID %s)",
-                object.Parent()->Name().c_str(), object.Parent()->ID().ToString().c_str());
+            ImGui::TextDisabled("親: %s", object.Parent()->Name().c_str());
         }
         else
         {
@@ -157,6 +221,406 @@ namespace ReplayEngine::Editor
             ImGui::TextColored(ImVec4(0.35f, 0.75f, 1.0f, 1.0f),
                 "%zu 個を選択中（主選択を表示）", context.Selection().Count());
         }
+
+        DrawPrefabHeader(context, object);
+
+        if (ImGui::CollapsingHeader("Advanced / IDs"))
+        {
+            ImGui::TextDisabled("ObjectID: %s", object.ID().ToString().c_str());
+            if (object.Parent() != nullptr)
+                ImGui::TextDisabled("Parent ObjectID: %s", object.Parent()->ID().ToString().c_str());
+            else
+                ImGui::TextDisabled("Parent ObjectID: (none)");
+        }
+    }
+
+    void InspectorPanel::DrawPrefabHeader(EditorContext& context, GameObject& object)
+    {
+        if (!object.IsPrefabInstance()) return;
+        Scene::Scene* scene = context.GetScene();
+        if (scene == nullptr) return;
+
+        GameObject* root = scene->FindGameObjectByID(object.PrefabInstanceRoot());
+        if (root == nullptr)
+        {
+            ImGui::TextColored(ImVec4(1.0f, 0.30f, 0.25f, 1.0f), "Missing Prefab Root");
+            return;
+        }
+
+        const Assets::AssetDatabase* database = context.GetAssetDatabase();
+        const Assets::AssetRecord* asset = database != nullptr
+            ? database->FindByGuid(object.PrefabSourceGUID()) : nullptr;
+
+        ImGui::Separator();
+        ImGui::TextColored(ImVec4(0.35f, 0.65f, 1.0f, 1.0f),
+            root == &object ? "Prefab Root" : "Prefab Instance");
+        ImGui::SameLine();
+        if (asset != nullptr)
+            ImGui::TextUnformatted(asset->display_name.c_str());
+        else
+            ImGui::TextColored(ImVec4(1.0f, 0.30f, 0.25f, 1.0f), "[Missing Prefab]");
+
+        if (root != &object)
+        {
+            if (ImGui::Button("Prefab Rootを選択")) context.Selection().Select(root->ID(), false);
+            return;
+        }
+
+        if (prefab_cache_owner_ != root->ID().Value() ||
+            prefab_cache_guid_ != root->PrefabSourceGUID())
+        {
+            prefab_cache_owner_ = root->ID().Value();
+            prefab_cache_guid_ = root->PrefabSourceGUID();
+            prefab_cache_valid_ = false;
+        }
+
+        bool refresh = ImGui::SmallButton("Overridesを再検証");
+        if ((!prefab_cache_valid_ || refresh) && asset != nullptr)
+        {
+            const Scene::Serialization::PrefabOverrideSummary summary =
+                Scene::Serialization::PrefabSerializer::InspectOverrides(
+                    *scene, root->ID(), asset->source_path, root->PrefabSourceGUID());
+            prefab_cache_missing_ = summary.missing_source;
+            prefab_cache_nested_ = summary.unsupported_nested_prefab;
+            prefab_cache_overrides_ = summary.has_overrides;
+            prefab_cache_details_ = summary.details;
+            prefab_cache_valid_ = true;
+        }
+        else if (asset == nullptr)
+        {
+            prefab_cache_missing_ = true;
+            prefab_cache_valid_ = true;
+        }
+
+        ImGui::SameLine();
+        if (prefab_cache_nested_)
+            ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.25f, 1.0f), "Unsupported Nested Prefab");
+        else if (prefab_cache_overrides_)
+            ImGui::TextColored(ImVec4(1.0f, 0.68f, 0.20f, 1.0f), "Overrides");
+        else if (!prefab_cache_missing_)
+            ImGui::TextColored(ImVec4(0.35f, 0.85f, 0.45f, 1.0f), "No Overrides");
+
+        if (prefab_cache_overrides_ && ImGui::TreeNode("Override Details"))
+        {
+            for (const std::string& detail : prefab_cache_details_)
+                ImGui::BulletText("%s", detail.c_str());
+            ImGui::TreePop();
+        }
+
+        const bool editable = context.CanEdit();
+        const bool source_available = asset != nullptr && !prefab_cache_nested_;
+        if (ImGui::Button("Apply", ImVec2(80.0f, 0.0f)) && editable && source_available)
+            ImGui::OpenPopup("ConfirmPrefabApply");
+        ImGui::SameLine();
+        if (ImGui::Button("Revert", ImVec2(80.0f, 0.0f)) && editable && source_available)
+            ImGui::OpenPopup("ConfirmPrefabRevert");
+        ImGui::SameLine();
+        if (ImGui::Button("Unpack", ImVec2(80.0f, 0.0f)) && editable)
+            ImGui::OpenPopup("ConfirmPrefabUnpack");
+
+        if (ImGui::BeginPopupModal("ConfirmPrefabApply", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::TextUnformatted("Prefab Asset原本を現在のOverridesで更新します。");
+            ImGui::TextDisabled("既存Assetは .bak へ退避され、失敗時は復元されます。");
+            if (ImGui::Button("Apply Overrides") && asset != nullptr)
+            {
+                context.BeginEdit("Prefab OverridesをApply");
+                std::string error;
+                if (Scene::Serialization::PrefabSerializer::ApplyOverrides(
+                    *scene, root->ID(), asset->source_path, root->PrefabSourceGUID(), error))
+                {
+                    context.CommitEdit();
+                    context.SetStatus("Prefab Assetを更新しました: " + asset->display_name);
+                }
+                else
+                {
+                    context.CancelEdit();
+                    context.SetStatus("Prefab Apply失敗: " + error);
+                }
+                prefab_cache_valid_ = false;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("キャンセル")) ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+        }
+
+        if (ImGui::BeginPopupModal("ConfirmPrefabRevert", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::TextUnformatted("このInstanceのOverridesを破棄してAsset状態へ戻しますか？");
+            if (ImGui::Button("Revert Overrides") && asset != nullptr)
+            {
+                context.BeginEdit("Prefab OverridesをRevert");
+                std::string error;
+                Scene::Serialization::SceneLoadReport report;
+                if (Scene::Serialization::PrefabSerializer::RevertOverrides(
+                    *scene, root->ID(), asset->source_path, root->PrefabSourceGUID(), error, &report))
+                {
+                    context.CommitEdit();
+                    context.Selection().Select(root->ID(), false);
+                    context.SetStatus("Prefab Overridesを戻しました");
+                }
+                else
+                {
+                    context.CancelEdit();
+                    context.SetStatus("Prefab Revert失敗: " + error);
+                }
+                prefab_cache_valid_ = false;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("キャンセル")) ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+        }
+
+        if (ImGui::BeginPopupModal("ConfirmPrefabUnpack", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::TextUnformatted("PrefabとのLinkを解除します。GameObjectは残ります。");
+            if (ImGui::Button("Unpack Prefab"))
+            {
+                context.BeginEdit("PrefabをUnpack");
+                std::string error;
+                if (Scene::Serialization::PrefabSerializer::Unpack(*scene, root->ID(), error))
+                {
+                    context.CommitEdit();
+                    context.SetStatus("PrefabをUnpackしました");
+                }
+                else
+                {
+                    context.CancelEdit();
+                    context.SetStatus("Prefab Unpack失敗: " + error);
+                }
+                prefab_cache_valid_ = false;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("キャンセル")) ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+        }
+
+        if (ImGui::CollapsingHeader("Prefab Source Details"))
+        {
+            if (asset != nullptr) ImGui::TextWrapped("Path: %s", asset->source_path.string().c_str());
+            ImGui::TextDisabled("AssetGUID: %s", root->PrefabSourceGUID().c_str());
+            ImGui::TextDisabled("Local ID: %llu", static_cast<unsigned long long>(root->PrefabLocalID()));
+        }
+    }
+
+    void InspectorPanel::DrawMultiSelection(EditorContext& context,
+        const std::vector<GameObject*>& objects)
+    {
+        if (objects.empty()) return;
+
+        ImGui::Text("%zu GameObjects", objects.size());
+        ImGui::TextDisabled("共通する Component と Property を一括編集します");
+
+        bool enabled = objects.front()->Enabled();
+        const bool enabled_mixed = std::any_of(objects.begin() + 1, objects.end(), [enabled](const GameObject* object)
+        {
+            return object != nullptr && object->Enabled() != enabled;
+        });
+        if (enabled_mixed) ImGui::PushItemFlag(ImGuiItemFlags_MixedValue, true);
+        const bool enabled_changed = ImGui::Checkbox("Enabled", &enabled);
+        if (enabled_mixed) ImGui::PopItemFlag();
+        if (enabled_changed && context.CanEdit())
+        {
+            context.BeginEdit("複数 GameObject の有効状態を変更");
+            for (GameObject* object : objects) if (object != nullptr) object->SetEnabled(enabled);
+            context.CommitEdit();
+        }
+
+        if (ImGui::CollapsingHeader("Advanced / IDs"))
+        {
+            for (const GameObject* object : objects)
+            {
+                if (object == nullptr) continue;
+                ImGui::TextDisabled("%s: %s", object->Name().c_str(), object->ID().ToString().c_str());
+            }
+        }
+        ImGui::Separator();
+
+        std::vector<Core::ComponentTypeID> common_types;
+        for (std::size_t index = 0; index < objects.front()->ComponentCount(); ++index)
+        {
+            Core::Component* component = objects.front()->ComponentAt(index);
+            if (component == nullptr || component->PendingDestroy()) continue;
+            const Core::ComponentTypeID type_id = component->TypeID();
+            if (std::find(common_types.begin(), common_types.end(), type_id) != common_types.end()) continue;
+            const bool common = std::all_of(objects.begin() + 1, objects.end(), [type_id](const GameObject* object)
+            {
+                return object != nullptr && object->FindComponent(type_id) != nullptr;
+            });
+            if (common) common_types.push_back(type_id);
+        }
+
+        for (const Core::ComponentTypeID type_id : common_types)
+        {
+            ImGui::PushID(static_cast<int>(type_id));
+            DrawCommonComponent(context, objects, type_id);
+            ImGui::PopID();
+        }
+
+        ImGui::Separator();
+        if (!context.CanEdit())
+        {
+            ImGui::TextDisabled("実行中はコンポーネントを変更できません");
+        }
+        else if (ImGui::Button("コンポーネントを一括追加", ImVec2(-1.0f, 0.0f)))
+        {
+            ImGui::OpenPopup("BulkAddComponent");
+        }
+
+        if (ImGui::BeginPopup("BulkAddComponent"))
+        {
+            ImGui::TextDisabled("選択中の全 GameObject に追加");
+            ImGui::Separator();
+            for (const Core::ComponentTypeInfo& info : ComponentRegistry::All())
+            {
+                if (!info.editor_visible || info.built_in) continue;
+                const bool all_present = !info.allow_multiple &&
+                    std::all_of(objects.begin(), objects.end(), [&info](const GameObject* object)
+                    {
+                        return object != nullptr && object->FindComponent(info.type_id) != nullptr;
+                    });
+                if (all_present)
+                {
+                    ImGui::TextDisabled("%s (追加済み)", info.DisplayName().c_str());
+                    continue;
+                }
+                if (ImGui::Selectable(info.DisplayName().c_str()))
+                {
+                    context.BeginEdit(info.DisplayName() + " を一括追加");
+                    int added = 0;
+                    for (GameObject* object : objects)
+                    {
+                        if (object == nullptr) continue;
+                        if (!info.allow_multiple && object->FindComponent(info.type_id) != nullptr) continue;
+                        if (object->AddComponent(info.type_id) != nullptr) ++added;
+                    }
+                    if (added > 0)
+                    {
+                        context.CommitEdit();
+                        context.SetStatus(info.DisplayName() + " を " + std::to_string(added) + " 個へ追加しました");
+                    }
+                    else context.CancelEdit();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            ImGui::EndPopup();
+        }
+
+        if (!context.Status().empty())
+        {
+            ImGui::Spacing();
+            ImGui::TextWrapped("%s", context.Status().c_str());
+        }
+    }
+
+    void InspectorPanel::DrawCommonComponent(EditorContext& context,
+        const std::vector<GameObject*>& objects, Core::ComponentTypeID type_id)
+    {
+        std::vector<Core::Component*> components;
+        components.reserve(objects.size());
+        for (GameObject* object : objects)
+        {
+            Core::Component* component = object != nullptr ? object->FindComponent(type_id) : nullptr;
+            if (component == nullptr || component->PendingDestroy()) return;
+            components.push_back(component);
+        }
+        if (components.empty()) return;
+
+        const ComponentTypeInfo* info = ComponentRegistry::Find(type_id);
+        const std::string title = info != nullptr ? info->DisplayName() : components.front()->TypeName();
+        const bool editable = context.CanEdit();
+
+        bool component_enabled = components.front()->Enabled();
+        const bool enabled_mixed = std::any_of(components.begin() + 1, components.end(), [component_enabled](const Core::Component* component)
+        {
+            return component != nullptr && component->Enabled() != component_enabled;
+        });
+        if (enabled_mixed) ImGui::PushItemFlag(ImGuiItemFlags_MixedValue, true);
+        const bool enabled_changed = ImGui::Checkbox("##ComponentEnabled", &component_enabled);
+        if (enabled_mixed) ImGui::PopItemFlag();
+        if (enabled_changed && editable)
+        {
+            context.BeginEdit(title + " の有効状態を一括変更");
+            for (Core::Component* component : components) component->SetEnabled(component_enabled);
+            context.CommitEdit();
+        }
+        ImGui::SameLine();
+
+        const bool opened = ImGui::CollapsingHeader(title.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+        if (!opened) return;
+
+        ImGui::Indent();
+        if (!editable)
+        {
+            ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+            ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+        }
+
+        for (const Reflection::PropertyDesc& desc : Reflection::PropertyRegistry::PropertiesOf(type_id))
+        {
+            if (!desc.editor_visible) continue;
+            const Reflection::PropertyValue primary_value = desc.Capture(*components.front());
+            const bool mixed = std::any_of(components.begin() + 1, components.end(), [&desc, &primary_value](const Core::Component* component)
+            {
+                return component == nullptr || !PropertyValuesEqual(primary_value, desc.Capture(*component));
+            });
+
+            const bool had_transaction = context.History().InTransaction();
+            if (editable && !had_transaction) context.BeginEdit(title + " の設定を一括変更");
+
+            ImGui::PushID(desc.name.c_str());
+            const bool changed = PropertyDrawer::Draw(desc, *components.front(),
+                context.GetAssetDatabase(), context.GetScene(), mixed);
+            ImGui::PopID();
+
+            if (changed)
+            {
+                const Reflection::PropertyValue updated = desc.Capture(*components.front());
+                for (std::size_t index = 1; index < components.size(); ++index)
+                {
+                    desc.Apply(*components[index], updated);
+                    components[index]->OnPropertyChanged(desc.name.c_str());
+                }
+                context.MarkDirty();
+                prefab_cache_valid_ = false;
+            }
+
+            if (editable && context.History().InTransaction() && !ImGui::IsAnyItemActive())
+            {
+                if (changed || had_transaction) context.CommitEdit();
+                else context.CancelEdit();
+            }
+        }
+
+        if (!editable)
+        {
+            ImGui::PopStyleVar();
+            ImGui::PopItemFlag();
+        }
+
+        const bool removable = ComponentRegistry::IsRemovable(type_id);
+        if (removable && editable && ImGui::Button("選択対象から一括削除"))
+            ImGui::OpenPopup("ConfirmBulkRemove");
+        if (ImGui::BeginPopupModal("ConfirmBulkRemove", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::Text("%zu 個の GameObject から %s を削除しますか？", objects.size(), title.c_str());
+            if (ImGui::Button("削除"))
+            {
+                context.BeginEdit(title + " を一括削除");
+                for (std::size_t index = 0; index < objects.size(); ++index)
+                    objects[index]->RemoveComponent(components[index]);
+                context.CommitEdit();
+                context.SetStatus(title + " を一括削除しました");
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("キャンセル")) ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+        }
+        ImGui::Unindent();
     }
 
     void InspectorPanel::DrawPlayerComposition(EditorContext& context, GameObject& object)
@@ -300,17 +764,34 @@ namespace ReplayEngine::Editor
 
         if (Reflection::PropertyRegistry::HasProperties(component.TypeID()))
         {
-            if (PropertyDrawer::DrawAll(component, context.GetAssetDatabase(), context.GetScene()))
+            const bool had_transaction = context.History().InTransaction();
+            if (editable && !had_transaction) context.BeginEdit(title + " の設定を変更");
+            if (!editable)
             {
-                // 値の変更は 1 操作としてまとめる。
-                // ドラッグ中は毎フレーム通るが、BeginEdit は最初の 1 回だけ有効。
-                context.BeginEdit(title + " の設定を変更");
-                context.MarkDirty();
+                ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+                ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
             }
-            // ドラッグが終わったところで確定させる。
-            if (context.History().InTransaction() && !ImGui::IsAnyItemActive())
+
+            const bool changed = PropertyDrawer::DrawAll(component,
+                context.GetAssetDatabase(), context.GetScene());
+
+            if (!editable)
             {
-                context.CommitEdit();
+                ImGui::PopStyleVar();
+                ImGui::PopItemFlag();
+            }
+            if (changed)
+            {
+                context.MarkDirty();
+                prefab_cache_valid_ = false;
+            }
+
+            // Draw の前に Snapshot を取るため、最初の変更も Undo へ正しく入る。
+            // Drag 中は transaction を保持し、マウスを離した Frame で 1 操作として確定する。
+            if (editable && context.History().InTransaction() && !ImGui::IsAnyItemActive())
+            {
+                if (changed || had_transaction) context.CommitEdit();
+                else context.CancelEdit();
             }
         }
         else

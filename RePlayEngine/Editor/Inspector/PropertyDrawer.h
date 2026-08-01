@@ -27,7 +27,8 @@ namespace ReplayEngine::Editor
         static bool Draw(const Reflection::PropertyDesc& desc,
             Core::Component& component,
             const Assets::AssetDatabase* assets,
-            const Scene::Scene* scene);
+            const Scene::Scene* scene,
+            bool mixed = false);
 
         // Component に登録された全プロパティを順に描く。
         // いずれか 1 つでも変更されたら true。

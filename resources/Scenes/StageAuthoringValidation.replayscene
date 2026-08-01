@@ -1,0 +1,356 @@
+REPLAY_SCENE 10
+SCENE "StageAuthoringValidation"
+SCENE_STATE 2
+COLLISION_STATE 2 0
+OBJECT_COUNT 14
+OBJECT
+  ID 1
+  NAME "StageRoot"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 0
+END_OBJECT
+OBJECT
+  ID 2
+  NAME "ControlledCharacter"
+  ENABLED 1
+  PARENT 1
+  TRANSFORM 0 1 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 7
+  COMPONENT "SkinnedMeshRendererComponent" 1
+    PROPERTY_COUNT 10
+    PROPERTY "mesh_asset" asset "1bd1358040255f5bd18f3be0d79fbe3c"
+    PROPERTY "tint" color 1 1 1 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "visible" bool 1
+    PROPERTY "visual_rotation_offset" vec3 90 180 180
+    PROPERTY "local_position_offset" vec3 0 0 0
+    PROPERTY "local_scale_multiplier" vec3 0.01 0.01 0.01
+    PROPERTY "apply_fbx_coordinate_transform" bool 1
+  END_COMPONENT
+  COMPONENT "CapsuleColliderComponent" 1
+    PROPERTY_COUNT 9
+    PROPERTY "collider_key" int 1
+    PROPERTY "center_offset" vec3 0 0.9 0
+    PROPERTY "collision_layer" layer 1
+    PROPERTY "collision_mask" layermask 255
+    PROPERTY "is_trigger" bool 0
+    PROPERTY "debug_draw" bool 1
+    PROPERTY "radius" float 0.4
+    PROPERTY "height" float 1.8
+    PROPERTY "axis" enum 1
+  END_COMPONENT
+  COMPONENT "CharacterMotorComponent" 1
+    PROPERTY_COUNT 10
+    PROPERTY "primary_collider_key" colliderref 1
+    PROPERTY "move_speed" float 6
+    PROPERTY "acceleration" float 30
+    PROPERTY "deceleration" float 20
+    PROPERTY "air_control" float 0.35
+    PROPERTY "gravity" float 18
+    PROPERTY "jump_power" float 8
+    PROPERTY "maximum_fall_speed" float 55
+    PROPERTY "fallback_ground_y" float -20
+    PROPERTY "vertical_physics" bool 1
+  END_COMPONENT
+  COMPONENT "PlayerInputComponent" 1
+    PROPERTY_COUNT 2
+    PROPERTY "input_enabled" bool 1
+    PROPERTY "local_player_slot" int 0
+  END_COMPONENT
+  COMPONENT "PlayerControllerComponent" 1
+    PROPERTY_COUNT 4
+    PROPERTY "turn_speed_degrees" float 720
+    PROPERTY "dash_multiplier" float 1.5
+    PROPERTY "camera_relative" bool 1
+    PROPERTY "rotate_towards_movement" bool 1
+  END_COMPONENT
+  COMPONENT "HealthComponent" 1
+    PROPERTY_COUNT 3
+    PROPERTY "max_health" int 100
+    PROPERTY "current_health" int 100
+    PROPERTY "invulnerable" bool 0
+  END_COMPONENT
+  COMPONENT "CameraTargetComponent" 1
+    PROPERTY_COUNT 6
+    PROPERTY "target_offset" vec3 0 0.9 0
+    PROPERTY "look_at_offset" vec3 0 0.5 0
+    PROPERTY "follow_distance" float 7
+    PROPERTY "follow_height" float 3
+    PROPERTY "follow_lag" float 12
+    PROPERTY "priority" int 10
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 3
+  NAME "Ground"
+  ENABLED 1
+  PARENT 1
+  TRANSFORM 0 -1 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "BoxColliderComponent" 1
+    PROPERTY_COUNT 7
+    PROPERTY "collider_key" int 1
+    PROPERTY "center_offset" vec3 0 0 0
+    PROPERTY "collision_layer" layer 3
+    PROPERTY "collision_mask" layermask 255
+    PROPERTY "is_trigger" bool 0
+    PROPERTY "debug_draw" bool 1
+    PROPERTY "size" vec3 30 2 30
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 4
+  NAME "Ramp"
+  ENABLED 1
+  PARENT 1
+  TRANSFORM 0 0.5 6 -0.25 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "BoxColliderComponent" 1
+    PROPERTY_COUNT 7
+    PROPERTY "collider_key" int 1
+    PROPERTY "center_offset" vec3 0 0 0
+    PROPERTY "collision_layer" layer 3
+    PROPERTY "collision_mask" layermask 255
+    PROPERTY "is_trigger" bool 0
+    PROPERTY "debug_draw" bool 1
+    PROPERTY "size" vec3 5 0.5 8
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 5
+  NAME "Obstacle"
+  ENABLED 1
+  PARENT 1
+  TRANSFORM 4 1 2 0 0.35 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "BoxColliderComponent" 1
+    PROPERTY_COUNT 7
+    PROPERTY "collider_key" int 1
+    PROPERTY "center_offset" vec3 0 0 0
+    PROPERTY "collision_layer" layer 3
+    PROPERTY "collision_mask" layermask 255
+    PROPERTY "is_trigger" bool 0
+    PROPERTY "debug_draw" bool 1
+    PROPERTY "size" vec3 2 2 2
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 6
+  NAME "SpawnPoint_A"
+  ENABLED 1
+  PARENT 1
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "SpawnPointComponent" 1
+    PROPERTY_COUNT 4
+    PROPERTY "spawn_id" int 1
+    PROPERTY "team" int 0
+    PROPERTY "priority" int 10
+    PROPERTY "debug_draw" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 7
+  NAME "Checkpoint_A"
+  ENABLED 1
+  PARENT 1
+  TRANSFORM 0 1 10 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "BoxColliderComponent" 1
+    PROPERTY_COUNT 7
+    PROPERTY "collider_key" int 1
+    PROPERTY "center_offset" vec3 0 0 0
+    PROPERTY "collision_layer" layer 7
+    PROPERTY "collision_mask" layermask 255
+    PROPERTY "is_trigger" bool 1
+    PROPERTY "debug_draw" bool 1
+    PROPERTY "size" vec3 4 2 1
+  END_COMPONENT
+  COMPONENT "CheckpointComponent" 1
+    PROPERTY_COUNT 5
+    PROPERTY "checkpoint_id" int 1
+    PROPERTY "respawn_position_offset" vec3 0 1 -1
+    PROPERTY "respawn_rotation" vec3 0 0 0
+    PROPERTY "target_mask" layermask 2
+    PROPERTY "one_shot" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 8
+  NAME "Goal"
+  ENABLED 1
+  PARENT 1
+  TRANSFORM 0 1 20 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "BoxColliderComponent" 1
+    PROPERTY_COUNT 7
+    PROPERTY "collider_key" int 1
+    PROPERTY "center_offset" vec3 0 0 0
+    PROPERTY "collision_layer" layer 7
+    PROPERTY "collision_mask" layermask 255
+    PROPERTY "is_trigger" bool 1
+    PROPERTY "debug_draw" bool 1
+    PROPERTY "size" vec3 5 3 1
+  END_COMPONENT
+  COMPONENT "GoalComponent" 1
+    PROPERTY_COUNT 4
+    PROPERTY "goal_id" int 1
+    PROPERTY "target_mask" layermask 2
+    PROPERTY "one_shot" bool 1
+    PROPERTY "completion_event" string "StageValidationComplete"
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 9
+  NAME "KillVolume"
+  ENABLED 1
+  PARENT 1
+  TRANSFORM 0 -6 8 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "BoxColliderComponent" 1
+    PROPERTY_COUNT 7
+    PROPERTY "collider_key" int 1
+    PROPERTY "center_offset" vec3 0 0 0
+    PROPERTY "collision_layer" layer 7
+    PROPERTY "collision_mask" layermask 255
+    PROPERTY "is_trigger" bool 1
+    PROPERTY "debug_draw" bool 1
+    PROPERTY "size" vec3 30 2 30
+  END_COMPONENT
+  COMPONENT "KillVolumeComponent" 1
+    PROPERTY_COUNT 3
+    PROPERTY "target_mask" layermask 2
+    PROPERTY "respawn_at_checkpoint" bool 1
+    PROPERTY "damage_amount" int 100000
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 10
+  NAME "JumpPad"
+  ENABLED 1
+  PARENT 1
+  TRANSFORM -4 0.25 5 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "BoxColliderComponent" 1
+    PROPERTY_COUNT 7
+    PROPERTY "collider_key" int 1
+    PROPERTY "center_offset" vec3 0 0 0
+    PROPERTY "collision_layer" layer 7
+    PROPERTY "collision_mask" layermask 255
+    PROPERTY "is_trigger" bool 1
+    PROPERTY "debug_draw" bool 1
+    PROPERTY "size" vec3 2 0.5 2
+  END_COMPONENT
+  COMPONENT "JumpPadComponent" 1
+    PROPERTY_COUNT 6
+    PROPERTY "direction" vec3 0 1 0.35
+    PROPERTY "force" float 14
+    PROPERTY "target_mask" layermask 2
+    PROPERTY "one_shot" bool 0
+    PROPERTY "cooldown" float 0.5
+    PROPERTY "debug_draw" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 11
+  NAME "DamageArea"
+  ENABLED 1
+  PARENT 1
+  TRANSFORM 5 0.5 12 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "BoxColliderComponent" 1
+    PROPERTY_COUNT 7
+    PROPERTY "collider_key" int 1
+    PROPERTY "center_offset" vec3 0 0 0
+    PROPERTY "collision_layer" layer 7
+    PROPERTY "collision_mask" layermask 255
+    PROPERTY "is_trigger" bool 1
+    PROPERTY "debug_draw" bool 1
+    PROPERTY "size" vec3 4 1 4
+  END_COMPONENT
+  COMPONENT "DamageAreaComponent" 1
+    PROPERTY_COUNT 4
+    PROPERTY "damage" int 10
+    PROPERTY "interval" float 1
+    PROPERTY "target_mask" layermask 2
+    PROPERTY "one_shot" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 12
+  NAME "Sun"
+  ENABLED 1
+  PARENT 1
+  TRANSFORM 0 8 0 -0.75 0.4 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "DirectionalLightComponent" 1
+    PROPERTY_COUNT 3
+    PROPERTY "color" color 1 0.96 0.88 1
+    PROPERTY "intensity" float 3.5
+    PROPERTY "cast_shadows" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 13
+  NAME "CheckpointLight"
+  ENABLED 1
+  PARENT 1
+  TRANSFORM 0 3 10 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PointLightComponent" 1
+    PROPERTY_COUNT 3
+    PROPERTY "color" color 0.25 0.6 1 1
+    PROPERTY "intensity" float 4
+    PROPERTY "range" float 8
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 14
+  NAME "StageMesh"
+  ENABLED 1
+  PARENT 1
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "MeshRendererComponent" 1
+    PROPERTY_COUNT 7
+    PROPERTY "mesh_asset" asset "60412424bb1443240b2bf2160eee6923"
+    PROPERTY "material_asset" asset ""
+    PROPERTY "tint" color 1 1 1 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+  COMPONENT "MeshColliderComponent" 1
+    PROPERTY_COUNT 11
+    PROPERTY "collider_key" int 1
+    PROPERTY "center_offset" vec3 0 0 0
+    PROPERTY "collision_layer" layer 3
+    PROPERTY "collision_mask" layermask 255
+    PROPERTY "is_trigger" bool 0
+    PROPERTY "debug_draw" bool 1
+    PROPERTY "mesh_source" enum 0
+    PROPERTY "mesh_asset" asset ""
+    PROPERTY "cook_cell_size" float 4
+    PROPERTY "double_sided" bool 1
+    PROPERTY "debug_draw_wireframe" bool 0
+  END_COMPONENT
+END_OBJECT

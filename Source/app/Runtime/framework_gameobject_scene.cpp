@@ -14,6 +14,7 @@
 #include "skinned_mesh.h"
 
 #include "../../RePlayEngine/Components/Camera/CameraTargetComponent.h"
+#include "../../RePlayEngine/Components/Rendering/LightComponents.h"
 #include "../../RePlayEngine/Object/Registry/BuiltInComponents.h"
 #include "../../RePlayEngine/Project/ProjectSettingsSerializer.h"
 #include "../../RePlayEngine/Rendering/Adapter/SceneRenderCollector.h"
@@ -21,6 +22,8 @@
 #include "../../RePlayEngine/Scene/Serialization/SceneData.h"
 #include "../../RePlayEngine/Scene/Serialization/SceneSerializer.h"
 
+#include <commdlg.h>
+#include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <cstdint>
@@ -30,6 +33,46 @@
 namespace
 {
     namespace SceneSerialization = ReplayEngine::Scene::Serialization;
+
+    std::filesystem::path BrowseObjectSceneFile(HWND owner, bool save,
+        const std::filesystem::path& current)
+    {
+        wchar_t filename[32768]{};
+        if (!current.empty())
+        {
+            const std::wstring initial = std::filesystem::absolute(current).wstring();
+            wcsncpy_s(filename, initial.c_str(), _TRUNCATE);
+        }
+
+        static const wchar_t filter[] =
+            L"RePlayEngine Scene (*.replayscene)\0*.replayscene\0All Files (*.*)\0*.*\0\0";
+        OPENFILENAMEW dialog{};
+        dialog.lStructSize = sizeof(dialog);
+        dialog.hwndOwner = owner;
+        dialog.lpstrFile = filename;
+        dialog.nMaxFile = static_cast<DWORD>(_countof(filename));
+        dialog.lpstrFilter = filter;
+        dialog.lpstrDefExt = L"replayscene";
+        dialog.lpstrTitle = save ? L"Save RePlayEngine Scene" : L"Open RePlayEngine Scene";
+        dialog.Flags = OFN_EXPLORER | OFN_NOCHANGEDIR | OFN_PATHMUSTEXIST |
+            (save ? OFN_OVERWRITEPROMPT : OFN_FILEMUSTEXIST);
+        const BOOL accepted = save ? GetSaveFileNameW(&dialog) : GetOpenFileNameW(&dialog);
+        return accepted ? std::filesystem::path(filename) : std::filesystem::path{};
+    }
+
+    std::filesystem::path AutosavePathFor(const std::filesystem::path& scene_path)
+    {
+        const std::string source = scene_path.lexically_normal().generic_string();
+        std::uint64_t hash = 1469598103934665603ull;
+        for (const unsigned char byte : source)
+        {
+            hash ^= byte;
+            hash *= 1099511628211ull;
+        }
+        const std::string stem = scene_path.stem().empty() ? "Untitled" : scene_path.stem().string();
+        return std::filesystem::path("Saved") / "Autosave" /
+            (stem + "_" + std::to_string(hash) + ".autosave.replayscene");
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -75,6 +118,7 @@ void framework::initialize_object_scene()
         object_editor_context.SetStatus(
             "シーンファイルがありません（空のシーンとして開始しました）");
     }
+    check_object_scene_recovery();
 
     // 編集中も Component の OnStart を回したいので Scene は開始状態にしておく。
     // 実際にゲームロジックが走るかどうかは Edit Mode 判定で制御する。
@@ -269,9 +313,109 @@ void framework::update_object_scene(float elapsed_time)
 
     // 選択が消えた GameObject を指し続けないようにする。
     object_editor_context.Selection().PruneMissing(scene);
+    sync_object_lights();
+
+    if (!object_scene_play_mode && object_editor_context.Dirty())
+    {
+        object_autosave_elapsed += (std::max)(0.0f, elapsed_time);
+        if (object_autosave_elapsed >= 60.0f)
+        {
+            autosave_object_scene();
+            object_autosave_elapsed = 0.0f;
+        }
+    }
+    else
+    {
+        object_autosave_elapsed = 0.0f;
+    }
 
     // 描画提出リストを作り直す。ここでは D3D に触れない。
     ReplayEngine::Rendering::SceneRenderCollector::Collect(scene, object_render_items);
+}
+
+void framework::sync_object_lights()
+{
+    using ReplayEngine::Components::DirectionalLightComponent;
+    using ReplayEngine::Components::PointLightComponent;
+    using ReplayEngine::Components::SpotLightComponent;
+    using namespace DirectX;
+
+    const ReplayEngine::Scene::Scene& scene = active_object_scene();
+    lights.data.light_counts = { 0, 0, 0, 0 };
+    bool directional_found = false;
+
+    for (std::size_t index = 0; index < scene.GameObjectCount(); ++index)
+    {
+        const ReplayEngine::Core::GameObject* object = scene.GameObjectAt(index);
+        if (object == nullptr || object->PendingDestroy() || !object->ActiveInHierarchy()) continue;
+
+        if (!directional_found)
+        {
+            const DirectionalLightComponent* light = object->GetComponent<DirectionalLightComponent>();
+            if (light != nullptr && light->ActiveInHierarchy())
+            {
+                const XMFLOAT4 rotation = object->GetTransform().WorldRotationQuaternion();
+                XMVECTOR direction = XMVector3Rotate(XMVectorSet(0.0f, -1.0f, 0.0f, 0.0f),
+                    XMLoadFloat4(&rotation));
+                direction = XMVector3Normalize(direction);
+                XMStoreFloat4(&light_direction, direction);
+                light_direction.w = 0.0f;
+                pbr.light.directional_color = {
+                    light->color.x, light->color.y, light->color.z,
+                    (std::max)(0.0f, light->intensity) };
+                pbr.light.shadow_params.w = light->cast_shadows ? 1.0f : 0.0f;
+                directional_found = true;
+            }
+        }
+
+        if (lights.data.light_counts.x < lights_manager::POINT_LIGHT_MAX)
+        {
+            const PointLightComponent* light = object->GetComponent<PointLightComponent>();
+            if (light != nullptr && light->ActiveInHierarchy())
+            {
+                const int slot = lights.data.light_counts.x++;
+                const XMFLOAT3 position = object->GetTransform().WorldPosition();
+                lights.data.point_lights[slot].position = {
+                    position.x, position.y, position.z, (std::max)(0.01f, light->range) };
+                lights.data.point_lights[slot].color = {
+                    light->color.x, light->color.y, light->color.z,
+                    (std::max)(0.0f, light->intensity) };
+            }
+        }
+
+        if (lights.data.light_counts.y < lights_manager::SPOT_LIGHT_MAX)
+        {
+            const SpotLightComponent* light = object->GetComponent<SpotLightComponent>();
+            if (light != nullptr && light->ActiveInHierarchy())
+            {
+                const int slot = lights.data.light_counts.y++;
+                const XMFLOAT3 position = object->GetTransform().WorldPosition();
+                const XMFLOAT4 rotation = object->GetTransform().WorldRotationQuaternion();
+                XMVECTOR direction = XMVector3Rotate(XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f),
+                    XMLoadFloat4(&rotation));
+                direction = XMVector3Normalize(direction);
+                XMFLOAT3 direction_value{};
+                XMStoreFloat3(&direction_value, direction);
+                const float outer = (std::max)(0.1f, (std::min)(179.0f, light->outer_angle_degrees));
+                const float inner = (std::max)(0.1f, (std::min)(outer, light->inner_angle_degrees));
+                lights.data.spot_lights[slot].position = {
+                    position.x, position.y, position.z, (std::max)(0.01f, light->range) };
+                lights.data.spot_lights[slot].direction = {
+                    direction_value.x, direction_value.y, direction_value.z,
+                    std::cos(XMConvertToRadians(inner)) };
+                lights.data.spot_lights[slot].color = {
+                    light->color.x, light->color.y, light->color.z,
+                    std::cos(XMConvertToRadians(outer)) };
+                lights.data.spot_lights[slot].params.x = (std::max)(0.0f, light->intensity);
+            }
+        }
+    }
+
+    if (!directional_found)
+    {
+        pbr.light.directional_color = { 0.0f, 0.0f, 0.0f, 0.0f };
+        pbr.light.shadow_params.w = 0.0f;
+    }
 }
 
 void framework::update_object_camera_follow(float elapsed_time)
@@ -338,12 +482,17 @@ bool framework::save_object_scene(bool choose_path)
         return false;
     }
 
-    if (choose_path || object_scene_path.empty())
+    std::filesystem::path destination = object_scene_path;
+    if (choose_path || destination.empty())
     {
-        // ファイルダイアログは既存の実装方針に合わせて後段で差し替えられるよう、
-        // ここでは既定パスをそのまま使う。
-        object_scene_path = std::filesystem::path("resources") / "Scenes" /
-            (object_scene.Name() + ReplayEngine::Scene::Serialization::SceneSerializer::file_extension);
+        destination = BrowseObjectSceneFile(hwnd, true, destination);
+        if (destination.empty())
+        {
+            object_editor_context.SetStatus("保存をキャンセルしました");
+            return false;
+        }
+        if (destination.extension().empty())
+            destination += ReplayEngine::Scene::Serialization::SceneSerializer::file_extension;
     }
 
     // メインスレッドでスナップショットを取ってから書き出す。
@@ -353,14 +502,19 @@ bool framework::save_object_scene(bool choose_path)
     SceneSerialization::CaptureScene(object_scene, data);
 
     std::string error;
-    if (!SceneSerialization::SceneSerializer::SaveToFile(data, object_scene_path, error))
+    if (!SceneSerialization::SceneSerializer::SaveToFile(data, destination, error))
     {
         object_editor_context.SetStatus("保存に失敗しました: " + error);
         return false;
     }
 
+    object_scene_path = std::move(destination);
     object_editor_context.SetScenePath(object_scene_path);
     object_editor_context.ClearDirty();
+    object_autosave_elapsed = 0.0f;
+    std::error_code remove_error;
+    std::filesystem::remove(AutosavePathFor(object_scene_path), remove_error);
+    object_recovery_available = false;
     object_editor_context.SetStatus("保存しました: " + object_scene_path.filename().string());
     return true;
 }
@@ -373,15 +527,20 @@ bool framework::load_object_scene(bool choose_path)
     // 戻ってきたときに同じ視点から再開できる。
     if (!editor_camera_state_key.empty()) save_editor_camera_state();
 
+    std::filesystem::path source = object_scene_path;
     if (choose_path)
     {
-        object_scene_path = std::filesystem::path("resources") / "Scenes" /
-            (object_scene.Name() + ReplayEngine::Scene::Serialization::SceneSerializer::file_extension);
+        source = BrowseObjectSceneFile(hwnd, false, source);
+        if (source.empty())
+        {
+            object_editor_context.SetStatus("読み込みをキャンセルしました");
+            return false;
+        }
     }
 
     SceneSerialization::SceneData data;
     std::string error;
-    if (!SceneSerialization::SceneSerializer::LoadFromFile(data, object_scene_path, error))
+    if (!SceneSerialization::SceneSerializer::LoadFromFile(data, source, error))
     {
         // 旧形式・破損・未存在。いずれもクラッシュさせず、現在の Scene を維持する。
         object_editor_context.SetStatus("読み込めませんでした: " + error);
@@ -395,6 +554,7 @@ bool framework::load_object_scene(bool choose_path)
 
     SceneSerialization::SceneLoadReport report;
     SceneSerialization::ApplySceneData(data, object_scene, report);
+    object_editor_context.ResetSceneState();
 
     // 読み込み後に Scene を開始する。
     // ApplySceneData の中では OnStart / OnEnable を呼ばないので、
@@ -402,6 +562,7 @@ bool framework::load_object_scene(bool choose_path)
     object_scene.Start();
 
     object_editor_context.AttachScene(&object_scene);
+    object_scene_path = std::move(source);
     object_editor_context.SetScenePath(object_scene_path);
     object_editor_context.ClearDirty();
 
@@ -422,7 +583,44 @@ bool framework::load_object_scene(bool choose_path)
     // 新しい Scene に対応する編集カメラ状態を読み込む。
     // 保存が無ければ既定位置になる。
     load_editor_camera_state();
+    check_object_scene_recovery();
     return true;
+}
+
+bool framework::autosave_object_scene()
+{
+    if (object_scene_play_mode || !object_editor_context.Dirty()) return false;
+
+    SceneSerialization::SceneData data;
+    SceneSerialization::CaptureScene(object_scene, data);
+    const std::filesystem::path path = AutosavePathFor(object_scene_path);
+    std::string error;
+    if (!SceneSerialization::SceneSerializer::SaveToFile(data, path, error))
+    {
+        object_autosave_status = "Autosave failed: " + error;
+        return false;
+    }
+    object_autosave_status = "Autosaved: " + path.filename().string();
+    return true;
+}
+
+void framework::check_object_scene_recovery()
+{
+    object_recovery_path = AutosavePathFor(object_scene_path);
+    object_recovery_available = false;
+    object_recovery_prompt_opened = false;
+
+    std::error_code error;
+    if (!std::filesystem::exists(object_recovery_path, error) || error) return;
+    const auto autosave_time = std::filesystem::last_write_time(object_recovery_path, error);
+    if (error) return;
+    if (!std::filesystem::exists(object_scene_path, error) || error)
+    {
+        object_recovery_available = true;
+        return;
+    }
+    const auto scene_time = std::filesystem::last_write_time(object_scene_path, error);
+    object_recovery_available = !error && autosave_time > scene_time;
 }
 
 // ---------------------------------------------------------------------------
@@ -700,6 +898,7 @@ bool framework::create_object_scene(const std::string& name, bool place_default_
 
     // 1) 空の Scene を作る。GameObject は 1 つも作らない。
     object_scene.Clear();
+    object_editor_context.ResetSceneState();
     object_scene.SetName(scene_name);
     object_scene.Services().SetControlledObject(ReplayEngine::Core::ObjectID::Invalid());
     object_scene.Services().SetCollisionBackendMode(1);   // Hybrid（開いた瞬間に床が消えない）
@@ -732,7 +931,7 @@ bool framework::create_object_scene(const std::string& name, bool place_default_
             SceneSerialization::SceneLoadReport report;
             const ReplayEngine::Core::ObjectID root =
                 SceneSerialization::PrefabSerializer::Instantiate(
-                    object_scene, prefab.path, error, &report);
+                    object_scene, prefab.path, error, &report, prefab.guid);
 
             if (!root.Valid())
             {

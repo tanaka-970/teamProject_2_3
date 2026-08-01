@@ -4,9 +4,18 @@
 
 #include <filesystem>
 #include <string>
+#include <vector>
 
 namespace ReplayEngine::Scene::Serialization
 {
+    struct PrefabOverrideSummary
+    {
+        bool missing_source = false;
+        bool unsupported_nested_prefab = false;
+        bool has_overrides = false;
+        std::vector<std::string> details;
+    };
+
     // GameObject の部分木を Prefab として保存・復元する。
     //
     // 旧 PrefabSerializer は SceneDocument の SceneEntity 1 件を
@@ -44,6 +53,24 @@ namespace ReplayEngine::Scene::Serialization
         // 成功したら起点 GameObject の新しい ObjectID を返し、失敗なら無効 ID を返す。
         static Core::ObjectID Instantiate(Scene& scene,
             const std::filesystem::path& path, std::string& error,
-            SceneLoadReport* report = nullptr);
+            SceneLoadReport* report = nullptr,
+            const std::string& source_asset_guid = {});
+
+        // Saving an ordinary hierarchy creates an asset; LinkInstance attaches the
+        // resulting AssetGUID to the existing Scene objects without name tracking.
+        static bool LinkInstance(Scene& scene, Core::ObjectID root,
+            const std::string& source_asset_guid, std::string& error);
+
+        static bool ApplyOverrides(Scene& scene, Core::ObjectID root,
+            const std::filesystem::path& path, const std::string& source_asset_guid,
+            std::string& error);
+        static bool RevertOverrides(Scene& scene, Core::ObjectID root,
+            const std::filesystem::path& path, const std::string& source_asset_guid,
+            std::string& error, SceneLoadReport* report = nullptr);
+        static bool Unpack(Scene& scene, Core::ObjectID root, std::string& error);
+
+        static PrefabOverrideSummary InspectOverrides(const Scene& scene,
+            Core::ObjectID root, const std::filesystem::path& path,
+            const std::string& source_asset_guid);
     };
 }

@@ -351,6 +351,12 @@
     <ClCompile Include="Source\app\Runtime\framework_collision_world.cpp" />
     <ClCompile Include="Source\app\Runtime\framework_collision_mesh_source.cpp" />
     <ClCompile Include="Source\app\Editor\framework_collider_debug.cpp" />
+    <ClCompile Include="RePlayEngine\Landscape\LandscapeData.cpp" />
+    <ClCompile Include="RePlayEngine\Landscape\LandscapeMeshGenerator.cpp" />
+    <ClCompile Include="RePlayEngine\Landscape\LandscapeRenderer.cpp" />
+    <ClCompile Include="RePlayEngine\Landscape\LandscapeCollision.cpp" />
+    <ClCompile Include="RePlayEngine\Landscape\LandscapeUndoCommand.cpp" />
+    <ClCompile Include="RePlayEngine\Landscape\LandscapeEditorTool.cpp" />
 </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\mesh\UI.h" />
@@ -453,6 +459,7 @@
     <ClInclude Include="RePlayEngine\Scene\Runtime\Scene.h" />
     <ClInclude Include="RePlayEngine\Components\Core\TransformComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Rendering\MeshRendererComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Rendering\LightComponents.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\RotatorComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\HealthComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\StageGameplayCommon.h" />
@@ -508,6 +515,15 @@
     <ClInclude Include="RePlayEngine\Scene\Services\LegacyStageMigrationState.h" />
     <ClInclude Include="RePlayEngine\Editor\Debug\ColliderDebugDraw.h" />
     <ClInclude Include="RePlayEngine\Object\Component\TriggerContact.h" />
+    <ClInclude Include="RePlayEngine\Landscape\LandscapeChunk.h" />
+    <ClInclude Include="RePlayEngine\Landscape\LandscapeMaterial.h" />
+    <ClInclude Include="RePlayEngine\Landscape\LandscapeBrush.h" />
+    <ClInclude Include="RePlayEngine\Landscape\LandscapeData.h" />
+    <ClInclude Include="RePlayEngine\Landscape\LandscapeMeshGenerator.h" />
+    <ClInclude Include="RePlayEngine\Landscape\LandscapeRenderer.h" />
+    <ClInclude Include="RePlayEngine\Landscape\LandscapeCollision.h" />
+    <ClInclude Include="RePlayEngine\Landscape\LandscapeUndoCommand.h" />
+    <ClInclude Include="RePlayEngine\Landscape\LandscapeEditorTool.h" />
 </ItemGroup>
   <ItemGroup>
     <None Include=".editorconfig" />

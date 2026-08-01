@@ -1,8 +1,86 @@
 ﻿#include <time.h>
 #include <array>
+#include <cstdio>
+#include <filesystem>
+#include <iomanip>
+#include <sstream>
 #include <string>
 
 #include "framework.h"
+#include "../../../RePlayEngine/Assets/AssetDatabase.h"
+#include "../../../RePlayEngine/Editor/Validation/SceneValidator.h"
+#include "../../../RePlayEngine/Object/Registry/BuiltInComponents.h"
+#include "../../../RePlayEngine/Scene/Runtime/Scene.h"
+#include "../../../RePlayEngine/Scene/Serialization/SceneData.h"
+#include "../../../RePlayEngine/Scene/Serialization/SceneSerializer.h"
+
+namespace
+{
+    int RunHeadlessSceneValidation(const char* command_line)
+    {
+        std::istringstream arguments(command_line != nullptr ? command_line : "");
+        std::string command;
+        std::string scene_path_text;
+        if (!(arguments >> command) || command != "--validate-scene") return -1;
+        if (!(arguments >> std::quoted(scene_path_text)) || scene_path_text.empty())
+        {
+            std::fprintf(stderr, "--validate-scene requires a path\n");
+            return 2;
+        }
+
+        ReplayEngine::Core::RegisterBuiltInComponents();
+        ReplayEngine::Assets::AssetDatabase assets;
+        std::string asset_error;
+        assets.Load(asset_error);
+
+        namespace Serialization = ReplayEngine::Scene::Serialization;
+        Serialization::SceneData source;
+        std::string error;
+        const std::filesystem::path scene_path(scene_path_text);
+        if (!Serialization::SceneSerializer::LoadFromFile(source, scene_path, error))
+        {
+            std::fprintf(stderr, "Scene load failed: %s\n", error.c_str());
+            return 3;
+        }
+
+        ReplayEngine::Scene::Scene scene;
+        Serialization::SceneLoadReport load_report;
+        Serialization::ApplySceneData(source, scene, load_report);
+        const auto issues = ReplayEngine::Editor::SceneValidator::Validate(scene, &assets);
+        int errors = 0;
+        for (const ReplayEngine::Editor::ValidationIssue& issue : issues)
+        {
+            if (issue.severity == ReplayEngine::Editor::ValidationSeverity::Error) ++errors;
+            std::fprintf(stderr, "[%s] %s: %s\n",
+                issue.severity == ReplayEngine::Editor::ValidationSeverity::Error ? "ERROR" :
+                issue.severity == ReplayEngine::Editor::ValidationSeverity::Warning ? "WARN" : "INFO",
+                issue.code.c_str(), issue.message.c_str());
+        }
+
+        Serialization::SceneData captured;
+        Serialization::CaptureScene(scene, captured);
+        const std::filesystem::path roundtrip_path = std::filesystem::path("Saved") /
+            "Validation" / (scene_path.stem().string() + ".roundtrip.replayscene");
+        if (!Serialization::SceneSerializer::SaveToFile(captured, roundtrip_path, error))
+        {
+            std::fprintf(stderr, "Round-trip save failed: %s\n", error.c_str());
+            return 4;
+        }
+        Serialization::SceneData roundtrip;
+        if (!Serialization::SceneSerializer::LoadFromFile(roundtrip, roundtrip_path, error) ||
+            roundtrip.objects.size() != captured.objects.size() ||
+            roundtrip.version != Serialization::SceneData::current_version)
+        {
+            std::fprintf(stderr, "Round-trip verification failed: %s\n", error.c_str());
+            return 5;
+        }
+
+        std::fprintf(stderr, "Validated %zu objects, %zu warnings, %d errors; round-trip v%d OK\n",
+            source.objects.size(), issues.size() - static_cast<std::size_t>(errors), errors,
+            roundtrip.version);
+        return errors == 0 ? 0 : 6;
+    }
+}
 
 LRESULT CALLBACK window_procedure(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
@@ -12,6 +90,9 @@ LRESULT CALLBACK window_procedure(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpa
 
 int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _In_ LPSTR cmd_line, _In_ int cmd_show)
 {
+    const int validation_result = RunHeadlessSceneValidation(cmd_line);
+    if (validation_result >= 0) return validation_result;
+
     // WICの画像読み込みはCOMを使うため、エンジンの生存期間中は初期化状態を維持する。
     // シーン切り替え後もWICファクトリを確実に利用できるようにする。
 	const HRESULT com_result = CoInitializeEx(nullptr, COINIT_MULTITHREADED);

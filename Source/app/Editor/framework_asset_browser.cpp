@@ -83,7 +83,7 @@ bool framework::place_asset_in_object_scene(const ReplayEngine::Assets::AssetRec
         ReplayEngine::Scene::Serialization::SceneLoadReport report;
         const ReplayEngine::Core::ObjectID root =
             ReplayEngine::Scene::Serialization::PrefabSerializer::Instantiate(
-                object_scene, asset.source_path, error, &report);
+                object_scene, asset.source_path, error, &report, asset.guid);
         if (!root.Valid())
         {
             object_editor_context.CancelEdit();

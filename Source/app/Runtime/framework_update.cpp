@@ -6,8 +6,12 @@ void framework::update(float elapsed_time)
     async_asset_manager.PumpMainThread();
     if (game_scene)
     {
-   
-        game_scene->Gameplay().SetLegacyStageActive(stage_asset_placed);
+        const auto& services = active_object_scene().Services();
+        const bool legacy_stage_allowed = services.CollisionBackendMode() != 2 &&
+            !services.LegacyStageMigration().IsMigrated(
+                ReplayEngine::Scene::LegacyStageMigrationState::stage_source_id);
+        game_scene->Gameplay().SetLegacyStageActive(stage_asset_placed && legacy_stage_allowed);
+        if (!legacy_stage_allowed) enable_stage_render = false;
     }
 
     if (scene_manager.IsExclusive())

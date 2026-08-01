@@ -287,6 +287,11 @@ namespace ReplayEngine::Scene::Serialization
             WriteFloat3(stream, object.scale);
             stream << '\n';
 
+            // v10. Empty GUID is an ordinary GameObject. The raw identifiers live
+            // only in the file/Advanced UI; normal authoring uses asset labels.
+            stream << "  PREFAB " << std::quoted(object.prefab_source_guid) << ' '
+                << object.prefab_local_id << ' ' << object.prefab_instance_root.Value() << '\n';
+
             stream << "  COMPONENT_COUNT " << object.components.size() << '\n';
             for (const ComponentData& component : object.components)
             {
@@ -447,6 +452,19 @@ namespace ReplayEngine::Scene::Serialization
                 return false;
             }
 
+            if (version >= 10)
+            {
+                if (!Expect(stream, "PREFAB", error)) return false;
+                Core::ObjectID::ValueType raw_instance_root = 0;
+                if (!(stream >> std::quoted(object.prefab_source_guid) >>
+                    object.prefab_local_id >> raw_instance_root))
+                {
+                    error = "Prefab instance情報を読み取れません。";
+                    return false;
+                }
+                object.prefab_instance_root = Core::ObjectID(raw_instance_root);
+            }
+
             if (!Expect(stream, "COMPONENT_COUNT", error)) return false;
             std::size_t component_count = 0;
             if (!(stream >> component_count) || component_count > maximum_components_per_object)
@@ -515,6 +533,16 @@ namespace ReplayEngine::Scene::Serialization
         std::ostringstream buffer;
         if (!WriteText(data, buffer, error)) return false;
 
+        // 書き出す内容を同じ Reader でもう一度検証する。
+        // Serializer の変更で読み戻せない形式を既存 Scene と差し替えない。
+        SceneData validation;
+        std::istringstream validation_stream(buffer.str());
+        if (!ReadText(validation, validation_stream, error))
+        {
+            error = "保存前Validationに失敗しました: " + error;
+            return false;
+        }
+
         const std::filesystem::path temporary = path.string() + ".tmp";
         {
             std::ofstream stream(temporary, std::ios::binary | std::ios::trunc);
@@ -525,6 +553,7 @@ namespace ReplayEngine::Scene::Serialization
             }
             const std::string text = buffer.str();
             stream.write(text.data(), static_cast<std::streamsize>(text.size()));
+            stream.flush();
             if (!stream)
             {
                 error = "Scene ファイルへの書き込みに失敗しました。";
@@ -532,19 +561,46 @@ namespace ReplayEngine::Scene::Serialization
             }
         }
 
+        // Windows では既存Pathへの rename が失敗するため、先に既存Sceneを
+        // .bak へ退避してから差し替える。途中で失敗した場合は元へ戻す。
+        const std::filesystem::path backup = path.string() + ".bak";
+        const bool had_existing = std::filesystem::exists(path, filesystem_error) && !filesystem_error;
+        if (filesystem_error)
+        {
+            error = "既存Sceneの状態を確認できません。";
+            return false;
+        }
+
+        if (had_existing)
+        {
+            std::error_code ignored;
+            std::filesystem::remove(backup, ignored);
+            std::filesystem::rename(path, backup, filesystem_error);
+            if (filesystem_error)
+            {
+                error = "既存SceneをBackupへ退避できません。";
+                return false;
+            }
+        }
+
+        filesystem_error.clear();
         std::filesystem::rename(temporary, path, filesystem_error);
         if (filesystem_error)
         {
-            // rename が使えない環境向けの代替。
-            std::filesystem::copy_file(temporary, path,
-                std::filesystem::copy_options::overwrite_existing, filesystem_error);
-            std::error_code ignored;
-            std::filesystem::remove(temporary, ignored);
-            if (filesystem_error)
+            if (had_existing)
             {
-                error = "Scene ファイルを差し替えられません。";
-                return false;
+                std::error_code restore_error;
+                std::filesystem::rename(backup, path, restore_error);
+                if (restore_error)
+                    error = "Scene差し替えとBackup復元に失敗しました。Backup: " + backup.string();
+                else
+                    error = "Sceneを差し替えられなかったため、元のSceneを復元しました。";
             }
+            else
+            {
+                error = "Sceneファイルを配置できません。Temporary: " + temporary.string();
+            }
+            return false;
         }
         return true;
     }

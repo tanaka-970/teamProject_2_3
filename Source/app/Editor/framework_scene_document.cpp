@@ -656,6 +656,18 @@ void framework::save_selected_prefab(bool choose_path)
     asset_database.Save(database_error);
 
     last_saved_prefab_guid = record.guid;
+    object_editor_context.BeginEdit("Prefab instanceへLink");
+    if (Serialization::PrefabSerializer::LinkInstance(
+        scene, target->ID(), record.guid, error))
+    {
+        object_editor_context.CommitEdit();
+    }
+    else
+    {
+        object_editor_context.CancelEdit();
+        object_editor_context.SetStatus("Prefabは保存しましたがinstanceへLinkできません: " + error);
+        return;
+    }
     object_editor_context.SetStatus("Prefab を保存しました: " + path.generic_string());
 }
 
@@ -673,13 +685,19 @@ void framework::load_prefab()
         L"RePlay Prefab (*.replayprefab)\0*.replayprefab\0\0");
     if (path.empty()) return;
 
+    const auto& record = asset_database.Register(path,
+        ReplayEngine::Assets::AssetKind::Scene);
+    std::string database_error;
+    asset_database.Save(database_error);
+
     // 配置は 1 操作として Undo できるようにする。
     object_editor_context.BeginEdit("Prefab を配置");
 
     std::string error;
     Serialization::SceneLoadReport report;
     const ReplayEngine::Core::ObjectID id =
-        Serialization::PrefabSerializer::Instantiate(object_scene, path, error, &report);
+        Serialization::PrefabSerializer::Instantiate(
+            object_scene, path, error, &report, record.guid);
 
     if (!id.Valid())
     {

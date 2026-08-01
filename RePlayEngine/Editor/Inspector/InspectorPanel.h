@@ -1,8 +1,10 @@
 ﻿#pragma once
 
 #include "../ComponentBrowser/AddComponentPanel.h"
+#include "../../Object/Component/ComponentTypeID.h"
 
 #include <string>
+#include <vector>
 
 namespace ReplayEngine::Core { class Component; class GameObject; }
 
@@ -33,6 +35,12 @@ namespace ReplayEngine::Editor
 
     private:
         void DrawGameObjectHeader(EditorContext& context, Core::GameObject& object);
+        void DrawPrefabHeader(EditorContext& context, Core::GameObject& object);
+        void DrawMultiSelection(EditorContext& context,
+            const std::vector<Core::GameObject*>& objects);
+        void DrawCommonComponent(EditorContext& context,
+            const std::vector<Core::GameObject*>& objects,
+            Core::ComponentTypeID type_id);
 
         // 操作対象としての構成診断。
         // 型ごとの専用 Editor ではなく、PlayerCompositionValidator の表を描くだけ。
@@ -54,5 +62,13 @@ namespace ReplayEngine::Editor
         static constexpr int name_buffer_size = 256;
         char name_buffer_[name_buffer_size]{};
         unsigned long long name_buffer_owner_ = 0;
+
+        unsigned long long prefab_cache_owner_ = 0;
+        std::string prefab_cache_guid_;
+        bool prefab_cache_valid_ = false;
+        bool prefab_cache_missing_ = false;
+        bool prefab_cache_nested_ = false;
+        bool prefab_cache_overrides_ = false;
+        std::vector<std::string> prefab_cache_details_;
     };
 }

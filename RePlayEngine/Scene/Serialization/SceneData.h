@@ -66,6 +66,12 @@ namespace ReplayEngine::Scene::Serialization
         DirectX::XMFLOAT3 rotation{ 0.0f, 0.0f, 0.0f };
         DirectX::XMFLOAT3 scale{ 1.0f, 1.0f, 1.0f };
 
+        // v10: Prefab instance identity. Empty source means ordinary GameObject.
+        // local_id is stable inside the Prefab asset; instance_root is a Scene ObjectID.
+        std::string prefab_source_guid;
+        std::uint64_t prefab_local_id = 0;
+        Core::ObjectID prefab_instance_root;
+
         std::vector<ComponentData> components;
     };
 
@@ -95,7 +101,7 @@ namespace ReplayEngine::Scene::Serialization
         //   Scene Colliders Only を既定にすると、開いた瞬間に床が消える。
         //   Hybrid なら「MeshCollider があればそれを使い、無ければ旧 Stage」
         //   となり、開く前と同じ挙動から始められる。
-        static constexpr int current_version = 9;
+        static constexpr int current_version = 10;
         static constexpr int minimum_supported_version = 7;
 
         int version = current_version;
@@ -193,6 +199,12 @@ namespace ReplayEngine::Scene::Serialization
     // ID を振り直すのは、同じ Prefab を 2 回配置したときに衝突させないため。
     // 戻り値は最初に見つかった親なし GameObject（部分木の起点）。何も作れなければ nullptr。
     Core::GameObject* InstantiateSceneData(const SceneData& data, Scene& scene,
+        SceneLoadReport& report, const std::string& prefab_source_guid = {});
+
+    // Prefab asset dataを既存instanceへ戻す。local IDが一致するObjectIDは維持し、
+    // 追加・削除された子やComponentもasset状態へ同期する。
+    bool ApplyPrefabInstanceData(const SceneData& data, Scene& scene,
+        Core::ObjectID instance_root, const std::string& prefab_source_guid,
         SceneLoadReport& report);
 
     // GameObject を複製する。

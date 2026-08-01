@@ -85,6 +85,31 @@ namespace ReplayEngine::Core
 
         bool IsDescendantOf(const GameObject* candidate_ancestor) const noexcept;
 
+        // ---- Prefab instance metadata ------------------------------------
+        // Runtime logic does not depend on this metadata. Editor/Serializer use it to
+        // track an instance by AssetGUID + stable prefab-local ID (never by name).
+        bool IsPrefabInstance() const noexcept { return !prefab_source_guid_.empty(); }
+        bool IsPrefabRoot() const noexcept
+        {
+            return IsPrefabInstance() && prefab_instance_root_ == id_;
+        }
+        const std::string& PrefabSourceGUID() const noexcept { return prefab_source_guid_; }
+        std::uint64_t PrefabLocalID() const noexcept { return prefab_local_id_; }
+        ObjectID PrefabInstanceRoot() const noexcept { return prefab_instance_root_; }
+        void SetPrefabInstanceInfo(std::string source_guid, std::uint64_t local_id,
+            ObjectID instance_root)
+        {
+            prefab_source_guid_ = std::move(source_guid);
+            prefab_local_id_ = local_id;
+            prefab_instance_root_ = instance_root;
+        }
+        void ClearPrefabInstanceInfo() noexcept
+        {
+            prefab_source_guid_.clear();
+            prefab_local_id_ = 0;
+            prefab_instance_root_ = ObjectID::Invalid();
+        }
+
         // ---- Component の追加 ----------------------------------------------
 
         // 型が複数追加を許可していない場合、既にあるインスタンスをそのまま返す。
@@ -222,6 +247,10 @@ namespace ReplayEngine::Core
         Scene::Scene* scene_ = nullptr;
         GameObject* parent_ = nullptr;
         std::vector<GameObject*> children_;
+
+        std::string prefab_source_guid_;
+        std::uint64_t prefab_local_id_ = 0;
+        ObjectID prefab_instance_root_;
 
         std::vector<std::unique_ptr<Component>> components_;
     };

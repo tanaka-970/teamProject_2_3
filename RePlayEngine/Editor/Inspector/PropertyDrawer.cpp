@@ -261,14 +261,15 @@ namespace ReplayEngine::Editor
     }
 
     bool PropertyDrawer::Draw(const PropertyDesc& desc, Core::Component& component,
-        const Assets::AssetDatabase* assets, const Scene::Scene* scene)
+        const Assets::AssetDatabase* assets, const Scene::Scene* scene, bool mixed)
     {
         if (!desc.editor_visible || !desc.getter) return false;
 
         const DisabledScope disabled(desc.read_only);
         const std::string label = "##" + desc.name;
 
-        ImGui::TextUnformatted(desc.DisplayName().c_str());
+        const std::string display_label = desc.DisplayName() + (mixed ? " [Mixed]" : "");
+        ImGui::TextUnformatted(display_label.c_str());
         DrawTooltip(desc);
         ImGui::SetNextItemWidth(-1.0f);
 
@@ -280,11 +281,13 @@ namespace ReplayEngine::Editor
         case PropertyType::Bool:
         {
             bool value = current.AsBool();
+            if (mixed) ImGui::PushItemFlag(ImGuiItemFlags_MixedValue, true);
             if (ImGui::Checkbox(label.c_str(), &value))
             {
                 desc.Apply(component, PropertyValue::MakeBool(value));
                 changed = true;
             }
+            if (mixed) ImGui::PopItemFlag();
             break;
         }
         case PropertyType::Int:

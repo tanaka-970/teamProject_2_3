@@ -37,6 +37,9 @@ namespace ReplayEngine::Editor
 
         // 編集対象の Scene を差し替える。選択と履歴は破棄される。
         void AttachScene(Scene::Scene* scene);
+        // 同じ Scene インスタンスの内容を Load/New で総入れ替えしたときに呼ぶ。
+        // 毎 Frame の AttachScene では消さない選択と Undo 履歴を明示的に破棄する。
+        void ResetSceneState();
         Scene::Scene* GetScene() const noexcept { return scene_; }
         bool HasScene() const noexcept { return scene_ != nullptr; }
 

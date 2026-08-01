@@ -30,6 +30,7 @@ namespace ReplayEngine::Editor
 
     private:
         void DrawNode(EditorContext& context, Core::GameObject& object, int depth);
+        bool NodeMatchesFilter(const Core::GameObject& object) const;
         void DrawContextMenu(EditorContext& context, Core::GameObject* object);
         void HandleDragAndDrop(EditorContext& context, Core::GameObject& object);
 
@@ -47,5 +48,9 @@ namespace ReplayEngine::Editor
         Core::ObjectID renaming_;
         static constexpr int rename_buffer_size = 256;
         char rename_buffer_[rename_buffer_size]{};
+
+        static constexpr int search_buffer_size = 256;
+        char search_buffer_[search_buffer_size]{};
+        Core::ObjectID selection_anchor_;
     };
 }

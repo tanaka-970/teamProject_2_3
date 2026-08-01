@@ -14,6 +14,12 @@ namespace ReplayEngine::Editor
         history_.Clear();
     }
 
+    void EditorContext::ResetSceneState()
+    {
+        selection_.Clear();
+        history_.Clear();
+    }
+
     std::string EditorContext::DisplayTitle() const
     {
         std::string title = scene_path_.empty()

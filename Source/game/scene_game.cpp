@@ -39,6 +39,7 @@ void SceneGame::SetLegacyStageActive(bool active)
     // 旧ステージの衝突メッシュを有効・無効にするだけ。
     // 二重衝突を防ぐ判断は SceneCollisionWorld 側の「移行済み集合」が行う。
     stage.GetCollisionMesh().SetEnabled(active);
+    legacy_stage_active = active;
 }
 
 void SceneGame::FollowCameraTarget(const DirectX::XMFLOAT3& target_position,
@@ -116,7 +117,7 @@ void SceneGame::Update(float dt)
 {
     // ここで動かすのは旧ステージだけ。
     // 操作対象の更新は Scene の Component が行い、この関数は一切関与しない。
-    stage.Update(dt);
+    if (legacy_stage_active) stage.Update(dt);
 }
 
 void SceneGame::DrawCameraGUI()

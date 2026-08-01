@@ -5,6 +5,8 @@
 #include "../../RePlayEngine/Components/Gameplay/PlayerInputComponent.h"
 #include "../../RePlayEngine/Editor/Style/EditorStyle.h"
 #include "../../RePlayEngine/Editor/Migration/LegacyStageConverter.h"
+#include "../../RePlayEngine/Scene/Serialization/SceneData.h"
+#include "../../RePlayEngine/Scene/Serialization/SceneSerializer.h"
 #include "shader.h"
 #include "texture.h"
 #include "skinned_mesh.h"
@@ -116,9 +118,7 @@ void framework::reset_editor_values()
     character_profiles_static[0] = ReplayEngine::Rendering::CharacterMaterialProfile{};
     stage_character_profile = ReplayEngine::Rendering::CharacterMaterialProfile{};
     shader_preset_status.clear();
-    lights.data.light_counts.x = 1;
-    lights.data.point_lights[0].position = { 3, 4, -24, 18 };
-    lights.data.point_lights[0].color = { 0.55f, 0.75f, 1, 2 };
+    lights.data.light_counts = { 0, 0, 0, 0 };
     apply_toon_preset(0);
 }
 
@@ -273,6 +273,66 @@ void framework::draw_editor_main_menu()
         ImGui::TextWrapped("SceneをGameObjectとComponentの組み合わせで制作します。");
         ImGui::EndMenu();
     }
+}
+
+void framework::draw_object_scene_recovery_prompt()
+{
+    if (!object_recovery_available) return;
+    if (!object_recovery_prompt_opened)
+    {
+        ImGui::OpenPopup("Scene Recovery");
+        object_recovery_prompt_opened = true;
+    }
+
+    namespace Serialization = ReplayEngine::Scene::Serialization;
+    if (!ImGui::BeginPopupModal("Scene Recovery", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
+
+    ImGui::TextUnformatted("A newer autosave was found.");
+    ImGui::TextWrapped("Scene: %s", object_scene_path.string().c_str());
+    ImGui::TextWrapped("Autosave: %s", object_recovery_path.string().c_str());
+
+    Serialization::SceneData preview;
+    std::string preview_error;
+    const bool readable = Serialization::SceneSerializer::LoadFromFile(
+        preview, object_recovery_path, preview_error);
+    if (readable)
+        ImGui::Text("Version %d / %zu GameObjects", preview.version, preview.objects.size());
+    else
+        ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.30f, 1.0f), "%s", preview_error.c_str());
+
+    if (ImGui::Button("Recover", ImVec2(110.0f, 0.0f)) && readable)
+    {
+        if (object_scene_play_mode) exit_object_play_mode();
+        detach_collision_world();
+        Serialization::SceneLoadReport report;
+        Serialization::ApplySceneData(preview, object_scene, report);
+        object_editor_context.ResetSceneState();
+        object_scene.Start();
+        object_editor_context.AttachScene(&object_scene);
+        object_editor_context.SetScenePath(object_scene_path);
+        object_editor_context.MarkDirty();
+        attach_collision_world(object_scene);
+        object_editor_context.SetStatus("Autosaveを復旧しました。Saveで本Sceneへ反映してください");
+        object_recovery_available = false;
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Keep for later", ImVec2(110.0f, 0.0f)))
+    {
+        object_recovery_available = false;
+        object_editor_context.SetStatus("Autosaveを保持しました");
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Discard", ImVec2(110.0f, 0.0f)))
+    {
+        std::error_code error;
+        std::filesystem::remove(object_recovery_path, error);
+        object_recovery_available = false;
+        object_editor_context.SetStatus(error ? "Autosaveを削除できませんでした" : "Autosaveを破棄しました");
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
 }
 
 void framework::draw_editor_toolbar()
@@ -460,8 +520,6 @@ void framework::draw_search_results()
     result("操作キャラクターを編集", "player プレイヤー 操作 キャラクター character",
         editor_selection::game_object);
     result("ステージを編集", "stage ステージ 地形", editor_selection::stage);
-    result("平行光源を編集", "directional light ライト 光源 pbr ibl shadow", editor_selection::directional_light);
-    result("点光源を編集", "point light 点光源 ライト", editor_selection::point_lights);
     result("描画設定を開く", "render rendering 描画 deferred shader", editor_selection::rendering);
     result("ポスト処理を開く", "post process ポスト bloom fxaa", editor_selection::post_process);
     if (matches("edit play mode 編集 プレイ") && ImGui::Selectable("編集／プレイモードを切り替える"))
@@ -519,12 +577,6 @@ void framework::draw_scene_hierarchy()
         // 名前も自由に変えられる。同じ対象を 2 か所から編集できる状態は作らない。
         item(stage_asset_placed ? "ステージ（配置済み）" : "ステージ素材（未配置）",
             editor_selection::stage);
-        if (ImGui::TreeNodeEx("ライト", ImGuiTreeNodeFlags_DefaultOpen))
-        {
-            item("平行光源", editor_selection::directional_light);
-            item("点光源", editor_selection::point_lights);
-            ImGui::TreePop();
-        }
         item("描画設定", editor_selection::rendering);
         item("ポスト処理", editor_selection::post_process);
         ImGui::TreePop();
@@ -958,6 +1010,8 @@ void framework::draw_editor()
         }
     }
     ImGui::End();
+
+    draw_object_scene_recovery_prompt();
 
     draw_scene_view_panel();
     if (show_hierarchy_panel) draw_scene_hierarchy();

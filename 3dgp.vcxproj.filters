@@ -974,6 +974,9 @@
     <ClInclude Include="RePlayEngine\Components\Rendering\MeshRendererComponent.h">
       <Filter>RePlayEngine\Components\Rendering</Filter>
     </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Rendering\LightComponents.h">
+      <Filter>RePlayEngine\Components\Rendering</Filter>
+    </ClInclude>
     <ClInclude Include="RePlayEngine\Components\Gameplay\RotatorComponent.h">
       <Filter>RePlayEngine\Components\Gameplay</Filter>
     </ClInclude>
@@ -1499,5 +1502,27 @@
     <FxCompile Include="Shader\tiled_deferred_lighting_cs.hlsl">
       <Filter>Shader</Filter>
     </FxCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="RePlayEngine\Landscape">
+      <UniqueIdentifier>{55f141b4-b6bb-4ce1-a467-c7b49fd5e493}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="RePlayEngine\Landscape\LandscapeData.cpp"><Filter>RePlayEngine\Landscape</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Landscape\LandscapeMeshGenerator.cpp"><Filter>RePlayEngine\Landscape</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Landscape\LandscapeRenderer.cpp"><Filter>RePlayEngine\Landscape</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Landscape\LandscapeCollision.cpp"><Filter>RePlayEngine\Landscape</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Landscape\LandscapeUndoCommand.cpp"><Filter>RePlayEngine\Landscape</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Landscape\LandscapeEditorTool.cpp"><Filter>RePlayEngine\Landscape</Filter></ClCompile>
+    <ClInclude Include="RePlayEngine\Landscape\LandscapeChunk.h"><Filter>RePlayEngine\Landscape</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Landscape\LandscapeMaterial.h"><Filter>RePlayEngine\Landscape</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Landscape\LandscapeBrush.h"><Filter>RePlayEngine\Landscape</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Landscape\LandscapeData.h"><Filter>RePlayEngine\Landscape</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Landscape\LandscapeMeshGenerator.h"><Filter>RePlayEngine\Landscape</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Landscape\LandscapeRenderer.h"><Filter>RePlayEngine\Landscape</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Landscape\LandscapeCollision.h"><Filter>RePlayEngine\Landscape</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Landscape\LandscapeUndoCommand.h"><Filter>RePlayEngine\Landscape</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Landscape\LandscapeEditorTool.h"><Filter>RePlayEngine\Landscape</Filter></ClInclude>
   </ItemGroup>
 </Project>
