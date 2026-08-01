@@ -1,22 +1,29 @@
 ﻿#include "framework.h"
 #include "skinned_mesh.h"
+#include "../../RePlayEngine/Components/Gameplay/CharacterMotorComponent.h"
+#include "../../RePlayEngine/Components/Gameplay/PlayerControllerComponent.h"
+#include "../../RePlayEngine/Components/Gameplay/PlayerInputComponent.h"
 
 #include <string>
 
 void framework::draw_shader_adjustment_workspace()
 {
-    const char* targets[] = { "プレイヤー", "ステージ", "静的メッシュ" };
-    int target = selected_editor_object == editor_selection::stage ? 1 :
-        selected_editor_object == editor_selection::rendering ? 2 : 0;
+    // 「プレイヤー」という対象は無くなった。
+    // キャラクターの描画方式・輪郭線は SkinnedMeshRendererComponent /
+    // MeshRendererComponent のプロパティが持ち、GameObject インスペクターで編集する。
+    // 同じ値をここと Component の両方から変えられる状態は作らない。
+    const char* targets[] = { "ステージ", "静的メッシュ" };
+    int target = selected_editor_object == editor_selection::rendering ? 1 : 0;
 
     ImGui::TextUnformatted("シェーダー調整");
     ImGui::TextDisabled("材質の表現、追加パスの順序、合成、プリセットをまとめて編集します。");
     ImGui::SetNextItemWidth(-1.0f);
     if (ImGui::Combo("##ShaderTarget", &target, targets, IM_ARRAYSIZE(targets)))
     {
-        selected_editor_object = target == 0 ? editor_selection::player :
-            target == 1 ? editor_selection::stage : editor_selection::rendering;
+        selected_editor_object = target == 0
+            ? editor_selection::stage : editor_selection::rendering;
     }
+    ImGui::TextDisabled("キャラクターの材質は GameObject の Renderer で編集します");
     ImGui::Separator();
 
     if (ImGui::BeginTabBar("ShaderAdjustmentTabs"))
@@ -24,18 +31,6 @@ void framework::draw_shader_adjustment_workspace()
         if (ImGui::BeginTabItem("材質・表現"))
         {
             if (target == 0)
-            {
-                ImGui::ColorEdit4("基本色", &material_color.x);
-                draw_shader_stack("shader_workspace_player", shading_per_skinned[0],
-                    outline_per_skinned[0], shader_layers_skinned[0],
-                    pixelate_grid_per_skinned[0], pixelate_strength_per_skinned[0]);
-                draw_character_material_controls("shader_workspace_player_material",
-                    shading_per_skinned[0], outline_per_skinned[0], shader_layers_skinned[0],
-                    character_profiles_skinned[0], pixelate_grid_per_skinned[0],
-                    pixelate_strength_per_skinned[0]);
-                shading_model_override = shading_per_skinned[0];
-            }
-            else if (target == 1)
             {
                 ImGui::Checkbox("ステージシェーダーを使う", &enable_stage_shader);
                 draw_shader_stack("shader_workspace_stage", shading_per_stage,
@@ -132,11 +127,21 @@ void framework::draw_inspector()
         ImGui::Checkbox("ゲームシーン", &enable_scene_game);
         ImGui::Checkbox("パーティクル", &enable_particles);
         ImGui::Checkbox("軌跡", &enable_trail);
+        ImGui::Separator();
+        draw_project_settings_panel();
+        ImGui::Separator();
+        draw_controlled_character_diagnostics();
         break;
 
     case editor_selection::camera:
-        ImGui::TextUnformatted("メインカメラ");
+        ImGui::TextUnformatted("カメラ");
         ImGui::Separator();
+
+        // Scene View 用の編集カメラ。ゲーム内のカメラとは別物。
+        draw_editor_camera_settings();
+        ImGui::Separator();
+
+        ImGui::TextUnformatted("Runtime Camera（ゲーム内）");
         if (enable_scene_game && game_scene)
         {
             const auto& camera = game_scene->Gameplay().GetCamera();
@@ -150,46 +155,6 @@ void framework::draw_inspector()
         {
             ImGui::DragFloat3("位置", &camera_position.x, 0.05f, -100.0f, 100.0f, "%.3f");
         }
-        break;
-
-    case editor_selection::player:
-        ImGui::TextUnformatted("プレイヤー");
-        ImGui::Separator();
-        if (enable_scene_game && game_scene)
-        {
-            game_scene->Gameplay().DrawPlayerGUI();
-        }
-        else
-        {
-            ImGui::DragFloat3("位置", &translation.x, 0.05f);
-            ImGui::DragFloat3("回転", &rotation.x, 0.5f);
-            ImGui::DragFloat3("拡大率", &scaling.x, 0.001f);
-            ImGui::Checkbox("アニメーション再生", &animate_model);
-            if (skinned_meshes[0] && !skinned_meshes[0]->animation_clips.empty())
-            {
-                const int count = static_cast<int>(skinned_meshes[0]->animation_clips.size());
-                if (animation_clip_index < 0 || animation_clip_index >= count) animation_clip_index = 0;
-                const char* preview = skinned_meshes[0]->animation_clips[animation_clip_index].name.c_str();
-                if (ImGui::BeginCombo("手動アニメーション", preview))
-                {
-                    for (int i = 0; i < count; ++i)
-                    {
-                        const bool selected = i == animation_clip_index;
-                        if (ImGui::Selectable(skinned_meshes[0]->animation_clips[i].name.c_str(), selected))
-                        {
-                            animation_clip_index = i;
-                            animation_tick = 0.0f;
-                        }
-                    }
-                    ImGui::EndCombo();
-                }
-                ImGui::SliderFloat("再生速度", &animation_speed, 0.0f, 3.0f);
-                ImGui::Checkbox("ループ", &animation_loop);
-            }
-        }
-        ImGui::ColorEdit4("色", &material_color.x);
-        if (ImGui::Button("シェーダー調整テーブルを開く"))
-            set_editor_workspace(editor_workspace::shader_adjustment);
         break;
 
     case editor_selection::stage:
@@ -228,6 +193,13 @@ void framework::draw_inspector()
 
     case editor_selection::scene_entity:
         draw_scene_entity_inspector();
+        break;
+
+    case editor_selection::game_object:
+        // GameObject / Component の編集は専用パネルへ委譲する。
+        // ここに Component 型ごとの分岐は書かない。
+        // 表示内容は ComponentRegistry と PropertyRegistry から自動生成される。
+        object_inspector_panel.DrawContents(object_editor_context);
         break;
 
     case editor_selection::directional_light:

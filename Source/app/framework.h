@@ -56,11 +56,34 @@ extern ImWchar glyphRangesJapanese[];
 #include "../../RePlayEngine/Assets/AssetDatabase.h"
 #include "../../RePlayEngine/Assets/AsyncAssetManager.h"
 #include "../../RePlayEngine/Assets/ConcurrentResourceCache.h"
+#include "../../RePlayEngine/Project/ProjectSettings.h"
 #include "../../RePlayEngine/Editor/Commands/UndoStack.h"
 #include "../../RePlayEngine/Editor/Gizmo/TransformGizmo.h"
 #include "../../RePlayEngine/Editor/Gizmo/ViewportPicker.h"
 #include "../../RePlayEngine/Scene/SceneDocument.h"
 #include "../../RePlayEngine/Physics/MeshCollisionCooker.h"
+
+// --- GameObject / Component 基盤 -------------------------------------------
+// 既存の SceneDocument / SceneManager とは責任が違う。
+//   SceneManager  … 起動ロゴ / ロード画面 / ゲームという画面遷移
+//   SceneDocument … 旧エディタのステージ配置記録（段階移行のため当面残す）
+//   Scene (下記)  … GameObject の入れ物。今回の新基盤。
+#include "../../RePlayEngine/Scene/Runtime/Scene.h"
+#include "../../RePlayEngine/Editor/Core/EditorContext.h"
+#include "../../RePlayEngine/Editor/Hierarchy/HierarchyPanel.h"
+#include "../../RePlayEngine/Editor/Inspector/InspectorPanel.h"
+#include "../../RePlayEngine/Rendering/Adapter/RenderItem.h"
+#include "../../RePlayEngine/Scene/Services/PlayerControlSystem.h"
+#include "../../RePlayEngine/Scene/Services/SceneCollisionWorld.h"
+#include "../../RePlayEngine/Editor/Debug/ColliderDebugDraw.h"
+#include "../../RePlayEngine/Editor/Viewport/EditorViewportCamera.h"
+#include "../../RePlayEngine/Editor/Viewport/EditorCameraController.h"
+#include "../../RePlayEngine/Editor/Viewport/EditorCameraStateStore.h"
+#include "../game/legacy_camera_basis_bridge.h"
+#include "../game/legacy_stage_collision_bridge.h"
+
+#include <unordered_map>
+#include <unordered_set>
 
 class gltf_model;
 
@@ -113,7 +136,6 @@ public:
     DirectX::XMFLOAT4 material_color{ 1, 1, 1, 1 };
     DirectX::XMFLOAT4 background_color{ 46.0f / 255.0f, 56.0f / 255.0f, 61.0f / 255.0f, 1.0f };
     bool draw_background_image{ false };
-    bool animate_model{ true };
     bool use_pbr_skin{ true };
     bool enable_toon_shader{ true };
     bool enable_unlit_shader{ true };
@@ -126,11 +148,17 @@ public:
     bool enable_fxaa_shader{ true };
     bool enable_static_meshes{ false };
     bool shader_stack_advanced_mode{ false };
-    int animation_clip_index{ 0 };
-    float animation_tick{ 0.0f };
-    float animation_speed{ 1.0f };
-    bool animation_loop{ true };
 
+    // static_meshes[0] … エディタのデバッグ用静的メッシュ (cube.obj)。既定は非表示。
+    // skinned_meshes[1] … 取り込んだ旧ステージ素材。
+    //
+    // かつて skinned_meshes[0] は「旧 Player 専用のモデルスロット」で、
+    // 起動時に固定の FBX を読み込み、Player の Transform で毎フレーム描いていた。
+    // その経路は完全に撤去したので、index 0 は誰も使わない。
+    // アニメーション付きモデルの描画は SkinnedMeshRendererComponent が提出する。
+    //
+    // shared_ptr なのは並列ロードとモデルキャッシュ (ConcurrentResourceCache /
+    // gltf_model_cache) が同じ実体を共有するため。所有権はここだけにしない。
     std::shared_ptr<static_mesh> static_meshes[8];
     std::shared_ptr<skinned_mesh> skinned_meshes[8];
     std::shared_ptr<gltf_model> stage_gltf_model;
@@ -155,23 +183,19 @@ public:
     Microsoft::WRL::ComPtr<ID3D11Buffer> shader_layer_cb;
     Microsoft::WRL::ComPtr<ID3D11Buffer> character_material_cb;
 
-    // ���f�����̃V�F�[�f�B���O�ݒ� (skinned_meshes[i] �ƑΉ�)
-    // 0=FBX�W���A1=PBR�A2=�g�D�[���A3=�A�����b�g�A4=�s�N�Z���[�V����
-    int shading_per_skinned[8] { 1, 1, 1, 1, 1, 1, 1, 1 };
+    // デバッグ用静的メッシュとステージのシェーディング設定 (static_meshes[i] と対応)
+    // 0=FBX標準、1=PBR、2=トゥーン、3=アンリット、4=ピクセレーション
+    //
+    // skinned 側の配列は撤去した。旧 Player 専用スロットのためだけに存在しており、
+    // GameObject の描画方式は SkinnedMeshRendererComponent /
+    // MeshRendererComponent の shading_model プロパティが持つ。
+    // 同じ値をここと Component の両方から変えられる状態は作らない。
     int shading_per_static [8] { 1, 1, 1, 1, 1, 1, 1, 1 };
-    bool outline_per_skinned[8] { false, false, false, false, false, false, false, false };
     bool outline_per_static [8] { false, false, false, false, false, false, false, false };
-    ReplayEngine::Rendering::ShaderLayerStack shader_layers_skinned[8];
     ReplayEngine::Rendering::ShaderLayerStack shader_layers_static[8];
-    ReplayEngine::Rendering::CharacterMaterialProfile character_profiles_skinned[8];
     ReplayEngine::Rendering::CharacterMaterialProfile character_profiles_static[8];
-    float pixelate_grid_per_skinned[8] { 6, 6, 6, 6, 6, 6, 6, 6 };
-    float pixelate_strength_per_skinned[8] { 1, 1, 1, 1, 1, 1, 1, 1 };
     float pixelate_grid_per_static[8] { 6, 6, 6, 6, 6, 6, 6, 6 };
     float pixelate_strength_per_static[8] { 1, 1, 1, 1, 1, 1, 1, 1 };
-
-    // UI����S�̂֓K�p����`������Bshading_per_skinned[0] �Ɠ�������B
-    int shading_model_override { 1 };
 
     pbr_renderer pbr;
 
@@ -190,23 +214,23 @@ public:
     ReplayEngine::Rendering::TaaPass taa_pass;
     ReplayEngine::Rendering::TiledDeferredPass tiled_deferred;
 
-    // SSAO/SSR/TAA�����L����t���[���萔�Bb9�֍ڂ���B
+    // SSAO/SSR/TAAが共有するフレーム定数。b9へ載せる。
     ReplayEngine::Rendering::FrameConstants frame_constants{};
     Microsoft::WRL::ComPtr<ID3D11Buffer> frame_constants_cb;
-    // TAA�̍ē��e�Ɏg���O�t���[���̃r���[�ˉe�s��B����͍��t���[���Ŗ��߂�B
+    // TAAの再投影に使う前フレームのビュー射影行列。初回は今フレームで埋める。
     DirectX::XMFLOAT4X4 previous_view_projection{};
     bool previous_view_projection_valid{ false };
-    // �ˉe�s��։��Z����TAA�W�b�^�[(NDC)�B���[�V�����x�N�^�[�őł������̂Ɏg���B
+    // 射影行列へ加算したTAAジッター(NDC)。モーションベクターで打ち消すのに使う。
     DirectX::XMFLOAT2 taa_jitter_ndc{ 0.0f, 0.0f };
     DirectX::XMFLOAT2 previous_taa_jitter_ndc{ 0.0f, 0.0f };
     unsigned int frame_index{ 0 };
     bool enable_ssao{ true };
     bool enable_ssr{ true };
     bool enable_taa{ true };
-    // �[�x�v���p�X�BG-Buffer��PS���s���őO�ʂ�1��ɗ}����B
-    // ���_������2��ɂȂ邽�߁ALOD�ƕ��p����O��B
+    // 深度プリパス。G-BufferのPS実行を最前面の1回に抑える。
+    // 頂点処理が2回になるため、LODと併用する前提。
     bool enable_depth_prepass{ true };
-    // �`�擝�v�I�[�o�[���C�̕\���BF4�Ő؂�ւ���B
+    // 描画統計オーバーレイの表示。F4で切り替える。
     bool show_render_stats{ true };
     // 初回フレームだけ統計ウィンドウの位置を強制するためのフラグ。
     // imgui.ini に残った旧座標(インスペクタと重なる位置)に
@@ -218,8 +242,8 @@ public:
     bool             enable_scene_game{ true };
     bool             editor_mode{ false };
 
-    // �X�e�[�W�̕`������� skinned[0] �ƕ�������B0��FBX�W���ŏ㏑�����Ȃ��B
-    // 0=FBX�W���A1=PBR�A2=�g�D�[���A3=�A�����b�g�A4=�s�N�Z���[�V����
+    // ステージの描画方式は skinned[0] と分離する。0はFBX標準で上書きしない。
+    // 0=FBX標準、1=PBR、2=トゥーン、3=アンリット、4=ピクセレーション
     int              shading_per_stage{ 1 };
     bool             outline_per_stage{ false };
     ReplayEngine::Rendering::ShaderLayerStack stage_shader_layers;
@@ -233,12 +257,25 @@ public:
     bool             stage_asset_placed{ false };
     std::string      selected_stage_asset_path;
     std::string      selected_stage_cache_path;
-    std::string      stage_asset_status{ "���I��" };
+    std::string      stage_asset_status{ "未選択" };
     ReplayEngine::Assets::AssetDatabase asset_database;
     ReplayEngine::Assets::ConcurrentResourceCache<static_mesh> static_mesh_cache;
     ReplayEngine::Assets::ConcurrentResourceCache<skinned_mesh> skinned_mesh_cache;
     ReplayEngine::Assets::ConcurrentResourceCache<gltf_model> gltf_model_cache;
     ReplayEngine::Assets::AsyncAssetManager async_asset_manager;
+
+    // プロジェクト設定。Default Controlled Character Prefab を持つ。
+    // 参照は AssetGUID なので、Prefab の名前やパスを変えても壊れない。
+    ReplayEngine::Project::ProjectSettings project_settings;
+    std::string project_settings_status{ "プロジェクト設定 未読込" };
+
+    // 直近で保存した Prefab の AssetGUID。
+    // 「保存した Prefab をそのまま既定の操作キャラクターにする」ボタン用。
+    std::string last_saved_prefab_guid;
+
+    // 新規シーン作成ダイアログの入力欄。
+    char new_object_scene_name[128]{ "NewScene" };
+
     ReplayEngine::Scene::SceneDocument editor_scene_document;
     ReplayEngine::Scene::SceneDocument runtime_scene_document;
     ReplayEngine::Editor::UndoStack scene_undo_stack;
@@ -249,16 +286,111 @@ public:
     std::vector<ReplayEngine::Scene::EntityId> selected_scene_entity_ids;
     std::vector<ReplayEngine::Scene::SceneEntity> copied_scene_entities;
     std::string      selected_stage_asset_guid;
+    // 旧ステージ配置記録 (SceneDocument) の保存先。sinotake 側の指定に合わせる。
     std::filesystem::path current_scene_path{ "resources/Scenes/Main.replayscene" };
-    std::string      scene_document_status{ "�V�K�V�[��" };
-    std::string      shader_preset_status{ "�v���Z�b�g���I��" };
+    std::string      scene_document_status{ "新規シーン" };
+    std::string      shader_preset_status{ "プリセット未選択" };
     bool             async_stage_load_active{ false };
+
+    // --- GameObject / Component 基盤 ---------------------------------------
+    //
+    // 所有関係:
+    //   framework が編集用 Scene と実行用 Scene の 2 つを値で所有する。
+    //   Scene が GameObject を、GameObject が Component を unique_ptr で所有する。
+    //   EditorContext と各パネルは Scene を非所有参照するだけ。
+    //
+    // Play Mode:
+    //   Play 開始時に編集 Scene を SceneData 経由で実行用 Scene へ複製する。
+    //   Play 中の変更は実行用 Scene だけに入るため、編集内容が汚れない。
+    ReplayEngine::Scene::Scene              object_scene;
+    ReplayEngine::Scene::Scene              object_scene_runtime;
+    ReplayEngine::Editor::EditorContext     object_editor_context;
+    ReplayEngine::Editor::HierarchyPanel    object_hierarchy_panel;
+    ReplayEngine::Editor::InspectorPanel    object_inspector_panel;
+    ReplayEngine::Rendering::RenderItemList object_render_items;
+
+    // Asset GUID -> メッシュ実体。
+    // 読み込めた Asset だけを入れる。null や壊れたエントリは決して登録しない。
+    std::unordered_map<std::string, std::unique_ptr<skinned_mesh>> object_mesh_cache;
+
+    // 読み込みに失敗した Asset GUID。
+    // 失敗をキャッシュ本体へ入れず別に持つことで、
+    //   - キャッシュには常に有効なメッシュしか入らない
+    //   - 毎フレーム同じ Asset を探し直さない
+    //   - 同じ警告をログへ出し続けない
+    // の 3 つを同時に満たす。
+    std::unordered_set<std::string> object_mesh_failures;
+
+    std::filesystem::path object_scene_path{ "resources/Scenes/TrainingStage.replayscene" };
+    bool             object_scene_play_mode{ false };
+
+    // 操作対象を型ではなく ObjectID で持つ。
+    // 人型からメカ・ドローンへ変えても GameObject のクラス型は変わらない。
+    ReplayEngine::Scene::PlayerControlSystem player_control_system;
+
+    // 【移行用】Gameplay Component から Camera / Stage 具象型を隠すための橋渡し。
+    // 削除条件はそれぞれのヘッダーへ記載してある。
+    LegacyCameraBasisBridge      object_camera_bridge;
+    LegacyStageCollisionBridge   object_collision_bridge;
+
+    // --- 衝突 -------------------------------------------------------------
+    //
+    // 所有関係:
+    //   framework が衝突世界と Cook キャッシュを値メンバとして 1 つずつ所有する。
+    //   衝突世界は Scene を非所有参照し、Cook データの実体は
+    //   MeshColliderComponent が shared_ptr で持つ（キャッシュは weak_ptr のみ）。
+    //
+    // Component からの経路:
+    //   Component -> GetScene() -> Services().Physics() -> object_collision_world
+    //   Motor は具象型を知らず、IPhysicsQueryService としてしか触らない。
+    ReplayEngine::Scene::SceneCollisionWorld  object_collision_world;
+    ReplayEngine::Physics::CookedMeshCollisionCache object_collision_cook_cache;
+
+    // Editor の Scene View へ形を描くための線分。毎フレーム作り直す。
+    std::vector<ReplayEngine::Editor::DebugLine> object_collider_debug_lines;
+    bool             show_collider_debug_draw{ false };
+    bool             show_collider_debug_bounds{ true };
+    bool             show_collider_debug_wireframe{ false };
+    bool             show_collision_diagnostics{ false };
+
+    // Cook に失敗した Asset。同じ警告をログへ出し続けないための記録。
+    std::unordered_set<std::string> object_collision_failures;
+
+    // 固定時間更新（CharacterMotor の物理用）。
+    float            object_fixed_time_step{ 1.0f / 60.0f };
+    float            object_fixed_accumulator{ 0.0f };
+    int              object_max_fixed_substeps{ 5 };
+
+    // 操作対象が設定されていない Scene であることを Editor へ知らせる。
+    // 「対象が居ないから何かを生成する」ことは決してしない。表示するだけ。
+    bool             object_missing_controlled_target{ false };
+
+    // --- Scene View の編集カメラ -------------------------------------------
+    //
+    // 所有関係:
+    //   framework が値メンバとして 1 つ持つ。Scene にも GameObject にも属さない。
+    //   Hierarchy へ出ないし、Scene ファイルにも Prefab にも保存されない。
+    //
+    // Runtime Camera との関係:
+    //   一切値をやり取りしない。Play 開始時に Runtime Camera へ写すことも、
+    //   Play 終了時に Runtime Camera から取り込むこともしない。
+    //   Viewport が 1 つしかないため、描画に使う行列だけを
+    //   「Edit Mode なら編集カメラ / Play・実行中なら Runtime Camera」と切り替える。
+    ReplayEngine::Editor::EditorViewportCamera   editor_camera;
+    ReplayEngine::Editor::EditorCameraController editor_camera_controller;
+
+    // 編集カメラがマウス／キーを消費したフレーム。
+    // Gizmo と選択処理を同時に走らせないためのフラグ。
+    bool             editor_camera_consumed_input{ false };
+
+    // 現在の Scene に対応する編集カメラ状態の保存キー。
+    std::string      editor_camera_state_key;
 
     bool             enable_deferred { true };
     bool             enable_particles{ false };
     bool             enable_trail    { false };
 
-    // �_�~�[�@���e�N�X�`�� (�@���}�b�v�������}�e���A���p�t�H�[���o�b�N)
+    // ダミー法線テクスチャ (法線マップが無いマテリアル用フォールバック)
     Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> dummy_normal_srv;
 
     int toon_preset_index{ 0 };
@@ -271,9 +403,9 @@ public:
     framework(framework&&) noexcept = delete;
     framework& operator=(framework&&) noexcept = delete;
 
-    // �I�����R�Ǝ�v�Ȑi�s�󋵂� Saved/engine_log.txt �֒ǋL����B
-    // �u�Ȃ����������v��������Ȃ��ƌ����̐؂蕪�����ł��Ȃ����߁A
-    // ��O��ُ�I�������łȂ�����I���̌o�H���c���B
+    // 終了理由と主要な進行状況を Saved/engine_log.txt へ追記する。
+    // 「なぜ落ちたか」が分からないと原因の切り分けができないため、
+    // 例外や異常終了だけでなく正常終了の経路も残す。
     static void log_shutdown_reason(const char* reason)
     {
         std::error_code error;
@@ -292,13 +424,13 @@ public:
     int run()
     {
         MSG msg{};
-        log_shutdown_reason("=== �N�� ===");
+        log_shutdown_reason("=== 起動 ===");
         if (!initialize())
         {
-            log_shutdown_reason("initialize() �� false ��Ԃ������ߏI��");
+            log_shutdown_reason("initialize() が false を返したため終了");
             return 0;
         }
-        log_shutdown_reason("initialize() ����");
+        log_shutdown_reason("initialize() 完了");
 
 #ifdef USE_IMGUI
         IMGUI_CHECKVERSION();
@@ -328,8 +460,8 @@ public:
             {
                 tictoc.tick();
                 calculate_frame_stats();
-                // �`�撆�̖��ߑ���O�ŐÂ��ɗ�����ƌ������ǂ��Ȃ����߁A
-                // �����ŕ߂܂��ė��R���c���B
+                // 描画中の未捕捉例外で静かに落ちると原因が追えないため、
+                // ここで捕まえて理由を残す。
                 try
                 {
                     update(tictoc.time_interval());
@@ -337,17 +469,17 @@ public:
                 }
                 catch (const std::exception& exception)
                 {
-                    log_shutdown_reason((std::string("��O: ") + exception.what()).c_str());
+                    log_shutdown_reason((std::string("例外: ") + exception.what()).c_str());
                     throw;
                 }
                 catch (...)
                 {
-                    log_shutdown_reason("�s���ȗ�O");
+                    log_shutdown_reason("不明な例外");
                     throw;
                 }
             }
         }
-        log_shutdown_reason("���b�Z�[�W���[�v�𔲂��� (WM_QUIT)");
+        log_shutdown_reason("メッセージループを抜けた (WM_QUIT)");
 
 #ifdef USE_IMGUI
         save_editor_session();
@@ -374,7 +506,21 @@ public:
                 (lparam & 0x40000000) == 0 && !ImGui::GetIO().WantTextInput;
             if (shortcut_pressed && wparam == 'S')
             {
-                save_scene_document((GetKeyState(VK_SHIFT) & 0x8000) != 0);
+                const bool choose_path = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+                // 旧ステージ配置記録と新しい GameObject シーンの両方を保存する。
+                // 保存先ファイルが別なので互いに上書きしない。
+                save_scene_document(choose_path);
+                save_object_scene(choose_path);
+                return 0;
+            }
+            // GameObject / Component 基盤の Undo / Redo。
+            // GameObject を選択している間はこちらが優先される。
+            if (msg == WM_KEYDOWN && control_down && !ImGui::GetIO().WantTextInput &&
+                (wparam == 'Z' || wparam == 'Y') &&
+                selected_editor_object == editor_selection::game_object)
+            {
+                if (wparam == 'Z') object_editor_context.Undo();
+                else object_editor_context.Redo();
                 return 0;
             }
             if (msg == WM_KEYDOWN && (GetKeyState(VK_CONTROL) & 0x8000) &&
@@ -437,6 +583,15 @@ public:
             show_render_stats = !show_render_stats;
             return 0;
         }
+        // F5 で GameObject シーンの実行 / 停止を切り替える。
+        // 実行中は編集用 Scene を複製した実行用 Scene が動くため、
+        // Play 中の位置や体力の変化が編集内容へ書き戻らない。
+        if (msg == WM_KEYDOWN && wparam == VK_F5 && editor_mode)
+        {
+            if (object_scene_play_mode) exit_object_play_mode();
+            else enter_object_play_mode();
+            return 0;
+        }
 #endif
         if ((msg == WM_SYSKEYDOWN && wparam == VK_RETURN && (lparam & (1LL << 29))) ||
             (msg == WM_KEYDOWN && wparam == VK_F11))
@@ -476,7 +631,7 @@ public:
             }
             if (wparam == VK_ESCAPE)
             {
-                log_shutdown_reason("ESC�L�[");
+                log_shutdown_reason("ESCキー");
                 PostMessage(hwnd, WM_CLOSE, 0, 0);
             }
             break;
@@ -493,8 +648,11 @@ private:
     void update(float elapsed_time);
     void render(float elapsed_time);
     bool uninitialize();
-    void store_object_world(DirectX::XMFLOAT4X4& world) const;
-    // SSAO/SSR/TAA�����L����t���[���萔�������b9�֍ڂ���B
+    // エディタのデバッグ用メッシュ (static_meshes[0]) を置くワールド行列。
+    // かつてはここで旧 Player の Transform を返していたが、その分岐は撤去した。
+    void store_debug_mesh_world(DirectX::XMFLOAT4X4& world) const;
+
+    // SSAO/SSR/TAAが共有するフレーム定数を作ってb9へ載せる。
     void update_frame_constants(const DirectX::XMMATRIX& view,
         const DirectX::XMMATRIX& projection, float elapsed_time);
     ID3D11PixelShader* skinned_forward_shader(int shading) const;
@@ -506,6 +664,10 @@ private:
     void reset_editor_values();
     void draw_editor();
     void draw_editor_toolbar();
+    void draw_runtime_mode_banner();
+
+    // 操作対象 GameObject の実行時診断。旧 Player の項目は持たない。
+    void draw_controlled_character_diagnostics();
     void draw_search_results();
     void draw_scene_hierarchy();
     void draw_inspector();
@@ -514,9 +676,9 @@ private:
         ReplayEngine::Rendering::ShaderLayerStack& layers, float& pixel_grid,
         float& pixelate_strength);
     void draw_screen_effect_stack();
-    // SSAO / SSR / TAA / CSM �̗L�����ƒ������ځB
+    // SSAO / SSR / TAA / CSM の有効化と調整項目。
     void draw_screen_space_settings();
-    // �|���S�����E�h���[�R�[�����Ȃǂ̕`�擝�v�I�[�o�[���C�B
+    // ポリゴン数・ドローコール数などの描画統計オーバーレイ。
     void draw_render_stats_overlay();
     void draw_character_material_controls(const char* id, int& base_shader, bool& outline_pass,
         ReplayEngine::Rendering::ShaderLayerStack& layers,
@@ -525,8 +687,8 @@ private:
     bool browse_stage_asset();
     bool load_stage_asset(const std::wstring& filename);
     bool load_stage_asset_now(const std::wstring& filename);
-    // ���[�J�[�X���b�h����Ăׂ郂�f����ǂ݁B�L���b�V���֍ڂ��邾����
-    // framework�̕\����Ԃ͐G��Ȃ����߁A���񃍁[�h���Ɉ��S�Ɏg����B
+    // ワーカースレッドから呼べるモデル先読み。キャッシュへ載せるだけで
+    // frameworkの表示状態は触らないため、並列ロード中に安全に使える。
     bool prewarm_model_asset(const std::filesystem::path& path);
     void draw_stage_placement_controls();
     void draw_scene_document_toolbar();
@@ -543,7 +705,11 @@ private:
     void save_editor_session();
     void restore_editor_session();
     void create_scene_document(const std::string& name);
-    void save_selected_prefab();
+
+    // 選択中の GameObject を Prefab として保存する。
+    // choose_path が true ならファイル名を選ばせる（任意名で保存できる）。
+    // 保存した Prefab は AssetDatabase へ登録され、AssetGUID で参照できるようになる。
+    void save_selected_prefab(bool choose_path);
     void load_prefab();
     void cook_selected_mesh_collision();
     void sync_selected_entity_to_stage();
@@ -551,6 +717,97 @@ private:
     void restore_stage_shader_layers(const ReplayEngine::Scene::ModelRendererData& renderer);
     ReplayEngine::Scene::SceneDocument& active_scene_document() noexcept;
     const ReplayEngine::Scene::SceneDocument& active_scene_document() const noexcept;
+
+    // --- GameObject / Component 基盤との接続 -------------------------------
+    // 実装はすべて Source/app/Runtime/framework_gameobject_scene.cpp にある。
+    void initialize_object_scene();
+    void update_object_scene(float elapsed_time);
+    bool save_object_scene(bool choose_path);
+    bool load_object_scene(bool choose_path);
+    void enter_object_play_mode();
+    void exit_object_play_mode();
+    ReplayEngine::Scene::Scene& active_object_scene() noexcept;
+    const ReplayEngine::Scene::Scene& active_object_scene() const noexcept;
+    skinned_mesh* resolve_object_mesh(const std::string& asset_guid);
+    void draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shader,
+        bool gbuffer_pass);
+    void clear_object_mesh_cache() noexcept;
+    bool object_runtime_active() const noexcept;
+    void update_object_fixed_step(float elapsed_time);
+    void update_object_camera_follow(float elapsed_time);
+    void refresh_object_scene_services();
+
+    // --- 新規 Scene 作成 ---------------------------------------------------
+    //
+    // Empty  … GameObject を 1 つも作らない。操作対象は未設定。
+    // Default … Default Controlled Character Prefab を 1 体だけ配置し、
+    //           そのルートを操作対象にする。
+    //
+    // どちらも「ユーザーが新規作成を選んだとき」しか呼ばれない。
+    // 起動時や Scene 読み込み時に Prefab を配置することは決してない。
+    bool create_object_scene(const std::string& name, bool place_default_character);
+
+    // --- プロジェクト設定 --------------------------------------------------
+    void load_project_settings();
+    bool save_project_settings();
+    void draw_project_settings_panel();
+
+    // 「新しいシーンを作成」ボタンと Empty / Default の選択ダイアログ。
+    void draw_new_object_scene_controls();
+
+    // --- Scene View の編集カメラ (Source/app/Editor/framework_editor_camera.cpp) --
+    //
+    // 【描画・Picking・Gizmo・Collider Debug Draw の行列はここだけから取る】
+    //   別々に行列を組み立てると、見えている位置・拾える位置・線の位置が
+    //   互いにずれる。取得窓口を 1 か所にすることで構造的に防ぐ。
+    //
+    //   Edit Mode        -> 編集カメラ
+    //   Play / 実行中     -> Runtime Camera (SceneGame が持つ Camera)
+    bool using_editor_camera() const noexcept;
+    DirectX::XMMATRIX viewport_view_matrix() const;
+    DirectX::XMMATRIX viewport_projection_matrix() const;
+    DirectX::XMFLOAT3 viewport_eye_position() const;
+
+    // 画面座標からワールド空間の視線を作る。Picking はこれだけを使う。
+    ReplayEngine::Editor::EditorViewportCamera::Ray viewport_picking_ray(
+        float mouse_x, float mouse_y) const;
+
+    // ImGui / Win32 から入力を読み、編集カメラへ渡す。
+    void update_editor_camera(float elapsed_time);
+
+    // F キーのフォーカス。選択対象の World Bounds を求めて収める。
+    // Undo 履歴へは積まない（Scene のデータを変更していないため）。
+    void focus_editor_camera_on_selection();
+
+    void draw_editor_camera_settings();
+
+    // 編集カメラ状態の保存・復元。Scene ファイルには一切書き込まない。
+    void load_editor_camera_state();
+    void save_editor_camera_state();
+    std::string make_editor_camera_state_key() const;
+
+    // Default Controlled Character Prefab の現在の解決結果。
+    ReplayEngine::Project::PrefabReferenceStatus resolve_default_character_prefab() const;
+
+    // --- 衝突 (Source/app/Runtime/framework_collision_world.cpp) ------------
+    // Scene の切り替えと Play / Edit の切り替えに合わせて衝突世界をつなぎ替える。
+    void initialize_collision_world();
+    void attach_collision_world(ReplayEngine::Scene::Scene& scene);
+    void detach_collision_world();
+    void refresh_collision_world();
+    void dispatch_collision_triggers();
+
+    // --- 衝突メッシュの供給 (framework_collision_mesh_source.cpp) -----------
+    // AssetGUID -> ローカル空間の三角形。Cook キャッシュから呼ばれる。
+    bool load_collision_triangles(const ReplayEngine::Physics::CookKey& key,
+        std::vector<ReplayEngine::Physics::Triangle>& out_local_triangles);
+    std::string resolve_asset_revision(const std::string& asset_guid) const;
+
+    // --- 衝突の可視化と診断 (Source/app/Editor/framework_collider_debug.cpp) -
+    void draw_collider_debug_overlay();
+    void draw_collision_diagnostics_panel();
+    const skinned_mesh::animation::keyframe* resolve_object_keyframe(
+        skinned_mesh& mesh, int clip_index, float animation_time) const;
     void draw_project_panel();
     void draw_console_panel();
     void execute_editor_command(const std::string& command);
@@ -593,13 +850,17 @@ private:
     DWORD windowed_ex_style{ 0 };
     RECT windowed_rect{ 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT };
 
+    // 旧 Player 用の項目 (player) は撤去した。
+    // 操作対象は Scene 内の通常 GameObject なので game_object で選択される。
     enum class editor_selection
     {
         world,
         camera,
-        player,
         stage,
         scene_entity,
+        // 新しい GameObject / Component 基盤で選択された GameObject。
+        // 旧 scene_entity（SceneDocument のステージ配置記録）とは別物。
+        game_object,
         directional_light,
         point_lights,
         rendering,
@@ -620,17 +881,17 @@ private:
     bool editor_layout_dirty{ false };
     bool editor_hide_requested{ false };
     bool editor_session_active{ false };
-    // ���̃t���[����ImGui::NewFrame()��ʂ������B
-    // ���[�h�����t���[���̂悤��update()������return���������editor_mode��
-    // ���ꍇ������ANewFrame������Render()�����ImGui��assert���邽�߁A
-    // NewFrame��Render/EndFrame�̑΂����̃t���O�ŕۏ؂���B
+    // このフレームでImGui::NewFrame()を通したか。
+    // ロード完了フレームのようにupdate()が早期returnした直後にeditor_modeが
+    // 立つ場合があり、NewFrame無しでRender()するとImGuiがassertするため、
+    // NewFrameとRender/EndFrameの対をこのフラグで保証する。
     bool imgui_frame_active{ false };
     bool edit_mode_active{ false };
     bool search_input_active{ false };
     bool focus_search_requested{ false };
     char editor_search_text[256]{};
     char editor_command_text[256]{};
-    std::string editor_command_result{ "help �ŃR�}���h�ꗗ��\��" };
+    std::string editor_command_result{ "help でコマンド一覧を表示" };
     bool viewport_drag_selecting{ false };
     POINT viewport_drag_start{};
 };

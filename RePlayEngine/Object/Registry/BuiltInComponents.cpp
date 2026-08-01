@@ -1,0 +1,546 @@
+﻿#include "BuiltInComponents.h"
+
+#include "ComponentRegistry.h"
+#include "../../Reflection/Registry/PropertyRegistry.h"
+
+#include "../../Components/Camera/CameraTargetComponent.h"
+#include "../../Components/Core/TransformComponent.h"
+#include "../../Components/Gameplay/CharacterMotorComponent.h"
+#include "../../Components/Gameplay/HealthComponent.h"
+#include "../../Components/Gameplay/PlayerControllerComponent.h"
+#include "../../Components/Gameplay/PlayerInputComponent.h"
+#include "../../Components/Gameplay/RotatorComponent.h"
+#include "../../Components/Physics/BoxColliderComponent.h"
+#include "../../Components/Physics/CapsuleColliderComponent.h"
+#include "../../Components/Physics/MeshColliderComponent.h"
+#include "../../Components/Physics/SphereColliderComponent.h"
+#include "../../Components/Rendering/AnimatorComponent.h"
+#include "../../Components/Rendering/MeshRendererComponent.h"
+#include "../../Components/Rendering/SkinnedMeshRendererComponent.h"
+
+namespace ReplayEngine::Core
+{
+    namespace
+    {
+        using Components::AnimatorComponent;
+        using Components::BoxColliderComponent;
+        using Components::CameraTargetComponent;
+        using Components::CapsuleColliderComponent;
+        using Components::CharacterMotorComponent;
+        using Components::HealthComponent;
+        using Components::MeshColliderComponent;
+        using Components::MeshRendererComponent;
+        using Components::PlayerControllerComponent;
+        using Components::PlayerInputComponent;
+        using Components::RotatorComponent;
+        using Components::SkinnedMeshRendererComponent;
+        using Components::SphereColliderComponent;
+        using Components::TransformComponent;
+
+        using Reflection::MakeAccessorProperty;
+        using Reflection::MakeProperty;
+        using Reflection::PropertyRegistry;
+        using Reflection::PropertyType;
+        using Reflection::PropertyValue;
+
+        void RegisterTransform()
+        {
+            ComponentRegistry::Register<TransformComponent>(
+                ComponentTypeInfo::Describe("Transform", "Core")
+                    .WithTooltip("位置・回転・拡大率。GameObject が実体を持つ。")
+                    .AsBuiltIn()
+                    .NotRemovable()
+                    // Transform は GameObject 側の情報として保存される。
+                    // ここでも保存すると同じ値がファイル内に 2 度出てしまう。
+                    .NotSerializable());
+
+            PropertyRegistry::Register<TransformComponent>(
+                MakeAccessorProperty<TransformComponent>("position", PropertyType::Vector3,
+                    [](const TransformComponent& component)
+                    { return PropertyValue::MakeVector3(component.Position()); },
+                    [](TransformComponent& component, const PropertyValue& value)
+                    { component.SetPosition(value.AsVector3()); })
+                .Display("位置").Step(0.05).NotSerializable());
+
+            PropertyRegistry::Register<TransformComponent>(
+                MakeAccessorProperty<TransformComponent>("rotation", PropertyType::Vector3,
+                    [](const TransformComponent& component)
+                    { return PropertyValue::MakeVector3(component.RotationDegrees()); },
+                    [](TransformComponent& component, const PropertyValue& value)
+                    { component.SetRotationDegrees(value.AsVector3()); })
+                .Display("回転 (度)").Step(0.5).NotSerializable());
+
+            PropertyRegistry::Register<TransformComponent>(
+                MakeAccessorProperty<TransformComponent>("scale", PropertyType::Vector3,
+                    [](const TransformComponent& component)
+                    { return PropertyValue::MakeVector3(component.Scale()); },
+                    [](TransformComponent& component, const PropertyValue& value)
+                    { component.SetScale(value.AsVector3()); })
+                .Display("拡大率").Step(0.01).NotSerializable());
+        }
+
+        void RegisterMeshRenderer()
+        {
+            ComponentRegistry::Register<MeshRendererComponent>(
+                ComponentTypeInfo::Describe("Mesh Renderer", "Rendering")
+                    .WithTooltip("Asset を指定して既存レンダラーへ描画を依頼する。"));
+
+            PropertyRegistry::Register<MeshRendererComponent>(
+                MakeProperty("mesh_asset", &MeshRendererComponent::mesh_asset)
+                    .Display("メッシュ").AsAssetPath()
+                    .Tooltip("AssetDatabase の GUID。プロジェクトパネルから指定する。"));
+
+            PropertyRegistry::Register<MeshRendererComponent>(
+                MakeProperty("material_asset", &MeshRendererComponent::material_asset)
+                    .Display("マテリアル").AsAssetPath()
+                    .Tooltip("将来 Material を分離するための枠。現時点では未使用。"));
+
+            PropertyRegistry::Register<MeshRendererComponent>(
+                MakeProperty("tint", &MeshRendererComponent::tint)
+                    .Display("色").AsColor());
+
+            PropertyRegistry::Register<MeshRendererComponent>(
+                MakeProperty("shading_model", &MeshRendererComponent::shading_model)
+                    .Display("描画方式")
+                    .AsEnum({ "FBX標準", "PBR", "トゥーン", "アンリット" }));
+
+            PropertyRegistry::Register<MeshRendererComponent>(
+                MakeProperty("outline", &MeshRendererComponent::outline).Display("輪郭線"));
+
+            PropertyRegistry::Register<MeshRendererComponent>(
+                MakeProperty("cast_shadow", &MeshRendererComponent::cast_shadow)
+                    .Display("影を落とす"));
+
+            PropertyRegistry::Register<MeshRendererComponent>(
+                MakeProperty("visible", &MeshRendererComponent::visible).Display("表示"));
+        }
+
+        void RegisterRotator()
+        {
+            ComponentRegistry::Register<RotatorComponent>(
+                ComponentTypeInfo::Describe("Rotator", "Gameplay")
+                    .WithTooltip("GameObject を一定速度で回し続ける。動作確認用。"));
+
+            PropertyRegistry::Register<RotatorComponent>(
+                MakeProperty("axis", &RotatorComponent::axis)
+                    .Display("回転軸").Step(0.01));
+
+            PropertyRegistry::Register<RotatorComponent>(
+                MakeProperty("degrees_per_second", &RotatorComponent::degrees_per_second)
+                    .Display("回転速度 (度/秒)")
+                    .Range(-1440.0, 1440.0).Step(1.0));
+        }
+
+        void RegisterHealth()
+        {
+            ComponentRegistry::Register<HealthComponent>(
+                ComponentTypeInfo::Describe("Health", "Gameplay")
+                    .WithTooltip("体力。将来はプレイヤーと敵で共有する。"));
+
+            PropertyRegistry::Register<HealthComponent>(
+                MakeProperty("max_health", &HealthComponent::max_health)
+                    .Display("最大体力").Range(1.0, 100000.0).Step(1.0));
+
+            PropertyRegistry::Register<HealthComponent>(
+                MakeProperty("current_health", &HealthComponent::current_health)
+                    .Display("現在体力").Range(0.0, 100000.0).Step(1.0));
+
+            PropertyRegistry::Register<HealthComponent>(
+                MakeProperty("invulnerable", &HealthComponent::invulnerable)
+                    .Display("無敵"));
+        }
+
+        void RegisterSkinnedMeshRenderer()
+        {
+            ComponentRegistry::Register<SkinnedMeshRendererComponent>(
+                ComponentTypeInfo::Describe("Skinned Mesh Renderer", "Rendering")
+                    .WithTooltip("アニメーション付きモデルを描画する。Animator のクリップと時刻を提出する。"));
+
+            PropertyRegistry::Register<SkinnedMeshRendererComponent>(
+                MakeProperty("mesh_asset", &SkinnedMeshRendererComponent::mesh_asset)
+                    .Display("メッシュ").AsAssetPath()
+                    .Tooltip("AssetDatabase の GUID。空なら描画しない。"));
+
+            PropertyRegistry::Register<SkinnedMeshRendererComponent>(
+                MakeProperty("tint", &SkinnedMeshRendererComponent::tint).Display("色").AsColor());
+
+            PropertyRegistry::Register<SkinnedMeshRendererComponent>(
+                MakeProperty("shading_model", &SkinnedMeshRendererComponent::shading_model)
+                    .Display("描画方式")
+                    .AsEnum({ "FBX標準", "PBR", "トゥーン", "アンリット" }));
+
+            PropertyRegistry::Register<SkinnedMeshRendererComponent>(
+                MakeProperty("outline", &SkinnedMeshRendererComponent::outline).Display("輪郭線"));
+
+            PropertyRegistry::Register<SkinnedMeshRendererComponent>(
+                MakeProperty("cast_shadow", &SkinnedMeshRendererComponent::cast_shadow)
+                    .Display("影を落とす"));
+
+            PropertyRegistry::Register<SkinnedMeshRendererComponent>(
+                MakeProperty("visible", &SkinnedMeshRendererComponent::visible).Display("表示"));
+
+            PropertyRegistry::Register<SkinnedMeshRendererComponent>(
+                MakeProperty("visual_rotation_offset",
+                    &SkinnedMeshRendererComponent::visual_rotation_offset)
+                    .Display("表示姿勢補正 (度)").Step(0.5)
+                    .Tooltip("FBX の基準姿勢を正立させるための補正。論理的な向きとは別物。"));
+
+            // 【重要】この 2 つは以前 PropertyRegistry へ登録されていなかった。
+            //   Component のメンバとしては存在し、描画にも使われていたが、
+            //   登録が無いと保存も復元も Inspector 表示もされない。
+            //   そのため「変換直後は正しい大きさなのに、保存して再起動すると
+            //   既定値 1.0 に戻って 100 倍の大きさで表示される」状態になっていた。
+            //   モデル固有の縮尺は Scene / Prefab へ保存されなければ意味がないので、
+            //   ここへ登録して単一の登録点の約束へ揃える。
+            PropertyRegistry::Register<SkinnedMeshRendererComponent>(
+                MakeProperty("local_position_offset",
+                    &SkinnedMeshRendererComponent::local_position_offset)
+                    .Display("モデル位置オフセット").Step(0.01)
+                    .Tooltip("モデルの原点が足元や中心でない場合のずらし。"
+                        "GameObject の位置とは別物。"));
+
+            PropertyRegistry::Register<SkinnedMeshRendererComponent>(
+                MakeProperty("local_scale_multiplier",
+                    &SkinnedMeshRendererComponent::local_scale_multiplier)
+                    .Display("モデル縮尺倍率").Step(0.001)
+                    .Tooltip("GameObject の Scale へ掛ける倍率。"
+                        "cm 単位で作られた FBX なら 0.01 を入れる。"
+                        "1.0 のままだと 100 倍の大きさで表示される。"));
+
+            PropertyRegistry::Register<SkinnedMeshRendererComponent>(
+                MakeProperty("apply_fbx_coordinate_transform",
+                    &SkinnedMeshRendererComponent::apply_fbx_coordinate_transform)
+                    .Display("FBX 座標系補正"));
+        }
+
+        void RegisterAnimator()
+        {
+            ComponentRegistry::Register<AnimatorComponent>(
+                ComponentTypeInfo::Describe("Animator", "Rendering")
+                    .WithTooltip("Character Motor の状態から Idle / Walk / Jump を切り替える。"));
+
+            PropertyRegistry::Register<AnimatorComponent>(
+                MakeProperty("idle_clip", &AnimatorComponent::idle_clip)
+                    .Display("待機クリップ").Range(-1.0, 255.0).Step(1.0)
+                    .Tooltip("-1 なら切り替えない。"));
+
+            PropertyRegistry::Register<AnimatorComponent>(
+                MakeProperty("walk_clip", &AnimatorComponent::walk_clip)
+                    .Display("移動クリップ").Range(-1.0, 255.0).Step(1.0));
+
+            PropertyRegistry::Register<AnimatorComponent>(
+                MakeProperty("jump_clip", &AnimatorComponent::jump_clip)
+                    .Display("ジャンプクリップ").Range(-1.0, 255.0).Step(1.0));
+
+            PropertyRegistry::Register<AnimatorComponent>(
+                MakeProperty("playback_speed", &AnimatorComponent::playback_speed)
+                    .Display("再生速度").Range(0.0, 5.0).Step(0.01));
+
+            PropertyRegistry::Register<AnimatorComponent>(
+                MakeProperty("loop", &AnimatorComponent::loop).Display("ループ"));
+
+            PropertyRegistry::Register<AnimatorComponent>(
+                MakeProperty("walk_speed_threshold", &AnimatorComponent::walk_speed_threshold)
+                    .Display("移動とみなす速度").Range(0.0, 10.0).Step(0.01));
+
+            PropertyRegistry::Register<AnimatorComponent>(
+                MakeProperty("playing", &AnimatorComponent::playing).Display("再生"));
+        }
+
+        // すべての Collider に共通するプロパティ。
+        //
+        // 形状ごとに同じ 5 行を書き写すと、片方だけ直し忘れる事故が起きる。
+        // 共通部分はここ 1 か所にまとめ、形状ごとの登録から呼ぶ。
+        // 登録先の型が違うだけなのでテンプレートで足りる。
+        // 【テンプレート引数を明示している理由】
+        //   collider_key などは基底 ColliderComponent のメンバなので、
+        //   MakeProperty(&T::collider_key) と書くと引数推論で C = ColliderComponent に
+        //   なってしまう。基底は抽象クラスで StaticTypeID を持たないためコンパイルできない。
+        //   <T, ...> を明示すると、メンバポインタが基底→派生へ暗黙変換され、
+        //   登録先も正しく派生型になる。
+        template<class T>
+        void RegisterColliderCommon()
+        {
+            PropertyRegistry::Register<T>(
+                MakeProperty<T, int>("collider_key", &T::collider_key)
+                    .Display("Collider 番号").ReadOnly().HiddenInEditor()
+                    .Tooltip("GameObject の中でこの Collider を指す番号。"
+                        "Character Motor の参照に使われる。自動で振られる。"));
+
+            PropertyRegistry::Register<T>(
+                MakeProperty<T, DirectX::XMFLOAT3>("center_offset", &T::center_offset)
+                    .Display("中心オフセット").Step(0.01));
+
+            PropertyRegistry::Register<T>(
+                MakeProperty<T, int>("collision_layer", &T::collision_layer)
+                    .Display("レイヤー").AsCollisionLayer()
+                    .Tooltip("この Collider が属するレイヤー。"));
+
+            PropertyRegistry::Register<T>(
+                MakeProperty<T, int>("collision_mask", &T::collision_mask)
+                    .Display("衝突する相手").AsCollisionMask()
+                    .Tooltip("衝突を受け付けるレイヤー。"
+                        "双方が互いを含んでいるときだけ衝突する。"));
+
+            PropertyRegistry::Register<T>(
+                MakeProperty<T, bool>("is_trigger", &T::is_trigger)
+                    .Display("トリガー")
+                    .Tooltip("true なら通り抜ける。押し戻しと接地からは必ず除外される。"
+                        "代わりに OnTriggerEnter / Stay / Exit が届く。"));
+
+            PropertyRegistry::Register<T>(
+                MakeProperty<T, bool>("debug_draw", &T::debug_draw)
+                    .Display("形状を表示")
+                    .Tooltip("Editor の Scene View へ形状を描く。"));
+        }
+
+        void RegisterSphereCollider()
+        {
+            ComponentRegistry::Register<SphereColliderComponent>(
+                ComponentTypeInfo::Describe("Sphere Collider", "Physics")
+                    .WithTooltip("球状の衝突形状。中心は Owner の Transform から求める。")
+                    .AllowMultipleInstances());
+
+            RegisterColliderCommon<SphereColliderComponent>();
+
+            PropertyRegistry::Register<SphereColliderComponent>(
+                MakeProperty("radius", &SphereColliderComponent::radius)
+                    .Display("半径").Range(0.01, 100.0).Step(0.01));
+
+            PropertyRegistry::Register<SphereColliderComponent>(
+                MakeProperty("skin_width", &SphereColliderComponent::skin_width)
+                    .Display("接触余白").Range(0.0, 1.0).Step(0.001));
+
+            PropertyRegistry::Register<SphereColliderComponent>(
+                MakeProperty("walkable_normal_y", &SphereColliderComponent::walkable_normal_y)
+                    .Display("歩ける傾斜のしきい値").Range(-1.0, 1.0).Step(0.01));
+        }
+
+        void RegisterBoxCollider()
+        {
+            ComponentRegistry::Register<BoxColliderComponent>(
+                ComponentTypeInfo::Describe("Box Collider", "Physics")
+                    .WithTooltip("直方体の衝突形状。"
+                        "GameObject の位置・回転・拡大率をすべて反映する。")
+                    .AllowMultipleInstances());
+
+            RegisterColliderCommon<BoxColliderComponent>();
+
+            PropertyRegistry::Register<BoxColliderComponent>(
+                MakeProperty("size", &BoxColliderComponent::size)
+                    .Display("サイズ").Step(0.01)
+                    .Tooltip("辺の長さ。半分の長さではない。"));
+        }
+
+        void RegisterCapsuleCollider()
+        {
+            ComponentRegistry::Register<CapsuleColliderComponent>(
+                ComponentTypeInfo::Describe("Capsule Collider", "Physics")
+                    .WithTooltip("カプセルの衝突形状。キャラクターの移動用に向く。")
+                    .AllowMultipleInstances());
+
+            RegisterColliderCommon<CapsuleColliderComponent>();
+
+            PropertyRegistry::Register<CapsuleColliderComponent>(
+                MakeProperty("radius", &CapsuleColliderComponent::radius)
+                    .Display("半径").Range(0.01, 100.0).Step(0.01));
+
+            PropertyRegistry::Register<CapsuleColliderComponent>(
+                MakeProperty("height", &CapsuleColliderComponent::height)
+                    .Display("高さ").Range(0.01, 200.0).Step(0.01)
+                    .Tooltip("両端の半球を含めた全長。"
+                        "直径を下回る値を入れると、判定は直径まで切り上げられ警告が出る。"));
+
+            PropertyRegistry::Register<CapsuleColliderComponent>(
+                MakeProperty("axis", &CapsuleColliderComponent::axis)
+                    .Display("軸").AsEnum({ "X", "Y", "Z" }));
+        }
+
+        void RegisterMeshCollider()
+        {
+            ComponentRegistry::Register<MeshColliderComponent>(
+                ComponentTypeInfo::Describe("Mesh Collider", "Physics")
+                    .WithTooltip("三角形メッシュの衝突形状（静的環境用）。"
+                        "Cook データは AssetGUID 単位で共有される。")
+                    .AllowMultipleInstances());
+
+            RegisterColliderCommon<MeshColliderComponent>();
+
+            PropertyRegistry::Register<MeshColliderComponent>(
+                MakeProperty("mesh_source", &MeshColliderComponent::mesh_source)
+                    .Display("メッシュの取得元")
+                    .AsEnum({ "Renderer のメッシュ", "衝突専用メッシュ" })
+                    .Tooltip("Renderer 側を使うか、衝突専用の低ポリメッシュを指定するか。"));
+
+            PropertyRegistry::Register<MeshColliderComponent>(
+                MakeProperty("mesh_asset", &MeshColliderComponent::mesh_asset)
+                    .Display("衝突専用メッシュ").AsAssetPath()
+                    .Tooltip("「衝突専用メッシュ」を選んだときだけ使う AssetGUID。"));
+
+            PropertyRegistry::Register<MeshColliderComponent>(
+                MakeProperty("cook_cell_size", &MeshColliderComponent::cook_cell_size)
+                    .Display("セルサイズ").Range(0.05, 100.0).Step(0.1)
+                    .Tooltip("空間分割の粗さ。小さいほど絞り込みが効くがメモリを使う。"));
+
+            PropertyRegistry::Register<MeshColliderComponent>(
+                MakeProperty("double_sided", &MeshColliderComponent::double_sided)
+                    .Display("両面に当たる"));
+
+            PropertyRegistry::Register<MeshColliderComponent>(
+                MakeProperty("debug_draw_wireframe",
+                    &MeshColliderComponent::debug_draw_wireframe)
+                    .Display("三角形を表示")
+                    .Tooltip("既定は境界ボックスのみ。"
+                        "有効にすると衝突三角形そのものを描く（重い）。"));
+        }
+
+        void RegisterCharacterMotor()
+        {
+            ComponentRegistry::Register<CharacterMotorComponent>(
+                ComponentTypeInfo::Describe("Character Motor", "Gameplay")
+                    .WithTooltip("移動・重力・ジャンプ・接地。プレイヤーと敵の双方から使える。"));
+
+            // 移動用 Collider は明示的に選ぶ。暗黙の自動選択はしない。
+            // 一覧には Sphere / Capsule / Box だけが出る（Mesh と Trigger は除外）。
+            PropertyRegistry::Register<CharacterMotorComponent>(
+                MakeProperty("primary_collider_key",
+                    &CharacterMotorComponent::primary_collider_key)
+                    .Display("移動用 Collider").AsColliderReference()
+                    .Tooltip("移動・接地・押し戻しに使う Collider。"
+                        "未設定だと地形との当たり判定を行わない。"));
+
+            PropertyRegistry::Register<CharacterMotorComponent>(
+                MakeProperty("move_speed", &CharacterMotorComponent::move_speed)
+                    .Display("移動速度").Range(0.0, 30.0).Step(0.1));
+
+            PropertyRegistry::Register<CharacterMotorComponent>(
+                MakeProperty("acceleration", &CharacterMotorComponent::acceleration)
+                    .Display("加速度").Range(0.0, 120.0).Step(0.5));
+
+            PropertyRegistry::Register<CharacterMotorComponent>(
+                MakeProperty("deceleration", &CharacterMotorComponent::deceleration)
+                    .Display("減速度").Range(0.0, 120.0).Step(0.5));
+
+            PropertyRegistry::Register<CharacterMotorComponent>(
+                MakeProperty("air_control", &CharacterMotorComponent::air_control)
+                    .Display("空中制御").Range(0.0, 1.0).Step(0.01));
+
+            PropertyRegistry::Register<CharacterMotorComponent>(
+                MakeProperty("gravity", &CharacterMotorComponent::gravity)
+                    .Display("重力").Range(0.0, 100.0).Step(0.1));
+
+            PropertyRegistry::Register<CharacterMotorComponent>(
+                MakeProperty("jump_power", &CharacterMotorComponent::jump_power)
+                    .Display("ジャンプ力").Range(0.0, 50.0).Step(0.1));
+
+            PropertyRegistry::Register<CharacterMotorComponent>(
+                MakeProperty("maximum_fall_speed", &CharacterMotorComponent::maximum_fall_speed)
+                    .Display("最大落下速度").Range(0.0, 200.0).Step(1.0));
+
+            PropertyRegistry::Register<CharacterMotorComponent>(
+                MakeProperty("fallback_ground_y", &CharacterMotorComponent::fallback_ground_y)
+                    .Display("地形が無い時の床の高さ").Step(0.05));
+
+            PropertyRegistry::Register<CharacterMotorComponent>(
+                MakeProperty("vertical_physics", &CharacterMotorComponent::vertical_physics)
+                    .Display("重力とジャンプを有効化")
+                    .Tooltip("旧 Player は既定で無効だったため、初期値も無効にしてある。"));
+        }
+
+        void RegisterPlayerInput()
+        {
+            ComponentRegistry::Register<PlayerInputComponent>(
+                ComponentTypeInfo::Describe("Player Input", "Gameplay")
+                    .WithTooltip("入力の取得だけを担当する。Transform も速度も触らない。"));
+
+            PropertyRegistry::Register<PlayerInputComponent>(
+                MakeProperty("input_enabled", &PlayerInputComponent::input_enabled)
+                    .Display("入力を受け付ける"));
+
+            PropertyRegistry::Register<PlayerInputComponent>(
+                MakeProperty("local_player_slot", &PlayerInputComponent::local_player_slot)
+                    .Display("プレイヤー番号").Range(0.0, 3.0).Step(1.0));
+        }
+
+        void RegisterPlayerController()
+        {
+            ComponentRegistry::Register<PlayerControllerComponent>(
+                ComponentTypeInfo::Describe("Player Controller", "Gameplay")
+                    .WithTooltip("Player Input と Character Motor をつなぐ。両方が必要。"));
+
+            PropertyRegistry::Register<PlayerControllerComponent>(
+                MakeProperty("turn_speed_degrees", &PlayerControllerComponent::turn_speed_degrees)
+                    .Display("旋回速度 (度/秒)").Range(0.0, 1440.0).Step(1.0));
+
+            PropertyRegistry::Register<PlayerControllerComponent>(
+                MakeProperty("dash_multiplier", &PlayerControllerComponent::dash_multiplier)
+                    .Display("ダッシュ倍率").Range(0.1, 5.0).Step(0.05));
+
+            PropertyRegistry::Register<PlayerControllerComponent>(
+                MakeProperty("camera_relative", &PlayerControllerComponent::camera_relative)
+                    .Display("カメラ基準で移動"));
+
+            PropertyRegistry::Register<PlayerControllerComponent>(
+                MakeProperty("rotate_towards_movement",
+                    &PlayerControllerComponent::rotate_towards_movement)
+                    .Display("進行方向へ向く"));
+        }
+
+        void RegisterCameraTarget()
+        {
+            ComponentRegistry::Register<CameraTargetComponent>(
+                ComponentTypeInfo::Describe("Camera Target", "Camera")
+                    .WithTooltip("カメラ追従の対象になる。自分ではカメラを動かさない。"));
+
+            PropertyRegistry::Register<CameraTargetComponent>(
+                MakeProperty("target_offset", &CameraTargetComponent::target_offset)
+                    .Display("追従基準のオフセット").Step(0.05)
+                    .Tooltip("追従する点そのものをずらす。"
+                        "モデルの原点が足元にある場合などに使う。"));
+
+            PropertyRegistry::Register<CameraTargetComponent>(
+                MakeProperty("look_at_offset", &CameraTargetComponent::look_at_offset)
+                    .Display("注視点オフセット").Step(0.05)
+                    .Tooltip("追従点は変えずに、カメラが見る点だけをずらす。"));
+
+            PropertyRegistry::Register<CameraTargetComponent>(
+                MakeProperty("follow_distance", &CameraTargetComponent::follow_distance)
+                    .Display("追従距離").Range(0.5, 100.0).Step(0.1));
+
+            PropertyRegistry::Register<CameraTargetComponent>(
+                MakeProperty("follow_height", &CameraTargetComponent::follow_height)
+                    .Display("追従高さ").Range(-10.0, 50.0).Step(0.1));
+
+            PropertyRegistry::Register<CameraTargetComponent>(
+                MakeProperty("follow_lag", &CameraTargetComponent::follow_lag)
+                    .Display("追従の速さ").Range(0.1, 60.0).Step(0.1));
+
+            PropertyRegistry::Register<CameraTargetComponent>(
+                MakeProperty("priority", &CameraTargetComponent::priority)
+                    .Display("優先度").Range(-100.0, 100.0).Step(1.0));
+        }
+    }
+
+    void RegisterBuiltInComponents()
+    {
+        // 並び順がそのまま Add Component 一覧の並びになる。
+        //
+        // 新しい Component を足すときは、ここへ 1 行足すだけでよい。
+        // それだけで Add Component 一覧・Inspector・Scene 保存・読み込み・
+        // 複製・Undo/Redo・Prefab のすべてへ反映される。
+        RegisterTransform();
+        RegisterMeshRenderer();
+        RegisterSkinnedMeshRenderer();
+        RegisterAnimator();
+        RegisterSphereCollider();
+        RegisterBoxCollider();
+        RegisterCapsuleCollider();
+        RegisterMeshCollider();
+        RegisterCharacterMotor();
+        RegisterPlayerInput();
+        RegisterPlayerController();
+        RegisterCameraTarget();
+        RegisterRotator();
+        RegisterHealth();
+    }
+}
