@@ -65,10 +65,11 @@ void framework::draw_collider_debug_overlay()
         object_collision_world, options, object_collider_debug_lines);
     if (object_collider_debug_lines.empty()) return;
 
-    const Camera& camera = game_scene->Gameplay().GetCamera();
+    // 描画・Picking・Gizmo と同じ窓口から行列を取る。
+    // ここで Runtime Camera を直接読むと、編集カメラで見ている画面に対して
+    // 線だけが別の位置へ出てしまう。
     const DirectX::XMMATRIX view_projection =
-        DirectX::XMLoadFloat4x4(&camera.GetView()) *
-        DirectX::XMLoadFloat4x4(&camera.GetProjection());
+        viewport_view_matrix() * viewport_projection_matrix();
 
     ImDrawList* draw_list = ImGui::GetBackgroundDrawList();
     const ImVec2 origin = ImGui::GetMainViewport()->Pos;

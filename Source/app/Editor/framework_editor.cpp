@@ -434,6 +434,19 @@ void framework::draw_project_panel()
         }
         ImGui::Separator();
     }
+    // GameObject シーン (.replayscene) の操作。
+    // 上の「シーン」欄が扱う旧ステージ配置記録 (.replaystage) とは別物。
+    if (ImGui::CollapsingHeader("GameObject シーン", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        ImGui::Text("現在: %s", active_object_scene().Name().c_str());
+        ImGui::TextDisabled("%s", object_scene_path.generic_u8string().c_str());
+        draw_new_object_scene_controls();
+        ImGui::SameLine();
+        if (ImGui::Button("Prefabとして保存...")) save_selected_prefab(true);
+        ImGui::TextDisabled("%s", object_editor_context.Status().c_str());
+        ImGui::Separator();
+    }
+
     if (ImGui::Button("モデルファイルを取り込む...")) browse_stage_asset();
     ImGui::SameLine();
     if (ImGui::Button("Prefabを配置...")) load_prefab();

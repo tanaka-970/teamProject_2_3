@@ -29,6 +29,18 @@ void framework::update(float elapsed_time)
     ImGui_ImplDX11_NewFrame();
     ImGui_ImplWin32_NewFrame();
     ImGui::NewFrame();
+
+    // Scene View の編集カメラ。
+    //
+    // draw_editor() より先に呼ぶ理由:
+    //   カメラがこのフレームでマウス／キーを消費したかを
+    //   editor_camera_consumed_input で先に確定させる必要がある。
+    //   Gizmo と矩形選択（draw_editor から呼ばれる）はその結果を見て、
+    //   カメラ操作中は動かないようにしている。
+    //
+    // Runtime Camera へは一切書き込まない。読むのは描画行列を返すときだけ。
+    update_editor_camera(elapsed_time);
+
     draw_editor();
 #endif
 }

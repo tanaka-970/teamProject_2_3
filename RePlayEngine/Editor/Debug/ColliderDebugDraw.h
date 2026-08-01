@@ -6,7 +6,9 @@
 #include <vector>
 
 namespace ReplayEngine::Scene { class SceneCollisionWorld; }
-namespace ReplayEngine::Core { struct ObjectID; }
+// ObjectID.h の定義は class。前方宣言も class で揃える
+// （struct と混ぜると MSVC が C4099 を出す）。
+namespace ReplayEngine::Core { class ObjectID; }
 
 namespace ReplayEngine::Editor
 {

@@ -130,8 +130,14 @@ void framework::draw_inspector()
         break;
 
     case editor_selection::camera:
-        ImGui::TextUnformatted("メインカメラ");
+        ImGui::TextUnformatted("カメラ");
         ImGui::Separator();
+
+        // Scene View 用の編集カメラ。ゲーム内のカメラとは別物。
+        draw_editor_camera_settings();
+        ImGui::Separator();
+
+        ImGui::TextUnformatted("Runtime Camera（ゲーム内）");
         if (enable_scene_game && game_scene)
         {
             const auto& camera = game_scene->Gameplay().GetCamera();

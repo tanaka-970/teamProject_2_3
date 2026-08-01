@@ -43,6 +43,8 @@ C:\Users\2250298\Desktop\teamProject_2_3\Source\app\Editor\framework_editor_comm
 C:\Users\2250298\Desktop\teamProject_2_3\Source\app\Runtime\framework_initialize.cpp;C:\Users\2250298\Desktop\teamProject_2_3\3dgp\x64\Debug\Source\app\Runtime\framework_initialize.obj
 C:\Users\2250298\Desktop\teamProject_2_3\Source\app\Editor\framework_editor.cpp;C:\Users\2250298\Desktop\teamProject_2_3\3dgp\x64\Debug\Source\app\Editor\framework_editor.obj
 C:\Users\2250298\Desktop\teamProject_2_3\Source\app\Editor\framework_inspector.cpp;C:\Users\2250298\Desktop\teamProject_2_3\3dgp\x64\Debug\Source\app\Editor\framework_inspector.obj
+C:\Users\2250298\Desktop\teamProject_2_3\Source\app\Editor\framework_project_settings.cpp;C:\Users\2250298\Desktop\teamProject_2_3\3dgp\x64\Debug\Source\app\Editor\framework_project_settings.obj
+C:\Users\2250298\Desktop\teamProject_2_3\Source\app\Editor\framework_editor_camera.cpp;C:\Users\2250298\Desktop\teamProject_2_3\3dgp\x64\Debug\Source\app\Editor\framework_editor_camera.obj
 C:\Users\2250298\Desktop\teamProject_2_3\Source\app\Editor\framework_scene_document.cpp;C:\Users\2250298\Desktop\teamProject_2_3\3dgp\x64\Debug\Source\app\Editor\framework_scene_document.obj
 C:\Users\2250298\Desktop\teamProject_2_3\Source\app\Editor\framework_shader_stack.cpp;C:\Users\2250298\Desktop\teamProject_2_3\3dgp\x64\Debug\Source\app\Editor\framework_shader_stack.obj
 C:\Users\2250298\Desktop\teamProject_2_3\Source\app\Editor\framework_character_material.cpp;C:\Users\2250298\Desktop\teamProject_2_3\3dgp\x64\Debug\Source\app\Editor\framework_character_material.obj
@@ -57,7 +59,6 @@ C:\Users\2250298\Desktop\teamProject_2_3\Source\mesh\static_mesh.cpp;C:\Users\22
 C:\Users\2250298\Desktop\teamProject_2_3\Source\core\texture.cpp;C:\Users\2250298\Desktop\teamProject_2_3\3dgp\x64\Debug\Source\core\texture.obj
 C:\Users\2250298\Desktop\teamProject_2_3\Source\game\camera.cpp;C:\Users\2250298\Desktop\teamProject_2_3\3dgp\x64\Debug\Source\game\camera.obj
 C:\Users\2250298\Desktop\teamProject_2_3\Source\game\free_camera_controller.cpp;C:\Users\2250298\Desktop\teamProject_2_3\3dgp\x64\Debug\Source\game\free_camera_controller.obj
-C:\Users\2250298\Desktop\teamProject_2_3\Source\game\player.cpp;C:\Users\2250298\Desktop\teamProject_2_3\3dgp\x64\Debug\Source\game\player.obj
 C:\Users\2250298\Desktop\teamProject_2_3\Source\game\raycast.cpp;C:\Users\2250298\Desktop\teamProject_2_3\3dgp\x64\Debug\Source\game\raycast.obj
 C:\Users\2250298\Desktop\teamProject_2_3\Source\game\stage.cpp;C:\Users\2250298\Desktop\teamProject_2_3\3dgp\x64\Debug\Source\game\stage.obj
 C:\Users\2250298\Desktop\teamProject_2_3\RePlayEngine\Physics\SphereCast.cpp;C:\Users\2250298\Desktop\teamProject_2_3\3dgp\x64\Debug\RePlayEngine\Physics\SphereCast.obj
@@ -102,6 +103,12 @@ C:\Users\2250298\Desktop\teamProject_2_3\RePlayEngine\Components\Rendering\MeshR
 C:\Users\2250298\Desktop\teamProject_2_3\Source\game\legacy_stage_collision_bridge.cpp;C:\Users\2250298\Desktop\teamProject_2_3\3dgp\x64\Debug\Source\game\legacy_stage_collision_bridge.obj
 C:\Users\2250298\Desktop\teamProject_2_3\Source\game\legacy_camera_basis_bridge.cpp;C:\Users\2250298\Desktop\teamProject_2_3\3dgp\x64\Debug\Source\game\legacy_camera_basis_bridge.obj
 C:\Users\2250298\Desktop\teamProject_2_3\RePlayEngine\Editor\Inspector\PlayerCompositionValidator.cpp;C:\Users\2250298\Desktop\teamProject_2_3\3dgp\x64\Debug\RePlayEngine\Editor\Inspector\PlayerCompositionValidator.obj
+C:\Users\2250298\Desktop\teamProject_2_3\RePlayEngine\Editor\Viewport\EditorViewportCamera.cpp;C:\Users\2250298\Desktop\teamProject_2_3\3dgp\x64\Debug\RePlayEngine\Editor\Viewport\EditorViewportCamera.obj
+C:\Users\2250298\Desktop\teamProject_2_3\RePlayEngine\Editor\Viewport\EditorCameraController.cpp;C:\Users\2250298\Desktop\teamProject_2_3\3dgp\x64\Debug\RePlayEngine\Editor\Viewport\EditorCameraController.obj
+C:\Users\2250298\Desktop\teamProject_2_3\RePlayEngine\Editor\Viewport\EditorCameraStateStore.cpp;C:\Users\2250298\Desktop\teamProject_2_3\3dgp\x64\Debug\RePlayEngine\Editor\Viewport\EditorCameraStateStore.obj
+C:\Users\2250298\Desktop\teamProject_2_3\RePlayEngine\Editor\Viewport\EditorSelectionBounds.cpp;C:\Users\2250298\Desktop\teamProject_2_3\3dgp\x64\Debug\RePlayEngine\Editor\Viewport\EditorSelectionBounds.obj
+C:\Users\2250298\Desktop\teamProject_2_3\RePlayEngine\Project\ProjectSettings.cpp;C:\Users\2250298\Desktop\teamProject_2_3\3dgp\x64\Debug\RePlayEngine\Project\ProjectSettings.obj
+C:\Users\2250298\Desktop\teamProject_2_3\RePlayEngine\Project\ProjectSettingsSerializer.cpp;C:\Users\2250298\Desktop\teamProject_2_3\3dgp\x64\Debug\RePlayEngine\Project\ProjectSettingsSerializer.obj
 C:\Users\2250298\Desktop\teamProject_2_3\RePlayEngine\Physics\CookedMeshCollision.cpp;C:\Users\2250298\Desktop\teamProject_2_3\3dgp\x64\Debug\RePlayEngine\Physics\CookedMeshCollision.obj
 C:\Users\2250298\Desktop\teamProject_2_3\RePlayEngine\Components\Physics\MeshColliderComponent.cpp;C:\Users\2250298\Desktop\teamProject_2_3\3dgp\x64\Debug\RePlayEngine\Components\Physics\MeshColliderComponent.obj
 C:\Users\2250298\Desktop\teamProject_2_3\RePlayEngine\Scene\Services\SceneCollisionWorld.cpp;C:\Users\2250298\Desktop\teamProject_2_3\3dgp\x64\Debug\RePlayEngine\Scene\Services\SceneCollisionWorld.obj

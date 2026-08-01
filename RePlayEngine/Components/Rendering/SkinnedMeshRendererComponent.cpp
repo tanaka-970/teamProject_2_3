@@ -29,7 +29,7 @@ namespace ReplayEngine::Components
 
         const Core::Transform& transform = owner.GetTransform();
 
-        // 旧 Player::UpdateTransform + store_object_world と同じ合成順にする。
+        // 合成順:
         //   world = FbxC * ( Scale * Rotation(visual + object) * Translation )
         // 見た目の補正はここで足す。GameObject の Transform は論理的な向きのまま。
         const DirectX::XMFLOAT3 position = transform.LocalPosition();

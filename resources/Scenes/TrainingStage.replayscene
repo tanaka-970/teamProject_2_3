@@ -48,7 +48,7 @@ OBJECT
   TRANSFORM 0 0 0.45964697003364563 0 0 0 1 1 1
   COMPONENT_COUNT 9
   COMPONENT "SkinnedMeshRendererComponent" 1
-    PROPERTY_COUNT 8
+    PROPERTY_COUNT 10
     PROPERTY "mesh_asset" asset "1bd1358040255f5bd18f3be0d79fbe3c"
     PROPERTY "tint" color 1 1 1 1
     PROPERTY "shading_model" enum 1
@@ -56,6 +56,8 @@ OBJECT
     PROPERTY "cast_shadow" bool 1
     PROPERTY "visible" bool 1
     PROPERTY "visual_rotation_offset" vec3 90 188.5 180
+    PROPERTY "local_position_offset" vec3 0 0 0
+    PROPERTY "local_scale_multiplier" vec3 0.01 0.01 0.01
     PROPERTY "apply_fbx_coordinate_transform" bool 1
   END_COMPONENT
   COMPONENT "AnimatorComponent" 1

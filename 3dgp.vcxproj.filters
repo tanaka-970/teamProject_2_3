@@ -225,6 +225,12 @@
     <Filter Include="RePlayEngine\Editor\ComponentBrowser">
       <UniqueIdentifier>{fec22a4f-590b-4d12-889d-875c28d987d4}</UniqueIdentifier>
     </Filter>
+    <Filter Include="RePlayEngine\Editor\Viewport">
+      <UniqueIdentifier>{2f7a1c64-9b3e-4a51-9c08-3d6f11a4e720}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Project">
+      <UniqueIdentifier>{8b4d20e7-51ca-4f3d-8a17-6c9e0f2b5d41}</UniqueIdentifier>
+    </Filter>
     <Filter Include="RePlayEngine\Rendering">
       <UniqueIdentifier>{fd056eea-eede-4062-834b-439ea812d298}</UniqueIdentifier>
     </Filter>
@@ -350,6 +356,12 @@
     <ClCompile Include="Source\app\Editor\framework_inspector.cpp">
       <Filter>Source\App\Editor</Filter>
     </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_project_settings.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_editor_camera.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
     <ClCompile Include="Source\app\Editor\framework_scene_document.cpp"><Filter>Source\App\Editor</Filter></ClCompile>
     <ClCompile Include="Source\app\Editor\framework_shader_stack.cpp">
       <Filter>Source\App\Editor</Filter>
@@ -388,9 +400,6 @@
       <Filter>Source\Game</Filter>
     </ClCompile>
     <ClCompile Include="Source\game\free_camera_controller.cpp">
-      <Filter>Source\Game</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\game\player.cpp">
       <Filter>Source\Game</Filter>
     </ClCompile>
     <ClCompile Include="Source\game\raycast.cpp">
@@ -466,9 +475,6 @@
     <ClInclude Include="RePlayEngine\Editor\ShaderEditing\ShaderPresetEditor.h"><Filter>RePlayEngine\Editor\ShaderEditing</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Editor\Rendering\PostProcessEditor.h"><Filter>RePlayEngine\Editor\Rendering</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Core\Components\IComponent.h">
-      <Filter>RePlayEngine\Core\Components</Filter>
-    </ClInclude>
-    <ClInclude Include="RePlayEngine\Core\Components\SphereColliderComponent.h">
       <Filter>RePlayEngine\Core\Components</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Core\Components\MeshColliderComponent.h">
@@ -584,9 +590,6 @@
       <Filter>Source\Game</Filter>
     </ClInclude>
     <ClInclude Include="Source\game\game_input.h">
-      <Filter>Source\Game</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\game\player.h">
       <Filter>Source\Game</Filter>
     </ClInclude>
     <ClInclude Include="Source\game\raycast.h">
@@ -1138,11 +1141,44 @@
     <ClCompile Include="RePlayEngine\Editor\Inspector\PlayerCompositionValidator.cpp">
       <Filter>RePlayEngine\Editor\Inspector</Filter>
     </ClCompile>
-    <ClInclude Include="RePlayEngine\Scene\Services\ScenePlayerMigrationState.h">
-      <Filter>RePlayEngine\Scene\Services</Filter>
-    </ClInclude>
+    <ClCompile Include="RePlayEngine\Editor\Viewport\EditorViewportCamera.cpp">
+      <Filter>RePlayEngine\Editor\Viewport</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\Viewport\EditorCameraController.cpp">
+      <Filter>RePlayEngine\Editor\Viewport</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\Viewport\EditorCameraStateStore.cpp">
+      <Filter>RePlayEngine\Editor\Viewport</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\Viewport\EditorSelectionBounds.cpp">
+      <Filter>RePlayEngine\Editor\Viewport</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Project\ProjectSettings.cpp">
+      <Filter>RePlayEngine\Project</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Project\ProjectSettingsSerializer.cpp">
+      <Filter>RePlayEngine\Project</Filter>
+    </ClCompile>
     <ClInclude Include="RePlayEngine\Editor\Inspector\PlayerCompositionValidator.h">
       <Filter>RePlayEngine\Editor\Inspector</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\Viewport\EditorViewportCamera.h">
+      <Filter>RePlayEngine\Editor\Viewport</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\Viewport\EditorCameraController.h">
+      <Filter>RePlayEngine\Editor\Viewport</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\Viewport\EditorCameraStateStore.h">
+      <Filter>RePlayEngine\Editor\Viewport</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\Viewport\EditorSelectionBounds.h">
+      <Filter>RePlayEngine\Editor\Viewport</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Project\ProjectSettings.h">
+      <Filter>RePlayEngine\Project</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Project\ProjectSettingsSerializer.h">
+      <Filter>RePlayEngine\Project</Filter>
     </ClInclude>
     <ClCompile Include="RePlayEngine\Physics\CookedMeshCollision.cpp">
       <Filter>RePlayEngine\Physics</Filter>

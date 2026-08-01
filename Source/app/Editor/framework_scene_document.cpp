@@ -158,12 +158,18 @@ void framework::handle_viewport_selection()
 {
     if (!edit_mode_active || !game_scene) return;
 
+    // 編集カメラがマウスを掴んでいるフレームは選択処理を動かさない。
+    // カメラ操作とギズモ操作・矩形選択が同時に走らないようにする。
+    if (editor_camera_consumed_input) return;
+
     POINT client_origin{ 0, 0 };
     ClientToScreen(hwnd, &client_origin);
     using namespace DirectX;
-    const Camera& camera = game_scene->Gameplay().GetCamera();
-    const XMMATRIX view = XMLoadFloat4x4(&camera.GetView());
-    const XMMATRIX projection = XMLoadFloat4x4(&camera.GetProjection());
+
+    // Scene View の描画と同じ行列を使う。
+    // 別々に組み立てると、見えている位置と拾える位置がずれる。
+    const XMMATRIX view = viewport_view_matrix();
+    const XMMATRIX projection = viewport_projection_matrix();
 
     if (const auto* entity = editor_scene_document.Find(selected_scene_entity_id);
         entity && entity->transform)
@@ -419,12 +425,13 @@ void framework::load_scene_document(bool choose_path)
 // 対象は GameObject / Component 基盤の Scene であり、旧 SceneDocument ではない。
 // 保存内容は Component 構成とプロパティを含む部分木で、
 // ComponentRegistry と PropertyRegistry を通るため型ごとの分岐は存在しない。
-void framework::save_selected_prefab()
+void framework::save_selected_prefab(bool choose_path)
 {
     namespace Serialization = ReplayEngine::Scene::Serialization;
 
     if (object_scene_play_mode)
     {
+        // Play 中の値（移動後の位置・減った HP・速度）を Prefab へ焼き込まない。
         object_editor_context.SetStatus("実行中は Prefab を保存できません");
         return;
     }
@@ -438,14 +445,40 @@ void framework::save_selected_prefab()
         return;
     }
 
-    const auto path = std::filesystem::path("resources/Prefabs") /
+    // 既定のファイル名は GameObject 名。ただしこれは「初期値」でしかない。
+    // 保存後に Prefab 名を変えても、参照は AssetGUID なので壊れない。
+    // 操作対象の判定に名前を使う場所は 1 か所も無い。
+    std::filesystem::path path = std::filesystem::path("resources/Prefabs") /
         (SafePrefabName(target->Name()) + Serialization::PrefabSerializer::file_extension);
 
+    if (choose_path)
+    {
+        std::error_code folder_error;
+        std::filesystem::create_directories(path.parent_path(), folder_error);
+
+        const auto selected = BrowseSceneFile(hwnd, true, L"Prefabとして保存", L"replayprefab",
+            L"RePlay Prefab (*.replayprefab)\0*.replayprefab\0\0");
+        if (selected.empty()) return;
+        path = selected;
+    }
+
     std::string error;
-    if (Serialization::PrefabSerializer::Save(scene, target->ID(), path, error))
-        object_editor_context.SetStatus("Prefab を保存しました: " + path.generic_string());
-    else
+    if (!Serialization::PrefabSerializer::Save(scene, target->ID(), path, error))
+    {
         object_editor_context.SetStatus("Prefab 保存失敗: " + error);
+        return;
+    }
+
+    // AssetDatabase へ登録して AssetGUID を発行する。
+    // これで Project Settings の Default Controlled Character Prefab から
+    // GUID で指せるようになる。
+    const auto& record = asset_database.Register(path,
+        ReplayEngine::Assets::AssetKind::Scene);
+    std::string database_error;
+    asset_database.Save(database_error);
+
+    last_saved_prefab_guid = record.guid;
+    object_editor_context.SetStatus("Prefab を保存しました: " + path.generic_string());
 }
 
 void framework::load_prefab()
@@ -787,7 +820,7 @@ void framework::draw_scene_entity_inspector()
         ImGui::EndPopup();
     }
     ImGui::SameLine();
-    if (ImGui::Button("Prefabとして保存")) save_selected_prefab();
+    if (ImGui::Button("Prefabとして保存")) save_selected_prefab(true);
     ImGui::SameLine();
     if (ImGui::Button("Entityを削除"))
     {

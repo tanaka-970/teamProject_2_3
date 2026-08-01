@@ -185,6 +185,28 @@ namespace ReplayEngine::Core
                     .Display("表示姿勢補正 (度)").Step(0.5)
                     .Tooltip("FBX の基準姿勢を正立させるための補正。論理的な向きとは別物。"));
 
+            // 【重要】この 2 つは以前 PropertyRegistry へ登録されていなかった。
+            //   Component のメンバとしては存在し、描画にも使われていたが、
+            //   登録が無いと保存も復元も Inspector 表示もされない。
+            //   そのため「変換直後は正しい大きさなのに、保存して再起動すると
+            //   既定値 1.0 に戻って 100 倍の大きさで表示される」状態になっていた。
+            //   モデル固有の縮尺は Scene / Prefab へ保存されなければ意味がないので、
+            //   ここへ登録して単一の登録点の約束へ揃える。
+            PropertyRegistry::Register<SkinnedMeshRendererComponent>(
+                MakeProperty("local_position_offset",
+                    &SkinnedMeshRendererComponent::local_position_offset)
+                    .Display("モデル位置オフセット").Step(0.01)
+                    .Tooltip("モデルの原点が足元や中心でない場合のずらし。"
+                        "GameObject の位置とは別物。"));
+
+            PropertyRegistry::Register<SkinnedMeshRendererComponent>(
+                MakeProperty("local_scale_multiplier",
+                    &SkinnedMeshRendererComponent::local_scale_multiplier)
+                    .Display("モデル縮尺倍率").Step(0.001)
+                    .Tooltip("GameObject の Scale へ掛ける倍率。"
+                        "cm 単位で作られた FBX なら 0.01 を入れる。"
+                        "1.0 のままだと 100 倍の大きさで表示される。"));
+
             PropertyRegistry::Register<SkinnedMeshRendererComponent>(
                 MakeProperty("apply_fbx_coordinate_transform",
                     &SkinnedMeshRendererComponent::apply_fbx_coordinate_transform)

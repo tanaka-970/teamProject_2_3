@@ -245,6 +245,8 @@
     <ClCompile Include="Source\app\Runtime\framework_initialize.cpp" />
     <ClCompile Include="Source\app\Editor\framework_editor.cpp" />
     <ClCompile Include="Source\app\Editor\framework_inspector.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_project_settings.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_editor_camera.cpp" />
     <ClCompile Include="Source\app\Editor\framework_scene_document.cpp" />
     <ClCompile Include="Source\app\Editor\framework_shader_stack.cpp" />
     <ClCompile Include="Source\app\Editor\framework_character_material.cpp" />
@@ -259,7 +261,6 @@
     <ClCompile Include="Source\core\texture.cpp" />
     <ClCompile Include="Source\game\camera.cpp" />
     <ClCompile Include="Source\game\free_camera_controller.cpp" />
-    <ClCompile Include="Source\game\player.cpp" />
     <ClCompile Include="Source\game\raycast.cpp" />
     <ClCompile Include="Source\game\stage.cpp" />
     <ClCompile Include="RePlayEngine\Physics\SphereCast.cpp" />
@@ -304,6 +305,12 @@
     <ClCompile Include="Source\game\legacy_stage_collision_bridge.cpp" />
     <ClCompile Include="Source\game\legacy_camera_basis_bridge.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Inspector\PlayerCompositionValidator.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Viewport\EditorViewportCamera.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Viewport\EditorCameraController.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Viewport\EditorCameraStateStore.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Viewport\EditorSelectionBounds.cpp" />
+    <ClCompile Include="RePlayEngine\Project\ProjectSettings.cpp" />
+    <ClCompile Include="RePlayEngine\Project\ProjectSettingsSerializer.cpp" />
     <ClCompile Include="RePlayEngine\Physics\CookedMeshCollision.cpp" />
     <ClCompile Include="RePlayEngine\Components\Physics\MeshColliderComponent.cpp" />
     <ClCompile Include="RePlayEngine\Scene\Services\SceneCollisionWorld.cpp" />
@@ -345,7 +352,6 @@
     <ClInclude Include="RePlayEngine\Core\Components\AnimationComponent.h" />
     <ClInclude Include="RePlayEngine\Core\Components\ModelRendererComponent.h" />
     <ClInclude Include="RePlayEngine\Core\Components\IComponent.h" />
-    <ClInclude Include="RePlayEngine\Core\Components\SphereColliderComponent.h" />
     <ClInclude Include="RePlayEngine\Core\Components\MeshColliderComponent.h" />
     <ClInclude Include="RePlayEngine\Core\Components\GravityComponent.h" />
     <ClInclude Include="RePlayEngine\Physics\SphereCast.h" />
@@ -385,7 +391,6 @@
     <ClInclude Include="Source\game\camera.h" />
     <ClInclude Include="Source\game\free_camera_controller.h" />
     <ClInclude Include="Source\game\game_input.h" />
-    <ClInclude Include="Source\game\player.h" />
     <ClInclude Include="Source\game\raycast.h" />
     <ClInclude Include="Source\game\scene_game.h" />
     <ClInclude Include="Source\game\game_scene.h" />
@@ -435,8 +440,13 @@
     <ClInclude Include="RePlayEngine\Components\Rendering\SkinnedMeshRendererComponent.h" />
     <ClInclude Include="Source\game\legacy_stage_collision_bridge.h" />
     <ClInclude Include="Source\game\legacy_camera_basis_bridge.h" />
-    <ClInclude Include="RePlayEngine\Scene\Services\ScenePlayerMigrationState.h" />
     <ClInclude Include="RePlayEngine\Editor\Inspector\PlayerCompositionValidator.h" />
+    <ClInclude Include="RePlayEngine\Editor\Viewport\EditorViewportCamera.h" />
+    <ClInclude Include="RePlayEngine\Editor\Viewport\EditorCameraController.h" />
+    <ClInclude Include="RePlayEngine\Editor\Viewport\EditorCameraStateStore.h" />
+    <ClInclude Include="RePlayEngine\Editor\Viewport\EditorSelectionBounds.h" />
+    <ClInclude Include="RePlayEngine\Project\ProjectSettings.h" />
+    <ClInclude Include="RePlayEngine\Project\ProjectSettingsSerializer.h" />
     <ClInclude Include="RePlayEngine\Physics\CookedMeshCollision.h" />
     <ClInclude Include="RePlayEngine\Components\Physics\MeshColliderComponent.h" />
     <ClInclude Include="RePlayEngine\Scene\Services\SceneCollisionWorld.h" />

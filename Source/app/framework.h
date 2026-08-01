@@ -65,6 +65,9 @@ extern ImWchar glyphRangesJapanese[];
 #include "../../RePlayEngine/Scene/Services/PlayerControlSystem.h"
 #include "../../RePlayEngine/Scene/Services/SceneCollisionWorld.h"
 #include "../../RePlayEngine/Editor/Debug/ColliderDebugDraw.h"
+#include "../../RePlayEngine/Editor/Viewport/EditorViewportCamera.h"
+#include "../../RePlayEngine/Editor/Viewport/EditorCameraController.h"
+#include "../../RePlayEngine/Editor/Viewport/EditorCameraStateStore.h"
 #include "../game/legacy_camera_basis_bridge.h"
 #include "../game/legacy_stage_collision_bridge.h"
 
@@ -215,6 +218,13 @@ public:
     ReplayEngine::Project::ProjectSettings project_settings;
     std::string project_settings_status{ "プロジェクト設定 未読込" };
 
+    // 直近で保存した Prefab の AssetGUID。
+    // 「保存した Prefab をそのまま既定の操作キャラクターにする」ボタン用。
+    std::string last_saved_prefab_guid;
+
+    // 新規シーン作成ダイアログの入力欄。
+    char new_object_scene_name[128]{ "NewScene" };
+
     ReplayEngine::Scene::SceneDocument editor_scene_document;
     ReplayEngine::Scene::SceneDocument runtime_scene_document;
     ReplayEngine::Editor::UndoStack scene_undo_stack;
@@ -305,6 +315,27 @@ public:
     // 操作対象が設定されていない Scene であることを Editor へ知らせる。
     // 「対象が居ないから何かを生成する」ことは決してしない。表示するだけ。
     bool             object_missing_controlled_target{ false };
+
+    // --- Scene View の編集カメラ -------------------------------------------
+    //
+    // 所有関係:
+    //   framework が値メンバとして 1 つ持つ。Scene にも GameObject にも属さない。
+    //   Hierarchy へ出ないし、Scene ファイルにも Prefab にも保存されない。
+    //
+    // Runtime Camera との関係:
+    //   一切値をやり取りしない。Play 開始時に Runtime Camera へ写すことも、
+    //   Play 終了時に Runtime Camera から取り込むこともしない。
+    //   Viewport が 1 つしかないため、描画に使う行列だけを
+    //   「Edit Mode なら編集カメラ / Play・実行中なら Runtime Camera」と切り替える。
+    ReplayEngine::Editor::EditorViewportCamera   editor_camera;
+    ReplayEngine::Editor::EditorCameraController editor_camera_controller;
+
+    // 編集カメラがマウス／キーを消費したフレーム。
+    // Gizmo と選択処理を同時に走らせないためのフラグ。
+    bool             editor_camera_consumed_input{ false };
+
+    // 現在の Scene に対応する編集カメラ状態の保存キー。
+    std::string      editor_camera_state_key;
 
     bool             enable_deferred { true };
     bool             enable_particles{ false };
@@ -607,6 +638,40 @@ private:
     void load_project_settings();
     bool save_project_settings();
     void draw_project_settings_panel();
+
+    // 「新しいシーンを作成」ボタンと Empty / Default の選択ダイアログ。
+    void draw_new_object_scene_controls();
+
+    // --- Scene View の編集カメラ (Source/app/Editor/framework_editor_camera.cpp) --
+    //
+    // 【描画・Picking・Gizmo・Collider Debug Draw の行列はここだけから取る】
+    //   別々に行列を組み立てると、見えている位置・拾える位置・線の位置が
+    //   互いにずれる。取得窓口を 1 か所にすることで構造的に防ぐ。
+    //
+    //   Edit Mode        -> 編集カメラ
+    //   Play / 実行中     -> Runtime Camera (SceneGame が持つ Camera)
+    bool using_editor_camera() const noexcept;
+    DirectX::XMMATRIX viewport_view_matrix() const;
+    DirectX::XMMATRIX viewport_projection_matrix() const;
+    DirectX::XMFLOAT3 viewport_eye_position() const;
+
+    // 画面座標からワールド空間の視線を作る。Picking はこれだけを使う。
+    ReplayEngine::Editor::EditorViewportCamera::Ray viewport_picking_ray(
+        float mouse_x, float mouse_y) const;
+
+    // ImGui / Win32 から入力を読み、編集カメラへ渡す。
+    void update_editor_camera(float elapsed_time);
+
+    // F キーのフォーカス。選択対象の World Bounds を求めて収める。
+    // Undo 履歴へは積まない（Scene のデータを変更していないため）。
+    void focus_editor_camera_on_selection();
+
+    void draw_editor_camera_settings();
+
+    // 編集カメラ状態の保存・復元。Scene ファイルには一切書き込まない。
+    void load_editor_camera_state();
+    void save_editor_camera_state();
+    std::string make_editor_camera_state_key() const;
 
     // Default Controlled Character Prefab の現在の解決結果。
     ReplayEngine::Project::PrefabReferenceStatus resolve_default_character_prefab() const;

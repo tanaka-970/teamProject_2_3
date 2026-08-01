@@ -124,39 +124,23 @@ void framework::render(float elapsed_time)
         return;
     }
 
-    float aspect = viewport.Width / viewport.Height;
-
-    DirectX::XMMATRIX P;
-    DirectX::XMMATRIX V;
-
-    if (enable_scene_game && game_scene)
-    {
-        // ゲーム実行中のカメラはSceneGameが所有し、エディタ用カメラと混在させない。
-        const Camera& cam = game_scene->Gameplay().GetCamera();
-        V = DirectX::XMLoadFloat4x4(&cam.GetView());
-        P = DirectX::XMLoadFloat4x4(&cam.GetProjection());
-    }
-    else
-    {
-        P = DirectX::XMMatrixPerspectiveFovLH(DirectX::XMConvertToRadians(30.0f), aspect, 0.1f, 10000.0f);
-        DirectX::XMVECTOR eye   = DirectX::XMLoadFloat4(&camera_position);
-        DirectX::XMVECTOR focus = DirectX::XMVectorSet(0, 0, 0, 1);
-        DirectX::XMVECTOR up    = DirectX::XMVectorSet(0, 1, 0, 0);
-        V = DirectX::XMMatrixLookAtLH(eye, focus, up);
-    }
+    // Scene View / Game View の行列はここ 1 か所からしか取らない。
+    //
+    //   Edit Mode        -> 編集カメラ (EditorViewportCamera)
+    //   Play / 通常実行   -> Runtime Camera (SceneGame が持つ Camera)
+    //
+    // Picking・Gizmo・Collider Debug Draw もすべて同じ窓口を通るので、
+    // 「見えている位置」と「拾える位置」と「線の位置」がずれない。
+    const DirectX::XMMATRIX V = viewport_view_matrix();
+    const DirectX::XMMATRIX P = viewport_projection_matrix();
 
     // 以降の全描画パスが共有するカメラと主光源の定数を一度だけ更新する。
     scene_constants scene{};
     DirectX::XMStoreFloat4x4(&scene.view_projection, V * P);
     scene.light_direction = light_direction;
-    if (enable_scene_game && game_scene)
     {
-        const DirectX::XMFLOAT3& eyeP = game_scene->Gameplay().GetCamera().GetEye();
-        scene.camera_position = { eyeP.x, eyeP.y, eyeP.z, 1.0f };
-    }
-    else
-    {
-        scene.camera_position = camera_position;
+        const DirectX::XMFLOAT3 eye = viewport_eye_position();
+        scene.camera_position = { eye.x, eye.y, eye.z, 1.0f };
     }
     immediate_context->UpdateSubresource(constant_buffers[0].Get(), 0, 0, &scene, 0, 0);
     immediate_context->VSSetConstantBuffers(1, 1, constant_buffers[0].GetAddressOf());

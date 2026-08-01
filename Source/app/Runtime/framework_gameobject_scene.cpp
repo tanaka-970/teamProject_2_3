@@ -84,6 +84,10 @@ void framework::initialize_object_scene()
     // これ以降 Component が見る IPhysicsQueryService は衝突世界であり、
     // 旧 Stage は衝突世界の内側から必要なときだけ呼ばれる。
     initialize_collision_world();
+
+    // Scene View の編集カメラを、この Scene 用に保存された状態から復元する。
+    // 保存が無い / 壊れていても、既定位置になるだけで Scene の読み込みには影響しない。
+    load_editor_camera_state();
 }
 
 // ---------------------------------------------------------------------------
@@ -364,6 +368,10 @@ bool framework::load_object_scene(bool choose_path)
 {
     if (object_scene_play_mode) exit_object_play_mode();
 
+    // Scene を切り替える前に、今の Scene の編集カメラ状態を残す。
+    // 戻ってきたときに同じ視点から再開できる。
+    if (!editor_camera_state_key.empty()) save_editor_camera_state();
+
     if (choose_path)
     {
         object_scene_path = std::filesystem::path("resources") / "Scenes" /
@@ -409,12 +417,23 @@ bool framework::load_object_scene(bool choose_path)
         }
     }
     object_editor_context.SetStatus(status);
+
+    // 新しい Scene に対応する編集カメラ状態を読み込む。
+    // 保存が無ければ既定位置になる。
+    load_editor_camera_state();
     return true;
 }
 
 // ---------------------------------------------------------------------------
 // Play Mode
 // ---------------------------------------------------------------------------
+//
+// 【編集カメラと Runtime Camera の関係】
+//   Play 開始時に編集カメラの値を Runtime Camera へ写さない。
+//   Play 終了時に Runtime Camera の値を編集カメラへ取り込まない。
+//   editor_camera は Play の出入りで一切書き換えられないので、
+//   Play 前の視点がそのまま残る。切り替わるのは
+//   「描画にどちらの行列を使うか」だけ（using_editor_camera）。
 
 void framework::enter_object_play_mode()
 {
@@ -744,6 +763,19 @@ bool framework::create_object_scene(const std::string& name, bool place_default_
 
     // 7) 再起動しても同じ状態から始められるよう、その場で書き出す。
     save_object_scene(false);
+
+    // 8) 編集カメラを安全な既定位置へ置く。
+    //    Runtime Camera にも CameraTargetComponent にも触れない。
+    editor_camera.ResetToDefault();
+    editor_camera_state_key = make_editor_camera_state_key();
+
+    // Default Scene で Prefab を配置できた場合だけ、その 1 体へ一度フォーカスする。
+    // 既存 Scene の読み込みではこれをしない（勝手に視点を動かさない）。
+    if (place_default_character && object_scene.Services().ControlledObject().Valid())
+    {
+        focus_editor_camera_on_selection();
+    }
+    save_editor_camera_state();
 
     object_editor_context.SetStatus(status);
     return true;
