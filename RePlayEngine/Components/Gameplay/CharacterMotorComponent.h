@@ -13,7 +13,7 @@ namespace ReplayEngine::Components
 
     // キャラクターの移動・重力・ジャンプ・接地を担当する。
     //
-    // 再利用可能であることが最重要:
+    // 再利用可能であることが最重要://
     //   プレイヤー専用にしない。誰が移動要求を出したかを一切知らない。
     //     PlayerControllerComponent -> Move()/RequestJump() -> CharacterMotor
     //     EnemyAIComponent          -> Move()/RequestJump() -> CharacterMotor
