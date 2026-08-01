@@ -23,7 +23,16 @@ namespace ReplayEngine::Components
     public:
         CameraTargetComponent() = default;
 
-        // 注視点のオフセット。旧 SceneGame は position.y + 1.0f を見ていた。
+        // 追従の基準点を GameObject のワールド位置からずらす量。
+        //
+        // look_at_offset との違い:
+        //   target_offset  … 「追従している点」そのものをずらす。
+        //                     モデルの原点が足元にある場合に腰の高さへ寄せる、
+        //                     機体の中心が前方にある場合に後ろへ寄せる、といった用途。
+        //   look_at_offset … 追従点はそのままで「カメラが見る点」だけをずらす。
+        DirectX::XMFLOAT3 target_offset{ 0.0f, 0.0f, 0.0f };
+
+        // 注視点のオフセット。旧来のカメラ追従は position.y + 1.0f を見ていた。
         DirectX::XMFLOAT3 look_at_offset{ 0.0f, 1.0f, 0.0f };
 
         // カメラを置く距離と高さ。旧 SceneGame の follow_distance / follow_height。

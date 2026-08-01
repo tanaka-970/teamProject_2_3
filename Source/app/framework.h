@@ -45,6 +45,7 @@ extern ImWchar glyphRangesJapanese[];
 #include "../../RePlayEngine/Rendering/Materials/CharacterMaterialGpuData.h"
 #include "../../RePlayEngine/Assets/AssetDatabase.h"
 #include "../../RePlayEngine/Assets/AsyncAssetManager.h"
+#include "../../RePlayEngine/Project/ProjectSettings.h"
 #include "../../RePlayEngine/Editor/Commands/UndoStack.h"
 #include "../../RePlayEngine/Editor/Gizmo/TransformGizmo.h"
 #include "../../RePlayEngine/Editor/Gizmo/ViewportPicker.h"
@@ -121,7 +122,6 @@ public:
     DirectX::XMFLOAT4 material_color{ 1, 1, 1, 1 };
     DirectX::XMFLOAT4 background_color{ 46.0f / 255.0f, 56.0f / 255.0f, 61.0f / 255.0f, 1.0f };
     bool draw_background_image{ false };
-    bool animate_model{ true };
     bool use_pbr_skin{ true };
     bool enable_toon_shader{ true };
     bool enable_unlit_shader{ true };
@@ -134,11 +134,14 @@ public:
     bool enable_fxaa_shader{ true };
     bool enable_static_meshes{ false };
     bool shader_stack_advanced_mode{ false };
-    int animation_clip_index{ 0 };
-    float animation_tick{ 0.0f };
-    float animation_speed{ 1.0f };
-    bool animation_loop{ true };
 
+    // static_meshes[0] … エディタのデバッグ用静的メッシュ (cube.obj)。既定は非表示。
+    // skinned_meshes[1] … 取り込んだ旧ステージ素材。
+    //
+    // かつて skinned_meshes[0] は「旧 Player 専用のモデルスロット」で、
+    // 起動時に固定の FBX を読み込み、Player の Transform で毎フレーム描いていた。
+    // その経路は完全に撤去したので、index 0 は誰も使わない。
+    // アニメーション付きモデルの描画は SkinnedMeshRendererComponent が提出する。
     std::unique_ptr<static_mesh> static_meshes[8];
     std::unique_ptr<skinned_mesh> skinned_meshes[8];
     std::unique_ptr<gltf_model> stage_gltf_model;
@@ -162,19 +165,16 @@ public:
     Microsoft::WRL::ComPtr<ID3D11Buffer> shader_layer_cb;
     Microsoft::WRL::ComPtr<ID3D11Buffer> character_material_cb;
 
-    // モデル毎のシェーディング設定 (skinned_meshes[i] と対応)
+    // デバッグ用静的メッシュのシェーディング設定 (static_meshes[i] と対応)
     // 0=FBX標準、1=PBR、2=トゥーン、3=アンリット
-    int shading_per_skinned[8] { 1, 1, 1, 1, 1, 1, 1, 1 };
+    //
+    // GameObject の描画方式は SkinnedMeshRendererComponent /
+    // MeshRendererComponent の shading_model プロパティが持つ。
+    // 同じ値をここと Component の両方から変えられる状態は作らない。
     int shading_per_static [8] { 1, 1, 1, 1, 1, 1, 1, 1 };
-    bool outline_per_skinned[8] { false, false, false, false, false, false, false, false };
     bool outline_per_static [8] { false, false, false, false, false, false, false, false };
-    ReplayEngine::Rendering::ShaderLayerStack shader_layers_skinned[8];
     ReplayEngine::Rendering::ShaderLayerStack shader_layers_static[8];
-    ReplayEngine::Rendering::CharacterMaterialProfile character_profiles_skinned[8];
     ReplayEngine::Rendering::CharacterMaterialProfile character_profiles_static[8];
-
-    // UIから全体へ適用する描画方式。shading_per_skinned[0] と同期する。
-    int shading_model_override { 1 };
 
     pbr_renderer pbr;
 
@@ -209,6 +209,12 @@ public:
     std::string      stage_asset_status{ "未選択" };
     ReplayEngine::Assets::AssetDatabase asset_database;
     ReplayEngine::Assets::AsyncAssetManager async_asset_manager;
+
+    // プロジェクト設定。Default Controlled Character Prefab を持つ。
+    // 参照は AssetGUID なので、Prefab の名前やパスを変えても壊れない。
+    ReplayEngine::Project::ProjectSettings project_settings;
+    std::string project_settings_status{ "プロジェクト設定 未読込" };
+
     ReplayEngine::Scene::SceneDocument editor_scene_document;
     ReplayEngine::Scene::SceneDocument runtime_scene_document;
     ReplayEngine::Editor::UndoStack scene_undo_stack;
@@ -296,9 +302,9 @@ public:
     float            object_fixed_accumulator{ 0.0f };
     int              object_max_fixed_substeps{ 5 };
 
-    // 新 Player GameObject が操作対象になっている間は、旧 Player を更新も描画もしない。
-    // 二重更新・二重描画を防ぐ唯一のスイッチ。
-    bool             object_player_active{ false };
+    // 操作対象が設定されていない Scene であることを Editor へ知らせる。
+    // 「対象が居ないから何かを生成する」ことは決してしない。表示するだけ。
+    bool             object_missing_controlled_target{ false };
 
     bool             enable_deferred { true };
     bool             enable_particles{ false };
@@ -514,7 +520,10 @@ private:
     void update(float elapsed_time);
     void render(float elapsed_time);
     bool uninitialize();
-    void store_object_world(DirectX::XMFLOAT4X4& world) const;
+
+    // エディタのデバッグ用メッシュ (static_meshes[0]) を置くワールド行列。
+    // かつてはここで旧 Player の Transform を返していたが、その分岐は撤去した。
+    void store_debug_mesh_world(DirectX::XMFLOAT4X4& world) const;
     ID3D11PixelShader* skinned_forward_shader(int shading) const;
     ID3D11PixelShader* static_forward_shader(int shading) const;
     unsigned int deferred_shading_model(int shading) const;
@@ -524,7 +533,9 @@ private:
     void draw_editor();
     void draw_editor_toolbar();
     void draw_runtime_mode_banner();
-    void draw_player_diagnostics();
+
+    // 操作対象 GameObject の実行時診断。旧 Player の項目は持たない。
+    void draw_controlled_character_diagnostics();
     void draw_search_results();
     void draw_scene_hierarchy();
     void draw_inspector();
@@ -550,7 +561,11 @@ private:
     void save_scene_document(bool choose_path);
     void load_scene_document(bool choose_path);
     void create_scene_document(const std::string& name);
-    void save_selected_prefab();
+
+    // 選択中の GameObject を Prefab として保存する。
+    // choose_path が true ならファイル名を選ばせる（任意名で保存できる）。
+    // 保存した Prefab は AssetDatabase へ登録され、AssetGUID で参照できるようになる。
+    void save_selected_prefab(bool choose_path);
     void load_prefab();
     void cook_selected_mesh_collision();
     void sync_selected_entity_to_stage();
@@ -577,7 +592,24 @@ private:
     void update_object_fixed_step(float elapsed_time);
     void update_object_camera_follow(float elapsed_time);
     void refresh_object_scene_services();
-    bool convert_legacy_player_to_gameobject();
+
+    // --- 新規 Scene 作成 ---------------------------------------------------
+    //
+    // Empty  … GameObject を 1 つも作らない。操作対象は未設定。
+    // Default … Default Controlled Character Prefab を 1 体だけ配置し、
+    //           そのルートを操作対象にする。
+    //
+    // どちらも「ユーザーが新規作成を選んだとき」しか呼ばれない。
+    // 起動時や Scene 読み込み時に Prefab を配置することは決してない。
+    bool create_object_scene(const std::string& name, bool place_default_character);
+
+    // --- プロジェクト設定 --------------------------------------------------
+    void load_project_settings();
+    bool save_project_settings();
+    void draw_project_settings_panel();
+
+    // Default Controlled Character Prefab の現在の解決結果。
+    ReplayEngine::Project::PrefabReferenceStatus resolve_default_character_prefab() const;
 
     // --- 衝突 (Source/app/Runtime/framework_collision_world.cpp) ------------
     // Scene の切り替えと Play / Edit の切り替えに合わせて衝突世界をつなぎ替える。
@@ -640,11 +672,12 @@ private:
     DWORD windowed_ex_style{ 0 };
     RECT windowed_rect{ 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT };
 
+    // 旧 Player 用の項目 (player) は撤去した。
+    // 操作対象は Scene 内の通常 GameObject なので game_object で選択される。
     enum class editor_selection
     {
         world,
         camera,
-        player,
         stage,
         scene_entity,
         // 新しい GameObject / Component 基盤で選択された GameObject。

@@ -1,13 +1,15 @@
-REPLAY_SCENE 7
+REPLAY_SCENE 9
 SCENE "TrainingStage"
-OBJECT_COUNT 1
+SCENE_STATE 2 1 2
+COLLISION_STATE 1 0
+OBJECT_COUNT 2
 OBJECT
   ID 1
   NAME "GameObject"
   ENABLED 1
   PARENT 0
-  TRANSFORM 0 1.9500000476837158 0 0 0 0 0.039999999105930328 0.05000000074505806 0.029999999329447746
-  COMPONENT_COUNT 2
+  TRANSFORM 0 1.9500000476837158 0 0 5.2702169418334961 0 0.039999999105930328 0.05000000074505806 0.029999999329447746
+  COMPONENT_COUNT 3
   COMPONENT "MeshRendererComponent" 1
     PROPERTY_COUNT 7
     PROPERTY "mesh_asset" asset "1bd1358040255f5bd18f3be0d79fbe3c"
@@ -22,5 +24,113 @@ OBJECT
     PROPERTY_COUNT 2
     PROPERTY "axis" vec3 0 1 0
     PROPERTY "degrees_per_second" float 90
+  END_COMPONENT
+  COMPONENT "MeshColliderComponent" 1
+    PROPERTY_COUNT 11
+    PROPERTY "collider_key" int 1
+    PROPERTY "center_offset" vec3 0 0 0
+    PROPERTY "collision_layer" layer 0
+    PROPERTY "collision_mask" layermask 255
+    PROPERTY "is_trigger" bool 0
+    PROPERTY "debug_draw" bool 1
+    PROPERTY "mesh_source" enum 0
+    PROPERTY "mesh_asset" asset ""
+    PROPERTY "cook_cell_size" float 4
+    PROPERTY "double_sided" bool 1
+    PROPERTY "debug_draw_wireframe" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 2
+  NAME "Player"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0.45964697003364563 0 0 0 1 1 1
+  COMPONENT_COUNT 9
+  COMPONENT "SkinnedMeshRendererComponent" 1
+    PROPERTY_COUNT 8
+    PROPERTY "mesh_asset" asset "1bd1358040255f5bd18f3be0d79fbe3c"
+    PROPERTY "tint" color 1 1 1 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "visible" bool 1
+    PROPERTY "visual_rotation_offset" vec3 90 188.5 180
+    PROPERTY "apply_fbx_coordinate_transform" bool 1
+  END_COMPONENT
+  COMPONENT "AnimatorComponent" 1
+    PROPERTY_COUNT 7
+    PROPERTY "idle_clip" int 5
+    PROPERTY "walk_clip" int 13
+    PROPERTY "jump_clip" int 2
+    PROPERTY "playback_speed" float 1
+    PROPERTY "loop" bool 1
+    PROPERTY "walk_speed_threshold" float 0.20000000298023224
+    PROPERTY "playing" bool 1
+  END_COMPONENT
+  COMPONENT "SphereColliderComponent" 1
+    PROPERTY_COUNT 9
+    PROPERTY "collider_key" int 1
+    PROPERTY "center_offset" vec3 0 0.37999999523162842 0
+    PROPERTY "collision_layer" layer 0
+    PROPERTY "collision_mask" layermask 255
+    PROPERTY "is_trigger" bool 0
+    PROPERTY "debug_draw" bool 1
+    PROPERTY "radius" float 0.37999999523162842
+    PROPERTY "skin_width" float 0.014999999664723873
+    PROPERTY "walkable_normal_y" float 0.25
+  END_COMPONENT
+  COMPONENT "CharacterMotorComponent" 1
+    PROPERTY_COUNT 10
+    PROPERTY "primary_collider_key" colliderref 1
+    PROPERTY "move_speed" float 6
+    PROPERTY "acceleration" float 30
+    PROPERTY "deceleration" float 20
+    PROPERTY "air_control" float 0.34999999403953552
+    PROPERTY "gravity" float 18
+    PROPERTY "jump_power" float 8
+    PROPERTY "maximum_fall_speed" float 55
+    PROPERTY "fallback_ground_y" float 0
+    PROPERTY "vertical_physics" bool 0
+  END_COMPONENT
+  COMPONENT "PlayerInputComponent" 1
+    PROPERTY_COUNT 2
+    PROPERTY "input_enabled" bool 1
+    PROPERTY "local_player_slot" int 0
+  END_COMPONENT
+  COMPONENT "PlayerControllerComponent" 1
+    PROPERTY_COUNT 4
+    PROPERTY "turn_speed_degrees" float 720
+    PROPERTY "dash_multiplier" float 1
+    PROPERTY "camera_relative" bool 1
+    PROPERTY "rotate_towards_movement" bool 1
+  END_COMPONENT
+  COMPONENT "HealthComponent" 1
+    PROPERTY_COUNT 3
+    PROPERTY "max_health" int 100
+    PROPERTY "current_health" int 100
+    PROPERTY "invulnerable" bool 0
+  END_COMPONENT
+  COMPONENT "CameraTargetComponent" 1
+    PROPERTY_COUNT 5
+    PROPERTY "look_at_offset" vec3 0 1 0
+    PROPERTY "follow_distance" float 6.5
+    PROPERTY "follow_height" float 2.25
+    PROPERTY "follow_lag" float 12
+    PROPERTY "priority" int 0
+  END_COMPONENT
+  COMPONENT "MeshColliderComponent" 1
+    PROPERTY_COUNT 11
+    PROPERTY "collider_key" int 2
+    PROPERTY "center_offset" vec3 0 0 0
+    PROPERTY "collision_layer" layer 0
+    PROPERTY "collision_mask" layermask 255
+    PROPERTY "is_trigger" bool 0
+    PROPERTY "debug_draw" bool 1
+    PROPERTY "mesh_source" enum 0
+    PROPERTY "mesh_asset" asset ""
+    PROPERTY "cook_cell_size" float 4
+    PROPERTY "double_sided" bool 1
+    PROPERTY "debug_draw_wireframe" bool 0
   END_COMPONENT
 END_OBJECT

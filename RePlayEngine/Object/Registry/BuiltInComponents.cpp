@@ -471,8 +471,15 @@ namespace ReplayEngine::Core
                     .WithTooltip("カメラ追従の対象になる。自分ではカメラを動かさない。"));
 
             PropertyRegistry::Register<CameraTargetComponent>(
+                MakeProperty("target_offset", &CameraTargetComponent::target_offset)
+                    .Display("追従基準のオフセット").Step(0.05)
+                    .Tooltip("追従する点そのものをずらす。"
+                        "モデルの原点が足元にある場合などに使う。"));
+
+            PropertyRegistry::Register<CameraTargetComponent>(
                 MakeProperty("look_at_offset", &CameraTargetComponent::look_at_offset)
-                    .Display("注視点オフセット").Step(0.05));
+                    .Display("注視点オフセット").Step(0.05)
+                    .Tooltip("追従点は変えずに、カメラが見る点だけをずらす。"));
 
             PropertyRegistry::Register<CameraTargetComponent>(
                 MakeProperty("follow_distance", &CameraTargetComponent::follow_distance)

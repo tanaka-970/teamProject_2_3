@@ -73,14 +73,21 @@ namespace ReplayEngine::Scene::Serialization
     {
         // 現在のファイル形式バージョン。
         // v1〜v6 は旧 SceneDocument 形式で、互換性を持たせない方針。
-        // 将来 v8 へ上げる余地を残すため、読み込み側はバージョン判定を必ず通す。
-        // v8 で「旧 Player の移行状態」と「操作対象 ObjectID」を追加した。
-        // v7 も読める（その場合は移行状態なし・操作対象なしとして扱う）。
+        // 将来 v10 へ上げる余地を残すため、読み込み側はバージョン判定を必ず通す。
+        // v8 で「操作対象 ObjectID」を追加した。v7 も読める（操作対象なしとして扱う）。
         // v9 で「Collision Backend Mode」と「旧 Stage の移行済み集合」を追加した。
         //
+        // 【旧 Player 移行状態について】
+        //   v8 / v9 の SCENE_STATE 行には「旧 Player の移行が済んでいるか」という
+        //   項目が並んでいた。旧 Player 経路そのものを撤去したため、この項目は
+        //   意味を失ったので SceneData から削除した。
+        //   既に書き出されたファイルを読めなくしないよう、SCENE_STATE の読み取りは
+        //   行単位で行い、余分な項目が並んでいても読み飛ばす。
+        //   書き出しは操作対象 ObjectID だけになるので、v9 のまま項目が減る。
+        //
         // v8 以前をどう扱うか:
-        //   v7 … 移行状態なし・操作対象なし・Backend Mode なしとして読む
-        //   v8 … 移行状態と操作対象は読む。Backend Mode は既定値 Hybrid とする
+        //   v7 … 操作対象なし・Backend Mode なしとして読む
+        //   v8 … 操作対象は読む。Backend Mode は既定値 Hybrid とする
         //   どちらも読み込みは成功し、保存すると v9 になる。
         //
         //   Backend Mode の既定を Hybrid にする理由:
@@ -98,12 +105,9 @@ namespace ReplayEngine::Scene::Serialization
         // ---- Scene 単位の状態 (v8 以降) ------------------------------------
         //
         // 操作対象。Component の有無ではなく、この ID が操作対象を決める。
+        // 無効なら「この Scene には操作対象が設定されていない」という状態であり、
+        // 何かを自動生成したり別の GameObject を自動で選んだりはしない。
         Core::ObjectID controlled_object;
-
-        // 旧 Player から GameObject への移行が済んでいるか。
-        // Component を削除しても false へ戻らない。旧 Player を二度と復活させないための印。
-        bool legacy_player_migrated = false;
-        Core::ObjectID migrated_player_object;
 
         // ---- Scene 単位の状態 (v9 以降) ------------------------------------
         //
@@ -121,8 +125,6 @@ namespace ReplayEngine::Scene::Serialization
             scene_name = "Scene";
             objects.clear();
             controlled_object = Core::ObjectID::Invalid();
-            legacy_player_migrated = false;
-            migrated_player_object = Core::ObjectID::Invalid();
             collision_backend_mode = 1;
             migrated_legacy_sources.clear();
         }

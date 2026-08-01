@@ -7,6 +7,7 @@
 #include <locale>
 #include <ostream>
 #include <sstream>
+#include <string>
 
 namespace ReplayEngine::Scene::Serialization
 {
@@ -251,11 +252,15 @@ namespace ReplayEngine::Scene::Serialization
         stream << "SCENE " << std::quoted(data.scene_name) << '\n';
 
         // v8 で追加。Scene 単位の状態。
-        // 操作対象を Component の有無ではなくここで決めることで、
-        // Component を削除しても旧 Player が復活しない。
-        stream << "SCENE_STATE " << data.controlled_object.Value() << ' '
-            << (data.legacy_player_migrated ? 1 : 0) << ' '
-            << data.migrated_player_object.Value() << '\n';
+        //
+        // 操作対象を Component の有無ではなくここで決める。
+        // 「操作対象」は ObjectID だけで表され、GameObject 名にも Prefab 名にも
+        // 配列の並び順にも依存しない。
+        //
+        // 以前はこの行に旧 Player の移行状態が 2 項目並んでいたが、
+        // 旧 Player 経路の撤去にともない書き出さなくなった。
+        // 読み取り側は行単位で解析するので、古いファイルもそのまま読める。
+        stream << "SCENE_STATE " << data.controlled_object.Value() << '\n';
 
         // v9 で追加。衝突の問い合わせ先と、旧 Stage の移行済み集合。
         // Backend Mode は Scene に 1 つだけ持ち、Component へは重複させない。
@@ -338,20 +343,34 @@ namespace ReplayEngine::Scene::Serialization
         }
 
         // v8 で追加した Scene 単位の状態。v7 には存在しないので読み飛ばす。
+        //
+        // 【行単位で読む理由】
+        //   v8 / v9 の書き出しでは、この行に旧 Player の移行状態が 2 項目
+        //   並んでいた。旧 Player 経路を撤去した今はもう書き出さないが、
+        //   既に保存済みのファイルを読めなくするわけにはいかない。
+        //   行の残りをまとめて読み捨てることで、項目が何個並んでいても
+        //   「先頭が操作対象 ObjectID」という約束だけで読み進められる。
         if (version >= 8)
         {
             if (!Expect(stream, "SCENE_STATE", error)) return false;
-            Core::ObjectID::ValueType controlled = 0;
-            int migrated = 0;
-            Core::ObjectID::ValueType migrated_object = 0;
-            if (!(stream >> controlled >> migrated >> migrated_object))
+
+            std::string state_line;
+            if (!std::getline(stream, state_line))
             {
                 error = "Scene 状態を読み取れません。";
                 return false;
             }
+
+            std::istringstream state_stream(state_line);
+            state_stream.imbue(std::locale::classic());
+            Core::ObjectID::ValueType controlled = 0;
+            if (!(state_stream >> controlled))
+            {
+                error = "操作対象 ObjectID を読み取れません。";
+                return false;
+            }
             data.controlled_object = Core::ObjectID(controlled);
-            data.legacy_player_migrated = migrated != 0;
-            data.migrated_player_object = Core::ObjectID(migrated_object);
+            // 行の残り（旧 Player の移行状態）は読み捨てる。
         }
 
         // v9 で追加した衝突まわりの状態。

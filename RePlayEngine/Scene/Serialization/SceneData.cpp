@@ -23,8 +23,6 @@ namespace ReplayEngine::Scene::Serialization
 
         // Scene 単位の状態。Component の有無とは独立して保存する。
         output.controlled_object = scene.Services().ControlledObject();
-        output.legacy_player_migrated = scene.Services().PlayerMigration().Migrated();
-        output.migrated_player_object = scene.Services().PlayerMigration().MigratedObject();
 
         // v9。衝突の問い合わせ先と、旧 Stage の移行済み集合。
         output.collision_backend_mode = scene.Services().CollisionBackendMode();
@@ -213,9 +211,10 @@ namespace ReplayEngine::Scene::Serialization
                 ? found->second->ID() : Core::ObjectID::Invalid();
         };
 
+        // 対応表を通した結果が無効になる場合（保存された操作対象が
+        // 実在しなかった場合）は、無効のまま残す。別の GameObject へ
+        // 勝手に乗り移らせない。
         scene.Services().SetControlledObject(remap(data.controlled_object));
-        scene.Services().PlayerMigration().Restore(
-            data.legacy_player_migrated, remap(data.migrated_player_object));
 
         // 衝突の問い合わせ先。v8 以前のファイルは 1 (Hybrid) のまま入ってくる。
         scene.Services().SetCollisionBackendMode(data.collision_backend_mode);
@@ -275,8 +274,10 @@ namespace ReplayEngine::Scene::Serialization
         report.Clear();
         if (data.objects.empty()) return nullptr;
 
-        // Prefab の中に入っていた操作対象 ID や移行状態は「配置先 Scene の情報」なので
-        // 一切持ち込まない。配置後に Scene 側で決める。
+        // Prefab の中に入っていた操作対象 ID は「配置先 Scene の情報」なので
+        // 一切持ち込まない。配置しただけで操作対象が入れ替わらないようにするため。
+        // 操作対象を変えるのは、ユーザーが Inspector で「操作対象に設定」を
+        // 押したときだけ。
 
         // Scene は消さない。既存の内容へ追加する。
         // ID は必ず採番し直すので、同じ Prefab を何度置いても衝突しない。

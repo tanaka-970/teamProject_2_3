@@ -3,7 +3,6 @@
 #include "ICameraBasisProvider.h"
 #include "IPhysicsQueryService.h"
 #include "LegacyStageMigrationState.h"
-#include "ScenePlayerMigrationState.h"
 #include "../../Core/ObjectID/ObjectID.h"
 
 namespace ReplayEngine::Scene
@@ -34,13 +33,11 @@ namespace ReplayEngine::Scene
         // 操作対象の GameObject。
         // 「プレイヤーかどうか」を型ではなく ObjectID で表す。
         // 人型からメカ・ドローンへ切り替えても、GameObject のクラス型は変わらない。
+        //
+        // この ID が無効なとき、Scene には操作対象が居ない。
+        // 代わりに別の GameObject を探したり、何かを自動生成したりはしない。
         Core::ObjectID ControlledObject() const noexcept { return controlled_object_; }
         void SetControlledObject(Core::ObjectID id) noexcept { controlled_object_ = id; }
-
-        // 旧 Player から GameObject への移行状態。
-        // Component の有無とは独立しており、Component を消しても取り消されない。
-        ScenePlayerMigrationState& PlayerMigration() noexcept { return migration_; }
-        const ScenePlayerMigrationState& PlayerMigration() const noexcept { return migration_; }
 
         // ---- 衝突まわりの Scene 単位の設定 ----------------------------------
         //
@@ -76,7 +73,7 @@ namespace ReplayEngine::Scene
             physics_ = nullptr;
             controlled_object_ = Core::ObjectID::Invalid();
             playing_ = false;
-            // 移行状態と Backend Mode はここでリセットしない。
+            // Backend Mode と旧 Stage の移行済み集合はここでリセットしない。
             // Scene の内容に属する情報なので、サービス参照の付け替えでは消えてはいけない。
         }
 
@@ -84,7 +81,6 @@ namespace ReplayEngine::Scene
         const ICameraBasisProvider* camera_basis_ = nullptr;
         const IPhysicsQueryService* physics_ = nullptr;
         Core::ObjectID controlled_object_;
-        ScenePlayerMigrationState migration_;
         LegacyStageMigrationState legacy_stage_;
         int collision_backend_mode_ = 1;   // Hybrid
         bool playing_ = false;
