@@ -67,7 +67,6 @@ void framework::reset_editor_values()
     material_color = { 1, 1, 1, 1 };
     background_color = { 46.0f / 255.0f, 56.0f / 255.0f, 61.0f / 255.0f, 1.0f };
     draw_background_image = false;
-    animate_model = true;
     use_pbr_skin = enable_toon_shader = enable_unlit_shader = true;
     enable_outline_shader = enable_pbr_shadow_shader = true;
     enable_luminance_shader = enable_final_pass_shader = true;
@@ -89,12 +88,9 @@ void framework::reset_editor_values()
     shading_per_stage = SHADING_MODEL_PBR;
     stage_texture_wrap = true;
     stage_texture_contrast = 1.20f;
+    // カメラと旧ステージの初期化だけ。Scene 内の GameObject には触れない。
+    // 「シーン初期化」で操作キャラクターが消えたり作り直されたりしない。
     if (game_scene) game_scene->Gameplay().ResetGameplay();
-    animation_clip_index = game_scene && game_scene->Gameplay().GetPlayer().clip_idle >= 0
-        ? game_scene->Gameplay().GetPlayer().clip_idle : 0;
-    animation_tick = 0.0f;
-    animation_speed = 1.0f;
-    animation_loop = true;
     render_graph.SetOutput(0);
     luminance_threshold = 1.0f;
     pbr.light.directional_color = { 1, 1, 1, 3.598f };
@@ -106,12 +102,10 @@ void framework::reset_editor_values()
     post.bloom_intensity = 0.25f;
     post.vignette_strength = 0.138f;
     post.fxaa_enable = 1.0f;
-    shading_model_override = shading_per_skinned[0] = shading_per_static[0] = SHADING_MODEL_PBR;
-    outline_per_skinned[0] = outline_per_static[0] = false;
-    shader_layers_skinned[0].Clear();
+    shading_per_static[0] = SHADING_MODEL_PBR;
+    outline_per_static[0] = false;
     shader_layers_static[0].Clear();
     stage_shader_layers.Clear();
-    character_profiles_skinned[0] = ReplayEngine::Rendering::CharacterMaterialProfile{};
     character_profiles_static[0] = ReplayEngine::Rendering::CharacterMaterialProfile{};
     stage_character_profile = ReplayEngine::Rendering::CharacterMaterialProfile{};
     shader_preset_status.clear();
@@ -158,13 +152,16 @@ void framework::set_editor_workspace(editor_workspace workspace)
         enable_stage_render = skinned_meshes[1] != nullptr || stage_gltf_model != nullptr;
         break;
     case editor_workspace::modeling:  selected_editor_object = editor_selection::stage; break;
-    case editor_workspace::animation: selected_editor_object = editor_selection::player; break;
+    case editor_workspace::animation:
+        // アニメーションは AnimatorComponent が持つ。
+        // 選択中の GameObject をそのまま見せる（固定のプレイヤー項目は無い）。
+        selected_editor_object = editor_selection::game_object;
+        break;
     case editor_workspace::rendering: selected_editor_object = editor_selection::rendering; break;
     case editor_workspace::shader_adjustment:
-        if (selected_editor_object != editor_selection::player &&
-            selected_editor_object != editor_selection::stage &&
+        if (selected_editor_object != editor_selection::stage &&
             selected_editor_object != editor_selection::rendering)
-            selected_editor_object = editor_selection::player;
+            selected_editor_object = editor_selection::stage;
         break;
     default: selected_editor_object = editor_selection::world; break;
     }
@@ -274,7 +271,8 @@ void framework::draw_search_results()
     };
     result("ワールドを編集", "world ワールド 背景", editor_selection::world);
     result("カメラを編集", "camera カメラ 視点", editor_selection::camera);
-    result("プレイヤーを編集", "player プレイヤー モデル", editor_selection::player);
+    result("操作キャラクターを編集", "player プレイヤー 操作 キャラクター character",
+        editor_selection::game_object);
     result("ステージを編集", "stage ステージ 地形", editor_selection::stage);
     result("平行光源を編集", "directional light ライト 光源 pbr ibl shadow", editor_selection::directional_light);
     result("点光源を編集", "point light 点光源 ライト", editor_selection::point_lights);
@@ -330,13 +328,9 @@ void framework::draw_scene_hierarchy()
     {
         item("ワールド", editor_selection::world);
         item("メインカメラ", editor_selection::camera);
-        // 移行後は旧 Player の固定項目を出さない。
-        // Player は下の GameObject ツリーへ通常の GameObject として現れる。
-        // 同じ Player を 2 か所で編集できる状態を残さないため。
-        if (!object_player_active)
-        {
-            item("Legacy 旧プレイヤー（未変換）", editor_selection::player);
-        }
+        // 「プレイヤー」という固定項目は無い。
+        // 操作キャラクターは下の GameObject ツリーへ通常の GameObject として現れ、
+        // 名前も自由に変えられる。同じ対象を 2 か所から編集できる状態は作らない。
         item(stage_asset_placed ? "ステージ（配置済み）" : "ステージ素材（未配置）",
             editor_selection::stage);
         if (ImGui::TreeNodeEx("ライト", ImGuiTreeNodeFlags_DefaultOpen))
@@ -357,22 +351,16 @@ void framework::draw_scene_hierarchy()
     // framework 側は「選択が変わったらインスペクターの表示先を切り替える」だけ。
     if (ImGui::TreeNodeEx("GameObject", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        // 移行状態で判定する。Component の有無では判定しない。
-        // 一度変換したら二度と変換ボタンを出さない。
-        const auto& migration = active_object_scene().Services().PlayerMigration();
-        if (migration.Migrated())
+        // 操作対象が設定されていない Scene であることを伝えるだけ。
+        // ここで何かを生成したり、代わりの GameObject を選んだりはしない。
+        if (object_missing_controlled_target)
         {
-            ImGui::TextDisabled("旧 Player は変換済みです（Player ObjectID: %s）",
-                migration.MigratedObject().ToString().c_str());
+            ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f),
+                "このシーンには操作対象が設定されていません");
+            ImGui::TextDisabled(
+                "GameObject を選び、インスペクターの「操作対象に設定」で指定してください");
+            ImGui::Separator();
         }
-        else if (!object_scene_play_mode)
-        {
-            if (ImGui::Button("旧 Player を GameObject へ変換"))
-            {
-                convert_legacy_player_to_gameobject();
-            }
-        }
-        ImGui::Separator();
 
         object_editor_context.SetPlayMode(object_scene_play_mode);
         object_editor_context.AttachScene(&active_object_scene());
@@ -488,7 +476,7 @@ void framework::draw_project_panel()
     }
     ImGui::Separator();
     ImGui::TextDisabled("現在のシーンが読み込んでいる素材");
-    ImGui::BulletText("プレイヤー / AllAnimation1.cereal");
+    ImGui::BulletText("キャラクター / Renderer Component の AssetGUID から解決");
     ImGui::BulletText("ステージ素材 / ファイルから選択");
     ImGui::BulletText("IBL / 拡散・鏡面・BRDF LUT");
     ImGui::BulletText("シェーダー / PBR・Toon・Deferred・PostProcess");
@@ -540,9 +528,8 @@ void framework::draw_workspace_panel()
     case editor_workspace::animation:
         ImGui::TextUnformatted("アニメーションWorkspace");
         ImGui::TextDisabled("今後、タイムラインとアニメーション編集をここへ登録します。");
-        if (ImGui::Button("プレイヤーを選択")) selected_editor_object = editor_selection::player;
-        ImGui::SameLine();
-        ImGui::Checkbox("プレビュー", &animate_model);
+        ImGui::TextDisabled(
+            "クリップの割り当てと再生は、対象 GameObject の Animator で編集します。");
         break;
     case editor_workspace::rendering:
         ImGui::TextUnformatted("レンダリングWorkspace");
@@ -647,7 +634,7 @@ void framework::draw_editor()
 
 
 // ---------------------------------------------------------------------------
-// 実行モード表示と Player 診断
+// 実行モード表示と操作キャラクターの診断
 // ---------------------------------------------------------------------------
 //
 // 「動かない原因が入力なのか Edit Mode なのか分からない」状態を解消するための表示。
@@ -682,11 +669,11 @@ void framework::draw_runtime_mode_banner()
 #endif
 }
 
-void framework::draw_player_diagnostics()
+void framework::draw_controlled_character_diagnostics()
 {
 #ifdef _DEBUG
     // Debug ビルドでのみ表示する。Release へ診断処理を残さない。
-    if (!ImGui::CollapsingHeader("Player Runtime Diagnostics")) return;
+    if (!ImGui::CollapsingHeader("Controlled Character Diagnostics")) return;
 
     namespace Components = ReplayEngine::Components;
     const ReplayEngine::Scene::Scene& scene = active_object_scene();
@@ -694,10 +681,6 @@ void framework::draw_player_diagnostics()
     ImGui::Text("Mode: %s", object_scene_play_mode ? "Play"
         : (object_runtime_active() ? "Running" : "Edit"));
     ImGui::Text("Runtime active: %s", object_runtime_active() ? "true" : "false");
-    ImGui::Text("Legacy migrated: %s", scene.Services().PlayerMigration().Migrated() ? "true" : "false");
-    ImGui::Text("Legacy Player Update: %s",
-        (game_scene && game_scene->Gameplay().LegacyPlayerActive()) ? "true" : "false");
-    ImGui::Text("Legacy Player Render: %s", object_player_active ? "false" : "true");
     ImGui::Text("Fixed accumulator: %.4f", object_fixed_accumulator);
     ImGui::Text("Render items: %zu", object_render_items.Size());
 
@@ -707,7 +690,9 @@ void framework::draw_player_diagnostics()
 
     if (target == nullptr)
     {
-        ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.4f, 1.0f), "Controlled Object: なし");
+        ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f),
+            "このシーンには操作対象が設定されていません");
+        ImGui::TextDisabled("インスペクターの「操作対象に設定」で指定してください");
         return;
     }
 

@@ -20,17 +20,14 @@ namespace
     }
 }
 
-void framework::store_object_world(DirectX::XMFLOAT4X4& world) const
+// エディタのデバッグ用メッシュ (static_meshes[0]) を置くワールド行列。
+//
+// かつてここには「ゲーム実行中は旧 Player の Transform を使う」という分岐があり、
+// それが旧 Player を画面へ出す固定行列だった。その分岐は撤去した。
+// GameObject の描画行列は SceneRenderCollector が RenderItem::world として作る。
+void framework::store_debug_mesh_world(DirectX::XMFLOAT4X4& world) const
 {
     DirectX::XMMATRIX C = fbx_coordinate_transform();
-
-    if (enable_scene_game && game_scene)
-    {
-        // 実行中はプレイヤーが持つTransformを優先し、FBXの座標変換だけを前段に加える。
-        DirectX::XMMATRIX W = DirectX::XMLoadFloat4x4(&game_scene->Gameplay().GetPlayer().GetTransform());
-        DirectX::XMStoreFloat4x4(&world, C * W);
-        return;
-    }
 
     DirectX::XMMATRIX S = DirectX::XMMatrixScaling(scaling.x, scaling.y, scaling.z);
     DirectX::XMMATRIX R = DirectX::XMMatrixRotationRollPitchYaw(
@@ -189,117 +186,47 @@ void framework::render(float elapsed_time)
     if (enable_particles) particles.simulate(immediate_context.Get(), elapsed_time);
     if (enable_trail)     test_trail.update(elapsed_time);
 
-    // 新 Player GameObject が操作対象になっている間は、旧 Player 用の
-    // skinned_meshes[0] を描画しない。描画は SkinnedMeshRendererComponent が提出する。
-    // これが二重描画を防ぐ唯一のスイッチ。
-    const bool draw_legacy_player = !object_player_active;
+    // 旧 Player 用の skinned_meshes[0] を描く経路は撤去した。
+    //
+    // かつてここには「draw_legacy_player」というスイッチがあり、
+    // 旧 Player の Transform と手動選択したクリップで固定モデルを描いていた。
+    // 現在、アニメーション付きモデルは例外なく
+    // SkinnedMeshRendererComponent + AnimatorComponent が提出し、
+    // draw_object_scene_meshes() / RenderItem 経由でのみ描かれる。
+    // Shadow / CSM / GBuffer / Forward / Outline のどのパスにも
+    // Player 専用の分岐は残っていない。
 
-    const skinned_mesh::animation::keyframe* active_keyframe = nullptr;
-    if (draw_legacy_player && skinned_meshes[0] && !skinned_meshes[0]->animation_clips.empty())
-    {
-        const int clip_count = static_cast<int>(skinned_meshes[0]->animation_clips.size());
-
-        // Playerが明示した場合だけクリップを切り替える。-1ならエディタで選んだ値を維持する。
-        if (enable_scene_game && game_scene)
-        {
-            int desired = game_scene->Gameplay().GetPlayer().GetAnimationClipIndex();
-            if (desired >= 0)
-            {
-                if (desired >= clip_count) desired = clip_count - 1;
-                if (desired != animation_clip_index)
-                {
-                    animation_clip_index = desired;
-                    animation_tick = 0.0f;
-                }
-            }
-        }
-
-        if (animation_clip_index < 0) animation_clip_index = 0;
-        if (animation_clip_index >= clip_count) animation_clip_index = clip_count - 1;
-
-        skinned_mesh::animation& anim = skinned_meshes[0]->animation_clips.at(animation_clip_index);
-        if (!anim.sequence.empty())
-        {
-            const float sampling_rate = anim.sampling_rate > 0.0f ? anim.sampling_rate : 60.0f;
-            const float duration = static_cast<float>(anim.sequence.size()) / sampling_rate;
-            if (animate_model)
-            {
-                animation_tick += elapsed_time * animation_speed;
-            }
-            if (animation_loop && duration > 0.0f)
-            {
-                while (animation_tick >= duration) animation_tick -= duration;
-                while (animation_tick < 0.0f) animation_tick += duration;
-            }
-            else
-            {
-                if (animation_tick < 0.0f) animation_tick = 0.0f;
-                if (animation_tick > duration) animation_tick = duration;
-            }
-
-            int frame = static_cast<int>(animation_tick * sampling_rate);
-            if (frame >= static_cast<int>(anim.sequence.size()))
-            {
-                frame = static_cast<int>(anim.sequence.size()) - 1;
-            }
-            active_keyframe = &anim.sequence.at(frame);
-        }
-    }
-
-    if (csm.constants.params.w > 0.5f &&
-        ((draw_legacy_player && skinned_meshes[0]) || (enable_static_meshes && static_meshes[0])))
+    if (csm.constants.params.w > 0.5f && enable_static_meshes && static_meshes[0])
     {
         // カスケードシャドウ用深度を先に作る。終了時に元のRTVとViewportを復元する。
         D3D11_VIEWPORT main_vp = viewport;
         csm.shadow_begin(immediate_context.Get());
 
         DirectX::XMFLOAT4X4 world;
-        store_object_world(world);
-        if (skinned_meshes[0])
-        {
-            skinned_meshes[0]->render(immediate_context.Get(), world, material_color, active_keyframe,
-                nullptr,
-                csm.caster_skinned_vs.Get(),
-                csm.caster_skinned_il.Get(),
-                false);
-        }
-        if (enable_static_meshes && static_meshes[0])
-        {
-            static_meshes[0]->render(immediate_context.Get(), world, material_color,
-                nullptr,
-                csm.caster_static_vs.Get(),
-                csm.caster_static_il.Get(),
-                false);
-        }
+        store_debug_mesh_world(world);
+        static_meshes[0]->render(immediate_context.Get(), world, material_color,
+            nullptr,
+            csm.caster_static_vs.Get(),
+            csm.caster_static_il.Get(),
+            false);
 
         csm.shadow_end(immediate_context.Get(),
             render_target_view.Get(), depth_stencil_view.Get(), main_vp);
     }
 
-    if (pbr_shadow_enabled && ((draw_legacy_player && skinned_meshes[0]) || (enable_static_meshes && static_meshes[0])))
+    if (pbr_shadow_enabled && enable_static_meshes && static_meshes[0])
     {
         // PBR固有のシャドウマップはCSMと別リソースなので、必要な場合だけ生成する。
         D3D11_VIEWPORT main_vp = viewport;
         pbr.shadow_begin(immediate_context.Get());
 
         DirectX::XMFLOAT4X4 world;
-        store_object_world(world);
-        if (skinned_meshes[0])
-        {
-            skinned_meshes[0]->render(immediate_context.Get(), world, material_color, active_keyframe,
-                nullptr,
-                pbr.shadow_caster_skinned_vs.Get(),
-                pbr.shadow_caster_skinned_il.Get(),
-                false);
-        }
-        if (enable_static_meshes && static_meshes[0])
-        {
-            static_meshes[0]->render(immediate_context.Get(), world, material_color,
-                nullptr,
-                pbr.shadow_caster_static_vs.Get(),
-                pbr.shadow_caster_static_il.Get(),
-                false);
-        }
+        store_debug_mesh_world(world);
+        static_meshes[0]->render(immediate_context.Get(), world, material_color,
+            nullptr,
+            pbr.shadow_caster_static_vs.Get(),
+            pbr.shadow_caster_static_il.Get(),
+            false);
 
         pbr.shadow_end(immediate_context.Get(),
             render_target_view.Get(), depth_stencil_view.Get(), main_vp);
@@ -343,13 +270,7 @@ void framework::render(float elapsed_time)
         immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
 
         DirectX::XMFLOAT4X4 world;
-        store_object_world(world);
-        if (draw_legacy_player && skinned_meshes[0])
-        {
-            bind_gbuffer_material(deferred_shading_model(shading_per_skinned[0]));
-            skinned_meshes[0]->render(immediate_context.Get(), world, material_color,
-                                      active_keyframe, skinned_mesh_gbuffer_ps.Get());
-        }
+        store_debug_mesh_world(world);
         if (enable_static_meshes && static_meshes[0])
         {
             bind_gbuffer_material(deferred_shading_model(shading_per_static[0]));
@@ -379,8 +300,11 @@ void framework::render(float elapsed_time)
 
         // GameObject / Component 基盤が提出した描画対象を GBuffer へ描く。
         // 提出リストは update_object_scene() が毎フレーム作り直す。
-        // 対象は MeshRendererComponent を持つ GameObject だけで、
-        // 上で描いた skinned_meshes[0] や旧 Stage とは対象が重ならない（二重描画しない）。
+        //
+        // 【二重描画しない根拠】
+        //   キャラクターを描く経路はここ 1 本だけになった。
+        //   上で描くのは「エディタのデバッグ用静的メッシュ」と「旧 Stage」で、
+        //   どちらも GameObject の提出リストには載らない別の入れ物にある。
         draw_object_scene_meshes(skinned_mesh_gbuffer_ps.Get(), true);
 
         deferred.gbuffer_end(immediate_context.Get());
@@ -389,8 +313,7 @@ void framework::render(float elapsed_time)
                                background_color, render_graph.DeferredDebugMode());
 
         const bool draw_shader_layers = render_graph.DeferredDebugMode() == 0 &&
-            (shader_layers_skinned[0].HasEnabledLayers() ||
-                shader_layers_static[0].HasEnabledLayers() ||
+            (shader_layers_static[0].HasEnabledLayers() ||
                 stage_shader_layers.HasEnabledLayers());
         if (draw_shader_layers)
         {
@@ -461,29 +384,6 @@ void framework::render(float elapsed_time)
                 }
             };
 
-            if (skinned_meshes[0])
-            {
-                for (const auto& layer : shader_layers_skinned[0].Layers())
-                {
-                    if (!layer.enabled) continue;
-                    if (layer.type == ReplayEngine::Rendering::ShaderLayerType::Outline)
-                    {
-                        immediate_context->OMSetBlendState(
-                            blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
-                        toon.bind_outline_pass(immediate_context.Get(), true);
-                        skinned_meshes[0]->render(immediate_context.Get(), world, material_color,
-                            active_keyframe, toon.outline_ps(), toon.skinned_outline_vs_.Get(),
-                            toon.skinned_outline_il_.Get(), true);
-                        immediate_context->RSSetState(
-                            rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
-                        continue;
-                    }
-                    prepare_layer(layer, character_profiles_skinned[0]);
-                    const auto color = layer_color(layer);
-                    skinned_meshes[0]->render(immediate_context.Get(), world, color,
-                        active_keyframe, skinned_pixel_shader(layer, false));
-                }
-            }
             if (enable_static_meshes && static_meshes[0])
             {
                 for (const auto& layer : shader_layers_static[0].Layers())
@@ -544,11 +444,11 @@ void framework::render(float elapsed_time)
             immediate_context->OMSetBlendState(blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
         }
 
+        // 輪郭線の追加パス。旧 Player 用の分岐は無い。
+        // GameObject の輪郭線は Renderer Component の outline プロパティが決める。
         const bool draw_deferred_outline = render_graph.DeferredDebugMode() == 0 &&
             enable_outline_shader &&
-            ((outline_per_skinned[0] &&
-                !shader_layers_skinned[0].Contains(ReplayEngine::Rendering::ShaderLayerType::Outline)) ||
-             (outline_per_static[0] &&
+            ((outline_per_static[0] &&
                 !shader_layers_static[0].Contains(ReplayEngine::Rendering::ShaderLayerType::Outline)) ||
              (outline_per_stage &&
                 !stage_shader_layers.Contains(ReplayEngine::Rendering::ShaderLayerType::Outline)));
@@ -559,14 +459,6 @@ void framework::render(float elapsed_time)
             immediate_context->OMSetDepthStencilState(
                 depth_stencil_states[(size_t)DEPTH_STATE::ZT_ON_ZW_OFF].Get(), 0);
             immediate_context->OMSetBlendState(blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
-            if (skinned_meshes[0] && outline_per_skinned[0] &&
-                !shader_layers_skinned[0].Contains(ReplayEngine::Rendering::ShaderLayerType::Outline))
-            {
-                toon.bind_outline_pass(immediate_context.Get(), true);
-                skinned_meshes[0]->render(immediate_context.Get(), world, material_color,
-                    active_keyframe, toon.outline_ps(), toon.skinned_outline_vs_.Get(),
-                    toon.skinned_outline_il_.Get(), true);
-            }
             if (enable_static_meshes && static_meshes[0] && outline_per_static[0] &&
                 !shader_layers_static[0].Contains(ReplayEngine::Rendering::ShaderLayerType::Outline))
             {
@@ -608,13 +500,7 @@ void framework::render(float elapsed_time)
         immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
 
         DirectX::XMFLOAT4X4 world;
-        store_object_world(world);
-
-        if (draw_legacy_player && skinned_meshes[0])
-        {
-            skinned_meshes[0]->render(immediate_context.Get(), world, material_color,
-                                      active_keyframe, skinned_forward_shader(shading_per_skinned[0]));
-        }
+        store_debug_mesh_world(world);
 
         if (enable_scene_game && game_scene && enable_stage_render)
         {
@@ -676,18 +562,8 @@ void framework::render(float elapsed_time)
                 item_keyframe, skinned_forward_shader(scene_item.shading_model));
         }
 
-        if (draw_legacy_player && skinned_meshes[0] && enable_outline_shader && outline_per_skinned[0])
-        {
-            // アウトラインは表面描画後に背面を膨らませて重ねる。
-            toon.bind_outline_pass(immediate_context.Get(), true);
-            skinned_meshes[0]->render(immediate_context.Get(), world, material_color,
-                                      active_keyframe,
-                                      toon.outline_ps(),
-                                      toon.skinned_outline_vs_.Get(),
-                                      toon.skinned_outline_il_.Get(),
-                                      true);
-            immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
-        }
+        // アウトラインは表面描画後に背面を膨らませて重ねる。
+        // 旧 Player 専用のアウトライン描画は撤去した。
         if (enable_static_meshes && static_meshes[0] &&
             enable_outline_shader && outline_per_static[0])
         {

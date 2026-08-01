@@ -5,52 +5,14 @@
 #include "../../RePlayEngine/Scene/BootLogoScene.h"
 #include "../../RePlayEngine/Scene/LoadingScene.h"
 
-#include <algorithm>
-#include <cctype>
 #include <filesystem>
-#include <initializer_list>
 #include <string>
 
-namespace
-{
-    std::string lower_copy(std::string text)
-    {
-        std::transform(text.begin(), text.end(), text.begin(),
-            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        return text;
-    }
-
-    int find_animation_clip(const skinned_mesh& mesh,
-                            std::initializer_list<const char*> exact_names,
-                            std::initializer_list<const char*> contains_names)
-    {
-        for (const char* exact : exact_names)
-        {
-            const std::string wanted = lower_copy(exact);
-            for (size_t i = 0; i < mesh.animation_clips.size(); ++i)
-            {
-                if (lower_copy(mesh.animation_clips[i].name) == wanted)
-                {
-                    return static_cast<int>(i);
-                }
-            }
-        }
-
-        for (const char* token : contains_names)
-        {
-            const std::string wanted = lower_copy(token);
-            for (size_t i = 0; i < mesh.animation_clips.size(); ++i)
-            {
-                if (lower_copy(mesh.animation_clips[i].name).find(wanted) != std::string::npos)
-                {
-                    return static_cast<int>(i);
-                }
-            }
-        }
-
-        return -1;
-    }
-}
+// 【削除済み】lower_copy / find_animation_clip
+//   起動時に固定のプレイヤーモデルからクリップ名を探し、
+//   旧 Player の clip_idle / clip_walk / clip_jump へ割り当てるための補助だった。
+//   クリップの割り当ては AnimatorComponent のプロパティ
+//   (idle_clip / walk_clip / jump_clip) が持ち、Scene へ保存される。
 
 bool framework::initialize()
 {
@@ -257,12 +219,13 @@ bool framework::initialize()
         sprite_batches[0] = std::make_unique<sprite_batch>(device.Get(), ui_image, 1);
         return true;
     });
-    loading_scene->AddTask("Player model", [this]
-    {
-        skinned_meshes[0] = std::make_unique<skinned_mesh>(
-            device.Get(), ".\\resources\\AnimationModel\\AllAnimation1.fbx");
-        return skinned_meshes[0] != nullptr;
-    });
+    // 【削除済み】"Player model" タスク
+    //   かつてここで .\resources\AnimationModel\AllAnimation1.fbx を
+    //   skinned_meshes[0] へ固定で読み込んでいた。これが旧 Player 専用の
+    //   Asset 固定参照であり、旧 Player 描画の入口だった。
+    //   キャラクターのモデルは SkinnedMeshRendererComponent の
+    //   mesh_asset (AssetGUID) が指し、resolve_object_mesh() が読み込む。
+    //   起動時にモデルを 1 つ決め打ちで読むことはもうしない。
     loading_scene->AddTask("Debug mesh", [this]
     {
         // static_mesh は .obj 専用。構築前に can_load で検証し、
@@ -301,17 +264,12 @@ bool framework::initialize()
 
     scene_manager.QueueSceneFactory([this]() -> std::unique_ptr<ReplayEngine::Scene::IScene>
     {
-        int idle = -1, walk = -1, jump = -1;
-        if (skinned_meshes[0])
-        {
-            idle = find_animation_clip(*skinned_meshes[0], { "idle" }, { "idle" });
-            walk = find_animation_clip(*skinned_meshes[0], { "walk", "run" }, { "walk", "run", "heavyrun" });
-            jump = find_animation_clip(*skinned_meshes[0], { "jump", "fall" }, { "jump", "fall" });
-        }
-        auto next_scene = std::make_unique<GameScene>(skinned_meshes[0].get(), nullptr,
-            static_cast<float>(SCREEN_WIDTH) / static_cast<float>(SCREEN_HEIGHT), idle, walk, jump);
+        // GameScene が持つのはカメラと旧ステージだけ。
+        // 操作キャラクターのモデルもアニメーションクリップも渡さない。
+        // それらは Scene 内の GameObject が Component として持っている。
+        auto next_scene = std::make_unique<GameScene>(nullptr,
+            static_cast<float>(SCREEN_WIDTH) / static_cast<float>(SCREEN_HEIGHT));
         game_scene = next_scene.get();
-        animation_clip_index = idle >= 0 ? idle : 0;
         return next_scene;
     });
 

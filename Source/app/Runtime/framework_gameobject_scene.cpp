@@ -14,22 +14,18 @@
 #include "skinned_mesh.h"
 
 #include "../../RePlayEngine/Components/Camera/CameraTargetComponent.h"
-#include "../../RePlayEngine/Components/Gameplay/CharacterMotorComponent.h"
-#include "../../RePlayEngine/Components/Gameplay/HealthComponent.h"
-#include "../../RePlayEngine/Components/Gameplay/PlayerControllerComponent.h"
-#include "../../RePlayEngine/Components/Gameplay/PlayerInputComponent.h"
-#include "../../RePlayEngine/Components/Physics/SphereColliderComponent.h"
-#include "../../RePlayEngine/Components/Rendering/AnimatorComponent.h"
-#include "../../RePlayEngine/Components/Rendering/MeshRendererComponent.h"
-#include "../../RePlayEngine/Components/Rendering/SkinnedMeshRendererComponent.h"
 #include "../../RePlayEngine/Object/Registry/BuiltInComponents.h"
+#include "../../RePlayEngine/Project/ProjectSettingsSerializer.h"
 #include "../../RePlayEngine/Rendering/Adapter/SceneRenderCollector.h"
+#include "../../RePlayEngine/Scene/Serialization/PrefabSerializer.h"
 #include "../../RePlayEngine/Scene/Serialization/SceneData.h"
 #include "../../RePlayEngine/Scene/Serialization/SceneSerializer.h"
 
 #include <cctype>
 #include <cmath>
+#include <cstdint>
 #include <filesystem>
+#include <string>
 
 namespace
 {
@@ -40,18 +36,35 @@ namespace
 // 初期化
 // ---------------------------------------------------------------------------
 
+// 起動時の流れはこの関数だけ。順序に意味がある。
+//
+//   1. Component 型を登録する
+//   2. プロジェクト設定を読み込む
+//   3. Scene v9 を読み込む（GameObject / Component / Property / Collider 参照 /
+//      controlledObjectId がここで復元される）
+//   4. Scene を開始する
+//   5. 衝突世界を Scene へ Attach する
+//
+// ここで GameObject を作ることも、Prefab を配置することも、
+// Component をコードから付け足すことも一切しない。
+// Scene ファイルの内容がそのまま起動後の状態になる。
 void framework::initialize_object_scene()
 {
     // Component 型の登録。Scene を作る前・読む前に 1 回だけ。
     // 二重に呼んでも ComponentRegistry が重複を弾くので安全。
     ReplayEngine::Core::RegisterBuiltInComponents();
 
+    // プロジェクト設定。Scene より先に読む。
+    // ただしここで Prefab を配置することはない。設定を持っているだけ。
+    load_project_settings();
+
     object_scene.SetName("TrainingStage");
     object_editor_context.AttachScene(&object_scene);
     object_editor_context.SetAssetDatabase(&asset_database);
     object_editor_context.SetScenePath(object_scene_path);
 
-    // 既定の Scene があれば読み込む。無くても失敗扱いにしない（新規シーンとして扱う）。
+    // 既定の Scene があれば読み込む。無くても失敗扱いにしない（空シーンとして扱う）。
+    // 「Scene が無いから既定のキャラクターを置く」ことはしない。
     std::error_code filesystem_error;
     if (std::filesystem::exists(object_scene_path, filesystem_error) && !filesystem_error)
     {
@@ -59,7 +72,8 @@ void framework::initialize_object_scene()
     }
     else
     {
-        object_editor_context.SetStatus("新規シーン");
+        object_editor_context.SetStatus(
+            "シーンファイルがありません（空のシーンとして開始しました）");
     }
 
     // 編集中も Component の OnStart を回したいので Scene は開始状態にしておく。
@@ -70,6 +84,49 @@ void framework::initialize_object_scene()
     // これ以降 Component が見る IPhysicsQueryService は衝突世界であり、
     // 旧 Stage は衝突世界の内側から必要なときだけ呼ばれる。
     initialize_collision_world();
+}
+
+// ---------------------------------------------------------------------------
+// プロジェクト設定
+// ---------------------------------------------------------------------------
+
+void framework::load_project_settings()
+{
+    namespace Project = ReplayEngine::Project;
+
+    std::string error;
+    const auto path = Project::ProjectSettingsSerializer::DefaultPath();
+    if (Project::ProjectSettingsSerializer::LoadFromFile(project_settings, path, error))
+    {
+        project_settings_status = "プロジェクト設定を読み込みました";
+    }
+    else
+    {
+        // 未作成・壊れているのどちらでも、既定値のまま続行する。
+        // ここで assert も例外も出さない。
+        project_settings_status = error;
+    }
+}
+
+bool framework::save_project_settings()
+{
+    namespace Project = ReplayEngine::Project;
+
+    std::string error;
+    const auto path = Project::ProjectSettingsSerializer::DefaultPath();
+    if (!Project::ProjectSettingsSerializer::SaveToFile(project_settings, path, error))
+    {
+        project_settings_status = "プロジェクト設定の保存に失敗しました: " + error;
+        return false;
+    }
+    project_settings_status = "プロジェクト設定を保存しました";
+    return true;
+}
+
+ReplayEngine::Project::PrefabReferenceStatus
+    framework::resolve_default_character_prefab() const
+{
+    return project_settings.ResolveDefaultCharacterPrefab(asset_database);
 }
 
 ReplayEngine::Scene::Scene& framework::active_object_scene() noexcept
@@ -122,23 +179,17 @@ void framework::refresh_object_scene_services()
     refresh_collision_world();
 
     // 操作対象を確定する。
-    // 保存されていた ID を優先し、それが使えない場合だけ自動選出する。
+    //
+    // Scene に保存されていた ID がそのまま操作対象になる。
+    // その GameObject が消えていれば無効化するだけで、
+    // 代わりの GameObject を探すことも、何かを生成することもしない。
     player_control_system.SetControlledObject(services.ControlledObject());
     const ReplayEngine::Core::ObjectID controlled = player_control_system.Resolve(scene);
     services.SetControlledObject(controlled);
 
-    // 【重要】旧 Player を出すかどうかは Component の有無では決めない。
-    //
-    //   以前は「PlayerController があるか」で切り替えていたため、
-    //   Controller を削除した瞬間に旧 Player が復活し、二体表示になっていた。
-    //
-    //   移行状態（Scene に保存される）だけで判定する。
-    //   Component を消しても移行状態は取り消されないので、旧 Player は二度と出ない。
-    object_player_active = services.PlayerMigration().Migrated();
-    if (game_scene != nullptr)
-    {
-        game_scene->Gameplay().SetLegacyPlayerActive(!object_player_active);
-    }
+    // 操作対象が居ないことは「異常」ではなく「そういう Scene」。
+    // Editor へ知らせるためにフラグを立てるだけで、復旧処理は一切しない。
+    object_missing_controlled_target = !controlled.Valid();
 }
 
 void framework::update_object_fixed_step(float elapsed_time)
@@ -223,19 +274,39 @@ void framework::update_object_camera_follow(float elapsed_time)
     if (game_scene == nullptr) return;
 
     // 追従対象は「CameraTargetComponent を持つ操作対象 GameObject」。
-    // カメラ側は Player 具象型を一切知らない。
+    // カメラ側は操作対象の具象型を一切知らない。
+    //
+    // 解決の材料は次の 4 つだけ。
+    //   controlledObjectId / CameraTargetComponent / Runtime Scene / ObjectID
+    // GameObject 名も Prefab 名も見ない。
     const ReplayEngine::Scene::Scene& scene = active_object_scene();
     const ReplayEngine::Core::ObjectID controlled = scene.Services().ControlledObject();
-    if (!controlled.Valid()) return;
 
-    const ReplayEngine::Core::GameObject* target = scene.FindGameObjectByID(controlled);
-    if (target == nullptr) return;
+    const ReplayEngine::Core::GameObject* target =
+        controlled.Valid() ? scene.FindGameObjectByID(controlled) : nullptr;
 
-    const auto* camera_target = target->GetComponent<ReplayEngine::Components::CameraTargetComponent>();
-    if (camera_target == nullptr || !camera_target->ActiveInHierarchy()) return;
+    const ReplayEngine::Components::CameraTargetComponent* camera_target = target != nullptr
+        ? target->GetComponent<ReplayEngine::Components::CameraTargetComponent>()
+        : nullptr;
+
+    // 対象が居ない / CameraTarget が外された / 無効化された。
+    // どの場合も追従を止めて自由カメラへ戻す。
+    // 「代わりに別のものを追う」ことはしない。
+    if (target == nullptr || camera_target == nullptr || !camera_target->ActiveInHierarchy())
+    {
+        game_scene->Gameplay().UpdateFreeCamera(elapsed_time);
+        return;
+    }
+
+    // 追従点は GameObject のワールド位置 + target_offset。
+    const DirectX::XMFLOAT3 world = target->GetTransform().WorldPosition();
+    const DirectX::XMFLOAT3 anchor{
+        world.x + camera_target->target_offset.x,
+        world.y + camera_target->target_offset.y,
+        world.z + camera_target->target_offset.z };
 
     game_scene->Gameplay().FollowCameraTarget(
-        target->GetTransform().WorldPosition(),
+        anchor,
         camera_target->look_at_offset,
         camera_target->follow_distance,
         camera_target->follow_height,
@@ -550,142 +621,130 @@ const skinned_mesh::animation::keyframe* framework::resolve_object_keyframe(
 }
 
 // ---------------------------------------------------------------------------
-// 旧 Player から Player GameObject への変換
+// 新規 Scene 作成
 // ---------------------------------------------------------------------------
 //
-// 一度だけ実行して v7 Scene へ保存する。
-// 毎回起動時にコードから Component を付け直す方式にはしない。
-// 変換後は Scene ファイルが正式な構成元になる。
+// ここが Prefab を配置する唯一の場所。
+//
+// 【なぜ「唯一」と言い切れるか】
+//   PrefabSerializer::Instantiate を呼ぶのは、この関数と load_prefab()
+//   （ユーザーが Prefab ファイルを選んで配置する操作）の 2 か所だけ。
+//   どちらもユーザーの明示操作からしか呼ばれない。
+//   起動処理・Scene 読み込み・Component 不足の検出からは呼ばれない。
 
-bool framework::convert_legacy_player_to_gameobject()
+namespace
 {
-    namespace Components = ReplayEngine::Components;
-
-    if (object_scene_play_mode)
+    // ファイル名として使えない文字を置き換える。
+    std::string MakeSafeSceneFileName(std::string name)
     {
-        object_editor_context.SetStatus("実行中は変換できません");
-        return false;
-    }
-
-    // 移行済みなら二度と変換しない。
-    // Component を消していても移行状態は残るので、ここで確実に弾かれる。
-    if (object_scene.Services().PlayerMigration().Migrated())
-    {
-        object_editor_context.SetStatus("旧 Player は変換済みです（Player ObjectID: " +
-            object_scene.Services().PlayerMigration().MigratedObject().ToString() + "）");
-        return false;
-    }
-
-    object_editor_context.BeginEdit("旧 Player を GameObject へ変換");
-
-    ReplayEngine::Core::GameObject* player = object_scene.CreateGameObject("Player");
-    if (player == nullptr)
-    {
-        object_editor_context.CancelEdit();
-        return false;
-    }
-
-    // 旧 Player の現在値を初期値として引き継ぐ。
-    const Player* legacy = game_scene != nullptr ? &game_scene->Gameplay().GetPlayer() : nullptr;
-
-    // GameObject の Scale は 1.0 のままにする。
-    // モデル固有の縮小（旧 Player の 0.01）は描画 Component 側の補正へ移す。
-    // こうすると Collider の半径やギズモが実寸の単位になり、扱いやすい。
-    ReplayEngine::Core::Transform& transform = player->GetTransform();
-    const DirectX::XMFLOAT3 model_scale = legacy != nullptr
-        ? legacy->GetScale() : DirectX::XMFLOAT3{ 0.01f, 0.01f, 0.01f };
-    transform.SetLocal(
-        legacy != nullptr ? legacy->GetPosition() : DirectX::XMFLOAT3{ 0.0f, 0.0f, 0.0f },
-        legacy != nullptr ? legacy->GetAngle() : DirectX::XMFLOAT3{ 0.0f, 0.0f, 0.0f },
-        DirectX::XMFLOAT3{ 1.0f, 1.0f, 1.0f });
-
-    auto* renderer = player->AddComponent<Components::SkinnedMeshRendererComponent>();
-    if (renderer != nullptr && legacy != nullptr)
-    {
-        renderer->visual_rotation_offset = DirectX::XMFLOAT3{
-            legacy->GetVisualPitchDeg(),
-            legacy->GetVisualYawOffsetDeg(),
-            legacy->GetVisualRollDeg() };
-        // 旧 Player が GameObject の Scale として使っていた縮小を、
-        // モデル座標系の補正としてこちらへ移す。見た目は完全に同じになる。
-        renderer->local_scale_multiplier = model_scale;
-        renderer->shading_model = shading_per_skinned[0];
-        renderer->outline = outline_per_skinned[0];
-        renderer->tint = material_color;
-
-        // プレイヤーモデルの Asset を AssetDatabase から探す。
-        // 見つからなくても変換は成功させ、Inspector から後で指定できるようにする。
-        if (const auto* record = asset_database.FindByPath(
-            std::filesystem::path("resources") / "AnimationModel" / "AllAnimation1.cereal"))
+        for (char& character : name)
         {
-            renderer->mesh_asset = record->guid;
+            if (character == '<' || character == '>' || character == ':' ||
+                character == '"' || character == '/' || character == '\\' ||
+                character == '|' || character == '?' || character == '*') character = '_';
+        }
+        return name.empty() ? std::string("Scene") : name;
+    }
+}
+
+bool framework::create_object_scene(const std::string& name, bool place_default_character)
+{
+    namespace Project = ReplayEngine::Project;
+
+    // 実行中に作り直すと、実行用 Scene と編集用 Scene の対応が壊れる。
+    if (object_scene_play_mode) exit_object_play_mode();
+
+    // Scene の中身が総入れ替えになるので、先に衝突世界を切り離す。
+    // 古い ObjectID / ColliderID を持ったまま新しい Scene を引かせない。
+    detach_collision_world();
+
+    const std::string scene_name = name.empty() ? std::string("新しいシーン") : name;
+
+    // 1) 空の Scene を作る。GameObject は 1 つも作らない。
+    object_scene.Clear();
+    object_scene.SetName(scene_name);
+    object_scene.Services().SetControlledObject(ReplayEngine::Core::ObjectID::Invalid());
+    object_scene.Services().SetCollisionBackendMode(1);   // Hybrid（開いた瞬間に床が消えない）
+    object_scene.Services().LegacyStageMigration().SetMigratedSources({});
+    player_control_system.Clear();
+
+    // 選択と Undo 履歴を作り直す。前の Scene の ObjectID を指し続けさせない。
+    object_editor_context.AttachScene(&object_scene);
+
+    std::string status = "空のシーンを作成しました";
+
+    // 2) Default を選んだときだけ Prefab を 1 体配置する。
+    if (place_default_character)
+    {
+        const Project::PrefabReferenceStatus prefab = resolve_default_character_prefab();
+
+        if (prefab.IsUnset())
+        {
+            // 未設定でもクラッシュさせない。空シーンとして成立させる。
+            status = "既定の操作キャラクター Prefab が未設定のため、空のシーンを作成しました";
+        }
+        else if (prefab.IsMissing())
+        {
+            status = "既定の操作キャラクター Prefab が見つかりません（Missing Prefab）。"
+                "空のシーンを作成しました";
+        }
+        else
+        {
+            std::string error;
+            SceneSerialization::SceneLoadReport report;
+            const ReplayEngine::Core::ObjectID root =
+                SceneSerialization::PrefabSerializer::Instantiate(
+                    object_scene, prefab.path, error, &report);
+
+            if (!root.Valid())
+            {
+                status = "既定の操作キャラクター Prefab を配置できませんでした: " + error;
+            }
+            else
+            {
+                // 3) 配置した Prefab のルートを操作対象にする。
+                //    GameObject 名でも Prefab 名でもなく、配置結果の ObjectID で指す。
+                object_scene.Services().SetControlledObject(root);
+                player_control_system.SetControlledObject(root);
+                object_editor_context.Selection().Select(root, false);
+
+                status = "既定の操作キャラクターを 1 体配置しました: " +
+                    prefab.DisplayLabel();
+                if (!report.Clean())
+                {
+                    status += "（警告 " + std::to_string(report.warnings.size()) + " 件）";
+                    for (const std::string& warning : report.warnings)
+                    {
+                        OutputDebugStringA(("[Prefab] " + warning + "\n").c_str());
+                    }
+                }
+            }
         }
     }
 
-    auto* animator = player->AddComponent<Components::AnimatorComponent>();
-    if (animator != nullptr && legacy != nullptr)
+    // 4) Scene を開始する。ここで初めて OnStart / OnEnable が走る。
+    object_scene.Start();
+
+    // 5) 保存先を決める。既存ファイルは上書きしない。
+    const std::filesystem::path folder = std::filesystem::path("resources") / "Scenes";
+    const std::string safe_name = MakeSafeSceneFileName(scene_name);
+    const std::string extension = SceneSerialization::SceneSerializer::file_extension;
+    std::filesystem::path scene_path = folder / (safe_name + extension);
+    std::error_code filesystem_error;
+    for (std::uint32_t number = 2;
+        std::filesystem::exists(scene_path, filesystem_error) && !filesystem_error; ++number)
     {
-        animator->idle_clip = legacy->clip_idle;
-        animator->walk_clip = legacy->clip_walk;
-        animator->jump_clip = legacy->clip_jump;
+        scene_path = folder / (safe_name + "_" + std::to_string(number) + extension);
     }
+    object_scene_path = std::move(scene_path);
+    object_editor_context.SetScenePath(object_scene_path);
 
-    auto* collider = player->AddComponent<Components::SphereColliderComponent>();
-    if (collider != nullptr && legacy != nullptr)
-    {
-        const auto& source = legacy->Collider();
-        collider->radius = source.radius;
-        collider->center_offset = source.center_offset;
-        collider->skin_width = source.skin_width;
-        collider->walkable_normal_y = source.walkable_normal_y;
-    }
+    // 6) 衝突世界を新しい Scene へつなぎ直す。
+    attach_collision_world(object_scene);
 
-    auto* motor = player->AddComponent<Components::CharacterMotorComponent>();
+    // 7) 再起動しても同じ状態から始められるよう、その場で書き出す。
+    save_object_scene(false);
 
-    // 旧 Player 変換のときだけ、既存の Sphere Collider を移動用として自動設定する。
-    // 通常は Inspector から明示的に選ぶ決まりだが、変換直後に
-    // 「Collider はあるのに動かない」状態で渡すのは不親切なため。
-    if (motor != nullptr && collider != nullptr) motor->SetPrimaryCollider(*collider);
-
-    if (motor != nullptr && legacy != nullptr)
-    {
-        motor->move_speed = legacy->GetMoveSpeed();
-        motor->acceleration = legacy->GetAcceleration();
-        motor->deceleration = legacy->GetDeceleration();
-        motor->gravity = legacy->GetGravity();
-        motor->jump_power = legacy->GetJumpSpeed();
-        motor->fallback_ground_y = legacy->GetGroundY();
-        motor->vertical_physics = legacy->IsVerticalPhysicsEnabled();
-    }
-
-    player->AddComponent<Components::PlayerInputComponent>();
-
-    auto* controller = player->AddComponent<Components::PlayerControllerComponent>();
-    if (controller != nullptr && legacy != nullptr)
-    {
-        controller->turn_speed_degrees = DirectX::XMConvertToDegrees(legacy->GetTurnSpeed());
-    }
-
-    player->AddComponent<Components::HealthComponent>();
-
-    auto* camera_target = player->AddComponent<Components::CameraTargetComponent>();
-    if (camera_target != nullptr && game_scene != nullptr)
-    {
-        const SceneGame& gameplay = game_scene->Gameplay();
-        camera_target->follow_distance = gameplay.follow_distance;
-        camera_target->follow_height = gameplay.follow_height;
-        camera_target->follow_lag = gameplay.follow_lag;
-    }
-
-    // 移行完了を Scene 単位の状態として記録する。
-    // これ以降、Component を削除しても旧 Player は復活しない。
-    object_scene.Services().PlayerMigration().MarkMigrated(player->ID());
-    object_scene.Services().SetControlledObject(player->ID());
-    player_control_system.SetControlledObject(player->ID());
-
-    object_editor_context.CommitEdit();
-    object_editor_context.Selection().Select(player->ID(), false);
-    object_editor_context.SetStatus(
-        "旧 Player を GameObject へ変換しました。Ctrl+S で保存してください。");
+    object_editor_context.SetStatus(status);
     return true;
 }
