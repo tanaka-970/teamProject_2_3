@@ -575,7 +575,7 @@ skinned_mesh* framework::resolve_object_mesh(const std::string& asset_guid)
 }
 
 void framework::draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shader,
-    bool gbuffer_pass)
+    bool gbuffer_pass, bool depth_only)
 {
     if (object_render_items.Empty()) return;
 
@@ -587,17 +587,33 @@ void framework::draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shade
         skinned_mesh* mesh = resolve_object_mesh(item.mesh_asset);
         if (mesh == nullptr) continue;
 
-        // GBuffer パスでは Component が指定した描画方式を材質定数へ流す。
-        if (gbuffer_pass) bind_gbuffer_material(deferred_shading_model(item.shading_model));
-
         // Animator が決めたクリップと時刻から姿勢を求める。
         // 静的メッシュ扱いの提出（skinned=false）ではバインドポーズのまま描く。
+        // 深度プリパスでも同じ姿勢で描かないと、本描画と深度が一致しない。
         const skinned_mesh::animation::keyframe* keyframe = item.skinned
             ? resolve_object_keyframe(*mesh, item.clip_index, item.animation_time)
             : nullptr;
 
+        if (depth_only)
+        {
+            // 深度プリパス。ピクセルシェーダーを外し、モーションベクターも書かない。
+            //
+            // 【ここを通さないと何も見えない】
+            //   本描画は DepthFunc=EQUAL で走る。プリパスで深度を書いていない
+            //   メッシュは深度比較に必ず失敗し、画面から丸ごと消える。
+            //   GBuffer へ出すものは、例外なくここでも描くこと。
+            mesh->render(immediate_context.Get(), item.world, item.tint,
+                keyframe, nullptr, nullptr, nullptr, false, false);
+            continue;
+        }
+
+        // GBuffer パスでは Component が指定した描画方式を材質定数へ流す。
+        if (gbuffer_pass) bind_gbuffer_material(deferred_shading_model(item.shading_model));
+
+        // 最後の引数がモーションベクター出力。GBuffer パスだけで真にする
+        // （複数回渡すと前フレーム姿勢が壊れる）。
         mesh->render(immediate_context.Get(), item.world, item.tint,
-            keyframe, override_pixel_shader);
+            keyframe, override_pixel_shader, nullptr, nullptr, true, gbuffer_pass);
     }
 }
 

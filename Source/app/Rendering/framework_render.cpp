@@ -425,6 +425,14 @@ void framework::render(float elapsed_time)
                     stage_gltf_model->render(immediate_context.Get(), stage_world,
                         material_color, nullptr, false, true);
             }
+
+            // GameObject の提出リストもここで深度を書く。
+            //
+            // 【必須】本描画は DepthFunc=EQUAL なので、プリパスで深度を書かなかった
+            // メッシュは比較に失敗して画面から丸ごと消える。
+            // キャラクターはこの経路でしか描かれないため、ここを外すと何も映らない。
+            draw_object_scene_meshes(nullptr, false, true);
+
             // 深度プリパスの描画数は統計へ混ぜない(同じ形状を二重に数えないため)。
         }
 

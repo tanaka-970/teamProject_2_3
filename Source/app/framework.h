@@ -729,8 +729,11 @@ private:
     ReplayEngine::Scene::Scene& active_object_scene() noexcept;
     const ReplayEngine::Scene::Scene& active_object_scene() const noexcept;
     skinned_mesh* resolve_object_mesh(const std::string& asset_guid);
+    // depth_only = true で深度プリパス用の描画になる。
+    // 深度プリパスを使う構成では、GBuffer へ出すものを必ずここでも描くこと。
+    // 描き漏らすと DepthFunc=EQUAL に落とされて画面から消える。
     void draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shader,
-        bool gbuffer_pass);
+        bool gbuffer_pass, bool depth_only = false);
     void clear_object_mesh_cache() noexcept;
     bool object_runtime_active() const noexcept;
     void update_object_fixed_step(float elapsed_time);
