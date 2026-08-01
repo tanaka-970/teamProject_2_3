@@ -3,6 +3,7 @@
 #include "ICameraBasisProvider.h"
 #include "IPhysicsQueryService.h"
 #include "LegacyStageMigrationState.h"
+#include "RespawnService.h"
 #include "../../Core/ObjectID/ObjectID.h"
 
 namespace ReplayEngine::Scene
@@ -62,6 +63,16 @@ namespace ReplayEngine::Scene
             return legacy_stage_;
         }
 
+        // ---- Stage Gameplay -------------------------------------------------
+        //
+        // 復帰地点と出来事の記録。Scene が値で持つので Singleton にならない。
+        // Play 用 Scene と編集 Scene がそれぞれ自分のぶんを持つ。
+        RespawnService& Respawn() noexcept { return respawn_; }
+        const RespawnService& Respawn() const noexcept { return respawn_; }
+
+        GameplayEventLog& GameplayEvents() noexcept { return gameplay_events_; }
+        const GameplayEventLog& GameplayEvents() const noexcept { return gameplay_events_; }
+
         // Play Mode 中かどうか。
         // 入力を受け付けてよいか、物理を進めてよいかの判断に使う。
         bool Playing() const noexcept { return playing_; }
@@ -82,6 +93,8 @@ namespace ReplayEngine::Scene
         const IPhysicsQueryService* physics_ = nullptr;
         Core::ObjectID controlled_object_;
         LegacyStageMigrationState legacy_stage_;
+        RespawnService respawn_;
+        GameplayEventLog gameplay_events_;
         int collision_backend_mode_ = 1;   // Hybrid
         bool playing_ = false;
     };
