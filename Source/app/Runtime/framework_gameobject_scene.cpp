@@ -65,6 +65,11 @@ void framework::initialize_object_scene()
     // 編集中も Component の OnStart を回したいので Scene は開始状態にしておく。
     // 実際にゲームロジックが走るかどうかは Edit Mode 判定で制御する。
     object_scene.Start();
+
+    // 衝突世界を編集 Scene へつなぐ。
+    // これ以降 Component が見る IPhysicsQueryService は衝突世界であり、
+    // 旧 Stage は衝突世界の内側から必要なときだけ呼ばれる。
+    initialize_collision_world();
 }
 
 ReplayEngine::Scene::Scene& framework::active_object_scene() noexcept
@@ -102,24 +107,19 @@ void framework::refresh_object_scene_services()
 {
     ReplayEngine::Scene::Scene& scene = active_object_scene();
 
-    // カメラと地形の橋渡しを毎フレーム張り直す。
+    // カメラの橋渡しを毎フレーム張り直す。
     // GameScene が作り直された場合でも参照が古くならないようにするため。
-    if (game_scene != nullptr)
-    {
-        object_camera_bridge.Attach(&game_scene->Gameplay().GetCamera());
-        object_collision_bridge.Attach(&game_scene->Gameplay().GetStage());
-        object_collision_bridge.SetActive(stage_asset_placed);
-    }
-    else
-    {
-        object_camera_bridge.Detach();
-        object_collision_bridge.Detach();
-    }
+    if (game_scene != nullptr) object_camera_bridge.Attach(&game_scene->Gameplay().GetCamera());
+    else                       object_camera_bridge.Detach();
 
     ReplayEngine::Scene::SceneServices& services = scene.Services();
     services.SetCameraBasis(&object_camera_bridge);
-    services.SetPhysics(&object_collision_bridge);
     services.SetPlaying(object_runtime_active());
+
+    // 地形の問い合わせ先は衝突世界。
+    // 旧 Stage を直接 Physics サービスへ挿すことはもうしない。
+    // 旧 Stage は衝突世界の内側で、未移行のときだけ使われる。
+    refresh_collision_world();
 
     // 操作対象を確定する。
     // 保存されていた ID を優先し、それが使えない場合だけ自動選出する。
@@ -195,6 +195,11 @@ void framework::update_object_scene(float elapsed_time)
         scene.Update(elapsed_time);
         update_object_fixed_step(elapsed_time);
         scene.LateUpdate(elapsed_time);
+
+        // 位置が確定してから Trigger を判定する。
+        // FixedUpdate の途中で判定すると、まだ押し戻されていない位置で
+        // Enter が出てしまい、次のフレームですぐ Exit になる。
+        dispatch_collision_triggers();
 
         // Transform が確定してからカメラを動かす。
         update_object_camera_follow(elapsed_time);
@@ -303,6 +308,11 @@ bool framework::load_object_scene(bool choose_path)
         return false;
     }
 
+    // Scene の中身が総入れ替えになるので、先に衝突世界を切り離す。
+    // 古い ObjectID / ColliderID を持ったまま新しい Scene を引くと、
+    // まったく別の GameObject へ当たることになる。
+    detach_collision_world();
+
     SceneSerialization::SceneLoadReport report;
     SceneSerialization::ApplySceneData(data, object_scene, report);
 
@@ -314,6 +324,9 @@ bool framework::load_object_scene(bool choose_path)
     object_editor_context.AttachScene(&object_scene);
     object_editor_context.SetScenePath(object_scene_path);
     object_editor_context.ClearDirty();
+
+    // 新しい Scene の Backend Mode と移行済み集合でつなぎ直す。
+    attach_collision_world(object_scene);
 
     std::string status = "読み込みました: " + object_scene_path.filename().string();
     if (!report.Clean())
@@ -347,6 +360,11 @@ void framework::enter_object_play_mode()
     SceneSerialization::ApplySceneData(snapshot, object_scene_runtime, report);
     object_scene_runtime.Start();
 
+    // 衝突世界を実行用 Scene へ差し替える。
+    // 編集 Scene の ObjectID / ColliderID はここで完全に捨てられるので、
+    // Play 中に編集 Scene の Collider へ当たることはない。
+    attach_collision_world(object_scene_runtime);
+
     // Play 開始時に貯まっていた時間を捨てる。開始直後に物理が飛ぶのを防ぐ。
     object_fixed_accumulator = 0.0f;
 
@@ -359,6 +377,11 @@ void framework::enter_object_play_mode()
 void framework::exit_object_play_mode()
 {
     if (!object_scene_play_mode) return;
+
+    // 先に衝突世界を切り離す。
+    // Scene を消してから切り離すと、その間に問い合わせが来た場合に
+    // 破棄済みの GameObject を引きに行ってしまう。
+    detach_collision_world();
 
     // 実行用 Scene を捨てる。編集 Scene には一切触れていないので、
     // Play 前の状態がそのまま残っている。
@@ -618,6 +641,12 @@ bool framework::convert_legacy_player_to_gameobject()
     }
 
     auto* motor = player->AddComponent<Components::CharacterMotorComponent>();
+
+    // 旧 Player 変換のときだけ、既存の Sphere Collider を移動用として自動設定する。
+    // 通常は Inspector から明示的に選ぶ決まりだが、変換直後に
+    // 「Collider はあるのに動かない」状態で渡すのは不親切なため。
+    if (motor != nullptr && collider != nullptr) motor->SetPrimaryCollider(*collider);
+
     if (motor != nullptr && legacy != nullptr)
     {
         motor->move_speed = legacy->GetMoveSpeed();

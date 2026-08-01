@@ -268,6 +268,29 @@ public:
     LegacyCameraBasisBridge      object_camera_bridge;
     LegacyStageCollisionBridge   object_collision_bridge;
 
+    // --- 衝突 -------------------------------------------------------------
+    //
+    // 所有関係:
+    //   framework が衝突世界と Cook キャッシュを値メンバとして 1 つずつ所有する。
+    //   衝突世界は Scene を非所有参照し、Cook データの実体は
+    //   MeshColliderComponent が shared_ptr で持つ（キャッシュは weak_ptr のみ）。
+    //
+    // Component からの経路:
+    //   Component -> GetScene() -> Services().Physics() -> object_collision_world
+    //   Motor は具象型を知らず、IPhysicsQueryService としてしか触らない。
+    ReplayEngine::Scene::SceneCollisionWorld  object_collision_world;
+    ReplayEngine::Physics::CookedMeshCollisionCache object_collision_cook_cache;
+
+    // Editor の Scene View へ形を描くための線分。毎フレーム作り直す。
+    std::vector<ReplayEngine::Editor::DebugLine> object_collider_debug_lines;
+    bool             show_collider_debug_draw{ false };
+    bool             show_collider_debug_bounds{ true };
+    bool             show_collider_debug_wireframe{ false };
+    bool             show_collision_diagnostics{ false };
+
+    // Cook に失敗した Asset。同じ警告をログへ出し続けないための記録。
+    std::unordered_set<std::string> object_collision_failures;
+
     // 固定時間更新（CharacterMotor の物理用）。
     float            object_fixed_time_step{ 1.0f / 60.0f };
     float            object_fixed_accumulator{ 0.0f };

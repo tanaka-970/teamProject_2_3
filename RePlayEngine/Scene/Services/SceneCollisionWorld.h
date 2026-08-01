@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "IPhysicsQueryService.h"
 #include "LegacyStageMigrationState.h"
@@ -177,14 +177,15 @@ namespace ReplayEngine::Scene
         bool SweepSphere(const DirectX::XMFLOAT3& start, const DirectX::XMFLOAT3& end,
             float radius, float maximum_normal_y, SphereSweepHit& hit) const override;
 
-        // Layer / Mask を考慮した版。Character Motor はこちらを使う。
+        // 絞り込み付き。Character Motor はこちらを使う。
+        // filter.ignore_object で自分自身の Collider を除外できる。
         bool SweepSphereFiltered(const DirectX::XMFLOAT3& start, const DirectX::XMFLOAT3& end,
-            float radius, float maximum_normal_y, int layer, int mask,
+            float radius, float maximum_normal_y, const CollisionQueryFilter& filter,
             SphereSweepHit& hit) const override;
 
         bool QueryGroundFiltered(const DirectX::XMFLOAT3& origin, float radius,
             float up_offset, float down_distance, float walkable_normal_y,
-            int layer, int mask, GroundHit& hit) const override;
+            const CollisionQueryFilter& filter, GroundHit& hit) const override;
 
     private:
         // Legacy へ問い合わせてよいか。
@@ -201,7 +202,7 @@ namespace ReplayEngine::Scene
         bool SweepSceneColliders(const DirectX::XMFLOAT3& start,
             const DirectX::XMFLOAT3& end, float radius,
             float minimum_normal_y, float maximum_normal_y,
-            int layer, int mask, SphereSweepHit& hit) const;
+            const CollisionQueryFilter& filter, SphereSweepHit& hit) const;
 
         // Collider 1 つに対するスイープ。形状ごとの分岐はここだけ。
         bool SweepSingleCollider(const Components::ColliderComponent& collider,

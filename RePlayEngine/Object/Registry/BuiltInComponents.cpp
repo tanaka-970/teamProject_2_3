@@ -230,38 +230,44 @@ namespace ReplayEngine::Core
         // 形状ごとに同じ 5 行を書き写すと、片方だけ直し忘れる事故が起きる。
         // 共通部分はここ 1 か所にまとめ、形状ごとの登録から呼ぶ。
         // 登録先の型が違うだけなのでテンプレートで足りる。
+        // 【テンプレート引数を明示している理由】
+        //   collider_key などは基底 ColliderComponent のメンバなので、
+        //   MakeProperty(&T::collider_key) と書くと引数推論で C = ColliderComponent に
+        //   なってしまう。基底は抽象クラスで StaticTypeID を持たないためコンパイルできない。
+        //   <T, ...> を明示すると、メンバポインタが基底→派生へ暗黙変換され、
+        //   登録先も正しく派生型になる。
         template<class T>
         void RegisterColliderCommon()
         {
             PropertyRegistry::Register<T>(
-                MakeProperty("collider_key", &T::collider_key)
+                MakeProperty<T, int>("collider_key", &T::collider_key)
                     .Display("Collider 番号").ReadOnly().HiddenInEditor()
                     .Tooltip("GameObject の中でこの Collider を指す番号。"
                         "Character Motor の参照に使われる。自動で振られる。"));
 
             PropertyRegistry::Register<T>(
-                MakeProperty("center_offset", &T::center_offset)
+                MakeProperty<T, DirectX::XMFLOAT3>("center_offset", &T::center_offset)
                     .Display("中心オフセット").Step(0.01));
 
             PropertyRegistry::Register<T>(
-                MakeProperty("collision_layer", &T::collision_layer)
+                MakeProperty<T, int>("collision_layer", &T::collision_layer)
                     .Display("レイヤー").AsCollisionLayer()
                     .Tooltip("この Collider が属するレイヤー。"));
 
             PropertyRegistry::Register<T>(
-                MakeProperty("collision_mask", &T::collision_mask)
+                MakeProperty<T, int>("collision_mask", &T::collision_mask)
                     .Display("衝突する相手").AsCollisionMask()
                     .Tooltip("衝突を受け付けるレイヤー。"
                         "双方が互いを含んでいるときだけ衝突する。"));
 
             PropertyRegistry::Register<T>(
-                MakeProperty("is_trigger", &T::is_trigger)
+                MakeProperty<T, bool>("is_trigger", &T::is_trigger)
                     .Display("トリガー")
                     .Tooltip("true なら通り抜ける。押し戻しと接地からは必ず除外される。"
                         "代わりに OnTriggerEnter / Stay / Exit が届く。"));
 
             PropertyRegistry::Register<T>(
-                MakeProperty("debug_draw", &T::debug_draw)
+                MakeProperty<T, bool>("debug_draw", &T::debug_draw)
                     .Display("形状を表示")
                     .Tooltip("Editor の Scene View へ形状を描く。"));
         }

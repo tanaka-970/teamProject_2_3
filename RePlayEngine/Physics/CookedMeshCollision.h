@@ -83,15 +83,17 @@ namespace ReplayEngine::Physics
     class CookedMeshCollisionData final
     {
     public:
-        using Settings = CookSettings;
-
         // ローカル座標の三角形から Cook する。
         static std::shared_ptr<const CookedMeshCollisionData> Build(
             CookKey key, std::vector<Triangle> local_triangles);
 
         const CookKey& Key() const noexcept { return key_; }
         const std::string& AssetGuid() const noexcept { return key_.asset_guid; }
-        const CookSettings& CookSettings() const noexcept { return key_.settings; }
+
+        // 名前を Settings() にしてある。
+        // CookSettings() にすると「型名と同じ名前のメンバ関数」になり、
+        // C++ の規則で名前の意味が変わってしまうためコンパイルが通らない。
+        const CookSettings& Settings() const noexcept { return key_.settings; }
 
         bool Valid() const noexcept { return !triangles_.empty(); }
         std::size_t TriangleCount() const noexcept { return triangles_.size(); }

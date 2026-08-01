@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../../Object/Component/Component.h"
 #include "../../Scene/Services/IPhysicsQueryService.h"
@@ -144,8 +144,10 @@ namespace ReplayEngine::Components
             float radius = 0.38f;
             float skin_width = 0.015f;
             float walkable_normal_y = 0.25f;
-            int layer = 0;
-            int mask = -1;
+
+            // Layer / Mask と「自分自身を除外する」指定をまとめて持つ。
+            Scene::CollisionQueryFilter filter;
+
             bool valid = false;
         };
         MotionSphere BuildMotionSphere() const;

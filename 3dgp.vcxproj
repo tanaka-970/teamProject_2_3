@@ -307,6 +307,16 @@
     <ClCompile Include="RePlayEngine\Physics\CookedMeshCollision.cpp" />
     <ClCompile Include="RePlayEngine\Components\Physics\MeshColliderComponent.cpp" />
     <ClCompile Include="RePlayEngine\Scene\Services\SceneCollisionWorld.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Physics\ColliderComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Physics\BoxColliderComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Physics\CapsuleColliderComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Physics\ShapeSweep.cpp" />
+    <ClCompile Include="RePlayEngine\Scene\Services\SceneCollisionWorldQuery.cpp" />
+    <ClCompile Include="RePlayEngine\Scene\Services\SceneCollisionWorldTrigger.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Debug\ColliderDebugDraw.cpp" />
+    <ClCompile Include="Source\app\Runtime\framework_collision_world.cpp" />
+    <ClCompile Include="Source\app\Runtime\framework_collision_mesh_source.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_collider_debug.cpp" />
 </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\render\csm_renderer.h" />
@@ -430,6 +440,14 @@
     <ClInclude Include="RePlayEngine\Physics\CookedMeshCollision.h" />
     <ClInclude Include="RePlayEngine\Components\Physics\MeshColliderComponent.h" />
     <ClInclude Include="RePlayEngine\Scene\Services\SceneCollisionWorld.h" />
+    <ClInclude Include="RePlayEngine\Components\Physics\ColliderComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Physics\BoxColliderComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Physics\CapsuleColliderComponent.h" />
+    <ClInclude Include="RePlayEngine\Physics\CollisionLayers.h" />
+    <ClInclude Include="RePlayEngine\Physics\ShapeSweep.h" />
+    <ClInclude Include="RePlayEngine\Scene\Services\LegacyStageMigrationState.h" />
+    <ClInclude Include="RePlayEngine\Editor\Debug\ColliderDebugDraw.h" />
+    <ClInclude Include="RePlayEngine\Object\Component\TriggerContact.h" />
 </ItemGroup>
   <ItemGroup>
     <None Include=".editorconfig" />

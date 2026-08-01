@@ -1,4 +1,4 @@
-// SceneCollisionWorld のうち「スイープと問い合わせ」だけを持つ。
+﻿// SceneCollisionWorld のうち「スイープと問い合わせ」だけを持つ。
 //
 // 形状ごとの分岐は SweepSingleCollider の 1 か所だけ。
 // 新しい形状を足すときはそこへ case を 1 つ増やす。
@@ -182,7 +182,7 @@ namespace ReplayEngine::Scene
 
     bool SceneCollisionWorld::SweepSceneColliders(const XMFLOAT3& start, const XMFLOAT3& end,
         float radius, float minimum_normal_y, float maximum_normal_y,
-        int layer, int mask, SphereSweepHit& hit) const
+        const CollisionQueryFilter& filter, SphereSweepHit& hit) const
     {
         hit = SphereSweepHit{};
         if (scene_ == nullptr || mode_ == BackendMode::LegacyOnly) return false;
@@ -208,8 +208,13 @@ namespace ReplayEngine::Scene
             // Trigger は押し戻しへ使わない。通り抜ける。
             if (entry.trigger) continue;
 
+            // 自分自身の Collider は無視する。
+            // これを外すと、Motor が自分の Collider に当たったと判断して
+            // 毎フレーム宙へ持ち上がる（実際に起きた不具合）。
+            if (filter.ignore_object.Valid() && entry.object == filter.ignore_object) continue;
+
             // Layer / Mask。双方向で一致したときだけ衝突とみなす。
-            if (!Layers::Interact(layer, mask, entry.layer, entry.mask)) continue;
+            if (!Layers::Interact(filter.layer, filter.mask, entry.layer, entry.mask)) continue;
 
             // ワールド AABB で早期に外す。ここまでは実体を引き直さない。
             if (!Physics::BoundsOverlap(query_min, query_max,
@@ -262,18 +267,21 @@ namespace ReplayEngine::Scene
     bool SceneCollisionWorld::SweepSphere(const XMFLOAT3& start, const XMFLOAT3& end,
         float radius, float maximum_normal_y, SphereSweepHit& hit) const
     {
-        return SweepSphereFiltered(start, end, radius, maximum_normal_y,
-            Layers::Default, Layers::all_layers_mask, hit);
+        CollisionQueryFilter filter;
+        filter.layer = Layers::Default;
+        filter.mask = Layers::all_layers_mask;
+        return SweepSphereFiltered(start, end, radius, maximum_normal_y, filter, hit);
     }
 
     bool SceneCollisionWorld::SweepSphereFiltered(const XMFLOAT3& start, const XMFLOAT3& end,
-        float radius, float maximum_normal_y, int layer, int mask, SphereSweepHit& hit) const
+        float radius, float maximum_normal_y, const CollisionQueryFilter& filter,
+        SphereSweepHit& hit) const
     {
         hit = SphereSweepHit{};
 
         SphereSweepHit scene_hit{};
         const bool scene_found = SweepSceneColliders(start, end, radius,
-            -1.0f, maximum_normal_y, layer, mask, scene_hit);
+            -1.0f, maximum_normal_y, filter, scene_hit);
 
         SphereSweepHit legacy_hit{};
         bool legacy_found = false;
@@ -301,13 +309,16 @@ namespace ReplayEngine::Scene
     bool SceneCollisionWorld::QueryGround(const XMFLOAT3& origin, float radius,
         float up_offset, float down_distance, float walkable_normal_y, GroundHit& hit) const
     {
+        CollisionQueryFilter filter;
+        filter.layer = Layers::Default;
+        filter.mask = Layers::all_layers_mask;
         return QueryGroundFiltered(origin, radius, up_offset, down_distance,
-            walkable_normal_y, Layers::Default, Layers::all_layers_mask, hit);
+            walkable_normal_y, filter, hit);
     }
 
     bool SceneCollisionWorld::QueryGroundFiltered(const XMFLOAT3& origin, float radius,
         float up_offset, float down_distance, float walkable_normal_y,
-        int layer, int mask, GroundHit& hit) const
+        const CollisionQueryFilter& filter, GroundHit& hit) const
     {
         hit = GroundHit{};
 
@@ -317,7 +328,7 @@ namespace ReplayEngine::Scene
 
         SphereSweepHit scene_hit{};
         const bool scene_found = SweepSceneColliders(start, end, radius,
-            walkable_normal_y, 1.0f, layer, mask, scene_hit);
+            walkable_normal_y, 1.0f, filter, scene_hit);
 
         GroundHit legacy_hit{};
         bool legacy_found = false;

@@ -635,8 +635,14 @@ void framework::draw_editor()
     draw_project_panel();
     draw_console_panel();
     draw_workspace_panel();
+    draw_collision_diagnostics_panel();
     draw_search_results();
     handle_viewport_selection();
+
+    // Collider の可視化は最後に描く。
+    // 背景の描画リストへ積むので、パネルの下に隠れず、
+    // かつパネルの上へも被らない。
+    draw_collider_debug_overlay();
 }
 
 
@@ -737,7 +743,36 @@ void framework::draw_player_diagnostics()
 
     const auto position = target->GetTransform().WorldPosition();
     ImGui::Text("Position: %.2f / %.2f / %.2f", position.x, position.y, position.z);
+
+    // ---- 衝突の出所 -------------------------------------------------------
+    //
+    // 「今どちらのバックエンドで当たっているか」が分からないと、
+    // MeshCollider を置いても効いているのか判断できない。
+    ImGui::Separator();
     ImGui::Text("Collision available: %s",
-        object_collision_bridge.CollisionAvailable() ? "true" : "false");
+        object_collision_world.CollisionAvailable() ? "true" : "false");
+    ImGui::Text("Backend mode: %s",
+        ReplayEngine::Scene::SceneCollisionWorld::ToString(
+            object_collision_world.GetBackendMode()));
+    ImGui::Text("Active colliders: %zu (blocking %zu / trigger %zu / mesh %zu)",
+        object_collision_world.ActiveColliderCount(),
+        object_collision_world.BlockingColliderCount(),
+        object_collision_world.TriggerColliderCount(),
+        object_collision_world.MeshColliderCount());
+    ImGui::Text("Legacy consulted: %s",
+        object_collision_world.LegacyConsulted() ? "true" : "false");
+
+    const auto& ground_source = object_collision_world.LastGroundSource();
+    const auto& sweep_source = object_collision_world.LastSweepSource();
+    ImGui::Text("Ground hit from: %s (Object %s / Collider %u)",
+        ReplayEngine::Scene::ToString(ground_source.backend),
+        ground_source.object.ToString().c_str(), ground_source.collider);
+    ImGui::Text("Wall hit from: %s (Object %s / Collider %u)",
+        ReplayEngine::Scene::ToString(sweep_source.backend),
+        sweep_source.object.ToString().c_str(), sweep_source.collider);
+
+    if (ImGui::Button("衝突の診断ウィンドウを開く")) show_collision_diagnostics = true;
+    ImGui::SameLine();
+    ImGui::Checkbox("Collider を描画", &show_collider_debug_draw);
 #endif
 }

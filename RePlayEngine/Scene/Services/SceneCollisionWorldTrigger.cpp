@@ -30,91 +30,171 @@ namespace ReplayEngine::Scene
 {
     namespace Layers = Physics::CollisionLayers;
 
+    namespace
+    {
+        // 相手の形を「これを内包する球」へ落とす。
+        //
+        // Trigger の入り口判定に必要なのは「触れたか」であって、
+        // どこで触れたかではない。近似は必ず本来より大きい側へ倒してあるので、
+        // 「Trigger の中に入ったのに反応しない」ことは起きない
+        // （代わりに、ごくわずかに早く反応することがある）。
+        bool BuildProbeSphere(const Components::ColliderComponent& collider,
+            XMFLOAT3& center, float& radius)
+        {
+            switch (collider.Shape())
+            {
+            case Components::ColliderShape::Sphere:
+            {
+                const auto& sphere =
+                    static_cast<const Components::SphereColliderComponent&>(collider);
+                center = sphere.WorldCenter();
+                radius = sphere.EffectiveRadius();
+                return radius > 0.0f;
+            }
+            case Components::ColliderShape::Capsule:
+            {
+                const auto& capsule =
+                    static_cast<const Components::CapsuleColliderComponent&>(collider);
+                XMFLOAT3 segment_start{};
+                XMFLOAT3 segment_end{};
+                capsule.WorldSegment(segment_start, segment_end);
+                const float half_length = 0.5f * std::sqrt(
+                    (segment_end.x - segment_start.x) * (segment_end.x - segment_start.x) +
+                    (segment_end.y - segment_start.y) * (segment_end.y - segment_start.y) +
+                    (segment_end.z - segment_start.z) * (segment_end.z - segment_start.z));
+                center = XMFLOAT3{
+                    (segment_start.x + segment_end.x) * 0.5f,
+                    (segment_start.y + segment_end.y) * 0.5f,
+                    (segment_start.z + segment_end.z) * 0.5f };
+                radius = capsule.EffectiveRadius() + half_length;
+                return radius > 0.0f;
+            }
+            case Components::ColliderShape::Box:
+            {
+                const auto& box = static_cast<const Components::BoxColliderComponent&>(collider);
+                const XMFLOAT3 half = box.WorldHalfExtents();
+                center = box.WorldCenter();
+                radius = std::sqrt(half.x * half.x + half.y * half.y + half.z * half.z);
+                return radius > 0.0f;
+            }
+            case Components::ColliderShape::Mesh:
+            {
+                XMFLOAT3 minimum{};
+                XMFLOAT3 maximum{};
+                if (!collider.ComputeWorldBounds(minimum, maximum)) return false;
+                center = XMFLOAT3{
+                    (minimum.x + maximum.x) * 0.5f,
+                    (minimum.y + maximum.y) * 0.5f,
+                    (minimum.z + maximum.z) * 0.5f };
+                radius = 0.5f * std::sqrt(
+                    (maximum.x - minimum.x) * (maximum.x - minimum.x) +
+                    (maximum.y - minimum.y) * (maximum.y - minimum.y) +
+                    (maximum.z - minimum.z) * (maximum.z - minimum.z));
+                return radius > 0.0f;
+            }
+            }
+            return false;
+        }
+
+        // 球 vs 回転した直方体。中に入っている場合も重なりとして返す。
+        bool SphereOverlapsBox(const Components::BoxColliderComponent& box,
+            const XMFLOAT3& sphere_center, float sphere_radius)
+        {
+            const XMFLOAT3 half = box.WorldHalfExtents();
+            if (half.x <= 0.0f || half.y <= 0.0f || half.z <= 0.0f) return false;
+
+            // 球の中心を箱のローカル空間へ移す。
+            XMFLOAT3 local = sphere_center;
+            const XMFLOAT3 center = box.WorldCenter();
+            local.x -= center.x;
+            local.y -= center.y;
+            local.z -= center.z;
+
+            if (const Core::GameObject* owner = box.Owner())
+            {
+                const XMFLOAT3 euler = owner->GetTransform().LocalRotationEuler();
+                const XMMATRIX rotation =
+                    XMMatrixRotationRollPitchYaw(euler.x, euler.y, euler.z);
+                // 回転行列の逆行列は転置。
+                XMStoreFloat3(&local, XMVector3TransformNormal(
+                    XMLoadFloat3(&local), XMMatrixTranspose(rotation)));
+            }
+
+            // 箱の中で最も近い点までの距離で判定する。
+            // 中に入っていれば各軸の差が 0 になり、距離 0 で必ず重なりになる。
+            const float dx = std::max(0.0f, std::fabs(local.x) - half.x);
+            const float dy = std::max(0.0f, std::fabs(local.y) - half.y);
+            const float dz = std::max(0.0f, std::fabs(local.z) - half.z);
+            return (dx * dx + dy * dy + dz * dz) <= sphere_radius * sphere_radius;
+        }
+    }
+
     bool SceneCollisionWorld::Overlaps(const Components::ColliderComponent& trigger,
         const Components::ColliderComponent& other) const
     {
-        // 相手を「動かない球（または線分）」とみなし、
-        // 移動量 0 のスイープを掛けて「開始時点で重なっているか」を見る。
-        //
-        // Trigger 側が Mesh / Box の場合はローカル空間の三角形へ落ちるので、
-        // 相手の形は球で近似する。近似は必ず本来より大きい側へ倒してあるので、
-        // 「Trigger の中に入ったのに反応しない」ことは起きない
-        // （代わりに、ごくわずかに早く反応することがある）。
         XMFLOAT3 probe_center{ 0.0f, 0.0f, 0.0f };
         float probe_radius = 0.0f;
+        if (!BuildProbeSphere(other, probe_center, probe_radius)) return false;
 
-        switch (other.Shape())
+        // 【重要】Trigger の形ごとに判定を変える。
+        //
+        //   以前は「移動量 0 のスイープを Cook 三角形へ掛ける」方式にしていたが、
+        //   これは表面に触れたときしか当たらない。
+        //   Trigger の内側へ完全に入ってしまうと、どの三角形とも交わらず
+        //   「中に居るのに反応しない」ことになる。Trigger としては致命的なので、
+        //   Box は内包を含む距離判定へ、Sphere / Capsule は解析解へ切り替えた。
+        switch (trigger.Shape())
         {
         case Components::ColliderShape::Sphere:
         {
-            const auto& sphere = static_cast<const Components::SphereColliderComponent&>(other);
-            probe_center = sphere.WorldCenter();
-            probe_radius = sphere.EffectiveRadius();
-            break;
+            const auto& sphere =
+                static_cast<const Components::SphereColliderComponent&>(trigger);
+            const XMFLOAT3 center = sphere.WorldCenter();
+            const float combined = sphere.EffectiveRadius() + probe_radius;
+            const float dx = probe_center.x - center.x;
+            const float dy = probe_center.y - center.y;
+            const float dz = probe_center.z - center.z;
+            return (dx * dx + dy * dy + dz * dz) <= combined * combined;
         }
         case Components::ColliderShape::Capsule:
         {
             const auto& capsule =
-                static_cast<const Components::CapsuleColliderComponent&>(other);
+                static_cast<const Components::CapsuleColliderComponent&>(trigger);
             XMFLOAT3 segment_start{};
             XMFLOAT3 segment_end{};
             capsule.WorldSegment(segment_start, segment_end);
 
-            // Trigger 側も球なら、近似せずカプセル対球として厳密に解く。
-            if (trigger.Shape() == Components::ColliderShape::Sphere)
-            {
-                const auto& sphere =
-                    static_cast<const Components::SphereColliderComponent&>(trigger);
-                const XMFLOAT3 center = sphere.WorldCenter();
-                Physics::SphereCastHit hit{};
-                return Physics::SweepSphereAgainstCapsule(center, center,
-                    sphere.EffectiveRadius(), segment_start, segment_end,
-                    capsule.EffectiveRadius(), hit);
-            }
-
-            // それ以外は線分を内包する球で近似する。
-            const float half_length = 0.5f * std::sqrt(
-                (segment_end.x - segment_start.x) * (segment_end.x - segment_start.x) +
-                (segment_end.y - segment_start.y) * (segment_end.y - segment_start.y) +
-                (segment_end.z - segment_start.z) * (segment_end.z - segment_start.z));
-            probe_center = XMFLOAT3{
-                (segment_start.x + segment_end.x) * 0.5f,
-                (segment_start.y + segment_end.y) * 0.5f,
-                (segment_start.z + segment_end.z) * 0.5f };
-            probe_radius = capsule.EffectiveRadius() + half_length;
-            break;
+            // 移動量 0 のスイープ。解析解は「開始時点で重なっている」を必ず拾う。
+            Physics::SphereCastHit hit{};
+            return Physics::SweepSphereAgainstCapsule(probe_center, probe_center,
+                probe_radius, segment_start, segment_end, capsule.EffectiveRadius(), hit);
         }
         case Components::ColliderShape::Box:
         {
-            const auto& box = static_cast<const Components::BoxColliderComponent&>(other);
-            const XMFLOAT3 half = box.WorldHalfExtents();
-            probe_center = box.WorldCenter();
-            // 外接球で近似する。取りこぼすより多めに拾う方を選ぶ。
-            probe_radius = std::sqrt(half.x * half.x + half.y * half.y + half.z * half.z);
-            break;
+            const auto& box = static_cast<const Components::BoxColliderComponent&>(trigger);
+            return SphereOverlapsBox(box, probe_center, probe_radius);
         }
         case Components::ColliderShape::Mesh:
         {
+            // 【制限】Mesh Trigger は内外判定を行わない。
+            //   閉じたメッシュとは限らないため、内側かどうかを正しく決められない。
+            //   ここでは「World Bounds の内側にある」ことをもって重なりとみなす。
+            //   凹んだ形の Trigger では、実際には外側の場所でも反応しうる。
+            //   正確さが要る場所には Box / Sphere / Capsule の Trigger を使うこと。
             XMFLOAT3 minimum{};
             XMFLOAT3 maximum{};
-            if (!other.ComputeWorldBounds(minimum, maximum)) return false;
-            probe_center = XMFLOAT3{
-                (minimum.x + maximum.x) * 0.5f,
-                (minimum.y + maximum.y) * 0.5f,
-                (minimum.z + maximum.z) * 0.5f };
-            probe_radius = 0.5f * std::sqrt(
-                (maximum.x - minimum.x) * (maximum.x - minimum.x) +
-                (maximum.y - minimum.y) * (maximum.y - minimum.y) +
-                (maximum.z - minimum.z) * (maximum.z - minimum.z));
-            break;
+            if (!trigger.ComputeWorldBounds(minimum, maximum)) return false;
+
+            const XMFLOAT3 expanded_min{
+                minimum.x - probe_radius, minimum.y - probe_radius, minimum.z - probe_radius };
+            const XMFLOAT3 expanded_max{
+                maximum.x + probe_radius, maximum.y + probe_radius, maximum.z + probe_radius };
+            return probe_center.x >= expanded_min.x && probe_center.x <= expanded_max.x &&
+                   probe_center.y >= expanded_min.y && probe_center.y <= expanded_max.y &&
+                   probe_center.z >= expanded_min.z && probe_center.z <= expanded_max.z;
         }
         }
-
-        if (probe_radius <= 0.0f) return false;
-
-        Physics::SphereCastHit hit{};
-        // 移動量 0 のスイープ。当たったなら開始時点で重なっている。
-        return SweepSingleCollider(trigger, probe_center, probe_center, probe_radius, hit);
+        return false;
     }
 
     void SceneCollisionWorld::DispatchTriggerEvents()

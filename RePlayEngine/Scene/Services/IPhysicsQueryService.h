@@ -55,6 +55,26 @@ namespace ReplayEngine::Scene
         bool valid = false;
     };
 
+    // 問い合わせの絞り込み条件。
+    //
+    // 【ignore_object があるのはなぜか】
+    //   Character Motor は自分の Collider を持ったまま、自分の周りへ球を飛ばす。
+    //   何も除外しないと「自分の Collider に当たった」という結果が返り、
+    //   その面から押し戻されて毎フレーム宙へ持ち上がる。
+    //   実際にこの不具合が起きたので、除外を問い合わせ条件として明示している。
+    //
+    //   除外の単位は GameObject。同じ GameObject に付いた
+    //   本体 Collider・攻撃判定・検知範囲は、まとめて自分自身として扱う。
+    struct CollisionQueryFilter
+    {
+        int layer = 0;
+        int mask = -1;
+
+        // この GameObject に属する Collider は結果に含めない。
+        // 無効 ID なら何も除外しない。
+        Core::ObjectID ignore_object;
+    };
+
     // 地形との問い合わせ窓口。
     //
     // なぜこれを挟むか:
@@ -92,23 +112,23 @@ namespace ReplayEngine::Scene
             const DirectX::XMFLOAT3& end, float radius,
             float maximum_normal_y, SphereSweepHit& hit) const = 0;
 
-        // ---- Layer / Mask を考慮した版 --------------------------------------
+        // ---- 絞り込み付きの問い合わせ ----------------------------------------
         //
-        // 既定の実装は layer / mask を無視して、上のフィルタ無し版へ委譲する。
+        // 既定の実装はフィルタを無視して、上のフィルタ無し版へ委譲する。
         // 旧 Stage のように Layer の概念を持たない実装は、この既定のままでよい。
         //
-        // 純粋仮想にしないのは、Layer に対応していない実装へ
+        // 純粋仮想にしないのは、対応していない実装へ
         // 「対応しているふり」を強制しないため。
         virtual bool SweepSphereFiltered(const DirectX::XMFLOAT3& start,
             const DirectX::XMFLOAT3& end, float radius, float maximum_normal_y,
-            int /*layer*/, int /*mask*/, SphereSweepHit& hit) const
+            const CollisionQueryFilter& /*filter*/, SphereSweepHit& hit) const
         {
             return SweepSphere(start, end, radius, maximum_normal_y, hit);
         }
 
         virtual bool QueryGroundFiltered(const DirectX::XMFLOAT3& origin, float radius,
             float up_offset, float down_distance, float walkable_normal_y,
-            int /*layer*/, int /*mask*/, GroundHit& hit) const
+            const CollisionQueryFilter& /*filter*/, GroundHit& hit) const
         {
             return QueryGround(origin, radius, up_offset, down_distance,
                 walkable_normal_y, hit);

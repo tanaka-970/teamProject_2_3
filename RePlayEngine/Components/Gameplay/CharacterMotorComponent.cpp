@@ -1,4 +1,4 @@
-#include "CharacterMotorComponent.h"
+﻿#include "CharacterMotorComponent.h"
 
 #include "../Physics/BoxColliderComponent.h"
 #include "../Physics/CapsuleColliderComponent.h"
@@ -122,8 +122,14 @@ namespace ReplayEngine::Components
         const ColliderComponent* collider = ResolvePrimaryCollider();
         if (collider == nullptr || !collider->ActiveInHierarchy()) return shape;
 
-        shape.layer = collider->collision_layer;
-        shape.mask = collider->collision_mask;
+        shape.filter.layer = collider->collision_layer;
+        shape.filter.mask = collider->collision_mask;
+
+        // 自分自身の Collider を除外する。
+        // ここを外すと、下向きキャストが自分の Collider に当たり、
+        // 毎フレーム宙へ持ち上がる（実際に起きた不具合）。
+        if (const Core::GameObject* owner = Owner()) shape.filter.ignore_object = owner->ID();
+
         shape.ground_offset = collider->center_offset;
         shape.wall_offset = collider->center_offset;
 
@@ -295,7 +301,7 @@ namespace ReplayEngine::Components
         // Trigger は SceneCollisionWorld 側で除外される。
         Scene::SphereSweepHit hit{};
         if (!physics->SweepSphereFiltered(start, end, shape.radius,
-            shape.walkable_normal_y - 0.001f, shape.layer, shape.mask, hit))
+            shape.walkable_normal_y - 0.001f, shape.filter, hit))
         {
             return;
         }
@@ -332,11 +338,19 @@ namespace ReplayEngine::Components
 
             Scene::GroundHit hit{};
             if (physics->QueryGroundFiltered(origin, shape.radius, 80.0f, 300.0f,
-                shape.walkable_normal_y, shape.layer, shape.mask, hit))
+                shape.walkable_normal_y, shape.filter, hit))
             {
                 has_ground_ = true;
-                // 接地点は中心オフセットぶん戻して、GameObject の足元の高さへ直す。
-                ground_height_ = hit.position.y - shape.ground_offset.y;
+
+                // 接地点から「GameObject をどの高さへ置くか」を求める。
+                //
+                //   落とした球の中心は  local.y + ground_offset.y
+                //   球が床へ乗ったとき  球の中心 = 床の高さ + 半径
+                //   よって              local.y = 床の高さ + 半径 - ground_offset.y
+                //
+                // 旧 Player は center_offset.y と半径が同じ値（0.38）だったため、
+                // この式は「床の高さそのもの」に一致する。挙動は変わらない。
+                ground_height_ = hit.position.y + shape.radius - shape.ground_offset.y;
                 ground_normal_ = hit.normal;
                 last_ground_source_ = hit.source;
             }
