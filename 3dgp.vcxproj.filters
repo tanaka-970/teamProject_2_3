@@ -178,6 +178,18 @@
     <Filter Include="RePlayEngine\Reflection\Registry">
       <UniqueIdentifier>{e2efe5a5-8aca-4f37-8ce5-7f596419afda}</UniqueIdentifier>
     </Filter>
+    <Filter Include="RePlayEngine\Runtime">
+      <UniqueIdentifier>{eab1a59d-450d-4435-add8-ae134fb5b6ef}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Runtime\Core">
+      <UniqueIdentifier>{f259f768-aa12-49b2-9a75-3e2f3fc8dacf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Runtime\Handles">
+      <UniqueIdentifier>{3300dc20-6aa8-4266-8678-e1d033467ba2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Runtime\Validation">
+      <UniqueIdentifier>{5bacaed4-7ebb-41bd-a817-c3ef171be23d}</UniqueIdentifier>
+    </Filter>
     <Filter Include="RePlayEngine\Scene\Runtime">
       <UniqueIdentifier>{4f219783-b84f-4f34-8423-20262681d406}</UniqueIdentifier>
     </Filter>
@@ -443,6 +455,21 @@
     </ClCompile>
     <ClCompile Include="RePlayEngine\Core\ObjectID\ObjectID.cpp">
       <Filter>RePlayEngine\Core\ObjectID</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Core\ObjectID\RuntimeIdentity.cpp">
+      <Filter>RePlayEngine\Core\ObjectID</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Runtime\Core\RuntimeResult.cpp">
+      <Filter>RePlayEngine\Runtime\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Runtime\Handles\RuntimeHandles.cpp">
+      <Filter>RePlayEngine\Runtime\Handles</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Runtime\Handles\HandleResolver.cpp">
+      <Filter>RePlayEngine\Runtime\Handles</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Runtime\Validation\HandleValidation.cpp">
+      <Filter>RePlayEngine\Runtime\Validation</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Core\Math\Transform.cpp">
       <Filter>RePlayEngine\Core\Math</Filter>
@@ -856,6 +883,21 @@
     </ClInclude>
     <ClInclude Include="RePlayEngine\Core\ObjectID\ObjectID.h">
       <Filter>RePlayEngine\Core\ObjectID</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Core\ObjectID\RuntimeIdentity.h">
+      <Filter>RePlayEngine\Core\ObjectID</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Runtime\Core\RuntimeResult.h">
+      <Filter>RePlayEngine\Runtime\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Runtime\Handles\RuntimeHandles.h">
+      <Filter>RePlayEngine\Runtime\Handles</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Runtime\Handles\HandleResolver.h">
+      <Filter>RePlayEngine\Runtime\Handles</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Runtime\Validation\HandleValidation.h">
+      <Filter>RePlayEngine\Runtime\Validation</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Core\Threading\ThreadPolicy.h">
       <Filter>RePlayEngine\Core\Threading</Filter>

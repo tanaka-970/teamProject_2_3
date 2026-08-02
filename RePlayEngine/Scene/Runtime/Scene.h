@@ -1,5 +1,6 @@
 ﻿#pragma once
 
+#include "../../Core/ObjectID/RuntimeIdentity.h"
 #include "../../Object/GameObject/GameObject.h"
 #include "../Services/SceneServices.h"
 
@@ -139,6 +140,30 @@ namespace ReplayEngine::Scene
         std::uint32_t StructureGeneration() const noexcept { return structure_generation_; }
         void BumpStructureGeneration() noexcept { ++structure_generation_; }
 
+        // ---- World の実体番号 ----------------------------------------------
+        //
+        // StructureGeneration との違い:
+        //   StructureGeneration … 同じ World の中で「顔ぶれ」が変わるたびに増える。
+        //                         Collider 登録表の差分更新に使う。
+        //   WorldInstanceID     … World そのものが総入れ替えになるたびに変わる。
+        //                         Scene をまたいだ古い参照を弾くために使う。
+        //
+        // Clear() が呼ばれるたびに新しい番号へ切り替わる。
+        // Scene 読み込み (ApplySceneData) は必ず Clear() を通るため、
+        // 読み込み前に取った Handle は読み込み後に必ず無効になる。
+        Core::WorldInstanceID WorldInstanceID() const noexcept { return world_instance_id_; }
+
+        // World の実体番号を採り直す。Clear() から自動的に呼ばれる。
+        // 中身を入れ替えずに「別の World として扱いたい」場合だけ外から呼ぶ。
+        void RenewWorldInstance() noexcept;
+
+        // Component の実行時通し番号を 1 つ払い出す。GameObject が結線時に呼ぶ。
+        // 再利用しないので、消して作り直した Component は必ず別の番号になる。
+        Core::ComponentInstanceID AcquireComponentInstanceID() noexcept
+        {
+            return next_component_instance_id_++;
+        }
+
         Core::ObjectIDGenerator& IDGenerator() noexcept { return id_generator_; }
         const Core::ObjectIDGenerator& IDGenerator() const noexcept { return id_generator_; }
 
@@ -157,7 +182,19 @@ namespace ReplayEngine::Scene
         // ObjectID からの検索表。objects_ と常に同期させる。
         std::unordered_map<Core::ObjectID, Core::GameObject*> id_lookup_;
 
+        // ObjectID ごとの「何回目の生成か」。GameObject の世代番号を採番するのに使う。
+        // 破棄しても項目を消さない。消すと同じ ID の次の生成が世代 1 に戻ってしまい、
+        // 破棄前に取った Handle が復活してしまうため。
+        // Clear() では World の実体番号ごと切り替わるので、まとめて空にしてよい。
+        std::unordered_map<Core::ObjectID, Core::ObjectGeneration> generation_by_id_;
+
         Core::ObjectIDGenerator id_generator_;
+
+        // World 実体の番号。構築時に 1 つ採る。
+        Core::WorldInstanceID world_instance_id_ = Core::AcquireWorldInstanceID();
+
+        // Component の実行時通し番号。1 から始まり、絶対に戻さない。
+        Core::ComponentInstanceID next_component_instance_id_ = 1;
 
         SceneServices services_;
 

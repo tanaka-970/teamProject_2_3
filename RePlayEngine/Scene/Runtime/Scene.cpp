@@ -36,8 +36,14 @@ namespace ReplayEngine::Scene
         }
         id_generator_.EnsureAbove(id);
 
+        // この ObjectID が「何回目の生成か」を進める。
+        // 破棄した ID を復元して作り直した場合でも必ず増えるため、
+        // 破棄前に取った ObjectHandle はここで無効になる。
+        const Core::ObjectGeneration generation = ++generation_by_id_[id];
+
         // GameObject のコンストラクタは private。Scene だけが friend として呼べる。
-        objects_.push_back(std::unique_ptr<GameObject>(new GameObject(id, name, this)));
+        objects_.push_back(
+            std::unique_ptr<GameObject>(new GameObject(id, generation, name, this)));
         GameObject* created = objects_.back().get();
         id_lookup_.emplace(id, created);
 
@@ -78,11 +84,30 @@ namespace ReplayEngine::Scene
 
         id_lookup_.clear();
         objects_.clear();
+        generation_by_id_.clear();
 
         // Scene の中身が総入れ替えになった。
         // 登録表側は古い ObjectID / ColliderID を必ず捨てる必要がある。
         BumpStructureGeneration();
+
+        // World そのものが別物になった。
+        // ここで実体番号を採り直すことで、Clear() 前に配られた
+        // ObjectHandle / ComponentHandle がすべて WrongWorld として弾かれる。
+        // Scene 読み込み (ApplySceneData) は必ずこの Clear() を通るため、
+        // 読み込み経路ごとに無効化を書き足す必要がない。
+        RenewWorldInstance();
+
         started_ = false;
+    }
+
+    void Scene::RenewWorldInstance() noexcept
+    {
+        world_instance_id_ = Core::AcquireWorldInstanceID();
+
+        // Component の通し番号も 1 へ戻してよい。
+        // World 番号が変わっている以上、古い ComponentHandle は
+        // 通し番号を照合するところまで到達しない。
+        next_component_instance_id_ = 1;
     }
 
     GameObject* Scene::FindGameObjectByID(ObjectID id) const noexcept

@@ -16,8 +16,9 @@ namespace ReplayEngine::Core
         constexpr int maximum_hierarchy_depth = 64;
     }
 
-    GameObject::GameObject(ObjectID id, std::string name, Scene::Scene* scene)
-        : id_(id), name_(std::move(name)), scene_(scene)
+    GameObject::GameObject(ObjectID id, ObjectGeneration generation, std::string name,
+        Scene::Scene* scene)
+        : id_(id), generation_(generation), name_(std::move(name)), scene_(scene)
     {
     }
 
@@ -150,6 +151,12 @@ namespace ReplayEngine::Core
 
     bool GameObject::AttachComponent(std::unique_ptr<Component> component)
     {
+        return AttachComponentWithStableID(std::move(component), invalid_component_stable_id);
+    }
+
+    bool GameObject::AttachComponentWithStableID(std::unique_ptr<Component> component,
+        ComponentStableID stable_id)
+    {
         if (!component) return false;
 
         // 削除予約中の GameObject へ足しても次の同期点で消えるだけなので受け付けない。
@@ -162,6 +169,11 @@ namespace ReplayEngine::Core
         }
 
         Component* raw = component.get();
+
+        // 識別番号は「実体を配列へ入れる前」に決める。
+        // OnAttach の中から StableID / InstanceID を読んでも 0 にならないようにするため。
+        AssignComponentIdentity(*raw, stable_id);
+
         components_.push_back(std::move(component));
 
         // OnAttach の中でさらに AddComponent が呼ばれても、raw はヒープ上の実体を指しており
@@ -174,6 +186,29 @@ namespace ReplayEngine::Core
         return true;
     }
 
+    void GameObject::AssignComponentIdentity(Component& component,
+        ComponentStableID requested_stable_id) noexcept
+    {
+        // 保存されていた番号を尊重する。ただし 0 や既存との衝突は採番し直す。
+        // 壊れたファイルを読んでも「同じ番号の Component が 2 つ」にならないようにする。
+        ComponentStableID stable_id = requested_stable_id;
+        if (stable_id == invalid_component_stable_id ||
+            FindComponentByStableID(stable_id) != nullptr)
+        {
+            stable_id = next_component_stable_id_;
+        }
+        EnsureComponentStableIDAbove(stable_id);
+
+        // 実行時の通し番号は必ず新しく採る。復元も再利用もしない。
+        // Scene が無い状態（Registry が単体で作った実体）では 0 のままにしておき、
+        // 結線されたときに割り当てられるようにする。
+        const ComponentInstanceID instance_id =
+            scene_ != nullptr ? scene_->AcquireComponentInstanceID()
+                              : invalid_component_instance_id;
+
+        component.AssignIdentity(stable_id, instance_id);
+    }
+
     Component* GameObject::FindComponent(ComponentTypeID type_id) const noexcept
     {
         if (type_id == invalid_component_type_id) return nullptr;
@@ -181,6 +216,35 @@ namespace ReplayEngine::Core
         {
             if (!component || component->PendingDestroy()) continue;
             if (component->TypeID() == type_id) return component.get();
+        }
+        return nullptr;
+    }
+
+    Component* GameObject::FindComponentByStableID(ComponentStableID stable_id) const noexcept
+    {
+        if (stable_id == invalid_component_stable_id) return nullptr;
+
+        // 削除予約中も対象に含める。これは「同一性の照合」であって生存確認ではない。
+        // 生存の判断は Handle を解決する側 (HandleResolver) が行う。
+        // ここで予約中を隠すと、同じ StableID が別の Component へ再利用されてしまい、
+        // 保存済みの ComponentReference が別物を指す事故につながる。
+        for (const auto& component : components_)
+        {
+            if (!component) continue;
+            if (component->StableID() == stable_id) return component.get();
+        }
+        return nullptr;
+    }
+
+    Component* GameObject::FindComponentByInstanceID(
+        ComponentInstanceID instance_id) const noexcept
+    {
+        if (instance_id == invalid_component_instance_id) return nullptr;
+
+        for (const auto& component : components_)
+        {
+            if (!component) continue;
+            if (component->InstanceID() == instance_id) return component.get();
         }
         return nullptr;
     }

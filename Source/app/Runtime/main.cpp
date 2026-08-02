@@ -24,6 +24,7 @@
 #include "../../../RePlayEngine/Landscape/LandscapeRenderer.h"
 #include "../../../RePlayEngine/Object/Registry/BuiltInComponents.h"
 #include "../../../RePlayEngine/Rendering/Materials/MaterialAsset.h"
+#include "../../../RePlayEngine/Runtime/Validation/HandleValidation.h"
 #include "../../../RePlayEngine/Scene/Runtime/Scene.h"
 #include "../../../RePlayEngine/Scene/Serialization/SceneData.h"
 #include "../../../RePlayEngine/Scene/Serialization/PrefabSerializer.h"
@@ -579,6 +580,17 @@ namespace
             roundtrip.version);
         return errors == 0 ? 0 : 6;
     }
+
+    // ObjectHandle / ComponentHandle 基盤の検証。
+    // D3D11 も Window も使わないため、ビルド直後にそのまま実行できる。
+    int RunHeadlessHandleValidation(const char* command_line)
+    {
+        std::istringstream arguments(command_line != nullptr ? command_line : "");
+        std::string command;
+        if (!(arguments >> command) || command != "--validate-handles") return -1;
+
+        return ReplayEngine::Runtime::Validation::RunHandleValidation();
+    }
 }
 
 LRESULT CALLBACK window_procedure(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
@@ -599,6 +611,8 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
     if (landscape_validation_result >= 0) return landscape_validation_result;
     const int prefab_validation_result = RunHeadlessPrefabValidation(cmd_line);
     if (prefab_validation_result >= 0) return prefab_validation_result;
+    const int handle_validation_result = RunHeadlessHandleValidation(cmd_line);
+    if (handle_validation_result >= 0) return handle_validation_result;
     const std::uint32_t automated_smoke_test_frames =
         ParseAutomatedSmokeTestFrames(cmd_line);
 

@@ -50,6 +50,15 @@ namespace ReplayEngine::Core
 
         ObjectID ID() const noexcept { return id_; }
 
+        // 同じ ObjectID が作り直されたことを見分ける世代番号。Scene が採番する。
+        //
+        // ObjectID だけでは足りない理由:
+        //   CreateGameObjectWithID() は保存されていた ID をそのまま復元する。
+        //   一度消した ID と同じ値が後からもう一度使われることがありうるため、
+        //   ID だけを持った古い参照は別物を指してしまう。
+        //   世代番号を突き合わせれば、破棄前に取った参照を確実に無効にできる。
+        ObjectGeneration Generation() const noexcept { return generation_; }
+
         const std::string& Name() const noexcept { return name_; }
         void SetName(std::string name);
 
@@ -192,6 +201,37 @@ namespace ReplayEngine::Core
         // 型 ID で引く。Editor と読み込み処理が使う非テンプレート版。
         Component* FindComponent(ComponentTypeID type_id) const noexcept;
 
+        // 保存用の安定 ID で引く。ComponentReference の解決経路。
+        // 型に依存しないので、型名を変えても参照が壊れない。
+        Component* FindComponentByStableID(ComponentStableID stable_id) const noexcept;
+
+        // 実行時の通し番号で引く。ComponentHandle の解決経路。
+        Component* FindComponentByInstanceID(ComponentInstanceID instance_id) const noexcept;
+
+        // 次に採番される StableID。読み込み側が保存値との衝突を避けるために見る。
+        ComponentStableID PeekNextComponentStableID() const noexcept
+        {
+            return next_component_stable_id_;
+        }
+
+        // 復元した StableID より必ず大きい値が次に出るようにする。
+        // ObjectIDGenerator::EnsureAbove と同じ役割。
+        void EnsureComponentStableIDAbove(ComponentStableID stable_id) noexcept
+        {
+            if (stable_id >= next_component_stable_id_)
+            {
+                next_component_stable_id_ = stable_id + 1;
+            }
+        }
+
+        // 保存されていた StableID を保ったまま Component を引き取る。
+        // Scene / Prefab の読み込みと複製が使う。
+        //
+        // stable_id が 0、または同じ GameObject 内で既に使われている場合は、
+        // 衝突を避けて新しい番号を採番する（壊れたファイルでも読み込みを止めない）。
+        bool AttachComponentWithStableID(std::unique_ptr<Component> component,
+            ComponentStableID stable_id);
+
         // 削除予約中を含めた実体の並び。Editor の表示と保存処理が添字で走査する。
         std::size_t ComponentCount() const noexcept { return components_.size(); }
         Component* ComponentAt(std::size_t index) const noexcept;
@@ -221,7 +261,13 @@ namespace ReplayEngine::Core
         friend class ReplayEngine::Scene::Scene;
 
         // 生成は Scene だけが行う。利用側は Scene::CreateGameObject を使うこと。
-        GameObject(ObjectID id, std::string name, Scene::Scene* scene);
+        // generation は Scene が ObjectID ごとに採番したもの。
+        GameObject(ObjectID id, ObjectGeneration generation, std::string name,
+            Scene::Scene* scene);
+
+        // Component へ StableID / InstanceID を割り当てる。AttachComponent から呼ぶ。
+        void AssignComponentIdentity(Component& component,
+            ComponentStableID requested_stable_id) noexcept;
 
         // 重複禁止の型で既存インスタンスがあればそれを返す。無ければ nullptr。
         Component* FindSingleInstanceConflict(ComponentTypeID type_id) const noexcept;
@@ -237,9 +283,15 @@ namespace ReplayEngine::Core
         void UnlinkChild(GameObject* child) noexcept;
 
         ObjectID id_{};
+        ObjectGeneration generation_ = invalid_object_generation;
         std::string name_{ "GameObject" };
         bool enabled_ = true;
         bool pending_destroy_ = false;
+
+        // 次に Component へ渡す StableID。1 から始まり、削除しても戻さない。
+        // 戻さないのは、消した Component と同じ番号を後から別の Component が
+        // 受け取ると、保存済みの ComponentReference が別物を指してしまうため。
+        ComponentStableID next_component_stable_id_ = 1;
 
         Transform transform_{};
 

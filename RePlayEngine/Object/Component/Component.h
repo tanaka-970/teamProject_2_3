@@ -2,6 +2,7 @@
 
 #include "ComponentTypeID.h"
 #include "TriggerContact.h"
+#include "../../Core/ObjectID/RuntimeIdentity.h"
 #include "../../Core/Threading/ThreadPolicy.h"
 
 namespace ReplayEngine::Reflection { class PropertyBag; }
@@ -124,6 +125,24 @@ namespace ReplayEngine::Core
         // Scene の次の同期点で対称に呼ばれる（Editor から描画中に呼んでも安全）。
         void SetEnabled(bool enabled) noexcept;
 
+        // ---- 識別 ----------------------------------------------------------
+        //
+        // 2 種類ある。役割が違うので混同しないこと。
+        //
+        //   StableID   … 保存する。所有 GameObject の中で安定した番号。
+        //                Scene / Prefab をまたいでも同じ値。Component の並びを
+        //                入れ替えても変わらない。ComponentReference の保存に使う。
+        //
+        //   InstanceID … 保存しない。World の中で実体へ一度だけ振られる通し番号。
+        //                再利用しないので、消して作り直すと必ず別の値になる。
+        //                ComponentHandle が古い実体を掴まないための照合に使う。
+        //
+        // どちらも GameObject へ結線された時点で割り当てられる。
+        // 結線前 (Registry が作っただけの状態) は両方 0。
+
+        ComponentStableID StableID() const noexcept { return stable_id_; }
+        ComponentInstanceID InstanceID() const noexcept { return instance_id_; }
+
         // ---- 状態 ----------------------------------------------------------
 
         bool Attached() const noexcept { return attached_; }
@@ -146,7 +165,33 @@ namespace ReplayEngine::Core
         void ForceDisable();        // 破棄前に有効状態を落とす
         void MarkPendingDestroy() noexcept { pending_destroy_ = true; }
 
+        // 識別番号の割り当て。GameObject::AttachComponent だけが呼ぶ。
+        // 一度割り当てた値は上書きしない（保存済みの参照が指す先を変えないため）。
+        void AssignIdentity(ComponentStableID stable_id,
+            ComponentInstanceID instance_id) noexcept
+        {
+            if (stable_id_ == invalid_component_stable_id)
+            {
+                stable_id_ = stable_id;
+            }
+            if (instance_id_ == invalid_component_instance_id)
+            {
+                instance_id_ = instance_id;
+            }
+        }
+
+        // 読み込み・複製が「保存されていた StableID」を復元するための入口。
+        // 結線前にだけ意味がある。結線後に呼んでも無視される。
+        void RestoreStableIDBeforeAttach(ComponentStableID stable_id) noexcept
+        {
+            if (!attached_) stable_id_ = stable_id;
+        }
+
         GameObject* owner_ = nullptr;
+
+        ComponentStableID stable_id_ = invalid_component_stable_id;
+        ComponentInstanceID instance_id_ = invalid_component_instance_id;
+
         bool enabled_ = true;
         bool attached_ = false;
         bool started_ = false;
