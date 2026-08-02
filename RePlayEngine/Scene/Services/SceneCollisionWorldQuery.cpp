@@ -185,7 +185,7 @@ namespace ReplayEngine::Scene
         const CollisionQueryFilter& filter, SphereSweepHit& hit) const
     {
         hit = SphereSweepHit{};
-        if (scene_ == nullptr || mode_ == BackendMode::LegacyOnly) return false;
+        if (scene_ == nullptr) return false;
 
         // クエリのワールド AABB。Broad Phase の粗い絞り込みに使う。
         const XMFLOAT3 query_min{
@@ -259,9 +259,7 @@ namespace ReplayEngine::Scene
 
     bool SceneCollisionWorld::CollisionAvailable() const
     {
-        if (mode_ != BackendMode::LegacyOnly && blocking_collider_count_ > 0) return true;
-        if (ShouldConsultLegacy() && legacy_->CollisionAvailable()) return true;
-        return false;
+        return blocking_collider_count_ > 0;
     }
 
     bool SceneCollisionWorld::SweepSphere(const XMFLOAT3& start, const XMFLOAT3& end,
@@ -283,24 +281,8 @@ namespace ReplayEngine::Scene
         const bool scene_found = SweepSceneColliders(start, end, radius,
             -1.0f, maximum_normal_y, filter, scene_hit);
 
-        SphereSweepHit legacy_hit{};
-        bool legacy_found = false;
-        if (ShouldConsultLegacy())
-        {
-            legacy_consulted_ = true;
-            legacy_found = legacy_->SweepSphere(start, end, radius, maximum_normal_y, legacy_hit);
-            if (legacy_found) legacy_hit.source.backend = CollisionBackend::LegacyStage;
-        }
-
-        // 両方から返った場合は近い方を採る。
-        // 同じ地形が両方から返ることはない（移行済みなら Legacy を見ないため）。
-        if (scene_found && legacy_found)
-        {
-            hit = scene_hit.fraction <= legacy_hit.fraction ? scene_hit : legacy_hit;
-        }
-        else if (scene_found) { hit = scene_hit; }
-        else if (legacy_found) { hit = legacy_hit; }
-        else { return false; }
+        if (!scene_found) return false;
+        hit = scene_hit;
 
         last_sweep_source_ = hit.source;
         return true;
@@ -330,16 +312,6 @@ namespace ReplayEngine::Scene
         const bool scene_found = SweepSceneColliders(start, end, radius,
             walkable_normal_y, 1.0f, filter, scene_hit);
 
-        GroundHit legacy_hit{};
-        bool legacy_found = false;
-        if (ShouldConsultLegacy())
-        {
-            legacy_consulted_ = true;
-            legacy_found = legacy_->QueryGround(origin, radius, up_offset,
-                down_distance, walkable_normal_y, legacy_hit);
-            if (legacy_found) legacy_hit.source.backend = CollisionBackend::LegacyStage;
-        }
-
         const auto take_scene = [&]()
         {
             // 球中心から半径ぶん下が接地点。
@@ -352,16 +324,8 @@ namespace ReplayEngine::Scene
             hit.valid = true;
         };
 
-        if (scene_found && legacy_found)
-        {
-            // 高い方（=先に足が着く方）を採る。
-            const float scene_height = scene_hit.center.y - radius;
-            if (scene_height >= legacy_hit.position.y) take_scene();
-            else hit = legacy_hit;
-        }
-        else if (scene_found) { take_scene(); }
-        else if (legacy_found) { hit = legacy_hit; }
-        else { return false; }
+        if (!scene_found) return false;
+        take_scene();
 
         last_ground_source_ = hit.source;
         return true;

@@ -20,7 +20,7 @@ bool framework::initialize()
 
     std::string asset_database_error;
     if (!asset_database.Load(asset_database_error))
-        scene_document_status = "AssetDatabase: " + asset_database_error;
+        object_editor_context.SetStatus("AssetDatabase: " + asset_database_error);
 
     UINT create_device_flags{ 0 };
 #ifdef _DEBUG
@@ -289,10 +289,10 @@ bool framework::initialize()
 
     scene_manager.QueueSceneFactory([this]() -> std::unique_ptr<ReplayEngine::Scene::IScene>
     {
-        // GameScene が持つのはカメラと旧ステージだけ。
+        // GameScene が持つのはカメラ操作だけ。
         // 操作キャラクターのモデルもアニメーションクリップも渡さない。
         // それらは Scene 内の GameObject が Component として持っている。
-        auto next_scene = std::make_unique<GameScene>(nullptr,
+        auto next_scene = std::make_unique<GameScene>(
             static_cast<float>(SCREEN_WIDTH) / static_cast<float>(SCREEN_HEIGHT));
         game_scene = next_scene.get();
         restore_editor_session();

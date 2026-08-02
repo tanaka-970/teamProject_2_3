@@ -4,8 +4,6 @@
 #include "../../RePlayEngine/Scene/IScene.h"
 #include "UI.h"
 
-class skinned_mesh;
-
 // ゲーム側が所有するシーン。描画パスの分割中は互換レンダラーを使うが、
 // 生存期間と更新処理は汎用SceneManagerが管理する。
 //
@@ -16,7 +14,7 @@ class skinned_mesh;
 class GameScene final : public ReplayEngine::Scene::IScene
 {
 public:
-    GameScene(skinned_mesh* stage_mesh, float aspect) noexcept;
+    explicit GameScene(float aspect) noexcept;
 
     bool Initialize(ID3D11Device* device) override;
     void Update(float elapsed_time) override;
@@ -27,7 +25,6 @@ public:
     const SceneGame& Gameplay() const noexcept { return gameplay_; }
 
 private:
-    skinned_mesh* stage_mesh_ = nullptr;
     float aspect_ = 16.0f / 9.0f;
     SceneGame gameplay_;
     UIManager uiManager;

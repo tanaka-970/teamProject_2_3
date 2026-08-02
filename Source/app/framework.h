@@ -57,16 +57,13 @@ extern ImWchar glyphRangesJapanese[];
 #include "../../RePlayEngine/Assets/AsyncAssetManager.h"
 #include "../../RePlayEngine/Assets/ConcurrentResourceCache.h"
 #include "../../RePlayEngine/Project/ProjectSettings.h"
-#include "../../RePlayEngine/Editor/Commands/UndoStack.h"
 #include "../../RePlayEngine/Editor/Gizmo/TransformGizmo.h"
 #include "../../RePlayEngine/Editor/Gizmo/ViewportPicker.h"
-#include "../../RePlayEngine/Scene/SceneDocument.h"
 #include "../../RePlayEngine/Physics/MeshCollisionCooker.h"
 
 // --- GameObject / Component 基盤 -------------------------------------------
-// 既存の SceneDocument / SceneManager とは責任が違う。
+// SceneManager とは責任が違う。
 //   SceneManager  … 起動ロゴ / ロード画面 / ゲームという画面遷移
-//   SceneDocument … 旧エディタのステージ配置記録（段階移行のため当面残す）
 //   Scene (下記)  … GameObject の入れ物。今回の新基盤。
 #include "../../RePlayEngine/Scene/Runtime/Scene.h"
 #include "../../RePlayEngine/Editor/Core/EditorContext.h"
@@ -81,7 +78,6 @@ extern ImWchar glyphRangesJapanese[];
 #include "../../RePlayEngine/Editor/Viewport/EditorCameraController.h"
 #include "../../RePlayEngine/Editor/Viewport/EditorCameraStateStore.h"
 #include "../game/legacy_camera_basis_bridge.h"
-#include "../game/legacy_stage_collision_bridge.h"
 
 #include <unordered_map>
 #include <unordered_set>
@@ -252,10 +248,8 @@ public:
     float            stage_pixelate_grid{ 6.0f };
     float            stage_pixelate_strength{ 1.0f };
     bool             enable_stage_shader{ true }; // false = always FBX default
-    bool             enable_stage_render{ false };
     bool             stage_texture_wrap{ true };
     float            stage_texture_contrast{ 1.20f };
-    bool             stage_asset_placed{ false };
     std::string      selected_stage_asset_path;
     std::string      selected_stage_cache_path;
     std::string      stage_asset_status{ "未選択" };
@@ -277,19 +271,9 @@ public:
     // 新規シーン作成ダイアログの入力欄。
     char new_object_scene_name[128]{ "NewScene" };
 
-    ReplayEngine::Scene::SceneDocument editor_scene_document;
-    ReplayEngine::Scene::SceneDocument runtime_scene_document;
-    ReplayEngine::Editor::UndoStack scene_undo_stack;
     ReplayEngine::Editor::TransformGizmo transform_gizmo;
     ReplayEngine::Physics::MeshCollisionCooker collision_cooker;
-    ReplayEngine::Scene::EntityId active_stage_placement_id{ 0 };
-    ReplayEngine::Scene::EntityId selected_scene_entity_id{ 0 };
-    std::vector<ReplayEngine::Scene::EntityId> selected_scene_entity_ids;
-    std::vector<ReplayEngine::Scene::SceneEntity> copied_scene_entities;
     std::string      selected_stage_asset_guid;
-    // 旧ステージ配置記録 (SceneDocument) の保存先。sinotake 側の指定に合わせる。
-    std::filesystem::path current_scene_path{ "resources/Scenes/Main.replayscene" };
-    std::string      scene_document_status{ "新規シーン" };
     std::string      shader_preset_status{ "プリセット未選択" };
     bool             async_stage_load_active{ false };
 
@@ -339,7 +323,6 @@ public:
     // 【移行用】Gameplay Component から Camera / Stage 具象型を隠すための橋渡し。
     // 削除条件はそれぞれのヘッダーへ記載してある。
     LegacyCameraBasisBridge      object_camera_bridge;
-    LegacyStageCollisionBridge   object_collision_bridge;
 
     // --- 衝突 -------------------------------------------------------------
     //
@@ -520,36 +503,16 @@ public:
                 save_object_scene(choose_path);
                 return 0;
             }
-            // GameObject / Component 基盤の Undo / Redo。
-            // GameObject を選択している間はこちらが優先される。
             if (msg == WM_KEYDOWN && control_down && !ImGui::GetIO().WantTextInput &&
-                (wparam == 'Z' || wparam == 'Y') &&
-                selected_editor_object == editor_selection::game_object)
+                (wparam == 'Z' || wparam == 'Y'))
             {
                 if (wparam == 'Z') object_editor_context.Undo();
                 else object_editor_context.Redo();
                 return 0;
             }
-            if (msg == WM_KEYDOWN && (GetKeyState(VK_CONTROL) & 0x8000) &&
-                !ImGui::GetIO().WantTextInput && (wparam == 'Z' || wparam == 'Y'))
-            {
-                std::string label;
-                if (wparam == 'Z') scene_undo_stack.Undo(editor_scene_document, label);
-                else scene_undo_stack.Redo(editor_scene_document, label);
-                scene_document_status = label.empty() ? scene_document_status : label;
-                selected_scene_entity_ids.erase(std::remove_if(selected_scene_entity_ids.begin(),
-                    selected_scene_entity_ids.end(), [this](ReplayEngine::Scene::EntityId id)
-                    { return editor_scene_document.Find(id) == nullptr; }), selected_scene_entity_ids.end());
-                if (editor_scene_document.Find(selected_scene_entity_id) == nullptr)
-                    selected_scene_entity_id = selected_scene_entity_ids.empty() ? 0 : selected_scene_entity_ids.back();
-                return 0;
-            }
             if (shortcut_pressed && wparam == 'D')
             {
-                if (selected_editor_object == editor_selection::game_object)
-                    object_hierarchy_panel.DuplicateSelection(object_editor_context);
-                else
-                    duplicate_selected_entities();
+                object_hierarchy_panel.DuplicateSelection(object_editor_context);
                 return 0;
             }
             if (msg == WM_KEYDOWN && wparam == VK_DELETE &&
@@ -557,14 +520,6 @@ public:
                 selected_editor_object == editor_selection::game_object)
             {
                 object_hierarchy_panel.DestroySelection(object_editor_context);
-                return 0;
-            }
-            if (msg == WM_KEYDOWN && control_down &&
-                !search_input_active && !ImGui::GetIO().WantTextInput &&
-                (wparam == 'C' || wparam == 'V'))
-            {
-                if (wparam == 'C') copy_selected_entities();
-                else paste_copied_entities();
                 return 0;
             }
             if (msg == WM_KEYDOWN && wparam == 'F' && (GetKeyState(VK_CONTROL) & 0x8000))
@@ -732,38 +687,19 @@ private:
     // ワーカースレッドから呼べるモデル先読み。キャッシュへ載せるだけで
     // frameworkの表示状態は触らないため、並列ロード中に安全に使える。
     bool prewarm_model_asset(const std::filesystem::path& path);
-    void draw_stage_placement_controls();
     bool place_asset_in_object_scene(const ReplayEngine::Assets::AssetRecord& asset,
         bool add_mesh_collider);
-    void draw_scene_document_toolbar();
-    void draw_scene_entity_inspector();
-    void draw_transform_gizmo_controls();
     void handle_viewport_selection();
     void draw_scene_grid_overlay();
     bool draw_object_transform_gizmo();
-    void select_scene_entity(ReplayEngine::Scene::EntityId id, bool additive);
-    void copy_selected_entities();
-    void paste_copied_entities();
-    void duplicate_selected_entities();
-    void save_scene_document(bool choose_path);
-    bool load_scene_document(bool choose_path,
-        ReplayEngine::Scene::EntityId preferred_entity_id = 0);
     void save_editor_session();
     void restore_editor_session();
-    void create_scene_document(const std::string& name);
 
     // 選択中の GameObject を Prefab として保存する。
     // choose_path が true ならファイル名を選ばせる（任意名で保存できる）。
     // 保存した Prefab は AssetDatabase へ登録され、AssetGUID で参照できるようになる。
     void save_selected_prefab(bool choose_path);
     void load_prefab();
-    void cook_selected_mesh_collision();
-    void sync_selected_entity_to_stage();
-    void store_stage_shader_layers(ReplayEngine::Scene::ModelRendererData& renderer) const;
-    void restore_stage_shader_layers(const ReplayEngine::Scene::ModelRendererData& renderer);
-    ReplayEngine::Scene::SceneDocument& active_scene_document() noexcept;
-    const ReplayEngine::Scene::SceneDocument& active_scene_document() const noexcept;
-
     // --- GameObject / Component 基盤との接続 -------------------------------
     // 実装はすべて Source/app/Runtime/framework_gameobject_scene.cpp にある。
     void initialize_object_scene();
@@ -909,10 +845,7 @@ private:
     {
         world,
         camera,
-        stage,
-        scene_entity,
-        // 新しい GameObject / Component 基盤で選択された GameObject。
-        // 旧 scene_entity（SceneDocument のステージ配置記録）とは別物。
+        // Scene 内の GameObject / Component 基盤で選択された GameObject。
         game_object,
         directional_light,
         point_lights,

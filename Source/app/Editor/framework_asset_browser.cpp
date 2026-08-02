@@ -287,7 +287,6 @@ bool framework::load_stage_asset_now(const std::wstring& filename)
             }
 
             stage_gltf_model = std::move(candidate);
-            if (game_scene) game_scene->Gameplay().GetStage().SetModel(nullptr);
             outline_per_stage = false;
             stage_asset_status = "glTF素材を読み込みました（配置プレビュー中）";
         }
@@ -307,7 +306,6 @@ bool framework::load_stage_asset_now(const std::wstring& filename)
             });
             skinned_meshes[1] = std::move(candidate);
             stage_gltf_model.reset();
-            if (game_scene) game_scene->Gameplay().GetStage().SetModel(skinned_meshes[1].get());
             stage_asset_status = "FBXキャッシュ素材を読み込みました（配置プレビュー中）";
         }
         else
@@ -386,119 +384,10 @@ bool framework::load_stage_asset_now(const std::wstring& filename)
         stage_asset_status += " / キャッシュ失敗: " + cache_error;
     }
 
-    enable_stage_render = true;
-    stage_asset_placed = false;
-    active_stage_placement_id = 0;
+    selected_asset_guid = selected_stage_asset_guid;
     set_editor_workspace(editor_workspace::placement);
-    selected_editor_object = editor_selection::stage;
+    selected_editor_object = editor_selection::game_object;
+    stage_asset_status += " / Asset Browserへ登録済み";
     return true;
 }
 
-void framework::draw_stage_placement_controls()
-{
-    const bool has_asset = skinned_meshes[1] != nullptr || stage_gltf_model != nullptr;
-    if (active_editor_workspace != editor_workspace::placement)
-    {
-        ImGui::TextDisabled("配置操作は配置モードのテーブルで行います");
-        if (ImGui::Button("配置モードへ切り替える"))
-        {
-            set_editor_workspace(editor_workspace::placement);
-        }
-        return;
-    }
-
-    ImGui::TextColored({ 0.35f, 0.75f, 1.0f, 1.0f }, "オブジェクト配置モード");
-    ImGui::TextDisabled("モデルごとにEntityと識別子を作り、シーンへ記録します。");
-    if (ImGui::Button("別のモデルを取り込む...")) browse_stage_asset();
-    ImGui::SameLine();
-    if (ImGui::Button("Prefabを配置...")) load_prefab();
-
-    if (ImGui::CollapsingHeader("配置済みオブジェクト", ImGuiTreeNodeFlags_DefaultOpen))
-    {
-        for (const auto& entity : editor_scene_document.Entities())
-        {
-            if (!entity.transform) continue;
-            ImGui::PushID(static_cast<int>(entity.id));
-            const bool selected = entity.id == selected_scene_entity_id;
-            const std::string label = entity.name + "  [" + entity.identifier + "]";
-            if (ImGui::Selectable(label.c_str(), selected)) select_scene_entity(entity.id, ImGui::GetIO().KeyShift);
-            ImGui::PopID();
-        }
-        if (!selected_scene_entity_ids.empty())
-        {
-            if (ImGui::Button("選択を複製  Ctrl+D")) duplicate_selected_entities();
-            ImGui::SameLine();
-            ImGui::TextDisabled("Shiftで複数選択");
-        }
-    }
-
-    if (!has_asset)
-    {
-        ImGui::TextDisabled("配置するモデルが選択されていません");
-        if (ImGui::Button("モデルファイルを選択...")) browse_stage_asset();
-        return;
-    }
-
-    if (game_scene) game_scene->Gameplay().DrawStageGUI();
-    if (stage_asset_placed && active_stage_placement_id != 0) sync_selected_entity_to_stage();
-    if (!stage_asset_placed)
-    {
-        ImGui::TextDisabled("現在はプレビューです。衝突対象にはなりません");
-        if (ImGui::Button("この位置へ配置を確定"))
-        {
-            const auto before = editor_scene_document;
-            const auto* asset_record = asset_database.FindByGuid(selected_stage_asset_guid);
-            const std::string asset_name = asset_record && !asset_record->display_name.empty()
-                ? asset_record->display_name
-                : std::filesystem::path(selected_stage_asset_path).stem().u8string();
-            auto& entity = editor_scene_document.CreateEntity(asset_name);
-            entity.transform.emplace();
-            if (game_scene)
-            {
-                const Stage& stage = game_scene->Gameplay().GetStage();
-                entity.transform->position = stage.GetPosition();
-                entity.transform->rotation = stage.GetAngle();
-                entity.transform->scale = stage.GetScale();
-            }
-            entity.model_renderer.emplace();
-            entity.model_renderer->asset_guid = selected_stage_asset_guid;
-            entity.model_renderer->asset_name = asset_name;
-            entity.model_renderer->shading_model = shading_per_stage;
-            entity.model_renderer->outline = outline_per_stage;
-            store_stage_shader_layers(*entity.model_renderer);
-            active_stage_placement_id = entity.id;
-            select_scene_entity(entity.id, false);
-            scene_undo_stack.Commit("モデルを配置", before, editor_scene_document);
-            stage_asset_placed = true;
-            enable_stage_render = true;
-            stage_asset_status = "シーンへオブジェクトを配置済み: " + entity.name +
-                " [" + entity.identifier + "]";
-            selected_editor_object = editor_selection::scene_entity;
-        }
-    }
-    else
-    {
-        ImGui::TextColored({ 0.45f, 0.85f, 0.55f, 1.0f }, "シーンへ配置済み");
-        if (ImGui::Button("同じモデルを続けて配置"))
-        {
-            active_stage_placement_id = 0;
-            selected_scene_entity_id = 0;
-            selected_scene_entity_ids.clear();
-            stage_asset_placed = false;
-            selected_editor_object = editor_selection::stage;
-            stage_asset_status = "同じモデルを配置プレビュー中";
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("配置確定を解除してプレビューへ戻す"))
-        {
-            const auto before = editor_scene_document;
-            editor_scene_document.DestroyEntity(active_stage_placement_id);
-            scene_undo_stack.Commit("配置を削除", before, editor_scene_document);
-            active_stage_placement_id = 0;
-            selected_scene_entity_id = 0;
-            selected_scene_entity_ids.clear();
-            stage_asset_placed = false;
-            stage_asset_status = "配置プレビュー中";
-        }
-    }
-}

@@ -1,15 +1,15 @@
 #include "game_scene.h"
 
-GameScene::GameScene(skinned_mesh* stage_mesh, float aspect) noexcept
-    : stage_mesh_(stage_mesh), aspect_(aspect)
+GameScene::GameScene(float aspect) noexcept
+    : aspect_(aspect)
 {
 }
 
 bool GameScene::Initialize(ID3D11Device* device)
 {
-    // カメラと旧ステージだけを初期化する。
+    // GameObject Sceneとは独立したカメラ操作だけを初期化する。
     // 操作対象の初期配置はここでは行わない。Scene ファイルの内容が正式な情報源。
-    gameplay_.Initialize(stage_mesh_, aspect_);
+    gameplay_.Initialize(aspect_);
 
     // sinotake 側で追加された UI。旧 Player とは無関係なのでそのまま残す。
     uiManager.Initalize(device);
@@ -21,5 +21,5 @@ bool GameScene::Initialize(ID3D11Device* device)
 
 void GameScene::Update(float elapsed_time)
 {
-    gameplay_.Update(elapsed_time);
+    (void)elapsed_time;
 }

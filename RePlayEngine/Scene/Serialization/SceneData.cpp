@@ -24,11 +24,6 @@ namespace ReplayEngine::Scene::Serialization
         // Scene 単位の状態。Component の有無とは独立して保存する。
         output.controlled_object = scene.Services().ControlledObject();
 
-        // v9。衝突の問い合わせ先と、旧 Stage の移行済み集合。
-        output.collision_backend_mode = scene.Services().CollisionBackendMode();
-        output.migrated_legacy_sources =
-            scene.Services().LegacyStageMigration().MigratedSources();
-
         output.objects.reserve(scene.GameObjectCount());
 
         for (std::size_t index = 0; index < scene.GameObjectCount(); ++index)
@@ -257,14 +252,6 @@ namespace ReplayEngine::Scene::Serialization
         // 実在しなかった場合）は、無効のまま残す。別の GameObject へ
         // 勝手に乗り移らせない。
         scene.Services().SetControlledObject(remap(data.controlled_object));
-
-        // 衝突の問い合わせ先。v8 以前のファイルは 1 (Hybrid) のまま入ってくる。
-        scene.Services().SetCollisionBackendMode(data.collision_backend_mode);
-
-        // 移行元 ID は Scene 内の ObjectID ではなく旧 Stage 側の番号なので、
-        // ここでは remap しない。remap すると別のものを指してしまう。
-        scene.Services().LegacyStageMigration().SetMigratedSources(
-            data.migrated_legacy_sources);
 
         // 予約状態が残っていないことを保証してから読み込みを終える。
         scene.ProcessPendingOperations();

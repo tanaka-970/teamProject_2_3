@@ -262,15 +262,8 @@ namespace ReplayEngine::Scene::Serialization
         // 読み取り側は行単位で解析するので、古いファイルもそのまま読める。
         stream << "SCENE_STATE " << data.controlled_object.Value() << '\n';
 
-        // v9 で追加。衝突の問い合わせ先と、旧 Stage の移行済み集合。
-        // Backend Mode は Scene に 1 つだけ持ち、Component へは重複させない。
-        stream << "COLLISION_STATE " << data.collision_backend_mode << ' '
-            << data.migrated_legacy_sources.size();
-        for (const std::uint64_t source : data.migrated_legacy_sources)
-        {
-            stream << ' ' << source;
-        }
-        stream << '\n';
+        // v9/v10との構文互換用の予約行。BackendはScene Colliderへ統一済み。
+        stream << "COLLISION_STATE 2 0\n";
 
         stream << "OBJECT_COUNT " << data.objects.size() << '\n';
 
@@ -378,22 +371,18 @@ namespace ReplayEngine::Scene::Serialization
             // 行の残り（旧 Player の移行状態）は読み捨てる。
         }
 
-        // v9 で追加した衝突まわりの状態。
-        // v7 / v8 には存在しないので、既定値のまま読み進める。
-        //   Backend Mode = Hybrid（開く前と同じ挙動から始まる）
-        //   移行済み集合 = 空（旧 Stage は未移行として扱う）
+        // v9/v10 の予約行。旧Backend値は構文互換のため読み飛ばす。
         if (version >= 9)
         {
             if (!Expect(stream, "COLLISION_STATE", error)) return false;
+            int ignored_backend = 2;
             std::size_t source_count = 0;
-            if (!(stream >> data.collision_backend_mode >> source_count) ||
+            if (!(stream >> ignored_backend >> source_count) ||
                 source_count > maximum_objects)
             {
                 error = "衝突の設定を読み取れません。";
                 return false;
             }
-            data.migrated_legacy_sources.clear();
-            data.migrated_legacy_sources.reserve(source_count);
             for (std::size_t index = 0; index < source_count; ++index)
             {
                 std::uint64_t source = 0;
@@ -402,7 +391,6 @@ namespace ReplayEngine::Scene::Serialization
                     error = "移行済み Legacy Stage の一覧を読み取れません。";
                     return false;
                 }
-                data.migrated_legacy_sources.push_back(source);
             }
         }
 

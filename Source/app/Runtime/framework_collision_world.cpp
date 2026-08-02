@@ -12,11 +12,6 @@
 #include "../../RePlayEngine/Components/Physics/MeshColliderComponent.h"
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
 
-namespace
-{
-    using BackendMode = ReplayEngine::Scene::SceneCollisionWorld::BackendMode;
-}
-
 void framework::initialize_collision_world()
 {
     // Cook キャッシュと、三角形を取り出す手段をつなぐ。
@@ -50,24 +45,15 @@ void framework::attach_collision_world(ReplayEngine::Scene::Scene& scene)
     // 古い Scene の ObjectID / ColliderID は 1 件も残らない。
     object_collision_world.AttachScene(&scene);
 
-    // Backend Mode と移行済み集合は Scene の状態。
-    // 衝突世界は「今つないでいる Scene の設定」で動く。
     ReplayEngine::Scene::SceneServices& services = scene.Services();
-    object_collision_world.SetBackendMode(
-        ReplayEngine::Scene::SceneCollisionWorld::BackendModeFromInt(
-            services.CollisionBackendMode()));
-    object_collision_world.LegacyMigration() = services.LegacyStageMigration();
 
     // Component からの問い合わせ先を衝突世界にする。
-    // ここから先、Motor が見るのは LegacyStageCollisionBridge ではない。
-    // 旧 Stage は衝突世界の内側から、必要なときだけ呼ばれる。
     services.SetPhysics(&object_collision_world);
 }
 
 void framework::detach_collision_world()
 {
     object_collision_world.DetachScene();
-    object_collision_world.DetachLegacy();
 
     // 参照が 0 になった Cook データを表から外す。
     // Scene を離れた時点で誰も使っていないものは、ここで消える。
@@ -87,34 +73,6 @@ void framework::refresh_collision_world()
         attach_collision_world(scene);
     }
 
-    // 旧 Stage をつなぐ。移行済みなら衝突世界の側が問い合わせを止める。
-    //
-    // 【二重衝突しない理由】
-    //   ここで無条件に AttachLegacy しても、Hybrid で移行済みの移行元へは
-    //   一切問い合わせが飛ばない。「同じ地形を新旧両方へ登録しない」という
-    //   条件を、呼ぶ側ではなく衝突世界の中で守っている。
-    const bool legacy_stage_allowed = services.CollisionBackendMode() != 2 &&
-        !services.LegacyStageMigration().IsMigrated(
-            ReplayEngine::Scene::LegacyStageMigrationState::stage_source_id);
-    if (game_scene != nullptr && stage_asset_placed && legacy_stage_allowed)
-    {
-        object_collision_bridge.Attach(&game_scene->Gameplay().GetStage());
-        object_collision_bridge.SetActive(true);
-        object_collision_world.AttachLegacy(&object_collision_bridge,
-            ReplayEngine::Scene::LegacyStageMigrationState::stage_source_id);
-    }
-    else
-    {
-        object_collision_bridge.Detach();
-        object_collision_world.DetachLegacy();
-    }
-
-    // Scene 側の設定を毎フレーム反映する。
-    // Inspector から Backend Mode を変えた直後のフレームから効く。
-    object_collision_world.SetBackendMode(
-        ReplayEngine::Scene::SceneCollisionWorld::BackendModeFromInt(
-            services.CollisionBackendMode()));
-    object_collision_world.LegacyMigration() = services.LegacyStageMigration();
     services.SetPhysics(&object_collision_world);
 
     // 登録表の突き合わせと、Cook / Transform の更新。

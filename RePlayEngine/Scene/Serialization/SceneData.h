@@ -81,7 +81,7 @@ namespace ReplayEngine::Scene::Serialization
         // v1〜v6 は旧 SceneDocument 形式で、互換性を持たせない方針。
         // 将来 v10 へ上げる余地を残すため、読み込み側はバージョン判定を必ず通す。
         // v8 で「操作対象 ObjectID」を追加した。v7 も読める（操作対象なしとして扱う）。
-        // v9 で「Collision Backend Mode」と「旧 Stage の移行済み集合」を追加した。
+        // v9 で追加された COLLISION_STATE は v10 でも予約行として読み書きする。
         //
         // 【旧 Player 移行状態について】
         //   v8 / v9 の SCENE_STATE 行には「旧 Player の移行が済んでいるか」という
@@ -92,15 +92,9 @@ namespace ReplayEngine::Scene::Serialization
         //   書き出しは操作対象 ObjectID だけになるので、v9 のまま項目が減る。
         //
         // v8 以前をどう扱うか:
-        //   v7 … 操作対象なし・Backend Mode なしとして読む
-        //   v8 … 操作対象は読む。Backend Mode は既定値 Hybrid とする
-        //   どちらも読み込みは成功し、保存すると v9 になる。
-        //
-        //   Backend Mode の既定を Hybrid にする理由:
-        //   既存 Scene は旧 Stage の衝突で動いていた。ここで
-        //   Scene Colliders Only を既定にすると、開いた瞬間に床が消える。
-        //   Hybrid なら「MeshCollider があればそれを使い、無ければ旧 Stage」
-        //   となり、開く前と同じ挙動から始められる。
+        //   v7 … 操作対象なしとして読む
+        //   v8 … 操作対象を読む
+        //   どちらも読み込みは成功し、保存すると v10 になる。
         static constexpr int current_version = 10;
         static constexpr int minimum_supported_version = 7;
 
@@ -115,24 +109,12 @@ namespace ReplayEngine::Scene::Serialization
         // 何かを自動生成したり別の GameObject を自動で選んだりはしない。
         Core::ObjectID controlled_object;
 
-        // ---- Scene 単位の状態 (v9 以降) ------------------------------------
-        //
-        // 問い合わせ先の構成。0=Legacy Only / 1=Hybrid / 2=Scene Colliders Only。
-        // Component へ重複して保存しない。Scene に 1 つだけ持つ。
-        int collision_backend_mode = 1;
-
-        // 旧 Stage の衝突から MeshCollider へ移行済みの「移行元 ID」。
-        // 単一 bool ではないので、一部だけ移行した状態も表せる。
-        std::vector<std::uint64_t> migrated_legacy_sources;
-
         void Clear()
         {
             version = current_version;
             scene_name = "Scene";
             objects.clear();
             controlled_object = Core::ObjectID::Invalid();
-            collision_backend_mode = 1;
-            migrated_legacy_sources.clear();
         }
     };
 

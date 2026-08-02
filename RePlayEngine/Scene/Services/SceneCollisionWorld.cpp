@@ -26,34 +26,9 @@ namespace ReplayEngine::Scene
         switch (backend)
         {
         case CollisionBackend::SceneCollider: return "SceneCollider";
-        case CollisionBackend::LegacyStage:   return "LegacyStage";
         case CollisionBackend::None:          break;
         }
         return "None";
-    }
-
-    const char* SceneCollisionWorld::ToString(BackendMode mode) noexcept
-    {
-        switch (mode)
-        {
-        case BackendMode::LegacyOnly:         return "Legacy Only";
-        case BackendMode::Hybrid:             return "Hybrid";
-        case BackendMode::SceneCollidersOnly: return "Scene Colliders Only";
-        }
-        return "Hybrid";
-    }
-
-    SceneCollisionWorld::BackendMode SceneCollisionWorld::BackendModeFromInt(int value) noexcept
-    {
-        switch (value)
-        {
-        case 0: return BackendMode::LegacyOnly;
-        case 2: return BackendMode::SceneCollidersOnly;
-        case 1:
-        default: break;
-        }
-        // 未知の値は Hybrid へ倒す。壊れた Scene ファイルでも安全側に寄せる。
-        return BackendMode::Hybrid;
     }
 
     // -----------------------------------------------------------------------
@@ -80,29 +55,6 @@ namespace ReplayEngine::Scene
         last_sweep_source_ = CollisionSourceInfo{};
 
         scene_ = scene;
-    }
-
-    bool SceneCollisionWorld::ShouldConsultLegacy() const noexcept
-    {
-        if (legacy_ == nullptr) return false;
-
-        switch (mode_)
-        {
-        case BackendMode::LegacyOnly:
-            return true;
-
-        case BackendMode::Hybrid:
-            // この移行元が MeshCollider へ移行済みなら問い合わせない。
-            // ここで弾くことで、同じ地形が新旧両方から Hit として返らない。
-            //
-            // 単一 bool ではなく移行元 ID ごとに見ているので、
-            // 別の配置物がまだ未移行なら、そちらは引き続き Legacy が担当する。
-            return !legacy_migration_.IsMigrated(legacy_source_);
-
-        case BackendMode::SceneCollidersOnly:
-            return false;
-        }
-        return false;
     }
 
     // -----------------------------------------------------------------------
@@ -193,7 +145,6 @@ namespace ReplayEngine::Scene
 
     void SceneCollisionWorld::Refresh()
     {
-        legacy_consulted_ = false;
         active_collider_count_ = 0;
         blocking_collider_count_ = 0;
         trigger_collider_count_ = 0;
@@ -203,10 +154,6 @@ namespace ReplayEngine::Scene
 
         // 構成が変わったフレームだけ全走査する。
         ReconcileRegistrations();
-
-        // Legacy Only の間は Scene 側の Cook を走らせない。
-        // 使わないデータの読み込みでフレームを落とさないため。
-        const bool use_scene_colliders = mode_ != BackendMode::LegacyOnly;
 
         for (Registration& entry : entries_)
         {
@@ -227,7 +174,7 @@ namespace ReplayEngine::Scene
             if (entry.shape == Components::ColliderShape::Mesh)
             {
                 auto* mesh = static_cast<Components::MeshColliderComponent*>(collider);
-                if (use_scene_colliders && cook_cache_ != nullptr && entry.active)
+                if (cook_cache_ != nullptr && entry.active)
                 {
                     // Cook が走るのは「Asset か Cook 設定が変わったとき」だけ。
                     // Transform が変わっただけでは走らない。

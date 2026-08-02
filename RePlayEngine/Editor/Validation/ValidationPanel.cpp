@@ -119,10 +119,7 @@ namespace ReplayEngine::Editor
                     ImGui::Text("Mode: %s", context.PlayMode() ? "Runtime" : "Edit");
                     ImGui::Text("Dirty: %s", context.Dirty() ? "Yes" : "No");
                     ImGui::Text("Render Items: %zu", render_item_count);
-                    ImGui::Text("Collision Backend: %d",
-                        scene->Services().CollisionBackendMode());
-                    ImGui::Text("Legacy migrated sources: %zu",
-                        scene->Services().LegacyStageMigration().Count());
+                    ImGui::TextUnformatted("Collision Backend: Scene Colliders Only");
                     ImGui::Text("Gameplay events: %zu",
                         scene->Services().GameplayEvents().Events().size());
                 }
@@ -134,8 +131,6 @@ namespace ReplayEngine::Editor
                         collision_world->BlockingColliderCount(),
                         collision_world->TriggerColliderCount(),
                         collision_world->MeshColliderCount());
-                    ImGui::Text("Legacy consulted: %s",
-                        collision_world->LegacyConsulted() ? "Yes" : "No");
                 }
                 ImGui::EndTabItem();
             }

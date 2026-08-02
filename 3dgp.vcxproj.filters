@@ -76,9 +76,6 @@
     <Filter Include="RePlayEngine\Editor\Style">
       <UniqueIdentifier>{de8d5c16-b5f0-4fe8-a1b0-5fa2b4b587bc}</UniqueIdentifier>
     </Filter>
-    <Filter Include="RePlayEngine\Editor\Migration">
-      <UniqueIdentifier>{66140235-63d4-4f1c-8866-f70dd5f35145}</UniqueIdentifier>
-    </Filter>
     <Filter Include="RePlayEngine\Editor\Validation">
       <UniqueIdentifier>{c34f60c3-43b6-4631-a961-573bc2dd8d44}</UniqueIdentifier>
     </Filter>
@@ -244,9 +241,6 @@
     <Filter Include="RePlayEngine\Rendering\Adapter">
       <UniqueIdentifier>{9a04e18f-e000-4e5f-8ae8-554958271567}</UniqueIdentifier>
     </Filter>
-    <Filter Include="RePlayEngine\Scene\Legacy">
-      <UniqueIdentifier>{9ffec2b4-e3db-4b4a-8416-868338113f64}</UniqueIdentifier>
-    </Filter>
     <Filter Include="RePlayEngine\Scene\Services">
       <UniqueIdentifier>{29522b67-4031-4b2a-8029-c9b11a28aa85}</UniqueIdentifier>
     </Filter>
@@ -288,9 +282,6 @@
     <ClCompile Include="RePlayEngine\Assets\AsyncAssetManager.cpp">
       <Filter>RePlayEngine\Assets</Filter>
     </ClCompile>
-    <ClCompile Include="RePlayEngine\Editor\Commands\UndoStack.cpp">
-      <Filter>RePlayEngine\Editor\Commands</Filter>
-    </ClCompile>
     <ClCompile Include="RePlayEngine\Editor\Gizmo\TransformGizmo.cpp">
       <Filter>RePlayEngine\Editor\Gizmo</Filter>
     </ClCompile>
@@ -311,9 +302,6 @@
     </ClCompile>
     <ClCompile Include="RePlayEngine\Physics\MeshCollisionCooker.cpp">
       <Filter>RePlayEngine\Physics</Filter>
-    </ClCompile>
-    <ClCompile Include="RePlayEngine\Scene\SceneDocument.cpp">
-      <Filter>RePlayEngine\Scene</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Scene\BootLogoScene.cpp">
       <Filter>RePlayEngine\Scene</Filter>
@@ -450,12 +438,6 @@
     <ClCompile Include="RePlayEngine\Rendering\ShaderPresets\ShaderPresetSerializer.cpp">
       <Filter>RePlayEngine\Rendering\ShaderPresets</Filter>
     </ClCompile>
-    <ClCompile Include="Source\game\stage.cpp">
-      <Filter>Source\Game</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\game\raycast.cpp">
-      <Filter>Source\Game</Filter>
-    </ClCompile>
     <ClCompile Include="Source\game\game_scene.cpp">
       <Filter>Source\Game</Filter>
     </ClCompile>
@@ -561,9 +543,6 @@
     <ClCompile Include="Source\app\Runtime\framework_gameobject_scene.cpp">
       <Filter>Source\App\Runtime</Filter>
     </ClCompile>
-    <ClCompile Include="RePlayEngine\Scene\Legacy\LegacySceneDocumentSerializer.cpp">
-      <Filter>RePlayEngine\Scene\Legacy</Filter>
-    </ClCompile>
     <ClCompile Include="RePlayEngine\Scene\Serialization\PrefabSerializer.cpp">
       <Filter>RePlayEngine\Scene\Serialization</Filter>
     </ClCompile>
@@ -591,9 +570,6 @@
     <ClCompile Include="RePlayEngine\Components\Rendering\MeshRendererComponent.cpp">
       <Filter>RePlayEngine\Components\Rendering</Filter>
     </ClCompile>
-    <ClCompile Include="Source\game\legacy_stage_collision_bridge.cpp">
-      <Filter>Source\Game</Filter>
-    </ClCompile>
     <ClCompile Include="Source\game\legacy_camera_basis_bridge.cpp">
       <Filter>Source\Game</Filter>
     </ClCompile>
@@ -605,9 +581,6 @@
     </ClCompile>
     <ClCompile Include="RePlayEngine\Editor\Style\EditorStyle.cpp">
       <Filter>RePlayEngine\Editor\Style</Filter>
-    </ClCompile>
-    <ClCompile Include="RePlayEngine\Editor\Migration\LegacyStageConverter.cpp">
-      <Filter>RePlayEngine\Editor\Migration</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Editor\Validation\SceneValidator.cpp">
       <Filter>RePlayEngine\Editor\Validation</Filter>
@@ -687,9 +660,6 @@
     <ClCompile Include="RePlayEngine\Rendering\RenderStats.cpp">
       <Filter>RePlayEngine\Rendering</Filter>
     </ClCompile>
-    <ClCompile Include="RePlayEngine\Scene\UIHierarchy.cpp">
-      <Filter>RePlayEngine\Scene</Filter>
-    </ClCompile>
     <ClCompile Include="Source\app\Editor\framework_render_stats.cpp">
       <Filter>Source\App\Editor</Filter>
     </ClCompile>
@@ -740,9 +710,6 @@
     <ClInclude Include="RePlayEngine\Rendering\Passes\SsaoPass.h">
       <Filter>RePlayEngine\Rendering\Passes</Filter>
     </ClInclude>
-    <ClInclude Include="RePlayEngine\Editor\Commands\UndoStack.h">
-      <Filter>RePlayEngine\Editor\Commands</Filter>
-    </ClInclude>
     <ClInclude Include="RePlayEngine\Editor\Gizmo\TransformGizmo.h">
       <Filter>RePlayEngine\Editor\Gizmo</Filter>
     </ClInclude>
@@ -777,9 +744,6 @@
       <Filter>RePlayEngine\Scene</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Scene\LoadingScene.h">
-      <Filter>RePlayEngine\Scene</Filter>
-    </ClInclude>
-    <ClInclude Include="RePlayEngine\Scene\SceneDocument.h">
       <Filter>RePlayEngine\Scene</Filter>
     </ClInclude>
     <ClInclude Include="Source\core\framebuffer.h">
@@ -908,12 +872,6 @@
     <ClInclude Include="RePlayEngine\Rendering\ShaderPresets\ShaderPresetSerializer.h">
       <Filter>RePlayEngine\Rendering\ShaderPresets</Filter>
     </ClInclude>
-    <ClInclude Include="Source\game\stage.h">
-      <Filter>Source\Game</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\game\raycast.h">
-      <Filter>Source\Game</Filter>
-    </ClInclude>
     <ClInclude Include="Source\game\game_scene.h">
       <Filter>Source\Game</Filter>
     </ClInclude>
@@ -1025,9 +983,6 @@
     <ClInclude Include="RePlayEngine\Rendering\Adapter\SceneRenderCollector.h">
       <Filter>RePlayEngine\Rendering\Adapter</Filter>
     </ClInclude>
-    <ClInclude Include="RePlayEngine\Scene\Legacy\LegacySceneDocumentSerializer.h">
-      <Filter>RePlayEngine\Scene\Legacy</Filter>
-    </ClInclude>
     <ClInclude Include="RePlayEngine\Scene\Serialization\PrefabSerializer.h">
       <Filter>RePlayEngine\Scene\Serialization</Filter>
     </ClInclude>
@@ -1070,9 +1025,6 @@
     <ClInclude Include="RePlayEngine\Components\Rendering\SkinnedMeshRendererComponent.h">
       <Filter>RePlayEngine\Components\Rendering</Filter>
     </ClInclude>
-    <ClInclude Include="Source\game\legacy_stage_collision_bridge.h">
-      <Filter>Source\Game</Filter>
-    </ClInclude>
     <ClInclude Include="Source\game\legacy_camera_basis_bridge.h">
       <Filter>Source\Game</Filter>
     </ClInclude>
@@ -1084,9 +1036,6 @@
     </ClInclude>
     <ClInclude Include="RePlayEngine\Editor\Style\EditorStyle.h">
       <Filter>RePlayEngine\Editor\Style</Filter>
-    </ClInclude>
-    <ClInclude Include="RePlayEngine\Editor\Migration\LegacyStageConverter.h">
-      <Filter>RePlayEngine\Editor\Migration</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Editor\Validation\SceneValidator.h">
       <Filter>RePlayEngine\Editor\Validation</Filter>
@@ -1133,9 +1082,6 @@
     <ClInclude Include="RePlayEngine\Physics\ShapeSweep.h">
       <Filter>RePlayEngine\Physics</Filter>
     </ClInclude>
-    <ClInclude Include="RePlayEngine\Scene\Services\LegacyStageMigrationState.h">
-      <Filter>RePlayEngine\Scene\Services</Filter>
-    </ClInclude>
     <ClInclude Include="RePlayEngine\Editor\Debug\ColliderDebugDraw.h">
       <Filter>RePlayEngine\Editor\Debug</Filter>
     </ClInclude>
@@ -1165,9 +1111,6 @@
     </ClInclude>
     <ClInclude Include="RePlayEngine\Rendering\RenderStats.h">
       <Filter>RePlayEngine\Rendering</Filter>
-    </ClInclude>
-    <ClInclude Include="RePlayEngine\Scene\UIHierarchy.h">
-      <Filter>RePlayEngine\Scene</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

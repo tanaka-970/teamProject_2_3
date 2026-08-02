@@ -246,21 +246,6 @@ namespace ReplayEngine::Editor
                 "Pointは8、Spotは4以下にしてください。");
         }
 
-        if (scene.Services().CollisionBackendMode() != 2)
-        {
-            Add(issues, ValidationSeverity::Warning, "LEGACY_COLLISION_ACTIVE",
-                "Collision BackendにLegacy互換経路が残っています。",
-                "Legacy Stageを変換後、Scene Colliders Onlyへ切り替えてください。");
-        }
-        if (scene.Services().CollisionBackendMode() != 2 &&
-            !scene.Services().LegacyStageMigration().IsMigrated(
-            Scene::LegacyStageMigrationState::stage_source_id))
-        {
-            Add(issues, ValidationSeverity::Warning, "LEGACY_STAGE_UNMIGRATED",
-                "旧Stageが未変換です。",
-                "ProjectパネルのLegacy Stage Converterを実行してください。");
-        }
-
         return issues;
     }
 }

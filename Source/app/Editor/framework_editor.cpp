@@ -1,10 +1,8 @@
 ﻿#include "framework.h"
-#include "../../RePlayEngine/Scene/Legacy/LegacySceneDocumentSerializer.h"
 #include "../../RePlayEngine/Components/Gameplay/CharacterMotorComponent.h"
 #include "../../RePlayEngine/Components/Gameplay/PlayerControllerComponent.h"
 #include "../../RePlayEngine/Components/Gameplay/PlayerInputComponent.h"
 #include "../../RePlayEngine/Editor/Style/EditorStyle.h"
-#include "../../RePlayEngine/Editor/Migration/LegacyStageConverter.h"
 #include "../../RePlayEngine/Scene/Serialization/SceneData.h"
 #include "../../RePlayEngine/Scene/Serialization/SceneSerializer.h"
 #include "shader.h"
@@ -61,7 +59,6 @@ void framework::apply_toon_preset(int preset)
 
 void framework::reset_editor_values()
 {
-    const std::string preserved_scene_name = editor_scene_document.SceneName();
     auto& post = post_process.GetSettings();
     camera_position = { 0.0f, 4.0f, -10.0f, 1.0f };
     light_direction = { 0.300f, 0.000f, 0.500f, 0.0f };
@@ -77,16 +74,6 @@ void framework::reset_editor_values()
     enable_bloom_shader = enable_fxaa_shader = true;
     enable_vignette_shader = enable_static_meshes = false;
     enable_scene_game = enable_stage_shader = true;
-    enable_stage_render = false;
-    stage_asset_placed = false;
-    active_stage_placement_id = 0;
-    editor_scene_document.Clear();
-    editor_scene_document.SetSceneName(preserved_scene_name);
-    runtime_scene_document.Clear();
-    scene_undo_stack.Clear();
-    selected_scene_entity_id = 0;
-    selected_scene_entity_ids.clear();
-    copied_scene_entities.clear();
     enable_particles = enable_trail = false;
     enable_deferred = true;
     shading_per_stage = SHADING_MODEL_PBR;
@@ -133,27 +120,15 @@ void framework::configure_editor_style()
 void framework::set_editor_workspace(editor_workspace workspace)
 {
     if (active_editor_workspace == workspace) return;
-    if (active_editor_workspace == editor_workspace::placement && !stage_asset_placed)
-    {
-        enable_stage_render = false;
-    }
     active_editor_workspace = workspace;
     editor_layout_dirty = true;
-    const auto& services = active_object_scene().Services();
-    const bool legacy_stage_allowed = services.CollisionBackendMode() != 2 &&
-        !services.LegacyStageMigration().IsMigrated(
-            ReplayEngine::Scene::LegacyStageMigrationState::stage_source_id);
     switch (active_editor_workspace)
     {
     case editor_workspace::placement:
-        selected_editor_object = legacy_stage_allowed ?
-            editor_selection::stage : editor_selection::game_object;
-        enable_stage_render = legacy_stage_allowed &&
-            (skinned_meshes[1] != nullptr || stage_gltf_model != nullptr);
+        selected_editor_object = editor_selection::game_object;
         break;
     case editor_workspace::modeling:
-        selected_editor_object = legacy_stage_allowed ?
-            editor_selection::stage : editor_selection::game_object;
+        selected_editor_object = editor_selection::game_object;
         break;
     case editor_workspace::animation:
         // アニメーションは AnimatorComponent が持つ。
@@ -162,10 +137,8 @@ void framework::set_editor_workspace(editor_workspace workspace)
         break;
     case editor_workspace::rendering: selected_editor_object = editor_selection::rendering; break;
     case editor_workspace::shader_adjustment:
-        if (selected_editor_object != editor_selection::stage &&
-            selected_editor_object != editor_selection::rendering)
-            selected_editor_object = legacy_stage_allowed ?
-                editor_selection::stage : editor_selection::rendering;
+        if (selected_editor_object != editor_selection::rendering)
+            selected_editor_object = editor_selection::rendering;
         break;
     default: selected_editor_object = editor_selection::world; break;
     }
@@ -174,10 +147,6 @@ void framework::set_editor_workspace(editor_workspace workspace)
 void framework::set_edit_mode(bool enabled)
 {
     if (edit_mode_active == enabled) return;
-    if (!enabled)
-        runtime_scene_document = editor_scene_document;
-    else
-        runtime_scene_document.Clear();
     edit_mode_active = enabled;
     if (!enabled)
     {
@@ -529,13 +498,6 @@ void framework::draw_search_results()
     result("カメラを編集", "camera カメラ 視点", editor_selection::camera);
     result("操作キャラクターを編集", "player プレイヤー 操作 キャラクター character",
         editor_selection::game_object);
-    const auto& search_services = active_object_scene().Services();
-    const bool search_legacy_stage = search_services.CollisionBackendMode() != 2 &&
-        !search_services.LegacyStageMigration().IsMigrated(
-            ReplayEngine::Scene::LegacyStageMigrationState::stage_source_id);
-    if (search_legacy_stage)
-        result("Legacy Stage Sourceを編集", "legacy stage ステージ 移行元 地形",
-            editor_selection::stage);
     result("描画設定を開く", "render rendering 描画 deferred shader", editor_selection::rendering);
     result("ポスト処理を開く", "post process ポスト bloom fxaa", editor_selection::post_process);
     if (matches("edit play mode 編集 プレイ") && ImGui::Selectable("編集／プレイモードを切り替える"))
@@ -591,15 +553,6 @@ void framework::draw_scene_hierarchy()
         // 「プレイヤー」という固定項目は無い。
         // 操作キャラクターは下の GameObject ツリーへ通常の GameObject として現れ、
         // 名前も自由に変えられる。同じ対象を 2 か所から編集できる状態は作らない。
-        const auto& hierarchy_services = active_object_scene().Services();
-        const bool show_legacy_stage = hierarchy_services.CollisionBackendMode() != 2 &&
-            !hierarchy_services.LegacyStageMigration().IsMigrated(
-                ReplayEngine::Scene::LegacyStageMigrationState::stage_source_id);
-        if (show_legacy_stage)
-        {
-            item(stage_asset_placed ? "Legacy Stage Source（配置済み）" :
-                "Legacy Stage Source（未配置）", editor_selection::stage);
-        }
         item("描画設定", editor_selection::rendering);
         item("ポスト処理", editor_selection::post_process);
         ImGui::TreePop();
@@ -643,119 +596,7 @@ void framework::draw_scene_hierarchy()
 void framework::draw_project_panel()
 {
     ImGui::Begin("プロジェクト");
-    if (ImGui::CollapsingHeader("Legacy Stage Migration（原本は読取専用）"))
-    {
-        ImGui::Text("現在: %s  [%s]", editor_scene_document.SceneName().c_str(),
-            editor_scene_document.SceneIdentifier().c_str());
-        if (ImGui::Button("新しいシーン...")) ImGui::OpenPopup("NewScenePopup");
-        if (ImGui::BeginPopupModal("NewScenePopup", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
-        {
-            static char new_scene_name[256] = "新しいシーン";
-            ImGui::InputText("シーン名", new_scene_name, IM_ARRAYSIZE(new_scene_name));
-            if (ImGui::Button("作成", { 100.0f, 0.0f }))
-            {
-                create_scene_document(new_scene_name);
-                strncpy_s(new_scene_name, "新しいシーン", _TRUNCATE);
-                ImGui::CloseCurrentPopup();
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("キャンセル", { 100.0f, 0.0f })) ImGui::CloseCurrentPopup();
-            ImGui::EndPopup();
-        }
-
-        std::error_code scene_error;
-        const std::filesystem::path scene_folder = std::filesystem::path("resources") / "Scenes";
-        if (std::filesystem::exists(scene_folder, scene_error))
-        {
-            std::vector<std::filesystem::path> scene_paths;
-            for (const auto& entry : std::filesystem::directory_iterator(scene_folder, scene_error))
-            {
-                // ここが列挙するのは旧ステージ配置記録 (.replaystage)。
-                // 新しい GameObject シーン (.replayscene) は
-                // load_object_scene / save_object_scene が扱うため、ここへは出さない。
-                if (scene_error || !entry.is_regular_file() ||
-                    entry.path().extension() !=
-                        ReplayEngine::Scene::Legacy::LegacySceneDocumentSerializer::file_extension)
-                    continue;
-                scene_paths.push_back(entry.path());
-            }
-            std::sort(scene_paths.begin(), scene_paths.end());
-            for (const auto& scene_path : scene_paths)
-            {
-                const bool current = scene_path.lexically_normal() == current_scene_path.lexically_normal();
-                ImGui::PushID(scene_path.generic_u8string().c_str());
-                if (ImGui::Selectable(scene_path.stem().u8string().c_str(), current))
-                {
-                    save_scene_document(false);
-                    current_scene_path = scene_path;
-                    load_scene_document(false);
-                }
-                ImGui::PopID();
-            }
-        }
-        ImGui::Separator();
-        if (ImGui::Button("Convert Legacy Stage To GameObjects"))
-        {
-            ReplayEngine::Editor::LegacyStageConverter::Result result;
-            std::string error;
-            object_editor_context.BeginEdit("Legacy StageをGameObjectへ変換");
-            if (!ReplayEngine::Editor::LegacyStageConverter::Convert(
-                editor_scene_document, object_scene, result, error))
-            {
-                object_editor_context.CancelEdit();
-                object_editor_context.SetStatus("Legacy変換失敗: " + error);
-            }
-            else if (result.already_converted)
-            {
-                object_editor_context.CancelEdit();
-                object_editor_context.SetStatus("Legacy Stageは変換済みです（二重変換しません）");
-            }
-            else
-            {
-                object_editor_context.CommitEdit();
-                object_editor_context.Selection().Select(result.stage_root, false);
-                selected_editor_object = editor_selection::game_object;
-
-                std::string stem = editor_scene_document.SceneName();
-                for (char& character : stem)
-                {
-                    if (character == '<' || character == '>' || character == ':' ||
-                        character == '"' || character == '/' || character == '\\' ||
-                        character == '|' || character == '?' || character == '*') character = '_';
-                }
-                if (stem.empty()) stem = "LegacyStage";
-                std::filesystem::path converted = std::filesystem::path("resources/Scenes") /
-                    (stem + "_Converted.replayscene");
-                std::error_code filesystem_error;
-                for (int suffix = 2; std::filesystem::exists(converted, filesystem_error) &&
-                    !filesystem_error; ++suffix)
-                {
-                    converted = std::filesystem::path("resources/Scenes") /
-                        (stem + "_Converted_" + std::to_string(suffix) + ".replayscene");
-                }
-
-                if (ReplayEngine::Editor::LegacyStageConverter::SaveAndVerify(
-                    object_scene, converted, error))
-                {
-                    object_scene_path = converted;
-                    object_editor_context.SetScenePath(converted);
-                    object_editor_context.ClearDirty();
-                    object_editor_context.SetStatus("Legacy Stageを変換・再読込検証しました: " +
-                        std::to_string(result.mappings.size()) + " objects / " +
-                        std::to_string(result.collider_count) + " colliders");
-                }
-                else
-                {
-                    object_editor_context.SetStatus("変換Scene保存失敗（原本は維持）: " + error);
-                }
-            }
-        }
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("旧データを変更せず、Scene v9のGameObjectへ一方向変換します");
-        ImGui::Separator();
-    }
-    // GameObject シーン (.replayscene) の操作。
-    // 上の「シーン」欄が扱う旧ステージ配置記録 (.replaystage) とは別物。
+    // GameObject Scene (.replayscene) is the only authoring format.
     if (ImGui::CollapsingHeader("GameObject シーン", ImGuiTreeNodeFlags_DefaultOpen))
     {
         ImGui::Text("現在: %s", active_object_scene().Name().c_str());
@@ -872,24 +713,9 @@ void framework::draw_project_panel()
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("Colliderは左の設定が有効な場合だけ明示的に追加します");
     ImGui::Separator();
-    ImGui::Text("シーン配置記録: %zu", editor_scene_document.Entities().size());
-    for (const auto& entity : editor_scene_document.Entities())
-    {
-        ImGui::BulletText("%s  [%s]", entity.name.c_str(), entity.identifier.c_str());
-        if (entity.model_renderer)
-        {
-            ImGui::Indent();
-            ImGui::TextDisabled("Asset: %s  GUID: %.8s",
-                entity.model_renderer->asset_name.empty() ? "（旧データ）" :
-                    entity.model_renderer->asset_name.c_str(),
-                entity.model_renderer->asset_guid.c_str());
-            ImGui::Unindent();
-        }
-    }
-    ImGui::Separator();
     ImGui::TextDisabled("現在のシーンが読み込んでいる素材");
     ImGui::BulletText("キャラクター / Renderer Component の AssetGUID から解決");
-    ImGui::BulletText("ステージ素材 / ファイルから選択");
+    ImGui::BulletText("Stage / Model / Prefab / Material Asset");
     ImGui::BulletText("IBL / 拡散・鏡面・BRDF LUT");
     ImGui::BulletText("シェーダー / PBR・Toon・Deferred・PostProcess");
     ImGui::End();
@@ -928,28 +754,11 @@ void framework::draw_workspace_panel()
     case editor_workspace::placement:
         ImGui::TextUnformatted("オブジェクト配置Workspace");
         ImGui::TextDisabled("ProjectのAsset BrowserからModelやPrefabをScene Viewへ配置します。");
-        {
-            const auto& services = active_object_scene().Services();
-            const bool legacy_stage_allowed = services.CollisionBackendMode() != 2 &&
-                !services.LegacyStageMigration().IsMigrated(
-                    ReplayEngine::Scene::LegacyStageMigrationState::stage_source_id);
-            if (legacy_stage_allowed)
-            {
-                ImGui::Separator();
-                ImGui::TextUnformatted("Legacy Stage Source");
-                draw_stage_placement_controls();
-            }
-            else
-            {
-                ImGui::TextDisabled(
-                    "Legacy Stage配置は無効です。GameObjectとしてAssetを配置してください。");
-            }
-        }
         break;
     case editor_workspace::modeling:
         ImGui::TextUnformatted("モデリングWorkspace");
         ImGui::TextDisabled("形状編集用のテーブルです。配置操作は配置Workspaceへ分離しています。");
-        if (ImGui::Button("ステージ素材を選択")) selected_editor_object = editor_selection::stage;
+        if (ImGui::Button("選択GameObjectを編集")) selected_editor_object = editor_selection::game_object;
         ImGui::SameLine();
         if (ImGui::Button("配置Workspaceへ")) set_editor_workspace(editor_workspace::placement);
         break;
@@ -1179,17 +988,12 @@ void framework::draw_controlled_character_diagnostics()
     ImGui::Separator();
     ImGui::Text("Collision available: %s",
         object_collision_world.CollisionAvailable() ? "true" : "false");
-    ImGui::Text("Backend mode: %s",
-        ReplayEngine::Scene::SceneCollisionWorld::ToString(
-            object_collision_world.GetBackendMode()));
+    ImGui::TextUnformatted("Backend mode: Scene Colliders Only");
     ImGui::Text("Active colliders: %zu (blocking %zu / trigger %zu / mesh %zu)",
         object_collision_world.ActiveColliderCount(),
         object_collision_world.BlockingColliderCount(),
         object_collision_world.TriggerColliderCount(),
         object_collision_world.MeshColliderCount());
-    ImGui::Text("Legacy consulted: %s",
-        object_collision_world.LegacyConsulted() ? "true" : "false");
-
     const auto& ground_source = object_collision_world.LastGroundSource();
     const auto& sweep_source = object_collision_world.LastSweepSource();
     ImGui::Text("Ground hit from: %s (Object %s / Collider %u)",

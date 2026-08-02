@@ -2,7 +2,6 @@
 
 #include "ICameraBasisProvider.h"
 #include "IPhysicsQueryService.h"
-#include "LegacyStageMigrationState.h"
 #include "RespawnService.h"
 #include "../../Core/ObjectID/ObjectID.h"
 
@@ -40,29 +39,6 @@ namespace ReplayEngine::Scene
         Core::ObjectID ControlledObject() const noexcept { return controlled_object_; }
         void SetControlledObject(Core::ObjectID id) noexcept { controlled_object_ = id; }
 
-        // ---- 衝突まわりの Scene 単位の設定 ----------------------------------
-        //
-        // 【なぜ Scene が持つのか】
-        //   Backend Mode を Collider ごとの Property にすると、
-        //   同じ Scene の中に「Legacy を見る Collider」と「見ない Collider」が
-        //   混在してしまい、二重衝突の管理が破綻する。
-        //   Scene に 1 つだけ持たせて、SceneCollisionWorld が読む形にしてある。
-        //
-        //   実体はここ（Scene の状態）にあり、SceneCollisionWorld へは
-        //   framework が毎フレーム流し込む。Scene ファイルへ保存されるのもここ。
-        //
-        // 0 = Legacy Only / 1 = Hybrid / 2 = Scene Colliders Only
-        int CollisionBackendMode() const noexcept { return collision_backend_mode_; }
-        void SetCollisionBackendMode(int mode) noexcept { collision_backend_mode_ = mode; }
-
-        // 旧 Stage の衝突から MeshCollider へ移行した「移行元」の集合。
-        // 単一 bool ではないので、一部だけ移行した状態も表せる。
-        LegacyStageMigrationState& LegacyStageMigration() noexcept { return legacy_stage_; }
-        const LegacyStageMigrationState& LegacyStageMigration() const noexcept
-        {
-            return legacy_stage_;
-        }
-
         // ---- Stage Gameplay -------------------------------------------------
         //
         // 復帰地点と出来事の記録。Scene が値で持つので Singleton にならない。
@@ -84,18 +60,14 @@ namespace ReplayEngine::Scene
             physics_ = nullptr;
             controlled_object_ = Core::ObjectID::Invalid();
             playing_ = false;
-            // Backend Mode と旧 Stage の移行済み集合はここでリセットしない。
-            // Scene の内容に属する情報なので、サービス参照の付け替えでは消えてはいけない。
         }
 
     private:
         const ICameraBasisProvider* camera_basis_ = nullptr;
         const IPhysicsQueryService* physics_ = nullptr;
         Core::ObjectID controlled_object_;
-        LegacyStageMigrationState legacy_stage_;
         RespawnService respawn_;
         GameplayEventLog gameplay_events_;
-        int collision_backend_mode_ = 1;   // Hybrid
         bool playing_ = false;
     };
 }

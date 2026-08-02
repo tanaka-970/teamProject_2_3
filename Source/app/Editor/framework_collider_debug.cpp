@@ -20,8 +20,6 @@
 
 namespace
 {
-    using BackendMode = ReplayEngine::Scene::SceneCollisionWorld::BackendMode;
-
     // ワールド座標を画面座標へ落とす。
     // カメラの後ろにある点は false を返し、線ごと捨てる
     // （投影すると画面の反対側へ跳ねて、無関係な位置に線が出るため）。
@@ -101,46 +99,8 @@ void framework::draw_collision_diagnostics_panel()
     // ---- 問い合わせ先の構成 ------------------------------------------------
     ImGui::TextUnformatted(u8"問い合わせ先");
     ImGui::Separator();
-
-    int backend = services.CollisionBackendMode();
-    const char* backend_labels[]{ "Legacy Only", "Hybrid", "Scene Colliders Only" };
-    if (backend < 0 || backend > 2) backend = 1;
-    if (ImGui::Combo(u8"Backend Mode", &backend, backend_labels, 3))
-    {
-        // Scene 単位の設定なので Scene の状態を書き換える。
-        // Collider ごとには保存しない。
-        services.SetCollisionBackendMode(backend);
-        object_editor_context.MarkDirty();
-    }
-    ImGui::TextDisabled(u8"Scene 単位の設定です。Collider ごとには保存されません。");
-
-    // ---- 旧 Stage の移行状態 ------------------------------------------------
-    ImGui::Spacing();
-    ImGui::TextUnformatted(u8"旧 Stage の移行");
-    ImGui::Separator();
-
-    auto& migration = services.LegacyStageMigration();
-    const auto stage_source =
-        ReplayEngine::Scene::LegacyStageMigrationState::stage_source_id;
-    const bool stage_migrated = migration.IsMigrated(stage_source);
-
-    ImGui::Text(u8"旧 Stage: %s", stage_migrated ? u8"移行済み" : u8"未移行");
-    ImGui::Text(u8"移行済みの移行元: %zu 件", migration.Count());
-    ImGui::Text(u8"旧 Stage へ問い合わせた: %s",
-        object_collision_world.LegacyConsulted() ? u8"はい" : u8"いいえ");
-
-    if (!stage_migrated && ImGui::Button(u8"旧 Stage を移行済みにする"))
-    {
-        // 移行済みにすると、Hybrid でも旧 Stage へ問い合わせなくなる。
-        // 同じ地形へ二重に当たらないための唯一のスイッチ。
-        migration.MarkMigrated(stage_source, ReplayEngine::Core::ObjectID::Invalid());
-        object_editor_context.MarkDirty();
-    }
-    if (stage_migrated && ImGui::Button(u8"旧 Stage の移行を取り消す"))
-    {
-        migration.ClearMigrated(stage_source);
-        object_editor_context.MarkDirty();
-    }
+    ImGui::TextUnformatted(u8"Scene Colliders Only");
+    ImGui::TextDisabled(u8"Runtime衝突はGameObject Colliderへ一本化されています。");
 
     // ---- 登録表 --------------------------------------------------------------
     ImGui::Spacing();

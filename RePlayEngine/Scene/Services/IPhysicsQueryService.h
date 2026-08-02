@@ -8,16 +8,11 @@
 
 namespace ReplayEngine::Scene
 {
-    // Hit がどの経路から返ってきたか。
-    //
-    // 移行期間中は「Scene 上の Collider」と「旧 Stage」の 2 経路がある。
-    // どちらから返ったかを Hit へ記録しておくと、
-    // 診断表示で「今の接地はどっち由来か」を画面から確認できる。
+    // Hit がScene Colliderから返ったことを診断へ伝える。
     enum class CollisionBackend
     {
         None = 0,
-        SceneCollider,   // Scene 上の MeshCollider などから
-        LegacyStage,     // 旧 Stage の衝突メッシュから（移行完了後に消える）
+        SceneCollider,
     };
 
     const char* ToString(CollisionBackend backend) noexcept;
@@ -32,7 +27,6 @@ namespace ReplayEngine::Scene
     {
         CollisionBackend backend = CollisionBackend::None;
 
-        // SceneCollider の場合のみ有効。LegacyStage では無効 ID になる。
         Core::ObjectID object;
         ColliderID collider = invalid_collider_id;
     };
@@ -78,12 +72,8 @@ namespace ReplayEngine::Scene
     // 地形との問い合わせ窓口。
     //
     // なぜこれを挟むか:
-    //   旧 SceneGame は GameRaycast::SphereCastStageDown(const Stage&, ...) を
-    //   直接呼んでおり、移動処理が Stage 具象型に縛られていた。
-    //
     //   CharacterMotorComponent はこのインターフェイスだけを見る。
-    //   Scene 上の Collider を使うのか旧 Stage を使うのかは
-    //   実装（SceneCollisionWorld）の中だけで決まり、Motor は違いを認識しない。
+    //   実装はSceneCollisionWorldへ一本化されている。
     //
     // 実装は Scene の外側（framework）が用意し、
     // SceneServices 経由で非所有参照として渡す。
@@ -115,8 +105,6 @@ namespace ReplayEngine::Scene
         // ---- 絞り込み付きの問い合わせ ----------------------------------------
         //
         // 既定の実装はフィルタを無視して、上のフィルタ無し版へ委譲する。
-        // 旧 Stage のように Layer の概念を持たない実装は、この既定のままでよい。
-        //
         // 純粋仮想にしないのは、対応していない実装へ
         // 「対応しているふり」を強制しないため。
         virtual bool SweepSphereFiltered(const DirectX::XMFLOAT3& start,

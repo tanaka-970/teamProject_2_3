@@ -7,11 +7,10 @@
 #include "imgui/imgui.h"
 #endif
 
-void SceneGame::Initialize(skinned_mesh* stage_mesh, float aspect)
+void SceneGame::Initialize(float aspect)
 {
     camera.SetPerspectiveFov(DirectX::XMConvertToRadians(50.0f),
                              aspect, 0.1f, 10000.0f);
-    stage.SetModel(stage_mesh);
     ResetGameplay();
 }
 
@@ -19,8 +18,6 @@ void SceneGame::ResetGameplay()
 {
     camera_yaw_offset = 0.0f;
     camera_pitch_offset = 0.0f;
-
-    stage.ResetTransform();
 
     camera.SetLookAt({ 0.0f, 2.25f, -6.5f }, { 0.0f, 1.0f, 0.0f }, { 0, 1, 0 });
     controller.SyncCameraToController(camera);
@@ -32,14 +29,6 @@ void SceneGame::SetAspect(float aspect)
     {
         camera.SetPerspectiveFov(DirectX::XMConvertToRadians(50.0f), aspect, 0.1f, 10000.0f);
     }
-}
-
-void SceneGame::SetLegacyStageActive(bool active)
-{
-    // 旧ステージの衝突メッシュを有効・無効にするだけ。
-    // 二重衝突を防ぐ判断は SceneCollisionWorld 側の「移行済み集合」が行う。
-    stage.GetCollisionMesh().SetEnabled(active);
-    legacy_stage_active = active;
 }
 
 void SceneGame::FollowCameraTarget(const DirectX::XMFLOAT3& target_position,
@@ -113,13 +102,6 @@ void SceneGame::UpdateCameraRotationInput(float dt)
     if (camera_pitch_offset < -lim) camera_pitch_offset = -lim;
 }
 
-void SceneGame::Update(float dt)
-{
-    // ここで動かすのは旧ステージだけ。
-    // 操作対象の更新は Scene の Component が行い、この関数は一切関与しない。
-    if (legacy_stage_active) stage.Update(dt);
-}
-
 void SceneGame::DrawCameraGUI()
 {
 #ifdef USE_IMGUI
@@ -129,35 +111,3 @@ void SceneGame::DrawCameraGUI()
 #endif
 }
 
-void SceneGame::DrawStageGUI()
-{
-#ifdef USE_IMGUI
-    if (ImGui::CollapsingHeader("トランスフォーム", ImGuiTreeNodeFlags_DefaultOpen))
-    {
-        DirectX::XMFLOAT3 sp = stage.GetPosition();
-        if (ImGui::DragFloat3("位置##stage", &sp.x, 0.05f))
-        {
-            stage.SetPosition(sp);
-        }
-        DirectX::XMFLOAT3 sr = stage.GetAngle();
-        DirectX::XMFLOAT3 sr_deg{
-            DirectX::XMConvertToDegrees(sr.x),
-            DirectX::XMConvertToDegrees(sr.y),
-            DirectX::XMConvertToDegrees(sr.z)
-        };
-        if (ImGui::DragFloat3("回転##stage", &sr_deg.x, 0.5f, -180.0f, 180.0f))
-        {
-            stage.SetAngle({
-                DirectX::XMConvertToRadians(sr_deg.x),
-                DirectX::XMConvertToRadians(sr_deg.y),
-                DirectX::XMConvertToRadians(sr_deg.z)
-            });
-        }
-        DirectX::XMFLOAT3 ss = stage.GetScale();
-        if (ImGui::DragFloat3("拡大率##stage", &ss.x, 0.01f, 0.001f, 100.0f))
-        {
-            stage.SetScale(ss);
-        }
-    }
-#endif
-}

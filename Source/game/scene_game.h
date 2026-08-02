@@ -2,11 +2,10 @@
 
 #include "camera.h"
 #include "free_camera_controller.h"
-#include "stage.h"
 
 #include <DirectXMath.h>
 
-// ゲーム側が持つ「カメラ」と「旧ステージ」だけを束ねる入れ物。
+// ゲーム側が持つカメラ操作を束ねる入れ物。
 //
 // 【プレイヤーは持たない】
 //   以前はここが Player の実体を値メンバとして所有し、Update / 接地解決 /
@@ -21,19 +20,13 @@
 class SceneGame
 {
 public:
-    // Stage は skinned_mesh (FBX, アニメーションなし) を使う。
-    void Initialize(skinned_mesh* stage_mesh, float aspect);
+    void Initialize(float aspect);
 
     void Finalize() {}
 
-    // 旧ステージの更新だけを行う。プレイヤーの更新はここには無い。
-    void Update(float elapsed_time);
-
     void DrawCameraGUI();
-    void DrawStageGUI();
     void ResetGameplay();
     void SetAspect(float aspect);
-    void SetLegacyStageActive(bool active);
 
     // CameraTargetComponent の設定でカメラを追従させる。
     // 呼び出し側は GameObject のワールド位置と設定値だけを渡す。
@@ -47,10 +40,8 @@ public:
     void UpdateFreeCamera(float delta_time);
 
     Camera& GetCamera() { return camera; }
-    Stage&  GetStage()  { return stage;  }
 
     const Camera& GetCamera() const { return camera; }
-    const Stage&  GetStage()  const { return stage;  }
 
     // Camera-only rotation offsets (mouse right-drag / IJKL).
     float camera_yaw_offset    = 0.0f;
@@ -62,6 +53,4 @@ private:
 
     Camera               camera;
     FreeCameraController controller;
-    Stage                stage;
-    bool                 legacy_stage_active = false;
 };

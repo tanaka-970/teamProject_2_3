@@ -8,70 +8,21 @@
 
 void framework::draw_shader_adjustment_workspace()
 {
-    // 「プレイヤー」という対象は無くなった。
-    // キャラクターの描画方式・輪郭線は SkinnedMeshRendererComponent /
-    // MeshRendererComponent のプロパティが持ち、GameObject インスペクターで編集する。
-    // 同じ値をここと Component の両方から変えられる状態は作らない。
-    const char* targets[] = { "ステージ", "静的メッシュ" };
-    int target = selected_editor_object == editor_selection::rendering ? 1 : 0;
-
     ImGui::TextUnformatted("シェーダー調整");
-    ImGui::TextDisabled("材質の表現、追加パスの順序、合成、プリセットをまとめて編集します。");
-    ImGui::SetNextItemWidth(-1.0f);
-    if (ImGui::Combo("##ShaderTarget", &target, targets, IM_ARRAYSIZE(targets)))
-    {
-        selected_editor_object = target == 0
-            ? editor_selection::stage : editor_selection::rendering;
-    }
-    ImGui::TextDisabled("キャラクターの材質は GameObject の Renderer で編集します");
+    ImGui::TextDisabled(
+        "Sceneの材質はGameObjectのMesh/Skinned Mesh RendererまたはMaterial Assetで編集します。");
     ImGui::Separator();
 
     if (ImGui::BeginTabBar("ShaderAdjustmentTabs"))
     {
         if (ImGui::BeginTabItem("材質・表現"))
         {
-            if (target == 0)
-            {
-                ImGui::Checkbox("ステージシェーダーを使う", &enable_stage_shader);
-                draw_shader_stack("shader_workspace_stage", shading_per_stage,
-                    outline_per_stage, stage_shader_layers,
-                    stage_pixelate_grid, stage_pixelate_strength);
-                draw_character_material_controls("shader_workspace_stage_material", shading_per_stage,
-                    outline_per_stage, stage_shader_layers, stage_character_profile,
-                    stage_pixelate_grid, stage_pixelate_strength);
-                if (stage_asset_placed && active_stage_placement_id != 0) sync_selected_entity_to_stage();
-            }
-            else
-            {
-                ImGui::Checkbox("静的メッシュを表示", &enable_static_meshes);
-                draw_shader_stack("shader_workspace_static", shading_per_static[0],
-                    outline_per_static[0], shader_layers_static[0],
-                    pixelate_grid_per_static[0], pixelate_strength_per_static[0]);
-                draw_character_material_controls("shader_workspace_static_material",
-                    shading_per_static[0], outline_per_static[0], shader_layers_static[0],
-                    character_profiles_static[0], pixelate_grid_per_static[0],
-                    pixelate_strength_per_static[0]);
-            }
-            ImGui::EndTabItem();
-        }
-        if (ImGui::BeginTabItem("ステージ表面"))
-        {
-            ImGui::TextUnformatted("マットな地形向けPBR設定");
-            ImGui::Checkbox("テクスチャを繰り返す", &stage_texture_wrap);
-            ImGui::SliderFloat("テクスチャの濃さ", &stage_texture_contrast, 0.50f, 2.50f, "%.2f");
-            bool geometric = pbr.stage_material.options.x > 0.5f;
-            bool normal_map = pbr.stage_material.options.y > 0.5f;
-            bool diffuse_ibl = pbr.stage_material.options.z > 0.5f;
-            bool shadow = pbr.stage_material.options.w > 0.5f;
-            if (ImGui::Checkbox("面法線を使う", &geometric))
-                pbr.stage_material.options.x = geometric ? 1.0f : 0.0f;
-            if (ImGui::Checkbox("法線マップ", &normal_map))
-                pbr.stage_material.options.y = normal_map ? 1.0f : 0.0f;
-            if (ImGui::Checkbox("拡散IBL", &diffuse_ibl))
-                pbr.stage_material.options.z = diffuse_ibl ? 1.0f : 0.0f;
-            if (ImGui::Checkbox("影を受ける", &shadow))
-                pbr.stage_material.options.w = shadow ? 1.0f : 0.0f;
-            ImGui::ColorEdit3("ステージ基本色", &pbr.stage_material.base_tint.x);
+            ImGui::Checkbox("デバッグ静的メッシュを表示", &enable_static_meshes);
+            draw_shader_stack("shader_workspace_static", shading_per_static[0],
+                outline_per_static[0], shader_layers_static[0],
+                pixelate_grid_per_static[0], pixelate_strength_per_static[0]);
+            ImGui::TextDisabled(
+                "選択GameObjectの本番材質は右側Component Cardから編集してください。");
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("画面効果"))
@@ -155,61 +106,6 @@ void framework::draw_inspector()
         {
             ImGui::DragFloat3("位置", &camera_position.x, 0.05f, -100.0f, 100.0f, "%.3f");
         }
-        break;
-
-    case editor_selection::stage:
-    {
-        const auto& services = active_object_scene().Services();
-        const bool legacy_stage_allowed = services.CollisionBackendMode() != 2 &&
-            !services.LegacyStageMigration().IsMigrated(
-                ReplayEngine::Scene::LegacyStageMigrationState::stage_source_id);
-        if (!legacy_stage_allowed)
-        {
-            ImGui::TextUnformatted("Legacy Stage Source");
-            ImGui::Separator();
-            ImGui::TextWrapped(
-                "このSceneはGameObject Colliderへ移行済みです。Legacy Stageの編集・描画・衝突は無効です。");
-            ImGui::TextDisabled(
-                "Model/PrefabはProjectのAsset BrowserからScene Viewへ配置してください。");
-            break;
-        }
-        ImGui::TextUnformatted(stage_asset_placed ?
-            "Legacy Stage Source（配置済み）" : "Legacy Stage Source（未配置）");
-        ImGui::Separator();
-        if (ImGui::Button("ファイルからモデルを選択...")) browse_stage_asset();
-        if (!selected_stage_asset_path.empty())
-        {
-            ImGui::TextWrapped("選択中: %s", selected_stage_asset_path.c_str());
-            if (!selected_stage_cache_path.empty())
-                ImGui::TextWrapped("キャッシュ: %s", selected_stage_cache_path.c_str());
-        }
-        ImGui::TextWrapped("状態: %s", stage_asset_status.c_str());
-        draw_stage_placement_controls();
-        ImGui::Checkbox("シェーダーを使う", &enable_stage_shader);
-        if (ImGui::Button("シェーダー調整テーブルを開く"))
-            set_editor_workspace(editor_workspace::shader_adjustment);
-        if (stage_asset_placed && active_stage_placement_id != 0) sync_selected_entity_to_stage();
-        if (shading_per_stage == SHADING_MODEL_PBR)
-        {
-            ImGui::TextDisabled("マットなステージ材質（鏡面反射なし）");
-            ImGui::Checkbox("テクスチャを繰り返す", &stage_texture_wrap);
-            ImGui::SliderFloat("Deferredテクスチャの濃さ", &stage_texture_contrast,
-                0.50f, 2.50f, "%.2f");
-            bool geometric = pbr.stage_material.options.x > 0.5f;
-            bool normal_map = pbr.stage_material.options.y > 0.5f;
-            bool diffuse_ibl = pbr.stage_material.options.z > 0.5f;
-            bool shadow = pbr.stage_material.options.w > 0.5f;
-            if (ImGui::Checkbox("面法線を使う", &geometric)) pbr.stage_material.options.x = geometric ? 1.0f : 0.0f;
-            if (ImGui::Checkbox("法線マップ", &normal_map)) pbr.stage_material.options.y = normal_map ? 1.0f : 0.0f;
-            if (ImGui::Checkbox("拡散IBL", &diffuse_ibl)) pbr.stage_material.options.z = diffuse_ibl ? 1.0f : 0.0f;
-            if (ImGui::Checkbox("影を受ける", &shadow)) pbr.stage_material.options.w = shadow ? 1.0f : 0.0f;
-            ImGui::ColorEdit3("基本色", &pbr.stage_material.base_tint.x);
-        }
-        break;
-    }
-
-    case editor_selection::scene_entity:
-        draw_scene_entity_inspector();
         break;
 
     case editor_selection::game_object:

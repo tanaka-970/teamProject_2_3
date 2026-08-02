@@ -1,7 +1,6 @@
 ﻿#pragma once
 
 #include "IPhysicsQueryService.h"
-#include "LegacyStageMigrationState.h"
 #include "../../Components/Physics/ColliderComponent.h"
 #include "../../Physics/CookedMeshCollision.h"
 
@@ -14,10 +13,7 @@ namespace ReplayEngine::Scene
 {
     class Scene;
 
-    // Scene 上の Collider と、移行前の旧 Stage をまとめて扱う問い合わせ窓口。
-    //
-    // CharacterMotorComponent は IPhysicsQueryService しか見ないので、
-    // 「どちらの経路から返ったか」を意識しない。統合はここだけが行う。
+    // Scene上のColliderを扱う唯一の問い合わせ窓口。
     //
     // ---------------------------------------------------------------------
     // 【登録表の持ち方】
@@ -47,24 +43,6 @@ namespace ReplayEngine::Scene
     class SceneCollisionWorld final : public IPhysicsQueryService
     {
     public:
-        // 問い合わせ先の構成。Scene 単位の設定として保存される。
-        enum class BackendMode
-        {
-            // 旧 Stage だけ。MeshCollider があっても使わない。
-            LegacyOnly = 0,
-
-            // Scene 上の Collider を使い、未移行の旧 Stage だけ補う。
-            // 既存 Scene の初期値。
-            Hybrid = 1,
-
-            // Scene 上の Collider だけ。旧 Stage へは一切問い合わせない。
-            // 新規 Scene の初期値であり、移行完了後の最終形。
-            SceneCollidersOnly = 2,
-        };
-
-        static const char* ToString(BackendMode mode) noexcept;
-        static BackendMode BackendModeFromInt(int value) noexcept;
-
         using RevisionProvider = std::function<std::string(const std::string& asset_guid)>;
 
         // ---- 接続（framework が設定する）------------------------------------
@@ -77,18 +55,6 @@ namespace ReplayEngine::Scene
         void DetachScene() { AttachScene(nullptr); }
 
         const Scene* AttachedScene() const noexcept { return scene_; }
-
-        // 未移行の旧 Stage を補うための実装。移行完了後は nullptr にできる。
-        //   legacy_source … 移行済み集合と突き合わせるための移行元 ID。
-        void AttachLegacy(const IPhysicsQueryService* legacy,
-            LegacyStageMigrationState::SourceID legacy_source =
-                LegacyStageMigrationState::stage_source_id) noexcept
-        {
-            legacy_ = legacy;
-            legacy_source_ = legacy_source;
-        }
-
-        void DetachLegacy() noexcept { legacy_ = nullptr; }
 
         // Cook データの共有キャッシュ。実体は framework が所有する。
         void AttachCookCache(Physics::CookedMeshCollisionCache* cache) noexcept
@@ -110,16 +76,6 @@ namespace ReplayEngine::Scene
             revision_provider_ = std::move(provider);
         }
 
-        void SetBackendMode(BackendMode mode) noexcept { mode_ = mode; }
-        BackendMode GetBackendMode() const noexcept { return mode_; }
-
-        // 旧 Stage の移行状態。framework が Scene の状態と同期させる。
-        LegacyStageMigrationState& LegacyMigration() noexcept { return legacy_migration_; }
-        const LegacyStageMigrationState& LegacyMigration() const noexcept
-        {
-            return legacy_migration_;
-        }
-
         // ---- 毎フレームの更新 ------------------------------------------------
 
         // 登録表を最新にし、Cook と Transform を必要なぶんだけ更新する。
@@ -139,13 +95,6 @@ namespace ReplayEngine::Scene
         std::size_t MeshColliderCount() const noexcept { return mesh_collider_count_; }
         std::size_t ActiveTriggerPairCount() const noexcept { return pairs_.size(); }
         std::size_t RescanCount() const noexcept { return rescan_count_; }
-        bool LegacyConsulted() const noexcept { return legacy_consulted_; }
-        bool LegacyAvailable() const noexcept { return legacy_ != nullptr; }
-        bool LegacyMigrated() const noexcept
-        {
-            return legacy_migration_.IsMigrated(legacy_source_);
-        }
-
         // 直近に返した Hit の出所。診断表示用。
         const CollisionSourceInfo& LastGroundSource() const noexcept { return last_ground_source_; }
         const CollisionSourceInfo& LastSweepSource() const noexcept { return last_sweep_source_; }
@@ -188,10 +137,6 @@ namespace ReplayEngine::Scene
             const CollisionQueryFilter& filter, GroundHit& hit) const override;
 
     private:
-        // Legacy へ問い合わせてよいか。
-        // Hybrid かつ「その移行元が未移行」のときだけ true。
-        bool ShouldConsultLegacy() const noexcept;
-
         // Scene の構成世代が変わっていたら登録表を作り直す。
         void ReconcileRegistrations();
 
@@ -234,15 +179,9 @@ namespace ReplayEngine::Scene
         // ---- 接続先（すべて非所有）------------------------------------------
 
         Scene* scene_ = nullptr;
-        const IPhysicsQueryService* legacy_ = nullptr;
-        LegacyStageMigrationState::SourceID legacy_source_ =
-            LegacyStageMigrationState::stage_source_id;
         Physics::CookedMeshCollisionCache* cook_cache_ = nullptr;
         Physics::CookedMeshCollisionCache::Loader loader_;
         RevisionProvider revision_provider_;
-
-        BackendMode mode_ = BackendMode::Hybrid;
-        LegacyStageMigrationState legacy_migration_;
 
         // ---- 登録表 -----------------------------------------------------------
 
@@ -276,7 +215,6 @@ namespace ReplayEngine::Scene
         std::size_t trigger_collider_count_ = 0;
         std::size_t mesh_collider_count_ = 0;
         std::size_t rescan_count_ = 0;
-        mutable bool legacy_consulted_ = false;
         mutable CollisionSourceInfo last_ground_source_;
         mutable CollisionSourceInfo last_sweep_source_;
 

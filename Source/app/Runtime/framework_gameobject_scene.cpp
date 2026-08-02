@@ -901,8 +901,6 @@ bool framework::create_object_scene(const std::string& name, bool place_default_
     object_editor_context.ResetSceneState();
     object_scene.SetName(scene_name);
     object_scene.Services().SetControlledObject(ReplayEngine::Core::ObjectID::Invalid());
-    object_scene.Services().SetCollisionBackendMode(1);   // Hybrid（開いた瞬間に床が消えない）
-    object_scene.Services().LegacyStageMigration().SetMigratedSources({});
     player_control_system.Clear();
 
     // 選択と Undo 履歴を作り直す。前の Scene の ObjectID を指し続けさせない。

@@ -227,7 +227,6 @@
     <ClCompile Include="RePlayEngine\Assets\AssetDatabase.cpp" />
     <ClCompile Include="RePlayEngine\Assets\AsyncAssetManager.cpp" />
     <ClCompile Include="RePlayEngine\Assets\TextureCompressor.cpp" />
-    <ClCompile Include="RePlayEngine\Editor\Commands\UndoStack.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Gizmo\TransformGizmo.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Gizmo\ViewportPicker.cpp" />
     <ClCompile Include="RePlayEngine\Editor\ShaderEditing\CharacterMaterialEditor.cpp" />
@@ -235,8 +234,6 @@
     <ClCompile Include="RePlayEngine\Editor\ShaderEditing\ShaderPresetEditor.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Rendering\PostProcessEditor.cpp" />
     <ClCompile Include="RePlayEngine\Physics\MeshCollisionCooker.cpp" />
-    <ClCompile Include="RePlayEngine\Scene\SceneDocument.cpp" />
-    <ClCompile Include="RePlayEngine\Scene\UIHierarchy.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\ShaderPresets\ShaderPresetSerializer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\ShaderPresets\BuiltInShaderPresets.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Materials\CharacterMaterialGpuData.cpp" />
@@ -282,8 +279,6 @@
     <ClCompile Include="Source\core\texture.cpp" />
     <ClCompile Include="Source\game\camera.cpp" />
     <ClCompile Include="Source\game\free_camera_controller.cpp" />
-    <ClCompile Include="Source\game\raycast.cpp" />
-    <ClCompile Include="Source\game\stage.cpp" />
     <ClCompile Include="RePlayEngine\Physics\SphereCast.cpp" />
     <ClCompile Include="RePlayEngine\Physics\LegacyMeshColliderComponent.cpp" />
     <ClCompile Include="RePlayEngine\Physics\GravityComponent.cpp" />
@@ -315,7 +310,6 @@
     <ClCompile Include="RePlayEngine\Editor\ComponentBrowser\AddComponentPanel.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Adapter\SceneRenderCollector.cpp" />
     <ClCompile Include="Source\app\Runtime\framework_gameobject_scene.cpp" />
-    <ClCompile Include="RePlayEngine\Scene\Legacy\LegacySceneDocumentSerializer.cpp" />
     <ClCompile Include="RePlayEngine\Scene\Serialization\PrefabSerializer.cpp" />
     <ClCompile Include="RePlayEngine\Scene\Services\PlayerControlSystem.cpp" />
     <ClCompile Include="RePlayEngine\Components\Physics\SphereColliderComponent.cpp" />
@@ -325,12 +319,10 @@
     <ClCompile Include="RePlayEngine\Components\Rendering\AnimatorComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Rendering\SkinnedMeshRendererComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Rendering\MeshRendererComponent.cpp" />
-    <ClCompile Include="Source\game\legacy_stage_collision_bridge.cpp" />
     <ClCompile Include="Source\game\legacy_camera_basis_bridge.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Inspector\PlayerCompositionValidator.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorViewportCamera.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Style\EditorStyle.cpp" />
-    <ClCompile Include="RePlayEngine\Editor\Migration\LegacyStageConverter.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Validation\SceneValidator.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Validation\ValidationPanel.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorCameraController.cpp" />
@@ -390,7 +382,6 @@
     <ClInclude Include="RePlayEngine\Assets\ConcurrentResourceCache.h" />
     <ClInclude Include="RePlayEngine\Assets\ParallelLoader.h" />
     <ClInclude Include="RePlayEngine\Assets\TextureCompressor.h" />
-    <ClInclude Include="RePlayEngine\Editor\Commands\UndoStack.h" />
     <ClInclude Include="RePlayEngine\Editor\Gizmo\TransformGizmo.h" />
     <ClInclude Include="RePlayEngine\Editor\Gizmo\ViewportPicker.h" />
     <ClInclude Include="RePlayEngine\Editor\ShaderEditing\CharacterMaterialEditor.h" />
@@ -408,8 +399,6 @@
     <ClInclude Include="RePlayEngine\Scene\SceneManager.h" />
     <ClInclude Include="RePlayEngine\Scene\BootLogoScene.h" />
     <ClInclude Include="RePlayEngine\Scene\LoadingScene.h" />
-    <ClInclude Include="RePlayEngine\Scene\SceneDocument.h" />
-    <ClInclude Include="RePlayEngine\Scene\UIHierarchy.h" />
     <ClInclude Include="Source\core\framebuffer.h" />
     <ClInclude Include="Source\app\framework.h" />
     <ClInclude Include="Source\core\fullscreen_quad.h" />
@@ -440,10 +429,8 @@
     <ClInclude Include="Source\game\camera.h" />
     <ClInclude Include="Source\game\free_camera_controller.h" />
     <ClInclude Include="Source\game\game_input.h" />
-    <ClInclude Include="Source\game\raycast.h" />
     <ClInclude Include="Source\game\scene_game.h" />
     <ClInclude Include="Source\game\game_scene.h" />
-    <ClInclude Include="Source\game\stage.h" />
       <ClInclude Include="RePlayEngine\Core\ObjectID\ObjectID.h" />
     <ClInclude Include="RePlayEngine\Core\Threading\ThreadPolicy.h" />
     <ClInclude Include="RePlayEngine\Core\Math\Transform.h" />
@@ -476,7 +463,6 @@
     <ClInclude Include="RePlayEngine\Editor\ComponentBrowser\AddComponentPanel.h" />
     <ClInclude Include="RePlayEngine\Rendering\Adapter\RenderItem.h" />
     <ClInclude Include="RePlayEngine\Rendering\Adapter\SceneRenderCollector.h" />
-    <ClInclude Include="RePlayEngine\Scene\Legacy\LegacySceneDocumentSerializer.h" />
     <ClInclude Include="RePlayEngine\Scene\Serialization\PrefabSerializer.h" />
     <ClInclude Include="RePlayEngine\Scene\Services\ICameraBasisProvider.h" />
     <ClInclude Include="RePlayEngine\Scene\Services\IPhysicsQueryService.h" />
@@ -491,12 +477,10 @@
     <ClInclude Include="RePlayEngine\Components\Camera\CameraTargetComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Rendering\AnimatorComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Rendering\SkinnedMeshRendererComponent.h" />
-    <ClInclude Include="Source\game\legacy_stage_collision_bridge.h" />
     <ClInclude Include="Source\game\legacy_camera_basis_bridge.h" />
     <ClInclude Include="RePlayEngine\Editor\Inspector\PlayerCompositionValidator.h" />
     <ClInclude Include="RePlayEngine\Editor\Viewport\EditorViewportCamera.h" />
     <ClInclude Include="RePlayEngine\Editor\Style\EditorStyle.h" />
-    <ClInclude Include="RePlayEngine\Editor\Migration\LegacyStageConverter.h" />
     <ClInclude Include="RePlayEngine\Editor\Validation\SceneValidator.h" />
     <ClInclude Include="RePlayEngine\Editor\Validation\ValidationPanel.h" />
     <ClInclude Include="RePlayEngine\Editor\Viewport\EditorCameraController.h" />
@@ -512,7 +496,6 @@
     <ClInclude Include="RePlayEngine\Components\Physics\CapsuleColliderComponent.h" />
     <ClInclude Include="RePlayEngine\Physics\CollisionLayers.h" />
     <ClInclude Include="RePlayEngine\Physics\ShapeSweep.h" />
-    <ClInclude Include="RePlayEngine\Scene\Services\LegacyStageMigrationState.h" />
     <ClInclude Include="RePlayEngine\Editor\Debug\ColliderDebugDraw.h" />
     <ClInclude Include="RePlayEngine\Object\Component\TriggerContact.h" />
     <ClInclude Include="RePlayEngine\Landscape\LandscapeChunk.h" />
