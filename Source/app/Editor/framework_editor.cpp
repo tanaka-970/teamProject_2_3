@@ -139,13 +139,22 @@ void framework::set_editor_workspace(editor_workspace workspace)
     }
     active_editor_workspace = workspace;
     editor_layout_dirty = true;
+    const auto& services = active_object_scene().Services();
+    const bool legacy_stage_allowed = services.CollisionBackendMode() != 2 &&
+        !services.LegacyStageMigration().IsMigrated(
+            ReplayEngine::Scene::LegacyStageMigrationState::stage_source_id);
     switch (active_editor_workspace)
     {
     case editor_workspace::placement:
-        selected_editor_object = editor_selection::stage;
-        enable_stage_render = skinned_meshes[1] != nullptr || stage_gltf_model != nullptr;
+        selected_editor_object = legacy_stage_allowed ?
+            editor_selection::stage : editor_selection::game_object;
+        enable_stage_render = legacy_stage_allowed &&
+            (skinned_meshes[1] != nullptr || stage_gltf_model != nullptr);
         break;
-    case editor_workspace::modeling:  selected_editor_object = editor_selection::stage; break;
+    case editor_workspace::modeling:
+        selected_editor_object = legacy_stage_allowed ?
+            editor_selection::stage : editor_selection::game_object;
+        break;
     case editor_workspace::animation:
         // アニメーションは AnimatorComponent が持つ。
         // 選択中の GameObject をそのまま見せる（固定のプレイヤー項目は無い）。
@@ -155,7 +164,8 @@ void framework::set_editor_workspace(editor_workspace workspace)
     case editor_workspace::shader_adjustment:
         if (selected_editor_object != editor_selection::stage &&
             selected_editor_object != editor_selection::rendering)
-            selected_editor_object = editor_selection::stage;
+            selected_editor_object = legacy_stage_allowed ?
+                editor_selection::stage : editor_selection::rendering;
         break;
     default: selected_editor_object = editor_selection::world; break;
     }
@@ -519,7 +529,13 @@ void framework::draw_search_results()
     result("カメラを編集", "camera カメラ 視点", editor_selection::camera);
     result("操作キャラクターを編集", "player プレイヤー 操作 キャラクター character",
         editor_selection::game_object);
-    result("ステージを編集", "stage ステージ 地形", editor_selection::stage);
+    const auto& search_services = active_object_scene().Services();
+    const bool search_legacy_stage = search_services.CollisionBackendMode() != 2 &&
+        !search_services.LegacyStageMigration().IsMigrated(
+            ReplayEngine::Scene::LegacyStageMigrationState::stage_source_id);
+    if (search_legacy_stage)
+        result("Legacy Stage Sourceを編集", "legacy stage ステージ 移行元 地形",
+            editor_selection::stage);
     result("描画設定を開く", "render rendering 描画 deferred shader", editor_selection::rendering);
     result("ポスト処理を開く", "post process ポスト bloom fxaa", editor_selection::post_process);
     if (matches("edit play mode 編集 プレイ") && ImGui::Selectable("編集／プレイモードを切り替える"))
@@ -575,8 +591,15 @@ void framework::draw_scene_hierarchy()
         // 「プレイヤー」という固定項目は無い。
         // 操作キャラクターは下の GameObject ツリーへ通常の GameObject として現れ、
         // 名前も自由に変えられる。同じ対象を 2 か所から編集できる状態は作らない。
-        item(stage_asset_placed ? "ステージ（配置済み）" : "ステージ素材（未配置）",
-            editor_selection::stage);
+        const auto& hierarchy_services = active_object_scene().Services();
+        const bool show_legacy_stage = hierarchy_services.CollisionBackendMode() != 2 &&
+            !hierarchy_services.LegacyStageMigration().IsMigrated(
+                ReplayEngine::Scene::LegacyStageMigrationState::stage_source_id);
+        if (show_legacy_stage)
+        {
+            item(stage_asset_placed ? "Legacy Stage Source（配置済み）" :
+                "Legacy Stage Source（未配置）", editor_selection::stage);
+        }
         item("描画設定", editor_selection::rendering);
         item("ポスト処理", editor_selection::post_process);
         ImGui::TreePop();
@@ -620,7 +643,7 @@ void framework::draw_scene_hierarchy()
 void framework::draw_project_panel()
 {
     ImGui::Begin("プロジェクト");
-    if (ImGui::CollapsingHeader("シーン", ImGuiTreeNodeFlags_DefaultOpen))
+    if (ImGui::CollapsingHeader("Legacy Stage Migration（原本は読取専用）"))
     {
         ImGui::Text("現在: %s  [%s]", editor_scene_document.SceneName().c_str(),
             editor_scene_document.SceneIdentifier().c_str());
@@ -904,8 +927,24 @@ void framework::draw_workspace_panel()
     {
     case editor_workspace::placement:
         ImGui::TextUnformatted("オブジェクト配置Workspace");
-        ImGui::TextDisabled("モデルやPrefabを選び、Transformを調整して複数のEntityとして配置します。");
-        draw_stage_placement_controls();
+        ImGui::TextDisabled("ProjectのAsset BrowserからModelやPrefabをScene Viewへ配置します。");
+        {
+            const auto& services = active_object_scene().Services();
+            const bool legacy_stage_allowed = services.CollisionBackendMode() != 2 &&
+                !services.LegacyStageMigration().IsMigrated(
+                    ReplayEngine::Scene::LegacyStageMigrationState::stage_source_id);
+            if (legacy_stage_allowed)
+            {
+                ImGui::Separator();
+                ImGui::TextUnformatted("Legacy Stage Source");
+                draw_stage_placement_controls();
+            }
+            else
+            {
+                ImGui::TextDisabled(
+                    "Legacy Stage配置は無効です。GameObjectとしてAssetを配置してください。");
+            }
+        }
         break;
     case editor_workspace::modeling:
         ImGui::TextUnformatted("モデリングWorkspace");

@@ -77,6 +77,7 @@ void framework::detach_collision_world()
 void framework::refresh_collision_world()
 {
     ReplayEngine::Scene::Scene& scene = active_object_scene();
+    ReplayEngine::Scene::SceneServices& services = scene.Services();
 
     // つなぎ先がずれていたら直す。
     // Play の出入りは enter/exit 側で処理しているが、
@@ -92,7 +93,10 @@ void framework::refresh_collision_world()
     //   ここで無条件に AttachLegacy しても、Hybrid で移行済みの移行元へは
     //   一切問い合わせが飛ばない。「同じ地形を新旧両方へ登録しない」という
     //   条件を、呼ぶ側ではなく衝突世界の中で守っている。
-    if (game_scene != nullptr && stage_asset_placed)
+    const bool legacy_stage_allowed = services.CollisionBackendMode() != 2 &&
+        !services.LegacyStageMigration().IsMigrated(
+            ReplayEngine::Scene::LegacyStageMigrationState::stage_source_id);
+    if (game_scene != nullptr && stage_asset_placed && legacy_stage_allowed)
     {
         object_collision_bridge.Attach(&game_scene->Gameplay().GetStage());
         object_collision_bridge.SetActive(true);
@@ -107,7 +111,6 @@ void framework::refresh_collision_world()
 
     // Scene 側の設定を毎フレーム反映する。
     // Inspector から Backend Mode を変えた直後のフレームから効く。
-    ReplayEngine::Scene::SceneServices& services = scene.Services();
     object_collision_world.SetBackendMode(
         ReplayEngine::Scene::SceneCollisionWorld::BackendModeFromInt(
             services.CollisionBackendMode()));

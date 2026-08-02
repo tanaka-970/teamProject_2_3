@@ -117,6 +117,8 @@ namespace ReplayEngine::Editor
 
             std::unordered_set<int> collider_keys;
             bool gameplay_needs_trigger = false;
+            bool has_character_motor = false;
+            bool has_mesh_collider = false;
             for (std::size_t component_index = 0;
                 component_index < object->ComponentCount(); ++component_index)
             {
@@ -156,6 +158,7 @@ namespace ReplayEngine::Editor
 
                 if (const auto* motor = dynamic_cast<const Components::CharacterMotorComponent*>(component))
                 {
+                    has_character_motor = true;
                     Components::ColliderComponent* primary = motor->ResolvePrimaryCollider();
                     if (primary == nullptr)
                     {
@@ -188,6 +191,7 @@ namespace ReplayEngine::Editor
 
                 if (const auto* mesh = dynamic_cast<const Components::MeshColliderComponent*>(component))
                 {
+                    has_mesh_collider = true;
                     const std::string guid = mesh->ResolveMeshAssetGuid();
                     if (guid.empty())
                     {
@@ -196,6 +200,15 @@ namespace ReplayEngine::Editor
                             "Renderer Meshまたは衝突専用Meshを指定してください。", object->ID());
                     }
                 }
+            }
+
+            if (object->ID() == controlled && has_character_motor && has_mesh_collider)
+            {
+                Add(issues, ValidationSeverity::Error, "CONTROLLED_MESH_COLLIDER",
+                    object->Name() +
+                        ": 操作対象にMesh Colliderが付いています。移動形状と二重衝突する可能性があります。",
+                    "操作対象はSphere/Capsule ColliderをPrimaryにし、Mesh Colliderは環境側へ移してください。",
+                    object->ID());
             }
 
             if (gameplay_needs_trigger && !HasTrigger(*object))

@@ -352,12 +352,9 @@ void framework::render(float elapsed_time)
         layer.parameter = grid;
         return layer;
     };
-    // Pixelate の対象は「エディタのデバッグ用静的メッシュ」と「旧 Stage」だけ。
-    // 旧 Player 用スロット (skinned[0]) は撤去したので、その分は作らない。
+    // Pixelate の固定設定はエディタのデバッグ用静的メッシュだけに使う。
     const auto static_pixelate_layer = make_base_pixelate_layer(
         pixelate_grid_per_static[0], pixelate_strength_per_static[0]);
-    const auto stage_pixelate_layer = make_base_pixelate_layer(
-        stage_pixelate_grid, stage_pixelate_strength);
     const auto find_pixelate_layer = [](const ReplayEngine::Rendering::ShaderLayerStack& stack)
         -> const ReplayEngine::Rendering::ShaderLayer*
     {
@@ -370,16 +367,10 @@ void framework::render(float elapsed_time)
         return nullptr;
     };
     const auto* static_added_pixelate = find_pixelate_layer(shader_layers_static[0]);
-    const auto* stage_added_pixelate = find_pixelate_layer(stage_shader_layers);
     const bool static_uses_pixelate = shading_per_static[0] == SHADING_MODEL_PIXELATE ||
         static_added_pixelate != nullptr;
-    const bool stage_uses_pixelate =
-        (enable_stage_shader && shading_per_stage == SHADING_MODEL_PIXELATE) ||
-        stage_added_pixelate != nullptr;
     const auto& static_pixelate_settings = static_added_pixelate
         ? *static_added_pixelate : static_pixelate_layer;
-    const auto& stage_pixelate_settings = stage_added_pixelate
-        ? *stage_added_pixelate : stage_pixelate_layer;
 
     // 通常描画はDeferredへ統一する。Forward+は将来別経路として追加する。
     const bool deferred_active = deferred.initialized;
@@ -411,21 +402,6 @@ void framework::render(float elapsed_time)
             if (enable_static_meshes && static_meshes[0])
                 static_meshes[0]->render(immediate_context.Get(), world, material_color,
                     nullptr, nullptr, nullptr, false, false);
-            if (enable_scene_game && game_scene && enable_stage_render)
-            {
-                DirectX::XMFLOAT4X4 stage_world;
-                DirectX::XMStoreFloat4x4(&stage_world,
-                    DirectX::XMLoadFloat4x4(&game_scene->Gameplay().GetStage().GetTransform()));
-                if (skinned_mesh* stage_model = game_scene->Gameplay().GetStage().GetModel())
-                    stage_model->render(immediate_context.Get(), stage_world, material_color,
-                        nullptr, nullptr, nullptr, nullptr, false, false);
-                // Sponzaのような大きなglTFステージが最大のオーバードロー源なので、
-                // ここを深度プリパスへ通すのが一番効く。
-                else if (stage_gltf_model)
-                    stage_gltf_model->render(immediate_context.Get(), stage_world,
-                        material_color, nullptr, false, true);
-            }
-
             // GameObject の提出リストもここで深度を書く。
             //
             // 【必須】本描画は DepthFunc=EQUAL なので、プリパスで深度を書かなかった
@@ -456,37 +432,10 @@ void framework::render(float elapsed_time)
                                      nullptr, nullptr, true, true);
         }
 
-        if (enable_scene_game && game_scene && enable_stage_render)
-        {
-            DirectX::XMFLOAT4X4 stage_world;
-            DirectX::XMStoreFloat4x4(&stage_world,
-                DirectX::XMLoadFloat4x4(&game_scene->Gameplay().GetStage().GetTransform()));
-            skinned_mesh* stage_model = game_scene->Gameplay().GetStage().GetModel();
-            if (stage_model)
-            {
-                bind_gbuffer_material(stage_uses_pixelate ? SHADING_MODEL_PIXELATE
-                    : deferred_shading_model(shading_per_stage), true,
-                    stage_pixelate_settings.parameter, stage_pixelate_settings.strength);
-                stage_model->render(immediate_context.Get(), stage_world, material_color,
-                    nullptr, skinned_mesh_gbuffer_ps.Get(), nullptr, nullptr, true, true);
-            }
-            else if (stage_gltf_model)
-            {
-                bind_gbuffer_material(stage_uses_pixelate ? SHADING_MODEL_PIXELATE
-                    : deferred_shading_model(shading_per_stage), true,
-                    stage_pixelate_settings.parameter, stage_pixelate_settings.strength);
-                stage_gltf_model->render(immediate_context.Get(), stage_world, material_color,
-                    static_mesh_gbuffer_ps.Get(), true);
-            }
-        }
-
         // GameObject / Component 基盤が提出した描画対象を GBuffer へ描く。
         // 提出リストは update_object_scene() が毎フレーム作り直す。
         //
-        // 【二重描画しない根拠】
-        //   キャラクターを描く経路はここ 1 本だけになった。
-        //   上で描くのは「エディタのデバッグ用静的メッシュ」と「旧 Stage」で、
-        //   どちらも GameObject の提出リストには載らない別の入れ物にある。
+        // Stage/Characterを含むScene描画はこの提出リスト1本だけ。
         draw_object_scene_meshes(skinned_mesh_gbuffer_ps.Get(), true);
 
         deferred.gbuffer_end(immediate_context.Get());
@@ -579,9 +528,7 @@ void framework::render(float elapsed_time)
 
         const bool draw_shader_layers = render_graph.DeferredDebugMode() == 0 &&
             (shader_layers_static[0].HasEnabledLayers() ||
-                stage_shader_layers.HasEnabledLayers() ||
-                shading_per_static[0] == SHADING_MODEL_PIXELATE ||
-                (enable_stage_shader && shading_per_stage == SHADING_MODEL_PIXELATE));
+                shading_per_static[0] == SHADING_MODEL_PIXELATE);
         if (draw_shader_layers)
         {
             // Surfaceとは別の材質パスをDeferred照明結果へ順番どおりに合成する。
@@ -616,20 +563,6 @@ void framework::render(float elapsed_time)
                 DirectX::XMFLOAT4 color = layer.tint;
                 color.w *= layer.opacity;
                 return color;
-            };
-            const auto skinned_pixel_shader = [this](const ReplayEngine::Rendering::ShaderLayer& layer,
-                bool stage) -> ID3D11PixelShader*
-            {
-                using ReplayEngine::Rendering::ShaderLayerType;
-                switch (layer.type)
-                {
-                case ShaderLayerType::Pbr:
-                    return stage ? pbr.skinned_mesh_stage_ps() : pbr.skinned_mesh_ps();
-                case ShaderLayerType::Toon:      return toon.skinned_mesh_ps();
-                case ShaderLayerType::Pixelate: return object_pixelate_ps.Get();
-                case ShaderLayerType::StylizedCharacter: return skinned_stylized_character_ps.Get();
-                default:                        return skinned_mesh_unlit_ps.Get();
-                }
             };
             const auto static_pixel_shader = [this](const ReplayEngine::Rendering::ShaderLayer& layer)
                 -> ID3D11PixelShader*
@@ -671,40 +604,6 @@ void framework::render(float elapsed_time)
                         static_pixel_shader(layer));
                 }
             }
-            if (enable_scene_game && game_scene && enable_stage_render)
-            {
-                DirectX::XMFLOAT4X4 stage_world;
-                DirectX::XMStoreFloat4x4(&stage_world,
-                    DirectX::XMLoadFloat4x4(&game_scene->Gameplay().GetStage().GetTransform()));
-                for (const auto& layer : stage_shader_layers.Layers())
-                {
-                    if (!layer.enabled) continue;
-                    if (layer.type == ReplayEngine::Rendering::ShaderLayerType::Pixelate) continue;
-                    if (layer.type == ReplayEngine::Rendering::ShaderLayerType::Outline)
-                    {
-                        if (skinned_mesh* stage_model = game_scene->Gameplay().GetStage().GetModel())
-                        {
-                            immediate_context->OMSetBlendState(
-                                blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
-                            toon.bind_outline_pass(immediate_context.Get(), true);
-                            stage_model->render(immediate_context.Get(), stage_world, material_color,
-                                nullptr, toon.outline_ps(), toon.skinned_outline_vs_.Get(),
-                                toon.skinned_outline_il_.Get(), true);
-                            immediate_context->RSSetState(
-                                rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
-                        }
-                        continue;
-                    }
-                    prepare_layer(layer, stage_character_profile);
-                    const auto color = layer_color(layer);
-                    if (skinned_mesh* stage_model = game_scene->Gameplay().GetStage().GetModel())
-                        stage_model->render(immediate_context.Get(), stage_world, color, nullptr,
-                            skinned_pixel_shader(layer, true));
-                    else if (stage_gltf_model)
-                        stage_gltf_model->render(immediate_context.Get(), stage_world, color,
-                            static_pixel_shader(layer));
-                }
-            }
             immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
             immediate_context->OMSetBlendState(blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
         }
@@ -713,10 +612,8 @@ void framework::render(float elapsed_time)
         // GameObject の輪郭線は Renderer Component の outline プロパティが決める。
         const bool draw_deferred_outline = render_graph.DeferredDebugMode() == 0 &&
             enable_outline_shader &&
-            ((outline_per_static[0] &&
-                !shader_layers_static[0].Contains(ReplayEngine::Rendering::ShaderLayerType::Outline)) ||
-             (outline_per_stage &&
-                !stage_shader_layers.Contains(ReplayEngine::Rendering::ShaderLayerType::Outline)));
+            outline_per_static[0] &&
+            !shader_layers_static[0].Contains(ReplayEngine::Rendering::ShaderLayerType::Outline);
         if (draw_deferred_outline)
         {
             // Deferred照明結果へ、同じDepthを使って追加パスを重ねる。
@@ -731,20 +628,6 @@ void framework::render(float elapsed_time)
                 static_meshes[0]->render(immediate_context.Get(), world, material_color,
                     toon.outline_ps(), toon.static_outline_vs_.Get(),
                     toon.static_outline_il_.Get(), true);
-            }
-            if (enable_scene_game && game_scene && enable_stage_render && outline_per_stage &&
-                !stage_shader_layers.Contains(ReplayEngine::Rendering::ShaderLayerType::Outline))
-            {
-                if (skinned_mesh* stage_model = game_scene->Gameplay().GetStage().GetModel())
-                {
-                    DirectX::XMFLOAT4X4 stage_world;
-                    DirectX::XMStoreFloat4x4(&stage_world,
-                        DirectX::XMLoadFloat4x4(&game_scene->Gameplay().GetStage().GetTransform()));
-                    toon.bind_outline_pass(immediate_context.Get(), true);
-                    stage_model->render(immediate_context.Get(), stage_world, material_color,
-                        nullptr, toon.outline_ps(), toon.skinned_outline_vs_.Get(),
-                        toon.skinned_outline_il_.Get(), true);
-                }
             }
             immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
         }
@@ -804,45 +687,6 @@ void framework::render(float elapsed_time)
 
         // 旧 Player 用 skinned_meshes[0] の Forward 描画は撤去した。
 
-        if (enable_scene_game && game_scene && enable_stage_render)
-        {
-            DirectX::XMFLOAT4X4 stage_world;
-            DirectX::XMStoreFloat4x4(&stage_world,
-                DirectX::XMLoadFloat4x4(&game_scene->Gameplay().GetStage().GetTransform()));
-            skinned_mesh* stage_model = game_scene->Gameplay().GetStage().GetModel();
-            if (stage_model)
-            {
-                if (enable_stage_shader && shading_per_stage == SHADING_MODEL_PIXELATE)
-                    bind_pixelate_settings(stage_pixelate_layer);
-                // ステージ用シェーダーは独立して切り替え、無効時はFBX標準PSを使う。
-                ID3D11PixelShader* stage_ps = enable_stage_shader
-                    ? (shading_per_stage == SHADING_MODEL_PBR && use_pbr_skin
-                        ? pbr.skinned_mesh_stage_ps()
-                        : skinned_forward_shader(shading_per_stage))
-                    : nullptr;
-                ID3D11SamplerState* stage_sampler = sampler_states[(size_t)(stage_texture_wrap
-                    ? SAMPLER_STATE::ANISOTROPIC : SAMPLER_STATE::ANISOTROPIC_CLAMP)].Get();
-                immediate_context->PSSetSamplers(2, 1, &stage_sampler);
-                stage_model->render(immediate_context.Get(), stage_world, material_color,
-                                    nullptr, stage_ps);
-                immediate_context->PSSetSamplers(2, 1,
-                    sampler_states[(size_t)SAMPLER_STATE::ANISOTROPIC].GetAddressOf());
-            }
-            else if (stage_gltf_model)
-            {
-                if (enable_stage_shader && shading_per_stage == SHADING_MODEL_PIXELATE)
-                    bind_pixelate_settings(stage_pixelate_layer);
-                ID3D11PixelShader* stage_ps = nullptr;
-                if (enable_stage_shader && shading_per_stage == SHADING_MODEL_TOON)
-                    stage_ps = toon.static_mesh_ps();
-                else if (enable_stage_shader && shading_per_stage == SHADING_MODEL_UNLIT)
-                    stage_ps = static_mesh_unlit_ps.Get();
-                else if (enable_stage_shader && shading_per_stage == SHADING_MODEL_PIXELATE)
-                    stage_ps = object_pixelate_ps.Get();
-                stage_gltf_model->render(immediate_context.Get(), stage_world, material_color, stage_ps);
-            }
-        }
-
         if (enable_static_meshes && static_meshes[0])
         {
             if (shading_per_static[0] == SHADING_MODEL_PIXELATE)
@@ -884,22 +728,6 @@ void framework::render(float elapsed_time)
                                      toon.static_outline_il_.Get(),
                                      true);
             immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
-        }
-        if (enable_scene_game && game_scene && enable_stage_render &&
-            enable_outline_shader && outline_per_stage)
-        {
-            skinned_mesh* stage_model = game_scene->Gameplay().GetStage().GetModel();
-            if (stage_model)
-            {
-                DirectX::XMFLOAT4X4 stage_world;
-                DirectX::XMStoreFloat4x4(&stage_world,
-                    DirectX::XMLoadFloat4x4(&game_scene->Gameplay().GetStage().GetTransform()));
-                toon.bind_outline_pass(immediate_context.Get(), true);
-                stage_model->render(immediate_context.Get(), stage_world, material_color,
-                    nullptr, toon.outline_ps(), toon.skinned_outline_vs_.Get(),
-                    toon.skinned_outline_il_.Get(), true);
-                immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
-            }
         }
     }
 

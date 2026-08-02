@@ -158,7 +158,23 @@ void framework::draw_inspector()
         break;
 
     case editor_selection::stage:
-        ImGui::TextUnformatted(stage_asset_placed ? "ステージ（配置済み）" : "ステージ素材（未配置）");
+    {
+        const auto& services = active_object_scene().Services();
+        const bool legacy_stage_allowed = services.CollisionBackendMode() != 2 &&
+            !services.LegacyStageMigration().IsMigrated(
+                ReplayEngine::Scene::LegacyStageMigrationState::stage_source_id);
+        if (!legacy_stage_allowed)
+        {
+            ImGui::TextUnformatted("Legacy Stage Source");
+            ImGui::Separator();
+            ImGui::TextWrapped(
+                "このSceneはGameObject Colliderへ移行済みです。Legacy Stageの編集・描画・衝突は無効です。");
+            ImGui::TextDisabled(
+                "Model/PrefabはProjectのAsset BrowserからScene Viewへ配置してください。");
+            break;
+        }
+        ImGui::TextUnformatted(stage_asset_placed ?
+            "Legacy Stage Source（配置済み）" : "Legacy Stage Source（未配置）");
         ImGui::Separator();
         if (ImGui::Button("ファイルからモデルを選択...")) browse_stage_asset();
         if (!selected_stage_asset_path.empty())
@@ -190,6 +206,7 @@ void framework::draw_inspector()
             ImGui::ColorEdit3("基本色", &pbr.stage_material.base_tint.x);
         }
         break;
+    }
 
     case editor_selection::scene_entity:
         draw_scene_entity_inspector();
