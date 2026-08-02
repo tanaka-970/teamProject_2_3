@@ -5,6 +5,8 @@
 #include "RespawnService.h"
 #include "../../Core/ObjectID/ObjectID.h"
 
+namespace ReplayEngine::Runtime { class RuntimeContext; }
+
 namespace ReplayEngine::Scene
 {
     // Scene が Component へ提供する外部サービスの束。
@@ -29,6 +31,16 @@ namespace ReplayEngine::Scene
 
         const IPhysicsQueryService* Physics() const noexcept { return physics_; }
         void SetPhysics(const IPhysicsQueryService* service) noexcept { physics_ = service; }
+
+        // Runtime API への入口。
+        //
+        // 未接続 (nullptr) がありうるのは意図的:
+        //   Editor で Scene を編集しているだけの状態では接続しない。
+        //   Behaviour が「置いただけで Runtime API を叩き始める」ことを
+        //   構造的に防ぐ。実体は framework が所有し、World の入れ替えのたびに
+        //   接続し直す。ここは非所有参照だけを持つ。
+        Runtime::RuntimeContext* Runtime() const noexcept { return runtime_; }
+        void SetRuntime(Runtime::RuntimeContext* context) noexcept { runtime_ = context; }
 
         // 操作対象の GameObject。
         // 「プレイヤーかどうか」を型ではなく ObjectID で表す。
@@ -58,6 +70,7 @@ namespace ReplayEngine::Scene
         {
             camera_basis_ = nullptr;
             physics_ = nullptr;
+            runtime_ = nullptr;
             controlled_object_ = Core::ObjectID::Invalid();
             playing_ = false;
         }
@@ -65,6 +78,7 @@ namespace ReplayEngine::Scene
     private:
         const ICameraBasisProvider* camera_basis_ = nullptr;
         const IPhysicsQueryService* physics_ = nullptr;
+        Runtime::RuntimeContext* runtime_ = nullptr;
         Core::ObjectID controlled_object_;
         RespawnService respawn_;
         GameplayEventLog gameplay_events_;

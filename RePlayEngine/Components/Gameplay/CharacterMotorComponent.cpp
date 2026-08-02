@@ -30,6 +30,7 @@ namespace ReplayEngine::Components
         grounded_ = true;
         last_ground_source_ = Scene::CollisionSourceInfo{};
         last_wall_source_ = Scene::CollisionSourceInfo{};
+        has_wall_contact_ = false;
     }
 
     void CharacterMotorComponent::OnDisable()
@@ -277,6 +278,11 @@ namespace ReplayEngine::Components
     void CharacterMotorComponent::ResolveWalls(const MotionSphere& shape,
         const DirectX::XMFLOAT3& previous_position)
     {
+        // 接触の記録は毎回ここで落とす。
+        // 途中で return する経路が複数あるため、先頭でまとめて false にしておかないと
+        // 「前のフレームの接触が残り続ける」= Exit が永遠に来ない状態になる。
+        has_wall_contact_ = false;
+
         Core::GameObject* owner = Owner();
         if (owner == nullptr || !shape.valid) return;
 
@@ -307,6 +313,11 @@ namespace ReplayEngine::Components
         }
 
         last_wall_source_ = hit.source;
+
+        // Collision Event 配送用に記録するだけ。押し戻しの計算には使わない。
+        has_wall_contact_ = true;
+        last_wall_point_ = hit.center;
+        last_wall_normal_ = hit.normal;
 
         // 面から skin_width だけ離した位置へ押し戻す。
         transform.SetLocalPosition(DirectX::XMFLOAT3{
@@ -353,6 +364,9 @@ namespace ReplayEngine::Components
                 ground_height_ = hit.position.y + shape.radius - shape.ground_offset.y;
                 ground_normal_ = hit.normal;
                 last_ground_source_ = hit.source;
+
+                // Collision Event 配送用の記録。接地高さの計算とは独立。
+                last_ground_point_ = hit.position;
             }
         }
 

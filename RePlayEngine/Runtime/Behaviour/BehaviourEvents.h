@@ -1,6 +1,7 @@
-#pragma once
+﻿#pragma once
 
 #include "../Handles/RuntimeHandles.h"
+#include "../../Scene/Services/IPhysicsQueryService.h"
 
 #include <DirectXMath.h>
 

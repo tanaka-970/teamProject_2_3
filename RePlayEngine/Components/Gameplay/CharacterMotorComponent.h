@@ -110,6 +110,30 @@ namespace ReplayEngine::Components
         }
         bool HasGround() const noexcept { return has_ground_; }
 
+        // ---- 直近の接触の記録 (Collision Event 配送用) ------------------------
+        //
+        // ここに置いてあるのは「移動を解決するために撃った問い合わせが返した値」
+        // そのものであり、剛体どうしの衝突解決の結果ではない。
+        // 記録するだけで、移動の挙動には一切影響しない。
+        //
+        // CollisionEventDispatcher が毎フレームこれを読み、
+        // 前フレームとの差分から Enter / Stay / Exit を組み立てる。
+        // Motor 側からイベントを発行しないのは、配送の順序と
+        // 生存確認を 1 か所（Dispatcher）に集めるため。
+
+        // 直近の FixedUpdate で壁に接触したか。接触が無ければ false。
+        bool HasWallContact() const noexcept { return has_wall_contact_; }
+
+        // 接地点（ワールド）。HasGround() が false のときの値は意味を持たない。
+        const DirectX::XMFLOAT3& LastGroundPoint() const noexcept
+        {
+            return last_ground_point_;
+        }
+
+        // 壁に接触したときの球中心（ワールド）と面法線。
+        const DirectX::XMFLOAT3& LastWallPoint() const noexcept { return last_wall_point_; }
+        const DirectX::XMFLOAT3& LastWallNormal() const noexcept { return last_wall_normal_; }
+
         // ---- 保存されるパラメータ（PropertyRegistry へ登録）------------------
         // 既定値は旧 Player の値をそのまま引き継いでいる。挙動を変えないため。
 
@@ -173,6 +197,12 @@ namespace ReplayEngine::Components
         DirectX::XMFLOAT3 last_move_direction_{ 0.0f, 0.0f, 0.0f };
         Scene::CollisionSourceInfo last_ground_source_;
         Scene::CollisionSourceInfo last_wall_source_;
+
+        // Collision Event 配送用の記録。移動の計算には使わない。
+        DirectX::XMFLOAT3 last_ground_point_{ 0.0f, 0.0f, 0.0f };
+        DirectX::XMFLOAT3 last_wall_point_{ 0.0f, 0.0f, 0.0f };
+        DirectX::XMFLOAT3 last_wall_normal_{ 0.0f, 1.0f, 0.0f };
+        bool has_wall_contact_ = false;
         float ground_height_ = 0.0f;
         bool grounded_ = true;
         bool jump_requested_ = false;

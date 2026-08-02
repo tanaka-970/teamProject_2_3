@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -298,6 +298,13 @@
     <ClCompile Include="RePlayEngine\Runtime\Handles\HandleResolver.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\HandleValidation.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\SerializationValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Behaviour\BehaviourComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Behaviour\BehaviourRegistry.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Events\EventBus.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Events\CollisionEventDispatcher.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\API\RuntimeContext.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourValidation.cpp" />
+    <ClCompile Include="Source\game\Behaviours\ValidationBehaviours.cpp" />
     <ClCompile Include="RePlayEngine\Scene\Runtime\Scene.cpp" />
     <ClCompile Include="RePlayEngine\Components\Core\TransformComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Gameplay\RotatorComponent.cpp" />
@@ -454,6 +461,14 @@
     <ClInclude Include="RePlayEngine\Runtime\Handles\HandleResolver.h" />
     <ClInclude Include="RePlayEngine\Runtime\Validation\HandleValidation.h" />
     <ClInclude Include="RePlayEngine\Runtime\Validation\SerializationValidation.h" />
+    <ClInclude Include="RePlayEngine\Runtime\Behaviour\BehaviourEvents.h" />
+    <ClInclude Include="RePlayEngine\Runtime\Behaviour\BehaviourComponent.h" />
+    <ClInclude Include="RePlayEngine\Runtime\Behaviour\BehaviourRegistry.h" />
+    <ClInclude Include="RePlayEngine\Runtime\Events\EventBus.h" />
+    <ClInclude Include="RePlayEngine\Runtime\Events\CollisionEventDispatcher.h" />
+    <ClInclude Include="RePlayEngine\Runtime\API\RuntimeContext.h" />
+    <ClInclude Include="RePlayEngine\Runtime\Validation\BehaviourValidation.h" />
+    <ClInclude Include="Source\game\Behaviours\ValidationBehaviours.h" />
     <ClInclude Include="RePlayEngine\Reflection\Registry\PropertyRegistry.h" />
     <ClInclude Include="RePlayEngine\Scene\Runtime\Scene.h" />
     <ClInclude Include="RePlayEngine\Components\Core\TransformComponent.h" />

@@ -24,8 +24,10 @@
 #include "../../../RePlayEngine/Landscape/LandscapeRenderer.h"
 #include "../../../RePlayEngine/Object/Registry/BuiltInComponents.h"
 #include "../../../RePlayEngine/Rendering/Materials/MaterialAsset.h"
+#include "../../../RePlayEngine/Runtime/Validation/BehaviourValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/HandleValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/SerializationValidation.h"
+#include "../../game/Behaviours/ValidationBehaviours.h"
 #include "../../../RePlayEngine/Scene/Runtime/Scene.h"
 #include "../../../RePlayEngine/Scene/Serialization/SceneData.h"
 #include "../../../RePlayEngine/Scene/Serialization/PrefabSerializer.h"
@@ -614,6 +616,32 @@ namespace
         if (command == "--validate-scene-version")
         {
             return Validation::RunSceneVersionValidation();
+        }
+
+        // Phase 3-5。Behaviour を使う検証は、先にゲーム側の登録を通しておく。
+        if (command == "--validate-behaviour")
+        {
+            ReplayEngine::Core::RegisterBuiltInComponents();
+            Game::RegisterGameBehaviours();
+            return Validation::RunBehaviourValidation();
+        }
+        if (command == "--validate-events")
+        {
+            ReplayEngine::Core::RegisterBuiltInComponents();
+            Game::RegisterGameBehaviours();
+            return Validation::RunEventValidation();
+        }
+        if (command == "--validate-runtime-api")
+        {
+            ReplayEngine::Core::RegisterBuiltInComponents();
+            Game::RegisterGameBehaviours();
+            return Validation::RunRuntimeApiValidation();
+        }
+        if (command == "--validate-collision")
+        {
+            ReplayEngine::Core::RegisterBuiltInComponents();
+            Game::RegisterGameBehaviours();
+            return Validation::RunCollisionValidation();
         }
         return -1;
     }
