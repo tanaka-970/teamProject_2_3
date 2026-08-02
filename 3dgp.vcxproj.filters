@@ -471,6 +471,15 @@
     <ClCompile Include="RePlayEngine\Runtime\Validation\HandleValidation.cpp">
       <Filter>RePlayEngine\Runtime\Validation</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Runtime\Validation\SerializationValidation.cpp">
+      <Filter>RePlayEngine\Runtime\Validation</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Reflection\Registry\TypeGUID.cpp">
+      <Filter>RePlayEngine\Reflection\Registry</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Object\Component\MissingComponent.cpp">
+      <Filter>RePlayEngine\Object\Component</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Core\Math\Transform.cpp">
       <Filter>RePlayEngine\Core\Math</Filter>
     </ClCompile>
@@ -898,6 +907,18 @@
     </ClInclude>
     <ClInclude Include="RePlayEngine\Runtime\Validation\HandleValidation.h">
       <Filter>RePlayEngine\Runtime\Validation</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Runtime\Validation\SerializationValidation.h">
+      <Filter>RePlayEngine\Runtime\Validation</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Reflection\Registry\TypeGUID.h">
+      <Filter>RePlayEngine\Reflection\Registry</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Reflection\Property\References.h">
+      <Filter>RePlayEngine\Reflection\Property</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Object\Component\MissingComponent.h">
+      <Filter>RePlayEngine\Object\Component</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Core\Threading\ThreadPolicy.h">
       <Filter>RePlayEngine\Core\Threading</Filter>

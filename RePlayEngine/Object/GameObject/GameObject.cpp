@@ -318,7 +318,10 @@ namespace ReplayEngine::Core
             if (component == nullptr || !component->PendingDestroy()) continue;
             if (component->Owner() == nullptr) continue;   // 既に片付け済み
 
+            // 順序は OnDisable -> OnRuntimeDestroy -> OnDetach。
+            // OnRuntimeDestroy の時点ではまだ Owner とプロパティへ触れる。
             component->ForceDisable();
+            component->RaiseRuntimeDestroy();
             component->OnDetach();
             component->owner_ = nullptr;
         }
@@ -338,7 +341,10 @@ namespace ReplayEngine::Core
         {
             Component* component = components_[index].get();
             if (component == nullptr || component->Owner() == nullptr) continue;
+            // 順序は OnDisable -> OnRuntimeDestroy -> OnDetach。
+            // OnRuntimeDestroy の時点ではまだ Owner とプロパティへ触れる。
             component->ForceDisable();
+            component->RaiseRuntimeDestroy();
             component->OnDetach();
             component->owner_ = nullptr;
         }

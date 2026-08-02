@@ -1,6 +1,7 @@
 ﻿#include "BuiltInComponents.h"
 
 #include "ComponentRegistry.h"
+#include "../Component/MissingComponent.h"
 #include "../../Reflection/Registry/PropertyRegistry.h"
 
 #include "../../Components/Camera/CameraTargetComponent.h"
@@ -53,6 +54,34 @@ namespace ReplayEngine::Core
         using Reflection::PropertyRegistry;
         using Reflection::PropertyType;
         using Reflection::PropertyValue;
+
+        // 読み込めなかった Component の預かり先。
+        //
+        // Add Component 一覧には出さない。ユーザーが自分で足すものではなく、
+        // 読み込み処理だけが作る内部用の型のため。
+        //
+        // 設定の意味:
+        //   AllowMultipleInstances … 1 つの GameObject が複数の型を読めないことがある
+        //   HiddenInEditor         … Add Component へ出さない
+        //   removable = true (既定) … ユーザーが明示的に消すことはできる。
+        //                             Missing を理由に自動削除はしない。
+        //   serializable = true (既定) … 保存対象。ただし書き出されるのは
+        //                             "MissingComponent" ではなく預かっている元の型。
+        void RegisterMissingComponent()
+        {
+            ComponentRegistry::Register<MissingComponent>(
+                ComponentTypeInfo::Describe("Missing Component", "Internal")
+                    .WithTooltip("型が見つからない Component。保存されていた値はそのまま保持され、"
+                        "型が使えるようになれば自動的に復元される。")
+                    .AllowMultipleInstances()
+                    .HiddenInEditor()
+                    .InModule("RePlayEngine.BuiltIn"));
+
+            // プロパティは登録しない。
+            // 預かっているデータは PropertyRegistry を通さず、
+            // MissingComponent::Record として丸ごと保持・書き戻しする。
+            // 中途半端に型付けすると、知らない型の値を壊してしまう。
+        }
 
         void RegisterTransform()
         {
@@ -722,6 +751,10 @@ namespace ReplayEngine::Core
         // 新しい Component を足すときは、ここへ 1 行足すだけでよい。
         // それだけで Add Component 一覧・Inspector・Scene 保存・読み込み・
         // 複製・Undo/Redo・Prefab のすべてへ反映される。
+        // Missing Component の預かり先を最初に登録する。
+        // Scene 読み込み中に型が見つからなかった場合、この型が必ず使える必要がある。
+        RegisterMissingComponent();
+
         RegisterTransform();
         RegisterMeshRenderer();
         RegisterLights();

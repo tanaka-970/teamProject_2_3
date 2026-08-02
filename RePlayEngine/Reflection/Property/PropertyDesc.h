@@ -1,8 +1,10 @@
 #pragma once
 
 #include "PropertyValue.h"
+#include "../Registry/TypeGUID.h"
 #include "../../Object/Component/Component.h"
 
+#include <cstdint>
 #include <functional>
 #include <string>
 #include <type_traits>
@@ -42,6 +44,34 @@ namespace ReplayEngine::Reflection
 
         // Enum 表示用のラベル。添字が値に対応する。
         std::vector<std::string> enum_labels;
+
+        // ---- v11 で追加したメタ情報 ----------------------------------------
+        //
+        // 目的は「Inspector 側へ Component 型ごとの if / switch を増やさない」こと。
+        // 描き方の違いはすべてここへ宣言し、汎用の描画処理が読み取る。
+
+        // Inspector の折り畳み見出し。空なら Component 直下へ並べる。
+        std::string category;
+
+        // 数値に添える単位表記（"m" / "度/秒" など）。表示のみで値には影響しない。
+        std::string unit;
+
+        // 実行中だけ意味のある値。編集 Scene では読み取り専用として描く。
+        bool runtime_only = false;
+
+        // 既定では折り畳んでおく高度な設定。
+        bool advanced = false;
+
+        // AssetReference が受け付ける Asset の種類（AssetDatabase の AssetKind 名）。
+        // 空なら種類を問わない。Picker の絞り込みと Validation の両方が使う。
+        std::string asset_type;
+
+        // ComponentReference が期待する Component 型。
+        // 無効値なら型を問わない。型が違っても参照は保持し、Validation が警告する。
+        TypeGUID expected_component_type;
+
+        // Array の要素型。type が Array のときだけ意味を持つ。
+        PropertyType array_element_type = PropertyType::Bool;
 
         Getter getter;
         Setter setter;
@@ -100,6 +130,27 @@ namespace ReplayEngine::Reflection
             return *this;
         }
 
+        // ---- v11 で追加した連結設定 -----------------------------------------
+
+        PropertyDesc& Category(std::string value) { category = std::move(value); return *this; }
+        PropertyDesc& Unit(std::string value) { unit = std::move(value); return *this; }
+        PropertyDesc& RuntimeOnly() { runtime_only = true; return *this; }
+        PropertyDesc& Advanced() { advanced = true; return *this; }
+
+        // AssetReference が受け付ける Asset の種類を絞る。
+        PropertyDesc& OfAssetType(std::string kind)
+        {
+            asset_type = std::move(kind);
+            return *this;
+        }
+
+        // ComponentReference が期待する Component 型を宣言する。
+        PropertyDesc& OfComponentType(TypeGUID type_guid)
+        {
+            expected_component_type = type_guid;
+            return *this;
+        }
+
         const std::string& DisplayName() const noexcept
         {
             return display_name.empty() ? name : display_name;
@@ -132,11 +183,24 @@ namespace ReplayEngine::Reflection
     {
         template<class> inline constexpr bool always_false_v = false;
 
+        // std::vector<T> かどうかの判定。配列プロパティの受け付けに使う。
+        template<class T> struct VectorTraits : std::false_type
+        {
+            using Element = void;
+        };
+        template<class T> struct VectorTraits<std::vector<T>> : std::true_type
+        {
+            using Element = T;
+        };
+
+        // 単一値の型判定。配列の要素型もこれで決める（入れ子は許さない）。
         template<class M>
-        constexpr PropertyType DeducePropertyType() noexcept
+        constexpr PropertyType DeduceScalarPropertyType() noexcept
         {
             if constexpr (std::is_same_v<M, bool>)                    return PropertyType::Bool;
             else if constexpr (std::is_same_v<M, int>)                return PropertyType::Int;
+            else if constexpr (std::is_same_v<M, std::int64_t>)       return PropertyType::Int64;
+            else if constexpr (std::is_same_v<M, std::uint64_t>)      return PropertyType::UInt64;
             else if constexpr (std::is_same_v<M, float>)              return PropertyType::Float;
             else if constexpr (std::is_same_v<M, double>)             return PropertyType::Double;
             else if constexpr (std::is_same_v<M, std::string>)        return PropertyType::String;
@@ -144,15 +208,42 @@ namespace ReplayEngine::Reflection
             else if constexpr (std::is_same_v<M, DirectX::XMFLOAT3>)  return PropertyType::Vector3;
             else if constexpr (std::is_same_v<M, DirectX::XMFLOAT4>)  return PropertyType::Vector4;
             else if constexpr (std::is_same_v<M, Core::ObjectID>)     return PropertyType::ObjectReference;
+            else if constexpr (std::is_same_v<M, ObjectReference>)    return PropertyType::ObjectReference;
+            else if constexpr (std::is_same_v<M, ComponentReference>) return PropertyType::ComponentReference;
+            else if constexpr (std::is_same_v<M, AssetReference>)     return PropertyType::AssetReference;
+            else if constexpr (std::is_same_v<M, SceneReference>)     return PropertyType::SceneReference;
             else static_assert(always_false_v<M>,
                 "PropertyRegistry がまだ対応していないメンバ型です");
         }
 
         template<class M>
-        PropertyValue CaptureMember(const M& value)
+        constexpr PropertyType DeducePropertyType() noexcept
+        {
+            if constexpr (VectorTraits<M>::value) return PropertyType::Array;
+            else return DeduceScalarPropertyType<M>();
+        }
+
+        // 配列の要素型。配列でないメンバでも呼べるよう、既定は Bool を返す。
+        template<class M>
+        constexpr PropertyType DeduceArrayElementType() noexcept
+        {
+            if constexpr (VectorTraits<M>::value)
+            {
+                return DeduceScalarPropertyType<typename VectorTraits<M>::Element>();
+            }
+            else
+            {
+                return PropertyType::Bool;
+            }
+        }
+
+        template<class M>
+        PropertyValue CaptureScalar(const M& value)
         {
             if constexpr (std::is_same_v<M, bool>)                    return PropertyValue::MakeBool(value);
             else if constexpr (std::is_same_v<M, int>)                return PropertyValue::MakeInt(value);
+            else if constexpr (std::is_same_v<M, std::int64_t>)       return PropertyValue::MakeInt64(value);
+            else if constexpr (std::is_same_v<M, std::uint64_t>)      return PropertyValue::MakeUInt64(value);
             else if constexpr (std::is_same_v<M, float>)              return PropertyValue::MakeFloat(value);
             else if constexpr (std::is_same_v<M, double>)             return PropertyValue::MakeDouble(value);
             else if constexpr (std::is_same_v<M, std::string>)        return PropertyValue::MakeString(value);
@@ -160,14 +251,20 @@ namespace ReplayEngine::Reflection
             else if constexpr (std::is_same_v<M, DirectX::XMFLOAT3>)  return PropertyValue::MakeVector3(value);
             else if constexpr (std::is_same_v<M, DirectX::XMFLOAT4>)  return PropertyValue::MakeVector4(value);
             else if constexpr (std::is_same_v<M, Core::ObjectID>)     return PropertyValue::MakeObjectReference(value);
+            else if constexpr (std::is_same_v<M, ObjectReference>)    return PropertyValue::MakeObjectReference(value.object);
+            else if constexpr (std::is_same_v<M, ComponentReference>) return PropertyValue::MakeComponentReference(value);
+            else if constexpr (std::is_same_v<M, AssetReference>)     return PropertyValue::MakeAssetReference(value.guid);
+            else if constexpr (std::is_same_v<M, SceneReference>)     return PropertyValue::MakeSceneReference(value.guid);
             else static_assert(always_false_v<M>, "未対応のメンバ型です");
         }
 
         template<class M>
-        void ApplyMember(M& target, const PropertyValue& value)
+        void ApplyScalar(M& target, const PropertyValue& value)
         {
             if constexpr (std::is_same_v<M, bool>)                    target = value.AsBool(target);
             else if constexpr (std::is_same_v<M, int>)                target = value.AsInt(target);
+            else if constexpr (std::is_same_v<M, std::int64_t>)       target = value.AsInt64(target);
+            else if constexpr (std::is_same_v<M, std::uint64_t>)      target = value.AsUInt64(target);
             else if constexpr (std::is_same_v<M, float>)              target = value.AsFloat(target);
             else if constexpr (std::is_same_v<M, double>)             target = value.AsDouble(target);
             else if constexpr (std::is_same_v<M, std::string>)        target = value.AsString();
@@ -175,7 +272,55 @@ namespace ReplayEngine::Reflection
             else if constexpr (std::is_same_v<M, DirectX::XMFLOAT3>)  target = value.AsVector3();
             else if constexpr (std::is_same_v<M, DirectX::XMFLOAT4>)  target = value.AsVector4();
             else if constexpr (std::is_same_v<M, Core::ObjectID>)     target = value.AsObjectReference();
+            else if constexpr (std::is_same_v<M, ObjectReference>)    target.object = value.AsObjectReference();
+            else if constexpr (std::is_same_v<M, ComponentReference>) target = value.AsComponentReference();
+            else if constexpr (std::is_same_v<M, AssetReference>)     target.guid = value.AsAssetReference().guid;
+            else if constexpr (std::is_same_v<M, SceneReference>)     target.guid = value.AsSceneReference().guid;
             else static_assert(always_false_v<M>, "未対応のメンバ型です");
+        }
+
+        template<class M>
+        PropertyValue CaptureMember(const M& value)
+        {
+            if constexpr (VectorTraits<M>::value)
+            {
+                std::vector<PropertyValue> elements;
+                elements.reserve(value.size());
+                for (const auto& element : value) elements.push_back(CaptureScalar(element));
+                return PropertyValue::MakeArray(DeduceArrayElementType<M>(), std::move(elements));
+            }
+            else
+            {
+                return CaptureScalar(value);
+            }
+        }
+
+        template<class M>
+        void ApplyMember(M& target, const PropertyValue& value)
+        {
+            if constexpr (VectorTraits<M>::value)
+            {
+                // 配列でない値が来た場合は既存の中身を維持する。
+                // 型が変わっただけで保存済みの要素を全部失わないため。
+                if (!value.IsArray()) return;
+
+                using Element = typename VectorTraits<M>::Element;
+                const std::vector<PropertyValue>& elements = value.ArrayElements();
+
+                M restored;
+                restored.reserve(elements.size());
+                for (const PropertyValue& element : elements)
+                {
+                    Element item{};
+                    ApplyScalar(item, element);
+                    restored.push_back(std::move(item));
+                }
+                target = std::move(restored);
+            }
+            else
+            {
+                ApplyScalar(target, value);
+            }
         }
     }
 
@@ -196,6 +341,7 @@ namespace ReplayEngine::Reflection
         PropertyDesc desc;
         desc.name = std::move(name);
         desc.type = Detail::DeducePropertyType<M>();
+        desc.array_element_type = Detail::DeduceArrayElementType<M>();
 
         desc.getter = [member](const Core::Component& component) -> PropertyValue
         {

@@ -1,8 +1,10 @@
 ﻿#pragma once
 
 #include "../../Core/ObjectID/ObjectID.h"
+#include "../../Core/ObjectID/RuntimeIdentity.h"
 #include "../../Object/Component/ComponentTypeID.h"
 #include "../../Reflection/Property/PropertyBag.h"
+#include "../../Reflection/Registry/TypeGUID.h"
 
 #include <DirectXMath.h>
 
@@ -40,7 +42,8 @@ namespace ReplayEngine::Scene::Serialization
 
     struct ComponentData
     {
-        // 保存の主キー。ComponentRegistry へ登録した型名と一致する。
+        // 人が読める型名。v10 まではこれが唯一の主キーだった。
+        // v11 以降も、GUID を持たない既存 Component 用に読み書きを続ける。
         std::string type_name;
 
         // 読み込み時に type_name から引き直す補助キー。ファイルには書かない。
@@ -48,6 +51,25 @@ namespace ReplayEngine::Scene::Serialization
 
         bool enabled = true;
 
+        // ---- v11 で追加 ---------------------------------------------------
+
+        // 永続的な型 ID。設定されていれば type_name より優先して解決する。
+        // クラス名・名前空間・ファイル位置を変えても参照が切れない。
+        Reflection::TypeGUID type_guid;
+
+        // 提供元モジュール。型が見つからないときに何が欠けているか示すために保存する。
+        std::string module_id;
+
+        // 型のデータ形式バージョン。0 なら未記録（v10 以前のファイル）。
+        int type_version = 0;
+
+        // 所有 GameObject の中で安定した Component の ID。
+        // ComponentReference の解決先。並び替えでも型名変更でも壊れない。
+        // 0 なら未記録で、読み込み側が採番し直す。
+        Core::ComponentStableID stable_id = Core::invalid_component_stable_id;
+
+        // プロパティ。型が解決できなかった場合も、ここへ読み込んだまま保持する
+        // （MissingComponent が丸ごと預かる）。
         Reflection::PropertyBag properties;
     };
 
@@ -94,8 +116,26 @@ namespace ReplayEngine::Scene::Serialization
         // v8 以前をどう扱うか:
         //   v7 … 操作対象なしとして読む
         //   v8 … 操作対象を読む
-        //   どちらも読み込みは成功し、保存すると v10 になる。
-        static constexpr int current_version = 10;
+        //   どちらも読み込みは成功し、保存すると現行バージョンになる。
+        //
+        // 【v11 で追加したもの】
+        //   COMPONENT ブロックへ次の行が増えた。どれも省略可能な追加行なので、
+        //   v10 以前のファイルは今まで通りそのまま読める。
+        //     STABLE_ID    … GameObject 内で安定した Component の ID
+        //     TYPE_GUID    … 型名を変えても壊れない永続的な型 ID
+        //     TYPE_MODULE  … 提供元モジュール
+        //     TYPE_VERSION … 型のデータ形式バージョン
+        //
+        //   PROPERTY へ次の型が増えた。
+        //     int64 / uint64 / assetref / sceneref / compref / array
+        //
+        // 【v10 を書き換えなかった理由】
+        //   同じバージョン番号のまま意味を変えると、既に v10 として保存された
+        //   ファイルが「読めるが中身の解釈が違う」状態になる。
+        //   バージョンを上げれば、読み手は必ず分岐を通る。
+        //
+        // 既存 Scene は開いただけでは変換しない。保存したときに初めて v11 になる。
+        static constexpr int current_version = 11;
         static constexpr int minimum_supported_version = 7;
 
         int version = current_version;
@@ -125,10 +165,21 @@ namespace ReplayEngine::Scene::Serialization
     struct SceneLoadReport
     {
         std::vector<std::string> warnings;
-        int skipped_components = 0;   // 未登録で生成できなかった Component
+        int skipped_components = 0;   // 生成そのものに失敗した Component
         int repaired_parents = 0;     // 親が見つからず Scene 直下へ寄せた GameObject
         int repaired_ids = 0;         // ID が重複して採番し直した GameObject
-        int unknown_properties = 0;   // 定義が見つからず無視したプロパティ
+        int unknown_properties = 0;   // 型が知らなかったプロパティ（捨てずに保持している）
+
+        // v11 で追加。
+        //
+        // 型が見つからず MissingComponent として保持した数。
+        // skipped_components と分けているのは意味がまったく違うため。
+        //   missing_components … データは保持されている。保存し直しても失われない。
+        //   skipped_components … 生成に失敗した。復元できていない。
+        int missing_components = 0;
+
+        // 採番し直した ComponentStableID の数（保存値が 0 または重複していた）。
+        int repaired_component_ids = 0;
 
         bool Clean() const noexcept { return warnings.empty(); }
         void Clear() noexcept
@@ -138,6 +189,8 @@ namespace ReplayEngine::Scene::Serialization
             repaired_parents = 0;
             repaired_ids = 0;
             unknown_properties = 0;
+            missing_components = 0;
+            repaired_component_ids = 0;
         }
     };
 

@@ -25,6 +25,7 @@
 #include "../../../RePlayEngine/Object/Registry/BuiltInComponents.h"
 #include "../../../RePlayEngine/Rendering/Materials/MaterialAsset.h"
 #include "../../../RePlayEngine/Runtime/Validation/HandleValidation.h"
+#include "../../../RePlayEngine/Runtime/Validation/SerializationValidation.h"
 #include "../../../RePlayEngine/Scene/Runtime/Scene.h"
 #include "../../../RePlayEngine/Scene/Serialization/SceneData.h"
 #include "../../../RePlayEngine/Scene/Serialization/PrefabSerializer.h"
@@ -591,6 +592,31 @@ namespace
 
         return ReplayEngine::Runtime::Validation::RunHandleValidation();
     }
+
+    // Phase 2 (Serialization Foundation) の検証。
+    // どれもファイルを触らず、メモリ上の文字列で往復を確かめる。
+    // 既存の Scene / Prefab 原本は一切変更しない。
+    int RunHeadlessSerializationValidation(const char* command_line)
+    {
+        std::istringstream arguments(command_line != nullptr ? command_line : "");
+        std::string command;
+        if (!(arguments >> command)) return -1;
+
+        namespace Validation = ReplayEngine::Runtime::Validation;
+        if (command == "--validate-serialization")
+        {
+            return Validation::RunSerializationValidation();
+        }
+        if (command == "--validate-missing-component")
+        {
+            return Validation::RunMissingComponentValidation();
+        }
+        if (command == "--validate-scene-version")
+        {
+            return Validation::RunSceneVersionValidation();
+        }
+        return -1;
+    }
 }
 
 LRESULT CALLBACK window_procedure(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
@@ -613,6 +639,8 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
     if (prefab_validation_result >= 0) return prefab_validation_result;
     const int handle_validation_result = RunHeadlessHandleValidation(cmd_line);
     if (handle_validation_result >= 0) return handle_validation_result;
+    const int serialization_validation_result = RunHeadlessSerializationValidation(cmd_line);
+    if (serialization_validation_result >= 0) return serialization_validation_result;
     const std::uint32_t automated_smoke_test_frames =
         ParseAutomatedSmokeTestFrames(cmd_line);
 

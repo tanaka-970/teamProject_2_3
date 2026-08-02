@@ -1,6 +1,7 @@
 ﻿#include "SceneData.h"
 
 #include "../Runtime/Scene.h"
+#include "../../Object/Component/MissingComponent.h"
 #include "../../Object/Registry/ComponentRegistry.h"
 #include "../../Reflection/Registry/PropertyRegistry.h"
 
@@ -13,8 +14,96 @@ namespace ReplayEngine::Scene::Serialization
     using Core::ComponentRegistry;
     using Core::ComponentTypeInfo;
     using Core::GameObject;
+    using Core::MissingComponent;
     using Core::ObjectID;
     using Reflection::PropertyRegistry;
+
+    namespace
+    {
+        // 保存 ObjectID -> 実際に作られた GameObject の対応表。
+        using ObjectRemap = std::unordered_map<ObjectID, GameObject*>;
+
+        // 参照値を配置先の ObjectID へ付け替える。
+        //
+        // clear_unresolved の意味:
+        //   false … 対応表に無ければ元の値をそのまま残す（Scene 読み込み）
+        //           ファイルに書かれている全 Object が対応表に載っているので、
+        //           見つからない＝本当に存在しない参照。値を消すと
+        //           「参照が壊れている」ことすら分からなくなるため残す。
+        //           Validation が Missing 参照として報告する。
+        //
+        //   true  … 対応表に無ければ無効値にする（Prefab 配置・複製）
+        //           ObjectID を採番し直しているので、元の ID を残すと
+        //           たまたま同じ ID を持つ無関係な GameObject を指してしまう。
+        //           これは黙って壊れるので、必ず切る。
+        Reflection::PropertyValue RemapReferenceValue(const Reflection::PropertyValue& value,
+            const ObjectRemap& remap, bool clear_unresolved)
+        {
+            const auto translate = [&remap, clear_unresolved](ObjectID saved, bool& resolved)
+            {
+                resolved = false;
+                if (!saved.Valid()) return ObjectID::Invalid();
+
+                const auto found = remap.find(saved);
+                if (found != remap.end() && found->second != nullptr)
+                {
+                    resolved = true;
+                    return found->second->ID();
+                }
+                return clear_unresolved ? ObjectID::Invalid() : saved;
+            };
+
+            switch (value.Type())
+            {
+            case Reflection::PropertyType::ObjectReference:
+            {
+                bool resolved = false;
+                return Reflection::PropertyValue::MakeObjectReference(
+                    translate(value.AsObjectReference(), resolved));
+            }
+            case Reflection::PropertyType::ComponentReference:
+            {
+                // 付け替えるのは所有 ObjectID だけ。
+                // ComponentStableID は GameObject の中で閉じた番号なので、
+                // 配置先でもそのまま通用する。ここが GameObject 単位にした利点。
+                Reflection::ComponentReference reference = value.AsComponentReference();
+                bool resolved = false;
+                reference.owner = translate(reference.owner, resolved);
+                if (!resolved && clear_unresolved) reference.Clear();
+                return Reflection::PropertyValue::MakeComponentReference(reference);
+            }
+            case Reflection::PropertyType::Array:
+            {
+                // 参照を含まない配列でも通るが、要素ごとに素通りするだけなので害はない。
+                std::vector<Reflection::PropertyValue> elements;
+                elements.reserve(value.ArrayElements().size());
+                for (const Reflection::PropertyValue& element : value.ArrayElements())
+                {
+                    elements.push_back(RemapReferenceValue(element, remap, clear_unresolved));
+                }
+                return Reflection::PropertyValue::MakeArray(
+                    value.ArrayElementType(), std::move(elements));
+            }
+            default:
+                // AssetReference / SceneReference は AssetGUID なので付け替え不要。
+                // Asset は Scene の配置とは無関係に存在する。
+                return value;
+            }
+        }
+
+        Reflection::PropertyBag RemapReferences(const Reflection::PropertyBag& source,
+            const ObjectRemap* remap, bool clear_unresolved)
+        {
+            if (remap == nullptr) return source;
+
+            Reflection::PropertyBag result = source;
+            for (const Reflection::PropertyBag::Entry& entry : source.Entries())
+            {
+                result.Set(entry.name, RemapReferenceValue(entry.value, *remap, clear_unresolved));
+            }
+            return result;
+        }
+    }
 
     void CaptureScene(const Scene& scene, SceneData& output)
     {
@@ -57,10 +146,44 @@ namespace ReplayEngine::Scene::Serialization
                 if (!ComponentRegistry::IsSerializable(component->TypeID())) continue;
 
                 ComponentData component_data;
-                component_data.type_id = component->TypeID();
-                component_data.type_name = component->TypeName();
                 component_data.enabled = component->Enabled();
-                PropertyRegistry::Capture(*component, component_data.properties);
+                component_data.stable_id = component->StableID();
+
+                if (component->TypeID() == MissingComponent::StaticTypeID())
+                {
+                    // 読み込めなかった Component。
+                    //
+                    // "MissingComponent" として書き出さず、預かっている「元の型」として
+                    // 書き戻す。こうしておくと、
+                    //   - 型が使えない環境で開いて保存してもファイルの内容が変わらない
+                    //   - 型が使えるようになった環境では、次の読み込みで自動的に復元される
+                    // という往復になる。Missing であること自体はファイルに残さない。
+                    const MissingComponent::Record& record =
+                        static_cast<const MissingComponent*>(component)->Original();
+
+                    component_data.type_name = record.type_name;
+                    component_data.type_id = Core::MakeComponentTypeID(record.type_name);
+                    component_data.type_guid = record.type_guid;
+                    component_data.module_id = record.module_id;
+                    component_data.type_version = record.type_version;
+                    component_data.properties = record.properties;
+                }
+                else
+                {
+                    component_data.type_id = component->TypeID();
+                    component_data.type_name = component->TypeName();
+
+                    // 型の永続情報は Registry が持つ。Component 実体は持たない。
+                    if (const ComponentTypeInfo* info = ComponentRegistry::Find(component->TypeID()))
+                    {
+                        component_data.type_guid = info->type_guid;
+                        component_data.module_id = info->module_id;
+                        component_data.type_version = info->type_version;
+                    }
+
+                    // Capture の中で、預かっている未知プロパティも合流する。
+                    PropertyRegistry::Capture(*component, component_data.properties);
+                }
 
                 data.components.push_back(std::move(component_data));
             }
@@ -71,26 +194,107 @@ namespace ReplayEngine::Scene::Serialization
 
     namespace
     {
+        // 保存済みのプロパティ名を、型が宣言した別名に従って読み替える。
+        // Field を Rename しても保存値を失わないための入口。
+        Reflection::PropertyBag ApplyPropertyAliases(const ComponentTypeInfo& info,
+            const Reflection::PropertyBag& source)
+        {
+            if (info.property_aliases.empty()) return source;
+
+            Reflection::PropertyBag result;
+            for (const Reflection::PropertyBag::Entry& entry : source.Entries())
+            {
+                const std::string* renamed = nullptr;
+                for (const auto& alias : info.property_aliases)
+                {
+                    if (alias.first == entry.name) { renamed = &alias.second; break; }
+                }
+                result.Set(renamed != nullptr ? *renamed : entry.name, entry.value);
+            }
+            return result;
+        }
+
         // GameObject 1 体ぶんの Component を SceneData から作り直す。
         // ApplySceneData と InstantiateSceneData で共通に使う。
+        //
+        // clear_unresolved_references:
+        //   Prefab 配置・複製のように ObjectID を採番し直す経路では true。
+        //   Scene 読み込みのように保存 ID をそのまま復元する経路では false。
         void BuildComponents(const GameObjectData& source, GameObject& target,
             SceneLoadReport& report,
-            const std::unordered_map<ObjectID, GameObject*>* object_remap = nullptr)
+            const ObjectRemap* object_remap = nullptr,
+            bool clear_unresolved_references = false)
         {
             for (const ComponentData& component_data : source.components)
             {
-                const ComponentTypeInfo* info = ComponentRegistry::Find(component_data.type_name);
+                // 型の解決は必ず Resolve を通す。
+                //   type_guid -> alias_guids -> type_name の順で引く。
+                const ComponentTypeInfo* info =
+                    ComponentRegistry::Resolve(component_data.type_guid, component_data.type_name);
+
+                const Reflection::PropertyBag remapped_properties =
+                    RemapReferences(component_data.properties, object_remap,
+                        clear_unresolved_references);
+
                 if (info == nullptr)
                 {
-                    // 未登録の型。Scene 全体を諦めず、この Component だけ飛ばす。
-                    ++report.skipped_components;
+                    // 型が見つからない。
+                    //
+                    // ここで読み飛ばすと、この Scene を保存し直した時点で
+                    // 保存されていた値がファイルから消える。
+                    // Script の Compile が通っていないだけ、Asset が未取得なだけ、
+                    // といった一時的な状態でも同じことが起きるため、実質のデータ破壊になる。
+                    //
+                    // 代わりに MissingComponent へ丸ごと預ける。
+                    // 動作はしないが、値は次の保存でそのまま書き戻される。
+                    Core::Component* placeholder = ComponentRegistry::CreateWithStableID(
+                        MissingComponent::StaticTypeID(), target, component_data.stable_id);
+                    if (placeholder == nullptr)
+                    {
+                        ++report.skipped_components;
+                        report.warnings.push_back(
+                            "Missing Component の預かり先を作れませんでした: " +
+                            component_data.type_name + " (" + source.name + ")");
+                        continue;
+                    }
+
+                    MissingComponent::Record record;
+                    record.type_name = component_data.type_name;
+                    record.type_guid = component_data.type_guid;
+                    record.module_id = component_data.module_id;
+                    record.type_version = component_data.type_version;
+                    // 参照は預かるデータに対しても付け替える。
+                    // Prefab として配置された Missing Component が、
+                    // 配置元 Scene の GameObject を指したままにならないようにする。
+                    record.properties = remapped_properties;
+
+                    static_cast<MissingComponent*>(placeholder)->SetOriginal(std::move(record));
+                    placeholder->SetEnabled(component_data.enabled);
+
+                    // 採番し直しの報告は Missing 経路でも行う。
+                    // 「型が読めなかった」ことと「番号が衝突した」ことは別の問題であり、
+                    // 片方だけ黙っていると、参照が別の Component へ向いた原因を追えなくなる。
+                    if (component_data.stable_id != Core::invalid_component_stable_id &&
+                        placeholder->StableID() != component_data.stable_id)
+                    {
+                        ++report.repaired_component_ids;
+                        report.warnings.push_back(
+                            "Component StableID が重複していたため採番し直しました: " +
+                            component_data.type_name + " (" + source.name + ")");
+                    }
+
+                    ++report.missing_components;
                     report.warnings.push_back(
-                        "未登録の Component のため読み飛ばしました: " +
-                        component_data.type_name + " (" + source.name + ")");
+                        "型が見つからないため Missing Component として保持しました: " +
+                        component_data.type_name +
+                        (component_data.module_id.empty()
+                            ? std::string{} : " [" + component_data.module_id + "]") +
+                        " (" + source.name + ")");
                     continue;
                 }
 
-                Core::Component* component = ComponentRegistry::Create(info->type_id, target);
+                Core::Component* component = ComponentRegistry::CreateWithStableID(
+                    info->type_id, target, component_data.stable_id);
                 if (component == nullptr)
                 {
                     ++report.skipped_components;
@@ -100,31 +304,25 @@ namespace ReplayEngine::Scene::Serialization
                     continue;
                 }
 
-                component->SetEnabled(component_data.enabled);
-
-                Reflection::PropertyBag remapped_properties = component_data.properties;
-                if (object_remap != nullptr)
+                if (component_data.stable_id != Core::invalid_component_stable_id &&
+                    component->StableID() != component_data.stable_id)
                 {
-                    for (const Reflection::PropertyBag::Entry& entry : component_data.properties.Entries())
-                    {
-                        if (entry.value.Type() != Reflection::PropertyType::ObjectReference) continue;
-                        const ObjectID saved_reference = entry.value.AsObjectReference();
-                        ObjectID actual_reference = ObjectID::Invalid();
-                        const auto found_reference = object_remap->find(saved_reference);
-                        if (found_reference != object_remap->end() && found_reference->second != nullptr)
-                            actual_reference = found_reference->second->ID();
-                        remapped_properties.Set(entry.name,
-                            Reflection::PropertyValue::MakeObjectReference(actual_reference));
-                    }
+                    ++report.repaired_component_ids;
+                    report.warnings.push_back(
+                        "Component StableID が重複していたため採番し直しました: " +
+                        component_data.type_name + " (" + source.name + ")");
                 }
 
+                component->SetEnabled(component_data.enabled);
+
                 std::vector<std::string> unknown;
-                PropertyRegistry::Apply(*component, remapped_properties, &unknown);
+                PropertyRegistry::Apply(*component,
+                    ApplyPropertyAliases(*info, remapped_properties), &unknown);
                 for (const std::string& name : unknown)
                 {
                     ++report.unknown_properties;
                     report.warnings.push_back(
-                        "定義が見つからないプロパティを無視しました: " +
+                        "この型が知らないプロパティを保持しました（保存時に書き戻します）: " +
                         component_data.type_name + "." + name);
                 }
             }
@@ -352,7 +550,9 @@ namespace ReplayEngine::Scene::Serialization
         {
             const auto found = saved_to_object.find(object_data.id);
             if (found == saved_to_object.end()) continue;
-            BuildComponents(object_data, *found->second, report, &saved_to_object);
+            // Prefab 配置では ObjectID を採番し直しているため、対応表に無い参照は必ず切る。
+            // 残すと、たまたま同じ ID の無関係な GameObject を指してしまう。
+            BuildComponents(object_data, *found->second, report, &saved_to_object, true);
         }
 
         if (root != nullptr && !prefab_source_guid.empty())
@@ -469,7 +669,7 @@ namespace ReplayEngine::Scene::Serialization
         {
             const auto found = local_to_object.find(object_data.id);
             if (found != local_to_object.end())
-                BuildComponents(object_data, *found->second, report, &local_to_object);
+                BuildComponents(object_data, *found->second, report, &local_to_object, true);
         }
         scene.ProcessPendingOperations();
         return true;
@@ -477,67 +677,162 @@ namespace ReplayEngine::Scene::Serialization
 
     namespace
     {
-        // 1 体ぶんの複製。親の指定は呼び出し側が行う。
-        GameObject* DuplicateSingle(Scene& scene, const GameObject& source,
-            const std::string& name_override)
+        // 複製元の部分木を、親→子の順で集める。
+        // 深さに上限を設けて、壊れた階層でも無限再帰しない。
+        void CollectSubtree(const GameObject& root, bool include_children,
+            std::vector<const GameObject*>& output)
         {
-            GameObject* clone = scene.CreateGameObject(
-                name_override.empty() ? source.Name() : name_override);
-            if (clone == nullptr) return nullptr;
+            output.push_back(&root);
+            if (!include_children) return;
 
-            clone->SetEnabled(source.Enabled());
-
-            const Core::Transform& source_transform = source.GetTransform();
-            clone->GetTransform().SetLocal(
-                source_transform.LocalPosition(),
-                source_transform.LocalRotationEuler(),
-                source_transform.LocalScale());
-
-            for (std::size_t slot = 0; slot < source.ComponentCount(); ++slot)
+            for (std::size_t index = 0; index < output.size(); ++index)
             {
-                const Core::Component* original = source.ComponentAt(slot);
-                if (original == nullptr || original->PendingDestroy()) continue;
+                if (output.size() > 100000) break;
 
-                const ComponentTypeInfo* info = ComponentRegistry::Find(original->TypeID());
-
-                // 組み込み Component は GameObject 生成時に自動で付いている。
-                // Transform の値は上でコピー済みなので、ここでは触らない。
-                if (info != nullptr && info->built_in) continue;
-
-                Core::Component* copy = ComponentRegistry::Create(original->TypeID(), *clone);
-                if (copy == nullptr) continue;
-
-                copy->SetEnabled(original->Enabled());
-                PropertyRegistry::CopyValues(*original, *copy);
+                const GameObject* current = output[index];
+                for (const GameObject* child : current->Children())
+                {
+                    if (child == nullptr || child->PendingDestroy()) continue;
+                    output.push_back(child);
+                }
             }
-            return clone;
+        }
+
+        // Component を 1 つ複製する。StableID は元と同じ値を引き継ぐ。
+        //
+        // 引き継ぐ理由:
+        //   複製した部分木の中で ComponentReference が閉じている場合、
+        //   所有 ObjectID さえ付け替えれば参照がそのまま成立する。
+        //   StableID を振り直すと、その対応表まで作らなければならなくなる。
+        void DuplicateComponent(const Core::Component& original, GameObject& clone,
+            const ObjectRemap& remap)
+        {
+            const ComponentTypeInfo* info = ComponentRegistry::Find(original.TypeID());
+
+            // 組み込み Component は GameObject 生成時に自動で付いている。
+            // Transform の値は呼び出し側でコピー済みなので、ここでは触らない。
+            if (info != nullptr && info->built_in) return;
+
+            Core::Component* copy = ComponentRegistry::CreateWithStableID(
+                original.TypeID(), clone, original.StableID());
+            if (copy == nullptr) return;
+
+            copy->SetEnabled(original.Enabled());
+
+            // 値をいったん取り出し、参照だけ付け替えてから流し込む。
+            //
+            // PropertyRegistry::CopyValues を直接使わないのは、あれが
+            // 「値をそのまま写す」ためのものであり、ObjectID の付け替えを行わないため。
+            // 複製先は必ず新しい ObjectID を持つので、付け替えないと
+            // 複製した側が元のオブジェクトを指したままになる。
+            Reflection::PropertyBag values;
+            PropertyRegistry::Capture(original, values);
+            PropertyRegistry::Apply(*copy, RemapReferences(values, &remap, true));
+
+            // MissingComponent は PropertyRegistry の対象外なので、預かり内容を直接写す。
+            if (original.TypeID() == MissingComponent::StaticTypeID() &&
+                copy->TypeID() == MissingComponent::StaticTypeID())
+            {
+                MissingComponent::Record record =
+                    static_cast<const MissingComponent&>(original).Original();
+                record.properties = RemapReferences(record.properties, &remap, true);
+                static_cast<MissingComponent*>(copy)->SetOriginal(std::move(record));
+            }
         }
     }
 
     GameObject* DuplicateGameObject(Scene& scene, const GameObject& source,
         bool include_children)
     {
-        GameObject* clone = DuplicateSingle(scene, source, source.Name() + " コピー");
-        if (clone == nullptr) return nullptr;
+        // 3 段階に分ける。
+        //   1) 複製する GameObject をすべて先に作る
+        //   2) 保存 ObjectID -> 複製先 の対応表を完成させる
+        //   3) その対応表を使って Component を写す
+        //
+        // 以前は 1 体ずつ完結させていたため、まだ作られていない兄弟を指す
+        // ObjectReference / ComponentReference を付け替えられなかった。
+        std::vector<const GameObject*> originals;
+        CollectSubtree(source, include_children, originals);
 
-        // 元と同じ親へぶら下げる。ローカル値のまま付けるので見た目の相対位置は変わらない。
-        if (source.Parent() != nullptr) clone->SetParent(source.Parent(), false);
+        ObjectRemap remap;
+        remap.reserve(originals.size());
 
-        if (!include_children) return clone;
+        std::vector<GameObject*> clones;
+        clones.reserve(originals.size());
 
-        // 子リストは複製中に変化しないよう控えを取ってから回す。
-        const std::vector<GameObject*> children = source.Children();
-        for (const GameObject* child : children)
+        for (const GameObject* original : originals)
         {
-            if (child == nullptr || child->PendingDestroy()) continue;
+            // 名前に「コピー」を付けるのは複製の起点だけでよい。
+            GameObject* clone = scene.CreateGameObject(
+                original == &source ? original->Name() + " コピー" : original->Name());
+            if (clone == nullptr)
+            {
+                clones.push_back(nullptr);
+                continue;
+            }
 
-            GameObject* child_clone = DuplicateGameObject(scene, *child, true);
-            if (child_clone == nullptr) continue;
+            clone->SetEnabled(original->Enabled());
 
-            // 子の名前には「コピー」を付けない。付くのは複製の起点だけでよい。
-            child_clone->SetName(child->Name());
-            child_clone->SetParent(clone, false);
+            const Core::Transform& source_transform = original->GetTransform();
+            clone->GetTransform().SetLocal(
+                source_transform.LocalPosition(),
+                source_transform.LocalRotationEuler(),
+                source_transform.LocalScale());
+
+            // Prefab instance の情報も引き継ぐ。instance root は下で張り替える。
+            if (original->IsPrefabInstance())
+            {
+                clone->SetPrefabInstanceInfo(original->PrefabSourceGUID(),
+                    original->PrefabLocalID(), clone->ID());
+            }
+
+            clones.push_back(clone);
+            remap.emplace(original->ID(), clone);
         }
-        return clone;
+
+        GameObject* root_clone = clones.empty() ? nullptr : clones.front();
+        if (root_clone == nullptr) return nullptr;
+
+        // 階層を張り直す。複製元の親が部分木の中にいれば複製先の親へ、
+        // 外にいれば（＝起点）元と同じ親へぶら下げる。
+        for (std::size_t index = 0; index < originals.size(); ++index)
+        {
+            GameObject* clone = clones[index];
+            if (clone == nullptr) continue;
+
+            const GameObject* original_parent = originals[index]->Parent();
+            if (original_parent == nullptr)
+            {
+                continue;
+            }
+
+            const auto found = remap.find(original_parent->ID());
+            clone->SetParent(found != remap.end() ? found->second
+                : const_cast<GameObject*>(original_parent), false);
+        }
+
+        // Prefab instance root を複製先の起点へ揃える。
+        for (GameObject* clone : clones)
+        {
+            if (clone == nullptr || !clone->IsPrefabInstance()) continue;
+            clone->SetPrefabInstanceInfo(clone->PrefabSourceGUID(),
+                clone->PrefabLocalID(), root_clone->ID());
+        }
+
+        for (std::size_t index = 0; index < originals.size(); ++index)
+        {
+            GameObject* clone = clones[index];
+            if (clone == nullptr) continue;
+
+            const GameObject& original = *originals[index];
+            for (std::size_t slot = 0; slot < original.ComponentCount(); ++slot)
+            {
+                const Core::Component* component = original.ComponentAt(slot);
+                if (component == nullptr || component->PendingDestroy()) continue;
+                DuplicateComponent(*component, *clone, remap);
+            }
+        }
+
+        return root_clone;
     }
 }

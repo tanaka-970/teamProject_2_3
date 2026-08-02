@@ -1,5 +1,7 @@
 ﻿#include "SceneSerializer.h"
 
+#include <cmath>
+#include <cstdint>
 #include <fstream>
 #include <iomanip>
 #include <istream>
@@ -8,6 +10,7 @@
 #include <ostream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 namespace ReplayEngine::Scene::Serialization
 {
@@ -23,6 +26,16 @@ namespace ReplayEngine::Scene::Serialization
         constexpr std::size_t maximum_objects = 200000;
         constexpr std::size_t maximum_components_per_object = 512;
         constexpr std::size_t maximum_properties_per_component = 512;
+        constexpr std::size_t maximum_array_elements = 65536;
+
+        // NaN / Infinity を書き出さない。
+        //
+        // operator<< はこれらを "nan" / "inf" として書き、読み戻しの挙動が
+        // 処理系で揺れる。1 個の壊れた値のせいで Scene 全体が読めなくなるより、
+        // その値だけ 0 にして残りを守る方がよい。
+        // 「壊れた値があった」ことは SceneValidator が実データ側で検出する。
+        float Sanitize(float value) noexcept { return std::isfinite(value) ? value : 0.0f; }
+        double Sanitize(double value) noexcept { return std::isfinite(value) ? value : 0.0; }
 
         bool Expect(std::istream& stream, const char* expected, std::string& error)
         {
@@ -38,7 +51,7 @@ namespace ReplayEngine::Scene::Serialization
 
         void WriteFloat3(std::ostream& stream, const DirectX::XMFLOAT3& value)
         {
-            stream << value.x << ' ' << value.y << ' ' << value.z;
+            stream << Sanitize(value.x) << ' ' << Sanitize(value.y) << ' ' << Sanitize(value.z);
         }
 
         bool ReadFloat3(std::istream& stream, DirectX::XMFLOAT3& value)
@@ -46,13 +59,18 @@ namespace ReplayEngine::Scene::Serialization
             return static_cast<bool>(stream >> value.x >> value.y >> value.z);
         }
 
-        bool WriteProperty(std::ostream& stream, const std::string& name,
-            const PropertyValue& value)
+        // 値の本体だけを書く。名前も型名も書かない。
+        //
+        // 名前・型名の出力と分けている理由:
+        //   配列の要素は「型名 1 つ + 値の並び」として書くため、
+        //   要素ごとに型名を繰り返さない。本体の書式を 1 か所にまとめておけば、
+        //   単一値と配列要素で書式がずれることがない。
+        //
+        // type は「宣言された型」。value 側が別の型を持っていても、
+        // 宣言された型の As* で取り出すので書式は必ず一致する。
+        bool WriteValueBody(std::ostream& stream, PropertyType type, const PropertyValue& value)
         {
-            stream << "    PROPERTY " << std::quoted(name) << ' '
-                << Reflection::ToString(value.Type()) << ' ';
-
-            switch (value.Type())
+            switch (type)
             {
             case PropertyType::Bool:
                 stream << (value.AsBool() ? 1 : 0);
@@ -65,20 +83,29 @@ namespace ReplayEngine::Scene::Serialization
                 // どれも内部表現は int。書式は同じで、型名だけが違う。
                 stream << value.AsInt();
                 break;
+            case PropertyType::Int64:
+                stream << value.AsInt64();
+                break;
+            case PropertyType::UInt64:
+                stream << value.AsUInt64();
+                break;
             case PropertyType::Float:
-                stream << value.AsFloat();
+                stream << Sanitize(value.AsFloat());
                 break;
             case PropertyType::Double:
-                stream << value.AsDouble();
+                stream << Sanitize(value.AsDouble());
                 break;
             case PropertyType::String:
             case PropertyType::AssetPath:
+            case PropertyType::AssetReference:
+            case PropertyType::SceneReference:
+                // 参照系はどれも「識別子の文字列」。書式は共通で、意味だけが型名で決まる。
                 stream << std::quoted(value.AsString());
                 break;
             case PropertyType::Vector2:
             {
                 const DirectX::XMFLOAT2 vector = value.AsVector2();
-                stream << vector.x << ' ' << vector.y;
+                stream << Sanitize(vector.x) << ' ' << Sanitize(vector.y);
                 break;
             }
             case PropertyType::Vector3:
@@ -89,13 +116,204 @@ namespace ReplayEngine::Scene::Serialization
             case PropertyType::Color:
             {
                 const DirectX::XMFLOAT4 vector = value.AsVector4();
-                stream << vector.x << ' ' << vector.y << ' ' << vector.z << ' ' << vector.w;
+                stream << Sanitize(vector.x) << ' ' << Sanitize(vector.y) << ' '
+                    << Sanitize(vector.z) << ' ' << Sanitize(vector.w);
                 break;
             }
             case PropertyType::ObjectReference:
                 stream << value.AsObjectReference().Value();
                 break;
+            case PropertyType::ComponentReference:
+            {
+                // 所有 ObjectID と、その GameObject 内で安定した Component ID の組。
+                const Reflection::ComponentReference reference = value.AsComponentReference();
+                stream << reference.owner.Value() << ' ' << reference.component;
+                break;
             }
+            case PropertyType::Array:
+                // 配列の入れ子は未対応。ここへ来るのは呼び出し側の誤りなので書かない。
+                return false;
+            }
+            return static_cast<bool>(stream);
+        }
+
+        bool ReadValueBody(std::istream& stream, PropertyType type, PropertyValue& out,
+            std::string& error)
+        {
+            switch (type)
+            {
+            case PropertyType::Bool:
+            {
+                int raw = 0;
+                if (!(stream >> raw)) { error = "bool を読み取れません。"; return false; }
+                out = PropertyValue::MakeBool(raw != 0);
+                return true;
+            }
+            case PropertyType::Int:
+            case PropertyType::Enum:
+            case PropertyType::CollisionLayer:
+            case PropertyType::CollisionMask:
+            case PropertyType::ColliderReference:
+            {
+                int raw = 0;
+                if (!(stream >> raw)) { error = "int を読み取れません。"; return false; }
+                switch (type)
+                {
+                case PropertyType::Enum:
+                    out = PropertyValue::MakeEnum(raw); break;
+                case PropertyType::CollisionLayer:
+                    out = PropertyValue::MakeCollisionLayer(raw); break;
+                case PropertyType::CollisionMask:
+                    out = PropertyValue::MakeCollisionMask(raw); break;
+                case PropertyType::ColliderReference:
+                    out = PropertyValue::MakeColliderReference(raw); break;
+                default:
+                    out = PropertyValue::MakeInt(raw); break;
+                }
+                return true;
+            }
+            case PropertyType::Int64:
+            {
+                std::int64_t raw = 0;
+                if (!(stream >> raw)) { error = "int64 を読み取れません。"; return false; }
+                out = PropertyValue::MakeInt64(raw);
+                return true;
+            }
+            case PropertyType::UInt64:
+            {
+                std::uint64_t raw = 0;
+                if (!(stream >> raw)) { error = "uint64 を読み取れません。"; return false; }
+                out = PropertyValue::MakeUInt64(raw);
+                return true;
+            }
+            case PropertyType::Float:
+            {
+                float raw = 0.0f;
+                if (!(stream >> raw)) { error = "float を読み取れません。"; return false; }
+                out = PropertyValue::MakeFloat(Sanitize(raw));
+                return true;
+            }
+            case PropertyType::Double:
+            {
+                double raw = 0.0;
+                if (!(stream >> raw)) { error = "double を読み取れません。"; return false; }
+                out = PropertyValue::MakeDouble(Sanitize(raw));
+                return true;
+            }
+            case PropertyType::String:
+            case PropertyType::AssetPath:
+            case PropertyType::AssetReference:
+            case PropertyType::SceneReference:
+            {
+                std::string raw;
+                if (!(stream >> std::quoted(raw)))
+                {
+                    error = "文字列を読み取れません。";
+                    return false;
+                }
+                switch (type)
+                {
+                case PropertyType::AssetPath:
+                    out = PropertyValue::MakeAssetPath(std::move(raw)); break;
+                case PropertyType::AssetReference:
+                    out = PropertyValue::MakeAssetReference(std::move(raw)); break;
+                case PropertyType::SceneReference:
+                    out = PropertyValue::MakeSceneReference(std::move(raw)); break;
+                default:
+                    out = PropertyValue::MakeString(std::move(raw)); break;
+                }
+                return true;
+            }
+            case PropertyType::Vector2:
+            {
+                DirectX::XMFLOAT2 raw{ 0.0f, 0.0f };
+                if (!(stream >> raw.x >> raw.y)) { error = "vec2 を読み取れません。"; return false; }
+                raw.x = Sanitize(raw.x); raw.y = Sanitize(raw.y);
+                out = PropertyValue::MakeVector2(raw);
+                return true;
+            }
+            case PropertyType::Vector3:
+            {
+                DirectX::XMFLOAT3 raw{ 0.0f, 0.0f, 0.0f };
+                if (!ReadFloat3(stream, raw)) { error = "vec3 を読み取れません。"; return false; }
+                raw.x = Sanitize(raw.x); raw.y = Sanitize(raw.y); raw.z = Sanitize(raw.z);
+                out = PropertyValue::MakeVector3(raw);
+                return true;
+            }
+            case PropertyType::Vector4:
+            case PropertyType::Quaternion:
+            case PropertyType::Color:
+            {
+                DirectX::XMFLOAT4 raw{ 0.0f, 0.0f, 0.0f, 1.0f };
+                if (!(stream >> raw.x >> raw.y >> raw.z >> raw.w))
+                {
+                    error = "vec4 を読み取れません。";
+                    return false;
+                }
+                raw.x = Sanitize(raw.x); raw.y = Sanitize(raw.y);
+                raw.z = Sanitize(raw.z); raw.w = Sanitize(raw.w);
+                if (type == PropertyType::Quaternion) out = PropertyValue::MakeQuaternion(raw);
+                else if (type == PropertyType::Color) out = PropertyValue::MakeColor(raw);
+                else                                  out = PropertyValue::MakeVector4(raw);
+                return true;
+            }
+            case PropertyType::ObjectReference:
+            {
+                Core::ObjectID::ValueType raw = 0;
+                if (!(stream >> raw)) { error = "オブジェクト参照を読み取れません。"; return false; }
+                out = PropertyValue::MakeObjectReference(Core::ObjectID(raw));
+                return true;
+            }
+            case PropertyType::ComponentReference:
+            {
+                Core::ObjectID::ValueType raw_owner = 0;
+                std::uint32_t raw_component = 0;
+                if (!(stream >> raw_owner >> raw_component))
+                {
+                    error = "Component 参照を読み取れません。";
+                    return false;
+                }
+                Reflection::ComponentReference reference;
+                reference.owner = Core::ObjectID(raw_owner);
+                reference.component = raw_component;
+                out = PropertyValue::MakeComponentReference(reference);
+                return true;
+            }
+            case PropertyType::Array:
+                error = "配列の入れ子には対応していません。";
+                return false;
+            }
+
+            error = "プロパティ型の処理に失敗しました。";
+            return false;
+        }
+
+        bool WriteProperty(std::ostream& stream, const std::string& name,
+            const PropertyValue& value)
+        {
+            stream << "    PROPERTY " << std::quoted(name) << ' '
+                << Reflection::ToString(value.Type());
+
+            if (value.Type() == PropertyType::Array)
+            {
+                // 書式: array <要素型名> <個数> <値0> <値1> ...
+                const PropertyType element_type = value.ArrayElementType();
+                const std::vector<PropertyValue>& elements = value.ArrayElements();
+
+                stream << ' ' << Reflection::ToString(element_type)
+                    << ' ' << elements.size();
+                for (const PropertyValue& element : elements)
+                {
+                    stream << ' ';
+                    if (!WriteValueBody(stream, element_type, element)) return false;
+                }
+            }
+            else
+            {
+                stream << ' ';
+                if (!WriteValueBody(stream, value.Type(), value)) return false;
+            }
+
             stream << '\n';
             return static_cast<bool>(stream);
         }
@@ -119,117 +337,57 @@ namespace ReplayEngine::Scene::Serialization
                 return false;
             }
 
-            switch (type)
+            if (type == PropertyType::Array)
             {
-            case PropertyType::Bool:
-            {
-                int raw = 0;
-                if (!(stream >> raw)) { error = "bool を読み取れません。"; return false; }
-                bag.Set(name, PropertyValue::MakeBool(raw != 0));
-                return true;
-            }
-            case PropertyType::Int:
-            case PropertyType::Enum:
-            case PropertyType::CollisionLayer:
-            case PropertyType::CollisionMask:
-            case PropertyType::ColliderReference:
-            {
-                int raw = 0;
-                if (!(stream >> raw)) { error = "int を読み取れません。"; return false; }
-                switch (type)
+                std::string element_type_text;
+                std::size_t element_count = 0;
+                if (!(stream >> element_type_text >> element_count))
                 {
-                case PropertyType::Enum:
-                    bag.Set(name, PropertyValue::MakeEnum(raw)); break;
-                case PropertyType::CollisionLayer:
-                    bag.Set(name, PropertyValue::MakeCollisionLayer(raw)); break;
-                case PropertyType::CollisionMask:
-                    bag.Set(name, PropertyValue::MakeCollisionMask(raw)); break;
-                case PropertyType::ColliderReference:
-                    bag.Set(name, PropertyValue::MakeColliderReference(raw)); break;
-                default:
-                    bag.Set(name, PropertyValue::MakeInt(raw)); break;
-                }
-                return true;
-            }
-            case PropertyType::Float:
-            {
-                float raw = 0.0f;
-                if (!(stream >> raw)) { error = "float を読み取れません。"; return false; }
-                bag.Set(name, PropertyValue::MakeFloat(raw));
-                return true;
-            }
-            case PropertyType::Double:
-            {
-                double raw = 0.0;
-                if (!(stream >> raw)) { error = "double を読み取れません。"; return false; }
-                bag.Set(name, PropertyValue::MakeDouble(raw));
-                return true;
-            }
-            case PropertyType::String:
-            case PropertyType::AssetPath:
-            {
-                std::string raw;
-                if (!(stream >> std::quoted(raw)))
-                {
-                    error = "文字列を読み取れません。";
+                    error = "配列の要素型または個数を読み取れません。";
                     return false;
                 }
-                bag.Set(name, type == PropertyType::AssetPath
-                    ? PropertyValue::MakeAssetPath(std::move(raw))
-                    : PropertyValue::MakeString(std::move(raw)));
-                return true;
-            }
-            case PropertyType::Vector2:
-            {
-                DirectX::XMFLOAT2 raw{ 0.0f, 0.0f };
-                if (!(stream >> raw.x >> raw.y)) { error = "vec2 を読み取れません。"; return false; }
-                bag.Set(name, PropertyValue::MakeVector2(raw));
-                return true;
-            }
-            case PropertyType::Vector3:
-            {
-                DirectX::XMFLOAT3 raw{ 0.0f, 0.0f, 0.0f };
-                if (!ReadFloat3(stream, raw)) { error = "vec3 を読み取れません。"; return false; }
-                bag.Set(name, PropertyValue::MakeVector3(raw));
-                return true;
-            }
-            case PropertyType::Vector4:
-            case PropertyType::Quaternion:
-            case PropertyType::Color:
-            {
-                DirectX::XMFLOAT4 raw{ 0.0f, 0.0f, 0.0f, 1.0f };
-                if (!(stream >> raw.x >> raw.y >> raw.z >> raw.w))
+                if (element_count > maximum_array_elements)
                 {
-                    error = "vec4 を読み取れません。";
+                    error = "配列の要素数が不正です。";
                     return false;
                 }
-                if (type == PropertyType::Quaternion) bag.Set(name, PropertyValue::MakeQuaternion(raw));
-                else if (type == PropertyType::Color)  bag.Set(name, PropertyValue::MakeColor(raw));
-                else                                   bag.Set(name, PropertyValue::MakeVector4(raw));
+
+                PropertyType element_type = PropertyType::Bool;
+                if (!Reflection::TryParsePropertyType(element_type_text, element_type) ||
+                    Reflection::IsContainerType(element_type))
+                {
+                    error = "配列の要素型が不正です: " + element_type_text;
+                    return false;
+                }
+
+                std::vector<PropertyValue> elements;
+                elements.reserve(element_count);
+                for (std::size_t index = 0; index < element_count; ++index)
+                {
+                    PropertyValue element;
+                    if (!ReadValueBody(stream, element_type, element, error)) return false;
+                    elements.push_back(std::move(element));
+                }
+
+                bag.Set(name, PropertyValue::MakeArray(element_type, std::move(elements)));
                 return true;
-            }
-            case PropertyType::ObjectReference:
-            {
-                Core::ObjectID::ValueType raw = 0;
-                if (!(stream >> raw)) { error = "オブジェクト参照を読み取れません。"; return false; }
-                bag.Set(name, PropertyValue::MakeObjectReference(Core::ObjectID(raw)));
-                return true;
-            }
             }
 
-            error = "プロパティ型の処理に失敗しました。";
-            return false;
+            PropertyValue value;
+            if (!ReadValueBody(stream, type, value, error)) return false;
+            bag.Set(name, std::move(value));
+            return true;
         }
     }
 
     std::string SceneSerializer::UnsupportedVersionMessage(int version)
     {
-        if (version > 0 && version < SceneData::current_version)
+        if (version > 0 && version < SceneData::minimum_supported_version)
         {
             return "この Scene ファイルは旧形式 (v" + std::to_string(version) +
                 ") です。GameObject / Component 基盤の刷新にともない非対応となりました。"
-                "v" + std::to_string(SceneData::current_version) +
-                " 形式で Scene を作り直してください。";
+                "対応しているのは v" + std::to_string(SceneData::minimum_supported_version) +
+                " 〜 v" + std::to_string(SceneData::current_version) + " です。";
         }
         if (version > SceneData::current_version)
         {
@@ -290,6 +448,20 @@ namespace ReplayEngine::Scene::Serialization
             {
                 stream << "  COMPONENT " << std::quoted(component.type_name) << ' '
                     << (component.enabled ? 1 : 0) << '\n';
+
+                // v11 で追加した行。
+                //
+                // COMPONENT 行そのものは v10 と同じ形のまま残してある。
+                // 追加情報を別行にしたのは、読み手の分岐を「行があるかどうか」の
+                // 1 段だけにして、v10 以前の読み取り経路へ手を入れずに済ませるため。
+                //
+                // TYPE_GUID が空 (32 個の 0) の型は、これまで通り型名が主キーになる。
+                // Engine 組み込み Component へ一斉に GUID を振る必要はない。
+                stream << "    STABLE_ID " << component.stable_id << '\n';
+                stream << "    TYPE_GUID " << std::quoted(component.type_guid.ToString()) << '\n';
+                stream << "    TYPE_MODULE " << std::quoted(component.module_id) << '\n';
+                stream << "    TYPE_VERSION " << component.type_version << '\n';
+
                 stream << "    PROPERTY_COUNT " << component.properties.Size() << '\n';
                 for (const PropertyBag::Entry& entry : component.properties.Entries())
                 {
@@ -475,6 +647,54 @@ namespace ReplayEngine::Scene::Serialization
                 }
                 component.enabled = component_enabled != 0;
                 component.type_id = Core::MakeComponentTypeID(component.type_name);
+
+                // v11 で追加した行。v10 以前には存在しないので読まない。
+                //
+                // v10 以前を読んだ場合:
+                //   stable_id = 0     -> 読み込み側が採番し直す
+                //   type_guid = 無効  -> 型名で解決する（従来どおり）
+                //   type_version = 0  -> 未記録
+                // どれも「情報が無い」だけで、読み込みは通る。
+                if (version >= 11)
+                {
+                    if (!Expect(stream, "STABLE_ID", error)) return false;
+                    std::uint32_t raw_stable_id = 0;
+                    if (!(stream >> raw_stable_id))
+                    {
+                        error = "Component の StableID を読み取れません。";
+                        return false;
+                    }
+                    component.stable_id = raw_stable_id;
+
+                    if (!Expect(stream, "TYPE_GUID", error)) return false;
+                    std::string raw_type_guid;
+                    if (!(stream >> std::quoted(raw_type_guid)))
+                    {
+                        error = "Component の Type GUID を読み取れません。";
+                        return false;
+                    }
+                    // 解析できない文字列は無効 GUID として扱い、型名での解決へ落とす。
+                    // 1 個の壊れた GUID で Scene 全体を読めなくしない。
+                    Reflection::TypeGUID parsed;
+                    if (Reflection::TypeGUID::TryParse(raw_type_guid, parsed))
+                    {
+                        component.type_guid = parsed;
+                    }
+
+                    if (!Expect(stream, "TYPE_MODULE", error)) return false;
+                    if (!(stream >> std::quoted(component.module_id)))
+                    {
+                        error = "Component のモジュール名を読み取れません。";
+                        return false;
+                    }
+
+                    if (!Expect(stream, "TYPE_VERSION", error)) return false;
+                    if (!(stream >> component.type_version))
+                    {
+                        error = "Component の型バージョンを読み取れません。";
+                        return false;
+                    }
+                }
 
                 if (!Expect(stream, "PROPERTY_COUNT", error)) return false;
                 std::size_t property_count = 0;

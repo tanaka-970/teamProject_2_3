@@ -15,6 +15,24 @@ namespace ReplayEngine::Core
             static std::vector<ComponentTypeInfo> table;
             return table;
         }
+
+        std::vector<std::string>& ConflictLog() noexcept
+        {
+            static std::vector<std::string> conflicts;
+            return conflicts;
+        }
+
+        // この型が名乗る GUID（本体 + 別名）のどれかに一致するか。
+        bool ClaimsGUID(const ComponentTypeInfo& info, Reflection::TypeGUID guid) noexcept
+        {
+            if (!guid.IsValid()) return false;
+            if (info.type_guid == guid) return true;
+            for (const Reflection::TypeGUID& alias : info.alias_guids)
+            {
+                if (alias == guid) return true;
+            }
+            return false;
+        }
     }
 
     bool ComponentRegistry::RegisterInfo(ComponentTypeInfo info)
@@ -34,6 +52,45 @@ namespace ReplayEngine::Core
             });
         if (duplicated != table.end()) return false;
 
+        // GUID の重複はもっと危険なので、記録したうえで登録自体を拒否する。
+        //
+        // 上書きしてしまうと、保存済み Scene の参照が別の型へ解決され、
+        // 「開いたら中身が違う Component になっていた」という壊れ方をする。
+        // 拒否すれば、その型は Missing Component として保持されるだけで済む。
+        if (info.type_guid.IsValid())
+        {
+            const auto guid_conflict = std::find_if(table.begin(), table.end(),
+                [&info](const ComponentTypeInfo& existing)
+                {
+                    return ClaimsGUID(existing, info.type_guid);
+                });
+            if (guid_conflict != table.end())
+            {
+                ConflictLog().push_back(
+                    "Type GUID が重複しています: " + info.type_guid.ToString() +
+                    " (" + info.type_name + " と " + guid_conflict->type_name + ")");
+                return false;
+            }
+        }
+
+        // 別名 GUID が既存の型と衝突する場合も同じ扱いにする。
+        for (const Reflection::TypeGUID& alias : info.alias_guids)
+        {
+            if (!alias.IsValid()) continue;
+            const auto alias_conflict = std::find_if(table.begin(), table.end(),
+                [&alias](const ComponentTypeInfo& existing)
+                {
+                    return ClaimsGUID(existing, alias);
+                });
+            if (alias_conflict != table.end())
+            {
+                ConflictLog().push_back(
+                    "別名 Type GUID が重複しています: " + alias.ToString() +
+                    " (" + info.type_name + " と " + alias_conflict->type_name + ")");
+                return false;
+            }
+        }
+
         table.push_back(std::move(info));
         return true;
     }
@@ -41,6 +98,12 @@ namespace ReplayEngine::Core
     void ComponentRegistry::Clear() noexcept
     {
         Table().clear();
+        ConflictLog().clear();
+    }
+
+    const std::vector<std::string>& ComponentRegistry::TypeGUIDConflicts() noexcept
+    {
+        return ConflictLog();
     }
 
     const ComponentTypeInfo* ComponentRegistry::Find(ComponentTypeID type_id) noexcept
@@ -63,6 +126,44 @@ namespace ReplayEngine::Core
             if (info.type_name == type_name) return &info;
         }
         return nullptr;
+    }
+
+    const ComponentTypeInfo* ComponentRegistry::Find(Reflection::TypeGUID type_guid) noexcept
+    {
+        if (!type_guid.IsValid()) return nullptr;
+
+        const auto& table = Table();
+
+        // 本体の GUID を先に総当たりする。別名より本体を優先するため、
+        // 1 回のループでまとめて判定せずに 2 段構えにしてある。
+        for (const ComponentTypeInfo& info : table)
+        {
+            if (info.type_guid == type_guid) return &info;
+        }
+        for (const ComponentTypeInfo& info : table)
+        {
+            if (ClaimsGUID(info, type_guid)) return &info;
+        }
+        return nullptr;
+    }
+
+    const ComponentTypeInfo* ComponentRegistry::Resolve(Reflection::TypeGUID type_guid,
+        const std::string& type_name) noexcept
+    {
+        if (const ComponentTypeInfo* by_guid = Find(type_guid)) return by_guid;
+
+        const ComponentTypeInfo* by_name = Find(type_name);
+        if (by_name == nullptr) return nullptr;
+
+        // 保存データに GUID があり、名前で当たった型が別の GUID を名乗っている場合は
+        // 「別の型」と判断する。名前が同じでも中身が違う可能性があるため、
+        // 黙って値を流し込まず Missing Component として保持させる。
+        if (type_guid.IsValid() && by_name->type_guid.IsValid() &&
+            by_name->type_guid != type_guid)
+        {
+            return nullptr;
+        }
+        return by_name;
     }
 
     const std::vector<ComponentTypeInfo>& ComponentRegistry::All() noexcept
@@ -102,6 +203,12 @@ namespace ReplayEngine::Core
 
     Component* ComponentRegistry::Create(ComponentTypeID type_id, GameObject& owner)
     {
+        return CreateWithStableID(type_id, owner, invalid_component_stable_id);
+    }
+
+    Component* ComponentRegistry::CreateWithStableID(ComponentTypeID type_id, GameObject& owner,
+        ComponentStableID stable_id)
+    {
         // 重複禁止の型が既にある場合は、追加せず既存インスタンスを返す。
         // Editor から押されたときも Scene 読み込み時も、ここで一律に弾く。
         if (!AllowsMultiple(type_id))
@@ -113,7 +220,7 @@ namespace ReplayEngine::Core
         if (!created) return nullptr;
 
         Component* raw = created.get();
-        return owner.AttachComponent(std::move(created)) ? raw : nullptr;
+        return owner.AttachComponentWithStableID(std::move(created), stable_id) ? raw : nullptr;
     }
 
     Component* ComponentRegistry::Create(const std::string& type_name, GameObject& owner)

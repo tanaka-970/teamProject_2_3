@@ -36,49 +36,12 @@ namespace ReplayEngine::Editor
             buffer[length] = '\0';
         }
 
-        bool NearlyEqual(float a, float b) noexcept
-        {
-            return std::fabs(a - b) <= 0.00001f;
-        }
-
+        // 値の比較は Reflection::ValuesEqual へ集約した。
+        // PropertyType を足したときに直す場所を 1 か所に保つため。
         bool PropertyValuesEqual(const Reflection::PropertyValue& a,
             const Reflection::PropertyValue& b)
         {
-            if (a.Type() != b.Type()) return false;
-            using Reflection::PropertyType;
-            switch (a.Type())
-            {
-            case PropertyType::Bool: return a.AsBool() == b.AsBool();
-            case PropertyType::Int:
-            case PropertyType::Enum:
-            case PropertyType::CollisionLayer:
-            case PropertyType::CollisionMask:
-            case PropertyType::ColliderReference: return a.AsInt() == b.AsInt();
-            case PropertyType::Float: return NearlyEqual(a.AsFloat(), b.AsFloat());
-            case PropertyType::Double: return std::fabs(a.AsDouble() - b.AsDouble()) <= 0.0000001;
-            case PropertyType::String:
-            case PropertyType::AssetPath: return a.AsString() == b.AsString();
-            case PropertyType::ObjectReference: return a.AsObjectReference() == b.AsObjectReference();
-            case PropertyType::Vector2:
-            {
-                const auto x = a.AsVector2(); const auto y = b.AsVector2();
-                return NearlyEqual(x.x, y.x) && NearlyEqual(x.y, y.y);
-            }
-            case PropertyType::Vector3:
-            {
-                const auto x = a.AsVector3(); const auto y = b.AsVector3();
-                return NearlyEqual(x.x, y.x) && NearlyEqual(x.y, y.y) && NearlyEqual(x.z, y.z);
-            }
-            case PropertyType::Vector4:
-            case PropertyType::Quaternion:
-            case PropertyType::Color:
-            {
-                const auto x = a.AsVector4(); const auto y = b.AsVector4();
-                return NearlyEqual(x.x, y.x) && NearlyEqual(x.y, y.y) &&
-                    NearlyEqual(x.z, y.z) && NearlyEqual(x.w, y.w);
-            }
-            }
-            return false;
+            return Reflection::ValuesEqual(a, b);
         }
     }
 

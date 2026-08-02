@@ -12,6 +12,7 @@
 #include "imgui/imgui.h"
 #include "imgui/imgui_internal.h"
 
+#include <cstdint>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -544,6 +545,89 @@ namespace ReplayEngine::Editor
                 ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.25f, 1.0f),
                     u8"⚠ 移動用 Collider が設定されていません");
             }
+            break;
+        }
+
+        // ---- v11 で追加した型 ------------------------------------------------
+
+        case PropertyType::Int64:
+        {
+            std::int64_t value = current.AsInt64();
+            if (ImGui::InputScalar(label.c_str(), ImGuiDataType_S64, &value))
+            {
+                desc.Apply(component, PropertyValue::MakeInt64(value));
+                changed = true;
+            }
+            break;
+        }
+        case PropertyType::UInt64:
+        {
+            std::uint64_t value = current.AsUInt64();
+            if (ImGui::InputScalar(label.c_str(), ImGuiDataType_U64, &value))
+            {
+                desc.Apply(component, PropertyValue::MakeUInt64(value));
+                changed = true;
+            }
+            break;
+        }
+        case PropertyType::AssetReference:
+        case PropertyType::SceneReference:
+        {
+            // どちらも AssetGUID を保存する。Picker は同じものを使う。
+            // 種類の絞り込みは desc.asset_type で行う（Phase 8 で候補の絞り込みを足す）。
+            //
+            // 解決できない GUID でも値は消さない。Picker には "Missing Asset" と出て、
+            // Asset が戻れば自動的に元の表示へ戻る。
+            std::string guid = current.AsString();
+            if (DrawAssetReference(label.c_str(), assets, guid, desc.read_only))
+            {
+                desc.Apply(component, desc.type == PropertyType::AssetReference
+                    ? PropertyValue::MakeAssetReference(guid)
+                    : PropertyValue::MakeSceneReference(guid));
+                changed = true;
+            }
+            break;
+        }
+        case PropertyType::ComponentReference:
+        {
+            // 所有 GameObject を選ぶところまでを提供する。
+            // 「その GameObject のどの Component か」を選ぶ一覧は Editor 統合
+            // (Phase 8) で足す。現時点では保存されている Component ID を表示する。
+            //
+            // 参照そのものは失わない。Object を選び直しても Component ID は保たれ、
+            // 配置先に同じ ID の Component があればそのまま解決される。
+            Reflection::ComponentReference reference = current.AsComponentReference();
+
+            Core::ObjectID owner = reference.owner;
+            if (scene != nullptr)
+            {
+                if (DrawObjectPicker(label.c_str(), *scene, owner))
+                {
+                    reference.owner = owner;
+                    desc.Apply(component, PropertyValue::MakeComponentReference(reference));
+                    changed = true;
+                }
+            }
+            else
+            {
+                ImGui::TextDisabled(u8"(Scene が無いため参照先を選べません)");
+            }
+
+            ImGui::TextDisabled(u8"Component ID: %u",
+                static_cast<unsigned int>(reference.component));
+            break;
+        }
+        case PropertyType::Array:
+        {
+            // 要素の追加・削除・並べ替えの UI は Editor 統合 (Phase 8) で足す。
+            //
+            // ここで中途半端な編集欄を出さない理由:
+            //   要素数を変える操作を Undo と噛み合わせないまま提供すると、
+            //   編集の途中で要素が消えたときに元へ戻せない。
+            //   表示だけに留めておけば、値が失われることはない。
+            ImGui::TextDisabled(u8"%s × %zu (編集 UI は未実装。値は保持されます)",
+                Reflection::ToString(current.ArrayElementType()),
+                current.ArrayElements().size());
             break;
         }
         }

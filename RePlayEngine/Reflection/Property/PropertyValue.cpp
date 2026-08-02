@@ -1,5 +1,8 @@
 #include "PropertyValue.h"
 
+#include <cmath>
+#include <limits>
+
 namespace ReplayEngine::Reflection
 {
     namespace
@@ -34,7 +37,59 @@ namespace ReplayEngine::Reflection
             { PropertyType::CollisionLayer,    "layer" },
             { PropertyType::CollisionMask,     "layermask" },
             { PropertyType::ColliderReference, "colliderref" },
+            // v11 で追加。
+            { PropertyType::Int64,             "int64" },
+            { PropertyType::UInt64,            "uint64" },
+            { PropertyType::AssetReference,    "assetref" },
+            { PropertyType::SceneReference,    "sceneref" },
+            { PropertyType::ComponentReference, "compref" },
+            { PropertyType::Array,             "array" },
         };
+
+        bool IsIntegerLike(PropertyType type) noexcept
+        {
+            switch (type)
+            {
+            case PropertyType::Bool:
+            case PropertyType::Int:
+            case PropertyType::Int64:
+            case PropertyType::UInt64:
+            case PropertyType::Enum:
+            case PropertyType::CollisionLayer:
+            case PropertyType::CollisionMask:
+            case PropertyType::ColliderReference:
+                return true;
+            default:
+                return false;
+            }
+        }
+
+        bool IsNumeric(PropertyType type) noexcept
+        {
+            return IsIntegerLike(type) ||
+                type == PropertyType::Float || type == PropertyType::Double;
+        }
+
+        bool IsGuidString(PropertyType type) noexcept
+        {
+            return type == PropertyType::AssetReference ||
+                type == PropertyType::SceneReference;
+        }
+
+        // 値の等価判定に使う許容差。
+        //
+        // 名前空間スコープへ置く理由:
+        //   関数ローカルの constexpr をラムダの中から参照すると、MSVC が
+        //   「既定のキャプチャモードが無いのでキャプチャできない」(C3493) として弾く。
+        //   名前空間スコープの定数ならキャプチャの対象にならないため、
+        //   キャプチャ無しのラムダからそのまま使える。
+        constexpr float value_float_tolerance = 0.00001f;
+        constexpr double value_double_tolerance = 0.0000001;
+
+        bool NearlyEqualFloat(float a, float b) noexcept
+        {
+            return std::fabs(a - b) <= value_float_tolerance;
+        }
     }
 
     const char* ToString(PropertyType type) noexcept
@@ -59,6 +114,23 @@ namespace ReplayEngine::Reflection
         return false;
     }
 
+    bool IsContainerType(PropertyType type) noexcept
+    {
+        return type == PropertyType::Array;
+    }
+
+    // ---- 特殊メンバ -------------------------------------------------------
+    //
+    // ここで定義する。std::vector<PropertyValue> をメンバに持つため、
+    // PropertyValue が完全型になった位置で実体化させる必要がある。
+
+    PropertyValue::PropertyValue() = default;
+    PropertyValue::~PropertyValue() = default;
+    PropertyValue::PropertyValue(const PropertyValue& other) = default;
+    PropertyValue::PropertyValue(PropertyValue&& other) noexcept = default;
+    PropertyValue& PropertyValue::operator=(const PropertyValue& other) = default;
+    PropertyValue& PropertyValue::operator=(PropertyValue&& other) noexcept = default;
+
     PropertyValue PropertyValue::MakeBool(bool value)
     {
         PropertyValue result;
@@ -71,6 +143,22 @@ namespace ReplayEngine::Reflection
     {
         PropertyValue result;
         result.type_ = PropertyType::Int;
+        result.storage_ = value;
+        return result;
+    }
+
+    PropertyValue PropertyValue::MakeInt64(std::int64_t value)
+    {
+        PropertyValue result;
+        result.type_ = PropertyType::Int64;
+        result.storage_ = value;
+        return result;
+    }
+
+    PropertyValue PropertyValue::MakeUInt64(std::uint64_t value)
+    {
+        PropertyValue result;
+        result.type_ = PropertyType::UInt64;
         result.storage_ = value;
         return result;
     }
@@ -187,10 +275,50 @@ namespace ReplayEngine::Reflection
         return result;
     }
 
+    PropertyValue PropertyValue::MakeAssetReference(std::string guid)
+    {
+        PropertyValue result;
+        result.type_ = PropertyType::AssetReference;
+        result.storage_ = std::move(guid);
+        return result;
+    }
+
+    PropertyValue PropertyValue::MakeSceneReference(std::string guid)
+    {
+        PropertyValue result;
+        result.type_ = PropertyType::SceneReference;
+        result.storage_ = std::move(guid);
+        return result;
+    }
+
+    PropertyValue PropertyValue::MakeComponentReference(const ComponentReference& value)
+    {
+        PropertyValue result;
+        result.type_ = PropertyType::ComponentReference;
+        result.storage_ = value;
+        return result;
+    }
+
+    PropertyValue PropertyValue::MakeArray(PropertyType element_type,
+        std::vector<PropertyValue> elements)
+    {
+        PropertyValue result;
+        result.type_ = PropertyType::Array;
+
+        // 入れ子の配列は今回未対応。要素型が Array の場合は空配列にする。
+        // 中途半端に一段だけ書き出して読み戻せない形にしない。
+        result.array_element_type_ =
+            IsContainerType(element_type) ? PropertyType::Bool : element_type;
+        if (!IsContainerType(element_type)) result.array_elements_ = std::move(elements);
+        return result;
+    }
+
     bool PropertyValue::AsBool(bool fallback) const noexcept
     {
         if (const bool* value = std::get_if<bool>(&storage_)) return *value;
         if (const int* value = std::get_if<int>(&storage_)) return *value != 0;
+        if (const auto* value = std::get_if<std::int64_t>(&storage_)) return *value != 0;
+        if (const auto* value = std::get_if<std::uint64_t>(&storage_)) return *value != 0;
         return fallback;
     }
 
@@ -198,8 +326,42 @@ namespace ReplayEngine::Reflection
     {
         if (const int* value = std::get_if<int>(&storage_)) return *value;
         if (const bool* value = std::get_if<bool>(&storage_)) return *value ? 1 : 0;
+        if (const auto* value = std::get_if<std::int64_t>(&storage_))
+            return static_cast<int>(*value);
+        if (const auto* value = std::get_if<std::uint64_t>(&storage_))
+            return static_cast<int>(*value);
         if (const float* value = std::get_if<float>(&storage_)) return static_cast<int>(*value);
         if (const double* value = std::get_if<double>(&storage_)) return static_cast<int>(*value);
+        return fallback;
+    }
+
+    std::int64_t PropertyValue::AsInt64(std::int64_t fallback) const noexcept
+    {
+        if (const auto* value = std::get_if<std::int64_t>(&storage_)) return *value;
+        if (const int* value = std::get_if<int>(&storage_))
+            return static_cast<std::int64_t>(*value);
+        if (const bool* value = std::get_if<bool>(&storage_)) return *value ? 1 : 0;
+        if (const auto* value = std::get_if<std::uint64_t>(&storage_))
+            return static_cast<std::int64_t>(*value);
+        if (const float* value = std::get_if<float>(&storage_))
+            return static_cast<std::int64_t>(*value);
+        if (const double* value = std::get_if<double>(&storage_))
+            return static_cast<std::int64_t>(*value);
+        return fallback;
+    }
+
+    std::uint64_t PropertyValue::AsUInt64(std::uint64_t fallback) const noexcept
+    {
+        if (const auto* value = std::get_if<std::uint64_t>(&storage_)) return *value;
+        if (const auto* value = std::get_if<std::int64_t>(&storage_))
+            return *value < 0 ? 0u : static_cast<std::uint64_t>(*value);
+        if (const int* value = std::get_if<int>(&storage_))
+            return *value < 0 ? 0u : static_cast<std::uint64_t>(*value);
+        if (const bool* value = std::get_if<bool>(&storage_)) return *value ? 1u : 0u;
+        if (const float* value = std::get_if<float>(&storage_))
+            return *value < 0.0f ? 0u : static_cast<std::uint64_t>(*value);
+        if (const double* value = std::get_if<double>(&storage_))
+            return *value < 0.0 ? 0u : static_cast<std::uint64_t>(*value);
         return fallback;
     }
 
@@ -208,6 +370,10 @@ namespace ReplayEngine::Reflection
         if (const float* value = std::get_if<float>(&storage_)) return *value;
         if (const double* value = std::get_if<double>(&storage_)) return static_cast<float>(*value);
         if (const int* value = std::get_if<int>(&storage_)) return static_cast<float>(*value);
+        if (const auto* value = std::get_if<std::int64_t>(&storage_))
+            return static_cast<float>(*value);
+        if (const auto* value = std::get_if<std::uint64_t>(&storage_))
+            return static_cast<float>(*value);
         return fallback;
     }
 
@@ -216,6 +382,10 @@ namespace ReplayEngine::Reflection
         if (const double* value = std::get_if<double>(&storage_)) return *value;
         if (const float* value = std::get_if<float>(&storage_)) return static_cast<double>(*value);
         if (const int* value = std::get_if<int>(&storage_)) return static_cast<double>(*value);
+        if (const auto* value = std::get_if<std::int64_t>(&storage_))
+            return static_cast<double>(*value);
+        if (const auto* value = std::get_if<std::uint64_t>(&storage_))
+            return static_cast<double>(*value);
         return fallback;
     }
 
@@ -261,6 +431,127 @@ namespace ReplayEngine::Reflection
         return Core::ObjectID::Invalid();
     }
 
+    ComponentReference PropertyValue::AsComponentReference() const noexcept
+    {
+        if (const auto* value = std::get_if<ComponentReference>(&storage_)) return *value;
+        return ComponentReference{};
+    }
+
+    AssetReference PropertyValue::AsAssetReference() const
+    {
+        // 型が AssetReference でなくても、文字列を持っていれば拾う。
+        // 保存済みの値を「型が違う」という理由だけで捨てないため。
+        return AssetReference{ AsString() };
+    }
+
+    SceneReference PropertyValue::AsSceneReference() const
+    {
+        return SceneReference{ AsString() };
+    }
+
+    bool PropertyValue::IsFinite() const noexcept
+    {
+        if (type_ == PropertyType::Array)
+        {
+            for (const PropertyValue& element : array_elements_)
+            {
+                if (!element.IsFinite()) return false;
+            }
+            return true;
+        }
+
+        if (const float* value = std::get_if<float>(&storage_)) return std::isfinite(*value);
+        if (const double* value = std::get_if<double>(&storage_)) return std::isfinite(*value);
+
+        if (const auto* value = std::get_if<DirectX::XMFLOAT2>(&storage_))
+            return std::isfinite(value->x) && std::isfinite(value->y);
+        if (const auto* value = std::get_if<DirectX::XMFLOAT3>(&storage_))
+            return std::isfinite(value->x) && std::isfinite(value->y) && std::isfinite(value->z);
+        if (const auto* value = std::get_if<DirectX::XMFLOAT4>(&storage_))
+        {
+            return std::isfinite(value->x) && std::isfinite(value->y) &&
+                std::isfinite(value->z) && std::isfinite(value->w);
+        }
+        return true;
+    }
+
+    bool ValuesEqual(const PropertyValue& a, const PropertyValue& b) noexcept
+    {
+        if (a.Type() != b.Type()) return false;
+
+        switch (a.Type())
+        {
+        case PropertyType::Bool:
+            return a.AsBool() == b.AsBool();
+
+        case PropertyType::Int:
+        case PropertyType::Enum:
+        case PropertyType::CollisionLayer:
+        case PropertyType::CollisionMask:
+        case PropertyType::ColliderReference:
+            return a.AsInt() == b.AsInt();
+
+        case PropertyType::Int64:
+            return a.AsInt64() == b.AsInt64();
+
+        case PropertyType::UInt64:
+            return a.AsUInt64() == b.AsUInt64();
+
+        case PropertyType::Float:
+            return NearlyEqualFloat(a.AsFloat(), b.AsFloat());
+
+        case PropertyType::Double:
+            return std::fabs(a.AsDouble() - b.AsDouble()) <= value_double_tolerance;
+
+        case PropertyType::String:
+        case PropertyType::AssetPath:
+        case PropertyType::AssetReference:
+        case PropertyType::SceneReference:
+            return a.AsString() == b.AsString();
+
+        case PropertyType::ObjectReference:
+            return a.AsObjectReference() == b.AsObjectReference();
+
+        case PropertyType::ComponentReference:
+            return a.AsComponentReference() == b.AsComponentReference();
+
+        case PropertyType::Vector2:
+        {
+            const DirectX::XMFLOAT2 x = a.AsVector2();
+            const DirectX::XMFLOAT2 y = b.AsVector2();
+            return NearlyEqualFloat(x.x, y.x) && NearlyEqualFloat(x.y, y.y);
+        }
+        case PropertyType::Vector3:
+        {
+            const DirectX::XMFLOAT3 x = a.AsVector3();
+            const DirectX::XMFLOAT3 y = b.AsVector3();
+            return NearlyEqualFloat(x.x, y.x) && NearlyEqualFloat(x.y, y.y) && NearlyEqualFloat(x.z, y.z);
+        }
+        case PropertyType::Vector4:
+        case PropertyType::Quaternion:
+        case PropertyType::Color:
+        {
+            const DirectX::XMFLOAT4 x = a.AsVector4();
+            const DirectX::XMFLOAT4 y = b.AsVector4();
+            return NearlyEqualFloat(x.x, y.x) && NearlyEqualFloat(x.y, y.y) &&
+                NearlyEqualFloat(x.z, y.z) && NearlyEqualFloat(x.w, y.w);
+        }
+        case PropertyType::Array:
+        {
+            if (a.ArrayElementType() != b.ArrayElementType()) return false;
+            const std::vector<PropertyValue>& left = a.ArrayElements();
+            const std::vector<PropertyValue>& right = b.ArrayElements();
+            if (left.size() != right.size()) return false;
+            for (std::size_t index = 0; index < left.size(); ++index)
+            {
+                if (!ValuesEqual(left[index], right[index])) return false;
+            }
+            return true;
+        }
+        }
+        return false;
+    }
+
     bool PropertyValue::ConvertTo(PropertyType target, PropertyValue& out) const
     {
         if (target == type_)
@@ -269,14 +560,18 @@ namespace ReplayEngine::Reflection
             return true;
         }
 
+        // 配列は他の型と行き来させない。
+        // 要素数が決まらない変換を許すと、黙って値が消える経路ができてしまう。
+        if (target == PropertyType::Array || type_ == PropertyType::Array) return false;
+
         // Scene ファイル側でプロパティの型が変わっていた場合の救済。
         // 意味が保てる組み合わせだけ通し、それ以外は false を返して既定値を維持させる。
         switch (target)
         {
         case PropertyType::Bool:
-            if (type_ == PropertyType::Int || type_ == PropertyType::Enum)
+            if (IsIntegerLike(type_))
             {
-                out = MakeBool(AsInt() != 0);
+                out = MakeBool(AsInt64() != 0);
                 return true;
             }
             return false;
@@ -288,12 +583,7 @@ namespace ReplayEngine::Reflection
         case PropertyType::ColliderReference:
             // 内部表現がどれも int なので、意味の付け替えとして相互に通す。
             // 古い Scene が生の int で保存していた値も、そのまま読める。
-            if (type_ == PropertyType::Bool || type_ == PropertyType::Int ||
-                type_ == PropertyType::Enum || type_ == PropertyType::Float ||
-                type_ == PropertyType::Double ||
-                type_ == PropertyType::CollisionLayer ||
-                type_ == PropertyType::CollisionMask ||
-                type_ == PropertyType::ColliderReference)
+            if (IsNumeric(type_))
             {
                 const int raw = AsInt();
                 switch (target)
@@ -308,9 +598,24 @@ namespace ReplayEngine::Reflection
             }
             return false;
 
+        case PropertyType::Int64:
+            if (IsNumeric(type_))
+            {
+                out = MakeInt64(AsInt64());
+                return true;
+            }
+            return false;
+
+        case PropertyType::UInt64:
+            if (IsNumeric(type_))
+            {
+                out = MakeUInt64(AsUInt64());
+                return true;
+            }
+            return false;
+
         case PropertyType::Float:
-            if (type_ == PropertyType::Int || type_ == PropertyType::Double ||
-                type_ == PropertyType::Enum)
+            if (IsNumeric(type_))
             {
                 out = MakeFloat(AsFloat());
                 return true;
@@ -318,8 +623,7 @@ namespace ReplayEngine::Reflection
             return false;
 
         case PropertyType::Double:
-            if (type_ == PropertyType::Int || type_ == PropertyType::Float ||
-                type_ == PropertyType::Enum)
+            if (IsNumeric(type_))
             {
                 out = MakeDouble(AsDouble());
                 return true;
@@ -328,10 +632,24 @@ namespace ReplayEngine::Reflection
 
         case PropertyType::String:
         case PropertyType::AssetPath:
+            // AssetPath と AssetReference は行き来させない。
+            // 片方は「プロジェクト相対パス」、もう片方は「AssetGUID」で、
+            // 中身の意味がまったく違う。文字列として写すと壊れた参照になる。
             if (type_ == PropertyType::String || type_ == PropertyType::AssetPath)
             {
                 out = target == PropertyType::String
                     ? MakeString(AsString()) : MakeAssetPath(AsString());
+                return true;
+            }
+            return false;
+
+        case PropertyType::AssetReference:
+        case PropertyType::SceneReference:
+            // GUID 文字列どうし、および素の文字列からは受け付ける。
+            if (IsGuidString(type_) || type_ == PropertyType::String)
+            {
+                out = target == PropertyType::AssetReference
+                    ? MakeAssetReference(AsString()) : MakeSceneReference(AsString());
                 return true;
             }
             return false;
@@ -369,6 +687,11 @@ namespace ReplayEngine::Reflection
             return false;
 
         case PropertyType::ObjectReference:
+        case PropertyType::ComponentReference:
+            // 参照どうしは変換しない。指す先の種類が違う。
+            return false;
+
+        case PropertyType::Array:
             return false;
         }
         return false;

@@ -5,6 +5,8 @@
 #include "../../Core/ObjectID/RuntimeIdentity.h"
 #include "../../Core/Threading/ThreadPolicy.h"
 
+#include <memory>
+
 namespace ReplayEngine::Reflection { class PropertyBag; }
 
 namespace ReplayEngine::Scene { class Scene; }
@@ -43,7 +45,9 @@ namespace ReplayEngine::Core
     class Component
     {
     public:
-        virtual ~Component() = default;
+        // 定義は Component.cpp。未知プロパティ保持用の unique_ptr が
+        // 不完全型 (PropertyBag) を指すため、ヘッダで暗黙生成させない。
+        virtual ~Component();
 
         Component(const Component&) = delete;
         Component& operator=(const Component&) = delete;
@@ -65,6 +69,36 @@ namespace ReplayEngine::Core
         virtual void OnFixedUpdate(float /*fixed_delta_time*/) {}
         virtual void OnLateUpdate(float /*delta_time*/) {}
         virtual void OnDetach() {}
+
+        // ---- Runtime 用の追加ライフサイクル ---------------------------------
+        //
+        // OnAttach / OnStart との違い:
+        //
+        //   OnAttach        … GameObject へ結線された直後。Editor で Component を
+        //                     追加しただけでも呼ばれる。プロパティはまだ入っていない。
+        //   OnRuntimeAwake  … Scene が動き始めた最初の同期点で一度だけ。
+        //                     プロパティ反映・親子復元・参照付け替えがすべて済んでいる。
+        //                     無効な Component でも必ず一度呼ばれる。
+        //   OnStart         … 初めて実際に有効になったときに一度だけ。
+        //                     無効のままなら有効化されるまで呼ばれない。
+        //
+        // なぜ OnAttach では足りないか:
+        //   OnAttach の時点ではプロパティが未反映で、参照先の GameObject も
+        //   まだ生成されていない。そこでゲーム処理を始めると、
+        //   「Editor で置いただけで動き出す」「参照が null」の両方が起きる。
+        //
+        // 呼び出しは Scene の同期点から。Component 側からは呼ばない。
+        virtual void OnRuntimeAwake() {}
+
+        // 実体が破棄される直前に一度だけ。順序は OnDisable -> OnRuntimeDestroy -> OnDetach。
+        //
+        // OnDetach と役割を分けている理由:
+        //   OnDetach は「GameObject との内部接続を外す」ための後始末で、
+        //   Scene からの取り外しでも呼ばれる。
+        //   OnRuntimeDestroy は「このインスタンスの一生が終わる」ことを表す。
+        //   購読の解除やイベント発行はこちらで行う。
+        //   この時点ではまだ Owner とプロパティへ安全に触れる。
+        virtual void OnRuntimeDestroy() {}
 
         // ---- Trigger イベント ------------------------------------------------
         //
@@ -100,6 +134,37 @@ namespace ReplayEngine::Core
 
         virtual void OnSerialize(Reflection::PropertyBag& /*output*/) const {}
         virtual void OnDeserialize(const Reflection::PropertyBag& /*input*/) {}
+
+        // ---- 未知プロパティの保持 ------------------------------------------
+        //
+        // 読み込んだ Scene に、この型が知らないプロパティが含まれていた場合、
+        // それを捨てずにここへ丸ごと預かる。
+        //
+        // なぜ必要か:
+        //   新しいビルドで足したプロパティを含む Scene を、古いビルドで開いて
+        //   保存すると、知らないぶんが消える。C# Script を載せると
+        //   「Compile が通っていない間に Scene を保存した」だけで
+        //   Field が全部飛ぶことになり、実害が大きい。
+        //
+        // 扱いの約束:
+        //   - 保存時に必ずそのまま書き戻す（PropertyRegistry::Capture が合流させる）
+        //   - 同名のプロパティが後から登録されたら、そちらへ復元して預かりを解く
+        //     （Rehydrate。PropertyRegistry::Apply が行う）
+        //   - Component の実処理はここを一切見ない。あくまで通過させるだけ。
+        //
+        // 何も預かっていない場合は nullptr。Component 1 個あたりの
+        // 追加コストをポインタ 1 本に抑えるため、必要になってから確保する。
+        const Reflection::PropertyBag* UnknownProperties() const noexcept
+        {
+            return unknown_properties_.get();
+        }
+
+        // 預かり内容を差し替える。読み込み処理だけが呼ぶ。
+        //
+        // どちらも定義は Component.cpp。unique_ptr の解放には PropertyBag の
+        // 完全な型が要るため、前方宣言しかないこのヘッダでは実装を書けない。
+        void RetainUnknownProperties(const Reflection::PropertyBag& properties);
+        void ClearUnknownProperties() noexcept;
 
         // Editor や読み込み処理がプロパティを書き換えた直後に呼ばれる。
         // 値の変更に応じて内部キャッシュを作り直したいときに使う。
@@ -153,7 +218,15 @@ namespace ReplayEngine::Core
         void Destroy() noexcept;
 
     protected:
-        Component() = default;
+        // 定義は Component.cpp。
+        //
+        // ここで = default にできない理由:
+        //   未知プロパティ保持用の unique_ptr<PropertyBag> をメンバに持っており、
+        //   PropertyBag はこのヘッダでは前方宣言しかない。
+        //   コンストラクタを暗黙生成させると、途中で例外が出た場合の巻き戻し用に
+        //   メンバのデストラクタが必要になり、不完全型のまま実体化しようとして失敗する。
+        //   派生クラスを生成する翻訳単位すべてでこれが起きるため、外へ出してある。
+        Component();
 
     private:
         friend class GameObject;
@@ -161,8 +234,9 @@ namespace ReplayEngine::Core
 
         // GameObject / Scene だけが触るライフサイクル駆動部。
         void AttachTo(GameObject* owner);
-        void SyncEnableState();     // OnEnable / OnDisable / OnStart を必要に応じて呼ぶ
+        void SyncEnableState();     // OnRuntimeAwake / OnEnable / OnDisable / OnStart を呼ぶ
         void ForceDisable();        // 破棄前に有効状態を落とす
+        void RaiseRuntimeDestroy(); // OnRuntimeDestroy を一度だけ呼ぶ
         void MarkPendingDestroy() noexcept { pending_destroy_ = true; }
 
         // 識別番号の割り当て。GameObject::AttachComponent だけが呼ぶ。
@@ -189,6 +263,9 @@ namespace ReplayEngine::Core
 
         GameObject* owner_ = nullptr;
 
+        // 型が知らないまま預かっているプロパティ。無ければ nullptr。
+        std::unique_ptr<Reflection::PropertyBag> unknown_properties_;
+
         ComponentStableID stable_id_ = invalid_component_stable_id;
         ComponentInstanceID instance_id_ = invalid_component_instance_id;
 
@@ -197,5 +274,7 @@ namespace ReplayEngine::Core
         bool started_ = false;
         bool enable_state_applied_ = false;
         bool pending_destroy_ = false;
+        bool runtime_awake_called_ = false;
+        bool runtime_destroy_called_ = false;
     };
 }

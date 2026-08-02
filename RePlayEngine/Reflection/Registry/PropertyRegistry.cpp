@@ -70,6 +70,20 @@ namespace ReplayEngine::Reflection
         // PropertyRegistry では表現しきれない値の追加分。
         // 通常の数値・文字列プロパティはここではなく登録側で扱う。
         component.OnSerialize(output);
+
+        // 読み込み時に「この型が知らない」として預かったぶんを書き戻す。
+        //
+        // 登録済みの名前と重なった場合は登録側を優先する。
+        // 重なるのは「預かったあとで同名のプロパティが登録された」場合であり、
+        // そのときは既に Apply 側で本来の場所へ復元されている。
+        if (const PropertyBag* retained = component.UnknownProperties())
+        {
+            for (const PropertyBag::Entry& entry : retained->Entries())
+            {
+                if (output.Contains(entry.name)) continue;
+                output.Set(entry.name, entry.value);
+            }
+        }
     }
 
     void PropertyRegistry::Apply(Core::Component& component, const PropertyBag& input,
@@ -77,13 +91,21 @@ namespace ReplayEngine::Reflection
     {
         const Core::ComponentTypeID type_id = component.TypeID();
 
+        // この型が知らない名前をそのまま預かるための入れ物。
+        // 名前だけでなく値ごと残すのが要点。名前しか残さないと、
+        // 保存し直したときに値が空になってしまう。
+        PropertyBag retained;
+
         for (const PropertyBag::Entry& entry : input.Entries())
         {
             const PropertyDesc* desc = Find(type_id, entry.name);
             if (desc == nullptr)
             {
-                // 未知のプロパティ。Component の実装が変わって削除された場合など。
-                // 読み込み自体は続行し、呼び出し側が警告を出せるように名前だけ残す。
+                // 未知のプロパティ。次のような場面で発生する。
+                //   - 新しいビルドで足したプロパティを古いビルドで開いた
+                //   - C# Script が Compile できておらず型が読めていない
+                // どちらも「値が要らなくなった」わけではないので、預かって書き戻す。
+                retained.Set(entry.name, entry.value);
                 if (unknown_names != nullptr) unknown_names->push_back(entry.name);
                 continue;
             }
@@ -96,6 +118,10 @@ namespace ReplayEngine::Reflection
             }
 
             // 保存時と型が変わっている場合。寄せられるなら寄せ、無理なら初期値を維持する。
+            //
+            // 寄せられなかった場合でも預かりへは入れない。
+            // 名前が登録済みである以上、保存時に登録側の値が同じ名前で書かれるため、
+            // 預かってしまうと同じ名前が二重になり、どちらが勝つかが不定になる。
             PropertyValue converted;
             if (entry.value.ConvertTo(desc->type, converted))
             {
@@ -106,6 +132,13 @@ namespace ReplayEngine::Reflection
                 unknown_names->push_back(entry.name);
             }
         }
+
+        // 預かり内容を差し替える。
+        //
+        // 以前預かっていた名前が今回登録済みになっていた場合、その名前は
+        // retained へ入らないため、ここで自動的に預かりが解ける（Rehydrate）。
+        // 値そのものは上のループで本来のプロパティへ復元済み。
+        component.RetainUnknownProperties(retained);
 
         component.OnDeserialize(input);
         component.OnPropertyChanged(nullptr);
@@ -125,6 +158,17 @@ namespace ReplayEngine::Reflection
         PropertyBag extra;
         source.OnSerialize(extra);
         if (!extra.Empty()) destination.OnDeserialize(extra);
+
+        // 預かっている未知プロパティも複製先へ引き継ぐ。
+        // これを写さないと、複製しただけで未知の値が消える。
+        if (const PropertyBag* retained = source.UnknownProperties())
+        {
+            destination.RetainUnknownProperties(*retained);
+        }
+        else
+        {
+            destination.ClearUnknownProperties();
+        }
 
         destination.OnPropertyChanged(nullptr);
     }

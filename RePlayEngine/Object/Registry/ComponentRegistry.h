@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ComponentTypeInfo.h"
+#include "../../Core/ObjectID/RuntimeIdentity.h"
 
 #include <memory>
 #include <string>
@@ -61,6 +62,29 @@ namespace ReplayEngine::Core
         static const ComponentTypeInfo* Find(ComponentTypeID type_id) noexcept;
         static const ComponentTypeInfo* Find(const std::string& type_name) noexcept;
 
+        // 永続 GUID から引く。type_guid で見つからなければ alias_guids も見る。
+        // 無効 GUID を渡された場合は nullptr。
+        static const ComponentTypeInfo* Find(Reflection::TypeGUID type_guid) noexcept;
+
+        // 保存データから型を解決する唯一の入口。
+        //
+        // 優先順位:
+        //   1. type_guid       … 型名を変えても壊れない主キー
+        //   2. alias_guids     … 統合・移行された旧 GUID
+        //   3. type_name       … GUID を持たない既存 Component 用の従来経路
+        //
+        // どれにも当たらなければ nullptr。呼び出し側は Missing Component として
+        // データを保持すること。決して読み飛ばさない。
+        static const ComponentTypeInfo* Resolve(Reflection::TypeGUID type_guid,
+            const std::string& type_name) noexcept;
+
+        // ---- GUID の重複検出 -----------------------------------------------
+        //
+        // 登録時に既存と同じ GUID を使っていた場合、その登録は拒否され、
+        // 内容がここへ記録される。起動時 / Validation で表示する。
+        // 黙って上書きすると、Scene の参照が別の型へ化ける。
+        static const std::vector<std::string>& TypeGUIDConflicts() noexcept;
+
         static bool IsRegistered(ComponentTypeID type_id) noexcept
         {
             return Find(type_id) != nullptr;
@@ -82,6 +106,14 @@ namespace ReplayEngine::Core
         // 未登録、または重複禁止の型が既にある場合は nullptr を返す（クラッシュしない）。
         static Component* Create(ComponentTypeID type_id, GameObject& owner);
         static Component* Create(const std::string& type_name, GameObject& owner);
+
+        // 保存されていた ComponentStableID を保ったまま生成して結線する。
+        // Scene / Prefab の読み込みと複製が使う。
+        //
+        // stable_id が 0 や重複の場合は GameObject 側が採番し直すため、
+        // 壊れたファイルでも読み込みは止まらない。
+        static Component* CreateWithStableID(ComponentTypeID type_id, GameObject& owner,
+            ComponentStableID stable_id);
 
         // ---- 問い合わせ ----------------------------------------------------
         // 未登録の型 ID を渡された場合は、安全側（追加を許さない・削除できる・保存する）へ倒す。
