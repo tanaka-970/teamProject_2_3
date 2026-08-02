@@ -49,6 +49,9 @@ namespace ReplayEngine::Components
         // AssetDatabase の GUID。空なら描画しない（クラッシュさせない）。
         std::string mesh_asset;
 
+        std::string material_asset;
+        bool material_override = false;
+
         DirectX::XMFLOAT4 tint{ 1.0f, 1.0f, 1.0f, 1.0f };
 
         // 0=FBX標準 / 1=PBR / 2=トゥーン / 3=アンリット
@@ -56,6 +59,7 @@ namespace ReplayEngine::Components
 
         bool outline = false;
         bool cast_shadow = true;
+        bool receive_shadow = true;
         bool visible = true;
 
         // ---- モデル座標系の補正 --------------------------------------------

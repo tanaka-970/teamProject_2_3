@@ -639,7 +639,9 @@ void framework::draw_project_panel()
     std::transform(asset_query.begin(), asset_query.end(), asset_query.begin(),
         [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
-    if (ImGui::BeginChild("AssetBrowserList", ImVec2(0.0f, 210.0f), true))
+    const bool asset_list_visible =
+        ImGui::BeginChild("AssetBrowserList", ImVec2(0.0f, 210.0f), true);
+    if (asset_list_visible)
     {
         for (const auto& asset : asset_database.Records())
         {
@@ -701,8 +703,8 @@ void framework::draw_project_panel()
             }
             ImGui::PopID();
         }
-        ImGui::EndChild();
     }
+    ImGui::EndChild();
 
     ImGui::Checkbox("Model配置時にMesh Colliderを追加", &asset_drop_add_collider);
     ImGui::SameLine();

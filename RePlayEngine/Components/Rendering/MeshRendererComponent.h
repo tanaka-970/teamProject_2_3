@@ -50,8 +50,10 @@ namespace ReplayEngine::Components
         // AssetDatabase の GUID。空なら描画対象にならない。
         std::string mesh_asset;
 
-        // 将来 Material を分離するための枠。現時点では未使用。
         std::string material_asset;
+
+        // trueならRenderer側の色・描画方式をMaterial Assetより優先する。
+        bool material_override = false;
 
         DirectX::XMFLOAT4 tint{ 1.0f, 1.0f, 1.0f, 1.0f };
 
@@ -60,6 +62,11 @@ namespace ReplayEngine::Components
 
         bool outline = false;
         bool cast_shadow = true;
+        bool receive_shadow = true;
         bool visible = true;
+
+        DirectX::XMFLOAT3 local_position_offset{ 0.0f, 0.0f, 0.0f };
+        DirectX::XMFLOAT3 local_rotation_offset{ 0.0f, 0.0f, 0.0f };
+        DirectX::XMFLOAT3 local_scale_multiplier{ 1.0f, 1.0f, 1.0f };
     };
 }

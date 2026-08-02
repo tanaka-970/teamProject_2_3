@@ -81,28 +81,33 @@ namespace ReplayEngine::Editor
                     ImGui::TextColored(EditorStyle::Tokens().success,
                         "現在検出できる問題はありません。");
                 }
-                else if (ImGui::BeginChild("ValidationIssueList", ImVec2(0.0f, 0.0f), false))
+                else
                 {
-                    for (std::size_t index = 0; index < issues_.size(); ++index)
+                    const bool issue_list_visible = ImGui::BeginChild(
+                        "ValidationIssueList", ImVec2(0.0f, 0.0f), false);
+                    if (issue_list_visible)
                     {
-                        const ValidationIssue& issue = issues_[index];
-                        ImGui::PushID(static_cast<int>(index));
-                        ImGui::TextColored(SeverityColor(issue.severity), "%s",
-                            SeverityLabel(issue.severity));
-                        ImGui::SameLine();
-                        if (ImGui::Selectable(issue.message.c_str(), false,
-                            ImGuiSelectableFlags_AllowDoubleClick) && issue.object.Valid())
+                        for (std::size_t index = 0; index < issues_.size(); ++index)
                         {
-                            context.Selection().Select(issue.object, false);
-                            context.SetStatus(issue.message);
+                            const ValidationIssue& issue = issues_[index];
+                            ImGui::PushID(static_cast<int>(index));
+                            ImGui::TextColored(SeverityColor(issue.severity), "%s",
+                                SeverityLabel(issue.severity));
+                            ImGui::SameLine();
+                            if (ImGui::Selectable(issue.message.c_str(), false,
+                                ImGuiSelectableFlags_AllowDoubleClick) && issue.object.Valid())
+                            {
+                                context.Selection().Select(issue.object, false);
+                                context.SetStatus(issue.message);
+                            }
+                            if (!issue.suggestion.empty())
+                            {
+                                ImGui::Indent();
+                                ImGui::TextDisabled("修正案: %s", issue.suggestion.c_str());
+                                ImGui::Unindent();
+                            }
+                            ImGui::PopID();
                         }
-                        if (!issue.suggestion.empty())
-                        {
-                            ImGui::Indent();
-                            ImGui::TextDisabled("修正案: %s", issue.suggestion.c_str());
-                            ImGui::Unindent();
-                        }
-                        ImGui::PopID();
                     }
                     ImGui::EndChild();
                 }

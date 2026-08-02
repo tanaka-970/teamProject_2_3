@@ -66,11 +66,13 @@ namespace ReplayEngine::Components
 
         out.owner = owner.ID();
         out.mesh_asset = mesh_asset;
-        out.material_asset.clear();
+        out.material_asset = material_asset;
+        out.material_override = material_override;
         out.tint = tint;
         out.shading_model = shading_model;
         out.outline = outline;
         out.cast_shadow = cast_shadow;
+        out.receive_shadow = receive_shadow;
         out.skinned = true;
 
         // Animator があればクリップと時刻を運ぶ。無ければ Renderer 側の現在値を維持する。

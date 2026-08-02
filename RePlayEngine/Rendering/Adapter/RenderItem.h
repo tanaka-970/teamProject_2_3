@@ -27,8 +27,10 @@ namespace ReplayEngine::Rendering
         // AssetDatabase の GUID。空なら描画しない。
         std::string mesh_asset;
 
-        // 将来 Material を分離するための枠。現時点では未使用。
+        // MaterialAssetのAssetGUID。空ならRendererのプロパティだけを使う。
         std::string material_asset;
+
+        bool material_override = false;
 
         // ワールド行列。親子階層を合成済みの最終値。
         DirectX::XMFLOAT4X4 world{
@@ -44,6 +46,14 @@ namespace ReplayEngine::Rendering
 
         bool outline = false;
         bool cast_shadow = true;
+        bool receive_shadow = true;
+
+        // Material Assetから解決され、GBuffer材質定数へ渡す値。
+        float metallic = 0.0f;
+        float roughness = 0.55f;
+        float ambient_occlusion = 1.0f;
+        float emissive_strength = 0.0f;
+        bool double_sided = false;
 
         // ---- スキンメッシュ用 ----------------------------------------------
         //

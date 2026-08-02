@@ -429,6 +429,9 @@
     <ClCompile Include="RePlayEngine\Rendering\Materials\CharacterMaterialGpuData.cpp">
       <Filter>RePlayEngine\Rendering\Materials</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\Materials\MaterialAsset.cpp">
+      <Filter>RePlayEngine\Rendering\Materials</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Rendering\Deferred\deferred_renderer.cpp">
       <Filter>RePlayEngine\Rendering\Deferred</Filter>
     </ClCompile>
@@ -843,6 +846,9 @@
       <Filter>RePlayEngine\Rendering\Materials</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Rendering\Materials\CharacterMaterialProfile.h">
+      <Filter>RePlayEngine\Rendering\Materials</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\Materials\MaterialAsset.h">
       <Filter>RePlayEngine\Rendering\Materials</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Rendering\Deferred\deferred_renderer.h">

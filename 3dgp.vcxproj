@@ -237,6 +237,7 @@
     <ClCompile Include="RePlayEngine\Rendering\ShaderPresets\ShaderPresetSerializer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\ShaderPresets\BuiltInShaderPresets.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Materials\CharacterMaterialGpuData.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Materials\MaterialAsset.cpp" />
     <ClCompile Include="RePlayEngine\Scene\BootLogoScene.cpp" />
     <ClCompile Include="RePlayEngine\Scene\LoadingScene.cpp" />
     <ClCompile Include="Source\core\framebuffer.cpp" />
@@ -374,6 +375,7 @@
     <ClInclude Include="RePlayEngine\Rendering\ShaderPresets\BuiltInShaderPresets.h" />
     <ClInclude Include="RePlayEngine\Rendering\Materials\CharacterMaterialProfile.h" />
     <ClInclude Include="RePlayEngine\Rendering\Materials\CharacterMaterialGpuData.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Materials\MaterialAsset.h" />
     <ClInclude Include="RePlayEngine\Assets\ImageAsset.h" />
     <ClInclude Include="RePlayEngine\Presentation\BootLogoComponent.h" />
     <ClInclude Include="RePlayEngine\Assets\AssetCache.h" />
