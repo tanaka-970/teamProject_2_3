@@ -112,15 +112,6 @@
     <Filter Include="プロジェクト設定">
       <UniqueIdentifier>{fa111111-1111-4111-8111-111111111111}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source\Game\Player">
-      <UniqueIdentifier>{eaa13e15-9d64-4e72-9fe7-422c4331a0f7}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source\Game\stage">
-      <UniqueIdentifier>{31e8dde3-da2d-4cee-9ee3-4950360cdc1f}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source\Game\raycast">
-      <UniqueIdentifier>{9ef95583-2e1d-420b-9623-de2691a28259}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Source\Game\Scene">
       <UniqueIdentifier>{fab74a19-6a87-4a93-bf50-8477b96e9ab8}</UniqueIdentifier>
     </Filter>
@@ -414,9 +405,6 @@
     <ClCompile Include="RePlayEngine\Physics\SphereCast.cpp">
       <Filter>RePlayEngine\Physics</Filter>
     </ClCompile>
-    <ClCompile Include="RePlayEngine\Physics\GravityComponent.cpp">
-      <Filter>RePlayEngine\Physics</Filter>
-    </ClCompile>
     <ClCompile Include="RePlayEngine\Rendering\Passes\SsaoPass.cpp">
       <Filter>RePlayEngine\Rendering\Passes</Filter>
     </ClCompile>
@@ -464,9 +452,6 @@
     </ClCompile>
     <ClCompile Include="Source\app\Editor\framework_gizmo.cpp">
       <Filter>Source\App\Editor</Filter>
-    </ClCompile>
-    <ClCompile Include="RePlayEngine\Physics\LegacyMeshColliderComponent.cpp">
-      <Filter>RePlayEngine\Physics</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Core\ObjectID\ObjectID.cpp">
       <Filter>RePlayEngine\Core\ObjectID</Filter>
@@ -573,7 +558,7 @@
     <ClCompile Include="RePlayEngine\Components\Rendering\MeshRendererComponent.cpp">
       <Filter>RePlayEngine\Components\Rendering</Filter>
     </ClCompile>
-    <ClCompile Include="Source\game\legacy_camera_basis_bridge.cpp">
+    <ClCompile Include="Source\game\camera_basis_provider.cpp">
       <Filter>Source\Game</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Editor\Inspector\PlayerCompositionValidator.cpp">
@@ -833,9 +818,6 @@
     <ClInclude Include="Source\game\game_input.h">
       <Filter>Source\Game</Filter>
     </ClInclude>
-    <ClInclude Include="RePlayEngine\Core\Components\AnimationComponent.h">
-      <Filter>RePlayEngine\Core\Components</Filter>
-    </ClInclude>
     <ClInclude Include="RePlayEngine\Rendering\Passes\BloomPass.h">
       <Filter>RePlayEngine\Rendering\Passes</Filter>
     </ClInclude>
@@ -854,16 +836,7 @@
     <ClInclude Include="RePlayEngine\Rendering\Deferred\deferred_renderer.h">
       <Filter>RePlayEngine\Rendering\Deferred</Filter>
     </ClInclude>
-    <ClInclude Include="RePlayEngine\Core\Components\GravityComponent.h">
-      <Filter>RePlayEngine\Core\Components</Filter>
-    </ClInclude>
     <ClInclude Include="RePlayEngine\Core\Components\IComponent.h">
-      <Filter>RePlayEngine\Core\Components</Filter>
-    </ClInclude>
-    <ClInclude Include="RePlayEngine\Core\Components\MeshColliderComponent.h">
-      <Filter>RePlayEngine\Core\Components</Filter>
-    </ClInclude>
-    <ClInclude Include="RePlayEngine\Core\Components\ModelRendererComponent.h">
       <Filter>RePlayEngine\Core\Components</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Rendering\Passes\PostProcessPass.h">
@@ -1031,7 +1004,7 @@
     <ClInclude Include="RePlayEngine\Components\Rendering\SkinnedMeshRendererComponent.h">
       <Filter>RePlayEngine\Components\Rendering</Filter>
     </ClInclude>
-    <ClInclude Include="Source\game\legacy_camera_basis_bridge.h">
+    <ClInclude Include="Source\game\camera_basis_provider.h">
       <Filter>Source\Game</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Editor\Inspector\PlayerCompositionValidator.h">
@@ -1317,9 +1290,6 @@
       <Filter>Shader</Filter>
     </FxCompile>
     <FxCompile Include="Shader\skinned_mesh_pbr_ps.hlsl">
-      <Filter>Shader</Filter>
-    </FxCompile>
-    <FxCompile Include="Shader\skinned_mesh_pbr_stage_ps.hlsl">
       <Filter>Shader</Filter>
     </FxCompile>
     <FxCompile Include="Shader\skinned_mesh_vs.hlsl">

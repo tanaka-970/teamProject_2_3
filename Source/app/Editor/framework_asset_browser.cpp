@@ -340,7 +340,7 @@ void framework::draw_material_asset_editor()
     ImGui::TextDisabled("%s", material_editor_status.c_str());
 }
 
-bool framework::browse_stage_asset()
+bool framework::browse_model_asset()
 {
     wchar_t filename[32768]{};
     OPENFILENAMEW dialog{};
@@ -359,7 +359,7 @@ bool framework::browse_stage_asset()
         OFN_EXPLORER | OFN_NOCHANGEDIR | OFN_HIDEREADONLY;
 
     if (!GetOpenFileNameW(&dialog)) return false;
-    return load_stage_asset(filename);
+    return load_model_asset_async(filename);
 }
 
 bool framework::prewarm_model_asset(const std::filesystem::path& path)
@@ -398,11 +398,11 @@ bool framework::prewarm_model_asset(const std::filesystem::path& path)
     return false;
 }
 
-bool framework::load_stage_asset(const std::wstring& filename)
+bool framework::load_model_asset_async(const std::wstring& filename)
 {
     const std::filesystem::path path(filename);
     async_stage_load_active = true;
-    stage_asset_status = "モデルを並列ロードしています...";
+    model_asset_status = "モデルを並列ロードしています...";
     async_asset_manager.QueueTask(path, ReplayEngine::Assets::AssetKind::Model,
         [this, path](ReplayEngine::Assets::AsyncAssetResult& result)
         {
@@ -439,19 +439,19 @@ bool framework::load_stage_asset(const std::wstring& filename)
             async_stage_load_active = false;
             if (!result.Succeeded())
             {
-                stage_asset_status = "読み込み失敗: " + result.error;
+                model_asset_status = "読み込み失敗: " + result.error;
                 return;
             }
-            load_stage_asset_now(result.path.wstring());
+            load_model_asset_now(result.path.wstring());
         });
     return true;
 }
 
-bool framework::load_stage_asset_now(const std::wstring& filename)
+bool framework::load_model_asset_now(const std::wstring& filename)
 {
     const std::filesystem::path path(filename);
     const std::wstring extension = LowerExtension(path);
-    selected_stage_asset_path = WideToUtf8(path.wstring());
+    selected_model_asset_path = WideToUtf8(path.wstring());
 
     try
     {
@@ -463,13 +463,13 @@ bool framework::load_stage_asset_now(const std::wstring& filename)
             });
             if (!candidate->IsLoaded())
             {
-                stage_asset_status = "読み込み失敗: " + candidate->Error();
+                model_asset_status = "読み込み失敗: " + candidate->Error();
                 return false;
             }
 
             stage_gltf_model = std::move(candidate);
             outline_per_stage = false;
-            stage_asset_status = "glTF素材を読み込みました（配置プレビュー中）";
+            model_asset_status = "glTF素材を読み込みました（配置プレビュー中）";
         }
         else if (extension == L".fbx" || extension == L".cereal")
         {
@@ -477,7 +477,7 @@ bool framework::load_stage_asset_now(const std::wstring& filename)
             cache.replace_extension(L".cereal");
             if (!std::filesystem::exists(cache))
             {
-                stage_asset_status = "同じ場所に実行用.cerealキャッシュが必要です";
+                model_asset_status = "同じ場所に実行用.cerealキャッシュが必要です";
                 return false;
             }
 
@@ -487,23 +487,23 @@ bool framework::load_stage_asset_now(const std::wstring& filename)
             });
             skinned_meshes[1] = std::move(candidate);
             stage_gltf_model.reset();
-            stage_asset_status = "FBXキャッシュ素材を読み込みました（配置プレビュー中）";
+            model_asset_status = "FBXキャッシュ素材を読み込みました（配置プレビュー中）";
         }
         else
         {
-            stage_asset_status = "未対応のモデル形式です";
+            model_asset_status = "未対応のモデル形式です";
             return false;
         }
     }
     catch (const std::exception& exception)
     {
-        stage_asset_status = "読み込み失敗: ";
-        stage_asset_status += exception.what();
+        model_asset_status = "読み込み失敗: ";
+        model_asset_status += exception.what();
         return false;
     }
     catch (...)
     {
-        stage_asset_status = "モデル読み込み中に不明なエラーが発生しました";
+        model_asset_status = "モデル読み込み中に不明なエラーが発生しました";
         return false;
     }
 
@@ -513,7 +513,7 @@ bool framework::load_stage_asset_now(const std::wstring& filename)
     if (cache.StoreSourceFile(path, ReplayEngine::Assets::AssetKind::Model,
         cache_entry, cache_error))
     {
-        selected_stage_cache_path = WideToUtf8(cache_entry.cache_path.wstring());
+        selected_model_cache_path = WideToUtf8(cache_entry.cache_path.wstring());
         std::filesystem::path registered_source = path;
         const auto normalized_source = ReplayEngine::Assets::AssetDatabase::NormalizeProjectPath(path);
         if (normalized_source.is_absolute())
@@ -543,32 +543,32 @@ bool framework::load_stage_asset_now(const std::wstring& filename)
             if (import_error)
             {
                 registered_source = path;
-                stage_asset_status += " / resourcesへの取込失敗";
+                model_asset_status += " / resourcesへの取込失敗";
             }
             else
             {
                 asset_database.Remove(temporary_guid);
-                selected_stage_asset_path = WideToUtf8(registered_source.wstring());
-                stage_asset_status += " / resourcesへ取込済み";
+                selected_model_asset_path = WideToUtf8(registered_source.wstring());
+                model_asset_status += " / resourcesへ取込済み";
             }
         }
         const auto& record = asset_database.Register(registered_source,
             ReplayEngine::Assets::AssetKind::Model, cache_entry.cache_path);
-        selected_stage_asset_guid = record.guid;
+        selected_model_asset_guid = record.guid;
         std::string database_error;
         asset_database.Save(database_error);
-        stage_asset_status += " / 共通キャッシュ作成済み";
+        model_asset_status += " / 共通キャッシュ作成済み";
     }
     else
     {
-        selected_stage_cache_path.clear();
-        stage_asset_status += " / キャッシュ失敗: " + cache_error;
+        selected_model_cache_path.clear();
+        model_asset_status += " / キャッシュ失敗: " + cache_error;
     }
 
-    selected_asset_guid = selected_stage_asset_guid;
+    selected_asset_guid = selected_model_asset_guid;
     set_editor_workspace(editor_workspace::placement);
     selected_editor_object = editor_selection::game_object;
-    stage_asset_status += " / Asset Browserへ登録済み";
+    model_asset_status += " / Asset Browserへ登録済み";
     return true;
 }
 

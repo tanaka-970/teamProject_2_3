@@ -48,7 +48,6 @@ public:
 
     Microsoft::WRL::ComPtr<ID3D11PixelShader> static_mesh_pbr_ps_;
     Microsoft::WRL::ComPtr<ID3D11PixelShader> skinned_mesh_pbr_ps_;
-    Microsoft::WRL::ComPtr<ID3D11PixelShader> skinned_mesh_pbr_stage_ps_;
 
     Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> diffuse_iem_srv;
     Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> specular_pmrem_srv;
@@ -56,7 +55,6 @@ public:
 
     ID3D11PixelShader* static_mesh_ps() const { return static_mesh_pbr_ps_.Get(); }
     ID3D11PixelShader* skinned_mesh_ps() const { return skinned_mesh_pbr_ps_.Get(); }
-    ID3D11PixelShader* skinned_mesh_stage_ps() const { return skinned_mesh_pbr_stage_ps_.Get(); }
 
     bool initialize(ID3D11Device* device);
 

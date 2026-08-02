@@ -10,7 +10,17 @@
 namespace ReplayEngine::Scene
 {
     LoadingScene::LoadingScene() = default;
-    LoadingScene::~LoadingScene() = default;
+    LoadingScene::~LoadingScene()
+    {
+        // async Taskはthisとframework側Cacheを参照する。メンバー破棄へ進む前に
+        // 必ず完了を待ち、終了処理中のUse-After-Freeを防ぐ。
+        if (loader_.valid())
+        {
+            try { loader_.get(); }
+            catch (...) { failed_.store(true); }
+        }
+        task_running_ = false;
+    }
 
     void LoadingScene::AddTask(std::string name, Task task)
     {

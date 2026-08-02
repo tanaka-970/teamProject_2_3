@@ -10,7 +10,7 @@
 
 namespace
 {
-    constexpr int EditorSessionVersion = 2;
+    constexpr int EditorSessionVersion = 3;
 
     std::filesystem::path EditorSessionFolder()
     {
@@ -191,6 +191,8 @@ void framework::save_editor_session()
     if (!state) return;
     state << "REPLAY_EDITOR_SESSION " << EditorSessionVersion << '\n';
     state << "OBJECT_SCENE_PATH " << std::quoted(object_scene_path.generic_string()) << '\n';
+    for (const std::filesystem::path& path : recent_scene_paths)
+        state << "RECENT_SCENE " << std::quoted(path.generic_u8string()) << '\n';
     state << "WORKSPACE " << static_cast<int>(active_editor_workspace) << '\n';
     state << "VIEW " << static_cast<int>(active_editor_view) << '\n';
 }
@@ -203,15 +205,23 @@ void framework::restore_editor_session()
     std::string signature;
     int version = 0;
     if (!(state >> signature >> version) || signature != "REPLAY_EDITOR_SESSION" ||
-        version != EditorSessionVersion) return;
+        version < 2 || version > EditorSessionVersion) return;
 
     std::string scene_path;
     int workspace = static_cast<int>(editor_workspace::general);
     int view = static_cast<int>(editor_view::scene);
+    std::vector<std::filesystem::path> restored_recent_scenes;
     std::string key;
     while (state >> key)
     {
         if (key == "OBJECT_SCENE_PATH") state >> std::quoted(scene_path);
+        else if (key == "RECENT_SCENE")
+        {
+            std::string recent_path;
+            state >> std::quoted(recent_path);
+            if (!recent_path.empty()) restored_recent_scenes.emplace_back(
+                std::filesystem::u8path(recent_path));
+        }
         else if (key == "WORKSPACE") state >> workspace;
         else if (key == "VIEW") state >> view;
         else
@@ -220,6 +230,11 @@ void framework::restore_editor_session()
             std::getline(state, ignored);
         }
     }
+
+    recent_scene_paths.clear();
+    for (auto iterator = restored_recent_scenes.rbegin();
+        iterator != restored_recent_scenes.rend(); ++iterator)
+        add_recent_object_scene(*iterator);
 
     if (!scene_path.empty())
     {
@@ -233,6 +248,7 @@ void framework::restore_editor_session()
             if (!load_object_scene(false)) object_scene_path = previous;
         }
     }
+    add_recent_object_scene(object_scene_path);
 
     const int last_workspace = static_cast<int>(editor_workspace::shader_adjustment);
     workspace = std::clamp(workspace, 0, last_workspace);
@@ -249,7 +265,7 @@ void framework::restore_editor_session()
 }
 
 // Prefab は v7 の SceneData 方式へ移行済み。
-// 対象は GameObject / Component 基盤の Scene であり、旧 SceneDocument ではない。
+// 対象はGameObject / Component基盤のScene。
 // 保存内容は Component 構成とプロパティを含む部分木で、
 // ComponentRegistry と PropertyRegistry を通るため型ごとの分岐は存在しない。
 void framework::save_selected_prefab(bool choose_path)

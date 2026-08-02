@@ -78,7 +78,7 @@ namespace ReplayEngine::Scene::Serialization
     struct SceneData
     {
         // 現在のファイル形式バージョン。
-        // v1〜v6 は旧 SceneDocument 形式で、互換性を持たせない方針。
+        // v1〜v6は構造が異なるため読み込み対象外。
         // 将来 v10 へ上げる余地を残すため、読み込み側はバージョン判定を必ず通す。
         // v8 で「操作対象 ObjectID」を追加した。v7 も読める（操作対象なしとして扱う）。
         // v9 で追加された COLLISION_STATE は v10 でも予約行として読み書きする。

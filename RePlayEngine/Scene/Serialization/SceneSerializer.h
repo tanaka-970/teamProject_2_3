@@ -20,7 +20,7 @@ namespace ReplayEngine::Scene::Serialization
     // WriteJson / ReadJson を並べるだけでよく、SceneData 側は変更不要。
     //
     // 対応バージョン:
-    //   v7 / v8 / v9。v1〜v6 は旧 SceneDocument 形式で、構造が根本的に違うため非対応。
+    //   v7 / v8 / v9。v1〜v6は構造が根本的に違うため非対応。
     //   v8 で「操作対象 ObjectID」、v9 で「衝突の設定」を追加した。
     //   旧形式を読み込もうとした場合はクラッシュさせず、
     //   作り直しを促す明確なエラーメッセージを返す。

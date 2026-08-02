@@ -22,6 +22,7 @@ extern ImWchar glyphRangesJapanese[];
 #endif
 
 #include <d3d11.h>
+#include <d3d11sdklayers.h>
 #include "sprite_batch.h"
 #include <wrl.h>
 #include "geometric_primitive.h"
@@ -78,7 +79,7 @@ extern ImWchar glyphRangesJapanese[];
 #include "../../RePlayEngine/Editor/Viewport/EditorViewportCamera.h"
 #include "../../RePlayEngine/Editor/Viewport/EditorCameraController.h"
 #include "../../RePlayEngine/Editor/Viewport/EditorCameraStateStore.h"
-#include "../game/legacy_camera_basis_bridge.h"
+#include "../game/camera_basis_provider.h"
 
 #include <unordered_map>
 #include <unordered_set>
@@ -148,13 +149,8 @@ public:
     bool shader_stack_advanced_mode{ false };
 
     // static_meshes[0] … エディタのデバッグ用静的メッシュ (cube.obj)。既定は非表示。
-    // skinned_meshes[1] … 取り込んだ旧ステージ素材。
-    //
-    // かつて skinned_meshes[0] は「旧 Player 専用のモデルスロット」で、
-    // 起動時に固定の FBX を読み込み、Player の Transform で毎フレーム描いていた。
-    // その経路は完全に撤去したので、index 0 は誰も使わない。
-    // アニメーション付きモデルの描画は SkinnedMeshRendererComponent が提出する。
-    //
+    // Imported model preview slots used by the compatibility renderer.
+    // Animated models are submitted by SkinnedMeshRendererComponent.
     // shared_ptr なのは並列ロードとモデルキャッシュ (ConcurrentResourceCache /
     // gltf_model_cache) が同じ実体を共有するため。所有権はここだけにしない。
     std::shared_ptr<static_mesh> static_meshes[8];
@@ -251,9 +247,9 @@ public:
     bool             enable_stage_shader{ true }; // false = always FBX default
     bool             stage_texture_wrap{ true };
     float            stage_texture_contrast{ 1.20f };
-    std::string      selected_stage_asset_path;
-    std::string      selected_stage_cache_path;
-    std::string      stage_asset_status{ "未選択" };
+    std::string      selected_model_asset_path;
+    std::string      selected_model_cache_path;
+    std::string      model_asset_status{ "未選択" };
     ReplayEngine::Assets::AssetDatabase asset_database;
     ReplayEngine::Assets::ConcurrentResourceCache<static_mesh> static_mesh_cache;
     ReplayEngine::Assets::ConcurrentResourceCache<skinned_mesh> skinned_mesh_cache;
@@ -274,7 +270,7 @@ public:
 
     ReplayEngine::Editor::TransformGizmo transform_gizmo;
     ReplayEngine::Physics::MeshCollisionCooker collision_cooker;
-    std::string      selected_stage_asset_guid;
+    std::string      selected_model_asset_guid;
     std::string      shader_preset_status{ "プリセット未選択" };
     bool             async_stage_load_active{ false };
 
@@ -316,7 +312,10 @@ public:
     std::unordered_map<std::string, cached_material_asset> object_material_cache;
     std::unordered_set<std::string> object_material_failures;
 
-    std::filesystem::path object_scene_path{ "resources/Scenes/TrainingStage.replayscene" };
+    // Startup Scene is restored from the Editor session.  A fresh project starts
+    // with an unsaved empty Scene instead of depending on a bundled sample asset.
+    std::filesystem::path object_scene_path;
+    std::string      object_scene_asset_guid;
     bool             object_scene_play_mode{ false };
     bool             object_scene_paused{ false };
     float            object_autosave_elapsed{ 0.0f };
@@ -324,6 +323,18 @@ public:
     bool             object_recovery_available{ false };
     bool             object_recovery_prompt_opened{ false };
     std::string      object_autosave_status;
+    std::vector<std::filesystem::path> recent_scene_paths;
+    enum class object_scene_action
+    {
+        none,
+        new_empty,
+        new_default,
+        open_path,
+        exit_application
+    };
+    object_scene_action pending_object_scene_action{ object_scene_action::none };
+    std::filesystem::path pending_object_scene_path;
+    bool object_scene_unsaved_prompt_requested{ false };
 
     // 操作対象を型ではなく ObjectID で持つ。
     // 人型からメカ・ドローンへ変えても GameObject のクラス型は変わらない。
@@ -331,7 +342,7 @@ public:
 
     // 【移行用】Gameplay Component から Camera / Stage 具象型を隠すための橋渡し。
     // 削除条件はそれぞれのヘッダーへ記載してある。
-    LegacyCameraBasisBridge      object_camera_bridge;
+    CameraBasisProvider          object_camera_bridge;
 
     // --- 衝突 -------------------------------------------------------------
     //
@@ -403,6 +414,13 @@ public:
     framework(framework&&) noexcept = delete;
     framework& operator=(framework&&) noexcept = delete;
 
+    void set_automated_smoke_test_frames(std::uint32_t frames) noexcept
+    {
+        automated_smoke_test_frames = frames;
+        automated_smoke_test_frames_rendered = 0;
+    }
+    Microsoft::WRL::ComPtr<ID3D11Debug> acquire_d3d11_debug() const noexcept;
+
     // 終了理由と主要な進行状況を Saved/engine_log.txt へ追記する。
     // 「なぜ落ちたか」が分からないと原因の切り分けができないため、
     // 例外や異常終了だけでなく正常終了の経路も残す。
@@ -466,6 +484,12 @@ public:
                 {
                     update(tictoc.time_interval());
                     render(tictoc.time_interval());
+                    if (automated_smoke_test_frames > 0 &&
+                        ++automated_smoke_test_frames_rendered >= automated_smoke_test_frames)
+                    {
+                        automated_smoke_test_frames = 0;
+                        PostMessage(hwnd, WM_CLOSE, 0, 0);
+                    }
                 }
                 catch (const std::exception& exception)
                 {
@@ -507,8 +531,7 @@ public:
             if (shortcut_pressed && wparam == 'S')
             {
                 const bool choose_path = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
-                // 標準保存は GameObject Scene だけを対象にする。
-                // 旧 .replaystage を同時更新して二重の正本を作らない。
+                // 標準保存はGameObject Sceneだけを対象にし、正本を一つに保つ。
                 save_object_scene(choose_path);
                 return 0;
             }
@@ -589,7 +612,12 @@ public:
         switch (msg)
         {
         case WM_PAINT: { PAINTSTRUCT ps; BeginPaint(hwnd, &ps); EndPaint(hwnd, &ps); break; }
-        case WM_CLOSE: log_shutdown_reason("WM_CLOSE"); return DefWindowProc(hwnd, msg, wparam, lparam);
+        case WM_CLOSE:
+#ifdef USE_IMGUI
+            if (!confirm_object_scene_close()) return 0;
+#endif
+            log_shutdown_reason("WM_CLOSE");
+            return DefWindowProc(hwnd, msg, wparam, lparam);
         case WM_DESTROY: log_shutdown_reason("WM_DESTROY"); PostQuitMessage(0); break;
         case WM_CREATE:  break;
         case WM_SIZE:
@@ -692,9 +720,9 @@ private:
         ReplayEngine::Rendering::ShaderLayerStack& layers,
         ReplayEngine::Rendering::CharacterMaterialProfile& profile, float& pixel_grid,
         float& pixelate_strength);
-    bool browse_stage_asset();
-    bool load_stage_asset(const std::wstring& filename);
-    bool load_stage_asset_now(const std::wstring& filename);
+    bool browse_model_asset();
+    bool load_model_asset_async(const std::wstring& filename);
+    bool load_model_asset_now(const std::wstring& filename);
     // ワーカースレッドから呼べるモデル先読み。キャッシュへ載せるだけで
     // frameworkの表示状態は触らないため、並列ロード中に安全に使える。
     bool prewarm_model_asset(const std::filesystem::path& path);
@@ -717,9 +745,18 @@ private:
     void update_object_scene(float elapsed_time);
     bool save_object_scene(bool choose_path);
     bool load_object_scene(bool choose_path);
+    bool load_object_scene_from_path(const std::filesystem::path& path);
     bool autosave_object_scene();
     void check_object_scene_recovery();
     void draw_object_scene_recovery_prompt();
+    void request_object_scene_action(object_scene_action action,
+        std::filesystem::path path = {});
+    void execute_pending_object_scene_action();
+    void draw_unsaved_object_scene_prompt();
+    bool confirm_object_scene_close();
+    void add_recent_object_scene(const std::filesystem::path& path);
+    void register_object_scene_asset();
+    void discard_object_scene_autosave();
     void enter_object_play_mode();
     void exit_object_play_mode();
     ReplayEngine::Scene::Scene& active_object_scene() noexcept;
@@ -827,6 +864,8 @@ private:
 
 private:
     high_resolution_timer tictoc;
+    std::uint32_t automated_smoke_test_frames{ 0 };
+    std::uint32_t automated_smoke_test_frames_rendered{ 0 };
     uint32_t frames{ 0 };
     float elapsed_time{ 0.0f };
     void calculate_frame_stats()
@@ -898,6 +937,9 @@ private:
     bool show_scene_view{ true };
     bool scene_view_hovered{ false };
     bool scene_view_focused{ false };
+    ImVec2 scene_view_overlay_position{ 0.0f, 0.0f };
+    ImVec2 scene_view_overlay_size{ 0.0f, 0.0f };
+    bool scene_view_overlay_valid{ false };
     float scene_view_min_x{ 0.0f };
     float scene_view_min_y{ 0.0f };
     float scene_view_max_x{ 0.0f };

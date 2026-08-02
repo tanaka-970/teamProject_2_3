@@ -18,9 +18,7 @@ namespace ReplayEngine::Scene::Serialization
 
     // GameObject の部分木を Prefab として保存・復元する。
     //
-    // 旧 PrefabSerializer は SceneDocument の SceneEntity 1 件を
-    // 旧 SceneSerializer で書き出すだけのものだった。
-    // こちらは v7 の SceneData をそのまま使うため、次がすべて自動で付いてくる。
+    // SceneDataの現行形式を使うため、次がすべて自動で付いてくる。
     //
     //   - Component の型名で保存し、ComponentRegistry で復元する
     //   - プロパティは PropertyRegistry の定義に従って保存・復元する
@@ -29,7 +27,7 @@ namespace ReplayEngine::Scene::Serialization
     //
     // 型ごとの分岐は 1 つも無い。Component を増やしても、このファイルは変更不要。
     //
-    // ファイル形式は Scene と同じ v7 テキスト。拡張子だけ .replayprefab に分ける。
+    // ファイル形式は Scene と同じ現行テキスト形式。拡張子だけ .replayprefab に分ける。
     // 中身が同形式なので、Prefab をそのまま Scene として開くこともできる。
     class PrefabSerializer final
     {

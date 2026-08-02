@@ -167,11 +167,30 @@ void framework::draw_editor_main_menu()
         if (ImGui::MenuItem("New Empty Scene")) create_object_scene(u8"新しいシーン", false);
         if (ImGui::MenuItem("New Default Scene")) create_object_scene(u8"新しいシーン", true);
         if (ImGui::MenuItem("Open Scene...", "Ctrl+O")) load_object_scene(true);
+        if (ImGui::BeginMenu("Recent Scenes"))
+        {
+            if (recent_scene_paths.empty()) ImGui::TextDisabled("履歴はありません");
+            for (std::size_t index = 0; index < recent_scene_paths.size(); ++index)
+            {
+                const std::filesystem::path& path = recent_scene_paths[index];
+                std::error_code error;
+                const bool exists = std::filesystem::exists(path, error) && !error;
+                std::string label = path.filename().u8string();
+                if (!exists) label += " [Missing]";
+                label += "##RecentScene" + std::to_string(index);
+                if (ImGui::MenuItem(label.c_str(), nullptr, false, exists))
+                    request_object_scene_action(object_scene_action::open_path, path);
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("%s", path.generic_u8string().c_str());
+            }
+            ImGui::EndMenu();
+        }
         ImGui::Separator();
         if (ImGui::MenuItem("Save", "Ctrl+S")) save_object_scene(false);
         if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S")) save_object_scene(true);
         ImGui::Separator();
-        if (ImGui::MenuItem("Exit")) PostMessage(hwnd, WM_CLOSE, 0, 0);
+        if (ImGui::MenuItem("Exit"))
+            request_object_scene_action(object_scene_action::exit_application);
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Edit"))
@@ -216,7 +235,7 @@ void framework::draw_editor_main_menu()
     }
     if (ImGui::BeginMenu("Assets"))
     {
-        if (ImGui::MenuItem("Import Model...")) browse_stage_asset();
+        if (ImGui::MenuItem("Import Model...")) browse_model_asset();
         if (ImGui::MenuItem("Place Prefab...")) load_prefab();
         if (ImGui::MenuItem("Show Project Browser")) show_project_panel = true;
         ImGui::EndMenu();
@@ -314,6 +333,48 @@ void framework::draw_object_scene_recovery_prompt()
     ImGui::EndPopup();
 }
 
+void framework::draw_unsaved_object_scene_prompt()
+{
+    if (object_scene_unsaved_prompt_requested)
+    {
+        ImGui::OpenPopup(u8"未保存のシーン");
+        object_scene_unsaved_prompt_requested = false;
+    }
+
+    if (!ImGui::BeginPopupModal(u8"未保存のシーン", nullptr,
+        ImGuiWindowFlags_AlwaysAutoResize)) return;
+
+    ImGui::TextUnformatted(u8"現在のシーンには未保存の変更があります。");
+    ImGui::TextWrapped(u8"%s", object_editor_context.DisplayTitle().c_str());
+    ImGui::Spacing();
+    ImGui::TextUnformatted(u8"保存してから続行しますか？");
+
+    if (ImGui::Button(u8"保存して続行", ImVec2(140.0f, 0.0f)))
+    {
+        if (save_object_scene(false))
+        {
+            ImGui::CloseCurrentPopup();
+            execute_pending_object_scene_action();
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(u8"破棄して続行", ImVec2(140.0f, 0.0f)))
+    {
+        discard_object_scene_autosave();
+        object_editor_context.ClearDirty();
+        ImGui::CloseCurrentPopup();
+        execute_pending_object_scene_action();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(u8"キャンセル", ImVec2(100.0f, 0.0f)))
+    {
+        pending_object_scene_action = object_scene_action::none;
+        pending_object_scene_path.clear();
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+}
+
 void framework::draw_editor_toolbar()
 {
     if (ImGui::Button("New")) create_object_scene(u8"新しいシーン", false);
@@ -382,8 +443,18 @@ void framework::draw_scene_view_panel()
     scene_view_focused = false;
     if (!show_scene_view) return;
 
+    if (scene_view_overlay_valid)
+    {
+        ImGui::SetNextWindowPos(scene_view_overlay_position, ImGuiCond_Always);
+        ImGui::SetNextWindowSize(scene_view_overlay_size, ImGuiCond_Always);
+    }
+    ImGui::SetNextWindowDockID(0, ImGuiCond_Always);
     ImGui::SetNextWindowBgAlpha(0.0f);
-    if (!ImGui::Begin("Scene View", &show_scene_view, ImGuiWindowFlags_NoBackground))
+    const ImGuiWindowFlags scene_view_flags = ImGuiWindowFlags_NoBackground |
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
+        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoSavedSettings;
+    if (!ImGui::Begin("Scene View", &show_scene_view, scene_view_flags))
     {
         ImGui::End();
         return;
@@ -608,7 +679,7 @@ void framework::draw_project_panel()
         ImGui::Separator();
     }
 
-    if (ImGui::Button("モデルファイルを取り込む...")) browse_stage_asset();
+    if (ImGui::Button("モデルファイルを取り込む...")) browse_model_asset();
     ImGui::SameLine();
     if (ImGui::Button("Prefabを配置...")) load_prefab();
     ImGui::SameLine();
@@ -617,20 +688,26 @@ void framework::draw_project_panel()
     {
         ImGui::ProgressBar(async_asset_manager.Progress(), ImVec2(-1.0f, 0.0f), "モデルを確認中");
     }
-    if (!selected_stage_asset_path.empty())
+    if (!selected_model_asset_path.empty())
     {
-        ImGui::TextWrapped("選択中: %s", selected_stage_asset_path.c_str());
-        ImGui::TextWrapped("状態: %s", stage_asset_status.c_str());
-        if (!selected_stage_cache_path.empty())
-            ImGui::TextWrapped("キャッシュ: %s", selected_stage_cache_path.c_str());
+        ImGui::TextWrapped("選択中: %s", selected_model_asset_path.c_str());
+        ImGui::TextWrapped("状態: %s", model_asset_status.c_str());
+        if (!selected_model_cache_path.empty())
+            ImGui::TextWrapped("キャッシュ: %s", selected_model_cache_path.c_str());
     }
+    ImGui::Separator();
+    ImGui::SetNextItemWidth(180.0f);
+    ImGui::InputTextWithHint("##NewMaterialName", "Material name",
+        new_material_name, IM_ARRAYSIZE(new_material_name));
+    ImGui::SameLine();
+    if (ImGui::Button("New Material")) create_material_asset();
     ImGui::Separator();
     ImGui::Text("Assets: %zu", asset_database.Records().size());
     ImGui::SetNextItemWidth(-150.0f);
     ImGui::InputTextWithHint("##AssetSearch", "Search assets...",
         asset_search_text, IM_ARRAYSIZE(asset_search_text));
     ImGui::SameLine();
-    const char* asset_filters[] = { "All", "Model", "Prefab", "Scene", "Other" };
+    const char* asset_filters[] = { "All", "Model", "Prefab", "Scene", "Material", "Other" };
     ImGui::SetNextItemWidth(140.0f);
     ImGui::Combo("##AssetTypeFilter", &asset_type_filter,
         asset_filters, IM_ARRAYSIZE(asset_filters));
@@ -646,7 +723,7 @@ void framework::draw_project_panel()
         for (const auto& asset : asset_database.Records())
         {
             const std::string extension = asset.source_path.extension().u8string();
-            int type = 4;
+            int type = 5;
             const char* icon = "[ASSET]";
             if (asset.kind == ReplayEngine::Assets::AssetKind::Model)
             {
@@ -662,6 +739,11 @@ void framework::draw_project_panel()
             {
                 type = 3;
                 icon = "[SCENE]";
+            }
+            else if (asset.kind == ReplayEngine::Assets::AssetKind::Material)
+            {
+                type = 4;
+                icon = "[MAT]";
             }
             if (asset_type_filter != 0 && asset_type_filter != type) continue;
 
@@ -687,14 +769,15 @@ void framework::draw_project_panel()
             {
                 selected_asset_guid = asset.guid;
                 if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && !missing &&
-                    (type == 1 || type == 2))
+                    (type == 1 || type == 2 || type == 4))
                     place_asset_in_object_scene(asset, asset_drop_add_collider);
             }
             if (missing) ImGui::PopStyleColor();
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("%s", asset.source_path.generic_u8string().c_str());
 
-            if (!missing && (type == 1 || type == 2) && ImGui::BeginDragDropSource())
+            if (!missing && (type == 1 || type == 2 || type == 4) &&
+                ImGui::BeginDragDropSource())
             {
                 ImGui::SetDragDropPayload("REPLAY_ASSET_GUID", asset.guid.c_str(),
                     asset.guid.size() + 1);
@@ -714,6 +797,7 @@ void framework::draw_project_panel()
         place_asset_in_object_scene(*selected_asset, asset_drop_add_collider);
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("Colliderは左の設定が有効な場合だけ明示的に追加します");
+    draw_material_asset_editor();
     ImGui::Separator();
     ImGui::TextDisabled("現在のシーンが読み込んでいる素材");
     ImGui::BulletText("キャラクター / Renderer Component の AssetGUID から解決");
@@ -820,7 +904,10 @@ void framework::draw_editor()
     }
 
     const ImGuiID dockspace_id = ImGui::GetID("RePlayEditorDockSpaceJP2");
-    ImGui::DockSpace(dockspace_id, ImVec2(0, 0), ImGuiDockNodeFlags_PassthruCentralNode);
+    const ImGuiDockNodeFlags dockspace_flags =
+        ImGuiDockNodeFlags_PassthruCentralNode |
+        ImGuiDockNodeFlags_NoDockingInCentralNode;
+    ImGui::DockSpace(dockspace_id, ImVec2(0, 0), dockspace_flags);
     if (!editor_layout_checked || editor_layout_dirty)
     {
         editor_layout_checked = true;
@@ -830,7 +917,8 @@ void framework::draw_editor()
         if (rebuild || !root || !root->IsSplitNode())
         {
             ImGui::DockBuilderRemoveNode(dockspace_id);
-            ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
+            ImGui::DockBuilderAddNode(dockspace_id,
+                ImGuiDockNodeFlags_DockSpace | dockspace_flags);
             ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->Size);
             ImGuiID center = dockspace_id;
             float left_ratio = 0.20f;
@@ -855,13 +943,23 @@ void framework::draw_editor()
             ImGui::DockBuilderDockWindow("コンソール", bottom);
             ImGui::DockBuilderDockWindow("ワークスペース", bottom);
             ImGui::DockBuilderDockWindow("Validation & Diagnostics", bottom);
-            ImGui::DockBuilderDockWindow("Scene View", center);
             ImGui::DockBuilderFinish(dockspace_id);
         }
+    }
+    if (ImGuiDockNode* central = ImGui::DockBuilderGetCentralNode(dockspace_id))
+    {
+        scene_view_overlay_position = central->Pos;
+        scene_view_overlay_size = central->Size;
+        scene_view_overlay_valid = central->Size.x > 1.0f && central->Size.y > 1.0f;
+    }
+    else
+    {
+        scene_view_overlay_valid = false;
     }
     ImGui::End();
 
     draw_object_scene_recovery_prompt();
+    draw_unsaved_object_scene_prompt();
 
     draw_scene_view_panel();
     if (show_hierarchy_panel) draw_scene_hierarchy();

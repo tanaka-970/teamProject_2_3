@@ -6,6 +6,13 @@
 
 framework::framework(HWND hwnd) : hwnd(hwnd) {}
 
+Microsoft::WRL::ComPtr<ID3D11Debug> framework::acquire_d3d11_debug() const noexcept
+{
+    Microsoft::WRL::ComPtr<ID3D11Debug> debug;
+    if (device) device.As(&debug);
+    return debug;
+}
+
 bool framework::is_fullscreen() const
 {
     return borderless_fullscreen;
@@ -129,6 +136,9 @@ bool framework::uninitialize()
     // Scene View の視点を残す。再起動後に同じ場所から再開できる。
     // 失敗しても続行する（次回は既定位置になるだけ）。
     save_editor_camera_state();
+
+    // LoadingSceneのTaskはモデルCacheへ書き込むため、Cache解放より先に停止・joinする。
+    scene_manager.Clear();
 
     // GameObject シーンが抱えているメッシュを、D3D デバイスより先に手放す。
     // ComPtr の破棄順に依存せず、明示的に解放しておく。

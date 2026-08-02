@@ -10,7 +10,7 @@ namespace ReplayEngine::Core
     //
     // 設計方針:
     //  - 実行時ポインタや配列インデックスは Scene ファイルへ保存しない。永続参照は必ずこの ID を使う。
-    //  - 旧 SceneDocument の EntityId が 64bit 整数だったため、保存形式の互換性を考えて 64bit を継承する。
+    //  - 保存済みIDとの互換性を保つため64bitを使用する。
     //  - 0 は「無効」を表す予約値。GameObject へ割り当てられることはない。
     //  - 値型なのでコピー・比較・ハッシュが安全に行える。生ポインタの代わりに気軽に持ち回してよい。
     class ObjectID final

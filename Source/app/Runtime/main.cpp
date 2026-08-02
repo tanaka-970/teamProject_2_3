@@ -1,22 +1,29 @@
 ﻿#include <time.h>
+#include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include "framework.h"
 #include "../../../RePlayEngine/Assets/AssetDatabase.h"
 #include "../../../RePlayEngine/Components/Gameplay/StageGameplayComponents.h"
 #include "../../../RePlayEngine/Components/Rendering/LightComponents.h"
+#include "../../../RePlayEngine/Components/Rendering/MeshRendererComponent.h"
+#include "../../../RePlayEngine/Editor/Core/EditorContext.h"
 #include "../../../RePlayEngine/Editor/Validation/SceneValidator.h"
 #include "../../../RePlayEngine/Landscape/LandscapeCollision.h"
 #include "../../../RePlayEngine/Landscape/LandscapeData.h"
 #include "../../../RePlayEngine/Landscape/LandscapeEditorTool.h"
 #include "../../../RePlayEngine/Landscape/LandscapeRenderer.h"
 #include "../../../RePlayEngine/Object/Registry/BuiltInComponents.h"
+#include "../../../RePlayEngine/Rendering/Materials/MaterialAsset.h"
 #include "../../../RePlayEngine/Scene/Runtime/Scene.h"
 #include "../../../RePlayEngine/Scene/Serialization/SceneData.h"
 #include "../../../RePlayEngine/Scene/Serialization/PrefabSerializer.h"
@@ -24,6 +31,122 @@
 
 namespace
 {
+    std::uint32_t ParseAutomatedSmokeTestFrames(const char* command_line)
+    {
+        std::istringstream arguments(command_line != nullptr ? command_line : "");
+        std::string command;
+        int frames = 0;
+        if (!(arguments >> command) || command != "--smoke-test") return 0;
+        if (!(arguments >> frames)) frames = 120;
+        return static_cast<std::uint32_t>((std::clamp)(frames, 30, 3600));
+    }
+
+    int RunHeadlessMaterialValidation(const char* command_line)
+    {
+        std::istringstream arguments(command_line != nullptr ? command_line : "");
+        std::string command;
+        if (!(arguments >> command) || command != "--validate-material") return -1;
+
+        using ReplayEngine::Rendering::MaterialAlphaMode;
+        using ReplayEngine::Rendering::MaterialAsset;
+        const std::filesystem::path folder = std::filesystem::path("Saved") / "Validation";
+        const std::filesystem::path material_path = folder / "MaterialFoundation.replaymaterial";
+
+        MaterialAsset material;
+        material.base_color = { 0.2f, 0.4f, 0.8f, 0.9f };
+        material.base_color_texture = "texture-base-guid";
+        material.normal_texture = "texture-normal-guid";
+        material.metallic = 0.7f;
+        material.roughness = 0.25f;
+        material.emissive = { 0.1f, 0.2f, 0.3f };
+        material.emissive_strength = 2.5f;
+        material.ambient_occlusion = 0.85f;
+        material.alpha_mode = MaterialAlphaMode::Mask;
+        material.alpha_cutoff = 0.42f;
+        material.double_sided = true;
+        material.shading_model = 2;
+
+        std::string error;
+        if (!MaterialAsset::Save(material, material_path, error))
+        {
+            std::fprintf(stderr, "Material first save failed: %s\n", error.c_str());
+            return 50;
+        }
+        material.roughness = 0.3f;
+        if (!MaterialAsset::Save(material, material_path, error))
+        {
+            std::fprintf(stderr, "Material atomic replace failed: %s\n", error.c_str());
+            return 51;
+        }
+        std::filesystem::path backup_path = material_path;
+        backup_path += L".bak";
+
+        MaterialAsset loaded;
+        if (!std::filesystem::exists(backup_path) ||
+            !MaterialAsset::Load(material_path, loaded, error) ||
+            std::fabs(loaded.roughness - 0.3f) > 0.00001f ||
+            loaded.base_color_texture != material.base_color_texture ||
+            loaded.normal_texture != material.normal_texture ||
+            loaded.alpha_mode != MaterialAlphaMode::Mask || !loaded.double_sided)
+        {
+            std::fprintf(stderr, "Material round-trip/backup failed: %s\n", error.c_str());
+            return 52;
+        }
+
+        ReplayEngine::Assets::AssetDatabase assets(folder / "MaterialAssetDatabase.replaydb");
+        assets.Load(error);
+        const auto& record = assets.Register(material_path,
+            ReplayEngine::Assets::AssetKind::Material);
+        const std::string material_guid = record.guid;
+        if (!assets.Save(error))
+        {
+            std::fprintf(stderr, "Material AssetDatabase save failed: %s\n", error.c_str());
+            return 53;
+        }
+        ReplayEngine::Assets::AssetDatabase reloaded_assets(
+            folder / "MaterialAssetDatabase.replaydb");
+        if (!reloaded_assets.Load(error) ||
+            reloaded_assets.FindByGuid(material_guid) == nullptr ||
+            reloaded_assets.FindByGuid(material_guid)->kind !=
+                ReplayEngine::Assets::AssetKind::Material)
+        {
+            std::fprintf(stderr, "Material AssetDatabase reload failed: %s\n", error.c_str());
+            return 54;
+        }
+
+        ReplayEngine::Core::RegisterBuiltInComponents();
+        ReplayEngine::Scene::Scene scene("MaterialScene");
+        ReplayEngine::Core::GameObject* object = scene.CreateGameObject("MaterialMesh");
+        auto* renderer = object != nullptr ? object->AddComponent<
+            ReplayEngine::Components::MeshRendererComponent>() : nullptr;
+        if (renderer == nullptr)
+        {
+            std::fprintf(stderr, "Material Renderer creation failed\n");
+            return 55;
+        }
+        renderer->mesh_asset = "mesh-guid";
+        renderer->material_asset = material_guid;
+
+        ReplayEngine::Scene::Serialization::SceneData data;
+        ReplayEngine::Scene::Serialization::CaptureScene(scene, data);
+        ReplayEngine::Scene::Scene restored;
+        ReplayEngine::Scene::Serialization::SceneLoadReport report;
+        if (!ReplayEngine::Scene::Serialization::ApplySceneData(data, restored, report) ||
+            restored.GameObjectCount() != 1 ||
+            restored.GameObjectAt(0)->GetComponent<
+                ReplayEngine::Components::MeshRendererComponent>() == nullptr ||
+            restored.GameObjectAt(0)->GetComponent<
+                ReplayEngine::Components::MeshRendererComponent>()->material_asset != material_guid)
+        {
+            std::fprintf(stderr, "Material Renderer Scene round-trip failed\n");
+            return 56;
+        }
+
+        std::fprintf(stderr,
+            "Material OK: atomic save/backup, full property round-trip, AssetGUID database, Renderer Scene link OK\n");
+        return 0;
+    }
+
     int RunHeadlessPrefabValidation(const char* command_line)
     {
         std::istringstream arguments(command_line != nullptr ? command_line : "");
@@ -239,6 +362,159 @@ namespace
         return 0;
     }
 
+    int RunHeadlessLargeSceneValidation(const char* command_line)
+    {
+        std::istringstream arguments(command_line != nullptr ? command_line : "");
+        std::string command;
+        if (!(arguments >> command) || command != "--validate-large-scene") return -1;
+
+        using clock = std::chrono::steady_clock;
+        const auto total_begin = clock::now();
+        ReplayEngine::Core::RegisterBuiltInComponents();
+        ReplayEngine::Scene::Scene scene("LargeSceneValidation");
+        std::vector<ReplayEngine::Core::ObjectID> ids;
+        ids.reserve(1000);
+
+        ReplayEngine::Core::GameObject* group_root = nullptr;
+        for (std::size_t index = 0; index < 1000; ++index)
+        {
+            const std::string name = index % 10 == 0
+                ? u8"検索対象_" + std::to_string(index)
+                : "LargeObject_" + std::to_string(index);
+            ReplayEngine::Core::GameObject* object = scene.CreateGameObject(name);
+            if (object == nullptr)
+            {
+                std::fprintf(stderr, "Large Scene object creation failed at %zu\n", index);
+                return 60;
+            }
+            object->GetTransform().SetLocalPosition({
+                static_cast<float>(index % 50),
+                static_cast<float>((index / 50) % 10),
+                static_cast<float>(index / 500) });
+            if (index % 100 == 0) group_root = object;
+            else if (group_root == nullptr || !object->SetParent(group_root, false))
+            {
+                std::fprintf(stderr, "Large Scene hierarchy creation failed at %zu\n", index);
+                return 61;
+            }
+            ids.push_back(object->ID());
+        }
+
+        ReplayEngine::Editor::EditorContext context;
+        context.AttachScene(&scene);
+        for (std::size_t index = 0; index < ids.size(); index += 37)
+            context.Selection().Select(ids[index], true);
+        if (context.Selection().Count() != 28)
+        {
+            std::fprintf(stderr, "Large Scene multi-selection failed: %zu\n",
+                context.Selection().Count());
+            return 62;
+        }
+
+        ReplayEngine::Core::GameObject* edited = scene.FindGameObjectByID(ids[777]);
+        if (edited == nullptr) return 63;
+        const DirectX::XMFLOAT3 original_position = edited->GetTransform().LocalPosition();
+        context.BeginEdit("Large Scene Transform");
+        edited->GetTransform().SetLocalPosition({ 123.0f, 45.0f, 6.0f });
+        context.CommitEdit();
+        if (!context.Dirty() || !context.Undo())
+        {
+            std::fprintf(stderr, "Large Scene transform undo setup failed\n");
+            return 64;
+        }
+        edited = scene.FindGameObjectByID(ids[777]);
+        if (edited == nullptr ||
+            std::fabs(edited->GetTransform().LocalPosition().x - original_position.x) > 0.00001f ||
+            !context.Redo())
+        {
+            std::fprintf(stderr, "Large Scene transform undo/redo failed\n");
+            return 65;
+        }
+        edited = scene.FindGameObjectByID(ids[777]);
+        if (edited == nullptr ||
+            std::fabs(edited->GetTransform().LocalPosition().x - 123.0f) > 0.00001f)
+        {
+            std::fprintf(stderr, "Large Scene transform redo value failed\n");
+            return 66;
+        }
+
+        std::size_t search_matches = 0;
+        for (std::size_t index = 0; index < scene.GameObjectCount(); ++index)
+        {
+            const ReplayEngine::Core::GameObject* object = scene.GameObjectAt(index);
+            if (object != nullptr && object->Name().find(u8"検索対象") != std::string::npos)
+                ++search_matches;
+        }
+        if (search_matches != 100)
+        {
+            std::fprintf(stderr, "Large Scene search failed: %zu\n", search_matches);
+            return 67;
+        }
+
+        namespace Serialization = ReplayEngine::Scene::Serialization;
+        Serialization::SceneData captured;
+        Serialization::CaptureScene(scene, captured);
+        const std::filesystem::path output = std::filesystem::path("Saved") /
+            "Validation" / "LargeScene1000.replayscene";
+        std::string error;
+        const auto save_begin = clock::now();
+        if (!Serialization::SceneSerializer::SaveToFile(captured, output, error))
+        {
+            std::fprintf(stderr, "Large Scene save failed: %s\n", error.c_str());
+            return 68;
+        }
+        const auto save_end = clock::now();
+
+        Serialization::SceneData loaded;
+        if (!Serialization::SceneSerializer::LoadFromFile(loaded, output, error) ||
+            loaded.objects.size() != 1000)
+        {
+            std::fprintf(stderr, "Large Scene load failed: %s\n", error.c_str());
+            return 69;
+        }
+        ReplayEngine::Scene::Scene restored;
+        Serialization::SceneLoadReport report;
+        if (!Serialization::ApplySceneData(loaded, restored, report) ||
+            restored.GameObjectCount() != 1000)
+        {
+            std::fprintf(stderr, "Large Scene apply failed\n");
+            return 70;
+        }
+        const auto load_end = clock::now();
+
+        const auto issues = ReplayEngine::Editor::SceneValidator::Validate(restored, nullptr);
+        const std::size_t error_count = static_cast<std::size_t>(std::count_if(
+            issues.begin(), issues.end(), [](const ReplayEngine::Editor::ValidationIssue& issue)
+            {
+                return issue.severity == ReplayEngine::Editor::ValidationSeverity::Error;
+            }));
+        if (error_count != 0)
+        {
+            std::fprintf(stderr, "Large Scene validation reported %zu errors\n", error_count);
+            return 71;
+        }
+
+        const auto total_end = clock::now();
+        const auto save_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            save_end - save_begin).count();
+        const auto load_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            load_end - save_end).count();
+        const auto total_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            total_end - total_begin).count();
+        if (total_ms > 30000)
+        {
+            std::fprintf(stderr, "Large Scene validation exceeded 30 seconds: %lld ms\n",
+                static_cast<long long>(total_ms));
+            return 72;
+        }
+
+        std::fprintf(stderr,
+            "Large Scene OK: 1000 GameObjects, hierarchy/search(100)/selection(28)/transform undo-redo/save-load/validation OK; save=%lld ms load=%lld ms total=%lld ms\n",
+            static_cast<long long>(save_ms), static_cast<long long>(load_ms),
+            static_cast<long long>(total_ms));
+        return 0;
+    }
+
     int RunHeadlessSceneValidation(const char* command_line)
     {
         std::istringstream arguments(command_line != nullptr ? command_line : "");
@@ -313,12 +589,18 @@ LRESULT CALLBACK window_procedure(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpa
 
 int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _In_ LPSTR cmd_line, _In_ int cmd_show)
 {
+    const int large_scene_validation_result = RunHeadlessLargeSceneValidation(cmd_line);
+    if (large_scene_validation_result >= 0) return large_scene_validation_result;
     const int validation_result = RunHeadlessSceneValidation(cmd_line);
     if (validation_result >= 0) return validation_result;
+    const int material_validation_result = RunHeadlessMaterialValidation(cmd_line);
+    if (material_validation_result >= 0) return material_validation_result;
     const int landscape_validation_result = RunHeadlessLandscapeValidation(cmd_line);
     if (landscape_validation_result >= 0) return landscape_validation_result;
     const int prefab_validation_result = RunHeadlessPrefabValidation(cmd_line);
     if (prefab_validation_result >= 0) return prefab_validation_result;
+    const std::uint32_t automated_smoke_test_frames =
+        ParseAutomatedSmokeTestFrames(cmd_line);
 
     // WICの画像読み込みはCOMを使うため、エンジンの生存期間中は初期化状態を維持する。
     // シーン切り替え後もWICファクトリを確実に利用できるようにする。
@@ -372,11 +654,53 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
 	HWND hwnd = CreateWindowExW(0, APPLICATION_NAME, L"", WS_OVERLAPPEDWINDOW | WS_VISIBLE,
 		CW_USEDEFAULT, CW_USEDEFAULT, rc.right - rc.left, rc.bottom - rc.top,
 		NULL, NULL, instance, NULL);
-	ShowWindow(hwnd, cmd_show);
+	ShowWindow(hwnd, automated_smoke_test_frames > 0 ? SW_HIDE : cmd_show);
 
-	framework framework(hwnd);
-	SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&framework));
-	const int exit_code = framework.run();
+    int exit_code = 0;
+    Microsoft::WRL::ComPtr<ID3D11Debug> d3d11_debug;
+    HRESULT d3d11_live_report_result = E_NOINTERFACE;
+    bool d3d11_live_report_available = false;
+    {
+	    framework application(hwnd);
+        application.set_automated_smoke_test_frames(automated_smoke_test_frames);
+	    SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&application));
+	    exit_code = application.run();
+        d3d11_debug = application.acquire_d3d11_debug();
+    }
+
+    if (d3d11_debug)
+    {
+        d3d11_live_report_available = true;
+        d3d11_live_report_result = d3d11_debug->ReportLiveDeviceObjects(
+            D3D11_RLDO_SUMMARY | D3D11_RLDO_DETAIL | D3D11_RLDO_IGNORE_INTERNAL);
+        std::fprintf(stderr, "D3D11 Live Object Report: %s (0x%08lx)\n",
+            SUCCEEDED(d3d11_live_report_result) ? "completed" : "failed",
+            static_cast<unsigned long>(d3d11_live_report_result));
+        if (FAILED(d3d11_live_report_result) && exit_code == 0) exit_code = 73;
+        d3d11_debug.Reset();
+    }
+
+	if (automated_smoke_test_frames > 0)
+    {
+        std::fprintf(stderr, "Runtime smoke test: %u rendered frames, exit code %d\n",
+            automated_smoke_test_frames, exit_code);
+        const std::filesystem::path validation_folder =
+            std::filesystem::path("Saved") / "Validation";
+        std::error_code directory_error;
+        std::filesystem::create_directories(validation_folder, directory_error);
+        std::ofstream report(validation_folder / "RuntimeSmoke.txt",
+            std::ios::binary | std::ios::trunc);
+        if (report)
+        {
+            report << "REPLAY_RUNTIME_SMOKE 1\n";
+            report << "RENDERED_FRAMES " << automated_smoke_test_frames << '\n';
+            report << "EXIT_CODE " << exit_code << '\n';
+            report << "D3D11_DEBUG_AVAILABLE " << (d3d11_live_report_available ? 1 : 0) << '\n';
+            report << "D3D11_LIVE_REPORT_HRESULT 0x" << std::hex << std::setw(8)
+                << std::setfill('0') << static_cast<unsigned long>(
+                    d3d11_live_report_result) << '\n';
+        }
+    }
 	if (SUCCEEDED(com_result)) CoUninitialize();
 	return exit_code;
 }

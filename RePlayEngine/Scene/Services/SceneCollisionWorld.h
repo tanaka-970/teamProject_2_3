@@ -32,14 +32,8 @@ namespace ReplayEngine::Scene
     //   AttachScene が登録表と接触ペアを丸ごと捨てる。
     //   古い Scene の ObjectID / ColliderID は 1 件も残らない。
     //
-    // ---------------------------------------------------------------------
-    // 【二重衝突を防ぐ仕組み】
-    //   同じ地形を新旧両方へ登録しないことで防ぐ。「片方が外れたらもう片方」
-    //   という順序依存の方式は採らない（MeshCollider の隙間から旧地形が
-    //   反応してしまうため）。
-    //
-    //   移行済みかどうかは「移行元 ID の集合」で管理する。単一 bool ではない。
-    //   一部の配置物だけを移行しても、未移行のぶんだけが Legacy へ回る。
+    // 衝突問い合わせはSceneへ登録されたCollider Componentだけを参照する。
+    // 別経路へのフォールバックを持たないため、同じ地形への二重衝突は起こらない。
     class SceneCollisionWorld final : public IPhysicsQueryService
     {
     public:

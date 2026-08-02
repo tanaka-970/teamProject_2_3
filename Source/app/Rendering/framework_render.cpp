@@ -272,11 +272,7 @@ void framework::render(float elapsed_time)
     if (enable_particles) particles.simulate(immediate_context.Get(), elapsed_time);
     if (enable_trail)     test_trail.update(elapsed_time);
 
-    // 旧 Player 用の skinned_meshes[0] を描く経路は撤去した。
-    //
-    // かつてここには「draw_legacy_player」というスイッチがあり、
-    // 旧 Player の Transform と手動選択したクリップで固定モデルを描いていた。
-    // 現在、アニメーション付きモデルは例外なく
+    // アニメーション付きモデルは例外なく
     // SkinnedMeshRendererComponent + AnimatorComponent が提出し、
     // draw_object_scene_meshes() / RenderItem 経由でのみ描かれる。
     // Shadow / CSM / GBuffer / Forward / Outline のどのパスにも
@@ -398,7 +394,6 @@ void framework::render(float elapsed_time)
             // 深度だけなのでピクセルシェーダーは外す(bind_pixel_shader=false)。
             // モーションベクターもここでは書かない。
             //
-            // 旧 Player 用 skinned_meshes[0] の描画はここから撤去した。
             // キャラクターは GameObject の提出リスト経由でのみ描かれる。
             if (enable_static_meshes && static_meshes[0])
                 static_meshes[0]->render(immediate_context.Get(), world, material_color,
@@ -579,7 +574,6 @@ void framework::render(float elapsed_time)
                 }
             };
 
-            // 旧 Player 用 skinned_meshes[0] のシェーダーレイヤー描画は撤去した。
             // キャラクターの追加パスは Renderer Component の設定で決まる。
             if (enable_static_meshes && static_meshes[0])
             {
@@ -685,8 +679,6 @@ void framework::render(float elapsed_time)
 
         DirectX::XMFLOAT4X4 world;
         store_debug_mesh_world(world);
-
-        // 旧 Player 用 skinned_meshes[0] の Forward 描画は撤去した。
 
         if (enable_static_meshes && static_meshes[0])
         {

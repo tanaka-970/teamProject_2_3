@@ -32,7 +32,15 @@ namespace ReplayEngine::Scene
             if (factory) queued_factories_.push_back(std::move(factory));
         }
 
-        void Clear() noexcept { current_scene_.reset(); }
+        void Clear() noexcept
+        {
+            current_scene_.reset();
+            // Queue済みLoadingSceneはバックグラウンドTaskを所有する。
+            // Cacheやframeworkメンバーより先に破棄し、Taskのjoinを完了させる。
+            queued_scene_.reset();
+            queued_factories_.clear();
+            device_ = nullptr;
+        }
         bool HasScene() const noexcept { return current_scene_ != nullptr; }
         bool IsExclusive() const noexcept
         {

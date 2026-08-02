@@ -230,13 +230,8 @@ bool framework::initialize()
         sprite_batches[0] = std::make_unique<sprite_batch>(device.Get(), ui_image, 1);
         return true;
     });
-    // 【削除済み】"Player model" タスク
-    //   かつてここで .\resources\AnimationModel\AllAnimation1.fbx を
-    //   skinned_meshes[0] へ固定で読み込んでいた。これが旧 Player 専用の
-    //   Asset 固定参照であり、旧 Player 描画の入口だった。
-    //   キャラクターのモデルは SkinnedMeshRendererComponent の
-    //   mesh_asset (AssetGUID) が指し、resolve_object_mesh() が読み込む。
-    //   起動時にモデルを 1 つ決め打ちで読むことはもうしない。
+    // キャラクターモデルは SkinnedMeshRendererComponent の
+    // mesh_asset (AssetGUID) が指し、resolve_object_mesh() が読み込む。
     loading_scene->AddTask("Debug mesh", [this]
     {
         // static_mesh は .obj 専用。構築前に can_load で検証し、

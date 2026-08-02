@@ -83,7 +83,7 @@ namespace
 //
 //   1. Component 型を登録する
 //   2. プロジェクト設定を読み込む
-//   3. Scene v9 を読み込む（GameObject / Component / Property / Collider 参照 /
+    //   3. 現行Sceneを読み込む（GameObject / Component / Property / Collider 参照 /
 //      controlledObjectId がここで復元される）
 //   4. Scene を開始する
 //   5. 衝突世界を Scene へ Attach する
@@ -101,12 +101,13 @@ void framework::initialize_object_scene()
     // ただしここで Prefab を配置することはない。設定を持っているだけ。
     load_project_settings();
 
-    object_scene.SetName("TrainingStage");
+    object_scene.SetName(u8"新しいシーン");
     object_editor_context.AttachScene(&object_scene);
     object_editor_context.SetAssetDatabase(&asset_database);
     object_editor_context.SetScenePath(object_scene_path);
 
-    // 既定の Scene があれば読み込む。無くても失敗扱いにしない（空シーンとして扱う）。
+    // Sessionで復元されたSceneがあれば後段で読み込む。ここでは固定Sampleへ
+    // 依存せず、明示されたSceneパスがある場合だけ読み込む。
     // 「Scene が無いから既定のキャラクターを置く」ことはしない。
     std::error_code filesystem_error;
     if (std::filesystem::exists(object_scene_path, filesystem_error) && !filesystem_error)
@@ -126,7 +127,7 @@ void framework::initialize_object_scene()
 
     // 衝突世界を編集 Scene へつなぐ。
     // これ以降 Component が見る IPhysicsQueryService は衝突世界であり、
-    // 旧 Stage は衝突世界の内側から必要なときだけ呼ばれる。
+    // 衝突問い合わせはSceneCollisionWorldだけを経由する。
     initialize_collision_world();
 
     // Scene View の編集カメラを、この Scene 用に保存された状態から復元する。
@@ -482,6 +483,7 @@ bool framework::save_object_scene(bool choose_path)
         return false;
     }
 
+    const std::filesystem::path previous_path = object_scene_path;
     std::filesystem::path destination = object_scene_path;
     if (choose_path || destination.empty())
     {
@@ -512,21 +514,23 @@ bool framework::save_object_scene(bool choose_path)
     object_editor_context.SetScenePath(object_scene_path);
     object_editor_context.ClearDirty();
     object_autosave_elapsed = 0.0f;
+    register_object_scene_asset();
+    add_recent_object_scene(object_scene_path);
     std::error_code remove_error;
+    if (!previous_path.empty())
+        std::filesystem::remove(AutosavePathFor(previous_path), remove_error);
+    remove_error.clear();
     std::filesystem::remove(AutosavePathFor(object_scene_path), remove_error);
     object_recovery_available = false;
+    editor_camera_state_key = make_editor_camera_state_key();
+    save_editor_camera_state();
+    save_editor_session();
     object_editor_context.SetStatus("保存しました: " + object_scene_path.filename().string());
     return true;
 }
 
 bool framework::load_object_scene(bool choose_path)
 {
-    if (object_scene_play_mode) exit_object_play_mode();
-
-    // Scene を切り替える前に、今の Scene の編集カメラ状態を残す。
-    // 戻ってきたときに同じ視点から再開できる。
-    if (!editor_camera_state_key.empty()) save_editor_camera_state();
-
     std::filesystem::path source = object_scene_path;
     if (choose_path)
     {
@@ -536,7 +540,28 @@ bool framework::load_object_scene(bool choose_path)
             object_editor_context.SetStatus("読み込みをキャンセルしました");
             return false;
         }
+        if (object_editor_context.Dirty())
+        {
+            request_object_scene_action(object_scene_action::open_path, source);
+            return false;
+        }
     }
+
+    return load_object_scene_from_path(source);
+}
+
+bool framework::load_object_scene_from_path(const std::filesystem::path& source)
+{
+    if (source.empty())
+    {
+        object_editor_context.SetStatus("読み込むシーンが指定されていません");
+        return false;
+    }
+    if (object_scene_play_mode) exit_object_play_mode();
+
+    // Scene を切り替える前に、今の Scene の編集カメラ状態を残す。
+    // 戻ってきたときに同じ視点から再開できる。
+    if (!editor_camera_state_key.empty()) save_editor_camera_state();
 
     SceneSerialization::SceneData data;
     std::string error;
@@ -562,9 +587,11 @@ bool framework::load_object_scene(bool choose_path)
     object_scene.Start();
 
     object_editor_context.AttachScene(&object_scene);
-    object_scene_path = std::move(source);
+    object_scene_path = source;
     object_editor_context.SetScenePath(object_scene_path);
     object_editor_context.ClearDirty();
+    register_object_scene_asset();
+    add_recent_object_scene(object_scene_path);
 
     // 新しい Scene の Backend Mode と移行済み集合でつなぎ直す。
     attach_collision_world(object_scene);
@@ -584,6 +611,7 @@ bool framework::load_object_scene(bool choose_path)
     // 保存が無ければ既定位置になる。
     load_editor_camera_state();
     check_object_scene_recovery();
+    save_editor_session();
     return true;
 }
 
@@ -621,6 +649,100 @@ void framework::check_object_scene_recovery()
     }
     const auto scene_time = std::filesystem::last_write_time(object_scene_path, error);
     object_recovery_available = !error && autosave_time > scene_time;
+}
+
+void framework::register_object_scene_asset()
+{
+    object_scene_asset_guid.clear();
+    if (object_scene_path.empty()) return;
+
+    const ReplayEngine::Assets::AssetRecord& record = asset_database.Register(
+        object_scene_path, ReplayEngine::Assets::AssetKind::Scene);
+    object_scene_asset_guid = record.guid;
+    std::string error;
+    if (!asset_database.Save(error))
+        OutputDebugStringA(("[Scene] AssetDatabase save failed: " + error + "\n").c_str());
+}
+
+void framework::add_recent_object_scene(const std::filesystem::path& path)
+{
+    if (path.empty()) return;
+    const std::filesystem::path normalized =
+        ReplayEngine::Assets::AssetDatabase::NormalizeProjectPath(path);
+    std::string key = normalized.generic_u8string();
+    std::transform(key.begin(), key.end(), key.begin(),
+        [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
+
+    recent_scene_paths.erase(std::remove_if(recent_scene_paths.begin(), recent_scene_paths.end(),
+        [&key](const std::filesystem::path& candidate)
+        {
+            std::string candidate_key = ReplayEngine::Assets::AssetDatabase::
+                NormalizeProjectPath(candidate).generic_u8string();
+            std::transform(candidate_key.begin(), candidate_key.end(), candidate_key.begin(),
+                [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
+            return candidate_key == key;
+        }), recent_scene_paths.end());
+    recent_scene_paths.insert(recent_scene_paths.begin(), normalized);
+    constexpr std::size_t maximum_recent_scenes = 10;
+    if (recent_scene_paths.size() > maximum_recent_scenes)
+        recent_scene_paths.resize(maximum_recent_scenes);
+}
+
+void framework::discard_object_scene_autosave()
+{
+    std::error_code error;
+    std::filesystem::remove(AutosavePathFor(object_scene_path), error);
+    object_recovery_available = false;
+    object_autosave_elapsed = 0.0f;
+    object_autosave_status.clear();
+}
+
+void framework::request_object_scene_action(object_scene_action action,
+    std::filesystem::path path)
+{
+    pending_object_scene_action = action;
+    pending_object_scene_path = std::move(path);
+    if (object_editor_context.Dirty())
+    {
+        object_scene_unsaved_prompt_requested = true;
+        editor_mode = true;
+        set_edit_mode(true);
+        return;
+    }
+    execute_pending_object_scene_action();
+}
+
+void framework::execute_pending_object_scene_action()
+{
+    const object_scene_action action = pending_object_scene_action;
+    const std::filesystem::path path = pending_object_scene_path;
+    pending_object_scene_action = object_scene_action::none;
+    pending_object_scene_path.clear();
+
+    switch (action)
+    {
+    case object_scene_action::new_empty:
+        create_object_scene(u8"新しいシーン", false);
+        break;
+    case object_scene_action::new_default:
+        create_object_scene(u8"新しいシーン", true);
+        break;
+    case object_scene_action::open_path:
+        load_object_scene_from_path(path);
+        break;
+    case object_scene_action::exit_application:
+        PostMessage(hwnd, WM_CLOSE, 0, 0);
+        break;
+    default:
+        break;
+    }
+}
+
+bool framework::confirm_object_scene_close()
+{
+    if (!object_editor_context.Dirty()) return true;
+    request_object_scene_action(object_scene_action::exit_application);
+    return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -952,27 +1074,22 @@ const skinned_mesh::animation::keyframe* framework::resolve_object_keyframe(
 //   どちらもユーザーの明示操作からしか呼ばれない。
 //   起動処理・Scene 読み込み・Component 不足の検出からは呼ばれない。
 
-namespace
-{
-    // ファイル名として使えない文字を置き換える。
-    std::string MakeSafeSceneFileName(std::string name)
-    {
-        for (char& character : name)
-        {
-            if (character == '<' || character == '>' || character == ':' ||
-                character == '"' || character == '/' || character == '\\' ||
-                character == '|' || character == '?' || character == '*') character = '_';
-        }
-        return name.empty() ? std::string("Scene") : name;
-    }
-}
-
 bool framework::create_object_scene(const std::string& name, bool place_default_character)
 {
     namespace Project = ReplayEngine::Project;
 
+    if (object_editor_context.Dirty())
+    {
+        request_object_scene_action(place_default_character
+            ? object_scene_action::new_default
+            : object_scene_action::new_empty);
+        return false;
+    }
+
     // 実行中に作り直すと、実行用 Scene と編集用 Scene の対応が壊れる。
     if (object_scene_play_mode) exit_object_play_mode();
+
+    if (!editor_camera_state_key.empty()) save_editor_camera_state();
 
     // Scene の中身が総入れ替えになるので、先に衝突世界を切り離す。
     // 古い ObjectID / ColliderID を持ったまま新しい Scene を引かせない。
@@ -1058,27 +1175,19 @@ bool framework::create_object_scene(const std::string& name, bool place_default_
     // 4) Scene を開始する。ここで初めて OnStart / OnEnable が走る。
     object_scene.Start();
 
-    // 5) 保存先を決める。既存ファイルは上書きしない。
-    const std::filesystem::path folder = std::filesystem::path("resources") / "Scenes";
-    const std::string safe_name = MakeSafeSceneFileName(scene_name);
-    const std::string extension = SceneSerialization::SceneSerializer::file_extension;
-    std::filesystem::path scene_path = folder / (safe_name + extension);
-    std::error_code filesystem_error;
-    for (std::uint32_t number = 2;
-        std::filesystem::exists(scene_path, filesystem_error) && !filesystem_error; ++number)
-    {
-        scene_path = folder / (safe_name + "_" + std::to_string(number) + extension);
-    }
-    object_scene_path = std::move(scene_path);
+    // 5) 新規 Scene は未保存として開始する。ユーザーが Save / Save As を選ぶまで
+    //    既存 Asset を上書きせず、ファイルも自動生成しない。
+    object_scene_path.clear();
+    object_scene_asset_guid.clear();
     object_editor_context.SetScenePath(object_scene_path);
+    object_editor_context.MarkDirty();
+    object_recovery_available = false;
+    object_autosave_elapsed = 0.0f;
 
     // 6) 衝突世界を新しい Scene へつなぎ直す。
     attach_collision_world(object_scene);
 
-    // 7) 再起動しても同じ状態から始められるよう、その場で書き出す。
-    save_object_scene(false);
-
-    // 8) 編集カメラを安全な既定位置へ置く。
+    // 7) 編集カメラを安全な既定位置へ置く。
     //    Runtime Camera にも CameraTargetComponent にも触れない。
     editor_camera.ResetToDefault();
     editor_camera_state_key = make_editor_camera_state_key();
@@ -1091,6 +1200,6 @@ bool framework::create_object_scene(const std::string& name, bool place_default_
     }
     save_editor_camera_state();
 
-    object_editor_context.SetStatus(status);
+    object_editor_context.SetStatus(status + "（未保存）");
     return true;
 }

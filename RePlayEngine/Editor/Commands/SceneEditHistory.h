@@ -18,7 +18,7 @@ namespace ReplayEngine::Editor
     //   GameObject / Component の生ポインタを履歴へ持ち込まずに済むため、
     //   削除済みオブジェクトを指したまま Undo するといった事故が起きない。
     //
-    //   既存の UndoStack (SceneDocument 用) と同じ考え方をそのまま踏襲している。
+    //   SceneDataスナップショットを使い、GameObject/Component編集を一操作単位で復元する。
     //   Entity 数が増えるとメモリを食う方式なので、上限を設けて古い履歴から捨てる。
     //   将来、差分方式へ置き換える場合もこのクラスの内側だけで完結する。
     //

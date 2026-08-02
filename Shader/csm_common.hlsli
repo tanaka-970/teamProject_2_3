@@ -114,13 +114,16 @@ float csm_estimate_penumbra(float2 uv, float reference_depth, int cascade, float
         }
     }
 
-    if (blocker_count < 0.5f) return 0.0f; // 遮蔽物なし = 完全に明るい
-
-    float average_blocker_depth = blocker_sum / blocker_count;
-    // 相似三角形で半影幅を求める。receiver と blocker が離れるほど広がる。
-    float penumbra = (reference_depth - average_blocker_depth) /
-        max(average_blocker_depth, 1.0e-5f);
-    return clamp(penumbra * csm_params2.z * csm_params2.x, 0.5f, 24.0f);
+    float result = 0.0f; // 遮蔽物なし = 完全に明るい
+    if (blocker_count >= 0.5f)
+    {
+        float average_blocker_depth = blocker_sum / blocker_count;
+        // 相似三角形で半影幅を求める。receiver と blocker が離れるほど広がる。
+        float penumbra = (reference_depth - average_blocker_depth) /
+            max(average_blocker_depth, 1.0e-5f);
+        result = clamp(penumbra * csm_params2.z * csm_params2.x, 0.5f, 24.0f);
+    }
+    return result;
 }
 
 // 回転ポアソンディスクPCF。filter_radius はテクセル単位。
@@ -154,19 +157,25 @@ float csm_sample_cascade(float3 world_position, float3 world_normal,
                          int cascade, float NoL, float rotation)
 {
     float4 projected = csm_project(world_position, world_normal, cascade, NoL);
-    if (projected.w < 0.5f) return 1.0f;
-
-    float filter_radius = max(csm_params.z, 0.5f) * max(csm_params3.w, 0.1f);
-
-    // PCSSが有効なら、ブロッカー距離からフィルタ半径を可変にする。
-    if (csm_params2.w >= 0.5f)
+    float visibility = 1.0f;
+    if (projected.w >= 0.5f)
     {
-        float penumbra = csm_estimate_penumbra(projected.xy, projected.z, cascade, rotation);
-        if (penumbra <= 0.0f) return 1.0f;
-        filter_radius = clamp(penumbra, 0.5f, 24.0f);
-    }
+        float filter_radius = max(csm_params.z, 0.5f) * max(csm_params3.w, 0.1f);
+        bool should_filter = true;
 
-    return csm_filter_pcf(projected.xy, projected.z, cascade, filter_radius, rotation);
+        // PCSSが有効なら、ブロッカー距離からフィルタ半径を可変にする。
+        if (csm_params2.w >= 0.5f)
+        {
+            float penumbra = csm_estimate_penumbra(
+                projected.xy, projected.z, cascade, rotation);
+            should_filter = penumbra > 0.0f;
+            filter_radius = clamp(penumbra, 0.5f, 24.0f);
+        }
+        if (should_filter)
+            visibility = csm_filter_pcf(
+                projected.xy, projected.z, cascade, filter_radius, rotation);
+    }
+    return visibility;
 }
 
 // 高品質版。view_z でカスケードを選び、境界ではひとつ先のカスケードと混ぜる。
@@ -174,30 +183,32 @@ float csm_sample_cascade(float3 world_position, float3 world_normal,
 float csm_sample_shadow_hq(float3 world_position, float3 world_normal,
                            float view_z, float NoL, float rotation_seed)
 {
-    if (csm_params.w < 0.5f) return 1.0f;
-
-    int cascade = csm_pick_cascade(view_z);
-    float rotation = rotation_seed * 6.28318530718f;
-
-    float visibility = csm_sample_cascade(world_position, world_normal,
-        cascade, NoL, rotation);
-
-    // 分割境界の手前からクロスフェードして、解像度切り替えの継ぎ目を消す。
-    float blend_width = max(csm_params2.y, 0.0f);
-    if (blend_width > 0.0f && cascade < CSM_CASCADE_COUNT - 1)
+    float result = 1.0f;
+    if (csm_params.w >= 0.5f)
     {
-        float split = csm_split_distances[cascade];
-        float blend_start = split - blend_width;
-        if (view_z > blend_start)
-        {
-            float blend = saturate((view_z - blend_start) / max(blend_width, 1.0e-4f));
-            float next_visibility = csm_sample_cascade(world_position, world_normal,
-                cascade + 1, NoL, rotation);
-            visibility = lerp(visibility, next_visibility, blend);
-        }
-    }
+        int cascade = csm_pick_cascade(view_z);
+        float rotation = rotation_seed * 6.28318530718f;
 
-    return lerp(1.0f, visibility, saturate(csm_params3.z));
+        float visibility = csm_sample_cascade(world_position, world_normal,
+            cascade, NoL, rotation);
+
+        // 分割境界の手前からクロスフェードして、解像度切り替えの継ぎ目を消す。
+        float blend_width = max(csm_params2.y, 0.0f);
+        if (blend_width > 0.0f && cascade < CSM_CASCADE_COUNT - 1)
+        {
+            float split = csm_split_distances[cascade];
+            float blend_start = split - blend_width;
+            if (view_z > blend_start)
+            {
+                float blend = saturate((view_z - blend_start) / max(blend_width, 1.0e-4f));
+                float next_visibility = csm_sample_cascade(world_position, world_normal,
+                    cascade + 1, NoL, rotation);
+                visibility = lerp(visibility, next_visibility, blend);
+            }
+        }
+        result = lerp(1.0f, visibility, saturate(csm_params3.z));
+    }
+    return result;
 }
 
 // 既存シェーダー互換の入口。回転シードとNoLが無い呼び出しでも動くようにする。

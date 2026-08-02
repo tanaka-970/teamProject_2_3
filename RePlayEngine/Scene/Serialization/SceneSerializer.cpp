@@ -388,7 +388,7 @@ namespace ReplayEngine::Scene::Serialization
                 std::uint64_t source = 0;
                 if (!(stream >> source))
                 {
-                    error = "移行済み Legacy Stage の一覧を読み取れません。";
+                    error = "予約済みの衝突移行履歴を読み取れません。";
                     return false;
                 }
             }

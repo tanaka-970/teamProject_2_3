@@ -124,6 +124,9 @@
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>.;.\Source\app;.\Source\core;.\Source\mesh;.\Source\render;.\cereal-master\include;.\DirectXTK-main\Inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <EnableASAN Condition="'$(ReplayEnableASAN)'=='true'">true</EnableASAN>
+      <DebugInformationFormat Condition="'$(ReplayEnableASAN)'=='true'">ProgramDatabase</DebugInformationFormat>
+      <PreprocessorDefinitions Condition="'$(ReplayEnableASAN)'=='true'">_DISABLE_VECTOR_ANNOTATION;_DISABLE_STRING_ANNOTATION;_DISABLE_OPTIONAL_ANNOTATION;_DEBUG;_WINDOWS;USE_IMGUI;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <!-- /FS: 並列ビルドで複数の CL.EXE が同じ PDB へ書くときの競合 (C1041) を防ぐ -->
       <AdditionalOptions>/utf-8 /validate-charset /FS %(AdditionalOptions)</AdditionalOptions>
       <!-- 別フォルダの同名 .cpp が同じ .obj へ出力されて上書きし合うのを防ぐ (LNK2001 対策) -->
@@ -281,8 +284,6 @@
     <ClCompile Include="Source\game\camera.cpp" />
     <ClCompile Include="Source\game\free_camera_controller.cpp" />
     <ClCompile Include="RePlayEngine\Physics\SphereCast.cpp" />
-    <ClCompile Include="RePlayEngine\Physics\LegacyMeshColliderComponent.cpp" />
-    <ClCompile Include="RePlayEngine\Physics\GravityComponent.cpp" />
     <ClCompile Include="Source\game\scene_game.cpp" />
     <ClCompile Include="Source\game\game_scene.cpp" />
       <ClCompile Include="RePlayEngine\Core\ObjectID\ObjectID.cpp" />
@@ -320,7 +321,7 @@
     <ClCompile Include="RePlayEngine\Components\Rendering\AnimatorComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Rendering\SkinnedMeshRendererComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Rendering\MeshRendererComponent.cpp" />
-    <ClCompile Include="Source\game\legacy_camera_basis_bridge.cpp" />
+    <ClCompile Include="Source\game\camera_basis_provider.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Inspector\PlayerCompositionValidator.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorViewportCamera.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Style\EditorStyle.cpp" />
@@ -390,11 +391,7 @@
     <ClInclude Include="RePlayEngine\Editor\ShaderEditing\ShaderStackEditor.h" />
     <ClInclude Include="RePlayEngine\Editor\ShaderEditing\ShaderPresetEditor.h" />
     <ClInclude Include="RePlayEngine\Editor\Rendering\PostProcessEditor.h" />
-    <ClInclude Include="RePlayEngine\Core\Components\AnimationComponent.h" />
-    <ClInclude Include="RePlayEngine\Core\Components\ModelRendererComponent.h" />
     <ClInclude Include="RePlayEngine\Core\Components\IComponent.h" />
-    <ClInclude Include="RePlayEngine\Core\Components\MeshColliderComponent.h" />
-    <ClInclude Include="RePlayEngine\Core\Components\GravityComponent.h" />
     <ClInclude Include="RePlayEngine\Physics\SphereCast.h" />
     <ClInclude Include="RePlayEngine\Physics\MeshCollisionCooker.h" />
     <ClInclude Include="RePlayEngine\Scene\IScene.h" />
@@ -479,7 +476,7 @@
     <ClInclude Include="RePlayEngine\Components\Camera\CameraTargetComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Rendering\AnimatorComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Rendering\SkinnedMeshRendererComponent.h" />
-    <ClInclude Include="Source\game\legacy_camera_basis_bridge.h" />
+    <ClInclude Include="Source\game\camera_basis_provider.h" />
     <ClInclude Include="RePlayEngine\Editor\Inspector\PlayerCompositionValidator.h" />
     <ClInclude Include="RePlayEngine\Editor\Viewport\EditorViewportCamera.h" />
     <ClInclude Include="RePlayEngine\Editor\Style\EditorStyle.h" />
@@ -671,12 +668,6 @@
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
     </FxCompile>
     <FxCompile Include="Shader\skinned_mesh_pbr_ps.hlsl">
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
-    </FxCompile>
-    <FxCompile Include="Shader\skinned_mesh_pbr_stage_ps.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
