@@ -775,13 +775,77 @@ skinned_mesh* framework::resolve_object_mesh(const std::string& asset_guid)
     return raw;
 }
 
+const ReplayEngine::Rendering::MaterialAsset* framework::resolve_object_material(
+    const std::string& asset_guid)
+{
+    using ReplayEngine::Assets::AssetKind;
+    using ReplayEngine::Rendering::MaterialAsset;
+
+    if (asset_guid.empty()) return nullptr;
+    const ReplayEngine::Assets::AssetRecord* record = asset_database.FindByGuid(asset_guid);
+    if (record == nullptr || record->kind != AssetKind::Material) return nullptr;
+
+    std::error_code filesystem_error;
+    const auto write_time = std::filesystem::last_write_time(
+        record->source_path, filesystem_error);
+    if (filesystem_error)
+    {
+        object_material_failures.insert(asset_guid);
+        return nullptr;
+    }
+
+    const auto cached = object_material_cache.find(asset_guid);
+    if (cached != object_material_cache.end() && cached->second.write_time == write_time)
+        return &cached->second.material;
+
+    MaterialAsset loaded;
+    std::string error;
+    if (!MaterialAsset::Load(record->source_path, loaded, error))
+    {
+        if (object_material_failures.insert(asset_guid).second)
+            OutputDebugStringA(("[Material] " + error + " (GUID: " + asset_guid + ")\n").c_str());
+        return nullptr;
+    }
+
+    object_material_failures.erase(asset_guid);
+    cached_material_asset entry;
+    entry.material = std::move(loaded);
+    entry.write_time = write_time;
+    auto inserted = object_material_cache.insert_or_assign(asset_guid, std::move(entry));
+    return &inserted.first->second.material;
+}
+
+ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
+    const ReplayEngine::Rendering::RenderItem& source)
+{
+    ReplayEngine::Rendering::RenderItem item = source;
+    const ReplayEngine::Rendering::MaterialAsset* material =
+        resolve_object_material(source.material_asset);
+    if (material == nullptr) return item;
+
+    if (!source.material_override)
+    {
+        item.tint = material->base_color;
+        item.shading_model = material->shading_model;
+    }
+    item.metallic = material->metallic;
+    item.roughness = material->roughness;
+    item.ambient_occlusion = material->ambient_occlusion;
+    item.emissive_strength = (std::max)({ material->emissive.x,
+        material->emissive.y, material->emissive.z }) * material->emissive_strength;
+    item.double_sided = material->double_sided;
+    return item;
+}
+
 void framework::draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shader,
     bool gbuffer_pass, bool depth_only)
 {
     if (object_render_items.Empty()) return;
 
-    for (const ReplayEngine::Rendering::RenderItem& item : object_render_items.Items())
+    for (const ReplayEngine::Rendering::RenderItem& source_item : object_render_items.Items())
     {
+        const ReplayEngine::Rendering::RenderItem item =
+            resolve_render_item_material(source_item);
         // Asset 未指定・解決不可・読み込み失敗のいずれでも nullptr が返る。
         // その場合はこの GameObject を描かずに次へ進むだけで、実行は継続する。
         if (item.mesh_asset.empty()) continue;
@@ -803,18 +867,32 @@ void framework::draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shade
             //   本描画は DepthFunc=EQUAL で走る。プリパスで深度を書いていない
             //   メッシュは深度比較に必ず失敗し、画面から丸ごと消える。
             //   GBuffer へ出すものは、例外なくここでも描くこと。
+            if (item.double_sided)
+                immediate_context->RSSetState(
+                    rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
             mesh->render(immediate_context.Get(), item.world, item.tint,
                 keyframe, nullptr, nullptr, nullptr, false, false);
+            if (item.double_sided)
+                immediate_context->RSSetState(
+                    rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
             continue;
         }
 
         // GBuffer パスでは Component が指定した描画方式を材質定数へ流す。
-        if (gbuffer_pass) bind_gbuffer_material(deferred_shading_model(item.shading_model));
+        if (gbuffer_pass) bind_gbuffer_material(deferred_shading_model(item.shading_model),
+            false, 6.0f, 1.0f, item.metallic, item.roughness,
+            item.ambient_occlusion, item.emissive_strength);
 
         // 最後の引数がモーションベクター出力。GBuffer パスだけで真にする
         // （複数回渡すと前フレーム姿勢が壊れる）。
+        if (item.double_sided)
+            immediate_context->RSSetState(
+                rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
         mesh->render(immediate_context.Get(), item.world, item.tint,
             keyframe, override_pixel_shader, nullptr, nullptr, true, gbuffer_pass);
+        if (item.double_sided)
+            immediate_context->RSSetState(
+                rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
     }
 }
 
@@ -822,6 +900,12 @@ void framework::clear_object_mesh_cache() noexcept
 {
     object_mesh_cache.clear();
     object_mesh_failures.clear();
+}
+
+void framework::clear_object_material_cache() noexcept
+{
+    object_material_cache.clear();
+    object_material_failures.clear();
 }
 
 const skinned_mesh::animation::keyframe* framework::resolve_object_keyframe(
@@ -911,6 +995,20 @@ bool framework::create_object_scene(const std::string& name, bool place_default_
     // 2) Default を選んだときだけ Prefab を 1 体配置する。
     if (place_default_character)
     {
+        // Default Sceneは起動直後から材質を確認できるよう、通常のLight Componentを置く。
+        // グローバルな固定ライトへは戻さず、Hierarchy/Inspector/Scene保存の対象にする。
+        if (ReplayEngine::Core::GameObject* sun = object_scene.CreateGameObject("Sun"))
+        {
+            sun->GetTransform().SetLocalRotationEuler({ -0.75f, 0.4f, 0.0f });
+            if (auto* light = sun->AddComponent<
+                ReplayEngine::Components::DirectionalLightComponent>())
+            {
+                light->color = { 1.0f, 0.96f, 0.88f, 1.0f };
+                light->intensity = 3.5f;
+                light->cast_shadows = true;
+            }
+        }
+
         const Project::PrefabReferenceStatus prefab = resolve_default_character_prefab();
 
         if (prefab.IsUnset())

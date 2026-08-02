@@ -1,14 +1,15 @@
-REPLAY_SCENE 9
+REPLAY_SCENE 10
 SCENE "TrainingStage"
-SCENE_STATE 2 1 2
-COLLISION_STATE 1 0
-OBJECT_COUNT 2
+SCENE_STATE 2
+COLLISION_STATE 2 0
+OBJECT_COUNT 3
 OBJECT
   ID 1
   NAME "GameObject"
   ENABLED 1
   PARENT 0
   TRANSFORM 0 1.9500000476837158 0 0 5.2702169418334961 0 0.039999999105930328 0.05000000074505806 0.029999999329447746
+  PREFAB "" 0 0
   COMPONENT_COUNT 3
   COMPONENT "MeshRendererComponent" 1
     PROPERTY_COUNT 7
@@ -46,7 +47,8 @@ OBJECT
   ENABLED 1
   PARENT 0
   TRANSFORM 0 0 0.45964697003364563 0 0 0 1 1 1
-  COMPONENT_COUNT 9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 8
   COMPONENT "SkinnedMeshRendererComponent" 1
     PROPERTY_COUNT 10
     PROPERTY "mesh_asset" asset "1bd1358040255f5bd18f3be0d79fbe3c"
@@ -121,18 +123,19 @@ OBJECT
     PROPERTY "follow_lag" float 12
     PROPERTY "priority" int 0
   END_COMPONENT
-  COMPONENT "MeshColliderComponent" 1
-    PROPERTY_COUNT 11
-    PROPERTY "collider_key" int 2
-    PROPERTY "center_offset" vec3 0 0 0
-    PROPERTY "collision_layer" layer 0
-    PROPERTY "collision_mask" layermask 255
-    PROPERTY "is_trigger" bool 0
-    PROPERTY "debug_draw" bool 1
-    PROPERTY "mesh_source" enum 0
-    PROPERTY "mesh_asset" asset ""
-    PROPERTY "cook_cell_size" float 4
-    PROPERTY "double_sided" bool 1
-    PROPERTY "debug_draw_wireframe" bool 0
+END_OBJECT
+OBJECT
+  ID 3
+  NAME "Sun"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 8 0 -0.75 0.4 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "DirectionalLightComponent" 1
+    PROPERTY_COUNT 3
+    PROPERTY "color" color 1 0.96 0.88 1
+    PROPERTY "intensity" float 3.5
+    PROPERTY "cast_shadows" bool 1
   END_COMPONENT
 END_OBJECT

@@ -4,6 +4,8 @@
 #include "../../RePlayEngine/Assets/AssetCache.h"
 #include "../../RePlayEngine/Components/Physics/MeshColliderComponent.h"
 #include "../../RePlayEngine/Components/Rendering/MeshRendererComponent.h"
+#include "../../RePlayEngine/Components/Rendering/SkinnedMeshRendererComponent.h"
+#include "../../RePlayEngine/Rendering/Materials/MaterialAsset.h"
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
 #include "../../RePlayEngine/Scene/Serialization/PrefabSerializer.h"
 
@@ -64,6 +66,17 @@ namespace
         }
         return true;
     }
+
+    std::string SafeAssetFileName(std::string name)
+    {
+        for (char& character : name)
+        {
+            if (character == '<' || character == '>' || character == ':' ||
+                character == '"' || character == '/' || character == '\\' ||
+                character == '|' || character == '?' || character == '*') character = '_';
+        }
+        return name.empty() ? "NewMaterial" : name;
+    }
 }
 
 bool framework::place_asset_in_object_scene(const ReplayEngine::Assets::AssetRecord& asset,
@@ -73,6 +86,44 @@ bool framework::place_asset_in_object_scene(const ReplayEngine::Assets::AssetRec
     {
         object_editor_context.SetStatus("Play中はAssetを配置できません");
         return false;
+    }
+
+    if (asset.kind == ReplayEngine::Assets::AssetKind::Material)
+    {
+        ReplayEngine::Core::GameObject* target =
+            object_editor_context.Selection().ResolvePrimary(object_scene);
+        if (target == nullptr)
+        {
+            object_editor_context.SetStatus(
+                "Materialを割り当てるGameObjectを選択してください");
+            return false;
+        }
+
+        auto* mesh = target->GetComponent<ReplayEngine::Components::MeshRendererComponent>();
+        auto* skinned = target->GetComponent<
+            ReplayEngine::Components::SkinnedMeshRendererComponent>();
+        if (mesh == nullptr && skinned == nullptr)
+        {
+            object_editor_context.SetStatus(
+                "選択GameObjectにMesh Rendererがありません");
+            return false;
+        }
+
+        object_editor_context.BeginEdit("Material Assetを割り当て");
+        if (mesh != nullptr)
+        {
+            mesh->material_asset = asset.guid;
+            mesh->material_override = false;
+        }
+        if (skinned != nullptr)
+        {
+            skinned->material_asset = asset.guid;
+            skinned->material_override = false;
+        }
+        object_editor_context.CommitEdit();
+        selected_editor_object = editor_selection::game_object;
+        object_editor_context.SetStatus("Materialを割り当てました: " + asset.display_name);
+        return true;
     }
 
     const std::wstring extension = LowerExtension(asset.source_path);
@@ -157,6 +208,136 @@ bool framework::place_asset_in_object_scene(const ReplayEngine::Assets::AssetRec
     selected_editor_object = editor_selection::game_object;
     object_editor_context.SetStatus("Assetを配置しました: " + asset.display_name);
     return true;
+}
+
+bool framework::create_material_asset()
+{
+    using ReplayEngine::Assets::AssetKind;
+    using ReplayEngine::Rendering::MaterialAsset;
+
+    std::filesystem::path folder = std::filesystem::path("resources") / "Materials";
+    const std::string base = SafeAssetFileName(new_material_name);
+    std::filesystem::path path = folder / (base + MaterialAsset::file_extension);
+    for (int suffix = 2; std::filesystem::exists(path) && suffix < 10000; ++suffix)
+        path = folder / (base + "_" + std::to_string(suffix) + MaterialAsset::file_extension);
+
+    MaterialAsset material;
+    std::string error;
+    if (!MaterialAsset::Save(material, path, error))
+    {
+        material_editor_status = "Material作成失敗: " + error;
+        return false;
+    }
+
+    const auto& record = asset_database.Register(path, AssetKind::Material);
+    if (!asset_database.Save(error))
+    {
+        material_editor_status = "Materialは作成しましたがDB保存失敗: " + error;
+        return false;
+    }
+    selected_asset_guid = record.guid;
+    material_editor_guid.clear();
+    return load_material_editor(record);
+}
+
+bool framework::load_material_editor(const ReplayEngine::Assets::AssetRecord& asset)
+{
+    if (asset.kind != ReplayEngine::Assets::AssetKind::Material) return false;
+    std::string error;
+    ReplayEngine::Rendering::MaterialAsset loaded;
+    if (!ReplayEngine::Rendering::MaterialAsset::Load(asset.source_path, loaded, error))
+    {
+        material_editor_loaded = false;
+        material_editor_status = "Material読込失敗: " + error;
+        return false;
+    }
+    material_editor_asset = std::move(loaded);
+    material_editor_guid = asset.guid;
+    material_editor_loaded = true;
+    material_editor_status = "Materialを読み込みました: " + asset.display_name;
+    return true;
+}
+
+bool framework::save_material_editor()
+{
+    if (!material_editor_loaded) return false;
+    const ReplayEngine::Assets::AssetRecord* asset =
+        asset_database.FindByGuid(material_editor_guid);
+    if (asset == nullptr || asset->kind != ReplayEngine::Assets::AssetKind::Material)
+    {
+        material_editor_status = "MaterialのAssetDatabase登録が見つかりません";
+        return false;
+    }
+
+    std::string error;
+    if (!ReplayEngine::Rendering::MaterialAsset::Save(
+        material_editor_asset, asset->source_path, error))
+    {
+        material_editor_status = "Material保存失敗: " + error;
+        return false;
+    }
+    object_material_cache.erase(material_editor_guid);
+    object_material_failures.erase(material_editor_guid);
+    material_editor_status = "MaterialをAtomic Saveしました: " +
+        asset->source_path.generic_u8string();
+    return true;
+}
+
+void framework::draw_material_asset_editor()
+{
+    const ReplayEngine::Assets::AssetRecord* selected = selected_asset_guid.empty()
+        ? nullptr : asset_database.FindByGuid(selected_asset_guid);
+    if (selected == nullptr || selected->kind != ReplayEngine::Assets::AssetKind::Material)
+        return;
+    if (!material_editor_loaded || material_editor_guid != selected->guid)
+        load_material_editor(*selected);
+    if (!material_editor_loaded) return;
+
+    ImGui::Separator();
+    if (!ImGui::CollapsingHeader("Material Asset", ImGuiTreeNodeFlags_DefaultOpen)) return;
+    ImGui::TextDisabled("%s", selected->source_path.generic_u8string().c_str());
+    ImGui::ColorEdit4("Base Color", &material_editor_asset.base_color.x);
+    ImGui::SliderFloat("Metallic", &material_editor_asset.metallic, 0.0f, 1.0f);
+    ImGui::SliderFloat("Roughness", &material_editor_asset.roughness, 0.0f, 1.0f);
+    ImGui::ColorEdit3("Emissive", &material_editor_asset.emissive.x);
+    ImGui::DragFloat("Emissive Strength", &material_editor_asset.emissive_strength,
+        0.05f, 0.0f, 1000.0f);
+    ImGui::SliderFloat("Ambient Occlusion", &material_editor_asset.ambient_occlusion,
+        0.0f, 1.0f);
+    int alpha = static_cast<int>(material_editor_asset.alpha_mode);
+    const char* alpha_modes[]{ "Opaque", "Mask", "Blend" };
+    if (ImGui::Combo("Alpha Mode", &alpha, alpha_modes, IM_ARRAYSIZE(alpha_modes)))
+        material_editor_asset.alpha_mode =
+            static_cast<ReplayEngine::Rendering::MaterialAlphaMode>(alpha);
+    if (material_editor_asset.alpha_mode == ReplayEngine::Rendering::MaterialAlphaMode::Mask)
+        ImGui::SliderFloat("Alpha Cutoff", &material_editor_asset.alpha_cutoff, 0.0f, 1.0f);
+    ImGui::Checkbox("Double Sided", &material_editor_asset.double_sided);
+    const char* shading_models[]{ "FBX Default", "PBR", "Toon", "Unlit", "Pixelate" };
+    ImGui::Combo("Shading Model", &material_editor_asset.shading_model,
+        shading_models, IM_ARRAYSIZE(shading_models));
+
+    const auto texture_guid = [](const char* label, std::string& value)
+    {
+        char buffer[96]{};
+        strncpy_s(buffer, value.c_str(), _TRUNCATE);
+        if (ImGui::InputText(label, buffer, IM_ARRAYSIZE(buffer))) value = buffer;
+    };
+    if (ImGui::TreeNode("Texture AssetGUIDs"))
+    {
+        texture_guid("Base Color Texture", material_editor_asset.base_color_texture);
+        texture_guid("Normal Texture", material_editor_asset.normal_texture);
+        texture_guid("Metallic Texture", material_editor_asset.metallic_texture);
+        texture_guid("Roughness Texture", material_editor_asset.roughness_texture);
+        texture_guid("Emissive Texture", material_editor_asset.emissive_texture);
+        texture_guid("AO Texture", material_editor_asset.ambient_occlusion_texture);
+        ImGui::TreePop();
+    }
+
+    if (ImGui::Button("Save Material")) save_material_editor();
+    ImGui::SameLine();
+    if (ImGui::Button("Assign to Selected Renderer"))
+        place_asset_in_object_scene(*selected, false);
+    ImGui::TextDisabled("%s", material_editor_status.c_str());
 }
 
 bool framework::browse_stage_asset()

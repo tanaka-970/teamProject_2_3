@@ -133,6 +133,7 @@ bool framework::uninitialize()
     // GameObject シーンが抱えているメッシュを、D3D デバイスより先に手放す。
     // ComPtr の破棄順に依存せず、明示的に解放しておく。
     clear_object_mesh_cache();
+    clear_object_material_cache();
     return true;
 }
 

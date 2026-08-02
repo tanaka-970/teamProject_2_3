@@ -142,12 +142,13 @@ unsigned int framework::deferred_shading_model(int shading) const
 }
 
 void framework::bind_gbuffer_material(unsigned int shading, bool stage_surface,
-    float pixelate_size, float pixelate_strength)
+    float pixelate_size, float pixelate_strength, float metallic, float roughness,
+    float ambient_occlusion, float emissive_strength)
 {
     material_override_constants constants{};
     constants.mat_params = stage_surface
         ? DirectX::XMFLOAT4{ 0.0f, 0.88f, 1.0f, 0.0f }
-        : DirectX::XMFLOAT4{ 0.0f, 0.55f, 1.0f, 0.0f };
+        : DirectX::XMFLOAT4{ metallic, roughness, ambient_occlusion, emissive_strength };
     constants.shading_model = shading;
     constants.texture_contrast = stage_surface ? stage_texture_contrast : 1.0f;
     constants.pixelate_size = pixelate_size;
@@ -700,20 +701,28 @@ void framework::render(float elapsed_time)
         // Asset 未指定・解決不可・読み込み失敗の GameObject は静かに飛ばす。
         for (const ReplayEngine::Rendering::RenderItem& scene_item : object_render_items.Items())
         {
-            if (scene_item.mesh_asset.empty()) continue;
-            skinned_mesh* scene_mesh = resolve_object_mesh(scene_item.mesh_asset);
+            const ReplayEngine::Rendering::RenderItem item =
+                resolve_render_item_material(scene_item);
+            if (item.mesh_asset.empty()) continue;
+            skinned_mesh* scene_mesh = resolve_object_mesh(item.mesh_asset);
             if (scene_mesh == nullptr) continue;
 
             // Animator が決めたクリップと時刻から姿勢を求める。
             // クリップ長を知っているのは Renderer 側なので、ループ処理もここで解決する。
             const skinned_mesh::animation::keyframe* item_keyframe =
-                scene_item.skinned
-                    ? resolve_object_keyframe(*scene_mesh, scene_item.clip_index,
-                        scene_item.animation_time)
+                item.skinned
+                    ? resolve_object_keyframe(*scene_mesh, item.clip_index,
+                        item.animation_time)
                     : nullptr;
 
-            scene_mesh->render(immediate_context.Get(), scene_item.world, scene_item.tint,
-                item_keyframe, skinned_forward_shader(scene_item.shading_model));
+            if (item.double_sided)
+                immediate_context->RSSetState(
+                    rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+            scene_mesh->render(immediate_context.Get(), item.world, item.tint,
+                item_keyframe, skinned_forward_shader(item.shading_model));
+            if (item.double_sided)
+                immediate_context->RSSetState(
+                    rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
         }
 
         // アウトラインは表面描画後に背面を膨らませて重ねる。

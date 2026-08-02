@@ -53,6 +53,7 @@ extern ImWchar glyphRangesJapanese[];
 #include "../../RePlayEngine/Rendering/ShaderStack/ShaderLayerStack.h"
 #include "../../RePlayEngine/Rendering/Materials/CharacterMaterialProfile.h"
 #include "../../RePlayEngine/Rendering/Materials/CharacterMaterialGpuData.h"
+#include "../../RePlayEngine/Rendering/Materials/MaterialAsset.h"
 #include "../../RePlayEngine/Assets/AssetDatabase.h"
 #include "../../RePlayEngine/Assets/AsyncAssetManager.h"
 #include "../../RePlayEngine/Assets/ConcurrentResourceCache.h"
@@ -306,6 +307,14 @@ public:
     //   - 同じ警告をログへ出し続けない
     // の 3 つを同時に満たす。
     std::unordered_set<std::string> object_mesh_failures;
+
+    struct cached_material_asset
+    {
+        ReplayEngine::Rendering::MaterialAsset material;
+        std::filesystem::file_time_type write_time{};
+    };
+    std::unordered_map<std::string, cached_material_asset> object_material_cache;
+    std::unordered_set<std::string> object_material_failures;
 
     std::filesystem::path object_scene_path{ "resources/Scenes/TrainingStage.replayscene" };
     bool             object_scene_play_mode{ false };
@@ -654,7 +663,9 @@ private:
     ID3D11PixelShader* static_forward_shader(int shading) const;
     unsigned int deferred_shading_model(int shading) const;
     void bind_gbuffer_material(unsigned int shading_model, bool stage_surface = false,
-        float pixelate_size = 6.0f, float pixelate_strength = 1.0f);
+        float pixelate_size = 6.0f, float pixelate_strength = 1.0f,
+        float metallic = 0.0f, float roughness = 0.55f,
+        float ambient_occlusion = 1.0f, float emissive_strength = 0.0f);
     void apply_toon_preset(int preset);
     void reset_editor_values();
     void draw_editor();
@@ -714,12 +725,17 @@ private:
     ReplayEngine::Scene::Scene& active_object_scene() noexcept;
     const ReplayEngine::Scene::Scene& active_object_scene() const noexcept;
     skinned_mesh* resolve_object_mesh(const std::string& asset_guid);
+    const ReplayEngine::Rendering::MaterialAsset* resolve_object_material(
+        const std::string& asset_guid);
+    ReplayEngine::Rendering::RenderItem resolve_render_item_material(
+        const ReplayEngine::Rendering::RenderItem& item);
     // depth_only = true で深度プリパス用の描画になる。
     // 深度プリパスを使う構成では、GBuffer へ出すものを必ずここでも描くこと。
     // 描き漏らすと DepthFunc=EQUAL に落とされて画面から消える。
     void draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shader,
         bool gbuffer_pass, bool depth_only = false);
     void clear_object_mesh_cache() noexcept;
+    void clear_object_material_cache() noexcept;
     bool object_runtime_active() const noexcept;
     void update_object_fixed_step(float elapsed_time);
     void update_object_camera_follow(float elapsed_time);
@@ -891,6 +907,16 @@ private:
     int asset_type_filter{ 0 };
     std::string selected_asset_guid;
     bool asset_drop_add_collider{ false };
+    char new_material_name[128]{ "NewMaterial" };
+    ReplayEngine::Rendering::MaterialAsset material_editor_asset;
+    std::string material_editor_guid;
+    std::string material_editor_status;
+    bool material_editor_loaded{ false };
+
+    bool create_material_asset();
+    bool load_material_editor(const ReplayEngine::Assets::AssetRecord& asset);
+    bool save_material_editor();
+    void draw_material_asset_editor();
     bool gizmo_local_space{ false };
     bool show_scene_grid{ true };
     float scene_grid_step{ 1.0f };

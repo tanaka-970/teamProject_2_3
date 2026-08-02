@@ -104,7 +104,12 @@ namespace ReplayEngine::Core
             PropertyRegistry::Register<MeshRendererComponent>(
                 MakeProperty("material_asset", &MeshRendererComponent::material_asset)
                     .Display("マテリアル").AsAssetPath()
-                    .Tooltip("将来 Material を分離するための枠。現時点では未使用。"));
+                    .Tooltip("Material AssetのGUID。Projectパネルから割り当てる。"));
+
+            PropertyRegistry::Register<MeshRendererComponent>(
+                MakeProperty("material_override", &MeshRendererComponent::material_override)
+                    .Display("マテリアル上書き")
+                    .Tooltip("色と描画方式にRenderer側の値を使う。"));
 
             PropertyRegistry::Register<MeshRendererComponent>(
                 MakeProperty("tint", &MeshRendererComponent::tint)
@@ -123,7 +128,21 @@ namespace ReplayEngine::Core
                     .Display("影を落とす"));
 
             PropertyRegistry::Register<MeshRendererComponent>(
+                MakeProperty("receive_shadow", &MeshRendererComponent::receive_shadow)
+                    .Display("影を受ける"));
+
+            PropertyRegistry::Register<MeshRendererComponent>(
                 MakeProperty("visible", &MeshRendererComponent::visible).Display("表示"));
+
+            PropertyRegistry::Register<MeshRendererComponent>(
+                MakeProperty("local_position_offset", &MeshRendererComponent::local_position_offset)
+                    .Display("モデル位置オフセット").Step(0.01));
+            PropertyRegistry::Register<MeshRendererComponent>(
+                MakeProperty("local_rotation_offset", &MeshRendererComponent::local_rotation_offset)
+                    .Display("モデル回転オフセット (度)").Step(0.5));
+            PropertyRegistry::Register<MeshRendererComponent>(
+                MakeProperty("local_scale_multiplier", &MeshRendererComponent::local_scale_multiplier)
+                    .Display("モデル縮尺倍率").Step(0.01));
         }
 
         void RegisterRotator()
@@ -173,6 +192,16 @@ namespace ReplayEngine::Core
                     .Tooltip("AssetDatabase の GUID。空なら描画しない。"));
 
             PropertyRegistry::Register<SkinnedMeshRendererComponent>(
+                MakeProperty("material_asset", &SkinnedMeshRendererComponent::material_asset)
+                    .Display("マテリアル").AsAssetPath()
+                    .Tooltip("Material AssetのGUID。Projectパネルから割り当てる。"));
+
+            PropertyRegistry::Register<SkinnedMeshRendererComponent>(
+                MakeProperty("material_override", &SkinnedMeshRendererComponent::material_override)
+                    .Display("マテリアル上書き")
+                    .Tooltip("色と描画方式にRenderer側の値を使う。"));
+
+            PropertyRegistry::Register<SkinnedMeshRendererComponent>(
                 MakeProperty("tint", &SkinnedMeshRendererComponent::tint).Display("色").AsColor());
 
             PropertyRegistry::Register<SkinnedMeshRendererComponent>(
@@ -186,6 +215,10 @@ namespace ReplayEngine::Core
             PropertyRegistry::Register<SkinnedMeshRendererComponent>(
                 MakeProperty("cast_shadow", &SkinnedMeshRendererComponent::cast_shadow)
                     .Display("影を落とす"));
+
+            PropertyRegistry::Register<SkinnedMeshRendererComponent>(
+                MakeProperty("receive_shadow", &SkinnedMeshRendererComponent::receive_shadow)
+                    .Display("影を受ける"));
 
             PropertyRegistry::Register<SkinnedMeshRendererComponent>(
                 MakeProperty("visible", &SkinnedMeshRendererComponent::visible).Display("表示"));
