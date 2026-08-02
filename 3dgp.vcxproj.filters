@@ -124,15 +124,6 @@
     <Filter Include="RePlayEngine\Editor\Debug">
       <UniqueIdentifier>{b34c2a19-0f03-47ae-be01-6f730c2aab49}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source\app">
-      <UniqueIdentifier>{f7541a2b-eddb-485b-ac35-c537809b72fa}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source\app\Editor">
-      <UniqueIdentifier>{3e39f5e4-5ebe-4b50-af24-1ac6c9e470d9}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source\app\Runtime">
-      <UniqueIdentifier>{756e2abb-a843-4083-b4dd-bb20947f7f98}</UniqueIdentifier>
-    </Filter>
     <Filter Include="RePlayEngine\Core\Components">
       <UniqueIdentifier>{b2222222-2222-4222-8222-222222222222}</UniqueIdentifier>
     </Filter>
@@ -240,9 +231,6 @@
     </Filter>
     <Filter Include="RePlayEngine\Components\Camera">
       <UniqueIdentifier>{0519d005-9a2c-470f-87e5-4ca27653fb37}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source\mesh">
-      <UniqueIdentifier>{5a6fcf73-85e3-59bc-a2b8-d60f4c34d1ca}</UniqueIdentifier>
     </Filter>
     <Filter Include="Shader\PostEffects\AmbientOcclusion">
       <UniqueIdentifier>{81f91c0a-8db2-5510-9212-625575a42a0a}</UniqueIdentifier>

@@ -1,7 +1,8 @@
-REPLAY_ASSET_DB 2 6
+REPLAY_ASSET_DB 2 7
 "60412424bb1443240b2bf2160eee6923" 1 "ExampleStage" "resources/Stage/ExampleStage.cereal" "resources/.replay_cache/models/f9fffac39252a621_v0.replaycache"
 "1bd1358040255f5bd18f3be0d79fbe3c" 1 "AllAnimation1" "resources/AnimationModel/AllAnimation1.cereal" "resources/.replay_cache/models/6a20e727f78fb359_v0.replaycache"
 "e5c4168feb92f8fd7357f6cbc1f66e22" 1 "scene" "resources/Stage/city_3d_model_gltf/scene.gltf" "resources/.replay_cache/models/98fd72a862da8c8f_v0.replaycache"
 "7cce693d16b0f3a3396924f6f3d6c018" 1 "Desert 1 (.glb)" "resources/Imported/fd0580ff/Desert 1 (.glb).glb" "resources/.replay_cache/models/250fc3c3dacdde6c_v0.replaycache"
 "62e01a5ada97375bf253e95a12f86c1a" 1 "scene" "resources/Imported/1af77e75/scene.gltf" "resources/.replay_cache/models/98fd72a862da8c8f_v0.replaycache"
 "851a285f21a43904dfcc9ca70496e5d5" 5 "TrainingStage" "resources/Scenes/TrainingStage.replayscene" ""
+"8cd38b48d62df27150182f00e2b89a78" 5 "DEMOSCENE" "resources/Scenes/DEMOSCENE.replayscene" ""
