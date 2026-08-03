@@ -190,6 +190,9 @@
     <Filter Include="RePlayEngine\Runtime\Behaviour">
       <UniqueIdentifier>{a6b4ee1a-6588-4468-a9ad-028e03a934e9}</UniqueIdentifier>
     </Filter>
+    <Filter Include="RePlayEngine\Runtime\Scene">
+      <UniqueIdentifier>{b2aa29d0-f5fc-4c2a-9a83-1d490d424819}</UniqueIdentifier>
+    </Filter>
     <Filter Include="RePlayEngine\Runtime\Events">
       <UniqueIdentifier>{7a8ee935-35a1-4b37-9ba4-51e4bf033e86}</UniqueIdentifier>
     </Filter>
@@ -498,6 +501,9 @@
     <ClCompile Include="RePlayEngine\Runtime\Events\CollisionEventDispatcher.cpp">
       <Filter>RePlayEngine\Runtime\Events</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Runtime\Scene\RuntimeSceneService.cpp">
+      <Filter>RePlayEngine\Runtime\Scene</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Runtime\API\RuntimeContext.cpp">
       <Filter>RePlayEngine\Runtime\API</Filter>
     </ClCompile>
@@ -713,6 +719,27 @@
     </ClCompile>
     <ClCompile Include="Source\mesh\gltf_model_cache.cpp">
       <Filter>Source\mesh</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Runtime\Validation\RuntimeSceneValidation.cpp">
+      <Filter>RePlayEngine\Runtime\Validation</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Runtime\Scene\SceneFlowService.cpp">
+      <Filter>RePlayEngine\Runtime\Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\game\Behaviours\SceneTransitionBehaviour.cpp">
+      <Filter>Source\Game\Behaviours</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Runtime\Validation\SceneFlowValidation.cpp">
+      <Filter>RePlayEngine\Runtime\Validation</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Runtime\framework_runtime_scene.cpp">
+      <Filter>Source\App\Runtime</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\Validation\EditorIntegrationValidation.cpp">
+      <Filter>RePlayEngine\Editor\Validation</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Runtime\Validation\StressValidation.cpp">
+      <Filter>RePlayEngine\Runtime\Validation</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -959,6 +986,9 @@
     <ClInclude Include="RePlayEngine\Runtime\Events\CollisionEventDispatcher.h">
       <Filter>RePlayEngine\Runtime\Events</Filter>
     </ClInclude>
+    <ClInclude Include="RePlayEngine\Runtime\Scene\RuntimeSceneService.h">
+      <Filter>RePlayEngine\Runtime\Scene</Filter>
+    </ClInclude>
     <ClInclude Include="RePlayEngine\Runtime\API\RuntimeContext.h">
       <Filter>RePlayEngine\Runtime\API</Filter>
     </ClInclude>
@@ -1198,6 +1228,24 @@
     </ClInclude>
     <ClInclude Include="RePlayEngine\Rendering\RenderStats.h">
       <Filter>RePlayEngine\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Runtime\Validation\RuntimeSceneValidation.h">
+      <Filter>RePlayEngine\Runtime\Validation</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Runtime\Scene\SceneFlowService.h">
+      <Filter>RePlayEngine\Runtime\Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\game\Behaviours\SceneTransitionBehaviour.h">
+      <Filter>Source\Game\Behaviours</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Runtime\Validation\SceneFlowValidation.h">
+      <Filter>RePlayEngine\Runtime\Validation</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\Validation\EditorIntegrationValidation.h">
+      <Filter>RePlayEngine\Editor\Validation</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Runtime\Validation\StressValidation.h">
+      <Filter>RePlayEngine\Runtime\Validation</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

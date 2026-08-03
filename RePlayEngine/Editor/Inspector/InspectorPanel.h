@@ -2,6 +2,7 @@
 
 #include "../ComponentBrowser/AddComponentPanel.h"
 #include "../../Object/Component/ComponentTypeID.h"
+#include "../../Object/Component/MissingComponent.h"
 
 #include <string>
 #include <vector>
@@ -46,6 +47,10 @@ namespace ReplayEngine::Editor
         // 型ごとの専用 Editor ではなく、PlayerCompositionValidator の表を描くだけ。
         void DrawPlayerComposition(EditorContext& context, Core::GameObject& object);
         void DrawComponent(EditorContext& context, Core::Component& component);
+
+        // 読み込めなかった Component の預かり内容を読み取り専用で表示する。
+        // 値は一切書き換えない。消えるのは明示的な削除操作のときだけ。
+        static void DrawMissingComponentDetails(const Core::MissingComponent& missing);
 
         AddComponentPanel add_component_panel_;
 

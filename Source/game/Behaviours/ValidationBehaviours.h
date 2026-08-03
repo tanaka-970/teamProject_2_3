@@ -103,4 +103,17 @@ namespace Game
     // Behaviour も普通の Component として ComponentRegistry へ登録するため、
     // 先に組み込み型が入っている必要がある。
     void RegisterGameBehaviours();
+
+    // SceneTransitionBehaviour の検証。
+    //
+    // なぜ Engine 側の Validation に置かないのか:
+    //   SceneTransitionBehaviour は Game Module の型で、
+    //   RePlayEngine/Runtime/ から参照すると Engine が Game へ依存する。
+    //   Engine が特定のゲームの型を知っている状態を作らないため、
+    //   Behaviour に触る検証だけを Game 側へ置き、
+    //   main.cpp が --validate-scene-flow の後半として呼ぶ。
+    //
+    // first_code から順に終了コードを割り当てる（508-519）。
+    // 合格なら 0、失敗なら最初に失敗した検査の終了コードを返す。
+    int RunSceneTransitionValidation(int first_code);
 }

@@ -302,6 +302,7 @@
     <ClCompile Include="RePlayEngine\Runtime\Behaviour\BehaviourRegistry.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Events\EventBus.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Events\CollisionEventDispatcher.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Scene\RuntimeSceneService.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\API\RuntimeContext.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourValidation.cpp" />
     <ClCompile Include="Source\game\Behaviours\ValidationBehaviours.cpp" />
@@ -362,6 +363,13 @@
     <ClCompile Include="RePlayEngine\Landscape\LandscapeCollision.cpp" />
     <ClCompile Include="RePlayEngine\Landscape\LandscapeUndoCommand.cpp" />
     <ClCompile Include="RePlayEngine\Landscape\LandscapeEditorTool.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Validation\RuntimeSceneValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Scene\SceneFlowService.cpp" />
+    <ClCompile Include="Source\game\Behaviours\SceneTransitionBehaviour.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Validation\SceneFlowValidation.cpp" />
+    <ClCompile Include="Source\app\Runtime\framework_runtime_scene.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Validation\EditorIntegrationValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Validation\StressValidation.cpp" />
 </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\mesh\UI.h" />
@@ -466,6 +474,7 @@
     <ClInclude Include="RePlayEngine\Runtime\Behaviour\BehaviourRegistry.h" />
     <ClInclude Include="RePlayEngine\Runtime\Events\EventBus.h" />
     <ClInclude Include="RePlayEngine\Runtime\Events\CollisionEventDispatcher.h" />
+    <ClInclude Include="RePlayEngine\Runtime\Scene\RuntimeSceneService.h" />
     <ClInclude Include="RePlayEngine\Runtime\API\RuntimeContext.h" />
     <ClInclude Include="RePlayEngine\Runtime\Validation\BehaviourValidation.h" />
     <ClInclude Include="Source\game\Behaviours\ValidationBehaviours.h" />
@@ -534,6 +543,12 @@
     <ClInclude Include="RePlayEngine\Landscape\LandscapeCollision.h" />
     <ClInclude Include="RePlayEngine\Landscape\LandscapeUndoCommand.h" />
     <ClInclude Include="RePlayEngine\Landscape\LandscapeEditorTool.h" />
+    <ClInclude Include="RePlayEngine\Runtime\Validation\RuntimeSceneValidation.h" />
+    <ClInclude Include="RePlayEngine\Runtime\Scene\SceneFlowService.h" />
+    <ClInclude Include="Source\game\Behaviours\SceneTransitionBehaviour.h" />
+    <ClInclude Include="RePlayEngine\Runtime\Validation\SceneFlowValidation.h" />
+    <ClInclude Include="RePlayEngine\Editor\Validation\EditorIntegrationValidation.h" />
+    <ClInclude Include="RePlayEngine\Runtime\Validation\StressValidation.h" />
 </ItemGroup>
   <ItemGroup>
     <None Include=".editorconfig" />

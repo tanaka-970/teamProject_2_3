@@ -115,9 +115,100 @@ void framework::draw_project_settings_panel()
         ImGui::TreePop();
     }
 
+    ImGui::Separator();
+
+    // ---- Startup Scene ------------------------------------------------------
+    //
+    // 【Editor が最後に開いた Scene とは別物】
+    //   Saved/EditorSession/ には「編集を再開する Scene」が入っている。
+    //   あれは作業者ごとの都合。Startup Scene は「ゲームを起動したときに
+    //   最初に始まる Scene」で、チーム全員が同じ値を共有する。
+    //   混ぜると、誰かが別の Scene を編集しただけで起動先が変わる。
+    ImGui::TextUnformatted("Startup Scene（ゲーム起動時に最初に読み込む Scene）");
+
+    const Project::AssetReferenceStatus startup =
+        project_settings.ResolveStartupScene(asset_database);
+
+    if (startup.IsMissing())
+    {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.45f, 0.35f, 1.0f));
+    }
+    const std::string startup_preview = startup.IsMissing()
+        ? std::string("[ Missing Scene ]") : startup.DisplayLabel();
+    ImGui::SetNextItemWidth(-1.0f);
+    if (ImGui::BeginCombo("##StartupScene", startup_preview.c_str()))
+    {
+        if (ImGui::Selectable("（未設定）", startup.IsUnset()))
+        {
+            // 明示的な Clear。空を許すので、これは正常な設定値。
+            project_settings.ClearStartupScene();
+            save_project_settings();
+        }
+
+        for (const auto& record : asset_database.Records())
+        {
+            // .replayscene として登録された Asset だけを候補に出す。
+            // 種類で絞らないと、Texture を起動先に指定できてしまう。
+            if (record.kind != ReplayEngine::Assets::AssetKind::Scene) continue;
+
+            const bool selected = record.guid == project_settings.StartupSceneGuid();
+            const std::string label = record.display_name.empty()
+                ? record.source_path.filename().generic_string()
+                : record.display_name;
+
+            ImGui::PushID(record.guid.c_str());
+            if (ImGui::Selectable(label.c_str(), selected))
+            {
+                // 保存するのは AssetGUID。Scene 名やパスは焼き込まない。
+                project_settings.SetStartupSceneGuid(record.guid);
+                save_project_settings();
+            }
+            if (selected) ImGui::SetItemDefaultFocus();
+            ImGui::PopID();
+        }
+        ImGui::EndCombo();
+    }
+    if (startup.IsMissing()) ImGui::PopStyleColor();
+
+    if (startup.IsResolved())
+    {
+        ImGui::TextDisabled("Path: %s", startup.path.generic_u8string().c_str());
+    }
+    else if (startup.IsMissing())
+    {
+        ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.35f, 1.0f),
+            "この Scene はプロジェクトに見つかりません（設定は保持しています）");
+        ImGui::TextDisabled("Scene を取り込み直すと同じ参照で復帰します");
+    }
+    else
+    {
+        ImGui::TextDisabled(
+            "未設定のまま起動すると、Runtime は開始せず診断状態で停止します");
+    }
+
+    if (project_settings.HasStartupScene())
+    {
+        if (ImGui::Button("Startup Scene を解除##ClearStartupScene"))
+        {
+            project_settings.ClearStartupScene();
+            save_project_settings();
+        }
+    }
+
+    if (ImGui::TreeNode("詳細##StartupScene"))
+    {
+        ImGui::TextDisabled("AssetGUID: %s",
+            startup.guid.empty() ? "(なし)" : startup.guid.c_str());
+        ImGui::TreePop();
+    }
+
+    // 保存の結果はここへ出る。失敗した場合も同じ場所に理由が出る。
     ImGui::TextDisabled("%s", project_settings_status.c_str());
 
     ImGui::Unindent();
+
+    // Runtime の読み取り専用診断。Runtime 側から Editor は一切参照しない。
+    draw_runtime_diagnostics_panel();
 #endif
 }
 

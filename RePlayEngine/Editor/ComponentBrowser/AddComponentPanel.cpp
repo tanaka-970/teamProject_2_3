@@ -3,6 +3,7 @@
 #include "../Core/EditorContext.h"
 #include "../../Object/GameObject/GameObject.h"
 #include "../../Object/Registry/ComponentRegistry.h"
+#include "../../Runtime/Behaviour/BehaviourRegistry.h"
 
 #include "imgui/imgui.h"
 
@@ -122,10 +123,38 @@ namespace ReplayEngine::Editor
                     }
                     ImGui::CloseCurrentPopup();
                 }
-                if (!info.tooltip.empty() && ImGui::IsItemHovered())
+                // 型ごとの分岐は書かない。
+                // 表示名・カテゴリ・説明・モジュール・型 GUID はすべて
+                // ComponentTypeInfo から、供給元だけ BehaviourRegistry から引く。
+                // Behaviour が増えてもここは 1 行も変わらない。
+                const Runtime::BehaviourRegistry::Entry* behaviour =
+                    Runtime::BehaviourRegistry::Find(info.type_id);
+
+                if (ImGui::IsItemHovered())
                 {
                     ImGui::BeginTooltip();
-                    ImGui::TextUnformatted(info.tooltip.c_str());
+                    if (!info.tooltip.empty()) ImGui::TextUnformatted(info.tooltip.c_str());
+                    if (behaviour != nullptr)
+                    {
+                        ImGui::Separator();
+                        ImGui::TextDisabled("Behaviour (%s)",
+                            behaviour->provider != nullptr
+                                ? behaviour->provider->ProviderName() : "Unknown");
+                        if (!Runtime::BehaviourRegistry::CanInstantiate(behaviour->type_guid))
+                        {
+                            ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.25f, 1.0f),
+                                "現在この型は生成できません");
+                        }
+                    }
+                    if (info.type_guid.IsValid())
+                    {
+                        ImGui::TextDisabled("Type GUID: %s",
+                            info.type_guid.ToString().c_str());
+                    }
+                    if (!info.module_id.empty())
+                    {
+                        ImGui::TextDisabled("Module: %s", info.module_id.c_str());
+                    }
                     ImGui::EndTooltip();
                 }
                 ImGui::PopID();

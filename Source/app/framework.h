@@ -68,6 +68,10 @@ extern ImWchar glyphRangesJapanese[];
 //   SceneManager  … 起動ロゴ / ロード画面 / ゲームという画面遷移
 //   Scene (下記)  … GameObject の入れ物。今回の新基盤。
 #include "../../RePlayEngine/Scene/Runtime/Scene.h"
+#include "../../RePlayEngine/Runtime/API/RuntimeContext.h"
+#include "../../RePlayEngine/Runtime/Events/CollisionEventDispatcher.h"
+#include "../../RePlayEngine/Runtime/Scene/RuntimeSceneService.h"
+#include "../../RePlayEngine/Runtime/Scene/SceneFlowService.h"
 #include "../../RePlayEngine/Editor/Core/EditorContext.h"
 #include "../../RePlayEngine/Editor/Hierarchy/HierarchyPanel.h"
 #include "../../RePlayEngine/Editor/Inspector/InspectorPanel.h"
@@ -83,6 +87,12 @@ extern ImWchar glyphRangesJapanese[];
 
 #include <unordered_map>
 #include <unordered_set>
+
+// Runtime World の所有と診断で使う。
+// 推移的な include に頼ると、上流のヘッダーを整理した瞬間に壊れる。
+#include <cstdint>
+#include <memory>
+#include <string>
 
 class gltf_model;
 
@@ -277,15 +287,92 @@ public:
     // --- GameObject / Component 基盤 ---------------------------------------
     //
     // 所有関係:
-    //   framework が編集用 Scene と実行用 Scene の 2 つを値で所有する。
-    //   Scene が GameObject を、GameObject が Component を unique_ptr で所有する。
-    //   EditorContext と各パネルは Scene を非所有参照するだけ。
+    //   編集 Scene   … framework が値で所有する（Editor が編集する唯一の正本）
+    //   Runtime World … RuntimeSceneService が unique_ptr で所有する（唯一の正規所有者）
+    //
+    //   framework は Runtime World を値でも生ポインタでも持たない。
+    //   必要なときに object_runtime_scenes.ActiveWorld() から取り直す。
+    //   Scene 切り替えで World の実体が入れ替わるため、跨いで参照を持つと
+    //   解放済みの Scene を指すことになる。
     //
     // Play Mode:
-    //   Play 開始時に編集 Scene を SceneData 経由で実行用 Scene へ複製する。
-    //   Play 中の変更は実行用 Scene だけに入るため、編集内容が汚れない。
+    //   Play 開始時に編集 Scene を SceneData 経由で RuntimeSceneService へ渡す
+    //   （RequestAdopt）。Play 中の変更は Runtime World だけに入るため、
+    //   編集内容が汚れない。Play 終了時は ResetToEmptyWorld() で捨てる。
     ReplayEngine::Scene::Scene              object_scene;
-    ReplayEngine::Scene::Scene              object_scene_runtime;
+
+    // --- Runtime World の所有と遷移 ----------------------------------------
+    //
+    // 宣言順が寿命の順序になる。
+    //   object_runtime_scenes … World の所有者。最後に壊れる
+    //   object_runtime_context … World の view。先に壊れる
+    //   object_scene_flow      … Runtime Scene Service の上位。さらに先に壊れる
+    // この順でないと、World の破棄中に破棄済みの RuntimeContext を触ることになる。
+    ReplayEngine::Runtime::RuntimeSceneService object_runtime_scenes;
+    std::unique_ptr<ReplayEngine::Runtime::RuntimeContext> object_runtime_context;
+    std::unique_ptr<ReplayEngine::Runtime::SceneFlowService> object_scene_flow;
+    ReplayEngine::Runtime::CollisionEventDispatcher object_collision_events;
+
+    // AssetGUID -> Scene ファイルのパス。Runtime 層が AssetDatabase を
+    // 直接 include しないための実装側。framework が所有する。
+    // 結線は initialize_runtime_services() で行う。
+    // メンバ初期化子で *this を渡す形にしないのは、
+    // まだ不完全な自分自身をメンバの初期化へ持ち込まないため。
+    class scene_asset_resolver final : public ReplayEngine::Runtime::ISceneAssetResolver
+    {
+    public:
+        void Bind(framework& owner) noexcept { owner_ = &owner; }
+
+        ReplayEngine::Runtime::RuntimeStatus ResolveScenePath(
+            const std::string& asset_guid, std::string& out_path) const override;
+
+    private:
+        framework* owner_ = nullptr;
+    };
+    scene_asset_resolver object_scene_resolver;
+
+    // Behaviour からの Prefab 生成要求の受け口。
+    class runtime_prefab_instantiator final
+        : public ReplayEngine::Runtime::IPrefabInstantiator
+    {
+    public:
+        void Bind(framework& owner) noexcept { owner_ = &owner; }
+
+        ReplayEngine::Runtime::RuntimeStatus InstantiatePrefab(
+            const std::string& asset_guid, ReplayEngine::Scene::Scene& world,
+            const DirectX::XMFLOAT3& position, const DirectX::XMFLOAT3& rotation_euler,
+            const DirectX::XMFLOAT3& scale, ReplayEngine::Core::ObjectID parent,
+            ReplayEngine::Core::ObjectID& created_root) override;
+
+    private:
+        framework* owner_ = nullptr;
+    };
+    runtime_prefab_instantiator object_prefab_instantiator;
+
+    // 直近に結線した World の実体番号。
+    // これが変わったフレームだけ、衝突世界・EditorContext・Selection を張り直す。
+    // 生の Scene* をどこにも溜めないので、張り直しの取りこぼしが起きても
+    // 解放済みメモリを触ることはなく、参照先が古いだけで済む。
+    ReplayEngine::Core::WorldInstanceID object_bound_world_instance{
+        ReplayEngine::Core::invalid_world_instance_id };
+
+    // Runtime World が「今このフレームで動かしている World」かどうか。
+    //
+    // object_scene_play_mode と分けている理由:
+    //   Play Mode は Editor の状態（F5 を押したか）。
+    //   こちらは「更新・描画・衝突の対象が Runtime World か編集 Scene か」。
+    //   Editor を出さない通常のゲーム起動では Play Mode に入らないまま
+    //   Runtime World が動くので、Play Mode だけで判断すると
+    //   起動した Scene ではなく編集 Scene を動かしてしまう。
+    bool object_runtime_world_active{ false };
+
+    // Runtime 開始が診断状態で止まっているか。
+    // Editor は落とさず、Runtime の開始だけを止める。
+    bool object_runtime_blocked{ false };
+    std::string object_runtime_block_reason;
+
+    // Runtime へ渡すフレーム番号。Scene が入れ替わっても連番のまま進める。
+    std::uint64_t object_runtime_frame_index{ 0 };
     ReplayEngine::Editor::EditorContext     object_editor_context;
     ReplayEngine::Editor::HierarchyPanel    object_hierarchy_panel;
     ReplayEngine::Editor::InspectorPanel    object_inspector_panel;
@@ -761,6 +848,23 @@ private:
     void exit_object_play_mode();
     ReplayEngine::Scene::Scene& active_object_scene() noexcept;
     const ReplayEngine::Scene::Scene& active_object_scene() const noexcept;
+
+    // --- Runtime World の結線 (framework_gameobject_scene.cpp) --------------
+    //
+    // World の実体が入れ替わったら、それに紐づくものを全部張り直す。
+    // 呼び出しは毎フレームの安全点 1 か所だけ。
+    void initialize_runtime_services();
+    void tick_runtime_scene_flow();
+    void rebind_runtime_world_if_changed();
+
+    // Startup Scene からの起動。空・無効・失敗はすべて診断状態にする。
+    void begin_startup_scene();
+    void set_runtime_blocked(const std::string& reason);
+    void clear_runtime_blocked() noexcept;
+    bool runtime_blocked() const noexcept { return object_runtime_blocked; }
+
+    // Editor の Runtime 診断パネル。読み取り専用。
+    void draw_runtime_diagnostics_panel();
     skinned_mesh* resolve_object_mesh(const std::string& asset_guid);
     const ReplayEngine::Rendering::MaterialAsset* resolve_object_material(
         const std::string& asset_guid);

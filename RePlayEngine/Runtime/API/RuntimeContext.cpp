@@ -19,11 +19,57 @@ namespace ReplayEngine::Runtime
     {
     }
 
-    RuntimeContext::~RuntimeContext() = default;
+    RuntimeContext::~RuntimeContext()
+    {
+        // 自分が結ばれている World から back-pointer を外してから消える。
+        //
+        // なぜ必要か:
+        //   RuntimeSceneService が World を所有し、RuntimeContext はその World を
+        //   参照する。両方を同じスコープに置くと、宣言順によっては
+        //   Context の方が先に消える。
+        //   そのあと World が破棄されると、Component の OnRuntimeDestroy が
+        //   Services().Runtime() 経由で破棄済みの Context を触りにいく。
+        //   （実際に EventBus::UnsubscribeOwner でクラッシュした。）
+        //
+        //   ここで参照を外しておけば、World 側は「Runtime 未接続」として
+        //   破棄されるだけになる。未接続は元から正常な状態なので、
+        //   破棄経路に特別な分岐を足さずに済む。
+        //
+        // 前提となる寿命の約束:
+        //   RuntimeContext は World の view であり、World より長生きしない。
+        //   つまり「World（または World を所有する RuntimeSceneService）を先に宣言し、
+        //   RuntimeContext を後に宣言する」。この順なら Context の方が先に消え、
+        //   ここで触る World は必ず生きている。
+        if (world_ != nullptr && world_->Services().Runtime() == this)
+        {
+            world_->Services().SetRuntime(nullptr);
+        }
+    }
 
     Core::WorldInstanceID RuntimeContext::CurrentWorldID() const noexcept
     {
         return world_->WorldInstanceID();
+    }
+
+    void RuntimeContext::Rebind(Scene::Scene& world)
+    {
+        // 旧 World には触れない。
+        //
+        // Rebind は「旧 World を解放したあと」に呼ばれることがある
+        // （RuntimeSceneService の入れ替えがまさにそれ）。
+        // ここで旧 World を読みにいくと解放済みメモリへ触る。
+        // 旧 World 側の後始末は、World をまだ持っている側の責任にする。
+        world_ = &world;
+
+        // resolver_ は Scene への参照を値で持つ view なので作り直す。
+        // 診断カウンタも同時に 0 へ戻り、World ごとの統計として読める。
+        diagnostics_.Reset();
+        resolver_ = HandleResolver(world, &diagnostics_);
+
+        // 旧 World に紐づいていたものを捨てる。
+        // 持ち越すと、消えた Object を指す購読と生成要求が残る。
+        events_->Clear();
+        pending_instantiations_.clear();
     }
 
     GameObject* RuntimeContext::ResolveObject(const ObjectHandle& handle,
@@ -295,6 +341,48 @@ namespace ReplayEngine::Runtime
 
         return owner->RemoveComponent(component)
             ? RuntimeStatus::Ok : RuntimeStatus::UnsupportedOperation;
+    }
+
+    // ---- Scene 遷移 ----------------------------------------------------------
+    //
+    // どれも「要求を渡すだけ」。ここで World を触らない。
+    // 未接続なら ServiceUnavailable。遷移したふりはしない。
+
+    RuntimeStatus RuntimeContext::LoadScene(const std::string& asset_guid)
+    {
+        if (scene_flow_ == nullptr) return RuntimeStatus::ServiceUnavailable;
+        if (asset_guid.empty()) return RuntimeStatus::InvalidArgument;
+        return scene_flow_->RequestSceneLoad(asset_guid);
+    }
+
+    RuntimeStatus RuntimeContext::ReloadCurrentScene()
+    {
+        if (scene_flow_ == nullptr) return RuntimeStatus::ServiceUnavailable;
+        return scene_flow_->RequestSceneReload();
+    }
+
+    RuntimeStatus RuntimeContext::ReturnToPreviousScene()
+    {
+        if (scene_flow_ == nullptr) return RuntimeStatus::ServiceUnavailable;
+        return scene_flow_->RequestReturnToPreviousScene();
+    }
+
+    RuntimeStatus RuntimeContext::QuitApplication(const std::string& reason)
+    {
+        if (scene_flow_ == nullptr) return RuntimeStatus::ServiceUnavailable;
+        return scene_flow_->RequestQuitApplication(reason);
+    }
+
+    bool RuntimeContext::SceneTransitionInProgress() const noexcept
+    {
+        return scene_flow_ != nullptr && scene_flow_->SceneTransitionInProgress();
+    }
+
+    const std::string& RuntimeContext::CurrentSceneGuid() const noexcept
+    {
+        // 未接続でも参照を返せるようにするための空文字列。
+        static const std::string empty;
+        return scene_flow_ != nullptr ? scene_flow_->CurrentSceneGuid() : empty;
     }
 
     // ---- Prefab -------------------------------------------------------------

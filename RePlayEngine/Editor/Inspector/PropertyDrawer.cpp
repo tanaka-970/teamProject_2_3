@@ -4,6 +4,7 @@
 #include "../../Components/Physics/ColliderComponent.h"
 #include "../../Object/Component/Component.h"
 #include "../../Object/GameObject/GameObject.h"
+#include "../../Object/Registry/ComponentRegistry.h"
 #include "../../Physics/CollisionLayers.h"
 #include "../../Reflection/Property/PropertyDesc.h"
 #include "../../Reflection/Registry/PropertyRegistry.h"
@@ -12,8 +13,11 @@
 #include "imgui/imgui.h"
 #include "imgui/imgui_internal.h"
 
+#include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <utility>
 #include <string>
 #include <vector>
 
@@ -136,8 +140,11 @@ namespace ReplayEngine::Editor
         // GUID は折り畳みの「詳細」の中にのみ置く。
         //
         // Component ごとの専用処理ではなく、AssetPath 型の Property すべてに効く。
+        // kind_filter を指定すると、その種類の Asset だけを候補に出す。
+        // Scene 参照へ Texture を設定できてしまう経路を作らないために使う。
         bool DrawAssetReference(const char* label, const Assets::AssetDatabase* database,
-            std::string& guid, bool read_only)
+            std::string& guid, bool read_only,
+            Assets::AssetKind kind_filter = Assets::AssetKind::Unknown)
         {
             bool changed = false;
 
@@ -163,6 +170,14 @@ namespace ReplayEngine::Editor
                     }
                     for (const Assets::AssetRecord& record : database->Records())
                     {
+                        // 種類が指定されていれば、それ以外は候補に出さない。
+                        // 出さないだけで、既に保存されている値は消さない。
+                        if (kind_filter != Assets::AssetKind::Unknown &&
+                            record.kind != kind_filter)
+                        {
+                            continue;
+                        }
+
                         const bool selected = record.guid == guid;
                         ImGui::PushID(record.guid.c_str());
                         if (ImGui::Selectable(record.display_name.c_str(), selected))
@@ -225,6 +240,177 @@ namespace ReplayEngine::Editor
             }
 
             return changed;
+        }
+
+        // 先に宣言だけしておく。配列要素の編集から呼ぶため。
+        bool DrawObjectPicker(const char* label, const Scene::Scene& scene, Core::ObjectID& id);
+
+        // 配列へ足す新しい要素の初期値。
+        // 型ごとの「空の値」を返すだけで、既存の要素には触らない。
+        PropertyValue MakeDefaultElement(PropertyType type)
+        {
+            switch (type)
+            {
+            case PropertyType::Bool:      return PropertyValue::MakeBool(false);
+            case PropertyType::Int:       return PropertyValue::MakeInt(0);
+            case PropertyType::Int64:     return PropertyValue::MakeInt64(0);
+            case PropertyType::UInt64:    return PropertyValue::MakeUInt64(0);
+            case PropertyType::Float:     return PropertyValue::MakeFloat(0.0f);
+            case PropertyType::Double:    return PropertyValue::MakeDouble(0.0);
+            case PropertyType::String:    return PropertyValue::MakeString(std::string());
+            case PropertyType::Enum:      return PropertyValue::MakeEnum(0);
+            case PropertyType::AssetPath: return PropertyValue::MakeAssetPath(std::string());
+            case PropertyType::ObjectReference:
+                return PropertyValue::MakeObjectReference(Core::ObjectID::Invalid());
+            case PropertyType::AssetReference:
+                return PropertyValue::MakeAssetReference(std::string());
+            case PropertyType::SceneReference:
+                return PropertyValue::MakeSceneReference(std::string());
+            case PropertyType::Vector2:
+                return PropertyValue::MakeVector2(DirectX::XMFLOAT2{ 0.0f, 0.0f });
+            case PropertyType::Vector3:
+                return PropertyValue::MakeVector3(DirectX::XMFLOAT3{ 0.0f, 0.0f, 0.0f });
+            case PropertyType::Vector4:
+                return PropertyValue::MakeVector4(
+                    DirectX::XMFLOAT4{ 0.0f, 0.0f, 0.0f, 0.0f });
+            case PropertyType::Color:
+                return PropertyValue::MakeColor(DirectX::XMFLOAT4{ 1.0f, 1.0f, 1.0f, 1.0f });
+            default:
+                break;
+            }
+            // 既定値を用意できない型。呼び出し側が追加ボタンを出さない。
+            return PropertyValue();
+        }
+
+        bool CanCreateElement(PropertyType type)
+        {
+            return MakeDefaultElement(type).Type() == type;
+        }
+
+        // 配列要素 1 件の編集欄。
+        //
+        // 対応していない型では読み取り専用の表示だけを出す。
+        // 「編集できるように見えて実は反映されない」欄は置かない。
+        bool DrawArrayElementValue(const char* label, PropertyValue& element,
+            const Assets::AssetDatabase* assets, const Scene::Scene* scene, bool read_only)
+        {
+            const DisabledScope disabled(read_only);
+            switch (element.Type())
+            {
+            case PropertyType::Bool:
+            {
+                bool value = element.AsBool();
+                if (ImGui::Checkbox(label, &value))
+                {
+                    element = PropertyValue::MakeBool(value);
+                    return true;
+                }
+                return false;
+            }
+            case PropertyType::Int:
+            case PropertyType::Enum:
+            {
+                int value = element.AsInt();
+                if (ImGui::InputInt(label, &value))
+                {
+                    element = element.Type() == PropertyType::Enum
+                        ? PropertyValue::MakeEnum(value) : PropertyValue::MakeInt(value);
+                    return true;
+                }
+                return false;
+            }
+            case PropertyType::Float:
+            {
+                float value = element.AsFloat();
+                if (ImGui::DragFloat(label, &value, 0.01f))
+                {
+                    element = PropertyValue::MakeFloat(value);
+                    return true;
+                }
+                return false;
+            }
+            case PropertyType::Double:
+            {
+                double value = element.AsDouble();
+                if (ImGui::InputDouble(label, &value))
+                {
+                    element = PropertyValue::MakeDouble(value);
+                    return true;
+                }
+                return false;
+            }
+            case PropertyType::String:
+            case PropertyType::AssetPath:
+            {
+                std::string value = element.AsString();
+                if (DrawTextField(label, value, read_only))
+                {
+                    element = element.Type() == PropertyType::AssetPath
+                        ? PropertyValue::MakeAssetPath(std::move(value))
+                        : PropertyValue::MakeString(std::move(value));
+                    return true;
+                }
+                return false;
+            }
+            case PropertyType::Vector3:
+            {
+                DirectX::XMFLOAT3 value = element.AsVector3();
+                if (ImGui::DragFloat3(label, &value.x, 0.01f))
+                {
+                    element = PropertyValue::MakeVector3(value);
+                    return true;
+                }
+                return false;
+            }
+            case PropertyType::Color:
+            {
+                DirectX::XMFLOAT4 value = element.AsVector4();
+                if (ImGui::ColorEdit4(label, &value.x))
+                {
+                    element = PropertyValue::MakeColor(value);
+                    return true;
+                }
+                return false;
+            }
+            case PropertyType::ObjectReference:
+            {
+                if (scene == nullptr)
+                {
+                    ImGui::TextDisabled(u8"(Scene が無いため選べません)");
+                    return false;
+                }
+                Core::ObjectID value = element.AsObjectReference();
+                if (DrawObjectPicker(label, *scene, value))
+                {
+                    element = PropertyValue::MakeObjectReference(value);
+                    return true;
+                }
+                return false;
+            }
+            case PropertyType::AssetReference:
+            case PropertyType::SceneReference:
+            {
+                std::string guid = element.AsString();
+                const Assets::AssetKind kind_filter =
+                    element.Type() == PropertyType::SceneReference
+                        ? Assets::AssetKind::Scene : Assets::AssetKind::Unknown;
+                if (DrawAssetReference(label, assets, guid, read_only, kind_filter))
+                {
+                    element = element.Type() == PropertyType::SceneReference
+                        ? PropertyValue::MakeSceneReference(std::move(guid))
+                        : PropertyValue::MakeAssetReference(std::move(guid));
+                    return true;
+                }
+                return false;
+            }
+            default:
+                break;
+            }
+
+            // 未対応の型。値は表示するだけで一切書き換えない。
+            ImGui::TextDisabled(u8"%s: %s（この型の編集欄は未対応。値は保持されます）",
+                label, Reflection::ToString(element.Type()));
+            return false;
         }
 
         bool DrawObjectPicker(const char* label, const Scene::Scene& scene, Core::ObjectID& id)
@@ -574,12 +760,18 @@ namespace ReplayEngine::Editor
         case PropertyType::SceneReference:
         {
             // どちらも AssetGUID を保存する。Picker は同じものを使う。
-            // 種類の絞り込みは desc.asset_type で行う（Phase 8 で候補の絞り込みを足す）。
+            //
+            // SceneReference は Scene Asset だけを候補に出す。
+            // 型で分けてある意味が「Picker に出る候補が違う」ことなので、
+            // ここで絞らないと Texture を遷移先に設定できてしまう。
             //
             // 解決できない GUID でも値は消さない。Picker には "Missing Asset" と出て、
             // Asset が戻れば自動的に元の表示へ戻る。
             std::string guid = current.AsString();
-            if (DrawAssetReference(label.c_str(), assets, guid, desc.read_only))
+            const Assets::AssetKind kind_filter =
+                desc.type == PropertyType::SceneReference
+                    ? Assets::AssetKind::Scene : Assets::AssetKind::Unknown;
+            if (DrawAssetReference(label.c_str(), assets, guid, desc.read_only, kind_filter))
             {
                 desc.Apply(component, desc.type == PropertyType::AssetReference
                     ? PropertyValue::MakeAssetReference(guid)
@@ -590,44 +782,202 @@ namespace ReplayEngine::Editor
         }
         case PropertyType::ComponentReference:
         {
-            // 所有 GameObject を選ぶところまでを提供する。
-            // 「その GameObject のどの Component か」を選ぶ一覧は Editor 統合
-            // (Phase 8) で足す。現時点では保存されている Component ID を表示する。
+            // 所有 GameObject と、その中の Component の 2 段で選ぶ。
             //
-            // 参照そのものは失わない。Object を選び直しても Component ID は保たれ、
-            // 配置先に同じ ID の Component があればそのまま解決される。
+            // 保存されるのは ComponentStableID。並び順でも型名でもないので、
+            // Component を並べ替えても型名を変えても参照は切れない。
+            //
+            // 参照そのものは失わない。指す先が見つからないときも値は保持し、
+            // 「Missing」と表示するだけにする。黙って無効化しない。
             Reflection::ComponentReference reference = current.AsComponentReference();
 
-            Core::ObjectID owner = reference.owner;
-            if (scene != nullptr)
-            {
-                if (DrawObjectPicker(label.c_str(), *scene, owner))
-                {
-                    reference.owner = owner;
-                    desc.Apply(component, PropertyValue::MakeComponentReference(reference));
-                    changed = true;
-                }
-            }
-            else
+            if (scene == nullptr)
             {
                 ImGui::TextDisabled(u8"(Scene が無いため参照先を選べません)");
+                ImGui::TextDisabled(u8"Component StableID: %u",
+                    static_cast<unsigned int>(reference.component));
+                break;
             }
 
-            ImGui::TextDisabled(u8"Component ID: %u",
+            Core::ObjectID owner_id = reference.owner;
+            if (DrawObjectPicker(label.c_str(), *scene, owner_id))
+            {
+                reference.owner = owner_id;
+
+                // 所有 GameObject を変えたら Component の指定は外す。
+                // 別の GameObject の同じ番号は、まったく無関係な Component。
+                reference.component = Core::invalid_component_stable_id;
+                desc.Apply(component, PropertyValue::MakeComponentReference(reference));
+                changed = true;
+            }
+
+            Core::GameObject* owner_object = scene->FindGameObjectByID(reference.owner);
+            if (owner_object == nullptr)
+            {
+                if (reference.owner.Valid())
+                {
+                    ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.25f, 1.0f),
+                        u8"  参照先の GameObject が見つかりません（値は保持しています）");
+                }
+                ImGui::TextDisabled(u8"  Component StableID: %u",
+                    static_cast<unsigned int>(reference.component));
+                break;
+            }
+
+            // 期待する型が宣言されていれば、その型だけを候補に出す。
+            const Reflection::TypeGUID expected = desc.expected_component_type;
+
+            const Core::Component* selected_component =
+                owner_object->FindComponentByStableID(reference.component);
+            const std::string preview = selected_component != nullptr
+                ? std::string(selected_component->TypeName())
+                : (reference.component == Core::invalid_component_stable_id
+                    ? std::string(u8"(未設定)") : std::string(u8"Missing Component"));
+
+            ImGui::PushID("component");
+            {
+                const DisabledScope disabled(desc.read_only);
+                if (ImGui::BeginCombo(u8"  Component", preview.c_str()))
+                {
+                    if (ImGui::Selectable(u8"(未設定)",
+                        reference.component == Core::invalid_component_stable_id))
+                    {
+                        reference.component = Core::invalid_component_stable_id;
+                        desc.Apply(component,
+                            PropertyValue::MakeComponentReference(reference));
+                        changed = true;
+                    }
+
+                    for (std::size_t index = 0; index < owner_object->ComponentCount(); ++index)
+                    {
+                        const Core::Component* candidate = owner_object->ComponentAt(index);
+                        if (candidate == nullptr || candidate->PendingDestroy()) continue;
+
+                        if (expected.IsValid())
+                        {
+                            const Core::ComponentTypeInfo* info =
+                                Core::ComponentRegistry::Find(candidate->TypeID());
+                            if (info == nullptr || info->type_guid != expected) continue;
+                        }
+
+                        const bool selected = candidate->StableID() == reference.component;
+                        ImGui::PushID(static_cast<int>(index));
+                        const std::string entry = std::string(candidate->TypeName()) +
+                            " #" + std::to_string(
+                                static_cast<unsigned int>(candidate->StableID()));
+                        if (ImGui::Selectable(entry.c_str(), selected))
+                        {
+                            reference.component = candidate->StableID();
+                            desc.Apply(component,
+                                PropertyValue::MakeComponentReference(reference));
+                            changed = true;
+                        }
+                        if (selected) ImGui::SetItemDefaultFocus();
+                        ImGui::PopID();
+                    }
+                    ImGui::EndCombo();
+                }
+            }
+            ImGui::PopID();
+
+            if (reference.component != Core::invalid_component_stable_id &&
+                selected_component == nullptr)
+            {
+                ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.25f, 1.0f),
+                    u8"  参照先の Component が見つかりません（値は保持しています）");
+            }
+            ImGui::TextDisabled(u8"  StableID: %u",
                 static_cast<unsigned int>(reference.component));
             break;
         }
         case PropertyType::Array:
         {
-            // 要素の追加・削除・並べ替えの UI は Editor 統合 (Phase 8) で足す。
+            // 配列は Reflection 側が std::vector<T> の取り込みと書き戻しに
+            // 対応しているので、追加・削除・並べ替えまで提供する。
             //
-            // ここで中途半端な編集欄を出さない理由:
-            //   要素数を変える操作を Undo と噛み合わせないまま提供すると、
-            //   編集の途中で要素が消えたときに元へ戻せない。
-            //   表示だけに留めておけば、値が失われることはない。
-            ImGui::TextDisabled(u8"%s × %zu (編集 UI は未実装。値は保持されます)",
-                Reflection::ToString(current.ArrayElementType()),
-                current.ArrayElements().size());
+            // 反映は「1 操作 = 配列まるごと 1 回の Apply」にしてある。
+            // 途中の状態を書き戻さないので、操作の途中で要素が失われることがない。
+            const PropertyType element_type = current.ArrayElementType();
+            std::vector<PropertyValue> elements = current.ArrayElements();
+            const bool can_add = CanCreateElement(element_type);
+
+            bool array_changed = false;
+
+            const std::string header = label + " [" +
+                std::to_string(elements.size()) + "]";
+            if (ImGui::TreeNodeEx(header.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                ImGui::TextDisabled(u8"要素の型: %s", Reflection::ToString(element_type));
+
+                std::size_t remove_index = elements.size();
+                std::size_t move_up_index = elements.size();
+                std::size_t move_down_index = elements.size();
+
+                for (std::size_t index = 0; index < elements.size(); ++index)
+                {
+                    ImGui::PushID(static_cast<int>(index));
+
+                    const std::string element_label = "[" + std::to_string(index) + "]";
+                    if (DrawArrayElementValue(element_label.c_str(), elements[index],
+                        assets, scene, desc.read_only))
+                    {
+                        array_changed = true;
+                    }
+
+                    if (!desc.read_only)
+                    {
+                        ImGui::SameLine();
+                        if (ImGui::SmallButton(u8"▲")) move_up_index = index;
+                        ImGui::SameLine();
+                        if (ImGui::SmallButton(u8"▼")) move_down_index = index;
+                        ImGui::SameLine();
+                        if (ImGui::SmallButton(u8"削除")) remove_index = index;
+                    }
+                    ImGui::PopID();
+                }
+
+                if (move_up_index > 0 && move_up_index < elements.size())
+                {
+                    std::swap(elements[move_up_index], elements[move_up_index - 1]);
+                    array_changed = true;
+                }
+                if (move_down_index + 1 < elements.size())
+                {
+                    std::swap(elements[move_down_index], elements[move_down_index + 1]);
+                    array_changed = true;
+                }
+                if (remove_index < elements.size())
+                {
+                    elements.erase(elements.begin() +
+                        static_cast<std::ptrdiff_t>(remove_index));
+                    array_changed = true;
+                }
+
+                if (!desc.read_only && can_add)
+                {
+                    if (ImGui::SmallButton(u8"＋ 要素を追加"))
+                    {
+                        elements.push_back(MakeDefaultElement(element_type));
+                        array_changed = true;
+                    }
+                }
+                else if (!desc.read_only)
+                {
+                    // 既定値を作れない型。追加ボタンを出さない。
+                    // 出して何も起きないより、出せない理由を書く方がよい。
+                    ImGui::TextDisabled(
+                        u8"この要素型は既定値を作れないため追加できません（既存の要素は保持されます）");
+                }
+
+                ImGui::TreePop();
+            }
+
+            if (array_changed)
+            {
+                desc.Apply(component,
+                    PropertyValue::MakeArray(element_type, std::move(elements)));
+                changed = true;
+            }
             break;
         }
         }
