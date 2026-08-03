@@ -424,11 +424,62 @@ namespace ReplayEngine::Scripting::CSharp
             return false;
         }
 
-        const std::wstring solution = Quote(GameScriptsSolutionPath(root));
+        const std::filesystem::path solution_path = GameScriptsSolutionPath(root);
+        const std::wstring solution = Quote(solution_path);
         const std::wstring project = Quote(GameScriptsProjectPath(root));
-        RunDotnet(L"new sln --force --format sln -n RePlayScripts -o " +
-            Quote(scripts), {});
-        RunDotnet(L"sln " + solution + L" add " + project, {});
+        const std::wstring managed = Quote(ManagedApiProjectPath(root));
+
+        // 既存の .sln は再生成しない。
+        //
+        // 以前は毎回 `dotnet new sln --force` を実行していたが、これには
+        // 2つの実害があった。
+        //   1. Visual Studio が .sln を開いている最中に外部から上書きされ、
+        //      再読込ダイアログが出る。
+        //   2. 再生成後に RePlayGameScripts しか add し直さないため、
+        //      RePlayEngine.Managed が .sln から消える。
+        // Behaviour を1つ作るたびにこれが起きるので、無い時だけ作る。
+        //
+        // `--format sln` は .slnx ではなく従来形式の .sln を作るために必須。
+        std::error_code solution_error;
+        if (!std::filesystem::exists(solution_path, solution_error))
+        {
+            const CSharpBuildResult created = RunDotnet(
+                L"new sln --format sln -n RePlayScripts -o " + Quote(scripts), {});
+            // RunDotnet の succeeded は output_assembly の存在も見るため、
+            // Assembly を伴わない sln 操作では exit_code で判定する。
+            if (created.exit_code != 0)
+            {
+                error = "dotnet new sln failed: " + created.output_text;
+                return false;
+            }
+
+            const CSharpBuildResult added_managed =
+                RunDotnet(L"sln " + solution + L" add " + managed, {});
+            if (added_managed.exit_code != 0)
+            {
+                error = "dotnet sln add (Managed API) failed: " +
+                    added_managed.output_text;
+                return false;
+            }
+
+            const CSharpBuildResult added_scripts =
+                RunDotnet(L"sln " + solution + L" add " + project, {});
+            if (added_scripts.exit_code != 0)
+            {
+                error = "dotnet sln add (Game Scripts) failed: " +
+                    added_scripts.output_text;
+                return false;
+            }
+            return true;
+        }
+
+        // 既存 .sln から Managed API が抜けている場合だけ補う。
+        // 旧実装が一度でも走った .sln を自己修復するための経路で、
+        // 失敗しても Behaviour 生成自体は妨げない。
+        if (ReadAllText(solution_path).find("RePlayEngine.Managed") == std::string::npos)
+        {
+            RunDotnet(L"sln " + solution + L" add " + managed, {});
+        }
         return true;
     }
 

@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("RePlayEngine.Managed")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+1a10a067c958203bb8d7356529a9484482c21074")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+1cce251f361cb63af2a8db35f60aab2a29a8ad71")]
 [assembly: System.Reflection.AssemblyProductAttribute("RePlayEngine.Managed")]
 [assembly: System.Reflection.AssemblyTitleAttribute("RePlayEngine.Managed")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

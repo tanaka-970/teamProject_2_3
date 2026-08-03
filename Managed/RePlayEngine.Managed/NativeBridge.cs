@@ -57,6 +57,9 @@ public static unsafe class NativeBridge
         public delegate* unmanaged[Cdecl]<byte*, int> LoadScene;
         public delegate* unmanaged[Cdecl]<int> ReloadScene;
         public delegate* unmanaged[Cdecl]<int> ReturnToPreviousScene;
+        public delegate* unmanaged[Cdecl]<ulong, ulong, ObjectHandle, ulong*, int> SubscribeEvent;
+        public delegate* unmanaged[Cdecl]<ulong, int> UnsubscribeEvent;
+        public delegate* unmanaged[Cdecl]<ulong, byte*, int, int> PollEvent;
     }
 
     private sealed class ManagedInstance
@@ -215,7 +218,9 @@ public static unsafe class NativeBridge
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     public static int DestroyInstance(ulong instance)
     {
-        return Instances.Remove(instance) ? 1 : 0;
+        if (!Instances.Remove(instance, out var state)) return 0;
+        state.Behaviour.ReleaseManagedSubscriptions();
+        return 1;
     }
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
@@ -418,12 +423,126 @@ public static unsafe class NativeBridge
         return (RuntimeStatus)api.ReturnToPreviousScene();
     }
 
+    internal static RuntimeResult<EventSubscription> SubscribeEvent(string eventTypeGuid, ObjectHandle owner)
+    {
+        if (api.SubscribeEvent == null) return new(RuntimeStatus.ServiceUnavailable);
+        if (!TryParseGuidText(eventTypeGuid, out var guid)) return new(RuntimeStatus.InvalidArgument);
+
+        ulong id = 0;
+        var status = (RuntimeStatus)api.SubscribeEvent(guid.High, guid.Low, owner, &id);
+        return new RuntimeResult<EventSubscription>(status, new EventSubscription(id));
+    }
+
+    internal static RuntimeStatus UnsubscribeEvent(EventSubscription subscription)
+    {
+        if (!subscription.IsValid) return RuntimeStatus.InvalidHandle;
+        if (api.UnsubscribeEvent == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.UnsubscribeEvent(subscription.Id);
+    }
+
+    internal static RuntimeResult<RuntimeEvent> PollEvent(EventSubscription subscription)
+    {
+        if (!subscription.IsValid) return new(RuntimeStatus.InvalidHandle);
+        if (api.PollEvent == null) return new(RuntimeStatus.ServiceUnavailable);
+
+        const int capacity = 4096;
+        byte* buffer = stackalloc byte[capacity];
+        var status = (RuntimeStatus)api.PollEvent(subscription.Id, buffer, capacity);
+        if (status != RuntimeStatus.Ok) return new(status);
+
+        var text = FromUtf8(buffer);
+        if (string.IsNullOrEmpty(text)) return new(RuntimeStatus.Ok);
+        return new RuntimeResult<RuntimeEvent>(RuntimeStatus.Ok, ParseRuntimeEvent(text));
+    }
+
     private static IEnumerable<Type> DiscoverBehaviourTypes(Assembly assembly)
     {
         return assembly.GetTypes().Where(type =>
             !type.IsAbstract &&
             typeof(ScriptBehaviour).IsAssignableFrom(type) &&
             type.GetCustomAttribute<ReplayGuidAttribute>() != null);
+    }
+
+    private static RuntimeEvent ParseRuntimeEvent(string text)
+    {
+        var typeGuid = string.Empty;
+        var typeName = string.Empty;
+        ulong frame = 0;
+        ulong sourceWorld = 0;
+        ulong sourceObject = 0;
+        uint sourceGeneration = 0;
+        ulong targetWorld = 0;
+        ulong targetObject = 0;
+        uint targetGeneration = 0;
+
+        foreach (var rawLine in text.Split('\n'))
+        {
+            if (string.IsNullOrWhiteSpace(rawLine)) continue;
+            var separator = rawLine.IndexOf('=');
+            if (separator <= 0) continue;
+
+            var key = rawLine[..separator];
+            var value = UnescapeEventValue(rawLine[(separator + 1)..]);
+            switch (key)
+            {
+                case "type": typeGuid = value; break;
+                case "name": typeName = value; break;
+                case "frame": ulong.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out frame); break;
+                case "source_world": ulong.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out sourceWorld); break;
+                case "source_object": ulong.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out sourceObject); break;
+                case "source_generation": uint.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out sourceGeneration); break;
+                case "target_world": ulong.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out targetWorld); break;
+                case "target_object": ulong.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out targetObject); break;
+                case "target_generation": uint.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out targetGeneration); break;
+            }
+        }
+
+        var source = new ObjectHandle
+        {
+            World = sourceWorld,
+            Object = sourceObject,
+            Generation = sourceGeneration,
+        };
+        var target = new ObjectHandle
+        {
+            World = targetWorld,
+            Object = targetObject,
+            Generation = targetGeneration,
+        };
+        return new RuntimeEvent(typeGuid, typeName, source, target, frame);
+    }
+
+    private static string UnescapeEventValue(string text)
+    {
+        var builder = new StringBuilder(text.Length);
+        var escaped = false;
+        foreach (var c in text)
+        {
+            if (!escaped && c == '\\')
+            {
+                escaped = true;
+                continue;
+            }
+
+            if (escaped)
+            {
+                builder.Append(c switch
+                {
+                    'n' => '\n',
+                    'r' => '\r',
+                    '\\' => '\\',
+                    '=' => '=',
+                    _ => c,
+                });
+                escaped = false;
+            }
+            else
+            {
+                builder.Append(c);
+            }
+        }
+        if (escaped) builder.Append('\\');
+        return builder.ToString();
     }
 
     private sealed class ScriptLoadContext : AssemblyLoadContext
@@ -452,20 +571,28 @@ public static unsafe class NativeBridge
     {
         var text = type.GetCustomAttribute<ReplayGuidAttribute>()?.Value;
         if (string.IsNullOrWhiteSpace(text)) return null;
+        return TryParseGuidText(text, out var guid) ? guid : null;
+    }
+
+    private static bool TryParseGuidText(string text, out TypeGuid guid)
+    {
+        guid = default;
+        if (string.IsNullOrWhiteSpace(text)) return false;
 
         Span<char> digits = stackalloc char[32];
         var count = 0;
         foreach (var c in text)
         {
             if (c == '-' || c == '{' || c == '}') continue;
-            if (!Uri.IsHexDigit(c) || count >= digits.Length) return null;
+            if (!Uri.IsHexDigit(c) || count >= digits.Length) return false;
             digits[count++] = char.ToLowerInvariant(c);
         }
 
-        if (count != 32) return null;
+        if (count != 32) return false;
         var high = ulong.Parse(new string(digits[..16]), NumberStyles.HexNumber, CultureInfo.InvariantCulture);
         var low = ulong.Parse(new string(digits[16..]), NumberStyles.HexNumber, CultureInfo.InvariantCulture);
-        return new TypeGuid { High = high, Low = low };
+        guid = new TypeGuid { High = high, Low = low };
+        return true;
     }
 
     private static string BuildSchema(Type type)

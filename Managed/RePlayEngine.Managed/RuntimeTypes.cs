@@ -71,3 +71,32 @@ public readonly struct RuntimeResult<T>
     public T Value { get; }
     public bool Succeeded => Status == RuntimeStatus.Ok;
 }
+
+public readonly struct EventSubscription
+{
+    internal EventSubscription(ulong id)
+    {
+        Id = id;
+    }
+
+    internal ulong Id { get; }
+    public bool IsValid => Id != 0;
+}
+
+public readonly struct RuntimeEvent
+{
+    internal RuntimeEvent(string typeGuid, string typeName, ObjectHandle source, ObjectHandle target, ulong frameIndex)
+    {
+        TypeGuid = typeGuid;
+        TypeName = typeName;
+        Source = source;
+        Target = target;
+        FrameIndex = frameIndex;
+    }
+
+    public string TypeGuid { get; }
+    public string TypeName { get; }
+    public ObjectHandle Source { get; }
+    public ObjectHandle Target { get; }
+    public ulong FrameIndex { get; }
+}

@@ -87,13 +87,37 @@ public sealed class ScriptRuntimeContext
         return NativeBridge.ReturnToPreviousScene();
     }
 
-    public RuntimeStatus Subscribe(string eventName)
+    public RuntimeResult<EventSubscription> SubscribeEvent(string eventTypeGuid, ObjectHandle owner = default)
     {
-        _ = eventName;
-        return RuntimeStatus.ServiceUnavailable;
+        return NativeBridge.SubscribeEvent(eventTypeGuid, owner);
+    }
+
+    public RuntimeStatus UnsubscribeEvent(EventSubscription subscription)
+    {
+        return NativeBridge.UnsubscribeEvent(subscription);
+    }
+
+    public RuntimeResult<RuntimeEvent> PollEvent(EventSubscription subscription)
+    {
+        return NativeBridge.PollEvent(subscription);
     }
 
     public RuntimeStatus InputUnavailable()
+    {
+        return RuntimeStatus.ServiceUnavailable;
+    }
+
+    public RuntimeStatus AudioUnavailable()
+    {
+        return RuntimeStatus.ServiceUnavailable;
+    }
+
+    public RuntimeStatus RuntimeUIUnavailable()
+    {
+        return RuntimeStatus.ServiceUnavailable;
+    }
+
+    public RuntimeStatus SaveGameUnavailable()
     {
         return RuntimeStatus.ServiceUnavailable;
     }
