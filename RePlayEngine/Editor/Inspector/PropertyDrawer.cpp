@@ -996,6 +996,24 @@ namespace ReplayEngine::Editor
             if (Draw(desc, component, assets, scene)) changed = true;
             ImGui::PopID();
         }
+
+        // インスタンスごとに変わるプロパティ（Script の公開変数など）。
+        //
+        // ここに型ごとの分岐は書かない。Component が申告した配列を
+        // 静的分とまったく同じ経路で描くだけで、
+        // 見た目は PropertyType と PropertyDesc のメタ情報だけで決まる。
+        //
+        // ポインタを 1 回だけ取って回す。描画の途中で中身が入れ替わらないことは
+        // 呼ばれる側の約束（Component::DynamicProperties のコメントを参照）。
+        if (const std::vector<PropertyDesc>* dynamic = component.DynamicProperties())
+        {
+            for (const PropertyDesc& desc : *dynamic)
+            {
+                ImGui::PushID(desc.name.c_str());
+                if (Draw(desc, component, assets, scene)) changed = true;
+                ImGui::PopID();
+            }
+        }
         return changed;
     }
 }

@@ -56,27 +56,66 @@ namespace ReplayEngine::Editor
         history_.Cancel();
     }
 
+    // Play 中に Undo / Redo を受け付けない理由と、その伝え方。
+    //
+    // ---------------------------------------------------------------------
+    // 【なぜ実行しないか】
+    //
+    //   Undo は SceneData のスナップショットを Scene へ流し込む方式で、
+    //   内部で Scene::Clear() を通って全 GameObject を作り直す。
+    //   Play 中の Runtime World へこれを行うと、
+    //     - 実行中の Component が Awake からやり直しになる
+    //     - ObjectHandle / ComponentHandle がすべて WrongWorld になる
+    //     - 編集 Scene の履歴が Runtime World の内容で上書きされる
+    //   のいずれも起きる。Runtime 用の Undo は用意していないので、
+    //   実行そのものを行わない。
+    //
+    // 【黙って無視しない】
+    //   以前は CanEdit() で false を返すだけだったため、
+    //   ユーザーには「押したのに何も起きない」としか見えなかった。
+    //   理由を Status へ出して、不具合と区別できるようにする。
+    // ---------------------------------------------------------------------
     bool EditorContext::Undo()
     {
-        if (!CanEdit()) return false;
+        if (scene_ == nullptr) return false;
+        if (play_mode_)
+        {
+            SetStatus("実行中は元に戻せません（停止してから操作してください）");
+            return false;
+        }
 
         std::string label;
-        if (!history_.Undo(*scene_, label)) return false;
+        if (!history_.Undo(*scene_, label))
+        {
+            SetStatus("これ以上元に戻せません");
+            return false;
+        }
 
+        // ApplySceneData は Scene を作り直す。
+        // 実行状態の復元は SceneEditHistory::Undo が行う（started_ を戻す）。
+        // ここでそれを重ねて呼ばないこと。二重に Start() すると
+        // SynchronizeStates が余分に 1 回走る。
         selection_.PruneMissing(*scene_);
         MarkDirty();
         SetStatus("元に戻す: " + label);
-
-        // ApplySceneData は Scene を作り直すため、実行中なら開始し直す必要がある。
         return true;
     }
 
     bool EditorContext::Redo()
     {
-        if (!CanEdit()) return false;
+        if (scene_ == nullptr) return false;
+        if (play_mode_)
+        {
+            SetStatus("実行中はやり直せません（停止してから操作してください）");
+            return false;
+        }
 
         std::string label;
-        if (!history_.Redo(*scene_, label)) return false;
+        if (!history_.Redo(*scene_, label))
+        {
+            SetStatus("これ以上やり直せません");
+            return false;
+        }
 
         selection_.PruneMissing(*scene_);
         MarkDirty();

@@ -134,10 +134,10 @@ namespace ReplayEngine::Components
         const DirectX::XMFLOAT3 direction =
             ResolveWorldDirection(input->MoveX(), input->MoveY());
 
-        // ダッシュは移動方向の大きさで表現する。
-        // Motor 側の上限速度に対する倍率として効く。
+        // ダッシュは方向とは別に速度倍率として渡す。
+        // 斜め入力の正規化と Dash 倍率が混ざらないようにする。
         const float scale = input->Dashing() ? dash_multiplier : 1.0f;
-        motor->Move(DirectX::XMFLOAT3{ direction.x * scale, 0.0f, direction.z * scale });
+        motor->Move(direction, scale);
 
         // ジャンプは 1 回だけ取り出して Motor へ渡す。
         // 取り出した時点でラッチが下りるので、多重消費が起きない。

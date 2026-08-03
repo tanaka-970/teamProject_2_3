@@ -303,6 +303,21 @@
     <ClCompile Include="RePlayEngine\Runtime\Events\EventBus.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Events\CollisionEventDispatcher.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Scene\RuntimeSceneService.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\Core\MockScriptBackend.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\Core\ScriptComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\Core\ScriptError.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\Core\ScriptFieldSchema.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\Core\ScriptLanguage.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\Core\ScriptRuntime.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\Core\ScriptTypeCatalog.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\Core\ScriptTypes.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\Core\ScriptValue.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\Core\ScriptWorld.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_project_browser.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpProject.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackend.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\Validation\CSharpScriptValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\Validation\ScriptCoreValidation.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\API\RuntimeContext.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourValidation.cpp" />
     <ClCompile Include="Source\game\Behaviours\ValidationBehaviours.cpp" />
@@ -369,6 +384,7 @@
     <ClCompile Include="RePlayEngine\Runtime\Validation\SceneFlowValidation.cpp" />
     <ClCompile Include="Source\app\Runtime\framework_runtime_scene.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Validation\EditorIntegrationValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Validation\AnimationUndoValidation.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\StressValidation.cpp" />
     <ClCompile Include="Source\app\Runtime\framework_shutdown_regression.cpp" />
 </ItemGroup>
@@ -476,6 +492,23 @@
     <ClInclude Include="RePlayEngine\Runtime\Events\EventBus.h" />
     <ClInclude Include="RePlayEngine\Runtime\Events\CollisionEventDispatcher.h" />
     <ClInclude Include="RePlayEngine\Runtime\Scene\RuntimeSceneService.h" />
+    <ClInclude Include="RePlayEngine\Scripting\Core\MockScriptBackend.h" />
+    <ClInclude Include="RePlayEngine\Scripting\Core\ScriptBackend.h" />
+    <ClInclude Include="RePlayEngine\Scripting\Core\ScriptComponent.h" />
+    <ClInclude Include="RePlayEngine\Scripting\Core\ScriptError.h" />
+    <ClInclude Include="RePlayEngine\Scripting\Core\ScriptFieldSchema.h" />
+    <ClInclude Include="RePlayEngine\Scripting\Core\ScriptLanguage.h" />
+    <ClInclude Include="RePlayEngine\Scripting\Core\ScriptRuntime.h" />
+    <ClInclude Include="RePlayEngine\Scripting\Core\ScriptServices.h" />
+    <ClInclude Include="RePlayEngine\Scripting\Core\ScriptTypeCatalog.h" />
+    <ClInclude Include="RePlayEngine\Scripting\Core\ScriptTypes.h" />
+    <ClInclude Include="RePlayEngine\Scripting\Core\ScriptValue.h" />
+    <ClInclude Include="RePlayEngine\Scripting\Core\ScriptWorld.h" />
+    <ClInclude Include="RePlayEngine\Scripting\CSharp\CSharpProject.h" />
+    <ClInclude Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackend.h" />
+    <ClInclude Include="RePlayEngine\Scripting\Validation\CSharpScriptValidation.h" />
+    <ClInclude Include="RePlayEngine\Scripting\Validation\ScriptCoreValidation.h" />
+    <ClInclude Include="RePlayEngine\Runtime\Scene\WorldLifecycleListener.h" />
     <ClInclude Include="RePlayEngine\Runtime\API\RuntimeContext.h" />
     <ClInclude Include="RePlayEngine\Runtime\Validation\BehaviourValidation.h" />
     <ClInclude Include="Source\game\Behaviours\ValidationBehaviours.h" />
@@ -549,6 +582,7 @@
     <ClInclude Include="Source\game\Behaviours\SceneTransitionBehaviour.h" />
     <ClInclude Include="RePlayEngine\Runtime\Validation\SceneFlowValidation.h" />
     <ClInclude Include="RePlayEngine\Editor\Validation\EditorIntegrationValidation.h" />
+    <ClInclude Include="RePlayEngine\Editor\Validation\AnimationUndoValidation.h" />
     <ClInclude Include="RePlayEngine\Runtime\Validation\StressValidation.h" />
 </ItemGroup>
   <ItemGroup>

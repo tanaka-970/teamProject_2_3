@@ -6,6 +6,7 @@
 #include "../../Core/ObjectID/ObjectID.h"
 
 namespace ReplayEngine::Runtime { class RuntimeContext; }
+namespace ReplayEngine::Scripting { class IScriptServices; }
 
 namespace ReplayEngine::Scene
 {
@@ -42,6 +43,17 @@ namespace ReplayEngine::Scene
         Runtime::RuntimeContext* Runtime() const noexcept { return runtime_; }
         void SetRuntime(Runtime::RuntimeContext* context) noexcept { runtime_ = context; }
 
+        // スクリプト機構への入口。Runtime と同じ扱いで、非所有参照だけを持つ。
+        //
+        // 未接続 (nullptr) がありうるのも同じ理由:
+        //   Editor で Scene を編集しているだけの状態では接続しない。
+        //   ScriptComponent が「置いただけで動き出す」ことを構造的に防ぐ。
+        //
+        // Component からの参照経路:
+        //   ScriptComponent -> GetScene() -> Services() -> Scripts()
+        Scripting::IScriptServices* Scripts() const noexcept { return scripts_; }
+        void SetScripts(Scripting::IScriptServices* services) noexcept { scripts_ = services; }
+
         // 操作対象の GameObject。
         // 「プレイヤーかどうか」を型ではなく ObjectID で表す。
         // 人型からメカ・ドローンへ切り替えても、GameObject のクラス型は変わらない。
@@ -71,6 +83,7 @@ namespace ReplayEngine::Scene
             camera_basis_ = nullptr;
             physics_ = nullptr;
             runtime_ = nullptr;
+            scripts_ = nullptr;
             controlled_object_ = Core::ObjectID::Invalid();
             playing_ = false;
         }
@@ -79,6 +92,7 @@ namespace ReplayEngine::Scene
         const ICameraBasisProvider* camera_basis_ = nullptr;
         const IPhysicsQueryService* physics_ = nullptr;
         Runtime::RuntimeContext* runtime_ = nullptr;
+        Scripting::IScriptServices* scripts_ = nullptr;
         Core::ObjectID controlled_object_;
         RespawnService respawn_;
         GameplayEventLog gameplay_events_;

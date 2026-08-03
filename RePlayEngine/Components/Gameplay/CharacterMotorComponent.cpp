@@ -18,6 +18,12 @@ namespace ReplayEngine::Components
         {
             return std::sqrt(value.x * value.x + value.z * value.z);
         }
+
+        float SanitizeNonNegative(float value) noexcept
+        {
+            if (!std::isfinite(value)) return 0.0f;
+            return (std::max)(0.0f, value);
+        }
     }
 
     void CharacterMotorComponent::OnStart()
@@ -26,6 +32,7 @@ namespace ReplayEngine::Components
         // Edit Mode で触った値や前回の Play の残りを持ち越さないため。
         velocity_ = { 0.0f, 0.0f, 0.0f };
         pending_move_ = { 0.0f, 0.0f, 0.0f };
+        pending_speed_multiplier_ = 1.0f;
         jump_requested_ = false;
         grounded_ = true;
         last_ground_source_ = Scene::CollisionSourceInfo{};
@@ -39,13 +46,21 @@ namespace ReplayEngine::Components
         // 再有効化したときに古い速度で飛び出さないようにする。
         velocity_ = { 0.0f, 0.0f, 0.0f };
         pending_move_ = { 0.0f, 0.0f, 0.0f };
+        pending_speed_multiplier_ = 1.0f;
         jump_requested_ = false;
     }
 
     void CharacterMotorComponent::Move(const DirectX::XMFLOAT3& world_direction) noexcept
     {
+        Move(world_direction, 1.0f);
+    }
+
+    void CharacterMotorComponent::Move(const DirectX::XMFLOAT3& world_direction,
+        float speed_multiplier) noexcept
+    {
         // 同じフレームに複数回呼ばれた場合は最後の要求を採用する。
         pending_move_ = world_direction;
+        pending_speed_multiplier_ = SanitizeNonNegative(speed_multiplier);
     }
 
     void CharacterMotorComponent::Teleport(const DirectX::XMFLOAT3& world_position)
@@ -192,27 +207,30 @@ namespace ReplayEngine::Components
         // ---- 水平方向 -------------------------------------------------------
 
         DirectX::XMFLOAT3 direction = pending_move_;
+        const float speed_multiplier = pending_speed_multiplier_;
         pending_move_ = { 0.0f, 0.0f, 0.0f };   // 要求は 1 回で消費する
+        pending_speed_multiplier_ = 1.0f;
 
         const float direction_length = Length2D(direction);
         const float control = grounded_ ? 1.0f : air_control;
+        const float requested_speed = SanitizeNonNegative(move_speed) * speed_multiplier;
 
-        if (direction_length > 0.0001f)
+        if (direction_length > 0.0001f && requested_speed > 0.0001f)
         {
             direction.x /= direction_length;
             direction.z /= direction_length;
             last_move_direction_ = DirectX::XMFLOAT3{ direction.x, 0.0f, direction.z };
 
-            const float step = acceleration * control * fixed_delta_time;
+            const float step = SanitizeNonNegative(acceleration) * control * fixed_delta_time;
             velocity_.x += direction.x * step;
             velocity_.z += direction.z * step;
 
             // 水平速度を上限へ収める。
             const float speed = Length2D(velocity_);
-            if (speed > move_speed && speed > 0.0001f)
+            if (speed > requested_speed && speed > 0.0001f)
             {
-                velocity_.x = velocity_.x / speed * move_speed;
-                velocity_.z = velocity_.z / speed * move_speed;
+                velocity_.x = velocity_.x / speed * requested_speed;
+                velocity_.z = velocity_.z / speed * requested_speed;
             }
         }
         else
@@ -220,7 +238,7 @@ namespace ReplayEngine::Components
             last_move_direction_ = { 0.0f, 0.0f, 0.0f };
 
             // 入力が無ければ滑らかに減速する。
-            const float step = deceleration * control * fixed_delta_time;
+            const float step = SanitizeNonNegative(deceleration) * control * fixed_delta_time;
             const float speed = Length2D(velocity_);
             if (speed > step && speed > 0.0001f)
             {

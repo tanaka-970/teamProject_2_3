@@ -71,6 +71,7 @@ extern ImWchar glyphRangesJapanese[];
 #include "../../RePlayEngine/Runtime/API/RuntimeContext.h"
 #include "../../RePlayEngine/Runtime/Events/CollisionEventDispatcher.h"
 #include "../../RePlayEngine/Runtime/Scene/RuntimeSceneService.h"
+#include "../../RePlayEngine/Scripting/Core/ScriptRuntime.h"
 #include "../../RePlayEngine/Runtime/Scene/SceneFlowService.h"
 #include "../../RePlayEngine/Editor/Core/EditorContext.h"
 #include "../../RePlayEngine/Editor/Hierarchy/HierarchyPanel.h"
@@ -308,6 +309,20 @@ public:
     //   object_runtime_context … World の view。先に壊れる
     //   object_scene_flow      … Runtime Scene Service の上位。さらに先に壊れる
     // この順でないと、World の破棄中に破棄済みの RuntimeContext を触ることになる。
+    // スクリプト機構。World の入れ替えへ IWorldLifecycleListener として接続する。
+    //
+    // 【宣言位置の意味】
+    //   object_runtime_scenes（World の唯一の所有者）より「前」に置くこと。
+    //   メンバは宣言と逆順に壊れるので、この順序だと
+    //   RuntimeSceneService が先に壊れ、ScriptRuntime が後に壊れる。
+    //
+    //   逆にすると壊れる:
+    //     RuntimeSceneService の破棄は Scene を破棄し、Scene::Clear() が
+    //     全 Component の OnRuntimeDestroy を流す。ScriptComponent はそこで
+    //     ユーザーの OnDestroy を呼び、インスタンスを解放する。
+    //     ScriptRuntime が先に消えていると、解放済みの実体を触ることになる。
+    std::unique_ptr<ReplayEngine::Scripting::ScriptRuntime> object_script_runtime;
+
     ReplayEngine::Runtime::RuntimeSceneService object_runtime_scenes;
     std::unique_ptr<ReplayEngine::Runtime::RuntimeContext> object_runtime_context;
     std::unique_ptr<ReplayEngine::Runtime::SceneFlowService> object_scene_flow;
@@ -988,6 +1003,15 @@ private:
     // Default Controlled Character Prefab の現在の解決結果。
     ReplayEngine::Project::PrefabReferenceStatus resolve_default_character_prefab() const;
 
+    bool refresh_csharp_scripts();
+    bool build_and_reload_csharp_scripts();
+    bool create_csharp_behaviour_asset();
+    bool open_selected_csharp_asset(int line = 0);
+    void snapshot_csharp_script_write_times();
+    void poll_csharp_script_changes(float elapsed_time);
+    void push_editor_log(std::string severity, std::string message,
+        std::filesystem::path file = {}, int line = 0, int column = 0);
+
     // --- 衝突 (Source/app/Runtime/framework_collision_world.cpp) ------------
     // Scene の切り替えと Play / Edit の切り替えに合わせて衝突世界をつなぎ替える。
     void initialize_collision_world();
@@ -1008,6 +1032,24 @@ private:
     const skinned_mesh::animation::keyframe* resolve_object_keyframe(
         skinned_mesh& mesh, int clip_index, float animation_time) const;
     void draw_project_panel();
+
+    // --- Project ブラウザ (Unity 型 2 ペイン) ------------------------------
+    // 左にフォルダツリー、右にそのフォルダの中身。
+    // 実装は Source/app/Editor/framework_project_browser.cpp。
+    void draw_project_browser();
+    void draw_project_folder_tree(const std::filesystem::path& folder, int depth);
+    void draw_project_folder_contents();
+    void set_project_folder(const std::filesystem::path& folder);
+    bool project_create_folder(const std::string& name);
+    bool project_create_csharp_behaviour(const std::string& class_name);
+    bool project_create_material(const std::string& name);
+    bool project_rename_entry(const std::filesystem::path& path,
+        const std::string& new_name);
+    ID3D11ShaderResourceView* project_thumbnail_for(
+        const std::filesystem::path& path);
+    ReplayEngine::Assets::AssetKind project_kind_for(
+        const std::filesystem::path& path) const;
+
     void draw_console_panel();
     void execute_editor_command(const std::string& command);
     void draw_workspace_panel();
@@ -1109,7 +1151,27 @@ private:
     int asset_type_filter{ 0 };
     std::string selected_asset_guid;
     bool asset_drop_add_collider{ false };
+    char new_csharp_behaviour_name[128]{ "NewBehaviour" };
+    char new_csharp_namespace[128]{ "Game" };
+    bool csharp_scripts_dirty{ false };
+    float csharp_scan_accumulator{ 0.0f };
+    std::unordered_map<std::string, std::filesystem::file_time_type>
+        csharp_source_write_times;
     char new_material_name[128]{ "NewMaterial" };
+
+    // --- Project ブラウザの状態 -------------------------------------------
+    // project_current_folder はプロジェクトルートからの相対パス。
+    // 空文字列はルート自身を指す。
+    std::filesystem::path project_current_folder;
+    std::filesystem::path project_rename_target;
+    char project_rename_buffer[192]{};
+    bool project_rename_focus_pending{ false };
+    char project_new_item_name[128]{ "NewItem" };
+    float project_thumbnail_size{ 84.0f };
+    float project_tree_width{ 210.0f };
+    bool project_grid_view{ true };
+    std::string project_browser_status;
+
     ReplayEngine::Rendering::MaterialAsset material_editor_asset;
     std::string material_editor_guid;
     std::string material_editor_status;
@@ -1149,6 +1211,16 @@ private:
     char editor_search_text[256]{};
     char editor_command_text[256]{};
     std::string editor_command_result{ "help でコマンド一覧を表示" };
+    struct editor_log_entry
+    {
+        std::string severity;
+        std::string message;
+        std::filesystem::path file;
+        int line = 0;
+        int column = 0;
+    };
+    std::vector<editor_log_entry> editor_log_entries;
+    int selected_editor_log_index{ -1 };
     bool viewport_drag_selecting{ false };
     POINT viewport_drag_start{};
 };

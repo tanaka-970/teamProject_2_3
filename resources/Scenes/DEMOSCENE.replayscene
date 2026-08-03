@@ -2,15 +2,15 @@ REPLAY_SCENE 11
 SCENE "新しいシーン"
 SCENE_STATE 0
 COLLISION_STATE 2 0
-OBJECT_COUNT 2
+OBJECT_COUNT 3
 OBJECT
-  ID 1
-  NAME "GameObject"
+  ID 3
+  NAME "Player"
   ENABLED 1
   PARENT 0
-  TRANSFORM 0 0 0 0 0 0 1 1 1
+  TRANSFORM -17.567276000976562 0 218.73426818847656 0 -15.855615615844727 0 1 1 1
   PREFAB "" 0 0
-  COMPONENT_COUNT 1
+  COMPONENT_COUNT 8
   COMPONENT "SkinnedMeshRendererComponent" 1
     STABLE_ID 2
     TYPE_GUID "00000000000000000000000000000000"
@@ -20,7 +20,7 @@ OBJECT
     PROPERTY "mesh_asset" asset "1bd1358040255f5bd18f3be0d79fbe3c"
     PROPERTY "material_asset" asset ""
     PROPERTY "material_override" bool 0
-    PROPERTY "tint" color 1 1 1 1
+    PROPERTY "tint" color 0.93927127122879028 0 0 1
     PROPERTY "shading_model" enum 1
     PROPERTY "outline" bool 0
     PROPERTY "cast_shadow" bool 1
@@ -31,13 +31,130 @@ OBJECT
     PROPERTY "local_scale_multiplier" vec3 1 1 1
     PROPERTY "apply_fbx_coordinate_transform" bool 1
   END_COMPONENT
+  COMPONENT "MeshColliderComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 11
+    PROPERTY "collider_key" int 1
+    PROPERTY "center_offset" vec3 0 0 0
+    PROPERTY "collision_layer" layer 0
+    PROPERTY "collision_mask" layermask 255
+    PROPERTY "is_trigger" bool 0
+    PROPERTY "debug_draw" bool 1
+    PROPERTY "mesh_source" enum 0
+    PROPERTY "mesh_asset" asset ""
+    PROPERTY "cook_cell_size" float 4
+    PROPERTY "double_sided" bool 1
+    PROPERTY "debug_draw_wireframe" bool 0
+  END_COMPONENT
+  COMPONENT "PlayerInputComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "input_enabled" bool 1
+    PROPERTY "local_player_slot" int 0
+  END_COMPONENT
+  COMPONENT "PlayerControllerComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "turn_speed_degrees" float 720
+    PROPERTY "dash_multiplier" float 1
+    PROPERTY "camera_relative" bool 1
+    PROPERTY "rotate_towards_movement" bool 1
+  END_COMPONENT
+  COMPONENT "CharacterMotorComponent" 1
+    STABLE_ID 6
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "primary_collider_key" colliderref 2
+    PROPERTY "move_speed" float 6
+    PROPERTY "acceleration" float 30
+    PROPERTY "deceleration" float 20
+    PROPERTY "air_control" float 0.34999999403953552
+    PROPERTY "gravity" float 18
+    PROPERTY "jump_power" float 8
+    PROPERTY "maximum_fall_speed" float 55
+    PROPERTY "fallback_ground_y" float 0
+    PROPERTY "vertical_physics" bool 0
+  END_COMPONENT
+  COMPONENT "CapsuleColliderComponent" 1
+    STABLE_ID 7
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "collider_key" int 2
+    PROPERTY "center_offset" vec3 0 0 0
+    PROPERTY "collision_layer" layer 1
+    PROPERTY "collision_mask" layermask 255
+    PROPERTY "is_trigger" bool 0
+    PROPERTY "debug_draw" bool 1
+    PROPERTY "radius" float 0.40000000596046448
+    PROPERTY "height" float 1.7999999523162842
+    PROPERTY "axis" enum 1
+  END_COMPONENT
+  COMPONENT "AnimatorComponent" 1
+    STABLE_ID 8
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "idle_clip" int 5
+    PROPERTY "walk_clip" int 8
+    PROPERTY "jump_clip" int -1
+    PROPERTY "playback_speed" float 1
+    PROPERTY "loop" bool 1
+    PROPERTY "walk_speed_threshold" float 0.20000000298023224
+    PROPERTY "playing" bool 1
+  END_COMPONENT
+  COMPONENT "CameraTargetComponent" 1
+    STABLE_ID 9
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 6
+    PROPERTY "target_offset" vec3 0 100 0
+    PROPERTY "look_at_offset" vec3 0 8.8000001907348633 0
+    PROPERTY "follow_distance" float 700
+    PROPERTY "follow_height" float 700
+    PROPERTY "follow_lag" float 12
+    PROPERTY "priority" int 0
+  END_COMPONENT
 END_OBJECT
 OBJECT
-  ID 2
+  ID 4
   NAME "GameObject"
   ENABLED 1
   PARENT 0
   TRANSFORM 0 0 0 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 0
+END_OBJECT
+OBJECT
+  ID 5
+  NAME "Light"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 373.6146240234375 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "DirectionalLightComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "color" color 0.16263173520565033 0.71180671453475952 0.97975707054138184 1
+    PROPERTY "intensity" float 60
+    PROPERTY "cast_shadows" bool 1
+  END_COMPONENT
 END_OBJECT

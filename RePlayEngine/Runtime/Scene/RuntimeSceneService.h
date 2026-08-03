@@ -15,6 +15,7 @@ namespace ReplayEngine::Runtime
     class RuntimeContext;
     class EventBus;
     class CollisionEventDispatcher;
+    class IWorldLifecycleListener;
 
     // Scene Asset の解決窓口。
     //
@@ -111,6 +112,23 @@ namespace ReplayEngine::Runtime
         void SetCollisionDispatcher(CollisionEventDispatcher* dispatcher) noexcept
         {
             collision_dispatcher_ = dispatcher;
+        }
+
+        // World 単位の付随状態を作り直す相手。非所有。
+        //
+        // 何のためにあるか:
+        //   SwapWorlds() は新しい World へ差し替えたあと Scene::Start() を呼び、
+        //   全 Component の OnRuntimeAwake -> OnEnable -> OnStart を一気に流す。
+        //   World 単位の付随状態は、その前に用意されていなければならない。
+        //
+        //   Play Mode の開始処理へ書くと、SceneFlowService 経由の
+        //   ゲーム中 Scene 遷移で同じ準備が漏れる。Editor の Play では動くのに
+        //   遷移した瞬間だけ動かなくなる、という追いにくい壊れ方をする。
+        //
+        // 詳細は WorldLifecycleListener.h を参照。
+        void SetWorldLifecycleListener(IWorldLifecycleListener* listener) noexcept
+        {
+            world_lifecycle_ = listener;
         }
 
         // ---- World --------------------------------------------------------
@@ -259,6 +277,7 @@ namespace ReplayEngine::Runtime
         const ISceneAssetResolver* asset_resolver_ = nullptr;
         RuntimeContext* runtime_ = nullptr;
         CollisionEventDispatcher* collision_dispatcher_ = nullptr;
+        IWorldLifecycleListener* world_lifecycle_ = nullptr;
 
         SceneLoadState state_ = SceneLoadState::Idle;
         RuntimeStatus last_status_ = RuntimeStatus::Ok;

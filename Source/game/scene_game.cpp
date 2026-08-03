@@ -1,16 +1,42 @@
 #include "scene_game.h"
 
 #include <windows.h>
+#include <algorithm>
 #include <cmath>
 
 #ifdef USE_IMGUI
 #include "imgui/imgui.h"
 #endif
 
+namespace
+{
+    constexpr float kDefaultFieldOfViewDegrees = 50.0f;
+    constexpr float kDefaultNearClip = 0.1f;
+    constexpr float kDefaultFarClip = 10000.0f;
+
+    float ClampFieldOfView(float degrees) noexcept
+    {
+        if (!std::isfinite(degrees)) return kDefaultFieldOfViewDegrees;
+        return (std::max)(1.0f, (std::min)(179.0f, degrees));
+    }
+
+    float ClampNearClip(float near_clip) noexcept
+    {
+        if (!std::isfinite(near_clip)) return kDefaultNearClip;
+        return (std::max)(1.0e-3f, near_clip);
+    }
+
+    float ClampFarClip(float far_clip, float near_clip) noexcept
+    {
+        if (!std::isfinite(far_clip)) return (std::max)(kDefaultFarClip, near_clip * 10.0f);
+        return (std::max)(far_clip, near_clip * 10.0f);
+    }
+}
+
 void SceneGame::Initialize(float aspect)
 {
-    camera.SetPerspectiveFov(DirectX::XMConvertToRadians(50.0f),
-                             aspect, 0.1f, 10000.0f);
+    if (aspect > 0.0f) aspect_ = aspect;
+    ApplyDefaultCameraSettings();
     ResetGameplay();
 }
 
@@ -18,6 +44,7 @@ void SceneGame::ResetGameplay()
 {
     camera_yaw_offset = 0.0f;
     camera_pitch_offset = 0.0f;
+    ApplyDefaultCameraSettings();
 
     camera.SetLookAt({ 0.0f, 2.25f, -6.5f }, { 0.0f, 1.0f, 0.0f }, { 0, 1, 0 });
     controller.SyncCameraToController(camera);
@@ -27,14 +54,38 @@ void SceneGame::SetAspect(float aspect)
 {
     if (aspect > 0.0f)
     {
-        camera.SetPerspectiveFov(DirectX::XMConvertToRadians(50.0f), aspect, 0.1f, 10000.0f);
+        aspect_ = aspect;
+        RefreshProjection();
     }
+}
+
+void SceneGame::ApplyCameraSettings(float field_of_view_degrees, float near_clip, float far_clip)
+{
+    camera_field_of_view_degrees_ = ClampFieldOfView(field_of_view_degrees);
+    camera_near_clip_ = ClampNearClip(near_clip);
+    camera_far_clip_ = ClampFarClip(far_clip, camera_near_clip_);
+    RefreshProjection();
+}
+
+void SceneGame::ApplyDefaultCameraSettings()
+{
+    ApplyCameraSettings(kDefaultFieldOfViewDegrees, kDefaultNearClip, kDefaultFarClip);
+}
+
+void SceneGame::RefreshProjection()
+{
+    camera.SetPerspectiveFov(DirectX::XMConvertToRadians(camera_field_of_view_degrees_),
+        aspect_, camera_near_clip_, camera_far_clip_);
 }
 
 void SceneGame::FollowCameraTarget(const DirectX::XMFLOAT3& target_position,
     const DirectX::XMFLOAT3& look_at_offset,
-    float distance, float height, float lag, float delta_time)
+    float distance, float height, float lag,
+    float field_of_view_degrees, float near_clip, float far_clip,
+    float delta_time)
 {
+    ApplyCameraSettings(field_of_view_degrees, near_clip, far_clip);
+
     // カメラの回転入力はここで受ける。
     // 追従対象の位置と設定値だけを外から受け取り、対象の具象型には触れない。
     UpdateCameraRotationInput(delta_time);
@@ -72,6 +123,7 @@ void SceneGame::UpdateFreeCamera(float delta_time)
 {
     // 追従対象が居ない場合のカメラ。
     // 「対象が居ないから何かを追う」という代替経路は持たない。
+    ApplyDefaultCameraSettings();
     controller.Update(delta_time);
     controller.SyncControllerToCamera(camera);
 }

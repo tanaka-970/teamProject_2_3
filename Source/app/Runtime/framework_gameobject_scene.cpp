@@ -316,6 +316,31 @@ void framework::update_object_scene(float elapsed_time)
     // SceneTransitionBehaviour が OnTriggerEnter で出した要求も、
     // 次のフレームのこの位置で初めて実際の切り替えになる。
     tick_runtime_scene_flow();
+    poll_csharp_script_changes(elapsed_time);
+
+    // スクリプトの同期点。
+    //
+    // ここは World を入れ替えてよい安全点と同じ位置で、
+    // Update / Trigger のどれも走っていない。
+    // Schema の差し替え（ホットリロード）はこの 1 か所だけで行う。
+    //
+    // 【これは第二の更新経路ではない】
+    //   ライフサイクル Callback を 1 つも呼ばない。
+    //   Component の有効・無効も削除予約も見ない。
+    //   やるのは Schema の差し替えと Field 値の移送だけ。
+    //   スクリプトの Update は Scene::Update -> ScriptComponent::OnUpdate の
+    //   1 本しか存在しない。
+    if (object_script_runtime)
+    {
+        object_script_runtime->ApplyPendingSchemaSwaps(elapsed_time);
+
+        // 抑制済みのぶんだけがここへ来る。同じエラーが毎フレーム出ても
+        // ログは埋まらない（最初の 5 回 -> 以降 1 秒ごとの集約）。
+        for (const std::string& line : object_script_runtime->DrainPendingLogLines())
+        {
+            log_shutdown_reason(line.c_str());
+        }
+    }
 
     // Runtime API 側へ時間を渡す。World が入れ替わっても接続は残る。
     if (object_runtime_context)
@@ -479,44 +504,44 @@ void framework::update_object_camera_follow(float elapsed_time)
 {
     if (game_scene == nullptr) return;
 
-    // 追従対象は「CameraTargetComponent を持つ操作対象 GameObject」。
+    // 追従対象は CameraTargetComponent の選択規則で決める。
     // カメラ側は操作対象の具象型を一切知らない。
     //
     // 解決の材料は次の 4 つだけ。
-    //   controlledObjectId / CameraTargetComponent / Runtime Scene / ObjectID
+    //   controlledObjectId / CameraTargetComponent / priority / Runtime Scene
     // GameObject 名も Prefab 名も見ない。
     const ReplayEngine::Scene::Scene& scene = active_object_scene();
     const ReplayEngine::Core::ObjectID controlled = scene.Services().ControlledObject();
 
-    const ReplayEngine::Core::GameObject* target =
-        controlled.Valid() ? scene.FindGameObjectByID(controlled) : nullptr;
+    const ReplayEngine::Components::CameraTargetSelection selection =
+        ReplayEngine::Components::ResolveCameraTargetSelection(scene, controlled);
 
-    const ReplayEngine::Components::CameraTargetComponent* camera_target = target != nullptr
-        ? target->GetComponent<ReplayEngine::Components::CameraTargetComponent>()
-        : nullptr;
-
-    // 対象が居ない / CameraTarget が外された / 無効化された。
-    // どの場合も追従を止めて自由カメラへ戻す。
-    // 「代わりに別のものを追う」ことはしない。
-    if (target == nullptr || camera_target == nullptr || !camera_target->ActiveInHierarchy())
+    // CameraTarget が 1 つも無い / すべて無効化されている場合だけ自由カメラへ戻す。
+    // controlledObjectId は変更しない。Fallback は CameraTarget の priority による
+    // 視点選択だけで、操作対象の自動変更ではない。
+    if (!selection.Valid())
     {
         game_scene->Gameplay().UpdateFreeCamera(elapsed_time);
         return;
     }
 
     // 追従点は GameObject のワールド位置 + target_offset。
-    const DirectX::XMFLOAT3 world = target->GetTransform().WorldPosition();
+    const DirectX::XMFLOAT3 world = selection.object->GetTransform().WorldPosition();
+    const ReplayEngine::Components::CameraTargetComponent& camera_target = *selection.component;
     const DirectX::XMFLOAT3 anchor{
-        world.x + camera_target->target_offset.x,
-        world.y + camera_target->target_offset.y,
-        world.z + camera_target->target_offset.z };
+        world.x + camera_target.target_offset.x,
+        world.y + camera_target.target_offset.y,
+        world.z + camera_target.target_offset.z };
 
     game_scene->Gameplay().FollowCameraTarget(
         anchor,
-        camera_target->look_at_offset,
-        camera_target->follow_distance,
-        camera_target->follow_height,
-        camera_target->follow_lag,
+        camera_target.look_at_offset,
+        camera_target.follow_distance,
+        camera_target.follow_height,
+        camera_target.follow_lag,
+        camera_target.field_of_view_degrees,
+        camera_target.near_clip,
+        camera_target.far_clip,
         elapsed_time);
 }
 

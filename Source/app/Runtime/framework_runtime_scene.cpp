@@ -33,6 +33,8 @@
 
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
 #include "../../RePlayEngine/Runtime/Behaviour/BehaviourRegistry.h"
+#include "../../RePlayEngine/Scripting/CSharp/CSharpProject.h"
+#include "../../RePlayEngine/Scripting/CSharp/CSharpScriptBackend.h"
 #include "../../RePlayEngine/Scene/Serialization/PrefabSerializer.h"
 #include "../../RePlayEngine/Scene/Serialization/SceneData.h"
 
@@ -140,14 +142,37 @@ void framework::initialize_runtime_services()
         object_runtime_scenes.ActiveWorld());
     object_scene_flow = std::make_unique<RRuntime::SceneFlowService>(object_runtime_scenes);
 
+    // スクリプト機構。GameObject 側の実体は常に ScriptComponent。
+    // C# Backend は managed instance だけを持ち、Runtime API は Handle 経由で触る。
+    object_script_runtime = std::make_unique<ReplayEngine::Scripting::ScriptRuntime>();
+    object_script_runtime->InstallBackend(
+        std::make_unique<ReplayEngine::Scripting::CSharp::CSharpScriptBackend>(
+            std::filesystem::current_path()));
+    object_script_runtime->Initialize();
+
     object_runtime_scenes.SetRuntimeContext(object_runtime_context.get());
     object_runtime_scenes.SetAssetResolver(&object_scene_resolver);
     object_runtime_scenes.SetCollisionDispatcher(&object_collision_events);
+
+    // World の入れ替えへ接続する。
+    //
+    // ここが要点。Play Mode の開始処理ではなく World 入れ替えのフックへ挿すことで、
+    // 「Play 開始」も「ゲーム中の Scene 遷移」も「Play 停止」も同じ 1 経路になる。
+    // Scene::Start() が OnRuntimeAwake を流す前に Play Session が用意される。
+    object_runtime_scenes.SetWorldLifecycleListener(object_script_runtime.get());
 
     object_runtime_context->SetPrefabInstantiator(&object_prefab_instantiator);
     object_runtime_context->SetSceneFlow(object_scene_flow.get());
 
     object_runtime_scenes.ActiveWorld().Services().SetRuntime(object_runtime_context.get());
+
+    // 編集 Scene からも Schema を引けるようにする。
+    // Play セッションはまだ無いので、Inspector の表示だけが動く。
+    // インスタンスの生成は PlaySessionActive() が false のあいだ起きない。
+    object_scene.Services().SetScripts(object_script_runtime.get());
+
+    refresh_csharp_scripts();
+
     object_bound_world_instance = object_runtime_scenes.ActiveWorldID();
 }
 

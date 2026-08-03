@@ -59,6 +59,48 @@ namespace ReplayEngine::Editor
         pending_before_.Clear();
     }
 
+    namespace
+    {
+        // スナップショットを流し込む。
+        //
+        // ---------------------------------------------------------------------
+        // 【Scene::Start() を呼び直すのが要点】
+        //
+        //   ApplySceneData は内部で Scene::Clear() を通る。
+        //   Clear() は最後に started_ を false へ落とす（Scene.cpp）。
+        //   そして ApplySceneData 自身は Start() を呼ばない。
+        //   これは仕様で、SceneData.h にも「呼び出し側が Scene::Start() を呼ぶ」と
+        //   書かれている。
+        //
+        //   実際、他の呼び出し箇所はすべて対で呼んでいる。
+        //     framework::load_object_scene   … ApplySceneData の直後に object_scene.Start()
+        //     RuntimeSceneService::SwapWorlds … 入れ替え後に active_->Start()
+        //
+        //   Undo / Redo だけがこれを欠いていた。その結果、一度でも Undo を押すと
+        //   scene.started_ が false のまま戻らず、
+        //   Scene::Update / FixedUpdate / LateUpdate が先頭で早期 return するため、
+        //   Scene 上の全 Component が止まる。
+        //
+        //   Animator が止まって見えるのはそれが一番目に見えるからで、
+        //   実際には Rotator も CharacterMotor も同時に止まっていた。
+        //   保存せずに再起動すると直るのは、読み込み経路が Start() を通るため。
+        //
+        // 【started_ を復元する形にした理由】
+        //   無条件に Start() を呼ぶと、まだ開始していない Scene（Editor で
+        //   読み込んだ直後など）を Undo しただけで動き出してしまう。
+        //   「元の状態へ戻す」のが Undo の意味なので、実行状態も元へ戻す。
+        // ---------------------------------------------------------------------
+        void ApplySnapshot(const Scene::Serialization::SceneData& data, Scene::Scene& scene)
+        {
+            const bool was_started = scene.Started();
+
+            SceneLoadReport report;
+            ApplySceneData(data, scene, report);
+
+            if (was_started) scene.Start();
+        }
+    }
+
     bool SceneEditHistory::Undo(Scene::Scene& scene, std::string& label)
     {
         if (!CanUndo()) return false;
@@ -68,8 +110,7 @@ namespace ReplayEngine::Editor
 
         --cursor_;
         const Entry& entry = entries_[cursor_];
-        SceneLoadReport report;
-        ApplySceneData(entry.before, scene, report);
+        ApplySnapshot(entry.before, scene);
         label = entry.label;
         return true;
     }
@@ -81,8 +122,7 @@ namespace ReplayEngine::Editor
         Cancel();
 
         const Entry& entry = entries_[cursor_];
-        SceneLoadReport report;
-        ApplySceneData(entry.after, scene, report);
+        ApplySnapshot(entry.after, scene);
         label = entry.label;
         ++cursor_;
         return true;

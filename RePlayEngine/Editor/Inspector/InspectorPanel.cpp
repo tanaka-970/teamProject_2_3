@@ -847,7 +847,12 @@ namespace ReplayEngine::Editor
             return;
         }
 
-        if (Reflection::PropertyRegistry::HasProperties(component.TypeID()))
+        // 静的な登録と、インスタンスごとの申告のどちらかがあれば編集欄を出す。
+        // 型ごとの分岐は書かない。Script は後者だけを持つ。
+        const bool has_dynamic = component.DynamicProperties() != nullptr &&
+            !component.DynamicProperties()->empty();
+
+        if (Reflection::PropertyRegistry::HasProperties(component.TypeID()) || has_dynamic)
         {
             const bool had_transaction = context.History().InTransaction();
             if (editable && !had_transaction) context.BeginEdit(title + " の設定を変更");
@@ -875,8 +880,28 @@ namespace ReplayEngine::Editor
             // Drag 中は transaction を保持し、マウスを離した Frame で 1 操作として確定する。
             if (editable && context.History().InTransaction() && !ImGui::IsAnyItemActive())
             {
-                if (changed || had_transaction) context.CommitEdit();
-                else context.CancelEdit();
+                if (changed || had_transaction)
+                {
+                    // 編集が確定したこの瞬間に、型へ変更を知らせる。
+                    //
+                    // ここへ置く理由:
+                    //   DrawAll が回している最中に呼ぶと、DynamicProperties() が
+                    //   返した配列を型が作り直した場合に、走査中のコンテナが
+                    //   入れ替わる。ここは「どの入力欄も掴まれていないフレーム」なので、
+                    //   走査はすべて終わっている。
+                    //
+                    //   Drag 中は毎フレーム呼ばれない。掴んでいる間は
+                    //   IsAnyItemActive() が true のままで、この分岐へ来ない。
+                    //
+                    //   Script では、これによって Script Asset を選び替えた直後に
+                    //   Field の顔ぶれが入れ替わる。
+                    component.OnPropertyChanged(nullptr);
+                    context.CommitEdit();
+                }
+                else
+                {
+                    context.CancelEdit();
+                }
             }
         }
         else
