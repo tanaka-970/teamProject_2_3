@@ -13,7 +13,7 @@ REM    then run: Tools\verify_csharp_scripting.bat
 REM  A plain cmd window will fail: msbuild is not on PATH.
 REM =====================================================================
 
-cd /d C:\Users\2250298\Desktop\teamProject_2_3
+cd /d "%~dp0.."
 if not exist Saved\Build mkdir Saved\Build
 
 set FAILED=
@@ -46,7 +46,7 @@ if not exist "%VSPATH%\Common7\Tools\VsDevCmd.bat" (
   goto :end
 )
 call "%VSPATH%\Common7\Tools\VsDevCmd.bat" -arch=amd64 -host_arch=amd64 -no_logo
-cd /d C:\Users\2250298\Desktop\teamProject_2_3
+cd /d "%~dp0.."
 
 where msbuild >nul 2>&1
 if errorlevel 1 (

@@ -5,7 +5,7 @@ REM  Release x64 only. Double-click this file.
 REM  Debug already passed, so this does NOT rebuild Debug.
 REM  ASCII ONLY.
 REM =====================================================================
-cd /d C:\Users\2250298\Desktop\teamProject_2_3
+cd /d "%~dp0.."
 if not exist Saved\Build mkdir Saved\Build
 set "LOG=Saved\Build\verify_release.log"
 

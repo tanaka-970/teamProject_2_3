@@ -115,3 +115,9 @@ imgui.ini
 # 削除しても dotnet build で作り直される。
 [Oo]bj/
 [Bb]in/
+
+# Visual Studio のソリューション単位のキャッシュ・個人設定。
+# .suo / CopilotIndices / FileContentIndex などが入り、
+# 人によって必ず中身が変わるためマージ衝突の原因にしかならない。
+# 削除しても Visual Studio が作り直す。
+.vs/

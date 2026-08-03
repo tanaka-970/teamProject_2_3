@@ -4,7 +4,7 @@ setlocal
 REM  Called by RUN_RELEASE.bat. Do not double-click directly.
 REM  ASCII ONLY.
 
-cd /d C:\Users\2250298\Desktop\teamProject_2_3
+cd /d "%~dp0.."
 
 where msbuild >nul 2>&1
 if not errorlevel 1 goto :have_msbuild
@@ -22,7 +22,7 @@ if not defined VSPATH (
   goto :end
 )
 call "%VSPATH%\Common7\Tools\VsDevCmd.bat" -arch=amd64 -host_arch=amd64 -no_logo
-cd /d C:\Users\2250298\Desktop\teamProject_2_3
+cd /d "%~dp0.."
 
 :have_msbuild
 echo ==================================================
