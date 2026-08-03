@@ -356,6 +356,10 @@ public:
     ReplayEngine::Core::WorldInstanceID object_bound_world_instance{
         ReplayEngine::Core::invalid_world_instance_id };
 
+    // 起動時に Startup Scene から Runtime を始めるか。
+    // main.cpp が --game を受け取ったときだけ true になる。
+    bool object_boot_from_startup_scene{ false };
+
     // Runtime World が「今このフレームで動かしている World」かどうか。
     //
     // object_scene_play_mode と分けている理由:
@@ -515,6 +519,20 @@ public:
     framework& operator=(const framework&) = delete;
     framework(framework&&) noexcept = delete;
     framework& operator=(framework&&) noexcept = delete;
+
+    // 起動時に Startup Scene から Runtime を開始するか。
+    //
+    // 【既定を false にしてある理由】
+    //   このアプリは Editor と Runtime が同じ実行ファイルに同居している。
+    //   editor_mode は「Editor UI を表示しているか」を切り替えるだけのフラグで、
+    //   既定が false でも Editor として起動している。
+    //   ここを editor_mode で判断すると、通常の Editor 起動でも
+    //   Runtime World が有効になり、編集対象が空の World にすり替わる。
+    //   起動 Scene から始めるのは、明示的に要求されたときだけにする。
+    void request_startup_scene_boot() noexcept
+    {
+        object_boot_from_startup_scene = true;
+    }
 
     void set_automated_smoke_test_frames(std::uint32_t frames) noexcept
     {

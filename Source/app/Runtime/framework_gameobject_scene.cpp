@@ -153,13 +153,9 @@ void framework::initialize_object_scene()
     // World の所有者はここで確定し、以降 framework が Scene を値で持つことはない。
     initialize_runtime_services();
 
-    // Editor を出さない通常起動のときだけ Startup Scene から始める。
-    //
-    // Editor 起動で自動的に Runtime を始めない理由:
-    //   Editor は編集 Scene を開いた状態で立ち上がる。そこへ Startup Scene を
-    //   読み込むと、編集していた Scene が起動のたびに置き換わったように見える。
-    //   Play (F5) を押した時点で初めて Runtime World が作られる。
-    if (!editor_mode) begin_startup_scene();
+    //   Editor として起動している間、編集対象は必ず object_scene。
+    //   Runtime World が有効になるのは Play (F5) か、--game 起動のときだけ。
+    if (object_boot_from_startup_scene) begin_startup_scene();
 }
 
 // ---------------------------------------------------------------------------

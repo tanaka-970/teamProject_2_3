@@ -39,6 +39,22 @@
 
 namespace
 {
+    // --game が指定されたら、Startup Scene から Runtime を開始する。
+    //
+    // 既定（引数なし）は Editor 起動。
+    // Editor 起動で Runtime World を有効にすると、編集対象が空の World へ
+    // すり替わり、配置した内容と保存内容が食い違う。
+    bool ParseStartupSceneBoot(const char* command_line)
+    {
+        std::istringstream arguments(command_line != nullptr ? command_line : "");
+        std::string token;
+        while (arguments >> token)
+        {
+            if (token == "--game") return true;
+        }
+        return false;
+    }
+
     std::uint32_t ParseAutomatedSmokeTestFrames(const char* command_line)
     {
         std::istringstream arguments(command_line != nullptr ? command_line : "");
@@ -783,6 +799,7 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
     {
 	    framework application(hwnd);
         application.set_automated_smoke_test_frames(automated_smoke_test_frames);
+        if (ParseStartupSceneBoot(cmd_line)) application.request_startup_scene_boot();
 	    SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&application));
 	    exit_code = application.run();
         d3d11_debug = application.acquire_d3d11_debug();
