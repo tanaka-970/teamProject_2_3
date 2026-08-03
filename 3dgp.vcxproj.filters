@@ -190,6 +190,15 @@
     <Filter Include="RePlayEngine\Runtime\Behaviour">
       <UniqueIdentifier>{a6b4ee1a-6588-4468-a9ad-028e03a934e9}</UniqueIdentifier>
     </Filter>
+    <Filter Include="RePlayEngine\Scripting">
+      <UniqueIdentifier>{c32ad55d-8c1d-4ce1-b042-69e44ca3f88d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Scripting\Core">
+      <UniqueIdentifier>{720da499-b8cf-4bc1-8bda-d02a2e21c97f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Scripting\Validation">
+      <UniqueIdentifier>{5fb034c2-897c-4771-9dae-f08f03ec0bf6}</UniqueIdentifier>
+    </Filter>
     <Filter Include="RePlayEngine\Runtime\Scene">
       <UniqueIdentifier>{b2aa29d0-f5fc-4c2a-9a83-1d490d424819}</UniqueIdentifier>
     </Filter>
@@ -503,6 +512,39 @@
     </ClCompile>
     <ClCompile Include="RePlayEngine\Runtime\Scene\RuntimeSceneService.cpp">
       <Filter>RePlayEngine\Runtime\Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scripting\Core\MockScriptBackend.cpp">
+      <Filter>RePlayEngine\Scripting\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scripting\Core\ScriptComponent.cpp">
+      <Filter>RePlayEngine\Scripting\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scripting\Core\ScriptError.cpp">
+      <Filter>RePlayEngine\Scripting\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scripting\Core\ScriptFieldSchema.cpp">
+      <Filter>RePlayEngine\Scripting\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scripting\Core\ScriptLanguage.cpp">
+      <Filter>RePlayEngine\Scripting\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scripting\Core\ScriptRuntime.cpp">
+      <Filter>RePlayEngine\Scripting\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scripting\Core\ScriptTypeCatalog.cpp">
+      <Filter>RePlayEngine\Scripting\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scripting\Core\ScriptTypes.cpp">
+      <Filter>RePlayEngine\Scripting\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scripting\Core\ScriptValue.cpp">
+      <Filter>RePlayEngine\Scripting\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scripting\Core\ScriptWorld.cpp">
+      <Filter>RePlayEngine\Scripting\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scripting\Validation\ScriptCoreValidation.cpp">
+      <Filter>RePlayEngine\Scripting\Validation</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Runtime\API\RuntimeContext.cpp">
       <Filter>RePlayEngine\Runtime\API</Filter>
@@ -990,6 +1032,48 @@
       <Filter>RePlayEngine\Runtime\Events</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Runtime\Scene\RuntimeSceneService.h">
+      <Filter>RePlayEngine\Runtime\Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Scripting\Core\MockScriptBackend.h">
+      <Filter>RePlayEngine\Scripting\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Scripting\Core\ScriptBackend.h">
+      <Filter>RePlayEngine\Scripting\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Scripting\Core\ScriptComponent.h">
+      <Filter>RePlayEngine\Scripting\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Scripting\Core\ScriptError.h">
+      <Filter>RePlayEngine\Scripting\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Scripting\Core\ScriptFieldSchema.h">
+      <Filter>RePlayEngine\Scripting\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Scripting\Core\ScriptLanguage.h">
+      <Filter>RePlayEngine\Scripting\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Scripting\Core\ScriptRuntime.h">
+      <Filter>RePlayEngine\Scripting\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Scripting\Core\ScriptServices.h">
+      <Filter>RePlayEngine\Scripting\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Scripting\Core\ScriptTypeCatalog.h">
+      <Filter>RePlayEngine\Scripting\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Scripting\Core\ScriptTypes.h">
+      <Filter>RePlayEngine\Scripting\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Scripting\Core\ScriptValue.h">
+      <Filter>RePlayEngine\Scripting\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Scripting\Core\ScriptWorld.h">
+      <Filter>RePlayEngine\Scripting\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Scripting\Validation\ScriptCoreValidation.h">
+      <Filter>RePlayEngine\Scripting\Validation</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Runtime\Scene\WorldLifecycleListener.h">
       <Filter>RePlayEngine\Runtime\Scene</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Runtime\API\RuntimeContext.h">

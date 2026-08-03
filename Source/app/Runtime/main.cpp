@@ -31,6 +31,7 @@
 #include "../../../RePlayEngine/Runtime/Validation/SceneFlowValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/SerializationValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/StressValidation.h"
+#include "../../../RePlayEngine/Scripting/Validation/ScriptCoreValidation.h"
 #include "../../game/Behaviours/ValidationBehaviours.h"
 #include "../../../RePlayEngine/Scene/Runtime/Scene.h"
 #include "../../../RePlayEngine/Scene/Serialization/SceneData.h"
@@ -724,6 +725,31 @@ namespace
             ReplayEngine::Core::RegisterBuiltInComponents();
             Game::RegisterGameBehaviours();
             return Validation::RunStressValidation();
+        }
+
+        // Script Phase 1。共通スクリプト基盤。
+        //
+        // Lua も .NET も使わない。MockScriptBackend の 2 種類のスクリプト型で、
+        // Schema の共有・ライフサイクル順序・保存・複製・値の保護を確かめる。
+        // 終了コード帯は 620-799。
+        {
+            namespace ScriptValidation = ReplayEngine::Scripting::Validation;
+
+            if (command == "--validate-script-core")
+            {
+                ReplayEngine::Core::RegisterBuiltInComponents();
+                return ScriptValidation::RunScriptCoreValidation();
+            }
+            if (command == "--validate-script-lifecycle")
+            {
+                ReplayEngine::Core::RegisterBuiltInComponents();
+                return ScriptValidation::RunScriptLifecycleValidation();
+            }
+            if (command == "--validate-script-serialization")
+            {
+                ReplayEngine::Core::RegisterBuiltInComponents();
+                return ScriptValidation::RunScriptSerializationValidation();
+            }
         }
         return -1;
     }

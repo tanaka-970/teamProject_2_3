@@ -140,14 +140,32 @@ void framework::initialize_runtime_services()
         object_runtime_scenes.ActiveWorld());
     object_scene_flow = std::make_unique<RRuntime::SceneFlowService>(object_runtime_scenes);
 
+    // スクリプト機構。Backend を挿すのは Phase 2 以降。
+    // ここでは基盤だけ立ち上げ、World の入れ替えへ接続する。
+    object_script_runtime = std::make_unique<ReplayEngine::Scripting::ScriptRuntime>();
+    object_script_runtime->Initialize();
+
     object_runtime_scenes.SetRuntimeContext(object_runtime_context.get());
     object_runtime_scenes.SetAssetResolver(&object_scene_resolver);
     object_runtime_scenes.SetCollisionDispatcher(&object_collision_events);
+
+    // World の入れ替えへ接続する。
+    //
+    // ここが要点。Play Mode の開始処理ではなく World 入れ替えのフックへ挿すことで、
+    // 「Play 開始」も「ゲーム中の Scene 遷移」も「Play 停止」も同じ 1 経路になる。
+    // Scene::Start() が OnRuntimeAwake を流す前に Play Session が用意される。
+    object_runtime_scenes.SetWorldLifecycleListener(object_script_runtime.get());
 
     object_runtime_context->SetPrefabInstantiator(&object_prefab_instantiator);
     object_runtime_context->SetSceneFlow(object_scene_flow.get());
 
     object_runtime_scenes.ActiveWorld().Services().SetRuntime(object_runtime_context.get());
+
+    // 編集 Scene からも Schema を引けるようにする。
+    // Play セッションはまだ無いので、Inspector の表示だけが動く。
+    // インスタンスの生成は PlaySessionActive() が false のあいだ起きない。
+    object_scene.Services().SetScripts(object_script_runtime.get());
+
     object_bound_world_instance = object_runtime_scenes.ActiveWorldID();
 }
 

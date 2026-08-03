@@ -71,6 +71,7 @@ extern ImWchar glyphRangesJapanese[];
 #include "../../RePlayEngine/Runtime/API/RuntimeContext.h"
 #include "../../RePlayEngine/Runtime/Events/CollisionEventDispatcher.h"
 #include "../../RePlayEngine/Runtime/Scene/RuntimeSceneService.h"
+#include "../../RePlayEngine/Scripting/Core/ScriptRuntime.h"
 #include "../../RePlayEngine/Runtime/Scene/SceneFlowService.h"
 #include "../../RePlayEngine/Editor/Core/EditorContext.h"
 #include "../../RePlayEngine/Editor/Hierarchy/HierarchyPanel.h"
@@ -308,6 +309,20 @@ public:
     //   object_runtime_context … World の view。先に壊れる
     //   object_scene_flow      … Runtime Scene Service の上位。さらに先に壊れる
     // この順でないと、World の破棄中に破棄済みの RuntimeContext を触ることになる。
+    // スクリプト機構。World の入れ替えへ IWorldLifecycleListener として接続する。
+    //
+    // 【宣言位置の意味】
+    //   object_runtime_scenes（World の唯一の所有者）より「前」に置くこと。
+    //   メンバは宣言と逆順に壊れるので、この順序だと
+    //   RuntimeSceneService が先に壊れ、ScriptRuntime が後に壊れる。
+    //
+    //   逆にすると壊れる:
+    //     RuntimeSceneService の破棄は Scene を破棄し、Scene::Clear() が
+    //     全 Component の OnRuntimeDestroy を流す。ScriptComponent はそこで
+    //     ユーザーの OnDestroy を呼び、インスタンスを解放する。
+    //     ScriptRuntime が先に消えていると、解放済みの実体を触ることになる。
+    std::unique_ptr<ReplayEngine::Scripting::ScriptRuntime> object_script_runtime;
+
     ReplayEngine::Runtime::RuntimeSceneService object_runtime_scenes;
     std::unique_ptr<ReplayEngine::Runtime::RuntimeContext> object_runtime_context;
     std::unique_ptr<ReplayEngine::Runtime::SceneFlowService> object_scene_flow;

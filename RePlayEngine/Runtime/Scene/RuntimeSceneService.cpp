@@ -1,5 +1,6 @@
 ﻿#include "RuntimeSceneService.h"
 
+#include "WorldLifecycleListener.h"
 #include "../API/RuntimeContext.h"
 #include "../Events/CollisionEventDispatcher.h"
 #include "../Events/EventBus.h"
@@ -171,8 +172,14 @@ namespace ReplayEngine::Runtime
         if (runtime_ != nullptr) runtime_->Events().Clear();
         if (collision_dispatcher_ != nullptr) collision_dispatcher_->Reset();
 
+        // 入れ替えとまったく同じ 3 点で通知する。
+        // ここだけ順序を変えると、Play 停止のときだけ後始末が漏れる。
+        if (world_lifecycle_ != nullptr) world_lifecycle_->OnWorldUnloading(*active_);
+
         active_->Services().SetRuntime(nullptr);
         active_->Clear();
+
+        if (world_lifecycle_ != nullptr) world_lifecycle_->OnWorldUnloaded(*active_);
 
         active_ = std::make_unique<Scene::Scene>("Runtime World");
 
@@ -181,6 +188,12 @@ namespace ReplayEngine::Runtime
             runtime_->Rebind(*active_);
             active_->Services().SetRuntime(runtime_);
         }
+
+        // 空の World でも対称に呼ぶ。
+        //
+        // Play セッションの世代番号をここで進めておくと、
+        // 停止中に残った古い Handle が次のセッションで再解決されない。
+        if (world_lifecycle_ != nullptr) world_lifecycle_->OnWorldActivating(*active_);
 
         current_scene_guid_.clear();
         pending_scene_guid_.clear();
@@ -343,12 +356,21 @@ namespace ReplayEngine::Runtime
             collision_dispatcher_->Reset();
         }
 
+        // World 単位の付随状態へ「これから壊す」と伝える。
+        // まだ全 Component が生きているので、購読の解除や
+        // 新規要求の受付停止をここで行える。
+        if (world_lifecycle_ != nullptr) world_lifecycle_->OnWorldUnloading(*active_);
+
         // 旧 World から Runtime への参照を先に外す。
         //
         // 外さないと、このあとの Clear() で走る OnRuntimeDestroy が
         // Services().Runtime() を引き、入れ替え途中の Context を触る。
         // Behaviour 側は Runtime 未接続を元から扱えるので、
         // 破棄経路に分岐を増やさずに済む。
+        //
+        // Scripts() はここでは外さない。Clear() が流す OnRuntimeDestroy から
+        // ユーザーの OnDestroy を呼び、インスタンスを解放する必要があるため。
+        // 解放し終えたことは OnWorldUnloaded で確かめる。
         active_->Services().SetRuntime(nullptr);
 
         // 旧 World の Behaviour へ OnDisable / OnDestroy / OnDetach を通す。
@@ -356,6 +378,11 @@ namespace ReplayEngine::Runtime
         // 入れ替えの前に明示的に済ませておくことで、
         // 破棄処理の中から新 World が見えてしまう状態を作らない。
         active_->Clear();
+
+        // OnRuntimeDestroy がすべて流れ終わった直後。
+        // 付随状態の破棄と、解放漏れの検証はここで行う。
+        // 実体はまだ生きているので、診断に World の情報を使える。
+        if (world_lifecycle_ != nullptr) world_lifecycle_->OnWorldUnloaded(*active_);
 
         // ---- 入れ替え ---------------------------------------------------------
         //
@@ -374,6 +401,13 @@ namespace ReplayEngine::Runtime
 
         // ---- Runtime 開始 -----------------------------------------------------
         //
+        // World 単位の付随状態を、Start() より「前」に用意する。
+        //
+        // ここが最後の安全点。この行を過ぎると Scene::Start() が
+        // 全 Component の OnRuntimeAwake を流してしまい、
+        // ユーザーのスクリプトが「実行基盤が無い状態」で走り出す。
+        if (world_lifecycle_ != nullptr) world_lifecycle_->OnWorldActivating(*active_);
+
         // Scene::Start() が同期点を 1 回通し、
         // 全 Component へ OnRuntimeAwake -> OnEnable -> OnStart を
         // 既存の Lifecycle 設計どおりの順で流す。

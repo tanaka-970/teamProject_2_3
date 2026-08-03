@@ -76,7 +76,17 @@ namespace ReplayEngine::Core
         //   有効・無効で分岐する前に呼べば、無効な Component にも確実に届く。
         //   ApplySceneData はこの経路を通らないので、
         //   「読み込んだだけ」では Awake が走らない（Editor で置いただけで動き出さない）。
-        if (!runtime_awake_called_)
+        // ただし DeferAwakeUntilObjectActive() が true の型（Script）は、
+        // 所有 GameObject の階層が有効になるまで待つ。
+        //
+        // ゲートに ActiveInHierarchy() ではなく owner_->ActiveInHierarchy() を
+        // 使うのが要点。前者は自分自身の enabled_ も含むため、
+        // 「有効な GameObject 上の無効な Component」へ Awake が届かなくなる。
+        // 届かないと、後から有効化したときに初期化が走らないまま Start が来る。
+        const bool object_active = owner_ != nullptr && owner_->ActiveInHierarchy();
+
+        if (!runtime_awake_called_ &&
+            (!DeferAwakeUntilObjectActive() || object_active))
         {
             runtime_awake_called_ = true;
             OnRuntimeAwake();

@@ -6,8 +6,11 @@
 #include "../../Core/Threading/ThreadPolicy.h"
 
 #include <memory>
+#include <vector>
 
-namespace ReplayEngine::Reflection { class PropertyBag; }
+// PropertyDesc.h はこのヘッダを include するため、こちらからは前方宣言だけにする。
+// DynamicProperties() が返すのはポインタなので、不完全型のままで足りる。
+namespace ReplayEngine::Reflection { class PropertyBag; class PropertyDesc; }
 
 namespace ReplayEngine::Scene { class Scene; }
 
@@ -170,6 +173,65 @@ namespace ReplayEngine::Core
         // 値の変更に応じて内部キャッシュを作り直したいときに使う。
         // property_name は PropertyRegistry の登録名。まとめて変わった場合は nullptr。
         virtual void OnPropertyChanged(const char* /*property_name*/) {}
+
+        // ---- インスタンスごとに変わるプロパティ ------------------------------
+        //
+        // PropertyRegistry は「型ごとの静的な表」なので、
+        // 同じ型でもインスタンスによって顔ぶれが変わるプロパティを置けない。
+        //
+        // これが必要になるのは Script のような型で、
+        // 同じ ScriptComponent 型でも RotatingObject.lua と DoorController.lua で
+        // 公開変数の顔ぶれが違う。
+        //
+        // 既定は nullptr（動的プロパティを持たない）。
+        // 既存の Component は 1 つも影響を受けない。
+        //
+        // 返した配列は次のすべてから同じように使われる。
+        // 型ごとの分岐を Editor / Serializer / 複製処理へ書き足さないための入口。
+        //   - Inspector の入力欄（PropertyDrawer::DrawAll）
+        //   - Scene ファイルへの保存（PropertyRegistry::Capture）
+        //   - Scene ファイルからの復元（PropertyRegistry::Apply）
+        //   - GameObject / Component の複製（PropertyRegistry::CopyValues）
+        //
+        // 【寿命の約束】
+        //   返すポインタは「次の同期点まで」有効であればよい。
+        //   Inspector の描画中や保存処理の途中で中身が入れ替わらないこと。
+        //   Script の場合、Schema の差し替えは ScriptRuntime の同期点だけで行う。
+        //
+        // 【名前の衝突】
+        //   静的な登録名と同じ名前を返さないこと。
+        //   PropertyRegistry は静的側を先に見るため、重なると動的側が無視される。
+        //   Script は "field." 接頭辞を付けて構造的に分けている。
+        virtual const std::vector<Reflection::PropertyDesc>*
+            DynamicProperties() const noexcept
+        {
+            return nullptr;
+        }
+
+        // ---- Awake のタイミング ----------------------------------------------
+        //
+        // OnRuntimeAwake を「所有 GameObject の階層が有効になってから」へ
+        // 遅らせるかどうか。
+        //
+        // 既定は false。従来どおり、Scene が動き出した最初の同期点で
+        // 有効・無効に関係なく必ず一度呼ぶ。既存の Component / Behaviour は
+        // この既定のままなので、挙動は一切変わらない。
+        //
+        // true を返すと次のようになる。
+        //   有効な GameObject 上の無効な Component -> 呼ばれる（GameObject は有効なので）
+        //   無効な GameObject 上の Component       -> 呼ばれない
+        //   その GameObject が有効になった同期点   -> ここで初めて呼ばれ、
+        //                                             続けて OnEnable -> OnStart が走る
+        //
+        // ScriptComponent だけが true を返す。
+        // ユーザーが書くスクリプトでは「無効なオブジェクトの初期化が走らない」方が
+        // 予測しやすく、Unity と同じ挙動になるため。
+        //
+        // 【注意】
+        //   true にすると「Awake が一度も走っていない Component」が存在しうる。
+        //   その状態で破棄されると OnRuntimeDestroy だけが呼ばれるので、
+        //   実装側は「初期化済みかどうか」を自分で確かめること。
+        virtual bool DeferAwakeUntilObjectActive() const noexcept { return false; }
 
         // ---- 所有者 --------------------------------------------------------
 

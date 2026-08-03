@@ -20,6 +20,38 @@ namespace ReplayEngine::Reflection
             static const std::vector<PropertyDesc> empty;
             return empty;
         }
+
+        // インスタンスごとに変わるプロパティ。持たない型では空。
+        //
+        // Script のように「同じ型でもインスタンスによって顔ぶれが違う」
+        // プロパティを、静的な表と同じ経路へ載せるための入口。
+        // 型ごとの分岐をここへ書かないための一般化であり、
+        // Component 側が 1 つの仮想関数で申告する。
+        const std::vector<PropertyDesc>& DynamicList(const Core::Component& component) noexcept
+        {
+            const std::vector<PropertyDesc>* dynamic = component.DynamicProperties();
+            return dynamic != nullptr ? *dynamic : EmptyList();
+        }
+
+        // 静的な表を先に見て、無ければ動的分を見る。
+        //
+        // 静的を先にするのは、型が自分で宣言したプロパティの意味を
+        // インスタンス側の申告で上書きさせないため。
+        const PropertyDesc* FindForComponent(const Core::Component& component,
+            const std::string& name) noexcept
+        {
+            if (const PropertyDesc* found =
+                PropertyRegistry::Find(component.TypeID(), name))
+            {
+                return found;
+            }
+
+            for (const PropertyDesc& desc : DynamicList(component))
+            {
+                if (desc.name == name) return &desc;
+            }
+            return nullptr;
+        }
     }
 
     bool PropertyRegistry::RegisterFor(Core::ComponentTypeID type_id, PropertyDesc desc)
@@ -67,6 +99,14 @@ namespace ReplayEngine::Reflection
             output.Set(desc.name, desc.Capture(component));
         }
 
+        // インスタンスごとのプロパティ。静的分の直後へ並べる。
+        // 並び順を固定しておくと、保存したファイルの差分が安定する。
+        for (const PropertyDesc& desc : DynamicList(component))
+        {
+            if (!desc.serializable) continue;
+            output.Set(desc.name, desc.Capture(component));
+        }
+
         // PropertyRegistry では表現しきれない値の追加分。
         // 通常の数値・文字列プロパティはここではなく登録側で扱う。
         component.OnSerialize(output);
@@ -89,8 +129,6 @@ namespace ReplayEngine::Reflection
     void PropertyRegistry::Apply(Core::Component& component, const PropertyBag& input,
         std::vector<std::string>* unknown_names)
     {
-        const Core::ComponentTypeID type_id = component.TypeID();
-
         // この型が知らない名前をそのまま預かるための入れ物。
         // 名前だけでなく値ごと残すのが要点。名前しか残さないと、
         // 保存し直したときに値が空になってしまう。
@@ -98,7 +136,8 @@ namespace ReplayEngine::Reflection
 
         for (const PropertyBag::Entry& entry : input.Entries())
         {
-            const PropertyDesc* desc = Find(type_id, entry.name);
+            // 静的な表と、インスタンスごとの申告の両方を見る。
+            const PropertyDesc* desc = FindForComponent(component, entry.name);
             if (desc == nullptr)
             {
                 // 未知のプロパティ。次のような場面で発生する。
@@ -152,6 +191,33 @@ namespace ReplayEngine::Reflection
         {
             if (desc.read_only) continue;
             desc.Apply(destination, desc.Capture(source));
+        }
+
+        // 静的プロパティが入った時点で、複製先の動的プロパティの顔ぶれが決まる。
+        // Script なら __script.asset / __script.class が入ったので Schema を引ける。
+        //
+        // ここで一度通知しないと、次のループで見る DynamicProperties() が
+        // まだ空のままになり、Field 値が 1 つも複製されない。
+        // OnPropertyChanged は内部キャッシュを作り直すためのもので、
+        // 複数回呼ばれても壊れない約束になっている。
+        destination.OnPropertyChanged(nullptr);
+
+        // インスタンスごとのプロパティも写す。
+        //
+        // 複製先の DynamicProperties() を使うのが要点。
+        // 複製元の desc を使うと、複製先がまだ同じ顔ぶれを持っていない場合に
+        // 存在しないプロパティへ書き込むことになる。
+        //
+        // 複製先の顔ぶれは、この直前に静的プロパティ（Script なら
+        // __script.asset など）が写ったことで既に整っている。
+        for (const PropertyDesc& desc : DynamicList(destination))
+        {
+            if (desc.read_only) continue;
+
+            const PropertyDesc* origin = FindForComponent(source, desc.name);
+            if (origin == nullptr) continue;
+
+            desc.Apply(destination, origin->Capture(source));
         }
 
         // 追加保存分も同じ経路で写す。

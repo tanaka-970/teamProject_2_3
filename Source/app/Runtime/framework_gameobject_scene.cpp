@@ -317,6 +317,30 @@ void framework::update_object_scene(float elapsed_time)
     // 次のフレームのこの位置で初めて実際の切り替えになる。
     tick_runtime_scene_flow();
 
+    // スクリプトの同期点。
+    //
+    // ここは World を入れ替えてよい安全点と同じ位置で、
+    // Update / Trigger のどれも走っていない。
+    // Schema の差し替え（ホットリロード）はこの 1 か所だけで行う。
+    //
+    // 【これは第二の更新経路ではない】
+    //   ライフサイクル Callback を 1 つも呼ばない。
+    //   Component の有効・無効も削除予約も見ない。
+    //   やるのは Schema の差し替えと Field 値の移送だけ。
+    //   スクリプトの Update は Scene::Update -> ScriptComponent::OnUpdate の
+    //   1 本しか存在しない。
+    if (object_script_runtime)
+    {
+        object_script_runtime->ApplyPendingSchemaSwaps(elapsed_time);
+
+        // 抑制済みのぶんだけがここへ来る。同じエラーが毎フレーム出ても
+        // ログは埋まらない（最初の 5 回 -> 以降 1 秒ごとの集約）。
+        for (const std::string& line : object_script_runtime->DrainPendingLogLines())
+        {
+            log_shutdown_reason(line.c_str());
+        }
+    }
+
     // Runtime API 側へ時間を渡す。World が入れ替わっても接続は残る。
     if (object_runtime_context)
     {
