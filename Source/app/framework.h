@@ -419,9 +419,24 @@ public:
         open_path,
         exit_application
     };
+    // 終了することがユーザーの操作で確定したか。
+    //
+    // 【なぜフラグが要るか】
+    //   終了は「WM_CLOSE -> 未保存確認 -> WM_CLOSE を投げ直す」という
+    //   2 往復で成立する。投げ直した先でもう一度 Dirty を見ているため、
+    //   その間に何かが Dirty を立て直すと、確認ダイアログが出続けて
+    //   永久に終了できない。
+    //   一度ユーザーが「保存して終了 / 破棄して終了」を選んだら、
+    //   以降は Dirty を見ずに閉じる。
+    bool             object_exit_confirmed{ false };
     object_scene_action pending_object_scene_action{ object_scene_action::none };
     std::filesystem::path pending_object_scene_path;
     bool object_scene_unsaved_prompt_requested{ false };
+
+    // 未保存確認ダイアログを実際に開いているか。
+    // Esc など「ボタン以外で閉じられた」ことを見分けるために持つ。
+    // BeginPopupModal の戻り値だけでは、開いていないのか閉じられたのかが分からない。
+    bool object_unsaved_prompt_open{ false };
 
     // 操作対象を型ではなく ObjectID で持つ。
     // 人型からメカ・ドローンへ変えても GameObject のクラス型は変わらない。

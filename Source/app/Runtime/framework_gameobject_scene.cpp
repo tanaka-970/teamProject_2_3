@@ -800,6 +800,11 @@ void framework::execute_pending_object_scene_action()
 
 bool framework::confirm_object_scene_close()
 {
+    // ユーザーが既に「保存して終了 / 破棄して終了」を選んでいる。
+    // ここで Dirty を見直すと、確認のあとに何かが Dirty を立て直しただけで
+    // 終了できなくなる。選んだ結果を尊重してそのまま閉じる。
+    if (object_exit_confirmed) return true;
+
     if (!object_editor_context.Dirty()) return true;
     request_object_scene_action(object_scene_action::exit_application);
     return false;
