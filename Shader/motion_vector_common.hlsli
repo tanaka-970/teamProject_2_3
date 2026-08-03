@@ -1,9 +1,18 @@
 // TAA用モーションベクターの生成に必要な前フレーム情報。
 //
 // スロットの取り決め:
-//   VS b6 = 前フレームのオブジェクト姿勢とビュー射影 (PSのb6はトゥーン材質なので無衝突)
+//   b6 = 前フレームのオブジェクト姿勢とビュー射影 (VS と PS の両方へ Bind する)
 //   VS b8 = 前フレームのボーン行列 (スキンメッシュのG-Bufferパスだけで使う)
 // どちらもモーションベクターを書くパス以外では触らない。
+//
+// 【PS へも Bind する理由】
+//   compute_motion_vector() が motion_params / motion_params2 を読むため、
+//   この関数を呼ぶ Pixel Shader も b6 に 160 バイトを期待する。
+//   G-Buffer の PS がまさにそれを呼んでいる。
+//   一方 toon_renderer は PS b6 へ 80 バイトのトゥーン材質を Bind する。
+//   同じスロットを別の用途で使っているので、モーションベクターを書くパスでは
+//   PS b6 も必ず上書きすること。VS だけに Bind すると
+//   "80 bytes provided, 160 bytes expected" が毎フレーム出る。
 #ifndef __MOTION_VECTOR_COMMON_HLSLI__
 #define __MOTION_VECTOR_COMMON_HLSLI__
 

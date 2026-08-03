@@ -741,6 +741,9 @@
     <ClCompile Include="RePlayEngine\Runtime\Validation\StressValidation.cpp">
       <Filter>RePlayEngine\Runtime\Validation</Filter>
     </ClCompile>
+    <ClCompile Include="Source\app\Runtime\framework_shutdown_regression.cpp">
+      <Filter>Source\App\Runtime</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\render\csm_renderer.h">

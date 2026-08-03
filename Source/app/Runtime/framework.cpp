@@ -137,13 +137,47 @@ bool framework::uninitialize()
     // 失敗しても続行する（次回は既定位置になるだけ）。
     save_editor_camera_state();
 
-    // LoadingSceneのTaskはモデルCacheへ書き込むため、Cache解放より先に停止・joinする。
+    // ---- D3D リソースの解放順 -------------------------------------------
+    //
+    // ここで明示的に手放さないと、ID3D11Debug::ReportLiveDeviceObjects が
+    // 走る時点でまだ生きている所有者が残る。
+    // とくに次の 2 つは「関数内 static / ファイルスコープ static」なので、
+    // 破棄されるのは main() が返ったあと = Report より後になる。
+    //   - Source/core/texture.cpp の テクスチャキャッシュ (SRV)
+    //   - RePlayEngine/Rendering/RenderStats.h の Stats() (ID3D11Query)
+    // どちらも Device より先に、ここで落とす。
+
+    // 1) Scene を止めて GameObject / Component / Behaviour を破棄する。
+    //    Renderer Component が握っているメッシュ参照はここで切れる。
+    object_runtime_scenes.ResetToEmptyWorld();
+    object_scene.Clear();
+
+    // 2) LoadingScene の Task はモデル Cache へ書き込むため、
+    //    Cache 解放より先に停止・join する。
     scene_manager.Clear();
 
-    // GameObject シーンが抱えているメッシュを、D3D デバイスより先に手放す。
-    // ComPtr の破棄順に依存せず、明示的に解放しておく。
+    // 3) GameObject シーンが抱えているメッシュ / マテリアルを手放す。
     clear_object_mesh_cache();
     clear_object_material_cache();
+
+    // 4) 衝突用の Cook データ。参照が 0 になったものを表から外す。
+    object_collision_cook_cache.Collect();
+
+    // 5) テクスチャキャッシュ (SRV)。
+    //    static なので明示的に呼ばないと Report まで生き残る。
+    release_all_textures();
+
+    // 6) GPU 統計の Query Pool。同じく static。
+    ReplayEngine::Rendering::Stats().Release();
+
+    // 7) パイプラインに残ったバインドを外してから、積んだコマンドを流し切る。
+    //    参照カウントを持っているのはバインド状態も同じなので、
+    //    ClearState を通さないと最後の描画で使ったリソースが残る。
+    if (immediate_context)
+    {
+        immediate_context->ClearState();
+        immediate_context->Flush();
+    }
     return true;
 }
 

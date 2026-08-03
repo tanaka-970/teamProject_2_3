@@ -1,5 +1,26 @@
 #include "RenderStats.h"
 
+#include <d3d11sdklayers.h>
+
+#include <cstring>
+
+namespace
+{
+    // Debug Build でだけ D3D オブジェクトへ名前を付ける。
+    // Live Object Report に名前が出ないと、どの生成箇所か追えない。
+    void SetDebugName(ID3D11DeviceChild* object, const char* name)
+    {
+#if defined(_DEBUG) || defined(DEBUG)
+        if (object == nullptr || name == nullptr) return;
+        object->SetPrivateData(WKPDID_D3DDebugObjectName,
+            static_cast<UINT>(std::strlen(name)), name);
+#else
+        (void)object;
+        (void)name;
+#endif
+    }
+}
+
 namespace ReplayEngine::Rendering
 {
     bool RenderStats::Initialize(ID3D11Device* device)
@@ -13,13 +34,32 @@ namespace ReplayEngine::Rendering
 
         D3D11_QUERY_DESC desc{};
         desc.Query = D3D11_QUERY_PIPELINE_STATISTICS;
-        for (auto& query : queries_)
+        static const char* const query_names[kQueryCount] = {
+            "RenderStats.PipelineQuery[0]",
+            "RenderStats.PipelineQuery[1]",
+            "RenderStats.PipelineQuery[2]",
+        };
+        for (std::size_t index = 0; index < queries_.size(); ++index)
         {
-            if (FAILED(device->CreateQuery(&desc, query.GetAddressOf()))) return false;
+            if (FAILED(device->CreateQuery(&desc, queries_[index].GetAddressOf())))
+            {
+                return false;
+            }
+            SetDebugName(queries_[index].Get(), query_names[index]);
         }
 
         initialized_ = true;
         return true;
+    }
+
+    void RenderStats::Release() noexcept
+    {
+        for (auto& query : queries_) query.Reset();
+        query_pending_.fill(false);
+        write_index_ = 0;
+        initialized_ = false;
+        frame_open_ = false;
+        resolved_gpu_ = {};
     }
 
     void RenderStats::BeginFrame(ID3D11DeviceContext* context)

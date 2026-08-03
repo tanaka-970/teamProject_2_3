@@ -678,6 +678,14 @@ void skinned_mesh::render(ID3D11DeviceContext* immediate_context,
             immediate_context->VSSetConstantBuffers(
                 6, 1, motion_object_constant_buffer.GetAddressOf());
 
+            // PS へも同じ Buffer を渡す。
+            // G-Buffer の Pixel Shader が compute_motion_vector() 経由で
+            // b6 の motion_params を読むため、PS も 160 バイトを期待している。
+            // VS だけに Bind すると PS の b6 にトゥーン材質 (80 バイト) が
+            // 残り、毎フレーム定数バッファのサイズ不一致警告が出る。
+            immediate_context->PSSetConstantBuffers(
+                6, 1, motion_object_constant_buffer.GetAddressOf());
+
             motion_bone_constants motion_bones{};
             if (has_history)
             {
