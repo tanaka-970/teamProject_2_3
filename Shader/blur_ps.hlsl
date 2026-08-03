@@ -44,7 +44,7 @@ float4 main(VS_OUT pin) : SV_TARGET
 #if 1
 	// Gamma process
 	const float GAMMA = 2.2;
-	color.rgb = pow(color.rgb, 1.0 / GAMMA);
+	color.rgb = pow(max(color.rgb, 0.0f), 1.0 / GAMMA);
 #endif
 
 	return float4(color.rgb, alpha);

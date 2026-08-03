@@ -32,6 +32,7 @@ namespace ReplayEngine::Assets
             case AssetKind::Audio: return "audio";
             case AssetKind::Shader: return "shaders";
             case AssetKind::Scene: return "scenes";
+            case AssetKind::Material: return "materials";
             default: return "unknown";
             }
         }

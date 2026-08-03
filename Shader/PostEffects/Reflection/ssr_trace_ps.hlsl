@@ -23,8 +23,9 @@ Texture2D color_history  : register(t3);
 float sample_view_depth(float2 uv)
 {
     float device_z = scene_depth.SampleLevel(ssr_sampler_point, uv, 0).r;
-    if (device_z >= 0.999999f) return frame_camera_planes.y * 4.0f;
-    return view_position_from_depth(uv, device_z).z;
+    float result = frame_camera_planes.y * 4.0f;
+    if (device_z < 0.999999f) result = view_position_from_depth(uv, device_z).z;
+    return result;
 }
 
 float4 main(VS_OUT pin) : SV_TARGET

@@ -14,7 +14,8 @@ namespace ReplayEngine::Assets
         Image,
         Audio,
         Shader,
-        Scene
+        Scene,
+        Material
     };
 
     struct AssetCacheEntry

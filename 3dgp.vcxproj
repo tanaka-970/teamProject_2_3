@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -93,13 +93,15 @@
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>.;.\Source\app;.\Source\core;.\Source\mesh;.\Source\render;.\cereal-master\include;.\DirectXTK-main\Inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
-      <!-- /FS: 並列ビルドで褁E�E��E�のCL.EXEが同じPDBへ書くとき�E競吁EC1041)を防ぁE-->
+      <!-- /FS: 並列ビルドで複数の CL.EXE が同じ PDB へ書くときの競合 (C1041) を防ぐ -->
       <AdditionalOptions>/utf-8 /validate-charset /FS %(AdditionalOptions)</AdditionalOptions>
+      <!-- 別フォルダの同名 .cpp が同じ .obj へ出力されて上書きし合うのを防ぐ (LNK2001 対策) -->
+      <ObjectFileName>$(IntDir)%(RelativeDir)</ObjectFileName>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;DirectXTK.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <IgnoreSpecificDefaultLibraries>
       </IgnoreSpecificDefaultLibraries>
       <IgnoreAllDefaultLibraries>
@@ -122,14 +124,18 @@
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>.;.\Source\app;.\Source\core;.\Source\mesh;.\Source\render;.\cereal-master\include;.\DirectXTK-main\Inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <!-- /FS: 並列ビルドで褁E�E��E�のCL.EXEが同じPDBへ書くとき�E競吁EC1041)を防ぁE-->
+      <EnableASAN Condition="'$(ReplayEnableASAN)'=='true'">true</EnableASAN>
+      <DebugInformationFormat Condition="'$(ReplayEnableASAN)'=='true'">ProgramDatabase</DebugInformationFormat>
+      <PreprocessorDefinitions Condition="'$(ReplayEnableASAN)'=='true'">_DISABLE_VECTOR_ANNOTATION;_DISABLE_STRING_ANNOTATION;_DISABLE_OPTIONAL_ANNOTATION;_DEBUG;_WINDOWS;USE_IMGUI;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <!-- /FS: 並列ビルドで複数の CL.EXE が同じ PDB へ書くときの競合 (C1041) を防ぐ -->
       <AdditionalOptions>/utf-8 /validate-charset /FS %(AdditionalOptions)</AdditionalOptions>
+      <!-- 別フォルダの同名 .cpp が同じ .obj へ出力されて上書きし合うのを防ぐ (LNK2001 対策) -->
+      <ObjectFileName>$(IntDir)%(RelativeDir)</ObjectFileName>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>.\DirectXTK-main\Bin\Desktop_2019\x64\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;DirectXTK.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <FxCompile>
       <ShaderModel>5.0</ShaderModel>
@@ -149,8 +155,10 @@
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>.;.\Source\app;.\Source\core;.\Source\mesh;.\Source\render;.\cereal-master\include;.\DirectXTK-main\Inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
-      <!-- /FS: 並列ビルドで褁E�E��E�のCL.EXEが同じPDBへ書くとき�E競吁EC1041)を防ぁE-->
+      <!-- /FS: 並列ビルドで複数の CL.EXE が同じ PDB へ書くときの競合 (C1041) を防ぐ -->
       <AdditionalOptions>/utf-8 /validate-charset /FS %(AdditionalOptions)</AdditionalOptions>
+      <!-- 別フォルダの同名 .cpp が同じ .obj へ出力されて上書きし合うのを防ぐ (LNK2001 対策) -->
+      <ObjectFileName>$(IntDir)%(RelativeDir)</ObjectFileName>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -159,7 +167,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>
       </AdditionalLibraryDirectories>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;DirectXTK.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <FxCompile>
       <ShaderModel>5.0</ShaderModel>
@@ -175,24 +183,22 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <!-- Debug|x64と同じC++17とUSE_IMGUIを指定する。ここが欠けてぁE�E��E�と
-           nested namespace めEstd::clamp が使えず、エチE�E��E�タUIも消える、E-->
+      <!-- Debug|x64縺ｨ蜷後§C++17縺ｨUSE_IMGUI繧呈欠螳壹☆繧九ゅ％縺薙′谺縺代※縺・・ｽ・ｽ縺ｨ
+           nested namespace 繧・std::clamp 縺御ｽｿ縺医★縲√お繝・・ｽ・ｽ繧ｿUI繧よｶ医∴繧九・-->
       <PreprocessorDefinitions>NDEBUG;_WINDOWS;USE_IMGUI;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <SDLCheck>true</SDLCheck>
-      <!-- /FS: 並列ビルドで褁E�E��E�のCL.EXEが同じPDBへ書くとき�E競吁EC1041)を防ぁE-->
+      <!-- /FS: 荳ｦ蛻励ン繝ｫ繝峨〒隍・・ｽ・ｽ縺ｮCL.EXE縺悟酔縺榔DB縺ｸ譖ｸ縺上→縺搾ｿｽE遶ｶ蜷・C1041)繧帝亟縺・-->
       <AdditionalOptions>/utf-8 /validate-charset /FS %(AdditionalOptions)</AdditionalOptions>
       <AdditionalIncludeDirectories>.;.\Source\app;.\Source\core;.\Source\mesh;.\Source\render;.\cereal-master\include;.\DirectXTK-main\Inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <ObjectFileName>$(IntDir)%(RelativeDir)</ObjectFileName>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <!-- ソリューション同梱のDirectXTKは Desktop_2026 構�Eで出力される、E
-           2019のパスにはReleaseビルド済みlibが無ぁE�E��E�め両方を並べる、E-->
-      <AdditionalLibraryDirectories>.\DirectXTK-main\Bin\Desktop_2026\x64\Release;.\DirectXTK-main\Bin\Desktop_2019\x64\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;DirectXTK.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <FxCompile>
       <ShaderModel>5.0</ShaderModel>
@@ -220,7 +226,6 @@
     <ClCompile Include="RePlayEngine\Assets\AssetDatabase.cpp" />
     <ClCompile Include="RePlayEngine\Assets\AsyncAssetManager.cpp" />
     <ClCompile Include="RePlayEngine\Assets\TextureCompressor.cpp" />
-    <ClCompile Include="RePlayEngine\Editor\Commands\UndoStack.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Gizmo\TransformGizmo.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Gizmo\ViewportPicker.cpp" />
     <ClCompile Include="RePlayEngine\Editor\ShaderEditing\CharacterMaterialEditor.cpp" />
@@ -228,13 +233,10 @@
     <ClCompile Include="RePlayEngine\Editor\ShaderEditing\ShaderPresetEditor.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Rendering\PostProcessEditor.cpp" />
     <ClCompile Include="RePlayEngine\Physics\MeshCollisionCooker.cpp" />
-    <ClCompile Include="RePlayEngine\Scene\SceneDocument.cpp" />
-    <ClCompile Include="RePlayEngine\Scene\SceneSerializer.cpp" />
-    <ClCompile Include="RePlayEngine\Scene\UIHierarchy.cpp" />
-    <ClCompile Include="RePlayEngine\Scene\PrefabSerializer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\ShaderPresets\ShaderPresetSerializer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\ShaderPresets\BuiltInShaderPresets.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Materials\CharacterMaterialGpuData.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Materials\MaterialAsset.cpp" />
     <ClCompile Include="RePlayEngine\Scene\BootLogoScene.cpp" />
     <ClCompile Include="RePlayEngine\Scene\LoadingScene.cpp" />
     <ClCompile Include="Source\core\framebuffer.cpp" />
@@ -260,6 +262,9 @@
     <ClCompile Include="Source\app\Runtime\framework_initialize.cpp" />
     <ClCompile Include="Source\app\Editor\framework_editor.cpp" />
     <ClCompile Include="Source\app\Editor\framework_inspector.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_project_settings.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_editor_camera.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_gizmo.cpp" />
     <ClCompile Include="Source\app\Editor\framework_scene_document.cpp" />
     <ClCompile Include="Source\app\Editor\framework_shader_stack.cpp" />
     <ClCompile Include="Source\app\Editor\framework_character_material.cpp" />
@@ -274,19 +279,95 @@
     <ClCompile Include="Source\core\texture.cpp" />
     <ClCompile Include="Source\game\camera.cpp" />
     <ClCompile Include="Source\game\free_camera_controller.cpp" />
-    <ClCompile Include="Source\game\player.cpp" />
-    <ClCompile Include="Source\game\raycast.cpp" />
-    <ClCompile Include="Source\game\stage.cpp" />
     <ClCompile Include="RePlayEngine\Physics\SphereCast.cpp" />
-    <ClCompile Include="RePlayEngine\Physics\MeshColliderComponent.cpp" />
-    <ClCompile Include="RePlayEngine\Physics\GravityComponent.cpp" />
     <ClCompile Include="Source\game\scene_game.cpp" />
     <ClCompile Include="Source\game\game_scene.cpp" />
-  </ItemGroup>
+      <ClCompile Include="RePlayEngine\Core\ObjectID\ObjectID.cpp" />
+    <ClCompile Include="RePlayEngine\Core\ObjectID\RuntimeIdentity.cpp" />
+    <ClCompile Include="RePlayEngine\Core\Math\Transform.cpp" />
+    <ClCompile Include="RePlayEngine\Object\Component\Component.cpp" />
+    <ClCompile Include="RePlayEngine\Object\Component\MissingComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Object\GameObject\GameObject.cpp" />
+    <ClCompile Include="RePlayEngine\Object\Registry\ComponentRegistry.cpp" />
+    <ClCompile Include="RePlayEngine\Reflection\Property\PropertyValue.cpp" />
+    <ClCompile Include="RePlayEngine\Reflection\Property\PropertyBag.cpp" />
+    <ClCompile Include="RePlayEngine\Reflection\Registry\PropertyRegistry.cpp" />
+    <ClCompile Include="RePlayEngine\Reflection\Registry\TypeGUID.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Core\RuntimeResult.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Handles\RuntimeHandles.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Handles\HandleResolver.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Validation\HandleValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Validation\SerializationValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Behaviour\BehaviourComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Behaviour\BehaviourRegistry.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Events\EventBus.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Events\CollisionEventDispatcher.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\API\RuntimeContext.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourValidation.cpp" />
+    <ClCompile Include="Source\game\Behaviours\ValidationBehaviours.cpp" />
+    <ClCompile Include="RePlayEngine\Scene\Runtime\Scene.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Core\TransformComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Gameplay\RotatorComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Gameplay\HealthComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Gameplay\StageGameplayCommon.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Gameplay\StageGameplayComponents.cpp" />
+    <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponents.cpp" />
+    <ClCompile Include="RePlayEngine\Scene\Serialization\SceneData.cpp" />
+    <ClCompile Include="RePlayEngine\Scene\Serialization\SceneSerializer.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Core\EditorContext.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Selection\EditorSelection.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Commands\SceneEditHistory.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Hierarchy\HierarchyPanel.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Inspector\InspectorPanel.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Inspector\PropertyDrawer.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\ComponentBrowser\AddComponentPanel.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Adapter\SceneRenderCollector.cpp" />
+    <ClCompile Include="Source\app\Runtime\framework_gameobject_scene.cpp" />
+    <ClCompile Include="RePlayEngine\Scene\Serialization\PrefabSerializer.cpp" />
+    <ClCompile Include="RePlayEngine\Scene\Services\PlayerControlSystem.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Physics\SphereColliderComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Gameplay\CharacterMotorComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Gameplay\PlayerInputComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Gameplay\PlayerControllerComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Rendering\AnimatorComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Rendering\SkinnedMeshRendererComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Rendering\MeshRendererComponent.cpp" />
+    <ClCompile Include="Source\game\camera_basis_provider.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Inspector\PlayerCompositionValidator.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Viewport\EditorViewportCamera.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Style\EditorStyle.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Validation\SceneValidator.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Validation\ValidationPanel.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Viewport\EditorCameraController.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Viewport\EditorCameraStateStore.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Viewport\EditorSelectionBounds.cpp" />
+    <ClCompile Include="RePlayEngine\Project\ProjectSettings.cpp" />
+    <ClCompile Include="RePlayEngine\Project\ProjectSettingsSerializer.cpp" />
+    <ClCompile Include="RePlayEngine\Physics\CookedMeshCollision.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Physics\MeshColliderComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Scene\Services\SceneCollisionWorld.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Physics\ColliderComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Physics\BoxColliderComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Physics\CapsuleColliderComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Physics\ShapeSweep.cpp" />
+    <ClCompile Include="RePlayEngine\Scene\Services\SceneCollisionWorldQuery.cpp" />
+    <ClCompile Include="RePlayEngine\Scene\Services\SceneCollisionWorldTrigger.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Debug\ColliderDebugDraw.cpp" />
+    <ClCompile Include="Source\app\Runtime\framework_collision_world.cpp" />
+    <ClCompile Include="Source\app\Runtime\framework_collision_mesh_source.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_collider_debug.cpp" />
+    <ClCompile Include="RePlayEngine\Landscape\LandscapeData.cpp" />
+    <ClCompile Include="RePlayEngine\Landscape\LandscapeMeshGenerator.cpp" />
+    <ClCompile Include="RePlayEngine\Landscape\LandscapeRenderer.cpp" />
+    <ClCompile Include="RePlayEngine\Landscape\LandscapeCollision.cpp" />
+    <ClCompile Include="RePlayEngine\Landscape\LandscapeUndoCommand.cpp" />
+    <ClCompile Include="RePlayEngine\Landscape\LandscapeEditorTool.cpp" />
+</ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\mesh\UI.h" />
     <ClInclude Include="Source\render\csm_renderer.h" />
     <ClInclude Include="Source\render\deferred_renderer.h" />
+    <ClInclude Include="Source\render\motion_vector_context.h" />
     <ClInclude Include="RePlayEngine\Rendering\Deferred\deferred_renderer.h" />
     <ClInclude Include="RePlayEngine\Rendering\Passes\PostProcessPass.h" />
     <ClInclude Include="RePlayEngine\Rendering\FrameConstants.h" />
@@ -306,6 +387,7 @@
     <ClInclude Include="RePlayEngine\Rendering\ShaderPresets\BuiltInShaderPresets.h" />
     <ClInclude Include="RePlayEngine\Rendering\Materials\CharacterMaterialProfile.h" />
     <ClInclude Include="RePlayEngine\Rendering\Materials\CharacterMaterialGpuData.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Materials\MaterialAsset.h" />
     <ClInclude Include="RePlayEngine\Assets\ImageAsset.h" />
     <ClInclude Include="RePlayEngine\Presentation\BootLogoComponent.h" />
     <ClInclude Include="RePlayEngine\Assets\AssetCache.h" />
@@ -314,31 +396,19 @@
     <ClInclude Include="RePlayEngine\Assets\ConcurrentResourceCache.h" />
     <ClInclude Include="RePlayEngine\Assets\ParallelLoader.h" />
     <ClInclude Include="RePlayEngine\Assets\TextureCompressor.h" />
-    <ClInclude Include="RePlayEngine\Editor\Commands\UndoStack.h" />
     <ClInclude Include="RePlayEngine\Editor\Gizmo\TransformGizmo.h" />
     <ClInclude Include="RePlayEngine\Editor\Gizmo\ViewportPicker.h" />
     <ClInclude Include="RePlayEngine\Editor\ShaderEditing\CharacterMaterialEditor.h" />
     <ClInclude Include="RePlayEngine\Editor\ShaderEditing\ShaderStackEditor.h" />
     <ClInclude Include="RePlayEngine\Editor\ShaderEditing\ShaderPresetEditor.h" />
     <ClInclude Include="RePlayEngine\Editor\Rendering\PostProcessEditor.h" />
-    <ClInclude Include="RePlayEngine\Core\Components\AnimationComponent.h" />
-    <ClInclude Include="RePlayEngine\Core\Components\ModelRendererComponent.h" />
     <ClInclude Include="RePlayEngine\Core\Components\IComponent.h" />
-    <ClInclude Include="RePlayEngine\Core\Components\GameObject.h" />
-    <ClInclude Include="RePlayEngine\Core\Components\TransformComponent.h" />
-    <ClInclude Include="RePlayEngine\Core\Components\SphereColliderComponent.h" />
-    <ClInclude Include="RePlayEngine\Core\Components\MeshColliderComponent.h" />
-    <ClInclude Include="RePlayEngine\Core\Components\GravityComponent.h" />
     <ClInclude Include="RePlayEngine\Physics\SphereCast.h" />
     <ClInclude Include="RePlayEngine\Physics\MeshCollisionCooker.h" />
     <ClInclude Include="RePlayEngine\Scene\IScene.h" />
     <ClInclude Include="RePlayEngine\Scene\SceneManager.h" />
     <ClInclude Include="RePlayEngine\Scene\BootLogoScene.h" />
     <ClInclude Include="RePlayEngine\Scene\LoadingScene.h" />
-    <ClInclude Include="RePlayEngine\Scene\SceneDocument.h" />
-    <ClInclude Include="RePlayEngine\Scene\UIHierarchy.h" />
-    <ClInclude Include="RePlayEngine\Scene\SceneSerializer.h" />
-    <ClInclude Include="RePlayEngine\Scene\PrefabSerializer.h" />
     <ClInclude Include="Source\core\framebuffer.h" />
     <ClInclude Include="Source\app\framework.h" />
     <ClInclude Include="Source\core\fullscreen_quad.h" />
@@ -369,12 +439,102 @@
     <ClInclude Include="Source\game\camera.h" />
     <ClInclude Include="Source\game\free_camera_controller.h" />
     <ClInclude Include="Source\game\game_input.h" />
-    <ClInclude Include="Source\game\player.h" />
-    <ClInclude Include="Source\game\raycast.h" />
     <ClInclude Include="Source\game\scene_game.h" />
     <ClInclude Include="Source\game\game_scene.h" />
-    <ClInclude Include="Source\game\stage.h" />
-  </ItemGroup>
+      <ClInclude Include="RePlayEngine\Core\ObjectID\ObjectID.h" />
+    <ClInclude Include="RePlayEngine\Core\ObjectID\RuntimeIdentity.h" />
+    <ClInclude Include="RePlayEngine\Core\Threading\ThreadPolicy.h" />
+    <ClInclude Include="RePlayEngine\Core\Math\Transform.h" />
+    <ClInclude Include="RePlayEngine\Object\Component\ComponentTypeID.h" />
+    <ClInclude Include="RePlayEngine\Object\Component\Component.h" />
+    <ClInclude Include="RePlayEngine\Object\Component\MissingComponent.h" />
+    <ClInclude Include="RePlayEngine\Object\GameObject\GameObject.h" />
+    <ClInclude Include="RePlayEngine\Object\Registry\ComponentTypeInfo.h" />
+    <ClInclude Include="RePlayEngine\Object\Registry\ComponentRegistry.h" />
+    <ClInclude Include="RePlayEngine\Reflection\Property\PropertyValue.h" />
+    <ClInclude Include="RePlayEngine\Reflection\Property\PropertyDesc.h" />
+    <ClInclude Include="RePlayEngine\Reflection\Property\PropertyBag.h" />
+    <ClInclude Include="RePlayEngine\Reflection\Property\References.h" />
+    <ClInclude Include="RePlayEngine\Reflection\Registry\TypeGUID.h" />
+    <ClInclude Include="RePlayEngine\Runtime\Core\RuntimeResult.h" />
+    <ClInclude Include="RePlayEngine\Runtime\Handles\RuntimeHandles.h" />
+    <ClInclude Include="RePlayEngine\Runtime\Handles\HandleResolver.h" />
+    <ClInclude Include="RePlayEngine\Runtime\Validation\HandleValidation.h" />
+    <ClInclude Include="RePlayEngine\Runtime\Validation\SerializationValidation.h" />
+    <ClInclude Include="RePlayEngine\Runtime\Behaviour\BehaviourEvents.h" />
+    <ClInclude Include="RePlayEngine\Runtime\Behaviour\BehaviourComponent.h" />
+    <ClInclude Include="RePlayEngine\Runtime\Behaviour\BehaviourRegistry.h" />
+    <ClInclude Include="RePlayEngine\Runtime\Events\EventBus.h" />
+    <ClInclude Include="RePlayEngine\Runtime\Events\CollisionEventDispatcher.h" />
+    <ClInclude Include="RePlayEngine\Runtime\API\RuntimeContext.h" />
+    <ClInclude Include="RePlayEngine\Runtime\Validation\BehaviourValidation.h" />
+    <ClInclude Include="Source\game\Behaviours\ValidationBehaviours.h" />
+    <ClInclude Include="RePlayEngine\Reflection\Registry\PropertyRegistry.h" />
+    <ClInclude Include="RePlayEngine\Scene\Runtime\Scene.h" />
+    <ClInclude Include="RePlayEngine\Components\Core\TransformComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Rendering\MeshRendererComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Rendering\LightComponents.h" />
+    <ClInclude Include="RePlayEngine\Components\Gameplay\RotatorComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Gameplay\HealthComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Gameplay\StageGameplayCommon.h" />
+    <ClInclude Include="RePlayEngine\Components\Gameplay\StageGameplayComponents.h" />
+    <ClInclude Include="RePlayEngine\Object\Registry\BuiltInComponents.h" />
+    <ClInclude Include="RePlayEngine\Scene\Serialization\SceneData.h" />
+    <ClInclude Include="RePlayEngine\Scene\Serialization\SceneSerializer.h" />
+    <ClInclude Include="RePlayEngine\Editor\Core\EditorContext.h" />
+    <ClInclude Include="RePlayEngine\Editor\Selection\EditorSelection.h" />
+    <ClInclude Include="RePlayEngine\Editor\Commands\SceneEditHistory.h" />
+    <ClInclude Include="RePlayEngine\Editor\Hierarchy\HierarchyPanel.h" />
+    <ClInclude Include="RePlayEngine\Editor\Inspector\InspectorPanel.h" />
+    <ClInclude Include="RePlayEngine\Editor\Inspector\PropertyDrawer.h" />
+    <ClInclude Include="RePlayEngine\Editor\ComponentBrowser\AddComponentPanel.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Adapter\RenderItem.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Adapter\SceneRenderCollector.h" />
+    <ClInclude Include="RePlayEngine\Scene\Serialization\PrefabSerializer.h" />
+    <ClInclude Include="RePlayEngine\Scene\Services\ICameraBasisProvider.h" />
+    <ClInclude Include="RePlayEngine\Scene\Services\IPhysicsQueryService.h" />
+    <ClInclude Include="RePlayEngine\Scene\Services\SceneServices.h" />
+    <ClInclude Include="RePlayEngine\Scene\Services\PlayerControlSystem.h" />
+    <ClInclude Include="RePlayEngine\Scene\Services\RespawnService.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Adapter\IRenderSubmitter.h" />
+    <ClInclude Include="RePlayEngine\Components\Physics\SphereColliderComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Gameplay\CharacterMotorComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Gameplay\PlayerInputComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Gameplay\PlayerControllerComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Camera\CameraTargetComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Rendering\AnimatorComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Rendering\SkinnedMeshRendererComponent.h" />
+    <ClInclude Include="Source\game\camera_basis_provider.h" />
+    <ClInclude Include="RePlayEngine\Editor\Inspector\PlayerCompositionValidator.h" />
+    <ClInclude Include="RePlayEngine\Editor\Viewport\EditorViewportCamera.h" />
+    <ClInclude Include="RePlayEngine\Editor\Style\EditorStyle.h" />
+    <ClInclude Include="RePlayEngine\Editor\Validation\SceneValidator.h" />
+    <ClInclude Include="RePlayEngine\Editor\Validation\ValidationPanel.h" />
+    <ClInclude Include="RePlayEngine\Editor\Viewport\EditorCameraController.h" />
+    <ClInclude Include="RePlayEngine\Editor\Viewport\EditorCameraStateStore.h" />
+    <ClInclude Include="RePlayEngine\Editor\Viewport\EditorSelectionBounds.h" />
+    <ClInclude Include="RePlayEngine\Project\ProjectSettings.h" />
+    <ClInclude Include="RePlayEngine\Project\ProjectSettingsSerializer.h" />
+    <ClInclude Include="RePlayEngine\Physics\CookedMeshCollision.h" />
+    <ClInclude Include="RePlayEngine\Components\Physics\MeshColliderComponent.h" />
+    <ClInclude Include="RePlayEngine\Scene\Services\SceneCollisionWorld.h" />
+    <ClInclude Include="RePlayEngine\Components\Physics\ColliderComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Physics\BoxColliderComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Physics\CapsuleColliderComponent.h" />
+    <ClInclude Include="RePlayEngine\Physics\CollisionLayers.h" />
+    <ClInclude Include="RePlayEngine\Physics\ShapeSweep.h" />
+    <ClInclude Include="RePlayEngine\Editor\Debug\ColliderDebugDraw.h" />
+    <ClInclude Include="RePlayEngine\Object\Component\TriggerContact.h" />
+    <ClInclude Include="RePlayEngine\Landscape\LandscapeChunk.h" />
+    <ClInclude Include="RePlayEngine\Landscape\LandscapeMaterial.h" />
+    <ClInclude Include="RePlayEngine\Landscape\LandscapeBrush.h" />
+    <ClInclude Include="RePlayEngine\Landscape\LandscapeData.h" />
+    <ClInclude Include="RePlayEngine\Landscape\LandscapeMeshGenerator.h" />
+    <ClInclude Include="RePlayEngine\Landscape\LandscapeRenderer.h" />
+    <ClInclude Include="RePlayEngine\Landscape\LandscapeCollision.h" />
+    <ClInclude Include="RePlayEngine\Landscape\LandscapeUndoCommand.h" />
+    <ClInclude Include="RePlayEngine\Landscape\LandscapeEditorTool.h" />
+</ItemGroup>
   <ItemGroup>
     <None Include=".editorconfig" />
     <None Include=".gitattributes" />
@@ -536,12 +696,6 @@
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
     </FxCompile>
     <FxCompile Include="Shader\skinned_mesh_pbr_ps.hlsl">
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
-    </FxCompile>
-    <FxCompile Include="Shader\skinned_mesh_pbr_stage_ps.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
@@ -769,6 +923,11 @@
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Vertex</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Vertex</ShaderType>
     </FxCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="DirectXTK-main\DirectXTK_Desktop_2026.vcxproj">
+      <Project>{AA1242D8-6F78-4DAC-875C-112278D900DA}</Project>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

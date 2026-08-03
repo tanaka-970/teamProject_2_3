@@ -100,7 +100,6 @@ bool pbr_renderer::initialize(ID3D11Device* device)
 
     create_ps_from_cso(device, "static_mesh_pbr_ps.cso", static_mesh_pbr_ps_.GetAddressOf());
     create_ps_from_cso(device, "skinned_mesh_pbr_ps.cso", skinned_mesh_pbr_ps_.GetAddressOf());
-    create_ps_from_cso(device, "skinned_mesh_pbr_stage_ps.cso", skinned_mesh_pbr_stage_ps_.GetAddressOf());
 
     return true;
 }

@@ -1,9 +1,5 @@
 ﻿#pragma once
 
-#include "../../Scene/SceneDocument.h"
-
-#include <DirectXMath.h>
-
 namespace ReplayEngine::Editor
 {
     enum class GizmoOperation
@@ -22,9 +18,6 @@ namespace ReplayEngine::Editor
         void SetSnapEnabled(bool enabled) noexcept { snap_enabled_ = enabled; }
         float SnapStep() const noexcept { return snap_step_; }
         void SetSnapStep(float value) noexcept;
-
-        void ApplyDelta(Scene::TransformData& transform,
-            const DirectX::XMFLOAT3& delta) const noexcept;
 
     private:
         GizmoOperation operation_ = GizmoOperation::Translate;

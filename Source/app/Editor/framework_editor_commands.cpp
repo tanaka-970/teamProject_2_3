@@ -42,9 +42,7 @@ void framework::execute_editor_command(const std::string& command)
     if (name == "help" || name == "ヘルプ")
     {
         editor_command_result =
-            "deferred [on/off/toggle] | stage [pbr/toon/unlit/pixelate/default] | "
-            "outline [on/off/toggle] | bloom [on/off/toggle] | save | undo | redo | "
-            "copy | paste | duplicate | placements | "
+            "deferred | bloom [on/off/toggle] | save | undo | redo | duplicate | objects | "
             "workspace [general/placement/modeling/animation/rendering] | fullscreen";
         return;
     }
@@ -56,32 +54,6 @@ void framework::execute_editor_command(const std::string& command)
             : "Renderer: Deferred（固定）";
         return;
     }
-    if (name == "stage")
-    {
-        if (argument == "pbr") shading_per_stage = SHADING_MODEL_PBR;
-        else if (argument == "toon") shading_per_stage = SHADING_MODEL_TOON;
-        else if (argument == "unlit") shading_per_stage = SHADING_MODEL_UNLIT;
-        else if (argument == "pixelate") shading_per_stage = SHADING_MODEL_PIXELATE;
-        else if (argument == "default") shading_per_stage = SHADING_MODEL_FBX_DEFAULT;
-        else
-        {
-            editor_command_result = "使い方: stage [pbr/toon/unlit/pixelate/default]";
-            return;
-        }
-        enable_stage_shader = true;
-        editor_command_result = "ステージのSurfaceシェーダーを変更しました";
-        return;
-    }
-    if (name == "outline")
-    {
-        if (ApplySwitch(argument, outline_per_stage))
-        {
-            if (outline_per_stage) enable_outline_shader = true;
-            editor_command_result = std::string("ステージ輪郭線: ") + (outline_per_stage ? "ON" : "OFF");
-        }
-        else editor_command_result = "使い方: outline [on/off/toggle]";
-        return;
-    }
     if (name == "bloom")
     {
         if (ApplySwitch(argument, enable_bloom_shader))
@@ -91,48 +63,35 @@ void framework::execute_editor_command(const std::string& command)
     }
     if (name == "save" || name == "保存")
     {
-        save_scene_document(false);
-        editor_command_result = scene_document_status;
+        save_object_scene(false);
+        editor_command_result = object_editor_context.Status();
         return;
     }
     if (name == "undo")
     {
-        std::string label;
-        editor_command_result = scene_undo_stack.Undo(editor_scene_document, label)
-            ? "元に戻しました: " + label : "元に戻せる操作がありません";
+        editor_command_result = object_editor_context.Undo()
+            ? "元に戻しました" : "元に戻せる操作がありません";
         return;
     }
     if (name == "redo")
     {
-        std::string label;
-        editor_command_result = scene_undo_stack.Redo(editor_scene_document, label)
-            ? "やり直しました: " + label : "やり直せる操作がありません";
-        return;
-    }
-    if (name == "copy" || name == "コピー")
-    {
-        copy_selected_entities();
-        editor_command_result = scene_document_status;
-        return;
-    }
-    if (name == "paste" || name == "貼り付け")
-    {
-        paste_copied_entities();
-        editor_command_result = scene_document_status;
+        editor_command_result = object_editor_context.Redo()
+            ? "やり直しました" : "やり直せる操作がありません";
         return;
     }
     if (name == "duplicate" || name == "複製")
     {
-        duplicate_selected_entities();
-        editor_command_result = scene_document_status;
+        object_hierarchy_panel.DuplicateSelection(object_editor_context);
+        editor_command_result = object_editor_context.Status();
         return;
     }
-    if (name == "placements" || name == "配置一覧")
+    if (name == "objects" || name == "一覧")
     {
         std::ostringstream result;
-        result << "配置記録 " << editor_scene_document.Entities().size() << "件";
-        for (const auto& entity : editor_scene_document.Entities())
-            result << " | " << entity.name << " [" << entity.identifier << ']';
+        const auto& scene = active_object_scene();
+        result << "GameObjects " << scene.GameObjectCount() << "件";
+        for (std::size_t index = 0; index < scene.GameObjectCount(); ++index)
+            if (const auto* object = scene.GameObjectAt(index)) result << " | " << object->Name();
         editor_command_result = result.str();
         return;
     }

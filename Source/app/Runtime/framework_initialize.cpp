@@ -5,51 +5,14 @@
 #include "../../RePlayEngine/Scene/BootLogoScene.h"
 #include "../../RePlayEngine/Scene/LoadingScene.h"
 
-#include <algorithm>
-#include <cctype>
-#include <initializer_list>
+#include <filesystem>
 #include <string>
 
-namespace
-{
-    std::string lower_copy(std::string text)
-    {
-        std::transform(text.begin(), text.end(), text.begin(),
-            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        return text;
-    }
-
-    int find_animation_clip(const skinned_mesh& mesh,
-                            std::initializer_list<const char*> exact_names,
-                            std::initializer_list<const char*> contains_names)
-    {
-        for (const char* exact : exact_names)
-        {
-            const std::string wanted = lower_copy(exact);
-            for (size_t i = 0; i < mesh.animation_clips.size(); ++i)
-            {
-                if (lower_copy(mesh.animation_clips[i].name) == wanted)
-                {
-                    return static_cast<int>(i);
-                }
-            }
-        }
-
-        for (const char* token : contains_names)
-        {
-            const std::string wanted = lower_copy(token);
-            for (size_t i = 0; i < mesh.animation_clips.size(); ++i)
-            {
-                if (lower_copy(mesh.animation_clips[i].name).find(wanted) != std::string::npos)
-                {
-                    return static_cast<int>(i);
-                }
-            }
-        }
-
-        return -1;
-    }
-}
+// 【削除済み】lower_copy / find_animation_clip
+//   起動時に固定のプレイヤーモデルからクリップ名を探し、
+//   旧 Player の clip_idle / clip_walk / clip_jump へ割り当てるための補助だった。
+//   クリップの割り当ては AnimatorComponent のプロパティ
+//   (idle_clip / walk_clip / jump_clip) が持ち、Scene へ保存される。
 
 bool framework::initialize()
 {
@@ -57,7 +20,7 @@ bool framework::initialize()
 
     std::string asset_database_error;
     if (!asset_database.Load(asset_database_error))
-        scene_document_status = "AssetDatabase: " + asset_database_error;
+        object_editor_context.SetStatus("AssetDatabase: " + asset_database_error);
 
     UINT create_device_flags{ 0 };
 #ifdef _DEBUG
@@ -222,9 +185,7 @@ bool framework::initialize()
     ReplayEngine::Rendering::Stats().Initialize(device.Get());
     lights.initialize(device.Get());
     uiManager.Initalize(device.Get());
-    lights.data.light_counts.x = 1;
-    lights.data.point_lights[0].position = { 3.0f, 4.0f, -24.0f, 18.0f };
-    lights.data.point_lights[0].color = { 0.55f, 0.75f, 1.0f, 2.0f };
+    lights.data.light_counts = { 0, 0, 0, 0 };
 
     // 法線テクスチャを持たない材質で使うダミー法線を作る。kwjkshhakjwhhwhhsbkkwhiiwnzkkhjsowjjw
 
@@ -251,20 +212,52 @@ bool framework::initialize()
     scene_manager.SetScene(
         std::make_unique<ReplayEngine::Scene::BootLogoScene>(), device.Get());
     auto loading_scene = std::make_unique<ReplayEngine::Scene::LoadingScene>();
+    // 任意アセットの読み込みは「無ければスキップして続行」に統一する。
+    // 実行に必須ではないファイルの不足で起動が止まらないようにするため。
+    // 失敗は OutputDebugString へ理由付きで出す（Visual Studio の出力ウィンドウで読める）。
     loading_scene->AddTask("UI image", [this]
     {
-        sprite_batches[0] = std::make_unique<sprite_batch>(
-            device.Get(), L".\\resources\\screenshot.jpg", 1);
-        return sprite_batches[0] != nullptr;
-    });
-    loading_scene->AddTask("Player model", [this]
-    {
-        const std::filesystem::path path = ".\\resources\\AnimationModel\\AllAnimation1.fbx";
-        skinned_meshes[0] = skinned_mesh_cache.Load(path, [this, path]
+        const wchar_t* ui_image = L".\\resources\\screenshot.jpg";
+        std::error_code filesystem_error;
+        if (!std::filesystem::exists(ui_image, filesystem_error) || filesystem_error)
         {
-            return std::make_shared<skinned_mesh>(device.Get(), path.string().c_str());
-        });
-        return skinned_meshes[0] != nullptr;
+            OutputDebugStringW(L"[Assets] 背景画像が見つかりません: "
+                L".\\resources\\screenshot.jpg （背景表示は無効のまま続行します）\n");
+            sprite_batches[0].reset();
+            draw_background_image = false;
+            return true;
+        }
+        sprite_batches[0] = std::make_unique<sprite_batch>(device.Get(), ui_image, 1);
+        return true;
+    });
+    // キャラクターモデルは SkinnedMeshRendererComponent の
+    // mesh_asset (AssetGUID) が指し、resolve_object_mesh() が読み込む。
+    loading_scene->AddTask("Debug mesh", [this]
+    {
+        // static_mesh は .obj 専用。構築前に can_load で検証し、
+        // 失敗を assert ではなくログとして上へ返す。
+        const wchar_t* debug_mesh = L".\\resources\\cube.obj";
+        std::wstring reason;
+        if (!static_mesh::can_load(debug_mesh, &reason))
+        {
+            OutputDebugStringW((L"[Assets] デバッグ用メッシュを読み込めません: " +
+                reason + L" （静的メッシュ表示は無効のまま続行します）\n").c_str());
+            static_meshes[0].reset();
+            enable_static_meshes = false;
+            return true;
+        }
+
+        auto candidate = std::make_unique<static_mesh>(device.Get(), debug_mesh, true);
+        if (!candidate->is_loaded())
+        {
+            OutputDebugStringW((L"[Assets] デバッグ用メッシュの解析に失敗しました: " +
+                candidate->load_error() + L"\n").c_str());
+            static_meshes[0].reset();
+            enable_static_meshes = false;
+            return true;
+        }
+        static_meshes[0] = std::move(candidate);
+        return true;
     });
     loading_scene->AddTask("IBL images", [this]
     {
@@ -291,20 +284,20 @@ bool framework::initialize()
 
     scene_manager.QueueSceneFactory([this]() -> std::unique_ptr<ReplayEngine::Scene::IScene>
     {
-        int idle = -1, walk = -1, jump = -1;
-        if (skinned_meshes[0])
-        {
-            idle = find_animation_clip(*skinned_meshes[0], { "idle" }, { "idle" });
-            walk = find_animation_clip(*skinned_meshes[0], { "walk", "run" }, { "walk", "run", "heavyrun" });
-            jump = find_animation_clip(*skinned_meshes[0], { "jump", "fall" }, { "jump", "fall" });
-        }
-        auto next_scene = std::make_unique<GameScene>(skinned_meshes[0].get(), nullptr,
-            static_cast<float>(SCREEN_WIDTH) / static_cast<float>(SCREEN_HEIGHT), idle, walk, jump);
+        // GameScene が持つのはカメラ操作だけ。
+        // 操作キャラクターのモデルもアニメーションクリップも渡さない。
+        // それらは Scene 内の GameObject が Component として持っている。
+        auto next_scene = std::make_unique<GameScene>(
+            static_cast<float>(SCREEN_WIDTH) / static_cast<float>(SCREEN_HEIGHT));
         game_scene = next_scene.get();
-        animation_clip_index = idle >= 0 ? idle : 0;
         restore_editor_session();
         return next_scene;
     });
+
+    // GameObject / Component 基盤の初期化。
+    // Component 型の登録・編集用 Scene の準備・既定 Scene ファイルの読み込みを行う。
+    // AssetDatabase の読み込み後に呼ぶ必要がある（Asset 参照を解決するため）。
+    initialize_object_scene();
 
     return true;
 }
