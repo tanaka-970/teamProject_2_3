@@ -65,6 +65,8 @@ namespace ReplayEngine::Scripting::CSharp
         bool LoadManagedApi();
         bool ResolveManagedEntryPoints();
         bool SetNativeApi();
+        std::filesystem::path ShadowCopyAssembly(
+            const std::filesystem::path& assembly_path, std::string& error) const;
         bool LoadGameAssembly(const std::filesystem::path& assembly_path,
             std::string& output);
         bool UnloadGameAssembly(std::string& output);

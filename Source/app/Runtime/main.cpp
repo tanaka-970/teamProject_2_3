@@ -35,6 +35,7 @@
 #include "../../../RePlayEngine/Runtime/Validation/SceneFlowValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/SerializationValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/StressValidation.h"
+#include "../../../RePlayEngine/Scripting/Validation/CSharpScriptValidation.h"
 #include "../../../RePlayEngine/Scripting/Validation/ScriptCoreValidation.h"
 #include "../../game/Behaviours/ValidationBehaviours.h"
 #include "../../../RePlayEngine/Scene/Runtime/Scene.h"
@@ -984,6 +985,11 @@ namespace
             {
                 ReplayEngine::Core::RegisterBuiltInComponents();
                 return ScriptValidation::RunScriptSerializationValidation();
+            }
+            if (command == "--validate-csharp-scripting")
+            {
+                ReplayEngine::Core::RegisterBuiltInComponents();
+                return ScriptValidation::RunCSharpScriptValidation();
             }
         }
         return -1;

@@ -153,6 +153,37 @@ namespace ReplayEngine::Scripting::CSharp
             return result;
         }
 
+        std::filesystem::path FindVisualStudioExecutable()
+        {
+#ifdef _WIN32
+            const std::array<std::filesystem::path, 8> candidates =
+            {
+                L"C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\Common7\\IDE\\devenv.exe",
+                L"C:\\Program Files\\Microsoft Visual Studio\\18\\Professional\\Common7\\IDE\\devenv.exe",
+                L"C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\Common7\\IDE\\devenv.exe",
+                L"C:\\Program Files\\Microsoft Visual Studio\\17\\Community\\Common7\\IDE\\devenv.exe",
+                L"C:\\Program Files\\Microsoft Visual Studio\\17\\Professional\\Common7\\IDE\\devenv.exe",
+                L"C:\\Program Files\\Microsoft Visual Studio\\17\\Enterprise\\Common7\\IDE\\devenv.exe",
+                L"C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Community\\Common7\\IDE\\devenv.exe",
+                L"devenv.exe",
+            };
+            std::error_code error;
+            for (const std::filesystem::path& candidate : candidates)
+            {
+                if (candidate.filename() == candidate)
+                {
+                    return candidate;
+                }
+                if (std::filesystem::exists(candidate, error) && !error)
+                {
+                    return candidate;
+                }
+                error.clear();
+            }
+#endif
+            return {};
+        }
+
         CSharpBuildResult RunDotnet(const std::wstring& arguments,
             const std::filesystem::path& expected_assembly)
         {
@@ -395,7 +426,8 @@ namespace ReplayEngine::Scripting::CSharp
 
         const std::wstring solution = Quote(GameScriptsSolutionPath(root));
         const std::wstring project = Quote(GameScriptsProjectPath(root));
-        RunDotnet(L"new sln --force -n RePlayScripts -o " + Quote(scripts), {});
+        RunDotnet(L"new sln --force --format sln -n RePlayScripts -o " +
+            Quote(scripts), {});
         RunDotnet(L"sln " + solution + L" add " + project, {});
         return true;
     }
@@ -537,6 +569,13 @@ namespace ReplayEngine::Scripting::CSharp
         int line, std::string& error)
     {
 #ifdef _WIN32
+        const std::filesystem::path executable = FindVisualStudioExecutable();
+        if (executable.empty())
+        {
+            error = "Visual Studio (devenv.exe) could not be located.";
+            return false;
+        }
+
         std::wstring arguments;
         if (line > 0)
         {
@@ -548,11 +587,13 @@ namespace ReplayEngine::Scripting::CSharp
             arguments = L"/edit " + Quote(file);
         }
 
-        const HINSTANCE result = ShellExecuteW(nullptr, L"open", L"devenv.exe",
+        const HINSTANCE result = ShellExecuteW(nullptr, L"open",
+            executable.wstring().c_str(),
             arguments.c_str(), nullptr, SW_SHOWNORMAL);
         if (reinterpret_cast<intptr_t>(result) > 32) return true;
 
-        error = "Visual Studio (devenv.exe) could not be started.";
+        error = "Visual Studio could not be started: " +
+            executable.generic_u8string();
         return false;
 #else
         (void)file;

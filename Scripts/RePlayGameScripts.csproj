@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <OutputType>Library</OutputType>
+    <AssemblyName>RePlayGameScripts</AssemblyName>
+    <RootNamespace>Game</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Managed/RePlayEngine.Managed/RePlayEngine.Managed.csproj" />
+  </ItemGroup>
+</Project>

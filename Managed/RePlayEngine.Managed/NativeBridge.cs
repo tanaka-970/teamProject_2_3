@@ -98,7 +98,7 @@ public static unsafe class NativeBridge
                 return Fail("Managed instances are still alive. Stop Play or destroy instances before Assembly Reload.", output, outputCapacity);
             }
 
-            var context = new ScriptLoadContext();
+            var context = new ScriptLoadContext(path);
             Assembly? assembly = null;
             Dictionary<TypeGuid, Type>? discovered = null;
             try
@@ -428,9 +428,12 @@ public static unsafe class NativeBridge
 
     private sealed class ScriptLoadContext : AssemblyLoadContext
     {
-        public ScriptLoadContext()
+        private readonly AssemblyDependencyResolver resolver;
+
+        public ScriptLoadContext(string assemblyPath)
             : base("RePlayEngine.CSharpScripts", isCollectible: true)
         {
+            resolver = new AssemblyDependencyResolver(assemblyPath);
         }
 
         protected override Assembly? Load(AssemblyName assemblyName)
@@ -440,7 +443,8 @@ public static unsafe class NativeBridge
                 return typeof(ScriptBehaviour).Assembly;
             }
 
-            return null;
+            var resolved = resolver.ResolveAssemblyToPath(assemblyName);
+            return resolved != null ? LoadFromAssemblyPath(resolved) : null;
         }
     }
 

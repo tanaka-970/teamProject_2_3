@@ -10,6 +10,7 @@
 #include <array>
 #include <cctype>
 #include <charconv>
+#include <chrono>
 #include <cstdlib>
 #include <iterator>
 #include <sstream>
@@ -852,13 +853,90 @@ namespace ReplayEngine::Scripting::CSharp
         return true;
     }
 
+    std::filesystem::path CSharpScriptBackend::ShadowCopyAssembly(
+        const std::filesystem::path& assembly_path, std::string& error) const
+    {
+        std::error_code filesystem_error;
+        if (!std::filesystem::exists(assembly_path, filesystem_error) ||
+            filesystem_error)
+        {
+            error = "C# build output is missing: " +
+                assembly_path.generic_u8string();
+            return {};
+        }
+
+        const auto ticks = std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count();
+        const std::filesystem::path cache_root =
+            project_root_ / "Saved" / "ManagedAssemblyCache";
+
+        for (int attempt = 0; attempt < 16; ++attempt)
+        {
+            const std::filesystem::path folder =
+                cache_root / (std::to_string(ticks) + "_" + std::to_string(attempt));
+            std::filesystem::create_directories(folder, filesystem_error);
+            if (filesystem_error)
+            {
+                error = "C# Assembly cache folder create failed: " +
+                    folder.generic_u8string();
+                return {};
+            }
+
+            const std::filesystem::path destination = folder / assembly_path.filename();
+            std::filesystem::copy_file(assembly_path, destination,
+                std::filesystem::copy_options::overwrite_existing, filesystem_error);
+            if (filesystem_error)
+            {
+                if (std::filesystem::exists(destination)) continue;
+                error = "C# Assembly shadow copy failed: " +
+                    filesystem_error.message();
+                return {};
+            }
+
+            const std::array<std::string, 2> sidecars = { ".pdb", ".deps.json" };
+            for (const std::string& extension : sidecars)
+            {
+                std::filesystem::path source_sidecar = assembly_path;
+                source_sidecar.replace_extension(extension);
+                if (!std::filesystem::exists(source_sidecar, filesystem_error) ||
+                    filesystem_error)
+                {
+                    filesystem_error.clear();
+                    continue;
+                }
+
+                std::filesystem::path destination_sidecar = destination;
+                destination_sidecar.replace_extension(extension);
+                std::filesystem::copy_file(source_sidecar, destination_sidecar,
+                    std::filesystem::copy_options::overwrite_existing,
+                    filesystem_error);
+                filesystem_error.clear();
+            }
+
+            return destination;
+        }
+
+        error = "C# Assembly shadow copy cache path could not be allocated.";
+        return {};
+    }
+
     bool CSharpScriptBackend::LoadGameAssembly(
         const std::filesystem::path& assembly_path, std::string& output)
     {
         if (load_assembly_ == nullptr) return false;
 
+        std::string copy_error;
+        const std::filesystem::path load_path =
+            ShadowCopyAssembly(assembly_path, copy_error);
+        if (load_path.empty())
+        {
+            output = copy_error;
+            SetLastError(copy_error);
+            return false;
+        }
+
         std::array<char, text_buffer_size> buffer{};
-        std::vector<char> path = Utf8CString(assembly_path);
+        std::vector<char> path = Utf8CString(load_path);
         const int result = reinterpret_cast<load_assembly_fn>(load_assembly_)(
             path.data(), buffer.data(), static_cast<int>(buffer.size()));
         output = ReadOutputBuffer(buffer);

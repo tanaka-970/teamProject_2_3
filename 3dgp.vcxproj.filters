@@ -552,6 +552,9 @@
     <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackend.cpp">
       <Filter>RePlayEngine\Scripting\CSharp</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Scripting\Validation\CSharpScriptValidation.cpp">
+      <Filter>RePlayEngine\Scripting\Validation</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Scripting\Validation\ScriptCoreValidation.cpp">
       <Filter>RePlayEngine\Scripting\Validation</Filter>
     </ClCompile>
@@ -1087,6 +1090,9 @@
     </ClInclude>
     <ClInclude Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackend.h">
       <Filter>RePlayEngine\Scripting\CSharp</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Scripting\Validation\CSharpScriptValidation.h">
+      <Filter>RePlayEngine\Scripting\Validation</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Scripting\Validation\ScriptCoreValidation.h">
       <Filter>RePlayEngine\Scripting\Validation</Filter>

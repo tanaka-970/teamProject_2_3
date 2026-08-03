@@ -1,0 +1,39 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v8.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v8.0": {
+      "RePlayGameScripts/1.0.0": {
+        "dependencies": {
+          "RePlayEngine.Managed": "1.0.0"
+        },
+        "runtime": {
+          "RePlayGameScripts.dll": {}
+        }
+      },
+      "RePlayEngine.Managed/1.0.0": {
+        "runtime": {
+          "RePlayEngine.Managed.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "RePlayGameScripts/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "RePlayEngine.Managed/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}
