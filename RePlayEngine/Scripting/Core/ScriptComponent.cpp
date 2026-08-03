@@ -100,8 +100,34 @@ namespace ReplayEngine::Scripting
 
     void ScriptComponent::RefreshScriptType()
     {
-        const ScriptTypeID derived =
-            MakeScriptTypeID(language_, asset_guid_, class_name_);
+        ScriptTypeID derived = InvalidScriptTypeID();
+        if (IScriptServices* services = Services())
+        {
+            for (const ScriptTypeDescriptor& descriptor : services->Catalog().All())
+            {
+                if (descriptor.language != language_) continue;
+                if (!asset_guid_.empty() && descriptor.asset_guid != asset_guid_) continue;
+                if (language_ == ScriptLanguage::CSharp &&
+                    !class_name_.empty() && descriptor.class_name != class_name_) continue;
+                derived = descriptor.type_id;
+                break;
+            }
+        }
+
+        if (!derived.IsValid())
+        {
+            if (language_ == ScriptLanguage::CSharp && script_type_.IsValid())
+            {
+                // C# は [ReplayGuid] が永続 ID。Scene/Pefab 読み込みで復元した
+                // __script.type_id を、ファイル名・クラス名・フォルダ移動だけで
+                // asset/class hash に置き換えない。
+                derived = script_type_;
+            }
+            else
+            {
+                derived = MakeScriptTypeID(language_, asset_guid_, class_name_);
+            }
+        }
 
         if (derived == script_type_) return;
 

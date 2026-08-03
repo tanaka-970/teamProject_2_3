@@ -196,6 +196,9 @@
     <Filter Include="RePlayEngine\Scripting\Core">
       <UniqueIdentifier>{720da499-b8cf-4bc1-8bda-d02a2e21c97f}</UniqueIdentifier>
     </Filter>
+    <Filter Include="RePlayEngine\Scripting\CSharp">
+      <UniqueIdentifier>{3f55259d-2f62-4b7e-9ebe-98f4c3ce748d}</UniqueIdentifier>
+    </Filter>
     <Filter Include="RePlayEngine\Scripting\Validation">
       <UniqueIdentifier>{5fb034c2-897c-4771-9dae-f08f03ec0bf6}</UniqueIdentifier>
     </Filter>
@@ -542,6 +545,12 @@
     </ClCompile>
     <ClCompile Include="RePlayEngine\Scripting\Core\ScriptWorld.cpp">
       <Filter>RePlayEngine\Scripting\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpProject.cpp">
+      <Filter>RePlayEngine\Scripting\CSharp</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackend.cpp">
+      <Filter>RePlayEngine\Scripting\CSharp</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Scripting\Validation\ScriptCoreValidation.cpp">
       <Filter>RePlayEngine\Scripting\Validation</Filter>
@@ -1072,6 +1081,12 @@
     </ClInclude>
     <ClInclude Include="RePlayEngine\Scripting\Core\ScriptWorld.h">
       <Filter>RePlayEngine\Scripting\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Scripting\CSharp\CSharpProject.h">
+      <Filter>RePlayEngine\Scripting\CSharp</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackend.h">
+      <Filter>RePlayEngine\Scripting\CSharp</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Scripting\Validation\ScriptCoreValidation.h">
       <Filter>RePlayEngine\Scripting\Validation</Filter>

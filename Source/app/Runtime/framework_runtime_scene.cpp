@@ -33,6 +33,8 @@
 
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
 #include "../../RePlayEngine/Runtime/Behaviour/BehaviourRegistry.h"
+#include "../../RePlayEngine/Scripting/CSharp/CSharpProject.h"
+#include "../../RePlayEngine/Scripting/CSharp/CSharpScriptBackend.h"
 #include "../../RePlayEngine/Scene/Serialization/PrefabSerializer.h"
 #include "../../RePlayEngine/Scene/Serialization/SceneData.h"
 
@@ -140,9 +142,12 @@ void framework::initialize_runtime_services()
         object_runtime_scenes.ActiveWorld());
     object_scene_flow = std::make_unique<RRuntime::SceneFlowService>(object_runtime_scenes);
 
-    // スクリプト機構。Backend を挿すのは Phase 2 以降。
-    // ここでは基盤だけ立ち上げ、World の入れ替えへ接続する。
+    // スクリプト機構。GameObject 側の実体は常に ScriptComponent。
+    // C# Backend は managed instance だけを持ち、Runtime API は Handle 経由で触る。
     object_script_runtime = std::make_unique<ReplayEngine::Scripting::ScriptRuntime>();
+    object_script_runtime->InstallBackend(
+        std::make_unique<ReplayEngine::Scripting::CSharp::CSharpScriptBackend>(
+            std::filesystem::current_path()));
     object_script_runtime->Initialize();
 
     object_runtime_scenes.SetRuntimeContext(object_runtime_context.get());
@@ -165,6 +170,8 @@ void framework::initialize_runtime_services()
     // Play セッションはまだ無いので、Inspector の表示だけが動く。
     // インスタンスの生成は PlaySessionActive() が false のあいだ起きない。
     object_scene.Services().SetScripts(object_script_runtime.get());
+
+    refresh_csharp_scripts();
 
     object_bound_world_instance = object_runtime_scenes.ActiveWorldID();
 }

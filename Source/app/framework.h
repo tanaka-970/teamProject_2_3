@@ -1003,6 +1003,15 @@ private:
     // Default Controlled Character Prefab の現在の解決結果。
     ReplayEngine::Project::PrefabReferenceStatus resolve_default_character_prefab() const;
 
+    bool refresh_csharp_scripts();
+    bool build_and_reload_csharp_scripts();
+    bool create_csharp_behaviour_asset();
+    bool open_selected_csharp_asset(int line = 0);
+    void snapshot_csharp_script_write_times();
+    void poll_csharp_script_changes(float elapsed_time);
+    void push_editor_log(std::string severity, std::string message,
+        std::filesystem::path file = {}, int line = 0, int column = 0);
+
     // --- 衝突 (Source/app/Runtime/framework_collision_world.cpp) ------------
     // Scene の切り替えと Play / Edit の切り替えに合わせて衝突世界をつなぎ替える。
     void initialize_collision_world();
@@ -1124,6 +1133,12 @@ private:
     int asset_type_filter{ 0 };
     std::string selected_asset_guid;
     bool asset_drop_add_collider{ false };
+    char new_csharp_behaviour_name[128]{ "NewBehaviour" };
+    char new_csharp_namespace[128]{ "Game" };
+    bool csharp_scripts_dirty{ false };
+    float csharp_scan_accumulator{ 0.0f };
+    std::unordered_map<std::string, std::filesystem::file_time_type>
+        csharp_source_write_times;
     char new_material_name[128]{ "NewMaterial" };
     ReplayEngine::Rendering::MaterialAsset material_editor_asset;
     std::string material_editor_guid;
@@ -1164,6 +1179,16 @@ private:
     char editor_search_text[256]{};
     char editor_command_text[256]{};
     std::string editor_command_result{ "help でコマンド一覧を表示" };
+    struct editor_log_entry
+    {
+        std::string severity;
+        std::string message;
+        std::filesystem::path file;
+        int line = 0;
+        int column = 0;
+    };
+    std::vector<editor_log_entry> editor_log_entries;
+    int selected_editor_log_index{ -1 };
     bool viewport_drag_selecting{ false };
     POINT viewport_drag_start{};
 };

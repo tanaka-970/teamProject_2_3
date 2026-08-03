@@ -275,7 +275,7 @@ namespace ReplayEngine::Scripting::CSharp
         bool ExtractReplayGuid(const std::string& text, std::string& out)
         {
             const std::regex expression(
-                R"(\[\s*(?:ReplayEngine\.)?ReplayGuid\s*\(\s*"([0-9a-fA-F\-\{\}]{32,38})"\s*\)\s*\])");
+                R"rgx(\[\s*(?:ReplayEngine\.)?ReplayGuid\s*\(\s*"([0-9a-fA-F\-\{\}]{32,38})"\s*\)\s*\])rgx");
             std::smatch match;
             if (!std::regex_search(text, match, expression)) return false;
             Reflection::TypeGUID parsed;

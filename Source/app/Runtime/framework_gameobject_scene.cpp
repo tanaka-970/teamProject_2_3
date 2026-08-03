@@ -316,6 +316,7 @@ void framework::update_object_scene(float elapsed_time)
     // SceneTransitionBehaviour が OnTriggerEnter で出した要求も、
     // 次のフレームのこの位置で初めて実際の切り替えになる。
     tick_runtime_scene_flow();
+    poll_csharp_script_changes(elapsed_time);
 
     // スクリプトの同期点。
     //

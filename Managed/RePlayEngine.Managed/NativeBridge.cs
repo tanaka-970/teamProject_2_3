@@ -98,22 +98,44 @@ public static unsafe class NativeBridge
                 return Fail("Managed instances are still alive. Stop Play or destroy instances before Assembly Reload.", output, outputCapacity);
             }
 
-            UnloadScriptContext();
-            Types.Clear();
-
-            var context = new AssemblyLoadContext("RePlayEngine.CSharpScripts", isCollectible: true);
-            var assembly = context.LoadFromAssemblyPath(path);
-            foreach (var type in DiscoverBehaviourTypes(assembly))
+            var context = new ScriptLoadContext();
+            Assembly? assembly = null;
+            Dictionary<TypeGuid, Type>? discovered = null;
+            try
             {
-                var guid = ReadGuid(type);
-                if (guid.HasValue)
+                assembly = context.LoadFromAssemblyPath(path);
+                discovered = new Dictionary<TypeGuid, Type>();
+                foreach (var type in DiscoverBehaviourTypes(assembly))
                 {
-                    Types[guid.Value] = type;
+                    var guid = ReadGuid(type);
+                    if (guid.HasValue)
+                    {
+                        discovered[guid.Value] = type;
+                    }
                 }
+            }
+            catch
+            {
+                context.Unload();
+                throw;
+            }
+
+            var oldContext = scriptContext;
+            Types.Clear();
+            foreach (var pair in discovered)
+            {
+                Types[pair.Key] = pair.Value;
             }
 
             scriptContext = context;
             scriptAssembly = assembly;
+            if (oldContext != null)
+            {
+                oldContext.Unload();
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+            }
             WriteUtf8($"Loaded {Types.Count} C# Behaviour type(s).", output, outputCapacity);
             ClearLastError();
             return 1;
@@ -402,6 +424,24 @@ public static unsafe class NativeBridge
             !type.IsAbstract &&
             typeof(ScriptBehaviour).IsAssignableFrom(type) &&
             type.GetCustomAttribute<ReplayGuidAttribute>() != null);
+    }
+
+    private sealed class ScriptLoadContext : AssemblyLoadContext
+    {
+        public ScriptLoadContext()
+            : base("RePlayEngine.CSharpScripts", isCollectible: true)
+        {
+        }
+
+        protected override Assembly? Load(AssemblyName assemblyName)
+        {
+            if (assemblyName.Name == typeof(ScriptBehaviour).Assembly.GetName().Name)
+            {
+                return typeof(ScriptBehaviour).Assembly;
+            }
+
+            return null;
+        }
     }
 
     private static TypeGuid? ReadGuid(Type type)

@@ -3,6 +3,8 @@
 #include "../../RePlayEngine/Components/Gameplay/PlayerControllerComponent.h"
 #include "../../RePlayEngine/Components/Gameplay/PlayerInputComponent.h"
 #include "../../RePlayEngine/Editor/Style/EditorStyle.h"
+#include "../../RePlayEngine/Scripting/CSharp/CSharpProject.h"
+#include "../../RePlayEngine/Scripting/CSharp/CSharpScriptBackend.h"
 #include "../../RePlayEngine/Scene/Serialization/SceneData.h"
 #include "../../RePlayEngine/Scene/Serialization/SceneSerializer.h"
 #include "shader.h"
@@ -698,6 +700,230 @@ void framework::draw_scene_hierarchy()
     ImGui::End();
 }
 
+void framework::push_editor_log(std::string severity, std::string message,
+    std::filesystem::path file, int line, int column)
+{
+    editor_log_entry entry;
+    entry.severity = std::move(severity);
+    entry.message = std::move(message);
+    entry.file = std::move(file);
+    entry.line = line;
+    entry.column = column;
+    editor_log_entries.push_back(std::move(entry));
+    if (editor_log_entries.size() > 500)
+    {
+        editor_log_entries.erase(editor_log_entries.begin());
+        if (selected_editor_log_index > 0) --selected_editor_log_index;
+    }
+}
+
+void framework::snapshot_csharp_script_write_times()
+{
+    namespace CSharp = ReplayEngine::Scripting::CSharp;
+
+    csharp_source_write_times.clear();
+    for (const CSharp::CSharpBehaviourInfo& info :
+        CSharp::CSharpProject::DiscoverBehaviours(std::filesystem::current_path()))
+    {
+        std::error_code error;
+        const std::filesystem::file_time_type time =
+            std::filesystem::last_write_time(info.source_path, error);
+        if (error) continue;
+        csharp_source_write_times[info.source_path.generic_u8string()] = time;
+    }
+    csharp_scripts_dirty = false;
+}
+
+void framework::poll_csharp_script_changes(float elapsed_time)
+{
+    namespace CSharp = ReplayEngine::Scripting::CSharp;
+
+    csharp_scan_accumulator += elapsed_time;
+    if (csharp_scan_accumulator < 1.0f) return;
+    csharp_scan_accumulator = 0.0f;
+
+    for (const CSharp::CSharpBehaviourInfo& info :
+        CSharp::CSharpProject::DiscoverBehaviours(std::filesystem::current_path()))
+    {
+        std::error_code error;
+        const std::filesystem::file_time_type time =
+            std::filesystem::last_write_time(info.source_path, error);
+        if (error) continue;
+
+        const std::string key = info.source_path.generic_u8string();
+        const auto found = csharp_source_write_times.find(key);
+        if (found == csharp_source_write_times.end())
+        {
+            csharp_source_write_times[key] = time;
+            csharp_scripts_dirty = true;
+            push_editor_log("Info", "C# source detected: " + key, info.source_path);
+            continue;
+        }
+
+        if (found->second != time)
+        {
+            found->second = time;
+            csharp_scripts_dirty = true;
+            push_editor_log("Info", "C# source changed: " + key, info.source_path);
+        }
+    }
+}
+
+bool framework::refresh_csharp_scripts()
+{
+    namespace CSharp = ReplayEngine::Scripting::CSharp;
+    namespace Scripting = ReplayEngine::Scripting;
+
+    initialize_runtime_services();
+    if (!object_script_runtime)
+    {
+        push_editor_log("Error", "ScriptRuntime is not initialized.");
+        return false;
+    }
+
+    std::string error;
+    if (!CSharp::CSharpProject::RefreshCatalog(std::filesystem::current_path(),
+        asset_database, object_script_runtime->Catalog(), error))
+    {
+        editor_command_result = "C# Catalog 更新失敗: " + error;
+        push_editor_log("Error", editor_command_result);
+        return false;
+    }
+
+    for (const Scripting::ScriptTypeDescriptor& descriptor :
+        object_script_runtime->Catalog().All())
+    {
+        if (descriptor.language != Scripting::ScriptLanguage::CSharp) continue;
+        object_script_runtime->RequestSchemaReload(descriptor.type_id);
+    }
+
+    snapshot_csharp_script_write_times();
+    editor_command_result = "C# Catalog を更新しました";
+    push_editor_log("Info", editor_command_result);
+    return true;
+}
+
+bool framework::build_and_reload_csharp_scripts()
+{
+    namespace CSharp = ReplayEngine::Scripting::CSharp;
+    namespace Scripting = ReplayEngine::Scripting;
+
+    initialize_runtime_services();
+    if (!object_script_runtime)
+    {
+        push_editor_log("Error", "ScriptRuntime is not initialized.");
+        return false;
+    }
+
+    auto* backend = dynamic_cast<CSharp::CSharpScriptBackend*>(
+        object_script_runtime->Backend(Scripting::ScriptLanguage::CSharp));
+    if (backend == nullptr)
+    {
+        editor_command_result = "C# Backend が接続されていません";
+        push_editor_log("Error", editor_command_result);
+        return false;
+    }
+
+    CSharp::CSharpBuildResult build;
+    const bool reloaded = backend->CompileAndReload(&build);
+    for (const CSharp::CSharpDiagnostic& diagnostic : build.diagnostics)
+    {
+        std::string severity = "Info";
+        if (diagnostic.severity == CSharp::CSharpDiagnostic::Severity::Warning)
+            severity = "Warning";
+        else if (diagnostic.severity == CSharp::CSharpDiagnostic::Severity::Error)
+            severity = "Error";
+
+        push_editor_log(severity,
+            diagnostic.code + ": " + diagnostic.message,
+            diagnostic.file, diagnostic.line, diagnostic.column);
+    }
+
+    if (!reloaded)
+    {
+        editor_command_result =
+            "C# Compile/Reload 失敗。直前に成功した Assembly は維持しています。";
+        if (build.diagnostics.empty() && !build.output_text.empty())
+        {
+            push_editor_log("Error", build.output_text);
+        }
+        return false;
+    }
+
+    refresh_csharp_scripts();
+    editor_command_result = "C# Compile/Reload 成功: " +
+        build.output_assembly.generic_u8string();
+    push_editor_log("Info", editor_command_result, build.output_assembly);
+    csharp_scripts_dirty = false;
+    return true;
+}
+
+bool framework::create_csharp_behaviour_asset()
+{
+    namespace CSharp = ReplayEngine::Scripting::CSharp;
+
+    CSharp::CSharpBehaviourInfo info;
+    std::string error;
+    if (!CSharp::CSharpProject::CreateBehaviour(std::filesystem::current_path(),
+        new_csharp_behaviour_name, new_csharp_namespace, info, error))
+    {
+        editor_command_result = "C# Behaviour 作成失敗: " + error;
+        push_editor_log("Error", editor_command_result);
+        return false;
+    }
+
+    const ReplayEngine::Assets::AssetRecord& record =
+        asset_database.Register(info.source_path, ReplayEngine::Assets::AssetKind::Script);
+    selected_asset_guid = record.guid;
+    if (!asset_database.Save(error))
+    {
+        push_editor_log("Warning", "C# script asset registration could not be saved: " + error,
+            info.source_path);
+    }
+
+    refresh_csharp_scripts();
+
+    std::string open_error;
+    if (!CSharp::CSharpProject::OpenVisualStudio(info.source_path, 1, open_error))
+    {
+        push_editor_log("Warning", open_error, info.source_path);
+    }
+
+    editor_command_result = "C# Behaviour を作成しました: " +
+        info.source_path.generic_u8string();
+    push_editor_log("Info", editor_command_result, info.source_path, 1);
+    return true;
+}
+
+bool framework::open_selected_csharp_asset(int line)
+{
+    namespace CSharp = ReplayEngine::Scripting::CSharp;
+
+    const ReplayEngine::Assets::AssetRecord* selected_asset =
+        selected_asset_guid.empty() ? nullptr : asset_database.FindByGuid(selected_asset_guid);
+    if (selected_asset == nullptr ||
+        selected_asset->kind != ReplayEngine::Assets::AssetKind::Script ||
+        selected_asset->source_path.extension() != ".cs")
+    {
+        editor_command_result = "C# script asset が選択されていません";
+        push_editor_log("Warning", editor_command_result);
+        return false;
+    }
+
+    std::string error;
+    if (!CSharp::CSharpProject::OpenVisualStudio(selected_asset->source_path, line, error))
+    {
+        editor_command_result = error;
+        push_editor_log("Error", error, selected_asset->source_path, line);
+        return false;
+    }
+
+    editor_command_result = "Visual Studio で開きました: " +
+        selected_asset->source_path.generic_u8string();
+    push_editor_log("Info", editor_command_result, selected_asset->source_path, line);
+    return true;
+}
+
 void framework::draw_project_panel()
 {
     ImGui::Begin("プロジェクト");
@@ -710,6 +936,40 @@ void framework::draw_project_panel()
         ImGui::SameLine();
         if (ImGui::Button("Prefabとして保存...")) save_selected_prefab(true);
         ImGui::TextDisabled("%s", object_editor_context.Status().c_str());
+        ImGui::Separator();
+    }
+
+    if (ImGui::CollapsingHeader("C# Scripts", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        namespace CSharp = ReplayEngine::Scripting::CSharp;
+
+        ImGui::SetNextItemWidth(180.0f);
+        ImGui::InputTextWithHint("##NewCSharpBehaviourName", "Class name",
+            new_csharp_behaviour_name, IM_ARRAYSIZE(new_csharp_behaviour_name));
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(160.0f);
+        ImGui::InputTextWithHint("##NewCSharpNamespace", "Namespace",
+            new_csharp_namespace, IM_ARRAYSIZE(new_csharp_namespace));
+        ImGui::SameLine();
+        if (ImGui::Button("New C# Behaviour")) create_csharp_behaviour_asset();
+
+        if (ImGui::Button("Refresh C# Catalog")) refresh_csharp_scripts();
+        ImGui::SameLine();
+        if (ImGui::Button("Build && Reload C#")) build_and_reload_csharp_scripts();
+        ImGui::SameLine();
+        if (ImGui::Button("Open Selected .cs")) open_selected_csharp_asset();
+        if (csharp_scripts_dirty)
+        {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1.0f, 0.74f, 0.28f, 1.0f),
+                "変更検出済み");
+        }
+        ImGui::TextDisabled("%s",
+            CSharp::CSharpProject::GameScriptsProjectPath(
+                std::filesystem::current_path()).generic_u8string().c_str());
+        ImGui::TextDisabled("%s",
+            CSharp::CSharpProject::GameScriptsSolutionPath(
+                std::filesystem::current_path()).generic_u8string().c_str());
         ImGui::Separator();
     }
 
@@ -741,7 +1001,7 @@ void framework::draw_project_panel()
     ImGui::InputTextWithHint("##AssetSearch", "Search assets...",
         asset_search_text, IM_ARRAYSIZE(asset_search_text));
     ImGui::SameLine();
-    const char* asset_filters[] = { "All", "Model", "Prefab", "Scene", "Material", "Other" };
+    const char* asset_filters[] = { "All", "Model", "Prefab", "Scene", "Material", "Script", "Other" };
     ImGui::SetNextItemWidth(140.0f);
     ImGui::Combo("##AssetTypeFilter", &asset_type_filter,
         asset_filters, IM_ARRAYSIZE(asset_filters));
@@ -757,7 +1017,7 @@ void framework::draw_project_panel()
         for (const auto& asset : asset_database.Records())
         {
             const std::string extension = asset.source_path.extension().u8string();
-            int type = 5;
+            int type = 6;
             const char* icon = "[ASSET]";
             if (asset.kind == ReplayEngine::Assets::AssetKind::Model)
             {
@@ -778,6 +1038,12 @@ void framework::draw_project_panel()
             {
                 type = 4;
                 icon = "[MAT]";
+            }
+            else if (asset.kind == ReplayEngine::Assets::AssetKind::Script ||
+                extension == ".cs")
+            {
+                type = 5;
+                icon = "[CS]";
             }
             if (asset_type_filter != 0 && asset_type_filter != type) continue;
 
@@ -805,6 +1071,9 @@ void framework::draw_project_panel()
                 if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && !missing &&
                     (type == 1 || type == 2 || type == 4))
                     place_asset_in_object_scene(asset, asset_drop_add_collider);
+                else if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && !missing &&
+                    type == 5)
+                    open_selected_csharp_asset();
             }
             if (missing) ImGui::PopStyleColor();
             if (ImGui::IsItemHovered())
@@ -831,6 +1100,13 @@ void framework::draw_project_panel()
         place_asset_in_object_scene(*selected_asset, asset_drop_add_collider);
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("Colliderは左の設定が有効な場合だけ明示的に追加します");
+    if (selected_asset != nullptr &&
+        (selected_asset->kind == ReplayEngine::Assets::AssetKind::Script ||
+            selected_asset->source_path.extension() == ".cs"))
+    {
+        ImGui::SameLine();
+        if (ImGui::Button("Visual Studioで開く")) open_selected_csharp_asset();
+    }
     draw_material_asset_editor();
     ImGui::Separator();
     ImGui::TextDisabled("現在のシーンが読み込んでいる素材");
@@ -853,6 +1129,53 @@ void framework::draw_console_panel()
         ImGui::SetKeyboardFocusHere(-1);
     }
     ImGui::TextWrapped("%s", editor_command_result.c_str());
+    ImGui::Separator();
+    if (ImGui::Button("Clear Logs"))
+    {
+        editor_log_entries.clear();
+        selected_editor_log_index = -1;
+    }
+    ImGui::SameLine();
+    ImGui::Text("Editor Logs: %zu", editor_log_entries.size());
+    if (ImGui::BeginChild("EditorLogEntries", ImVec2(0.0f, 150.0f), true))
+    {
+        for (int index = 0; index < static_cast<int>(editor_log_entries.size()); ++index)
+        {
+            const editor_log_entry& entry = editor_log_entries[index];
+            ImVec4 color{ 0.78f, 0.82f, 0.90f, 1.0f };
+            if (entry.severity == "Error") color = { 1.0f, 0.43f, 0.38f, 1.0f };
+            else if (entry.severity == "Warning") color = { 1.0f, 0.74f, 0.28f, 1.0f };
+            else if (entry.severity == "Info") color = { 0.56f, 0.84f, 1.0f, 1.0f };
+
+            std::string label = "[" + entry.severity + "] " + entry.message;
+            if (!entry.file.empty())
+            {
+                label += " (" + entry.file.filename().generic_u8string();
+                if (entry.line > 0) label += ":" + std::to_string(entry.line);
+                label += ")";
+            }
+
+            ImGui::PushStyleColor(ImGuiCol_Text, color);
+            const bool selected = selected_editor_log_index == index;
+            if (ImGui::Selectable(label.c_str(), selected))
+            {
+                selected_editor_log_index = index;
+                if (!entry.file.empty())
+                {
+                    std::string error;
+                    ReplayEngine::Scripting::CSharp::CSharpProject::OpenVisualStudio(
+                        entry.file, entry.line, error);
+                    if (!error.empty()) editor_command_result = error;
+                }
+            }
+            ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered() && !entry.file.empty())
+            {
+                ImGui::SetTooltip("%s", entry.file.generic_u8string().c_str());
+            }
+        }
+    }
+    ImGui::EndChild();
     ImGui::Separator();
     ImGui::TextColored({ 0.45f, 0.85f, 0.55f, 1.0f }, "[正常] RePlayランタイム動作中");
     ImGui::Text("現在のモード: %s", edit_mode_active ? "編集（ゲーム停止）" : "プレイ（WASD有効）");
