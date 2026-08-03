@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("RePlayGameScripts")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+1cce251f361cb63af2a8db35f60aab2a29a8ad71")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ebcf0c5feba5f8daea9ec8447eb8f7c783d8bfc5")]
 [assembly: System.Reflection.AssemblyProductAttribute("RePlayGameScripts")]
 [assembly: System.Reflection.AssemblyTitleAttribute("RePlayGameScripts")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
