@@ -54,8 +54,14 @@ namespace ReplayEngine::Components
 
         // ---- 移動要求（外から呼ぶ API）--------------------------------------
 
-        // ワールド空間の水平移動方向。長さ 0〜1。次の FixedUpdate で消費される。
+        // ワールド空間の水平移動方向。長さは方向としてだけ扱い、正規化して使う。
+        // 次の FixedUpdate で消費される。
         void Move(const DirectX::XMFLOAT3& world_direction) noexcept;
+
+        // 方向と速度倍率を分けて渡す版。
+        // speed_multiplier は move_speed に対する倍率で、Dash や AI の速度補正に使う。
+        void Move(const DirectX::XMFLOAT3& world_direction,
+            float speed_multiplier) noexcept;
 
         // ジャンプ要求。次の FixedUpdate で 1 回だけ消費される。
         // 可変フレームで複数回呼ばれても 1 回にまとまり、
@@ -194,6 +200,7 @@ namespace ReplayEngine::Components
         DirectX::XMFLOAT3 velocity_{ 0.0f, 0.0f, 0.0f };
         DirectX::XMFLOAT3 ground_normal_{ 0.0f, 1.0f, 0.0f };
         DirectX::XMFLOAT3 pending_move_{ 0.0f, 0.0f, 0.0f };
+        float pending_speed_multiplier_ = 1.0f;
         DirectX::XMFLOAT3 last_move_direction_{ 0.0f, 0.0f, 0.0f };
         Scene::CollisionSourceInfo last_ground_source_;
         Scene::CollisionSourceInfo last_wall_source_;

@@ -7,6 +7,8 @@
 #include <cstddef>
 #include <string>
 
+namespace ReplayEngine::Runtime { class RuntimeContext; }
+
 namespace ReplayEngine::Scripting
 {
     // 型の読み込み結果。
@@ -79,6 +81,11 @@ namespace ReplayEngine::Scripting
         virtual bool Initialize() = 0;
         virtual void Shutdown() = 0;
         virtual bool Initialized() const noexcept = 0;
+
+        // Active World の Runtime API 入口。Backend の内部だけが使う。
+        // C# へは ObjectHandle / ComponentHandle の値だけを渡し、このポインタを
+        // managed 境界へ出してはいけない。
+        virtual void BindRuntimeContext(Runtime::RuntimeContext* /*context*/) noexcept {}
 
         // ---- 型 --------------------------------------------------------------
 

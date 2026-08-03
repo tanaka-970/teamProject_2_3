@@ -701,6 +701,22 @@ namespace ReplayEngine::Core
             PropertyRegistry::Register<CameraTargetComponent>(
                 MakeProperty("priority", &CameraTargetComponent::priority)
                     .Display("優先度").Range(-100.0, 100.0).Step(1.0));
+
+            PropertyRegistry::Register<CameraTargetComponent>(
+                MakeProperty("field_of_view_degrees",
+                    &CameraTargetComponent::field_of_view_degrees)
+                    .Display("視野角 (度)").Range(1.0, 179.0).Step(0.5)
+                    .Tooltip("この Target が選ばれたときの Runtime Camera の視野角。"));
+
+            PropertyRegistry::Register<CameraTargetComponent>(
+                MakeProperty("near_clip", &CameraTargetComponent::near_clip)
+                    .Display("Near Clip").Range(0.001, 10.0).Step(0.01)
+                    .Tooltip("この Target が選ばれたときの Runtime Camera の Near Clip。"));
+
+            PropertyRegistry::Register<CameraTargetComponent>(
+                MakeProperty("far_clip", &CameraTargetComponent::far_clip)
+                    .Display("Far Clip").Range(10.0, 100000.0).Step(10.0)
+                    .Tooltip("この Target が選ばれたときの Runtime Camera の Far Clip。"));
         }
 
         void RegisterLights()

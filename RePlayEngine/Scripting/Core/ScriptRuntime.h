@@ -73,7 +73,7 @@ namespace ReplayEngine::Scripting
         // ---- 目録 -------------------------------------------------------------
 
         ScriptTypeCatalog& Catalog() noexcept { return catalog_; }
-        const ScriptTypeCatalog& Catalog() const noexcept { return catalog_; }
+        const ScriptTypeCatalog& Catalog() const noexcept override { return catalog_; }
 
         // 型を目録へ入れ、対応する Backend で読み込んで Schema を作る。
         //

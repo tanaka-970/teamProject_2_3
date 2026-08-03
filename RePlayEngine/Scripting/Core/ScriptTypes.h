@@ -3,6 +3,7 @@
 #include "ScriptLanguage.h"
 #include "../../Core/ObjectID/ObjectID.h"
 #include "../../Core/ObjectID/RuntimeIdentity.h"
+#include "../../Runtime/Handles/RuntimeHandles.h"
 #include "../../Reflection/Registry/TypeGUID.h"
 
 #include <cstdint>
@@ -194,5 +195,7 @@ namespace ReplayEngine::Scripting
         ScriptTypeID type_id;
         Core::ObjectID owner_object;
         Core::ComponentStableID owner_component = Core::invalid_component_stable_id;
+        Runtime::ObjectHandle owner_handle;
+        Runtime::ComponentHandle component_handle;
     };
 }

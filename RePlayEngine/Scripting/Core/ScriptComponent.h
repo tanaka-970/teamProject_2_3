@@ -14,6 +14,7 @@
 namespace ReplayEngine::Scripting
 {
     class IScriptServices;
+    struct ScriptTypeDescriptor;
 
     // GameObject へ Lua / C# のスクリプトを取り付ける Component。
     //
@@ -90,6 +91,10 @@ namespace ReplayEngine::Scripting
         // C# の完全修飾クラス名。Lua では空。
         const std::string& ClassName() const noexcept { return class_name_; }
         void SetClassName(std::string value);
+
+        // Catalog に載っている Script Type をこの Component へ割り当てる。
+        // Add Component から「Rotating Object」などを選んだときの入口。
+        void AssignScriptType(const ScriptTypeDescriptor& descriptor);
 
         // 同一フレーム内の呼び出し順のヒント。
         //

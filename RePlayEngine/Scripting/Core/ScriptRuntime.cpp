@@ -232,6 +232,10 @@ namespace ReplayEngine::Scripting
         // Scene::Clear() が OnRuntimeDestroy を流す直前。
         // 新しいインスタンス生成だけを止める。既存の後始末はこれから走る。
         if (world_) world_->BeginClosing();
+        for (const std::unique_ptr<IScriptBackend>& backend : backends_)
+        {
+            if (backend) backend->BindRuntimeContext(nullptr);
+        }
     }
 
     void ScriptRuntime::OnWorldUnloaded(Scene::Scene& world)
@@ -254,6 +258,10 @@ namespace ReplayEngine::Scripting
         // 自分自身を World へ接続するのもここで行う。
         // framework の毎フレーム処理へ任せると、Start() に間に合わない。
         world.Services().SetScripts(this);
+        for (const std::unique_ptr<IScriptBackend>& backend : backends_)
+        {
+            if (backend) backend->BindRuntimeContext(world.Services().Runtime());
+        }
 
         if (world_)
         {

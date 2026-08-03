@@ -503,44 +503,44 @@ void framework::update_object_camera_follow(float elapsed_time)
 {
     if (game_scene == nullptr) return;
 
-    // 追従対象は「CameraTargetComponent を持つ操作対象 GameObject」。
+    // 追従対象は CameraTargetComponent の選択規則で決める。
     // カメラ側は操作対象の具象型を一切知らない。
     //
     // 解決の材料は次の 4 つだけ。
-    //   controlledObjectId / CameraTargetComponent / Runtime Scene / ObjectID
+    //   controlledObjectId / CameraTargetComponent / priority / Runtime Scene
     // GameObject 名も Prefab 名も見ない。
     const ReplayEngine::Scene::Scene& scene = active_object_scene();
     const ReplayEngine::Core::ObjectID controlled = scene.Services().ControlledObject();
 
-    const ReplayEngine::Core::GameObject* target =
-        controlled.Valid() ? scene.FindGameObjectByID(controlled) : nullptr;
+    const ReplayEngine::Components::CameraTargetSelection selection =
+        ReplayEngine::Components::ResolveCameraTargetSelection(scene, controlled);
 
-    const ReplayEngine::Components::CameraTargetComponent* camera_target = target != nullptr
-        ? target->GetComponent<ReplayEngine::Components::CameraTargetComponent>()
-        : nullptr;
-
-    // 対象が居ない / CameraTarget が外された / 無効化された。
-    // どの場合も追従を止めて自由カメラへ戻す。
-    // 「代わりに別のものを追う」ことはしない。
-    if (target == nullptr || camera_target == nullptr || !camera_target->ActiveInHierarchy())
+    // CameraTarget が 1 つも無い / すべて無効化されている場合だけ自由カメラへ戻す。
+    // controlledObjectId は変更しない。Fallback は CameraTarget の priority による
+    // 視点選択だけで、操作対象の自動変更ではない。
+    if (!selection.Valid())
     {
         game_scene->Gameplay().UpdateFreeCamera(elapsed_time);
         return;
     }
 
     // 追従点は GameObject のワールド位置 + target_offset。
-    const DirectX::XMFLOAT3 world = target->GetTransform().WorldPosition();
+    const DirectX::XMFLOAT3 world = selection.object->GetTransform().WorldPosition();
+    const ReplayEngine::Components::CameraTargetComponent& camera_target = *selection.component;
     const DirectX::XMFLOAT3 anchor{
-        world.x + camera_target->target_offset.x,
-        world.y + camera_target->target_offset.y,
-        world.z + camera_target->target_offset.z };
+        world.x + camera_target.target_offset.x,
+        world.y + camera_target.target_offset.y,
+        world.z + camera_target.target_offset.z };
 
     game_scene->Gameplay().FollowCameraTarget(
         anchor,
-        camera_target->look_at_offset,
-        camera_target->follow_distance,
-        camera_target->follow_height,
-        camera_target->follow_lag,
+        camera_target.look_at_offset,
+        camera_target.follow_distance,
+        camera_target.follow_height,
+        camera_target.follow_lag,
+        camera_target.field_of_view_degrees,
+        camera_target.near_clip,
+        camera_target.far_clip,
         elapsed_time);
 }
 

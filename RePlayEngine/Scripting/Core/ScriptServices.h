@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "ScriptFieldSchema.h"
+#include "ScriptTypeCatalog.h"
 #include "ScriptTypes.h"
 
 #include <string>
@@ -42,6 +43,10 @@ namespace ReplayEngine::Scripting
 
         // Inspector ヘッダーに出す名前（"Rotating Object"）。未登録なら空。
         virtual std::string ResolveDisplayName(ScriptTypeID type) const = 0;
+
+        // Editor の Add Component 一覧に出す Script Type 目録。
+        // ここから見えるのはデータだけで、Backend の実体には触れない。
+        virtual const ScriptTypeCatalog& Catalog() const noexcept = 0;
 
         // ---- Play セッション ------------------------------------------------
 

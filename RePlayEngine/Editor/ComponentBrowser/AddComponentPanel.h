@@ -8,9 +8,9 @@ namespace ReplayEngine::Editor
 
     // Add Component の一覧をポップアップとして描く。
     //
-    // 一覧の中身は ComponentRegistry から取る。
-    // Component 型名をここへ書き並べることはしない。
-    // 新しい Component を登録すれば、そのままこのパネルへ現れる。
+    // 一覧の中身は ComponentRegistry と ScriptTypeCatalog から取る。
+    // Component 型名や Script 名をここへ書き並べることはしない。
+    // 新しい Component / Script Type を登録すれば、そのままこのパネルへ現れる。
     class AddComponentPanel final
     {
     public:

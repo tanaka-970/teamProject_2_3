@@ -4,6 +4,10 @@
 #include "../../Object/GameObject/GameObject.h"
 #include "../../Object/Registry/ComponentRegistry.h"
 #include "../../Runtime/Behaviour/BehaviourRegistry.h"
+#include "../../Scene/Runtime/Scene.h"
+#include "../../Scripting/Core/ScriptComponent.h"
+#include "../../Scripting/Core/ScriptServices.h"
+#include "../../Scripting/Core/ScriptTypeCatalog.h"
 
 #include "imgui/imgui.h"
 
@@ -11,11 +15,13 @@
 #include <cctype>
 #include <cstring>
 #include <string>
+#include <vector>
 
 namespace ReplayEngine::Editor
 {
     using Core::ComponentRegistry;
     using Core::ComponentTypeInfo;
+    namespace Scripting = ReplayEngine::Scripting;
 
     namespace
     {
@@ -38,6 +44,32 @@ namespace ReplayEngine::Editor
             if (lowered_query.empty()) return true;
             return ToLower(info.type_name).find(lowered_query) != std::string::npos ||
                 ToLower(info.DisplayName()).find(lowered_query) != std::string::npos;
+        }
+
+        bool Matches(const Scripting::ScriptTypeDescriptor& script,
+            const std::string& lowered_query)
+        {
+            if (lowered_query.empty()) return true;
+            return ToLower(script.script_name).find(lowered_query) != std::string::npos ||
+                ToLower(script.DisplayName()).find(lowered_query) != std::string::npos ||
+                ToLower(script.class_name).find(lowered_query) != std::string::npos ||
+                ToLower(script.asset_guid).find(lowered_query) != std::string::npos;
+        }
+
+        std::vector<std::string> ScriptCategories(
+            const std::vector<Scripting::ScriptTypeDescriptor>& scripts)
+        {
+            std::vector<std::string> categories;
+            for (const Scripting::ScriptTypeDescriptor& script : scripts)
+            {
+                const std::string category = script.ResolvedCategory();
+                if (std::find(categories.begin(), categories.end(), category) ==
+                    categories.end())
+                {
+                    categories.push_back(category);
+                }
+            }
+            return categories;
         }
     }
 
@@ -74,6 +106,7 @@ namespace ReplayEngine::Editor
         const std::string query = ToLower(std::string(search_text_));
 
         bool added = false;
+        bool any_visible = false;
         for (const std::string& category : ComponentRegistry::Categories())
         {
             // このカテゴリに表示すべき型があるかを先に数える。
@@ -87,6 +120,7 @@ namespace ReplayEngine::Editor
                 ++visible_in_category;
             }
             if (visible_in_category == 0) continue;
+            any_visible = true;
 
             ImGui::TextDisabled("%s", category.c_str());
             ImGui::Separator();
@@ -165,7 +199,95 @@ namespace ReplayEngine::Editor
             ImGui::Spacing();
         }
 
-        if (query.empty() && ComponentRegistry::All().empty())
+        const Scene::Scene* scene = context.GetScene();
+        const Scripting::IScriptServices* scripts =
+            scene != nullptr ? scene->Services().Scripts() : nullptr;
+        const std::vector<Scripting::ScriptTypeDescriptor>* script_types =
+            scripts != nullptr ? &scripts->Catalog().All() : nullptr;
+
+        if (!added && script_types != nullptr && !script_types->empty())
+        {
+            for (const std::string& category : ScriptCategories(*script_types))
+            {
+                int visible_in_category = 0;
+                for (const Scripting::ScriptTypeDescriptor& script : *script_types)
+                {
+                    if (script.ResolvedCategory() != category) continue;
+                    if (!Matches(script, query)) continue;
+                    ++visible_in_category;
+                }
+                if (visible_in_category == 0) continue;
+                any_visible = true;
+
+                ImGui::TextDisabled("%s", category.c_str());
+                ImGui::Separator();
+
+                for (const Scripting::ScriptTypeDescriptor& script : *script_types)
+                {
+                    if (script.ResolvedCategory() != category) continue;
+                    if (!Matches(script, query)) continue;
+
+                    const std::string type_id = script.type_id.ToString();
+                    ImGui::PushID(type_id.c_str());
+                    if (ImGui::Selectable(("  " + script.DisplayName()).c_str()))
+                    {
+                        context.BeginEdit(script.DisplayName() + " を追加");
+                        Core::Component* component =
+                            target.AddComponent(Scripting::ScriptComponent::StaticTypeID());
+                        Scripting::ScriptComponent* script_component = component != nullptr
+                            ? Scripting::ScriptComponent::From(*component)
+                            : nullptr;
+                        if (script_component != nullptr)
+                        {
+                            script_component->AssignScriptType(script);
+                            context.CommitEdit();
+                            context.SetStatus(script.DisplayName() + " を追加しました");
+                            added = true;
+                        }
+                        else
+                        {
+                            context.CancelEdit();
+                            context.SetStatus(script.DisplayName() + " を追加できませんでした");
+                        }
+                        ImGui::CloseCurrentPopup();
+                    }
+
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::BeginTooltip();
+                        ImGui::TextDisabled("Script (%s)", ToString(script.language));
+                        if (!script.script_name.empty())
+                        {
+                            ImGui::TextUnformatted(script.script_name.c_str());
+                        }
+                        if (!script.class_name.empty())
+                        {
+                            ImGui::TextDisabled("Class: %s", script.class_name.c_str());
+                        }
+                        if (!script.asset_guid.empty())
+                        {
+                            ImGui::TextDisabled("Asset: %s", script.asset_guid.c_str());
+                        }
+                        ImGui::TextDisabled("Script Type ID: %s", type_id.c_str());
+                        if (script.status == Scripting::ScriptStatus::Error &&
+                            !script.last_error.empty())
+                        {
+                            ImGui::Separator();
+                            ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.25f, 1.0f),
+                                "%s", script.last_error.c_str());
+                        }
+                        ImGui::EndTooltip();
+                    }
+                    ImGui::PopID();
+
+                    if (added) break;
+                }
+                if (added) break;
+                ImGui::Spacing();
+            }
+        }
+
+        if (query.empty() && !any_visible)
         {
             ImGui::TextDisabled("登録された Component がありません");
         }

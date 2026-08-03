@@ -128,11 +128,18 @@ namespace ReplayEngine::Scripting::Validation
                 auto* script = object.AddComponent<ScriptComponent>();
                 if (script == nullptr) return nullptr;
 
-                script->SetLanguage(language);
-                script->SetScriptAssetGUID(asset_guid);
-                script->SetClassName(class_name);
-                script->RestoreScriptType(type);
-                script->ResolveSchema();
+                if (const ScriptTypeDescriptor* descriptor = runtime->Catalog().Find(type))
+                {
+                    script->AssignScriptType(*descriptor);
+                }
+                else
+                {
+                    script->SetLanguage(language);
+                    script->SetScriptAssetGUID(asset_guid);
+                    script->SetClassName(class_name);
+                    script->RestoreScriptType(type);
+                    script->ResolveSchema();
+                }
                 return script;
             }
 
@@ -207,10 +214,23 @@ namespace ReplayEngine::Scripting::Validation
         check.Expect(fixture.runtime->Catalog().Count() == 2, "目録へ 2 種類が登録される");
         check.Expect(fixture.runtime->Catalog().Find(lua_id) != nullptr,
             "目録から Lua の型を引ける");
+        check.Expect(fixture.runtime->Catalog().All().size() == 2,
+            "目録の Script Type 一覧を列挙できる");
+        check.Expect(fixture.world.Services().Scripts() != nullptr &&
+            fixture.world.Services().Scripts()->Catalog().All().size() == 2,
+            "Editor は SceneServices 経由で Script Type 一覧を読める");
         check.Expect(fixture.runtime->ResolveDisplayName(lua_id) == "Rotating Object",
             "目録の表示名が引ける");
         check.Expect(fixture.runtime->ResolveDisplayName(csharp_id) == "Door Controller",
             "C# の表示名が引ける");
+        const ScriptTypeDescriptor* rotating_descriptor = fixture.runtime->Catalog().Find(lua_id);
+        check.Expect(rotating_descriptor != nullptr &&
+            rotating_descriptor->ResolvedCategory() == "Scripts/Lua",
+            "Lua Script は Add Component 用カテゴリを持つ");
+        const ScriptTypeDescriptor* door_descriptor = fixture.runtime->Catalog().Find(csharp_id);
+        check.Expect(door_descriptor != nullptr &&
+            door_descriptor->ResolvedCategory() == "Scripts/C#",
+            "C# Script は Add Component 用カテゴリを持つ");
 
         // ---- Schema の共有（改訂 2 の要件） -----------------------------------
 
@@ -250,6 +270,13 @@ namespace ReplayEngine::Scripting::Validation
             "同じ ScriptTypeID の 100 インスタンスが同一の PropertyDesc 配列を共有する");
         check.Expect(first_descs != nullptr && first_descs->size() == 2,
             "RotatingObject の Field は 2 個");
+        check.Expect(!shared.empty() && shared.front() != nullptr &&
+            shared.front()->Language() == ScriptLanguage::Lua &&
+            shared.front()->ScriptAssetGUID() == MockScriptTypes::RotatingObjectAssetGUID() &&
+            shared.front()->ClassName().empty() &&
+            shared.front()->ScriptType() == lua_id &&
+            shared.front()->Status() == ScriptStatus::Loaded,
+            "Catalog の Lua Script Type を ScriptComponent へ割り当てられる");
 
         // Schema 実体も共有されていること。
         bool same_schema = true;
@@ -276,6 +303,11 @@ namespace ReplayEngine::Scripting::Validation
                 "DoorController の Field は 2 個");
             check.Expect(door_descs != first_descs,
                 "Script Type が違えば PropertyDesc 配列も別");
+            check.Expect(door->Language() == ScriptLanguage::CSharp &&
+                door->ScriptAssetGUID() == MockScriptTypes::DoorControllerAssetGUID() &&
+                door->ClassName() == MockScriptTypes::DoorControllerClassName() &&
+                door->ScriptType() == csharp_id,
+                "Catalog の C# Script Type を ScriptComponent へ割り当てられる");
 
             const bool has_open_angle = door->Schema() &&
                 door->Schema()->FindField("OpenAngle") != nullptr;

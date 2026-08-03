@@ -27,13 +27,16 @@ public:
     void DrawCameraGUI();
     void ResetGameplay();
     void SetAspect(float aspect);
+    void ApplyCameraSettings(float field_of_view_degrees, float near_clip, float far_clip);
 
     // CameraTargetComponent の設定でカメラを追従させる。
     // 呼び出し側は GameObject のワールド位置と設定値だけを渡す。
     // カメラ側は操作対象の具象型を知らない。
     void FollowCameraTarget(const DirectX::XMFLOAT3& target_position,
         const DirectX::XMFLOAT3& look_at_offset,
-        float distance, float height, float lag, float delta_time);
+        float distance, float height, float lag,
+        float field_of_view_degrees, float near_clip, float far_clip,
+        float delta_time);
 
     // 追従対象が無いときのカメラ。自由移動コントローラーへ委ねる。
     // 「対象が居ないから旧 Player を追う」という経路は存在しない。
@@ -50,7 +53,13 @@ public:
 private:
     // カメラ回転入力（右ドラッグ / IJKL）。
     void UpdateCameraRotationInput(float delta_time);
+    void ApplyDefaultCameraSettings();
+    void RefreshProjection();
 
     Camera               camera;
     FreeCameraController controller;
+    float aspect_ = 16.0f / 9.0f;
+    float camera_field_of_view_degrees_ = 50.0f;
+    float camera_near_clip_ = 0.1f;
+    float camera_far_clip_ = 10000.0f;
 };

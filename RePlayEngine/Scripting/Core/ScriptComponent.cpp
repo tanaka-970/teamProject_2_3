@@ -57,6 +57,41 @@ namespace ReplayEngine::Scripting
         RefreshScriptType();
     }
 
+    void ScriptComponent::AssignScriptType(const ScriptTypeDescriptor& descriptor)
+    {
+        const ScriptTypeID assigned_type = descriptor.type_id.IsValid()
+            ? descriptor.type_id
+            : MakeScriptTypeID(descriptor.language, descriptor.asset_guid,
+                descriptor.class_name);
+
+        const bool changed =
+            language_ != descriptor.language ||
+            asset_guid_ != descriptor.asset_guid ||
+            class_name_ != descriptor.class_name ||
+            script_type_ != assigned_type;
+
+        language_ = descriptor.language;
+        asset_guid_ = descriptor.asset_guid;
+        class_name_ = descriptor.class_name;
+        script_type_ = assigned_type;
+
+        if (changed)
+        {
+            if (schema_ && schema_->TypeID() != script_type_)
+            {
+                BindSchema(ScriptFieldSchemaRef{});
+            }
+            status_ = script_type_.IsValid() ? ScriptStatus::Unresolved
+                : ScriptStatus::Unassigned;
+            last_error_.clear();
+        }
+
+        if (ResolveSchema() && status_ == ScriptStatus::Unresolved)
+        {
+            status_ = HasInstance() ? ScriptStatus::Running : ScriptStatus::Loaded;
+        }
+    }
+
     void ScriptComponent::RestoreScriptType(ScriptTypeID value)
     {
         if (!value.IsValid()) return;
@@ -376,6 +411,16 @@ namespace ReplayEngine::Scripting
         request.type_id = script_type_;
         request.owner_object = Owner() != nullptr ? Owner()->ID() : Core::ObjectID::Invalid();
         request.owner_component = StableID();
+        if (Owner() != nullptr && GetScene() != nullptr)
+        {
+            request.owner_handle.world = GetScene()->WorldInstanceID();
+            request.owner_handle.object = Owner()->ID();
+            request.owner_handle.generation = Owner()->Generation();
+
+            request.component_handle.owner = request.owner_handle;
+            request.component_handle.instance = InstanceID();
+            request.component_handle.type_id = TypeID();
+        }
 
         instance_ = services->CreateInstance(request);
         if (!HasInstance())
