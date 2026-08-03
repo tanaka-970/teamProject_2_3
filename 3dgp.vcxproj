@@ -380,6 +380,7 @@
     <ClCompile Include="RePlayEngine\Runtime\Validation\SceneFlowValidation.cpp" />
     <ClCompile Include="Source\app\Runtime\framework_runtime_scene.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Validation\EditorIntegrationValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Validation\AnimationUndoValidation.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\StressValidation.cpp" />
     <ClCompile Include="Source\app\Runtime\framework_shutdown_regression.cpp" />
 </ItemGroup>
@@ -574,6 +575,7 @@
     <ClInclude Include="Source\game\Behaviours\SceneTransitionBehaviour.h" />
     <ClInclude Include="RePlayEngine\Runtime\Validation\SceneFlowValidation.h" />
     <ClInclude Include="RePlayEngine\Editor\Validation\EditorIntegrationValidation.h" />
+    <ClInclude Include="RePlayEngine\Editor\Validation\AnimationUndoValidation.h" />
     <ClInclude Include="RePlayEngine\Runtime\Validation\StressValidation.h" />
 </ItemGroup>
   <ItemGroup>

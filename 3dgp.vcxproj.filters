@@ -780,6 +780,9 @@
     <ClCompile Include="RePlayEngine\Editor\Validation\EditorIntegrationValidation.cpp">
       <Filter>RePlayEngine\Editor\Validation</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\Validation\AnimationUndoValidation.cpp">
+      <Filter>RePlayEngine\Editor\Validation</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Runtime\Validation\StressValidation.cpp">
       <Filter>RePlayEngine\Runtime\Validation</Filter>
     </ClCompile>
@@ -1329,6 +1332,9 @@
       <Filter>RePlayEngine\Runtime\Validation</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Editor\Validation\EditorIntegrationValidation.h">
+      <Filter>RePlayEngine\Editor\Validation</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\Validation\AnimationUndoValidation.h">
       <Filter>RePlayEngine\Editor\Validation</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Runtime\Validation\StressValidation.h">

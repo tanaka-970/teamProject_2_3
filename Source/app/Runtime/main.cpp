@@ -17,6 +17,7 @@
 #include "../../../RePlayEngine/Components/Rendering/LightComponents.h"
 #include "../../../RePlayEngine/Components/Rendering/MeshRendererComponent.h"
 #include "../../../RePlayEngine/Editor/Core/EditorContext.h"
+#include "../../../RePlayEngine/Editor/Validation/AnimationUndoValidation.h"
 #include "../../../RePlayEngine/Editor/Validation/EditorIntegrationValidation.h"
 #include "../../../RePlayEngine/Editor/Validation/SceneValidator.h"
 #include "../../../RePlayEngine/Landscape/LandscapeCollision.h"
@@ -725,6 +726,17 @@ namespace
             ReplayEngine::Core::RegisterBuiltInComponents();
             Game::RegisterGameBehaviours();
             return Validation::RunStressValidation();
+        }
+
+        // Pre-Scripting Stabilization / Phase A-1。
+        //
+        // Undo / Redo のあとも Scene の実行状態が保たれることを、
+        // Component の更新回数で直接確かめる。
+        // 終了コード帯は 800-859。
+        if (command == "--validate-animation-undo")
+        {
+            ReplayEngine::Core::RegisterBuiltInComponents();
+            return ReplayEngine::Editor::Validation::RunAnimationUndoValidation();
         }
 
         // Script Phase 1。共通スクリプト基盤。
