@@ -339,29 +339,62 @@ void framework::draw_unsaved_object_scene_prompt()
     {
         ImGui::OpenPopup(u8"未保存のシーン");
         object_scene_unsaved_prompt_requested = false;
+        object_unsaved_prompt_open = true;
     }
 
     if (!ImGui::BeginPopupModal(u8"未保存のシーン", nullptr,
-        ImGuiWindowFlags_AlwaysAutoResize)) return;
+        ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        // 開いていたものが閉じられた場合だけ後始末する。
+        //
+        // Esc で閉じると、どのボタンも押されないまま予約だけが残る。
+        // 残したままにすると、次に別の操作を要求したときに
+        // 古い予約（たとえばアプリ終了）が実行されてしまう。
+        // 閉じた = 選ばなかった、として取り消す。
+        if (object_unsaved_prompt_open)
+        {
+            object_unsaved_prompt_open = false;
+            pending_object_scene_action = object_scene_action::none;
+            pending_object_scene_path.clear();
+        }
+        return;
+    }
+
+    // 終了なのか、別のシーンへ移るだけなのかでボタンの意味が変わる。
+    // どちらも「続行」と書くと、押した結果がアプリ終了なのか分からない。
+    const bool exiting = pending_object_scene_action == object_scene_action::exit_application;
+    const char* save_label = exiting ? u8"保存して終了" : u8"保存して続行";
+    const char* discard_label = exiting ? u8"破棄して終了" : u8"破棄して続行";
 
     ImGui::TextUnformatted(u8"現在のシーンには未保存の変更があります。");
     ImGui::TextWrapped(u8"%s", object_editor_context.DisplayTitle().c_str());
     ImGui::Spacing();
-    ImGui::TextUnformatted(u8"保存してから続行しますか？");
+    ImGui::TextUnformatted(exiting
+        ? u8"保存してから終了しますか？"
+        : u8"保存してから続行しますか？");
 
-    if (ImGui::Button(u8"保存して続行", ImVec2(140.0f, 0.0f)))
+    if (ImGui::Button(save_label, ImVec2(140.0f, 0.0f)))
     {
         if (save_object_scene(false))
         {
+            // 終了を確定させてから実行する。
+            // 実行後に Dirty が立て直されても、もう確認へは戻らない。
+            if (exiting) object_exit_confirmed = true;
+            object_unsaved_prompt_open = false;
             ImGui::CloseCurrentPopup();
             execute_pending_object_scene_action();
         }
+        // 保存に失敗した場合は何もしない。
+        // 閉じてしまうと、保存できていないのに終了したように見える。
     }
     ImGui::SameLine();
-    if (ImGui::Button(u8"破棄して続行", ImVec2(140.0f, 0.0f)))
+    if (ImGui::Button(discard_label, ImVec2(140.0f, 0.0f)))
     {
+        // ここは「変更を捨てる」が仕事。編集内容は保存しない。
         discard_object_scene_autosave();
         object_editor_context.ClearDirty();
+        if (exiting) object_exit_confirmed = true;
+        object_unsaved_prompt_open = false;
         ImGui::CloseCurrentPopup();
         execute_pending_object_scene_action();
     }
@@ -370,6 +403,7 @@ void framework::draw_unsaved_object_scene_prompt()
     {
         pending_object_scene_action = object_scene_action::none;
         pending_object_scene_path.clear();
+        object_unsaved_prompt_open = false;
         ImGui::CloseCurrentPopup();
     }
     ImGui::EndPopup();

@@ -17,6 +17,7 @@
 #include "../../../RePlayEngine/Components/Rendering/LightComponents.h"
 #include "../../../RePlayEngine/Components/Rendering/MeshRendererComponent.h"
 #include "../../../RePlayEngine/Editor/Core/EditorContext.h"
+#include "../../../RePlayEngine/Editor/Validation/EditorIntegrationValidation.h"
 #include "../../../RePlayEngine/Editor/Validation/SceneValidator.h"
 #include "../../../RePlayEngine/Landscape/LandscapeCollision.h"
 #include "../../../RePlayEngine/Landscape/LandscapeData.h"
@@ -26,7 +27,10 @@
 #include "../../../RePlayEngine/Rendering/Materials/MaterialAsset.h"
 #include "../../../RePlayEngine/Runtime/Validation/BehaviourValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/HandleValidation.h"
+#include "../../../RePlayEngine/Runtime/Validation/RuntimeSceneValidation.h"
+#include "../../../RePlayEngine/Runtime/Validation/SceneFlowValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/SerializationValidation.h"
+#include "../../../RePlayEngine/Runtime/Validation/StressValidation.h"
 #include "../../game/Behaviours/ValidationBehaviours.h"
 #include "../../../RePlayEngine/Scene/Runtime/Scene.h"
 #include "../../../RePlayEngine/Scene/Serialization/SceneData.h"
@@ -35,6 +39,22 @@
 
 namespace
 {
+    // --game が指定されたら、Startup Scene から Runtime を開始する。
+    //
+    // 既定（引数なし）は Editor 起動。
+    // Editor 起動で Runtime World を有効にすると、編集対象が空の World へ
+    // すり替わり、配置した内容と保存内容が食い違う。
+    bool ParseStartupSceneBoot(const char* command_line)
+    {
+        std::istringstream arguments(command_line != nullptr ? command_line : "");
+        std::string token;
+        while (arguments >> token)
+        {
+            if (token == "--game") return true;
+        }
+        return false;
+    }
+
     std::uint32_t ParseAutomatedSmokeTestFrames(const char* command_line)
     {
         std::istringstream arguments(command_line != nullptr ? command_line : "");
@@ -643,6 +663,52 @@ namespace
             Game::RegisterGameBehaviours();
             return Validation::RunCollisionValidation();
         }
+
+        // Phase 6。Runtime Scene の読み込みと入れ替え。
+        // 検証用の Scene ファイルは Saved/Validation/RuntimeScene/ へ
+        // その場で書き出すため、既存の Scene 原本には触れない。
+        if (command == "--validate-runtime-scene")
+        {
+            ReplayEngine::Core::RegisterBuiltInComponents();
+            Game::RegisterGameBehaviours();
+            return Validation::RunRuntimeSceneValidation();
+        }
+
+        // Phase 7。Scene Flow / Startup Scene / SceneTransitionBehaviour。
+        //
+        // 2 段に分けている理由:
+        //   前半 (460-507) は Engine 側だけで完結する検証。
+        //   後半 (508-519) は Game Module の SceneTransitionBehaviour を触る。
+        //   Engine 側の Validation から Game の型を参照すると
+        //   「Engine が特定のゲームを知っている」依存ができるため、
+        //   呼び分けをここで行う。
+        if (command == "--validate-scene-flow")
+        {
+            ReplayEngine::Core::RegisterBuiltInComponents();
+            Game::RegisterGameBehaviours();
+            const int engine_result = Validation::RunSceneFlowValidation();
+            if (engine_result != 0) return engine_result;
+            return Game::RunSceneTransitionValidation(508);
+        }
+
+        // Phase 8。Editor 統合。
+        //
+        // ImGui の操作そのものは自動化していない。
+        // UI が呼ぶのと同じ内部 API を叩き、データが壊れないことを確かめる。
+        if (command == "--validate-editor-integration")
+        {
+            ReplayEngine::Core::RegisterBuiltInComponents();
+            Game::RegisterGameBehaviours();
+            return ReplayEngine::Editor::Validation::RunEditorIntegrationValidation();
+        }
+
+        // Phase 9。反復と大量データの耐久検査。
+        if (command == "--validate-stress")
+        {
+            ReplayEngine::Core::RegisterBuiltInComponents();
+            Game::RegisterGameBehaviours();
+            return Validation::RunStressValidation();
+        }
         return -1;
     }
 }
@@ -733,6 +799,7 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
     {
 	    framework application(hwnd);
         application.set_automated_smoke_test_frames(automated_smoke_test_frames);
+        if (ParseStartupSceneBoot(cmd_line)) application.request_startup_scene_boot();
 	    SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&application));
 	    exit_code = application.run();
         d3d11_debug = application.acquire_d3d11_debug();

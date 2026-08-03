@@ -18,9 +18,17 @@
 #include "../../RePlayEngine/Object/Registry/BuiltInComponents.h"
 #include "../../RePlayEngine/Project/ProjectSettingsSerializer.h"
 #include "../../RePlayEngine/Rendering/Adapter/SceneRenderCollector.h"
+
+// RuntimeContext.h は EventBus を前方宣言だけしている。
+// Events() の戻り値へ Dispatch() を呼ぶには完全型が要るので、
+// 使う .cpp 側でだけ include する。
+// framework.h や RuntimeContext.h へ広げると、EventBus を使わない
+// 翻訳単位まで巻き込むことになる。
+#include "../../RePlayEngine/Runtime/Events/EventBus.h"
 #include "../../RePlayEngine/Scene/Serialization/PrefabSerializer.h"
 #include "../../RePlayEngine/Scene/Serialization/SceneData.h"
 #include "../../RePlayEngine/Scene/Serialization/SceneSerializer.h"
+#include "../../game/Behaviours/ValidationBehaviours.h"
 
 #include <commdlg.h>
 #include <algorithm>
@@ -97,6 +105,13 @@ void framework::initialize_object_scene()
     // 二重に呼んでも ComponentRegistry が重複を弾くので安全。
     ReplayEngine::Core::RegisterBuiltInComponents();
 
+    // ゲーム側 Behaviour の登録。Engine の型が入ったあとに呼ぶ。
+    //
+    // ここで呼ばないと、Scene に保存された Behaviour が
+    // Editor でも Runtime でも Missing Component になってしまう。
+    // 静的初期化に頼らず明示的に呼ぶので、初期化順序の問題が起きない。
+    Game::RegisterGameBehaviours();
+
     // プロジェクト設定。Scene より先に読む。
     // ただしここで Prefab を配置することはない。設定を持っているだけ。
     load_project_settings();
@@ -133,6 +148,14 @@ void framework::initialize_object_scene()
     // Scene View の編集カメラを、この Scene 用に保存された状態から復元する。
     // 保存が無い / 壊れていても、既定位置になるだけで Scene の読み込みには影響しない。
     load_editor_camera_state();
+
+    // Runtime 側のサービスを組み立てる。
+    // World の所有者はここで確定し、以降 framework が Scene を値で持つことはない。
+    initialize_runtime_services();
+
+    //   Editor として起動している間、編集対象は必ず object_scene。
+    //   Runtime World が有効になるのは Play (F5) か、--game 起動のときだけ。
+    if (object_boot_from_startup_scene) begin_startup_scene();
 }
 
 // ---------------------------------------------------------------------------
@@ -178,14 +201,17 @@ ReplayEngine::Project::PrefabReferenceStatus
     return project_settings.ResolveDefaultCharacterPrefab(asset_database);
 }
 
+// Runtime 中の World は RuntimeSceneService が所有する。
+// ここでは所有せず、そのつど取り直すだけ。
+// 戻り値の参照を呼び出し側が保存しないこと（次の切り替えで実体が変わる）。
 ReplayEngine::Scene::Scene& framework::active_object_scene() noexcept
 {
-    return object_scene_play_mode ? object_scene_runtime : object_scene;
+    return object_runtime_world_active ? object_runtime_scenes.ActiveWorld() : object_scene;
 }
 
 const ReplayEngine::Scene::Scene& framework::active_object_scene() const noexcept
 {
-    return object_scene_play_mode ? object_scene_runtime : object_scene;
+    return object_runtime_world_active ? object_runtime_scenes.ActiveWorld() : object_scene;
 }
 
 // ---------------------------------------------------------------------------
@@ -283,6 +309,26 @@ void framework::update_object_fixed_step(float elapsed_time)
 
 void framework::update_object_scene(float elapsed_time)
 {
+    // Scene 遷移はフレームの先頭で進める。
+    //
+    // ここが「World を入れ替えてよい安全点」。
+    // Update / Trigger の最中に入れ替えると、走査中の配列と実体が同時に消える。
+    // SceneTransitionBehaviour が OnTriggerEnter で出した要求も、
+    // 次のフレームのこの位置で初めて実際の切り替えになる。
+    tick_runtime_scene_flow();
+
+    // Runtime API 側へ時間を渡す。World が入れ替わっても接続は残る。
+    if (object_runtime_context)
+    {
+        ReplayEngine::Runtime::RuntimeTime runtime_time;
+        runtime_time.delta_time = elapsed_time;
+        runtime_time.unscaled_delta_time = elapsed_time;
+        runtime_time.fixed_delta_time = object_fixed_time_step;
+        runtime_time.frame_index = object_runtime_frame_index;
+        object_runtime_context->SetTime(runtime_time);
+    }
+    ++object_runtime_frame_index;
+
     refresh_object_scene_services();
 
     ReplayEngine::Scene::Scene& scene = active_object_scene();
@@ -301,6 +347,16 @@ void framework::update_object_scene(float elapsed_time)
         // FixedUpdate の途中で判定すると、まだ押し戻されていない位置で
         // Enter が出てしまい、次のフレームですぐ Exit になる。
         dispatch_collision_triggers();
+
+        // Behaviour への Collision 配送。Trigger とは経路が完全に分かれている。
+        object_collision_events.Dispatch(scene, object_runtime_frame_index);
+
+        // Behaviour が積んだイベントと遅延生成を、この同期点で流し切る。
+        if (object_runtime_context)
+        {
+            object_runtime_context->Events().Dispatch(&object_runtime_context->Resolver());
+            object_runtime_context->FlushDeferredOperations();
+        }
 
         // Transform が確定してからカメラを動かす。
         update_object_camera_follow(elapsed_time);
@@ -740,6 +796,11 @@ void framework::execute_pending_object_scene_action()
 
 bool framework::confirm_object_scene_close()
 {
+    // ユーザーが既に「保存して終了 / 破棄して終了」を選んでいる。
+    // ここで Dirty を見直すと、確認のあとに何かが Dirty を立て直しただけで
+    // 終了できなくなる。選んだ結果を尊重してそのまま閉じる。
+    if (object_exit_confirmed) return true;
+
     if (!object_editor_context.Dirty()) return true;
     request_object_scene_action(object_scene_action::exit_application);
     return false;
@@ -764,25 +825,63 @@ void framework::enter_object_play_mode()
     // 直接コピーせず SceneData を経由するのは、
     // Scene が生ポインタで結ばれておりコピー不可なため。
     // これにより Play 中の変更が編集 Scene へ戻らないことが構造的に保証される。
+    initialize_runtime_services();
+
+    // 編集 Scene の内容を RuntimeSceneService へ渡す。
+    //
+    // framework が自分で Scene を組み立てて持たない理由:
+    //   持つと Runtime World の所有者が 2 つになる。どちらが本物かが
+    //   場所ごとに変わり、Scene 切り替えのたびに食い違う。
+    //   組み立ても入れ替えもサービス側の 1 経路へ寄せる。
+    //
+    // SceneData を経由するのは Scene がコピー不可なため。
+    // これにより Play 中の変更が編集 Scene へ戻らないことが構造的に保証される。
     SceneSerialization::SceneData snapshot;
     SceneSerialization::CaptureScene(object_scene, snapshot);
 
-    SceneSerialization::SceneLoadReport report;
-    SceneSerialization::ApplySceneData(snapshot, object_scene_runtime, report);
-    object_scene_runtime.Start();
+    // 未保存の Scene には AssetGUID が無い。空のまま渡す。
+    // 空の場合、この World に対する Reload は InvalidRequest になるだけで、
+    // 別の Scene が代わりに読まれることはない。
+    const ReplayEngine::Runtime::SceneRequestResult request =
+        object_runtime_scenes.RequestAdopt(snapshot, object_scene_asset_guid);
+    if (request != ReplayEngine::Runtime::SceneRequestResult::Accepted)
+    {
+        object_editor_context.SetStatus("実行を開始できません（Scene 遷移が進行中です）");
+        return;
+    }
 
-    // 衝突世界を実行用 Scene へ差し替える。
+    // 構築と入れ替えをその場で済ませる。
+    // Play 開始はフレーム境界を挟む必要がないうえ、
+    // ここで済ませないと 1 フレームだけ「Play 中なのに空の World」になる。
+    object_runtime_scenes.Tick();   // Staging World の構築
+    object_runtime_scenes.Tick();   // 入れ替えと Scene::Start()
+
+    if (object_runtime_scenes.State() != ReplayEngine::Runtime::SceneLoadState::Completed)
+    {
+        // 失敗しても編集 Scene には一切触れていない。そのまま Edit Mode を続ける。
+        object_editor_context.SetStatus(
+            "実行用 Scene を構築できませんでした: " + object_runtime_scenes.LastError());
+        return;
+    }
+
+    ReplayEngine::Scene::Scene& runtime_world = object_runtime_scenes.ActiveWorld();
+
+    // 衝突世界を Runtime World へ差し替える。
     // 編集 Scene の ObjectID / ColliderID はここで完全に捨てられるので、
     // Play 中に編集 Scene の Collider へ当たることはない。
-    attach_collision_world(object_scene_runtime);
+    attach_collision_world(runtime_world);
 
     // Play 開始時に貯まっていた時間を捨てる。開始直後に物理が飛ぶのを防ぐ。
     object_fixed_accumulator = 0.0f;
+    object_collision_events.Reset();
 
     object_scene_play_mode = true;
     object_scene_paused = false;
+    object_runtime_world_active = true;
+    object_bound_world_instance = object_runtime_scenes.ActiveWorldID();
     object_editor_context.SetPlayMode(true);
-    object_editor_context.AttachScene(&object_scene_runtime);
+    object_editor_context.AttachScene(&runtime_world);
+    object_editor_context.ResetSceneState();
     object_editor_context.SetStatus("実行中（編集シーンは保持されています）");
 }
 
@@ -795,16 +894,29 @@ void framework::exit_object_play_mode()
     // 破棄済みの GameObject を引きに行ってしまう。
     detach_collision_world();
 
-    // 実行用 Scene を捨てる。編集 Scene には一切触れていないので、
-    // Play 前の状態がそのまま残っている。
-    object_scene_runtime.Clear();
+    // Runtime World を捨てる。
+    //
+    // 編集 Scene へ書き戻すことはしない。
+    // Play 中の変更（生成された Prefab、動いた Transform、増えた Component）は
+    // すべてここで消える。暗黙保存の経路そのものを置かない。
+    object_runtime_scenes.ResetToEmptyWorld();
+    object_collision_events.Reset();
 
     object_fixed_accumulator = 0.0f;
 
     object_scene_play_mode = false;
     object_scene_paused = false;
+    object_runtime_world_active = false;
+    object_bound_world_instance = object_runtime_scenes.ActiveWorldID();
+
+    // 編集 Scene へ戻す。Play 中の Selection と Undo 履歴はここで捨てる。
+    // Runtime の操作が Edit Mode の Undo へ混ざらないのはこのため。
     object_editor_context.SetPlayMode(false);
     object_editor_context.AttachScene(&object_scene);
+    object_editor_context.ResetSceneState();
+
+    // 編集 Scene の衝突世界を張り直す。
+    attach_collision_world(object_scene);
     object_editor_context.SetStatus("編集モードへ戻りました");
 }
 

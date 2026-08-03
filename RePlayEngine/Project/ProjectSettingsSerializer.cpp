@@ -14,6 +14,13 @@ namespace ReplayEngine::Project
         constexpr const char* magic_token = "REPLAY_PROJECT";
     }
 
+    void ProjectSettingsSerializer::ApplySafeDefaults(ProjectSettings& settings) noexcept
+    {
+        // 既定は「何も設定されていない」。
+        // 勝手にどれかの Scene や Prefab を選ぶことはしない。
+        settings.Reset();
+    }
+
     std::filesystem::path ProjectSettingsSerializer::DefaultPath()
     {
         return std::filesystem::path("resources") /
@@ -31,6 +38,11 @@ namespace ReplayEngine::Project
         // 名前やパスをここへ焼き込むと、Prefab の名前を変えた瞬間に食い違う。
         stream << "DEFAULT_CONTROLLED_CHARACTER_PREFAB "
             << std::quoted(settings.DefaultCharacterPrefabGuid()) << '\n';
+
+        // v2 で追加。空 GUID も「未設定」という値として書き出す。
+        // 行ごと省略すると、v1 から移行しただけのファイルと
+        // 「明示的に未設定へ戻したファイル」を区別できなくなる。
+        stream << "STARTUP_SCENE " << std::quoted(settings.StartupSceneGuid()) << '\n';
 
         if (!stream)
         {
@@ -53,12 +65,20 @@ namespace ReplayEngine::Project
             error = "プロジェクト設定ファイルではありません。";
             return false;
         }
-        if (version <= 0 || version > current_version)
+        if (version < minimum_supported_version || version > current_version)
         {
+            // 安全な既定値へ戻してから返す。
+            // 読めなかったファイルの断片が設定として残らないようにする。
+            ApplySafeDefaults(settings);
             error = "このビルドが読めないプロジェクト設定のバージョンです (v" +
                 std::to_string(version) + ")。";
             return false;
         }
+
+        // v1 からの移行:
+        //   v1 には STARTUP_SCENE 行が無い。読み飛ばされるので空のままになり、
+        //   「Startup Scene 未設定」という正しい状態になる。
+        //   移行のために別の値を推測して埋めることはしない。
 
         // 以降は「キーワード + 行の残り」の並び。
         // 未知のキーワードは読み飛ばすので、新しい項目が増えた版で保存された
@@ -77,6 +97,17 @@ namespace ReplayEngine::Project
                 if (value_stream >> std::quoted(guid))
                 {
                     settings.SetDefaultCharacterPrefabGuid(std::move(guid));
+                }
+            }
+            else if (keyword == "STARTUP_SCENE")
+            {
+                // v2 で追加。v1 のファイルにはこの行が無いので、空のままになる。
+                std::istringstream value_stream(line);
+                value_stream.imbue(std::locale::classic());
+                std::string guid;
+                if (value_stream >> std::quoted(guid))
+                {
+                    settings.SetStartupSceneGuid(std::move(guid));
                 }
             }
             // 未知のキーワードはここで捨てる。
@@ -151,8 +182,14 @@ namespace ReplayEngine::Project
         if (!stream)
         {
             error = "プロジェクト設定ファイルを開けません: " + path.generic_string();
+            ApplySafeDefaults(settings);
             return false;
         }
-        return ReadText(settings, stream, error);
+        if (!ReadText(settings, stream, error))
+        {
+            ApplySafeDefaults(settings);
+            return false;
+        }
+        return true;
     }
 }

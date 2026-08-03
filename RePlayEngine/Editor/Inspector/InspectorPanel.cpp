@@ -3,6 +3,7 @@
 #include "PropertyDrawer.h"
 #include "PlayerCompositionValidator.h"
 #include "../../Assets/AssetDatabase.h"
+#include "../../Object/Component/MissingComponent.h"
 #include "../../Object/Registry/ComponentRegistry.h"
 #include "../Core/EditorContext.h"
 #include "../../Object/GameObject/GameObject.h"
@@ -691,12 +692,108 @@ namespace ReplayEngine::Editor
         ImGui::Spacing();
     }
 
+    // 読み込めなかった Component の中身を、そのまま見せる。
+    //
+    // 【なぜ表示するのか】
+    //   MissingComponent は「型が使えないあいだ預かっているだけ」の入れ物で、
+    //   保存し直せば元の型として書き戻される。ここで何も見せないと、
+    //   ユーザーには「Component が消えた」ようにしか見えず、
+    //   まだ生きているデータを手で消してしまう。
+    //
+    // 【触らないもの】
+    //   PropertyBag は読み取り専用で出す。編集欄を作らない。
+    //   型が分からない状態で値を書き換えると、型が戻ったときに解釈できない。
+    //   消えるのはユーザーが明示的に Remove Component を押したときだけ。
+    void InspectorPanel::DrawMissingComponentDetails(const Core::MissingComponent& missing)
+    {
+        const Core::MissingComponent::Record& record = missing.Original();
+
+        ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.25f, 1.0f),
+            u8"この Component の型がこのビルドに存在しません");
+        ImGui::TextDisabled(u8"%s", missing.DescribeReason().c_str());
+
+        ImGui::Separator();
+        ImGui::Text(u8"元の型名: %s", record.type_name.empty()
+            ? u8"(不明)" : record.type_name.c_str());
+        ImGui::Text(u8"Type GUID: %s", record.type_guid.IsValid()
+            ? record.type_guid.ToString().c_str() : u8"(未記録)");
+        ImGui::Text(u8"Module ID: %s", record.module_id.empty()
+            ? u8"(未記録)" : record.module_id.c_str());
+        ImGui::Text(u8"Type Version: %d", record.type_version);
+
+        ImGui::Separator();
+        ImGui::Text(u8"保持しているプロパティ: %zu 件", record.properties.Size());
+
+        if (ImGui::TreeNodeEx(u8"Serialized Property（読み取り専用）",
+            ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            for (const Reflection::PropertyBag::Entry& entry : record.properties.Entries())
+            {
+                // 参照型は「何を指していたか」まで出す。
+                // 型が戻ったときに参照が復元されることを確かめられるようにするため。
+                switch (entry.value.Type())
+                {
+                case Reflection::PropertyType::ObjectReference:
+                    ImGui::BulletText(u8"%s : ObjectReference -> ObjectID %llu",
+                        entry.name.c_str(), static_cast<unsigned long long>(
+                            entry.value.AsObjectReference().Value()));
+                    break;
+                case Reflection::PropertyType::ComponentReference:
+                {
+                    const Reflection::ComponentReference reference =
+                        entry.value.AsComponentReference();
+                    ImGui::BulletText(
+                        u8"%s : ComponentReference -> ObjectID %llu / StableID %u",
+                        entry.name.c_str(),
+                        static_cast<unsigned long long>(reference.owner.Value()),
+                        static_cast<unsigned int>(reference.component));
+                    break;
+                }
+                case Reflection::PropertyType::AssetReference:
+                case Reflection::PropertyType::SceneReference:
+                    ImGui::BulletText(u8"%s : %s -> %s", entry.name.c_str(),
+                        Reflection::ToString(entry.value.Type()),
+                        entry.value.AsString().empty()
+                            ? u8"(未設定)" : entry.value.AsString().c_str());
+                    break;
+                case Reflection::PropertyType::Array:
+                    ImGui::BulletText(u8"%s : Array<%s> × %zu", entry.name.c_str(),
+                        Reflection::ToString(entry.value.ArrayElementType()),
+                        entry.value.ArrayElements().size());
+                    break;
+                case Reflection::PropertyType::String:
+                    ImGui::BulletText(u8"%s : String = \"%s\"", entry.name.c_str(),
+                        entry.value.AsString().c_str());
+                    break;
+                default:
+                    ImGui::BulletText(u8"%s : %s", entry.name.c_str(),
+                        Reflection::ToString(entry.value.Type()));
+                    break;
+                }
+            }
+            if (record.properties.Size() == 0)
+            {
+                ImGui::TextDisabled(u8"（保持しているプロパティはありません）");
+            }
+            ImGui::TreePop();
+        }
+
+        ImGui::TextDisabled(
+            u8"型が使えるようになれば、次に読み込んだ時点で自動的に復元されます。");
+        ImGui::TextDisabled(
+            u8"保存し直しても、この内容は元の型として書き戻されます。");
+    }
+
     void InspectorPanel::DrawComponent(EditorContext& context, Core::Component& component)
     {
         const ComponentTypeInfo* info = ComponentRegistry::Find(component.TypeID());
-        const std::string title = info != nullptr
-            ? info->DisplayName()
-            : std::string("(未登録) ") + component.TypeName();
+        const auto* missing = dynamic_cast<const Core::MissingComponent*>(&component);
+
+        const std::string title = missing != nullptr
+            ? missing->DescribeMissingType()
+            : (info != nullptr
+                ? info->DisplayName()
+                : std::string("(未登録) ") + component.TypeName());
 
         const bool editable = context.CanEdit();
         const bool removable = ComponentRegistry::IsRemovable(component.TypeID());
@@ -724,6 +821,31 @@ namespace ReplayEngine::Editor
         if (!opened) return;
 
         ImGui::Indent();
+
+        if (missing != nullptr)
+        {
+            // 預かっている内容を出すだけ。PropertyRegistry の対象外なので、
+            // 下の通常の描画経路には入れない。
+            DrawMissingComponentDetails(*missing);
+
+            // 削除の導線は通常の Component と同じものを使う。
+            // 「明示的に消すまで残る」ことと「消せる」ことを両立させる。
+            ImGui::Spacing();
+            if (!editable)
+            {
+                ImGui::TextDisabled("実行中は削除できません");
+            }
+            else if (ImGui::Button("この Missing Component を削除"))
+            {
+                pending_removal_ = &component;
+                pending_removal_label_ = title;
+            }
+            ImGui::TextDisabled(
+                u8"削除すると、預かっている内容も一緒に失われます。");
+
+            ImGui::Unindent();
+            return;
+        }
 
         if (Reflection::PropertyRegistry::HasProperties(component.TypeID()))
         {

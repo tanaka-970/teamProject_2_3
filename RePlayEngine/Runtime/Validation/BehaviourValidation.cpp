@@ -235,19 +235,25 @@ namespace ReplayEngine::Runtime::Validation
 
         int destroy_seen = 0;
         int disable_seen = 0;
+        ObjectID doomed_id;
         if (doomed != nullptr)
         {
+            // ID は破棄する前に控える。
+            // 破棄後に doomed_object を読むと解放済みメモリへ触ることになる。
+            doomed_id = doomed_object->ID();
             world.DestroyGameObject(doomed_object);
             world.ProcessPendingOperations();
-            // doomed はここで解放済み。値は破棄前に読めないため、
-            // 破棄後の観測は「Handle が無効になったか」で行う。
+
+            // ここで実体は解放済み。以降このポインタは使わない。
+            doomed_object = nullptr;
+            doomed = nullptr;
             destroy_seen = 1;
             disable_seen = 1;
         }
         check.Expect(destroy_seen == 1 && disable_seen == 1,
             "GameObject の遅延破棄が完了する");
-        check.Expect(world.FindGameObjectByID(ObjectID{ doomed_object->ID() }) == nullptr ||
-            true, "破棄後の検索が落ちない");
+        check.Expect(doomed_id.Valid() && world.FindGameObjectByID(doomed_id) == nullptr,
+            "破棄後は ObjectID で引けなくなる");
 
         // Awake の中で Destroy を要求しても落ちないこと
         {
@@ -912,9 +918,16 @@ namespace ReplayEngine::Runtime::Validation
 
         probe->Destroy();
         probe->Clear();
-        step(13);
+
+        // 予約直後、まだ実体があるうちに配送を試す。
+        // step() を挟むと FixedUpdate の同期点で実体が解放され、
+        // そのあとに probe を読むと解放済みメモリへ触ることになる。
+        dispatcher.Dispatch(world, 13);
         check.Expect(probe->records.empty(), "削除予約済みの Behaviour へは配送しない");
+
+        // ここで probe の実体が解放される。以降このポインタは使わない。
         world.ProcessPendingOperations();
+        probe = nullptr;
 
         // ---- World が入れ替わったら接触状態を捨てる ---------------------------------
 

@@ -60,6 +60,36 @@ namespace ReplayEngine::Runtime
             Core::ObjectID parent, Core::ObjectID& created_root) = 0;
     };
 
+    // Scene 遷移要求の窓口。
+    //
+    // なぜインターフェイスで挟むか:
+    //   実体は SceneFlowService だが、RuntimeContext がそれを直接知ると
+    //   「Runtime API -> Scene Flow -> Runtime Scene Service」という
+    //   下向きの依存が生まれる。Behaviour から見えるのは要求の口だけでよい。
+    //
+    //   接続されていなければ ServiceUnavailable を返す。
+    //   遷移したふりをして何も起きない実装は置かない。
+    //
+    // 【即時に切り替わらないことは仕様】
+    //   ここで受け付けるのは「要求」だけ。実際の World 入れ替えは
+    //   RuntimeSceneService::Tick() の安全点まで起きない。
+    //   OnTrigger の最中に呼んでも、走査中の World が足元で消えることはない。
+    class ISceneFlow
+    {
+    public:
+        virtual ~ISceneFlow() = default;
+
+        virtual RuntimeStatus RequestSceneLoad(const std::string& asset_guid) = 0;
+        virtual RuntimeStatus RequestSceneReload() = 0;
+        virtual RuntimeStatus RequestReturnToPreviousScene() = 0;
+
+        // プロセスを落とさない。要求として記録するだけ。
+        virtual RuntimeStatus RequestQuitApplication(const std::string& reason) = 0;
+
+        virtual bool SceneTransitionInProgress() const = 0;
+        virtual const std::string& CurrentSceneGuid() const = 0;
+    };
+
     // ログの出力先。framework / Editor が実装する。
     class IRuntimeLogSink
     {
@@ -110,8 +140,23 @@ namespace ReplayEngine::Runtime
         void SetLogSink(IRuntimeLogSink* sink) noexcept { log_sink_ = sink; }
         void SetTime(const RuntimeTime& time) noexcept { time_ = time; }
 
+        // World の入れ替えでは切らない。framework が持つ接続なので Rebind でも残す。
+        void SetSceneFlow(ISceneFlow* flow) noexcept { scene_flow_ = flow; }
+
         Scene::Scene& World() const noexcept { return *world_; }
         Core::WorldInstanceID CurrentWorldID() const noexcept;
+
+        // World が入れ替わったときに接続し直す。RuntimeSceneService が呼ぶ。
+        //
+        // 何を捨てるか:
+        //   Event 購読 … 旧 World の Object を指す購読が残ると、
+        //                 配送のたびに解決に失敗し続ける。
+        //   遅延要求   … 旧 World の親 ObjectID を持つ生成要求は意味を失う。
+        //   診断カウンタ… World ごとの統計として読めるよう 0 から数え直す。
+        //
+        // 何を残すか:
+        //   Prefab Instantiator / Log Sink / Time は framework が持つ接続なので残す。
+        void Rebind(Scene::Scene& world);
 
         EventBus& Events() noexcept { return *events_; }
         const EventBus& Events() const noexcept { return *events_; }
@@ -215,6 +260,26 @@ namespace ReplayEngine::Runtime
             return pending_instantiations_.size();
         }
 
+        // ---- Scene 遷移 ----------------------------------------------------------
+        //
+        // どれも要求を出すだけ。戻り値が Ok でも、その場で World は変わらない。
+        // 実際の入れ替えは次の安全点で起きる。
+
+        bool SceneFlowAvailable() const noexcept { return scene_flow_ != nullptr; }
+
+        RuntimeStatus LoadScene(const std::string& asset_guid);
+        RuntimeStatus ReloadCurrentScene();
+        RuntimeStatus ReturnToPreviousScene();
+
+        // アプリケーションの終了要求。ここではプロセスを終了しない。
+        RuntimeStatus QuitApplication(const std::string& reason = std::string());
+
+        // 遷移中か。要求の二重発行を避けたい Behaviour が見る。
+        bool SceneTransitionInProgress() const noexcept;
+
+        // 現在の Runtime Scene の AssetGUID。未接続なら空。
+        const std::string& CurrentSceneGuid() const noexcept;
+
         // ---- Physics ------------------------------------------------------------
         //
         // 既存の安全な問い合わせだけを通す。
@@ -272,6 +337,7 @@ namespace ReplayEngine::Runtime
 
         IPrefabInstantiator* prefab_instantiator_ = nullptr;
         IRuntimeLogSink* log_sink_ = nullptr;
+        ISceneFlow* scene_flow_ = nullptr;
 
         RuntimeTime time_;
         std::vector<PendingInstantiation> pending_instantiations_;
