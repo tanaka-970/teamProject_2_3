@@ -44,6 +44,22 @@ namespace
     // 既定（引数なし）は Editor 起動。
     // Editor 起動で Runtime World を有効にすると、編集対象が空の World へ
     // すり替わり、配置した内容と保存内容が食い違う。
+    // --validate-shutdown : 終了時のリソース解放を確かめる。
+    //
+    // D3D デバイスが要るのでヘッドレス Validation には載せられない。
+    // smoke test と同じ「N フレーム描画して終了」の経路を使い、
+    // 終了後の Live Object Report で合否を見る。
+    bool ParseShutdownRegression(const char* command_line)
+    {
+        std::istringstream arguments(command_line != nullptr ? command_line : "");
+        std::string token;
+        while (arguments >> token)
+        {
+            if (token == "--validate-shutdown") return true;
+        }
+        return false;
+    }
+
     bool ParseStartupSceneBoot(const char* command_line)
     {
         std::istringstream arguments(command_line != nullptr ? command_line : "");
@@ -737,6 +753,7 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
     if (serialization_validation_result >= 0) return serialization_validation_result;
     const std::uint32_t automated_smoke_test_frames =
         ParseAutomatedSmokeTestFrames(cmd_line);
+    const bool shutdown_regression_requested = ParseShutdownRegression(cmd_line);
 
     // WICの画像読み込みはCOMを使うため、エンジンの生存期間中は初期化状態を維持する。
     // シーン切り替え後もWICファクトリを確実に利用できるようにする。
@@ -800,6 +817,14 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
 	    framework application(hwnd);
         application.set_automated_smoke_test_frames(automated_smoke_test_frames);
         if (ParseStartupSceneBoot(cmd_line)) application.request_startup_scene_boot();
+        if (shutdown_regression_requested)
+        {
+            // 数フレーム描画してから終了させる。
+            // 一度も描画せずに終わると、描画経路で作られるリソースを通らない。
+            application.set_automated_smoke_test_frames(
+                automated_smoke_test_frames > 0 ? automated_smoke_test_frames : 60u);
+            application.request_shutdown_regression();
+        }
 	    SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&application));
 	    exit_code = application.run();
         d3d11_debug = application.acquire_d3d11_debug();

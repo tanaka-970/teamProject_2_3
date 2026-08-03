@@ -534,6 +534,21 @@ public:
         object_boot_from_startup_scene = true;
     }
 
+    // 終了時のリソース解放を確かめるための一連の操作を実行する。
+    //
+    // 【Debug 限定にしている理由】
+    //   確かめたいのは D3D Debug Layer が報告する Live Object。
+    //   通常の Release 起動で Debug Layer や ReportLiveDeviceObjects を
+    //   強制的に有効化してしまうと、製品版の動作と実行コストが変わる。
+    //   Release では何もしない空実装にしてある。
+    void run_shutdown_regression_scenario();
+
+    // --validate-shutdown から呼ぶ。終了直前に 1 回だけ実行される。
+    void request_shutdown_regression() noexcept
+    {
+        shutdown_regression_requested = true;
+    }
+
     void set_automated_smoke_test_frames(std::uint32_t frames) noexcept
     {
         automated_smoke_test_frames = frames;
@@ -624,6 +639,11 @@ public:
             }
         }
         log_shutdown_reason("メッセージループを抜けた (WM_QUIT)");
+
+        // 終了処理へ入る直前に検査シナリオを流す。
+        // ここから先は通常の終了経路をそのまま通るので、
+        // 「検査のためだけの特別な解放」は一切挟まらない。
+        if (shutdown_regression_requested) run_shutdown_regression_scenario();
 
 #ifdef USE_IMGUI
         save_editor_session();
@@ -1001,6 +1021,9 @@ private:
 
 private:
     high_resolution_timer tictoc;
+    // 終了時リソース解放の検査を要求されているか。
+    bool shutdown_regression_requested{ false };
+
     std::uint32_t automated_smoke_test_frames{ 0 };
     std::uint32_t automated_smoke_test_frames_rendered{ 0 };
     uint32_t frames{ 0 };

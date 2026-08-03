@@ -66,6 +66,15 @@ namespace ReplayEngine::Rendering
         const GpuCounters& Gpu() const noexcept { return resolved_gpu_; }
         bool Initialized() const noexcept { return initialized_; }
 
+        // Query を明示的に手放す。
+        //
+        // 【なぜ必要か】
+        //   Stats() は関数内 static なので、破棄されるのは main() が返ったあと。
+        //   ID3D11Debug::ReportLiveDeviceObjects はそれより前に走るため、
+        //   ここで解放しないと ID3D11Query が必ず Live Object として残る。
+        //   Device より先に、終了処理の中から呼ぶこと。
+        void Release() noexcept;
+
     private:
         // 3フレーム分あればGetDataが待たされない。
         static constexpr size_t kQueryCount = 3;

@@ -919,6 +919,12 @@ void gltf_model::render(ID3D11DeviceContext* context, const XMFLOAT4X4& world,
             context->VSSetConstantBuffers(
                 6, 1, motion_object_constant_buffer_.GetAddressOf());
 
+            // PS へも同じ Buffer を渡す。
+            // G-Buffer の Pixel Shader が compute_motion_vector() 経由で
+            // b6 の motion_params を読むため、PS も 160 バイトを期待している。
+            context->PSSetConstantBuffers(
+                6, 1, motion_object_constant_buffer_.GetAddressOf());
+
             if (advance_motion_history)
                 previous_primitive_worlds_[motion_primitive_index] = constants.world;
             ++motion_primitive_index;

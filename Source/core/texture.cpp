@@ -20,7 +20,23 @@ using namespace std;
 #include <sstream>
 #include <iomanip>
 
+// Live Object Report へ名前を出すために使う。
+#include <d3d11sdklayers.h>
+
 static map<wstring, ComPtr<ID3D11ShaderResourceView>> resources;
+
+// Debug Build でだけ SRV へ名前を付ける。
+//
+// Live Object Report に名前が出ないと、残った SRV がどのテクスチャなのか、
+// どのキャッシュが握っているのかを追えない。
+// 名前は "TextureCache:<パス>" にして、キャッシュ由来だと一目で分かるようにする。
+// Dummy Texture 用。エンジンが自分で生成した SRV にだけ、生成直後に 1 回だけ呼ぶ。
+//
+// 外部 Loader (DirectXTK) が返した SRV には呼ばないこと。
+// あちらは生成時に自分で名前を付けており、後から別名を設定すると
+// SETPRIVATEDATA_CHANGINGPARAMS の警告になる。
+static void set_dummy_texture_debug_name(ID3D11ShaderResourceView* view, const wstring& key);
+
 struct texture_load_state
 {
 	condition_variable ready;
@@ -77,7 +93,21 @@ HRESULT load_texture_from_file(ID3D11Device* device, const wchar_t* filename, ID
 			loading->result = hr;
 			loading->resource = loaded_view;
 			loading->completed = true;
-			if (SUCCEEDED(hr)) resources[key] = loaded_view;
+			if (SUCCEEDED(hr))
+			{
+				// ここでデバッグ名を付けない。
+				//
+				// この SRV を生成したのは DirectXTK の WIC / DDS Loader で、
+				// 生成側が既に WKPDID_D3DDebugObjectName を設定している。
+				// そこへ長さの違う名前を付け直すと D3D11 が
+				//   SETPRIVATEDATA_CHANGINGPARAMS (STATE_SETTING WARNING #55)
+				// を出す。実際にこの経路で 1 テクスチャにつき 1 件出ていた。
+				//
+				// 名前は「生成した所有者が 1 回だけ決める」方針にする。
+				// 外部 Loader が返した SRV はエンジン側で再命名しない。
+				// 自前で生成する Dummy Texture だけを命名する。
+				resources[key] = loaded_view;
+			}
 			loading_resources.erase(key);
 		}
 		loading->ready.notify_all();
@@ -94,10 +124,45 @@ HRESULT load_texture_from_file(ID3D11Device* device, const wchar_t* filename, ID
 	if (texture2d_desc) texture2d->GetDesc(texture2d_desc);
 	return loaded_view.CopyTo(shader_resource_view);
 }
+static void set_dummy_texture_debug_name(ID3D11ShaderResourceView* view, const wstring& key)
+{
+#if defined(_DEBUG) || defined(DEBUG)
+	if (view == nullptr) return;
+
+	// 既存名の問い合わせによるガードは置かない。
+	//
+	// この SRV は直前の CreateShaderResourceView でエンジンが生成したもので、
+	// 名前を付けるのはこの 1 箇所だけ。誰も先に付けていないことが
+	// 呼び出し構造から保証されている。
+	// 「既にあれば付けない」というガードは、外部 Loader が生成した SRV へ
+	// 再命名しようとするから必要になるものであり、その設計自体をやめた。
+	std::string name = "DummyTexture:";
+	for (wchar_t character : key)
+	{
+		// キーは 16 進数と '.' だけなので、そのまま 1 バイトへ落とせる。
+		name.push_back(static_cast<char>(character));
+	}
+	view->SetPrivateData(WKPDID_D3DDebugObjectName,
+		static_cast<UINT>(name.size()), name.c_str());
+#else
+	(void)view;
+	(void)key;
+#endif
+}
+
 void release_all_textures()
 {
+	// このキャッシュはファイルスコープの static なので、
+	// 何もしなければ破棄されるのは main() が返ったあと。
+	// ID3D11Debug::ReportLiveDeviceObjects はそれより前に走るため、
+	// ここを呼ばないと SRV が必ず Live Object として残る。
+	// 終了処理から Device より先に明示的に呼ぶこと。
 	lock_guard<mutex> lock(resources_mutex);
 	resources.clear();
+
+	// 読み込み途中の状態も一緒に片付ける。
+	// 完了済みの state が SRV を握ったまま残ると、同じ理由で解放されない。
+	loading_resources.clear();
 }
 // UNIT.16
 HRESULT make_dummy_texture(ID3D11Device* device, ID3D11ShaderResourceView** shader_resource_view, DWORD value/*0xAABBGGRR*/, UINT dimension)
@@ -151,6 +216,11 @@ HRESULT make_dummy_texture(ID3D11Device* device, ID3D11ShaderResourceView** shad
 
 		hr = device->CreateShaderResourceView(texture2d.Get(), &shader_resource_view_desc, shader_resource_view);
 		_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+
+		// 生成直後に 1 回だけ名前を付ける。
+		// この SRV は自前で作っているので他所の名前と衝突しない。
+		set_dummy_texture_debug_name(*shader_resource_view, keyname.str());
+
 		resources.insert(std::make_pair(keyname.str().c_str(), *shader_resource_view));
 	}
 	return hr;

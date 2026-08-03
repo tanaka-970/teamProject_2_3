@@ -488,6 +488,17 @@ void static_mesh::render(ID3D11DeviceContext* immediate_context,
 		immediate_context->VSSetConstantBuffers(
 			6, 1, motion_object_constant_buffer.GetAddressOf());
 
+		// PS へも同じ Buffer を渡す。
+		//
+		// G-Buffer の Pixel Shader が compute_motion_vector() を呼んでおり、
+		// その中で b6 の motion_params / motion_params2 を読んでいる。
+		// つまり PS 側も b6 に 160 バイトを期待している。
+		// VS だけに Bind すると、PS の b6 にはトゥーン材質 (80 バイト) が
+		// 残ったままになり、毎フレーム
+		//   "80 bytes provided, 160 bytes expected" の警告が出る。
+		immediate_context->PSSetConstantBuffers(
+			6, 1, motion_object_constant_buffer.GetAddressOf());
+
 		// 同一フレーム内で二度呼ばれても履歴は一度だけ進める。
 		if (motion_frame_id != motion_frame.frame_id)
 		{

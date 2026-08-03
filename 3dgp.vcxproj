@@ -370,6 +370,7 @@
     <ClCompile Include="Source\app\Runtime\framework_runtime_scene.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Validation\EditorIntegrationValidation.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\StressValidation.cpp" />
+    <ClCompile Include="Source\app\Runtime\framework_shutdown_regression.cpp" />
 </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\mesh\UI.h" />
