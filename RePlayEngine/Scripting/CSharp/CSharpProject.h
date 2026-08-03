@@ -69,9 +69,13 @@ namespace ReplayEngine::Scripting::CSharp
         static bool EnsureProjectFiles(const std::filesystem::path& project_root,
             std::string& error);
 
+        // subfolder は Scripts/ からの相対フォルダ。空ならば Scripts/ 直下。
+        // csproj は **/*.cs を暗黙に含むので、サブフォルダでも
+        // そのままコンパイル対象になる。
         static bool CreateBehaviour(const std::filesystem::path& project_root,
             const std::string& class_name, const std::string& namespace_name,
-            CSharpBehaviourInfo& out, std::string& error);
+            CSharpBehaviourInfo& out, std::string& error,
+            const std::filesystem::path& subfolder = {});
 
         static std::vector<CSharpBehaviourInfo> DiscoverBehaviours(
             const std::filesystem::path& project_root);

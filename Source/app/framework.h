@@ -1032,6 +1032,24 @@ private:
     const skinned_mesh::animation::keyframe* resolve_object_keyframe(
         skinned_mesh& mesh, int clip_index, float animation_time) const;
     void draw_project_panel();
+
+    // --- Project ブラウザ (Unity 型 2 ペイン) ------------------------------
+    // 左にフォルダツリー、右にそのフォルダの中身。
+    // 実装は Source/app/Editor/framework_project_browser.cpp。
+    void draw_project_browser();
+    void draw_project_folder_tree(const std::filesystem::path& folder, int depth);
+    void draw_project_folder_contents();
+    void set_project_folder(const std::filesystem::path& folder);
+    bool project_create_folder(const std::string& name);
+    bool project_create_csharp_behaviour(const std::string& class_name);
+    bool project_create_material(const std::string& name);
+    bool project_rename_entry(const std::filesystem::path& path,
+        const std::string& new_name);
+    ID3D11ShaderResourceView* project_thumbnail_for(
+        const std::filesystem::path& path);
+    ReplayEngine::Assets::AssetKind project_kind_for(
+        const std::filesystem::path& path) const;
+
     void draw_console_panel();
     void execute_editor_command(const std::string& command);
     void draw_workspace_panel();
@@ -1140,6 +1158,20 @@ private:
     std::unordered_map<std::string, std::filesystem::file_time_type>
         csharp_source_write_times;
     char new_material_name[128]{ "NewMaterial" };
+
+    // --- Project ブラウザの状態 -------------------------------------------
+    // project_current_folder はプロジェクトルートからの相対パス。
+    // 空文字列はルート自身を指す。
+    std::filesystem::path project_current_folder;
+    std::filesystem::path project_rename_target;
+    char project_rename_buffer[192]{};
+    bool project_rename_focus_pending{ false };
+    char project_new_item_name[128]{ "NewItem" };
+    float project_thumbnail_size{ 84.0f };
+    float project_tree_width{ 210.0f };
+    bool project_grid_view{ true };
+    std::string project_browser_status;
+
     ReplayEngine::Rendering::MaterialAsset material_editor_asset;
     std::string material_editor_guid;
     std::string material_editor_status;

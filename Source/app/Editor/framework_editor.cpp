@@ -997,100 +997,10 @@ void framework::draw_project_panel()
     if (ImGui::Button("New Material")) create_material_asset();
     ImGui::Separator();
     ImGui::Text("Assets: %zu", asset_database.Records().size());
-    ImGui::SetNextItemWidth(-150.0f);
-    ImGui::InputTextWithHint("##AssetSearch", "Search assets...",
-        asset_search_text, IM_ARRAYSIZE(asset_search_text));
-    ImGui::SameLine();
-    const char* asset_filters[] = { "All", "Model", "Prefab", "Scene", "Material", "Script", "Other" };
-    ImGui::SetNextItemWidth(140.0f);
-    ImGui::Combo("##AssetTypeFilter", &asset_type_filter,
-        asset_filters, IM_ARRAYSIZE(asset_filters));
 
-    std::string asset_query = asset_search_text;
-    std::transform(asset_query.begin(), asset_query.end(), asset_query.begin(),
-        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-
-    const bool asset_list_visible =
-        ImGui::BeginChild("AssetBrowserList", ImVec2(0.0f, 210.0f), true);
-    if (asset_list_visible)
-    {
-        for (const auto& asset : asset_database.Records())
-        {
-            const std::string extension = asset.source_path.extension().u8string();
-            int type = 6;
-            const char* icon = "[ASSET]";
-            if (asset.kind == ReplayEngine::Assets::AssetKind::Model)
-            {
-                type = 1;
-                icon = "[MESH]";
-            }
-            else if (extension == ".replayprefab")
-            {
-                type = 2;
-                icon = "[PREFAB]";
-            }
-            else if (extension == ".replayscene")
-            {
-                type = 3;
-                icon = "[SCENE]";
-            }
-            else if (asset.kind == ReplayEngine::Assets::AssetKind::Material)
-            {
-                type = 4;
-                icon = "[MAT]";
-            }
-            else if (asset.kind == ReplayEngine::Assets::AssetKind::Script ||
-                extension == ".cs")
-            {
-                type = 5;
-                icon = "[CS]";
-            }
-            if (asset_type_filter != 0 && asset_type_filter != type) continue;
-
-            std::string searchable = asset.display_name + " " +
-                asset.source_path.generic_u8string();
-            std::transform(searchable.begin(), searchable.end(), searchable.begin(),
-                [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-            if (!asset_query.empty() && searchable.find(asset_query) == std::string::npos)
-                continue;
-
-            std::error_code exists_error;
-            const bool missing = !std::filesystem::exists(asset.source_path, exists_error) || exists_error;
-            std::string label = std::string(icon) + " " +
-                (asset.display_name.empty() ? asset.source_path.stem().u8string() : asset.display_name);
-            if (missing) label += "  [MISSING]";
-
-            ImGui::PushID(asset.guid.c_str());
-            if (missing) ImGui::PushStyleColor(ImGuiCol_Text,
-                ReplayEngine::Editor::EditorStyle::Tokens().missing);
-            const bool selected = selected_asset_guid == asset.guid;
-            if (ImGui::Selectable(label.c_str(), selected,
-                ImGuiSelectableFlags_AllowDoubleClick))
-            {
-                selected_asset_guid = asset.guid;
-                if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && !missing &&
-                    (type == 1 || type == 2 || type == 4))
-                    place_asset_in_object_scene(asset, asset_drop_add_collider);
-                else if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && !missing &&
-                    type == 5)
-                    open_selected_csharp_asset();
-            }
-            if (missing) ImGui::PopStyleColor();
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("%s", asset.source_path.generic_u8string().c_str());
-
-            if (!missing && (type == 1 || type == 2 || type == 4) &&
-                ImGui::BeginDragDropSource())
-            {
-                ImGui::SetDragDropPayload("REPLAY_ASSET_GUID", asset.guid.c_str(),
-                    asset.guid.size() + 1);
-                ImGui::TextUnformatted(label.c_str());
-                ImGui::EndDragDropSource();
-            }
-            ImGui::PopID();
-        }
-    }
-    ImGui::EndChild();
+    // Project ブラウザ本体 (Source/app/Editor/framework_project_browser.cpp)。
+    // フォルダツリー + そのフォルダの中身。作成・改名・D&D はそちら側。
+    draw_project_browser();
 
     ImGui::Checkbox("Model配置時にMesh Colliderを追加", &asset_drop_add_collider);
     ImGui::SameLine();

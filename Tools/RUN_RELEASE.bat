@@ -17,8 +17,12 @@ echo --- fxc.exe ---
 tasklist /fi "imagename eq fxc.exe" 2>nul | find /i "fxc.exe" || echo   none
 echo --- devenv.exe - Visual Studio ---
 tasklist /fi "imagename eq devenv.exe" 2>nul | find /i "devenv.exe" || echo   none
+echo --- MSBuild.exe - leftover build nodes ---
+tasklist /fi "imagename eq MSBuild.exe" 2>nul | find /i "MSBuild.exe" || echo   none
+echo --- dotnet.exe ---
+tasklist /fi "imagename eq dotnet.exe" 2>nul | find /i "dotnet.exe" || echo   none
 echo.
-echo If any of the above are listed, close them first, then re-run.
+echo 3dgp.exe listed above means LNK1104 will happen. Close it first.
 echo Press a key to continue anyway.
 pause >nul
 

@@ -15,10 +15,13 @@
 #include <regex>
 #include <sstream>
 #include <system_error>
+#include <vector>
 
 #ifdef _WIN32
 #include <windows.h>
 #include <shellapi.h>
+#include <tlhelp32.h>
+#include <string.h>
 #endif
 
 namespace ReplayEngine::Scripting::CSharp
@@ -184,29 +187,173 @@ namespace ReplayEngine::Scripting::CSharp
             return {};
         }
 
+#ifdef _WIN32
+        bool IsVisualStudioRunning()
+        {
+            const HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+            if (snapshot == INVALID_HANDLE_VALUE) return false;
+
+            PROCESSENTRY32W entry{};
+            entry.dwSize = sizeof(entry);
+            bool found = false;
+            if (Process32FirstW(snapshot, &entry))
+            {
+                do
+                {
+                    if (_wcsicmp(entry.szExeFile, L"devenv.exe") == 0)
+                    {
+                        found = true;
+                        break;
+                    }
+                } while (Process32NextW(snapshot, &entry));
+            }
+            CloseHandle(snapshot);
+            return found;
+        }
+
+        // 指定パスから上へ辿って統合 Solution (3dgp.sln) を探す。
+        //
+        // Solution Explorer にツリーを出すには Solution が開いている
+        // 必要がある。3dgp.sln には C++ と C# のプロジェクトが両方
+        // 入っているので、これ 1 つ開けば .cs も見える。
+        std::filesystem::path FindPrimarySolution(const std::filesystem::path& start)
+        {
+            std::error_code error;
+            std::filesystem::path directory = start;
+            if (!std::filesystem::is_directory(directory, error) || error)
+            {
+                directory = start.parent_path();
+            }
+            error.clear();
+
+            for (int depth = 0; depth < 8 && !directory.empty(); ++depth)
+            {
+                const std::filesystem::path candidate = directory / "3dgp.sln";
+                if (std::filesystem::exists(candidate, error) && !error) return candidate;
+                error.clear();
+
+                const std::filesystem::path parent = directory.parent_path();
+                if (parent == directory) break;
+                directory = parent;
+            }
+            return {};
+        }
+
+        bool LaunchVisualStudio(const std::filesystem::path& executable,
+            const std::wstring& arguments, bool wait_for_idle)
+        {
+            const std::wstring executable_text = executable.wstring();
+
+            SHELLEXECUTEINFOW info{};
+            info.cbSize = sizeof(info);
+            info.fMask = SEE_MASK_NOCLOSEPROCESS;
+            info.lpVerb = L"open";
+            info.lpFile = executable_text.c_str();
+            info.lpParameters = arguments.c_str();
+            info.nShow = SW_SHOWNORMAL;
+
+            if (!ShellExecuteExW(&info)) return false;
+
+            if (info.hProcess != nullptr)
+            {
+                // Solution を開く時だけ、Visual Studio のメッセージループが
+                // 立ち上がるまで待つ。待たずに /edit を投げると、
+                // 起動しきる前に届いて 2 つ目のインスタンスが開くことがある。
+                if (wait_for_idle) WaitForInputIdle(info.hProcess, 60000);
+                CloseHandle(info.hProcess);
+            }
+            return true;
+        }
+#endif
+
         CSharpBuildResult RunDotnet(const std::wstring& arguments,
             const std::filesystem::path& expected_assembly)
         {
             CSharpBuildResult result;
             result.output_assembly = expected_assembly;
 
-            const std::wstring command = L"dotnet " + arguments + L" 2>&1";
-            FILE* pipe = _wpopen(command.c_str(), L"r");
-            if (pipe == nullptr)
+#ifdef _WIN32
+            // 以前は _wpopen を使っていたが、_wpopen は cmd.exe を起こすため
+            // GUI アプリ（WinMain）から呼ぶと dotnet 実行のたびに
+            // コンソール窓が一瞬表示される。Editor 起動時の
+            // BuildManagedApi / CompileAndReload と、保存ごとの再コンパイルで
+            // 毎回出てしまうので、CreateProcessW + CREATE_NO_WINDOW で
+            // 窓を出さずに起動し、stdout / stderr を匿名パイプで受ける。
+            //
+            // 旧実装の " 2>&1" は hStdOutput と hStdError を
+            // 同じパイプに向けることで置き換えている。
+            SECURITY_ATTRIBUTES security{};
+            security.nLength = sizeof(security);
+            security.bInheritHandle = TRUE;
+            security.lpSecurityDescriptor = nullptr;
+
+            HANDLE read_pipe = nullptr;
+            HANDLE write_pipe = nullptr;
+            if (!CreatePipe(&read_pipe, &write_pipe, &security, 0))
             {
+                result.output_text = "dotnet pipe could not be created.";
+                return result;
+            }
+
+            // 読み側は子プロセスへ継承させない。
+            SetHandleInformation(read_pipe, HANDLE_FLAG_INHERIT, 0);
+
+            STARTUPINFOW startup{};
+            startup.cb = sizeof(startup);
+            startup.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
+            startup.wShowWindow = SW_HIDE;
+            startup.hStdInput = nullptr;
+            startup.hStdOutput = write_pipe;
+            startup.hStdError = write_pipe;
+
+            // CreateProcessW は第2引数を書き換えるため可変バッファが必要。
+            const std::wstring command_line = L"dotnet " + arguments;
+            std::vector<wchar_t> mutable_command(
+                command_line.begin(), command_line.end());
+            mutable_command.push_back(L'\0');
+
+            PROCESS_INFORMATION process{};
+            const BOOL started = CreateProcessW(nullptr, mutable_command.data(),
+                nullptr, nullptr, TRUE, CREATE_NO_WINDOW,
+                nullptr, nullptr, &startup, &process);
+
+            // 親側の書き込みハンドルは必ずここで閉じる。
+            // 残したままだと子の終了後もパイプが開いたままになり、
+            // ReadFile が返らなくなる。
+            CloseHandle(write_pipe);
+
+            if (!started)
+            {
+                CloseHandle(read_pipe);
                 result.output_text = "dotnet command failed to start.";
                 return result;
             }
 
             std::array<char, 4096> buffer{};
-            while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe) != nullptr)
+            DWORD read_bytes = 0;
+            while (ReadFile(read_pipe, buffer.data(),
+                static_cast<DWORD>(buffer.size()), &read_bytes, nullptr) &&
+                read_bytes > 0)
             {
-                result.output_text += buffer.data();
+                result.output_text.append(buffer.data(), read_bytes);
             }
+            CloseHandle(read_pipe);
 
-            const int exit_code = _pclose(pipe);
-            result.exit_code = exit_code;
-            result.succeeded = exit_code == 0 &&
+            WaitForSingleObject(process.hProcess, INFINITE);
+            DWORD process_exit_code = 0;
+            if (!GetExitCodeProcess(process.hProcess, &process_exit_code))
+            {
+                process_exit_code = 1;
+            }
+            CloseHandle(process.hThread);
+            CloseHandle(process.hProcess);
+
+            result.exit_code = static_cast<int>(process_exit_code);
+#else
+            result.output_text = "dotnet execution is only supported on Windows.";
+            return result;
+#endif
+            result.succeeded = result.exit_code == 0 &&
                 std::filesystem::exists(expected_assembly);
             return result;
         }
@@ -485,7 +632,8 @@ namespace ReplayEngine::Scripting::CSharp
 
     bool CSharpProject::CreateBehaviour(const std::filesystem::path& project_root,
         const std::string& class_name, const std::string& namespace_name,
-        CSharpBehaviourInfo& out, std::string& error)
+        CSharpBehaviourInfo& out, std::string& error,
+        const std::filesystem::path& subfolder)
     {
         const std::filesystem::path root = NormalizeRoot(project_root);
         if (!IsIdentifier(class_name))
@@ -500,10 +648,21 @@ namespace ReplayEngine::Scripting::CSharp
         }
         if (!EnsureProjectFiles(root, error)) return false;
 
-        std::filesystem::path path = ScriptsRoot(root) / (class_name + ".cs");
+        // subfolder が Scripts/ の外へ出る指定は無視して Scripts/ 直下に作る。
+        std::filesystem::path folder = ScriptsRoot(root);
+        if (!subfolder.empty() && !subfolder.is_absolute() &&
+            subfolder.generic_u8string().find("..") == std::string::npos)
+        {
+            folder /= subfolder;
+            std::error_code folder_error;
+            std::filesystem::create_directories(folder, folder_error);
+            if (folder_error) folder = ScriptsRoot(root);
+        }
+
+        std::filesystem::path path = folder / (class_name + ".cs");
         for (int suffix = 2; std::filesystem::exists(path) && suffix < 10000; ++suffix)
         {
-            path = ScriptsRoot(root) / (class_name + std::to_string(suffix) + ".cs");
+            path = folder / (class_name + std::to_string(suffix) + ".cs");
         }
 
         const std::string guid = GenerateTypeGuid();
@@ -627,6 +786,23 @@ namespace ReplayEngine::Scripting::CSharp
             return false;
         }
 
+        // devenv /edit はファイル単体を開くコマンドで、Solution が
+        // 開いていない Visual Studio では「その他のファイル」扱いになり、
+        // Solution Explorer にツリーが出ない。
+        //
+        // devenv が 1 つも起動していない場合は、先に統合 Solution
+        // (3dgp.sln) を開いてから /edit する。3dgp.sln には C++ と
+        // C# のプロジェクトが両方入っているので、これ 1 つで
+        // .cs も Solution Explorer から辿れる。
+        if (!IsVisualStudioRunning())
+        {
+            const std::filesystem::path solution = FindPrimarySolution(file);
+            if (!solution.empty())
+            {
+                LaunchVisualStudio(executable, Quote(solution), true);
+            }
+        }
+
         std::wstring arguments;
         if (line > 0)
         {
@@ -638,10 +814,7 @@ namespace ReplayEngine::Scripting::CSharp
             arguments = L"/edit " + Quote(file);
         }
 
-        const HINSTANCE result = ShellExecuteW(nullptr, L"open",
-            executable.wstring().c_str(),
-            arguments.c_str(), nullptr, SW_SHOWNORMAL);
-        if (reinterpret_cast<intptr_t>(result) > 32) return true;
+        if (LaunchVisualStudio(executable, arguments, false)) return true;
 
         error = "Visual Studio could not be started: " +
             executable.generic_u8string();

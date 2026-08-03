@@ -1,12 +1,13 @@
 using System.Collections.Generic;
 
 namespace ReplayEngine;
-
+// ビヘイビアスクリプトの基底クラス。ゲームオブジェクトにアタッチされるスクリプトは、このクラスを継承する必要があるよ。
 public abstract class ScriptBehaviour
 {
-    private readonly List<EventSubscription> eventSubscriptions = new();
-
-    internal void Attach(ScriptRuntimeContext context, ObjectHandle gameObject, ComponentHandle component)
+	// ゲームオブジェクトにアタッチされたスクリプトのライフサイクルイベントを定義
+	private readonly List<EventSubscription> eventSubscriptions = new();
+	// ゲームオブジェクトとコンポーネントのハンドルを保持するためのプロパティ
+	internal void Attach(ScriptRuntimeContext context, ObjectHandle gameObject, ComponentHandle component)
     {
         Runtime = context;
         GameObject = gameObject;
@@ -17,8 +18,8 @@ public abstract class ScriptBehaviour
 
     public ObjectHandle GameObject { get; private set; }
     public ComponentHandle Component { get; private set; }
-
-    protected RuntimeResult<EventSubscription> SubscribeEvent(string eventTypeGuid)
+	// イベントの購読を行うメソッド。指定されたイベントタイプの購読を開始し、成功した場合は購読情報を保持
+	protected RuntimeResult<EventSubscription> SubscribeEvent(string eventTypeGuid)
     {
         var result = Runtime.SubscribeEvent(eventTypeGuid, GameObject);
         if (result.Succeeded && result.Value.IsValid)

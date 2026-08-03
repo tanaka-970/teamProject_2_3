@@ -8,6 +8,9 @@
 #include "../../RePlayEngine/Rendering/Materials/MaterialAsset.h"
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
 #include "../../RePlayEngine/Scene/Serialization/PrefabSerializer.h"
+#include "../../RePlayEngine/Scripting/Core/ScriptComponent.h"
+#include "../../RePlayEngine/Scripting/Core/ScriptRuntime.h"
+#include "../../RePlayEngine/Scripting/Core/ScriptTypeCatalog.h"
 
 #include <commdlg.h>
 #include <cmath>
@@ -123,6 +126,65 @@ bool framework::place_asset_in_object_scene(const ReplayEngine::Assets::AssetRec
         object_editor_context.CommitEdit();
         selected_editor_object = editor_selection::game_object;
         object_editor_context.SetStatus("Materialを割り当てました: " + asset.display_name);
+        return true;
+    }
+
+    // .cs を GameObject へ渡すと Script Component を足す。
+    // Add Component の Scripts/C# から選ぶのと同じ経路で、
+    // AssignScriptType が Type GUID / Class 名 / Asset GUID をまとめて入れる。
+    // ここで生の文字列を組み立てないこと。
+    if (asset.kind == ReplayEngine::Assets::AssetKind::Script)
+    {
+        namespace Scripting = ReplayEngine::Scripting;
+
+        ReplayEngine::Core::GameObject* target =
+            object_editor_context.Selection().ResolvePrimary(object_scene);
+        if (target == nullptr)
+        {
+            object_editor_context.SetStatus(
+                "Scriptを付けるGameObjectを選択してください");
+            return false;
+        }
+        if (!object_script_runtime)
+        {
+            object_editor_context.SetStatus("ScriptRuntimeが初期化されていません");
+            return false;
+        }
+
+        const Scripting::ScriptTypeDescriptor* descriptor = nullptr;
+        for (const Scripting::ScriptTypeDescriptor& candidate :
+            object_script_runtime->Catalog().All())
+        {
+            if (candidate.asset_guid == asset.guid)
+            {
+                descriptor = &candidate;
+                break;
+            }
+        }
+        if (descriptor == nullptr)
+        {
+            object_editor_context.SetStatus(
+                "Script Typeが見つかりません。Refresh C# Catalogを実行してください");
+            return false;
+        }
+
+        object_editor_context.BeginEdit(descriptor->DisplayName() + " を追加");
+        ReplayEngine::Core::Component* component =
+            target->AddComponent(Scripting::ScriptComponent::StaticTypeID());
+        Scripting::ScriptComponent* script_component = component != nullptr
+            ? Scripting::ScriptComponent::From(*component) : nullptr;
+        if (script_component == nullptr)
+        {
+            object_editor_context.CancelEdit();
+            object_editor_context.SetStatus(
+                descriptor->DisplayName() + " を追加できませんでした");
+            return false;
+        }
+        script_component->AssignScriptType(*descriptor);
+        object_editor_context.CommitEdit();
+        selected_editor_object = editor_selection::game_object;
+        object_editor_context.SetStatus(
+            descriptor->DisplayName() + " を追加しました");
         return true;
     }
 
