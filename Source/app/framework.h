@@ -452,6 +452,11 @@ public:
     std::filesystem::path pending_object_scene_path;
     bool object_scene_unsaved_prompt_requested{ false };
 
+    // 未保存確認ダイアログで保存に失敗した理由。
+    // ステータス行はプロジェクトタブにしか出ず、モーダルの上からは
+    // 見えないため、失敗理由をここへ持ってダイアログ内に表示する。
+    std::string object_scene_save_failure;
+
     // 未保存確認ダイアログを実際に開いているか。
     // Esc など「ボタン以外で閉じられた」ことを見分けるために持つ。
     // BeginPopupModal の戻り値だけでは、開いていないのか閉じられたのかが分からない。

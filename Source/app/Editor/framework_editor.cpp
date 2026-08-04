@@ -449,10 +449,24 @@ void framework::draw_unsaved_object_scene_prompt()
         ? u8"保存してから終了しますか？"
         : u8"保存してから続行しますか？");
 
+    if (!object_scene_save_failure.empty())
+    {
+        // 保存に失敗したまま黙って閉じない。閉じると
+        // 「保存できていないのに終了した」ように見える。
+        // ただし理由を出さないと、押しても無反応にしか見えない。
+        ImGui::Spacing();
+        ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.35f, 1.0f),
+            u8"保存できませんでした");
+        ImGui::TextWrapped(u8"%s", object_scene_save_failure.c_str());
+        ImGui::TextDisabled(u8"別名で保存するか、破棄して終了を選んでください。");
+        ImGui::Spacing();
+    }
+
     if (ImGui::Button(save_label, ImVec2(140.0f, 0.0f)))
     {
         if (save_object_scene(false))
         {
+            object_scene_save_failure.clear();
             // 終了を確定させてから実行する。
             // 実行後に Dirty が立て直されても、もう確認へは戻らない。
             if (exiting) object_exit_confirmed = true;
@@ -460,13 +474,39 @@ void framework::draw_unsaved_object_scene_prompt()
             ImGui::CloseCurrentPopup();
             execute_pending_object_scene_action();
         }
-        // 保存に失敗した場合は何もしない。
-        // 閉じてしまうと、保存できていないのに終了したように見える。
+        else
+        {
+            // 失敗の理由をこのダイアログへ出す。
+            // ステータス行はプロジェクトタブにしか出ず、
+            // ここからは見えないため気付けなかった。
+            object_scene_save_failure = object_editor_context.Status();
+            if (object_scene_save_failure.empty())
+            {
+                object_scene_save_failure = u8"理由は不明です。";
+            }
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(u8"別名で保存", ImVec2(120.0f, 0.0f)))
+    {
+        if (save_object_scene(true))
+        {
+            object_scene_save_failure.clear();
+            if (exiting) object_exit_confirmed = true;
+            object_unsaved_prompt_open = false;
+            ImGui::CloseCurrentPopup();
+            execute_pending_object_scene_action();
+        }
+        else
+        {
+            object_scene_save_failure = object_editor_context.Status();
+        }
     }
     ImGui::SameLine();
     if (ImGui::Button(discard_label, ImVec2(140.0f, 0.0f)))
     {
         // ここは「変更を捨てる」が仕事。編集内容は保存しない。
+        object_scene_save_failure.clear();
         discard_object_scene_autosave();
         object_editor_context.ClearDirty();
         if (exiting) object_exit_confirmed = true;
@@ -477,6 +517,7 @@ void framework::draw_unsaved_object_scene_prompt()
     ImGui::SameLine();
     if (ImGui::Button(u8"キャンセル", ImVec2(100.0f, 0.0f)))
     {
+        object_scene_save_failure.clear();
         pending_object_scene_action = object_scene_action::none;
         pending_object_scene_path.clear();
         object_unsaved_prompt_open = false;

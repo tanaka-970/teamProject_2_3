@@ -786,6 +786,13 @@ void framework::discard_object_scene_autosave()
 void framework::request_object_scene_action(object_scene_action action,
     std::filesystem::path path)
 {
+    // 新規 / 開く / 終了 はどれも編集シーンに対する操作。
+    // Play 中のまま進むと save_object_scene が
+    // 「実行中はシーンを保存できません」で false を返し、
+    // 「保存して終了」を押しても何も起きず終了できなくなる。
+    // 先に実行を止めてから確認へ進む。
+    if (object_scene_play_mode) exit_object_play_mode();
+
     pending_object_scene_action = action;
     pending_object_scene_path = std::move(path);
     if (object_editor_context.Dirty())
