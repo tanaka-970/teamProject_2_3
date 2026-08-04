@@ -573,7 +573,15 @@ void framework::draw_project_folder_contents()
 
         // .cs も含めて全種別をドラッグできるようにする。
         // 受け側 (Scene ビュー / Inspector) が種別で判断する。
-        if (record != nullptr && !entry.is_directory && ImGui::BeginDragDropSource())
+        //
+        // 直前のアイコンボタンが「掴まれている」時だけドラッグ元にする。
+        // ImGui の BeginDragDropSource は LastItemId が 0 のまま呼ぶと
+        // IM_ASSERT(0) で落ちる。子ウィンドウがクリップされて SkipItems が
+        // 立つと Button() が ItemAdd を呼ばず LastItemId が 0 のまま残るので、
+        // ここを無条件で呼ぶとクリックした瞬間に落ちていた。
+        // SourceAllowNullID も付けて二重に防ぐ。
+        if (record != nullptr && !entry.is_directory && ImGui::IsItemActive() &&
+            ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
         {
             ImGui::SetDragDropPayload("REPLAY_ASSET_GUID", record->guid.c_str(),
                 record->guid.size() + 1);
@@ -741,7 +749,11 @@ void framework::draw_project_browser()
     ImGui::Separator();
 
     // --- 左: フォルダツリー ---
-    ImGui::BeginChild("##ProjectTree", ImVec2(project_tree_width, 320.0f), true);
+    //
+    // BeginChild の戻り値は必ず見ること。false のときは SkipItems が立ち、
+    // 中のウィジェットが ItemAdd を呼ばないため LastItemId が古いまま残る。
+    // EndChild は戻り値に関わらず必ず呼ぶ。
+    if (ImGui::BeginChild("##ProjectTree", ImVec2(project_tree_width, 320.0f), true))
     {
         ImGuiTreeNodeFlags root_flags = ImGuiTreeNodeFlags_OpenOnArrow |
             ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_DefaultOpen;
@@ -765,7 +777,7 @@ void framework::draw_project_browser()
     ImGui::SameLine();
 
     // --- 右: フォルダの中身 ---
-    ImGui::BeginChild("##ProjectContents", ImVec2(0.0f, 320.0f), true);
+    if (ImGui::BeginChild("##ProjectContents", ImVec2(0.0f, 320.0f), true))
     {
         draw_project_folder_contents();
 

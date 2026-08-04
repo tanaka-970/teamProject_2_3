@@ -1004,6 +1004,11 @@ private:
     ReplayEngine::Project::PrefabReferenceStatus resolve_default_character_prefab() const;
 
     bool refresh_csharp_scripts();
+
+    // 編集 Scene の ScriptComponent へ Schema を引き直させる。
+    // Catalog 更新は Play セッションの Component にしか届かないため、
+    // 編集側はここで明示的に引き直す。戻り値は解決できた件数。
+    std::size_t resolve_editor_script_schemas();
     bool build_and_reload_csharp_scripts();
     bool create_csharp_behaviour_asset();
     bool open_selected_csharp_asset(int line = 0);
@@ -1011,6 +1016,10 @@ private:
     void poll_csharp_script_changes(float elapsed_time);
     void push_editor_log(std::string severity, std::string message,
         std::filesystem::path file = {}, int line = 0, int column = 0);
+
+    // Play 直後に実行用 World の Script Component を数える診断用。
+    void count_runtime_script_instances(ReplayEngine::Core::GameObject& object,
+        std::size_t& total, std::size_t& with_instance);
 
     // --- 衝突 (Source/app/Runtime/framework_collision_world.cpp) ------------
     // Scene の切り替えと Play / Edit の切り替えに合わせて衝突世界をつなぎ替える。
@@ -1147,6 +1156,13 @@ private:
     float scene_view_max_x{ 0.0f };
     float scene_view_max_y{ 0.0f };
     int scene_view_draw_mode{ 0 };
+    // --- UI の見た目設定（Window メニュー →「UI の見た目」で変更）----------
+    // 起動ごとの一時設定。保存はしない。
+    float ui_button_scale{ 1.0f };      // ボタンとメニューの余白倍率
+    float ui_font_scale{ 1.0f };        // 文字の大きさ倍率
+    float ui_text_color[3]{ 1.0f, 1.0f, 1.0f };   // 文字色（既定は白）
+    bool  ui_style_overridden{ false };  // 一度でも触ったか
+
     char asset_search_text[192]{};
     int asset_type_filter{ 0 };
     std::string selected_asset_guid;

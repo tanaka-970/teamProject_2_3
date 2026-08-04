@@ -290,6 +290,18 @@ namespace ReplayEngine::Runtime
         // ApplySceneData を通すので、Editor 読み込みと同じ規則が使われる。
         auto staging = std::make_unique<Scene::Scene>(data.scene_name);
 
+        // Component を作る「前」に Services を張る。
+        //
+        // ApplySceneData は生成しながら OnDeserialize / OnPropertyChanged を
+        // 流す。ScriptComponent はそこで Services()->Catalog() と照合して
+        // Script 型を決めるため、ここで張らないと型が解決できず、
+        // Play へ入っても Unresolved のままインスタンスが作られない。
+        //
+        // 編集 Scene 側は最初から Services が張ってあり、同じデータでも
+        // そちらだけ Loaded になる。その食い違いがここで生まれていた。
+        if (runtime_ != nullptr) staging->Services().SetRuntime(runtime_);
+        if (world_lifecycle_ != nullptr) world_lifecycle_->OnWorldBuilding(*staging);
+
         Serialization::SceneLoadReport report;
         if (!Serialization::ApplySceneData(data, *staging, report))
         {

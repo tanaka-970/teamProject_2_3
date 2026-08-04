@@ -202,6 +202,12 @@ namespace ReplayEngine::Scripting
         // 差し替わった Schema を、使っている ScriptComponent へ配る。
         //
         // ここで Callback は 1 つも呼ばない。値の移送だけを行う。
+        //
+        // 配布先は「Play セッションに登録済みの Component」だけ。
+        // 編集 Scene の Component は world_ に居ないため、ここでは届かない。
+        // 編集側の再解決は Editor が bound_scene_ 経由で行う
+        // (ResolveSchemasInScene)。ここで Scene を触らないのは、
+        // Play 中の更新経路へ編集 Scene を混ぜないため。
         if (!world_) return;
 
         // BindSchema の中から Unregister されることは無いが、
@@ -248,6 +254,21 @@ namespace ReplayEngine::Scripting
         // OnRuntimeDestroy から Services().Scripts() が引けなくなり、
         // ユーザーの OnDestroy もインスタンスの解放も走らない。
         world.Services().SetScripts(nullptr);
+    }
+
+    void ScriptRuntime::OnWorldBuilding(Scene::Scene& world)
+    {
+        // ApplySceneData が Component を作る「前」。
+        //
+        // ここで自分を World へ繋いでおかないと、復元中の
+        // ScriptComponent::RefreshScriptType() が Services() を引けず、
+        // Catalog と照合できないまま Script 型が決まってしまう。
+        // その状態で Play へ入ると Schema が解決できず Unresolved で止まる。
+        //
+        // Play セッション（world_）はまだ作らない。作るのは
+        // OnWorldActivating。ここで作るとインスタンスが
+        // Scene::Start() より前に生まれてしまう。
+        world.Services().SetScripts(this);
     }
 
     void ScriptRuntime::OnWorldActivating(Scene::Scene& world)

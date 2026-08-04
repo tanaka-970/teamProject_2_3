@@ -36,6 +36,10 @@ namespace ReplayEngine::Runtime
     // ---------------------------------------------------------------------
     // 【呼ばれる順序】
     //
+    //   World 構築:
+    //     OnWorldBuilding(新)    … ApplySceneData の直前。Staging World は空
+    //     （ApplySceneData … GameObject / Component 生成と Property 反映）
+    //
     //   World 入れ替え:
     //     OnWorldUnloading(旧)   … 旧 World の Clear() の直前。全 Component が生きている
     //     （Scene::Clear() … OnDisable -> OnRuntimeDestroy -> OnDetach）
@@ -44,7 +48,7 @@ namespace ReplayEngine::Runtime
     //     OnWorldActivating(新)  … Scene::Start() の直前
     //     （Scene::Start() … OnRuntimeAwake -> OnEnable -> OnStart）
     //
-    //   Play 停止 (ResetToEmptyWorld) でも同じ 3 つが同じ順で呼ばれる。
+    //   Play 停止 (ResetToEmptyWorld) でも入れ替えの 3 つが同じ順で呼ばれる。
     //
     // 実装側は例外を投げないこと。ここは World 入れ替えの途中であり、
     // 巻き戻せる状態ではない。
@@ -52,6 +56,15 @@ namespace ReplayEngine::Runtime
     {
     public:
         virtual ~IWorldLifecycleListener() = default;
+
+        // Staging World へ Component を作る「前」。
+        //
+        // ここで Services を張らないと、ApplySceneData の途中で走る
+        // OnDeserialize / OnPropertyChanged が Services() を引けない。
+        // ScriptComponent はそこで Catalog と照合して Script 型を決めるため、
+        // 張り忘れると型が解決できず Unresolved のまま Play へ入る。
+        // 既定は何もしない。必要な実装だけ上書きする。
+        virtual void OnWorldBuilding(Scene::Scene& /*world*/) {}
 
         virtual void OnWorldUnloading(Scene::Scene& world) = 0;
         virtual void OnWorldUnloaded(Scene::Scene& world) = 0;

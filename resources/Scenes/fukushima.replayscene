@@ -1,6 +1,6 @@
 REPLAY_SCENE 11
 SCENE "新しいシーン"
-SCENE_STATE 0
+SCENE_STATE 1
 COLLISION_STATE 2 0
 OBJECT_COUNT 1
 OBJECT
@@ -8,9 +8,9 @@ OBJECT
   NAME "player"
   ENABLED 1
   PARENT 0
-  TRANSFORM 0 0 0 0 0 0 1 1 1
+  TRANSFORM 4.7577123641967773 0 78.541465759277344 0 9.424778938293457 0 1 1 1
   PREFAB "" 0 0
-  COMPONENT_COUNT 5
+  COMPONENT_COUNT 6
   COMPONENT "MeshRendererComponent" 1
     STABLE_ID 2
     TYPE_GUID "00000000000000000000000000000000"
@@ -82,5 +82,23 @@ OBJECT
     PROPERTY "dash_multiplier" float 1
     PROPERTY "camera_relative" bool 1
     PROPERTY "rotate_towards_movement" bool 1
+  END_COMPONENT
+  COMPONENT "ScriptComponent" 1
+    STABLE_ID 7
+    TYPE_GUID "7a3e1c94b06d4f28ae5137c0d9b28e41"
+    TYPE_MODULE "RePlayEngine.Scripting"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 11
+    PROPERTY "__script.language" enum 1
+    PROPERTY "__script.asset" assetref "66d1ba1d943164391cbce051013b0706"
+    PROPERTY "__script.class" string "Game.MoveTest"
+    PROPERTY "__script.execution_order" int 136
+    PROPERTY "__script.type_id" string "9c41d7a25b8e4f13a6d0e28c74f5b301"
+    PROPERTY "field.Speed" float 50001.2890625
+    PROPERTY "field.Frames" int 211
+    PROPERTY "field.Elapsed" float 1.4199999570846558
+    PROPERTY "field.MoveOk" int 0
+    PROPERTY "field.LastStatus" int -1
+    PROPERTY "field.Target" objref 1
   END_COMPONENT
 END_OBJECT
