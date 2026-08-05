@@ -14,7 +14,12 @@
 #pragma property range Strength  "強さ"     0..1  = 1
 #pragma property range Opacity   "不透明度" 0..1  = 0.45
 
+// cbuffer は書かない。上の #pragma property から自動生成される。
+// PixelSize / Strength / Opacity はそのまま参照できる。
+
 float4 main(float4 position : SV_POSITION) : SV_TARGET
 {
-    return float4(1.0f, 1.0f, 1.0f, 1.0f);
+    float2 cell = floor(position.xy / PixelSize) * PixelSize;
+    float3 color = float3(cell * 0.001f, Strength);
+    return float4(color, Opacity);
 }

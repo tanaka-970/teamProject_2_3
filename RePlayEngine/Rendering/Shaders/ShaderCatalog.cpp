@@ -36,7 +36,83 @@ namespace ReplayEngine::Rendering
         entries_.push_back(std::move(entry));
     }
 
+    std::size_t ShaderCatalog::VariantResult::ErrorCount() const noexcept
+    {
+        std::size_t count = 0;
+        for (const ShaderDiagnostic& item : diagnostics)
+        {
+            if (item.severity == ShaderDiagnostic::Severity::Error) ++count;
+        }
+        return count;
+    }
+
+    const ShaderDiagnostic* ShaderCatalog::VariantResult::FirstError() const noexcept
+    {
+        for (const ShaderDiagnostic& item : diagnostics)
+        {
+            if (item.severity == ShaderDiagnostic::Severity::Error) return &item;
+        }
+        return nullptr;
+    }
+
+    bool ShaderCatalog::Entry::AllCompiled() const noexcept
+    {
+        for (int index = 0; index < shader_variant_count; ++index)
+        {
+            const ShaderVariant variant = static_cast<ShaderVariant>(index);
+            if (!UsesVariant(variant)) continue;
+            if (!At(variant).compiled) return false;
+        }
+        return true;
+    }
+
+    bool ShaderCatalog::Entry::EverCompiled() const noexcept
+    {
+        for (int index = 0; index < shader_variant_count; ++index)
+        {
+            const ShaderVariant variant = static_cast<ShaderVariant>(index);
+            if (!UsesVariant(variant)) continue;
+            if (!At(variant).ever_compiled) return false;
+        }
+        return true;
+    }
+
+    std::size_t ShaderCatalog::Entry::ErrorCount() const noexcept
+    {
+        std::size_t count = 0;
+        for (int index = 0; index < shader_variant_count; ++index)
+        {
+            const ShaderVariant variant = static_cast<ShaderVariant>(index);
+            if (!UsesVariant(variant)) continue;
+            count += At(variant).ErrorCount();
+        }
+        return count;
+    }
+
+    const ShaderDiagnostic* ShaderCatalog::Entry::FirstError() const noexcept
+    {
+        for (int index = 0; index < shader_variant_count; ++index)
+        {
+            const ShaderVariant variant = static_cast<ShaderVariant>(index);
+            if (!UsesVariant(variant)) continue;
+            if (const ShaderDiagnostic* found = At(variant).FirstError())
+            {
+                return found;
+            }
+        }
+        return nullptr;
+    }
+
     const ShaderCatalog::Entry* ShaderCatalog::Find(ShaderID id) const noexcept
+    {
+        if (!id.IsValid()) return nullptr;
+        const auto found = index_.find(id.ToString());
+        if (found == index_.end()) return nullptr;
+        if (found->second >= entries_.size()) return nullptr;
+        return &entries_[found->second];
+    }
+
+    ShaderCatalog::Entry* ShaderCatalog::FindMutable(ShaderID id) noexcept
     {
         if (!id.IsValid()) return nullptr;
         const auto found = index_.find(id.ToString());

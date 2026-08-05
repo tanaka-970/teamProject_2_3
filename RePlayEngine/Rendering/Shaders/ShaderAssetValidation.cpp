@@ -2,9 +2,11 @@
 
 #include "ShaderCatalog.h"
 #include "ShaderConstantPacker.h"
+#include "ShaderLibrary.h"
 #include "ShaderSource.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -342,7 +344,7 @@ namespace ReplayEngine::Rendering::Validation
             entry.info = info;
             entry.schema = std::make_shared<ShaderPropertySchema>(
                 info.id, info.properties, 1);
-            entry.compiled = true;
+            entry.At(ShaderVariant::Static).compiled = true;
             catalog.Register(entry);
 
             check.Expect(catalog.Count() == 1, "登録できる");
@@ -594,8 +596,8 @@ namespace ReplayEngine::Rendering::Validation
                 "2 つ目の float3 を宣言する");
             check.Expect(hlsl.find("_replay_pad") != std::string::npos,
                 "境界跨ぎの隙間を埋める");
-            check.Expect(hlsl.find("Texture2D MainTex : register(t10);") !=
-                std::string::npos, "テクスチャを t10 へ置く");
+            check.Expect(hlsl.find("Texture2D MainTex : register(t40);") !=
+                std::string::npos, "テクスチャを t40 へ置く");
         }
 
         // ---- 13. GenerateID -----------------------------------------------
@@ -615,6 +617,192 @@ namespace ReplayEngine::Rendering::Validation
                 seen.push_back(text);
             }
             check.Expect(all_unique, "200 回連続で一意な ID を作れる");
+        }
+
+        // ---- 14. 走査から D3DCompile まで通す --------------------------------
+        //
+        // ここが今回の本題。
+        // 「#pragma property を書くと、それが cbuffer になって、
+        //   HLSL 側からその名前で参照できる」ことを機械で確かめる。
+        //
+        // 目で見て確かめる作りにすると、確かめない日が必ず来る。
+        {
+            const std::filesystem::path root = folder / "Lib";
+            const std::filesystem::path materials = root / "Shader" / "Materials";
+            std::error_code clean_error;
+            std::filesystem::remove_all(root, clean_error);
+
+            const std::filesystem::path good = materials / "LibGood.hlsl";
+            const std::filesystem::path bare = materials / "LibBare.hlsl";
+
+            // 宣言した名前を本体から参照する。
+            //
+            // これが要点。cbuffer の自動生成が効いていなければ
+            // "undeclared identifier 'LibTint'" で落ちる。
+            // つまりこの 1 枚が通ることが、生成が効いている証拠になる。
+            check.Expect(WriteText(good,
+                "#pragma replay_guid     \"00000000000000000000000000009001\"\n"
+                "#pragma replay_name     \"Lib Good\"\n"
+                "#pragma replay_domain   surface\n"
+                "#pragma property color LibTint  \"色\"   = (1, 1, 1, 1)\n"
+                "#pragma property range LibPower \"強さ\" 0..4 = 1\n"
+                "float4 main() : SV_TARGET { return LibTint * LibPower; }\n"),
+                "検証用シェーダを書ける");
+
+            // property が 1 つも無い場合。空 cbuffer で落ちないこと。
+            check.Expect(WriteText(bare,
+                "#pragma replay_guid     \"00000000000000000000000000009002\"\n"
+                "#pragma replay_name     \"Lib Bare\"\n"
+                "#pragma replay_domain   surface\n"
+                "float4 main() : SV_TARGET { return 1; }\n"),
+                "property の無いシェーダを書ける");
+
+            ShaderLibrary library;
+            const ShaderLibrary::ScanReport report = library.ScanAll(root);
+
+            check.Expect(report.scanned == 2, "2 枚見つける");
+            check.Expect(report.registered == 2, "2 枚とも登録する");
+            check.Expect(report.compiled == 2,
+                "宣言した名前を本体から参照しても通る（cbuffer 自動生成が効いている）");
+            check.Expect(report.compile_failed == 0, "失敗が 0 件");
+
+            const ShaderID good_id =
+                Reflection::MakeTypeGUID("00000000000000000000000000009001");
+            const ShaderCatalog::Entry* entry = library.Catalog().Find(good_id);
+            check.Expect(entry != nullptr, "コンパイル後も ID で引ける");
+
+            if (entry != nullptr)
+            {
+                check.Expect(entry->AllCompiled(), "使う変種が全部通る");
+                check.Expect(entry->EverCompiled(), "ever_compiled が立つ");
+                check.Expect(entry->At(ShaderVariant::Static).bytecode != nullptr,
+                    "Static のバイトコードが入る");
+                check.Expect(entry->At(ShaderVariant::Skinned).bytecode != nullptr,
+                    "surface は Skinned もコンパイルされる");
+                check.Expect(entry->ErrorCount() == 0, "エラーが 0 件");
+            }
+
+            // ---- 壊しても直前のバイトコードを捨てない --------------------
+            //
+            // ここを守らないと、構文エラーを 1 文字書いた瞬間に
+            // 絵が消える。編集中は常に壊れているので、
+            // 「壊れている間は前のもので描き続ける」が要る。
+            // 参照を握ったまま比べる。
+            //
+            // 握らずにアドレスだけ覚えると、解放されたあと同じ番地が
+            // 再利用されて「別物なのに同じ」に見えることがある。
+            // 検査がたまに通ってしまう作りにしない。
+            Microsoft::WRL::ComPtr<ID3DBlob> previous_blob;
+            if (entry != nullptr)
+            {
+                previous_blob = entry->At(ShaderVariant::Static).bytecode;
+            }
+            const void* previous = previous_blob
+                ? previous_blob->GetBufferPointer() : nullptr;
+
+            check.Expect(WriteText(good,
+                "#pragma replay_guid     \"00000000000000000000000000009001\"\n"
+                "#pragma replay_name     \"Lib Good\"\n"
+                "#pragma replay_domain   surface\n"
+                "#pragma property color LibTint \"色\" = (1, 1, 1, 1)\n"
+                "float4 main() : SV_TARGET { return NotDeclaredAtAll; }\n"),
+                "壊したソースを書ける");
+
+            const bool broke = library.CompileOne(good_id, false);
+            check.Expect(!broke, "壊れたソースはコンパイルに失敗する");
+
+            const ShaderCatalog::Entry* after = library.Catalog().Find(good_id);
+            check.Expect(after != nullptr, "失敗しても Entry を消さない");
+            if (after != nullptr)
+            {
+                const ShaderCatalog::VariantResult& still =
+                    after->At(ShaderVariant::Static);
+                check.Expect(!still.compiled, "失敗したら compiled は下りる");
+                check.Expect(still.ever_compiled,
+                    "一度成功していれば ever_compiled は立ったまま");
+                check.Expect(still.bytecode != nullptr,
+                    "失敗してもバイトコードを捨てない");
+                check.Expect(still.bytecode &&
+                    still.bytecode->GetBufferPointer() == previous,
+                    "失敗時のバイトコードは直前に成功したものと同一");
+                check.Expect(after->schema != nullptr,
+                    "失敗しても Schema を捨てない");
+                check.Expect(after->ErrorCount() != 0, "エラーが記録される");
+
+                // 行番号が元ソースのものであること。
+                //
+                // 自動生成した cbuffer を先頭へ差し込んでいるので、
+                // #line で戻していなければ 10 行以上ずれる。
+                // ずれると「エラー行をクリックしたら別の行が開く」。
+                const ShaderDiagnostic* first = after->FirstError();
+                check.Expect(first != nullptr, "最初のエラーを取れる");
+                if (first != nullptr)
+                {
+                    check.Expect(first->line == 5,
+                        "行番号が元ソースの 5 行目を指す（#line で戻している）");
+                    check.Expect(first->file.filename() == good.filename(),
+                        "ファイル名が元ソースを指す");
+                }
+            }
+
+            // ---- 直せば戻る ------------------------------------------------
+            check.Expect(WriteText(good,
+                "#pragma replay_guid     \"00000000000000000000000000009001\"\n"
+                "#pragma replay_name     \"Lib Good\"\n"
+                "#pragma replay_domain   surface\n"
+                "#pragma property color LibTint  \"色\"   = (1, 1, 1, 1)\n"
+                "#pragma property range LibPower \"強さ\" 0..4 = 1\n"
+                "#pragma property float3 LibAdded \"追加\" = (0, 0, 0)\n"
+                "float4 main() : SV_TARGET\n"
+                "{ return LibTint * LibPower + float4(LibAdded, 0); }\n"),
+                "直したソースを書ける");
+
+            // 更新時刻を確実に進める。
+            // 同じ秒に書くと保存検出が拾えないことがある。
+            {
+                std::error_code touch_error;
+                std::filesystem::last_write_time(good,
+                    std::filesystem::file_time_type::clock::now() +
+                    std::chrono::seconds(2), touch_error);
+            }
+
+            const std::size_t recompiled = library.PollSourceChanges(false);
+            check.Expect(recompiled >= 1, "保存を検出して再コンパイルする");
+
+            const ShaderCatalog::Entry* fixed = library.Catalog().Find(good_id);
+            check.Expect(fixed != nullptr, "直したあとも ID で引ける");
+            if (fixed != nullptr)
+            {
+                check.Expect(fixed->AllCompiled(), "直せばコンパイルが通る");
+                check.Expect(fixed->ErrorCount() == 0, "エラーが消える");
+                check.Expect(fixed->schema != nullptr, "Schema が付いている");
+
+                if (fixed->schema)
+                {
+                    // 足した property が Schema に出ること。
+                    // ここが「.hlsl に 1 行足すと Inspector の欄が増える」の実体。
+                    check.Expect(fixed->schema->Properties().size() == 3,
+                        "保存し直すと足した property が増える");
+                    check.Expect(
+                        fixed->schema->FindByName("LibAdded") != nullptr,
+                        "足した property を名前で引ける");
+                    check.Expect(fixed->schema->Revision() >= 2,
+                        "宣言が変わったら Revision が上がる");
+                }
+
+                const ShaderCatalog::VariantResult& renewed =
+                    fixed->At(ShaderVariant::Static);
+                check.Expect(renewed.bytecode != nullptr &&
+                    renewed.bytecode->GetBufferPointer() != previous,
+                    "直したら新しいバイトコードに差し替わる");
+            }
+
+            // 何も触っていなければ再コンパイルしない。
+            // 毎フレーム全部コンパイルし直すと編集どころではなくなる。
+            check.Expect(library.PollSourceChanges(false) == 0,
+                "変更が無ければ再コンパイルしない");
+
+            std::filesystem::remove_all(root, clean_error);
         }
 
         return check.Report("shader-asset");

@@ -842,7 +842,16 @@ void framework::render(float elapsed_time)
     // ジッター/ノイズ列を進めるためのフレーム番号を更新する。
     previous_view_projection = frame_constants.view_projection;
     previous_view_projection_valid = true;
-    ++frame_index;
+
+    // 基準画像を撮る間はフレーム番号も止める。
+    //
+    // frame_index は SSAO / SSR / TAA の時間ノイズの種になっている。
+    // 進めたまま撮ると、止めているつもりでもノイズだけが毎回変わる。
+    if (!golden_capture_pending()) ++frame_index;
+
+    // Present の直前で撮ること。
+    // Present のあとはバックバッファの中身が保証されない（DISCARD）。
+    tick_golden_capture();
 
     swap_chain->Present(0, 0);
 }

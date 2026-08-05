@@ -34,15 +34,34 @@ namespace ReplayEngine::Rendering
     public:
         // ユーザー領域の開始レジスタ。
         //
-        // b0..b8 と t0..t9 は既存のパスが使っている。
-        //   b0 DOF / Fog
-        //   b1 SCENE_CONSTANT_BUFFER
-        //   b4 frame_constants
-        //   b7 DECAL_CONSTANT_BUFFER
-        //   b8 INV_VP_CB
-        // 侵すと既存の描画が壊れるので、ここから後ろを使う。
+        // 【b9 を選んだ理由】
+        //   既存の Shader/*.hlsl を全部調べて、b0..b13 のうち
+        //   前方描画のピクセルシェーダで空いているのが b9 だった。
+        //     b0 DOF / Fog / static_mesh    b1 SCENE_CONSTANT_BUFFER
+        //     b2 b3 pbr_common              b4 frame_constants
+        //     b5 csm_common                 b6 toon / motion_vector
+        //     b7 DECAL / outline            b8 INV_VP / motion_vector_skinning
+        //     b9 空き（gbuffer PS の material_override だけが使用）
+        //     b10 lights_common / pixelate  b11 stylized_character
+        //     b12 ssao / taa / tiled        b13 ssr
+        //
+        //   b9 は今 material_override_constants（メッシュ単位の上書き）に
+        //   使われている。役割が同じなので、フェーズ 6 でそれを
+        //   自動生成の cbuffer に置き換えて 1 本化する。
+        //   別の番号にすると、同じ「マテリアル定数」が 2 か所へ散る。
         static constexpr std::uint32_t material_constant_register = 9;
-        static constexpr std::uint32_t material_texture_base_slot = 10;
+
+        // 【t40 を選んだ理由】
+        //   t10 では足りない。既存のパスが飛び飛びで使っている。
+        //     t0..t4   diffuse / pbr_common
+        //     t6..t8   deferred_lighting
+        //     t12      csm_common の影マップ / pixelate の GBuffer
+        //     t20      tiled_light_common
+        //     t33..t35 pbr_common の IBL
+        //   t10 から順に振ると 3 枚目で t12 に当たって影が壊れる。
+        //   エラーは出ず、絵だけおかしくなるので気付きにくい。
+        //   既存の最大が t35 なので、余裕を見て t40 から始める。
+        static constexpr std::uint32_t material_texture_base_slot = 40;
 
         // properties の constant_offset / constant_size / texture_slot を埋める。
         //

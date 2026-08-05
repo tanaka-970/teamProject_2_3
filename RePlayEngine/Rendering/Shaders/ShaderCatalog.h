@@ -1,7 +1,12 @@
 #pragma once
 
 #include "ShaderAsset.h"
+#include "ShaderDiagnostic.h"
 
+#include <d3d11.h>
+#include <wrl.h>
+
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -21,15 +26,70 @@ namespace ReplayEngine::Rendering
     class ShaderCatalog final
     {
     public:
+        // 1 つの変種（Static / Skinned）のコンパイル結果。
+        struct VariantResult final
+        {
+            // 直近のコンパイルが成功したか。
+            //
+            // 【失敗しても Entry を消さないこと】
+            //   消すと Material が参照している ShaderID が引けなくなり、
+            //   Missing Shader 扱いになってプロパティ値が失われる。
+            //   構文エラーを 1 つ書いただけで設定が飛ぶのは論外。
+            //   コンパイルが失敗しても、宣言と値は保持し続ける。
+            bool compiled = false;
+
+            // 一度でもコンパイルに成功したか。
+            // 「まだ試していない」と「試して失敗した」を区別する。
+            bool ever_compiled = false;
+
+            // 成功したバイトコード。失敗時は前回のものを保持する。
+            Microsoft::WRL::ComPtr<ID3DBlob> bytecode;
+
+            // 直近のコンパイルで出た診断。成功時も警告が入る。
+            std::vector<ShaderDiagnostic> diagnostics;
+
+            std::size_t ErrorCount() const noexcept;
+            const ShaderDiagnostic* FirstError() const noexcept;
+        };
+
         struct Entry final
         {
             ShaderSourceInfo info;
             ShaderPropertySchemaRef schema;
 
-            // 直近のコンパイル結果。
-            // 失敗していても Entry は消さない。値を保持し続けるため。
-            bool compiled = false;
-            std::string last_error;
+            // Static / Skinned それぞれの結果。
+            // 使わない変種（layer の Skinned など）は触られない。
+            VariantResult variants[shader_variant_count];
+
+            // 最後に読んだソースの更新時刻。保存検出に使う。
+            std::filesystem::file_time_type source_write_time{};
+
+            VariantResult& At(ShaderVariant variant) noexcept
+            {
+                return variants[static_cast<int>(variant)];
+            }
+            const VariantResult& At(ShaderVariant variant) const noexcept
+            {
+                return variants[static_cast<int>(variant)];
+            }
+
+            bool UsesVariant(ShaderVariant variant) const noexcept
+            {
+                return ShaderDomainUsesVariant(info.domain, variant);
+            }
+
+            // 使う変種が全部通ったか。1 つでも落ちていれば false。
+            //
+            // 片方だけ通った状態を「成功」と呼ばないこと。
+            // スキンだけ落ちていると、キャラだけ描けない状態になる。
+            bool AllCompiled() const noexcept;
+
+            // 一度でも通ったことがあるか（使う変種すべてについて）。
+            bool EverCompiled() const noexcept;
+
+            // 使う変種のエラー合計。
+            std::size_t ErrorCount() const noexcept;
+            const ShaderDiagnostic* FirstError() const noexcept;
         };
 
         // 登録または更新。既存の ID なら中身を差し替える。
@@ -37,6 +97,11 @@ namespace ReplayEngine::Rendering
 
         // 見つからなければ nullptr。
         const Entry* Find(ShaderID id) const noexcept;
+
+        // 書き換え用。ShaderLibrary がコンパイル結果を入れるのに使う。
+        Entry* FindMutable(ShaderID id) noexcept;
+
+        std::vector<Entry>& AllMutable() noexcept { return entries_; }
 
         ShaderPropertySchemaRef FindSchema(ShaderID id) const noexcept;
 

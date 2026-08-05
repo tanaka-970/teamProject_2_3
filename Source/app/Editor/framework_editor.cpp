@@ -279,6 +279,9 @@ void framework::draw_editor_main_menu()
         // シェーダ資産の一覧。
         // .hlsl の #pragma がそのまま項目になることを確かめる窓。
         ImGui::MenuItem(u8"シェーダ一覧", nullptr, &show_shader_catalog_panel);
+        // 見た目が変わっていないことを機械で確かめる窓。
+        // 描画やシェーダを触る前に基準を撮っておくこと。
+        ImGui::MenuItem(u8"スクリーンショット回帰", nullptr, &show_golden_panel);
         ImGui::Separator();
         if (ImGui::MenuItem("Reset Layout")) editor_layout_dirty = true;
 
@@ -1530,6 +1533,7 @@ void framework::draw_editor()
     if (show_console_panel) draw_console_panel();
     if (show_workspace_panel) draw_workspace_panel();
     draw_shader_catalog_panel();
+    draw_golden_panel();
     if (show_validation_panel)
         object_validation_panel.Draw(object_editor_context, &asset_database,
             &object_collision_world, object_render_items.Size());

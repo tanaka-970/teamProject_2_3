@@ -36,6 +36,50 @@ namespace ReplayEngine::Rendering
     const char* ToString(ShaderDomain domain) noexcept;
     bool TryParseShaderDomain(std::string_view text, ShaderDomain& out) noexcept;
 
+    // 同じシェーダを、頂点の入り方の違いで 2 通りコンパイルする。
+    //
+    // 【なぜ必要か】
+    //   このエンジンは静的メッシュとスキンメッシュで VS_OUT の中身が違う。
+    //     static  … 接線を持たない。法線から擬似接線を作る
+    //     skinned … world_tangent を持つ
+    //   そのため今も static_mesh_pbr_ps.hlsl と skinned_mesh_pbr_ps.hlsl が
+    //   別ファイルで存在する。中身はほぼ同じで、接線の作り方だけが違う。
+    //
+    //   マテリアル側から見れば「PBR」は 1 つであるべきで、
+    //   付ける相手がスキンかどうかを人が選ぶのはおかしい。
+    //   だから 1 枚の .hlsl を 2 通りにコンパイルして、
+    //   描画時にメッシュの種類で選ぶ。
+    //
+    // 【なぜ 2 つに固定するのか】
+    //   Unity の multi_compile のようにキーワードを自由に足せるようにすると、
+    //   組み合わせが指数で増えてコンパイル時間とメモリが破綻する。
+    //   ここは「増やせない軸」として固定する。
+    //   増やしたくなったら、そのときに設計し直すこと。安易に足さない。
+    enum class ShaderVariant : std::int32_t
+    {
+        Static = 0,
+        Skinned = 1,
+    };
+
+    inline constexpr int shader_variant_count = 2;
+
+    const char* ToString(ShaderVariant variant) noexcept;
+
+    // HLSL へ渡す define 名。#if REPLAY_SKINNED で分岐する。
+    inline constexpr const char* shader_variant_define = "REPLAY_SKINNED";
+
+    // このドメインがその変種を使うか。
+    //
+    // surface だけが 2 通り要る。
+    // layer と postprocess は画面全体にかけるもので、
+    // 頂点の入り方に依存しないので Static だけでよい。
+    constexpr bool ShaderDomainUsesVariant(ShaderDomain domain,
+        ShaderVariant variant) noexcept
+    {
+        if (variant == ShaderVariant::Static) return true;
+        return domain == ShaderDomain::Surface;
+    }
+
     // Inspector に出す 1 項目の種別。
     //
     // Unity の Properties ブロックにある型と対応させてある。

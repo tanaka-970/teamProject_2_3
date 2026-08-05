@@ -323,6 +323,12 @@ void framework::update_object_scene(float elapsed_time)
     tick_runtime_scene_flow();
     poll_csharp_script_changes(elapsed_time);
 
+    // .hlsl の保存もここで拾う。
+    //
+    // C# と同じ位置に置く理由は同じ。描画の最中に
+    // バイトコードを差し替えないための同期点がここだから。
+    poll_shader_source_changes(elapsed_time);
+
     // スクリプトの同期点。
     //
     // ここは World を入れ替えてよい安全点と同じ位置で、

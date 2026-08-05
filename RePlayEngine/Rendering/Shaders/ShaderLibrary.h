@@ -40,6 +40,8 @@ namespace ReplayEngine::Rendering
             std::size_t parse_issues = 0;   // pragma の書式エラー
             std::size_t duplicate_ids = 0;  // GUID の重複
             std::size_t failed = 0;         // 読めなかったもの
+            std::size_t compiled = 0;       // コンパイルに成功した枚数
+            std::size_t compile_failed = 0; // コンパイルに失敗した枚数
 
             std::string Summary() const;
         };
@@ -48,9 +50,29 @@ namespace ReplayEngine::Rendering
 
         // 走査してカタログを作り直す。
         //
-        // コンパイルはしない。ここは「何があるか」を集めるだけ。
-        // 実際のコンパイルはフェーズ 4 以降で ShaderProgram が担う。
+        // 走査のあと、そのまま全部コンパイルする。
+        // 分けても得が無く、分けると「走査したがコンパイルしていない」
+        // 中途半端な状態が生まれて扱いが増える。
         ScanReport ScanAll(const std::filesystem::path& project_root);
+
+        // カタログ内の全シェーダをコンパイルする。
+        //
+        // #pragma property から cbuffer を自動生成してソースの先頭へ差し込み、
+        // D3DCompile へ渡す。人は cbuffer を書かない。
+        //
+        // 失敗しても Entry は消さず、直前に成功したバイトコードを保持する。
+        // 構文エラーを 1 つ書いただけで Material の設定が飛ぶのを避けるため。
+        ScanReport CompileAll(bool debug_build);
+
+        // 1 枚だけコンパイルし直す。
+        bool CompileOne(ShaderID id, bool debug_build);
+
+        // 保存を検出したものだけコンパイルし直す。
+        //
+        // 戻り値は再コンパイルした枚数。
+        // 毎フレーム呼ばず、1 秒程度の間隔で呼ぶこと
+        // （poll_csharp_script_changes と同じ考え方）。
+        std::size_t PollSourceChanges(bool debug_build);
 
         ShaderCatalog& Catalog() noexcept { return catalog_; }
         const ShaderCatalog& Catalog() const noexcept { return catalog_; }
@@ -64,6 +86,17 @@ namespace ReplayEngine::Rendering
     private:
         void Log(const char* severity, const std::string& message,
             const std::filesystem::path& file = {}, int line = 0) const;
+
+        // 1 件をコンパイルして結果を Entry へ書き込む。ログは出さない。
+        // 呼び出し側が「何件成功したか」をまとめてから出す。
+        //
+        // 使う変種（surface なら Static と Skinned）を全部コンパイルし、
+        // 全部通ったときだけ true。片方だけ通った状態を成功と呼ばない。
+        bool CompileEntry(ShaderCatalog::Entry& entry, bool debug_build);
+
+        // 変種 1 つぶん。REPLAY_SKINNED を define して渡す。
+        bool CompileVariant(ShaderCatalog::Entry& entry, ShaderVariant variant,
+            bool debug_build);
 
         ShaderCatalog catalog_;
         ScanReport last_report_;

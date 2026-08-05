@@ -56,6 +56,7 @@ extern ImWchar glyphRangesJapanese[];
 #include "../../RePlayEngine/Rendering/Materials/CharacterMaterialGpuData.h"
 #include "../../RePlayEngine/Rendering/Materials/MaterialAsset.h"
 #include "../../RePlayEngine/Rendering/Shaders/ShaderLibrary.h"
+#include "../../RePlayEngine/Rendering/Capture/GoldenImage.h"
 #include "../../RePlayEngine/Assets/AssetDatabase.h"
 #include "../../RePlayEngine/Assets/AsyncAssetManager.h"
 #include "../../RePlayEngine/Assets/ConcurrentResourceCache.h"
@@ -1178,9 +1179,65 @@ private:
     ReplayEngine::Rendering::ShaderLibrary shader_library;
     bool show_shader_catalog_panel{ false };
 
+    // .hlsl を保存したら自動でコンパイルし直す。
+    // C# の自動リロードと同じ扱い。既定は有効。
+    bool shader_auto_recompile{ true };
+    float shader_poll_timer{ 0.0f };
+
     // 起動時に 1 回走査する。ログは push_editor_log へ流す。
     void scan_shader_library();
     void draw_shader_catalog_panel();
+
+    // 保存されたものだけコンパイルし直す。毎フレーム呼んでよい
+    // （内部で 1 秒の間隔を取る）。
+    void poll_shader_source_changes(float elapsed_time);
+
+    // --- スクリーンショット回帰（フェーズ 18）------------------------------
+    //
+    // 「見た目が 1 ピクセルも変わらない」を機械で確かめる。
+    // 目視では気付けない。色が 1 段ずれても人間には分からない。
+    enum class golden_request_kind
+    {
+        none = 0,
+        capture,     // 基準画像として撮る
+        compare,     // 撮って基準と比べる
+        self_check,  // 2 回撮って一致するか（＝決定論が足りているか）
+    };
+
+    golden_request_kind golden_request{ golden_request_kind::none };
+    std::string golden_name{ "default" };
+    char golden_name_buffer[64]{ "default" };
+
+    // 撮る前に何フレーム「止めた状態」で回すか。
+    //
+    // TAA の履歴が収束するまで待つ必要がある。
+    // 止めずに撮ると毎回違う絵になり、差分が出続けて誰も見なくなる。
+    int golden_settle_frames{ 8 };
+    int golden_countdown{ 0 };
+
+    // チャンネルごとの許容差。0 なら完全一致。
+    int golden_tolerance{ 0 };
+
+    std::string golden_last_summary;
+    bool golden_last_ok{ false };
+    bool show_golden_panel{ false };
+
+    // self_check の 1 回目を覚えておく場所。
+    ReplayEngine::Rendering::Capture::Image golden_self_check_first;
+    bool golden_self_check_has_first{ false };
+
+    // 撮影待ちの間はワールドを止める。update / render から見る。
+    bool golden_capture_pending() const noexcept
+    {
+        return golden_request != golden_request_kind::none;
+    }
+
+    void request_golden(golden_request_kind kind);
+
+    // Present の直前に呼ぶ。Present のあとはバックバッファの中身が保証されない。
+    void tick_golden_capture();
+
+    void draw_golden_panel();
 
     // --- UI の見た目設定（Window メニュー →「UI の見た目」で変更）----------
     // 起動ごとの一時設定。保存はしない。

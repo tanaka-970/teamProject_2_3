@@ -112,6 +112,18 @@ namespace ReplayEngine::Rendering
         stream << "// このブロックは手で書かないこと。\n";
         stream << "// #pragma property の宣言から毎回作り直される。\n";
 
+        // X3568 "unknown pragma ignored" を黙らせる。
+        //
+        // replay_guid / replay_name / property … は全部こちらの拡張なので、
+        // fxc から見れば当然「知らない pragma」で、1 行ごとに警告が出る。
+        // 放っておくと診断欄がこれだけで埋まり、本当のエラーが埋もれる。
+        // 警告を消すこと自体が目的ではなく、見るべきものを見えるようにするため。
+        //
+        // pragma の書式チェックは ShaderSource が別でやっていて、
+        // おかしければ「#pragma の書式エラー」として出る。ここで消しても
+        // 書き間違いが見逃されることはない。
+        stream << "#pragma warning(disable: 3568)\n";
+
         // 定数が 1 つも無くても cbuffer は出す。
         // 出さないと、あとで property を足したときだけ
         // レジスタ番号がずれることになる。
@@ -150,6 +162,16 @@ namespace ReplayEngine::Rendering
         {
             stream << "    float _replay_pad" << padding_index++ << ";\n";
             cursor += 4;
+        }
+
+        // 1 つも入らなかったときは中身を 1 つ入れておく。
+        //
+        // 空の cbuffer はコンパイラによって扱いが揺れる。
+        // 「property を書いていないシェーダだけコンパイルが通らない」
+        // という分かりにくい失敗を作らないための保険。
+        if (cursor == 0)
+        {
+            stream << "    float4 _replay_unused;\n";
         }
 
         stream << "};\n";

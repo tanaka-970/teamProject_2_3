@@ -30,6 +30,7 @@
 #include "../../../RePlayEngine/Reflection/Registry/PropertyRegistry.h"
 #include "../../../RePlayEngine/Rendering/Materials/MaterialAsset.h"
 #include "../../../RePlayEngine/Rendering/Shaders/ShaderAssetValidation.h"
+#include "../../../RePlayEngine/Rendering/Shaders/ShaderBuiltInValidation.h"
 #include "../../../RePlayEngine/Rendering/Shaders/ShaderCompileValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/BehaviourValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/HandleValidation.h"
@@ -1009,6 +1010,16 @@ namespace
         if (command == "--validate-shader-asset")
         {
             return ReplayEngine::Rendering::Validation::RunShaderAssetValidation();
+        }
+
+        // シェーダ基盤。フェーズ 4（組み込み 5 種の移植）。
+        //
+        // 実プロジェクトの Shader/ を走査するので、
+        // カレントディレクトリがプロジェクト直下であること。
+        // 終了コードは 1200 から連番。
+        if (command == "--validate-shader-builtin")
+        {
+            return ReplayEngine::Rendering::Validation::RunShaderBuiltInValidation();
         }
 
         return -1;

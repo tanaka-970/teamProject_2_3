@@ -15,6 +15,16 @@ namespace ReplayEngine::Rendering
         }
     }
 
+    const char* ToString(ShaderVariant variant) noexcept
+    {
+        switch (variant)
+        {
+        case ShaderVariant::Static:  return "Static";
+        case ShaderVariant::Skinned: return "Skinned";
+        default:                     return "Static";
+        }
+    }
+
     bool TryParseShaderDomain(std::string_view text, ShaderDomain& out) noexcept
     {
         if (text == "surface")     { out = ShaderDomain::Surface;     return true; }
