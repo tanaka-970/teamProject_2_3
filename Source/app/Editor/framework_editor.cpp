@@ -276,6 +276,10 @@ void framework::draw_editor_main_menu()
         ImGui::MenuItem("Validation / Diagnostics", nullptr, &show_validation_panel);
         ImGui::MenuItem("Collision Diagnostics", nullptr, &show_collision_diagnostics);
         ImGui::Separator();
+        // シェーダ資産の一覧。
+        // .hlsl の #pragma がそのまま項目になることを確かめる窓。
+        ImGui::MenuItem(u8"シェーダ一覧", nullptr, &show_shader_catalog_panel);
+        ImGui::Separator();
         if (ImGui::MenuItem("Reset Layout")) editor_layout_dirty = true;
 
         // 見た目の調整。人によって画面サイズも見やすい大きさも違うので、
@@ -1525,6 +1529,7 @@ void framework::draw_editor()
     if (show_project_panel) draw_project_panel();
     if (show_console_panel) draw_console_panel();
     if (show_workspace_panel) draw_workspace_panel();
+    draw_shader_catalog_panel();
     if (show_validation_panel)
         object_validation_panel.Draw(object_editor_context, &asset_database,
             &object_collision_world, object_render_items.Size());

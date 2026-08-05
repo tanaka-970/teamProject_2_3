@@ -173,6 +173,12 @@ void framework::initialize_runtime_services()
 
     refresh_csharp_scripts();
 
+    // シェーダ資産の走査。
+    //
+    // ここへ置くのは、Console のログ経路が既に使える状態だから。
+    // まだ描画には使わないので、失敗しても他へ影響しない。
+    scan_shader_library();
+
     object_bound_world_instance = object_runtime_scenes.ActiveWorldID();
 }
 

@@ -29,6 +29,7 @@
 #include "../../../RePlayEngine/Object/Registry/BuiltInComponents.h"
 #include "../../../RePlayEngine/Reflection/Registry/PropertyRegistry.h"
 #include "../../../RePlayEngine/Rendering/Materials/MaterialAsset.h"
+#include "../../../RePlayEngine/Rendering/Shaders/ShaderAssetValidation.h"
 #include "../../../RePlayEngine/Rendering/Shaders/ShaderCompileValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/BehaviourValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/HandleValidation.h"
@@ -1001,6 +1002,13 @@ namespace
         if (command == "--validate-shader-compile")
         {
             return ReplayEngine::Rendering::Validation::RunShaderCompileValidation();
+        }
+
+        // シェーダ基盤。フェーズ 2（pragma 解析 / GUID 採番 / Catalog）。
+        // 終了コード帯は 950-999。
+        if (command == "--validate-shader-asset")
+        {
+            return ReplayEngine::Rendering::Validation::RunShaderAssetValidation();
         }
 
         return -1;

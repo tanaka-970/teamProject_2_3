@@ -314,9 +314,16 @@
     <ClCompile Include="RePlayEngine\Scripting\Core\ScriptValue.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\Core\ScriptWorld.cpp" />
     <ClCompile Include="Source\app\Editor\framework_project_browser.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_shader_catalog.cpp" />
     <ClCompile Include="RePlayEngine\Editor\ShaderEditing\ShaderInspector.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderAsset.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderAssetValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderCatalog.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderConstantPacker.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderCompiler.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderCompileValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderLibrary.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderSource.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpProject.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackend.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\Validation\CSharpScriptValidation.cpp" />

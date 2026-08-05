@@ -55,6 +55,7 @@ extern ImWchar glyphRangesJapanese[];
 #include "../../RePlayEngine/Rendering/Materials/CharacterMaterialProfile.h"
 #include "../../RePlayEngine/Rendering/Materials/CharacterMaterialGpuData.h"
 #include "../../RePlayEngine/Rendering/Materials/MaterialAsset.h"
+#include "../../RePlayEngine/Rendering/Shaders/ShaderLibrary.h"
 #include "../../RePlayEngine/Assets/AssetDatabase.h"
 #include "../../RePlayEngine/Assets/AsyncAssetManager.h"
 #include "../../RePlayEngine/Assets/ConcurrentResourceCache.h"
@@ -1169,6 +1170,18 @@ private:
     float scene_view_max_x{ 0.0f };
     float scene_view_max_y{ 0.0f };
     int scene_view_draw_mode{ 0 };
+    // --- シェーダ資産（フェーズ 1〜3）--------------------------------------
+    //
+    // Shader/Materials, Shader/Layers, Shader/PostProcess を走査して
+    // #pragma から宣言を読み、目録を作る。
+    // まだ描画には使わない。接続はフェーズ 4 以降。
+    ReplayEngine::Rendering::ShaderLibrary shader_library;
+    bool show_shader_catalog_panel{ false };
+
+    // 起動時に 1 回走査する。ログは push_editor_log へ流す。
+    void scan_shader_library();
+    void draw_shader_catalog_panel();
+
     // --- UI の見た目設定（Window メニュー →「UI の見た目」で変更）----------
     // 起動ごとの一時設定。保存はしない。
     float ui_button_scale{ 1.0f };      // ボタンとメニューの余白倍率
