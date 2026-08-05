@@ -7,6 +7,7 @@ void framework::draw_character_material_controls(const char* id, int& base_shade
     ReplayEngine::Rendering::CharacterMaterialProfile& profile, float& pixel_grid,
     float& pixelate_strength)
 {
+   
     ImGui::PushID(id);
     if (!ImGui::CollapsingHeader("キャラクター材質", ImGuiTreeNodeFlags_DefaultOpen))
     {
