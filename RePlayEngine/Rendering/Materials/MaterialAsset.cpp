@@ -90,6 +90,29 @@ namespace ReplayEngine::Rendering
             << material.alpha_cutoff << '\n';
         stream << "DOUBLE_SIDED " << (material.double_sided ? 1 : 0) << '\n';
         stream << "SHADING_MODEL " << material.shading_model << '\n';
+
+        // ---- version 2 で追加 -------------------------------------------
+        //
+        // 層構造は Material 固有。並び順がそのまま描画順になる。
+        // id は保存しない。読み込み時に振り直す。
+        // 保存された id を復元しても意味が無く、
+        // 別 Material 間で衝突したときに追いにくくなるだけのため。
+        stream << "PIXELATE " << material.pixelate_grid << ' '
+            << material.pixelate_strength << '\n';
+        stream << "OUTLINE_PASS " << (material.outline_pass ? 1 : 0) << '\n';
+        stream << "LAYER_COUNT " << material.layers.Layers().size() << '\n';
+        for (const ShaderLayer& layer : material.layers.Layers())
+        {
+            stream << "LAYER "
+                << static_cast<int>(layer.type) << ' '
+                << static_cast<int>(layer.blend) << ' '
+                << (layer.enabled ? 1 : 0) << ' '
+                << layer.opacity << ' '
+                << layer.strength << ' '
+                << layer.parameter << ' '
+                << layer.tint.x << ' ' << layer.tint.y << ' '
+                << layer.tint.z << ' ' << layer.tint.w << '\n';
+        }
         stream << "END_MATERIAL\n";
         stream.flush();
         if (!stream)
@@ -141,8 +164,11 @@ namespace ReplayEngine::Rendering
         MaterialAsset loaded;
         int alpha = 0;
         int double_sided_value = 0;
+        // version 1 も読む。層構造が無いだけで、それ以外は同じ並び。
+        // 古い .replaymaterial を開けなくすると、
+        // 既に作ってあるアセットが全部失われる。
         if (!(stream >> magic >> version) || magic != "REPLAY_MATERIAL" ||
-            version != current_version ||
+            version < 1 || version > current_version ||
             !Expect(stream, "BASE_COLOR", error) ||
             !(stream >> loaded.base_color.x >> loaded.base_color.y >>
                 loaded.base_color.z >> loaded.base_color.w) ||
@@ -168,10 +194,72 @@ namespace ReplayEngine::Rendering
             !Expect(stream, "ALPHA", error) ||
             !(stream >> alpha >> loaded.alpha_cutoff) ||
             !Expect(stream, "DOUBLE_SIDED", error) || !(stream >> double_sided_value) ||
-            !Expect(stream, "SHADING_MODEL", error) || !(stream >> loaded.shading_model) ||
-            !Expect(stream, "END_MATERIAL", error))
+            !Expect(stream, "SHADING_MODEL", error) || !(stream >> loaded.shading_model))
         {
             if (error.empty()) error = "Materialの内容を読み取れません";
+            return false;
+        }
+
+        // ---- version 2 の追加分 -------------------------------------------
+        if (version >= 2)
+        {
+            int outline_value = 0;
+            std::size_t layer_count = 0;
+            if (!Expect(stream, "PIXELATE", error) ||
+                !(stream >> loaded.pixelate_grid >> loaded.pixelate_strength) ||
+                !Expect(stream, "OUTLINE_PASS", error) || !(stream >> outline_value) ||
+                !Expect(stream, "LAYER_COUNT", error) || !(stream >> layer_count))
+            {
+                if (error.empty()) error = "Materialの層構造を読み取れません";
+                return false;
+            }
+            loaded.outline_pass = outline_value != 0;
+
+            if (layer_count > ShaderLayerStack::MaxLayers)
+            {
+                error = "Materialの層数が上限を超えています";
+                return false;
+            }
+
+            for (std::size_t index = 0; index < layer_count; ++index)
+            {
+                int type = 0;
+                int blend = 0;
+                int enabled = 0;
+                ShaderLayer source{};
+                if (!Expect(stream, "LAYER", error) ||
+                    !(stream >> type >> blend >> enabled >> source.opacity >>
+                        source.strength >> source.parameter >>
+                        source.tint.x >> source.tint.y >>
+                        source.tint.z >> source.tint.w))
+                {
+                    if (error.empty()) error = "Materialの層を読み取れません";
+                    return false;
+                }
+                if (type < static_cast<int>(ShaderLayerType::Pbr) ||
+                    type > static_cast<int>(ShaderLayerType::StylizedCharacter) ||
+                    blend < static_cast<int>(ShaderLayerBlend::Alpha) ||
+                    blend > static_cast<int>(ShaderLayerBlend::Multiply))
+                {
+                    error = "Materialの層の列挙値が不正です";
+                    return false;
+                }
+
+                // id は Add が振り直す。保存された id は使わない。
+                ShaderLayer& added =
+                    loaded.layers.Add(static_cast<ShaderLayerType>(type));
+                added.blend = static_cast<ShaderLayerBlend>(blend);
+                added.enabled = enabled != 0;
+                added.opacity = source.opacity;
+                added.strength = source.strength;
+                added.parameter = source.parameter;
+                added.tint = source.tint;
+            }
+        }
+
+        if (!Expect(stream, "END_MATERIAL", error))
+        {
+            if (error.empty()) error = "Materialの終端が見つかりません";
             return false;
         }
         if (alpha < static_cast<int>(MaterialAlphaMode::Opaque) ||

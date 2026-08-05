@@ -314,6 +314,9 @@
     <ClCompile Include="RePlayEngine\Scripting\Core\ScriptValue.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\Core\ScriptWorld.cpp" />
     <ClCompile Include="Source\app\Editor\framework_project_browser.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\ShaderEditing\ShaderInspector.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderCompiler.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderCompileValidation.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpProject.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackend.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\Validation\CSharpScriptValidation.cpp" />

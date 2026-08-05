@@ -1,6 +1,9 @@
 ﻿#include "ShaderStackEditor.h"
 
 #include "imgui/imgui.h"
+// PushItemFlag / ImGuiItemFlags_Disabled は internal 側にある。
+// 並べ替えボタンの端で無効表示にするために使う。
+#include "imgui/imgui_internal.h"
 
 #include <cstdint>
 #include <string>
@@ -121,10 +124,13 @@ namespace ReplayEngine::Editor
             add_layer("Unlit発光", ShaderLayerType::Unlit);
             add_layer("ピクセレーション", ShaderLayerType::Pixelate);
             add_layer("ワイヤーフレーム", ShaderLayerType::Wireframe);
-            if (advanced_mode || !layers.Contains(ShaderLayerType::StylizedCharacter))
-                add_layer("キャラクター材質", ShaderLayerType::StylizedCharacter);
-            if (advanced_mode || !layers.Contains(ShaderLayerType::Outline))
-                add_layer("輪郭線", ShaderLayerType::Outline);
+            // 種別ごとの枚数制限は設けない。
+            //
+            // 以前は輪郭線とキャラクター材質を 1 枚までに制限していたが、
+            // 「輪郭を色違いで 2 重に掛ける」のような使い方ができなかった。
+            // 重ね掛けは表現の道具なので、枚数はユーザーに決めさせる。
+            add_layer("キャラクター材質", ShaderLayerType::StylizedCharacter);
+            add_layer("輪郭線", ShaderLayerType::Outline);
             ImGui::EndPopup();
         }
 
@@ -159,6 +165,33 @@ namespace ReplayEngine::Editor
             }
             ImGui::SameLine();
             ImGui::Checkbox("有効", &layer.enabled);
+
+            // 並べ替えのボタン。
+            //
+            // ドラッグ&ドロップだけだと、並べ替えられること自体に
+            // 気付けない。上下ボタンを出して発見できるようにする。
+            // ドラッグは残すので、慣れたらそちらの方が速い。
+            ImGui::SameLine();
+            if (index == 0) ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+            if (ImGui::ArrowButton("##MoveUp", ImGuiDir_Up) && index > 0)
+            {
+                move_source = index;
+                move_destination = index - 1;
+            }
+            if (index == 0) ImGui::PopItemFlag();
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("1つ手前へ（先に描く）");
+
+            ImGui::SameLine();
+            const bool is_last = index + 1 >= layers.Layers().size();
+            if (is_last) ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+            if (ImGui::ArrowButton("##MoveDown", ImGuiDir_Down) && !is_last)
+            {
+                move_source = index;
+                move_destination = index + 1;
+            }
+            if (is_last) ImGui::PopItemFlag();
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("1つ後ろへ（後に描く）");
+
             ImGui::SameLine();
             if (ImGui::SmallButton("削除")) remove_index = index;
 

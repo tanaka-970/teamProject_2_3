@@ -1238,10 +1238,20 @@ ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
         resolve_object_material(source.material_asset);
     if (material == nullptr) return item;
 
+    // 【マテリアルが唯一の真実】
+    //
+    // 絵柄（shading_model）は必ずマテリアルの指定を使う。
+    //
+    // 以前は material_override が true だと Renderer 側の shading_model が
+    // 優先され、マテリアルでトゥーンを選んでも PBR のままだった。
+    // 「マテリアルを割り当てたのに絵が変わらない」原因がこれ。
+    //
+    // Unity では Renderer に絵柄の指定は無く、マテリアルだけが決める。
+    // material_override は色の上書き（tint）だけに意味を限定する。
+    item.shading_model = material->shading_model;
     if (!source.material_override)
     {
         item.tint = material->base_color;
-        item.shading_model = material->shading_model;
     }
     item.metallic = material->metallic;
     item.roughness = material->roughness;

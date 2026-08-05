@@ -868,18 +868,23 @@ private:
     void draw_scene_hierarchy();
     void draw_inspector();
     void draw_shader_adjustment_workspace();
-    void draw_shader_stack(const char* id, int& base_shader, bool& outline_pass,
-        ReplayEngine::Rendering::ShaderLayerStack& layers, float& pixel_grid,
-        float& pixelate_strength);
+    // シェーダ編集の唯一の入口（Source/app/Editor/framework_shader_stack.cpp）。
+    //
+    // 絵柄・レイヤ・キャラ材質・プリセットをここ 1 箇所で編集する。
+    // 引数はすべて参照なので、呼び出し側が選択中の GameObject の
+    // 値を渡せば、そのオブジェクトだけが変わる。
+    // オブジェクトごとに違うシェーダを掛けられる状態を保つこと。
+    void draw_shader_inspector(const char* id, const std::string& label,
+        int& base_shader, bool& outline_pass,
+        ReplayEngine::Rendering::ShaderLayerStack& layers,
+        ReplayEngine::Rendering::CharacterMaterialProfile& profile,
+        float& pixel_grid, float& pixelate_strength);
     void draw_screen_effect_stack();
     // SSAO / SSR / TAA / CSM の有効化と調整項目。
     void draw_screen_space_settings();
     // ポリゴン数・ドローコール数などの描画統計オーバーレイ。
     void draw_render_stats_overlay();
-    void draw_character_material_controls(const char* id, int& base_shader, bool& outline_pass,
-        ReplayEngine::Rendering::ShaderLayerStack& layers,
-        ReplayEngine::Rendering::CharacterMaterialProfile& profile, float& pixel_grid,
-        float& pixelate_strength);
+    // draw_character_material_controls は draw_shader_inspector へ統合された。
     bool browse_model_asset();
     bool load_model_asset_async(const std::wstring& filename);
     bool load_model_asset_now(const std::wstring& filename);

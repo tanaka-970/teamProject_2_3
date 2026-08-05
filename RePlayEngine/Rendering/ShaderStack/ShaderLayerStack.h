@@ -42,7 +42,13 @@ namespace ReplayEngine::Rendering
     class ShaderLayerStack final
     {
     public:
-        static constexpr std::size_t MaxLayers = 16;
+        // 重ね掛けの上限。
+        //
+        // GPU 側に固定長の配列は無く、1 層につき 1 パス描くだけなので
+        // 構造上の制限は無い。それでも上限を残すのは、
+        // 誤って何百層も積んで気付かないうちにフレームが落ちるのを防ぐため。
+        // 実用上まず届かない値にしてある。
+        static constexpr std::size_t MaxLayers = 64;
 
         ShaderLayer& Add(ShaderLayerType type)
         {

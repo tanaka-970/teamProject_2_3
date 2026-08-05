@@ -29,6 +29,7 @@
 #include "../../../RePlayEngine/Object/Registry/BuiltInComponents.h"
 #include "../../../RePlayEngine/Reflection/Registry/PropertyRegistry.h"
 #include "../../../RePlayEngine/Rendering/Materials/MaterialAsset.h"
+#include "../../../RePlayEngine/Rendering/Shaders/ShaderCompileValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/BehaviourValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/HandleValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/RuntimeSceneValidation.h"
@@ -992,6 +993,16 @@ namespace
                 return ScriptValidation::RunCSharpScriptValidation();
             }
         }
+
+        // シェーダ基盤。フェーズ 1（実行時コンパイル）。
+        //
+        // D3D デバイスを作らずに走る。D3DCompile はデバイス非依存なので、
+        // ヘッドレスで検証できる。終了コード帯は 900-949。
+        if (command == "--validate-shader-compile")
+        {
+            return ReplayEngine::Rendering::Validation::RunShaderCompileValidation();
+        }
+
         return -1;
     }
 }
