@@ -1010,6 +1010,9 @@ private:
 
     bool refresh_csharp_scripts();
 
+    // Catalog 更新と Assembly 再コンパイルを 1 回でやる。
+    bool rebuild_all_csharp();
+
     // 編集 Scene の ScriptComponent へ Schema を引き直させる。
     // Catalog 更新は Play セッションの Component にしか届かないため、
     // 編集側はここで明示的に引き直す。戻り値は解決できた件数。
@@ -1175,6 +1178,11 @@ private:
     char new_csharp_behaviour_name[128]{ "NewBehaviour" };
     char new_csharp_namespace[128]{ "Game" };
     bool csharp_scripts_dirty{ false };
+
+    // .cs の保存を検出したら自動で再コンパイルするか。
+    // 既定で有効。コンパイル失敗時は直前に成功した Assembly が
+    // 維持されるので、自動で走らせても編集中の状態は壊れない。
+    bool csharp_auto_reload{ true };
     float csharp_scan_accumulator{ 0.0f };
     std::unordered_map<std::string, std::filesystem::file_time_type>
         csharp_source_write_times;

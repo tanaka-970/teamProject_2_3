@@ -909,6 +909,12 @@ void framework::poll_csharp_script_changes(float elapsed_time)
     if (csharp_scan_accumulator < 1.0f) return;
     csharp_scan_accumulator = 0.0f;
 
+    // この回で新しく変化を見つけたか。
+    // 見つけた直後は再ビルドしない。Visual Studio は複数ファイルを
+    // 続けて保存するので、検出のたびに走らせるとビルドが重なる。
+    // 「変化が落ち着いた次の回」で 1 度だけ走らせる。
+    bool changed_this_scan = false;
+
     for (const CSharp::CSharpBehaviourInfo& info :
         CSharp::CSharpProject::DiscoverBehaviours(std::filesystem::current_path()))
     {
@@ -923,6 +929,7 @@ void framework::poll_csharp_script_changes(float elapsed_time)
         {
             csharp_source_write_times[key] = time;
             csharp_scripts_dirty = true;
+            changed_this_scan = true;
             push_editor_log("Info", "C# source detected: " + key, info.source_path);
             continue;
         }
@@ -931,9 +938,48 @@ void framework::poll_csharp_script_changes(float elapsed_time)
         {
             found->second = time;
             csharp_scripts_dirty = true;
+            changed_this_scan = true;
             push_editor_log("Info", "C# source changed: " + key, info.source_path);
         }
     }
+
+    // 保存を検出したら自動で再コンパイルする。
+    //
+    // 手で「Build && Reload C#」を押す運用だと、押し忘れたまま
+    // 「直したのに動かない」と悩む時間が生まれる。実際にそれで詰まった。
+    //
+    // コンパイルに失敗しても直前に成功した Assembly が維持されるので、
+    // 自動で走らせても編集中のシーンは壊れない。
+    if (csharp_scripts_dirty && csharp_auto_reload && !changed_this_scan)
+    {
+        csharp_scripts_dirty = false;
+        push_editor_log("Info", "C# の変更を検出したので自動で再コンパイルします");
+        build_and_reload_csharp_scripts();
+    }
+}
+
+// C# を一括で作り直す。
+// Catalog の更新と Assembly の再コンパイルを 1 回でやる。
+bool framework::rebuild_all_csharp()
+{
+    push_editor_log("Info", "===== C# 一括更新 開始 =====");
+
+    // 先に Catalog。新しく増えた .cs をここで拾う。
+    const bool catalog_ok = refresh_csharp_scripts();
+
+    // 次に Assembly。Catalog に載った型が実際に生成できる状態になる。
+    const bool build_ok = build_and_reload_csharp_scripts();
+
+    // 変更検出の基準を今の状態へ揃える。
+    // これをしないと、直後の巡回でもう一度自動再コンパイルが走る。
+    snapshot_csharp_script_write_times();
+    csharp_scripts_dirty = false;
+
+    push_editor_log(catalog_ok && build_ok ? "Info" : "Error",
+        std::string("===== C# 一括更新 終了 (Catalog=") +
+        (catalog_ok ? "OK" : "NG") + " / Build=" + (build_ok ? "OK" : "NG") + ") =====");
+
+    return catalog_ok && build_ok;
 }
 
 bool framework::refresh_csharp_scripts()
@@ -1168,16 +1214,46 @@ void framework::draw_project_panel()
         ImGui::SameLine();
         if (ImGui::Button("New C# Behaviour")) create_csharp_behaviour_asset();
 
-        if (ImGui::Button("Refresh C# Catalog")) refresh_csharp_scripts();
+        // 一括更新をいちばん目立つ位置へ置く。
+        // Catalog 更新と再コンパイルを分けて覚えるのは negligible な区別で、
+        // 実際には「とりあえず全部更新したい」がほとんど。
+        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.20f, 0.48f, 0.72f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.26f, 0.60f, 0.86f, 1.0f));
+        if (ImGui::Button(u8"C# をすべて更新", ImVec2(150.0f, 0.0f))) rebuild_all_csharp();
+        ImGui::PopStyleColor(2);
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip(u8"Catalog の更新と Assembly の再コンパイルを"
+                u8"まとめて行います。\n迷ったらこれを押してください。");
+        }
+
         ImGui::SameLine();
-        if (ImGui::Button("Build && Reload C#")) build_and_reload_csharp_scripts();
+        ImGui::Checkbox(u8"自動更新", &csharp_auto_reload);
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip(u8".cs を保存すると自動で再コンパイルします。\n"
+                u8"失敗しても直前に成功した Assembly を使い続けるので、\n"
+                u8"編集中の状態は壊れません。");
+        }
+
         ImGui::SameLine();
         if (ImGui::Button("Open Selected .cs")) open_selected_csharp_asset();
+
         if (csharp_scripts_dirty)
         {
             ImGui::SameLine();
             ImGui::TextColored(ImVec4(1.0f, 0.74f, 0.28f, 1.0f),
-                "変更検出済み");
+                csharp_auto_reload ? u8"変更検出 → まもなく更新"
+                                   : u8"変更検出済み（自動更新は無効）");
+        }
+
+        // 個別操作は畳んでおく。普段は使わない。
+        if (ImGui::TreeNode(u8"個別に実行"))
+        {
+            if (ImGui::Button("Refresh C# Catalog")) refresh_csharp_scripts();
+            ImGui::SameLine();
+            if (ImGui::Button("Build && Reload C#")) build_and_reload_csharp_scripts();
+            ImGui::TreePop();
         }
         ImGui::TextDisabled("%s",
             CSharp::CSharpProject::GameScriptsProjectPath(
