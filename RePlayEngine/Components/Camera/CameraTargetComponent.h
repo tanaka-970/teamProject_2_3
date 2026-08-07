@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../../Core/ObjectID/ObjectID.h"
 #include "../../Object/Component/Component.h"
@@ -13,8 +13,7 @@ namespace ReplayEngine::Components
     // 重要: このクラス自身はカメラを一切動かさない。
     //   カメラを動かすのはカメラ制御側（現状は SceneGame）。
     //   制御側は「CameraTargetComponent を持つ GameObject」を ObjectID で探し、
-    //   その Transform と、ここに書かれたオフセット設定を読むだけ。
-    //
+    //   その Transform と、ここに書かれたオフセット設定を読むだけ
     //   これにより、カメラ側が Player 具象型を知る必要がなくなる。
     //   追従対象を人型からメカやドローンへ変えても、
     //   この Component を付け替えるだけで済む。
@@ -25,13 +24,7 @@ namespace ReplayEngine::Components
     public:
         CameraTargetComponent() = default;
 
-        // 追従の基準点を GameObject のワールド位置からずらす量。
-        //
-        // look_at_offset との違い:
-        //   target_offset  … 「追従している点」そのものをずらす。
-        //                     モデルの原点が足元にある場合に腰の高さへ寄せる、
-        //                     機体の中心が前方にある場合に後ろへ寄せる、といった用途。
-        //   look_at_offset … 追従点はそのままで「カメラが見る点」だけをずらす。
+      
         DirectX::XMFLOAT3 target_offset{ 0.0f, 0.0f, 0.0f };
 
         // 注視点のオフセット。旧来のカメラ追従は position.y + 1.0f を見ていた。

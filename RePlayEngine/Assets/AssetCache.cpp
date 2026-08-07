@@ -12,7 +12,7 @@ namespace ReplayEngine::Assets
         constexpr std::uint32_t cache_magic = 0x43415052;
         constexpr std::uint32_t cache_container_version = 1;
 
-        // ヘッダーに種類と元データの指紋を持たせ、古いキャッシュの誤読を防ぐ。
+        // ヘッダーに種類と元データの形を持たせて、古いキャッシュの誤読を防ぐ。
         struct CacheHeader
         {
             std::uint32_t magic = cache_magic;
