@@ -1,4 +1,4 @@
-﻿#include "framework.h"
+#include "framework.h"
 #include "gltf_model.h"
 #include "skinned_mesh.h"
 #include "../../RePlayEngine/Assets/AssetCache.h"
@@ -6,6 +6,8 @@
 #include "../../RePlayEngine/Components/Rendering/MeshRendererComponent.h"
 #include "../../RePlayEngine/Components/Rendering/SkinnedMeshRendererComponent.h"
 #include "../../RePlayEngine/Rendering/Materials/MaterialAsset.h"
+#include "../../RePlayEngine/Editor/ShaderEditing/MaterialShaderInspector.h"
+#include "../../RePlayEngine/Editor/ShaderEditing/ShaderStackEditor.h"
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
 #include "../../RePlayEngine/Scene/Serialization/PrefabSerializer.h"
 #include "../../RePlayEngine/Scripting/Core/ScriptComponent.h"
@@ -316,6 +318,7 @@ bool framework::load_material_editor(const ReplayEngine::Assets::AssetRecord& as
     material_editor_asset = std::move(loaded);
     material_editor_guid = asset.guid;
     material_editor_loaded = true;
+    material_editor_dirty = false;
     material_editor_status = "Materialを読み込みました: " + asset.display_name;
     return true;
 }
@@ -331,6 +334,11 @@ bool framework::save_material_editor()
         return false;
     }
 
+    // Schema-driven Inspector は PropertyBag を正として編集する。
+    // Phase 6/12 の旧互換 field へも同期してから保存し、
+    // fallback 経路と新経路のどちらでも同じ見た目になるようにする。
+    material_editor_asset.SyncPropertiesToLegacyFields();
+
     std::string error;
     if (!ReplayEngine::Rendering::MaterialAsset::Save(
         material_editor_asset, asset->source_path, error))
@@ -342,6 +350,7 @@ bool framework::save_material_editor()
     object_material_failures.erase(material_editor_guid);
     material_editor_status = "MaterialをAtomic Saveしました: " +
         asset->source_path.generic_u8string();
+    material_editor_dirty = false;
     return true;
 }
 
@@ -351,6 +360,14 @@ void framework::draw_material_asset_editor()
         ? nullptr : asset_database.FindByGuid(selected_asset_guid);
     if (selected == nullptr || selected->kind != ReplayEngine::Assets::AssetKind::Material)
         return;
+
+    // 別 Material へ移るとき未保存値を黙って捨てない。
+    // Unity の Asset 編集に近く、選択変更を「保存確認の罠」にしない。
+    if (material_editor_loaded && material_editor_guid != selected->guid &&
+        material_editor_dirty)
+    {
+        if (!save_material_editor()) return;
+    }
     if (!material_editor_loaded || material_editor_guid != selected->guid)
         load_material_editor(*selected);
     if (!material_editor_loaded) return;
@@ -358,78 +375,80 @@ void framework::draw_material_asset_editor()
     ImGui::Separator();
     if (!ImGui::CollapsingHeader("Material Asset", ImGuiTreeNodeFlags_DefaultOpen)) return;
     ImGui::TextDisabled("%s", selected->source_path.generic_u8string().c_str());
-    ImGui::ColorEdit4("Base Color", &material_editor_asset.base_color.x);
-    ImGui::SliderFloat("Metallic", &material_editor_asset.metallic, 0.0f, 1.0f);
-    ImGui::SliderFloat("Roughness", &material_editor_asset.roughness, 0.0f, 1.0f);
-    ImGui::ColorEdit3("Emissive", &material_editor_asset.emissive.x);
-    ImGui::DragFloat("Emissive Strength", &material_editor_asset.emissive_strength,
-        0.05f, 0.0f, 1000.0f);
-    ImGui::SliderFloat("Ambient Occlusion", &material_editor_asset.ambient_occlusion,
-        0.0f, 1.0f);
-    int alpha = static_cast<int>(material_editor_asset.alpha_mode);
-    const char* alpha_modes[]{ "Opaque", "Mask", "Blend" };
-    if (ImGui::Combo("Alpha Mode", &alpha, alpha_modes, IM_ARRAYSIZE(alpha_modes)))
-        material_editor_asset.alpha_mode =
-            static_cast<ReplayEngine::Rendering::MaterialAlphaMode>(alpha);
-    if (material_editor_asset.alpha_mode == ReplayEngine::Rendering::MaterialAlphaMode::Mask)
-        ImGui::SliderFloat("Alpha Cutoff", &material_editor_asset.alpha_cutoff, 0.0f, 1.0f);
-    ImGui::Checkbox("Double Sided", &material_editor_asset.double_sided);
-    const char* shading_models[]{ "FBX Default", "PBR", "Toon", "Unlit", "Pixelate" };
-    ImGui::Combo("Shading Model", &material_editor_asset.shading_model,
-        shading_models, IM_ARRAYSIZE(shading_models));
 
-    const auto texture_guid = [](const char* label, std::string& value)
+    // ---------------------------------------------------------------------
+    // Phase 7: Shader GUID + PropertySchema が Inspector の正本。
+    //
+    // PBR / Toon / Unlit / Pixelate / Project Shader を同じ Picker から選ぶ。
+    // Shader 固有 UI はここへ hard-code せず、#pragma property の Schema から
+    // MaterialShaderInspector が自動生成する。
+    // ---------------------------------------------------------------------
+    const std::string inspector_id = "material_schema_" + selected->guid;
+    const auto inspector = ReplayEngine::Editor::MaterialShaderInspector::Draw(
+        inspector_id.c_str(), material_editor_asset,
+        shader_library.Catalog(), asset_database);
+    if (inspector.changed)
     {
-        char buffer[96]{};
-        strncpy_s(buffer, value.c_str(), _TRUNCATE);
-        if (ImGui::InputText(label, buffer, IM_ARRAYSIZE(buffer))) value = buffer;
-    };
-    if (ImGui::TreeNode("Texture AssetGUIDs"))
-    {
-        texture_guid("Base Color Texture", material_editor_asset.base_color_texture);
-        texture_guid("Normal Texture", material_editor_asset.normal_texture);
-        texture_guid("Metallic Texture", material_editor_asset.metallic_texture);
-        texture_guid("Roughness Texture", material_editor_asset.roughness_texture);
-        texture_guid("Emissive Texture", material_editor_asset.emissive_texture);
-        texture_guid("AO Texture", material_editor_asset.ambient_occlusion_texture);
-        ImGui::TreePop();
+        material_editor_dirty = true;
+
+        // Disk Save を待たず Scene 上へ即時プレビューする。
+        // resolve_object_material() は disk write_time と cache write_time が同じなら
+        // cache を返すため、現在ファイルの時刻を付けた編集コピーを差し込めば
+        // Slider / Shader Picker の結果が次フレームからそのまま見える。
+        std::error_code preview_error;
+        const auto write_time = std::filesystem::last_write_time(
+            selected->source_path, preview_error);
+        if (!preview_error)
+        {
+            cached_material_asset preview;
+            preview.material = material_editor_asset;
+            preview.write_time = write_time;
+            object_material_cache.insert_or_assign(
+                material_editor_guid, std::move(preview));
+            object_material_failures.erase(material_editor_guid);
+        }
     }
 
-    // ---- シェーダ調整（唯一の入口）---------------------------------------
-    //
-    // 絵柄・レイヤ・キャラ材質・プリセットはここで編集する。
-    // 以前は「シェーダー調整」タブにも同じ見た目の欄があったが、
-    // そちらはデバッグメッシュ専用で本番マテリアルに効かなかったため撤去した。
-    //
-    // Shading Model はこの Material が持つ値なので、
-    // Material を分ければオブジェクトごとに別の絵柄になる。
+    // ---------------------------------------------------------------------
+    // 既存の Layer Stack は Phase 16 の Asset-driven Stack へ移行するまで保持。
+    // Base Shader の選択欄だけ隠し、上の GUID Picker と二重管理しない。
+    // ---------------------------------------------------------------------
     ImGui::Separator();
+    if (ImGui::TreeNodeEx("Shader Stack", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        // ImGui の ID は Material ごとに変える。
-        // 使い回すと、別 Material を選んだときに開閉状態が混ざる。
-        const std::string inspector_id = "material_shader_" + selected->guid;
-        const std::string label = selected->source_path.filename().u8string();
-
-        // レイヤはこの Material 自身のものを渡す。
-        // グローバル配列（shader_layers_static[0]）を渡すと、
-        // どの Material を選んでも同じ層構成になってしまう。
-        //
-        // キャラ材質だけはまだ Material が持っていないため
-        // グローバルを渡している。次段階で Material へ移す。
-        draw_shader_inspector(inspector_id.c_str(), label,
+        const bool was_active = ImGui::IsAnyItemActive();
+        const auto stack = ReplayEngine::Editor::ShaderStackEditor::Draw(
+            ("material_stack_" + selected->guid).c_str(),
             material_editor_asset.shading_model,
             material_editor_asset.outline_pass,
             material_editor_asset.layers,
-            character_profiles_static[0],
+            shader_stack_advanced_mode,
+            toon.outline.outline_color,
+            toon.outline.outline_params,
             material_editor_asset.pixelate_grid,
-            material_editor_asset.pixelate_strength);
+            material_editor_asset.pixelate_strength,
+            false);
+
+        if (stack.requires_pbr)     use_pbr_skin = true;
+        if (stack.requires_toon)    enable_toon_shader = true;
+        if (stack.requires_unlit)   enable_unlit_shader = true;
+        if (stack.requires_outline) enable_outline_shader = true;
+
+        // ImGui 1.80 には IsAnyItemEdited が無いので、既存 Editor と同じく
+        // 操作中を dirty の近似値として使う。Save はいつでも押せる。
+        if (ImGui::IsAnyItemActive() || was_active) material_editor_dirty = true;
+        ImGui::TreePop();
     }
 
     ImGui::Separator();
-    if (ImGui::Button("Save Material")) save_material_editor();
+    const char* save_label = material_editor_dirty ? "Save Material *" : "Save Material";
+    if (ImGui::Button(save_label)) save_material_editor();
     ImGui::SameLine();
     if (ImGui::Button("Assign to Selected Renderer"))
         place_asset_in_object_scene(*selected, false);
+    ImGui::SameLine();
+    ImGui::TextDisabled(material_editor_dirty ? "未保存" : "保存済み");
+
     ImGui::TextDisabled("%s", material_editor_status.c_str());
 }
 

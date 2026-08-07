@@ -21,6 +21,6 @@ namespace ReplayEngine::Editor
             bool& outline_pass, Rendering::ShaderLayerStack& layers,
             bool& advanced_mode, DirectX::XMFLOAT4& outline_color,
             DirectX::XMFLOAT4& outline_parameters, float& pixel_grid,
-            float& pixelate_strength);
+            float& pixelate_strength, bool show_surface_controls = true);
     };
 }

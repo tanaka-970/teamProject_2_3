@@ -54,7 +54,7 @@ namespace ReplayEngine::Rendering
             value.properties.Set("prop.EmissiveStrength", PropertyValue::MakeFloat(value.emissive_strength));
             value.properties.Set("prop.EmissiveMap", PropertyValue::MakeAssetReference(value.emissive_texture));
             value.properties.Set("prop.AmbientOcclusion", PropertyValue::MakeFloat(value.ambient_occlusion));
-            value.properties.Set("prop.AmbientOcclusionMap", PropertyValue::MakeAssetReference(value.ambient_occlusion_texture));
+            value.properties.Set("prop.OcclusionMap", PropertyValue::MakeAssetReference(value.ambient_occlusion_texture));
             value.properties.Set("prop.AlphaMode", PropertyValue::MakeEnum(static_cast<int>(value.alpha_mode)));
             value.properties.Set("prop.AlphaCutoff", PropertyValue::MakeFloat(value.alpha_cutoff));
             value.properties.Set("prop.DoubleSided", PropertyValue::MakeBool(value.double_sided));
@@ -156,7 +156,10 @@ namespace ReplayEngine::Rendering
         ApplyIf(properties, "prop.EmissiveStrength", [this](const Reflection::PropertyValue& v){ emissive_strength=v.AsFloat(emissive_strength); });
         ApplyIf(properties, "prop.EmissiveMap", [this](const Reflection::PropertyValue& v){ emissive_texture=v.AsString(); });
         ApplyIf(properties, "prop.AmbientOcclusion", [this](const Reflection::PropertyValue& v){ ambient_occlusion=v.AsFloat(ambient_occlusion); });
-        ApplyIf(properties, "prop.AmbientOcclusionMap", [this](const Reflection::PropertyValue& v){ ambient_occlusion_texture=v.AsString(); });
+        if (const Reflection::PropertyValue* value = properties.Find("prop.OcclusionMap"))
+            ambient_occlusion_texture = value->AsString();
+        else
+            ApplyIf(properties, "prop.AmbientOcclusionMap", [this](const Reflection::PropertyValue& v){ ambient_occlusion_texture=v.AsString(); });
         ApplyIf(properties, "prop.AlphaMode", [this](const Reflection::PropertyValue& v){ alpha_mode=static_cast<MaterialAlphaMode>(v.AsInt(static_cast<int>(alpha_mode))); });
         ApplyIf(properties, "prop.AlphaCutoff", [this](const Reflection::PropertyValue& v){ alpha_cutoff=v.AsFloat(alpha_cutoff); });
         ApplyIf(properties, "prop.DoubleSided", [this](const Reflection::PropertyValue& v){ double_sided=v.AsBool(double_sided); });
@@ -199,6 +202,10 @@ namespace ReplayEngine::Rendering
         MaterialAsset normalized = material;
         if (normalized.shader_guid.empty())
             normalized.shader_guid = BuiltInShaders::FromShadingModel(normalized.shading_model).ToString();
+
+        // v3ではPropertyBagが主。Editorで変更した値を旧固定フィールドへ戻してから、
+        // 互換フィールドと既知propertyを同じ値へ揃える。未知propertyは消さない。
+        normalized.SyncPropertiesToLegacyFields();
         normalized.SyncLegacyFieldsToProperties();
 
         stream << std::setprecision(std::numeric_limits<float>::max_digits10);

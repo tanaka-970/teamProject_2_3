@@ -1,4 +1,4 @@
-﻿#include "framework.h"
+#include "framework.h"
 #include "../../RePlayEngine/Components/Gameplay/CharacterMotorComponent.h"
 #include "../../RePlayEngine/Components/Gameplay/PlayerControllerComponent.h"
 #include "../../RePlayEngine/Components/Gameplay/PlayerInputComponent.h"
@@ -1314,6 +1314,20 @@ void framework::draw_project_panel()
     {
         ImGui::SameLine();
         if (ImGui::Button("Visual Studioで開く")) open_selected_csharp_asset();
+    }
+    if (selected_asset != nullptr &&
+        selected_asset->kind == ReplayEngine::Assets::AssetKind::Shader)
+    {
+        ImGui::SameLine();
+        if (ImGui::Button("ShaderをVisual Studioで開く"))
+        {
+            std::string open_error;
+            if (!ReplayEngine::Scripting::CSharp::CSharpProject::OpenVisualStudio(
+                selected_asset->source_path, 1, open_error))
+            {
+                push_editor_log("Warning", open_error, selected_asset->source_path);
+            }
+        }
     }
     draw_material_asset_editor();
     ImGui::Separator();

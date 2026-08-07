@@ -3,6 +3,7 @@
 #include "../../RePlayEngine/Assets/AssetCache.h"
 #include "../../RePlayEngine/Editor/Style/EditorStyle.h"
 #include "../../RePlayEngine/Rendering/Materials/MaterialAsset.h"
+#include "../../RePlayEngine/Rendering/Shaders/ShaderAssetFactory.h"
 #include "../../RePlayEngine/Scripting/CSharp/CSharpProject.h"
 
 #include <algorithm>
@@ -153,6 +154,7 @@ namespace
         case AssetKind::Material: return ImVec4(0.95f, 0.60f, 0.85f, 1.0f);
         case AssetKind::Scene:    return ImVec4(0.75f, 0.72f, 0.98f, 1.0f);
         case AssetKind::Script:   return ImVec4(0.45f, 0.88f, 0.80f, 1.0f);
+        case AssetKind::Shader:   return ImVec4(0.98f, 0.67f, 0.28f, 1.0f);
         default:                  return ImVec4(0.72f, 0.72f, 0.72f, 1.0f);
         }
     }
@@ -362,6 +364,93 @@ bool framework::project_create_material(const std::string& name)
     return true;
 }
 
+
+bool framework::project_create_surface_shader(const std::string& name)
+{
+    using ReplayEngine::Assets::AssetKind;
+    using ReplayEngine::Rendering::ShaderAssetFactory;
+    using ReplayEngine::Rendering::ShaderID;
+
+    const std::string safe = SafeProjectFileName(
+        name.empty() ? std::string("NewShader") : name);
+
+    std::error_code error;
+    const std::filesystem::path root = std::filesystem::current_path(error);
+    if (error)
+    {
+        project_browser_status = "Project root を取得できません";
+        return false;
+    }
+
+    // ShaderLibrary は Shader/Materials/** だけを surface shader として走査する。
+    // Project Browser のどこで Create を押しても使える Shader が作られるよう、
+    // Shader/Materials 外なら Shader/Materials/Project へ自動的に置く。
+    std::filesystem::path folder = root / project_current_folder;
+    std::filesystem::path relative = std::filesystem::relative(folder, root, error);
+    if (error) relative.clear();
+    const std::string relative_lower = ToLowerCopy(relative.generic_u8string());
+    if (relative_lower.rfind("shader/materials", 0) != 0)
+        folder = root / "Shader" / "Materials" / "Project";
+
+    std::filesystem::create_directories(folder, error);
+    if (error)
+    {
+        project_browser_status = "Shader folder を作成できません";
+        return false;
+    }
+
+    std::filesystem::path path = folder / (safe + ".hlsl");
+    for (int suffix = 2; std::filesystem::exists(path) && suffix < 10000; ++suffix)
+        path = folder / (safe + std::to_string(suffix) + ".hlsl");
+
+    // Picker のカテゴリもフォルダ構造から自動で作る。
+    // Shader/Materials/Characters/Skin.hlsl -> Project/Characters/Skin
+    // Editor 側に custom shader 名を hard-code しない。
+    std::string picker_category = "Project";
+    const std::filesystem::path materials_root = root / "Shader" / "Materials";
+    std::filesystem::path shader_subfolder =
+        std::filesystem::relative(folder, materials_root, error);
+    if (!error && !shader_subfolder.empty() && shader_subfolder != ".")
+    {
+        const std::string sub = shader_subfolder.generic_u8string();
+        // 既定の Shader/Materials/Project は "Project/Project" にしない。
+        // Project/Characters のような配下だけ、そのまま分類へ反映する。
+        if (sub == "Project") picker_category = "Project";
+        else if (sub.rfind("Project/", 0) == 0) picker_category = sub;
+        else picker_category = "Project/" + sub;
+    }
+    error.clear();
+
+    ShaderID shader_id;
+    std::string shader_error;
+    if (!ShaderAssetFactory::CreateSurfaceShader(
+        path, safe, picker_category, shader_id, shader_error))
+    {
+        project_browser_status = "Shader 作成失敗: " + shader_error;
+        return false;
+    }
+
+    const ReplayEngine::Assets::AssetRecord& record =
+        asset_database.Register(path, AssetKind::Shader);
+    if (!asset_database.Save(shader_error))
+    {
+        project_browser_status = "Shader は作成しましたが DB 保存失敗: " + shader_error;
+        return false;
+    }
+
+    // 作った瞬間に Picker へ出す。次回起動待ちにしない。
+    const auto report = shader_library.ScanAll(root);
+    selected_asset_guid = record.guid;
+    set_project_folder(path.parent_path());
+
+    project_browser_status = "Surface Shader を作成しました: " +
+        path.filename().u8string() + " / ShaderGUID=" + shader_id.ToString();
+    if (report.compile_failed != 0)
+        project_browser_status += " (compile error は Shader Catalog で確認)";
+    push_editor_log("Info", project_browser_status, path, 1);
+    return true;
+}
+
 // -----------------------------------------------------------------------------
 //  改名
 //
@@ -423,7 +512,20 @@ bool framework::project_rename_entry(const std::filesystem::path& path,
         }
     }
 
-    if (ToLowerCopy(destination.extension().u8string()) == ".cs") refresh_csharp_scripts();
+    const std::string renamed_extension =
+        ToLowerCopy(destination.extension().u8string());
+    if (renamed_extension == ".cs") refresh_csharp_scripts();
+    if (renamed_extension == ".hlsl" || renamed_extension == ".fx")
+    {
+        std::error_code root_error;
+        const std::filesystem::path root = std::filesystem::current_path(root_error);
+        if (!root_error)
+        {
+            // Shader 内部の replay_guid は書き換えない。
+            // Source path だけ Catalog へ即反映し、Material の ShaderGUID 参照を保つ。
+            shader_library.ScanAll(root);
+        }
+    }
     project_browser_status = "改名しました: " + destination.filename().u8string();
     return true;
 }
@@ -511,7 +613,7 @@ void framework::draw_project_folder_contents()
             ? AssetKind::Unknown : project_kind_for(entry.path);
         if (!entry.is_directory && asset_type_filter != 0)
         {
-            int filter_type = 6;
+            int filter_type = 7;
             if (kind == AssetKind::Model) filter_type = 1;
             else if (ToLowerCopy(entry.path.extension().u8string()) == ".replayprefab")
                 filter_type = 2;
@@ -519,6 +621,7 @@ void framework::draw_project_folder_contents()
                 filter_type = 3;
             else if (kind == AssetKind::Material) filter_type = 4;
             else if (kind == AssetKind::Script) filter_type = 5;
+            else if (kind == AssetKind::Shader) filter_type = 6;
             if (asset_type_filter != filter_type) continue;
         }
 
@@ -609,6 +712,16 @@ void framework::draw_project_folder_contents()
                 if (record != nullptr) selected_asset_guid = record->guid;
                 open_selected_csharp_asset();
             }
+            if (!entry.is_directory && kind == AssetKind::Shader &&
+                ImGui::MenuItem("Visual Studio で開く"))
+            {
+                std::string open_error;
+                if (!ReplayEngine::Scripting::CSharp::CSharpProject::OpenVisualStudio(
+                    entry.path, 1, open_error))
+                {
+                    push_editor_log("Warning", open_error, entry.path);
+                }
+            }
             if (entry.is_directory && ImGui::MenuItem("このフォルダを開く"))
             {
                 set_project_folder(entry.path);
@@ -628,6 +741,16 @@ void framework::draw_project_folder_contents()
             {
                 if (record != nullptr) selected_asset_guid = record->guid;
                 open_selected_csharp_asset();
+            }
+            else if (kind == AssetKind::Shader)
+            {
+                if (record != nullptr) selected_asset_guid = record->guid;
+                std::string open_error;
+                if (!ReplayEngine::Scripting::CSharp::CSharpProject::OpenVisualStudio(
+                    entry.path, 1, open_error))
+                {
+                    push_editor_log("Warning", open_error, entry.path);
+                }
             }
             else if (record != nullptr)
             {
@@ -736,7 +859,7 @@ void framework::draw_project_browser()
         asset_search_text, IM_ARRAYSIZE(asset_search_text));
     ImGui::SameLine();
     const char* filters[] =
-        { "All", "Model", "Prefab", "Scene", "Material", "Script", "Other" };
+        { "All", "Model", "Prefab", "Scene", "Material", "Script", "Shader", "Other" };
     ImGui::SetNextItemWidth(120.0f);
     ImGui::Combo("##ProjectFilter", &asset_type_filter, filters, IM_ARRAYSIZE(filters));
     ImGui::SameLine();
@@ -799,6 +922,10 @@ void framework::draw_project_browser()
             if (ImGui::MenuItem("Material"))
             {
                 project_create_material(project_new_item_name);
+            }
+            if (ImGui::MenuItem("Surface Shader"))
+            {
+                project_create_surface_shader(project_new_item_name);
             }
             if (ImGui::MenuItem("Folder"))
             {

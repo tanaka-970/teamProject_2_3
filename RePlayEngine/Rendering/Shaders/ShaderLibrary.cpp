@@ -104,10 +104,25 @@ namespace ReplayEngine::Rendering
                 //
                 // 捨てると「#pragma を書いたのに欄が出ない」の原因が
                 // 一切分からなくなる。1 件ずつ行番号付きで出す。
+                bool has_fatal_parse_issue = false;
                 for (const ShaderSource::ParseIssue& issue : parsed.issues)
                 {
                     ++report.parse_issues;
-                    Log("Warning", issue.message, entry.path(), issue.line);
+                    if (issue.fatal) has_fatal_parse_issue = true;
+                    Log(issue.fatal ? "Error" : "Warning",
+                        issue.message, entry.path(), issue.line);
+                }
+
+                // replay_lighting の不明値など、意味を勝手に補えない宣言は
+                // Catalog へ入れない。PBR へ黙って丸めると、指定したのに
+                // 見た目が変わらない原因になる。
+                if (has_fatal_parse_issue || !parsed.info.lighting_model_valid)
+                {
+                    ++report.failed;
+                    Log("Error",
+                        "致命的なシェーダ宣言エラーのため登録しません",
+                        entry.path());
+                    continue;
                 }
 
                 if (needs_guid)

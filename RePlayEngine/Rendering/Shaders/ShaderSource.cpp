@@ -1,4 +1,4 @@
-#include "ShaderSource.h"
+﻿#include "ShaderSource.h"
 
 #include <algorithm>
 #include <cctype>
@@ -217,6 +217,7 @@ namespace ReplayEngine::Rendering
         std::istringstream stream(text);
         std::string raw;
         int line_number = 0;
+        bool lighting_directive_seen = false;
 
         while (std::getline(stream, raw))
         {
@@ -280,6 +281,41 @@ namespace ReplayEngine::Rendering
                 continue;
             }
 
+            if (directive == "replay_lighting")
+            {
+                if (lighting_directive_seen)
+                {
+                    result.info.lighting_model_valid = false;
+                    result.issues.push_back({ line_number,
+                        "replay_lighting が重複しています", true });
+                    continue;
+                }
+                lighting_directive_seen = true;
+
+                if (tokens.size() < 3)
+                {
+                    result.info.lighting_model_valid = false;
+                    result.issues.push_back({ line_number,
+                        "replay_lighting に値がありません", true });
+                    continue;
+                }
+
+                ShaderLightingModel model = ShaderLightingModel::Pbr;
+                if (!TryParseShaderLightingModel(tokens[2], model))
+                {
+                    // 既定値は PBR だが、不明な名前を PBR として通してはいけない。
+                    // valid=false を残し、ShaderLibrary が Catalog 登録を止める。
+                    result.info.lighting_model_valid = false;
+                    result.issues.push_back({ line_number,
+                        "replay_lighting が不明です: " + tokens[2], true });
+                    continue;
+                }
+
+                result.info.lighting_model = model;
+                result.info.lighting_model_valid = true;
+                continue;
+            }
+
             if (directive != "property") continue;
 
             // #pragma property <kind> <name> ["表示名"] [range] [{enum}] [= 既定]
@@ -325,6 +361,34 @@ namespace ReplayEngine::Rendering
                     {
                         property.default_texture = tokens[index + 1];
                         ++index;
+                    }
+                    continue;
+                }
+                if (token == "category")
+                {
+                    if (index + 1 < tokens.size())
+                    {
+                        property.category = tokens[index + 1];
+                        ++index;
+                    }
+                    else
+                    {
+                        result.issues.push_back({ line_number,
+                            "property category に値がありません" });
+                    }
+                    continue;
+                }
+                if (token == "tooltip")
+                {
+                    if (index + 1 < tokens.size())
+                    {
+                        property.tooltip = tokens[index + 1];
+                        ++index;
+                    }
+                    else
+                    {
+                        result.issues.push_back({ line_number,
+                            "property tooltip に値がありません" });
                     }
                     continue;
                 }

@@ -55,6 +55,7 @@ extern ImWchar glyphRangesJapanese[];
 #include "../../RePlayEngine/Rendering/Materials/CharacterMaterialProfile.h"
 #include "../../RePlayEngine/Rendering/Materials/CharacterMaterialGpuData.h"
 #include "../../RePlayEngine/Rendering/Materials/MaterialAsset.h"
+#include "../../RePlayEngine/Rendering/Materials/MaterialGpuBinder.h"
 #include "../../RePlayEngine/Rendering/Shaders/ShaderLibrary.h"
 #include "../../RePlayEngine/Rendering/Capture/GoldenImage.h"
 #include "../../RePlayEngine/Assets/AssetDatabase.h"
@@ -179,12 +180,18 @@ public:
 
     struct material_override_constants
     {
+        DirectX::XMFLOAT4 base_color_factor{ 1.0f, 1.0f, 1.0f, 1.0f };
+        DirectX::XMFLOAT4 emissive_factor{ 0.0f, 0.0f, 0.0f, 0.0f };
         DirectX::XMFLOAT4 mat_params{ 0.0f, 0.55f, 1.0f, 0.0f };
-        unsigned int shading_model{ 1 };
+        unsigned int lighting_model{ 0 };
         float texture_contrast{ 1.0f };
-        float pixelate_size{ 6.0f };
-        float pixelate_strength{ 1.0f };
+        float pixelate_size{ 0.0f };
+        float pixelate_strength{ 0.0f };
+        unsigned int texture_mask{ 0 };
+        DirectX::XMFLOAT3 padding{ 0.0f, 0.0f, 0.0f };
     };
+    static_assert(sizeof(material_override_constants) == 80,
+        "GBUFFER_MATERIAL_CONSTANTS must stay byte-identical to HLSL");
     Microsoft::WRL::ComPtr<ID3D11Buffer> material_override_cb;
 
     Microsoft::WRL::ComPtr<ID3D11Buffer> shader_layer_cb;
@@ -419,6 +426,10 @@ public:
     };
     std::unordered_map<std::string, cached_material_asset> object_material_cache;
     std::unordered_set<std::string> object_material_failures;
+
+    // Shader GUID から replay_lighting を解決できなかったもの。
+    // 同じ警告を毎フレーム出さないため、Material cache と同じ寿命で保持する。
+    std::unordered_set<std::string> object_shader_lighting_failures;
 
     // Startup Scene is restored from the Editor session.  A fresh project starts
     // with an unsaved empty Scene instead of depending on a bundled sample asset.
@@ -668,6 +679,14 @@ public:
         if (shutdown_regression_requested) run_shutdown_regression_scenario();
 
 #ifdef USE_IMGUI
+        // Material Inspector の変更は終了時にも保存する。
+        // Save ボタンを押し忘れただけで Shader / Texture / Property が消える
+        // Editor にはしない。失敗時だけ終了ログへ残す。
+        if (material_editor_loaded && material_editor_dirty &&
+            !save_material_editor())
+        {
+            log_shutdown_reason("Material AutoSave に失敗");
+        }
         save_editor_session();
         ImGui_ImplDX11_Shutdown();
         ImGui_ImplWin32_Shutdown();
@@ -851,11 +870,17 @@ private:
         const DirectX::XMMATRIX& projection, float elapsed_time);
     ID3D11PixelShader* skinned_forward_shader(int shading) const;
     ID3D11PixelShader* static_forward_shader(int shading) const;
-    unsigned int deferred_shading_model(int shading) const;
-    void bind_gbuffer_material(unsigned int shading_model, bool stage_surface = false,
+    ReplayEngine::Rendering::ShaderLightingModel deferred_lighting_model(
+        int shading) const;
+    void bind_gbuffer_material(
+        ReplayEngine::Rendering::ShaderLightingModel lighting_model,
+        bool stage_surface = false, bool pixelate_enabled = false,
         float pixelate_size = 6.0f, float pixelate_strength = 1.0f,
         float metallic = 0.0f, float roughness = 0.55f,
-        float ambient_occlusion = 1.0f, float emissive_strength = 0.0f);
+        float ambient_occlusion = 1.0f, float emissive_strength = 0.0f,
+        const DirectX::XMFLOAT4& base_color_factor = DirectX::XMFLOAT4{ 1,1,1,1 },
+        const DirectX::XMFLOAT3& emissive_color = DirectX::XMFLOAT3{ 0,0,0 },
+        std::uint32_t texture_mask = 0);
     void apply_toon_preset(int preset);
     void reset_editor_values();
     void draw_editor();
@@ -1067,6 +1092,7 @@ private:
     bool project_create_folder(const std::string& name);
     bool project_create_csharp_behaviour(const std::string& class_name);
     bool project_create_material(const std::string& name);
+    bool project_create_surface_shader(const std::string& name);
     bool project_rename_entry(const std::filesystem::path& path,
         const std::string& new_name);
     ID3D11ShaderResourceView* project_thumbnail_for(
@@ -1177,6 +1203,7 @@ private:
     // #pragma から宣言を読み、目録を作る。
     // まだ描画には使わない。接続はフェーズ 4 以降。
     ReplayEngine::Rendering::ShaderLibrary shader_library;
+    ReplayEngine::Rendering::MaterialGpuBinder material_gpu_binder;
     bool show_shader_catalog_panel{ false };
 
     // .hlsl を保存したら自動でコンパイルし直す。
@@ -1280,6 +1307,7 @@ private:
     std::string material_editor_guid;
     std::string material_editor_status;
     bool material_editor_loaded{ false };
+    bool material_editor_dirty{ false };
 
     bool create_material_asset();
     bool load_material_editor(const ReplayEngine::Assets::AssetRecord& asset);

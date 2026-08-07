@@ -1,4 +1,4 @@
-#include <time.h>
+﻿#include <time.h>
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -32,6 +32,10 @@
 #include "../../../RePlayEngine/Rendering/Shaders/ShaderAssetValidation.h"
 #include "../../../RePlayEngine/Rendering/Shaders/ShaderBuiltInValidation.h"
 #include "../../../RePlayEngine/Rendering/Shaders/ShaderMaterialValidation.h"
+#include "../../../RePlayEngine/Rendering/Shaders/ShaderRenderValidation.h"
+#include "../../../RePlayEngine/Rendering/Shaders/ShaderTextureValidation.h"
+#include "../../../RePlayEngine/Rendering/Shaders/ShaderEditorValidation.h"
+#include "../../../RePlayEngine/Rendering/Shaders/ShaderLightingValidation.h"
 #include "../../../RePlayEngine/Rendering/Shaders/ShaderCompileValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/BehaviourValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/HandleValidation.h"
@@ -1027,6 +1031,30 @@ namespace
         if (command == "--validate-shader-material")
         {
             return ReplayEngine::Rendering::Validation::RunShaderMaterialValidation();
+        }
+
+        // シェーダ基盤。フェーズ 11（照明モデルをShader Asset宣言へ分離）。
+        if (command == "--validate-shader-lighting")
+        {
+            return ReplayEngine::Rendering::Validation::RunShaderLightingValidation();
+        }
+
+        // シェーダ基盤。フェーズ 6（Material -> Catalog -> Render binding）。
+        if (command == "--validate-shader-render")
+        {
+            return ReplayEngine::Rendering::Validation::RunShaderRenderValidation();
+        }
+
+        // シェーダ基盤。フェーズ 12（Texture AssetGUID / t40+ / default）。
+        if (command == "--validate-shader-texture")
+        {
+            return ReplayEngine::Rendering::Validation::RunShaderTextureValidation();
+        }
+
+        // シェーダ基盤。フェーズ 7（Shader Picker / Schema Inspector / 保存保持）。
+        if (command == "--validate-shader-editor")
+        {
+            return ReplayEngine::Rendering::Validation::RunShaderEditorValidation();
         }
 
         return -1;

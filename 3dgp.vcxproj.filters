@@ -281,6 +281,11 @@
       <UniqueIdentifier>{ee92f3f8-5508-56a8-97ab-cdc94318186f}</UniqueIdentifier>
     </Filter>
       <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderMaterialValidation.cpp" />
+      <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderLightingValidation.cpp" />
+      <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderRenderValidation.cpp" />
+      <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderTextureValidation.cpp" />
+      <ClCompile Include="RePlayEngine\Rendering\Materials\MaterialBinding.cpp" />
+      <ClCompile Include="RePlayEngine\Rendering\Materials\MaterialGpuBinder.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Source\render\csm_renderer.cpp">
@@ -1460,6 +1465,9 @@
     <None Include="Shader\shading_model_hlsl.hlsli">
       <Filter>Shader\Includes</Filter>
     </None>
+    <None Include="Shader\lighting_model_hlsl.hlsli">
+      <Filter>Shader\Includes</Filter>
+    </None>
     <None Include="Shader\skinned_mesh.hlsli">
       <Filter>Shader\Includes</Filter>
     </None>
@@ -1715,5 +1723,20 @@
     <ClInclude Include="RePlayEngine\Landscape\LandscapeUndoCommand.h"><Filter>RePlayEngine\Landscape</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Landscape\LandscapeEditorTool.h"><Filter>RePlayEngine\Landscape</Filter></ClInclude>
       <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderMaterialValidation.h" />
+      <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderLightingValidation.h" />
+      <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderRenderValidation.h" />
+      <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderTextureValidation.h" />
+      <ClInclude Include="RePlayEngine\Rendering\Materials\MaterialBinding.h" />
+      <ClInclude Include="RePlayEngine\Rendering\Materials\MaterialGpuBinder.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="RePlayEngine\Rendering\Materials\MaterialSchema.cpp"><Filter>RePlayEngine\Rendering\Materials</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\ShaderEditing\MaterialShaderInspector.cpp"><Filter>RePlayEngine\Editor\ShaderEditing</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderAssetFactory.cpp"><Filter>RePlayEngine\Rendering</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderEditorValidation.cpp"><Filter>RePlayEngine\Rendering</Filter></ClCompile>
+    <ClInclude Include="RePlayEngine\Rendering\Materials\MaterialSchema.h"><Filter>RePlayEngine\Rendering\Materials</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\ShaderEditing\MaterialShaderInspector.h"><Filter>RePlayEngine\Editor\ShaderEditing</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderAssetFactory.h"><Filter>RePlayEngine\Rendering</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderEditorValidation.h"><Filter>RePlayEngine\Rendering</Filter></ClInclude>
   </ItemGroup>
 </Project>

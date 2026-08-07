@@ -15,6 +15,7 @@
 
 #include "../../RePlayEngine/Components/Camera/CameraTargetComponent.h"
 #include "../../RePlayEngine/Components/Rendering/LightComponents.h"
+#include "../../RePlayEngine/Rendering/Shaders/BuiltInShaders.h"
 #include "../../RePlayEngine/Object/Registry/BuiltInComponents.h"
 #include "../../RePlayEngine/Project/ProjectSettingsSerializer.h"
 #include "../../RePlayEngine/Rendering/Adapter/SceneRenderCollector.h"
@@ -1239,32 +1240,104 @@ const ReplayEngine::Rendering::MaterialAsset* framework::resolve_object_material
 ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
     const ReplayEngine::Rendering::RenderItem& source)
 {
-    ReplayEngine::Rendering::RenderItem item = source;
-    const ReplayEngine::Rendering::MaterialAsset* material =
-        resolve_object_material(source.material_asset);
+    using namespace ReplayEngine::Rendering;
+
+    RenderItem item = source;
+    item.legacy_tint = source.tint;
+    item.lighting_model = deferred_lighting_model(source.shading_model);
+
+    const MaterialAsset* material = resolve_object_material(source.material_asset);
     if (material == nullptr) return item;
 
-    // 【マテリアルが唯一の真実】
-    //
-    // 絵柄（shading_model）は必ずマテリアルの指定を使う。
-    //
-    // 以前は material_override が true だと Renderer 側の shading_model が
-    // 優先され、マテリアルでトゥーンを選んでも PBR のままだった。
-    // 「マテリアルを割り当てたのに絵が変わらない」原因がこれ。
-    //
-    // Unity では Renderer に絵柄の指定は無く、マテリアルだけが決める。
-    // material_override は色の上書き（tint）だけに意味を限定する。
-    item.shading_model = material->shading_model;
-    if (!source.material_override)
-    {
-        item.tint = material->base_color;
-    }
+    // 旧 .cso fallback では従来どおり Material の base_color を頂点 tint に使う。
+    item.legacy_tint = source.material_override ? source.tint : material->base_color;
+
+    // Catalog shader では BaseColor は b9 から渡す。pin.color は Renderer 側の
+    // 追加 tint にだけ使い、同じ色を二重に掛けない。
+    item.tint = source.material_override
+        ? source.tint : DirectX::XMFLOAT4{ 1.0f, 1.0f, 1.0f, 1.0f };
+
+    item.shading_model = material->shading_model; // fallback のためだけに保持
+    // material_override は従来どおり「Renderer tint が Material BaseColor を置換」。
+    // Catalog shader は BaseColor を b9 から読むため、置換時は b9 側を白にする。
+    item.material_base_color = source.material_override
+        ? DirectX::XMFLOAT4{ 1.0f, 1.0f, 1.0f, 1.0f }
+        : material->base_color;
     item.metallic = material->metallic;
     item.roughness = material->roughness;
     item.ambient_occlusion = material->ambient_occlusion;
-    item.emissive_strength = (std::max)({ material->emissive.x,
-        material->emissive.y, material->emissive.z }) * material->emissive_strength;
+    item.emissive_color = material->emissive;
+    item.emissive_strength = material->emissive_strength;
     item.double_sided = material->double_sided;
+    item.outline = material->outline_pass;
+    item.pixelate_size = material->pixelate_grid;
+    item.pixelate_strength = material->pixelate_strength;
+
+    // 現在の GameObject mesh は静的提出も skinned_mesh renderer を通る。
+    // Vertex Shader の VS_OUT と一致させるため Catalog 側も Skinned 変種を使う。
+    // 真の static_mesh 経路を RenderItem へ接続した時点で source.skinned 分岐へ戻す。
+    const ShaderVariant variant = ShaderVariant::Skinned;
+    MaterialAsset binding_material = *material;
+    if (source.material_override)
+    {
+        const DirectX::XMFLOAT4 white{ 1.0f, 1.0f, 1.0f, 1.0f };
+        binding_material.base_color = white;
+        binding_material.properties.Set("prop.BaseColor",
+            ReplayEngine::Reflection::PropertyValue::MakeColor(white));
+    }
+    const bool resolved = MaterialBindingResolver::Resolve(binding_material,
+        shader_library.Catalog(), variant, item.material_binding);
+    // binding_material は一時コピーなので、LayerStack の借用先だけ元Assetへ戻す。
+    item.material_binding.layers = &material->layers;
+
+    if (resolved && item.material_binding.usable_shader)
+    {
+        item.lighting_model = item.material_binding.lighting_model;
+        if (item.material_binding.requested_shader.IsValid())
+            object_shader_lighting_failures.erase(
+                item.material_binding.requested_shader.ToString());
+    }
+    else
+    {
+        item.lighting_model = deferred_lighting_model(material->shading_model);
+    }
+
+    if (item.material_binding.missing_shader)
+    {
+        // Deferred は generated b9 ではなく固定 GBuffer bridge を使うため、
+        // Missing Shader のマゼンタをこちらにも明示的に反映する。
+        item.material_base_color = DirectX::XMFLOAT4{ 1.0f, 0.0f, 1.0f, 1.0f };
+        item.tint = DirectX::XMFLOAT4{ 1.0f, 1.0f, 1.0f, 1.0f };
+        item.emissive_color = DirectX::XMFLOAT3{ 0.0f, 0.0f, 0.0f };
+        item.emissive_strength = 0.0f;
+
+        const std::string key = material->shader_guid.empty()
+            ? std::string("legacy:") + std::to_string(material->shading_model)
+            : material->shader_guid;
+        if (object_shader_lighting_failures.insert(key).second)
+        {
+            push_editor_log("Error",
+                "Material Shader を解決できないため Unlit/Magenta へフォールバック: " +
+                key + " / " + item.material_binding.diagnostic);
+        }
+    }
+
+    // Pixelate は surface shader と layer の両方から有効になる。
+    item.pixelate_enabled = item.material_binding.shader == BuiltInShaders::Pixelate;
+    for (const ShaderLayer& layer : material->layers.Layers())
+    {
+        if (!layer.enabled) continue;
+        if (layer.type == ShaderLayerType::Pixelate)
+        {
+            item.pixelate_enabled = true;
+            item.pixelate_size = layer.parameter;
+            item.pixelate_strength = layer.strength;
+        }
+        else if (layer.type == ShaderLayerType::Outline)
+        {
+            item.outline = true;
+        }
+    }
     return item;
 }
 
@@ -1310,9 +1383,27 @@ void framework::draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shade
         }
 
         // GBuffer パスでは Component が指定した描画方式を材質定数へ流す。
-        if (gbuffer_pass) bind_gbuffer_material(deferred_shading_model(item.shading_model),
-            false, 6.0f, 1.0f, item.metallic, item.roughness,
-            item.ambient_occlusion, item.emissive_strength);
+        if (gbuffer_pass)
+        {
+            if (item.material_binding.usable_shader)
+            {
+                material_gpu_binder.BindGBufferTextures(device.Get(), immediate_context.Get(),
+                    asset_database, item.material_binding);
+            }
+            else
+            {
+                material_gpu_binder.UnbindTextures(immediate_context.Get());
+            }
+
+            bind_gbuffer_material(item.lighting_model,
+                false, item.pixelate_enabled, item.pixelate_size,
+                item.pixelate_strength, item.metallic, item.roughness,
+                item.ambient_occlusion, item.emissive_strength,
+                item.material_base_color,
+                item.emissive_color,
+                item.material_binding.usable_shader
+                    ? item.material_binding.TextureSemanticMask() : 0u);
+        }
 
         // 最後の引数がモーションベクター出力。GBuffer パスだけで真にする
         // （複数回渡すと前フレーム姿勢が壊れる）。
@@ -1321,6 +1412,8 @@ void framework::draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shade
                 rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
         mesh->render(immediate_context.Get(), item.world, item.tint,
             keyframe, override_pixel_shader, nullptr, nullptr, true, gbuffer_pass);
+        if (gbuffer_pass)
+            material_gpu_binder.UnbindTextures(immediate_context.Get());
         if (item.double_sided)
             immediate_context->RSSetState(
                 rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
@@ -1337,6 +1430,7 @@ void framework::clear_object_material_cache() noexcept
 {
     object_material_cache.clear();
     object_material_failures.clear();
+    object_shader_lighting_failures.clear();
 }
 
 const skinned_mesh::animation::keyframe* framework::resolve_object_keyframe(

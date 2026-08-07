@@ -6,20 +6,20 @@
 #define ANISOTROPIC 2
 
 SamplerState sampler_states[3] : register(s0);
+#ifndef REPLAY_MATERIAL_PROPERTIES
 Texture2D texture_maps[4] : register(t0);
+#endif
 
 float4 main(VS_OUT pin) : SV_TARGET
 {
-    // テクスチャから色をサンプリング [cite: 561]
-	float4 color = texture_maps[0].Sample(sampler_states[ANISOTROPIC], pin.texcoord);
+#ifdef REPLAY_MATERIAL_PROPERTIES
+    float4 color = BaseMap.Sample(sampler_states[ANISOTROPIC], pin.texcoord) * BaseColor;
+#else
+    float4 color = texture_maps[0].Sample(sampler_states[ANISOTROPIC], pin.texcoord);
+#endif
 
-    // 法線とライト方向の計算 [cite: 563-567]
-	float3 N = normalize(pin.world_normal.xyz);
-	float3 L = normalize(-light_direction.xyz);
-
-    // 拡散反射の計算 [cite: 569]
-	float3 diffuse = color.rgb * max(0, dot(N, L));
-
-    // テクスチャのアルファ値とマテリアルカラーを合成して出力 [cite: 571]
-	return float4(diffuse, color.a) * pin.color;
+    float3 N = normalize(pin.world_normal.xyz);
+    float3 L = normalize(-light_direction.xyz);
+    float3 diffuse = color.rgb * max(0, dot(N, L));
+    return float4(diffuse, color.a) * pin.color;
 }

@@ -3,6 +3,7 @@
 #include "texture.h"
 #include "skinned_mesh.h"
 #include "gltf_model.h"
+#include "../../../RePlayEngine/Rendering/Shaders/BuiltInShaders.h"
 
 namespace
 {
@@ -147,35 +148,50 @@ ID3D11PixelShader* framework::static_forward_shader(int shading) const
     }
 }
 
-unsigned int framework::deferred_shading_model(int shading) const
+ReplayEngine::Rendering::ShaderLightingModel framework::deferred_lighting_model(
+    int shading) const
 {
-    // マテリアルの指定をそのまま GBuffer へ書く。
-    // ピクセル化は GBuffer では表現できないので PBR として書き、
-    // 合成段でセル化する（これは技術的制約であって上書きではない）。
-    switch (shading)
+    using ReplayEngine::Rendering::ShaderLightingModel;
+
+    ShaderLightingModel model = ShaderLightingModel::Pbr;
+    if (ReplayEngine::Rendering::BuiltInShaders::
+        TryGetLightingModelFromShadingModel(shading, model))
     {
-    case SHADING_MODEL_PBR:      return SHADING_MODEL_PBR;
-    case SHADING_MODEL_TOON:     return SHADING_MODEL_TOON;
-    case SHADING_MODEL_UNLIT:    return SHADING_MODEL_UNLIT;
-    case SHADING_MODEL_PIXELATE: return SHADING_MODEL_PBR;
-    default:                     return SHADING_MODEL_UNLIT;
+        return model;
     }
+
+    // 旧データの不明値は従来どおり Unlit へ落とす。
+    // MaterialにShader GUIDがある場合は resolve_render_item_material() が
+    // Catalogの replay_lighting で上書きする。
+    return ShaderLightingModel::Unlit;
 }
 
-void framework::bind_gbuffer_material(unsigned int shading, bool stage_surface,
+void framework::bind_gbuffer_material(
+    ReplayEngine::Rendering::ShaderLightingModel lighting_model,
+    bool stage_surface, bool pixelate_enabled,
     float pixelate_size, float pixelate_strength, float metallic, float roughness,
-    float ambient_occlusion, float emissive_strength)
+    float ambient_occlusion, float emissive_strength,
+    const DirectX::XMFLOAT4& base_color_factor,
+    const DirectX::XMFLOAT3& emissive_color,
+    std::uint32_t texture_mask)
 {
     material_override_constants constants{};
+    constants.base_color_factor = base_color_factor;
+    constants.emissive_factor = DirectX::XMFLOAT4{
+        emissive_color.x, emissive_color.y, emissive_color.z, emissive_strength };
     constants.mat_params = stage_surface
         ? DirectX::XMFLOAT4{ 0.0f, 0.88f, 1.0f, 0.0f }
-        : DirectX::XMFLOAT4{ metallic, roughness, ambient_occlusion, emissive_strength };
-    constants.shading_model = shading;
+        : DirectX::XMFLOAT4{ metallic, roughness, ambient_occlusion, 0.0f };
+    constants.lighting_model = static_cast<unsigned int>(lighting_model);
     constants.texture_contrast = stage_surface ? stage_texture_contrast : 1.0f;
-    constants.pixelate_size = pixelate_size;
-    constants.pixelate_strength = pixelate_strength;
-    immediate_context->UpdateSubresource(material_override_cb.Get(), 0, nullptr, &constants, 0, 0);
-    immediate_context->PSSetConstantBuffers(9, 1, material_override_cb.GetAddressOf());
+    constants.pixelate_size = pixelate_enabled ? pixelate_size : 0.0f;
+    constants.pixelate_strength = pixelate_enabled ? pixelate_strength : 0.0f;
+    constants.texture_mask = texture_mask;
+
+    immediate_context->UpdateSubresource(material_override_cb.Get(), 0,
+        nullptr, &constants, 0, 0);
+    immediate_context->PSSetConstantBuffers(9, 1,
+        material_override_cb.GetAddressOf());
 }
 
 void framework::render(float elapsed_time)
@@ -441,9 +457,11 @@ void framework::render(float elapsed_time)
 
         if (enable_static_meshes && static_meshes[0])
         {
-            bind_gbuffer_material(static_uses_pixelate ? SHADING_MODEL_PIXELATE
-                : deferred_shading_model(shading_per_static[0]), false,
-                static_pixelate_settings.parameter, static_pixelate_settings.strength);
+            bind_gbuffer_material(
+                deferred_lighting_model(shading_per_static[0]),
+                false, static_uses_pixelate,
+                static_pixelate_settings.parameter,
+                static_pixelate_settings.strength);
             static_meshes[0]->render(immediate_context.Get(), world, material_color,
                                      static_mesh_gbuffer_ps.Get(),
                                      nullptr, nullptr, true, true);
@@ -543,9 +561,23 @@ void framework::render(float elapsed_time)
         if (enable_ssr && ssr_pass.Initialized() && render_graph.DeferredDebugMode() == 0)
             ssr_pass.CaptureHistory(immediate_context.Get(), deferred.lit_tex.Get());
 
+        bool object_layers_present = false;
+        for (const ReplayEngine::Rendering::RenderItem& source_item : object_render_items.Items())
+        {
+            const ReplayEngine::Rendering::RenderItem item =
+                resolve_render_item_material(source_item);
+            if (item.outline || (item.material_binding.layers != nullptr &&
+                item.material_binding.layers->HasEnabledLayers()))
+            {
+                object_layers_present = true;
+                break;
+            }
+        }
+
         const bool draw_shader_layers = render_graph.DeferredDebugMode() == 0 &&
             (shader_layers_static[0].HasEnabledLayers() ||
-                shading_per_static[0] == SHADING_MODEL_PIXELATE);
+                shading_per_static[0] == SHADING_MODEL_PIXELATE ||
+                object_layers_present);
         if (draw_shader_layers)
         {
             // Surfaceとは別の材質パスをDeferred照明結果へ順番どおりに合成する。
@@ -620,6 +652,65 @@ void framework::render(float elapsed_time)
                         static_pixel_shader(layer));
                 }
             }
+            // GameObject Material 固有のLayerStack。同じ順序で追加パスを描く。
+            const ReplayEngine::Rendering::CharacterMaterialProfile default_profile{};
+            for (const ReplayEngine::Rendering::RenderItem& source_item : object_render_items.Items())
+            {
+                const ReplayEngine::Rendering::RenderItem item =
+                    resolve_render_item_material(source_item);
+                if (item.mesh_asset.empty()) continue;
+                skinned_mesh* mesh = resolve_object_mesh(item.mesh_asset);
+                if (mesh == nullptr) continue;
+                const auto* keyframe = item.skinned
+                    ? resolve_object_keyframe(*mesh, item.clip_index, item.animation_time)
+                    : nullptr;
+
+                bool outline_drawn = false;
+                if (item.material_binding.layers != nullptr)
+                {
+                    for (const auto& layer : item.material_binding.layers->Layers())
+                    {
+                        if (!layer.enabled || layer.type == ReplayEngine::Rendering::ShaderLayerType::Pixelate)
+                            continue; // PixelateはGBufferへ設定済み
+                        if (layer.type == ReplayEngine::Rendering::ShaderLayerType::Outline)
+                        {
+                            immediate_context->OMSetBlendState(
+                                blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
+                            toon.bind_outline_pass(immediate_context.Get(), true);
+                            mesh->render(immediate_context.Get(), item.world, layer.tint,
+                                keyframe, toon.outline_ps(), toon.skinned_outline_vs_.Get(),
+                                toon.skinned_outline_il_.Get(), true, false);
+                            outline_drawn = true;
+                            continue;
+                        }
+
+                        prepare_layer(layer, default_profile);
+                        ID3D11PixelShader* layer_ps = skinned_mesh_unlit_ps.Get();
+                        using ReplayEngine::Rendering::ShaderLayerType;
+                        switch (layer.type)
+                        {
+                        case ShaderLayerType::Pbr: layer_ps = pbr.skinned_mesh_ps(); break;
+                        case ShaderLayerType::Toon: layer_ps = toon.skinned_mesh_ps(); break;
+                        case ShaderLayerType::StylizedCharacter:
+                            layer_ps = skinned_stylized_character_ps.Get(); break;
+                        default: break;
+                        }
+                        mesh->render(immediate_context.Get(), item.world, layer_color(layer),
+                            keyframe, layer_ps, nullptr, nullptr, true, false);
+                    }
+                }
+
+                if (item.outline && !outline_drawn)
+                {
+                    immediate_context->OMSetBlendState(
+                        blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
+                    toon.bind_outline_pass(immediate_context.Get(), true);
+                    mesh->render(immediate_context.Get(), item.world, item.tint,
+                        keyframe, toon.outline_ps(), toon.skinned_outline_vs_.Get(),
+                        toon.skinned_outline_il_.Get(), true, false);
+                }
+            }
+
             immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
             immediate_context->OMSetBlendState(blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
         }
@@ -728,12 +819,103 @@ void framework::render(float elapsed_time)
                         item.animation_time)
                     : nullptr;
 
+            ID3D11PixelShader* catalog_shader = nullptr;
+            bool catalog_bound = false;
+            if (item.material_binding.usable_shader)
+            {
+                catalog_shader = material_gpu_binder.ResolvePixelShader(
+                    device.Get(), shader_library.Catalog(), item.material_binding);
+                if (catalog_shader != nullptr)
+                {
+                    catalog_bound = material_gpu_binder.Bind(device.Get(),
+                        immediate_context.Get(), asset_database,
+                        item.material_binding);
+                    // b9 の生成に失敗した状態で Catalog PS を使うと、旧 draw の
+                    // 定数を読んでしまう。完全に bind できない場合は旧 .cso へ戻す。
+                    if (!catalog_bound)
+                    {
+                        material_gpu_binder.Unbind(immediate_context.Get());
+                        catalog_shader = nullptr;
+                    }
+                }
+            }
+
             if (item.double_sided)
                 immediate_context->RSSetState(
                     rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
-            scene_mesh->render(immediate_context.Get(), item.world, item.tint,
-                item_keyframe, skinned_forward_shader(item.shading_model));
-            if (item.double_sided)
+
+            // Catalog shader を作れた場合だけ新経路へ切り替える。
+            // Bind に一部失敗しても既定Textureへ落として描画は続ける。
+            scene_mesh->render(immediate_context.Get(), item.world,
+                catalog_shader != nullptr ? item.tint : item.legacy_tint,
+                item_keyframe,
+                catalog_shader != nullptr
+                    ? catalog_shader : skinned_forward_shader(item.shading_model));
+
+            if (catalog_shader != nullptr || catalog_bound)
+                material_gpu_binder.Unbind(immediate_context.Get());
+
+            // Forward時もMaterial固有Layerを宣言順で描く。
+            bool outline_drawn = false;
+            if (item.material_binding.layers != nullptr)
+            {
+                for (const auto& layer : item.material_binding.layers->Layers())
+                {
+                    if (!layer.enabled) continue;
+                    if (layer.type == ReplayEngine::Rendering::ShaderLayerType::Outline)
+                    {
+                        immediate_context->OMSetBlendState(
+                            blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
+                        toon.bind_outline_pass(immediate_context.Get(), true);
+                        scene_mesh->render(immediate_context.Get(), item.world, layer.tint,
+                            item_keyframe, toon.outline_ps(), toon.skinned_outline_vs_.Get(),
+                            toon.skinned_outline_il_.Get(), true, false);
+                        outline_drawn = true;
+                        continue;
+                    }
+
+                    BLEND_STATE blend = BLEND_STATE::ALPHA;
+                    if (layer.blend == ReplayEngine::Rendering::ShaderLayerBlend::Additive)
+                        blend = BLEND_STATE::ADD;
+                    else if (layer.blend == ReplayEngine::Rendering::ShaderLayerBlend::Multiply)
+                        blend = BLEND_STATE::MULTIPLY;
+                    immediate_context->OMSetBlendState(
+                        blend_states[(size_t)blend].Get(), nullptr, 0xFFFFFFFF);
+                    immediate_context->RSSetState(rasterizer_states[(size_t)(
+                        layer.type == ReplayEngine::Rendering::ShaderLayerType::Wireframe
+                            ? RASTER_STATE::WIREFRAME_CULL_NONE : RASTER_STATE::CULL_NONE)].Get());
+
+                    ID3D11PixelShader* layer_ps = skinned_mesh_unlit_ps.Get();
+                    using ReplayEngine::Rendering::ShaderLayerType;
+                    switch (layer.type)
+                    {
+                    case ShaderLayerType::Pbr: layer_ps = pbr.skinned_mesh_ps(); break;
+                    case ShaderLayerType::Toon: layer_ps = toon.skinned_mesh_ps(); break;
+                    case ShaderLayerType::Pixelate:
+                        bind_pixelate_settings(layer); layer_ps = object_pixelate_ps.Get(); break;
+                    case ShaderLayerType::StylizedCharacter:
+                        layer_ps = skinned_stylized_character_ps.Get(); break;
+                    default: break;
+                    }
+                    DirectX::XMFLOAT4 layer_tint = layer.tint;
+                    layer_tint.w *= layer.opacity;
+                    scene_mesh->render(immediate_context.Get(), item.world, layer_tint,
+                        item_keyframe, layer_ps, nullptr, nullptr, true, false);
+                }
+            }
+            if (item.outline && !outline_drawn)
+            {
+                immediate_context->OMSetBlendState(
+                    blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
+                toon.bind_outline_pass(immediate_context.Get(), true);
+                scene_mesh->render(immediate_context.Get(), item.world, item.tint,
+                    item_keyframe, toon.outline_ps(), toon.skinned_outline_vs_.Get(),
+                    toon.skinned_outline_il_.Get(), true, false);
+            }
+
+            immediate_context->OMSetBlendState(
+                blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
+            if (item.double_sided || item.material_binding.layers != nullptr || item.outline)
                 immediate_context->RSSetState(
                     rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
         }

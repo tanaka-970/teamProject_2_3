@@ -237,6 +237,9 @@
     <ClCompile Include="RePlayEngine\Rendering\ShaderPresets\BuiltInShaderPresets.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Materials\CharacterMaterialGpuData.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Materials\MaterialAsset.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Materials\MaterialSchema.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Materials\MaterialBinding.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Materials\MaterialGpuBinder.cpp" />
     <ClCompile Include="RePlayEngine\Scene\BootLogoScene.cpp" />
     <ClCompile Include="RePlayEngine\Scene\LoadingScene.cpp" />
     <ClCompile Include="Source\core\framebuffer.cpp" />
@@ -318,11 +321,17 @@
     <ClCompile Include="Source\app\Editor\framework_golden.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Capture\GoldenImage.cpp" />
     <ClCompile Include="RePlayEngine\Editor\ShaderEditing\ShaderInspector.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\ShaderEditing\MaterialShaderInspector.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Shaders\BuiltInShaders.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderAsset.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderAssetFactory.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderEditorValidation.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderAssetValidation.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderBuiltInValidation.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderMaterialValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderLightingValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderRenderValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderTextureValidation.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderCatalog.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderConstantPacker.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderCompiler.cpp" />
@@ -428,6 +437,9 @@
     <ClInclude Include="RePlayEngine\Rendering\Materials\CharacterMaterialProfile.h" />
     <ClInclude Include="RePlayEngine\Rendering\Materials\CharacterMaterialGpuData.h" />
     <ClInclude Include="RePlayEngine\Rendering\Materials\MaterialAsset.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Materials\MaterialSchema.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Materials\MaterialBinding.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Materials\MaterialGpuBinder.h" />
     <ClInclude Include="RePlayEngine\Assets\ImageAsset.h" />
     <ClInclude Include="RePlayEngine\Presentation\BootLogoComponent.h" />
     <ClInclude Include="RePlayEngine\Assets\AssetCache.h" />
@@ -440,6 +452,7 @@
     <ClInclude Include="RePlayEngine\Editor\Gizmo\ViewportPicker.h" />
     <ClInclude Include="RePlayEngine\Editor\ShaderEditing\CharacterMaterialEditor.h" />
     <ClInclude Include="RePlayEngine\Editor\ShaderEditing\ShaderStackEditor.h" />
+    <ClInclude Include="RePlayEngine\Editor\ShaderEditing\MaterialShaderInspector.h" />
     <ClInclude Include="RePlayEngine\Editor\ShaderEditing\ShaderPresetEditor.h" />
     <ClInclude Include="RePlayEngine\Editor\Rendering\PostProcessEditor.h" />
     <ClInclude Include="RePlayEngine\Core\Components\IComponent.h" />
@@ -600,6 +613,11 @@
     <ClInclude Include="RePlayEngine\Editor\Validation\AnimationUndoValidation.h" />
     <ClInclude Include="RePlayEngine\Runtime\Validation\StressValidation.h" />
     <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderMaterialValidation.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderLightingValidation.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderRenderValidation.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderTextureValidation.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderAssetFactory.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderEditorValidation.h" />
 </ItemGroup>
   <ItemGroup>
     <None Include=".editorconfig" />
@@ -640,6 +658,7 @@
     <None Include="Shader\pbr_brdf.hlsli" />
     <None Include="Shader\pbr_common.hlsli" />
     <None Include="Shader\shading_model_hlsl.hlsli" />
+    <None Include="Shader\lighting_model_hlsl.hlsli" />
     <None Include="Shader\skinned_mesh.hlsli" />
     <None Include="Shader\sprite.hlsli" />
     <None Include="Shader\static_mesh.hlsli" />

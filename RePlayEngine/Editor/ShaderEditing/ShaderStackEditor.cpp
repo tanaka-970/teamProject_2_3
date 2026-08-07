@@ -39,7 +39,7 @@ namespace ReplayEngine::Editor
         bool& outline_pass, Rendering::ShaderLayerStack& layers,
         bool& advanced_mode, DirectX::XMFLOAT4& outline_color,
         DirectX::XMFLOAT4& outline_parameters, float& pixel_grid,
-        float& pixelate_strength)
+        float& pixelate_strength, bool show_surface_controls)
     {
         using namespace Rendering;
         const char* shading_names[] = { "FBX標準", "PBR", "トゥーン", "アンリット", "ピクセレーション" };
@@ -55,51 +55,59 @@ namespace ReplayEngine::Editor
         if (outline_pass && !layers.Contains(ShaderLayerType::Outline))
             layers.Add(ShaderLayerType::Outline);
 
-        if (ImGui::Button("PBR + 輪郭"))
+        if (show_surface_controls)
         {
-            base_shader = 1;
-            outline_pass = true;
-            if (!layers.Contains(ShaderLayerType::Outline)) layers.Add(ShaderLayerType::Outline);
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Toon + Pixel + 輪郭"))
-        {
-            base_shader = 2;
-            outline_pass = true;
-            layers.Clear();
-            auto& pixelate = layers.Add(ShaderLayerType::Pixelate);
-            pixelate.opacity = 0.35f;
-            pixelate.parameter = 6.0f;
-            layers.Add(ShaderLayerType::Outline);
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Surfaceのみ"))
-        {
-            outline_pass = false;
-            layers.Clear();
-        }
+            if (ImGui::Button("PBR + 輪郭"))
+            {
+                base_shader = 1;
+                outline_pass = true;
+                if (!layers.Contains(ShaderLayerType::Outline)) layers.Add(ShaderLayerType::Outline);
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Toon + Pixel + 輪郭"))
+            {
+                base_shader = 2;
+                outline_pass = true;
+                layers.Clear();
+                auto& pixelate = layers.Add(ShaderLayerType::Pixelate);
+                pixelate.opacity = 0.35f;
+                pixelate.parameter = 6.0f;
+                layers.Add(ShaderLayerType::Outline);
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Surfaceのみ"))
+            {
+                outline_pass = false;
+                layers.Clear();
+            }
 
-        ImGui::Separator();
-        ImGui::TextUnformatted("Pass 1  Surface");
-        ImGui::Combo("基本シェーダー", &base_shader, shading_names, IM_ARRAYSIZE(shading_names));
-        if (base_shader == 4)
+            ImGui::Separator();
+            ImGui::TextUnformatted("Pass 1  Surface");
+            ImGui::Combo("基本シェーダー", &base_shader, shading_names, IM_ARRAYSIZE(shading_names));
+            if (base_shader == 4)
+            {
+                ImGui::Spacing();
+                ImGui::TextColored(ImVec4(0.35f, 0.72f, 1.0f, 1.0f), "四角ピクセルの調整");
+                ImGui::TextColored(ImVec4(0.45f, 0.95f, 0.55f, 1.0f), "適用中: モデル色の低解像度化");
+                ImGui::TextDisabled("サイズを上げるほど四角いブロックが大きくなります");
+                if (ImGui::SmallButton("細かい  3px")) pixel_grid = 3.0f;
+                ImGui::SameLine();
+                if (ImGui::SmallButton("標準  6px")) pixel_grid = 6.0f;
+                ImGui::SameLine();
+                if (ImGui::SmallButton("粗い  12px")) pixel_grid = 12.0f;
+                ImGui::TextUnformatted("四角ピクセルサイズ (px)");
+                ImGui::SetNextItemWidth(-1.0f);
+                ImGui::SliderFloat("##BasePixelSize", &pixel_grid, 1.0f, 24.0f, "%.1f px");
+                ImGui::TextUnformatted("効果の強さ");
+                ImGui::SetNextItemWidth(-1.0f);
+                ImGui::SliderFloat("##BasePixelStrength", &pixelate_strength,
+                    0.0f, 1.0f, "%.2f");
+                ImGui::Separator();
+            }
+        }
+        else
         {
-            ImGui::Spacing();
-            ImGui::TextColored(ImVec4(0.35f, 0.72f, 1.0f, 1.0f), "四角ピクセルの調整");
-            ImGui::TextColored(ImVec4(0.45f, 0.95f, 0.55f, 1.0f), "適用中: モデル色の低解像度化");
-            ImGui::TextDisabled("サイズを上げるほど四角いブロックが大きくなります");
-            if (ImGui::SmallButton("細かい  3px")) pixel_grid = 3.0f;
-            ImGui::SameLine();
-            if (ImGui::SmallButton("標準  6px")) pixel_grid = 6.0f;
-            ImGui::SameLine();
-            if (ImGui::SmallButton("粗い  12px")) pixel_grid = 12.0f;
-            ImGui::TextUnformatted("四角ピクセルサイズ (px)");
-            ImGui::SetNextItemWidth(-1.0f);
-            ImGui::SliderFloat("##BasePixelSize", &pixel_grid, 1.0f, 24.0f, "%.1f px");
-            ImGui::TextUnformatted("効果の強さ");
-            ImGui::SetNextItemWidth(-1.0f);
-            ImGui::SliderFloat("##BasePixelStrength", &pixelate_strength,
-                0.0f, 1.0f, "%.2f");
+            ImGui::TextDisabled("Base Shader は上の Shader Picker で選択します");
             ImGui::Separator();
         }
 

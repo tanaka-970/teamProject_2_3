@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../../Reflection/Registry/TypeGUID.h"
 
@@ -35,6 +35,26 @@ namespace ReplayEngine::Rendering
 
     const char* ToString(ShaderDomain domain) noexcept;
     bool TryParseShaderDomain(std::string_view text, ShaderDomain& out) noexcept;
+
+    // 遅延描画で使う照明式。
+    //
+    // ShaderID や旧 shading_model の番号とは別物。
+    // GBuffer に保存するのは「どのシェーダか」ではなく、
+    // 最終照明を PBR / Toon / Unlit のどれで評価するかだけ。
+    //
+    // 数値は HLSL の REPLAY_LIGHTING_* と必ず一致させること。
+    enum class ShaderLightingModel : std::int32_t
+    {
+        Pbr = 0,
+        Toon = 1,
+        Unlit = 2,
+    };
+
+    inline constexpr std::uint32_t shader_lighting_model_count = 3;
+
+    const char* ToString(ShaderLightingModel model) noexcept;
+    bool TryParseShaderLightingModel(std::string_view text,
+        ShaderLightingModel& out) noexcept;
 
     // 同じシェーダを、頂点の入り方の違いで 2 通りコンパイルする。
     //
@@ -116,6 +136,13 @@ namespace ReplayEngine::Rendering
 
         // Inspector の表示名。"基本色"。空なら name を使う。
         std::string display_name;
+
+        // Inspector の見出し。空なら "Shader Properties" へ入る。
+        // Shader 固有 UI を C++ へ書かず、宣言側だけで整理できるようにする。
+        std::string category;
+
+        // 項目にマウスを重ねたときの説明。空なら何も出さない。
+        std::string tooltip;
 
         ShaderPropertyKind kind = ShaderPropertyKind::Float;
 
@@ -209,6 +236,12 @@ namespace ReplayEngine::Rendering
         std::string name;          // "Standard Lit"
         std::string category;      // "Lit/Standard"
         ShaderDomain domain = ShaderDomain::Surface;
+
+        // #pragma replay_lighting。未指定は PBR。
+        // 不明な名前を読んだときは lighting_model_valid=false になり、
+        // ShaderLibrary は Catalog へ登録しない。勝手に PBR へ丸めない。
+        ShaderLightingModel lighting_model = ShaderLightingModel::Pbr;
+        bool lighting_model_valid = true;
 
         std::vector<ShaderProperty> properties;
 

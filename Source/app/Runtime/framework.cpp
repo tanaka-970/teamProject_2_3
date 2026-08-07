@@ -163,14 +163,18 @@ bool framework::uninitialize()
     // 4) 衝突用の Cook データ。参照が 0 になったものを表から外す。
     object_collision_cook_cache.Collect();
 
-    // 5) テクスチャキャッシュ (SRV)。
+    // 5) Material Catalog が作った PixelShader / 既定Texture / Asset Texture。
+    //    Device の Live Object Report より先に必ず解放する。
+    material_gpu_binder.Clear();
+
+    // 6) 旧テクスチャキャッシュ (SRV)。
     //    static なので明示的に呼ばないと Report まで生き残る。
     release_all_textures();
 
-    // 6) GPU 統計の Query Pool。同じく static。
+    // 7) GPU 統計の Query Pool。同じく static。
     ReplayEngine::Rendering::Stats().Release();
 
-    // 7) パイプラインに残ったバインドを外してから、積んだコマンドを流し切る。
+    // 8) パイプラインに残ったバインドを外してから、積んだコマンドを流し切る。
     //    参照カウントを持っているのはバインド状態も同じなので、
     //    ClearState を通さないと最後の描画で使ったリソースが残る。
     if (immediate_context)

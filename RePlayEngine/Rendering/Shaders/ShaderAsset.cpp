@@ -33,6 +33,26 @@ namespace ReplayEngine::Rendering
         return false;
     }
 
+    const char* ToString(ShaderLightingModel model) noexcept
+    {
+        switch (model)
+        {
+        case ShaderLightingModel::Pbr:   return "pbr";
+        case ShaderLightingModel::Toon:  return "toon";
+        case ShaderLightingModel::Unlit: return "unlit";
+        default:                         return "unknown";
+        }
+    }
+
+    bool TryParseShaderLightingModel(std::string_view text,
+        ShaderLightingModel& out) noexcept
+    {
+        if (text == "pbr")   { out = ShaderLightingModel::Pbr;   return true; }
+        if (text == "toon")  { out = ShaderLightingModel::Toon;  return true; }
+        if (text == "unlit") { out = ShaderLightingModel::Unlit; return true; }
+        return false;
+    }
+
     const char* ToString(ShaderPropertyKind kind) noexcept
     {
         switch (kind)

@@ -1,0 +1,31 @@
+RePlayEngine Phase 7 patch files
+Base: latest user ZIP + Phase 6/12 patch
+
+MOD	3dgp.vcxproj
+MOD	3dgp.vcxproj.filters
+NEW	RePlayEngine/Editor/ShaderEditing/MaterialShaderInspector.cpp
+NEW	RePlayEngine/Editor/ShaderEditing/MaterialShaderInspector.h
+MOD	RePlayEngine/Editor/ShaderEditing/ShaderStackEditor.cpp
+MOD	RePlayEngine/Editor/ShaderEditing/ShaderStackEditor.h
+NEW	RePlayEngine/Rendering/Materials/MaterialSchema.cpp
+NEW	RePlayEngine/Rendering/Materials/MaterialSchema.h
+MOD	RePlayEngine/Rendering/Shaders/ShaderAsset.h
+NEW	RePlayEngine/Rendering/Shaders/ShaderAssetFactory.cpp
+NEW	RePlayEngine/Rendering/Shaders/ShaderAssetFactory.h
+MOD	RePlayEngine/Rendering/Shaders/ShaderConstantPacker.h
+NEW	RePlayEngine/Rendering/Shaders/ShaderEditorValidation.cpp
+NEW	RePlayEngine/Rendering/Shaders/ShaderEditorValidation.h
+MOD	RePlayEngine/Rendering/Shaders/ShaderSource.cpp
+MOD	RePlayEngine/Rendering/Shaders/ShaderSource.h
+MOD	Shader/Materials/BuiltIn/FbxDefault.hlsl
+MOD	Shader/Materials/BuiltIn/Pbr.hlsl
+MOD	Shader/Materials/BuiltIn/Pixelate.hlsl
+MOD	Shader/Materials/BuiltIn/Toon.hlsl
+MOD	Shader/Materials/BuiltIn/Unlit.hlsl
+MOD	Source/app/Editor/framework_asset_browser.cpp
+MOD	Source/app/Editor/framework_editor.cpp
+MOD	Source/app/Editor/framework_project_browser.cpp
+MOD	Source/app/Runtime/main.cpp
+MOD	Source/app/framework.h
+
+Total: 26 files

@@ -161,6 +161,19 @@ bool framework::initialize()
         static_stylized_character_ps.GetAddressOf());
     cbd.ByteWidth = sizeof(material_override_constants);
     device->CreateBuffer(&cbd, nullptr, material_override_cb.GetAddressOf());
+
+    // Phase 6 + 12: Catalog bytecode / b9 / t40+ を実描画へ載せる。
+    // 初期化に失敗しても旧 .cso 経路は残るため、Editor 自体は起動を続ける。
+    if (!material_gpu_binder.Initialize(device.Get(),
+        [this](const std::string& severity, const std::string& message)
+        {
+            push_editor_log(severity, message);
+        }))
+    {
+        push_editor_log("Warning",
+            "Material GPU Binder を初期化できません。旧描画経路を使用します");
+    }
+
     cbd.ByteWidth = sizeof(ReplayEngine::Rendering::ShaderLayerGpuData);
     device->CreateBuffer(&cbd, nullptr, shader_layer_cb.GetAddressOf());
     cbd.ByteWidth = sizeof(ReplayEngine::Rendering::CharacterMaterialGpuData);
