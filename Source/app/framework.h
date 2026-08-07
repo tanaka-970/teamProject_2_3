@@ -1093,6 +1093,7 @@ private:
     bool project_create_csharp_behaviour(const std::string& class_name);
     bool project_create_material(const std::string& name);
     bool project_create_surface_shader(const std::string& name);
+    bool project_create_layer_shader(const std::string& name);
     bool project_rename_entry(const std::filesystem::path& path,
         const std::string& new_name);
     ID3D11ShaderResourceView* project_thumbnail_for(

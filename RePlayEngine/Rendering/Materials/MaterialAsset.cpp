@@ -8,6 +8,7 @@
 #include <iomanip>
 #include <limits>
 #include <sstream>
+#include <unordered_set>
 
 namespace ReplayEngine::Rendering
 {
@@ -31,12 +32,32 @@ namespace ReplayEngine::Rendering
                 value.emissive.x, value.emissive.y, value.emissive.z,
                 value.emissive_strength, value.ambient_occlusion, value.alpha_cutoff };
             for (const float item : values) if (!std::isfinite(item)) return false;
-            return value.metallic >= 0.0f && value.metallic <= 1.0f &&
+            if (!(value.metallic >= 0.0f && value.metallic <= 1.0f &&
                 value.roughness >= 0.0f && value.roughness <= 1.0f &&
                 value.ambient_occlusion >= 0.0f && value.ambient_occlusion <= 1.0f &&
                 value.alpha_cutoff >= 0.0f && value.alpha_cutoff <= 1.0f &&
                 value.emissive_strength >= 0.0f &&
-                value.shading_model >= 0 && value.shading_model <= 4;
+                value.shading_model >= 0 && value.shading_model <= 4))
+                return false;
+
+            for (const Reflection::PropertyBag::Entry& entry : value.properties.Entries())
+                if (!entry.value.IsFinite()) return false;
+
+            std::unordered_set<std::uint64_t> layer_ids;
+            for (const ShaderLayer& layer : value.layers.Layers())
+            {
+                if (layer.id == 0 ||
+                    layer.id == (std::numeric_limits<std::uint64_t>::max)() ||
+                    !layer_ids.insert(layer.id).second ||
+                    !layer.EffectiveShader().IsValid())
+                    return false;
+                const float layer_values[]{ layer.opacity, layer.strength, layer.parameter,
+                    layer.tint.x, layer.tint.y, layer.tint.z, layer.tint.w };
+                for (const float item : layer_values) if (!std::isfinite(item)) return false;
+                for (const Reflection::PropertyBag::Entry& entry : layer.properties.Entries())
+                    if (!entry.value.IsFinite()) return false;
+            }
+            return true;
         }
 
 
@@ -203,10 +224,17 @@ namespace ReplayEngine::Rendering
         if (normalized.shader_guid.empty())
             normalized.shader_guid = BuiltInShaders::FromShadingModel(normalized.shading_model).ToString();
 
-        // v3ではPropertyBagが主。Editorで変更した値を旧固定フィールドへ戻してから、
-        // 互換フィールドと既知propertyを同じ値へ揃える。未知propertyは消さない。
+        // v3 以降は PropertyBag が surface の正本。
+        // v4 では Layer も ShaderGUID + PropertyBag が正本になる。
+        // 互換 bridge は既存 7 layer の見た目を移行中も変えないためだけに同期する。
         normalized.SyncPropertiesToLegacyFields();
         normalized.SyncLegacyFieldsToProperties();
+        for (ShaderLayer& layer : normalized.layers.Layers())
+        {
+            if (!layer.shader.IsValid()) layer.shader = layer.EffectiveShader();
+            layer.SyncPropertiesToLegacyFields();
+            layer.SyncLegacyFieldsToProperties();
+        }
 
         stream << std::setprecision(std::numeric_limits<float>::max_digits10);
         stream << "REPLAY_MATERIAL " << current_version << '\n';
@@ -241,27 +269,40 @@ namespace ReplayEngine::Rendering
             }
         }
 
-        // ---- version 2 で追加 -------------------------------------------
-        //
-        // 層構造は Material 固有。並び順がそのまま描画順になる。
-        // id は保存しない。読み込み時に振り直す。
-        // 保存された id を復元しても意味が無く、
-        // 別 Material 間で衝突したときに追いにくくなるだけのため。
+        // ---- v4 Layer Asset ---------------------------------------------
+        // Layer の種類は enum ではなく ShaderGUID。PropertyBag も各 Layer 自身が持つ。
+        // legacy_type / 固定値は旧レンダラとの bridge で、新規 Layer の追加条件ではない。
         stream << "PIXELATE " << normalized.pixelate_grid << ' '
             << normalized.pixelate_strength << '\n';
-        stream << "OUTLINE_PASS " << (normalized.outline_pass ? 1 : 0) << '\n';
+        // v2/v3 reader compatibility token。正本は LayerStack。
+        stream << "OUTLINE_PASS "
+            << (normalized.layers.Contains(BuiltInShaderLayers::Outline) ? 1 : 0) << '\n';
         stream << "LAYER_COUNT " << normalized.layers.Layers().size() << '\n';
         for (const ShaderLayer& layer : normalized.layers.Layers())
         {
-            stream << "LAYER "
-                << static_cast<int>(layer.type) << ' '
+            int legacy_type = -1;
+            std::uint32_t legacy = 0;
+            if (BuiltInShaderLayers::TryGetLegacyType(layer.EffectiveShader(), legacy))
+                legacy_type = static_cast<int>(legacy);
+
+            stream << "LAYER4 " << std::quoted(layer.EffectiveShader().ToString()) << ' '
+                << layer.id << ' ' << legacy_type << ' '
                 << static_cast<int>(layer.blend) << ' '
                 << (layer.enabled ? 1 : 0) << ' '
-                << layer.opacity << ' '
-                << layer.strength << ' '
-                << layer.parameter << ' '
+                << layer.opacity << ' ' << layer.strength << ' ' << layer.parameter << ' '
                 << layer.tint.x << ' ' << layer.tint.y << ' '
                 << layer.tint.z << ' ' << layer.tint.w << '\n';
+            stream << "LAYER_PROPERTY_COUNT " << layer.properties.Size() << '\n';
+            for (const Reflection::PropertyBag::Entry& entry : layer.properties.Entries())
+            {
+                if (!WriteProperty(stream, entry))
+                {
+                    stream.close();
+                    std::filesystem::remove(temporary, filesystem_error);
+                    error = "Layer property has unsupported serialization type: " + entry.name;
+                    return false;
+                }
+            }
         }
         stream << "END_MATERIAL\n";
         stream.flush();
@@ -314,6 +355,7 @@ namespace ReplayEngine::Rendering
         MaterialAsset loaded;
         int alpha = 0;
         int double_sided_value = 0;
+        bool legacy_outline_pass = false;
         // version 1 も読む。層構造が無いだけで、それ以外は同じ並び。
         // 古い .replaymaterial を開けなくすると、
         // 既に作ってあるアセットが全部失われる。
@@ -396,7 +438,7 @@ namespace ReplayEngine::Rendering
                 if (error.empty()) error = "Materialの層構造を読み取れません";
                 return false;
             }
-            loaded.outline_pass = outline_value != 0;
+            legacy_outline_pass = outline_value != 0;
 
             if (layer_count > ShaderLayerStack::MaxLayers)
             {
@@ -406,38 +448,118 @@ namespace ReplayEngine::Rendering
 
             for (std::size_t index = 0; index < layer_count; ++index)
             {
-                int type = 0;
                 int blend = 0;
                 int enabled = 0;
                 ShaderLayer source{};
-                if (!Expect(stream, "LAYER", error) ||
-                    !(stream >> type >> blend >> enabled >> source.opacity >>
-                        source.strength >> source.parameter >>
-                        source.tint.x >> source.tint.y >>
-                        source.tint.z >> source.tint.w))
-                {
-                    if (error.empty()) error = "Materialの層を読み取れません";
-                    return false;
-                }
-                if (type < static_cast<int>(ShaderLayerType::Pbr) ||
-                    type > static_cast<int>(ShaderLayerType::StylizedCharacter) ||
-                    blend < static_cast<int>(ShaderLayerBlend::Alpha) ||
-                    blend > static_cast<int>(ShaderLayerBlend::Multiply))
-                {
-                    error = "Materialの層の列挙値が不正です";
-                    return false;
-                }
 
-                // id は Add が振り直す。保存された id は使わない。
-                ShaderLayer& added =
-                    loaded.layers.Add(static_cast<ShaderLayerType>(type));
-                added.blend = static_cast<ShaderLayerBlend>(blend);
-                added.enabled = enabled != 0;
-                added.opacity = source.opacity;
-                added.strength = source.strength;
-                added.parameter = source.parameter;
-                added.tint = source.tint;
+                if (version >= 4)
+                {
+                    std::string shader_guid;
+                    std::uint64_t persistent_id = 0;
+                    int legacy_type = -1;
+                    if (!Expect(stream, "LAYER4", error) ||
+                        !(stream >> std::quoted(shader_guid) >> persistent_id >> legacy_type >> blend >> enabled >>
+                            source.opacity >> source.strength >> source.parameter >>
+                            source.tint.x >> source.tint.y >> source.tint.z >> source.tint.w))
+                    {
+                        if (error.empty()) error = "Material v4 layer header could not be read";
+                        return false;
+                    }
+                    if (blend < static_cast<int>(ShaderLayerBlend::Alpha) ||
+                        blend > static_cast<int>(ShaderLayerBlend::Multiply))
+                    {
+                        error = "Material layer blend is invalid";
+                        return false;
+                    }
+
+                    ShaderID layer_shader;
+                    if (!ShaderID::TryParse(shader_guid, layer_shader) || !layer_shader.IsValid())
+                    {
+                        error = "Material layer ShaderGUID is invalid: " + shader_guid;
+                        return false;
+                    }
+                    if (persistent_id == 0 ||
+                        persistent_id == (std::numeric_limits<std::uint64_t>::max)() ||
+                        loaded.layers.ContainsID(persistent_id))
+                    {
+                        error = "Material layer persistent ID is invalid or duplicated";
+                        return false;
+                    }
+                    ShaderLayer& added = loaded.layers.AddWithID(layer_shader, persistent_id);
+                    added.blend = static_cast<ShaderLayerBlend>(blend);
+                    added.enabled = enabled != 0;
+                    added.opacity = source.opacity;
+                    added.strength = source.strength;
+                    added.parameter = source.parameter;
+                    added.tint = source.tint;
+                    if (legacy_type >= 0 && legacy_type <=
+                        static_cast<int>(ShaderLayerType::StylizedCharacter))
+                    {
+                        // GUID が正本だが、旧特殊パスの見た目維持に使う。
+                        added.type = static_cast<ShaderLayerType>(legacy_type);
+                    }
+
+                    std::size_t property_count = 0;
+                    if (!Expect(stream, "LAYER_PROPERTY_COUNT", error) ||
+                        !(stream >> property_count) || property_count > 4096)
+                    {
+                        if (error.empty()) error = "Material layer property count is invalid";
+                        return false;
+                    }
+                    added.properties.Clear();
+                    for (std::size_t property_index = 0;
+                        property_index < property_count; ++property_index)
+                    {
+                        if (!Expect(stream, "PROPERTY", error) ||
+                            !ReadProperty(stream, added.properties, error))
+                        {
+                            if (error.empty()) error = "Material layer property could not be read";
+                            return false;
+                        }
+                    }
+                    added.SyncPropertiesToLegacyFields();
+                }
+                else
+                {
+                    int type = 0;
+                    if (!Expect(stream, "LAYER", error) ||
+                        !(stream >> type >> blend >> enabled >> source.opacity >>
+                            source.strength >> source.parameter >>
+                            source.tint.x >> source.tint.y >> source.tint.z >> source.tint.w))
+                    {
+                        if (error.empty()) error = "Materialの層を読み取れません";
+                        return false;
+                    }
+                    if (type < static_cast<int>(ShaderLayerType::Pbr) ||
+                        type > static_cast<int>(ShaderLayerType::StylizedCharacter) ||
+                        blend < static_cast<int>(ShaderLayerBlend::Alpha) ||
+                        blend > static_cast<int>(ShaderLayerBlend::Multiply))
+                    {
+                        error = "Materialの層の列挙値が不正です";
+                        return false;
+                    }
+
+                    ShaderLayer& added =
+                        loaded.layers.Add(static_cast<ShaderLayerType>(type));
+                    added.blend = static_cast<ShaderLayerBlend>(blend);
+                    added.enabled = enabled != 0;
+                    added.opacity = source.opacity;
+                    added.strength = source.strength;
+                    added.parameter = source.parameter;
+                    added.tint = source.tint;
+                    added.SyncLegacyFieldsToProperties();
+                }
             }
+        }
+
+        // v2/v3 の outline_pass は Shader-owned bool だった。v4 では Outline Layer
+        // へ 1 回だけ移行し、以後の正本を LayerStack にする。
+        if (legacy_outline_pass &&
+            !loaded.layers.Contains(BuiltInShaderLayers::Outline) &&
+            loaded.layers.CanAdd())
+        {
+            ShaderLayer& outline = loaded.layers.Add(BuiltInShaderLayers::Outline);
+            outline.SyncLegacyFieldsToProperties();
         }
 
         if (!Expect(stream, "END_MATERIAL", error))

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "../../Reflection/Registry/TypeGUID.h"
 
@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ReplayEngine::Rendering
@@ -85,19 +86,38 @@ namespace ReplayEngine::Rendering
 
     const char* ToString(ShaderVariant variant) noexcept;
 
+    // Shader-owned additional pass. Material Layer とは別物。
+    // Layer はユーザーが順番を変えるが、Pass は Shader 作者が宣言した順に固定する。
+    enum class ShaderPassBlend : std::int32_t
+    {
+        Inherit = 0,
+        Alpha,
+        Additive,
+        Multiply,
+    };
+
+    const char* ToString(ShaderPassBlend blend) noexcept;
+    bool TryParseShaderPassBlend(std::string_view text, ShaderPassBlend& out) noexcept;
+
+    struct ShaderPassInfo final
+    {
+        std::string name;
+        std::string entry_point;
+        ShaderPassBlend blend = ShaderPassBlend::Inherit;
+    };
+
     // HLSL へ渡す define 名。#if REPLAY_SKINNED で分岐する。
     inline constexpr const char* shader_variant_define = "REPLAY_SKINNED";
 
     // このドメインがその変種を使うか。
     //
-    // surface だけが 2 通り要る。
-    // layer と postprocess は画面全体にかけるもので、
-    // 頂点の入り方に依存しないので Static だけでよい。
+    // surface と layer はメッシュの Pixel Shader 入力を受けるため 2 通り要る。
+    // postprocess だけは画面全体にかけ、頂点の入り方に依存しないので Static のみ。
     constexpr bool ShaderDomainUsesVariant(ShaderDomain domain,
         ShaderVariant variant) noexcept
     {
         if (variant == ShaderVariant::Static) return true;
-        return domain == ShaderDomain::Surface;
+        return domain == ShaderDomain::Surface || domain == ShaderDomain::Layer;
     }
 
     // Inspector に出す 1 項目の種別。
@@ -244,6 +264,10 @@ namespace ReplayEngine::Rendering
         bool lighting_model_valid = true;
 
         std::vector<ShaderProperty> properties;
+
+        // #pragma replay_pass "Glow" GlowPass additive
+        // 宣言順が描画順。Material 側から並べ替えない。
+        std::vector<ShaderPassInfo> passes;
 
         // Inspector のドロップダウンに出す表示名。
         // category が空なら name だけ、あれば "category/name"。

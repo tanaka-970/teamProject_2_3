@@ -1,4 +1,4 @@
-#include "framework.h"
+﻿#include "framework.h"
 #include "texture.h"
 #include "../../RePlayEngine/Assets/AssetCache.h"
 #include "../../RePlayEngine/Editor/Style/EditorStyle.h"
@@ -24,7 +24,7 @@
 //    以前は framework_editor.cpp の draw_project_panel が
 //    「フォームで名前を打って作る」形になっており、
 //    作る場所と作られた物が出る場所が違っていた。
-//    フォルダを持ち、その場で作り、その場で改名できるようにする。
+//    フォルダを持ち、その場で作り、その場で改名できるようにしたほうがかんりしやすいでしょ
 // =============================================================================
 
 namespace
@@ -444,6 +444,83 @@ bool framework::project_create_surface_shader(const std::string& name)
     set_project_folder(path.parent_path());
 
     project_browser_status = "Surface Shader を作成しました: " +
+        path.filename().u8string() + " / ShaderGUID=" + shader_id.ToString();
+    if (report.compile_failed != 0)
+        project_browser_status += " (compile error は Shader Catalog で確認)";
+    push_editor_log("Info", project_browser_status, path, 1);
+    return true;
+}
+
+
+bool framework::project_create_layer_shader(const std::string& name)
+{
+    using ReplayEngine::Assets::AssetKind;
+    using ReplayEngine::Rendering::ShaderAssetFactory;
+    using ReplayEngine::Rendering::ShaderID;
+
+    const std::string safe = SafeProjectFileName(
+        name.empty() ? std::string("NewLayer") : name);
+
+    std::error_code error;
+    const std::filesystem::path root = std::filesystem::current_path(error);
+    if (error)
+    {
+        project_browser_status = "Project root を取得できません";
+        return false;
+    }
+
+    std::filesystem::path folder = root / project_current_folder;
+    std::filesystem::path relative = std::filesystem::relative(folder, root, error);
+    if (error) relative.clear();
+    const std::string relative_lower = ToLowerCopy(relative.generic_u8string());
+    if (relative_lower.rfind("shader/layers", 0) != 0)
+        folder = root / "Shader" / "Layers" / "Project";
+
+    std::filesystem::create_directories(folder, error);
+    if (error)
+    {
+        project_browser_status = "Layer Shader folder を作成できません";
+        return false;
+    }
+
+    std::filesystem::path path = folder / (safe + ".hlsl");
+    for (int suffix = 2; std::filesystem::exists(path) && suffix < 10000; ++suffix)
+        path = folder / (safe + std::to_string(suffix) + ".hlsl");
+
+    std::string picker_category = "Project";
+    const std::filesystem::path layers_root = root / "Shader" / "Layers";
+    std::filesystem::path shader_subfolder =
+        std::filesystem::relative(folder, layers_root, error);
+    if (!error && !shader_subfolder.empty() && shader_subfolder != ".")
+    {
+        const std::string sub = shader_subfolder.generic_u8string();
+        if (sub == "Project") picker_category = "Project";
+        else if (sub.rfind("Project/", 0) == 0) picker_category = sub;
+        else picker_category = "Project/" + sub;
+    }
+    error.clear();
+
+    ShaderID shader_id;
+    std::string shader_error;
+    if (!ShaderAssetFactory::CreateLayerShader(
+        path, safe, picker_category, shader_id, shader_error))
+    {
+        project_browser_status = "Layer Shader 作成失敗: " + shader_error;
+        return false;
+    }
+
+    const ReplayEngine::Assets::AssetRecord& record =
+        asset_database.Register(path, AssetKind::Shader);
+    if (!asset_database.Save(shader_error))
+    {
+        project_browser_status = "Layer Shader は作成しましたが DB 保存失敗: " + shader_error;
+        return false;
+    }
+
+    const auto report = shader_library.ScanAll(root);
+    selected_asset_guid = record.guid;
+    set_project_folder(path.parent_path());
+    project_browser_status = "Layer Shader を作成しました: " +
         path.filename().u8string() + " / ShaderGUID=" + shader_id.ToString();
     if (report.compile_failed != 0)
         project_browser_status += " (compile error は Shader Catalog で確認)";
@@ -926,6 +1003,10 @@ void framework::draw_project_browser()
             if (ImGui::MenuItem("Surface Shader"))
             {
                 project_create_surface_shader(project_new_item_name);
+            }
+            if (ImGui::MenuItem("Layer Shader"))
+            {
+                project_create_layer_shader(project_new_item_name);
             }
             if (ImGui::MenuItem("Folder"))
             {

@@ -25,6 +25,27 @@ namespace ReplayEngine::Rendering
         }
     }
 
+    const char* ToString(ShaderPassBlend blend) noexcept
+    {
+        switch (blend)
+        {
+        case ShaderPassBlend::Inherit:  return "inherit";
+        case ShaderPassBlend::Alpha:    return "alpha";
+        case ShaderPassBlend::Additive: return "additive";
+        case ShaderPassBlend::Multiply: return "multiply";
+        default:                        return "inherit";
+        }
+    }
+
+    bool TryParseShaderPassBlend(std::string_view text, ShaderPassBlend& out) noexcept
+    {
+        if (text == "inherit")  { out = ShaderPassBlend::Inherit;  return true; }
+        if (text == "alpha")    { out = ShaderPassBlend::Alpha;    return true; }
+        if (text == "additive") { out = ShaderPassBlend::Additive; return true; }
+        if (text == "multiply") { out = ShaderPassBlend::Multiply; return true; }
+        return false;
+    }
+
     bool TryParseShaderDomain(std::string_view text, ShaderDomain& out) noexcept
     {
         if (text == "surface")     { out = ShaderDomain::Surface;     return true; }

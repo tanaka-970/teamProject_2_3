@@ -220,6 +220,51 @@ namespace ReplayEngine::Rendering
         return cached.shader.Get();
     }
 
+    ID3D11PixelShader* MaterialGpuBinder::ResolvePassPixelShader(
+        ID3D11Device* device, const ShaderCatalog& catalog,
+        const ResolvedMaterialBinding& binding, std::size_t pass_index)
+    {
+        if (!initialized_ || device == nullptr || !binding.usable_shader ||
+            !binding.shader.IsValid())
+            return nullptr;
+
+        const ShaderCatalog::Entry* entry = catalog.Find(binding.shader);
+        if (entry == nullptr || !entry->UsesVariant(binding.variant) ||
+            pass_index >= entry->passes.size())
+            return nullptr;
+
+        const ShaderCatalog::PassResult& pass = entry->passes[pass_index];
+        const ShaderCatalog::VariantResult& result = pass.At(binding.variant);
+        if (!result.bytecode) return nullptr;
+
+        const std::string key = ShaderCacheKey(binding.shader, binding.variant) +
+            ":Pass:" + pass.info.entry_point;
+        CachedPixelShader& cached = shader_cache_[key];
+        const std::size_t bytecode_size = result.bytecode->GetBufferSize();
+        if (cached.shader && cached.bytecode_identity == result.bytecode.Get() &&
+            cached.bytecode_size == bytecode_size)
+            return cached.shader.Get();
+
+        Microsoft::WRL::ComPtr<ID3D11PixelShader> replacement;
+        const HRESULT created = device->CreatePixelShader(
+            result.bytecode->GetBufferPointer(), bytecode_size, nullptr,
+            replacement.GetAddressOf());
+        if (FAILED(created))
+        {
+            LogOnce(shader_failures_, key, "Error",
+                "Shader pass bytecode から PixelShader を作れません: " + key);
+            return cached.shader.Get();
+        }
+
+        const std::string debug_name = "ReplayMaterial.PS:" + key;
+        SetDebugName(replacement.Get(), debug_name.c_str());
+        cached.shader = replacement;
+        cached.bytecode_identity = result.bytecode.Get();
+        cached.bytecode_size = bytecode_size;
+        shader_failures_.erase(key);
+        return cached.shader.Get();
+    }
+
     ID3D11ShaderResourceView* MaterialGpuBinder::DefaultTexture(
         const std::string& name) const noexcept
     {

@@ -1,4 +1,4 @@
-﻿// GameObject / Component 基盤と既存 framework の接続部。
+// GameObject / Component 基盤と既存 framework の接続部。
 //
 // この 1 ファイルへ新基盤との橋渡しをまとめている理由:
 //   framework 側の既存ファイル（描画・入力・エディタ）への変更を最小限に抑え、
@@ -16,6 +16,7 @@
 #include "../../RePlayEngine/Components/Camera/CameraTargetComponent.h"
 #include "../../RePlayEngine/Components/Rendering/LightComponents.h"
 #include "../../RePlayEngine/Rendering/Shaders/BuiltInShaders.h"
+#include "../../RePlayEngine/Rendering/ShaderStack/BuiltInShaderLayers.h"
 #include "../../RePlayEngine/Object/Registry/BuiltInComponents.h"
 #include "../../RePlayEngine/Project/ProjectSettingsSerializer.h"
 #include "../../RePlayEngine/Rendering/Adapter/SceneRenderCollector.h"
@@ -1269,7 +1270,7 @@ ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
     item.emissive_color = material->emissive;
     item.emissive_strength = material->emissive_strength;
     item.double_sided = material->double_sided;
-    item.outline = material->outline_pass;
+    item.outline = material->layers.Contains(BuiltInShaderLayers::Outline);
     item.pixelate_size = material->pixelate_grid;
     item.pixelate_strength = material->pixelate_strength;
 
@@ -1327,13 +1328,13 @@ ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
     for (const ShaderLayer& layer : material->layers.Layers())
     {
         if (!layer.enabled) continue;
-        if (layer.type == ShaderLayerType::Pixelate)
+        if (layer.Is(BuiltInShaderLayers::Pixelate))
         {
             item.pixelate_enabled = true;
             item.pixelate_size = layer.parameter;
             item.pixelate_strength = layer.strength;
         }
-        else if (layer.type == ShaderLayerType::Outline)
+        else if (layer.Is(BuiltInShaderLayers::Outline))
         {
             item.outline = true;
         }

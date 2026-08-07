@@ -52,10 +52,29 @@ namespace ReplayEngine::Rendering
             const ShaderDiagnostic* FirstError() const noexcept;
         };
 
+        struct PassResult final
+        {
+            ShaderPassInfo info;
+            VariantResult variants[shader_variant_count];
+
+            VariantResult& At(ShaderVariant variant) noexcept
+            {
+                return variants[static_cast<int>(variant)];
+            }
+            const VariantResult& At(ShaderVariant variant) const noexcept
+            {
+                return variants[static_cast<int>(variant)];
+            }
+        };
+
         struct Entry final
         {
             ShaderSourceInfo info;
             ShaderPropertySchemaRef schema;
+
+            // Shader-owned additional passes. info.passes と同じ宣言順。
+            // Material の Layer 順序とは独立しており、Editor から並べ替えない。
+            std::vector<PassResult> passes;
 
             // Static / Skinned それぞれの結果。
             // 使わない変種（layer の Skinned など）は触られない。

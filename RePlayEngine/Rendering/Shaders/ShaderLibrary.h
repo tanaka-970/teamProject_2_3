@@ -98,6 +98,17 @@ namespace ReplayEngine::Rendering
         bool CompileVariant(ShaderCatalog::Entry& entry, ShaderVariant variant,
             bool debug_build);
 
+        // Shader-owned pass 用。base pass と同じ source/schema を使い、
+        // entry point だけを変えて別 bytecode として保持する。
+        bool CompilePassVariant(ShaderCatalog::Entry& entry,
+            ShaderCatalog::PassResult& pass, ShaderVariant variant,
+            bool debug_build);
+
+        bool CompileVariantInto(ShaderCatalog::Entry& entry,
+            ShaderCatalog::VariantResult& result, ShaderVariant variant,
+            const char* entry_point, const std::string& diagnostic_prefix,
+            bool debug_build);
+
         ShaderCatalog catalog_;
         ScanReport last_report_;
         LogSink log_;

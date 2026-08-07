@@ -417,26 +417,29 @@ void framework::draw_material_asset_editor()
     if (ImGui::TreeNodeEx("Shader Stack", ImGuiTreeNodeFlags_DefaultOpen))
     {
         const bool was_active = ImGui::IsAnyItemActive();
+        bool material_outline_bridge = material_editor_asset.layers.Contains(
+            ReplayEngine::Rendering::BuiltInShaderLayers::Outline);
         const auto stack = ReplayEngine::Editor::ShaderStackEditor::Draw(
             ("material_stack_" + selected->guid).c_str(),
             material_editor_asset.shading_model,
-            material_editor_asset.outline_pass,
+            material_outline_bridge,
             material_editor_asset.layers,
             shader_stack_advanced_mode,
             toon.outline.outline_color,
             toon.outline.outline_params,
             material_editor_asset.pixelate_grid,
             material_editor_asset.pixelate_strength,
-            false);
+            false, &shader_library.Catalog(), &asset_database);
 
         if (stack.requires_pbr)     use_pbr_skin = true;
         if (stack.requires_toon)    enable_toon_shader = true;
         if (stack.requires_unlit)   enable_unlit_shader = true;
         if (stack.requires_outline) enable_outline_shader = true;
 
-        // ImGui 1.80 には IsAnyItemEdited が無いので、既存 Editor と同じく
-        // 操作中を dirty の近似値として使う。Save はいつでも押せる。
-        if (ImGui::IsAnyItemActive() || was_active) material_editor_dirty = true;
+        // Layer 追加/削除/並べ替え/Property 編集は Editor 自身が changed を返す。
+        // 古い ImGui の操作中判定も fallback として残す。
+        if (stack.changed || ImGui::IsAnyItemActive() || was_active)
+            material_editor_dirty = true;
         ImGui::TreePop();
     }
 

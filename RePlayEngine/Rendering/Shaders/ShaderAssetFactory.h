@@ -19,5 +19,11 @@ namespace ReplayEngine::Rendering
         static bool CreateSurfaceShader(const std::filesystem::path& path,
             const std::string& display_name, const std::string& category,
             ShaderID& out_id, std::string& error);
+
+        // Material の Shader Stack へ追加できる Layer Shader を作る。
+        // Editor / Renderer の C++ へ種類を追加する必要はない。
+        static bool CreateLayerShader(const std::filesystem::path& path,
+            const std::string& display_name, const std::string& category,
+            ShaderID& out_id, std::string& error);
     };
 }

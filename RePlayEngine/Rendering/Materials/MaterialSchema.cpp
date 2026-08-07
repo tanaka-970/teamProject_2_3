@@ -235,17 +235,17 @@ namespace ReplayEngine::Rendering
         }
     }
 
-    bool MaterialSchema::EnsureProperties(MaterialAsset& material,
+    bool MaterialSchema::EnsurePropertyBag(Reflection::PropertyBag& properties,
         const ShaderPropertySchema& schema)
     {
         bool changed = false;
         for (const ShaderProperty& property : schema.Properties())
         {
             const std::string saved = property.SavedName();
-            const Reflection::PropertyValue* existing = material.properties.Find(saved);
+            const Reflection::PropertyValue* existing = properties.Find(saved);
             if (existing == nullptr)
             {
-                material.properties.Set(saved, DefaultValueFor(property));
+                properties.Set(saved, DefaultValueFor(property));
                 changed = true;
                 continue;
             }
@@ -254,11 +254,17 @@ namespace ReplayEngine::Rendering
             if (NormalizeValue(*existing, property, normalized) &&
                 !Reflection::ValuesEqual(*existing, normalized))
             {
-                material.properties.Set(saved, std::move(normalized));
+                properties.Set(saved, std::move(normalized));
                 changed = true;
             }
         }
+        return changed;
+    }
 
+    bool MaterialSchema::EnsureProperties(MaterialAsset& material,
+        const ShaderPropertySchema& schema)
+    {
+        const bool changed = EnsurePropertyBag(material.properties, schema);
         if (changed) material.SyncPropertiesToLegacyFields();
         return changed;
     }

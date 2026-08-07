@@ -1,9 +1,11 @@
-﻿#include "framework.h"
+#include "framework.h"
 #include "shader.h"
 #include "texture.h"
 #include "skinned_mesh.h"
 #include "gltf_model.h"
 #include "../../../RePlayEngine/Rendering/Shaders/BuiltInShaders.h"
+#include "../../../RePlayEngine/Rendering/ShaderStack/BuiltInShaderLayers.h"
+#include "../../../RePlayEngine/Rendering/Materials/ShaderLayerBinding.h"
 
 namespace
 {
@@ -634,14 +636,20 @@ void framework::render(float elapsed_time)
                 {
                     if (!layer.enabled) continue;
                     if (layer.type == ReplayEngine::Rendering::ShaderLayerType::Pixelate) continue;
-                    if (layer.type == ReplayEngine::Rendering::ShaderLayerType::Outline)
+                    if (layer.Is(ReplayEngine::Rendering::BuiltInShaderLayers::Outline))
                     {
+                        const auto saved_outline = toon.outline;
+                        toon.outline.outline_color = layer.tint;
+                        toon.outline.outline_params.x = layer.parameter;
+                        toon.update_constants(immediate_context.Get());
                         immediate_context->OMSetBlendState(
                             blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
                         toon.bind_outline_pass(immediate_context.Get(), false);
                         static_meshes[0]->render(immediate_context.Get(), world, material_color,
                             toon.outline_ps(), toon.static_outline_vs_.Get(),
                             toon.static_outline_il_.Get(), true);
+                        toon.outline = saved_outline;
+                        toon.update_constants(immediate_context.Get());
                         immediate_context->RSSetState(
                             rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
                         continue;
@@ -670,17 +678,89 @@ void framework::render(float elapsed_time)
                 {
                     for (const auto& layer : item.material_binding.layers->Layers())
                     {
-                        if (!layer.enabled || layer.type == ReplayEngine::Rendering::ShaderLayerType::Pixelate)
+                        if (!layer.enabled || layer.Is(ReplayEngine::Rendering::BuiltInShaderLayers::Pixelate))
                             continue; // PixelateはGBufferへ設定済み
-                        if (layer.type == ReplayEngine::Rendering::ShaderLayerType::Outline)
+                        if (layer.Is(ReplayEngine::Rendering::BuiltInShaderLayers::Outline))
                         {
+                            const auto saved_outline = toon.outline;
+                            toon.outline.outline_color = layer.tint;
+                            toon.outline.outline_params.x = layer.parameter;
+                            toon.update_constants(immediate_context.Get());
                             immediate_context->OMSetBlendState(
                                 blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
                             toon.bind_outline_pass(immediate_context.Get(), true);
                             mesh->render(immediate_context.Get(), item.world, layer.tint,
                                 keyframe, toon.outline_ps(), toon.skinned_outline_vs_.Get(),
                                 toon.skinned_outline_il_.Get(), true, false);
+                            toon.outline = saved_outline;
+                            toon.update_constants(immediate_context.Get());
                             outline_drawn = true;
+                            continue;
+                        }
+
+                        // Built-in 7種は見た目を変えない旧専用パス。
+                        // それ以外は Layer Shader Asset を Catalog から直接描く。
+                        if (!ReplayEngine::Rendering::BuiltInShaderLayers::IsBuiltIn(
+                            layer.EffectiveShader()))
+                        {
+                            prepare_layer(layer, default_profile);
+                            ReplayEngine::Rendering::ResolvedMaterialBinding layer_binding;
+                            if (ReplayEngine::Rendering::ShaderLayerBindingResolver::Resolve(
+                                layer, shader_library.Catalog(),
+                                ReplayEngine::Rendering::ShaderVariant::Skinned, layer_binding))
+                            {
+                                const auto* layer_entry = shader_library.Catalog().Find(
+                                    layer_binding.shader);
+                                ID3D11PixelShader* catalog_layer =
+                                    material_gpu_binder.ResolvePixelShader(
+                                        device.Get(), shader_library.Catalog(), layer_binding);
+                                if (catalog_layer != nullptr &&
+                                    material_gpu_binder.Bind(device.Get(), immediate_context.Get(),
+                                        asset_database, layer_binding))
+                                {
+                                    const DirectX::XMFLOAT4 white{ 1.0f, 1.0f, 1.0f, 1.0f };
+                                    mesh->render(immediate_context.Get(), item.world, white,
+                                        keyframe, catalog_layer, nullptr, nullptr, true, false);
+
+                                    // Shader-owned pass は Layer の直後、宣言順で固定実行する。
+                                    // Material Editor から順番を変えるのは Layer だけ。
+                                    if (layer_entry != nullptr)
+                                    {
+                                        for (std::size_t pass_index = 0;
+                                            pass_index < layer_entry->passes.size(); ++pass_index)
+                                        {
+                                            const auto& pass = layer_entry->passes[pass_index];
+                                            BLEND_STATE pass_blend = BLEND_STATE::ALPHA;
+                                            switch (pass.info.blend)
+                                            {
+                                            case ReplayEngine::Rendering::ShaderPassBlend::Inherit:
+                                                if (layer.blend == ReplayEngine::Rendering::ShaderLayerBlend::Additive)
+                                                    pass_blend = BLEND_STATE::ADD;
+                                                else if (layer.blend == ReplayEngine::Rendering::ShaderLayerBlend::Multiply)
+                                                    pass_blend = BLEND_STATE::MULTIPLY;
+                                                break;
+                                            case ReplayEngine::Rendering::ShaderPassBlend::Additive:
+                                                pass_blend = BLEND_STATE::ADD; break;
+                                            case ReplayEngine::Rendering::ShaderPassBlend::Multiply:
+                                                pass_blend = BLEND_STATE::MULTIPLY; break;
+                                            case ReplayEngine::Rendering::ShaderPassBlend::Alpha:
+                                            default: pass_blend = BLEND_STATE::ALPHA; break;
+                                            }
+                                            immediate_context->OMSetBlendState(
+                                                blend_states[(size_t)pass_blend].Get(), nullptr, 0xFFFFFFFF);
+                                            if (ID3D11PixelShader* pass_ps =
+                                                material_gpu_binder.ResolvePassPixelShader(
+                                                    device.Get(), shader_library.Catalog(),
+                                                    layer_binding, pass_index))
+                                            {
+                                                mesh->render(immediate_context.Get(), item.world, white,
+                                                    keyframe, pass_ps, nullptr, nullptr, true, false);
+                                            }
+                                        }
+                                    }
+                                }
+                                material_gpu_binder.Unbind(immediate_context.Get());
+                            }
                             continue;
                         }
 
@@ -862,15 +942,83 @@ void framework::render(float elapsed_time)
                 for (const auto& layer : item.material_binding.layers->Layers())
                 {
                     if (!layer.enabled) continue;
-                    if (layer.type == ReplayEngine::Rendering::ShaderLayerType::Outline)
+                    if (layer.Is(ReplayEngine::Rendering::BuiltInShaderLayers::Outline))
                     {
+                        const auto saved_outline = toon.outline;
+                        toon.outline.outline_color = layer.tint;
+                        toon.outline.outline_params.x = layer.parameter;
+                        toon.update_constants(immediate_context.Get());
                         immediate_context->OMSetBlendState(
                             blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
                         toon.bind_outline_pass(immediate_context.Get(), true);
                         scene_mesh->render(immediate_context.Get(), item.world, layer.tint,
                             item_keyframe, toon.outline_ps(), toon.skinned_outline_vs_.Get(),
                             toon.skinned_outline_il_.Get(), true, false);
+                        toon.outline = saved_outline;
+                        toon.update_constants(immediate_context.Get());
                         outline_drawn = true;
+                        continue;
+                    }
+
+                    if (!ReplayEngine::Rendering::BuiltInShaderLayers::IsBuiltIn(
+                        layer.EffectiveShader()))
+                    {
+                        BLEND_STATE custom_blend = BLEND_STATE::ALPHA;
+                        if (layer.blend == ReplayEngine::Rendering::ShaderLayerBlend::Additive)
+                            custom_blend = BLEND_STATE::ADD;
+                        else if (layer.blend == ReplayEngine::Rendering::ShaderLayerBlend::Multiply)
+                            custom_blend = BLEND_STATE::MULTIPLY;
+                        immediate_context->OMSetBlendState(
+                            blend_states[(size_t)custom_blend].Get(), nullptr, 0xFFFFFFFF);
+                        immediate_context->RSSetState(
+                            rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+
+                        ReplayEngine::Rendering::ResolvedMaterialBinding layer_binding;
+                        if (ReplayEngine::Rendering::ShaderLayerBindingResolver::Resolve(
+                            layer, shader_library.Catalog(),
+                            ReplayEngine::Rendering::ShaderVariant::Skinned, layer_binding))
+                        {
+                            const auto* layer_entry = shader_library.Catalog().Find(
+                                layer_binding.shader);
+                            ID3D11PixelShader* catalog_layer =
+                                material_gpu_binder.ResolvePixelShader(
+                                    device.Get(), shader_library.Catalog(), layer_binding);
+                            if (catalog_layer != nullptr &&
+                                material_gpu_binder.Bind(device.Get(), immediate_context.Get(),
+                                    asset_database, layer_binding))
+                            {
+                                const DirectX::XMFLOAT4 white{ 1.0f, 1.0f, 1.0f, 1.0f };
+                                scene_mesh->render(immediate_context.Get(), item.world, white,
+                                    item_keyframe, catalog_layer, nullptr, nullptr, true, false);
+
+                                if (layer_entry != nullptr)
+                                {
+                                    for (std::size_t pass_index = 0;
+                                        pass_index < layer_entry->passes.size(); ++pass_index)
+                                    {
+                                        const auto& pass = layer_entry->passes[pass_index];
+                                        BLEND_STATE pass_blend = custom_blend;
+                                        if (pass.info.blend == ReplayEngine::Rendering::ShaderPassBlend::Alpha)
+                                            pass_blend = BLEND_STATE::ALPHA;
+                                        else if (pass.info.blend == ReplayEngine::Rendering::ShaderPassBlend::Additive)
+                                            pass_blend = BLEND_STATE::ADD;
+                                        else if (pass.info.blend == ReplayEngine::Rendering::ShaderPassBlend::Multiply)
+                                            pass_blend = BLEND_STATE::MULTIPLY;
+                                        immediate_context->OMSetBlendState(
+                                            blend_states[(size_t)pass_blend].Get(), nullptr, 0xFFFFFFFF);
+                                        if (ID3D11PixelShader* pass_ps =
+                                            material_gpu_binder.ResolvePassPixelShader(
+                                                device.Get(), shader_library.Catalog(),
+                                                layer_binding, pass_index))
+                                        {
+                                            scene_mesh->render(immediate_context.Get(), item.world, white,
+                                                item_keyframe, pass_ps, nullptr, nullptr, true, false);
+                                        }
+                                    }
+                                }
+                            }
+                            material_gpu_binder.Unbind(immediate_context.Get());
+                        }
                         continue;
                     }
 

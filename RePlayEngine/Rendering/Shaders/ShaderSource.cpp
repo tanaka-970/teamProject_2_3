@@ -1,4 +1,4 @@
-﻿#include "ShaderSource.h"
+#include "ShaderSource.h"
 
 #include <algorithm>
 #include <cctype>
@@ -18,8 +18,21 @@ namespace ReplayEngine::Rendering
         {
             std::ifstream stream(path, std::ios::binary);
             if (!stream) return std::string();
-            return std::string((std::istreambuf_iterator<char>(stream)),
+            std::string text((std::istreambuf_iterator<char>(stream)),
                 std::istreambuf_iterator<char>());
+
+            // Visual Studio の「UTF-8 with signature」で保存された HLSL も受ける。
+            // ShaderLibrary は generated cbuffer をソース先頭へ差し込むため、
+            // 元ファイルの BOM を残すと BOM がストリーム途中へ移動して D3DCompile が
+            // FbxDefault 等を失敗させる。Parser と Compiler の両方で正規化する。
+            if (text.size() >= 3 &&
+                static_cast<unsigned char>(text[0]) == 0xEF &&
+                static_cast<unsigned char>(text[1]) == 0xBB &&
+                static_cast<unsigned char>(text[2]) == 0xBF)
+            {
+                text.erase(0, 3);
+            }
+            return text;
         }
 
         void TrimInPlace(std::string& text)
@@ -313,6 +326,53 @@ namespace ReplayEngine::Rendering
 
                 result.info.lighting_model = model;
                 result.info.lighting_model_valid = true;
+                continue;
+            }
+
+            if (directive == "replay_pass")
+            {
+                // #pragma replay_pass "Display Name" EntryPoint [inherit|alpha|additive|multiply]
+                // 宣言順をそのまま固定描画順として保存する。
+                if (tokens.size() < 4)
+                {
+                    result.issues.push_back({ line_number,
+                        "replay_pass は表示名と entry point が必要です", true });
+                    continue;
+                }
+
+                ShaderPassInfo pass;
+                pass.name = tokens[2];
+                pass.entry_point = tokens[3];
+                if (pass.name.empty() || pass.entry_point.empty() || pass.entry_point == "main")
+                {
+                    result.issues.push_back({ line_number,
+                        "replay_pass の名前/entry point が不正です（main は base pass 専用）", true });
+                    continue;
+                }
+                if (tokens.size() >= 5 &&
+                    !TryParseShaderPassBlend(tokens[4], pass.blend))
+                {
+                    result.issues.push_back({ line_number,
+                        "replay_pass blend が不明です: " + tokens[4], true });
+                    continue;
+                }
+
+                bool duplicate = false;
+                for (const ShaderPassInfo& existing : result.info.passes)
+                {
+                    if (existing.name == pass.name || existing.entry_point == pass.entry_point)
+                    {
+                        duplicate = true;
+                        break;
+                    }
+                }
+                if (duplicate)
+                {
+                    result.issues.push_back({ line_number,
+                        "replay_pass の名前または entry point が重複しています", true });
+                    continue;
+                }
+                result.info.passes.push_back(std::move(pass));
                 continue;
             }
 

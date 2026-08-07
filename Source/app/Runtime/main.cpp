@@ -1,4 +1,4 @@
-﻿#include <time.h>
+#include <time.h>
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -36,6 +36,8 @@
 #include "../../../RePlayEngine/Rendering/Shaders/ShaderTextureValidation.h"
 #include "../../../RePlayEngine/Rendering/Shaders/ShaderEditorValidation.h"
 #include "../../../RePlayEngine/Rendering/Shaders/ShaderLightingValidation.h"
+#include "../../../RePlayEngine/Rendering/Shaders/ShaderLayerValidation.h"
+#include "../../../RePlayEngine/Rendering/Shaders/ShaderPassValidation.h"
 #include "../../../RePlayEngine/Rendering/Shaders/ShaderCompileValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/BehaviourValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/HandleValidation.h"
@@ -1055,6 +1057,18 @@ namespace
         if (command == "--validate-shader-editor")
         {
             return ReplayEngine::Rendering::Validation::RunShaderEditorValidation();
+        }
+
+        // シェーダ基盤。フェーズ 10（Layer Shader Asset / GUID Stack）。
+        if (command == "--validate-shader-layer")
+        {
+            return ReplayEngine::Rendering::Validation::RunShaderLayerValidation();
+        }
+
+        // シェーダ基盤。フェーズ 16（Material Layer / Shader-owned Pass 分離）。
+        if (command == "--validate-shader-pass")
+        {
+            return ReplayEngine::Rendering::Validation::RunShaderPassValidation();
         }
 
         return -1;

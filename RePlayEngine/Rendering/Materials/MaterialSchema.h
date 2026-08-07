@@ -22,9 +22,13 @@ namespace ReplayEngine::Rendering
         static Reflection::PropertyValue DefaultValueFor(
             const ShaderProperty& property);
 
-        // Schema に存在する項目が Material に無ければ既定値を追加する。
+        // Schema に存在する項目が PropertyBag に無ければ既定値を追加する。
+        // Material / ShaderLayer / 将来の Shader Composer で同じ規則を使う。
         // 既存値は互換型へ寄せられる場合だけ正規化し、未知 Property は絶対に削除しない。
-        // 何か変更した場合 true。
+        static bool EnsurePropertyBag(Reflection::PropertyBag& properties,
+            const ShaderPropertySchema& schema);
+
+        // Material 用 wrapper。互換 fixed field も同期する。
         static bool EnsureProperties(MaterialAsset& material,
             const ShaderPropertySchema& schema);
 

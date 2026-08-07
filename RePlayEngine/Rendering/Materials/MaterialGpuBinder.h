@@ -36,6 +36,11 @@ namespace ReplayEngine::Rendering
             const ShaderCatalog& catalog,
             const ResolvedMaterialBinding& binding);
 
+        // Shader-owned additional pass。pass_index は Catalog の宣言順。
+        ID3D11PixelShader* ResolvePassPixelShader(ID3D11Device* device,
+            const ShaderCatalog& catalog,
+            const ResolvedMaterialBinding& binding, std::size_t pass_index);
+
         // Forward 用。b9 と t40 以降をまとめて設定する。
         bool Bind(ID3D11Device* device, ID3D11DeviceContext* context,
             const Assets::AssetDatabase& assets,

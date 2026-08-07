@@ -75,6 +75,7 @@ namespace ReplayEngine::Editor
                 *target.outline_parameters, *target.pixel_grid,
                 *target.pixelate_strength);
 
+            result.changed = result.changed || stack.changed;
             result.requires_pbr = stack.requires_pbr;
             result.requires_toon = stack.requires_toon;
             result.requires_unlit = stack.requires_unlit;
@@ -107,7 +108,7 @@ namespace ReplayEngine::Editor
         // ここでは「触っている最中か」までしか分からない。
         // 呼び出し側はこれを保存の要否ではなく、
         // プレビュー更新の判断にだけ使うこと。
-        result.changed = ImGui::IsAnyItemActive();
+        result.changed = result.changed || ImGui::IsAnyItemActive();
 
         ImGui::PopID();
         return result;
