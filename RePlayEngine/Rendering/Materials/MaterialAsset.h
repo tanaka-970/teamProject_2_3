@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../ShaderStack/ShaderLayerStack.h"
+#include "../../Reflection/Property/PropertyBag.h"
 
 #include <DirectXMath.h>
 
@@ -22,7 +23,7 @@ namespace ReplayEngine::Rendering
     {
         // version 2 で層構造（layers）を追加した。
         // version 1 のファイルも読める。読んだ場合 layers は空になる。
-        static constexpr int current_version = 2;
+        static constexpr int current_version = 3;
         static constexpr const char* file_extension = ".replaymaterial";
 
         DirectX::XMFLOAT4 base_color{ 1.0f, 1.0f, 1.0f, 1.0f };
@@ -41,6 +42,16 @@ namespace ReplayEngine::Rendering
         float alpha_cutoff = 0.5f;
         bool double_sided = false;
         int shading_model = 1;
+
+        // ---- version 3 ----------------------------------------------------
+        // Shader は固定 enum ではなく GUID で参照する。空なら旧 shading_model から
+        // 組み込み GUID へ移行する。properties は未知項目も捨てずに保持する。
+        std::string shader_guid;
+        Reflection::PropertyBag properties;
+
+        // 旧描画経路との一時互換。Phase 6 で描画が PropertyBag を直接読むまで残す。
+        void SyncLegacyFieldsToProperties();
+        void SyncPropertiesToLegacyFields();
 
         // ---- 重ね掛け（この Material 固有）------------------------------
         //

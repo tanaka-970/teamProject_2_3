@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="Source">
@@ -280,6 +280,7 @@
     <Filter Include="Shader\PostEffects\TemporalAA">
       <UniqueIdentifier>{ee92f3f8-5508-56a8-97ab-cdc94318186f}</UniqueIdentifier>
     </Filter>
+      <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderMaterialValidation.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Source\render\csm_renderer.cpp">
@@ -1713,5 +1714,6 @@
     <ClInclude Include="RePlayEngine\Landscape\LandscapeCollision.h"><Filter>RePlayEngine\Landscape</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Landscape\LandscapeUndoCommand.h"><Filter>RePlayEngine\Landscape</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Landscape\LandscapeEditorTool.h"><Filter>RePlayEngine\Landscape</Filter></ClInclude>
+      <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderMaterialValidation.h" />
   </ItemGroup>
 </Project>

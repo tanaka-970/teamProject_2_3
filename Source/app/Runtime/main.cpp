@@ -1,4 +1,4 @@
-﻿#include <time.h>
+#include <time.h>
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -31,6 +31,7 @@
 #include "../../../RePlayEngine/Rendering/Materials/MaterialAsset.h"
 #include "../../../RePlayEngine/Rendering/Shaders/ShaderAssetValidation.h"
 #include "../../../RePlayEngine/Rendering/Shaders/ShaderBuiltInValidation.h"
+#include "../../../RePlayEngine/Rendering/Shaders/ShaderMaterialValidation.h"
 #include "../../../RePlayEngine/Rendering/Shaders/ShaderCompileValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/BehaviourValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/HandleValidation.h"
@@ -1020,6 +1021,12 @@ namespace
         if (command == "--validate-shader-builtin")
         {
             return ReplayEngine::Rendering::Validation::RunShaderBuiltInValidation();
+        }
+
+        // シェーダ基盤。フェーズ 5（MaterialAsset v3 / 旧版移行）。
+        if (command == "--validate-shader-material")
+        {
+            return ReplayEngine::Rendering::Validation::RunShaderMaterialValidation();
         }
 
         return -1;
