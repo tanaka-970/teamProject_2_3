@@ -15,6 +15,7 @@
 #include "../../Physics/ShapeSweep.h"
 
 #include <algorithm>
+#include <cmath>
 
 using namespace DirectX;
 
@@ -285,6 +286,49 @@ namespace ReplayEngine::Scene
         hit = scene_hit;
 
         last_sweep_source_ = hit.source;
+        return true;
+    }
+
+    bool SceneCollisionWorld::Raycast(const XMFLOAT3& origin,
+        const XMFLOAT3& direction, float max_distance, RaycastHit& hit) const
+    {
+        CollisionQueryFilter filter;
+        filter.layer = Layers::Default;
+        filter.mask = Layers::all_layers_mask;
+        return RaycastFiltered(origin, direction, max_distance, filter, hit);
+    }
+
+    bool SceneCollisionWorld::RaycastFiltered(const XMFLOAT3& origin,
+        const XMFLOAT3& direction, float max_distance,
+        const CollisionQueryFilter& filter, RaycastHit& hit) const
+    {
+        hit = RaycastHit{};
+        if (scene_ == nullptr || max_distance <= 0.0f) return false;
+
+        const float length = std::sqrt(direction.x * direction.x +
+            direction.y * direction.y + direction.z * direction.z);
+        if (length <= 1.0e-6f) return false;
+
+        const XMFLOAT3 normalized{
+            direction.x / length, direction.y / length, direction.z / length };
+        const XMFLOAT3 end{
+            origin.x + normalized.x * max_distance,
+            origin.y + normalized.y * max_distance,
+            origin.z + normalized.z * max_distance };
+
+        // radius=0 の SphereSweep は線分 Ray と同値。
+        // 形状ごとの判定を Raycast 用に二重実装せず、既存の
+        // Mesh/Box/Capsule/Sphere の正確な経路をそのまま使う。
+        SphereSweepHit sweep{};
+        if (!SweepSceneColliders(origin, end, 0.0f, -1.0f, 1.0f, filter, sweep))
+            return false;
+
+        hit.point = sweep.center;
+        hit.normal = sweep.normal;
+        hit.distance = (std::max)(0.0f, (std::min)(1.0f, sweep.fraction)) * max_distance;
+        hit.source = sweep.source;
+        hit.valid = true;
+        last_ray_source_ = hit.source;
         return true;
     }
 

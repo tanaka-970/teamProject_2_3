@@ -1,4 +1,4 @@
-#include "framework.h"
+﻿#include "framework.h"
 #include "../../RePlayEngine/Components/Gameplay/CharacterMotorComponent.h"
 #include "../../RePlayEngine/Components/Gameplay/PlayerControllerComponent.h"
 #include "../../RePlayEngine/Components/Gameplay/PlayerInputComponent.h"
@@ -274,11 +274,16 @@ void framework::draw_editor_main_menu()
         ImGui::MenuItem("Console", nullptr, &show_console_panel);
         ImGui::MenuItem("Workspace", nullptr, &show_workspace_panel);
         ImGui::MenuItem("Validation / Diagnostics", nullptr, &show_validation_panel);
+        ImGui::Separator();
+        ImGui::MenuItem(u8"シーンメモ", nullptr, &show_scene_notes_panel);
+        ImGui::MenuItem("Scene Flow", nullptr, &show_scene_flow_panel);
         ImGui::MenuItem("Collision Diagnostics", nullptr, &show_collision_diagnostics);
         ImGui::Separator();
         // シェーダ資産の一覧。
         // .hlsl の #pragma がそのまま項目になることを確かめる窓。
         ImGui::MenuItem(u8"シェーダ一覧", nullptr, &show_shader_catalog_panel);
+        if (ImGui::MenuItem("Shader Composer", nullptr, false, shader_composer_editor.HasAsset()))
+            shader_composer_editor.Show();
         // 見た目が変わっていないことを機械で確かめる窓。
         // 描画やシェーダを触る前に基準を撮っておくこと。
         ImGui::MenuItem(u8"スクリーンショット回帰", nullptr, &show_golden_panel);
@@ -695,6 +700,10 @@ void framework::draw_scene_view_panel()
     scene_view_hovered = ImGui::IsItemHovered();
     scene_view_focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
 
+    // 右クリックの Play From Here / Checkpoint / Scene Memo。
+    // InvisibleButton の直後に置くことで ContextItem の対象を確実に Viewport にする。
+    draw_play_from_here_context_menu();
+
     if (active_editor_view == editor_view::scene && ImGui::BeginDragDropTarget())
     {
         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("REPLAY_ASSET_GUID"))
@@ -709,6 +718,7 @@ void framework::draw_scene_view_panel()
         ImGui::EndDragDropTarget();
     }
 
+    draw_scene_note_overlay();
     ImGui::End();
 }
 
@@ -1546,7 +1556,15 @@ void framework::draw_editor()
     if (show_project_panel) draw_project_panel();
     if (show_console_panel) draw_console_panel();
     if (show_workspace_panel) draw_workspace_panel();
+    draw_scene_notes_panel();
+    draw_scene_flow_panel();
     draw_shader_catalog_panel();
+    {
+        std::error_code composer_root_error;
+        const std::filesystem::path composer_root = std::filesystem::current_path(composer_root_error);
+        if (!composer_root_error)
+            shader_composer_editor.Draw(composer_root, shader_library, asset_database);
+    }
     draw_golden_panel();
     if (show_validation_panel)
         object_validation_panel.Draw(object_editor_context, &asset_database,

@@ -78,6 +78,20 @@ namespace ReplayEngine::Scripting::CSharp
                 DirectX::XMFLOAT3, Runtime::ObjectHandle, Runtime::ObjectHandle*);
         using scene_callback = int(__cdecl*)(const char*);
         using noarg_scene_callback = int(__cdecl*)();
+        using scene_flow_bool_callback = int(__cdecl*)(const char*, int);
+        using scene_flow_int_callback = int(__cdecl*)(const char*, std::int64_t);
+        using scene_flow_float_callback = int(__cdecl*)(const char*, double);
+        struct NativeRaycastHit final
+        {
+            DirectX::XMFLOAT3 point{};
+            DirectX::XMFLOAT3 normal{ 0.0f, 1.0f, 0.0f };
+            float distance = 0.0f;
+            Runtime::ObjectHandle object{};
+            std::uint32_t collider_id = 0;
+            std::int32_t valid = 0;
+        };
+        using raycast_callback = int(__cdecl*)(DirectX::XMFLOAT3, DirectX::XMFLOAT3,
+            float, int, int, Runtime::ObjectHandle, NativeRaycastHit*);
         using subscribe_event_callback =
             int(__cdecl*)(std::uint64_t, std::uint64_t, Runtime::ObjectHandle,
                 std::uint64_t*);
@@ -111,6 +125,13 @@ namespace ReplayEngine::Scripting::CSharp
             subscribe_event_callback subscribe_event = nullptr;
             unsubscribe_event_callback unsubscribe_event = nullptr;
             poll_event_callback poll_event = nullptr;
+
+            // v2 additions. ABI table is mirrored in RePlayEngine.Managed/NativeBridge.cs.
+            scene_callback trigger_scene_flow = nullptr;
+            scene_flow_bool_callback set_scene_flow_bool = nullptr;
+            scene_flow_int_callback set_scene_flow_int = nullptr;
+            scene_flow_float_callback set_scene_flow_float = nullptr;
+            raycast_callback raycast = nullptr;
         };
 
         int StatusCode(RuntimeStatus status) noexcept
@@ -303,6 +324,53 @@ namespace ReplayEngine::Scripting::CSharp
             return StatusCode(g_runtime_context->ReturnToPreviousScene());
         }
 
+        int NativeTriggerSceneFlow(const char* event_name) noexcept
+        {
+            if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+            return StatusCode(g_runtime_context->TriggerSceneFlow(CString(event_name)));
+        }
+
+        int NativeSetSceneFlowBool(const char* key, int value) noexcept
+        {
+            if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+            return StatusCode(g_runtime_context->SetSceneFlowBool(CString(key), value != 0));
+        }
+
+        int NativeSetSceneFlowInt(const char* key, std::int64_t value) noexcept
+        {
+            if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+            return StatusCode(g_runtime_context->SetSceneFlowInt(CString(key), value));
+        }
+
+        int NativeSetSceneFlowFloat(const char* key, double value) noexcept
+        {
+            if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+            return StatusCode(g_runtime_context->SetSceneFlowFloat(CString(key), value));
+        }
+
+        int NativeRaycast(DirectX::XMFLOAT3 origin, DirectX::XMFLOAT3 direction,
+            float max_distance, int layer, int mask, Runtime::ObjectHandle ignore,
+            NativeRaycastHit* out) noexcept
+        {
+            if (out == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+            *out = NativeRaycastHit{};
+            if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+
+            ReplayEngine::Scene::RaycastHit native{};
+            const RuntimeStatus status = g_runtime_context->Raycast(origin, direction,
+                max_distance, layer, mask, ignore, native);
+            if (Runtime::Failed(status)) return StatusCode(status);
+
+            out->point = native.point;
+            out->normal = native.normal;
+            out->distance = native.distance;
+            out->collider_id = native.source.collider;
+            out->valid = native.valid ? 1 : 0;
+            if (native.valid && native.source.object.Valid())
+                out->object = g_runtime_context->FindByObjectID(native.source.object);
+            return StatusCode(RuntimeStatus::Ok);
+        }
+
         int NativeSubscribeEvent(std::uint64_t high, std::uint64_t low,
             Runtime::ObjectHandle owner, std::uint64_t* out) noexcept
         {
@@ -384,6 +452,11 @@ namespace ReplayEngine::Scripting::CSharp
             table.subscribe_event = &NativeSubscribeEvent;
             table.unsubscribe_event = &NativeUnsubscribeEvent;
             table.poll_event = &NativePollEvent;
+            table.trigger_scene_flow = &NativeTriggerSceneFlow;
+            table.set_scene_flow_bool = &NativeSetSceneFlowBool;
+            table.set_scene_flow_int = &NativeSetSceneFlowInt;
+            table.set_scene_flow_float = &NativeSetSceneFlowFloat;
+            table.raycast = &NativeRaycast;
             return table;
         }
 

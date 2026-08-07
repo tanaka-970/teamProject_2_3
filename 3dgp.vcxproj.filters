@@ -786,10 +786,16 @@
     <ClCompile Include="Source\mesh\gltf_model_cache.cpp">
       <Filter>Source\mesh</Filter>
     </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_convenience_tools.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Runtime\Validation\RuntimeSceneValidation.cpp">
       <Filter>RePlayEngine\Runtime\Validation</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Runtime\Scene\SceneFlowService.cpp">
+      <Filter>RePlayEngine\Runtime\Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Runtime\Scene\SceneFlowAsset.cpp">
       <Filter>RePlayEngine\Runtime\Scene</Filter>
     </ClCompile>
     <ClCompile Include="Source\game\Behaviours\SceneTransitionBehaviour.cpp">
@@ -1187,6 +1193,9 @@
     <ClInclude Include="RePlayEngine\Components\Gameplay\StageGameplayComponents.h">
       <Filter>RePlayEngine\Components\Gameplay</Filter>
     </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Editor\EditorNoteComponent.h">
+      <Filter>RePlayEngine\Components</Filter>
+    </ClInclude>
     <ClInclude Include="RePlayEngine\Object\Registry\BuiltInComponents.h">
       <Filter>RePlayEngine\Object\Registry</Filter>
     </ClInclude>
@@ -1356,6 +1365,9 @@
       <Filter>RePlayEngine\Runtime\Validation</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Runtime\Scene\SceneFlowService.h">
+      <Filter>RePlayEngine\Runtime\Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Runtime\Scene\SceneFlowAsset.h">
       <Filter>RePlayEngine\Runtime\Scene</Filter>
     </ClInclude>
     <ClInclude Include="Source\game\Behaviours\SceneTransitionBehaviour.h">
@@ -1752,12 +1764,20 @@
     <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderAssetFactory.h"><Filter>RePlayEngine\Rendering</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderEditorValidation.h"><Filter>RePlayEngine\Rendering</Filter></ClInclude>
     <ClCompile Include="RePlayEngine\Editor\ShaderEditing\ShaderPropertyInspector.cpp"><Filter>RePlayEngine\Editor\ShaderEditing</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\ShaderEditing\ShaderComposerEditor.cpp"><Filter>RePlayEngine\Editor\ShaderEditing</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerAsset.cpp"><Filter>RePlayEngine\Rendering</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerGenerator.cpp"><Filter>RePlayEngine\Rendering</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerValidation.cpp"><Filter>RePlayEngine\Rendering</Filter></ClCompile>
     <ClCompile Include="RePlayEngine\Rendering\Materials\ShaderLayerBinding.cpp"><Filter>RePlayEngine\Rendering\Materials</Filter></ClCompile>
     <ClCompile Include="RePlayEngine\Rendering\ShaderStack\BuiltInShaderLayers.cpp"><Filter>RePlayEngine\Rendering\ShaderStack</Filter></ClCompile>
     <ClCompile Include="RePlayEngine\Rendering\ShaderStack\ShaderExecutionPlan.cpp"><Filter>RePlayEngine\Rendering\ShaderStack</Filter></ClCompile>
     <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderLayerValidation.cpp"><Filter>RePlayEngine\Rendering</Filter></ClCompile>
     <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderPassValidation.cpp"><Filter>RePlayEngine\Rendering</Filter></ClCompile>
     <ClInclude Include="RePlayEngine\Editor\ShaderEditing\ShaderPropertyInspector.h"><Filter>RePlayEngine\Editor\ShaderEditing</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\ShaderEditing\ShaderComposerEditor.h"><Filter>RePlayEngine\Editor\ShaderEditing</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerAsset.h"><Filter>RePlayEngine\Rendering</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerGenerator.h"><Filter>RePlayEngine\Rendering</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerValidation.h"><Filter>RePlayEngine\Rendering</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Rendering\Materials\ShaderLayerBinding.h"><Filter>RePlayEngine\Rendering\Materials</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Rendering\ShaderStack\BuiltInShaderLayers.h"><Filter>RePlayEngine\Rendering\ShaderStack</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Rendering\ShaderStack\ShaderExecutionPlan.h"><Filter>RePlayEngine\Rendering\ShaderStack</Filter></ClInclude>

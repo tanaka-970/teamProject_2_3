@@ -1,10 +1,11 @@
-﻿#include "BuiltInComponents.h"
+#include "BuiltInComponents.h"
 
 #include "ComponentRegistry.h"
 #include "../Component/MissingComponent.h"
 #include "../../Reflection/Registry/PropertyRegistry.h"
 
 #include "../../Components/Camera/CameraTargetComponent.h"
+#include "../../Components/Editor/EditorNoteComponent.h"
 #include "../../Components/Core/TransformComponent.h"
 #include "../../Components/Gameplay/CharacterMotorComponent.h"
 #include "../../Components/Gameplay/HealthComponent.h"
@@ -35,6 +36,7 @@ namespace ReplayEngine::Core
         using Components::MeshColliderComponent;
         using Components::MeshRendererComponent;
         using Components::DirectionalLightComponent;
+        using Components::EditorNoteComponent;
         using Components::PointLightComponent;
         using Components::SpotLightComponent;
         using Components::PlayerControllerComponent;
@@ -764,6 +766,36 @@ namespace ReplayEngine::Core
                     .Display("外側角度").Range(0.1, 179.0).Step(0.5));
         }
 
+        void RegisterEditorNote()
+        {
+            ComponentRegistry::Register<EditorNoteComponent>(
+                ComponentTypeInfo::Describe("Scene Note", "Editor")
+                    .WithTooltip("Scene View 上に制作指示・TODO・BUG メモを表示する Editor Annotation。")
+                    .AllowMultipleInstances()
+                    .EditorOnly());
+
+            PropertyRegistry::Register<EditorNoteComponent>(
+                MakeProperty("text", &EditorNoteComponent::text).Display("メモ"));
+            PropertyRegistry::Register<EditorNoteComponent>(
+                MakeProperty("category", &EditorNoteComponent::category)
+                    .Display("カテゴリ")
+                    .AsEnum({ "TODO", "BUG", "ART", "PROGRAM", "LEVEL", "IDEA" }));
+            PropertyRegistry::Register<EditorNoteComponent>(
+                MakeProperty("priority", &EditorNoteComponent::priority)
+                    .Display("優先度").AsEnum({ "Low", "Normal", "High", "Critical" }));
+            PropertyRegistry::Register<EditorNoteComponent>(
+                MakeProperty("completed", &EditorNoteComponent::completed).Display("完了"));
+            PropertyRegistry::Register<EditorNoteComponent>(
+                MakeProperty("show_in_viewport", &EditorNoteComponent::show_in_viewport)
+                    .Display("Scene Viewに表示"));
+            PropertyRegistry::Register<EditorNoteComponent>(
+                MakeProperty("hide_when_completed", &EditorNoteComponent::hide_when_completed)
+                    .Display("完了時に非表示"));
+            PropertyRegistry::Register<EditorNoteComponent>(
+                MakeProperty("offset", &EditorNoteComponent::offset)
+                    .Display("表示オフセット").Step(0.05));
+        }
+
         void RegisterStageGameplay()
         {
             ComponentRegistry::Register<SpawnPointComponent>(
@@ -897,6 +929,7 @@ namespace ReplayEngine::Core
         RegisterRotator();
         RegisterHealth();
         RegisterStageGameplay();
+        RegisterEditorNote();
         RegisterScript();
     }
 }

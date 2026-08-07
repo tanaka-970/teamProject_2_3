@@ -130,16 +130,26 @@ namespace ReplayEngine::Project
         AssetReferenceStatus ResolveStartupScene(
             const Assets::AssetDatabase& database) const;
 
+        // ---- Active Scene Flow ----------------------------------------------
+        const std::string& SceneFlowGuid() const noexcept { return scene_flow_guid_; }
+        void SetSceneFlowGuid(std::string guid) { scene_flow_guid_ = std::move(guid); }
+        void ClearSceneFlow() noexcept { scene_flow_guid_.clear(); }
+        bool HasSceneFlow() const noexcept { return !scene_flow_guid_.empty(); }
+        AssetReferenceStatus ResolveSceneFlow(
+            const Assets::AssetDatabase& database) const;
+
         // ---- 既定値へ戻す --------------------------------------------------
 
         void Reset() noexcept
         {
             default_character_prefab_guid_.clear();
             startup_scene_guid_.clear();
+            scene_flow_guid_.clear();
         }
 
     private:
         std::string default_character_prefab_guid_;
         std::string startup_scene_guid_;
+        std::string scene_flow_guid_;
     };
 }

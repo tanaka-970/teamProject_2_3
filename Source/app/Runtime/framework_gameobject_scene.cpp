@@ -893,6 +893,11 @@ void framework::enter_object_play_mode()
     SceneSerialization::SceneData snapshot;
     SceneSerialization::CaptureScene(object_scene, snapshot);
 
+    // Play From Here は SceneData の実行用コピーだけへ焼き込む。
+    // Runtime World の OnAwake / OnStart より前に位置が確定するため、
+    // Start 側が初期座標を読むゲームでも期待どおりの場所から始まる。
+    apply_play_spawn_override(snapshot);
+
     // 未保存の Scene には AssetGUID が無い。空のまま渡す。
     // 空の場合、この World に対する Reload は InvalidRequest になるだけで、
     // 別の Scene が代わりに読まれることはない。
@@ -907,6 +912,7 @@ void framework::enter_object_play_mode()
             std::to_string(static_cast<int>(request));
         object_editor_context.SetStatus(reason);
         push_editor_log("Error", reason);
+        play_spawn_override.active = false;
         return;
     }
 
@@ -928,6 +934,7 @@ void framework::enter_object_play_mode()
             std::to_string(static_cast<int>(object_runtime_scenes.State()));
         object_editor_context.SetStatus(reason);
         push_editor_log("Error", reason);
+        play_spawn_override.active = false;
         return;
     }
 
@@ -937,6 +944,15 @@ void framework::enter_object_play_mode()
     // 編集 Scene の ObjectID / ColliderID はここで完全に捨てられるので、
     // Play 中に編集 Scene の Collider へ当たることはない。
     attach_collision_world(runtime_world);
+
+    // Attach 直後に登録表を作る。Play From Here の座標は SceneData へ
+    // 事前反映済みなので、OnAwake / OnStart からも正しい開始位置が見える。
+    object_collision_world.Refresh();
+    if (play_spawn_override.active)
+    {
+        push_editor_log("Info", play_spawn_override.label + " から Play を開始しました");
+        play_spawn_override.active = false; // 一回限り。通常 Play へ持ち越さない。
+    }
 
     // Play 開始時に貯まっていた時間を捨てる。開始直後に物理が飛ぶのを防ぐ。
     object_fixed_accumulator = 0.0f;

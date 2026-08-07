@@ -38,6 +38,7 @@
 #include "../../../RePlayEngine/Rendering/Shaders/ShaderLightingValidation.h"
 #include "../../../RePlayEngine/Rendering/Shaders/ShaderLayerValidation.h"
 #include "../../../RePlayEngine/Rendering/Shaders/ShaderPassValidation.h"
+#include "../../../RePlayEngine/Rendering/ShaderComposer/ShaderComposerValidation.h"
 #include "../../../RePlayEngine/Rendering/Shaders/ShaderCompileValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/BehaviourValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/HandleValidation.h"
@@ -1069,6 +1070,12 @@ namespace
         if (command == "--validate-shader-pass")
         {
             return ReplayEngine::Rendering::Validation::RunShaderPassValidation();
+        }
+
+        // Shader Composer v1 (graph save/load -> HLSL -> normal ShaderAsset compile).
+        if (command == "--validate-shader-composer")
+        {
+            return ReplayEngine::Rendering::Validation::RunShaderComposerValidation();
         }
 
         return -1;

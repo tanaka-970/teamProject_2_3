@@ -231,6 +231,10 @@
     <ClCompile Include="RePlayEngine\Editor\ShaderEditing\CharacterMaterialEditor.cpp" />
     <ClCompile Include="RePlayEngine\Editor\ShaderEditing\ShaderStackEditor.cpp" />
     <ClCompile Include="RePlayEngine\Editor\ShaderEditing\ShaderPropertyInspector.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\ShaderEditing\ShaderComposerEditor.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerAsset.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerGenerator.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerValidation.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Materials\ShaderLayerBinding.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\ShaderStack\BuiltInShaderLayers.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\ShaderStack\ShaderExecutionPlan.cpp" />
@@ -323,6 +327,7 @@
     <ClCompile Include="RePlayEngine\Scripting\Core\ScriptValue.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\Core\ScriptWorld.cpp" />
     <ClCompile Include="Source\app\Editor\framework_project_browser.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_convenience_tools.cpp" />
     <ClCompile Include="Source\app\Editor\framework_shader_catalog.cpp" />
     <ClCompile Include="Source\app\Editor\framework_golden.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Capture\GoldenImage.cpp" />
@@ -410,6 +415,7 @@
     <ClCompile Include="RePlayEngine\Landscape\LandscapeEditorTool.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\RuntimeSceneValidation.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Scene\SceneFlowService.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Scene\SceneFlowAsset.cpp" />
     <ClCompile Include="Source\game\Behaviours\SceneTransitionBehaviour.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\SceneFlowValidation.cpp" />
     <ClCompile Include="Source\app\Runtime\framework_runtime_scene.cpp" />
@@ -459,6 +465,10 @@
     <ClInclude Include="RePlayEngine\Editor\ShaderEditing\CharacterMaterialEditor.h" />
     <ClInclude Include="RePlayEngine\Editor\ShaderEditing\ShaderStackEditor.h" />
     <ClInclude Include="RePlayEngine\Editor\ShaderEditing\ShaderPropertyInspector.h" />
+    <ClInclude Include="RePlayEngine\Editor\ShaderEditing\ShaderComposerEditor.h" />
+    <ClInclude Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerAsset.h" />
+    <ClInclude Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerGenerator.h" />
+    <ClInclude Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerValidation.h" />
     <ClInclude Include="RePlayEngine\Rendering\Materials\ShaderLayerBinding.h" />
     <ClInclude Include="RePlayEngine\Rendering\ShaderStack\BuiltInShaderLayers.h" />
     <ClInclude Include="RePlayEngine\Rendering\ShaderStack\ShaderExecutionPlan.h" />
@@ -561,6 +571,7 @@
     <ClInclude Include="RePlayEngine\Components\Gameplay\HealthComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\StageGameplayCommon.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\StageGameplayComponents.h" />
+    <ClInclude Include="RePlayEngine\Components\Editor\EditorNoteComponent.h" />
     <ClInclude Include="RePlayEngine\Object\Registry\BuiltInComponents.h" />
     <ClInclude Include="RePlayEngine\Scene\Serialization\SceneData.h" />
     <ClInclude Include="RePlayEngine\Scene\Serialization\SceneSerializer.h" />
@@ -619,6 +630,7 @@
     <ClInclude Include="RePlayEngine\Landscape\LandscapeEditorTool.h" />
     <ClInclude Include="RePlayEngine\Runtime\Validation\RuntimeSceneValidation.h" />
     <ClInclude Include="RePlayEngine\Runtime\Scene\SceneFlowService.h" />
+    <ClInclude Include="RePlayEngine\Runtime\Scene\SceneFlowAsset.h" />
     <ClInclude Include="Source\game\Behaviours\SceneTransitionBehaviour.h" />
     <ClInclude Include="RePlayEngine\Runtime\Validation\SceneFlowValidation.h" />
     <ClInclude Include="RePlayEngine\Editor\Validation\EditorIntegrationValidation.h" />

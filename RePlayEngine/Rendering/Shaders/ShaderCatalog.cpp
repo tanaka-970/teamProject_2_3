@@ -1,4 +1,4 @@
-#include "ShaderCatalog.h"
+﻿#include "ShaderCatalog.h"
 
 #include <algorithm>
 
@@ -9,7 +9,7 @@ namespace ReplayEngine::Rendering
         if (!entry.info.id.IsValid())
         {
             // ID が無いものは目録に載せない。
-            // 載せると引けない項目がドロップダウンに並ぶことになる。
+            // 載せると引けない項目がドロップダウンに並ぶことになるんで
             return;
         }
 

@@ -1,4 +1,4 @@
-REPLAY_ASSET_DB 2 64
+REPLAY_ASSET_DB 2 69
 "60412424bb1443240b2bf2160eee6923" 1 "ExampleStage" "resources/Stage/ExampleStage.cereal" "resources/.replay_cache/models/f9fffac39252a621_v0.replaycache"
 "1bd1358040255f5bd18f3be0d79fbe3c" 1 "AllAnimation1" "resources/AnimationModel/AllAnimation1.cereal" "resources/.replay_cache/models/6a20e727f78fb359_v0.replaycache"
 "e5c4168feb92f8fd7357f6cbc1f66e22" 1 "scene" "resources/Stage/city_3d_model_gltf/scene.gltf" "resources/.replay_cache/models/98fd72a862da8c8f_v0.replaycache"
@@ -63,3 +63,8 @@ REPLAY_ASSET_DB 2 64
 "5c45e205d6d72e91078376b860d57fe0" 4 "wire_frame" "Shader/wire_frame.hlsl" ""
 "b77e440ae00dc5f36187faab660b4ba8" 5 "NewTestScene01" "resources/Scenes/NewTestScene01.replayscene" ""
 "0c2eea12c70219725867920c6020a905" 5 "NewTestScene02" "resources/Scenes/NewTestScene02.replayscene" ""
+"20ee1c183b41e060bcf70daf335a3ecd" 4 "NewItem" "Shader/NewItem.replayshadergraph" ""
+"e2441f3a3798859e7f1f3e564b14c1cb" 4 "NewItem_56fe52c5" "Shader/Materials/Generated/NewItem_56fe52c5.hlsl" ""
+"84209bf3cf5efcc2f1b7de4465c4532f" 4 "NewItem" "Shader/NewItem/NewItem.replayshadergraph" ""
+"5477f23a142de7d0987fabb825f518c1" 4 "NewItem_b907dbe8" "Shader/Materials/Generated/NewItem_b907dbe8.hlsl" ""
+"96f1289d8a7d94f2999b274cffb5331b" 4 "NewItem_af4f21c2" "Shader/Materials/Generated/NewItem_af4f21c2.hlsl" ""

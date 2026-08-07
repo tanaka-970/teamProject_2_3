@@ -1,9 +1,12 @@
-﻿#include "framework.h"
+#include "framework.h"
 #include "texture.h"
 #include "../../RePlayEngine/Assets/AssetCache.h"
 #include "../../RePlayEngine/Editor/Style/EditorStyle.h"
 #include "../../RePlayEngine/Rendering/Materials/MaterialAsset.h"
 #include "../../RePlayEngine/Rendering/Shaders/ShaderAssetFactory.h"
+#include "../../RePlayEngine/Rendering/ShaderComposer/ShaderComposerAsset.h"
+#include "../../RePlayEngine/Rendering/ShaderComposer/ShaderComposerGenerator.h"
+#include "../../RePlayEngine/Runtime/Scene/SceneFlowAsset.h"
 #include "../../RePlayEngine/Scripting/CSharp/CSharpProject.h"
 
 #include <algorithm>
@@ -139,6 +142,7 @@ namespace
         case AssetKind::Script:   return "C#";
         case AssetKind::Audio:    return "AUDIO";
         case AssetKind::Shader:   return "SHADER";
+        case AssetKind::SceneFlow:return "FLOW";
         default:                  return "FILE";
         }
     }
@@ -155,6 +159,7 @@ namespace
         case AssetKind::Scene:    return ImVec4(0.75f, 0.72f, 0.98f, 1.0f);
         case AssetKind::Script:   return ImVec4(0.45f, 0.88f, 0.80f, 1.0f);
         case AssetKind::Shader:   return ImVec4(0.98f, 0.67f, 0.28f, 1.0f);
+        case AssetKind::SceneFlow:return ImVec4(0.55f, 0.86f, 1.00f, 1.0f);
         default:                  return ImVec4(0.72f, 0.72f, 0.72f, 1.0f);
         }
     }
@@ -173,12 +178,15 @@ ReplayEngine::Assets::AssetKind framework::project_kind_for(
     if (extension == ".replayscene") return AssetKind::Scene;
     if (extension == ".replayprefab") return AssetKind::Scene;
     if (extension == ".replaymaterial") return AssetKind::Material;
+    if (extension == ReplayEngine::Runtime::SceneFlowAsset::file_extension)
+        return AssetKind::SceneFlow;
     if (extension == ".fbx" || extension == ".glb" || extension == ".gltf" ||
         extension == ".obj") return AssetKind::Model;
     if (IsImageExtension(extension)) return AssetKind::Image;
     if (extension == ".wav" || extension == ".mp3" || extension == ".ogg")
         return AssetKind::Audio;
-    if (extension == ".hlsl" || extension == ".fx" || extension == ".cso")
+    if (extension == ".hlsl" || extension == ".fx" || extension == ".cso" ||
+        extension == ReplayEngine::Rendering::ShaderComposerAsset::file_extension)
         return AssetKind::Shader;
     return AssetKind::Unknown;
 }
@@ -365,6 +373,54 @@ bool framework::project_create_material(const std::string& name)
 }
 
 
+bool framework::project_create_scene_flow(const std::string& name)
+{
+    using ReplayEngine::Assets::AssetKind;
+    using ReplayEngine::Runtime::SceneFlowAsset;
+
+    const std::string safe = SafeProjectFileName(
+        name.empty() ? std::string("GameFlow") : name);
+    if (safe.empty())
+    {
+        project_browser_status = "Scene Flow 名が空です";
+        return false;
+    }
+
+    std::error_code error;
+    const std::filesystem::path root = std::filesystem::current_path(error);
+    if (error) return false;
+    const std::filesystem::path folder = root / project_current_folder;
+    std::filesystem::path path = folder / (safe + SceneFlowAsset::file_extension);
+    for (int suffix = 2; std::filesystem::exists(path) && suffix < 10000; ++suffix)
+        path = folder / (safe + std::to_string(suffix) + SceneFlowAsset::file_extension);
+
+    SceneFlowAsset flow;
+    flow.name = safe;
+    auto& first = flow.AddTransition();
+    first.event_name = "Next";
+
+    std::string save_error;
+    if (!SceneFlowAsset::Save(flow, path, save_error))
+    {
+        project_browser_status = "Scene Flow 作成失敗: " + save_error;
+        return false;
+    }
+
+    const ReplayEngine::Assets::AssetRecord& record =
+        asset_database.Register(path, AssetKind::SceneFlow);
+    if (!asset_database.Save(save_error))
+    {
+        project_browser_status = "Scene Flow は作成しましたが DB 保存失敗: " + save_error;
+        return false;
+    }
+    selected_asset_guid = record.guid;
+    load_scene_flow_editor(record);
+    project_browser_status = "Scene Flow を作成しました: " + path.filename().u8string();
+    push_editor_log("Info", project_browser_status, path, 1);
+    return true;
+}
+
+
 bool framework::project_create_surface_shader(const std::string& name)
 {
     using ReplayEngine::Assets::AssetKind;
@@ -528,6 +584,92 @@ bool framework::project_create_layer_shader(const std::string& name)
     return true;
 }
 
+
+bool framework::project_create_shader_composer(const std::string& name,
+    ReplayEngine::Rendering::ShaderDomain domain)
+{
+    using ReplayEngine::Assets::AssetKind;
+    using ReplayEngine::Rendering::ShaderComposerAsset;
+    using ReplayEngine::Rendering::ShaderComposerGenerator;
+    using ReplayEngine::Rendering::ShaderDomain;
+
+    if (domain != ShaderDomain::Surface && domain != ShaderDomain::Layer)
+    {
+        project_browser_status = "Shader Composer v1 は Surface / Layer のみ対応です";
+        return false;
+    }
+
+    const std::string safe = SafeProjectFileName(
+        name.empty() ? (domain == ShaderDomain::Layer ? std::string("NewLayerGraph")
+                                                   : std::string("NewShaderGraph")) : name);
+    std::error_code ec;
+    const std::filesystem::path root = std::filesystem::current_path(ec);
+    if (ec)
+    {
+        project_browser_status = "Project root を取得できません";
+        return false;
+    }
+
+    // Graph Asset itself is created in the current Project Browser folder.
+    // Generated HLSL is kept in Shader/Materials|Layers/Generated so ShaderLibrary
+    // can discover it without a special renderer path.
+    std::filesystem::path graph_folder = root / project_current_folder;
+    std::filesystem::create_directories(graph_folder, ec);
+    if (ec)
+    {
+        project_browser_status = "Shader Composer folder を作成できません";
+        return false;
+    }
+
+    std::filesystem::path graph_path = graph_folder /
+        (safe + ShaderComposerAsset::file_extension);
+    int suffix = 2;
+    while (std::filesystem::exists(graph_path) && suffix < 10000)
+        graph_path = graph_folder / (safe + std::to_string(suffix++) + ShaderComposerAsset::file_extension);
+
+    const std::string generated_stem = graph_path.stem().u8string();
+    ShaderComposerAsset graph = ShaderComposerAsset::CreateDefault(
+        domain, generated_stem, {});
+    const std::string id_text = graph.shader_id.ToString();
+    const std::string short_id = id_text.size() >= 8 ? id_text.substr(0, 8) : id_text;
+    const std::filesystem::path generated_relative =
+        (domain == ShaderDomain::Layer
+            ? std::filesystem::path("Shader") / "Layers" / "Generated"
+            : std::filesystem::path("Shader") / "Materials" / "Generated") /
+        (generated_stem + "_" + short_id + ".hlsl");
+    graph.generated_hlsl = generated_relative;
+    std::string error;
+    if (!ShaderComposerAsset::Save(graph, graph_path, error) ||
+        !ShaderComposerGenerator::GenerateToFile(graph, root, error))
+    {
+        project_browser_status = "Shader Composer 作成失敗: " + error;
+        return false;
+    }
+
+    const auto& graph_record = asset_database.Register(graph_path, AssetKind::Shader);
+    asset_database.Register(root / generated_relative, AssetKind::Shader);
+    if (!asset_database.Save(error))
+    {
+        project_browser_status = "Shader Composer は作成しましたが DB 保存失敗: " + error;
+        return false;
+    }
+
+    const auto report = shader_library.ScanAll(root);
+    selected_asset_guid = graph_record.guid;
+    set_project_folder(graph_path.parent_path());
+    if (!shader_composer_editor.Open(graph_path, error))
+    {
+        project_browser_status = "Graph は作成しましたが Editor で開けません: " + error;
+        return false;
+    }
+
+    project_browser_status = "Shader Composer を作成しました: " + graph_path.filename().u8string();
+    if (report.compile_failed != 0)
+        project_browser_status += " (compile error は Shader Catalog で確認)";
+    push_editor_log("Info", project_browser_status, graph_path, 1);
+    return true;
+}
+
 // -----------------------------------------------------------------------------
 //  改名
 //
@@ -581,6 +723,23 @@ bool framework::project_rename_entry(const std::filesystem::path& path,
             const ReplayEngine::Assets::AssetRecord& fresh =
                 asset_database.Register(destination, kind);
             selected_asset_guid = fresh.guid;
+
+            // AssetDatabase は現在 path-derived GUID なので、Scene Flow の改名時は
+            // 開いている Editor と Active 参照の両方を同時に追従させる。
+            if (kind == ReplayEngine::Assets::AssetKind::SceneFlow)
+            {
+                if (scene_flow_editor_guid == old_guid)
+                {
+                    scene_flow_editor_guid = fresh.guid;
+                    scene_flow_editor_path = destination;
+                }
+                if (project_settings.SceneFlowGuid() == old_guid)
+                {
+                    project_settings.SetSceneFlowGuid(fresh.guid);
+                    save_project_settings();
+                    sync_runtime_scene_flow_asset();
+                }
+            }
         }
         std::string save_error;
         if (!asset_database.Save(save_error))
@@ -592,6 +751,10 @@ bool framework::project_rename_entry(const std::filesystem::path& path,
     const std::string renamed_extension =
         ToLowerCopy(destination.extension().u8string());
     if (renamed_extension == ".cs") refresh_csharp_scripts();
+    if (renamed_extension == ReplayEngine::Rendering::ShaderComposerAsset::file_extension)
+    {
+        shader_composer_editor.NotifyAssetRenamed(path, destination);
+    }
     if (renamed_extension == ".hlsl" || renamed_extension == ".fx")
     {
         std::error_code root_error;
@@ -690,7 +853,7 @@ void framework::draw_project_folder_contents()
             ? AssetKind::Unknown : project_kind_for(entry.path);
         if (!entry.is_directory && asset_type_filter != 0)
         {
-            int filter_type = 7;
+            int filter_type = 8;
             if (kind == AssetKind::Model) filter_type = 1;
             else if (ToLowerCopy(entry.path.extension().u8string()) == ".replayprefab")
                 filter_type = 2;
@@ -699,6 +862,7 @@ void framework::draw_project_folder_contents()
             else if (kind == AssetKind::Material) filter_type = 4;
             else if (kind == AssetKind::Script) filter_type = 5;
             else if (kind == AssetKind::Shader) filter_type = 6;
+            else if (kind == AssetKind::SceneFlow) filter_type = 7;
             if (asset_type_filter != filter_type) continue;
         }
 
@@ -789,14 +953,36 @@ void framework::draw_project_folder_contents()
                 if (record != nullptr) selected_asset_guid = record->guid;
                 open_selected_csharp_asset();
             }
-            if (!entry.is_directory && kind == AssetKind::Shader &&
-                ImGui::MenuItem("Visual Studio で開く"))
+            if (!entry.is_directory && kind == AssetKind::SceneFlow &&
+                ImGui::MenuItem("Scene Flow で開く"))
             {
-                std::string open_error;
-                if (!ReplayEngine::Scripting::CSharp::CSharpProject::OpenVisualStudio(
-                    entry.path, 1, open_error))
+                if (record != nullptr)
                 {
-                    push_editor_log("Warning", open_error, entry.path);
+                    selected_asset_guid = record->guid;
+                    load_scene_flow_editor(*record);
+                }
+            }
+            if (!entry.is_directory && kind == AssetKind::Shader)
+            {
+                const bool is_composer = ToLowerCopy(entry.path.extension().u8string()) ==
+                    ReplayEngine::Rendering::ShaderComposerAsset::file_extension;
+                if (is_composer)
+                {
+                    if (ImGui::MenuItem("Shader Composer で開く"))
+                    {
+                        std::string open_error;
+                        if (!shader_composer_editor.Open(entry.path, open_error))
+                            push_editor_log("Warning", open_error, entry.path);
+                    }
+                }
+                else if (ImGui::MenuItem("Visual Studio で開く"))
+                {
+                    std::string open_error;
+                    if (!ReplayEngine::Scripting::CSharp::CSharpProject::OpenVisualStudio(
+                        entry.path, 1, open_error))
+                    {
+                        push_editor_log("Warning", open_error, entry.path);
+                    }
                 }
             }
             if (entry.is_directory && ImGui::MenuItem("このフォルダを開く"))
@@ -819,11 +1005,25 @@ void framework::draw_project_folder_contents()
                 if (record != nullptr) selected_asset_guid = record->guid;
                 open_selected_csharp_asset();
             }
+            else if (kind == AssetKind::SceneFlow)
+            {
+                if (record != nullptr)
+                {
+                    selected_asset_guid = record->guid;
+                    load_scene_flow_editor(*record);
+                }
+            }
             else if (kind == AssetKind::Shader)
             {
                 if (record != nullptr) selected_asset_guid = record->guid;
                 std::string open_error;
-                if (!ReplayEngine::Scripting::CSharp::CSharpProject::OpenVisualStudio(
+                if (ToLowerCopy(entry.path.extension().u8string()) ==
+                    ReplayEngine::Rendering::ShaderComposerAsset::file_extension)
+                {
+                    if (!shader_composer_editor.Open(entry.path, open_error))
+                        push_editor_log("Warning", open_error, entry.path);
+                }
+                else if (!ReplayEngine::Scripting::CSharp::CSharpProject::OpenVisualStudio(
                     entry.path, 1, open_error))
                 {
                     push_editor_log("Warning", open_error, entry.path);
@@ -936,7 +1136,7 @@ void framework::draw_project_browser()
         asset_search_text, IM_ARRAYSIZE(asset_search_text));
     ImGui::SameLine();
     const char* filters[] =
-        { "All", "Model", "Prefab", "Scene", "Material", "Script", "Shader", "Other" };
+        { "All", "Model", "Prefab", "Scene", "Material", "Script", "Shader", "Flow", "Other" };
     ImGui::SetNextItemWidth(120.0f);
     ImGui::Combo("##ProjectFilter", &asset_type_filter, filters, IM_ARRAYSIZE(filters));
     ImGui::SameLine();
@@ -1000,6 +1200,10 @@ void framework::draw_project_browser()
             {
                 project_create_material(project_new_item_name);
             }
+            if (ImGui::MenuItem("Scene Flow"))
+            {
+                project_create_scene_flow(project_new_item_name);
+            }
             if (ImGui::MenuItem("Surface Shader"))
             {
                 project_create_surface_shader(project_new_item_name);
@@ -1007,6 +1211,17 @@ void framework::draw_project_browser()
             if (ImGui::MenuItem("Layer Shader"))
             {
                 project_create_layer_shader(project_new_item_name);
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Shader Composer (Surface)"))
+            {
+                project_create_shader_composer(project_new_item_name,
+                    ReplayEngine::Rendering::ShaderDomain::Surface);
+            }
+            if (ImGui::MenuItem("Shader Composer (Layer)"))
+            {
+                project_create_shader_composer(project_new_item_name,
+                    ReplayEngine::Rendering::ShaderDomain::Layer);
             }
             if (ImGui::MenuItem("Folder"))
             {

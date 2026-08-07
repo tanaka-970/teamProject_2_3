@@ -64,6 +64,7 @@ extern ImWchar glyphRangesJapanese[];
 #include "../../RePlayEngine/Project/ProjectSettings.h"
 #include "../../RePlayEngine/Editor/Gizmo/TransformGizmo.h"
 #include "../../RePlayEngine/Editor/Gizmo/ViewportPicker.h"
+#include "../../RePlayEngine/Components/Editor/EditorNoteComponent.h"
 #include "../../RePlayEngine/Physics/MeshCollisionCooker.h"
 
 // --- GameObject / Component 基盤 -------------------------------------------
@@ -84,6 +85,7 @@ extern ImWchar glyphRangesJapanese[];
 #include "../../RePlayEngine/Scene/Services/SceneCollisionWorld.h"
 #include "../../RePlayEngine/Editor/Debug/ColliderDebugDraw.h"
 #include "../../RePlayEngine/Editor/Validation/ValidationPanel.h"
+#include "../../RePlayEngine/Editor/ShaderEditing/ShaderComposerEditor.h"
 #include "../../RePlayEngine/Editor/Viewport/EditorViewportCamera.h"
 #include "../../RePlayEngine/Editor/Viewport/EditorCameraController.h"
 #include "../../RePlayEngine/Editor/Viewport/EditorCameraStateStore.h"
@@ -280,6 +282,28 @@ public:
     // 参照は AssetGUID なので、Prefab の名前やパスを変えても壊れない。
     ReplayEngine::Project::ProjectSettings project_settings;
     std::string project_settings_status{ "プロジェクト設定 未読込" };
+
+    // Scene Flow Editor。ProjectSettings の GUID が Runtime で使う正本。
+    ReplayEngine::Runtime::SceneFlowAsset scene_flow_editor_asset;
+    std::filesystem::path scene_flow_editor_path;
+    std::string scene_flow_editor_guid;
+    std::string scene_flow_editor_status{ "Scene Flow 未選択" };
+    bool scene_flow_editor_loaded{ false };
+    bool scene_flow_editor_dirty{ false };
+
+    // Play From Here は Editor セッションだけの一時オーバーライド。
+    // SceneData / Scene ファイルへは保存しない。
+    struct play_spawn_override_state
+    {
+        bool active = false;
+        bool apply_rotation = false;
+        bool use_camera_direction = false;
+        DirectX::XMFLOAT3 position{ 0.0f, 0.0f, 0.0f };
+        // Transform の内部規約に合わせてラジアン。
+        DirectX::XMFLOAT3 rotation_radians{ 0.0f, 0.0f, 0.0f };
+        std::string label;
+    };
+    play_spawn_override_state play_spawn_override;
 
     // 直近で保存した Prefab の AssetGUID。
     // 「保存した Prefab をそのまま既定の操作キャラクターにする」ボタン用。
@@ -687,6 +711,14 @@ public:
         {
             log_shutdown_reason("Material AutoSave に失敗");
         }
+        {
+            std::string composer_save_error;
+            if (!shader_composer_editor.AutoSaveGraph(composer_save_error))
+            {
+                const std::string message = "Shader Composer AutoSave に失敗: " + composer_save_error;
+                log_shutdown_reason(message.c_str());
+            }
+        }
         save_editor_session();
         ImGui_ImplDX11_Shutdown();
         ImGui_ImplWin32_Shutdown();
@@ -887,6 +919,24 @@ private:
     void draw_editor_main_menu();
     void draw_editor_toolbar();
     void draw_scene_view_panel();
+
+    // --- 制作便利機能: Scene Memo / Play From Here / Scene Flow -------------
+    void draw_scene_note_overlay();
+    void draw_scene_notes_panel();
+    ReplayEngine::Core::GameObject* create_scene_note_at(
+        const DirectX::XMFLOAT3& world_position, const std::string& text = "ここを修正");
+    bool scene_view_mouse_world_point(DirectX::XMFLOAT3& out_position,
+        DirectX::XMFLOAT3* out_normal = nullptr) const;
+    void request_play_from_here(const DirectX::XMFLOAT3& position,
+        bool camera_direction, const char* label);
+    void apply_play_spawn_override(ReplayEngine::Scene::Serialization::SceneData& snapshot);
+    void draw_play_from_here_context_menu();
+
+    bool load_scene_flow_editor(const ReplayEngine::Assets::AssetRecord& record);
+    bool save_scene_flow_editor();
+    void draw_scene_flow_panel();
+    void sync_runtime_scene_flow_asset();
+
     void draw_runtime_mode_banner();
 
     // 操作対象 GameObject の実行時診断。旧 Player の項目は持たない。
@@ -1092,8 +1142,11 @@ private:
     bool project_create_folder(const std::string& name);
     bool project_create_csharp_behaviour(const std::string& class_name);
     bool project_create_material(const std::string& name);
+    bool project_create_scene_flow(const std::string& name);
     bool project_create_surface_shader(const std::string& name);
     bool project_create_layer_shader(const std::string& name);
+    bool project_create_shader_composer(const std::string& name,
+        ReplayEngine::Rendering::ShaderDomain domain);
     bool project_rename_entry(const std::filesystem::path& path,
         const std::string& new_name);
     ID3D11ShaderResourceView* project_thumbnail_for(
@@ -1119,6 +1172,7 @@ private:
 
     std::uint32_t automated_smoke_test_frames{ 0 };
     std::uint32_t automated_smoke_test_frames_rendered{ 0 };
+    float shader_composer_time{ 0.0f }; // elapsed_time が 0 の Golden Capture 中は進めない
     uint32_t frames{ 0 };
     float elapsed_time{ 0.0f };
     void calculate_frame_stats()
@@ -1188,6 +1242,8 @@ private:
     bool show_workspace_panel{ true };
     bool show_validation_panel{ true };
     bool show_scene_view{ true };
+    bool show_scene_notes_panel{ false };
+    bool show_scene_flow_panel{ false };
     bool scene_view_hovered{ false };
     bool scene_view_focused{ false };
     ImVec2 scene_view_overlay_position{ 0.0f, 0.0f };
@@ -1197,6 +1253,9 @@ private:
     float scene_view_min_y{ 0.0f };
     float scene_view_max_x{ 0.0f };
     float scene_view_max_y{ 0.0f };
+    // Viewport 右クリック位置は Popup を操作している間も保持する。
+    bool scene_context_world_point_valid{ false };
+    DirectX::XMFLOAT3 scene_context_world_point{ 0.0f, 0.0f, 0.0f };
     int scene_view_draw_mode{ 0 };
     // --- シェーダ資産（フェーズ 1〜3）--------------------------------------
     //
@@ -1205,6 +1264,7 @@ private:
     // まだ描画には使わない。接続はフェーズ 4 以降。
     ReplayEngine::Rendering::ShaderLibrary shader_library;
     ReplayEngine::Rendering::MaterialGpuBinder material_gpu_binder;
+    ReplayEngine::Editor::ShaderComposerEditor shader_composer_editor;
     bool show_shader_catalog_panel{ false };
 
     // .hlsl を保存したら自動でコンパイルし直す。

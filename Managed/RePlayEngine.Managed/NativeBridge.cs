@@ -60,6 +60,11 @@ public static unsafe class NativeBridge
         public delegate* unmanaged[Cdecl]<ulong, ulong, ObjectHandle, ulong*, int> SubscribeEvent;
         public delegate* unmanaged[Cdecl]<ulong, int> UnsubscribeEvent;
         public delegate* unmanaged[Cdecl]<ulong, byte*, int, int> PollEvent;
+        public delegate* unmanaged[Cdecl]<byte*, int> TriggerSceneFlow;
+        public delegate* unmanaged[Cdecl]<byte*, int, int> SetSceneFlowBool;
+        public delegate* unmanaged[Cdecl]<byte*, long, int> SetSceneFlowInt;
+        public delegate* unmanaged[Cdecl]<byte*, double, int> SetSceneFlowFloat;
+        public delegate* unmanaged[Cdecl]<Vector3, Vector3, float, int, int, ObjectHandle, RaycastHit*, int> Raycast;
     }
 
     private sealed class ManagedInstance
@@ -421,6 +426,51 @@ public static unsafe class NativeBridge
     {
         if (api.ReturnToPreviousScene == null) return RuntimeStatus.ServiceUnavailable;
         return (RuntimeStatus)api.ReturnToPreviousScene();
+    }
+
+    internal static RuntimeStatus TriggerSceneFlow(string eventName)
+    {
+        if (api.TriggerSceneFlow == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(eventName + "\0"))
+        {
+            return (RuntimeStatus)api.TriggerSceneFlow(text);
+        }
+    }
+
+    internal static RuntimeStatus SetSceneFlowBool(string key, bool value)
+    {
+        if (api.SetSceneFlowBool == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(key + "\0"))
+        {
+            return (RuntimeStatus)api.SetSceneFlowBool(text, value ? 1 : 0);
+        }
+    }
+
+    internal static RuntimeStatus SetSceneFlowInt(string key, long value)
+    {
+        if (api.SetSceneFlowInt == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(key + "\0"))
+        {
+            return (RuntimeStatus)api.SetSceneFlowInt(text, value);
+        }
+    }
+
+    internal static RuntimeStatus SetSceneFlowFloat(string key, double value)
+    {
+        if (api.SetSceneFlowFloat == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(key + "\0"))
+        {
+            return (RuntimeStatus)api.SetSceneFlowFloat(text, value);
+        }
+    }
+
+    internal static RuntimeResult<RaycastHit> Raycast(Vector3 origin, Vector3 direction,
+        float maxDistance, int layer, int mask, ObjectHandle ignore)
+    {
+        if (api.Raycast == null) return new(RuntimeStatus.ServiceUnavailable);
+        RaycastHit hit = default;
+        var status = (RuntimeStatus)api.Raycast(origin, direction, maxDistance, layer, mask, ignore, &hit);
+        return new RuntimeResult<RaycastHit>(status, hit);
     }
 
     internal static RuntimeResult<EventSubscription> SubscribeEvent(string eventTypeGuid, ObjectHandle owner)

@@ -53,6 +53,7 @@ namespace ReplayEngine::Scene
         mesh_collider_count_ = 0;
         last_ground_source_ = CollisionSourceInfo{};
         last_sweep_source_ = CollisionSourceInfo{};
+        last_ray_source_ = CollisionSourceInfo{};
 
         scene_ = scene;
     }

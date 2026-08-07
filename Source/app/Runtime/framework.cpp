@@ -1,4 +1,4 @@
-﻿#include "framework.h"
+#include "framework.h"
 #include "shader.h"
 #include "texture.h"
 #include "skinned_mesh.h"
@@ -114,6 +114,15 @@ bool framework::resize_back_buffers(UINT width, UINT height)
     const bool deferred_requested = enable_deferred;
     const bool deferred_ready = deferred.initialize(device.Get(), width, height);
     enable_deferred = deferred_requested && deferred_ready;
+
+    // These passes own textures whose dimensions must exactly follow the current
+    // render size.  Leaving their startup-size resources alive after ResizeBuffers
+    // makes SSR copy a 1920x1080 lit texture into a 1600x900 history texture and
+    // D3D11 reports COPYRESOURCE_INVALIDSOURCE every frame.
+    ssao_pass.Initialize(device.Get(), width, height);
+    ssr_pass.Initialize(device.Get(), width, height);
+    taa_pass.Initialize(device.Get(), width, height);
+    tiled_deferred.Initialize(device.Get(), width, height);
 
     client_width = width;
     client_height = height;

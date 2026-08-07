@@ -2,6 +2,8 @@
 
 #include "../Events/EventBus.h"
 
+#include <algorithm>
+#include <cmath>
 #include <utility>
 
 namespace ReplayEngine::Runtime
@@ -57,6 +59,129 @@ namespace ReplayEngine::Runtime
     }
 
     SceneFlowService::~SceneFlowService() = default;
+
+    void SceneFlowService::SetFlowAsset(const SceneFlowAsset& asset)
+    {
+        flow_asset_ = asset;
+        flow_asset_loaded_ = true;
+    }
+
+    void SceneFlowService::ClearFlowAsset() noexcept
+    {
+        flow_asset_.Clear();
+        flow_asset_loaded_ = false;
+    }
+
+    void SceneFlowService::ClearVariables() noexcept
+    {
+        flow_bools_.clear();
+        flow_ints_.clear();
+        flow_floats_.clear();
+    }
+
+    RuntimeStatus SceneFlowService::SetVariableBool(const std::string& key, bool value)
+    {
+        if (key.empty()) return RuntimeStatus::InvalidArgument;
+        flow_bools_[key] = value;
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus SceneFlowService::SetVariableInt(const std::string& key, std::int64_t value)
+    {
+        if (key.empty()) return RuntimeStatus::InvalidArgument;
+        flow_ints_[key] = value;
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus SceneFlowService::SetVariableFloat(const std::string& key, double value)
+    {
+        if (key.empty() || !std::isfinite(value)) return RuntimeStatus::InvalidArgument;
+        flow_floats_[key] = value;
+        return RuntimeStatus::Ok;
+    }
+
+    bool SceneFlowService::EvaluateCondition(const SceneFlowCondition& condition) const noexcept
+    {
+        double actual = 0.0;
+        switch (condition.type)
+        {
+        case SceneFlowConditionType::Bool:
+        {
+            const auto found = flow_bools_.find(condition.key);
+            if (found == flow_bools_.end()) return false;
+            actual = found->second ? 1.0 : 0.0;
+            break;
+        }
+        case SceneFlowConditionType::Int:
+        {
+            const auto found = flow_ints_.find(condition.key);
+            if (found == flow_ints_.end()) return false;
+            actual = static_cast<double>(found->second);
+            break;
+        }
+        case SceneFlowConditionType::Float:
+        {
+            const auto found = flow_floats_.find(condition.key);
+            if (found == flow_floats_.end()) return false;
+            actual = found->second;
+            break;
+        }
+        default:
+            return false;
+        }
+
+        const double expected = condition.value;
+        switch (condition.op)
+        {
+        case SceneFlowCompareOp::Equal:
+            return condition.type == SceneFlowConditionType::Float
+                ? std::fabs(actual - expected) <= 1.0e-6 : actual == expected;
+        case SceneFlowCompareOp::NotEqual:
+            return condition.type == SceneFlowConditionType::Float
+                ? std::fabs(actual - expected) > 1.0e-6 : actual != expected;
+        case SceneFlowCompareOp::Less:         return actual < expected;
+        case SceneFlowCompareOp::LessEqual:    return actual <= expected;
+        case SceneFlowCompareOp::Greater:      return actual > expected;
+        case SceneFlowCompareOp::GreaterEqual: return actual >= expected;
+        }
+        return false;
+    }
+
+    RuntimeStatus SceneFlowService::Trigger(const std::string& event_name)
+    {
+        if (event_name.empty()) return RuntimeStatus::InvalidArgument;
+        if (!flow_asset_loaded_) return RuntimeStatus::ServiceUnavailable;
+        if (TransitionInProgress()) return RuntimeStatus::TransitionInProgress;
+
+        const std::string current = CurrentSceneGUID();
+        const SceneFlowTransition* best = nullptr;
+        for (const SceneFlowTransition& transition : flow_asset_.transitions)
+        {
+            if (!transition.enabled || transition.event_name != event_name ||
+                transition.to_scene_guid.empty())
+                continue;
+            if (!transition.from_scene_guid.empty() && transition.from_scene_guid != current)
+                continue;
+
+            bool conditions_ok = true;
+            for (const SceneFlowCondition& condition : transition.conditions)
+            {
+                if (!EvaluateCondition(condition))
+                {
+                    conditions_ok = false;
+                    break;
+                }
+            }
+            if (!conditions_ok) continue;
+
+            // 同優先度なら Asset 内で前に書かれたものを優先し、結果を決定的にする。
+            if (best == nullptr || transition.priority > best->priority)
+                best = &transition;
+        }
+
+        if (best == nullptr) return RuntimeStatus::SceneMissing;
+        return LoadScene(best->to_scene_guid);
+    }
 
     // -----------------------------------------------------------------------
     // 状態
@@ -383,6 +508,26 @@ namespace ReplayEngine::Runtime
     RuntimeStatus SceneFlowService::RequestReturnToPreviousScene()
     {
         return ReturnToPreviousScene();
+    }
+
+    RuntimeStatus SceneFlowService::RequestSceneFlowTrigger(const std::string& event_name)
+    {
+        return Trigger(event_name);
+    }
+
+    RuntimeStatus SceneFlowService::SetSceneFlowBool(const std::string& key, bool value)
+    {
+        return SetVariableBool(key, value);
+    }
+
+    RuntimeStatus SceneFlowService::SetSceneFlowInt(const std::string& key, std::int64_t value)
+    {
+        return SetVariableInt(key, value);
+    }
+
+    RuntimeStatus SceneFlowService::SetSceneFlowFloat(const std::string& key, double value)
+    {
+        return SetVariableFloat(key, value);
     }
 
     RuntimeStatus SceneFlowService::RequestQuitApplication(const std::string& reason)

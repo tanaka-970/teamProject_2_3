@@ -1,4 +1,4 @@
-﻿#include "BehaviourValidation.h"
+#include "BehaviourValidation.h"
 
 #include "../API/RuntimeContext.h"
 #include "../Behaviour/BehaviourComponent.h"
@@ -646,6 +646,10 @@ namespace ReplayEngine::Runtime::Validation
             Core::ObjectID wall_object;
             Scene::ColliderID wall_collider = 22;
 
+            bool ray_hit = false;
+            Core::ObjectID ray_object;
+            Scene::ColliderID ray_collider = 33;
+
             bool CollisionAvailable() const override { return true; }
 
             bool QueryGround(const DirectX::XMFLOAT3& origin, float /*radius*/,
@@ -674,6 +678,26 @@ namespace ReplayEngine::Runtime::Validation
                 hit.source.backend = Scene::CollisionBackend::SceneCollider;
                 hit.source.object = wall_object;
                 hit.source.collider = wall_collider;
+                return true;
+            }
+
+            bool RaycastFiltered(const DirectX::XMFLOAT3& origin,
+                const DirectX::XMFLOAT3& direction, float /*max_distance*/,
+                const Scene::CollisionQueryFilter& /*filter*/,
+                Scene::RaycastHit& hit) const override
+            {
+                hit = Scene::RaycastHit{};
+                if (!ray_hit) return false;
+                hit.valid = true;
+                hit.point = DirectX::XMFLOAT3{
+                    origin.x + direction.x * 2.0f,
+                    origin.y + direction.y * 2.0f,
+                    origin.z + direction.z * 2.0f };
+                hit.normal = DirectX::XMFLOAT3{ 0.0f, 1.0f, 0.0f };
+                hit.distance = 2.0f;
+                hit.source.backend = Scene::CollisionBackend::SceneCollider;
+                hit.source.object = ray_object;
+                hit.source.collider = ray_collider;
                 return true;
             }
         };
@@ -775,6 +799,22 @@ namespace ReplayEngine::Runtime::Validation
         }
         physics.ground_object = floor_a->ID();
         physics.wall_object = wall->ID();
+        physics.ray_object = wall->ID();
+
+        // Runtime Raycast は同じ Physics Service を通り、Object/Collider 情報まで返す。
+        physics.ray_hit = true;
+        Scene::RaycastHit raycast_hit{};
+        check.Expect(runtime.Raycast(DirectX::XMFLOAT3{ 0, 1, 0 },
+            DirectX::XMFLOAT3{ 0, 0, 1 }, 100.0f, 0, -1,
+            ObjectHandle::None(), raycast_hit) == RuntimeStatus::Ok &&
+            raycast_hit.valid && raycast_hit.source.object == wall->ID() &&
+            raycast_hit.source.collider == physics.ray_collider,
+            "Runtime Raycast が Hit Object / Collider を返す");
+        physics.ray_hit = false;
+        check.Expect(runtime.Raycast(DirectX::XMFLOAT3{ 0, 1, 0 },
+            DirectX::XMFLOAT3{ 0, 0, 1 }, 100.0f, 0, -1,
+            ObjectHandle::None(), raycast_hit) == RuntimeStatus::Ok && !raycast_hit.valid,
+            "Runtime Raycast の miss は成功した問い合わせ + invalid hit として返る");
 
         // 動く側。Collider と Motor と Probe を付ける。
         Core::GameObject* character = world.CreateGameObject("Character");

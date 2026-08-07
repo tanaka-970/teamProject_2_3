@@ -83,6 +83,25 @@ namespace ReplayEngine::Runtime
         virtual RuntimeStatus RequestSceneReload() = 0;
         virtual RuntimeStatus RequestReturnToPreviousScene() = 0;
 
+        // Scene Flow Asset を使う上位のイベント駆動遷移。
+        // 既存のテスト用 ISceneFlow 実装を壊さないため、追加 API は既定で未対応。
+        virtual RuntimeStatus RequestSceneFlowTrigger(const std::string& /*event_name*/)
+        {
+            return RuntimeStatus::UnsupportedOperation;
+        }
+        virtual RuntimeStatus SetSceneFlowBool(const std::string& /*key*/, bool /*value*/)
+        {
+            return RuntimeStatus::UnsupportedOperation;
+        }
+        virtual RuntimeStatus SetSceneFlowInt(const std::string& /*key*/, std::int64_t /*value*/)
+        {
+            return RuntimeStatus::UnsupportedOperation;
+        }
+        virtual RuntimeStatus SetSceneFlowFloat(const std::string& /*key*/, double /*value*/)
+        {
+            return RuntimeStatus::UnsupportedOperation;
+        }
+
         // プロセスを落とさない。要求として記録するだけ。
         virtual RuntimeStatus RequestQuitApplication(const std::string& reason) = 0;
 
@@ -271,6 +290,12 @@ namespace ReplayEngine::Runtime
         RuntimeStatus ReloadCurrentScene();
         RuntimeStatus ReturnToPreviousScene();
 
+        // Scene Flow Asset のイベントを発火し、条件に一致した遷移を要求する。
+        RuntimeStatus TriggerSceneFlow(const std::string& event_name);
+        RuntimeStatus SetSceneFlowBool(const std::string& key, bool value);
+        RuntimeStatus SetSceneFlowInt(const std::string& key, std::int64_t value);
+        RuntimeStatus SetSceneFlowFloat(const std::string& key, double value);
+
         // アプリケーションの終了要求。ここではプロセスを終了しない。
         RuntimeStatus QuitApplication(const std::string& reason = std::string());
 
@@ -292,6 +317,11 @@ namespace ReplayEngine::Runtime
         RuntimeStatus SweepSphere(const DirectX::XMFLOAT3& start,
             const DirectX::XMFLOAT3& end, float radius, float maximum_normal_y,
             const ObjectHandle& ignore, Scene::SphereSweepHit& out) const;
+
+        RuntimeStatus Raycast(const DirectX::XMFLOAT3& origin,
+            const DirectX::XMFLOAT3& direction, float max_distance,
+            int layer, int mask, const ObjectHandle& ignore,
+            Scene::RaycastHit& out) const;
 
         // ---- Log ----------------------------------------------------------------
 

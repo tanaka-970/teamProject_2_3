@@ -82,7 +82,10 @@ void framework::update_frame_constants(const DirectX::XMMATRIX& view,
     const float height = static_cast<float>(SCREEN_HEIGHT);
     frame_constants.screen_size = { width, height, 1.0f / width, 1.0f / height };
     frame_constants.camera_planes = { near_plane, far_plane, tan_half_fov_y, aspect };
-    frame_constants.frame_params = { static_cast<float>(frame_index), elapsed_time, 0.0f, 0.0f };
+    // z is accumulated effect/composer time. Golden capture passes elapsed_time=0,
+    // so visual regression remains deterministic instead of advancing while capturing.
+    shader_composer_time += (std::max)(0.0f, elapsed_time);
+    frame_constants.frame_params = { static_cast<float>(frame_index), elapsed_time, shader_composer_time, 0.0f };
 
     // TAAのジッター量(NDC)。射影行列へ加算済みの値をそのまま共有し、
     // モーションベクター側で打ち消せるようにしておく。

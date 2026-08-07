@@ -1,4 +1,4 @@
-﻿// RuntimeSceneService / SceneFlowService と framework の接続部。
+// RuntimeSceneService / SceneFlowService と framework の接続部。
 //
 // ここが唯一の「Runtime World を結線する場所」。
 //
@@ -163,6 +163,10 @@ void framework::initialize_runtime_services()
 
     object_runtime_context->SetPrefabInstantiator(&object_prefab_instantiator);
     object_runtime_context->SetSceneFlow(object_scene_flow.get());
+
+    // ProjectSettings の Active Scene Flow を Runtime へ接続する。
+    // 未設定/欠損なら空のままにし、直接 LoadScene の既存経路は壊さない。
+    sync_runtime_scene_flow_asset();
 
     object_runtime_scenes.ActiveWorld().Services().SetRuntime(object_runtime_context.get());
 

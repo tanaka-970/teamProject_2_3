@@ -92,6 +92,11 @@ namespace ReplayEngine::Core
         // GameObject を作った時点で自動的に付くか。TransformComponent 用。
         bool built_in = false;
 
+        // Runtime World に実体化するか。
+        // false は Scene/Prefab には保存するが、RuntimeSceneService が構築する
+        // World では生成しない Editor Annotation 等に使う。
+        bool runtime_available = true;
+
         // 実体を作る関数。owner への結線は GameObject 側が行うので、ここでは生成だけ。
         Factory factory;
 
@@ -154,6 +159,12 @@ namespace ReplayEngine::Core
         ComponentTypeInfo& AsBuiltIn()
         {
             built_in = true;
+            return *this;
+        }
+
+        ComponentTypeInfo& EditorOnly()
+        {
+            runtime_available = false;
             return *this;
         }
 

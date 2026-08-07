@@ -33,6 +33,7 @@ namespace ReplayEngine::Assets
             case AssetKind::Shader: return "shaders";
             case AssetKind::Scene: return "scenes";
             case AssetKind::Material: return "materials";
+            case AssetKind::SceneFlow: return "scene_flows";
             default: return "unknown";
             }
         }
