@@ -159,6 +159,24 @@ namespace ReplayEngine::Scripting
 
     ScriptValue ScriptComponent::ReadField(const std::string& saved_name) const
     {
+        // Play 中は managed インスタンスの「今の値」を返す。
+        //
+        // これが無いと、スクリプトがフィールドを書き換えても Inspector は
+        // C++ 側のキャッシュ（Play 開始時の値）を表示し続ける。
+        // 値の流れが C++ -> C# の一方向になり、
+        // 「スクリプトが動いているのかどうか」を確かめる手段が無くなる。
+        //
+        // 失敗したら黙ってキャッシュへ落とす。Play 停止直後や
+        // インスタンス破棄済みの瞬間に Inspector が空を描かないようにするため。
+        if (HasInstance())
+        {
+            if (IScriptServices* services = Services())
+            {
+                ScriptValue live;
+                if (services->PullField(instance_, saved_name, live)) return live;
+            }
+        }
+
         if (const ScriptValue* stored = field_values_.Find(saved_name)) return *stored;
 
         // Schema にあって値がまだ無い場合は既定値を返す。
@@ -408,14 +426,31 @@ namespace ReplayEngine::Scripting
     {
         if (HasInstance()) return;
 
+        // どの条件で作られなかったのかを last_error_ へ必ず残す。
+        //
+        // 以前はどの return も理由を残さず、Inspector からは
+        // 「状態 Loaded・インスタンス なし」としか見えなかった。
+        // その状態からは Services が無いのか Play セッションが無いのかを
+        // 区別できず、原因の切り分けができなかった。
         IScriptServices* services = Services();
-        if (services == nullptr) return;
+        if (services == nullptr)
+        {
+            last_error_ = "Scene に ScriptServices が接続されていません"
+                "（World 構築時の SetScripts 漏れ）";
+            return;
+        }
 
         // Edit Mode では作らない。「置いただけで動き出す」ことを防ぐ。
-        if (!services->PlaySessionActive()) return;
+        if (!services->PlaySessionActive())
+        {
+            last_error_ = "Play セッションがありません"
+                "（Edit 中は正常。Play 中に出るなら OnWorldActivating 未通過）";
+            return;
+        }
 
         if (!script_type_.IsValid())
         {
+            last_error_ = "Script 型が未指定です";
             status_ = ScriptStatus::Unassigned;
             return;
         }
@@ -423,6 +458,8 @@ namespace ReplayEngine::Scripting
         if (!schema_)
         {
             // Schema が無くても Field 値は預かったまま。エンジンは止めない。
+            last_error_ = "Schema を解決できていません"
+                "（Catalog に型が無い / Assembly 未ロード）";
             status_ = ScriptStatus::Unresolved;
             return;
         }

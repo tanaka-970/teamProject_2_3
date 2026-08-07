@@ -103,16 +103,35 @@ void framework::update_frame_constants(const DirectX::XMMATRIX& view,
     immediate_context->CSSetConstantBuffers(4, 1, buffers);
 }
 
+// 【マテリアルが唯一の真実】
+//
+// 以前はここでグローバルフラグ（use_pbr_skin / enable_toon_shader など）を
+// 見て、false なら nullptr を返したり SHADING_MODEL_UNLIT へ降格させていた。
+//
+// その結果、
+//   「描画確認」タブのチェックを外す
+//     -> 全マテリアルの指定が無視されて Unlit になる
+//     -> 画面にもログにも理由が出ない
+// という状態になっていた。マテリアルでトゥーンを選んだのに
+// 反映されない原因がこれ。
+//
+// Unity ではマテリアルが指定した絵柄が必ず使われる。
+// グローバルなスイッチがマテリアルを黙って上書きすることはない。
+// ここもそれに合わせ、**指定された絵柄をそのまま返す**。
+//
+// フラグは描画を止める役目をやめ、診断表示だけに使う
+// （framework_editor.cpp の draw_runtime_mode_banner で警告を出す）。
+
 ID3D11PixelShader* framework::skinned_forward_shader(int shading) const
 {
     // nullptrは各メッシュが持つ標準ピクセルシェーダーを使う指定になる。
     switch (shading)
     {
-    case SHADING_MODEL_PBR:   return use_pbr_skin ? pbr.skinned_mesh_ps() : nullptr;
-    case SHADING_MODEL_TOON:  return enable_toon_shader ? toon.skinned_mesh_ps() : nullptr;
-    case SHADING_MODEL_UNLIT: return enable_unlit_shader ? skinned_mesh_unlit_ps.Get() : nullptr;
+    case SHADING_MODEL_PBR:      return pbr.skinned_mesh_ps();
+    case SHADING_MODEL_TOON:     return toon.skinned_mesh_ps();
+    case SHADING_MODEL_UNLIT:    return skinned_mesh_unlit_ps.Get();
     case SHADING_MODEL_PIXELATE: return object_pixelate_ps.Get();
-    default:                  return nullptr;
+    default:                     return nullptr;
     }
 }
 
@@ -120,24 +139,26 @@ ID3D11PixelShader* framework::static_forward_shader(int shading) const
 {
     switch (shading)
     {
-    case SHADING_MODEL_PBR:   return use_pbr_skin ? pbr.static_mesh_ps() : nullptr;
-    case SHADING_MODEL_TOON:  return enable_toon_shader ? toon.static_mesh_ps() : nullptr;
-    case SHADING_MODEL_UNLIT: return enable_unlit_shader ? static_mesh_unlit_ps.Get() : nullptr;
+    case SHADING_MODEL_PBR:      return pbr.static_mesh_ps();
+    case SHADING_MODEL_TOON:     return toon.static_mesh_ps();
+    case SHADING_MODEL_UNLIT:    return static_mesh_unlit_ps.Get();
     case SHADING_MODEL_PIXELATE: return object_pixelate_ps.Get();
-    default:                  return nullptr;
+    default:                     return nullptr;
     }
 }
 
 unsigned int framework::deferred_shading_model(int shading) const
 {
-    // 無効化された描画方式がGBufferへ残らないよう、安全な方式へ置き換える。
+    // マテリアルの指定をそのまま GBuffer へ書く。
+    // ピクセル化は GBuffer では表現できないので PBR として書き、
+    // 合成段でセル化する（これは技術的制約であって上書きではない）。
     switch (shading)
     {
-    case SHADING_MODEL_PBR:   return use_pbr_skin ? SHADING_MODEL_PBR : SHADING_MODEL_UNLIT;
-    case SHADING_MODEL_TOON:  return enable_toon_shader ? SHADING_MODEL_TOON : SHADING_MODEL_UNLIT;
-    case SHADING_MODEL_UNLIT: return enable_unlit_shader ? SHADING_MODEL_UNLIT : SHADING_MODEL_FBX_DEFAULT;
+    case SHADING_MODEL_PBR:      return SHADING_MODEL_PBR;
+    case SHADING_MODEL_TOON:     return SHADING_MODEL_TOON;
+    case SHADING_MODEL_UNLIT:    return SHADING_MODEL_UNLIT;
     case SHADING_MODEL_PIXELATE: return SHADING_MODEL_PBR;
-    default:                  return SHADING_MODEL_UNLIT;
+    default:                     return SHADING_MODEL_UNLIT;
     }
 }
 
@@ -821,7 +842,16 @@ void framework::render(float elapsed_time)
     // ジッター/ノイズ列を進めるためのフレーム番号を更新する。
     previous_view_projection = frame_constants.view_projection;
     previous_view_projection_valid = true;
-    ++frame_index;
+
+    // 基準画像を撮る間はフレーム番号も止める。
+    //
+    // frame_index は SSAO / SSR / TAA の時間ノイズの種になっている。
+    // 進めたまま撮ると、止めているつもりでもノイズだけが毎回変わる。
+    if (!golden_capture_pending()) ++frame_index;
+
+    // Present の直前で撮ること。
+    // Present のあとはバックバッファの中身が保証されない（DISCARD）。
+    tick_golden_capture();
 
     swap_chain->Present(0, 0);
 }

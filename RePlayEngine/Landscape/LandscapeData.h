@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "LandscapeChunk.h"
 
@@ -19,30 +19,31 @@ namespace ReplayEngine::Landscape
         bool Initialize(int width, int height, float cell_size, float initial_height = 0.0f);
         bool Valid() const noexcept;
 
-        int Width() const noexcept { return width_; }
-        int Height() const noexcept { return height_; }
-        float CellSize() const noexcept { return cell_size_; }
-        std::size_t SampleCount() const noexcept { return heights_.size(); }
-        std::size_t Index(int x, int z) const noexcept;
-        bool Contains(int x, int z) const noexcept;
-        float HeightAt(int x, int z) const noexcept;
-        float HeightByIndex(std::size_t index) const noexcept;
-        bool SetHeight(int x, int z, float value) noexcept;
-        bool SetHeightByIndex(std::size_t index, float value) noexcept;
+         int Width() const noexcept { return width_; }
+         int Height() const noexcept { return height_; }
+          float CellSize() const noexcept { return cell_size_; }
+          std::size_t SampleCount() const noexcept { return heights_.size(); }
+          std::size_t Index(int x, int z) const noexcept;//
+          bool Contains(int x, int z) const noexcept;//
 
-        const std::vector<float>& Heights() const noexcept { return heights_; }
-        const std::vector<LandscapeChunk>& Chunks() const noexcept { return chunks_; }
-        std::vector<LandscapeChunk>& Chunks() noexcept { return chunks_; }
-        LandscapeChunk* FindChunk(LandscapeChunkCoord coord) noexcept;
-        const LandscapeChunk* FindChunk(LandscapeChunkCoord coord) const noexcept;
-
-        void MarkAllDirty() noexcept;
-        void MarkSampleDirty(int x, int z) noexcept;
-        void RecalculateChunkBounds(LandscapeChunk& chunk) noexcept;
-
-        bool Save(const std::filesystem::path& path, std::string& error) const;
-        static bool Load(const std::filesystem::path& path, LandscapeData& output,
-            std::string& error);
+          float HeightAt(int x, int z) const noexcept;
+          float HeightByIndex(std::size_t index) const noexcept;
+          bool SetHeight(int x, int z, float value) noexcept;
+          bool SetHeightByIndex(std::size_t index, float value) noexcept;
+        
+          const std::vector<float>& Heights() const noexcept { return heights_; }
+          const std::vector<LandscapeChunk>& Chunks() const noexcept { return chunks_; }
+          std::vector<LandscapeChunk>& Chunks() noexcept { return chunks_; }
+          LandscapeChunk* FindChunk(LandscapeChunkCoord coord) noexcept;
+          const LandscapeChunk* FindChunk(LandscapeChunkCoord coord) const noexcept;
+        
+         void MarkAllDirty() noexcept;
+         void MarkSampleDirty(int x, int z) noexcept;
+         void RecalculateChunkBounds(LandscapeChunk& chunk) noexcept;
+       
+         bool Save(const std::filesystem::path& path, std::string& error) const;
+         static bool Load(const std::filesystem::path& path, LandscapeData& output,
+             std::string& error);
 
     private:
         void BuildChunks();

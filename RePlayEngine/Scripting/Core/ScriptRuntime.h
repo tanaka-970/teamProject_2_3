@@ -109,6 +109,7 @@ namespace ReplayEngine::Scripting
         const ScriptWorld* World() const noexcept { return world_.get(); }
 
         // IWorldLifecycleListener
+        void OnWorldBuilding(Scene::Scene& world) override;
         void OnWorldUnloading(Scene::Scene& world) override;
         void OnWorldUnloaded(Scene::Scene& world) override;
         void OnWorldActivating(Scene::Scene& world) override;

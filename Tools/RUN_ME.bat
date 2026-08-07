@@ -6,7 +6,7 @@ REM  It runs the verification in a CHILD cmd process, so this window
 REM  survives even if the inner script dies, and everything is logged.
 REM  ASCII ONLY.
 REM =====================================================================
-cd /d C:\Users\2250298\Desktop\teamProject_2_3
+cd /d "%~dp0.."
 if not exist Saved\Build mkdir Saved\Build
 set "LOG=Saved\Build\verify_run.log"
 

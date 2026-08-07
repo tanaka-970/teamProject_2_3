@@ -1,4 +1,4 @@
-// Scene View の編集カメラと framework の接続部。
+﻿// Scene View の編集カメラと framework の接続部。
 //
 // 【この 1 ファイルにまとめている理由】
 //   ImGui / Win32 から入力を読むのはここだけ。
@@ -39,34 +39,34 @@ bool framework::using_editor_camera() const noexcept
 }
 
 DirectX::XMMATRIX framework::viewport_view_matrix() const
-{
-    if (using_editor_camera()) return editor_camera.ViewMatrix();
-
-    if (enable_scene_game && game_scene)
-    {
-        return DirectX::XMLoadFloat4x4(&game_scene->Gameplay().GetCamera().GetView());
-    }
-
-    // GameScene がまだ作られていない起動直後。編集カメラで代用する。
-    return editor_camera.ViewMatrix();
-}
-
-DirectX::XMMATRIX framework::viewport_projection_matrix() const
-{
-    const float aspect = (client_height > 0)
-        ? static_cast<float>(client_width) / static_cast<float>(client_height)
-        : (16.0f / 9.0f);
-
-    if (using_editor_camera()) return editor_camera.ProjectionMatrix(aspect);
-
-    if (enable_scene_game && game_scene)
-    {
-        return DirectX::XMLoadFloat4x4(&game_scene->Gameplay().GetCamera().GetProjection());
-    }
-
-    return editor_camera.ProjectionMatrix(aspect);
-}
-
+{                                                                                                                                                  //
+    if (using_editor_camera()) return editor_camera.ViewMatrix();                                                                                  //
+                                                                                                                                                   //
+    if (enable_scene_game && game_scene)                                                                                                           //
+    {                                                                                                                                              //
+        return DirectX::XMLoadFloat4x4(&game_scene->Gameplay().GetCamera().GetView());                                                             //
+    }                                                                                                                                              //
+                                                                                                                                                   //
+    // GameScene がまだ作られていない起動直後。編集カメラで代用する。                                                                              //
+    return editor_camera.ViewMatrix();                                                                                                             //
+}                                                                                                                                                  //
+                                                                                                                                                   
+DirectX::XMMATRIX framework::viewport_projection_matrix() const                                                                                    //
+{                                                                                                                                                  //
+    const float aspect = (client_height > 0)                                                                                                       //
+        ? static_cast<float>(client_width) / static_cast<float>(client_height)                                                                     //
+        : (16.0f / 9.0f);                                                                                                                          //
+                                                                                                                                                   //
+    if (using_editor_camera()) return editor_camera.ProjectionMatrix(aspect);                                                                      //
+                                                                                                                                                   //
+    if (enable_scene_game && game_scene)                                                                                                           //
+    {                                                                                                                                              //
+        return DirectX::XMLoadFloat4x4(&game_scene->Gameplay().GetCamera().GetProjection());                                                       //
+    }                                                                                                                                              //
+                                                                                                                                                   //
+    return editor_camera.ProjectionMatrix(aspect);                                                                                                 //
+}                                                                                                                                                  //
+                                                                                                                                                   //
 DirectX::XMFLOAT3 framework::viewport_eye_position() const
 {
     if (using_editor_camera()) return editor_camera.Position();

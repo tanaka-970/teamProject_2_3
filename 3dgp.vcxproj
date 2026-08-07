@@ -110,7 +110,7 @@
     </Link>
     <FxCompile>
       <ShaderModel>5.0</ShaderModel>
-      <AdditionalIncludeDirectories>Shader;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)Shader;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ObjectFileOutput>Shader\compiled\%(Filename).cso</ObjectFileOutput>
     </FxCompile>
   </ItemDefinitionGroup>
@@ -139,7 +139,7 @@
     </Link>
     <FxCompile>
       <ShaderModel>5.0</ShaderModel>
-      <AdditionalIncludeDirectories>Shader;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)Shader;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ObjectFileOutput>Shader\compiled\%(Filename).cso</ObjectFileOutput>
     </FxCompile>
   </ItemDefinitionGroup>
@@ -171,7 +171,7 @@
     </Link>
     <FxCompile>
       <ShaderModel>5.0</ShaderModel>
-      <AdditionalIncludeDirectories>Shader;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)Shader;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ObjectFileOutput>Shader\compiled\%(Filename).cso</ObjectFileOutput>
     </FxCompile>
   </ItemDefinitionGroup>
@@ -202,7 +202,7 @@
     </Link>
     <FxCompile>
       <ShaderModel>5.0</ShaderModel>
-      <AdditionalIncludeDirectories>Shader;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)Shader;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ObjectFileOutput>Shader\compiled\%(Filename).cso</ObjectFileOutput>
     </FxCompile>
   </ItemDefinitionGroup>
@@ -314,6 +314,20 @@
     <ClCompile Include="RePlayEngine\Scripting\Core\ScriptValue.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\Core\ScriptWorld.cpp" />
     <ClCompile Include="Source\app\Editor\framework_project_browser.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_shader_catalog.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_golden.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Capture\GoldenImage.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\ShaderEditing\ShaderInspector.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\BuiltInShaders.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderAsset.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderAssetValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderBuiltInValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderCatalog.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderConstantPacker.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderCompiler.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderCompileValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderLibrary.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderSource.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpProject.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackend.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\Validation\CSharpScriptValidation.cpp" />

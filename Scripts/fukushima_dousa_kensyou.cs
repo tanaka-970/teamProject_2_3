@@ -15,7 +15,7 @@ public sealed class fukushima_dousa_kensyou : ScriptBehaviour
     public override void Update(float deltaTime)
     {
         int i = 1;
-        i += 
+        i += 3;
         i = 0;
     }
 }

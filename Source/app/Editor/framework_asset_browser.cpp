@@ -395,6 +395,37 @@ void framework::draw_material_asset_editor()
         ImGui::TreePop();
     }
 
+    // ---- シェーダ調整（唯一の入口）---------------------------------------
+    //
+    // 絵柄・レイヤ・キャラ材質・プリセットはここで編集する。
+    // 以前は「シェーダー調整」タブにも同じ見た目の欄があったが、
+    // そちらはデバッグメッシュ専用で本番マテリアルに効かなかったため撤去した。
+    //
+    // Shading Model はこの Material が持つ値なので、
+    // Material を分ければオブジェクトごとに別の絵柄になる。
+    ImGui::Separator();
+    {
+        // ImGui の ID は Material ごとに変える。
+        // 使い回すと、別 Material を選んだときに開閉状態が混ざる。
+        const std::string inspector_id = "material_shader_" + selected->guid;
+        const std::string label = selected->source_path.filename().u8string();
+
+        // レイヤはこの Material 自身のものを渡す。
+        // グローバル配列（shader_layers_static[0]）を渡すと、
+        // どの Material を選んでも同じ層構成になってしまう。
+        //
+        // キャラ材質だけはまだ Material が持っていないため
+        // グローバルを渡している。次段階で Material へ移す。
+        draw_shader_inspector(inspector_id.c_str(), label,
+            material_editor_asset.shading_model,
+            material_editor_asset.outline_pass,
+            material_editor_asset.layers,
+            character_profiles_static[0],
+            material_editor_asset.pixelate_grid,
+            material_editor_asset.pixelate_strength);
+    }
+
+    ImGui::Separator();
     if (ImGui::Button("Save Material")) save_material_editor();
     ImGui::SameLine();
     if (ImGui::Button("Assign to Selected Renderer"))

@@ -55,6 +55,8 @@ extern ImWchar glyphRangesJapanese[];
 #include "../../RePlayEngine/Rendering/Materials/CharacterMaterialProfile.h"
 #include "../../RePlayEngine/Rendering/Materials/CharacterMaterialGpuData.h"
 #include "../../RePlayEngine/Rendering/Materials/MaterialAsset.h"
+#include "../../RePlayEngine/Rendering/Shaders/ShaderLibrary.h"
+#include "../../RePlayEngine/Rendering/Capture/GoldenImage.h"
 #include "../../RePlayEngine/Assets/AssetDatabase.h"
 #include "../../RePlayEngine/Assets/AsyncAssetManager.h"
 #include "../../RePlayEngine/Assets/ConcurrentResourceCache.h"
@@ -451,6 +453,11 @@ public:
     object_scene_action pending_object_scene_action{ object_scene_action::none };
     std::filesystem::path pending_object_scene_path;
     bool object_scene_unsaved_prompt_requested{ false };
+
+    // 未保存確認ダイアログで保存に失敗した理由。
+    // ステータス行はプロジェクトタブにしか出ず、モーダルの上からは
+    // 見えないため、失敗理由をここへ持ってダイアログ内に表示する。
+    std::string object_scene_save_failure;
 
     // 未保存確認ダイアログを実際に開いているか。
     // Esc など「ボタン以外で閉じられた」ことを見分けるために持つ。
@@ -863,18 +870,23 @@ private:
     void draw_scene_hierarchy();
     void draw_inspector();
     void draw_shader_adjustment_workspace();
-    void draw_shader_stack(const char* id, int& base_shader, bool& outline_pass,
-        ReplayEngine::Rendering::ShaderLayerStack& layers, float& pixel_grid,
-        float& pixelate_strength);
+    // シェーダ編集の唯一の入口（Source/app/Editor/framework_shader_stack.cpp）。
+    //
+    // 絵柄・レイヤ・キャラ材質・プリセットをここ 1 箇所で編集する。
+    // 引数はすべて参照なので、呼び出し側が選択中の GameObject の
+    // 値を渡せば、そのオブジェクトだけが変わる。
+    // オブジェクトごとに違うシェーダを掛けられる状態を保つこと。
+    void draw_shader_inspector(const char* id, const std::string& label,
+        int& base_shader, bool& outline_pass,
+        ReplayEngine::Rendering::ShaderLayerStack& layers,
+        ReplayEngine::Rendering::CharacterMaterialProfile& profile,
+        float& pixel_grid, float& pixelate_strength);
     void draw_screen_effect_stack();
     // SSAO / SSR / TAA / CSM の有効化と調整項目。
     void draw_screen_space_settings();
     // ポリゴン数・ドローコール数などの描画統計オーバーレイ。
     void draw_render_stats_overlay();
-    void draw_character_material_controls(const char* id, int& base_shader, bool& outline_pass,
-        ReplayEngine::Rendering::ShaderLayerStack& layers,
-        ReplayEngine::Rendering::CharacterMaterialProfile& profile, float& pixel_grid,
-        float& pixelate_strength);
+    // draw_character_material_controls は draw_shader_inspector へ統合された。
     bool browse_model_asset();
     bool load_model_asset_async(const std::wstring& filename);
     bool load_model_asset_now(const std::wstring& filename);
@@ -1004,6 +1016,14 @@ private:
     ReplayEngine::Project::PrefabReferenceStatus resolve_default_character_prefab() const;
 
     bool refresh_csharp_scripts();
+
+    // Catalog 更新と Assembly 再コンパイルを 1 回でやる。
+    bool rebuild_all_csharp();
+
+    // 編集 Scene の ScriptComponent へ Schema を引き直させる。
+    // Catalog 更新は Play セッションの Component にしか届かないため、
+    // 編集側はここで明示的に引き直す。戻り値は解決できた件数。
+    std::size_t resolve_editor_script_schemas();
     bool build_and_reload_csharp_scripts();
     bool create_csharp_behaviour_asset();
     bool open_selected_csharp_asset(int line = 0);
@@ -1011,6 +1031,10 @@ private:
     void poll_csharp_script_changes(float elapsed_time);
     void push_editor_log(std::string severity, std::string message,
         std::filesystem::path file = {}, int line = 0, int column = 0);
+
+    // Play 直後に実行用 World の Script Component を数える診断用。
+    void count_runtime_script_instances(ReplayEngine::Core::GameObject& object,
+        std::size_t& total, std::size_t& with_instance);
 
     // --- 衝突 (Source/app/Runtime/framework_collision_world.cpp) ------------
     // Scene の切り替えと Play / Edit の切り替えに合わせて衝突世界をつなぎ替える。
@@ -1147,6 +1171,81 @@ private:
     float scene_view_max_x{ 0.0f };
     float scene_view_max_y{ 0.0f };
     int scene_view_draw_mode{ 0 };
+    // --- シェーダ資産（フェーズ 1〜3）--------------------------------------
+    //
+    // Shader/Materials, Shader/Layers, Shader/PostProcess を走査して
+    // #pragma から宣言を読み、目録を作る。
+    // まだ描画には使わない。接続はフェーズ 4 以降。
+    ReplayEngine::Rendering::ShaderLibrary shader_library;
+    bool show_shader_catalog_panel{ false };
+
+    // .hlsl を保存したら自動でコンパイルし直す。
+    // C# の自動リロードと同じ扱い。既定は有効。
+    bool shader_auto_recompile{ true };
+    float shader_poll_timer{ 0.0f };
+
+    // 起動時に 1 回走査する。ログは push_editor_log へ流す。
+    void scan_shader_library();
+    void draw_shader_catalog_panel();
+
+    // 保存されたものだけコンパイルし直す。毎フレーム呼んでよい
+    // （内部で 1 秒の間隔を取る）。
+    void poll_shader_source_changes(float elapsed_time);
+
+    // --- スクリーンショット回帰（フェーズ 18）------------------------------
+    //
+    // 「見た目が 1 ピクセルも変わらない」を機械で確かめる。
+    // 目視では気付けない。色が 1 段ずれても人間には分からない。
+    enum class golden_request_kind
+    {
+        none = 0,
+        capture,     // 基準画像として撮る
+        compare,     // 撮って基準と比べる
+        self_check,  // 2 回撮って一致するか（＝決定論が足りているか）
+    };
+
+    golden_request_kind golden_request{ golden_request_kind::none };
+    std::string golden_name{ "default" };
+    char golden_name_buffer[64]{ "default" };
+
+    // 撮る前に何フレーム「止めた状態」で回すか。
+    //
+    // TAA の履歴が収束するまで待つ必要がある。
+    // 止めずに撮ると毎回違う絵になり、差分が出続けて誰も見なくなる。
+    int golden_settle_frames{ 8 };
+    int golden_countdown{ 0 };
+
+    // チャンネルごとの許容差。0 なら完全一致。
+    int golden_tolerance{ 0 };
+
+    std::string golden_last_summary;
+    bool golden_last_ok{ false };
+    bool show_golden_panel{ false };
+
+    // self_check の 1 回目を覚えておく場所。
+    ReplayEngine::Rendering::Capture::Image golden_self_check_first;
+    bool golden_self_check_has_first{ false };
+
+    // 撮影待ちの間はワールドを止める。update / render から見る。
+    bool golden_capture_pending() const noexcept
+    {
+        return golden_request != golden_request_kind::none;
+    }
+
+    void request_golden(golden_request_kind kind);
+
+    // Present の直前に呼ぶ。Present のあとはバックバッファの中身が保証されない。
+    void tick_golden_capture();
+
+    void draw_golden_panel();
+
+    // --- UI の見た目設定（Window メニュー →「UI の見た目」で変更）----------
+    // 起動ごとの一時設定。保存はしない。
+    float ui_button_scale{ 1.0f };      // ボタンとメニューの余白倍率
+    float ui_font_scale{ 1.0f };        // 文字の大きさ倍率
+    float ui_text_color[3]{ 1.0f, 1.0f, 1.0f };   // 文字色（既定は白）
+    bool  ui_style_overridden{ false };  // 一度でも触ったか
+
     char asset_search_text[192]{};
     int asset_type_filter{ 0 };
     std::string selected_asset_guid;
@@ -1154,6 +1253,11 @@ private:
     char new_csharp_behaviour_name[128]{ "NewBehaviour" };
     char new_csharp_namespace[128]{ "Game" };
     bool csharp_scripts_dirty{ false };
+
+    // .cs の保存を検出したら自動で再コンパイルするか。
+    // 既定で有効。コンパイル失敗時は直前に成功した Assembly が
+    // 維持されるので、自動で走らせても編集中の状態は壊れない。
+    bool csharp_auto_reload{ true };
     float csharp_scan_accumulator{ 0.0f };
     std::unordered_map<std::string, std::filesystem::file_time_type>
         csharp_source_write_times;

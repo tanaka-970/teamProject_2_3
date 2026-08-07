@@ -1,3 +1,4 @@
+#pragma replay_guid "5a8d351a5d3408c03ec343c561dbe3fa"
 // スキンメッシュへスタイライズドキャラクター表現を適用する。
 #include "skinned_mesh.hlsli"
 #include "stylized_character_common.hlsli"

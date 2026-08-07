@@ -2,6 +2,13 @@
 
 void framework::update(float elapsed_time)
 {
+    // 基準画像を撮る間はワールドを止める。
+    //
+    // 止めないとアニメ・粒子・物理が毎フレーム進み、
+    // 同じシーンを撮っても毎回違う絵になる。
+    // 差分が出続ける検査は、無い検査より悪い。
+    // 「あると思って見ていない」状態になるから。
+    if (golden_capture_pending()) elapsed_time = 0.0f;
 
     async_asset_manager.PumpMainThread();
     if (scene_manager.IsExclusive())

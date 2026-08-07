@@ -1,0 +1,31 @@
+REPLAY_SCENE 11
+SCENE "新しいシーン"
+SCENE_STATE 0
+COLLISION_STATE 2 0
+OBJECT_COUNT 1
+OBJECT
+  ID 1
+  NAME "GameObject"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "ScriptComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "7a3e1c94b06d4f28ae5137c0d9b28e41"
+    TYPE_MODULE "RePlayEngine.Scripting"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "__script.language" enum 1
+    PROPERTY "__script.asset" assetref "2d4023538cad678d1c962b5ca5b60852"
+    PROPERTY "__script.class" string "Game.NewBehaviour"
+    PROPERTY "__script.execution_order" int 0
+    PROPERTY "__script.type_id" string "205ccf78170532b2f086c75618c64235"
+    PROPERTY "field.DelaySeconds" float 3
+    PROPERTY "field.Elapsed" float 0
+    PROPERTY "field.ReloadCount" int 0
+    PROPERTY "field.LastStatus" int -1
+    PROPERTY "field.ReloadConfirmed" int 0
+  END_COMPONENT
+END_OBJECT

@@ -28,6 +28,11 @@
 #include "../../RePlayEngine/Scene/Serialization/PrefabSerializer.h"
 #include "../../RePlayEngine/Scene/Serialization/SceneData.h"
 #include "../../RePlayEngine/Scene/Serialization/SceneSerializer.h"
+#include "../../RePlayEngine/Scripting/CSharp/CSharpScriptBackend.h"
+#include "../../RePlayEngine/Scripting/Core/ScriptComponent.h"
+#include "../../RePlayEngine/Scripting/Core/ScriptRuntime.h"
+#include "../../RePlayEngine/Scripting/Core/ScriptTypeCatalog.h"
+#include "../../RePlayEngine/Scripting/Core/ScriptTypes.h"
 #include "../../game/Behaviours/ValidationBehaviours.h"
 
 #include <commdlg.h>
@@ -317,6 +322,12 @@ void framework::update_object_scene(float elapsed_time)
     // 次のフレームのこの位置で初めて実際の切り替えになる。
     tick_runtime_scene_flow();
     poll_csharp_script_changes(elapsed_time);
+
+    // .hlsl の保存もここで拾う。
+    //
+    // C# と同じ位置に置く理由は同じ。描画の最中に
+    // バイトコードを差し替えないための同期点がここだから。
+    poll_shader_source_changes(elapsed_time);
 
     // スクリプトの同期点。
     //
@@ -781,6 +792,13 @@ void framework::discard_object_scene_autosave()
 void framework::request_object_scene_action(object_scene_action action,
     std::filesystem::path path)
 {
+    // 新規 / 開く / 終了 はどれも編集シーンに対する操作。
+    // Play 中のまま進むと save_object_scene が
+    // 「実行中はシーンを保存できません」で false を返し、
+    // 「保存して終了」を押しても何も起きず終了できなくなる。
+    // 先に実行を止めてから確認へ進む。
+    if (object_scene_play_mode) exit_object_play_mode();
+
     pending_object_scene_action = action;
     pending_object_scene_path = std::move(path);
     if (object_editor_context.Dirty())
@@ -844,7 +862,16 @@ bool framework::confirm_object_scene_close()
 
 void framework::enter_object_play_mode()
 {
-    if (object_scene_play_mode) return;
+    // 呼ばれたこと自体を必ず残す。
+    // 「Play を押しても何も起きない」ときに、ボタンが繋がっていないのか
+    // 中で弾かれているのかを切り分けられないと追えない。
+    push_editor_log("Info", "Play 開始要求を受けました");
+
+    if (object_scene_play_mode)
+    {
+        push_editor_log("Info", "既に Play 中のため何もしません");
+        return;
+    }
 
     // 編集 Scene の内容を実行用 Scene へ複製する。
     // 直接コピーせず SceneData を経由するのは、
@@ -871,7 +898,13 @@ void framework::enter_object_play_mode()
         object_runtime_scenes.RequestAdopt(snapshot, object_scene_asset_guid);
     if (request != ReplayEngine::Runtime::SceneRequestResult::Accepted)
     {
-        object_editor_context.SetStatus("実行を開始できません（Scene 遷移が進行中です）");
+        // status だけだとプロジェクトタブを開いていないと見えない。
+        // Play に入れないのは重大なので Console へも Error として出す。
+        const std::string reason =
+            "Play を開始できません（Scene 遷移が進行中です）。SceneRequestResult=" +
+            std::to_string(static_cast<int>(request));
+        object_editor_context.SetStatus(reason);
+        push_editor_log("Error", reason);
         return;
     }
 
@@ -884,8 +917,15 @@ void framework::enter_object_play_mode()
     if (object_runtime_scenes.State() != ReplayEngine::Runtime::SceneLoadState::Completed)
     {
         // 失敗しても編集 Scene には一切触れていない。そのまま Edit Mode を続ける。
-        object_editor_context.SetStatus(
-            "実行用 Scene を構築できませんでした: " + object_runtime_scenes.LastError());
+        //
+        // ここで黙って戻ると「Play を押しても EDIT MODE のまま」に見え、
+        // 原因がまったく分からなくなる。Console へ理由を必ず残す。
+        const std::string reason =
+            "実行用 Scene を構築できませんでした: " + object_runtime_scenes.LastError() +
+            " / SceneLoadState=" +
+            std::to_string(static_cast<int>(object_runtime_scenes.State()));
+        object_editor_context.SetStatus(reason);
+        push_editor_log("Error", reason);
         return;
     }
 
@@ -908,6 +948,128 @@ void framework::enter_object_play_mode()
     object_editor_context.AttachScene(&runtime_world);
     object_editor_context.ResetSceneState();
     object_editor_context.SetStatus("実行中（編集シーンは保持されています）");
+
+    // ---- Play 直後の全数診断 ------------------------------------------------
+    //
+    // Inspector が見ているのは編集 Scene の Component で、実際に動くのは
+    // ここで作られた実行用 World の複製の方。複製側の状態は Inspector から
+    // 一切見えないため、ここで洗いざらい出す。
+    //
+    // 「Play しても動かない」の原因になり得るものを全部並べる:
+    //   ScriptRuntime が無い / Backend が無い / Backend 未初期化 /
+    //   Assembly 未ロード / Play セッション未開始 / Catalog が空 /
+    //   型が Catalog に無い / Schema 未解決 / インスタンス生成失敗
+    {
+        namespace Scripting = ReplayEngine::Scripting;
+
+        push_editor_log("Info", "===== Play 診断 開始 =====");
+
+        if (!object_script_runtime)
+        {
+            push_editor_log("Error", "ScriptRuntime がありません。C# は動きません");
+        }
+        else
+        {
+            push_editor_log("Info", std::string("Play セッション: ") +
+                (object_script_runtime->PlaySessionActive() ? "有効" : "*** 無効 ***"));
+
+            auto* backend = dynamic_cast<Scripting::CSharp::CSharpScriptBackend*>(
+                object_script_runtime->Backend(Scripting::ScriptLanguage::CSharp));
+            if (backend == nullptr)
+            {
+                push_editor_log("Error", "C# Backend が接続されていません");
+            }
+            else
+            {
+                push_editor_log(backend->Initialized() ? "Info" : "Error",
+                    std::string("C# Backend 初期化: ") +
+                    (backend->Initialized() ? "済" : "*** 未 ***"));
+                push_editor_log(backend->AssemblyLoaded() ? "Info" : "Error",
+                    std::string("C# Assembly ロード: ") +
+                    (backend->AssemblyLoaded() ? "済" : "*** 未 ***"));
+                push_editor_log("Info", "C# 生存インスタンス数: " +
+                    std::to_string(backend->LiveInstanceCount()));
+                if (!backend->LastErrorMessage().empty())
+                {
+                    push_editor_log("Error",
+                        "C# Backend 直近エラー: " + backend->LastErrorMessage());
+                }
+            }
+
+            const auto& all = object_script_runtime->Catalog().All();
+            push_editor_log(all.empty() ? "Error" : "Info",
+                "Catalog 登録数: " + std::to_string(all.size()));
+            for (const Scripting::ScriptTypeDescriptor& descriptor : all)
+            {
+                const bool can = backend != nullptr &&
+                    backend->CanInstantiate(descriptor.type_id);
+                push_editor_log(can ? "Info" : "Warning",
+                    "  Catalog: " + descriptor.DisplayName() +
+                    " / class=" + descriptor.class_name +
+                    " / typeid=" + descriptor.type_id.ToString() +
+                    " / asset=" + descriptor.asset_guid +
+                    " / 生成可否=" + (can ? "可" : "*** 不可 ***") +
+                    (descriptor.last_error.empty()
+                        ? std::string() : " / エラー=" + descriptor.last_error));
+            }
+        }
+
+        std::size_t script_total = 0;
+        std::size_t script_with_instance = 0;
+        for (ReplayEngine::Core::GameObject* root : runtime_world.RootGameObjects())
+        {
+            if (root == nullptr) continue;
+            count_runtime_script_instances(*root, script_total, script_with_instance);
+        }
+        push_editor_log(script_total == 0 ? "Error"
+            : (script_with_instance == script_total ? "Info" : "Warning"),
+            "実行用 World の Script Component: " + std::to_string(script_total) +
+            " 個 / インスタンス生成済み " + std::to_string(script_with_instance) + " 個");
+
+        if (script_total == 0)
+        {
+            push_editor_log("Error",
+                "実行用 World に Script Component が 1 つもありません。"
+                "編集 Scene から実行用 Scene への複製で落ちています");
+        }
+
+        push_editor_log("Info", "===== Play 診断 終了 =====");
+    }
+}
+
+// 実行用 World の Script Component を数える。
+// Play 直後の 1 回だけ呼ぶ診断用。
+void framework::count_runtime_script_instances(
+    ReplayEngine::Core::GameObject& object,
+    std::size_t& total, std::size_t& with_instance)
+{
+    for (std::size_t index = 0; index < object.ComponentCount(); ++index)
+    {
+        ReplayEngine::Core::Component* component = object.ComponentAt(index);
+        if (component == nullptr) continue;
+        auto* script = dynamic_cast<ReplayEngine::Scripting::ScriptComponent*>(component);
+        if (script == nullptr) continue;
+
+        ++total;
+        if (script->HasInstance()) ++with_instance;
+
+        push_editor_log(script->HasInstance() ? "Info" : "Error",
+            "  [" + object.Name() + "] 状態=" +
+            ReplayEngine::Scripting::ToString(script->Status()) +
+            " / インスタンス=" + (script->HasInstance() ? "あり" : "*** なし ***") +
+            " / class=" + script->ClassName() +
+            " / typeid=" + script->ScriptType().ToString() +
+            " / asset=" + script->ScriptAssetGUID() +
+            " / Schema=" + (script->Schema() ? "あり" : "*** なし ***") +
+            " / enabled=" + (script->Enabled() ? "true" : "false") +
+            (script->LastError().empty()
+                ? std::string() : " / 理由=" + script->LastError()));
+    }
+
+    for (ReplayEngine::Core::GameObject* child : object.Children())
+    {
+        if (child != nullptr) count_runtime_script_instances(*child, total, with_instance);
+    }
 }
 
 void framework::exit_object_play_mode()
@@ -1082,10 +1244,20 @@ ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
         resolve_object_material(source.material_asset);
     if (material == nullptr) return item;
 
+    // 【マテリアルが唯一の真実】
+    //
+    // 絵柄（shading_model）は必ずマテリアルの指定を使う。
+    //
+    // 以前は material_override が true だと Renderer 側の shading_model が
+    // 優先され、マテリアルでトゥーンを選んでも PBR のままだった。
+    // 「マテリアルを割り当てたのに絵が変わらない」原因がこれ。
+    //
+    // Unity では Renderer に絵柄の指定は無く、マテリアルだけが決める。
+    // material_override は色の上書き（tint）だけに意味を限定する。
+    item.shading_model = material->shading_model;
     if (!source.material_override)
     {
         item.tint = material->base_color;
-        item.shading_model = material->shading_model;
     }
     item.metallic = material->metallic;
     item.roughness = material->roughness;

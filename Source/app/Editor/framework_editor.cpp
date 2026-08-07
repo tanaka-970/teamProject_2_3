@@ -3,8 +3,11 @@
 #include "../../RePlayEngine/Components/Gameplay/PlayerControllerComponent.h"
 #include "../../RePlayEngine/Components/Gameplay/PlayerInputComponent.h"
 #include "../../RePlayEngine/Editor/Style/EditorStyle.h"
+#include "../../RePlayEngine/Object/GameObject/GameObject.h"
 #include "../../RePlayEngine/Scripting/CSharp/CSharpProject.h"
 #include "../../RePlayEngine/Scripting/CSharp/CSharpScriptBackend.h"
+#include "../../RePlayEngine/Scripting/Core/ScriptComponent.h"
+#include "../../RePlayEngine/Scripting/Core/ScriptRuntime.h"
 #include "../../RePlayEngine/Scene/Serialization/SceneData.h"
 #include "../../RePlayEngine/Scene/Serialization/SceneSerializer.h"
 #include "shader.h"
@@ -117,6 +120,23 @@ void framework::configure_editor_style()
         ? static_cast<float>(GetDpiForWindow(hwnd)) / 96.0f : 1.0f;
     ReplayEngine::Editor::EditorStyle::Apply(dpi);
     ImGui::GetIO().FontGlobalScale = dpi;
+
+    // Window メニュー →「UI の見た目」で変えた分を上から重ねる。
+    //
+    // EditorStyle::Apply の中で決め打ちせずここへ置くのは、
+    // Apply が「配色と余白の基準」を作る役で、
+    // 個人の見やすさの調整はその上に乗る別物だから。
+    if (!ui_style_overridden) return;
+
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.FramePadding.x *= ui_button_scale;
+    style.FramePadding.y *= ui_button_scale;
+    style.ItemSpacing.x  *= ui_button_scale;
+    style.ItemSpacing.y  *= ui_button_scale;
+    style.Colors[ImGuiCol_Text] =
+        ImVec4(ui_text_color[0], ui_text_color[1], ui_text_color[2], 1.0f);
+
+    ImGui::GetIO().FontGlobalScale = dpi * ui_font_scale;
 }
 
 void framework::set_editor_workspace(editor_workspace workspace)
@@ -212,34 +232,37 @@ void framework::draw_editor_main_menu()
             object_hierarchy_panel.DestroySelection(object_editor_context);
         ImGui::EndMenu();
     }
-    if (ImGui::BeginMenu("GameObject"))
+    // GameObject / Component / Assets を 1 つへまとめる。
+    //
+    // それぞれ 1〜3 項目しか無いのにメニューバーを 3 つ占有しており、
+    // 目的の項目がどこにあるか分からなかった。「作る・置く」で 1 つにする。
+    if (ImGui::BeginMenu(u8"作成"))
     {
-        if (ImGui::MenuItem("Create Empty", nullptr, false, object_editor_context.CanEdit()))
+        if (ImGui::MenuItem(u8"空の GameObject", nullptr, false,
+            object_editor_context.CanEdit()))
+        {
             object_hierarchy_panel.CreateEmpty(object_editor_context);
-        if (ImGui::MenuItem("Set As Controlled Object", nullptr, false,
+        }
+        if (ImGui::MenuItem(u8"選択中を操作対象にする", nullptr, false,
             object_editor_context.CanEdit() && !object_editor_context.Selection().Empty()))
         {
             object_editor_context.BeginEdit("操作対象を変更");
             object_scene.Services().SetControlledObject(object_editor_context.Selection().Primary());
             object_editor_context.CommitEdit();
         }
-        ImGui::EndMenu();
-    }
-    if (ImGui::BeginMenu("Component"))
-    {
-        if (ImGui::MenuItem("Open Inspector", nullptr, false,
+
+        ImGui::Separator();
+        if (ImGui::MenuItem(u8"モデルを取り込む...")) browse_model_asset();
+        if (ImGui::MenuItem(u8"Prefab を置く...")) load_prefab();
+
+        ImGui::Separator();
+        if (ImGui::MenuItem(u8"インスペクターを開く", nullptr, false,
             !object_editor_context.Selection().Empty()))
         {
             show_inspector_panel = true;
             selected_editor_object = editor_selection::game_object;
         }
-        ImGui::EndMenu();
-    }
-    if (ImGui::BeginMenu("Assets"))
-    {
-        if (ImGui::MenuItem("Import Model...")) browse_model_asset();
-        if (ImGui::MenuItem("Place Prefab...")) load_prefab();
-        if (ImGui::MenuItem("Show Project Browser")) show_project_panel = true;
+        if (ImGui::MenuItem(u8"プロジェクトを開く")) show_project_panel = true;
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Window"))
@@ -253,16 +276,74 @@ void framework::draw_editor_main_menu()
         ImGui::MenuItem("Validation / Diagnostics", nullptr, &show_validation_panel);
         ImGui::MenuItem("Collision Diagnostics", nullptr, &show_collision_diagnostics);
         ImGui::Separator();
+        // シェーダ資産の一覧。
+        // .hlsl の #pragma がそのまま項目になることを確かめる窓。
+        ImGui::MenuItem(u8"シェーダ一覧", nullptr, &show_shader_catalog_panel);
+        // 見た目が変わっていないことを機械で確かめる窓。
+        // 描画やシェーダを触る前に基準を撮っておくこと。
+        ImGui::MenuItem(u8"スクリーンショット回帰", nullptr, &show_golden_panel);
+        ImGui::Separator();
         if (ImGui::MenuItem("Reset Layout")) editor_layout_dirty = true;
+
+        // 見た目の調整。人によって画面サイズも見やすい大きさも違うので、
+        // 固定値で決め打ちせずここで変えられるようにする。
+        ImGui::Separator();
+        if (ImGui::BeginMenu(u8"UI の見た目"))
+        {
+            bool style_changed = false;
+
+            ImGui::TextDisabled(u8"大きさ");
+            ImGui::SetNextItemWidth(180.0f);
+            style_changed |= ImGui::SliderFloat(
+                u8"ボタンの余白", &ui_button_scale, 0.6f, 3.0f, "x%.2f");
+            ImGui::SetNextItemWidth(180.0f);
+            style_changed |= ImGui::SliderFloat(
+                u8"文字の大きさ", &ui_font_scale, 0.7f, 2.5f, "x%.2f");
+
+            ImGui::Separator();
+            ImGui::TextDisabled(u8"文字色");
+            ImGui::SetNextItemWidth(200.0f);
+            style_changed |= ImGui::ColorEdit3(u8"##UITextColor", ui_text_color);
+
+            ImGui::Separator();
+            if (ImGui::MenuItem(u8"大きめにする"))
+            {
+                ui_button_scale = 1.8f;
+                ui_font_scale = 1.3f;
+                style_changed = true;
+            }
+            if (ImGui::MenuItem(u8"既定へ戻す"))
+            {
+                ui_button_scale = 1.0f;
+                ui_font_scale = 1.0f;
+                ui_text_color[0] = 1.0f;
+                ui_text_color[1] = 1.0f;
+                ui_text_color[2] = 1.0f;
+                style_changed = true;
+            }
+
+            // 変えた瞬間に反映する。
+            // configure_editor_style は毎回 EditorStyle::Apply から作り直すので、
+            // 何度呼んでも倍率が積み重なることはない。
+            if (style_changed)
+            {
+                ui_style_overridden = true;
+                configure_editor_style();
+            }
+            ImGui::EndMenu();
+        }
         ImGui::EndMenu();
     }
-    if (ImGui::BeginMenu("Play"))
+    // メニュー名を "Play" にしない。
+    // ツールバーの実行ボタンと同名だと、どちらを押せばよいか区別できない。
+    // 実際にそれで迷子になった。
+    if (ImGui::BeginMenu(u8"実行"))
     {
-        if (ImGui::MenuItem("Play", "F5", false, !object_scene_play_mode))
+        if (ImGui::MenuItem(u8"▶ 実行", "F5", false, !object_scene_play_mode))
             enter_object_play_mode();
-        if (ImGui::MenuItem(object_scene_paused ? "Resume" : "Pause", nullptr,
+        if (ImGui::MenuItem(object_scene_paused ? u8"▶ 再開" : u8"❚❚ 一時停止", nullptr,
             false, object_scene_play_mode)) object_scene_paused = !object_scene_paused;
-        if (ImGui::MenuItem("Stop", "Shift+F5", false, object_scene_play_mode))
+        if (ImGui::MenuItem(u8"■ 停止", "Shift+F5", false, object_scene_play_mode))
             exit_object_play_mode();
         ImGui::EndMenu();
     }
@@ -375,10 +456,24 @@ void framework::draw_unsaved_object_scene_prompt()
         ? u8"保存してから終了しますか？"
         : u8"保存してから続行しますか？");
 
+    if (!object_scene_save_failure.empty())
+    {
+        // 保存に失敗したまま黙って閉じない。閉じると
+        // 「保存できていないのに終了した」ように見える。
+        // ただし理由を出さないと、押しても無反応にしか見えない。
+        ImGui::Spacing();
+        ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.35f, 1.0f),
+            u8"保存できませんでした");
+        ImGui::TextWrapped(u8"%s", object_scene_save_failure.c_str());
+        ImGui::TextDisabled(u8"別名で保存するか、破棄して終了を選んでください。");
+        ImGui::Spacing();
+    }
+
     if (ImGui::Button(save_label, ImVec2(140.0f, 0.0f)))
     {
         if (save_object_scene(false))
         {
+            object_scene_save_failure.clear();
             // 終了を確定させてから実行する。
             // 実行後に Dirty が立て直されても、もう確認へは戻らない。
             if (exiting) object_exit_confirmed = true;
@@ -386,13 +481,39 @@ void framework::draw_unsaved_object_scene_prompt()
             ImGui::CloseCurrentPopup();
             execute_pending_object_scene_action();
         }
-        // 保存に失敗した場合は何もしない。
-        // 閉じてしまうと、保存できていないのに終了したように見える。
+        else
+        {
+            // 失敗の理由をこのダイアログへ出す。
+            // ステータス行はプロジェクトタブにしか出ず、
+            // ここからは見えないため気付けなかった。
+            object_scene_save_failure = object_editor_context.Status();
+            if (object_scene_save_failure.empty())
+            {
+                object_scene_save_failure = u8"理由は不明です。";
+            }
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(u8"別名で保存", ImVec2(120.0f, 0.0f)))
+    {
+        if (save_object_scene(true))
+        {
+            object_scene_save_failure.clear();
+            if (exiting) object_exit_confirmed = true;
+            object_unsaved_prompt_open = false;
+            ImGui::CloseCurrentPopup();
+            execute_pending_object_scene_action();
+        }
+        else
+        {
+            object_scene_save_failure = object_editor_context.Status();
+        }
     }
     ImGui::SameLine();
     if (ImGui::Button(discard_label, ImVec2(140.0f, 0.0f)))
     {
         // ここは「変更を捨てる」が仕事。編集内容は保存しない。
+        object_scene_save_failure.clear();
         discard_object_scene_autosave();
         object_editor_context.ClearDirty();
         if (exiting) object_exit_confirmed = true;
@@ -403,6 +524,7 @@ void framework::draw_unsaved_object_scene_prompt()
     ImGui::SameLine();
     if (ImGui::Button(u8"キャンセル", ImVec2(100.0f, 0.0f)))
     {
+        object_scene_save_failure.clear();
         pending_object_scene_action = object_scene_action::none;
         pending_object_scene_path.clear();
         object_unsaved_prompt_open = false;
@@ -413,21 +535,15 @@ void framework::draw_unsaved_object_scene_prompt()
 
 void framework::draw_editor_toolbar()
 {
-    if (ImGui::Button("New")) create_object_scene(u8"新しいシーン", false);
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("New Empty Scene");
-    ImGui::SameLine();
-    if (ImGui::Button("Open")) load_object_scene(true);
-    ImGui::SameLine();
-    if (ImGui::Button(object_editor_context.Dirty() ? "Save *" : "Save"))
-        save_object_scene(false);
-    ImGui::SameLine();
-    if (ImGui::Button("Undo")) object_editor_context.Undo();
-    ImGui::SameLine();
-    if (ImGui::Button("Redo")) object_editor_context.Redo();
-
-    ImGui::SameLine();
-    ImGui::Separator();
-    ImGui::SameLine();
+    // New / Open / Save / Undo / Redo はツールバーへ置かない。
+    //
+    // File / Edit メニューと Ctrl+N/O/S/Z/Y に同じものがあり、
+    // ツールバーに並べても幅を食うだけで得るものが無い。
+    // ここへ残すのは「今どの状態か」が見た目に要るものだけにする。
+    //   ギズモの操作種別 … 今どのモードかが分からないと操作できない
+    //   実行 / 停止      … 今 Play 中かどうかが一目で要る
+    //
+    // 未保存かどうかはウィンドウタイトルとシーン名の * で分かる。
     if (ImGui::Button("Move [W]"))
         transform_gizmo.SetOperation(ReplayEngine::Editor::GizmoOperation::Translate);
     ImGui::SameLine();
@@ -446,16 +562,45 @@ void framework::draw_editor_toolbar()
     ImGui::SameLine();
     ImGui::Separator();
     ImGui::SameLine();
+
+    // 実行ボタンは色と大きさで他から切り離す。
+    //
+    // 以前は同じ見た目のボタンが 8 個並ぶ中に "Play" が紛れており、
+    // しかもメニューバーにも同名の "Play" があった。
+    // どちらを押せばよいか画面から判断できず、実際に迷子になった。
+    const ImVec2 transport_size(96.0f, 0.0f);
     if (!object_scene_play_mode)
     {
-        if (ImGui::Button("Play")) enter_object_play_mode();
+        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.16f, 0.62f, 0.28f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.22f, 0.74f, 0.36f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.12f, 0.50f, 0.22f, 1.0f));
+        if (ImGui::Button(u8"▶ 実行 (F5)", transport_size)) enter_object_play_mode();
+        ImGui::PopStyleColor(3);
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip(u8"ゲームを実行します。\n"
+                u8"実行用のコピーが動くので、編集中のシーンは変わりません。\n"
+                u8"C# スクリプトの Update はここから先でしか動きません。");
+        }
     }
     else
     {
-        if (ImGui::Button(object_scene_paused ? "Resume" : "Pause"))
+        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.70f, 0.52f, 0.14f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.84f, 0.63f, 0.20f, 1.0f));
+        if (ImGui::Button(object_scene_paused ? u8"▶ 再開" : u8"❚❚ 一時停止", transport_size))
             object_scene_paused = !object_scene_paused;
+        ImGui::PopStyleColor(2);
+
         ImGui::SameLine();
-        if (ImGui::Button("Stop")) exit_object_play_mode();
+        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.72f, 0.22f, 0.20f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.86f, 0.30f, 0.26f, 1.0f));
+        if (ImGui::Button(u8"■ 停止", transport_size)) exit_object_play_mode();
+        ImGui::PopStyleColor(2);
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip(u8"編集モードへ戻ります。\n"
+                u8"実行中に動いた位置や生成した物はすべて破棄されます。");
+        }
     }
 
     if (ImGui::GetContentRegionAvail().x > 280.0f)
@@ -703,6 +848,35 @@ void framework::draw_scene_hierarchy()
 void framework::push_editor_log(std::string severity, std::string message,
     std::filesystem::path file, int line, int column)
 {
+    // 画面のログはコピーしないと外へ出せない。
+    // 同じ内容をファイルへも落としておく。
+    //
+    // 起動ごとに切り詰める（append ではなく trunc を初回だけ）。
+    // 追記し続けると前回の実行と混ざり、どれが今回のものか分からなくなる。
+    {
+        static bool truncated = false;
+        std::error_code folder_error;
+        const std::filesystem::path folder =
+            std::filesystem::path("Saved") / "Diagnostics";
+        std::filesystem::create_directories(folder, folder_error);
+
+        std::ofstream sink(folder / "editor_log.txt",
+            std::ios::binary | (truncated ? std::ios::app : std::ios::trunc));
+        truncated = true;
+        if (sink)
+        {
+            sink << '[' << severity << "] " << message;
+            if (!file.empty())
+            {
+                sink << "  (" << file.generic_u8string();
+                if (line > 0) sink << ':' << line;
+                if (column > 0) sink << ':' << column;
+                sink << ')';
+            }
+            sink << '\n';
+        }
+    }
+
     editor_log_entry entry;
     entry.severity = std::move(severity);
     entry.message = std::move(message);
@@ -742,6 +916,12 @@ void framework::poll_csharp_script_changes(float elapsed_time)
     if (csharp_scan_accumulator < 1.0f) return;
     csharp_scan_accumulator = 0.0f;
 
+    // この回で新しく変化を見つけたか。
+    // 見つけた直後は再ビルドしない。Visual Studio は複数ファイルを
+    // 続けて保存するので、検出のたびに走らせるとビルドが重なる。
+    // 「変化が落ち着いた次の回」で 1 度だけ走らせる。
+    bool changed_this_scan = false;
+
     for (const CSharp::CSharpBehaviourInfo& info :
         CSharp::CSharpProject::DiscoverBehaviours(std::filesystem::current_path()))
     {
@@ -756,6 +936,7 @@ void framework::poll_csharp_script_changes(float elapsed_time)
         {
             csharp_source_write_times[key] = time;
             csharp_scripts_dirty = true;
+            changed_this_scan = true;
             push_editor_log("Info", "C# source detected: " + key, info.source_path);
             continue;
         }
@@ -764,9 +945,48 @@ void framework::poll_csharp_script_changes(float elapsed_time)
         {
             found->second = time;
             csharp_scripts_dirty = true;
+            changed_this_scan = true;
             push_editor_log("Info", "C# source changed: " + key, info.source_path);
         }
     }
+
+    // 保存を検出したら自動で再コンパイルする。
+    //
+    // 手で「Build && Reload C#」を押す運用だと、押し忘れたまま
+    // 「直したのに動かない」と悩む時間が生まれる。実際にそれで詰まった。
+    //
+    // コンパイルに失敗しても直前に成功した Assembly が維持されるので、
+    // 自動で走らせても編集中のシーンは壊れない。
+    if (csharp_scripts_dirty && csharp_auto_reload && !changed_this_scan)
+    {
+        csharp_scripts_dirty = false;
+        push_editor_log("Info", "C# の変更を検出したので自動で再コンパイルします");
+        build_and_reload_csharp_scripts();
+    }
+}
+
+// C# を一括で作り直す。
+// Catalog の更新と Assembly の再コンパイルを 1 回でやる。
+bool framework::rebuild_all_csharp()
+{
+    push_editor_log("Info", "===== C# 一括更新 開始 =====");
+
+    // 先に Catalog。新しく増えた .cs をここで拾う。
+    const bool catalog_ok = refresh_csharp_scripts();
+
+    // 次に Assembly。Catalog に載った型が実際に生成できる状態になる。
+    const bool build_ok = build_and_reload_csharp_scripts();
+
+    // 変更検出の基準を今の状態へ揃える。
+    // これをしないと、直後の巡回でもう一度自動再コンパイルが走る。
+    snapshot_csharp_script_write_times();
+    csharp_scripts_dirty = false;
+
+    push_editor_log(catalog_ok && build_ok ? "Info" : "Error",
+        std::string("===== C# 一括更新 終了 (Catalog=") +
+        (catalog_ok ? "OK" : "NG") + " / Build=" + (build_ok ? "OK" : "NG") + ") =====");
+
+    return catalog_ok && build_ok;
 }
 
 bool framework::refresh_csharp_scripts()
@@ -797,10 +1017,58 @@ bool framework::refresh_csharp_scripts()
         object_script_runtime->RequestSchemaReload(descriptor.type_id);
     }
 
+    // Schema の差し替えをここで 1 回通す。
+    // ApplyPendingSchemaSwaps は Play セッションに登録済みの Component へしか
+    // 配らない（内部で world_ が無ければ抜ける）ので、編集 Scene の
+    // Component は下の resolve_editor_script_schemas で自分で引き直す。
+    object_script_runtime->ApplyPendingSchemaSwaps(0.0f);
+
+    // 編集 Scene の ScriptComponent を再解決する。
+    //
+    // これが無いと、Catalog を更新しても編集 Scene の Component は
+    // Unresolved のまま残る。Scene を読み込んだ時点では Catalog がまだ
+    // 空なので、起動直後は必ずこの状態になっていた。
+    const std::size_t resolved = resolve_editor_script_schemas();
+
     snapshot_csharp_script_write_times();
-    editor_command_result = "C# Catalog を更新しました";
+    editor_command_result = "C# Catalog を更新しました（編集 Scene の Script " +
+        std::to_string(resolved) + " 件を再解決）";
     push_editor_log("Info", editor_command_result);
     return true;
+}
+
+// 編集 Scene の ScriptComponent へ Schema を引き直させる。
+// 戻り値は Schema を持てた Component の数。
+std::size_t framework::resolve_editor_script_schemas()
+{
+    std::size_t resolved = 0;
+
+    // 再帰で階層を降りる。ラムダ再帰を使わず素直に書く。
+    struct Walker
+    {
+        static void Visit(ReplayEngine::Core::GameObject& object, std::size_t& count)
+        {
+            for (std::size_t index = 0; index < object.ComponentCount(); ++index)
+            {
+                ReplayEngine::Core::Component* component = object.ComponentAt(index);
+                if (component == nullptr) continue;
+                auto* script =
+                    dynamic_cast<ReplayEngine::Scripting::ScriptComponent*>(component);
+                if (script == nullptr) continue;
+                if (script->ResolveSchema()) ++count;
+            }
+            for (ReplayEngine::Core::GameObject* child : object.Children())
+            {
+                if (child != nullptr) Visit(*child, count);
+            }
+        }
+    };
+
+    for (ReplayEngine::Core::GameObject* root : object_scene.RootGameObjects())
+    {
+        if (root != nullptr) Walker::Visit(*root, resolved);
+    }
+    return resolved;
 }
 
 bool framework::build_and_reload_csharp_scripts()
@@ -953,16 +1221,46 @@ void framework::draw_project_panel()
         ImGui::SameLine();
         if (ImGui::Button("New C# Behaviour")) create_csharp_behaviour_asset();
 
-        if (ImGui::Button("Refresh C# Catalog")) refresh_csharp_scripts();
+        // 一括更新をいちばん目立つ位置へ置く。
+        // Catalog 更新と再コンパイルを分けて覚えるのは negligible な区別で、
+        // 実際には「とりあえず全部更新したい」がほとんど。
+        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.20f, 0.48f, 0.72f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.26f, 0.60f, 0.86f, 1.0f));
+        if (ImGui::Button(u8"C# をすべて更新", ImVec2(150.0f, 0.0f))) rebuild_all_csharp();
+        ImGui::PopStyleColor(2);
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip(u8"Catalog の更新と Assembly の再コンパイルを"
+                u8"まとめて行います。\n迷ったらこれを押してください。");
+        }
+
         ImGui::SameLine();
-        if (ImGui::Button("Build && Reload C#")) build_and_reload_csharp_scripts();
+        ImGui::Checkbox(u8"自動更新", &csharp_auto_reload);
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip(u8".cs を保存すると自動で再コンパイルします。\n"
+                u8"失敗しても直前に成功した Assembly を使い続けるので、\n"
+                u8"編集中の状態は壊れません。");
+        }
+
         ImGui::SameLine();
         if (ImGui::Button("Open Selected .cs")) open_selected_csharp_asset();
+
         if (csharp_scripts_dirty)
         {
             ImGui::SameLine();
             ImGui::TextColored(ImVec4(1.0f, 0.74f, 0.28f, 1.0f),
-                "変更検出済み");
+                csharp_auto_reload ? u8"変更検出 → まもなく更新"
+                                   : u8"変更検出済み（自動更新は無効）");
+        }
+
+        // 個別操作は畳んでおく。普段は使わない。
+        if (ImGui::TreeNode(u8"個別に実行"))
+        {
+            if (ImGui::Button("Refresh C# Catalog")) refresh_csharp_scripts();
+            ImGui::SameLine();
+            if (ImGui::Button("Build && Reload C#")) build_and_reload_csharp_scripts();
+            ImGui::TreePop();
         }
         ImGui::TextDisabled("%s",
             CSharp::CSharpProject::GameScriptsProjectPath(
@@ -1234,6 +1532,8 @@ void framework::draw_editor()
     if (show_project_panel) draw_project_panel();
     if (show_console_panel) draw_console_panel();
     if (show_workspace_panel) draw_workspace_panel();
+    draw_shader_catalog_panel();
+    draw_golden_panel();
     if (show_validation_panel)
         object_validation_panel.Draw(object_editor_context, &asset_database,
             &object_collision_world, object_render_items.Size());
@@ -1263,19 +1563,22 @@ void framework::draw_runtime_mode_banner()
         const ImVec4 color = object_scene_paused
             ? ImVec4(1.0f, 0.75f, 0.25f, 1.0f)
             : ImVec4(0.4f, 0.95f, 0.5f, 1.0f);
-        ImGui::TextColored(color, object_scene_paused ? "PAUSED" : "PLAY MODE");
+        ImGui::TextColored(color, object_scene_paused
+            ? u8"❚❚ 一時停止中" : u8"▶ 実行中");
         ImGui::TextDisabled(object_scene_paused
-            ? "実行シーンを一時停止中" : "実行シーンで動作中 / 入力有効");
+            ? u8"実行シーンを一時停止中"
+            : u8"実行シーンで動作中 / 入力有効 / C# の Update が回っています");
     }
     else if (object_runtime_active())
     {
-        ImGui::TextColored(ImVec4(0.4f, 0.85f, 1.0f, 1.0f), "RUNNING");
-        ImGui::TextDisabled("編集シーンをそのまま実行中 / 入力有効");
+        ImGui::TextColored(ImVec4(0.4f, 0.85f, 1.0f, 1.0f), u8"▶ 実行中（編集シーン）");
+        ImGui::TextDisabled(u8"編集シーンをそのまま実行中 / 入力有効");
     }
     else
     {
-        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "EDIT MODE");
-        ImGui::TextDisabled("編集中 / 物理と入力は停止 (F3 で切替、F5 で Play)");
+        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), u8"■ 編集中（停止）");
+        ImGui::TextDisabled(u8"物理・入力・C# スクリプトはすべて停止中");
+        ImGui::TextDisabled(u8"動かすには上の緑の「▶ 実行」ボタン、または F5");
     }
 
 #ifdef _DEBUG

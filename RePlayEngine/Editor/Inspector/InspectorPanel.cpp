@@ -11,6 +11,8 @@
 #include "../../Reflection/Registry/PropertyRegistry.h"
 #include "../../Scene/Runtime/Scene.h"
 #include "../../Scene/Serialization/PrefabSerializer.h"
+#include "../../Scripting/Core/ScriptComponent.h"
+#include "../../Scripting/Core/ScriptTypes.h"
 
 #include "imgui/imgui.h"
 #include "imgui/imgui_internal.h"
@@ -845,6 +847,63 @@ namespace ReplayEngine::Editor
 
             ImGui::Unindent();
             return;
+        }
+
+        // Script Component は状態と失敗理由をここへ出す。
+        //
+        // これが無いと「Play しても動かない」ときに手掛かりが一切無く、
+        // インスタンスが作られていないのか、コンパイルに失敗しているのか、
+        // Play セッションが始まっていないのかを切り分けられない。
+        // エンジンは status_ / last_error_ を持っているのに
+        // 画面へ出していなかった。
+        if (auto* script = dynamic_cast<Scripting::ScriptComponent*>(&component))
+        {
+            const Scripting::ScriptStatus status = script->Status();
+
+            ImVec4 status_color(0.72f, 0.72f, 0.72f, 1.0f);
+            const char* hint = "";
+            switch (status)
+            {
+            case Scripting::ScriptStatus::Running:
+                status_color = ImVec4(0.45f, 0.88f, 0.60f, 1.0f);
+                hint = "インスタンス生成済み。Update が回っています";
+                break;
+            case Scripting::ScriptStatus::Loaded:
+                status_color = ImVec4(0.55f, 0.78f, 0.98f, 1.0f);
+                hint = "型は解決済み。Play を押すとインスタンスが作られます";
+                break;
+            case Scripting::ScriptStatus::Unresolved:
+                status_color = ImVec4(1.0f, 0.78f, 0.35f, 1.0f);
+                hint = "型が未解決。Build && Reload C# と Refresh C# Catalog を試してください";
+                break;
+            case Scripting::ScriptStatus::Unassigned:
+                status_color = ImVec4(1.0f, 0.78f, 0.35f, 1.0f);
+                hint = "Script が未指定です";
+                break;
+            case Scripting::ScriptStatus::Error:
+                status_color = ImVec4(1.0f, 0.45f, 0.35f, 1.0f);
+                hint = "下の理由を確認してください";
+                break;
+            default:
+                break;
+            }
+
+            ImGui::TextDisabled("状態");
+            ImGui::SameLine();
+            ImGui::TextColored(status_color, "%s", Scripting::ToString(status));
+            if (hint[0] != '\0')
+            {
+                ImGui::TextDisabled("  %s", hint);
+            }
+            ImGui::TextDisabled("  インスタンス: %s",
+                script->HasInstance() ? "あり" : "なし");
+
+            if (!script->LastError().empty())
+            {
+                ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.35f, 1.0f), "  理由");
+                ImGui::TextWrapped("  %s", script->LastError().c_str());
+            }
+            ImGui::Separator();
         }
 
         // 静的な登録と、インスタンスごとの申告のどちらかがあれば編集欄を出す。

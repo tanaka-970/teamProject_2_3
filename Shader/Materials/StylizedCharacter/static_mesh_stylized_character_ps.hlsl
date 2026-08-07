@@ -1,3 +1,4 @@
+#pragma replay_guid "c0e5bd4adf981d714e4a9aac90d4a90d"
 // 静的メッシュへスタイライズドキャラクター表現を適用する。
 #include "static_mesh.hlsli"
 #include "stylized_character_common.hlsli"
