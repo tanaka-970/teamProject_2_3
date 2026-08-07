@@ -88,6 +88,7 @@ extern ImWchar glyphRangesJapanese[];
 #include "../../RePlayEngine/Editor/ShaderEditing/ShaderComposerEditor.h"
 #include "../../RePlayEngine/Editor/Viewport/EditorViewportCamera.h"
 #include "../../RePlayEngine/Editor/Viewport/EditorCameraController.h"
+#include "../../RePlayEngine/Editor/Viewport/EditorCameraPreset.h"
 #include "../../RePlayEngine/Editor/Viewport/EditorCameraStateStore.h"
 #include "../game/camera_basis_provider.h"
 
@@ -552,6 +553,16 @@ public:
     //   「Edit Mode なら編集カメラ / Play・実行中なら Runtime Camera」と切り替える。
     ReplayEngine::Editor::EditorViewportCamera   editor_camera;
     ReplayEngine::Editor::EditorCameraController editor_camera_controller;
+
+    // 操作方法はユーザーごとの preset。Scene には保存しない。
+    // Shared preset は Editor/CameraPresets、Personal preset は Saved/Editor/CameraPresets。
+    std::vector<ReplayEngine::Editor::EditorCameraPreset> editor_camera_presets;
+    int              active_editor_camera_preset_index{ -1 };
+    bool             editor_camera_presets_loaded{ false };
+    bool             show_camera_preset_manager{ false };
+    bool             gizmo_move_shortcut_was_down{ false };
+    bool             gizmo_rotate_shortcut_was_down{ false };
+    bool             gizmo_scale_shortcut_was_down{ false };
 
     // 編集カメラがマウス／キーを消費したフレーム。
     // Gizmo と選択処理を同時に走らせないためのフラグ。
@@ -1100,6 +1111,16 @@ private:
     void focus_editor_camera_on_selection();
 
     void draw_editor_camera_settings();
+    void draw_editor_camera_preset_manager();
+    void draw_editor_camera_top_menu();
+
+    // Camera preset lifecycle。active 選択だけは local Saved へ保存する。
+    void ensure_editor_camera_presets_loaded();
+    ReplayEngine::Editor::EditorCameraPreset& active_editor_camera_preset();
+    const ReplayEngine::Editor::EditorCameraPreset& active_editor_camera_preset() const;
+    bool switch_editor_camera_preset(const std::string& preset_id);
+    bool save_active_editor_camera_preset();
+    bool make_active_editor_camera_preset_personal_copy();
 
     // 編集カメラ状態の保存・復元。Scene ファイルには一切書き込まない。
     void load_editor_camera_state();

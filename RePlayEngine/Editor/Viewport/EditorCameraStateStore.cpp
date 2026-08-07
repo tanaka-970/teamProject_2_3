@@ -24,6 +24,7 @@ namespace ReplayEngine::Editor
         state.position = camera.Position();
         state.yaw = camera.Yaw();
         state.pitch = camera.Pitch();
+        state.roll = camera.Roll();
         state.orbit_pivot = camera.OrbitPivot();
         state.orbit_distance = camera.OrbitDistance();
         state.move_speed = camera.move_speed;
@@ -34,7 +35,7 @@ namespace ReplayEngine::Editor
     void EditorCameraStateStore::Apply(const State& state, EditorViewportCamera& camera)
     {
         camera.SetPosition(state.position);
-        camera.SetYawPitch(state.yaw, state.pitch);
+        camera.SetYawPitchRoll(state.yaw, state.pitch, state.roll);
         camera.SetOrbitPivot(state.orbit_pivot);
         camera.move_speed = state.move_speed;
         camera.field_of_view_degrees = state.field_of_view_degrees;
@@ -95,7 +96,7 @@ namespace ReplayEngine::Editor
         stream << magic_token << ' ' << current_version << '\n';
         stream << "POSITION " << state.position.x << ' ' << state.position.y << ' '
             << state.position.z << '\n';
-        stream << "ROTATION " << state.yaw << ' ' << state.pitch << '\n';
+        stream << "ROTATION " << state.yaw << ' ' << state.pitch << ' ' << state.roll << '\n';
         stream << "PIVOT " << state.orbit_pivot.x << ' ' << state.orbit_pivot.y << ' '
             << state.orbit_pivot.z << '\n';
         stream << "DISTANCE " << state.orbit_distance << '\n';
@@ -155,6 +156,8 @@ namespace ReplayEngine::Editor
             else if (keyword == "ROTATION")
             {
                 stream >> state.yaw >> state.pitch;
+                // v1 は yaw/pitch の 2 値。v2 から roll を追加。
+                if (version >= 2) stream >> state.roll;
             }
             else if (keyword == "PIVOT")
             {

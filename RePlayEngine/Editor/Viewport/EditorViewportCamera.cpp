@@ -51,22 +51,37 @@ namespace ReplayEngine::Editor
             sin_pitch,
             cos_pitch * cos_yaw };
 
-        // Right はワールドの上方向と Forward の外積。
-        // pitch を ±89 度で止めているので、両者が平行になって縮退することはない。
-        right_ = XMFLOAT3{ cos_yaw, 0.0f, -sin_yaw };
+        // roll=0 の基底を作る。pitch を ±89 度で止めているので縮退しない。
+        const XMFLOAT3 base_right{ cos_yaw, 0.0f, -sin_yaw };
+        const XMFLOAT3 base_up{
+            forward_.y * base_right.z - forward_.z * base_right.y,
+            forward_.z * base_right.x - forward_.x * base_right.z,
+            forward_.x * base_right.y - forward_.y * base_right.x };
 
-        // Up = Forward × Right（左手系）。
+        // Forward 軸回りに roll。Runtime Camera へは一切同期しない Editor 専用姿勢。
+        const float cos_roll = std::cos(roll_);
+        const float sin_roll = std::sin(roll_);
+        right_ = XMFLOAT3{
+            base_right.x * cos_roll + base_up.x * sin_roll,
+            base_right.y * cos_roll + base_up.y * sin_roll,
+            base_right.z * cos_roll + base_up.z * sin_roll };
         up_ = XMFLOAT3{
-            forward_.y * right_.z - forward_.z * right_.y,
-            forward_.z * right_.x - forward_.x * right_.z,
-            forward_.x * right_.y - forward_.y * right_.x };
+            base_up.x * cos_roll - base_right.x * sin_roll,
+            base_up.y * cos_roll - base_right.y * sin_roll,
+            base_up.z * cos_roll - base_right.z * sin_roll };
     }
 
     void EditorViewportCamera::SetYawPitch(float yaw, float pitch) noexcept
     {
+        SetYawPitchRoll(yaw, pitch, roll_);
+    }
+
+    void EditorViewportCamera::SetYawPitchRoll(float yaw, float pitch, float roll) noexcept
+    {
         yaw_ = WrapAngle(yaw);
         // 上下反転を防ぐ。真上・真下を越えさせない。
         pitch_ = std::clamp(pitch, -pitch_limit, pitch_limit);
+        roll_ = WrapAngle(roll);
         RecalculateBasis();
     }
 
@@ -89,7 +104,7 @@ namespace ReplayEngine::Editor
     }
 
     void EditorViewportCamera::Fly(const MoveAxes& axes, float speed_multiplier,
-        float delta_time) noexcept
+        float delta_time, bool world_vertical_move) noexcept
     {
         if (delta_time <= 0.0f) return;
 
@@ -99,7 +114,9 @@ namespace ReplayEngine::Editor
         XMFLOAT3 movement{ 0.0f, 0.0f, 0.0f };
         movement = Add(movement, Scale(forward_, axes.forward * speed));
         movement = Add(movement, Scale(right_, axes.right * speed));
-        movement = Add(movement, Scale(up_, axes.up * speed));
+        const XMFLOAT3 vertical = world_vertical_move
+            ? XMFLOAT3{ 0.0f, 1.0f, 0.0f } : up_;
+        movement = Add(movement, Scale(vertical, axes.up * speed));
 
         position_ = Add(position_, movement);
 
@@ -116,6 +133,14 @@ namespace ReplayEngine::Editor
             pitch_ - mouse_delta_y * mouse_sensitivity * radians_per_pixel);
 
         // 視点だけ回したときは Pivot も前方へ付いていく。
+        SetOrbitPivotToViewCenter();
+    }
+
+    void EditorViewportCamera::Rotate(float yaw_delta_radians, float pitch_delta_radians,
+        float roll_delta_radians) noexcept
+    {
+        SetYawPitchRoll(yaw_ + yaw_delta_radians, pitch_ + pitch_delta_radians,
+            roll_ + roll_delta_radians);
         SetOrbitPivotToViewCenter();
     }
 
@@ -162,6 +187,19 @@ namespace ReplayEngine::Editor
         orbit_distance_ = std::clamp(orbit_distance_ * factor,
             minimum_orbit_distance, maximum_orbit_distance);
 
+        position_ = XMFLOAT3{
+            orbit_pivot_.x - forward_.x * orbit_distance_,
+            orbit_pivot_.y - forward_.y * orbit_distance_,
+            orbit_pivot_.z - forward_.z * orbit_distance_ };
+    }
+
+    void EditorViewportCamera::Dolly(float mouse_delta) noexcept
+    {
+        if (mouse_delta == 0.0f) return;
+        // drag 量を指数倍率へ変換。距離に依存せず同じ手応えになる。
+        const float factor = std::exp(-mouse_delta * zoom_sensitivity * 0.01f);
+        orbit_distance_ = std::clamp(orbit_distance_ * factor,
+            minimum_orbit_distance, maximum_orbit_distance);
         position_ = XMFLOAT3{
             orbit_pivot_.x - forward_.x * orbit_distance_,
             orbit_pivot_.y - forward_.y * orbit_distance_,
@@ -234,8 +272,8 @@ namespace ReplayEngine::Editor
         {
             const float horizontal = std::sqrt(
                 to_target.x * to_target.x + to_target.z * to_target.z);
-            SetYawPitch(std::atan2(to_target.x, to_target.z),
-                std::atan2(to_target.y, horizontal));
+            SetYawPitchRoll(std::atan2(to_target.x, to_target.z),
+                std::atan2(to_target.y, horizontal), 0.0f);
         }
         else
         {

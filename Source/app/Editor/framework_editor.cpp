@@ -267,59 +267,10 @@ void framework::draw_editor_main_menu()
         if (ImGui::MenuItem(u8"プロジェクトを開く")) show_project_panel = true;
         ImGui::EndMenu();
     }
-    // よく触るデバッグカメラ速度は上部メニューから直接変更できる。
+    // 操作方法・速度・user preset は上部の Camera メニューへ集約する。
     if (ImGui::BeginMenu(u8"カメラ"))
     {
-        ImGui::TextDisabled(u8"デバッグカメラ移動速度");
-        ImGui::Text(u8"現在: %.3f", editor_camera.move_speed);
-        ImGui::Separator();
-
-        const float presets[] =
-        {
-            0.5f, 1.0f, 2.5f, 5.0f, 10.0f, 25.0f,
-            50.0f, 100.0f, 250.0f, 500.0f, 1000.0f
-        };
-        for (const float preset : presets)
-        {
-            char label[32]{};
-            if (preset < 10.0f) std::snprintf(label, sizeof(label), "%.1f", preset);
-            else std::snprintf(label, sizeof(label), "%.0f", preset);
-
-            const bool selected = std::fabs(editor_camera.move_speed - preset) < 0.0001f;
-            if (ImGui::MenuItem(label, nullptr, selected))
-            {
-                editor_camera.move_speed = preset;
-                save_editor_camera_move_speed_preference();
-            }
-        }
-
-        ImGui::Separator();
-        ImGui::TextDisabled(u8"自由入力（上限なし）");
-        ImGui::SetNextItemWidth(180.0f);
-        float edited_speed = editor_camera.move_speed;
-        if (ImGui::DragFloat(u8"##DebugCameraMoveSpeed", &edited_speed,
-            0.25f, 0.0f, 0.0f, "%.3f"))
-        {
-            if (edited_speed > 0.0f && std::isfinite(edited_speed))
-            {
-                editor_camera.move_speed = edited_speed;
-                save_editor_camera_move_speed_preference();
-            }
-        }
-
-        ImGui::Separator();
-        if (ImGui::MenuItem(u8"現在の速度を保存"))
-            save_editor_camera_move_speed_preference();
-        if (ImGui::MenuItem(u8"保存した速度を読み込む"))
-            load_editor_camera_move_speed_preference();
-        if (ImGui::MenuItem(u8"既定値 5.0 に戻す"))
-        {
-            editor_camera.move_speed = 5.0f;
-            save_editor_camera_move_speed_preference();
-        }
-        ImGui::Separator();
-        ImGui::TextDisabled(u8"変更は自動保存されます");
-        ImGui::TextDisabled(u8"RMB + Wheel でも速度変更できます");
+        draw_editor_camera_top_menu();
         ImGui::EndMenu();
     }
 
@@ -335,6 +286,7 @@ void framework::draw_editor_main_menu()
         ImGui::Separator();
         ImGui::MenuItem(u8"シーンメモ", nullptr, &show_scene_notes_panel);
         ImGui::MenuItem("Scene Flow", nullptr, &show_scene_flow_panel);
+        ImGui::MenuItem(u8"カメラ操作プリセット", nullptr, &show_camera_preset_manager);
         ImGui::MenuItem("Collision Diagnostics", nullptr, &show_collision_diagnostics);
         ImGui::Separator();
         // シェーダ資産の一覧。
@@ -607,13 +559,13 @@ void framework::draw_editor_toolbar()
     //   実行 / 停止      … 今 Play 中かどうかが一目で要る
     //
     // 未保存かどうかはウィンドウタイトルとシーン名の * で分かる。
-    if (ImGui::Button("Move [Shift+W]"))
+    if (ImGui::Button("Move"))
         transform_gizmo.SetOperation(ReplayEngine::Editor::GizmoOperation::Translate);
     ImGui::SameLine();
-    if (ImGui::Button("Rotate [Shift+E]"))
+    if (ImGui::Button("Rotate"))
         transform_gizmo.SetOperation(ReplayEngine::Editor::GizmoOperation::Rotate);
     ImGui::SameLine();
-    if (ImGui::Button("Scale [Shift+R]"))
+    if (ImGui::Button("Scale"))
         transform_gizmo.SetOperation(ReplayEngine::Editor::GizmoOperation::Scale);
     ImGui::SameLine();
     bool snap = transform_gizmo.SnapEnabled();
@@ -733,7 +685,9 @@ void framework::draw_scene_view_panel()
             gizmo_local_space ? "Local" : "World",
             transform_gizmo.SnapEnabled() ? "Snap" : "Free",
             object_scene_play_mode ? (object_scene_paused ? "Paused" : "Playing") : "Editing");
-        ImGui::TextDisabled("WASD: 移動  Q/E: 上下  RMB: 視点  Shift+W/E/R: 移動/回転/拡縮");
+        ensure_editor_camera_presets_loaded();
+        ImGui::TextDisabled(u8"Camera preset: %s | カメラ > プリセット管理 で操作を自由設定",
+            active_editor_camera_preset().name.c_str());
     }
     else
     {
@@ -1617,6 +1571,7 @@ void framework::draw_editor()
     if (show_workspace_panel) draw_workspace_panel();
     draw_scene_notes_panel();
     draw_scene_flow_panel();
+    draw_editor_camera_preset_manager();
     draw_shader_catalog_panel();
     {
         std::error_code composer_root_error;

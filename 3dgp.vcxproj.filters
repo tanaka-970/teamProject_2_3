@@ -489,6 +489,9 @@
     <ClCompile Include="Source\app\Editor\framework_editor_camera.cpp">
       <Filter>Source\App\Editor</Filter>
     </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_editor_camera_presets.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
     <ClCompile Include="Source\app\Editor\framework_gizmo.cpp">
       <Filter>Source\App\Editor</Filter>
     </ClCompile>
@@ -706,6 +709,9 @@
       <Filter>RePlayEngine\Editor\Validation</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorCameraController.cpp">
+      <Filter>RePlayEngine\Editor\Viewport</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\Viewport\EditorCameraPreset.cpp">
       <Filter>RePlayEngine\Editor\Viewport</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorCameraStateStore.cpp">
@@ -1293,6 +1299,9 @@
       <Filter>RePlayEngine\Editor\Validation</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Editor\Viewport\EditorCameraController.h">
+      <Filter>RePlayEngine\Editor\Viewport</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\Viewport\EditorCameraPreset.h">
       <Filter>RePlayEngine\Editor\Viewport</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Editor\Viewport\EditorCameraStateStore.h">

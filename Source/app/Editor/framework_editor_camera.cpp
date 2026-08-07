@@ -1,4 +1,4 @@
-﻿// Scene View の編集カメラと framework の接続部。
+// Scene View の編集カメラと framework の接続部。
 //
 // 【この 1 ファイルにまとめている理由】
 //   ImGui / Win32 から入力を読むのはここだけ。
@@ -105,6 +105,9 @@ void framework::update_editor_camera(float elapsed_time)
         return;
     }
 
+    ensure_editor_camera_presets_loaded();
+    auto& camera_preset = active_editor_camera_preset();
+
     const ImGuiIO& io = ImGui::GetIO();
 
     ReplayEngine::Editor::EditorCameraInput input;
@@ -156,14 +159,14 @@ void framework::update_editor_camera(float elapsed_time)
     input.wheel = io.MouseWheel;
 
     // ---- キー --------------------------------------------------------------
-    //
-    // GetAsyncKeyState を使うのは、この ImGui のバージョンに
-    // ImGuiKey ベースの安定した問い合わせが無いため。
-    // ウィンドウが前面にないフレームでは window_focused が false になり、
-    // 下の値は使われないので、Alt+Tab 後に押しっぱなしにはならない。
+    // Preset 側は Win32 を知らない。ここで physical key を enum へ変換する。
     const auto key_down = [](int virtual_key)
     {
         return (::GetAsyncKeyState(virtual_key) & 0x8000) != 0;
+    };
+    const auto set_key = [&](ReplayEngine::Editor::EditorCameraKey key, int virtual_key)
+    {
+        input.keys[static_cast<std::size_t>(key)] = key_down(virtual_key);
     };
 
     input.alt_down = key_down(VK_MENU);
@@ -171,34 +174,77 @@ void framework::update_editor_camera(float elapsed_time)
     input.control_down = key_down(VK_CONTROL);
     input.escape_pressed = key_down(VK_ESCAPE);
 
-    input.key_forward = key_down('W');
-    input.key_back = key_down('S');
-    input.key_left = key_down('A');
-    input.key_right = key_down('D');
-    input.key_up = key_down('E');
-    input.key_down = key_down('Q');
-    input.key_focus = key_down('F');
-
-    // 選択オブジェクトがある Shift+W / Shift+E / Shift+R は Maya 風 Tool 切替。
-    // Shift+W/E が camera fast-move と二重発火しないよう該当軸だけ抑止する。
-    const bool selected_game_object =
-        selected_editor_object == editor_selection::game_object &&
-        object_editor_context.Selection().Primary().Valid();
-    if (input.shift_down && selected_game_object && !input.control_down && !input.alt_down)
-    {
-        if (key_down('W')) input.key_forward = false;
-        if (key_down('E')) input.key_up = false;
-    }
+    using CameraKey = ReplayEngine::Editor::EditorCameraKey;
+    set_key(CameraKey::W, 'W'); set_key(CameraKey::A, 'A');
+    set_key(CameraKey::S, 'S'); set_key(CameraKey::D, 'D');
+    set_key(CameraKey::Q, 'Q'); set_key(CameraKey::E, 'E');
+    set_key(CameraKey::R, 'R'); set_key(CameraKey::F, 'F');
+    set_key(CameraKey::G, 'G'); set_key(CameraKey::C, 'C');
+    set_key(CameraKey::V, 'V'); set_key(CameraKey::X, 'X');
+    set_key(CameraKey::Z, 'Z'); set_key(CameraKey::Space, VK_SPACE);
+    set_key(CameraKey::Left, VK_LEFT); set_key(CameraKey::Right, VK_RIGHT);
+    set_key(CameraKey::Up, VK_UP); set_key(CameraKey::Down, VK_DOWN);
+    set_key(CameraKey::Home, VK_HOME); set_key(CameraKey::End, VK_END);
+    set_key(CameraKey::PageUp, VK_PRIOR); set_key(CameraKey::PageDown, VK_NEXT);
+    set_key(CameraKey::Num0, VK_NUMPAD0); set_key(CameraKey::Num1, VK_NUMPAD1);
+    set_key(CameraKey::Num2, VK_NUMPAD2); set_key(CameraKey::Num3, VK_NUMPAD3);
+    set_key(CameraKey::Num4, VK_NUMPAD4); set_key(CameraKey::Num5, VK_NUMPAD5);
+    set_key(CameraKey::Num6, VK_NUMPAD6); set_key(CameraKey::Num7, VK_NUMPAD7);
+    set_key(CameraKey::Num8, VK_NUMPAD8); set_key(CameraKey::Num9, VK_NUMPAD9);
 
     input.window_focused = ::GetForegroundWindow() == hwnd;
     input.delta_time = elapsed_time;
 
-    const float move_speed_before_input = editor_camera.move_speed;
-    editor_camera_consumed_input = editor_camera_controller.Update(editor_camera, input);
+    // Gizmo shortcut も preset の一部。Mayaなら W/E/R、Hybridなら Shift+W/E/R など。
+    const bool selected_game_object =
+        selected_editor_object == editor_selection::game_object &&
+        object_editor_context.Selection().Primary().Valid();
+    // RMB+WASD で fly している最中に Unity の W/E/R tool shortcut が発火しないよう、
+    // mouse navigation 中は Gizmo shortcut を開始しない。
+    const bool no_mouse_navigation = !input.left_mouse_down &&
+        !input.middle_mouse_down && !input.right_mouse_down;
+    const bool move_shortcut_down = selected_game_object && no_mouse_navigation &&
+        ReplayEngine::Editor::EditorCameraController::KeyChordHeld(
+            camera_preset.gizmo_move, input, false);
+    const bool rotate_shortcut_down = selected_game_object && no_mouse_navigation &&
+        ReplayEngine::Editor::EditorCameraController::KeyChordHeld(
+            camera_preset.gizmo_rotate, input, false);
+    const bool scale_shortcut_down = selected_game_object && no_mouse_navigation &&
+        ReplayEngine::Editor::EditorCameraController::KeyChordHeld(
+            camera_preset.gizmo_scale, input, false);
 
-    // RMB + Wheel で速度を変えた場合も上部メニューと同じ保存先へ即時保存する。
+    if (move_shortcut_down && !gizmo_move_shortcut_was_down)
+        transform_gizmo.SetOperation(ReplayEngine::Editor::GizmoOperation::Translate);
+    if (rotate_shortcut_down && !gizmo_rotate_shortcut_was_down)
+        transform_gizmo.SetOperation(ReplayEngine::Editor::GizmoOperation::Rotate);
+    if (scale_shortcut_down && !gizmo_scale_shortcut_was_down)
+        transform_gizmo.SetOperation(ReplayEngine::Editor::GizmoOperation::Scale);
+    gizmo_move_shortcut_was_down = move_shortcut_down;
+    gizmo_rotate_shortcut_was_down = rotate_shortcut_down;
+    gizmo_scale_shortcut_was_down = scale_shortcut_down;
+
+    // Tool shortcut に使った key は camera movement へ二重投入しない。
+    const auto suppress_chord_key = [&](const ReplayEngine::Editor::EditorCameraKeyChord& chord, bool held)
+    {
+        if (!held || chord.key == CameraKey::None) return;
+        input.keys[static_cast<std::size_t>(chord.key)] = false;
+    };
+    suppress_chord_key(camera_preset.gizmo_move, move_shortcut_down);
+    suppress_chord_key(camera_preset.gizmo_rotate, rotate_shortcut_down);
+    suppress_chord_key(camera_preset.gizmo_scale, scale_shortcut_down);
+
+    const float move_speed_before_input = editor_camera.move_speed;
+    editor_camera_consumed_input = editor_camera_controller.Update(
+        editor_camera, input, camera_preset);
+
+    // RMB+Wheel など profile 自身が値を変更した場合、その user preset へ保存する。
     if (editor_camera.move_speed != move_speed_before_input)
-        save_editor_camera_move_speed_preference();
+    {
+        const float changed_speed = editor_camera.move_speed;
+        if (!camera_preset.Editable()) make_active_editor_camera_preset_personal_copy();
+        editor_camera.move_speed = changed_speed;
+        save_active_editor_camera_preset();
+    }
 
     // ---- マウスロック -------------------------------------------------------
     //
@@ -250,44 +296,51 @@ void framework::draw_editor_camera_settings()
 {
 #ifdef USE_IMGUI
     if (!ImGui::CollapsingHeader("Scene Camera")) return;
+    ensure_editor_camera_presets_loaded();
 
     ImGui::Indent();
-
-    // v_min == v_max == 0 で DragFloat のクランプを無効化。上限なし。
-    const float speed_before_edit = editor_camera.move_speed;
-    ImGui::DragFloat("移動速度", &editor_camera.move_speed, 0.1f, 0.0f, 0.0f, "%.3f");
-    if (!(editor_camera.move_speed > 0.0f) || !std::isfinite(editor_camera.move_speed))
-        editor_camera.move_speed = speed_before_edit > 0.0f ? speed_before_edit : 5.0f;
-    if (editor_camera.move_speed != speed_before_edit)
-        save_editor_camera_move_speed_preference();
-
-    ImGui::DragFloat("高速倍率", &editor_camera.fast_multiplier, 0.1f, 1.0f, 50.0f, "%.2f");
-    ImGui::DragFloat("低速倍率", &editor_camera.slow_multiplier, 0.01f, 0.01f, 1.0f, "%.2f");
-    ImGui::DragFloat("マウス感度", &editor_camera.mouse_sensitivity, 0.01f, 0.01f, 2.0f, "%.2f");
-    ImGui::DragFloat("平行移動感度", &editor_camera.pan_sensitivity, 0.01f, 0.01f, 10.0f, "%.2f");
-    ImGui::DragFloat("ズーム感度", &editor_camera.zoom_sensitivity, 0.01f, 0.01f, 10.0f, "%.2f");
-    ImGui::DragFloat("視野角", &editor_camera.field_of_view_degrees, 0.5f, 10.0f, 120.0f, "%.1f");
-    ImGui::DragFloat("Near Clip", &editor_camera.near_clip, 0.01f, 0.001f, 10.0f, "%.3f");
-    ImGui::DragFloat("Far Clip", &editor_camera.far_clip, 10.0f, 10.0f, 100000.0f, "%.0f");
-
-    ImGui::Spacing();
-    if (ImGui::Button("既定値へ戻す")) editor_camera.ResetSettingsToDefault();
+    auto& preset = active_editor_camera_preset();
+    ImGui::Text(u8"操作プリセット: %s", preset.name.c_str());
     ImGui::SameLine();
-    if (ImGui::Button("選択対象へフォーカス")) focus_editor_camera_on_selection();
+    ImGui::TextDisabled(preset.Editable() ? "[Personal]" : "[Shared]");
+    if (ImGui::Button(u8"プリセット管理を開く")) show_camera_preset_manager = true;
+    if (!preset.Editable())
+    {
+        ImGui::SameLine();
+        if (ImGui::Button(u8"自分用に複製")) make_active_editor_camera_preset_personal_copy();
+    }
 
-    // 現在の姿勢は読み取り専用。生の View 行列は出さない。
+    bool changed = false;
+    if (active_editor_camera_preset().Editable())
+    {
+        const float speed_before = editor_camera.move_speed;
+        changed |= ImGui::DragFloat(u8"移動速度", &editor_camera.move_speed, 0.1f, 0.0f, 0.0f, "%.3f");
+        if (!(editor_camera.move_speed > 0.0f) || !std::isfinite(editor_camera.move_speed))
+            editor_camera.move_speed = speed_before > 0.0f ? speed_before : 5.0f;
+        changed |= ImGui::DragFloat(u8"高速倍率", &editor_camera.fast_multiplier, 0.1f, 0.01f, 100.0f, "%.2f");
+        changed |= ImGui::DragFloat(u8"低速倍率", &editor_camera.slow_multiplier, 0.01f, 0.001f, 1.0f, "%.3f");
+        changed |= ImGui::DragFloat(u8"回転感度", &editor_camera.mouse_sensitivity, 0.01f, 0.001f, 5.0f, "%.3f");
+        changed |= ImGui::DragFloat(u8"平行移動感度", &editor_camera.pan_sensitivity, 0.01f, 0.001f, 20.0f, "%.3f");
+        changed |= ImGui::DragFloat(u8"Zoom/Dolly感度", &editor_camera.zoom_sensitivity, 0.01f, 0.001f, 20.0f, "%.3f");
+        changed |= ImGui::DragFloat(u8"視野角", &editor_camera.field_of_view_degrees, 0.5f, 5.0f, 170.0f, "%.1f");
+        if (changed) save_active_editor_camera_preset();
+    }
+    else
+    {
+        ImGui::TextDisabled(u8"Shared preset の値は直接変更しません。複製すると編集できます。");
+    }
+
     ImGui::Spacing();
-    const auto& position = editor_camera.Position();
-    ImGui::TextDisabled("位置   %.2f  %.2f  %.2f", position.x, position.y, position.z);
-    ImGui::TextDisabled("回転   yaw %.1f°  pitch %.1f°",
-        DirectX::XMConvertToDegrees(editor_camera.Yaw()),
-        DirectX::XMConvertToDegrees(editor_camera.Pitch()));
-    ImGui::TextDisabled("Orbit 距離  %.2f", editor_camera.OrbitDistance());
+    if (ImGui::Button(u8"選択対象へフォーカス")) focus_editor_camera_on_selection();
 
-    ImGui::TextDisabled("WASD: 前後左右 / Q,E: 上下 / 右ドラッグ: 視点変更");
-    ImGui::TextDisabled("Shift: 高速 / Ctrl: 低速 / 中ドラッグ: 平行移動");
-    ImGui::TextDisabled("Alt+左ドラッグ: 回り込み / ホイール: ズーム / F: フォーカス");
-    ImGui::TextDisabled("選択中 Shift+W/E/R: Move / Rotate / Scale");
+    const auto& position = editor_camera.Position();
+    ImGui::TextDisabled(u8"位置   %.2f  %.2f  %.2f", position.x, position.y, position.z);
+    ImGui::TextDisabled(u8"回転   yaw %.1f°  pitch %.1f°  roll %.1f°",
+        DirectX::XMConvertToDegrees(editor_camera.Yaw()),
+        DirectX::XMConvertToDegrees(editor_camera.Pitch()),
+        DirectX::XMConvertToDegrees(editor_camera.Roll()));
+    ImGui::TextDisabled(u8"Orbit 距離  %.2f", editor_camera.OrbitDistance());
+    ImGui::TextDisabled(u8"操作キーは Camera preset ごとに自由設定できます");
 
     ImGui::Unindent();
 #endif
@@ -335,8 +388,9 @@ void framework::load_editor_camera_state()
         editor_camera.ResetToDefault();
     }
 
-    // 速度は Scene ごとの値ではなく Editor 全体の保存値を優先する。
-    load_editor_camera_move_speed_preference();
+    // 視点（position/yaw/pitch/roll）は Scene ごと。操作感は user preset が正。
+    ensure_editor_camera_presets_loaded();
+    active_editor_camera_preset().ApplyCameraSettings(editor_camera);
 }
 
 void framework::save_editor_camera_state()

@@ -34,7 +34,7 @@ namespace ReplayEngine::Editor
         EditorCameraStateStore() = delete;
 
         static constexpr const char* file_extension = ".replaycam";
-        static constexpr int current_version = 1;
+        static constexpr int current_version = 2;
 
         // 保存されるのは次だけ。設定値のうち移動速度と視野角も含める。
         struct State
@@ -42,6 +42,7 @@ namespace ReplayEngine::Editor
             DirectX::XMFLOAT3 position{ 0.0f, 3.0f, -8.0f };
             float yaw = 0.0f;
             float pitch = 0.0f;
+            float roll = 0.0f;
             DirectX::XMFLOAT3 orbit_pivot{ 0.0f, 1.0f, 0.0f };
             float orbit_distance = 8.0f;
             float move_speed = 5.0f;
