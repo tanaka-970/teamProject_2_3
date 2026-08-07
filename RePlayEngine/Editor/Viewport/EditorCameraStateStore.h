@@ -63,5 +63,13 @@ namespace ReplayEngine::Editor
         // 読めなければ false。state は既定値のまま。
         static bool Load(State& state, const std::filesystem::path& path,
             std::string& error);
+
+        // Editor 全体で共有するデバッグカメラ移動速度。
+        // Scene ごとの視点とは別ファイルに保存し、Scene 切替後も同じ速度を使う。
+        // UI 上の上限は設けない。0 以下 / NaN / Inf だけを拒否する。
+        // 保存先: Saved/Editor/CameraSettings.replaycamsettings
+        static std::filesystem::path MoveSpeedPreferencePath();
+        static bool SaveMoveSpeedPreference(float move_speed, std::string& error);
+        static bool LoadMoveSpeedPreference(float& move_speed, std::string& error);
     };
 }

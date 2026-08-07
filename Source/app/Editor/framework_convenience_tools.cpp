@@ -26,22 +26,6 @@ namespace
         return names[(std::max)(0, (std::min)(category, 5))];
     }
 
-#ifdef USE_IMGUI
-    ImU32 NoteCategoryColor(int category, bool completed) noexcept
-    {
-        if (completed) return IM_COL32(150, 150, 150, 220);
-        switch (category)
-        {
-        case 1: return IM_COL32(235, 88, 78, 245);      // BUG
-        case 2: return IM_COL32(225, 130, 230, 245);    // ART
-        case 3: return IM_COL32(80, 190, 245, 245);     // PROGRAM
-        case 4: return IM_COL32(85, 210, 130, 245);     // LEVEL
-        case 5: return IM_COL32(245, 195, 70, 245);     // IDEA
-        default: return IM_COL32(245, 165, 60, 245);    // TODO
-        }
-    }
-#endif
-
     template<std::size_t N>
     void CopyText(std::array<char, N>& buffer, const std::string& text)
     {
@@ -181,19 +165,21 @@ void framework::draw_scene_note_overlay()
             if (anchor.x < scene_view_min_x || anchor.x > scene_view_max_x ||
                 anchor.y < scene_view_min_y || anchor.y > scene_view_max_y) continue;
 
-            std::string label = std::string(NoteCategoryName(note->category)) + "  " + note->text;
-            if (note->completed) label = "[DONE] " + label;
-            const ImVec2 text_size = ImGui::CalcTextSize(label.c_str());
-            const ImVec2 minimum{ anchor.x + 9.0f, anchor.y - text_size.y * 0.5f - 6.0f };
-            const ImVec2 maximum{ minimum.x + text_size.x + 14.0f,
-                minimum.y + text_size.y + 12.0f };
-            const ImU32 accent = NoteCategoryColor(note->category, note->completed);
-            draw->AddLine(anchor, { minimum.x, (minimum.y + maximum.y) * 0.5f }, accent, 1.5f);
-            draw->AddCircleFilled(anchor, 4.0f, accent);
-            draw->AddRectFilled(minimum, maximum, IM_COL32(24, 26, 30, 225), 4.0f);
-            draw->AddRect(minimum, maximum, accent, 4.0f, 0, note->priority >= 2 ? 2.0f : 1.0f);
-            draw->AddText({ minimum.x + 7.0f, minimum.y + 6.0f },
-                IM_COL32(245, 245, 245, note->completed ? 170 : 255), label.c_str());
+            // Unreal の World Note / Text Render に近い感覚にする。
+            // カテゴリ名・吹き出し・枠を勝手に足さず、ユーザーが書いた文字だけを描く。
+            if (note->text.empty()) continue;
+
+            ImVec4 text_color{ note->color.x, note->color.y, note->color.z, note->color.w };
+            text_color.x = std::clamp(text_color.x, 0.0f, 1.0f);
+            text_color.y = std::clamp(text_color.y, 0.0f, 1.0f);
+            text_color.z = std::clamp(text_color.z, 0.0f, 1.0f);
+            text_color.w = std::clamp(text_color.w, 0.0f, 1.0f);
+            if (note->completed) text_color.w *= 0.45f;
+
+            const float font_size = ImGui::GetFontSize() *
+                std::clamp(note->text_scale, 0.35f, 4.0f);
+            draw->AddText(ImGui::GetFont(), font_size, anchor,
+                ImGui::ColorConvertFloat4ToU32(text_color), note->text.c_str());
         }
     }
     draw->PopClipRect();
@@ -377,16 +363,36 @@ void framework::draw_play_from_here_context_menu()
 #ifdef USE_IMGUI
     if (object_scene_play_mode || active_editor_view != editor_view::scene) return;
 
-    // Popup を開いたあとマウスはメニュー側へ移動するため、
-    // 「右クリックした瞬間」のワールド位置を先に保存しておく。
+    // RMB は Unreal 風のカメラ Look にも使う。
+    // そのため「短い右クリック」は Context Menu、「右ドラッグ」はカメラ操作と
+    // 明確に分ける。BeginPopupContextItem の既定挙動だとドラッグ後にも
+    // メニューが出やすく、Fly 操作の手触りを壊していた。
+    const ImVec2 mouse = ImGui::GetMousePos();
     if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
     {
+        scene_context_right_click_tracking = true;
+        scene_context_right_click_dragged = false;
+        scene_context_right_click_start_x = mouse.x;
+        scene_context_right_click_start_y = mouse.y;
         scene_context_world_point_valid =
             scene_view_mouse_world_point(scene_context_world_point, nullptr);
     }
 
-    if (!ImGui::BeginPopupContextItem("##SceneViewportContext"))
-        return;
+    if (scene_context_right_click_tracking && ImGui::IsMouseDown(ImGuiMouseButton_Right))
+    {
+        const float dx = mouse.x - scene_context_right_click_start_x;
+        const float dy = mouse.y - scene_context_right_click_start_y;
+        if (dx * dx + dy * dy > 36.0f) scene_context_right_click_dragged = true;
+    }
+
+    if (scene_context_right_click_tracking && ImGui::IsMouseReleased(ImGuiMouseButton_Right))
+    {
+        if (!scene_context_right_click_dragged && ImGui::IsItemHovered())
+            ImGui::OpenPopup("##SceneViewportContext");
+        scene_context_right_click_tracking = false;
+    }
+
+    if (!ImGui::BeginPopup("##SceneViewportContext")) return;
 
     const DirectX::XMFLOAT3 point = scene_context_world_point;
     const bool has_point = scene_context_world_point_valid;

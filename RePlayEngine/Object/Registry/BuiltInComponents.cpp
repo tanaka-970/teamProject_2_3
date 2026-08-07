@@ -792,6 +792,12 @@ namespace ReplayEngine::Core
                 MakeProperty("hide_when_completed", &EditorNoteComponent::hide_when_completed)
                     .Display("完了時に非表示"));
             PropertyRegistry::Register<EditorNoteComponent>(
+                MakeProperty("color", &EditorNoteComponent::color)
+                    .Display("文字色").AsColor());
+            PropertyRegistry::Register<EditorNoteComponent>(
+                MakeProperty("text_scale", &EditorNoteComponent::text_scale)
+                    .Display("文字サイズ").Range(0.35, 4.0).Step(0.05));
+            PropertyRegistry::Register<EditorNoteComponent>(
                 MakeProperty("offset", &EditorNoteComponent::offset)
                     .Display("表示オフセット").Step(0.05));
         }

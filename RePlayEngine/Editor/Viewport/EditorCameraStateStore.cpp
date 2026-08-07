@@ -1,7 +1,10 @@
 #include "EditorCameraStateStore.h"
 
+#include <cmath>
 #include <cstdint>
 #include <fstream>
+#include <iomanip>
+#include <limits>
 #include <locale>
 #include <sstream>
 
@@ -10,6 +13,8 @@ namespace ReplayEngine::Editor
     namespace
     {
         constexpr const char* magic_token = "REPLAY_SCENEVIEW_CAMERA";
+        constexpr const char* preference_magic_token = "REPLAY_EDITOR_CAMERA_SETTINGS";
+        constexpr int preference_version = 1;
     }
 
     EditorCameraStateStore::State EditorCameraStateStore::Capture(
@@ -193,4 +198,107 @@ namespace ReplayEngine::Editor
         }
         return true;
     }
+
+    std::filesystem::path EditorCameraStateStore::MoveSpeedPreferencePath()
+    {
+        return std::filesystem::path("Saved") / "Editor" /
+            "CameraSettings.replaycamsettings";
+    }
+
+    bool EditorCameraStateStore::SaveMoveSpeedPreference(float move_speed,
+        std::string& error)
+    {
+        // 500 / 1000 などの恣意的な上限は置かない。
+        // float の範囲外と、移動不能になる 0 以下だけは保存しない。
+        if (!(move_speed > 0.0f) || !std::isfinite(move_speed))
+        {
+            error = "編集カメラ移動速度が不正です。";
+            return false;
+        }
+
+        const std::filesystem::path path = MoveSpeedPreferencePath();
+        std::error_code filesystem_error;
+        if (!path.parent_path().empty())
+        {
+            std::filesystem::create_directories(path.parent_path(), filesystem_error);
+            if (filesystem_error)
+            {
+                error = "編集カメラ設定の保存先フォルダーを作成できません。";
+                return false;
+            }
+        }
+
+        std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+        if (!stream)
+        {
+            error = "編集カメラ設定を書き出せません。";
+            return false;
+        }
+        stream.imbue(std::locale::classic());
+        stream << std::setprecision(std::numeric_limits<float>::max_digits10);
+        stream << preference_magic_token << ' ' << preference_version << '\n';
+        stream << "MOVE_SPEED " << move_speed << '\n';
+        if (!stream)
+        {
+            error = "編集カメラ設定の書き込みに失敗しました。";
+            return false;
+        }
+        return true;
+    }
+
+    bool EditorCameraStateStore::LoadMoveSpeedPreference(float& move_speed,
+        std::string& error)
+    {
+        const std::filesystem::path path = MoveSpeedPreferencePath();
+        std::error_code filesystem_error;
+        if (!std::filesystem::exists(path, filesystem_error) || filesystem_error)
+        {
+            error = "保存された編集カメラ移動速度がありません。";
+            return false;
+        }
+
+        std::ifstream stream(path, std::ios::binary);
+        if (!stream)
+        {
+            error = "編集カメラ設定を開けません。";
+            return false;
+        }
+        stream.imbue(std::locale::classic());
+
+        std::string magic;
+        int version = 0;
+        if (!(stream >> magic >> version) || magic != preference_magic_token ||
+            version <= 0 || version > preference_version)
+        {
+            error = "編集カメラ設定の形式が不正です。";
+            return false;
+        }
+
+        std::string keyword;
+        float loaded_speed = move_speed;
+        bool found = false;
+        while (stream >> keyword)
+        {
+            if (keyword == "MOVE_SPEED")
+            {
+                stream >> loaded_speed;
+                found = !stream.fail();
+            }
+            else
+            {
+                std::string ignored;
+                std::getline(stream, ignored);
+            }
+            if (stream.fail()) break;
+        }
+
+        if (!found || !(loaded_speed > 0.0f) || !std::isfinite(loaded_speed))
+        {
+            error = "保存された編集カメラ移動速度が不正です。";
+            return false;
+        }
+        move_speed = loaded_speed;
+        return true;
+    }
+
 }

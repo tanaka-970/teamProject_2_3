@@ -777,11 +777,30 @@ public:
             {
                 return 0;
             }
-            if (msg == WM_KEYDOWN && edit_mode_active && !search_input_active)
+            // Scene Camera が W/A/S/D + Q/E を使うため、Transform Tool は
+            // Maya の W/E/R を Shift 付きへ退避する。選択中の GameObject にだけ効く。
+            const bool shift_down = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+            const bool alt_down = (GetKeyState(VK_MENU) & 0x8000) != 0;
+            if (msg == WM_KEYDOWN && edit_mode_active && !search_input_active &&
+                shift_down && !control_down && !alt_down &&
+                selected_editor_object == editor_selection::game_object &&
+                object_editor_context.Selection().Primary().Valid())
             {
-                if (wparam == 'W') transform_gizmo.SetOperation(ReplayEngine::Editor::GizmoOperation::Translate);
-                if (wparam == 'E') transform_gizmo.SetOperation(ReplayEngine::Editor::GizmoOperation::Rotate);
-                if (wparam == 'R') transform_gizmo.SetOperation(ReplayEngine::Editor::GizmoOperation::Scale);
+                if (wparam == 'W')
+                {
+                    transform_gizmo.SetOperation(ReplayEngine::Editor::GizmoOperation::Translate);
+                    return 0;
+                }
+                if (wparam == 'E')
+                {
+                    transform_gizmo.SetOperation(ReplayEngine::Editor::GizmoOperation::Rotate);
+                    return 0;
+                }
+                if (wparam == 'R')
+                {
+                    transform_gizmo.SetOperation(ReplayEngine::Editor::GizmoOperation::Scale);
+                    return 0;
+                }
             }
         }
         if (msg == WM_KEYDOWN && wparam == VK_F1)
@@ -1087,6 +1106,10 @@ private:
     void save_editor_camera_state();
     std::string make_editor_camera_state_key() const;
 
+    // Scene とは独立した Editor 全体の移動速度設定。
+    void load_editor_camera_move_speed_preference();
+    bool save_editor_camera_move_speed_preference();
+
     // Default Controlled Character Prefab の現在の解決結果。
     ReplayEngine::Project::PrefabReferenceStatus resolve_default_character_prefab() const;
 
@@ -1254,8 +1277,13 @@ private:
     float scene_view_max_x{ 0.0f };
     float scene_view_max_y{ 0.0f };
     // Viewport 右クリック位置は Popup を操作している間も保持する。
+    // 右クリックは camera look と共用するため、短い click / drag を区別する。
     bool scene_context_world_point_valid{ false };
     DirectX::XMFLOAT3 scene_context_world_point{ 0.0f, 0.0f, 0.0f };
+    bool scene_context_right_click_tracking{ false };
+    bool scene_context_right_click_dragged{ false };
+    float scene_context_right_click_start_x{ 0.0f };
+    float scene_context_right_click_start_y{ 0.0f };
     int scene_view_draw_mode{ 0 };
     // --- シェーダ資産（フェーズ 1〜3）--------------------------------------
     //

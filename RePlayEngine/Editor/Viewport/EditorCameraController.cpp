@@ -31,7 +31,7 @@ namespace ReplayEngine::Editor
         //   Asset Browser の操作中（いずれも ui_wants_mouse か ui_wants_keyboard が立つ） /
         //   Transform・Collider ギズモのドラッグ中。
         if (!input.window_focused) return false;
-        if (!input.viewport_hovered) return false;
+        if (!input.viewport_hovered && !input.viewport_focused) return false;
         if (input.ui_wants_mouse) return false;
         if (input.ui_wants_keyboard) return false;
         if (input.ui_text_input_active) return false;
@@ -141,12 +141,40 @@ namespace ReplayEngine::Editor
                 // 右クリック中のホイールは移動速度の変更。
                 // Zoom と役割が衝突しないよう、明確に分けてある。
                 const float factor = (input.wheel > 0.0f) ? 1.15f : (1.0f / 1.15f);
-                camera.move_speed = std::clamp(camera.move_speed * factor, 0.05f, 500.0f);
+                // 大規模ワールドでも使えるよう 500 などの上限は置かない。
+                // 0 以下になることだけ防ぐ。
+                camera.move_speed = std::max(camera.move_speed * factor, 0.001f);
                 consumed = true;
             }
             else if (can_begin)
             {
                 camera.Zoom(input.wheel);
+                consumed = true;
+            }
+        }
+
+        // ---- RMB を押していないときの keyboard fly --------------------------
+        //
+        // Unreal の Viewport と同じキー配置を、さらに一段手軽に使えるようにする。
+        // Scene View にフォーカスがある間は WASD/QE だけでも移動でき、
+        // RMB を押したときだけ mouse-look が追加される。
+        if (mode_ == Mode::None && can_begin && !input.alt_down)
+        {
+            EditorViewportCamera::MoveAxes axes;
+            if (input.key_forward) axes.forward += 1.0f;
+            if (input.key_back)    axes.forward -= 1.0f;
+            if (input.key_right)   axes.right += 1.0f;
+            if (input.key_left)    axes.right -= 1.0f;
+            if (input.key_up)      axes.up += 1.0f;
+            if (input.key_down)    axes.up -= 1.0f;
+
+            if (axes.forward != 0.0f || axes.right != 0.0f || axes.up != 0.0f)
+            {
+                float multiplier = 1.0f;
+                if (input.shift_down)   multiplier *= camera.fast_multiplier;
+                if (input.control_down) multiplier *= camera.slow_multiplier;
+                const float delta_time = std::min(input.delta_time, maximum_delta_time);
+                camera.Fly(axes, multiplier, delta_time);
                 consumed = true;
             }
         }

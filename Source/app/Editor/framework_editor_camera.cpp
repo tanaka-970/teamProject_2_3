@@ -19,6 +19,7 @@
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
 
 #include <algorithm>
+#include <cmath>
 #include <string>
 
 // ---------------------------------------------------------------------------
@@ -128,7 +129,9 @@ void framework::update_editor_camera(float elapsed_time)
 
     // ---- Editor UI が入力を取っているか -----------------------------------
     input.ui_wants_mouse = io.WantCaptureMouse && !scene_view_hovered;
-    input.ui_wants_keyboard = io.WantCaptureKeyboard;
+    // Scene View がフォーカスを持っているときは ImGui の keyboard capture だけで
+    // WASD/QE を潰さない。TextInput / popup は下で引き続き確実にブロックする。
+    input.ui_wants_keyboard = io.WantCaptureKeyboard && !scene_view_focused;
     input.ui_text_input_active = io.WantTextInput || search_input_active;
     input.ui_popup_open = ImGui::IsPopupOpen(static_cast<const char*>(nullptr),
         ImGuiPopupFlags_AnyPopup);
@@ -176,10 +179,26 @@ void framework::update_editor_camera(float elapsed_time)
     input.key_down = key_down('Q');
     input.key_focus = key_down('F');
 
+    // 選択オブジェクトがある Shift+W / Shift+E / Shift+R は Maya 風 Tool 切替。
+    // Shift+W/E が camera fast-move と二重発火しないよう該当軸だけ抑止する。
+    const bool selected_game_object =
+        selected_editor_object == editor_selection::game_object &&
+        object_editor_context.Selection().Primary().Valid();
+    if (input.shift_down && selected_game_object && !input.control_down && !input.alt_down)
+    {
+        if (key_down('W')) input.key_forward = false;
+        if (key_down('E')) input.key_up = false;
+    }
+
     input.window_focused = ::GetForegroundWindow() == hwnd;
     input.delta_time = elapsed_time;
 
+    const float move_speed_before_input = editor_camera.move_speed;
     editor_camera_consumed_input = editor_camera_controller.Update(editor_camera, input);
+
+    // RMB + Wheel で速度を変えた場合も上部メニューと同じ保存先へ即時保存する。
+    if (editor_camera.move_speed != move_speed_before_input)
+        save_editor_camera_move_speed_preference();
 
     // ---- マウスロック -------------------------------------------------------
     //
@@ -234,7 +253,14 @@ void framework::draw_editor_camera_settings()
 
     ImGui::Indent();
 
-    ImGui::DragFloat("移動速度", &editor_camera.move_speed, 0.1f, 0.05f, 500.0f, "%.2f");
+    // v_min == v_max == 0 で DragFloat のクランプを無効化。上限なし。
+    const float speed_before_edit = editor_camera.move_speed;
+    ImGui::DragFloat("移動速度", &editor_camera.move_speed, 0.1f, 0.0f, 0.0f, "%.3f");
+    if (!(editor_camera.move_speed > 0.0f) || !std::isfinite(editor_camera.move_speed))
+        editor_camera.move_speed = speed_before_edit > 0.0f ? speed_before_edit : 5.0f;
+    if (editor_camera.move_speed != speed_before_edit)
+        save_editor_camera_move_speed_preference();
+
     ImGui::DragFloat("高速倍率", &editor_camera.fast_multiplier, 0.1f, 1.0f, 50.0f, "%.2f");
     ImGui::DragFloat("低速倍率", &editor_camera.slow_multiplier, 0.01f, 0.01f, 1.0f, "%.2f");
     ImGui::DragFloat("マウス感度", &editor_camera.mouse_sensitivity, 0.01f, 0.01f, 2.0f, "%.2f");
@@ -258,8 +284,10 @@ void framework::draw_editor_camera_settings()
         DirectX::XMConvertToDegrees(editor_camera.Pitch()));
     ImGui::TextDisabled("Orbit 距離  %.2f", editor_camera.OrbitDistance());
 
-    ImGui::TextDisabled("右ドラッグ: 移動 / 中ドラッグ: 平行移動");
+    ImGui::TextDisabled("WASD: 前後左右 / Q,E: 上下 / 右ドラッグ: 視点変更");
+    ImGui::TextDisabled("Shift: 高速 / Ctrl: 低速 / 中ドラッグ: 平行移動");
     ImGui::TextDisabled("Alt+左ドラッグ: 回り込み / ホイール: ズーム / F: フォーカス");
+    ImGui::TextDisabled("選択中 Shift+W/E/R: Move / Rotate / Scale");
 
     ImGui::Unindent();
 #endif
@@ -299,12 +327,16 @@ void framework::load_editor_camera_state()
     if (EditorNS::EditorCameraStateStore::Load(state, path, error))
     {
         EditorNS::EditorCameraStateStore::Apply(state, editor_camera);
-        return;
+    }
+    else
+    {
+        // 保存が無い / 壊れている。既定位置から始める。
+        // ここで失敗しても Scene の読み込みには一切影響しない。
+        editor_camera.ResetToDefault();
     }
 
-    // 保存が無い / 壊れている。既定位置から始める。
-    // ここで失敗しても Scene の読み込みには一切影響しない。
-    editor_camera.ResetToDefault();
+    // 速度は Scene ごとの値ではなく Editor 全体の保存値を優先する。
+    load_editor_camera_move_speed_preference();
 }
 
 void framework::save_editor_camera_state()
@@ -322,4 +354,24 @@ void framework::save_editor_camera_state()
     std::string error;
     // 保存に失敗しても何も壊れない。次回は既定位置から始まるだけ。
     EditorNS::EditorCameraStateStore::Save(state, path, error);
+}
+
+void framework::load_editor_camera_move_speed_preference()
+{
+    namespace EditorNS = ReplayEngine::Editor;
+    float saved_speed = editor_camera.move_speed;
+    std::string error;
+    if (EditorNS::EditorCameraStateStore::LoadMoveSpeedPreference(saved_speed, error))
+        editor_camera.move_speed = saved_speed;
+}
+
+bool framework::save_editor_camera_move_speed_preference()
+{
+    namespace EditorNS = ReplayEngine::Editor;
+    if (!(editor_camera.move_speed > 0.0f) || !std::isfinite(editor_camera.move_speed))
+        return false;
+
+    std::string error;
+    return EditorNS::EditorCameraStateStore::SaveMoveSpeedPreference(
+        editor_camera.move_speed, error);
 }

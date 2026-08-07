@@ -24,6 +24,11 @@ namespace ReplayEngine::Components
         bool completed = false;
         bool show_in_viewport = true;
         bool hide_when_completed = false;
-        DirectX::XMFLOAT3 offset{ 0.0f, 1.5f, 0.0f };
+
+        // Scene View へ描く文字そのものの見た目。
+        // 枠・吹き出しは付けず、World 位置へ自由色の文字だけを投影する。
+        DirectX::XMFLOAT4 color{ 1.0f, 0.82f, 0.25f, 1.0f };
+        float text_scale = 1.0f;
+        DirectX::XMFLOAT3 offset{ 0.0f, 0.25f, 0.0f };
     };
 }
