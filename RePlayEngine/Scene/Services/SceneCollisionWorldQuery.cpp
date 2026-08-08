@@ -10,6 +10,7 @@
 #include "../../Components/Physics/CapsuleColliderComponent.h"
 #include "../../Components/Physics/MeshColliderComponent.h"
 #include "../../Components/Physics/SphereColliderComponent.h"
+#include "../../Components/Landscape/LandscapeColliderComponent.h"
 #include "../../Object/GameObject/GameObject.h"
 #include "../../Physics/CollisionLayers.h"
 #include "../../Physics/ShapeSweep.h"
@@ -85,6 +86,47 @@ namespace ReplayEngine::Scene
     {
         switch (collider.Shape())
         {
+        case Components::ColliderShape::Landscape:
+        {
+            const auto& landscape =
+                static_cast<const Components::LandscapeColliderComponent&>(collider);
+            if (!landscape.ReadyForQuery() || landscape.Cooked() == nullptr) return false;
+
+            // Landscape も任意 topology になったので、8k/数万 triangle を毎 query
+            // 総当たりしない。MeshCollider と同じ local-space XZ grid で候補を絞る。
+            const auto& cooked = landscape.Cooked();
+            const XMMATRIX inverse = XMLoadFloat4x4(&landscape.InverseWorldMatrix());
+            XMFLOAT3 local_start{};
+            XMFLOAT3 local_end{};
+            XMStoreFloat3(&local_start, XMVector3TransformCoord(XMLoadFloat3(&start), inverse));
+            XMStoreFloat3(&local_end, XMVector3TransformCoord(XMLoadFloat3(&end), inverse));
+
+            const float local_radius = radius * landscape.LocalRadiusScale();
+            const XMFLOAT3 local_min{
+                std::min(local_start.x, local_end.x) - local_radius,
+                std::min(local_start.y, local_end.y) - local_radius,
+                std::min(local_start.z, local_end.z) - local_radius };
+            const XMFLOAT3 local_max{
+                std::max(local_start.x, local_end.x) + local_radius,
+                std::max(local_start.y, local_end.y) + local_radius,
+                std::max(local_start.z, local_end.z) + local_radius };
+
+            cooked->CollectTriangles(local_min, local_max, scratch_indices_);
+            if (scratch_indices_.empty()) return false;
+            scratch_triangles_.clear();
+            scratch_triangles_.reserve(scratch_indices_.size());
+            const Physics::Triangle* source = cooked->Triangles();
+            for (const std::uint32_t triangle_index : scratch_indices_)
+            {
+                scratch_triangles_.push_back(source[triangle_index]);
+            }
+
+            return SweepLocalTriangles(landscape.WorldMatrix(), landscape.InverseWorldMatrix(),
+                landscape.NegativeScale(), landscape.LocalRadiusScale(),
+                scratch_triangles_.data(), scratch_triangles_.size(),
+                start, end, radius, hit);
+        }
+
         case Components::ColliderShape::Mesh:
         {
             const auto& mesh = static_cast<const Components::MeshColliderComponent&>(collider);

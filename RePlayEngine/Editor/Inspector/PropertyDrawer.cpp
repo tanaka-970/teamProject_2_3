@@ -133,6 +133,17 @@ namespace ReplayEngine::Editor
             return true;
         }
 
+        const char* BuiltInAssetDisplayName(const std::string& id)
+        {
+            if (id == "builtin:plane") return "Built-in Plane";
+            if (id == "builtin:cube") return "Built-in Cube";
+            if (id == "builtin:sphere") return "Built-in Sphere";
+            if (id == "builtin:capsule") return "Built-in Capsule";
+            if (id == "builtin:cylinder") return "Built-in Cylinder";
+            if (id == "builtin:quad") return "Built-in Quad";
+            return nullptr;
+        }
+
         // Asset 参照の共通描画。
         //
         // 生の GUID（1bd1358040255f5bd18f3be0d79fbe3c のような文字列）を
@@ -150,12 +161,15 @@ namespace ReplayEngine::Editor
 
             const Assets::AssetRecord* current =
                 database != nullptr ? database->FindByGuid(guid) : nullptr;
+            const char* builtin_name = BuiltInAssetDisplayName(guid);
 
-            // 選択欄。名前だけを見せる。
+            // 選択欄。名前だけを見せる。builtin:* は AssetDatabase の外にある
+            // Engine 内蔵メッシュなので Missing Asset 扱いにしない。
             const char* preview = "(未設定)";
             if (!guid.empty())
             {
-                preview = current != nullptr ? current->display_name.c_str() : "Missing Asset";
+                if (builtin_name != nullptr) preview = builtin_name;
+                else preview = current != nullptr ? current->display_name.c_str() : "Missing Asset";
             }
 
             if (database != nullptr)
@@ -201,6 +215,10 @@ namespace ReplayEngine::Editor
             if (guid.empty())
             {
                 ImGui::TextDisabled("  Asset が未指定です");
+            }
+            else if (builtin_name != nullptr)
+            {
+                ImGui::TextDisabled("  Engine Built-in Primitive");
             }
             else if (current != nullptr)
             {

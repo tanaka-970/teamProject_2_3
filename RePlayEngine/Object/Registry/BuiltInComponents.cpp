@@ -1,4 +1,4 @@
-#include "BuiltInComponents.h"
+﻿#include "BuiltInComponents.h"
 
 #include "ComponentRegistry.h"
 #include "../Component/MissingComponent.h"
@@ -17,9 +17,13 @@
 #include "../../Components/Physics/CapsuleColliderComponent.h"
 #include "../../Components/Physics/MeshColliderComponent.h"
 #include "../../Components/Physics/SphereColliderComponent.h"
+#include "../../Components/Landscape/LandscapeComponent.h"
+#include "../../Components/Landscape/LandscapeRendererComponent.h"
+#include "../../Components/Landscape/LandscapeColliderComponent.h"
 #include "../../Components/Rendering/AnimatorComponent.h"
 #include "../../Components/Rendering/LightComponents.h"
 #include "../../Components/Rendering/MeshRendererComponent.h"
+#include "../../Components/Rendering/PrimitiveMeshRendererComponent.h"
 #include "../../Components/Rendering/SkinnedMeshRendererComponent.h"
 #include "../../Scripting/Core/ScriptComponent.h"
 
@@ -34,7 +38,11 @@ namespace ReplayEngine::Core
         using Components::CharacterMotorComponent;
         using Components::HealthComponent;
         using Components::MeshColliderComponent;
+        using Components::LandscapeComponent;
+        using Components::LandscapeRendererComponent;
+        using Components::LandscapeColliderComponent;
         using Components::MeshRendererComponent;
+        using Components::PrimitiveMeshRendererComponent;
         using Components::DirectionalLightComponent;
         using Components::EditorNoteComponent;
         using Components::PointLightComponent;
@@ -175,6 +183,46 @@ namespace ReplayEngine::Core
             PropertyRegistry::Register<MeshRendererComponent>(
                 MakeProperty("local_scale_multiplier", &MeshRendererComponent::local_scale_multiplier)
                     .Display("モデル縮尺倍率").Step(0.01));
+        }
+
+        void RegisterPrimitiveMeshRenderer()
+        {
+            ComponentRegistry::Register<PrimitiveMeshRendererComponent>(
+                ComponentTypeInfo::Describe("Primitive Mesh Renderer", "Rendering")
+                    .WithTooltip("Engine内蔵の Plane / Cube / Sphere / Capsule / Cylinder / Quad を描画する。外部Model Assetは参照しない。"));
+
+            PropertyRegistry::Register<PrimitiveMeshRendererComponent>(
+                MakeProperty("primitive_type", &PrimitiveMeshRendererComponent::primitive_type)
+                    .Display("プリミティブ")
+                    .AsEnum({ "Plane", "Cube", "Sphere", "Capsule", "Cylinder", "Quad" }));
+
+            PropertyRegistry::Register<PrimitiveMeshRendererComponent>(
+                MakeProperty("material_asset", &PrimitiveMeshRendererComponent::material_asset)
+                    .Display("マテリアル").AsAssetPath()
+                    .Tooltip("Material AssetのGUID。Projectパネルから割り当てる。"));
+
+            PropertyRegistry::Register<PrimitiveMeshRendererComponent>(
+                MakeProperty("material_override", &PrimitiveMeshRendererComponent::material_override)
+                    .Display("マテリアル上書き")
+                    .Tooltip("色と描画方式にRenderer側の値を使う。"));
+
+            PropertyRegistry::Register<PrimitiveMeshRendererComponent>(
+                MakeProperty("tint", &PrimitiveMeshRendererComponent::tint)
+                    .Display("色").AsColor());
+
+            PropertyRegistry::Register<PrimitiveMeshRendererComponent>(
+                MakeProperty("shading_model", &PrimitiveMeshRendererComponent::shading_model)
+                    .Display("描画方式")
+                    .AsEnum({ "FBX標準", "PBR", "トゥーン", "アンリット" }));
+
+            PropertyRegistry::Register<PrimitiveMeshRendererComponent>(
+                MakeProperty("outline", &PrimitiveMeshRendererComponent::outline).Display("輪郭線"));
+            PropertyRegistry::Register<PrimitiveMeshRendererComponent>(
+                MakeProperty("cast_shadow", &PrimitiveMeshRendererComponent::cast_shadow).Display("影を落とす"));
+            PropertyRegistry::Register<PrimitiveMeshRendererComponent>(
+                MakeProperty("receive_shadow", &PrimitiveMeshRendererComponent::receive_shadow).Display("影を受ける"));
+            PropertyRegistry::Register<PrimitiveMeshRendererComponent>(
+                MakeProperty("visible", &PrimitiveMeshRendererComponent::visible).Display("表示"));
         }
 
         void RegisterRotator()
@@ -579,6 +627,51 @@ namespace ReplayEngine::Core
                         "有効にすると衝突三角形そのものを描く（重い）。"));
         }
 
+        void RegisterLandscape()
+        {
+            ComponentRegistry::Register<LandscapeComponent>(
+                ComponentTypeInfo::Describe("Landscape", "Landscape")
+                    .WithVersion(2)
+                    .WithTooltip("任意三角形Topologyを持つ編集可能な地形。描画と衝突は別Component。"));
+
+            PropertyRegistry::Register<LandscapeComponent>(
+                MakeProperty("default_resolution", &LandscapeComponent::default_resolution)
+                    .Display("新規解像度").Range(2.0, 513.0).Step(1.0)
+                    .Tooltip("新しい平面を生成するときの解像度。既存地形は自動変更しない。"));
+            PropertyRegistry::Register<LandscapeComponent>(
+                MakeProperty("default_cell_size", &LandscapeComponent::default_cell_size)
+                    .Display("新規セルサイズ").Range(0.05, 100.0).Step(0.05)
+                    .Tooltip("新しい平面を生成するときの格子間隔。"));
+
+            ComponentRegistry::Register<LandscapeRendererComponent>(
+                ComponentTypeInfo::Describe("Landscape Renderer", "Landscape")
+                    .WithTooltip("Landscape Component の任意Meshを描画する。GPU ResourceはRenderer側が所有。"));
+            PropertyRegistry::Register<LandscapeRendererComponent>(
+                MakeProperty("tint", &LandscapeRendererComponent::tint).Display("色").AsColor());
+            PropertyRegistry::Register<LandscapeRendererComponent>(
+                MakeProperty("visible", &LandscapeRendererComponent::visible).Display("表示"));
+            PropertyRegistry::Register<LandscapeRendererComponent>(
+                MakeProperty("cast_shadow", &LandscapeRendererComponent::cast_shadow).Display("影を落とす"));
+            PropertyRegistry::Register<LandscapeRendererComponent>(
+                MakeProperty("receive_shadow", &LandscapeRendererComponent::receive_shadow).Display("影を受ける"));
+            PropertyRegistry::Register<LandscapeRendererComponent>(
+                MakeProperty("double_sided", &LandscapeRendererComponent::double_sided).Display("両面描画"));
+
+            ComponentRegistry::Register<LandscapeColliderComponent>(
+                ComponentTypeInfo::Describe("Landscape Collider", "Landscape")
+                    .WithTooltip("Landscapeの任意Topologyをそのまま衝突形状として使う。"));
+            RegisterColliderCommon<LandscapeColliderComponent>();
+            PropertyRegistry::Register<LandscapeColliderComponent>(
+                MakeProperty("double_sided", &LandscapeColliderComponent::double_sided)
+                    .Display("両面に当たる"));
+            PropertyRegistry::Register<LandscapeColliderComponent>(
+                MakeProperty("collision_cell_size", &LandscapeColliderComponent::collision_cell_size)
+                    .Display("衝突セルサイズ").Range(0.05, 128.0));
+            PropertyRegistry::Register<LandscapeColliderComponent>(
+                MakeProperty("debug_draw_wireframe", &LandscapeColliderComponent::debug_draw_wireframe)
+                    .Display("三角形を表示"));
+        }
+
         void RegisterCharacterMotor()
         {
             ComponentRegistry::Register<CharacterMotorComponent>(
@@ -921,6 +1014,7 @@ namespace ReplayEngine::Core
 
         RegisterTransform();
         RegisterMeshRenderer();
+        RegisterPrimitiveMeshRenderer();
         RegisterLights();
         RegisterSkinnedMeshRenderer();
         RegisterAnimator();
@@ -928,6 +1022,7 @@ namespace ReplayEngine::Core
         RegisterBoxCollider();
         RegisterCapsuleCollider();
         RegisterMeshCollider();
+        RegisterLandscape();
         RegisterCharacterMotor();
         RegisterPlayerInput();
         RegisterPlayerController();

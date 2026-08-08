@@ -66,6 +66,8 @@ extern ImWchar glyphRangesJapanese[];
 #include "../../RePlayEngine/Editor/Gizmo/ViewportPicker.h"
 #include "../../RePlayEngine/Components/Editor/EditorNoteComponent.h"
 #include "../../RePlayEngine/Physics/MeshCollisionCooker.h"
+#include "../../RePlayEngine/Landscape/LandscapeBrush.h"
+#include "../../RePlayEngine/Landscape/LandscapeEditorTool.h"
 
 // --- GameObject / Component 基盤 -------------------------------------------
 // SceneManager とは責任が違う。
@@ -435,6 +437,15 @@ public:
     // Asset GUID -> メッシュ実体。
     // 読み込めた Asset だけを入れる。null や壊れたエントリは決して登録しない。
     std::unordered_map<std::string, std::unique_ptr<skinned_mesh>> object_mesh_cache;
+    // builtin:plane / builtin:cube 等は外部ファイルを要求しない Engine 内蔵 Mesh。
+    // GameObject 側は通常の MeshRendererComponent を使うので特別な Object 型は増やさない。
+    std::unordered_map<std::string, std::unique_ptr<static_mesh>> builtin_primitive_mesh_cache;
+    struct landscape_gpu_cache_entry
+    {
+        std::uint64_t revision = 0;
+        std::unique_ptr<static_mesh> mesh;
+    };
+    std::unordered_map<std::uint64_t, landscape_gpu_cache_entry> landscape_gpu_mesh_cache;
 
     // 読み込みに失敗した Asset GUID。
     // 失敗をキャッシュ本体へ入れず別に持つことで、
@@ -456,8 +467,9 @@ public:
     // 同じ警告を毎フレーム出さないため、Material cache と同じ寿命で保持する。
     std::unordered_set<std::string> object_shader_lighting_failures;
 
-    // Startup Scene is restored from the Editor session.  A fresh project starts
-    // with an unsaved empty Scene instead of depending on a bundled sample asset.
+    // Startup Scene is restored from the Editor session. If no Scene exists yet,
+    // a fresh project starts with an unsaved component-based Basic Scene
+    // (Landscape Ground + Sun) instead of depending on a bundled sample asset.
     std::filesystem::path object_scene_path;
     std::string      object_scene_asset_guid;
     bool             object_scene_play_mode{ false };
@@ -1001,6 +1013,10 @@ private:
     bool place_asset_in_object_scene(const ReplayEngine::Assets::AssetRecord& asset,
         bool add_mesh_collider);
     void handle_viewport_selection();
+    // 選択中の Landscape GameObject にだけ有効な Scene View 編集。
+    // Runtime Component へ ImGui 依存を持ち込まず、Editor Tool が data を編集する。
+    bool handle_landscape_viewport_edit();
+    void draw_landscape_editor_toolbar();
     void draw_scene_grid_overlay();
     bool draw_object_transform_gizmo();
     void save_editor_session();
@@ -1051,6 +1067,7 @@ private:
     // Editor の Runtime 診断パネル。読み取り専用。
     void draw_runtime_diagnostics_panel();
     skinned_mesh* resolve_object_mesh(const std::string& asset_guid);
+    static_mesh* resolve_builtin_primitive_mesh(const std::string& builtin_id);
     const ReplayEngine::Rendering::MaterialAsset* resolve_object_material(
         const std::string& asset_guid);
     ReplayEngine::Rendering::RenderItem resolve_render_item_material(
@@ -1060,6 +1077,9 @@ private:
     // 描き漏らすと DepthFunc=EQUAL に落とされて画面から消える。
     void draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shader,
         bool gbuffer_pass, bool depth_only = false);
+    // LandscapeRendererComponent 用の procedural static mesh 描画。
+    // AssetGUIDを介さず、LandscapeData::Revision が変わったときだけGPU Meshを作り直す。
+    void draw_landscape_scene_meshes(bool gbuffer_pass, bool depth_only = false);
     void clear_object_mesh_cache() noexcept;
     void clear_object_material_cache() noexcept;
     bool object_runtime_active() const noexcept;
@@ -1071,12 +1091,14 @@ private:
     // --- 新規 Scene 作成 ---------------------------------------------------
     //
     // Empty  … GameObject を 1 つも作らない。操作対象は未設定。
-    // Default … Default Controlled Character Prefab を 1 体だけ配置し、
-    //           そのルートを操作対象にする。
+    // Default … 編集可能なLandscape Ground + Sunを作り、設定済みなら
+    //           Default Controlled Character Prefabも配置する。
     //
     // どちらも「ユーザーが新規作成を選んだとき」しか呼ばれない。
     // 起動時や Scene 読み込み時に Prefab を配置することは決してない。
     bool create_object_scene(const std::string& name, bool place_default_character);
+    ReplayEngine::Core::GameObject* create_default_landscape_ground(
+        ReplayEngine::Scene::Scene& scene);
 
     // --- プロジェクト設定 --------------------------------------------------
     void load_project_settings();
@@ -1306,6 +1328,30 @@ private:
     float scene_context_right_click_start_x{ 0.0f };
     float scene_context_right_click_start_y{ 0.0f };
     int scene_view_draw_mode{ 0 };
+
+    // --- Landscape / World Editing ---------------------------------------
+    // Landscape 自体は普通の GameObject + Component。ここに置くのは
+    // Scene View の一時的な選択・ブラシ状態だけで、Scene 保存対象ではない。
+    bool landscape_edit_enabled{ false };
+    int landscape_edit_mode{ 0 }; // 0=Sculpt, 1=Topology
+    int landscape_topology_selection_mode{ 0 }; // 0=Face, 1=Edge Bridge
+    int landscape_brush_mode{ 0 };
+    ReplayEngine::Landscape::LandscapeBrush landscape_brush{};
+    ReplayEngine::Landscape::LandscapeEditorTool landscape_editor_tool;
+    std::size_t landscape_selected_face{ static_cast<std::size_t>(-1) };
+    // Bridge は同じ mesh 上の 2 edge を順に選ぶ。Editor transient state だけなので
+    // Component/Scene には保存しない。
+    std::uint32_t landscape_bridge_a0{ static_cast<std::uint32_t>(-1) };
+    std::uint32_t landscape_bridge_a1{ static_cast<std::uint32_t>(-1) };
+    std::uint32_t landscape_bridge_b0{ static_cast<std::uint32_t>(-1) };
+    std::uint32_t landscape_bridge_b1{ static_cast<std::uint32_t>(-1) };
+    bool landscape_stroke_transaction{ false };
+    float landscape_extrude_distance{ 1.0f };
+    float landscape_inset_amount{ 0.25f };
+    float landscape_tunnel_depth{ 8.0f };
+    int landscape_tunnel_segments{ 6 };
+    float landscape_tunnel_end_scale{ 1.0f };
+
     // --- シェーダ資産（フェーズ 1〜3）--------------------------------------
     //
     // Shader/Materials, Shader/Layers, Shader/PostProcess を走査して

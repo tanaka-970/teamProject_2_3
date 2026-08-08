@@ -446,6 +446,7 @@ void framework::render(float elapsed_time)
             // メッシュは比較に失敗して画面から丸ごと消える。
             // キャラクターはこの経路でしか描かれないため、ここを外すと何も映らない。
             draw_object_scene_meshes(nullptr, false, true);
+            draw_landscape_scene_meshes(false, true);
 
             // 深度プリパスの描画数は統計へ混ぜない(同じ形状を二重に数えないため)。
         }
@@ -477,6 +478,7 @@ void framework::render(float elapsed_time)
         //
         // Stage/Characterを含むScene描画はこの提出リスト1本だけ。
         draw_object_scene_meshes(skinned_mesh_gbuffer_ps.Get(), true);
+        draw_landscape_scene_meshes(true, false);
 
         deferred.gbuffer_end(immediate_context.Get());
 
@@ -882,6 +884,9 @@ void framework::render(float elapsed_time)
             static_meshes[0]->render(immediate_context.Get(), world, material_color,
                                      static_forward_shader(shading_per_static[0]));
         }
+
+        // Landscape procedural mesh もForward経路へ出す。
+        draw_landscape_scene_meshes(false, false);
 
         // GameObject / Component 基盤の描画（Forward 経路）。
         // Component ごとの描画方式を反映するため、Shader は 1 件ずつ選び直す。

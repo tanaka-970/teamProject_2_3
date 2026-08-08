@@ -21,6 +21,7 @@ namespace ReplayEngine::Components
         Box,
         Capsule,
         Mesh,
+        Landscape,
     };
 
     const char* ToString(ColliderShape shape) noexcept;

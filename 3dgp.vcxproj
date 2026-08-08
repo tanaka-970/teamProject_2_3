@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -280,6 +280,7 @@
     <ClCompile Include="Source\app\Editor\framework_editor_camera_presets.cpp" />
     <ClCompile Include="Source\app\Editor\framework_gizmo.cpp" />
     <ClCompile Include="Source\app\Editor\framework_scene_document.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_landscape_editor.cpp" />
     <ClCompile Include="Source\app\Editor\framework_shader_stack.cpp" />
     <ClCompile Include="Source\app\Editor\framework_character_material.cpp" />
     <ClCompile Include="Source\app\Editor\framework_post_process.cpp" />
@@ -384,6 +385,7 @@
     <ClCompile Include="RePlayEngine\Components\Rendering\AnimatorComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Rendering\SkinnedMeshRendererComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Rendering\MeshRendererComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Rendering\PrimitiveMeshRendererComponent.cpp" />
     <ClCompile Include="Source\game\camera_basis_provider.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Inspector\PlayerCompositionValidator.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorViewportCamera.cpp" />
@@ -415,6 +417,9 @@
     <ClCompile Include="RePlayEngine\Landscape\LandscapeCollision.cpp" />
     <ClCompile Include="RePlayEngine\Landscape\LandscapeUndoCommand.cpp" />
     <ClCompile Include="RePlayEngine\Landscape\LandscapeEditorTool.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Landscape\LandscapeComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Landscape\LandscapeRendererComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Landscape\LandscapeColliderComponent.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\RuntimeSceneValidation.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Scene\SceneFlowService.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Scene\SceneFlowAsset.cpp" />
@@ -568,6 +573,7 @@
     <ClInclude Include="RePlayEngine\Scene\Runtime\Scene.h" />
     <ClInclude Include="RePlayEngine\Components\Core\TransformComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Rendering\MeshRendererComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Rendering\PrimitiveMeshRendererComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Rendering\LightComponents.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\RotatorComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\HealthComponent.h" />
@@ -631,6 +637,9 @@
     <ClInclude Include="RePlayEngine\Landscape\LandscapeCollision.h" />
     <ClInclude Include="RePlayEngine\Landscape\LandscapeUndoCommand.h" />
     <ClInclude Include="RePlayEngine\Landscape\LandscapeEditorTool.h" />
+    <ClInclude Include="RePlayEngine\Components\Landscape\LandscapeComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Landscape\LandscapeRendererComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Landscape\LandscapeColliderComponent.h" />
     <ClInclude Include="RePlayEngine\Runtime\Validation\RuntimeSceneValidation.h" />
     <ClInclude Include="RePlayEngine\Runtime\Scene\SceneFlowService.h" />
     <ClInclude Include="RePlayEngine\Runtime\Scene\SceneFlowAsset.h" />

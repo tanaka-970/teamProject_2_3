@@ -688,6 +688,9 @@ void framework::draw_scene_view_panel()
         ensure_editor_camera_presets_loaded();
         ImGui::TextDisabled(u8"Camera preset: %s | カメラ > プリセット管理 で操作を自由設定",
             active_editor_camera_preset().name.c_str());
+        // Landscape を選択しているときだけ専用 Tool を出す。
+        // Component 自体に ImGui / Editor 状態を持たせない。
+        draw_landscape_editor_toolbar();
     }
     else
     {

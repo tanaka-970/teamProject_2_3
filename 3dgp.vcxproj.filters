@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="Source">
@@ -277,6 +277,9 @@
     <Filter Include="RePlayEngine\Components\Camera">
       <UniqueIdentifier>{0519d005-9a2c-470f-87e5-4ca27653fb37}</UniqueIdentifier>
     </Filter>
+    <Filter Include="RePlayEngine\Components\Landscape">
+      <UniqueIdentifier>{9d47309b-1c67-4fe1-9c09-5ec29b04c2ab}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Shader\PostEffects\AmbientOcclusion">
       <UniqueIdentifier>{81f91c0a-8db2-5510-9212-625575a42a0a}</UniqueIdentifier>
     </Filter>
@@ -406,6 +409,9 @@
       <Filter>Source\App\Editor</Filter>
     </ClCompile>
     <ClCompile Include="Source\app\Editor\framework_scene_document.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_landscape_editor.cpp">
       <Filter>Source\App\Editor</Filter>
     </ClCompile>
     <ClCompile Include="Source\app\Editor\framework_shader_stack.cpp">
@@ -688,6 +694,9 @@
       <Filter>RePlayEngine\Components\Rendering</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Components\Rendering\MeshRendererComponent.cpp">
+      <Filter>RePlayEngine\Components\Rendering</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\Rendering\PrimitiveMeshRendererComponent.cpp">
       <Filter>RePlayEngine\Components\Rendering</Filter>
     </ClCompile>
     <ClCompile Include="Source\game\camera_basis_provider.cpp">
@@ -1182,6 +1191,9 @@
       <Filter>RePlayEngine\Components\Core</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Components\Rendering\MeshRendererComponent.h">
+      <Filter>RePlayEngine\Components\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Rendering\PrimitiveMeshRendererComponent.h">
       <Filter>RePlayEngine\Components\Rendering</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Components\Rendering\LightComponents.h">
@@ -1741,6 +1753,9 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="RePlayEngine\Components\Landscape\LandscapeComponent.cpp"><Filter>RePlayEngine\Components\Landscape</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Components\Landscape\LandscapeRendererComponent.cpp"><Filter>RePlayEngine\Components\Landscape</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Components\Landscape\LandscapeColliderComponent.cpp"><Filter>RePlayEngine\Components\Landscape</Filter></ClCompile>
     <ClCompile Include="RePlayEngine\Landscape\LandscapeData.cpp"><Filter>RePlayEngine\Landscape</Filter></ClCompile>
     <ClCompile Include="RePlayEngine\Landscape\LandscapeMeshGenerator.cpp"><Filter>RePlayEngine\Landscape</Filter></ClCompile>
     <ClCompile Include="RePlayEngine\Landscape\LandscapeRenderer.cpp"><Filter>RePlayEngine\Landscape</Filter></ClCompile>
@@ -1750,6 +1765,9 @@
     <ClInclude Include="RePlayEngine\Landscape\LandscapeChunk.h"><Filter>RePlayEngine\Landscape</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Landscape\LandscapeMaterial.h"><Filter>RePlayEngine\Landscape</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Landscape\LandscapeBrush.h"><Filter>RePlayEngine\Landscape</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Landscape\LandscapeComponent.h"><Filter>RePlayEngine\Components\Landscape</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Landscape\LandscapeRendererComponent.h"><Filter>RePlayEngine\Components\Landscape</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Landscape\LandscapeColliderComponent.h"><Filter>RePlayEngine\Components\Landscape</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Landscape\LandscapeData.h"><Filter>RePlayEngine\Landscape</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Landscape\LandscapeMeshGenerator.h"><Filter>RePlayEngine\Landscape</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Landscape\LandscapeRenderer.h"><Filter>RePlayEngine\Landscape</Filter></ClInclude>

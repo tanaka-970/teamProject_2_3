@@ -12,6 +12,7 @@
 
 #include "../Runtime/Scene.h"
 #include "../../Components/Physics/MeshColliderComponent.h"
+#include "../../Components/Landscape/LandscapeColliderComponent.h"
 #include "../../Object/GameObject/GameObject.h"
 #include "../../Physics/CollisionLayers.h"
 
@@ -187,6 +188,14 @@ namespace ReplayEngine::Scene
                 // Transform が変わっていたときだけ World / Inverse / Bounds を作り直す。
                 mesh->RefreshTransformIfChanged();
                 if (mesh->ReadyForQuery()) ++mesh_collider_count_;
+            }
+            else if (entry.shape == Components::ColliderShape::Landscape)
+            {
+                auto* landscape = static_cast<Components::LandscapeColliderComponent*>(collider);
+                // Asset共有cacheは介さず、LandscapeComponent の revision が変わった時だけ
+                // local triangle + spatial cook を更新する。Transform 更新は同じ入口で扱う。
+                landscape->RefreshGeometryIfChanged();
+                if (landscape->ReadyForQuery()) ++mesh_collider_count_;
             }
 
             entry.bounds_valid = entry.active &&

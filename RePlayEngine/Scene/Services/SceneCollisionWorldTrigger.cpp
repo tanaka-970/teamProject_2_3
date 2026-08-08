@@ -78,6 +78,7 @@ namespace ReplayEngine::Scene
                 return radius > 0.0f;
             }
             case Components::ColliderShape::Mesh:
+            case Components::ColliderShape::Landscape:
             {
                 XMFLOAT3 minimum{};
                 XMFLOAT3 maximum{};
@@ -175,6 +176,7 @@ namespace ReplayEngine::Scene
             return SphereOverlapsBox(box, probe_center, probe_radius);
         }
         case Components::ColliderShape::Mesh:
+        case Components::ColliderShape::Landscape:
         {
             // 【制限】Mesh Trigger は内外判定を行わない。
             //   閉じたメッシュとは限らないため、内側かどうかを正しく決められない。

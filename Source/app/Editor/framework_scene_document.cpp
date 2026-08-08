@@ -55,7 +55,12 @@ namespace
 
 void framework::handle_viewport_selection()
 {
-    if (!edit_mode_active || !game_scene || !scene_view_hovered) return;
+    if (!edit_mode_active || !game_scene) return;
+
+    // Landscape Tool は左ドラッグを Sculpt / Face 選択へ使う。
+    // Stroke の mouse-up は Viewport 外でも拾う必要があるため Hover 判定より先。
+    if (handle_landscape_viewport_edit()) return;
+    if (!scene_view_hovered) return;
 
     // 編集カメラがマウスを掴んでいるフレームは選択処理を動かさない。
     // カメラ操作とギズモ操作・矩形選択が同時に走らないようにする。

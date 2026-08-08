@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../../Core/ObjectID/ObjectID.h"
 
@@ -35,6 +35,10 @@ namespace ReplayEngine::Editor
         void HandleDragAndDrop(EditorContext& context, Core::GameObject& object);
 
         void CreateEmptyGameObject(EditorContext& context, Core::GameObject* parent);
+        void DrawCreateMenu(EditorContext& context, Core::GameObject* parent);
+        void CreateBuiltInPrimitive(EditorContext& context, Core::GameObject* parent,
+            const char* display_name, int primitive_type);
+        void CreateLandscapeGround(EditorContext& context, Core::GameObject* parent);
         void DuplicateSelected(EditorContext& context);
         void DestroySelected(EditorContext& context);
 

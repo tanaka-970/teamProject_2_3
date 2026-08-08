@@ -1,4 +1,4 @@
-﻿#include "shader.h"
+#include "shader.h"
 #include "misc.h"
 #include "static_mesh.h"
 
@@ -461,6 +461,122 @@ static_mesh::static_mesh(ID3D11Device* device, const wchar_t* obj_filename, bool
 	// ここまで到達したときだけ描画可能とみなす。
 	// 呼び出し側は is_loaded() が false のメッシュを描画してはいけない。
 	loaded_ = true;
+}
+
+
+static_mesh::static_mesh(ID3D11Device* device, const std::vector<vertex>& source_vertices,
+    const std::vector<uint32_t>& source_indices)
+{
+    if (device == nullptr || source_vertices.empty() || source_indices.empty() ||
+        source_indices.size() % 3 != 0)
+    {
+        load_error_ = L"Procedural mesh data が空か不正です。";
+        return;
+    }
+    for (uint32_t index : source_indices)
+    {
+        if (index >= source_vertices.size())
+        {
+            load_error_ = L"Procedural mesh index が頂点範囲外です。";
+            return;
+        }
+    }
+
+    // create_com_buffers は入力を変更しないが旧APIが非const pointerなので、
+    // GPU upload 用に一時コピーを作る。
+    std::vector<vertex> vertices = source_vertices;
+    std::vector<uint32_t> indices = source_indices;
+    create_com_buffers(device, vertices.data(), vertices.size(), indices.data(), indices.size());
+
+    HRESULT hr{ S_OK };
+    D3D11_INPUT_ELEMENT_DESC input_element_desc[]
+    {
+        { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+        { "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+        { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+    };
+    create_vs_from_cso(device, "static_mesh_vs.cso", vertex_shader.GetAddressOf(),
+        input_layout.GetAddressOf(), input_element_desc, ARRAYSIZE(input_element_desc));
+    create_ps_from_cso(device, "static_mesh_ps.cso", pixel_shader.GetAddressOf());
+
+    D3D11_BUFFER_DESC buffer_desc{};
+    buffer_desc.ByteWidth = sizeof(constants);
+    buffer_desc.Usage = D3D11_USAGE_DEFAULT;
+    buffer_desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+    hr = device->CreateBuffer(&buffer_desc, nullptr, constant_buffer.GetAddressOf());
+    _ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+
+    buffer_desc.ByteWidth = sizeof(motion_vectors::ObjectConstants);
+    hr = device->CreateBuffer(&buffer_desc, nullptr,
+        motion_object_constant_buffer.GetAddressOf());
+    _ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+
+    // procedural mesh は外部 material library を持たない。1 subset / 1 material にする。
+    subsets.push_back({ L"Procedural", 0, static_cast<uint32_t>(indices.size()) });
+    material procedural_material;
+    procedural_material.name = L"Procedural";
+    materials.push_back(std::move(procedural_material));
+
+    make_dummy_texture(device, materials[0].shader_resource_views[0].GetAddressOf(), 0xFFFFFFFF, 16);
+    make_dummy_texture(device, materials[0].shader_resource_views[1].GetAddressOf(), 0xFFFF7F7F, 16);
+
+    for (const vertex& v : vertices)
+    {
+        bounding_box[0].x = std::min<float>(bounding_box[0].x, v.position.x);
+        bounding_box[0].y = std::min<float>(bounding_box[0].y, v.position.y);
+        bounding_box[0].z = std::min<float>(bounding_box[0].z, v.position.z);
+        bounding_box[1].x = std::max<float>(bounding_box[1].x, v.position.x);
+        bounding_box[1].y = std::max<float>(bounding_box[1].y, v.position.y);
+        bounding_box[1].z = std::max<float>(bounding_box[1].z, v.position.z);
+    }
+    loaded_ = vertex_buffer != nullptr && index_buffer != nullptr &&
+        vertex_shader != nullptr && constant_buffer != nullptr;
+    if (!loaded_) load_error_ = L"Procedural mesh GPU resource の作成に失敗しました。";
+}
+
+bool static_mesh::update_procedural_geometry(ID3D11Device* device,
+    const std::vector<vertex>& source_vertices,
+    const std::vector<uint32_t>& source_indices)
+{
+    if (device == nullptr || source_vertices.empty() || source_indices.empty() ||
+        source_indices.size() % 3 != 0)
+        return false;
+
+    for (uint32_t index : source_indices)
+    {
+        if (index >= source_vertices.size()) return false;
+    }
+
+    // create_com_buffers の旧APIが非const pointerなので upload 用コピーだけ作る。
+    // Shader / Material / Texture は既存のものをそのまま再利用する。
+    std::vector<vertex> vertices = source_vertices;
+    std::vector<uint32_t> indices = source_indices;
+    create_com_buffers(device, vertices.data(), vertices.size(), indices.data(), indices.size());
+
+    if (subsets.empty())
+        subsets.push_back({ L"Procedural", 0, static_cast<uint32_t>(indices.size()) });
+    else
+    {
+        subsets[0].index_start = 0;
+        subsets[0].index_count = static_cast<uint32_t>(indices.size());
+    }
+
+    bounding_box[0] = { D3D11_FLOAT32_MAX, D3D11_FLOAT32_MAX, D3D11_FLOAT32_MAX };
+    bounding_box[1] = { -D3D11_FLOAT32_MAX, -D3D11_FLOAT32_MAX, -D3D11_FLOAT32_MAX };
+    for (const vertex& v : vertices)
+    {
+        bounding_box[0].x = std::min<float>(bounding_box[0].x, v.position.x);
+        bounding_box[0].y = std::min<float>(bounding_box[0].y, v.position.y);
+        bounding_box[0].z = std::min<float>(bounding_box[0].z, v.position.z);
+        bounding_box[1].x = std::max<float>(bounding_box[1].x, v.position.x);
+        bounding_box[1].y = std::max<float>(bounding_box[1].y, v.position.y);
+        bounding_box[1].z = std::max<float>(bounding_box[1].z, v.position.z);
+    }
+
+    loaded_ = vertex_buffer != nullptr && index_buffer != nullptr &&
+        vertex_shader != nullptr && constant_buffer != nullptr;
+    if (!loaded_) load_error_ = L"Procedural mesh GPU geometry の更新に失敗しました。";
+    return loaded_;
 }
 
 void static_mesh::render(ID3D11DeviceContext* immediate_context,
