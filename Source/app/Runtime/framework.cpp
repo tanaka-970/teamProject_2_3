@@ -190,6 +190,14 @@ bool framework::uninitialize()
     // 7) GPU 統計の Query Pool。同じく static。
     ReplayEngine::Rendering::Stats().Release();
 
+    // 7.5) Compute / Deferred が持つ UAV と DepthStencilState。
+    //      この 2 つは initialize() の作り直しでリセット対象から漏れており、
+    //      resize のたびに前の実体が孤児になっていた。
+    //      作り直し側は release() を通すよう直したので、
+    //      ここでは終了時の最後の所有参照を落とす。
+    particles.release();
+    deferred.release();
+
     // 8) パイプラインに残ったバインドを外してから、積んだコマンドを流し切る。
     //    参照カウントを持っているのはバインド状態も同じなので、
     //    ClearState を通さないと最後の描画で使ったリソースが残る。

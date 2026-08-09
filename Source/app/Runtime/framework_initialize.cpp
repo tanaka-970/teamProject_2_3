@@ -6,7 +6,23 @@
 #include "../../RePlayEngine/Scene/LoadingScene.h"
 
 #include <filesystem>
+#include <cstring>
 #include <string>
+
+namespace
+{
+    void SetDebugName(ID3D11DeviceChild* object, const char* name)
+    {
+#if defined(_DEBUG) || defined(DEBUG)
+        if (object == nullptr || name == nullptr || *name == '\0') return;
+        object->SetPrivateData(WKPDID_D3DDebugObjectName,
+            static_cast<UINT>(std::strlen(name)), name);
+#else
+        (void)object;
+        (void)name;
+#endif
+    }
+}
 
 // 【削除済み】lower_copy / find_animation_clip
 //   起動時に固定のプレイヤーモデルからクリップ名を探し、
@@ -113,12 +129,20 @@ bool framework::initialize()
     D3D11_DEPTH_STENCIL_DESC dsd{};
     dsd.DepthEnable = TRUE; dsd.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL; dsd.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
     device->CreateDepthStencilState(&dsd, depth_stencil_states[(size_t)DEPTH_STATE::ZT_ON_ZW_ON].GetAddressOf());
+    SetDebugName(depth_stencil_states[(size_t)DEPTH_STATE::ZT_ON_ZW_ON].Get(),
+        "framework.depth_stencil_states[ZT_ON_ZW_ON] Source/app/Runtime/framework_initialize.cpp");
     dsd.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
     device->CreateDepthStencilState(&dsd, depth_stencil_states[(size_t)DEPTH_STATE::ZT_ON_ZW_OFF].GetAddressOf());
+    SetDebugName(depth_stencil_states[(size_t)DEPTH_STATE::ZT_ON_ZW_OFF].Get(),
+        "framework.depth_stencil_states[ZT_ON_ZW_OFF] Source/app/Runtime/framework_initialize.cpp");
     dsd.DepthEnable = FALSE; dsd.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
     device->CreateDepthStencilState(&dsd, depth_stencil_states[(size_t)DEPTH_STATE::ZT_OFF_ZW_ON].GetAddressOf());
+    SetDebugName(depth_stencil_states[(size_t)DEPTH_STATE::ZT_OFF_ZW_ON].Get(),
+        "framework.depth_stencil_states[ZT_OFF_ZW_ON] Source/app/Runtime/framework_initialize.cpp");
     dsd.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
     device->CreateDepthStencilState(&dsd, depth_stencil_states[(size_t)DEPTH_STATE::ZT_OFF_ZW_OFF].GetAddressOf());
+    SetDebugName(depth_stencil_states[(size_t)DEPTH_STATE::ZT_OFF_ZW_OFF].Get(),
+        "framework.depth_stencil_states[ZT_OFF_ZW_OFF] Source/app/Runtime/framework_initialize.cpp");
 
     D3D11_BLEND_DESC bd{};
     bd.RenderTarget[0].BlendEnable = FALSE;
