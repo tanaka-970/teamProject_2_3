@@ -260,7 +260,7 @@ void framework::restore_editor_session()
     }
     add_recent_object_scene(object_scene_path);
 
-    const int last_workspace = static_cast<int>(editor_workspace::shader_adjustment);
+    const int last_workspace = static_cast<int>(editor_workspace::motion);
     workspace = std::clamp(workspace, 0, last_workspace);
     view = std::clamp(view, 0, static_cast<int>(editor_view::game));
     active_editor_workspace = static_cast<editor_workspace>(workspace);

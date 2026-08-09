@@ -144,6 +144,8 @@ void framework::configure_editor_style()
 void framework::set_editor_workspace(editor_workspace workspace)
 {
     if (active_editor_workspace == workspace) return;
+    const editor_workspace previous_workspace = active_editor_workspace;
+    if (previous_workspace == editor_workspace::motion) stop_motion_preview();
     active_editor_workspace = workspace;
     editor_layout_dirty = true;
     switch (active_editor_workspace)
@@ -169,6 +171,14 @@ void framework::set_editor_workspace(editor_workspace workspace)
         show_ui_hierarchy_panel = true;
         show_ui_preview_panel = true;
         show_ui_inspector_panel = true;
+        break;
+    case editor_workspace::motion:
+        selected_editor_object = editor_selection::game_object;
+        show_motion_layers_panel = true;
+        show_motion_preview_panel = true;
+        show_motion_inspector_panel = true;
+        show_motion_timeline_panel = true;
+        show_motion_graph_panel = true;
         break;
     default: selected_editor_object = editor_selection::world; break;
     }
@@ -216,7 +226,11 @@ void framework::draw_editor_main_menu()
             ImGui::EndMenu();
         }
         ImGui::Separator();
-        if (ImGui::MenuItem("Save", "Ctrl+S")) save_object_scene(false);
+        if (active_editor_workspace == editor_workspace::motion && motion_editor_loaded)
+        {
+            if (ImGui::MenuItem("Save Motion", "Ctrl+S")) save_current_motion_asset();
+        }
+        else if (ImGui::MenuItem("Save", "Ctrl+S")) save_object_scene(false);
         if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S")) save_object_scene(true);
         ImGui::Separator();
         if (ImGui::MenuItem("Exit"))
@@ -225,12 +239,23 @@ void framework::draw_editor_main_menu()
     }
     if (ImGui::BeginMenu("Edit"))
     {
+        const bool motion_workspace = active_editor_workspace == editor_workspace::motion;
         if (ImGui::MenuItem("Undo", "Ctrl+Z", false,
-            object_editor_context.CanEdit() && object_editor_context.History().CanUndo()))
-            object_editor_context.Undo();
+            motion_workspace ? motion_edit_history.CanUndo()
+                : (object_editor_context.CanEdit() &&
+                    object_editor_context.History().CanUndo())))
+        {
+            if (motion_workspace) undo_motion_edit();
+            else object_editor_context.Undo();
+        }
         if (ImGui::MenuItem("Redo", "Ctrl+Y", false,
-            object_editor_context.CanEdit() && object_editor_context.History().CanRedo()))
-            object_editor_context.Redo();
+            motion_workspace ? motion_edit_history.CanRedo()
+                : (object_editor_context.CanEdit() &&
+                    object_editor_context.History().CanRedo())))
+        {
+            if (motion_workspace) redo_motion_edit();
+            else object_editor_context.Redo();
+        }
         ImGui::Separator();
         if (ImGui::MenuItem("Duplicate", "Ctrl+D", false,
             object_editor_context.CanEdit() && !object_editor_context.Selection().Empty()))
@@ -292,11 +317,21 @@ void framework::draw_editor_main_menu()
         ImGui::Separator();
         if (ImGui::MenuItem("UI Workspaceへ"))
             set_editor_workspace(editor_workspace::ui);
+        if (ImGui::MenuItem("Motion Workspaceへ"))
+            set_editor_workspace(editor_workspace::motion);
         if (active_editor_workspace == editor_workspace::ui)
         {
             ImGui::MenuItem("UI 階層", nullptr, &show_ui_hierarchy_panel);
             ImGui::MenuItem("Canvas プレビュー", nullptr, &show_ui_preview_panel);
             ImGui::MenuItem("UI インスペクター", nullptr, &show_ui_inspector_panel);
+        }
+        if (active_editor_workspace == editor_workspace::motion)
+        {
+            ImGui::MenuItem("Motion レイヤー", nullptr, &show_motion_layers_panel);
+            ImGui::MenuItem("Motion プレビュー", nullptr, &show_motion_preview_panel);
+            ImGui::MenuItem("Motion インスペクター", nullptr, &show_motion_inspector_panel);
+            ImGui::MenuItem("タイムライン", nullptr, &show_motion_timeline_panel);
+            ImGui::MenuItem("グラフエディター", nullptr, &show_motion_graph_panel);
         }
         ImGui::Separator();
         ImGui::MenuItem(u8"シーンメモ", nullptr, &show_scene_notes_panel);
@@ -905,6 +940,12 @@ void framework::draw_search_results()
         ImGui::Selectable("UI Workspaceへ"))
     {
         set_editor_workspace(editor_workspace::ui);
+        editor_search_text[0] = '\0';
+    }
+    if (matches("workspace motion timeline keyframe モーション タイムライン") &&
+        ImGui::Selectable("Motion Workspaceへ"))
+    {
+        set_editor_workspace(editor_workspace::motion);
         editor_search_text[0] = '\0';
     }
     if (matches("shader material preset シェーダー 材質 プリセット") &&
@@ -1571,6 +1612,13 @@ void framework::draw_workspace_panel()
         ImGui::SameLine();
         if (ImGui::Button("Canvas プレビューを開く")) show_ui_preview_panel = true;
         break;
+    case editor_workspace::motion:
+        ImGui::TextUnformatted("Motion Workspace");
+        ImGui::TextDisabled("Motion Asset、キー、プレビューを編集します。");
+        if (ImGui::Button("Motion レイヤーを開く")) show_motion_layers_panel = true;
+        ImGui::SameLine();
+        if (ImGui::Button("タイムラインを開く")) show_motion_timeline_panel = true;
+        break;
     default:
         ImGui::TextUnformatted("基本Workspace");
         ImGui::TextDisabled("シーン編集と実行状態の確認を行います。");
@@ -1610,7 +1658,8 @@ void framework::draw_editor()
     const ImGuiID dockspace_id = ImGui::GetID("RePlayEditorDockSpaceJP2");
     const ImGuiDockNodeFlags dockspace_flags =
         ImGuiDockNodeFlags_PassthruCentralNode |
-        (active_editor_workspace == editor_workspace::ui
+        (active_editor_workspace == editor_workspace::ui ||
+            active_editor_workspace == editor_workspace::motion
             ? ImGuiDockNodeFlags_None : ImGuiDockNodeFlags_NoDockingInCentralNode);
     ImGui::DockSpace(dockspace_id, ImVec2(0, 0), dockspace_flags);
     if (!editor_layout_checked || editor_layout_dirty)
@@ -1639,6 +1688,12 @@ void framework::draw_editor()
                 right_ratio = 0.30f;
                 bottom_ratio = 0.20f;
             }
+            if (active_editor_workspace == editor_workspace::motion)
+            {
+                left_ratio = 0.16f;
+                right_ratio = 0.26f;
+                bottom_ratio = 0.40f;
+            }
             if (active_editor_workspace == editor_workspace::shader_adjustment)
             {
                 left_ratio = 0.16f;
@@ -1653,6 +1708,16 @@ void framework::draw_editor()
                 ImGui::DockBuilderDockWindow("UI 階層", left);
                 ImGui::DockBuilderDockWindow("UI インスペクター", right);
                 ImGui::DockBuilderDockWindow("Canvas プレビュー", center);
+                ImGui::DockBuilderDockWindow("プロジェクト", bottom);
+                ImGui::DockBuilderDockWindow("コンソール", bottom);
+            }
+            else if (active_editor_workspace == editor_workspace::motion)
+            {
+                ImGui::DockBuilderDockWindow("Motion レイヤー", left);
+                ImGui::DockBuilderDockWindow("Motion インスペクター", right);
+                ImGui::DockBuilderDockWindow("Motion プレビュー", center);
+                ImGui::DockBuilderDockWindow("タイムライン", bottom);
+                ImGui::DockBuilderDockWindow("グラフエディター", bottom);
                 ImGui::DockBuilderDockWindow("プロジェクト", bottom);
                 ImGui::DockBuilderDockWindow("コンソール", bottom);
             }
@@ -1688,6 +1753,19 @@ void framework::draw_editor()
         draw_ui_hierarchy();
         draw_ui_preview();
         draw_ui_inspector();
+        if (show_project_panel) draw_project_panel();
+        if (show_console_panel) draw_console_panel();
+        draw_search_results();
+        return;
+    }
+
+    if (active_editor_workspace == editor_workspace::motion)
+    {
+        draw_motion_layers();
+        draw_motion_preview();
+        draw_motion_inspector();
+        draw_motion_timeline();
+        draw_motion_graph_editor();
         if (show_project_panel) draw_project_panel();
         if (show_console_panel) draw_console_panel();
         draw_search_results();

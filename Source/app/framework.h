@@ -61,6 +61,11 @@ extern ImWchar glyphRangesJapanese[];
 #include "../../RePlayEngine/Assets/AssetDatabase.h"
 #include "../../RePlayEngine/Assets/AsyncAssetManager.h"
 #include "../../RePlayEngine/Assets/ConcurrentResourceCache.h"
+#include "../../RePlayEngine/Core/ObjectID/RuntimeIdentity.h"
+#include "../../RePlayEngine/Motion/CompositionAsset.h"
+#include "../../RePlayEngine/Motion/MotionAsset.h"
+#include "../../RePlayEngine/Motion/MotionMixer.h"
+#include "../../RePlayEngine/Reflection/Property/PropertyBag.h"
 #include "../../RePlayEngine/UI/FontAtlas.h"
 #include "../../RePlayEngine/UI/UIRenderer.h"
 #include "../../RePlayEngine/Audio/AudioSystem.h"
@@ -83,6 +88,7 @@ extern ImWchar glyphRangesJapanese[];
 #include "../../RePlayEngine/Scripting/Core/ScriptRuntime.h"
 #include "../../RePlayEngine/Runtime/Scene/SceneFlowService.h"
 #include "../../RePlayEngine/Editor/Core/EditorContext.h"
+#include "../../RePlayEngine/Editor/Commands/MotionEditHistory.h"
 #include "../../RePlayEngine/Editor/Hierarchy/HierarchyPanel.h"
 #include "../../RePlayEngine/Editor/Inspector/InspectorPanel.h"
 #include "../../RePlayEngine/Rendering/Adapter/RenderItem.h"
@@ -282,6 +288,9 @@ public:
     ReplayEngine::Assets::ConcurrentResourceCache<static_mesh> static_mesh_cache;
     ReplayEngine::Assets::ConcurrentResourceCache<skinned_mesh> skinned_mesh_cache;
     ReplayEngine::Assets::ConcurrentResourceCache<gltf_model> gltf_model_cache;
+    ReplayEngine::Motion::MotionMixer motion_mixer;
+    std::unordered_map<std::string, ReplayEngine::Motion::MotionAsset> motion_asset_cache;
+    std::unordered_set<std::string> motion_asset_load_failures;
     ReplayEngine::Assets::AsyncAssetManager async_asset_manager;
 
     // プロジェクト設定。Default Controlled Character Prefab を持つ。
@@ -799,6 +808,12 @@ public:
             if (shortcut_pressed && wparam == 'S')
             {
                 const bool choose_path = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+                if (active_editor_workspace == editor_workspace::motion &&
+                    !choose_path && motion_editor_loaded)
+                {
+                    save_current_motion_asset();
+                    return 0;
+                }
                 // 標準保存はGameObject Sceneだけを対象にし、正本を一つに保つ。
                 save_object_scene(choose_path);
                 return 0;
@@ -806,8 +821,16 @@ public:
             if (msg == WM_KEYDOWN && control_down && !ImGui::GetIO().WantTextInput &&
                 (wparam == 'Z' || wparam == 'Y'))
             {
-                if (wparam == 'Z') object_editor_context.Undo();
-                else object_editor_context.Redo();
+                if (active_editor_workspace == editor_workspace::motion)
+                {
+                    if (wparam == 'Z') undo_motion_edit();
+                    else redo_motion_edit();
+                }
+                else
+                {
+                    if (wparam == 'Z') object_editor_context.Undo();
+                    else object_editor_context.Redo();
+                }
                 return 0;
             }
             if (shortcut_pressed && wparam == 'D')
@@ -1132,6 +1155,9 @@ private:
     void update_object_fixed_step(float elapsed_time);
     void update_object_camera_follow(float elapsed_time);
     void refresh_object_scene_services();
+    const ReplayEngine::Motion::MotionAsset* resolve_motion_asset(
+        const std::string& asset_guid);
+    void evaluate_motion_players(ReplayEngine::Scene::Scene& scene, float elapsed_time);
     void sync_object_lights();
 
     // --- 新規 Scene 作成 ---------------------------------------------------
@@ -1254,6 +1280,7 @@ private:
     bool project_create_folder(const std::string& name);
     bool project_create_csharp_behaviour(const std::string& class_name);
     bool project_create_material(const std::string& name);
+    bool project_create_motion(const std::string& name);
     bool project_create_scene_flow(const std::string& name);
     bool project_create_surface_shader(const std::string& name);
     bool project_create_layer_shader(const std::string& name);
@@ -1272,6 +1299,18 @@ private:
     void draw_ui_hierarchy();
     void draw_ui_preview();
     void draw_ui_inspector();
+    bool open_motion_asset(const ReplayEngine::Assets::AssetRecord& asset);
+    bool save_current_motion_asset();
+    bool undo_motion_edit();
+    bool redo_motion_edit();
+    void draw_motion_layers();
+    void draw_motion_preview();
+    void draw_motion_inspector();
+    void draw_motion_timeline();
+    void draw_motion_graph_editor();
+    void stop_motion_preview();
+    void capture_motion_preview_targets();
+    void apply_motion_preview_time();
     void set_editor_workspace(editor_workspace workspace);
     void configure_editor_style();
     void set_edit_mode(bool enabled);
@@ -1337,7 +1376,8 @@ private:
         animation,
         rendering,
         shader_adjustment,
-        ui
+        ui,
+        motion
     };
     enum class editor_view
     {
@@ -1363,6 +1403,34 @@ private:
     bool show_ui_hierarchy_panel{ true };
     bool show_ui_preview_panel{ true };
     bool show_ui_inspector_panel{ true };
+    bool show_motion_layers_panel{ true };
+    bool show_motion_preview_panel{ true };
+    bool show_motion_inspector_panel{ true };
+    bool show_motion_timeline_panel{ true };
+    bool show_motion_graph_panel{ true };
+    ReplayEngine::Motion::MotionAsset motion_editor_asset;
+    ReplayEngine::Motion::CompositionAsset motion_editor_composition;
+    ReplayEngine::Editor::MotionEditHistory motion_edit_history;
+    std::filesystem::path motion_editor_path;
+    std::string motion_editor_guid;
+    std::string motion_editor_status{ "Motion Asset が未選択です" };
+    bool motion_editor_loaded{ false };
+    bool motion_editor_dirty{ false };
+    bool motion_composition_loaded{ false };
+    int motion_selected_track{ -1 };
+    int motion_selected_key{ -1 };
+    bool motion_preview_active{ false };
+    bool motion_preview_loop{ false };
+    float motion_preview_time{ 0.0f };
+    float motion_preview_speed{ 1.0f };
+    struct MotionPreviewCapture
+    {
+        ReplayEngine::Core::ObjectID object;
+        ReplayEngine::Core::ComponentStableID component =
+            ReplayEngine::Core::invalid_component_stable_id;
+        ReplayEngine::Reflection::PropertyBag properties;
+    };
+    std::vector<MotionPreviewCapture> motion_preview_captures;
     int ui_preview_resolution_index{ 0 };
     int ui_preview_custom_width{ 1920 };
     int ui_preview_custom_height{ 1080 };

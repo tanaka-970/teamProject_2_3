@@ -29,10 +29,149 @@
 
 #include "texture.h"
 
+#include "../../RePlayEngine/Components/UI/UIImageComponent.h"
+#include "../../RePlayEngine/Motion/MotionAsset.h"
+#include "../../RePlayEngine/Motion/MotionBindingResolver.h"
+#include "../../RePlayEngine/Motion/MotionEvaluator.h"
+#include "../../RePlayEngine/Motion/MotionMixer.h"
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
+#include "../../RePlayEngine/Reflection/Property/PropertyValue.h"
+#include "../../RePlayEngine/Scene/Runtime/Scene.h"
 #include "../../RePlayEngine/Scene/Serialization/SceneData.h"
 
+#include <cmath>
+#include <filesystem>
+#include <fstream>
 #include <string>
+
+namespace
+{
+    bool MotionClose(float lhs, float rhs) noexcept
+    {
+        return std::fabs(lhs - rhs) <= 0.0001f;
+    }
+
+    void WriteMotionValidationReport(bool ok, const std::string& message)
+    {
+        const std::filesystem::path report_path =
+            std::filesystem::path("Saved") / "Validation" / "MotionRuntime.txt";
+
+        std::error_code ec;
+        std::filesystem::create_directories(report_path.parent_path(), ec);
+
+        std::ofstream report(report_path);
+        if (!report) return;
+
+        report << "REPLAY_MOTION_RUNTIME_VALIDATION 1\n";
+        report << "RESULT " << (ok ? "OK" : "FAIL") << "\n";
+        if (!message.empty()) report << "DETAIL " << message << "\n";
+    }
+
+    bool RunMotionRuntimeValidation(std::string& error)
+    {
+        namespace Components = ReplayEngine::Components;
+        namespace Motion = ReplayEngine::Motion;
+        namespace Reflection = ReplayEngine::Reflection;
+        namespace Scene = ReplayEngine::Scene;
+
+        Scene::Scene scene("MotionRuntimeValidation");
+        ReplayEngine::Core::GameObject* object = scene.CreateGameObject("ValidationImage");
+        if (object == nullptr)
+        {
+            error = "GameObject を作成できません。";
+            return false;
+        }
+
+        Components::UIImageComponent* image =
+            object->AddComponent<Components::UIImageComponent>();
+        if (image == nullptr)
+        {
+            error = "UIImageComponent を作成できません。";
+            return false;
+        }
+        image->opacity = 0.0f;
+
+        Motion::MotionAsset asset;
+        asset.name = "ShutdownMotionOpacity";
+        asset.duration = 1.0f;
+
+        Motion::MotionTrack track;
+        track.name = "ValidationImage.opacity";
+        track.binding.object = object->ID();
+        track.binding.component_type = Components::UIImageComponent::StaticTypeID();
+        track.binding.component_index = 0;
+        track.binding.property = "opacity";
+        track.value_type = Reflection::PropertyType::Float;
+
+        Motion::MotionKeyframe start;
+        start.time = 0.0f;
+        start.value = Reflection::PropertyValue::MakeFloat(0.0f);
+        start.easing = Motion::MotionEasing::Linear;
+
+        Motion::MotionKeyframe end;
+        end.time = 1.0f;
+        end.value = Reflection::PropertyValue::MakeFloat(1.0f);
+        end.easing = Motion::MotionEasing::Linear;
+
+        track.keys.push_back(start);
+        track.keys.push_back(end);
+        asset.tracks.push_back(track);
+        asset.SortKeys();
+
+        const std::filesystem::path motion_path =
+            std::filesystem::path("Saved") / "Validation" / "ShutdownMotion.replaymotion";
+
+        if (!Motion::MotionAsset::SaveToFile(motion_path, asset, error))
+        {
+            return false;
+        }
+
+        Motion::MotionAsset loaded;
+        if (!Motion::MotionAsset::LoadFromFile(motion_path, loaded, error))
+        {
+            return false;
+        }
+        if (loaded.tracks.empty())
+        {
+            error = "読み込んだ Motion に Track がありません。";
+            return false;
+        }
+
+        Reflection::PropertyValue value;
+        if (!Motion::MotionEvaluator::EvaluateTrack(loaded.tracks.front(), 0.5f, value))
+        {
+            error = "MotionEvaluator が opacity Track を評価できません。";
+            return false;
+        }
+        if (!MotionClose(value.AsFloat(-1.0f), 0.5f))
+        {
+            error = "MotionEvaluator の 0.5 秒地点が期待値と一致しません。";
+            return false;
+        }
+
+        Motion::ResolvedMotionBinding binding =
+            Motion::MotionBindingResolver::Resolve(scene, loaded.tracks.front().binding);
+        if (!binding.Valid())
+        {
+            error = "MotionBindingResolver が UIImage.opacity を解決できません。";
+            return false;
+        }
+
+        Motion::MotionMixer mixer;
+        mixer.BeginFrame();
+        mixer.Contribute(binding, value, 1.0f);
+        mixer.Apply();
+
+        if (!MotionClose(image->opacity, 0.5f))
+        {
+            error = "MotionMixer 適用後の UIImage.opacity が期待値と一致しません。";
+            return false;
+        }
+
+        error = "UIImage.opacity 0->1 の 0.5 秒地点を評価・適用しました。";
+        return true;
+    }
+}
 
 void framework::run_shutdown_regression_scenario()
 {
@@ -40,6 +179,14 @@ void framework::run_shutdown_regression_scenario()
     namespace Serialization = ReplayEngine::Scene::Serialization;
 
     OutputDebugStringA("[ShutdownRegression] 開始\n");
+
+    std::string motion_error;
+    const bool motion_ok = RunMotionRuntimeValidation(motion_error);
+    WriteMotionValidationReport(motion_ok, motion_error);
+    OutputDebugStringA(motion_ok
+        ? "[ShutdownRegression] Motion Runtime 検証 OK\n"
+        : ("[ShutdownRegression] Motion Runtime 検証失敗: " +
+            motion_error + "\n").c_str());
 
     // ---- 1) Texture Cache を使う ------------------------------------------
     //

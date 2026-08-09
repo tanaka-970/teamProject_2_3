@@ -24,6 +24,7 @@
 #include "../../Components/Landscape/LandscapeComponent.h"
 #include "../../Components/Landscape/LandscapeRendererComponent.h"
 #include "../../Components/Landscape/LandscapeColliderComponent.h"
+#include "../../Components/Motion/MotionPlayerComponent.h"
 #include "../../Components/UI/CanvasComponent.h"
 #include "../../Components/UI/RectTransformComponent.h"
 #include "../../Components/UI/UIImageComponent.h"
@@ -56,6 +57,7 @@ namespace ReplayEngine::Core
         using Components::LandscapeComponent;
         using Components::LandscapeRendererComponent;
         using Components::LandscapeColliderComponent;
+        using Components::MotionPlayerComponent;
         using Components::MeshRendererComponent;
         using Components::PrimitiveMeshRendererComponent;
         using Components::DirectionalLightComponent;
@@ -1088,8 +1090,10 @@ namespace ReplayEngine::Core
                     .Display("テキスト").Animation(Animatable::Step));
             PropertyRegistry::Register<UITextComponent>(
                 MakeProperty("font", &UITextComponent::font)
-                    .Display("フォント").Animation(Animatable::Step)
-                    .Tooltip("将来の Font Asset GUID です。未指定でも fallback atlas で描画します。"));
+                    .Display("フォント").OfAssetType("Font")
+                    .Animation(Animatable::Step)
+                    .Tooltip("フォント Asset を選ぶ。まだ取り込み経路が無いので候補は空です。"
+                        "未指定でも fallback atlas で描画します。"));
             PropertyRegistry::Register<UITextComponent>(
                 MakeProperty("font_size", &UITextComponent::font_size)
                     .Display("文字サイズ").Range(1.0, 512.0).Step(1.0));
@@ -1173,6 +1177,53 @@ namespace ReplayEngine::Core
             //   ・UIText は 1 文字 1 クアッドで character_index を持つ
             //   ・Blend は framework の共有 BLEND_STATE を使う
             //   ・Mask は Phase 1 では scissor rasterizer state だけを使う
+        }
+
+        void RegisterMotion()
+        {
+            ComponentRegistry::Register<MotionPlayerComponent>(
+                ComponentTypeInfo::Describe("Motion Player", "Motion")
+                    .WithTooltip("Motion AssetをScene更新後に評価し、PropertyRegistry経由で値を書き込む。"));
+
+            PropertyRegistry::Register<MotionPlayerComponent>(
+                MakeProperty("motion", &MotionPlayerComponent::motion)
+                    .Display("Motion Asset")
+                    .OfAssetType("Motion")
+                    .Animation(Animatable::Step)
+                    .Tooltip("再生する .replaymotion Asset。"));
+            PropertyRegistry::Register<MotionPlayerComponent>(
+                MakeProperty("play_on_start", &MotionPlayerComponent::play_on_start)
+                    .Display("開始時に再生")
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<MotionPlayerComponent>(
+                MakeProperty("loop", &MotionPlayerComponent::loop)
+                    .Display("ループ")
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<MotionPlayerComponent>(
+                MakeProperty("speed", &MotionPlayerComponent::speed)
+                    .Display("再生速度").Range(-8.0, 8.0).Step(0.05));
+            PropertyRegistry::Register<MotionPlayerComponent>(
+                MakeProperty("weight", &MotionPlayerComponent::weight)
+                    .Display("重み").Range(0.0, 1.0).Step(0.01));
+            PropertyRegistry::Register<MotionPlayerComponent>(
+                MakeProperty("time", &MotionPlayerComponent::time)
+                    .Display("現在時刻")
+                    .Unit("秒")
+                    .RuntimeOnly()
+                    .ReadOnly()
+                    .NotSerializable());
+
+            // ---- 拡張点: Motion Runtime -------------------------------------
+            //
+            // 【今は入れていない理由】
+            //   Phase 3 は PropertyRegistry へ値を流す最小の評価経路を固定する段階。
+            //   Layer mode / Additive / Baseline は「現在値を壊さない」規則と衝突しやすいため、
+            //   Mixer の蓄積口だけ残して Phase 7 で扱う。
+            //
+            // 【入れるときにここへ足す】
+            //   ・MotionPlayerComponent に layer / blend_mode / fade_in_out を追加する
+            //   ・MotionMixer は同じ property へ setter を 1 回だけ呼ぶ規則を維持する
+            //   ・未バインド property は Apply しない
         }
 
         void RegisterEditorNote()
@@ -1333,6 +1384,7 @@ namespace ReplayEngine::Core
         RegisterPrimitiveMeshRenderer();
         RegisterLights();
         RegisterUI();
+        RegisterMotion();
         RegisterSkinnedMeshRenderer();
         RegisterAnimator();
         RegisterSphereCollider();

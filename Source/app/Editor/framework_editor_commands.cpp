@@ -103,9 +103,10 @@ void framework::execute_editor_command(const std::string& command)
         else if (argument == "animation") set_editor_workspace(editor_workspace::animation);
         else if (argument == "rendering") set_editor_workspace(editor_workspace::rendering);
         else if (argument == "shader") set_editor_workspace(editor_workspace::shader_adjustment);
+        else if (argument == "motion") set_editor_workspace(editor_workspace::motion);
         else
         {
-            editor_command_result = "使い方: workspace [general/placement/modeling/animation/rendering/shader]";
+            editor_command_result = "使い方: workspace [general/placement/modeling/animation/rendering/shader/motion]";
             return;
         }
         editor_command_result = "ワークスペースを切り替えました";

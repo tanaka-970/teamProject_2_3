@@ -289,6 +289,12 @@
     <Filter Include="RePlayEngine\Components\Landscape">
       <UniqueIdentifier>{9d47309b-1c67-4fe1-9c09-5ec29b04c2ab}</UniqueIdentifier>
     </Filter>
+    <Filter Include="RePlayEngine\Motion">
+      <UniqueIdentifier>{1c4d7db8-7c04-4a51-a4f1-5ad2a34280e0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Components\Motion">
+      <UniqueIdentifier>{9c373180-f830-4bc6-964e-f974522699da}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Shader\PostEffects\AmbientOcclusion">
       <UniqueIdentifier>{81f91c0a-8db2-5510-9212-625575a42a0a}</UniqueIdentifier>
     </Filter>
@@ -662,6 +668,30 @@
     </ClCompile>
     <ClCompile Include="RePlayEngine\Editor\Commands\SceneEditHistory.cpp">
       <Filter>RePlayEngine\Editor\Commands</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\Commands\MotionEditHistory.cpp">
+      <Filter>RePlayEngine\Editor\Commands</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Motion\MotionEasing.cpp">
+      <Filter>RePlayEngine\Motion</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Motion\MotionAsset.cpp">
+      <Filter>RePlayEngine\Motion</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Motion\CompositionAsset.cpp">
+      <Filter>RePlayEngine\Motion</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Motion\MotionEvaluator.cpp">
+      <Filter>RePlayEngine\Motion</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Motion\MotionBindingResolver.cpp">
+      <Filter>RePlayEngine\Motion</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Motion\MotionMixer.cpp">
+      <Filter>RePlayEngine\Motion</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\Motion\MotionPlayerComponent.cpp">
+      <Filter>RePlayEngine\Components\Motion</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Editor\Hierarchy\HierarchyPanel.cpp">
       <Filter>RePlayEngine\Editor\Hierarchy</Filter>
@@ -1169,6 +1199,27 @@
     <ClInclude Include="RePlayEngine\Reflection\Property\References.h">
       <Filter>RePlayEngine\Reflection\Property</Filter>
     </ClInclude>
+    <ClInclude Include="RePlayEngine\Motion\MotionEasing.h">
+      <Filter>RePlayEngine\Motion</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Motion\MotionAsset.h">
+      <Filter>RePlayEngine\Motion</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Motion\CompositionAsset.h">
+      <Filter>RePlayEngine\Motion</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Motion\MotionEvaluator.h">
+      <Filter>RePlayEngine\Motion</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Motion\MotionBindingResolver.h">
+      <Filter>RePlayEngine\Motion</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Motion\MotionMixer.h">
+      <Filter>RePlayEngine\Motion</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Motion\MotionPlayerComponent.h">
+      <Filter>RePlayEngine\Components\Motion</Filter>
+    </ClInclude>
     <ClInclude Include="RePlayEngine\Object\Component\MissingComponent.h">
       <Filter>RePlayEngine\Object\Component</Filter>
     </ClInclude>
@@ -1257,6 +1308,9 @@
       <Filter>RePlayEngine\Editor\Selection</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Editor\Commands\SceneEditHistory.h">
+      <Filter>RePlayEngine\Editor\Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\Commands\MotionEditHistory.h">
       <Filter>RePlayEngine\Editor\Commands</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Editor\Hierarchy\HierarchyPanel.h">
@@ -1866,6 +1920,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Source\app\Editor\framework_ui_workspace.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_motion_workspace.cpp">
       <Filter>Source\App\Editor</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Components\UI\CanvasComponent.cpp">

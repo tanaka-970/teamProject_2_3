@@ -371,6 +371,14 @@
     <ClCompile Include="RePlayEngine\Editor\Core\EditorContext.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Selection\EditorSelection.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Commands\SceneEditHistory.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Commands\MotionEditHistory.cpp" />
+    <ClCompile Include="RePlayEngine\Motion\MotionEasing.cpp" />
+    <ClCompile Include="RePlayEngine\Motion\MotionAsset.cpp" />
+    <ClCompile Include="RePlayEngine\Motion\CompositionAsset.cpp" />
+    <ClCompile Include="RePlayEngine\Motion\MotionEvaluator.cpp" />
+    <ClCompile Include="RePlayEngine\Motion\MotionBindingResolver.cpp" />
+    <ClCompile Include="RePlayEngine\Motion\MotionMixer.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Motion\MotionPlayerComponent.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Hierarchy\HierarchyPanel.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Inspector\InspectorPanel.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Inspector\PropertyDrawer.cpp" />
@@ -542,6 +550,13 @@
     <ClInclude Include="RePlayEngine\Reflection\Property\PropertyBag.h" />
     <ClInclude Include="RePlayEngine\Reflection\Property\References.h" />
     <ClInclude Include="RePlayEngine\Reflection\Registry\TypeGUID.h" />
+    <ClInclude Include="RePlayEngine\Motion\MotionEasing.h" />
+    <ClInclude Include="RePlayEngine\Motion\MotionAsset.h" />
+    <ClInclude Include="RePlayEngine\Motion\CompositionAsset.h" />
+    <ClInclude Include="RePlayEngine\Motion\MotionEvaluator.h" />
+    <ClInclude Include="RePlayEngine\Motion\MotionBindingResolver.h" />
+    <ClInclude Include="RePlayEngine\Motion\MotionMixer.h" />
+    <ClInclude Include="RePlayEngine\Components\Motion\MotionPlayerComponent.h" />
     <ClInclude Include="RePlayEngine\Runtime\Core\RuntimeResult.h" />
     <ClInclude Include="RePlayEngine\Runtime\Handles\RuntimeHandles.h" />
     <ClInclude Include="RePlayEngine\Runtime\Handles\HandleResolver.h" />
@@ -592,6 +607,7 @@
     <ClInclude Include="RePlayEngine\Editor\Core\EditorContext.h" />
     <ClInclude Include="RePlayEngine\Editor\Selection\EditorSelection.h" />
     <ClInclude Include="RePlayEngine\Editor\Commands\SceneEditHistory.h" />
+    <ClInclude Include="RePlayEngine\Editor\Commands\MotionEditHistory.h" />
     <ClInclude Include="RePlayEngine\Editor\Hierarchy\HierarchyPanel.h" />
     <ClInclude Include="RePlayEngine\Editor\Inspector\InspectorPanel.h" />
     <ClInclude Include="RePlayEngine\Editor\Inspector\PropertyDrawer.h" />
@@ -668,6 +684,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Source\app\Editor\framework_ui_workspace.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_motion_workspace.cpp" />
     <ClCompile Include="RePlayEngine\Components\UI\CanvasComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\UI\RectTransformComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\UI\UIImageComponent.cpp" />

@@ -16,6 +16,7 @@
 #include "../../RePlayEngine/Components/Camera/CameraComponent.h"
 #include "../../RePlayEngine/Components/Camera/CameraTargetComponent.h"
 #include "../../RePlayEngine/Components/Camera/FollowTargetComponent.h"
+#include "../../RePlayEngine/Components/Motion/MotionPlayerComponent.h"
 #include "../../RePlayEngine/Components/Rendering/LightComponents.h"
 #include "../../RePlayEngine/Components/Landscape/LandscapeComponent.h"
 #include "../../RePlayEngine/Components/Landscape/LandscapeRendererComponent.h"
@@ -25,6 +26,8 @@
 #include "../../RePlayEngine/Object/Registry/BuiltInComponents.h"
 #include "../../RePlayEngine/Project/ProjectSettingsSerializer.h"
 #include "../../RePlayEngine/Rendering/Adapter/SceneRenderCollector.h"
+#include "../../RePlayEngine/Motion/MotionBindingResolver.h"
+#include "../../RePlayEngine/Motion/MotionEvaluator.h"
 #include "../../RePlayEngine/UI/UILayout.h"
 
 // RuntimeContext.h は EventBus を前方宣言だけしている。
@@ -509,6 +512,100 @@ void framework::update_object_fixed_step(float elapsed_time)
     if (steps >= object_max_fixed_substeps) object_fixed_accumulator = 0.0f;
 }
 
+const ReplayEngine::Motion::MotionAsset* framework::resolve_motion_asset(
+    const std::string& asset_guid)
+{
+    if (asset_guid.empty()) return nullptr;
+
+    auto cached = motion_asset_cache.find(asset_guid);
+    if (cached != motion_asset_cache.end()) return &cached->second;
+
+    const ReplayEngine::Assets::AssetRecord* record =
+        asset_database.FindByGuid(asset_guid);
+    if (record == nullptr || record->kind != ReplayEngine::Assets::AssetKind::Motion)
+    {
+        if (motion_asset_load_failures.insert(asset_guid).second)
+        {
+            push_editor_log("Warning",
+                "Motion Assetを解決できません: " + asset_guid);
+        }
+        return nullptr;
+    }
+
+    ReplayEngine::Motion::MotionAsset asset;
+    std::string error;
+    if (!ReplayEngine::Motion::MotionAsset::LoadFromFile(record->source_path,
+        asset, error))
+    {
+        if (motion_asset_load_failures.insert(asset_guid).second)
+        {
+            push_editor_log("Warning", error, record->source_path);
+        }
+        return nullptr;
+    }
+
+    auto inserted = motion_asset_cache.emplace(asset_guid, std::move(asset));
+    return &inserted.first->second;
+}
+
+void framework::evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
+    float elapsed_time)
+{
+    using ReplayEngine::Components::MotionPlayerComponent;
+    using ReplayEngine::Motion::MotionBindingResolver;
+    using ReplayEngine::Motion::MotionEvaluator;
+    using ReplayEngine::Motion::MotionTrack;
+    using ReplayEngine::Reflection::PropertyValue;
+
+    motion_mixer.BeginFrame();
+
+    for (std::size_t object_index = 0; object_index < scene.GameObjectCount();
+        ++object_index)
+    {
+        ReplayEngine::Core::GameObject* object = scene.GameObjectAt(object_index);
+        if (object == nullptr || object->PendingDestroy() ||
+            !object->ActiveInHierarchy())
+        {
+            continue;
+        }
+
+        for (std::size_t component_index = 0;
+            component_index < object->ComponentCount(); ++component_index)
+        {
+            ReplayEngine::Core::Component* component =
+                object->ComponentAt(component_index);
+            if (component == nullptr || component->PendingDestroy() ||
+                !component->ActiveInHierarchy() ||
+                component->TypeID() != MotionPlayerComponent::StaticTypeID())
+            {
+                continue;
+            }
+
+            MotionPlayerComponent& player =
+                static_cast<MotionPlayerComponent&>(*component);
+            if (!player.ShouldContribute()) continue;
+
+            const ReplayEngine::Motion::MotionAsset* asset =
+                resolve_motion_asset(player.motion.guid);
+            if (asset == nullptr) continue;
+
+            player.Advance(asset->duration, elapsed_time);
+            for (const MotionTrack& track : asset->tracks)
+            {
+                PropertyValue value;
+                if (!MotionEvaluator::EvaluateTrack(track, player.time, value))
+                    continue;
+
+                const ReplayEngine::Motion::ResolvedMotionBinding binding =
+                    MotionBindingResolver::Resolve(scene, track.binding);
+                motion_mixer.Contribute(binding, value, player.weight);
+            }
+        }
+    }
+
+    motion_mixer.Apply();
+}
+
 void framework::update_object_scene(float elapsed_time)
 {
     // Scene 遷移はフレームの先頭で進める。
@@ -605,6 +702,15 @@ void framework::update_object_scene(float elapsed_time)
 
     // 選択が消えた GameObject を指し続けないようにする。
     object_editor_context.Selection().PruneMissing(scene);
+
+    if (object_runtime_active())
+    {
+        // 順序: Scene::Update -> Motion Mixer -> UI Layout -> Render。
+        // Motion は Component::OnUpdate からは評価しない。全 Player の寄与を先に集め、
+        // 同じ property へ setter を 1 フレーム 1 回だけ呼ぶため、この外部フェーズで扱う。
+        evaluate_motion_players(scene, elapsed_time);
+    }
+
     sync_object_lights();
 
     // Scene::Update は GameObject / Component の平坦な走査だけを担当する。

@@ -309,8 +309,30 @@ namespace ReplayEngine::Editor
         //
         // 対応していない型では読み取り専用の表示だけを出す。
         // 「編集できるように見えて実は反映されない」欄は置かない。
+        // PropertyDesc の asset_type（`.OfAssetType("Image")` などで指定した名前）を
+        // Picker の絞り込みに使える AssetKind へ直す。
+        //
+        // 指定が無い / 知らない名前なら Unknown を返す。Unknown は「絞り込まない」なので、
+        // 綴りを間違えても候補が全部消えるのではなく、従来どおり全部出るだけで済む。
+        Assets::AssetKind AssetKindFromTypeName(const std::string& name)
+        {
+            if (name.empty()) return Assets::AssetKind::Unknown;
+            if (name == "Model") return Assets::AssetKind::Model;
+            if (name == "Image") return Assets::AssetKind::Image;
+            if (name == "Audio") return Assets::AssetKind::Audio;
+            if (name == "Shader") return Assets::AssetKind::Shader;
+            if (name == "Scene") return Assets::AssetKind::Scene;
+            if (name == "Material") return Assets::AssetKind::Material;
+            if (name == "Script") return Assets::AssetKind::Script;
+            if (name == "SceneFlow") return Assets::AssetKind::SceneFlow;
+            if (name == "Font") return Assets::AssetKind::Font;
+            if (name == "Motion") return Assets::AssetKind::Motion;
+            return Assets::AssetKind::Unknown;
+        }
+
         bool DrawArrayElementValue(const char* label, PropertyValue& element,
-            const Assets::AssetDatabase* assets, const Scene::Scene* scene, bool read_only)
+            const Assets::AssetDatabase* assets, const Scene::Scene* scene, bool read_only,
+            const std::string& asset_type = std::string())
         {
             const DisabledScope disabled(read_only);
             switch (element.Type())
@@ -411,7 +433,8 @@ namespace ReplayEngine::Editor
                 std::string guid = element.AsString();
                 const Assets::AssetKind kind_filter =
                     element.Type() == PropertyType::SceneReference
-                        ? Assets::AssetKind::Scene : Assets::AssetKind::Unknown;
+                        ? Assets::AssetKind::Scene
+                        : AssetKindFromTypeName(asset_type);
                 if (DrawAssetReference(label, assets, guid, read_only, kind_filter))
                 {
                     element = element.Type() == PropertyType::SceneReference
@@ -783,12 +806,18 @@ namespace ReplayEngine::Editor
             // 型で分けてある意味が「Picker に出る候補が違う」ことなので、
             // ここで絞らないと Texture を遷移先に設定できてしまう。
             //
+            // AssetReference は PropertyDesc の asset_type で絞る。
+            // `.OfAssetType("Image")` を書いてあるのにここで見ていなかったため、
+            // 画像を選ぶ欄にモデルもマテリアルもスクリプトも並んでいた。
+            // 指定が無ければ従来どおり全部出す（Unknown = 絞り込まない）。
+            //
             // 解決できない GUID でも値は消さない。Picker には "Missing Asset" と出て、
             // Asset が戻れば自動的に元の表示へ戻る。
             std::string guid = current.AsString();
             const Assets::AssetKind kind_filter =
                 desc.type == PropertyType::SceneReference
-                    ? Assets::AssetKind::Scene : Assets::AssetKind::Unknown;
+                    ? Assets::AssetKind::Scene
+                    : AssetKindFromTypeName(desc.asset_type);
             if (DrawAssetReference(label.c_str(), assets, guid, desc.read_only, kind_filter))
             {
                 desc.Apply(component, desc.type == PropertyType::AssetReference
@@ -937,7 +966,7 @@ namespace ReplayEngine::Editor
 
                     const std::string element_label = "[" + std::to_string(index) + "]";
                     if (DrawArrayElementValue(element_label.c_str(), elements[index],
-                        assets, scene, desc.read_only))
+                        assets, scene, desc.read_only, desc.asset_type))
                     {
                         array_changed = true;
                     }

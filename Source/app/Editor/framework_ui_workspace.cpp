@@ -629,16 +629,16 @@ void framework::draw_ui_inspector()
 
     object_inspector_panel.DrawContents(object_editor_context);
     ImGui::Separator();
-    // Motion Workspace への導線。今は押しても何も起きないが、
-    // 先に置いておくことで、後から機能を足したときに導線を探さずに済む。
-    //
-    // ImGuiItemFlags_Disabled を使うと IsItemHovered が false になり
-    // ツールチップを出せないため、ここは見た目だけ淡くして押下を無視する。
-    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
-    ImGui::Button("Motion を作成");
-    ImGui::PopStyleVar();
+    // Motion Workspace への導線。UI 側の編集状態は変えず、
+    // Motion Asset の作成と Workspace 切り替えだけを担当する。
+    if (ImGui::Button("Motion を作成"))
+    {
+        if (!motion_editor_loaded)
+            project_create_motion("UIMotion");
+        set_editor_workspace(editor_workspace::motion);
+    }
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Phase 4 の Motion Workspace で接続します。");
+        ImGui::SetTooltip("選択中の UI 要素を Motion Workspace で編集します。");
 
     ImGui::End();
 }

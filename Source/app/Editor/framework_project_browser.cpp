@@ -2,6 +2,8 @@
 #include "texture.h"
 #include "../../RePlayEngine/Assets/AssetCache.h"
 #include "../../RePlayEngine/Editor/Style/EditorStyle.h"
+#include "../../RePlayEngine/Motion/CompositionAsset.h"
+#include "../../RePlayEngine/Motion/MotionAsset.h"
 #include "../../RePlayEngine/Rendering/Materials/MaterialAsset.h"
 #include "../../RePlayEngine/Rendering/Shaders/ShaderAssetFactory.h"
 #include "../../RePlayEngine/Rendering/ShaderComposer/ShaderComposerAsset.h"
@@ -179,6 +181,7 @@ namespace
         case AssetKind::Audio:    return "AUDIO";
         case AssetKind::Shader:   return "SHADER";
         case AssetKind::SceneFlow:return "FLOW";
+        case AssetKind::Motion:   return "MOTION";
         default:                  return "FILE";
         }
     }
@@ -196,6 +199,7 @@ namespace
         case AssetKind::Script:   return ImVec4(0.45f, 0.88f, 0.80f, 1.0f);
         case AssetKind::Shader:   return ImVec4(0.98f, 0.67f, 0.28f, 1.0f);
         case AssetKind::SceneFlow:return ImVec4(0.55f, 0.86f, 1.00f, 1.0f);
+        case AssetKind::Motion:   return ImVec4(0.95f, 0.78f, 0.36f, 1.0f);
         default:                  return ImVec4(0.72f, 0.72f, 0.72f, 1.0f);
         }
     }
@@ -216,6 +220,9 @@ ReplayEngine::Assets::AssetKind framework::project_kind_for(
     if (extension == ".replaymaterial") return AssetKind::Material;
     if (extension == ReplayEngine::Runtime::SceneFlowAsset::file_extension)
         return AssetKind::SceneFlow;
+    if (extension == ReplayEngine::Motion::MotionAsset::file_extension ||
+        extension == ReplayEngine::Motion::CompositionAsset::file_extension)
+        return AssetKind::Motion;
     if (extension == ".fbx" || extension == ".glb" || extension == ".gltf" ||
         extension == ".obj") return AssetKind::Model;
     if (IsImageExtension(extension)) return AssetKind::Image;
@@ -410,6 +417,68 @@ bool framework::project_create_material(const std::string& name)
     }
     selected_asset_guid = record.guid;
     project_browser_status = "Material を作成しました: " + path.filename().u8string();
+    return true;
+}
+
+bool framework::project_create_motion(const std::string& name)
+{
+    using ReplayEngine::Assets::AssetKind;
+    using ReplayEngine::Motion::MotionAsset;
+
+    const std::string safe = SafeProjectFileName(
+        name.empty() ? std::string("NewMotion") : name);
+    if (safe.empty())
+    {
+        project_browser_status = "Motion 名が空です";
+        return false;
+    }
+
+    std::error_code error;
+    const std::filesystem::path root = std::filesystem::current_path(error);
+    if (error) return false;
+
+    const std::filesystem::path folder = root / project_current_folder;
+    std::filesystem::create_directories(folder, error);
+    if (error)
+    {
+        project_browser_status = "Motion folder を作成できません";
+        return false;
+    }
+
+    std::filesystem::path path = folder / (safe + MotionAsset::file_extension);
+    for (int suffix = 2; std::filesystem::exists(path) && suffix < 10000; ++suffix)
+        path = folder / (safe + std::to_string(suffix) + MotionAsset::file_extension);
+
+    MotionAsset motion;
+    motion.name = safe;
+    motion.duration = 1.0f;
+
+    std::string save_error;
+    if (!MotionAsset::SaveToFile(path, motion, save_error))
+    {
+        project_browser_status = "Motion 作成失敗: " + save_error;
+        return false;
+    }
+
+    const ReplayEngine::Assets::AssetRecord& record =
+        asset_database.Register(path, AssetKind::Motion);
+    if (!asset_database.Save(save_error))
+    {
+        project_browser_status = "Motion は作成しましたが DB 保存失敗: " + save_error;
+        return false;
+    }
+
+    selected_asset_guid = record.guid;
+    set_project_folder(path.parent_path());
+    if (!open_motion_asset(record))
+    {
+        project_browser_status = "Motion は作成しましたが Editor で開けません: " +
+            path.filename().u8string();
+        return false;
+    }
+
+    project_browser_status = "Motion を作成しました: " + path.filename().u8string();
+    push_editor_log("Info", project_browser_status, path, 1);
     return true;
 }
 
@@ -896,7 +965,7 @@ void framework::draw_project_folder_contents()
             ? AssetKind::Unknown : project_kind_for(entry.path);
         if (!entry.is_directory && asset_type_filter != 0)
         {
-            int filter_type = 8;
+            int filter_type = 9;
             if (kind == AssetKind::Model) filter_type = 1;
             else if (ToLowerCopy(entry.path.extension().u8string()) == ".replayprefab")
                 filter_type = 2;
@@ -906,6 +975,7 @@ void framework::draw_project_folder_contents()
             else if (kind == AssetKind::Script) filter_type = 5;
             else if (kind == AssetKind::Shader) filter_type = 6;
             else if (kind == AssetKind::SceneFlow) filter_type = 7;
+            else if (kind == AssetKind::Motion) filter_type = 8;
             if (asset_type_filter != filter_type) continue;
         }
 
@@ -1005,6 +1075,15 @@ void framework::draw_project_folder_contents()
                     load_scene_flow_editor(*record);
                 }
             }
+            if (!entry.is_directory && kind == AssetKind::Motion &&
+                ImGui::MenuItem("Motion Workspace で開く"))
+            {
+                if (record != nullptr)
+                {
+                    selected_asset_guid = record->guid;
+                    open_motion_asset(*record);
+                }
+            }
             if (!entry.is_directory && kind == AssetKind::Shader)
             {
                 const bool is_composer = ToLowerCopy(entry.path.extension().u8string()) ==
@@ -1054,6 +1133,14 @@ void framework::draw_project_folder_contents()
                 {
                     selected_asset_guid = record->guid;
                     load_scene_flow_editor(*record);
+                }
+            }
+            else if (kind == AssetKind::Motion)
+            {
+                if (record != nullptr)
+                {
+                    selected_asset_guid = record->guid;
+                    open_motion_asset(*record);
                 }
             }
             else if (kind == AssetKind::Shader)
@@ -1185,7 +1272,7 @@ void framework::draw_project_browser()
         ImGui::SetTooltip("Project 全体を再帰検索します");
     ImGui::SameLine();
     const char* filters[] =
-        { "All", "Model", "Prefab", "Scene", "Material", "Script", "Shader", "Flow", "Other" };
+        { "All", "Model", "Prefab", "Scene", "Material", "Script", "Shader", "Flow", "Motion", "Other" };
     ImGui::SetNextItemWidth(120.0f);
     ImGui::Combo("##ProjectFilter", &asset_type_filter, filters, IM_ARRAYSIZE(filters));
     ImGui::SameLine();
@@ -1252,6 +1339,10 @@ void framework::draw_project_browser()
             if (ImGui::MenuItem("Scene Flow"))
             {
                 project_create_scene_flow(project_new_item_name);
+            }
+            if (ImGui::MenuItem("Motion Asset"))
+            {
+                project_create_motion(project_new_item_name);
             }
             if (ImGui::MenuItem("Surface Shader"))
             {
