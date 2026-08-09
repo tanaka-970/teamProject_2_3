@@ -49,6 +49,7 @@ public:
     bool initialized{ false };
 
     bool initialize(ID3D11Device* device);
+    void release() noexcept;
     void simulate(ID3D11DeviceContext* ctx, float delta_time);
     void render(ID3D11DeviceContext* ctx);
 };

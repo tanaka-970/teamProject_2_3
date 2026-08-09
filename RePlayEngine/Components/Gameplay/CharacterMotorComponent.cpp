@@ -186,7 +186,8 @@ namespace ReplayEngine::Components
             break;
         }
         case ColliderShape::Mesh:
-            // ここへは来ない（ResolvePrimaryCollider が弾く）。
+        case ColliderShape::Landscape:
+            // ここへは来ない（ResolvePrimaryCollider が弾く）。静的環境用。
             break;
         }
         return shape;

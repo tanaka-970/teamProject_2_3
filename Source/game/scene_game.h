@@ -62,4 +62,7 @@ private:
     float camera_field_of_view_degrees_ = 50.0f;
     float camera_near_clip_ = 0.1f;
     float camera_far_clip_ = 10000.0f;
+    bool camera_rotation_cursor_initialized_ = false;
+    long previous_camera_rotation_cursor_x_ = 0;
+    long previous_camera_rotation_cursor_y_ = 0;
 };

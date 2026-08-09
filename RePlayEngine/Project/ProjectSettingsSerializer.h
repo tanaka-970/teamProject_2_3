@@ -24,13 +24,14 @@ namespace ReplayEngine::Project
 
         // v1 … Default Controlled Character Prefab だけ
         // v2 … Startup Scene (AssetGUID) を追加
+        // v3 … Active Scene Flow (AssetGUID) を追加
         //
         // Scene のファイル形式とは別のバージョン番号。
         // 片方を上げたらもう片方も上げる、という関係にはしない。
         // 保存する内容が別なので、揃えると意味の無い版番号が増える。
-        static constexpr int current_version = 2;
+        static constexpr int current_version = 3;
 
-        // v1 のファイルもそのまま読める。読み込み後に保存すると v2 になる。
+        // v1/v2 のファイルもそのまま読める。読み込み後に保存すると v3 になる。
         static constexpr int minimum_supported_version = 1;
 
         // 読み込みに失敗したときに使う安全な既定値へ戻す。

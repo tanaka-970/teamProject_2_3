@@ -89,14 +89,15 @@ namespace ReplayEngine::Scene
         if (!initialized_ || !context.device_context) return;
         const float w = context.width;
         const float h = context.height;
-        solid_->render(context.device_context, 0, 0, w, h, 1.0f, 1.0f, 1.0f, 1.0f, 0);
+        solid_->render(context.device_context, 0, 0, w, h,
+            0.025f, 0.032f, 0.045f, 1.0f, 0);
 
         const float bar_w = w * 0.46f;
         const float bar_h = (std::max)(8.0f, h * 0.012f);
         const float x = (w - bar_w) * 0.5f;
         const float y = h * 0.68f;
         solid_->render(context.device_context, x, y, bar_w, bar_h,
-            0.82f, 0.86f, 0.90f, 1.0f, 0);
+            0.15f, 0.18f, 0.23f, 1.0f, 0);
         const float fill = bar_w * Progress();
         if (fill > 0.0f)
             solid_->render(context.device_context, x, y, fill, bar_h,

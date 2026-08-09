@@ -71,6 +71,46 @@ namespace ReplayEngine::Scripting::CSharp
             return static_cast<bool>(stream);
         }
 
+        bool SourceTreeIsNewer(const std::filesystem::path& source_root,
+            const std::filesystem::path& output,
+            const std::vector<std::filesystem::path>& dependencies = {})
+        {
+            std::error_code error;
+            if (!std::filesystem::exists(output, error) || error) return true;
+            const auto output_time = std::filesystem::last_write_time(output, error);
+            if (error) return true;
+
+            for (const std::filesystem::path& dependency : dependencies)
+            {
+                const auto dependency_time =
+                    std::filesystem::last_write_time(dependency, error);
+                if (error || dependency_time > output_time) return true;
+            }
+
+            std::filesystem::recursive_directory_iterator it(
+                source_root, std::filesystem::directory_options::skip_permission_denied, error);
+            const std::filesystem::recursive_directory_iterator end;
+            for (; !error && it != end; it.increment(error))
+            {
+                if (it->is_directory(error))
+                {
+                    const std::string name = it->path().filename().generic_u8string();
+                    if (name == "bin" || name == "obj") it.disable_recursion_pending();
+                    continue;
+                }
+                if (error || !it->is_regular_file(error)) continue;
+
+                const std::string extension = it->path().extension().generic_u8string();
+                if (extension != ".cs" && extension != ".csproj" &&
+                    extension != ".props" && extension != ".targets")
+                    continue;
+
+                const auto source_time = std::filesystem::last_write_time(it->path(), error);
+                if (error || source_time > output_time) return true;
+            }
+            return static_cast<bool>(error);
+        }
+
         bool IsIdentifier(std::string_view text) noexcept
         {
             if (text.empty()) return false;
@@ -764,8 +804,11 @@ namespace ReplayEngine::Scripting::CSharp
             return result;
         }
 
-        CSharpBuildResult api = BuildManagedApi(root, configuration);
-        if (!api.succeeded) return api;
+        if (ManagedApiBuildRequired(root, configuration))
+        {
+            CSharpBuildResult api = BuildManagedApi(root, configuration);
+            if (!api.succeeded) return api;
+        }
 
         CSharpBuildResult result = RunDotnet(L"build " +
             Quote(GameScriptsProjectPath(root)) + L" -c " +
@@ -773,6 +816,27 @@ namespace ReplayEngine::Scripting::CSharp
             GameScriptsAssemblyPath(root, configuration));
         ParseDiagnostics(result);
         return result;
+    }
+
+    bool CSharpProject::ManagedApiBuildRequired(
+        const std::filesystem::path& project_root, const std::string& configuration)
+    {
+        const std::filesystem::path root = NormalizeRoot(project_root);
+        std::error_code error;
+        if (!std::filesystem::exists(
+            ManagedApiRuntimeConfigPath(root, configuration), error) || error)
+            return true;
+        return SourceTreeIsNewer(ManagedApiProjectPath(root).parent_path(),
+            ManagedApiAssemblyPath(root, configuration));
+    }
+
+    bool CSharpProject::GameScriptsBuildRequired(
+        const std::filesystem::path& project_root, const std::string& configuration)
+    {
+        const std::filesystem::path root = NormalizeRoot(project_root);
+        return SourceTreeIsNewer(ScriptsRoot(root),
+            GameScriptsAssemblyPath(root, configuration),
+            { ManagedApiAssemblyPath(root, configuration) });
     }
 
     bool CSharpProject::OpenVisualStudio(const std::filesystem::path& file,

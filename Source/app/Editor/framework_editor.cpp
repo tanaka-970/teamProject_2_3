@@ -1,4 +1,4 @@
-﻿#include "framework.h"
+#include "framework.h"
 #include "../../RePlayEngine/Components/Gameplay/CharacterMotorComponent.h"
 #include "../../RePlayEngine/Components/Gameplay/PlayerControllerComponent.h"
 #include "../../RePlayEngine/Components/Gameplay/PlayerInputComponent.h"
@@ -14,6 +14,8 @@
 #include "texture.h"
 #include "skinned_mesh.h"
 
+#include <cmath>
+#include <cstdio>
 #include <algorithm>
 #include <cctype>
 #include <string>
@@ -162,6 +164,12 @@ void framework::set_editor_workspace(editor_workspace workspace)
         if (selected_editor_object != editor_selection::rendering)
             selected_editor_object = editor_selection::rendering;
         break;
+    case editor_workspace::ui:
+        selected_editor_object = editor_selection::game_object;
+        show_ui_hierarchy_panel = true;
+        show_ui_preview_panel = true;
+        show_ui_inspector_panel = true;
+        break;
     default: selected_editor_object = editor_selection::world; break;
     }
 }
@@ -265,6 +273,13 @@ void framework::draw_editor_main_menu()
         if (ImGui::MenuItem(u8"プロジェクトを開く")) show_project_panel = true;
         ImGui::EndMenu();
     }
+    // 操作方法・速度・user preset は上部の Camera メニューへ集約する。
+    if (ImGui::BeginMenu(u8"カメラ"))
+    {
+        draw_editor_camera_top_menu();
+        ImGui::EndMenu();
+    }
+
     if (ImGui::BeginMenu("Window"))
     {
         ImGui::MenuItem("Scene / Game View", nullptr, &show_scene_view);
@@ -274,11 +289,26 @@ void framework::draw_editor_main_menu()
         ImGui::MenuItem("Console", nullptr, &show_console_panel);
         ImGui::MenuItem("Workspace", nullptr, &show_workspace_panel);
         ImGui::MenuItem("Validation / Diagnostics", nullptr, &show_validation_panel);
+        ImGui::Separator();
+        if (ImGui::MenuItem("UI Workspaceへ"))
+            set_editor_workspace(editor_workspace::ui);
+        if (active_editor_workspace == editor_workspace::ui)
+        {
+            ImGui::MenuItem("UI 階層", nullptr, &show_ui_hierarchy_panel);
+            ImGui::MenuItem("Canvas プレビュー", nullptr, &show_ui_preview_panel);
+            ImGui::MenuItem("UI インスペクター", nullptr, &show_ui_inspector_panel);
+        }
+        ImGui::Separator();
+        ImGui::MenuItem(u8"シーンメモ", nullptr, &show_scene_notes_panel);
+        ImGui::MenuItem("Scene Flow", nullptr, &show_scene_flow_panel);
+        ImGui::MenuItem(u8"カメラ操作プリセット", nullptr, &show_camera_preset_manager);
         ImGui::MenuItem("Collision Diagnostics", nullptr, &show_collision_diagnostics);
         ImGui::Separator();
         // シェーダ資産の一覧。
         // .hlsl の #pragma がそのまま項目になることを確かめる窓。
         ImGui::MenuItem(u8"シェーダ一覧", nullptr, &show_shader_catalog_panel);
+        if (ImGui::MenuItem("Shader Composer", nullptr, false, shader_composer_editor.HasAsset()))
+            shader_composer_editor.Show();
         // 見た目が変わっていないことを機械で確かめる窓。
         // 描画やシェーダを触る前に基準を撮っておくこと。
         ImGui::MenuItem(u8"スクリーンショット回帰", nullptr, &show_golden_panel);
@@ -544,20 +574,62 @@ void framework::draw_editor_toolbar()
     //   実行 / 停止      … 今 Play 中かどうかが一目で要る
     //
     // 未保存かどうかはウィンドウタイトルとシーン名の * で分かる。
-    if (ImGui::Button("Move [W]"))
-        transform_gizmo.SetOperation(ReplayEngine::Editor::GizmoOperation::Translate);
+    // モードごとに Scene View のギズモの形が変わる。
+    //   Move   … 軸線 + 先端の丸
+    //   Rotate … 軸まわりの円
+    //   Scale  … 軸線 + 先端の四角
+    //
+    // 選択中のモードはボタンの色でも示す。
+    // 形だけだと Scene View を見ていないと分からず、
+    // ツールバーを見ても «今どれか» が読み取れなかった。
+    const auto gizmo_mode_button = [&](const char* label,
+        ReplayEngine::Editor::GizmoOperation mode, const char* tooltip)
+    {
+        const bool active = transform_gizmo.Operation() == mode;
+        if (active)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Button,
+                ImGui::GetStyle().Colors[ImGuiCol_ButtonActive]);
+        }
+        if (ImGui::Button(label)) transform_gizmo.SetOperation(mode);
+        if (active) ImGui::PopStyleColor();
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tooltip);
+    };
+
+    gizmo_mode_button("Move", ReplayEngine::Editor::GizmoOperation::Translate,
+        u8"移動（既定: Shift+W）\n"
+        u8"軸線の先端が丸。軸をドラッグするとその方向へ動く。\n"
+        u8"ドラッグ中に Esc で取り消し。");
     ImGui::SameLine();
-    if (ImGui::Button("Rotate [E]"))
-        transform_gizmo.SetOperation(ReplayEngine::Editor::GizmoOperation::Rotate);
+    gizmo_mode_button("Rotate", ReplayEngine::Editor::GizmoOperation::Rotate,
+        u8"回転（既定: Shift+E）\n"
+        u8"軸まわりの円。円周を掴んで、円に沿って引くと回る。\n"
+        u8"ドラッグ中に Esc で取り消し。");
     ImGui::SameLine();
-    if (ImGui::Button("Scale [R]"))
-        transform_gizmo.SetOperation(ReplayEngine::Editor::GizmoOperation::Scale);
+    gizmo_mode_button("Scale", ReplayEngine::Editor::GizmoOperation::Scale,
+        u8"拡縮（既定: Shift+R）\n"
+        u8"軸線の先端が四角。軸をドラッグするとその軸だけ伸縮する。\n"
+        u8"ドラッグ中に Esc で取り消し。");
     ImGui::SameLine();
     bool snap = transform_gizmo.SnapEnabled();
     if (ImGui::Checkbox("Snap", &snap)) transform_gizmo.SetSnapEnabled(snap);
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::SetTooltip(
+            u8"ドラッグ量を一定の刻みに丸める。\n"
+            u8"移動・回転・拡縮のどのモードにも効く。");
+    }
     ImGui::SameLine();
     if (ImGui::Button(gizmo_local_space ? "Local" : "World"))
         gizmo_local_space = !gizmo_local_space;
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::SetTooltip(
+            u8"ギズモの軸の向きを切り替える。\n"
+            u8"World … ワールド座標の軸に固定する。\n"
+            u8"Local … 選択しているオブジェクトの回転に追従する。\n"
+            u8"傾いた物を «その物にとっての前» へ動かしたいときは Local。");
+    }
 
     ImGui::SameLine();
     ImGui::Separator();
@@ -670,6 +742,26 @@ void framework::draw_scene_view_panel()
             gizmo_local_space ? "Local" : "World",
             transform_gizmo.SnapEnabled() ? "Snap" : "Free",
             object_scene_play_mode ? (object_scene_paused ? "Paused" : "Playing") : "Editing");
+        ensure_editor_camera_presets_loaded();
+        ImGui::TextDisabled(u8"Camera preset: %s | カメラ > プリセット管理 で操作を自由設定",
+            active_editor_camera_preset().name.c_str());
+        // Landscape を選択しているときだけ専用 Tool を出す。
+        // Component 自体に ImGui / Editor 状態を持たせない。
+        draw_landscape_editor_toolbar();
+        if (landscape_edit_enabled)
+        {
+            const char* landscape_tool = landscape_edit_mode == 0
+                ? u8"Landscape / Sculpt"
+                : (landscape_topology_selection_mode == 0
+                    ? u8"Landscape / Topology Face"
+                    : u8"Landscape / Topology Edge");
+            ImGui::TextColored(ImVec4(1.0f, 0.72f, 0.25f, 1.0f),
+                u8"ACTIVE TOOL: %s  (Escで終了 / Ctrl・Alt+左クリックで通常選択)", landscape_tool);
+        }
+        else
+        {
+            ImGui::TextDisabled("ACTIVE TOOL: Transform / Scene Selection");
+        }
     }
     else
     {
@@ -695,6 +787,10 @@ void framework::draw_scene_view_panel()
     scene_view_hovered = ImGui::IsItemHovered();
     scene_view_focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
 
+    // 右クリックの Play From Here / Checkpoint / Scene Memo。
+    // InvisibleButton の直後に置くことで ContextItem の対象を確実に Viewport にする。
+    draw_play_from_here_context_menu();
+
     if (active_editor_view == editor_view::scene && ImGui::BeginDragDropTarget())
     {
         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("REPLAY_ASSET_GUID"))
@@ -703,12 +799,28 @@ void framework::draw_scene_view_panel()
             {
                 const std::string guid(static_cast<const char*>(payload->Data));
                 if (const auto* asset = asset_database.FindByGuid(guid))
-                    place_asset_in_object_scene(*asset, asset_drop_add_collider);
+                {
+                    DirectX::XMFLOAT3 drop_position{};
+                    const bool has_drop_position = scene_view_mouse_world_point(drop_position, nullptr);
+                    ReplayEngine::Core::ObjectID drop_target = ReplayEngine::Core::ObjectID::Invalid();
+                    const ImVec2 mouse = ImGui::GetMousePos();
+                    const float local_x = mouse.x - scene_view_min_x;
+                    const float local_y = mouse.y - scene_view_min_y;
+                    if (local_x >= 0.0f && local_y >= 0.0f)
+                    {
+                        const auto ray = viewport_picking_ray(local_x, local_y);
+                        drop_target = ReplayEngine::Editor::ViewportPicker::Pick(
+                            object_scene, ray.origin, ray.direction);
+                    }
+                    place_asset_in_object_scene(*asset, asset_drop_add_collider,
+                        has_drop_position ? &drop_position : nullptr, drop_target);
+                }
             }
         }
         ImGui::EndDragDropTarget();
     }
 
+    draw_scene_note_overlay();
     ImGui::End();
 }
 
@@ -748,11 +860,23 @@ void framework::draw_search_results()
     };
     result("ワールドを編集", "world ワールド 背景", editor_selection::world);
     result("カメラを編集", "camera カメラ 視点", editor_selection::camera);
-    result("操作キャラクターを編集", "player プレイヤー 操作 キャラクター character",
-        editor_selection::game_object);
+    if (matches("player プレイヤー 操作 キャラクター character") &&
+        ImGui::Selectable("操作対象 GameObject を選択"))
+    {
+        ReplayEngine::Scene::Scene& scene = active_object_scene();
+        const ReplayEngine::Core::ObjectID controlled = scene.Services().ControlledObject();
+        if (controlled.Valid() && scene.FindGameObjectByID(controlled) != nullptr)
+        {
+            object_editor_context.Selection().Select(controlled, false);
+            selected_editor_object = editor_selection::game_object;
+        }
+        else object_editor_context.SetStatus("操作対象 GameObject が設定されていません");
+        editor_search_text[0] = '\0';
+        search_input_active = false;
+    }
     result("描画設定を開く", "render rendering 描画 deferred shader", editor_selection::rendering);
     result("ポスト処理を開く", "post process ポスト bloom fxaa", editor_selection::post_process);
-    if (matches("edit play mode 編集 プレイ") && ImGui::Selectable("編集／プレイモードを切り替える"))
+    if (matches("input capture editor 入力 キャプチャ") && ImGui::Selectable("Editor入力キャプチャを切り替える"))
     {
         set_edit_mode(!edit_mode_active);
         editor_search_text[0] = '\0';
@@ -775,6 +899,12 @@ void framework::draw_search_results()
     if (matches("workspace レンダリング rendering") && ImGui::Selectable("レンダリングWorkspaceへ"))
     {
         set_editor_workspace(editor_workspace::rendering);
+        editor_search_text[0] = '\0';
+    }
+    if (matches("workspace ui canvas userinterface ユーザーインターフェイス") &&
+        ImGui::Selectable("UI Workspaceへ"))
+    {
+        set_editor_workspace(editor_workspace::ui);
         editor_search_text[0] = '\0';
     }
     if (matches("shader material preset シェーダー 材質 プリセット") &&
@@ -1211,15 +1341,7 @@ void framework::draw_project_panel()
     {
         namespace CSharp = ReplayEngine::Scripting::CSharp;
 
-        ImGui::SetNextItemWidth(180.0f);
-        ImGui::InputTextWithHint("##NewCSharpBehaviourName", "Class name",
-            new_csharp_behaviour_name, IM_ARRAYSIZE(new_csharp_behaviour_name));
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(160.0f);
-        ImGui::InputTextWithHint("##NewCSharpNamespace", "Namespace",
-            new_csharp_namespace, IM_ARRAYSIZE(new_csharp_namespace));
-        ImGui::SameLine();
-        if (ImGui::Button("New C# Behaviour")) create_csharp_behaviour_asset();
+        ImGui::TextDisabled(u8"C# Script の作成は Project Browser の右クリック > Create に統一しました。");
 
         // 一括更新をいちばん目立つ位置へ置く。
         // Catalog 更新と再コンパイルを分けて覚えるのは negligible な区別で、
@@ -1288,11 +1410,7 @@ void framework::draw_project_panel()
             ImGui::TextWrapped("キャッシュ: %s", selected_model_cache_path.c_str());
     }
     ImGui::Separator();
-    ImGui::SetNextItemWidth(180.0f);
-    ImGui::InputTextWithHint("##NewMaterialName", "Material name",
-        new_material_name, IM_ARRAYSIZE(new_material_name));
-    ImGui::SameLine();
-    if (ImGui::Button("New Material")) create_material_asset();
+    ImGui::TextDisabled("Asset 作成は Project Browser の右クリック > Create から行います");
     ImGui::Separator();
     ImGui::Text("Assets: %zu", asset_database.Records().size());
 
@@ -1300,7 +1418,7 @@ void framework::draw_project_panel()
     // フォルダツリー + そのフォルダの中身。作成・改名・D&D はそちら側。
     draw_project_browser();
 
-    ImGui::Checkbox("Model配置時にMesh Colliderを追加", &asset_drop_add_collider);
+    ImGui::Checkbox("SceneへModel配置時にMesh Colliderも追加", &asset_drop_add_collider);
     ImGui::SameLine();
     const auto* selected_asset = selected_asset_guid.empty()
         ? nullptr : asset_database.FindByGuid(selected_asset_guid);
@@ -1314,6 +1432,20 @@ void framework::draw_project_panel()
     {
         ImGui::SameLine();
         if (ImGui::Button("Visual Studioで開く")) open_selected_csharp_asset();
+    }
+    if (selected_asset != nullptr &&
+        selected_asset->kind == ReplayEngine::Assets::AssetKind::Shader)
+    {
+        ImGui::SameLine();
+        if (ImGui::Button("ShaderをVisual Studioで開く"))
+        {
+            std::string open_error;
+            if (!ReplayEngine::Scripting::CSharp::CSharpProject::OpenVisualStudio(
+                selected_asset->source_path, 1, open_error))
+            {
+                push_editor_log("Warning", open_error, selected_asset->source_path);
+            }
+        }
     }
     draw_material_asset_editor();
     ImGui::Separator();
@@ -1386,14 +1518,14 @@ void framework::draw_console_panel()
     ImGui::EndChild();
     ImGui::Separator();
     ImGui::TextColored({ 0.45f, 0.85f, 0.55f, 1.0f }, "[正常] RePlayランタイム動作中");
-    ImGui::Text("現在のモード: %s", edit_mode_active ? "編集（ゲーム停止）" : "プレイ（WASD有効）");
+    ImGui::Text("Editor入力: %s", edit_mode_active ? "編集操作" : "Game View入力キャプチャ");
     ImGui::Text("画面サイズ: %u x %u", client_width, client_height);
     ImGui::TextUnformatted("描画方式: Deferred（固定）");
     const char* outputs[] = { "Final", "HDR Scene", "Bloom", "Deferred Lit",
         "GBuffer Base Color", "GBuffer Normal", "GBuffer Material", "Depth" };
     ImGui::Text("出力: %s", outputs[render_graph.OutputIndex()]);
     ImGui::TextDisabled("Ctrl+S: 保存  Ctrl+Z/Y: 元に戻す/やり直す  Ctrl+D: 複製");
-    ImGui::TextDisabled("F1: エディタ表示  F2: 出力  F3: 編集/プレイ  F11: 全画面");
+    ImGui::TextDisabled("F1: エディタ表示  F2: 名前変更  Ctrl+F2: 出力  F3: 入力キャプチャ  F5: 実行  F11: 全画面");
     ImGui::End();
 }
 
@@ -1431,6 +1563,13 @@ void framework::draw_workspace_panel()
         ImGui::TextDisabled("右上の専用テーブルで材質、合成順、プリセット、画面効果を編集します。");
         ImGui::TextUnformatted("方式: 型付きパラメータ + 順序付き追加パス");
         ImGui::TextDisabled("シェーダーグラフを使わず、安全な範囲で表現を組み合わせます。");
+        break;
+    case editor_workspace::ui:
+        ImGui::TextUnformatted("UI Workspace");
+        ImGui::TextDisabled("Canvas、RectTransform、UI Component を編集します。");
+        if (ImGui::Button("UI 階層を開く")) show_ui_hierarchy_panel = true;
+        ImGui::SameLine();
+        if (ImGui::Button("Canvas プレビューを開く")) show_ui_preview_panel = true;
         break;
     default:
         ImGui::TextUnformatted("基本Workspace");
@@ -1471,7 +1610,8 @@ void framework::draw_editor()
     const ImGuiID dockspace_id = ImGui::GetID("RePlayEditorDockSpaceJP2");
     const ImGuiDockNodeFlags dockspace_flags =
         ImGuiDockNodeFlags_PassthruCentralNode |
-        ImGuiDockNodeFlags_NoDockingInCentralNode;
+        (active_editor_workspace == editor_workspace::ui
+            ? ImGuiDockNodeFlags_None : ImGuiDockNodeFlags_NoDockingInCentralNode);
     ImGui::DockSpace(dockspace_id, ImVec2(0, 0), dockspace_flags);
     if (!editor_layout_checked || editor_layout_dirty)
     {
@@ -1493,6 +1633,12 @@ void framework::draw_editor()
             if (active_editor_workspace == editor_workspace::modeling) right_ratio = 0.33f;
             if (active_editor_workspace == editor_workspace::animation) bottom_ratio = 0.36f;
             if (active_editor_workspace == editor_workspace::rendering) left_ratio = 0.16f;
+            if (active_editor_workspace == editor_workspace::ui)
+            {
+                left_ratio = 0.18f;
+                right_ratio = 0.30f;
+                bottom_ratio = 0.20f;
+            }
             if (active_editor_workspace == editor_workspace::shader_adjustment)
             {
                 left_ratio = 0.16f;
@@ -1502,12 +1648,23 @@ void framework::draw_editor()
             ImGuiID left = ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, left_ratio, nullptr, &center);
             ImGuiID right = ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, right_ratio, nullptr, &center);
             ImGuiID bottom = ImGui::DockBuilderSplitNode(center, ImGuiDir_Down, bottom_ratio, nullptr, &center);
-            ImGui::DockBuilderDockWindow("階層", left);
-            ImGui::DockBuilderDockWindow("インスペクター", right);
-            ImGui::DockBuilderDockWindow("プロジェクト", bottom);
-            ImGui::DockBuilderDockWindow("コンソール", bottom);
-            ImGui::DockBuilderDockWindow("ワークスペース", bottom);
-            ImGui::DockBuilderDockWindow("Validation & Diagnostics", bottom);
+            if (active_editor_workspace == editor_workspace::ui)
+            {
+                ImGui::DockBuilderDockWindow("UI 階層", left);
+                ImGui::DockBuilderDockWindow("UI インスペクター", right);
+                ImGui::DockBuilderDockWindow("Canvas プレビュー", center);
+                ImGui::DockBuilderDockWindow("プロジェクト", bottom);
+                ImGui::DockBuilderDockWindow("コンソール", bottom);
+            }
+            else
+            {
+                ImGui::DockBuilderDockWindow("階層", left);
+                ImGui::DockBuilderDockWindow("インスペクター", right);
+                ImGui::DockBuilderDockWindow("プロジェクト", bottom);
+                ImGui::DockBuilderDockWindow("コンソール", bottom);
+                ImGui::DockBuilderDockWindow("ワークスペース", bottom);
+                ImGui::DockBuilderDockWindow("Validation & Diagnostics", bottom);
+            }
             ImGui::DockBuilderFinish(dockspace_id);
         }
     }
@@ -1526,13 +1683,33 @@ void framework::draw_editor()
     draw_object_scene_recovery_prompt();
     draw_unsaved_object_scene_prompt();
 
+    if (active_editor_workspace == editor_workspace::ui)
+    {
+        draw_ui_hierarchy();
+        draw_ui_preview();
+        draw_ui_inspector();
+        if (show_project_panel) draw_project_panel();
+        if (show_console_panel) draw_console_panel();
+        draw_search_results();
+        return;
+    }
+
     draw_scene_view_panel();
     if (show_hierarchy_panel) draw_scene_hierarchy();
     if (show_inspector_panel) draw_inspector();
     if (show_project_panel) draw_project_panel();
     if (show_console_panel) draw_console_panel();
     if (show_workspace_panel) draw_workspace_panel();
+    draw_scene_notes_panel();
+    draw_scene_flow_panel();
+    draw_editor_camera_preset_manager();
     draw_shader_catalog_panel();
+    {
+        std::error_code composer_root_error;
+        const std::filesystem::path composer_root = std::filesystem::current_path(composer_root_error);
+        if (!composer_root_error)
+            shader_composer_editor.Draw(composer_root, shader_library, asset_database);
+    }
     draw_golden_panel();
     if (show_validation_panel)
         object_validation_panel.Draw(object_editor_context, &asset_database,

@@ -59,6 +59,20 @@ public struct ComponentReference
     public bool IsAssigned => OwnerObjectId != 0 && ComponentStableId != 0;
 }
 
+
+[StructLayout(LayoutKind.Sequential)]
+public struct RaycastHit
+{
+    public Vector3 Point;
+    public Vector3 Normal;
+    public float Distance;
+    public ObjectHandle Object;
+    public uint ColliderId;
+    private int valid;
+
+    public bool Valid => valid != 0;
+}
+
 public readonly struct RuntimeResult<T>
 {
     public RuntimeResult(RuntimeStatus status, T value = default!)

@@ -1,9 +1,14 @@
-#include "HierarchyPanel.h"
+﻿#include "HierarchyPanel.h"
 
 #include "../Core/EditorContext.h"
 #include "../../Assets/AssetDatabase.h"
 #include "../../Object/GameObject/GameObject.h"
 #include "../../Object/Registry/ComponentRegistry.h"
+#include "../../Components/Rendering/MeshRendererComponent.h"
+#include "../../Components/Rendering/PrimitiveMeshRendererComponent.h"
+#include "../../Components/Landscape/LandscapeComponent.h"
+#include "../../Components/Landscape/LandscapeRendererComponent.h"
+#include "../../Components/Landscape/LandscapeColliderComponent.h"
 #include "../../Scene/Runtime/Scene.h"
 #include "../../Scene/Serialization/SceneData.h"
 
@@ -86,9 +91,14 @@ namespace ReplayEngine::Editor
 
         if (editable)
         {
-            if (ImGui::Button("GameObject を作成"))
+            if (ImGui::Button("+ 作成"))
             {
-                CreateEmptyGameObject(context, nullptr);
+                ImGui::OpenPopup("HierarchyCreatePopup");
+            }
+            if (ImGui::BeginPopup("HierarchyCreatePopup"))
+            {
+                DrawCreateMenu(context, nullptr);
+                ImGui::EndPopup();
             }
             ImGui::SameLine();
             if (ImGui::Button("複製")) DuplicateSelected(context);
@@ -367,14 +377,17 @@ namespace ReplayEngine::Editor
     {
         const bool editable = context.CanEdit();
 
-        if (ImGui::MenuItem("GameObject を作成", nullptr, false, editable))
+        if (editable)
         {
-            CreateEmptyGameObject(context, nullptr);
+            if (ImGui::BeginMenu(object != nullptr ? "子を作成" : "作成"))
+            {
+                DrawCreateMenu(context, object);
+                ImGui::EndMenu();
+            }
         }
-        if (object != nullptr &&
-            ImGui::MenuItem("子として GameObject を作成", nullptr, false, editable))
+        else
         {
-            CreateEmptyGameObject(context, object);
+            ImGui::MenuItem("作成", nullptr, false, false);
         }
 
         if (object == nullptr) return;
@@ -394,6 +407,118 @@ namespace ReplayEngine::Editor
         }
         ImGui::Separator();
         if (ImGui::MenuItem("削除", "Del", false, editable)) DestroySelected(context);
+    }
+
+    void HierarchyPanel::DrawCreateMenu(EditorContext& context, GameObject* parent)
+    {
+        if (!context.CanEdit()) return;
+
+        if (ImGui::MenuItem("空の GameObject"))
+        {
+            CreateEmptyGameObject(context, parent);
+        }
+
+        if (ImGui::BeginMenu("3D Object"))
+        {
+            if (ImGui::MenuItem("Plane"))
+                CreateBuiltInPrimitive(context, parent, "Plane", Components::PrimitiveMeshRendererComponent::Plane);
+            if (ImGui::MenuItem("Cube"))
+                CreateBuiltInPrimitive(context, parent, "Cube", Components::PrimitiveMeshRendererComponent::Cube);
+            if (ImGui::MenuItem("Sphere"))
+                CreateBuiltInPrimitive(context, parent, "Sphere", Components::PrimitiveMeshRendererComponent::Sphere);
+            if (ImGui::MenuItem("Capsule"))
+                CreateBuiltInPrimitive(context, parent, "Capsule", Components::PrimitiveMeshRendererComponent::Capsule);
+            if (ImGui::MenuItem("Cylinder"))
+                CreateBuiltInPrimitive(context, parent, "Cylinder", Components::PrimitiveMeshRendererComponent::Cylinder);
+            if (ImGui::MenuItem("Quad"))
+                CreateBuiltInPrimitive(context, parent, "Quad", Components::PrimitiveMeshRendererComponent::Quad);
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::MenuItem("Landscape Ground"))
+        {
+            CreateLandscapeGround(context, parent);
+        }
+    }
+
+    void HierarchyPanel::CreateBuiltInPrimitive(EditorContext& context, GameObject* parent,
+        const char* display_name, int primitive_type)
+    {
+        Scene::Scene* scene = context.GetScene();
+        if (scene == nullptr || !context.CanEdit() || display_name == nullptr)
+            return;
+
+        context.BeginEdit(std::string(display_name) + " を作成");
+        GameObject* created = scene->CreateGameObject(display_name);
+        if (created == nullptr)
+        {
+            context.CancelEdit();
+            return;
+        }
+        if (parent != nullptr) created->SetParent(parent, false);
+
+        auto* renderer = created->AddComponent<Components::PrimitiveMeshRendererComponent>();
+        if (renderer == nullptr)
+        {
+            scene->DestroyGameObject(created->ID());
+            context.CancelEdit();
+            return;
+        }
+        // Plane / Cube 等は特別な GameObject ではなく、
+        // 普通の GameObject に Primitive Mesh Renderer を付けて表現する。
+        renderer->primitive_type = primitive_type;
+        renderer->shading_model = 1;
+        renderer->visible = true;
+
+        context.CommitEdit();
+        context.Selection().Select(created->ID(), false);
+        context.SetStatus(std::string(display_name) + " を作成しました");
+    }
+
+    void HierarchyPanel::CreateLandscapeGround(EditorContext& context, GameObject* parent)
+    {
+        Scene::Scene* scene = context.GetScene();
+        if (scene == nullptr || !context.CanEdit()) return;
+
+        context.BeginEdit("Landscape Ground を作成");
+        GameObject* ground = scene->CreateGameObject("Ground");
+        if (ground == nullptr)
+        {
+            context.CancelEdit();
+            return;
+        }
+        if (parent != nullptr) ground->SetParent(parent, false);
+
+        auto* landscape = ground->AddComponent<Components::LandscapeComponent>();
+        auto* renderer = ground->AddComponent<Components::LandscapeRendererComponent>();
+        auto* collider = ground->AddComponent<Components::LandscapeColliderComponent>();
+        if (landscape == nullptr || renderer == nullptr || collider == nullptr ||
+            !landscape->GenerateFlat(33, 33, 2.0f, 0.0f))
+        {
+            scene->DestroyGameObject(ground->ID());
+            context.CancelEdit();
+            return;
+        }
+
+        // GenerateFlat が geometry 自体を Pivot 中心へ生成するため、
+        // 作成経路によって Transform 補正を変えない。
+        renderer->tint = { 0.36f, 0.48f, 0.31f, 1.0f };
+        collider->double_sided = true;
+
+        context.CommitEdit();
+        context.Selection().Select(ground->ID(), false);
+        context.SetStatus("Landscape Ground を作成しました");
+    }
+
+    void HierarchyPanel::BeginRenameSelection(EditorContext& context)
+    {
+        Scene::Scene* scene = context.GetScene();
+        if (scene == nullptr || !context.CanEdit()) return;
+        GameObject* object = context.Selection().ResolvePrimary(*scene);
+        if (object == nullptr || object->PendingDestroy()) return;
+        renaming_ = object->ID();
+        CopyToBuffer(rename_buffer_, rename_buffer_size, object->Name());
+        context.SetStatus("F2: GameObject 名を変更");
     }
 
     void HierarchyPanel::CreateEmptyGameObject(EditorContext& context, GameObject* parent)

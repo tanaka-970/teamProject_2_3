@@ -10,11 +10,13 @@
 #include "../../Components/Physics/CapsuleColliderComponent.h"
 #include "../../Components/Physics/MeshColliderComponent.h"
 #include "../../Components/Physics/SphereColliderComponent.h"
+#include "../../Components/Landscape/LandscapeColliderComponent.h"
 #include "../../Object/GameObject/GameObject.h"
 #include "../../Physics/CollisionLayers.h"
 #include "../../Physics/ShapeSweep.h"
 
 #include <algorithm>
+#include <cmath>
 
 using namespace DirectX;
 
@@ -84,6 +86,47 @@ namespace ReplayEngine::Scene
     {
         switch (collider.Shape())
         {
+        case Components::ColliderShape::Landscape:
+        {
+            const auto& landscape =
+                static_cast<const Components::LandscapeColliderComponent&>(collider);
+            if (!landscape.ReadyForQuery() || landscape.Cooked() == nullptr) return false;
+
+            // Landscape も任意 topology になったので、8k/数万 triangle を毎 query
+            // 総当たりしない。MeshCollider と同じ local-space XZ grid で候補を絞る。
+            const auto& cooked = landscape.Cooked();
+            const XMMATRIX inverse = XMLoadFloat4x4(&landscape.InverseWorldMatrix());
+            XMFLOAT3 local_start{};
+            XMFLOAT3 local_end{};
+            XMStoreFloat3(&local_start, XMVector3TransformCoord(XMLoadFloat3(&start), inverse));
+            XMStoreFloat3(&local_end, XMVector3TransformCoord(XMLoadFloat3(&end), inverse));
+
+            const float local_radius = radius * landscape.LocalRadiusScale();
+            const XMFLOAT3 local_min{
+                std::min(local_start.x, local_end.x) - local_radius,
+                std::min(local_start.y, local_end.y) - local_radius,
+                std::min(local_start.z, local_end.z) - local_radius };
+            const XMFLOAT3 local_max{
+                std::max(local_start.x, local_end.x) + local_radius,
+                std::max(local_start.y, local_end.y) + local_radius,
+                std::max(local_start.z, local_end.z) + local_radius };
+
+            cooked->CollectTriangles(local_min, local_max, scratch_indices_);
+            if (scratch_indices_.empty()) return false;
+            scratch_triangles_.clear();
+            scratch_triangles_.reserve(scratch_indices_.size());
+            const Physics::Triangle* source = cooked->Triangles();
+            for (const std::uint32_t triangle_index : scratch_indices_)
+            {
+                scratch_triangles_.push_back(source[triangle_index]);
+            }
+
+            return SweepLocalTriangles(landscape.WorldMatrix(), landscape.InverseWorldMatrix(),
+                landscape.NegativeScale(), landscape.LocalRadiusScale(),
+                scratch_triangles_.data(), scratch_triangles_.size(),
+                start, end, radius, hit);
+        }
+
         case Components::ColliderShape::Mesh:
         {
             const auto& mesh = static_cast<const Components::MeshColliderComponent&>(collider);
@@ -285,6 +328,49 @@ namespace ReplayEngine::Scene
         hit = scene_hit;
 
         last_sweep_source_ = hit.source;
+        return true;
+    }
+
+    bool SceneCollisionWorld::Raycast(const XMFLOAT3& origin,
+        const XMFLOAT3& direction, float max_distance, RaycastHit& hit) const
+    {
+        CollisionQueryFilter filter;
+        filter.layer = Layers::Default;
+        filter.mask = Layers::all_layers_mask;
+        return RaycastFiltered(origin, direction, max_distance, filter, hit);
+    }
+
+    bool SceneCollisionWorld::RaycastFiltered(const XMFLOAT3& origin,
+        const XMFLOAT3& direction, float max_distance,
+        const CollisionQueryFilter& filter, RaycastHit& hit) const
+    {
+        hit = RaycastHit{};
+        if (scene_ == nullptr || max_distance <= 0.0f) return false;
+
+        const float length = std::sqrt(direction.x * direction.x +
+            direction.y * direction.y + direction.z * direction.z);
+        if (length <= 1.0e-6f) return false;
+
+        const XMFLOAT3 normalized{
+            direction.x / length, direction.y / length, direction.z / length };
+        const XMFLOAT3 end{
+            origin.x + normalized.x * max_distance,
+            origin.y + normalized.y * max_distance,
+            origin.z + normalized.z * max_distance };
+
+        // radius=0 の SphereSweep は線分 Ray と同値。
+        // 形状ごとの判定を Raycast 用に二重実装せず、既存の
+        // Mesh/Box/Capsule/Sphere の正確な経路をそのまま使う。
+        SphereSweepHit sweep{};
+        if (!SweepSceneColliders(origin, end, 0.0f, -1.0f, 1.0f, filter, sweep))
+            return false;
+
+        hit.point = sweep.center;
+        hit.normal = sweep.normal;
+        hit.distance = (std::max)(0.0f, (std::min)(1.0f, sweep.fraction)) * max_distance;
+        hit.source = sweep.source;
+        hit.valid = true;
+        last_ray_source_ = hit.source;
         return true;
     }
 

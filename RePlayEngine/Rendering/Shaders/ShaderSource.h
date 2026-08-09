@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "ShaderAsset.h"
 
@@ -20,11 +20,13 @@ namespace ReplayEngine::Rendering
     //   #pragma replay_name     "Standard Lit"
     //   #pragma replay_category "Lit/Standard"
     //   #pragma replay_domain   surface
+    //   #pragma replay_lighting pbr
     //
     //   #pragma property color   BaseColor  "基本色"        = (1, 1, 1, 1)
     //   #pragma property texture BaseMap    "基本色マップ"   default white
-    //   #pragma property range   Metallic   "金属度"  0..1  = 0.0
-    //   #pragma property float3  Emissive   "発光色"        = (0, 0, 0)
+    //   #pragma property range   Metallic   "金属度"  0..1  = 0.0 category "Surface"
+    //   #pragma property float3  Emissive   "発光色"        = (0, 0, 0) category "Emission"
+    //   #pragma property range   RimPower   "リム" 0..8 = 2 tooltip "輪郭付近の発光の強さ"
     //   #pragma property toggle  DoubleSided "両面描画"     = false
     //   #pragma property enum    CullMode   "カリング" { Off, Front, Back } = Back
     class ShaderSource final
@@ -34,6 +36,10 @@ namespace ReplayEngine::Rendering
         {
             int line = 0;
             std::string message;
+
+            // true の項目が 1 件でもあれば Catalog へ登録しない。
+            // replay_lighting の不明値を PBR へ黙って丸めないために使う。
+            bool fatal = false;
         };
 
         struct ParseResult final
@@ -41,7 +47,7 @@ namespace ReplayEngine::Rendering
             bool succeeded = false;
             ShaderSourceInfo info;
 
-            // 解析できなかった pragma。致命ではないが握り潰さない。
+            // 解析できなかった pragma。fatal=true の項目はCatalog登録を止める。
             //
             // 握り潰すと「書いたのに欄が出ない」原因が分からなくなる。
             // 呼び出し側は必ずログへ流すこと。

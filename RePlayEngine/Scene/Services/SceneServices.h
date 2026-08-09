@@ -7,6 +7,7 @@
 
 namespace ReplayEngine::Runtime { class RuntimeContext; }
 namespace ReplayEngine::Scripting { class IScriptServices; }
+namespace ReplayEngine::Audio { class IAudioPlaybackService; }
 
 namespace ReplayEngine::Scene
 {
@@ -32,6 +33,9 @@ namespace ReplayEngine::Scene
 
         const IPhysicsQueryService* Physics() const noexcept { return physics_; }
         void SetPhysics(const IPhysicsQueryService* service) noexcept { physics_ = service; }
+
+        Audio::IAudioPlaybackService* Audio() const noexcept { return audio_; }
+        void SetAudio(Audio::IAudioPlaybackService* service) noexcept { audio_ = service; }
 
         // Runtime API への入口。
         //
@@ -82,6 +86,7 @@ namespace ReplayEngine::Scene
         {
             camera_basis_ = nullptr;
             physics_ = nullptr;
+            audio_ = nullptr;
             runtime_ = nullptr;
             scripts_ = nullptr;
             controlled_object_ = Core::ObjectID::Invalid();
@@ -91,6 +96,7 @@ namespace ReplayEngine::Scene
     private:
         const ICameraBasisProvider* camera_basis_ = nullptr;
         const IPhysicsQueryService* physics_ = nullptr;
+        Audio::IAudioPlaybackService* audio_ = nullptr;
         Runtime::RuntimeContext* runtime_ = nullptr;
         Scripting::IScriptServices* scripts_ = nullptr;
         Core::ObjectID controlled_object_;

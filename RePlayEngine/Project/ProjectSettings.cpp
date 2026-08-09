@@ -81,4 +81,33 @@ namespace ReplayEngine::Project
         status.path = record->source_path;
         return status;
     }
+
+    AssetReferenceStatus ProjectSettings::ResolveSceneFlow(
+        const Assets::AssetDatabase& database) const
+    {
+        AssetReferenceStatus status;
+        status.guid = scene_flow_guid_;
+        if (scene_flow_guid_.empty())
+        {
+            status.state = AssetReferenceStatus::State::Unset;
+            return status;
+        }
+
+        const Assets::AssetRecord* record = database.FindByGuid(scene_flow_guid_);
+        if (record == nullptr || record->kind != Assets::AssetKind::SceneFlow)
+        {
+            status.state = AssetReferenceStatus::State::Missing;
+            if (record != nullptr)
+            {
+                status.display_name = record->display_name;
+                status.path = record->source_path;
+            }
+            return status;
+        }
+
+        status.state = AssetReferenceStatus::State::Resolved;
+        status.display_name = record->display_name;
+        status.path = record->source_path;
+        return status;
+    }
 }

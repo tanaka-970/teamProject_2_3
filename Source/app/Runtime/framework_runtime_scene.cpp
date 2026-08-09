@@ -1,4 +1,4 @@
-﻿// RuntimeSceneService / SceneFlowService と framework の接続部。
+// RuntimeSceneService / SceneFlowService と framework の接続部。
 //
 // ここが唯一の「Runtime World を結線する場所」。
 //
@@ -164,12 +164,18 @@ void framework::initialize_runtime_services()
     object_runtime_context->SetPrefabInstantiator(&object_prefab_instantiator);
     object_runtime_context->SetSceneFlow(object_scene_flow.get());
 
+    // ProjectSettings の Active Scene Flow を Runtime へ接続する。
+    // 未設定/欠損なら空のままにし、直接 LoadScene の既存経路は壊さない。
+    sync_runtime_scene_flow_asset();
+
     object_runtime_scenes.ActiveWorld().Services().SetRuntime(object_runtime_context.get());
+    object_runtime_scenes.ActiveWorld().Services().SetAudio(&object_audio_system);
 
     // 編集 Scene からも Schema を引けるようにする。
     // Play セッションはまだ無いので、Inspector の表示だけが動く。
     // インスタンスの生成は PlaySessionActive() が false のあいだ起きない。
     object_scene.Services().SetScripts(object_script_runtime.get());
+    object_scene.Services().SetAudio(&object_audio_system);
 
     refresh_csharp_scripts();
 
@@ -303,6 +309,8 @@ void framework::rebind_runtime_world_if_changed()
     if (!object_runtime_world_active) return;
 
     ReplayEngine::Scene::Scene& world = object_runtime_scenes.ActiveWorld();
+    world.Services().SetAudio(&object_audio_system);
+    object_audio_system.StopAll();
 
     // 衝突世界を新しい World へ張り替える。
     // AttachScene の中で登録表と接触ペアが捨てられるので、

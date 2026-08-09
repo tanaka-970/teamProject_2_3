@@ -6,7 +6,23 @@
 #include "../../RePlayEngine/Scene/LoadingScene.h"
 
 #include <filesystem>
+#include <cstring>
 #include <string>
+
+namespace
+{
+    void SetDebugName(ID3D11DeviceChild* object, const char* name)
+    {
+#if defined(_DEBUG) || defined(DEBUG)
+        if (object == nullptr || name == nullptr || *name == '\0') return;
+        object->SetPrivateData(WKPDID_D3DDebugObjectName,
+            static_cast<UINT>(std::strlen(name)), name);
+#else
+        (void)object;
+        (void)name;
+#endif
+    }
+}
 
 // 【削除済み】lower_copy / find_animation_clip
 //   起動時に固定のプレイヤーモデルからクリップ名を探し、
@@ -21,6 +37,11 @@ bool framework::initialize()
     std::string asset_database_error;
     if (!asset_database.Load(asset_database_error))
         object_editor_context.SetStatus("AssetDatabase: " + asset_database_error);
+
+    if (!object_audio_system.Initialize())
+    {
+        push_editor_log("Warning", "Audio は silent mode で起動します");
+    }
 
     UINT create_device_flags{ 0 };
 #ifdef _DEBUG
@@ -45,6 +66,20 @@ bool framework::initialize()
         &feature_levels, 1, D3D11_SDK_VERSION, &swap_chain_desc,
         swap_chain.GetAddressOf(), device.GetAddressOf(), NULL, immediate_context.GetAddressOf());
     _ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+
+#if defined(_DEBUG) || defined(DEBUG)
+    // Live Object Report の中身をあとからファイルへ落とせるように、
+    // Debug Layer のメッセージを作成直後から落とさず蓄積する。
+    if (device)
+    {
+        Microsoft::WRL::ComPtr<ID3D11InfoQueue> info_queue;
+        if (SUCCEEDED(device.As(&info_queue)) && info_queue)
+        {
+            info_queue->SetMessageCountLimit(static_cast<UINT64>(-1));
+            info_queue->PushEmptyStorageFilter();
+        }
+    }
+#endif
 
     Microsoft::WRL::ComPtr<ID3D11Texture2D> back_buffer{};
     hr = swap_chain->GetBuffer(0, __uuidof(ID3D11Texture2D),
@@ -99,12 +134,20 @@ bool framework::initialize()
     D3D11_DEPTH_STENCIL_DESC dsd{};
     dsd.DepthEnable = TRUE; dsd.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL; dsd.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
     device->CreateDepthStencilState(&dsd, depth_stencil_states[(size_t)DEPTH_STATE::ZT_ON_ZW_ON].GetAddressOf());
+    SetDebugName(depth_stencil_states[(size_t)DEPTH_STATE::ZT_ON_ZW_ON].Get(),
+        "framework.depth_stencil_states[ZT_ON_ZW_ON] Source/app/Runtime/framework_initialize.cpp");
     dsd.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
     device->CreateDepthStencilState(&dsd, depth_stencil_states[(size_t)DEPTH_STATE::ZT_ON_ZW_OFF].GetAddressOf());
+    SetDebugName(depth_stencil_states[(size_t)DEPTH_STATE::ZT_ON_ZW_OFF].Get(),
+        "framework.depth_stencil_states[ZT_ON_ZW_OFF] Source/app/Runtime/framework_initialize.cpp");
     dsd.DepthEnable = FALSE; dsd.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
     device->CreateDepthStencilState(&dsd, depth_stencil_states[(size_t)DEPTH_STATE::ZT_OFF_ZW_ON].GetAddressOf());
+    SetDebugName(depth_stencil_states[(size_t)DEPTH_STATE::ZT_OFF_ZW_ON].Get(),
+        "framework.depth_stencil_states[ZT_OFF_ZW_ON] Source/app/Runtime/framework_initialize.cpp");
     dsd.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
     device->CreateDepthStencilState(&dsd, depth_stencil_states[(size_t)DEPTH_STATE::ZT_OFF_ZW_OFF].GetAddressOf());
+    SetDebugName(depth_stencil_states[(size_t)DEPTH_STATE::ZT_OFF_ZW_OFF].Get(),
+        "framework.depth_stencil_states[ZT_OFF_ZW_OFF] Source/app/Runtime/framework_initialize.cpp");
 
     D3D11_BLEND_DESC bd{};
     bd.RenderTarget[0].BlendEnable = FALSE;
@@ -128,6 +171,10 @@ bool framework::initialize()
     bd.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_DEST_ALPHA; bd.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
     device->CreateBlendState(&bd, blend_states[(size_t)BLEND_STATE::MULTIPLY].GetAddressOf());
 
+    bd.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE; bd.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_COLOR;
+    bd.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE; bd.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
+    device->CreateBlendState(&bd, blend_states[(size_t)BLEND_STATE::SCREEN].GetAddressOf());
+
     D3D11_RASTERIZER_DESC rd{};
     rd.FillMode = D3D11_FILL_SOLID; rd.CullMode = D3D11_CULL_BACK;
     rd.FrontCounterClockwise = TRUE; rd.DepthClipEnable = TRUE;
@@ -138,6 +185,10 @@ bool framework::initialize()
     device->CreateRasterizerState(&rd, rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].GetAddressOf());
     rd.FillMode = D3D11_FILL_WIREFRAME;
     device->CreateRasterizerState(&rd, rasterizer_states[(size_t)RASTER_STATE::WIREFRAME_CULL_NONE].GetAddressOf());
+    rd.FillMode = D3D11_FILL_SOLID;
+    rd.CullMode = D3D11_CULL_NONE;
+    rd.ScissorEnable = TRUE;
+    device->CreateRasterizerState(&rd, rasterizer_states[(size_t)RASTER_STATE::SCISSOR].GetAddressOf());
 
     D3D11_BUFFER_DESC cbd{};
     cbd.ByteWidth = sizeof(scene_constants);
@@ -161,6 +212,19 @@ bool framework::initialize()
         static_stylized_character_ps.GetAddressOf());
     cbd.ByteWidth = sizeof(material_override_constants);
     device->CreateBuffer(&cbd, nullptr, material_override_cb.GetAddressOf());
+
+    // Phase 6 + 12: Catalog bytecode / b9 / t40+ を実描画へ載せる。
+    // 初期化に失敗しても旧 .cso 経路は残るため、Editor 自体は起動を続ける。
+    if (!material_gpu_binder.Initialize(device.Get(),
+        [this](const std::string& severity, const std::string& message)
+        {
+            push_editor_log(severity, message);
+        }))
+    {
+        push_editor_log("Warning",
+            "Material GPU Binder を初期化できません。旧描画経路を使用します");
+    }
+
     cbd.ByteWidth = sizeof(ReplayEngine::Rendering::ShaderLayerGpuData);
     device->CreateBuffer(&cbd, nullptr, shader_layer_cb.GetAddressOf());
     cbd.ByteWidth = sizeof(ReplayEngine::Rendering::CharacterMaterialGpuData);
@@ -185,6 +249,10 @@ bool framework::initialize()
     ReplayEngine::Rendering::Stats().Initialize(device.Get());
     lights.initialize(device.Get());
     uiManager.Initalize(device.Get());
+    if (!ui_font_atlas.Initialize(device.Get()))
+        push_editor_log("Warning", "UI FontAtlas を初期化できません。UIText は描画されません");
+    if (!ui_renderer.Initialize(device.Get()))
+        push_editor_log("Warning", "UIRenderer を初期化できません。Canvas UI は描画されません");
     lights.data.light_counts = { 0, 0, 0, 0 };
 
     // 法線テクスチャを持たない材質で使うダミー法線を作る。kwjkshhakjwhhwhhsbkkwhiiwnzkkhjsowjjw
@@ -207,10 +275,6 @@ bool framework::initialize()
         _ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
     }
 
-    // ロゴ、ロード、ゲームの順に進め、重いモデルと画像はロードシーン内で生成する。
-    // これによりロゴ表示前の起動停止を防ぐ。
-    scene_manager.SetScene(
-        std::make_unique<ReplayEngine::Scene::BootLogoScene>(), device.Get());
     auto loading_scene = std::make_unique<ReplayEngine::Scene::LoadingScene>();
     // 任意アセットの読み込みは「無ければスキップして続行」に統一する。
     // 実行に必須ではないファイルの不足で起動が止まらないようにするため。
@@ -280,7 +344,18 @@ bool framework::initialize()
             return true;
         });
     }
-    scene_manager.QueueScene(std::move(loading_scene), device.Get());
+    // Game 起動ではロゴの裏でロードを進める。Editor 起動では固定長の
+    // ロゴ待ちを省き、暗いロード画面から直接セッションを復元する。
+    if (object_boot_from_startup_scene)
+    {
+        scene_manager.SetScene(
+            std::make_unique<ReplayEngine::Scene::BootLogoScene>(), device.Get());
+        scene_manager.QueueScene(std::move(loading_scene), device.Get());
+    }
+    else
+    {
+        scene_manager.SetScene(std::move(loading_scene), device.Get());
+    }
 
     scene_manager.QueueSceneFactory([this]() -> std::unique_ptr<ReplayEngine::Scene::IScene>
     {

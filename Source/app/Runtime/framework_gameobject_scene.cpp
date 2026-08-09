@@ -1,4 +1,4 @@
-﻿// GameObject / Component 基盤と既存 framework の接続部。
+// GameObject / Component 基盤と既存 framework の接続部。
 //
 // この 1 ファイルへ新基盤との橋渡しをまとめている理由:
 //   framework 側の既存ファイル（描画・入力・エディタ）への変更を最小限に抑え、
@@ -13,11 +13,19 @@
 #include "gltf_model.h"
 #include "skinned_mesh.h"
 
+#include "../../RePlayEngine/Components/Camera/CameraComponent.h"
 #include "../../RePlayEngine/Components/Camera/CameraTargetComponent.h"
+#include "../../RePlayEngine/Components/Camera/FollowTargetComponent.h"
 #include "../../RePlayEngine/Components/Rendering/LightComponents.h"
+#include "../../RePlayEngine/Components/Landscape/LandscapeComponent.h"
+#include "../../RePlayEngine/Components/Landscape/LandscapeRendererComponent.h"
+#include "../../RePlayEngine/Components/Landscape/LandscapeColliderComponent.h"
+#include "../../RePlayEngine/Rendering/Shaders/BuiltInShaders.h"
+#include "../../RePlayEngine/Rendering/ShaderStack/BuiltInShaderLayers.h"
 #include "../../RePlayEngine/Object/Registry/BuiltInComponents.h"
 #include "../../RePlayEngine/Project/ProjectSettingsSerializer.h"
 #include "../../RePlayEngine/Rendering/Adapter/SceneRenderCollector.h"
+#include "../../RePlayEngine/UI/UILayout.h"
 
 // RuntimeContext.h は EventBus を前方宣言だけしている。
 // Events() の戻り値へ Dispatch() を呼ぶには完全型が要るので、
@@ -85,6 +93,146 @@ namespace
         const std::string stem = scene_path.stem().empty() ? "Untitled" : scene_path.stem().string();
         return std::filesystem::path("Saved") / "Autosave" /
             (stem + "_" + std::to_string(hash) + ".autosave.replayscene");
+
+    }
+
+    using PrimitiveVertex = static_mesh::vertex;
+
+    void AppendPrimitiveQuad(std::vector<PrimitiveVertex>& vertices,
+        std::vector<std::uint32_t>& indices,
+        const DirectX::XMFLOAT3& a, const DirectX::XMFLOAT3& b,
+        const DirectX::XMFLOAT3& c, const DirectX::XMFLOAT3& d,
+        const DirectX::XMFLOAT3& normal)
+    {
+        const std::uint32_t base = static_cast<std::uint32_t>(vertices.size());
+        vertices.push_back({ a, normal, { 0.0f, 1.0f } });
+        vertices.push_back({ b, normal, { 0.0f, 0.0f } });
+        vertices.push_back({ c, normal, { 1.0f, 0.0f } });
+        vertices.push_back({ d, normal, { 1.0f, 1.0f } });
+        indices.insert(indices.end(), { base, base + 1, base + 2, base, base + 2, base + 3 });
+    }
+
+    bool BuildBuiltinPrimitive(const std::string& id,
+        std::vector<PrimitiveVertex>& vertices, std::vector<std::uint32_t>& indices)
+    {
+        using namespace DirectX;
+        vertices.clear();
+        indices.clear();
+
+        if (id == "builtin:plane")
+        {
+            AppendPrimitiveQuad(vertices, indices,
+                { -0.5f, 0.0f, -0.5f }, { -0.5f, 0.0f, 0.5f },
+                { 0.5f, 0.0f, 0.5f }, { 0.5f, 0.0f, -0.5f },
+                { 0.0f, 1.0f, 0.0f });
+            return true;
+        }
+        if (id == "builtin:quad")
+        {
+            AppendPrimitiveQuad(vertices, indices,
+                { -0.5f, -0.5f, 0.0f }, { -0.5f, 0.5f, 0.0f },
+                { 0.5f, 0.5f, 0.0f }, { 0.5f, -0.5f, 0.0f },
+                { 0.0f, 0.0f, -1.0f });
+            return true;
+        }
+        if (id == "builtin:cube")
+        {
+            const float h = 0.5f;
+            AppendPrimitiveQuad(vertices, indices, { -h,-h,-h }, { -h, h,-h }, { h, h,-h }, { h,-h,-h }, { 0,0,-1 });
+            AppendPrimitiveQuad(vertices, indices, { h,-h, h }, { h, h, h }, { -h, h, h }, { -h,-h, h }, { 0,0,1 });
+            AppendPrimitiveQuad(vertices, indices, { -h,-h, h }, { -h, h, h }, { -h, h,-h }, { -h,-h,-h }, { -1,0,0 });
+            AppendPrimitiveQuad(vertices, indices, { h,-h,-h }, { h, h,-h }, { h, h, h }, { h,-h, h }, { 1,0,0 });
+            AppendPrimitiveQuad(vertices, indices, { -h, h,-h }, { -h, h, h }, { h, h, h }, { h, h,-h }, { 0,1,0 });
+            AppendPrimitiveQuad(vertices, indices, { -h,-h, h }, { -h,-h,-h }, { h,-h,-h }, { h,-h, h }, { 0,-1,0 });
+            return true;
+        }
+
+        const bool sphere = id == "builtin:sphere";
+        const bool capsule = id == "builtin:capsule";
+        if (sphere || capsule)
+        {
+            constexpr int slices = 24;
+            constexpr int stacks = 16;
+            const float radius = 0.5f;
+            const float capsule_half_cylinder = capsule ? 0.5f : 0.0f;
+            for (int stack = 0; stack <= stacks; ++stack)
+            {
+                const float v = static_cast<float>(stack) / stacks;
+                const float latitude = -XM_PIDIV2 + v * XM_PI;
+                const float cos_lat = std::cos(latitude);
+                const float sin_lat = std::sin(latitude);
+                for (int slice = 0; slice <= slices; ++slice)
+                {
+                    const float u = static_cast<float>(slice) / slices;
+                    const float longitude = u * XM_2PI;
+                    XMFLOAT3 normal{ cos_lat * std::cos(longitude), sin_lat,
+                        cos_lat * std::sin(longitude) };
+                    XMFLOAT3 position{ normal.x * radius, normal.y * radius,
+                        normal.z * radius };
+                    if (capsule)
+                        position.y += normal.y >= 0.0f ? capsule_half_cylinder : -capsule_half_cylinder;
+                    vertices.push_back({ position, normal, { u, 1.0f - v } });
+                }
+            }
+            const int stride = slices + 1;
+            for (int stack = 0; stack < stacks; ++stack)
+            {
+                for (int slice = 0; slice < slices; ++slice)
+                {
+                    const std::uint32_t a = static_cast<std::uint32_t>(stack * stride + slice);
+                    const std::uint32_t b = a + 1;
+                    const std::uint32_t c = a + stride;
+                    const std::uint32_t d = c + 1;
+                    indices.insert(indices.end(), { a, c, b, b, c, d });
+                }
+            }
+            return true;
+        }
+
+        if (id == "builtin:cylinder")
+        {
+            constexpr int slices = 24;
+            const float radius = 0.5f;
+            const float half_height = 0.5f;
+            for (int slice = 0; slice <= slices; ++slice)
+            {
+                const float u = static_cast<float>(slice) / slices;
+                const float angle = u * XM_2PI;
+                const XMFLOAT3 normal{ std::cos(angle), 0.0f, std::sin(angle) };
+                vertices.push_back({ { normal.x * radius, -half_height, normal.z * radius }, normal, { u,1 } });
+                vertices.push_back({ { normal.x * radius, half_height, normal.z * radius }, normal, { u,0 } });
+            }
+            for (int slice = 0; slice < slices; ++slice)
+            {
+                const std::uint32_t a = static_cast<std::uint32_t>(slice * 2);
+                const std::uint32_t b = a + 1;
+                const std::uint32_t c = a + 2;
+                const std::uint32_t d = a + 3;
+                indices.insert(indices.end(), { a,b,c, c,b,d });
+            }
+            const std::uint32_t bottom_center = static_cast<std::uint32_t>(vertices.size());
+            vertices.push_back({ {0,-half_height,0}, {0,-1,0}, {0.5f,0.5f} });
+            const std::uint32_t top_center = static_cast<std::uint32_t>(vertices.size());
+            vertices.push_back({ {0,half_height,0}, {0,1,0}, {0.5f,0.5f} });
+            const std::uint32_t cap_start = static_cast<std::uint32_t>(vertices.size());
+            for (int slice = 0; slice < slices; ++slice)
+            {
+                const float angle = static_cast<float>(slice) / slices * XM_2PI;
+                const float x = std::cos(angle) * radius, z = std::sin(angle) * radius;
+                vertices.push_back({ {x,-half_height,z},{0,-1,0},{x+0.5f,z+0.5f} });
+                vertices.push_back({ {x, half_height,z},{0, 1,0},{x+0.5f,z+0.5f} });
+            }
+            for (int slice = 0; slice < slices; ++slice)
+            {
+                const int next = (slice + 1) % slices;
+                const std::uint32_t b0 = cap_start + static_cast<std::uint32_t>(slice * 2);
+                const std::uint32_t b1 = cap_start + static_cast<std::uint32_t>(next * 2);
+                const std::uint32_t t0 = b0 + 1, t1 = b1 + 1;
+                indices.insert(indices.end(), { bottom_center,b1,b0, top_center,t0,t1 });
+            }
+            return true;
+        }
+        return false;
     }
 }
 
@@ -96,14 +244,15 @@ namespace
 //
 //   1. Component 型を登録する
 //   2. プロジェクト設定を読み込む
-    //   3. 現行Sceneを読み込む（GameObject / Component / Property / Collider 参照 /
-//      controlledObjectId がここで復元される）
-//   4. Scene を開始する
-//   5. 衝突世界を Scene へ Attach する
+//   3. Sessionで指定された現行Sceneがあれば、その内容をそのまま読み込む
+//   4. Sceneがまだ存在しない初回起動だけ、通常GameObject + Componentで
+//      Landscape Ground + Sun の Basic Scene を作る
+//   5. Scene を開始する
+//   6. 衝突世界を Scene へ Attach する
 //
-// ここで GameObject を作ることも、Prefab を配置することも、
-// Component をコードから付け足すことも一切しない。
-// Scene ファイルの内容がそのまま起動後の状態になる。
+// 既存Sceneをロードするときは自動GameObjectを追加しない。
+// Basic Sceneの自動生成は「読み込むSceneが無い初回」だけに限定し、
+// Empty Sceneはユーザー操作で引き続き完全な空Sceneとして作成できる。
 void framework::initialize_object_scene()
 {
     // Component 型の登録。Scene を作る前・読む前に 1 回だけ。
@@ -126,6 +275,8 @@ void framework::initialize_object_scene()
     object_editor_context.SetAssetDatabase(&asset_database);
     object_editor_context.SetScenePath(object_scene_path);
 
+    bool created_startup_basic_scene = false;
+
     // Sessionで復元されたSceneがあれば後段で読み込む。ここでは固定Sampleへ
     // 依存せず、明示されたSceneパスがある場合だけ読み込む。
     // 「Scene が無いから既定のキャラクターを置く」ことはしない。
@@ -136,8 +287,35 @@ void framework::initialize_object_scene()
     }
     else
     {
-        object_editor_context.SetStatus(
-            "シーンファイルがありません（空のシーンとして開始しました）");
+        // 初回起動は「何もない空間」ではなく、すぐ Sculpt と衝突確認を始められる
+        // Basic Scene にする。特殊な World Terrain は作らず、通常の GameObject +
+        // Landscape / Renderer / Collider Component だけで構成する。
+        ReplayEngine::Core::GameObject* ground = create_default_landscape_ground(object_scene);
+        created_startup_basic_scene = ground != nullptr;
+        if (ReplayEngine::Core::GameObject* sun = object_scene.CreateGameObject("Sun"))
+        {
+            sun->GetTransform().SetLocalRotationEuler({ -0.75f, 0.4f, 0.0f });
+            if (auto* light = sun->AddComponent<
+                ReplayEngine::Components::DirectionalLightComponent>())
+            {
+                light->color = { 1.0f, 0.96f, 0.88f, 1.0f };
+                light->intensity = 3.5f;
+                light->cast_shadows = true;
+            }
+        }
+        if (ground != nullptr)
+        {
+            object_editor_context.Selection().Select(ground->ID(), false);
+            selected_editor_object = editor_selection::game_object;
+            object_editor_context.MarkDirty();
+            object_editor_context.SetStatus(
+                "新規 Basic Scene を作成しました（Landscape Ground + Sun）");
+        }
+        else
+        {
+            object_editor_context.SetStatus(
+                "新規 Scene を作成しました（Landscape Ground の生成に失敗）");
+        }
     }
     check_object_scene_recovery();
 
@@ -153,6 +331,12 @@ void framework::initialize_object_scene()
     // Scene View の編集カメラを、この Scene 用に保存された状態から復元する。
     // 保存が無い / 壊れていても、既定位置になるだけで Scene の読み込みには影響しない。
     load_editor_camera_state();
+
+    // 新規 Basic Scene だけは保存済みの「未保存Sceneカメラ」を使い回さない。
+    // Ground が見えない状態から始まると生成失敗に見えるため、64m四方を
+    // 斜め上から一目で確認できる位置へ合わせる。既存Sceneのカメラは触らない。
+    if (created_startup_basic_scene)
+        editor_camera.LookAt({ 0.0f, 30.0f, -42.0f }, { 0.0f, 0.0f, 0.0f });
 
     // Runtime 側のサービスを組み立てる。
     // World の所有者はここで確定し、以降 framework が Scene を値で持つことはない。
@@ -232,13 +416,11 @@ bool framework::object_runtime_active() const noexcept
     //   そのため Editor を開いて F5 を押すまで入力も物理も一切動かず、
     //   「PlayerController があるのに動かない」状態になっていた。
     //
-    // 正しい条件は「編集中でないこと」。
-    //   Editor 非表示（通常のゲーム実行） -> 動く
-    //   Editor 表示 + Edit Mode           -> 止まる（GameObject を編集中）
-    //   Editor 表示 + Play Mode (F5)      -> 動く
-    const bool editing = editor_mode && edit_mode_active && !object_scene_play_mode;
+    // Editor 内で Runtime World を動かす入口は F5 Play Session だけ。
+    // F3 は Editor UI/input capture の切替であり、第2の Play Mode にはしない。
     if (object_scene_play_mode && object_scene_paused) return false;
-    return !editing;
+    if (!editor_mode) return true;
+    return object_scene_play_mode;
 }
 
 void framework::refresh_object_scene_services()
@@ -247,11 +429,26 @@ void framework::refresh_object_scene_services()
 
     // カメラの橋渡しを毎フレーム張り直す。
     // GameScene が作り直された場合でも参照が古くならないようにするため。
-    if (game_scene != nullptr) object_camera_bridge.Attach(&game_scene->Gameplay().GetCamera());
-    else                       object_camera_bridge.Detach();
+    const ReplayEngine::Components::CameraSelection camera_selection =
+        ReplayEngine::Components::ResolveActiveCameraSelection(scene);
+    if (camera_selection.Valid())
+    {
+        object_camera_bridge.AttachBasis(
+            camera_selection.component->Forward(),
+            camera_selection.component->Right());
+    }
+    else if (game_scene != nullptr)
+    {
+        object_camera_bridge.Attach(&game_scene->Gameplay().GetCamera());
+    }
+    else
+    {
+        object_camera_bridge.Detach();
+    }
 
     ReplayEngine::Scene::SceneServices& services = scene.Services();
     services.SetCameraBasis(&object_camera_bridge);
+    services.SetAudio(&object_audio_system);
     services.SetPlaying(object_runtime_active());
 
     // 地形の問い合わせ先は衝突世界。
@@ -369,7 +566,7 @@ void framework::update_object_scene(float elapsed_time)
 
     ReplayEngine::Scene::Scene& scene = active_object_scene();
 
-    // 編集中（F3 で停止中）は Component を更新しない。
+    // Editor では F5 Play Session 以外 Component を更新しない。
     // Editor で置いた GameObject が編集中に勝手に動くのを防ぐ。
     if (object_runtime_active())
     {
@@ -396,9 +593,11 @@ void framework::update_object_scene(float elapsed_time)
 
         // Transform が確定してからカメラを動かす。
         update_object_camera_follow(elapsed_time);
+        object_audio_system.UpdateFromScene(scene);
     }
     else
     {
+        object_audio_system.StopAll();
         // 停止中でも生成・削除の予約だけは反映する。
         // Editor 操作の結果が次のフレームまで残らないようにするため。
         scene.ProcessPendingOperations();
@@ -407,6 +606,44 @@ void framework::update_object_scene(float elapsed_time)
     // 選択が消えた GameObject を指し続けないようにする。
     object_editor_context.Selection().PruneMissing(scene);
     sync_object_lights();
+
+    // Scene::Update は GameObject / Component の平坦な走査だけを担当する。
+    // UI layout は親子順序が必要なので、Scene 更新の外側で明示フェーズとして行う。
+    ReplayEngine::UI::UILayout::Resolve(scene,
+        static_cast<float>(client_width), static_cast<float>(client_height));
+    POINT mouse{};
+    GetCursorPos(&mouse);
+    ScreenToClient(hwnd, &mouse);
+    const float mouse_x = static_cast<float>(mouse.x);
+    const float mouse_y = static_cast<float>(client_height) - static_cast<float>(mouse.y);
+    const bool mouse_down = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+    const bool mouse_pressed = mouse_down && !ui_pointer_down_last;
+    const bool mouse_released = !mouse_down && ui_pointer_down_last;
+    bool input_captured = false;
+#ifdef USE_IMGUI
+    if (editor_mode && ImGui::GetCurrentContext())
+        input_captured = ImGui::GetIO().WantCaptureMouse;
+#endif
+    ReplayEngine::UI::UILayout::UpdateButtons(scene,
+        static_cast<float>(client_width), static_cast<float>(client_height),
+        mouse_x, mouse_y, mouse_down, mouse_pressed, mouse_released, input_captured);
+    ui_pointer_down_last = mouse_down;
+
+    // 削除済み Landscape の GPU メッシュをフレーム更新時に 1 回だけ解放する。
+    // 非表示なだけの Landscape は再表示時の再生成を避けるためキャッシュへ残す。
+    for (auto it = landscape_gpu_mesh_cache.begin(); it != landscape_gpu_mesh_cache.end();)
+    {
+        const ReplayEngine::Core::GameObject* object = scene.FindGameObjectByID(
+            ReplayEngine::Core::ObjectID{ it->first });
+        const bool still_owned = object != nullptr && !object->PendingDestroy() &&
+            object->GetComponent<ReplayEngine::Components::LandscapeComponent>() != nullptr &&
+            object->GetComponent<ReplayEngine::Components::LandscapeRendererComponent>() != nullptr;
+
+        if (!still_owned)
+            it = landscape_gpu_mesh_cache.erase(it);
+        else
+            ++it;
+    }
 
     if (!object_scene_play_mode && object_editor_context.Dirty())
     {
@@ -506,7 +743,20 @@ void framework::sync_object_lights()
 
     if (!directional_found)
     {
-        pbr.light.directional_color = { 0.0f, 0.0f, 0.0f, 0.0f };
+        // Scene View は配置・選択のための編集画面なので、Light がまだ無い
+        // 空Sceneでも PBR Mesh の形が分かる最低限の補助光を使う。
+        // Play/GameではSceneの照明設定を尊重し、Lightなしなら従来どおり暗闇にする。
+        const bool editor_preview_light =
+            editor_mode && edit_mode_active && !object_scene_play_mode;
+        if (editor_preview_light)
+        {
+            light_direction = { 0.35f, -1.0f, 0.25f, 0.0f };
+            pbr.light.directional_color = { 1.0f, 0.98f, 0.94f, 1.25f };
+        }
+        else
+        {
+            pbr.light.directional_color = { 0.0f, 0.0f, 0.0f, 0.0f };
+        }
         pbr.light.shadow_params.w = 0.0f;
     }
 }
@@ -515,28 +765,25 @@ void framework::update_object_camera_follow(float elapsed_time)
 {
     if (game_scene == nullptr) return;
 
-    // 追従対象は CameraTargetComponent の選択規則で決める。
-    // カメラ側は操作対象の具象型を一切知らない。
-    //
-    // 解決の材料は次の 4 つだけ。
-    //   controlledObjectId / CameraTargetComponent / priority / Runtime Scene
-    // GameObject 名も Prefab 名も見ない。
     const ReplayEngine::Scene::Scene& scene = active_object_scene();
+    if (ReplayEngine::Components::ResolveActiveCameraSelection(scene).Valid())
+    {
+        return;
+    }
+
+    // CameraComponent を持たない旧シーンは保存データを書き換えず、既存の
+    // SceneGame カメラ経路へ戻す。新しい追従制御は FollowTargetComponent が担当する。
     const ReplayEngine::Core::ObjectID controlled = scene.Services().ControlledObject();
 
     const ReplayEngine::Components::CameraTargetSelection selection =
         ReplayEngine::Components::ResolveCameraTargetSelection(scene, controlled);
 
-    // CameraTarget が 1 つも無い / すべて無効化されている場合だけ自由カメラへ戻す。
-    // controlledObjectId は変更しない。Fallback は CameraTarget の priority による
-    // 視点選択だけで、操作対象の自動変更ではない。
     if (!selection.Valid())
     {
         game_scene->Gameplay().UpdateFreeCamera(elapsed_time);
         return;
     }
 
-    // 追従点は GameObject のワールド位置 + target_offset。
     const DirectX::XMFLOAT3 world = selection.object->GetTransform().WorldPosition();
     const ReplayEngine::Components::CameraTargetComponent& camera_target = *selection.component;
     const DirectX::XMFLOAT3 anchor{
@@ -547,12 +794,12 @@ void framework::update_object_camera_follow(float elapsed_time)
     game_scene->Gameplay().FollowCameraTarget(
         anchor,
         camera_target.look_at_offset,
-        camera_target.follow_distance,
-        camera_target.follow_height,
-        camera_target.follow_lag,
-        camera_target.field_of_view_degrees,
-        camera_target.near_clip,
-        camera_target.far_clip,
+        6.5f,
+        2.25f,
+        12.0f,
+        50.0f,
+        0.1f,
+        10000.0f,
         elapsed_time);
 }
 
@@ -650,6 +897,7 @@ bool framework::load_object_scene_from_path(const std::filesystem::path& source)
         return false;
     }
     if (object_scene_play_mode) exit_object_play_mode();
+    reset_landscape_editor_state(true);
 
     // Scene を切り替える前に、今の Scene の編集カメラ状態を残す。
     // 戻ってきたときに同じ視点から再開できる。
@@ -873,6 +1121,8 @@ void framework::enter_object_play_mode()
         return;
     }
 
+    reset_landscape_editor_state(true);
+
     // 編集 Scene の内容を実行用 Scene へ複製する。
     // 直接コピーせず SceneData を経由するのは、
     // Scene が生ポインタで結ばれておりコピー不可なため。
@@ -891,6 +1141,11 @@ void framework::enter_object_play_mode()
     SceneSerialization::SceneData snapshot;
     SceneSerialization::CaptureScene(object_scene, snapshot);
 
+    // Play From Here は SceneData の実行用コピーだけへ焼き込む。
+    // Runtime World の OnAwake / OnStart より前に位置が確定するため、
+    // Start 側が初期座標を読むゲームでも期待どおりの場所から始まる。
+    apply_play_spawn_override(snapshot);
+
     // 未保存の Scene には AssetGUID が無い。空のまま渡す。
     // 空の場合、この World に対する Reload は InvalidRequest になるだけで、
     // 別の Scene が代わりに読まれることはない。
@@ -905,6 +1160,7 @@ void framework::enter_object_play_mode()
             std::to_string(static_cast<int>(request));
         object_editor_context.SetStatus(reason);
         push_editor_log("Error", reason);
+        play_spawn_override.active = false;
         return;
     }
 
@@ -926,6 +1182,7 @@ void framework::enter_object_play_mode()
             std::to_string(static_cast<int>(object_runtime_scenes.State()));
         object_editor_context.SetStatus(reason);
         push_editor_log("Error", reason);
+        play_spawn_override.active = false;
         return;
     }
 
@@ -935,6 +1192,15 @@ void framework::enter_object_play_mode()
     // 編集 Scene の ObjectID / ColliderID はここで完全に捨てられるので、
     // Play 中に編集 Scene の Collider へ当たることはない。
     attach_collision_world(runtime_world);
+
+    // Attach 直後に登録表を作る。Play From Here の座標は SceneData へ
+    // 事前反映済みなので、OnAwake / OnStart からも正しい開始位置が見える。
+    object_collision_world.Refresh();
+    if (play_spawn_override.active)
+    {
+        push_editor_log("Info", play_spawn_override.label + " から Play を開始しました");
+        play_spawn_override.active = false; // 一回限り。通常 Play へ持ち越さない。
+    }
 
     // Play 開始時に貯まっていた時間を捨てる。開始直後に物理が飛ぶのを防ぐ。
     object_fixed_accumulator = 0.0f;
@@ -1076,6 +1342,8 @@ void framework::exit_object_play_mode()
 {
     if (!object_scene_play_mode) return;
 
+    object_audio_system.StopAll();
+
     // 先に衝突世界を切り離す。
     // Scene を消してから切り離すと、その間に問い合わせが来た場合に
     // 破棄済みの GameObject を引きに行ってしまう。
@@ -1196,6 +1464,22 @@ skinned_mesh* framework::resolve_object_mesh(const std::string& asset_guid)
     return raw;
 }
 
+static_mesh* framework::resolve_builtin_primitive_mesh(const std::string& builtin_id)
+{
+    if (!device || builtin_id.rfind("builtin:", 0) != 0) return nullptr;
+    const auto cached = builtin_primitive_mesh_cache.find(builtin_id);
+    if (cached != builtin_primitive_mesh_cache.end()) return cached->second.get();
+
+    std::vector<static_mesh::vertex> vertices;
+    std::vector<std::uint32_t> indices;
+    if (!BuildBuiltinPrimitive(builtin_id, vertices, indices)) return nullptr;
+    auto mesh = std::make_unique<static_mesh>(device.Get(), vertices, indices);
+    if (!mesh || !mesh->is_loaded()) return nullptr;
+    static_mesh* raw = mesh.get();
+    builtin_primitive_mesh_cache.emplace(builtin_id, std::move(mesh));
+    return raw;
+}
+
 const ReplayEngine::Rendering::MaterialAsset* framework::resolve_object_material(
     const std::string& asset_guid)
 {
@@ -1239,32 +1523,104 @@ const ReplayEngine::Rendering::MaterialAsset* framework::resolve_object_material
 ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
     const ReplayEngine::Rendering::RenderItem& source)
 {
-    ReplayEngine::Rendering::RenderItem item = source;
-    const ReplayEngine::Rendering::MaterialAsset* material =
-        resolve_object_material(source.material_asset);
+    using namespace ReplayEngine::Rendering;
+
+    RenderItem item = source;
+    item.legacy_tint = source.tint;
+    item.lighting_model = deferred_lighting_model(source.shading_model);
+
+    const MaterialAsset* material = resolve_object_material(source.material_asset);
     if (material == nullptr) return item;
 
-    // 【マテリアルが唯一の真実】
-    //
-    // 絵柄（shading_model）は必ずマテリアルの指定を使う。
-    //
-    // 以前は material_override が true だと Renderer 側の shading_model が
-    // 優先され、マテリアルでトゥーンを選んでも PBR のままだった。
-    // 「マテリアルを割り当てたのに絵が変わらない」原因がこれ。
-    //
-    // Unity では Renderer に絵柄の指定は無く、マテリアルだけが決める。
-    // material_override は色の上書き（tint）だけに意味を限定する。
-    item.shading_model = material->shading_model;
-    if (!source.material_override)
-    {
-        item.tint = material->base_color;
-    }
+    // 旧 .cso fallback では従来どおり Material の base_color を頂点 tint に使う。
+    item.legacy_tint = source.material_override ? source.tint : material->base_color;
+
+    // Catalog shader では BaseColor は b9 から渡す。pin.color は Renderer 側の
+    // 追加 tint にだけ使い、同じ色を二重に掛けない。
+    item.tint = source.material_override
+        ? source.tint : DirectX::XMFLOAT4{ 1.0f, 1.0f, 1.0f, 1.0f };
+
+    item.shading_model = material->shading_model; // fallback のためだけに保持
+    // material_override は従来どおり「Renderer tint が Material BaseColor を置換」。
+    // Catalog shader は BaseColor を b9 から読むため、置換時は b9 側を白にする。
+    item.material_base_color = source.material_override
+        ? DirectX::XMFLOAT4{ 1.0f, 1.0f, 1.0f, 1.0f }
+        : material->base_color;
     item.metallic = material->metallic;
     item.roughness = material->roughness;
     item.ambient_occlusion = material->ambient_occlusion;
-    item.emissive_strength = (std::max)({ material->emissive.x,
-        material->emissive.y, material->emissive.z }) * material->emissive_strength;
-    item.double_sided = material->double_sided;
+    item.emissive_color = material->emissive;
+    item.emissive_strength = material->emissive_strength;
+    item.double_sided = source.double_sided || material->double_sided;
+    item.outline = material->layers.Contains(BuiltInShaderLayers::Outline);
+    item.pixelate_size = material->pixelate_grid;
+    item.pixelate_strength = material->pixelate_strength;
+
+    // 現在の GameObject mesh は静的提出も skinned_mesh renderer を通る。
+    // Vertex Shader の VS_OUT と一致させるため Catalog 側も Skinned 変種を使う。
+    // 真の static_mesh 経路を RenderItem へ接続した時点で source.skinned 分岐へ戻す。
+    const ShaderVariant variant = ShaderVariant::Skinned;
+    MaterialAsset binding_material = *material;
+    if (source.material_override)
+    {
+        const DirectX::XMFLOAT4 white{ 1.0f, 1.0f, 1.0f, 1.0f };
+        binding_material.base_color = white;
+        binding_material.properties.Set("prop.BaseColor",
+            ReplayEngine::Reflection::PropertyValue::MakeColor(white));
+    }
+    const bool resolved = MaterialBindingResolver::Resolve(binding_material,
+        shader_library.Catalog(), variant, item.material_binding);
+    // binding_material は一時コピーなので、LayerStack の借用先だけ元Assetへ戻す。
+    item.material_binding.layers = &material->layers;
+
+    if (resolved && item.material_binding.usable_shader)
+    {
+        item.lighting_model = item.material_binding.lighting_model;
+        if (item.material_binding.requested_shader.IsValid())
+            object_shader_lighting_failures.erase(
+                item.material_binding.requested_shader.ToString());
+    }
+    else
+    {
+        item.lighting_model = deferred_lighting_model(material->shading_model);
+    }
+
+    if (item.material_binding.missing_shader)
+    {
+        // Deferred は generated b9 ではなく固定 GBuffer bridge を使うため、
+        // Missing Shader のマゼンタをこちらにも明示的に反映する。
+        item.material_base_color = DirectX::XMFLOAT4{ 1.0f, 0.0f, 1.0f, 1.0f };
+        item.tint = DirectX::XMFLOAT4{ 1.0f, 1.0f, 1.0f, 1.0f };
+        item.emissive_color = DirectX::XMFLOAT3{ 0.0f, 0.0f, 0.0f };
+        item.emissive_strength = 0.0f;
+
+        const std::string key = material->shader_guid.empty()
+            ? std::string("legacy:") + std::to_string(material->shading_model)
+            : material->shader_guid;
+        if (object_shader_lighting_failures.insert(key).second)
+        {
+            push_editor_log("Error",
+                "Material Shader を解決できないため Unlit/Magenta へフォールバック: " +
+                key + " / " + item.material_binding.diagnostic);
+        }
+    }
+
+    // Pixelate は surface shader と layer の両方から有効になる。
+    item.pixelate_enabled = item.material_binding.shader == BuiltInShaders::Pixelate;
+    for (const ShaderLayer& layer : material->layers.Layers())
+    {
+        if (!layer.enabled) continue;
+        if (layer.Is(BuiltInShaderLayers::Pixelate))
+        {
+            item.pixelate_enabled = true;
+            item.pixelate_size = layer.parameter;
+            item.pixelate_strength = layer.strength;
+        }
+        else if (layer.Is(BuiltInShaderLayers::Outline))
+        {
+            item.outline = true;
+        }
+    }
     return item;
 }
 
@@ -1280,6 +1636,57 @@ void framework::draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shade
         // Asset 未指定・解決不可・読み込み失敗のいずれでも nullptr が返る。
         // その場合はこの GameObject を描かずに次へ進むだけで、実行は継続する。
         if (item.mesh_asset.empty()) continue;
+
+        // Engine 内蔵 Primitive も通常の MeshRendererComponent から提出される。
+        // 特殊な Primitive GameObject は作らず、asset id だけ builtin:* を使う。
+        if (item.mesh_asset.rfind("builtin:", 0) == 0)
+        {
+            static_mesh* primitive = resolve_builtin_primitive_mesh(item.mesh_asset);
+            if (primitive == nullptr) continue;
+
+            if (item.double_sided)
+                immediate_context->RSSetState(
+                    rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+
+            if (depth_only)
+            {
+                primitive->render(immediate_context.Get(), item.world, item.tint,
+                    nullptr, nullptr, nullptr, false, false);
+            }
+            else if (gbuffer_pass)
+            {
+                if (item.material_binding.usable_shader)
+                {
+                    material_gpu_binder.BindGBufferTextures(device.Get(), immediate_context.Get(),
+                        asset_database, item.material_binding);
+                }
+                else
+                {
+                    material_gpu_binder.UnbindTextures(immediate_context.Get());
+                }
+                bind_gbuffer_material(item.lighting_model,
+                    false, item.pixelate_enabled, item.pixelate_size,
+                    item.pixelate_strength, item.metallic, item.roughness,
+                    item.ambient_occlusion, item.emissive_strength,
+                    item.material_base_color, item.emissive_color,
+                    item.material_binding.usable_shader
+                        ? item.material_binding.TextureSemanticMask() : 0u);
+                primitive->render(immediate_context.Get(), item.world, item.tint,
+                    static_mesh_gbuffer_ps.Get(), nullptr, nullptr, true, true);
+                material_gpu_binder.UnbindTextures(immediate_context.Get());
+            }
+            else
+            {
+                primitive->render(immediate_context.Get(), item.world, item.tint,
+                    static_forward_shader(item.shading_model));
+            }
+
+            if (item.double_sided)
+                immediate_context->RSSetState(
+                    rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
+            continue;
+        }
+
         skinned_mesh* mesh = resolve_object_mesh(item.mesh_asset);
         if (mesh == nullptr) continue;
 
@@ -1310,9 +1717,27 @@ void framework::draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shade
         }
 
         // GBuffer パスでは Component が指定した描画方式を材質定数へ流す。
-        if (gbuffer_pass) bind_gbuffer_material(deferred_shading_model(item.shading_model),
-            false, 6.0f, 1.0f, item.metallic, item.roughness,
-            item.ambient_occlusion, item.emissive_strength);
+        if (gbuffer_pass)
+        {
+            if (item.material_binding.usable_shader)
+            {
+                material_gpu_binder.BindGBufferTextures(device.Get(), immediate_context.Get(),
+                    asset_database, item.material_binding);
+            }
+            else
+            {
+                material_gpu_binder.UnbindTextures(immediate_context.Get());
+            }
+
+            bind_gbuffer_material(item.lighting_model,
+                false, item.pixelate_enabled, item.pixelate_size,
+                item.pixelate_strength, item.metallic, item.roughness,
+                item.ambient_occlusion, item.emissive_strength,
+                item.material_base_color,
+                item.emissive_color,
+                item.material_binding.usable_shader
+                    ? item.material_binding.TextureSemanticMask() : 0u);
+        }
 
         // 最後の引数がモーションベクター出力。GBuffer パスだけで真にする
         // （複数回渡すと前フレーム姿勢が壊れる）。
@@ -1321,7 +1746,92 @@ void framework::draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shade
                 rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
         mesh->render(immediate_context.Get(), item.world, item.tint,
             keyframe, override_pixel_shader, nullptr, nullptr, true, gbuffer_pass);
+        if (gbuffer_pass)
+            material_gpu_binder.UnbindTextures(immediate_context.Get());
         if (item.double_sided)
+            immediate_context->RSSetState(
+                rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
+    }
+}
+
+
+void framework::draw_landscape_scene_meshes(bool gbuffer_pass, bool depth_only)
+{
+    ReplayEngine::Scene::Scene& scene = active_object_scene();
+    for (std::size_t object_index = 0; object_index < scene.GameObjectCount(); ++object_index)
+    {
+        ReplayEngine::Core::GameObject* object = scene.GameObjectAt(object_index);
+        if (object == nullptr || object->PendingDestroy() || !object->ActiveInHierarchy()) continue;
+
+        auto* landscape = object->GetComponent<ReplayEngine::Components::LandscapeComponent>();
+        auto* renderer = object->GetComponent<ReplayEngine::Components::LandscapeRendererComponent>();
+        if (landscape == nullptr || renderer == nullptr || !renderer->visible ||
+            !renderer->ActiveInHierarchy() || !landscape->Data().Valid()) continue;
+
+        const auto& data = landscape->Data();
+        const std::uint64_t cache_key = object->ID().Value();
+        landscape_gpu_cache_entry& cache = landscape_gpu_mesh_cache[cache_key];
+        if (cache.revision != data.Revision() || cache.mesh == nullptr)
+        {
+            std::vector<static_mesh::vertex> vertices;
+            vertices.reserve(data.VertexCount());
+            for (const ReplayEngine::Landscape::LandscapeVertex& source : data.Vertices())
+            {
+                static_mesh::vertex vertex{};
+                vertex.position = source.position;
+                vertex.normal = source.normal;
+                vertex.texcoord = source.uv;
+                vertices.push_back(vertex);
+            }
+
+            bool gpu_ready = false;
+            if (cache.mesh == nullptr)
+            {
+                cache.mesh = std::make_unique<static_mesh>(device.Get(), vertices, data.Indices());
+                gpu_ready = cache.mesh != nullptr && cache.mesh->is_loaded();
+            }
+            else
+            {
+                // Sculpt / Topology edit では geometry だけが変わる。
+                // static_mesh を丸ごと再構築すると CSO/Texture まで毎回作り直すため、
+                // vertex/index buffer だけ更新する。
+                gpu_ready = cache.mesh->update_procedural_geometry(
+                    device.Get(), vertices, data.Indices());
+            }
+
+            if (gpu_ready) cache.revision = data.Revision();
+        }
+        if (cache.mesh == nullptr || !cache.mesh->is_loaded()) continue;
+
+        if (renderer->double_sided)
+            immediate_context->RSSetState(
+                rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+
+        const DirectX::XMFLOAT4X4 world = object->GetTransform().WorldMatrixFloat4x4();
+        if (depth_only)
+        {
+            cache.mesh->render(immediate_context.Get(), world, renderer->tint,
+                nullptr, nullptr, nullptr, false, false);
+        }
+        else if (gbuffer_pass)
+        {
+            // Landscape はまず標準PBR surfaceとしてGBufferへ出す。
+            // Material Component連携はこの任意Mesh基盤の上へ後から追加できる。
+            bind_gbuffer_material(
+                ReplayEngine::Rendering::ShaderLightingModel::Pbr,
+                false, false, 1.0f, 0.0f,
+                0.0f, 0.75f, 1.0f, 0.0f,
+                renderer->tint, { 0.0f, 0.0f, 0.0f }, 0u);
+            cache.mesh->render(immediate_context.Get(), world, renderer->tint,
+                static_mesh_gbuffer_ps.Get(), nullptr, nullptr, true, true);
+        }
+        else
+        {
+            cache.mesh->render(immediate_context.Get(), world, renderer->tint,
+                static_forward_shader(SHADING_MODEL_PBR));
+        }
+
+        if (renderer->double_sided)
             immediate_context->RSSetState(
                 rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
     }
@@ -1330,6 +1840,8 @@ void framework::draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shade
 void framework::clear_object_mesh_cache() noexcept
 {
     object_mesh_cache.clear();
+    builtin_primitive_mesh_cache.clear();
+    landscape_gpu_mesh_cache.clear();
     object_mesh_failures.clear();
 }
 
@@ -1337,6 +1849,7 @@ void framework::clear_object_material_cache() noexcept
 {
     object_material_cache.clear();
     object_material_failures.clear();
+    object_shader_lighting_failures.clear();
 }
 
 const skinned_mesh::animation::keyframe* framework::resolve_object_keyframe(
@@ -1383,6 +1896,29 @@ const skinned_mesh::animation::keyframe* framework::resolve_object_keyframe(
 //   どちらもユーザーの明示操作からしか呼ばれない。
 //   起動処理・Scene 読み込み・Component 不足の検出からは呼ばれない。
 
+
+ReplayEngine::Core::GameObject* framework::create_default_landscape_ground(
+    ReplayEngine::Scene::Scene& scene)
+{
+    ReplayEngine::Core::GameObject* ground = scene.CreateGameObject("Ground");
+    if (ground == nullptr) return nullptr;
+
+    auto* landscape = ground->AddComponent<ReplayEngine::Components::LandscapeComponent>();
+    auto* renderer = ground->AddComponent<ReplayEngine::Components::LandscapeRendererComponent>();
+    auto* collider = ground->AddComponent<ReplayEngine::Components::LandscapeColliderComponent>();
+    if (landscape == nullptr || renderer == nullptr || collider == nullptr)
+    {
+        ground->Destroy();
+        return nullptr;
+    }
+
+    // GenerateFlat 側で geometry を Pivot 中心に生成する。
+    landscape->GenerateFlat(33, 33, 2.0f, 0.0f);
+    renderer->tint = { 0.36f, 0.48f, 0.31f, 1.0f };
+    collider->double_sided = true;
+    return ground;
+}
+
 bool framework::create_object_scene(const std::string& name, bool place_default_character)
 {
     namespace Project = ReplayEngine::Project;
@@ -1397,6 +1933,7 @@ bool framework::create_object_scene(const std::string& name, bool place_default_
 
     // 実行中に作り直すと、実行用 Scene と編集用 Scene の対応が壊れる。
     if (object_scene_play_mode) exit_object_play_mode();
+    reset_landscape_editor_state(true);
 
     if (!editor_camera_state_key.empty()) save_editor_camera_state();
 
@@ -1405,6 +1942,9 @@ bool framework::create_object_scene(const std::string& name, bool place_default_
     detach_collision_world();
 
     const std::string scene_name = name.empty() ? std::string("新しいシーン") : name;
+
+    // 新規 Scene の既定視点を先に作り、Default Scene だけ後段の LookAt で上書きする。
+    editor_camera.ResetToDefault();
 
     // 1) 空の Scene を作る。GameObject は 1 つも作らない。
     object_scene.Clear();
@@ -1418,9 +1958,18 @@ bool framework::create_object_scene(const std::string& name, bool place_default_
 
     std::string status = "空のシーンを作成しました";
 
-    // 2) Default を選んだときだけ Prefab を 1 体配置する。
+    // 2) Default Scene は、まず普通の GameObject + Component で Ground を作る。
+    //    Empty Scene には何も自動追加しない。
     if (place_default_character)
     {
+        ReplayEngine::Core::GameObject* default_ground =
+            create_default_landscape_ground(object_scene);
+        if (default_ground != nullptr)
+        {
+            object_editor_context.Selection().Select(default_ground->ID(), false);
+            status = "Landscape Ground を含む既定シーンを作成しました";
+        }
+
         // Default Sceneは起動直後から材質を確認できるよう、通常のLight Componentを置く。
         // グローバルな固定ライトへは戻さず、Hierarchy/Inspector/Scene保存の対象にする。
         if (ReplayEngine::Core::GameObject* sun = object_scene.CreateGameObject("Sun"))
@@ -1440,12 +1989,11 @@ bool framework::create_object_scene(const std::string& name, bool place_default_
         if (prefab.IsUnset())
         {
             // 未設定でもクラッシュさせない。空シーンとして成立させる。
-            status = "既定の操作キャラクター Prefab が未設定のため、空のシーンを作成しました";
+            status = "Landscape Ground を作成しました（既定キャラクター Prefab は未設定）";
         }
         else if (prefab.IsMissing())
         {
-            status = "既定の操作キャラクター Prefab が見つかりません（Missing Prefab）。"
-                "空のシーンを作成しました";
+            status = "Landscape Ground を作成しました（既定キャラクター Prefab は Missing）";
         }
         else
         {
@@ -1465,9 +2013,8 @@ bool framework::create_object_scene(const std::string& name, bool place_default_
                 //    GameObject 名でも Prefab 名でもなく、配置結果の ObjectID で指す。
                 object_scene.Services().SetControlledObject(root);
                 player_control_system.SetControlledObject(root);
-                object_editor_context.Selection().Select(root, false);
 
-                status = "既定の操作キャラクターを 1 体配置しました: " +
+                status = "Landscape Ground + 既定の操作キャラクターを配置しました: " +
                     prefab.DisplayLabel();
                 if (!report.Clean())
                 {
@@ -1478,6 +2025,16 @@ bool framework::create_object_scene(const std::string& name, bool place_default_
                     }
                 }
             }
+        }
+
+        // Default Scene の主役は編集可能な Ground。Character Prefab が設定済みでも
+        // ControlledObject にするだけで、Inspector/Scene View の選択は Ground に戻す。
+        // 起動直後からそのまま Sculpt/Topology を確認できるようにする。
+        if (default_ground != nullptr)
+        {
+            object_editor_context.Selection().Select(default_ground->ID(), false);
+            // New Default Scene は新しい作業空間なので Ground が確実に見える視点から始める。
+            editor_camera.LookAt({ 0.0f, 30.0f, -42.0f }, { 0.0f, 0.0f, 0.0f });
         }
     }
 
@@ -1496,17 +2053,13 @@ bool framework::create_object_scene(const std::string& name, bool place_default_
     // 6) 衝突世界を新しい Scene へつなぎ直す。
     attach_collision_world(object_scene);
 
-    // 7) 編集カメラを安全な既定位置へ置く。
-    //    Runtime Camera にも CameraTargetComponent にも触れない。
-    editor_camera.ResetToDefault();
+    // 7) Runtime Camera / CameraTargetComponent には触れない。
+    //    Default Scene の Ground 用 LookAt は上書きせず維持する。
     editor_camera_state_key = make_editor_camera_state_key();
 
-    // Default Scene で Prefab を配置できた場合だけ、その 1 体へ一度フォーカスする。
-    // 既存 Scene の読み込みではこれをしない（勝手に視点を動かさない）。
-    if (place_default_character && object_scene.Services().ControlledObject().Valid())
-    {
-        focus_editor_camera_on_selection();
-    }
+    // Default Scene は Ground を選択したまま既定カメラを維持する。
+    // 巨大な Ground 全体へ Focus すると遠ざかりすぎ、Character へ Focus すると
+    // Sculpt の導線が切れるため、自動 Focus はしない。
     save_editor_camera_state();
 
     object_editor_context.SetStatus(status + "（未保存）");

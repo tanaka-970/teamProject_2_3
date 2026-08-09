@@ -1,6 +1,8 @@
 #pragma once
 
 #include "../../Core/ObjectID/ObjectID.h"
+#include "../Shaders/ShaderAsset.h"
+#include "../Materials/MaterialBinding.h"
 
 #include <DirectXMath.h>
 
@@ -30,6 +32,8 @@ namespace ReplayEngine::Rendering
         // MaterialAssetのAssetGUID。空ならRendererのプロパティだけを使う。
         std::string material_asset;
 
+        // 旧 Scene 互換。Material が割り当てられているときは Shader と値を
+        // MaterialAsset から解決し、この値は追加 tint の有無だけに使う。
         bool material_override = false;
 
         // ワールド行列。親子階層を合成済みの最終値。
@@ -39,21 +43,41 @@ namespace ReplayEngine::Rendering
             0.0f, 0.0f, 1.0f, 0.0f,
             0.0f, 0.0f, 0.0f, 1.0f };
 
+        // Catalog shader 使用時に頂点色へ掛ける追加 tint。
         DirectX::XMFLOAT4 tint{ 1.0f, 1.0f, 1.0f, 1.0f };
 
-        // 既存の描画方式番号。0=FBX標準 / 1=PBR / 2=トゥーン / 3=アンリット
+        // Catalog shader を作れなかった場合の旧 .cso fallback 用 tint。
+        DirectX::XMFLOAT4 legacy_tint{ 1.0f, 1.0f, 1.0f, 1.0f };
+
+        // 旧 Scene / Material の移行用番号。描画の主経路は material_binding.shader。
+        // Material が無い Object だけが互換 fallback として使う。
         int shading_model = 1;
+
+        // MaterialAsset -> ShaderCatalog -> PropertyBag を解決した結果。
+        // GPU リソースは持たない。
+        ResolvedMaterialBinding material_binding;
+
+        // 遅延照明だけは ShaderAsset の #pragma replay_lighting から解決する。
+        // ShaderID と旧 shading_model の番号を GBuffer へ直接書かない。
+        ShaderLightingModel lighting_model = ShaderLightingModel::Pbr;
 
         bool outline = false;
         bool cast_shadow = true;
         bool receive_shadow = true;
 
         // Material Assetから解決され、GBuffer材質定数へ渡す値。
+        DirectX::XMFLOAT4 material_base_color{ 1.0f, 1.0f, 1.0f, 1.0f };
         float metallic = 0.0f;
         float roughness = 0.55f;
         float ambient_occlusion = 1.0f;
+        DirectX::XMFLOAT3 emissive_color{ 0.0f, 0.0f, 0.0f };
         float emissive_strength = 0.0f;
         bool double_sided = false;
+
+        // Deferred互換ブリッジ。Pixelateは照明モデルではなく追加設定。
+        bool pixelate_enabled = false;
+        float pixelate_size = 6.0f;
+        float pixelate_strength = 1.0f;
 
         // ---- スキンメッシュ用 ----------------------------------------------
         //

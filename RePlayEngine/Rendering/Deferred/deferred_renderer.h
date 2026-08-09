@@ -49,6 +49,7 @@ public:
     Microsoft::WRL::ComPtr<ID3D11DepthStencilState> depth_equal_state;
 
     bool initialize(ID3D11Device* device, UINT w, UINT h);
+    void release() noexcept;
 
     // 深度だけを先に描くパス。RTVを外してピクセルシェーダーも外すため、
     // G-Buffer本描画のオーバードローを1回に抑えられる。

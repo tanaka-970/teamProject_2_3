@@ -17,7 +17,7 @@ void framework::update(float elapsed_time)
         return;
     }
 
-    if (!editor_mode || !edit_mode_active)
+    if (!editor_mode || object_scene_play_mode)
     {
         scene_manager.Update(elapsed_time);
     }

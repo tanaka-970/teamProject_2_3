@@ -55,15 +55,22 @@ extern ImWchar glyphRangesJapanese[];
 #include "../../RePlayEngine/Rendering/Materials/CharacterMaterialProfile.h"
 #include "../../RePlayEngine/Rendering/Materials/CharacterMaterialGpuData.h"
 #include "../../RePlayEngine/Rendering/Materials/MaterialAsset.h"
+#include "../../RePlayEngine/Rendering/Materials/MaterialGpuBinder.h"
 #include "../../RePlayEngine/Rendering/Shaders/ShaderLibrary.h"
 #include "../../RePlayEngine/Rendering/Capture/GoldenImage.h"
 #include "../../RePlayEngine/Assets/AssetDatabase.h"
 #include "../../RePlayEngine/Assets/AsyncAssetManager.h"
 #include "../../RePlayEngine/Assets/ConcurrentResourceCache.h"
+#include "../../RePlayEngine/UI/FontAtlas.h"
+#include "../../RePlayEngine/UI/UIRenderer.h"
+#include "../../RePlayEngine/Audio/AudioSystem.h"
 #include "../../RePlayEngine/Project/ProjectSettings.h"
 #include "../../RePlayEngine/Editor/Gizmo/TransformGizmo.h"
 #include "../../RePlayEngine/Editor/Gizmo/ViewportPicker.h"
+#include "../../RePlayEngine/Components/Editor/EditorNoteComponent.h"
 #include "../../RePlayEngine/Physics/MeshCollisionCooker.h"
+#include "../../RePlayEngine/Landscape/LandscapeBrush.h"
+#include "../../RePlayEngine/Landscape/LandscapeEditorTool.h"
 
 // --- GameObject / Component 基盤 -------------------------------------------
 // SceneManager とは責任が違う。
@@ -83,8 +90,10 @@ extern ImWchar glyphRangesJapanese[];
 #include "../../RePlayEngine/Scene/Services/SceneCollisionWorld.h"
 #include "../../RePlayEngine/Editor/Debug/ColliderDebugDraw.h"
 #include "../../RePlayEngine/Editor/Validation/ValidationPanel.h"
+#include "../../RePlayEngine/Editor/ShaderEditing/ShaderComposerEditor.h"
 #include "../../RePlayEngine/Editor/Viewport/EditorViewportCamera.h"
 #include "../../RePlayEngine/Editor/Viewport/EditorCameraController.h"
+#include "../../RePlayEngine/Editor/Viewport/EditorCameraPreset.h"
 #include "../../RePlayEngine/Editor/Viewport/EditorCameraStateStore.h"
 #include "../game/camera_basis_provider.h"
 
@@ -125,11 +134,11 @@ public:
     enum class DEPTH_STATE { ZT_ON_ZW_ON, ZT_ON_ZW_OFF, ZT_OFF_ZW_ON, ZT_OFF_ZW_OFF };
     Microsoft::WRL::ComPtr<ID3D11DepthStencilState> depth_stencil_states[4];
 
-    enum class BLEND_STATE { NONE, ALPHA, ADD, MULTIPLY };
-    Microsoft::WRL::ComPtr<ID3D11BlendState> blend_states[4];
+    enum class BLEND_STATE { NONE, ALPHA, ADD, MULTIPLY, SCREEN };
+    Microsoft::WRL::ComPtr<ID3D11BlendState> blend_states[5];
 
-    enum class RASTER_STATE { SOLID, WIREFRAME, CULL_NONE, WIREFRAME_CULL_NONE };
-    Microsoft::WRL::ComPtr<ID3D11RasterizerState> rasterizer_states[4];
+    enum class RASTER_STATE { SOLID, WIREFRAME, CULL_NONE, WIREFRAME_CULL_NONE, SCISSOR };
+    Microsoft::WRL::ComPtr<ID3D11RasterizerState> rasterizer_states[5];
 
     struct scene_constants
     {
@@ -179,12 +188,18 @@ public:
 
     struct material_override_constants
     {
+        DirectX::XMFLOAT4 base_color_factor{ 1.0f, 1.0f, 1.0f, 1.0f };
+        DirectX::XMFLOAT4 emissive_factor{ 0.0f, 0.0f, 0.0f, 0.0f };
         DirectX::XMFLOAT4 mat_params{ 0.0f, 0.55f, 1.0f, 0.0f };
-        unsigned int shading_model{ 1 };
+        unsigned int lighting_model{ 0 };
         float texture_contrast{ 1.0f };
-        float pixelate_size{ 6.0f };
-        float pixelate_strength{ 1.0f };
+        float pixelate_size{ 0.0f };
+        float pixelate_strength{ 0.0f };
+        unsigned int texture_mask{ 0 };
+        DirectX::XMFLOAT3 padding{ 0.0f, 0.0f, 0.0f };
     };
+    static_assert(sizeof(material_override_constants) == 80,
+        "GBUFFER_MATERIAL_CONSTANTS must stay byte-identical to HLSL");
     Microsoft::WRL::ComPtr<ID3D11Buffer> material_override_cb;
 
     Microsoft::WRL::ComPtr<ID3D11Buffer> shader_layer_cb;
@@ -273,6 +288,28 @@ public:
     // 参照は AssetGUID なので、Prefab の名前やパスを変えても壊れない。
     ReplayEngine::Project::ProjectSettings project_settings;
     std::string project_settings_status{ "プロジェクト設定 未読込" };
+
+    // Scene Flow Editor。ProjectSettings の GUID が Runtime で使う正本。
+    ReplayEngine::Runtime::SceneFlowAsset scene_flow_editor_asset;
+    std::filesystem::path scene_flow_editor_path;
+    std::string scene_flow_editor_guid;
+    std::string scene_flow_editor_status{ "Scene Flow 未選択" };
+    bool scene_flow_editor_loaded{ false };
+    bool scene_flow_editor_dirty{ false };
+
+    // Play From Here は Editor セッションだけの一時オーバーライド。
+    // SceneData / Scene ファイルへは保存しない。
+    struct play_spawn_override_state
+    {
+        bool active = false;
+        bool apply_rotation = false;
+        bool use_camera_direction = false;
+        DirectX::XMFLOAT3 position{ 0.0f, 0.0f, 0.0f };
+        // Transform の内部規約に合わせてラジアン。
+        DirectX::XMFLOAT3 rotation_radians{ 0.0f, 0.0f, 0.0f };
+        std::string label;
+    };
+    play_spawn_override_state play_spawn_override;
 
     // 直近で保存した Prefab の AssetGUID。
     // 「保存した Prefab をそのまま既定の操作キャラクターにする」ボタン用。
@@ -399,10 +436,22 @@ public:
     ReplayEngine::Editor::InspectorPanel    object_inspector_panel;
     ReplayEngine::Editor::ValidationPanel   object_validation_panel;
     ReplayEngine::Rendering::RenderItemList object_render_items;
+    ReplayEngine::UI::FontAtlas             ui_font_atlas;
+    ReplayEngine::UI::UIRenderer            ui_renderer;
+    bool ui_pointer_down_last{ false };
 
     // Asset GUID -> メッシュ実体。
     // 読み込めた Asset だけを入れる。null や壊れたエントリは決して登録しない。
     std::unordered_map<std::string, std::unique_ptr<skinned_mesh>> object_mesh_cache;
+    // builtin:plane / builtin:cube 等は外部ファイルを要求しない Engine 内蔵 Mesh。
+    // GameObject 側は通常の MeshRendererComponent を使うので特別な Object 型は増やさない。
+    std::unordered_map<std::string, std::unique_ptr<static_mesh>> builtin_primitive_mesh_cache;
+    struct landscape_gpu_cache_entry
+    {
+        std::uint64_t revision = 0;
+        std::unique_ptr<static_mesh> mesh;
+    };
+    std::unordered_map<std::uint64_t, landscape_gpu_cache_entry> landscape_gpu_mesh_cache;
 
     // 読み込みに失敗した Asset GUID。
     // 失敗をキャッシュ本体へ入れず別に持つことで、
@@ -420,8 +469,13 @@ public:
     std::unordered_map<std::string, cached_material_asset> object_material_cache;
     std::unordered_set<std::string> object_material_failures;
 
-    // Startup Scene is restored from the Editor session.  A fresh project starts
-    // with an unsaved empty Scene instead of depending on a bundled sample asset.
+    // Shader GUID から replay_lighting を解決できなかったもの。
+    // 同じ警告を毎フレーム出さないため、Material cache と同じ寿命で保持する。
+    std::unordered_set<std::string> object_shader_lighting_failures;
+
+    // Startup Scene is restored from the Editor session. If no Scene exists yet,
+    // a fresh project starts with an unsaved component-based Basic Scene
+    // (Landscape Ground + Sun) instead of depending on a bundled sample asset.
     std::filesystem::path object_scene_path;
     std::string      object_scene_asset_guid;
     bool             object_scene_play_mode{ false };
@@ -471,6 +525,7 @@ public:
     // 【移行用】Gameplay Component から Camera / Stage 具象型を隠すための橋渡し。
     // 削除条件はそれぞれのヘッダーへ記載してある。
     CameraBasisProvider          object_camera_bridge;
+    ReplayEngine::Audio::AudioSystem object_audio_system;
 
     // --- 衝突 -------------------------------------------------------------
     //
@@ -517,6 +572,16 @@ public:
     //   「Edit Mode なら編集カメラ / Play・実行中なら Runtime Camera」と切り替える。
     ReplayEngine::Editor::EditorViewportCamera   editor_camera;
     ReplayEngine::Editor::EditorCameraController editor_camera_controller;
+
+    // 操作方法はユーザーごとの preset。Scene には保存しない。
+    // Shared preset は Editor/CameraPresets、Personal preset は Saved/Editor/CameraPresets。
+    std::vector<ReplayEngine::Editor::EditorCameraPreset> editor_camera_presets;
+    int              active_editor_camera_preset_index{ -1 };
+    bool             editor_camera_presets_loaded{ false };
+    bool             show_camera_preset_manager{ false };
+    bool             gizmo_move_shortcut_was_down{ false };
+    bool             gizmo_rotate_shortcut_was_down{ false };
+    bool             gizmo_scale_shortcut_was_down{ false };
 
     // 編集カメラがマウス／キーを消費したフレーム。
     // Gizmo と選択処理を同時に走らせないためのフラグ。
@@ -577,6 +642,7 @@ public:
         automated_smoke_test_frames_rendered = 0;
     }
     Microsoft::WRL::ComPtr<ID3D11Debug> acquire_d3d11_debug() const noexcept;
+    Microsoft::WRL::ComPtr<ID3D11InfoQueue> acquire_d3d11_info_queue() const noexcept;
 
     // 終了理由と主要な進行状況を Saved/engine_log.txt へ追記する。
     // 「なぜ落ちたか」が分からないと原因の切り分けができないため、
@@ -596,7 +662,7 @@ public:
         log << "[" << stamp << "] " << reason << '\n';
     }
 
-    int run()
+    int run(int show_command = SW_SHOWDEFAULT)
     {
         MSG msg{};
         log_shutdown_reason("=== 起動 ===");
@@ -624,40 +690,51 @@ public:
         configure_editor_style();
 #endif
 
+        // Device / Shader / Script / Editor の初期化が終わるまで Window は隠す。
+        // 先に表示すると、初回描画まで Windows の背景色だけが長時間見えてしまう。
+        if (show_command != SW_HIDE)
+        {
+            ShowWindow(hwnd, show_command);
+            UpdateWindow(hwnd);
+        }
+
         while (WM_QUIT != msg.message)
         {
-            if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
+            // Drain a bounded batch, then advance one frame. Waiting for the queue to
+            // become completely empty allowed WM_PAINT/input traffic to starve render.
+            for (int message_count = 0; message_count < 64 &&
+                PeekMessage(&msg, NULL, 0, 0, PM_REMOVE); ++message_count)
             {
                 TranslateMessage(&msg);
                 DispatchMessage(&msg);
+                if (msg.message == WM_QUIT) break;
             }
-            else
+            if (msg.message == WM_QUIT) break;
+
+            tictoc.tick();
+            calculate_frame_stats();
+            // 描画中の未捕捉例外で静かに落ちると原因が追えないため、
+            // ここで捕まえて理由を残す。
+            try
             {
-                tictoc.tick();
-                calculate_frame_stats();
-                // 描画中の未捕捉例外で静かに落ちると原因が追えないため、
-                // ここで捕まえて理由を残す。
-                try
+                update(tictoc.time_interval());
+                render(tictoc.time_interval());
+                if (automated_smoke_test_frames > 0 &&
+                    ++automated_smoke_test_frames_rendered >= automated_smoke_test_frames)
                 {
-                    update(tictoc.time_interval());
-                    render(tictoc.time_interval());
-                    if (automated_smoke_test_frames > 0 &&
-                        ++automated_smoke_test_frames_rendered >= automated_smoke_test_frames)
-                    {
-                        automated_smoke_test_frames = 0;
-                        PostMessage(hwnd, WM_CLOSE, 0, 0);
-                    }
+                    automated_smoke_test_frames = 0;
+                    PostMessage(hwnd, WM_CLOSE, 0, 0);
                 }
-                catch (const std::exception& exception)
-                {
-                    log_shutdown_reason((std::string("例外: ") + exception.what()).c_str());
-                    throw;
-                }
-                catch (...)
-                {
-                    log_shutdown_reason("不明な例外");
-                    throw;
-                }
+            }
+            catch (const std::exception& exception)
+            {
+                log_shutdown_reason((std::string("例外: ") + exception.what()).c_str());
+                throw;
+            }
+            catch (...)
+            {
+                log_shutdown_reason("不明な例外");
+                throw;
             }
         }
         log_shutdown_reason("メッセージループを抜けた (WM_QUIT)");
@@ -668,6 +745,25 @@ public:
         if (shutdown_regression_requested) run_shutdown_regression_scenario();
 
 #ifdef USE_IMGUI
+        // Material Inspector の変更は終了時にも保存する。
+        // Save ボタンを押し忘れただけで Shader / Texture / Property が消える
+        // Editor にはしない。失敗時だけ終了ログへ残す。
+        if (material_editor_loaded && material_editor_dirty &&
+            !save_material_editor())
+        {
+            log_shutdown_reason("Material AutoSave に失敗");
+        }
+        {
+            std::string composer_save_error;
+            if (!shader_composer_editor.AutoSaveGraph(composer_save_error))
+            {
+                const std::string message = "Shader Composer AutoSave に失敗: " + composer_save_error;
+                log_shutdown_reason(message.c_str());
+            }
+        }
+        // Landscape Tool は編集中の LandscapeData を非所有で参照するため、
+        // ImGui/Scene の破棄より前に Stroke と Collider interactive-edit を必ず閉じる。
+        reset_landscape_editor_state(true);
         save_editor_session();
         ImGui_ImplDX11_Shutdown();
         ImGui_ImplWin32_Shutdown();
@@ -682,6 +778,8 @@ public:
     LRESULT CALLBACK handle_message(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
     {
 #ifdef USE_IMGUI
+        // IME 入力は ImGui へ先に渡す。将来 UIInputField を足すときは
+        // WM_IME_* をここから横取りせず、Editor / Runtime の入力所有者で分岐する。
         const bool keyboard_message = msg == WM_KEYDOWN || msg == WM_KEYUP ||
             msg == WM_SYSKEYDOWN || msg == WM_SYSKEYUP || msg == WM_CHAR;
         if (editor_mode)
@@ -690,6 +788,14 @@ public:
             const bool control_down = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
             const bool shortcut_pressed = msg == WM_KEYDOWN && control_down &&
                 (lparam & 0x40000000) == 0 && !ImGui::GetIO().WantTextInput;
+
+            // Focused Tool > Scene > Global の順で shortcut を所有する。
+            const bool focused_tool_owns_shortcut =
+                shader_composer_editor.OwnsKeyboardShortcut() && msg == WM_KEYDOWN &&
+                !ImGui::GetIO().WantTextInput &&
+                (wparam == VK_DELETE || (control_down && wparam == 'S'));
+            if (focused_tool_owns_shortcut) return 0;
+
             if (shortcut_pressed && wparam == 'S')
             {
                 const bool choose_path = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
@@ -726,11 +832,30 @@ public:
             {
                 return 0;
             }
-            if (msg == WM_KEYDOWN && edit_mode_active && !search_input_active)
+            // Scene Camera が W/A/S/D + Q/E を使うため、Transform Tool は
+            // Maya の W/E/R を Shift 付きへ退避する。選択中の GameObject にだけ効く。
+            const bool shift_down = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+            const bool alt_down = (GetKeyState(VK_MENU) & 0x8000) != 0;
+            if (msg == WM_KEYDOWN && edit_mode_active && !search_input_active &&
+                shift_down && !control_down && !alt_down &&
+                selected_editor_object == editor_selection::game_object &&
+                object_editor_context.Selection().Primary().Valid())
             {
-                if (wparam == 'W') transform_gizmo.SetOperation(ReplayEngine::Editor::GizmoOperation::Translate);
-                if (wparam == 'E') transform_gizmo.SetOperation(ReplayEngine::Editor::GizmoOperation::Rotate);
-                if (wparam == 'R') transform_gizmo.SetOperation(ReplayEngine::Editor::GizmoOperation::Scale);
+                if (wparam == 'W')
+                {
+                    transform_gizmo.SetOperation(ReplayEngine::Editor::GizmoOperation::Translate);
+                    return 0;
+                }
+                if (wparam == 'E')
+                {
+                    transform_gizmo.SetOperation(ReplayEngine::Editor::GizmoOperation::Rotate);
+                    return 0;
+                }
+                if (wparam == 'R')
+                {
+                    transform_gizmo.SetOperation(ReplayEngine::Editor::GizmoOperation::Scale);
+                    return 0;
+                }
             }
         }
         if (msg == WM_KEYDOWN && wparam == VK_F1)
@@ -749,13 +874,16 @@ public:
             show_render_stats = !show_render_stats;
             return 0;
         }
-        // F5 で GameObject シーンの実行 / 停止を切り替える。
-        // 実行中は編集用 Scene を複製した実行用 Scene が動くため、
-        // Play 中の位置や体力の変化が編集内容へ書き戻らない。
+        // F5 は開始専用、Shift+F5 は停止専用。UI 表示と実装を一致させる。
         if (msg == WM_KEYDOWN && wparam == VK_F5 && editor_mode)
         {
-            if (object_scene_play_mode) exit_object_play_mode();
-            else enter_object_play_mode();
+            const bool shift_down = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+            if (shift_down)
+            {
+                if (object_scene_play_mode) exit_object_play_mode();
+                else object_editor_context.SetStatus("停止する Play Session はありません");
+            }
+            else if (!object_scene_play_mode) enter_object_play_mode();
             return 0;
         }
 #endif
@@ -767,6 +895,15 @@ public:
         }
         if (msg == WM_KEYDOWN && wparam == VK_F2)
         {
+#ifdef USE_IMGUI
+            const bool control_down = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+            if (editor_mode && !control_down)
+            {
+                object_hierarchy_panel.BeginRenameSelection(object_editor_context);
+                return 0;
+            }
+#endif
+            // Render Output は Ctrl+F2。Hierarchy 標準の F2 Rename と競合させない。
             render_graph.CycleOutput();
             if (render_graph.RequiresDeferred()) enable_deferred = true;
             return 0;
@@ -851,17 +988,41 @@ private:
         const DirectX::XMMATRIX& projection, float elapsed_time);
     ID3D11PixelShader* skinned_forward_shader(int shading) const;
     ID3D11PixelShader* static_forward_shader(int shading) const;
-    unsigned int deferred_shading_model(int shading) const;
-    void bind_gbuffer_material(unsigned int shading_model, bool stage_surface = false,
+    ReplayEngine::Rendering::ShaderLightingModel deferred_lighting_model(
+        int shading) const;
+    void bind_gbuffer_material(
+        ReplayEngine::Rendering::ShaderLightingModel lighting_model,
+        bool stage_surface = false, bool pixelate_enabled = false,
         float pixelate_size = 6.0f, float pixelate_strength = 1.0f,
         float metallic = 0.0f, float roughness = 0.55f,
-        float ambient_occlusion = 1.0f, float emissive_strength = 0.0f);
+        float ambient_occlusion = 1.0f, float emissive_strength = 0.0f,
+        const DirectX::XMFLOAT4& base_color_factor = DirectX::XMFLOAT4{ 1,1,1,1 },
+        const DirectX::XMFLOAT3& emissive_color = DirectX::XMFLOAT3{ 0,0,0 },
+        std::uint32_t texture_mask = 0);
     void apply_toon_preset(int preset);
     void reset_editor_values();
     void draw_editor();
     void draw_editor_main_menu();
     void draw_editor_toolbar();
     void draw_scene_view_panel();
+
+    // --- 制作便利機能: Scene Memo / Play From Here / Scene Flow -------------
+    void draw_scene_note_overlay();
+    void draw_scene_notes_panel();
+    ReplayEngine::Core::GameObject* create_scene_note_at(
+        const DirectX::XMFLOAT3& world_position, const std::string& text = "ここを修正");
+    bool scene_view_mouse_world_point(DirectX::XMFLOAT3& out_position,
+        DirectX::XMFLOAT3* out_normal = nullptr) const;
+    void request_play_from_here(const DirectX::XMFLOAT3& position,
+        bool camera_direction, const char* label);
+    void apply_play_spawn_override(ReplayEngine::Scene::Serialization::SceneData& snapshot);
+    void draw_play_from_here_context_menu();
+
+    bool load_scene_flow_editor(const ReplayEngine::Assets::AssetRecord& record);
+    bool save_scene_flow_editor();
+    void draw_scene_flow_panel();
+    void sync_runtime_scene_flow_asset();
+
     void draw_runtime_mode_banner();
 
     // 操作対象 GameObject の実行時診断。旧 Player の項目は持たない。
@@ -894,8 +1055,14 @@ private:
     // frameworkの表示状態は触らないため、並列ロード中に安全に使える。
     bool prewarm_model_asset(const std::filesystem::path& path);
     bool place_asset_in_object_scene(const ReplayEngine::Assets::AssetRecord& asset,
-        bool add_mesh_collider);
+        bool add_mesh_collider, const DirectX::XMFLOAT3* drop_world_position = nullptr,
+        ReplayEngine::Core::ObjectID drop_target = ReplayEngine::Core::ObjectID::Invalid());
     void handle_viewport_selection();
+    // 選択中の Landscape GameObject にだけ有効な Scene View 編集。
+    // Runtime Component へ ImGui 依存を持ち込まず、Editor Tool が data を編集する。
+    bool handle_landscape_viewport_edit();
+    void draw_landscape_editor_toolbar();
+    void reset_landscape_editor_state(bool rollback_stroke = true);
     void draw_scene_grid_overlay();
     bool draw_object_transform_gizmo();
     void save_editor_session();
@@ -946,6 +1113,7 @@ private:
     // Editor の Runtime 診断パネル。読み取り専用。
     void draw_runtime_diagnostics_panel();
     skinned_mesh* resolve_object_mesh(const std::string& asset_guid);
+    static_mesh* resolve_builtin_primitive_mesh(const std::string& builtin_id);
     const ReplayEngine::Rendering::MaterialAsset* resolve_object_material(
         const std::string& asset_guid);
     ReplayEngine::Rendering::RenderItem resolve_render_item_material(
@@ -955,6 +1123,9 @@ private:
     // 描き漏らすと DepthFunc=EQUAL に落とされて画面から消える。
     void draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shader,
         bool gbuffer_pass, bool depth_only = false);
+    // LandscapeRendererComponent 用の procedural static mesh 描画。
+    // AssetGUIDを介さず、LandscapeData::Revision が変わったときだけGPU Meshを作り直す。
+    void draw_landscape_scene_meshes(bool gbuffer_pass, bool depth_only = false);
     void clear_object_mesh_cache() noexcept;
     void clear_object_material_cache() noexcept;
     bool object_runtime_active() const noexcept;
@@ -966,12 +1137,14 @@ private:
     // --- 新規 Scene 作成 ---------------------------------------------------
     //
     // Empty  … GameObject を 1 つも作らない。操作対象は未設定。
-    // Default … Default Controlled Character Prefab を 1 体だけ配置し、
-    //           そのルートを操作対象にする。
+    // Default … 編集可能なLandscape Ground + Sunを作り、設定済みなら
+    //           Default Controlled Character Prefabも配置する。
     //
     // どちらも「ユーザーが新規作成を選んだとき」しか呼ばれない。
     // 起動時や Scene 読み込み時に Prefab を配置することは決してない。
     bool create_object_scene(const std::string& name, bool place_default_character);
+    ReplayEngine::Core::GameObject* create_default_landscape_ground(
+        ReplayEngine::Scene::Scene& scene);
 
     // --- プロジェクト設定 --------------------------------------------------
     void load_project_settings();
@@ -1006,11 +1179,25 @@ private:
     void focus_editor_camera_on_selection();
 
     void draw_editor_camera_settings();
+    void draw_editor_camera_preset_manager();
+    void draw_editor_camera_top_menu();
+
+    // Camera preset lifecycle。active 選択だけは local Saved へ保存する。
+    void ensure_editor_camera_presets_loaded();
+    ReplayEngine::Editor::EditorCameraPreset& active_editor_camera_preset();
+    const ReplayEngine::Editor::EditorCameraPreset& active_editor_camera_preset() const;
+    bool switch_editor_camera_preset(const std::string& preset_id);
+    bool save_active_editor_camera_preset();
+    bool make_active_editor_camera_preset_personal_copy();
 
     // 編集カメラ状態の保存・復元。Scene ファイルには一切書き込まない。
     void load_editor_camera_state();
     void save_editor_camera_state();
     std::string make_editor_camera_state_key() const;
+
+    // Scene とは独立した Editor 全体の移動速度設定。
+    void load_editor_camera_move_speed_preference();
+    bool save_editor_camera_move_speed_preference();
 
     // Default Controlled Character Prefab の現在の解決結果。
     ReplayEngine::Project::PrefabReferenceStatus resolve_default_character_prefab() const;
@@ -1067,6 +1254,11 @@ private:
     bool project_create_folder(const std::string& name);
     bool project_create_csharp_behaviour(const std::string& class_name);
     bool project_create_material(const std::string& name);
+    bool project_create_scene_flow(const std::string& name);
+    bool project_create_surface_shader(const std::string& name);
+    bool project_create_layer_shader(const std::string& name);
+    bool project_create_shader_composer(const std::string& name,
+        ReplayEngine::Rendering::ShaderDomain domain);
     bool project_rename_entry(const std::filesystem::path& path,
         const std::string& new_name);
     ID3D11ShaderResourceView* project_thumbnail_for(
@@ -1077,6 +1269,9 @@ private:
     void draw_console_panel();
     void execute_editor_command(const std::string& command);
     void draw_workspace_panel();
+    void draw_ui_hierarchy();
+    void draw_ui_preview();
+    void draw_ui_inspector();
     void set_editor_workspace(editor_workspace workspace);
     void configure_editor_style();
     void set_edit_mode(bool enabled);
@@ -1092,6 +1287,7 @@ private:
 
     std::uint32_t automated_smoke_test_frames{ 0 };
     std::uint32_t automated_smoke_test_frames_rendered{ 0 };
+    float shader_composer_time{ 0.0f }; // elapsed_time が 0 の Golden Capture 中は進めない
     uint32_t frames{ 0 };
     float elapsed_time{ 0.0f };
     void calculate_frame_stats()
@@ -1140,7 +1336,8 @@ private:
         modeling,
         animation,
         rendering,
-        shader_adjustment
+        shader_adjustment,
+        ui
     };
     enum class editor_view
     {
@@ -1161,6 +1358,22 @@ private:
     bool show_workspace_panel{ true };
     bool show_validation_panel{ true };
     bool show_scene_view{ true };
+    bool show_scene_notes_panel{ false };
+    bool show_scene_flow_panel{ false };
+    bool show_ui_hierarchy_panel{ true };
+    bool show_ui_preview_panel{ true };
+    bool show_ui_inspector_panel{ true };
+    int ui_preview_resolution_index{ 0 };
+    int ui_preview_custom_width{ 1920 };
+    int ui_preview_custom_height{ 1080 };
+    float ui_preview_zoom{ 0.5f };
+    bool ui_preview_grid{ true };
+    float ui_preview_grid_size{ 100.0f };
+    ImVec2 ui_preview_pan{ 0.0f, 0.0f };
+    bool ui_preview_dragging{ false };
+    ReplayEngine::Core::ObjectID ui_preview_drag_object;
+    ImVec2 ui_preview_drag_start_mouse{ 0.0f, 0.0f };
+    DirectX::XMFLOAT2 ui_preview_drag_start_position{ 0.0f, 0.0f };
     bool scene_view_hovered{ false };
     bool scene_view_focused{ false };
     ImVec2 scene_view_overlay_position{ 0.0f, 0.0f };
@@ -1170,13 +1383,48 @@ private:
     float scene_view_min_y{ 0.0f };
     float scene_view_max_x{ 0.0f };
     float scene_view_max_y{ 0.0f };
+    // Viewport 右クリック位置は Popup を操作している間も保持する。
+    // 右クリックは camera look と共用するため、短い click / drag を区別する。
+    bool scene_context_world_point_valid{ false };
+    DirectX::XMFLOAT3 scene_context_world_point{ 0.0f, 0.0f, 0.0f };
+    bool scene_context_right_click_tracking{ false };
+    bool scene_context_right_click_dragged{ false };
+    float scene_context_right_click_start_x{ 0.0f };
+    float scene_context_right_click_start_y{ 0.0f };
     int scene_view_draw_mode{ 0 };
+
+    // --- Landscape / World Editing ---------------------------------------
+    // Landscape 自体は普通の GameObject + Component。ここに置くのは
+    // Scene View の一時的な選択・ブラシ状態だけで、Scene 保存対象ではない。
+    bool landscape_edit_enabled{ false };
+    int landscape_edit_mode{ 0 }; // 0=Sculpt, 1=Topology
+    int landscape_topology_selection_mode{ 0 }; // 0=Face, 1=Edge Bridge
+    int landscape_brush_mode{ 0 };
+    int landscape_brush_preview_mode{ 1 }; // 0=Ring, 1=Falloff, 2=Grid, 3=Contour, 4=Grid+Contour
+    ReplayEngine::Landscape::LandscapeBrush landscape_brush{};
+    ReplayEngine::Landscape::LandscapeEditorTool landscape_editor_tool;
+    std::size_t landscape_selected_face{ static_cast<std::size_t>(-1) };
+    // Bridge は同じ mesh 上の 2 edge を順に選ぶ。Editor transient state だけなので
+    // Component/Scene には保存しない。
+    std::uint32_t landscape_bridge_a0{ static_cast<std::uint32_t>(-1) };
+    std::uint32_t landscape_bridge_a1{ static_cast<std::uint32_t>(-1) };
+    std::uint32_t landscape_bridge_b0{ static_cast<std::uint32_t>(-1) };
+    std::uint32_t landscape_bridge_b1{ static_cast<std::uint32_t>(-1) };
+    bool landscape_stroke_transaction{ false };
+    float landscape_extrude_distance{ 1.0f };
+    float landscape_inset_amount{ 0.25f };
+    float landscape_tunnel_depth{ 8.0f };
+    int landscape_tunnel_segments{ 6 };
+    float landscape_tunnel_end_scale{ 1.0f };
+
     // --- シェーダ資産（フェーズ 1〜3）--------------------------------------
     //
     // Shader/Materials, Shader/Layers, Shader/PostProcess を走査して
     // #pragma から宣言を読み、目録を作る。
     // まだ描画には使わない。接続はフェーズ 4 以降。
     ReplayEngine::Rendering::ShaderLibrary shader_library;
+    ReplayEngine::Rendering::MaterialGpuBinder material_gpu_binder;
+    ReplayEngine::Editor::ShaderComposerEditor shader_composer_editor;
     bool show_shader_catalog_panel{ false };
 
     // .hlsl を保存したら自動でコンパイルし直す。
@@ -1280,6 +1528,7 @@ private:
     std::string material_editor_guid;
     std::string material_editor_status;
     bool material_editor_loaded{ false };
+    bool material_editor_dirty{ false };
 
     bool create_material_asset();
     bool load_material_editor(const ReplayEngine::Assets::AssetRecord& asset);

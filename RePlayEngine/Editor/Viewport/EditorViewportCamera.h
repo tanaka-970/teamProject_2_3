@@ -38,7 +38,9 @@ namespace ReplayEngine::Editor
         // ラジアン。yaw は連続回転、pitch は上下反転しないよう制限される。
         float Yaw() const noexcept { return yaw_; }
         float Pitch() const noexcept { return pitch_; }
+        float Roll() const noexcept { return roll_; }
         void SetYawPitch(float yaw, float pitch) noexcept;
+        void SetYawPitchRoll(float yaw, float pitch, float roll) noexcept;
 
         // 基底ベクトル。SetYawPitch / SetPosition のたびに 1 か所で作り直される。
         const DirectX::XMFLOAT3& Forward() const noexcept { return forward_; }
@@ -67,10 +69,15 @@ namespace ReplayEngine::Editor
         };
 
         // フライ移動。delta_time は呼び出し側で上限を掛けてから渡すこと。
-        void Fly(const MoveAxes& axes, float speed_multiplier, float delta_time) noexcept;
+        void Fly(const MoveAxes& axes, float speed_multiplier, float delta_time,
+            bool world_vertical_move = false) noexcept;
 
         // 視点回転。引数はマウスの相対移動量（ピクセル）。
         void Look(float mouse_delta_x, float mouse_delta_y) noexcept;
+
+        // キーボードなどから角度を直接加える。roll も Editor Camera だけで保持する。
+        void Rotate(float yaw_delta_radians, float pitch_delta_radians,
+            float roll_delta_radians) noexcept;
 
         // 平行移動。Right / Up 方向へ動かす。
         // 現在の Orbit 距離に比例させるので、遠景でも近景でも操作感が変わらない。
@@ -81,6 +88,9 @@ namespace ReplayEngine::Editor
 
         // ホイールによる前後。距離が 0 以下にならないよう必ず下限で止まる。
         void Zoom(float wheel_delta) noexcept;
+
+        // Maya / Blender 系の mouse-drag dolly。Orbit Pivot との距離を連続変更する。
+        void Dolly(float mouse_delta) noexcept;
 
         // ---- フォーカス --------------------------------------------------------
 
@@ -154,6 +164,7 @@ namespace ReplayEngine::Editor
         DirectX::XMFLOAT3 position_{ 0.0f, 3.0f, -8.0f };
         float yaw_ = 0.0f;
         float pitch_ = 0.0f;
+        float roll_ = 0.0f;
 
         DirectX::XMFLOAT3 forward_{ 0.0f, 0.0f, 1.0f };
         DirectX::XMFLOAT3 right_{ 1.0f, 0.0f, 0.0f };

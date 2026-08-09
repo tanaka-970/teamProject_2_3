@@ -34,7 +34,7 @@ namespace ReplayEngine::Editor
         EditorCameraStateStore() = delete;
 
         static constexpr const char* file_extension = ".replaycam";
-        static constexpr int current_version = 1;
+        static constexpr int current_version = 2;
 
         // 保存されるのは次だけ。設定値のうち移動速度と視野角も含める。
         struct State
@@ -42,6 +42,7 @@ namespace ReplayEngine::Editor
             DirectX::XMFLOAT3 position{ 0.0f, 3.0f, -8.0f };
             float yaw = 0.0f;
             float pitch = 0.0f;
+            float roll = 0.0f;
             DirectX::XMFLOAT3 orbit_pivot{ 0.0f, 1.0f, 0.0f };
             float orbit_distance = 8.0f;
             float move_speed = 5.0f;
@@ -63,5 +64,13 @@ namespace ReplayEngine::Editor
         // 読めなければ false。state は既定値のまま。
         static bool Load(State& state, const std::filesystem::path& path,
             std::string& error);
+
+        // Editor 全体で共有するデバッグカメラ移動速度。
+        // Scene ごとの視点とは別ファイルに保存し、Scene 切替後も同じ速度を使う。
+        // UI 上の上限は設けない。0 以下 / NaN / Inf だけを拒否する。
+        // 保存先: Saved/Editor/CameraSettings.replaycamsettings
+        static std::filesystem::path MoveSpeedPreferencePath();
+        static bool SaveMoveSpeedPreference(float move_speed, std::string& error);
+        static bool LoadMoveSpeedPreference(float& move_speed, std::string& error);
     };
 }

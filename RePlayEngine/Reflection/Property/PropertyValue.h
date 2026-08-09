@@ -173,6 +173,10 @@ namespace ReplayEngine::Reflection
         // 変換できない組み合わせでは false を返し、呼び出し側が既定値を維持できるようにする。
         bool ConvertTo(PropertyType target, PropertyValue& out) const;
 
+        // 型ごとの規則で a と b を混ぜる。
+        // t は 0..1 に丸めない。型が食い違う場合は a を返し、例外は投げない。
+        static PropertyValue Lerp(const PropertyValue& a, const PropertyValue& b, float t);
+
     private:
         PropertyType type_ = PropertyType::Bool;
         Storage storage_{ false };

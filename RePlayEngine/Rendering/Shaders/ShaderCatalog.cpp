@@ -1,4 +1,4 @@
-#include "ShaderCatalog.h"
+﻿#include "ShaderCatalog.h"
 
 #include <algorithm>
 
@@ -9,7 +9,7 @@ namespace ReplayEngine::Rendering
         if (!entry.info.id.IsValid())
         {
             // ID が無いものは目録に載せない。
-            // 載せると引けない項目がドロップダウンに並ぶことになる。
+            // 載せると引けない項目がドロップダウンに並ぶことになるんで
             return;
         }
 
@@ -63,6 +63,15 @@ namespace ReplayEngine::Rendering
             if (!UsesVariant(variant)) continue;
             if (!At(variant).compiled) return false;
         }
+        for (const PassResult& pass : passes)
+        {
+            for (int index = 0; index < shader_variant_count; ++index)
+            {
+                const ShaderVariant variant = static_cast<ShaderVariant>(index);
+                if (!UsesVariant(variant)) continue;
+                if (!pass.At(variant).compiled) return false;
+            }
+        }
         return true;
     }
 
@@ -73,6 +82,15 @@ namespace ReplayEngine::Rendering
             const ShaderVariant variant = static_cast<ShaderVariant>(index);
             if (!UsesVariant(variant)) continue;
             if (!At(variant).ever_compiled) return false;
+        }
+        for (const PassResult& pass : passes)
+        {
+            for (int index = 0; index < shader_variant_count; ++index)
+            {
+                const ShaderVariant variant = static_cast<ShaderVariant>(index);
+                if (!UsesVariant(variant)) continue;
+                if (!pass.At(variant).ever_compiled) return false;
+            }
         }
         return true;
     }
@@ -86,6 +104,15 @@ namespace ReplayEngine::Rendering
             if (!UsesVariant(variant)) continue;
             count += At(variant).ErrorCount();
         }
+        for (const PassResult& pass : passes)
+        {
+            for (int index = 0; index < shader_variant_count; ++index)
+            {
+                const ShaderVariant variant = static_cast<ShaderVariant>(index);
+                if (!UsesVariant(variant)) continue;
+                count += pass.At(variant).ErrorCount();
+            }
+        }
         return count;
     }
 
@@ -96,8 +123,16 @@ namespace ReplayEngine::Rendering
             const ShaderVariant variant = static_cast<ShaderVariant>(index);
             if (!UsesVariant(variant)) continue;
             if (const ShaderDiagnostic* found = At(variant).FirstError())
-            {
                 return found;
+        }
+        for (const PassResult& pass : passes)
+        {
+            for (int index = 0; index < shader_variant_count; ++index)
+            {
+                const ShaderVariant variant = static_cast<ShaderVariant>(index);
+                if (!UsesVariant(variant)) continue;
+                if (const ShaderDiagnostic* found = pass.At(variant).FirstError())
+                    return found;
             }
         }
         return nullptr;

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../../Core/ObjectID/ObjectID.h"
 
@@ -45,6 +45,17 @@ namespace ReplayEngine::Scene
         DirectX::XMFLOAT3 center{ 0.0f, 0.0f, 0.0f };     // 衝突時の球中心（ワールド）
         DirectX::XMFLOAT3 normal{ 0.0f, 1.0f, 0.0f };
         float fraction = 1.0f;
+        CollisionSourceInfo source;
+        bool valid = false;
+    };
+
+    // 線分 Raycast の結果。Gameplay / Editor の両方から同じ衝突世界を使う。
+    // point は実際の接触位置、distance は origin からのワールド距離。
+    struct RaycastHit
+    {
+        DirectX::XMFLOAT3 point{ 0.0f, 0.0f, 0.0f };
+        DirectX::XMFLOAT3 normal{ 0.0f, 1.0f, 0.0f };
+        float distance = 0.0f;
         CollisionSourceInfo source;
         bool valid = false;
     };
@@ -120,6 +131,26 @@ namespace ReplayEngine::Scene
         {
             return QueryGround(origin, radius, up_offset, down_distance,
                 walkable_normal_y, hit);
+        }
+
+
+        // 任意方向へ 1 本の Ray を飛ばす。
+        // 既定実装は「未対応」を明示する。SceneCollisionWorld が正式実装を持つ。
+        // 既存のテスト用 Physics Service に新しい pure virtual を強制しないため、
+        // ここでは純粋仮想にしていない。
+        virtual bool Raycast(const DirectX::XMFLOAT3& /*origin*/,
+            const DirectX::XMFLOAT3& /*direction*/, float /*max_distance*/,
+            RaycastHit& hit) const
+        {
+            hit = RaycastHit{};
+            return false;
+        }
+
+        virtual bool RaycastFiltered(const DirectX::XMFLOAT3& origin,
+            const DirectX::XMFLOAT3& direction, float max_distance,
+            const CollisionQueryFilter& /*filter*/, RaycastHit& hit) const
+        {
+            return Raycast(origin, direction, max_distance, hit);
         }
     };
 }

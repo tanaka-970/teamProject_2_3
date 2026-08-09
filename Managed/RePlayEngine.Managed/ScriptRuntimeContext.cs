@@ -87,6 +87,34 @@ public sealed class ScriptRuntimeContext
         return NativeBridge.ReturnToPreviousScene();
     }
 
+    /// <summary>Fires an event in the active Scene Flow asset.</summary>
+    public RuntimeStatus TriggerSceneFlow(string eventName)
+    {
+        return NativeBridge.TriggerSceneFlow(eventName);
+    }
+
+    public RuntimeStatus SetSceneFlowBool(string key, bool value)
+    {
+        return NativeBridge.SetSceneFlowBool(key, value);
+    }
+
+    public RuntimeStatus SetSceneFlowInt(string key, long value)
+    {
+        return NativeBridge.SetSceneFlowInt(key, value);
+    }
+
+    public RuntimeStatus SetSceneFlowFloat(string key, double value)
+    {
+        return NativeBridge.SetSceneFlowFloat(key, value);
+    }
+
+    /// <summary>Casts against the runtime collision world.</summary>
+    public RuntimeResult<RaycastHit> Raycast(Vector3 origin, Vector3 direction,
+        float maxDistance = 1000.0f, int layer = 0, int mask = -1, ObjectHandle ignore = default)
+    {
+        return NativeBridge.Raycast(origin, direction, maxDistance, layer, mask, ignore);
+    }
+
     public RuntimeResult<EventSubscription> SubscribeEvent(string eventTypeGuid, ObjectHandle owner = default)
     {
         return NativeBridge.SubscribeEvent(eventTypeGuid, owner);

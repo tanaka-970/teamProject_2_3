@@ -367,6 +367,34 @@ namespace ReplayEngine::Runtime
         return scene_flow_->RequestReturnToPreviousScene();
     }
 
+    RuntimeStatus RuntimeContext::TriggerSceneFlow(const std::string& event_name)
+    {
+        if (scene_flow_ == nullptr) return RuntimeStatus::ServiceUnavailable;
+        if (event_name.empty()) return RuntimeStatus::InvalidArgument;
+        return scene_flow_->RequestSceneFlowTrigger(event_name);
+    }
+
+    RuntimeStatus RuntimeContext::SetSceneFlowBool(const std::string& key, bool value)
+    {
+        if (scene_flow_ == nullptr) return RuntimeStatus::ServiceUnavailable;
+        if (key.empty()) return RuntimeStatus::InvalidArgument;
+        return scene_flow_->SetSceneFlowBool(key, value);
+    }
+
+    RuntimeStatus RuntimeContext::SetSceneFlowInt(const std::string& key, std::int64_t value)
+    {
+        if (scene_flow_ == nullptr) return RuntimeStatus::ServiceUnavailable;
+        if (key.empty()) return RuntimeStatus::InvalidArgument;
+        return scene_flow_->SetSceneFlowInt(key, value);
+    }
+
+    RuntimeStatus RuntimeContext::SetSceneFlowFloat(const std::string& key, double value)
+    {
+        if (scene_flow_ == nullptr) return RuntimeStatus::ServiceUnavailable;
+        if (key.empty()) return RuntimeStatus::InvalidArgument;
+        return scene_flow_->SetSceneFlowFloat(key, value);
+    }
+
     RuntimeStatus RuntimeContext::QuitApplication(const std::string& reason)
     {
         if (scene_flow_ == nullptr) return RuntimeStatus::ServiceUnavailable;
@@ -512,6 +540,26 @@ namespace ReplayEngine::Runtime
         if (!ignore.IsEmpty()) filter.ignore_object = ignore.object;
 
         physics->SweepSphereFiltered(start, end, radius, maximum_normal_y, filter, out);
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus RuntimeContext::Raycast(const DirectX::XMFLOAT3& origin,
+        const DirectX::XMFLOAT3& direction, float max_distance,
+        int layer, int mask, const ObjectHandle& ignore, Scene::RaycastHit& out) const
+    {
+        out = Scene::RaycastHit{};
+        if (max_distance <= 0.0f) return RuntimeStatus::InvalidArgument;
+
+        const Scene::IPhysicsQueryService* physics = world_->Services().Physics();
+        if (physics == nullptr || !physics->CollisionAvailable())
+            return RuntimeStatus::ServiceUnavailable;
+
+        Scene::CollisionQueryFilter filter;
+        filter.layer = layer;
+        filter.mask = mask;
+        if (!ignore.IsEmpty()) filter.ignore_object = ignore.object;
+
+        physics->RaycastFiltered(origin, direction, max_distance, filter, out);
         return RuntimeStatus::Ok;
     }
 

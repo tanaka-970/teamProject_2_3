@@ -5,6 +5,7 @@
 #include "../../Components/Physics/CapsuleColliderComponent.h"
 #include "../../Components/Physics/MeshColliderComponent.h"
 #include "../../Components/Physics/SphereColliderComponent.h"
+#include "../../Components/Landscape/LandscapeColliderComponent.h"
 #include "../../Object/GameObject/GameObject.h"
 #include "../../Scene/Runtime/Scene.h"
 #include "../../Scene/Services/SceneCollisionWorld.h"
@@ -290,6 +291,29 @@ namespace ReplayEngine::Editor
                 XMStoreFloat4x4(&rotation,
                     XMMatrixRotationRollPitchYaw(euler.x, euler.y, euler.z));
                 AppendBox(box.WorldCenter(), box.WorldHalfExtents(), rotation, color, out);
+                break;
+            }
+            case Components::ColliderShape::Landscape:
+            {
+                const auto& landscape =
+                    static_cast<const Components::LandscapeColliderComponent&>(*collider);
+                if (!landscape.ReadyForQuery()) break;
+                if (!options.draw_mesh_wireframe || !landscape.debug_draw_wireframe) break;
+
+                const XMMATRIX matrix = XMLoadFloat4x4(&landscape.WorldMatrix());
+                const auto& triangles = landscape.Triangles();
+                for (const Physics::Triangle& triangle : triangles)
+                {
+                    XMFLOAT3 world_vertices[3]{};
+                    for (int vertex = 0; vertex < 3; ++vertex)
+                    {
+                        XMStoreFloat3(&world_vertices[vertex], XMVector3TransformCoord(
+                            XMLoadFloat3(&triangle.vertices[vertex]), matrix));
+                    }
+                    AppendLine(world_vertices[0], world_vertices[1], color, out);
+                    AppendLine(world_vertices[1], world_vertices[2], color, out);
+                    AppendLine(world_vertices[2], world_vertices[0], color, out);
+                }
                 break;
             }
             case Components::ColliderShape::Mesh:

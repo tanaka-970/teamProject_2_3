@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "RuntimeSceneService.h"
+#include "SceneFlowAsset.h"
 #include "../API/RuntimeContext.h"
 #include "../Core/RuntimeResult.h"
 #include "../../Reflection/Property/References.h"
@@ -8,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace ReplayEngine::Runtime
@@ -106,6 +108,21 @@ namespace ReplayEngine::Runtime
         RuntimeStatus ReloadCurrentScene();
         RuntimeStatus ReturnToPreviousScene();
 
+        // ---- Data-driven Scene Flow ---------------------------------------------
+        //
+        // Asset は ProjectSettings / Editor が読み込み、この Service へ値で渡す。
+        // Runtime はファイルパスを知らない。Hot-reload 時も SetFlowAsset() で差し替える。
+        void SetFlowAsset(const SceneFlowAsset& asset);
+        void ClearFlowAsset() noexcept;
+        bool HasFlowAsset() const noexcept { return flow_asset_loaded_; }
+        const SceneFlowAsset& FlowAsset() const noexcept { return flow_asset_; }
+
+        RuntimeStatus Trigger(const std::string& event_name);
+        RuntimeStatus SetVariableBool(const std::string& key, bool value);
+        RuntimeStatus SetVariableInt(const std::string& key, std::int64_t value);
+        RuntimeStatus SetVariableFloat(const std::string& key, double value);
+        void ClearVariables() noexcept;
+
         // アプリケーションの終了要求。
         //
         // ここでプロセスを終了しない理由:
@@ -176,6 +193,10 @@ namespace ReplayEngine::Runtime
         RuntimeStatus RequestSceneLoad(const std::string& asset_guid) override;
         RuntimeStatus RequestSceneReload() override;
         RuntimeStatus RequestReturnToPreviousScene() override;
+        RuntimeStatus RequestSceneFlowTrigger(const std::string& event_name) override;
+        RuntimeStatus SetSceneFlowBool(const std::string& key, bool value) override;
+        RuntimeStatus SetSceneFlowInt(const std::string& key, std::int64_t value) override;
+        RuntimeStatus SetSceneFlowFloat(const std::string& key, double value) override;
         RuntimeStatus RequestQuitApplication(const std::string& reason) override;
         bool SceneTransitionInProgress() const override;
         const std::string& CurrentSceneGuid() const override;
@@ -191,8 +212,15 @@ namespace ReplayEngine::Runtime
         void PushHistory(const std::string& guid, const std::string& new_current);
 
         void SetFailure(RuntimeStatus status, std::string detail);
+        bool EvaluateCondition(const SceneFlowCondition& condition) const noexcept;
 
         RuntimeSceneService* scenes_ = nullptr;
+
+        SceneFlowAsset flow_asset_;
+        bool flow_asset_loaded_ = false;
+        std::unordered_map<std::string, bool> flow_bools_;
+        std::unordered_map<std::string, std::int64_t> flow_ints_;
+        std::unordered_map<std::string, double> flow_floats_;
 
         SceneTransitionState state_ = SceneTransitionState::Idle;
         SceneTransitionKind kind_ = SceneTransitionKind::None;

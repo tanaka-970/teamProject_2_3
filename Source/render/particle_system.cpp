@@ -1,14 +1,34 @@
 ﻿#include "particle_system.h"
 #include "shader.h"
 #include "misc.h"
+#include <d3d11sdklayers.h>
+#include <cstring>
 #include <vector>
 #include <cstdio>
 
 using namespace DirectX;
 using Microsoft::WRL::ComPtr;
 
+namespace
+{
+    void SetDebugName(ID3D11DeviceChild* object, const char* name)
+    {
+#if defined(_DEBUG) || defined(DEBUG)
+        if (object == nullptr || name == nullptr || *name == '\0') return;
+        object->SetPrivateData(WKPDID_D3DDebugObjectName,
+            static_cast<UINT>(std::strlen(name)), name);
+#else
+        (void)object;
+        (void)name;
+#endif
+    }
+}
+
 bool particle_system::initialize(ID3D11Device* device)
 {
+    release();
+    if (!device) return false;
+
     HRESULT hr = S_OK;
 
     // パーティクル用 StructuredBuffer
@@ -34,6 +54,8 @@ bool particle_system::initialize(ID3D11Device* device)
     uvd.Buffer.FirstElement = 0;
     uvd.Buffer.NumElements  = MAX_COUNT;
     device->CreateUnorderedAccessView(particle_buffer.Get(), &uvd, particle_uav.GetAddressOf());
+    SetDebugName(particle_uav.Get(),
+        "particle_system.particle_uav Source/render/particle_system.cpp");
 
     // 定数バッファ
     D3D11_BUFFER_DESC cb{};
@@ -53,6 +75,21 @@ bool particle_system::initialize(ID3D11Device* device)
 
     initialized = (initialize_cs && integrate_cs);
     return initialized;
+}
+
+void particle_system::release() noexcept
+{
+    particle_buffer.Reset();
+    particle_srv.Reset();
+    particle_uav.Reset();
+    constant_buffer.Reset();
+    initialize_cs.Reset();
+    integrate_cs.Reset();
+    particle_vs.Reset();
+    particle_gs.Reset();
+    particle_ps.Reset();
+    constants = {};
+    initialized = false;
 }
 
 void particle_system::simulate(ID3D11DeviceContext* ctx, float delta_time)

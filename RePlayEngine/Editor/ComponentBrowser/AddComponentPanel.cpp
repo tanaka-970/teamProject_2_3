@@ -14,7 +14,9 @@
 #include <algorithm>
 #include <cctype>
 #include <cstring>
+#include <functional>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 namespace ReplayEngine::Editor
@@ -54,6 +56,45 @@ namespace ReplayEngine::Editor
                 ToLower(script.DisplayName()).find(lowered_query) != std::string::npos ||
                 ToLower(script.class_name).find(lowered_query) != std::string::npos ||
                 ToLower(script.asset_guid).find(lowered_query) != std::string::npos;
+        }
+
+        std::string RelationshipNames(const std::vector<Core::ComponentTypeID>& ids)
+        {
+            std::string result;
+            for (Core::ComponentTypeID id : ids)
+            {
+                if (!result.empty()) result += ", ";
+                result += ComponentRegistry::DisplayNameOf(id);
+            }
+            return result;
+        }
+
+        bool AddWithRequiredComponents(Core::GameObject& target,
+            const ComponentTypeInfo& requested, int& dependency_count)
+        {
+            dependency_count = 0;
+            std::unordered_set<Core::ComponentTypeID> visiting;
+            std::function<bool(const ComponentTypeInfo&, bool)> add_recursive;
+            add_recursive = [&](const ComponentTypeInfo& info, bool dependency) -> bool
+            {
+                if (!visiting.insert(info.type_id).second) return false;
+                for (Core::ComponentTypeID required_id : info.required_components)
+                {
+                    if (target.FindComponent(required_id) != nullptr) continue;
+                    const ComponentTypeInfo* required = ComponentRegistry::Find(required_id);
+                    if (required == nullptr || !add_recursive(*required, true))
+                    {
+                        visiting.erase(info.type_id);
+                        return false;
+                    }
+                }
+                visiting.erase(info.type_id);
+                if (target.FindComponent(info.type_id) != nullptr && !info.allow_multiple) return true;
+                if (target.AddComponent(info.type_id) == nullptr) return false;
+                if (dependency) ++dependency_count;
+                return true;
+            };
+            return add_recursive(requested, false);
         }
 
         std::vector<std::string> ScriptCategories(
@@ -144,16 +185,20 @@ namespace ReplayEngine::Editor
                 else if (ImGui::Selectable(("  " + info.DisplayName()).c_str()))
                 {
                     context.BeginEdit(info.DisplayName() + " を追加");
-                    if (target.AddComponent(info.type_id) != nullptr)
+                    int dependency_count = 0;
+                    if (AddWithRequiredComponents(target, info, dependency_count))
                     {
                         context.CommitEdit();
-                        context.SetStatus(info.DisplayName() + " を追加しました");
+                        std::string status = info.DisplayName() + " を追加しました";
+                        if (dependency_count > 0)
+                            status += "（必須 Component " + std::to_string(dependency_count) + " 個を自動追加）";
+                        context.SetStatus(status);
                         added = true;
                     }
                     else
                     {
                         context.CancelEdit();
-                        context.SetStatus(info.DisplayName() + " を追加できませんでした");
+                        context.SetStatus(info.DisplayName() + " を追加できませんでした（必須 Component を確認してください）");
                     }
                     ImGui::CloseCurrentPopup();
                 }
@@ -168,6 +213,18 @@ namespace ReplayEngine::Editor
                 {
                     ImGui::BeginTooltip();
                     if (!info.tooltip.empty()) ImGui::TextUnformatted(info.tooltip.c_str());
+                    if (!info.required_components.empty())
+                    {
+                        ImGui::Separator();
+                        const std::string names = RelationshipNames(info.required_components);
+                        ImGui::TextColored(ImVec4(1.0f, 0.68f, 0.30f, 1.0f), "必須: %s", names.c_str());
+                        ImGui::TextDisabled("不足分は追加時に自動で補います");
+                    }
+                    if (!info.recommended_components.empty())
+                    {
+                        const std::string names = RelationshipNames(info.recommended_components);
+                        ImGui::TextDisabled("推奨: %s", names.c_str());
+                    }
                     if (behaviour != nullptr)
                     {
                         ImGui::Separator();

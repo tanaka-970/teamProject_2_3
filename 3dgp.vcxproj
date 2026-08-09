@@ -101,7 +101,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;xaudio2.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <IgnoreSpecificDefaultLibraries>
       </IgnoreSpecificDefaultLibraries>
       <IgnoreAllDefaultLibraries>
@@ -135,7 +135,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;xaudio2.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <FxCompile>
       <ShaderModel>5.0</ShaderModel>
@@ -167,7 +167,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>
       </AdditionalLibraryDirectories>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;xaudio2.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <FxCompile>
       <ShaderModel>5.0</ShaderModel>
@@ -198,7 +198,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;xaudio2.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <FxCompile>
       <ShaderModel>5.0</ShaderModel>
@@ -230,6 +230,16 @@
     <ClCompile Include="RePlayEngine\Editor\Gizmo\ViewportPicker.cpp" />
     <ClCompile Include="RePlayEngine\Editor\ShaderEditing\CharacterMaterialEditor.cpp" />
     <ClCompile Include="RePlayEngine\Editor\ShaderEditing\ShaderStackEditor.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\ShaderEditing\ShaderPropertyInspector.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\ShaderEditing\ShaderComposerEditor.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerAsset.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerGenerator.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Materials\ShaderLayerBinding.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\ShaderStack\BuiltInShaderLayers.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\ShaderStack\ShaderExecutionPlan.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderLayerValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderPassValidation.cpp" />
     <ClCompile Include="RePlayEngine\Editor\ShaderEditing\ShaderPresetEditor.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Rendering\PostProcessEditor.cpp" />
     <ClCompile Include="RePlayEngine\Physics\MeshCollisionCooker.cpp" />
@@ -237,6 +247,9 @@
     <ClCompile Include="RePlayEngine\Rendering\ShaderPresets\BuiltInShaderPresets.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Materials\CharacterMaterialGpuData.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Materials\MaterialAsset.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Materials\MaterialSchema.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Materials\MaterialBinding.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Materials\MaterialGpuBinder.cpp" />
     <ClCompile Include="RePlayEngine\Scene\BootLogoScene.cpp" />
     <ClCompile Include="RePlayEngine\Scene\LoadingScene.cpp" />
     <ClCompile Include="Source\core\framebuffer.cpp" />
@@ -264,8 +277,10 @@
     <ClCompile Include="Source\app\Editor\framework_inspector.cpp" />
     <ClCompile Include="Source\app\Editor\framework_project_settings.cpp" />
     <ClCompile Include="Source\app\Editor\framework_editor_camera.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_editor_camera_presets.cpp" />
     <ClCompile Include="Source\app\Editor\framework_gizmo.cpp" />
     <ClCompile Include="Source\app\Editor\framework_scene_document.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_landscape_editor.cpp" />
     <ClCompile Include="Source\app\Editor\framework_shader_stack.cpp" />
     <ClCompile Include="Source\app\Editor\framework_character_material.cpp" />
     <ClCompile Include="Source\app\Editor\framework_post_process.cpp" />
@@ -314,14 +329,22 @@
     <ClCompile Include="RePlayEngine\Scripting\Core\ScriptValue.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\Core\ScriptWorld.cpp" />
     <ClCompile Include="Source\app\Editor\framework_project_browser.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_convenience_tools.cpp" />
     <ClCompile Include="Source\app\Editor\framework_shader_catalog.cpp" />
     <ClCompile Include="Source\app\Editor\framework_golden.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Capture\GoldenImage.cpp" />
     <ClCompile Include="RePlayEngine\Editor\ShaderEditing\ShaderInspector.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\ShaderEditing\MaterialShaderInspector.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Shaders\BuiltInShaders.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderAsset.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderAssetFactory.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderEditorValidation.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderAssetValidation.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderBuiltInValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderMaterialValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderLightingValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderRenderValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderTextureValidation.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderCatalog.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderConstantPacker.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderCompiler.cpp" />
@@ -341,6 +364,7 @@
     <ClCompile Include="RePlayEngine\Components\Gameplay\HealthComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Gameplay\StageGameplayCommon.cpp" />
     <ClCompile Include="RePlayEngine\Components\Gameplay\StageGameplayComponents.cpp" />
+    <ClCompile Include="RePlayEngine\Audio\AudioSystem.cpp" />
     <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponents.cpp" />
     <ClCompile Include="RePlayEngine\Scene\Serialization\SceneData.cpp" />
     <ClCompile Include="RePlayEngine\Scene\Serialization\SceneSerializer.cpp" />
@@ -359,9 +383,13 @@
     <ClCompile Include="RePlayEngine\Components\Gameplay\CharacterMotorComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Gameplay\PlayerInputComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Gameplay\PlayerControllerComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Audio\AudioSourceComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Camera\CameraComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Camera\FollowTargetComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Rendering\AnimatorComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Rendering\SkinnedMeshRendererComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Rendering\MeshRendererComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Rendering\PrimitiveMeshRendererComponent.cpp" />
     <ClCompile Include="Source\game\camera_basis_provider.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Inspector\PlayerCompositionValidator.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorViewportCamera.cpp" />
@@ -369,6 +397,7 @@
     <ClCompile Include="RePlayEngine\Editor\Validation\SceneValidator.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Validation\ValidationPanel.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorCameraController.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Viewport\EditorCameraPreset.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorCameraStateStore.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorSelectionBounds.cpp" />
     <ClCompile Include="RePlayEngine\Project\ProjectSettings.cpp" />
@@ -392,8 +421,12 @@
     <ClCompile Include="RePlayEngine\Landscape\LandscapeCollision.cpp" />
     <ClCompile Include="RePlayEngine\Landscape\LandscapeUndoCommand.cpp" />
     <ClCompile Include="RePlayEngine\Landscape\LandscapeEditorTool.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Landscape\LandscapeComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Landscape\LandscapeRendererComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Landscape\LandscapeColliderComponent.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\RuntimeSceneValidation.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Scene\SceneFlowService.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Scene\SceneFlowAsset.cpp" />
     <ClCompile Include="Source\game\Behaviours\SceneTransitionBehaviour.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\SceneFlowValidation.cpp" />
     <ClCompile Include="Source\app\Runtime\framework_runtime_scene.cpp" />
@@ -427,6 +460,9 @@
     <ClInclude Include="RePlayEngine\Rendering\Materials\CharacterMaterialProfile.h" />
     <ClInclude Include="RePlayEngine\Rendering\Materials\CharacterMaterialGpuData.h" />
     <ClInclude Include="RePlayEngine\Rendering\Materials\MaterialAsset.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Materials\MaterialSchema.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Materials\MaterialBinding.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Materials\MaterialGpuBinder.h" />
     <ClInclude Include="RePlayEngine\Assets\ImageAsset.h" />
     <ClInclude Include="RePlayEngine\Presentation\BootLogoComponent.h" />
     <ClInclude Include="RePlayEngine\Assets\AssetCache.h" />
@@ -439,6 +475,17 @@
     <ClInclude Include="RePlayEngine\Editor\Gizmo\ViewportPicker.h" />
     <ClInclude Include="RePlayEngine\Editor\ShaderEditing\CharacterMaterialEditor.h" />
     <ClInclude Include="RePlayEngine\Editor\ShaderEditing\ShaderStackEditor.h" />
+    <ClInclude Include="RePlayEngine\Editor\ShaderEditing\ShaderPropertyInspector.h" />
+    <ClInclude Include="RePlayEngine\Editor\ShaderEditing\ShaderComposerEditor.h" />
+    <ClInclude Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerAsset.h" />
+    <ClInclude Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerGenerator.h" />
+    <ClInclude Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerValidation.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Materials\ShaderLayerBinding.h" />
+    <ClInclude Include="RePlayEngine\Rendering\ShaderStack\BuiltInShaderLayers.h" />
+    <ClInclude Include="RePlayEngine\Rendering\ShaderStack\ShaderExecutionPlan.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderLayerValidation.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderPassValidation.h" />
+    <ClInclude Include="RePlayEngine\Editor\ShaderEditing\MaterialShaderInspector.h" />
     <ClInclude Include="RePlayEngine\Editor\ShaderEditing\ShaderPresetEditor.h" />
     <ClInclude Include="RePlayEngine\Editor\Rendering\PostProcessEditor.h" />
     <ClInclude Include="RePlayEngine\Core\Components\IComponent.h" />
@@ -530,11 +577,15 @@
     <ClInclude Include="RePlayEngine\Scene\Runtime\Scene.h" />
     <ClInclude Include="RePlayEngine\Components\Core\TransformComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Rendering\MeshRendererComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Rendering\PrimitiveMeshRendererComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Rendering\LightComponents.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\RotatorComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\HealthComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\StageGameplayCommon.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\StageGameplayComponents.h" />
+    <ClInclude Include="RePlayEngine\Components\Editor\EditorNoteComponent.h" />
+    <ClInclude Include="RePlayEngine\Audio\AudioService.h" />
+    <ClInclude Include="RePlayEngine\Audio\AudioSystem.h" />
     <ClInclude Include="RePlayEngine\Object\Registry\BuiltInComponents.h" />
     <ClInclude Include="RePlayEngine\Scene\Serialization\SceneData.h" />
     <ClInclude Include="RePlayEngine\Scene\Serialization\SceneSerializer.h" />
@@ -558,7 +609,12 @@
     <ClInclude Include="RePlayEngine\Components\Gameplay\CharacterMotorComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\PlayerInputComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\PlayerControllerComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Audio\AudioListenerComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Audio\AudioSourceComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Common\PriorityComponentSelection.h" />
+    <ClInclude Include="RePlayEngine\Components\Camera\CameraComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Camera\CameraTargetComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Camera\FollowTargetComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Rendering\AnimatorComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Rendering\SkinnedMeshRendererComponent.h" />
     <ClInclude Include="Source\game\camera_basis_provider.h" />
@@ -568,6 +624,7 @@
     <ClInclude Include="RePlayEngine\Editor\Validation\SceneValidator.h" />
     <ClInclude Include="RePlayEngine\Editor\Validation\ValidationPanel.h" />
     <ClInclude Include="RePlayEngine\Editor\Viewport\EditorCameraController.h" />
+    <ClInclude Include="RePlayEngine\Editor\Viewport\EditorCameraPreset.h" />
     <ClInclude Include="RePlayEngine\Editor\Viewport\EditorCameraStateStore.h" />
     <ClInclude Include="RePlayEngine\Editor\Viewport\EditorSelectionBounds.h" />
     <ClInclude Include="RePlayEngine\Project\ProjectSettings.h" />
@@ -591,14 +648,46 @@
     <ClInclude Include="RePlayEngine\Landscape\LandscapeCollision.h" />
     <ClInclude Include="RePlayEngine\Landscape\LandscapeUndoCommand.h" />
     <ClInclude Include="RePlayEngine\Landscape\LandscapeEditorTool.h" />
+    <ClInclude Include="RePlayEngine\Components\Landscape\LandscapeComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Landscape\LandscapeRendererComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Landscape\LandscapeColliderComponent.h" />
     <ClInclude Include="RePlayEngine\Runtime\Validation\RuntimeSceneValidation.h" />
     <ClInclude Include="RePlayEngine\Runtime\Scene\SceneFlowService.h" />
+    <ClInclude Include="RePlayEngine\Runtime\Scene\SceneFlowAsset.h" />
     <ClInclude Include="Source\game\Behaviours\SceneTransitionBehaviour.h" />
     <ClInclude Include="RePlayEngine\Runtime\Validation\SceneFlowValidation.h" />
     <ClInclude Include="RePlayEngine\Editor\Validation\EditorIntegrationValidation.h" />
     <ClInclude Include="RePlayEngine\Editor\Validation\AnimationUndoValidation.h" />
     <ClInclude Include="RePlayEngine\Runtime\Validation\StressValidation.h" />
-</ItemGroup>
+    <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderMaterialValidation.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderLightingValidation.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderRenderValidation.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderTextureValidation.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderAssetFactory.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderEditorValidation.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Source\app\Editor\framework_ui_workspace.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\CanvasComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\RectTransformComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\UIImageComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\UITextComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\UIButtonComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\UIMaskComponent.cpp" />
+    <ClCompile Include="RePlayEngine\UI\UILayout.cpp" />
+    <ClCompile Include="RePlayEngine\UI\FontAtlas.cpp" />
+    <ClCompile Include="RePlayEngine\UI\UIRenderer.cpp" />
+    <ClInclude Include="RePlayEngine\Components\UI\CanvasComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\UI\RectTransformComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\UI\UIImageComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\UI\UITextComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\UI\UIButtonComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\UI\UIMaskComponent.h" />
+    <ClInclude Include="RePlayEngine\UI\UILayout.h" />
+    <ClInclude Include="RePlayEngine\UI\FontAtlas.h" />
+    <ClInclude Include="RePlayEngine\UI\UIRenderer.h" />
+    <ClInclude Include="RePlayEngine\UI\ThirdParty\stb_truetype.h" />
+  </ItemGroup>
   <ItemGroup>
     <None Include=".editorconfig" />
     <None Include=".gitattributes" />
@@ -638,11 +727,19 @@
     <None Include="Shader\pbr_brdf.hlsli" />
     <None Include="Shader\pbr_common.hlsli" />
     <None Include="Shader\shading_model_hlsl.hlsli" />
+    <None Include="Shader\lighting_model_hlsl.hlsli" />
     <None Include="Shader\skinned_mesh.hlsli" />
     <None Include="Shader\sprite.hlsli" />
     <None Include="Shader\static_mesh.hlsli" />
     <None Include="Shader\toon_common.hlsli" />
     <None Include="Shader\Materials\StylizedCharacter\stylized_character_common.hlsli" />
+    <None Include="Shader\Layers\Pixelate.hlsl" />
+    <None Include="Shader\Layers\BuiltIn\Pbr.hlsl" />
+    <None Include="Shader\Layers\BuiltIn\Toon.hlsl" />
+    <None Include="Shader\Layers\BuiltIn\Unlit.hlsl" />
+    <None Include="Shader\Layers\BuiltIn\Wireframe.hlsl" />
+    <None Include="Shader\Layers\BuiltIn\Outline.hlsl" />
+    <None Include="Shader\Layers\BuiltIn\StylizedCharacter.hlsl" />
     <None Include="resources\Shaders\Presets\WutheringStylized.replayshader" />
     <None Include="resources\Shaders\Presets\EndfieldLayered.replayshader" />
     <None Include="resources\Shaders\Presets\SoftAnime.replayshader" />
@@ -790,6 +887,18 @@
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
     </FxCompile>
     <FxCompile Include="Shader\sprite_vs.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Vertex</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_ps.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_vs.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Vertex</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Vertex</ShaderType>

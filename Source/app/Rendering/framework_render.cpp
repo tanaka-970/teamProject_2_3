@@ -1,8 +1,12 @@
-﻿#include "framework.h"
+#include "framework.h"
 #include "shader.h"
 #include "texture.h"
 #include "skinned_mesh.h"
 #include "gltf_model.h"
+#include "../../../RePlayEngine/Rendering/Shaders/BuiltInShaders.h"
+#include "../../../RePlayEngine/Rendering/ShaderStack/BuiltInShaderLayers.h"
+#include "../../../RePlayEngine/Rendering/Materials/ShaderLayerBinding.h"
+#include "../../../RePlayEngine/UI/UILayout.h"
 
 namespace
 {
@@ -79,7 +83,10 @@ void framework::update_frame_constants(const DirectX::XMMATRIX& view,
     const float height = static_cast<float>(SCREEN_HEIGHT);
     frame_constants.screen_size = { width, height, 1.0f / width, 1.0f / height };
     frame_constants.camera_planes = { near_plane, far_plane, tan_half_fov_y, aspect };
-    frame_constants.frame_params = { static_cast<float>(frame_index), elapsed_time, 0.0f, 0.0f };
+    // z is accumulated effect/composer time. Golden capture passes elapsed_time=0,
+    // so visual regression remains deterministic instead of advancing while capturing.
+    shader_composer_time += (std::max)(0.0f, elapsed_time);
+    frame_constants.frame_params = { static_cast<float>(frame_index), elapsed_time, shader_composer_time, 0.0f };
 
     // TAAのジッター量(NDC)。射影行列へ加算済みの値をそのまま共有し、
     // モーションベクター側で打ち消せるようにしておく。
@@ -147,35 +154,50 @@ ID3D11PixelShader* framework::static_forward_shader(int shading) const
     }
 }
 
-unsigned int framework::deferred_shading_model(int shading) const
+ReplayEngine::Rendering::ShaderLightingModel framework::deferred_lighting_model(
+    int shading) const
 {
-    // マテリアルの指定をそのまま GBuffer へ書く。
-    // ピクセル化は GBuffer では表現できないので PBR として書き、
-    // 合成段でセル化する（これは技術的制約であって上書きではない）。
-    switch (shading)
+    using ReplayEngine::Rendering::ShaderLightingModel;
+
+    ShaderLightingModel model = ShaderLightingModel::Pbr;
+    if (ReplayEngine::Rendering::BuiltInShaders::
+        TryGetLightingModelFromShadingModel(shading, model))
     {
-    case SHADING_MODEL_PBR:      return SHADING_MODEL_PBR;
-    case SHADING_MODEL_TOON:     return SHADING_MODEL_TOON;
-    case SHADING_MODEL_UNLIT:    return SHADING_MODEL_UNLIT;
-    case SHADING_MODEL_PIXELATE: return SHADING_MODEL_PBR;
-    default:                     return SHADING_MODEL_UNLIT;
+        return model;
     }
+
+    // 旧データの不明値は従来どおり Unlit へ落とす。
+    // MaterialにShader GUIDがある場合は resolve_render_item_material() が
+    // Catalogの replay_lighting で上書きする。
+    return ShaderLightingModel::Unlit;
 }
 
-void framework::bind_gbuffer_material(unsigned int shading, bool stage_surface,
+void framework::bind_gbuffer_material(
+    ReplayEngine::Rendering::ShaderLightingModel lighting_model,
+    bool stage_surface, bool pixelate_enabled,
     float pixelate_size, float pixelate_strength, float metallic, float roughness,
-    float ambient_occlusion, float emissive_strength)
+    float ambient_occlusion, float emissive_strength,
+    const DirectX::XMFLOAT4& base_color_factor,
+    const DirectX::XMFLOAT3& emissive_color,
+    std::uint32_t texture_mask)
 {
     material_override_constants constants{};
+    constants.base_color_factor = base_color_factor;
+    constants.emissive_factor = DirectX::XMFLOAT4{
+        emissive_color.x, emissive_color.y, emissive_color.z, emissive_strength };
     constants.mat_params = stage_surface
         ? DirectX::XMFLOAT4{ 0.0f, 0.88f, 1.0f, 0.0f }
-        : DirectX::XMFLOAT4{ metallic, roughness, ambient_occlusion, emissive_strength };
-    constants.shading_model = shading;
+        : DirectX::XMFLOAT4{ metallic, roughness, ambient_occlusion, 0.0f };
+    constants.lighting_model = static_cast<unsigned int>(lighting_model);
     constants.texture_contrast = stage_surface ? stage_texture_contrast : 1.0f;
-    constants.pixelate_size = pixelate_size;
-    constants.pixelate_strength = pixelate_strength;
-    immediate_context->UpdateSubresource(material_override_cb.Get(), 0, nullptr, &constants, 0, 0);
-    immediate_context->PSSetConstantBuffers(9, 1, material_override_cb.GetAddressOf());
+    constants.pixelate_size = pixelate_enabled ? pixelate_size : 0.0f;
+    constants.pixelate_strength = pixelate_enabled ? pixelate_strength : 0.0f;
+    constants.texture_mask = texture_mask;
+
+    immediate_context->UpdateSubresource(material_override_cb.Get(), 0,
+        nullptr, &constants, 0, 0);
+    immediate_context->PSSetConstantBuffers(9, 1,
+        material_override_cb.GetAddressOf());
 }
 
 void framework::render(float elapsed_time)
@@ -424,6 +446,7 @@ void framework::render(float elapsed_time)
             // 【必須】本描画は DepthFunc=EQUAL なので、プリパスで深度を書かなかった
             // メッシュは比較に失敗して画面から丸ごと消える。
             // キャラクターはこの経路でしか描かれないため、ここを外すと何も映らない。
+            draw_landscape_scene_meshes(false, true);
             draw_object_scene_meshes(nullptr, false, true);
 
             // 深度プリパスの描画数は統計へ混ぜない(同じ形状を二重に数えないため)。
@@ -441,9 +464,11 @@ void framework::render(float elapsed_time)
 
         if (enable_static_meshes && static_meshes[0])
         {
-            bind_gbuffer_material(static_uses_pixelate ? SHADING_MODEL_PIXELATE
-                : deferred_shading_model(shading_per_static[0]), false,
-                static_pixelate_settings.parameter, static_pixelate_settings.strength);
+            bind_gbuffer_material(
+                deferred_lighting_model(shading_per_static[0]),
+                false, static_uses_pixelate,
+                static_pixelate_settings.parameter,
+                static_pixelate_settings.strength);
             static_meshes[0]->render(immediate_context.Get(), world, material_color,
                                      static_mesh_gbuffer_ps.Get(),
                                      nullptr, nullptr, true, true);
@@ -453,6 +478,7 @@ void framework::render(float elapsed_time)
         // 提出リストは update_object_scene() が毎フレーム作り直す。
         //
         // Stage/Characterを含むScene描画はこの提出リスト1本だけ。
+        draw_landscape_scene_meshes(true, false);
         draw_object_scene_meshes(skinned_mesh_gbuffer_ps.Get(), true);
 
         deferred.gbuffer_end(immediate_context.Get());
@@ -484,6 +510,16 @@ void framework::render(float elapsed_time)
         // GBufferをSRVへ切り替えた後、ライト計算結果をDeferred側の出力へ書く。
         // タイルド版が有効なときはコンピュートシェーダーへ差し替える。
         // デバッグ表示中はPS版のみが対応しているのでそちらを使う。
+        // Object/primitive draws leave their own culling and depth states behind.
+        // The classic deferred pass renders a fullscreen strip, so inheriting a
+        // mesh cull state can reject the entire lighting pass and leave only clear.
+        immediate_context->OMSetBlendState(
+            blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
+        immediate_context->OMSetDepthStencilState(
+            depth_stencil_states[(size_t)DEPTH_STATE::ZT_OFF_ZW_OFF].Get(), 0);
+        immediate_context->RSSetState(
+            rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+
         const bool use_tiled = tiled_deferred.enabled && tiled_deferred.Initialized() &&
             render_graph.DeferredDebugMode() == 0;
         if (use_tiled)
@@ -543,9 +579,23 @@ void framework::render(float elapsed_time)
         if (enable_ssr && ssr_pass.Initialized() && render_graph.DeferredDebugMode() == 0)
             ssr_pass.CaptureHistory(immediate_context.Get(), deferred.lit_tex.Get());
 
+        bool object_layers_present = false;
+        for (const ReplayEngine::Rendering::RenderItem& source_item : object_render_items.Items())
+        {
+            const ReplayEngine::Rendering::RenderItem item =
+                resolve_render_item_material(source_item);
+            if (item.outline || (item.material_binding.layers != nullptr &&
+                item.material_binding.layers->HasEnabledLayers()))
+            {
+                object_layers_present = true;
+                break;
+            }
+        }
+
         const bool draw_shader_layers = render_graph.DeferredDebugMode() == 0 &&
             (shader_layers_static[0].HasEnabledLayers() ||
-                shading_per_static[0] == SHADING_MODEL_PIXELATE);
+                shading_per_static[0] == SHADING_MODEL_PIXELATE ||
+                object_layers_present);
         if (draw_shader_layers)
         {
             // Surfaceとは別の材質パスをDeferred照明結果へ順番どおりに合成する。
@@ -602,14 +652,20 @@ void framework::render(float elapsed_time)
                 {
                     if (!layer.enabled) continue;
                     if (layer.type == ReplayEngine::Rendering::ShaderLayerType::Pixelate) continue;
-                    if (layer.type == ReplayEngine::Rendering::ShaderLayerType::Outline)
+                    if (layer.Is(ReplayEngine::Rendering::BuiltInShaderLayers::Outline))
                     {
+                        const auto saved_outline = toon.outline;
+                        toon.outline.outline_color = layer.tint;
+                        toon.outline.outline_params.x = layer.parameter;
+                        toon.update_constants(immediate_context.Get());
                         immediate_context->OMSetBlendState(
                             blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
                         toon.bind_outline_pass(immediate_context.Get(), false);
                         static_meshes[0]->render(immediate_context.Get(), world, material_color,
                             toon.outline_ps(), toon.static_outline_vs_.Get(),
                             toon.static_outline_il_.Get(), true);
+                        toon.outline = saved_outline;
+                        toon.update_constants(immediate_context.Get());
                         immediate_context->RSSetState(
                             rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
                         continue;
@@ -620,6 +676,137 @@ void framework::render(float elapsed_time)
                         static_pixel_shader(layer));
                 }
             }
+            // GameObject Material 固有のLayerStack。同じ順序で追加パスを描く。
+            const ReplayEngine::Rendering::CharacterMaterialProfile default_profile{};
+            for (const ReplayEngine::Rendering::RenderItem& source_item : object_render_items.Items())
+            {
+                const ReplayEngine::Rendering::RenderItem item =
+                    resolve_render_item_material(source_item);
+                if (item.mesh_asset.empty()) continue;
+                skinned_mesh* mesh = resolve_object_mesh(item.mesh_asset);
+                if (mesh == nullptr) continue;
+                const auto* keyframe = item.skinned
+                    ? resolve_object_keyframe(*mesh, item.clip_index, item.animation_time)
+                    : nullptr;
+
+                bool outline_drawn = false;
+                if (item.material_binding.layers != nullptr)
+                {
+                    for (const auto& layer : item.material_binding.layers->Layers())
+                    {
+                        if (!layer.enabled || layer.Is(ReplayEngine::Rendering::BuiltInShaderLayers::Pixelate))
+                            continue; // PixelateはGBufferへ設定済み
+                        if (layer.Is(ReplayEngine::Rendering::BuiltInShaderLayers::Outline))
+                        {
+                            const auto saved_outline = toon.outline;
+                            toon.outline.outline_color = layer.tint;
+                            toon.outline.outline_params.x = layer.parameter;
+                            toon.update_constants(immediate_context.Get());
+                            immediate_context->OMSetBlendState(
+                                blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
+                            toon.bind_outline_pass(immediate_context.Get(), true);
+                            mesh->render(immediate_context.Get(), item.world, layer.tint,
+                                keyframe, toon.outline_ps(), toon.skinned_outline_vs_.Get(),
+                                toon.skinned_outline_il_.Get(), true, false);
+                            toon.outline = saved_outline;
+                            toon.update_constants(immediate_context.Get());
+                            outline_drawn = true;
+                            continue;
+                        }
+
+                        // Built-in 7種は見た目を変えない旧専用パス。
+                        // それ以外は Layer Shader Asset を Catalog から直接描く。
+                        if (!ReplayEngine::Rendering::BuiltInShaderLayers::IsBuiltIn(
+                            layer.EffectiveShader()))
+                        {
+                            prepare_layer(layer, default_profile);
+                            ReplayEngine::Rendering::ResolvedMaterialBinding layer_binding;
+                            if (ReplayEngine::Rendering::ShaderLayerBindingResolver::Resolve(
+                                layer, shader_library.Catalog(),
+                                ReplayEngine::Rendering::ShaderVariant::Skinned, layer_binding))
+                            {
+                                const auto* layer_entry = shader_library.Catalog().Find(
+                                    layer_binding.shader);
+                                ID3D11PixelShader* catalog_layer =
+                                    material_gpu_binder.ResolvePixelShader(
+                                        device.Get(), shader_library.Catalog(), layer_binding);
+                                if (catalog_layer != nullptr &&
+                                    material_gpu_binder.Bind(device.Get(), immediate_context.Get(),
+                                        asset_database, layer_binding))
+                                {
+                                    const DirectX::XMFLOAT4 white{ 1.0f, 1.0f, 1.0f, 1.0f };
+                                    mesh->render(immediate_context.Get(), item.world, white,
+                                        keyframe, catalog_layer, nullptr, nullptr, true, false);
+
+                                    // Shader-owned pass は Layer の直後、宣言順で固定実行する。
+                                    // Material Editor から順番を変えるのは Layer だけ。
+                                    if (layer_entry != nullptr)
+                                    {
+                                        for (std::size_t pass_index = 0;
+                                            pass_index < layer_entry->passes.size(); ++pass_index)
+                                        {
+                                            const auto& pass = layer_entry->passes[pass_index];
+                                            BLEND_STATE pass_blend = BLEND_STATE::ALPHA;
+                                            switch (pass.info.blend)
+                                            {
+                                            case ReplayEngine::Rendering::ShaderPassBlend::Inherit:
+                                                if (layer.blend == ReplayEngine::Rendering::ShaderLayerBlend::Additive)
+                                                    pass_blend = BLEND_STATE::ADD;
+                                                else if (layer.blend == ReplayEngine::Rendering::ShaderLayerBlend::Multiply)
+                                                    pass_blend = BLEND_STATE::MULTIPLY;
+                                                break;
+                                            case ReplayEngine::Rendering::ShaderPassBlend::Additive:
+                                                pass_blend = BLEND_STATE::ADD; break;
+                                            case ReplayEngine::Rendering::ShaderPassBlend::Multiply:
+                                                pass_blend = BLEND_STATE::MULTIPLY; break;
+                                            case ReplayEngine::Rendering::ShaderPassBlend::Alpha:
+                                            default: pass_blend = BLEND_STATE::ALPHA; break;
+                                            }
+                                            immediate_context->OMSetBlendState(
+                                                blend_states[(size_t)pass_blend].Get(), nullptr, 0xFFFFFFFF);
+                                            if (ID3D11PixelShader* pass_ps =
+                                                material_gpu_binder.ResolvePassPixelShader(
+                                                    device.Get(), shader_library.Catalog(),
+                                                    layer_binding, pass_index))
+                                            {
+                                                mesh->render(immediate_context.Get(), item.world, white,
+                                                    keyframe, pass_ps, nullptr, nullptr, true, false);
+                                            }
+                                        }
+                                    }
+                                }
+                                material_gpu_binder.Unbind(immediate_context.Get());
+                            }
+                            continue;
+                        }
+
+                        prepare_layer(layer, default_profile);
+                        ID3D11PixelShader* layer_ps = skinned_mesh_unlit_ps.Get();
+                        using ReplayEngine::Rendering::ShaderLayerType;
+                        switch (layer.type)
+                        {
+                        case ShaderLayerType::Pbr: layer_ps = pbr.skinned_mesh_ps(); break;
+                        case ShaderLayerType::Toon: layer_ps = toon.skinned_mesh_ps(); break;
+                        case ShaderLayerType::StylizedCharacter:
+                            layer_ps = skinned_stylized_character_ps.Get(); break;
+                        default: break;
+                        }
+                        mesh->render(immediate_context.Get(), item.world, layer_color(layer),
+                            keyframe, layer_ps, nullptr, nullptr, true, false);
+                    }
+                }
+
+                if (item.outline && !outline_drawn)
+                {
+                    immediate_context->OMSetBlendState(
+                        blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
+                    toon.bind_outline_pass(immediate_context.Get(), true);
+                    mesh->render(immediate_context.Get(), item.world, item.tint,
+                        keyframe, toon.outline_ps(), toon.skinned_outline_vs_.Get(),
+                        toon.skinned_outline_il_.Get(), true, false);
+                }
+            }
+
             immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
             immediate_context->OMSetBlendState(blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
         }
@@ -709,6 +896,9 @@ void framework::render(float elapsed_time)
                                      static_forward_shader(shading_per_static[0]));
         }
 
+        // Landscape procedural mesh もForward経路へ出す。
+        draw_landscape_scene_meshes(false, false);
+
         // GameObject / Component 基盤の描画（Forward 経路）。
         // Component ごとの描画方式を反映するため、Shader は 1 件ずつ選び直す。
         // Asset 未指定・解決不可・読み込み失敗の GameObject は静かに飛ばす。
@@ -728,12 +918,171 @@ void framework::render(float elapsed_time)
                         item.animation_time)
                     : nullptr;
 
+            ID3D11PixelShader* catalog_shader = nullptr;
+            bool catalog_bound = false;
+            if (item.material_binding.usable_shader)
+            {
+                catalog_shader = material_gpu_binder.ResolvePixelShader(
+                    device.Get(), shader_library.Catalog(), item.material_binding);
+                if (catalog_shader != nullptr)
+                {
+                    catalog_bound = material_gpu_binder.Bind(device.Get(),
+                        immediate_context.Get(), asset_database,
+                        item.material_binding);
+                    // b9 の生成に失敗した状態で Catalog PS を使うと、旧 draw の
+                    // 定数を読んでしまう。完全に bind できない場合は旧 .cso へ戻す。
+                    if (!catalog_bound)
+                    {
+                        material_gpu_binder.Unbind(immediate_context.Get());
+                        catalog_shader = nullptr;
+                    }
+                }
+            }
+
             if (item.double_sided)
                 immediate_context->RSSetState(
                     rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
-            scene_mesh->render(immediate_context.Get(), item.world, item.tint,
-                item_keyframe, skinned_forward_shader(item.shading_model));
-            if (item.double_sided)
+
+            // Catalog shader を作れた場合だけ新経路へ切り替える。
+            // Bind に一部失敗しても既定Textureへ落として描画は続ける。
+            scene_mesh->render(immediate_context.Get(), item.world,
+                catalog_shader != nullptr ? item.tint : item.legacy_tint,
+                item_keyframe,
+                catalog_shader != nullptr
+                    ? catalog_shader : skinned_forward_shader(item.shading_model));
+
+            if (catalog_shader != nullptr || catalog_bound)
+                material_gpu_binder.Unbind(immediate_context.Get());
+
+            // Forward時もMaterial固有Layerを宣言順で描く。
+            bool outline_drawn = false;
+            if (item.material_binding.layers != nullptr)
+            {
+                for (const auto& layer : item.material_binding.layers->Layers())
+                {
+                    if (!layer.enabled) continue;
+                    if (layer.Is(ReplayEngine::Rendering::BuiltInShaderLayers::Outline))
+                    {
+                        const auto saved_outline = toon.outline;
+                        toon.outline.outline_color = layer.tint;
+                        toon.outline.outline_params.x = layer.parameter;
+                        toon.update_constants(immediate_context.Get());
+                        immediate_context->OMSetBlendState(
+                            blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
+                        toon.bind_outline_pass(immediate_context.Get(), true);
+                        scene_mesh->render(immediate_context.Get(), item.world, layer.tint,
+                            item_keyframe, toon.outline_ps(), toon.skinned_outline_vs_.Get(),
+                            toon.skinned_outline_il_.Get(), true, false);
+                        toon.outline = saved_outline;
+                        toon.update_constants(immediate_context.Get());
+                        outline_drawn = true;
+                        continue;
+                    }
+
+                    if (!ReplayEngine::Rendering::BuiltInShaderLayers::IsBuiltIn(
+                        layer.EffectiveShader()))
+                    {
+                        BLEND_STATE custom_blend = BLEND_STATE::ALPHA;
+                        if (layer.blend == ReplayEngine::Rendering::ShaderLayerBlend::Additive)
+                            custom_blend = BLEND_STATE::ADD;
+                        else if (layer.blend == ReplayEngine::Rendering::ShaderLayerBlend::Multiply)
+                            custom_blend = BLEND_STATE::MULTIPLY;
+                        immediate_context->OMSetBlendState(
+                            blend_states[(size_t)custom_blend].Get(), nullptr, 0xFFFFFFFF);
+                        immediate_context->RSSetState(
+                            rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+
+                        ReplayEngine::Rendering::ResolvedMaterialBinding layer_binding;
+                        if (ReplayEngine::Rendering::ShaderLayerBindingResolver::Resolve(
+                            layer, shader_library.Catalog(),
+                            ReplayEngine::Rendering::ShaderVariant::Skinned, layer_binding))
+                        {
+                            const auto* layer_entry = shader_library.Catalog().Find(
+                                layer_binding.shader);
+                            ID3D11PixelShader* catalog_layer =
+                                material_gpu_binder.ResolvePixelShader(
+                                    device.Get(), shader_library.Catalog(), layer_binding);
+                            if (catalog_layer != nullptr &&
+                                material_gpu_binder.Bind(device.Get(), immediate_context.Get(),
+                                    asset_database, layer_binding))
+                            {
+                                const DirectX::XMFLOAT4 white{ 1.0f, 1.0f, 1.0f, 1.0f };
+                                scene_mesh->render(immediate_context.Get(), item.world, white,
+                                    item_keyframe, catalog_layer, nullptr, nullptr, true, false);
+
+                                if (layer_entry != nullptr)
+                                {
+                                    for (std::size_t pass_index = 0;
+                                        pass_index < layer_entry->passes.size(); ++pass_index)
+                                    {
+                                        const auto& pass = layer_entry->passes[pass_index];
+                                        BLEND_STATE pass_blend = custom_blend;
+                                        if (pass.info.blend == ReplayEngine::Rendering::ShaderPassBlend::Alpha)
+                                            pass_blend = BLEND_STATE::ALPHA;
+                                        else if (pass.info.blend == ReplayEngine::Rendering::ShaderPassBlend::Additive)
+                                            pass_blend = BLEND_STATE::ADD;
+                                        else if (pass.info.blend == ReplayEngine::Rendering::ShaderPassBlend::Multiply)
+                                            pass_blend = BLEND_STATE::MULTIPLY;
+                                        immediate_context->OMSetBlendState(
+                                            blend_states[(size_t)pass_blend].Get(), nullptr, 0xFFFFFFFF);
+                                        if (ID3D11PixelShader* pass_ps =
+                                            material_gpu_binder.ResolvePassPixelShader(
+                                                device.Get(), shader_library.Catalog(),
+                                                layer_binding, pass_index))
+                                        {
+                                            scene_mesh->render(immediate_context.Get(), item.world, white,
+                                                item_keyframe, pass_ps, nullptr, nullptr, true, false);
+                                        }
+                                    }
+                                }
+                            }
+                            material_gpu_binder.Unbind(immediate_context.Get());
+                        }
+                        continue;
+                    }
+
+                    BLEND_STATE blend = BLEND_STATE::ALPHA;
+                    if (layer.blend == ReplayEngine::Rendering::ShaderLayerBlend::Additive)
+                        blend = BLEND_STATE::ADD;
+                    else if (layer.blend == ReplayEngine::Rendering::ShaderLayerBlend::Multiply)
+                        blend = BLEND_STATE::MULTIPLY;
+                    immediate_context->OMSetBlendState(
+                        blend_states[(size_t)blend].Get(), nullptr, 0xFFFFFFFF);
+                    immediate_context->RSSetState(rasterizer_states[(size_t)(
+                        layer.type == ReplayEngine::Rendering::ShaderLayerType::Wireframe
+                            ? RASTER_STATE::WIREFRAME_CULL_NONE : RASTER_STATE::CULL_NONE)].Get());
+
+                    ID3D11PixelShader* layer_ps = skinned_mesh_unlit_ps.Get();
+                    using ReplayEngine::Rendering::ShaderLayerType;
+                    switch (layer.type)
+                    {
+                    case ShaderLayerType::Pbr: layer_ps = pbr.skinned_mesh_ps(); break;
+                    case ShaderLayerType::Toon: layer_ps = toon.skinned_mesh_ps(); break;
+                    case ShaderLayerType::Pixelate:
+                        bind_pixelate_settings(layer); layer_ps = object_pixelate_ps.Get(); break;
+                    case ShaderLayerType::StylizedCharacter:
+                        layer_ps = skinned_stylized_character_ps.Get(); break;
+                    default: break;
+                    }
+                    DirectX::XMFLOAT4 layer_tint = layer.tint;
+                    layer_tint.w *= layer.opacity;
+                    scene_mesh->render(immediate_context.Get(), item.world, layer_tint,
+                        item_keyframe, layer_ps, nullptr, nullptr, true, false);
+                }
+            }
+            if (item.outline && !outline_drawn)
+            {
+                immediate_context->OMSetBlendState(
+                    blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
+                toon.bind_outline_pass(immediate_context.Get(), true);
+                scene_mesh->render(immediate_context.Get(), item.world, item.tint,
+                    item_keyframe, toon.outline_ps(), toon.skinned_outline_vs_.Get(),
+                    toon.skinned_outline_il_.Get(), true, false);
+            }
+
+            immediate_context->OMSetBlendState(
+                blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
+            if (item.double_sided || item.material_binding.layers != nullptr || item.outline)
                 immediate_context->RSSetState(
                     rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
         }
@@ -815,6 +1164,28 @@ void framework::render(float elapsed_time)
     // ドライバー任せの競合解消を避けるために明示的に解除する。
     ID3D11ShaderResourceView* null_post_srvs[2]{};
     immediate_context->PSSetShaderResources(0, _countof(null_post_srvs), null_post_srvs);
+
+    ReplayEngine::UI::UILayout::Resolve(active_object_scene(),
+        viewport.Width, viewport.Height);
+    ReplayEngine::UI::UIRenderer::RenderStates ui_states{};
+    ui_states.depth_disabled =
+        depth_stencil_states[(size_t)DEPTH_STATE::ZT_OFF_ZW_OFF].Get();
+    ui_states.rasterizer =
+        rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get();
+    ui_states.rasterizer_scissor =
+        rasterizer_states[(size_t)RASTER_STATE::SCISSOR].Get();
+    ui_states.blend_alpha =
+        blend_states[(size_t)BLEND_STATE::ALPHA].Get();
+    ui_states.blend_add =
+        blend_states[(size_t)BLEND_STATE::ADD].Get();
+    ui_states.blend_multiply =
+        blend_states[(size_t)BLEND_STATE::MULTIPLY].Get();
+    ui_states.blend_screen =
+        blend_states[(size_t)BLEND_STATE::SCREEN].Get();
+    ui_states.sampler =
+        sampler_states[(size_t)SAMPLER_STATE::LINEAR].Get();
+    ui_renderer.Render(immediate_context.Get(), active_object_scene(),
+        &asset_database, ui_font_atlas, viewport.Width, viewport.Height, ui_states);
 
 #ifdef USE_IMGUI
     // update()でNewFrameを通したフレームだけ描く。ロード完了フレームのように

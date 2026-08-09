@@ -21,7 +21,10 @@ namespace ReplayEngine::Assets
         //
         // 必ず末尾へ足すこと。値は .replaydb へ整数として書かれているので、
         // 途中へ挿入すると既存の Asset の種別が別のものへ化ける。化けました
-        Script
+        Script,
+
+        // .replaysceneflow。既存値を壊さないよう必ず末尾。
+        SceneFlow
     };
 
     struct AssetCacheEntry

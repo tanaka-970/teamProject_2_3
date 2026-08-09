@@ -1,4 +1,4 @@
-﻿#include "framework.h"
+#include "framework.h"
 #include "shader.h"
 #include "texture.h"
 #include "skinned_mesh.h"
@@ -11,6 +11,13 @@ Microsoft::WRL::ComPtr<ID3D11Debug> framework::acquire_d3d11_debug() const noexc
     Microsoft::WRL::ComPtr<ID3D11Debug> debug;
     if (device) device.As(&debug);
     return debug;
+}
+
+Microsoft::WRL::ComPtr<ID3D11InfoQueue> framework::acquire_d3d11_info_queue() const noexcept
+{
+    Microsoft::WRL::ComPtr<ID3D11InfoQueue> info_queue;
+    if (device) device.As(&info_queue);
+    return info_queue;
 }
 
 bool framework::is_fullscreen() const
@@ -115,6 +122,15 @@ bool framework::resize_back_buffers(UINT width, UINT height)
     const bool deferred_ready = deferred.initialize(device.Get(), width, height);
     enable_deferred = deferred_requested && deferred_ready;
 
+    // These passes own textures whose dimensions must exactly follow the current
+    // render size.  Leaving their startup-size resources alive after ResizeBuffers
+    // makes SSR copy a 1920x1080 lit texture into a 1600x900 history texture and
+    // D3D11 reports COPYRESOURCE_INVALIDSOURCE every frame.
+    ssao_pass.Initialize(device.Get(), width, height);
+    ssr_pass.Initialize(device.Get(), width, height);
+    taa_pass.Initialize(device.Get(), width, height);
+    tiled_deferred.Initialize(device.Get(), width, height);
+
     client_width = width;
     client_height = height;
     if (game_scene)
@@ -151,6 +167,7 @@ bool framework::uninitialize()
     //    Renderer Component が握っているメッシュ参照はここで切れる。
     object_runtime_scenes.ResetToEmptyWorld();
     object_scene.Clear();
+    object_audio_system.Shutdown();
 
     // 2) LoadingScene の Task はモデル Cache へ書き込むため、
     //    Cache 解放より先に停止・join する。
@@ -163,14 +180,30 @@ bool framework::uninitialize()
     // 4) 衝突用の Cook データ。参照が 0 になったものを表から外す。
     object_collision_cook_cache.Collect();
 
-    // 5) テクスチャキャッシュ (SRV)。
+    // 5) Material Catalog が作った PixelShader / 既定Texture / Asset Texture。
+    //    Device の Live Object Report より先に必ず解放する。
+    material_gpu_binder.Clear();
+
+    // 5.5) UI Renderer / FontAtlas。内部の SRV を texture cache より先に手放す。
+    ui_renderer.Release();
+    ui_font_atlas.Release();
+
+    // 6) 旧テクスチャキャッシュ (SRV)。
     //    static なので明示的に呼ばないと Report まで生き残る。
     release_all_textures();
 
-    // 6) GPU 統計の Query Pool。同じく static。
+    // 7) GPU 統計の Query Pool。同じく static。
     ReplayEngine::Rendering::Stats().Release();
 
-    // 7) パイプラインに残ったバインドを外してから、積んだコマンドを流し切る。
+    // 7.5) Compute / Deferred が持つ UAV と DepthStencilState。
+    //      この 2 つは initialize() の作り直しでリセット対象から漏れており、
+    //      resize のたびに前の実体が孤児になっていた。
+    //      作り直し側は release() を通すよう直したので、
+    //      ここでは終了時の最後の所有参照を落とす。
+    particles.release();
+    deferred.release();
+
+    // 8) パイプラインに残ったバインドを外してから、積んだコマンドを流し切る。
     //    参照カウントを持っているのはバインド状態も同じなので、
     //    ClearState を通さないと最後の描画で使ったリソースが残る。
     if (immediate_context)
@@ -182,4 +215,3 @@ bool framework::uninitialize()
 }
 
 framework::~framework() {}
-

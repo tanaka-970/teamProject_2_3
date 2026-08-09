@@ -45,9 +45,8 @@ namespace ReplayEngine::Rendering
         //     b10 lights_common / pixelate  b11 stylized_character
         //     b12 ssao / taa / tiled        b13 ssr
         //
-        //   b9 は今 material_override_constants（メッシュ単位の上書き）に
-        //   使われている。役割が同じなので、フェーズ 6 でそれを
-        //   自動生成の cbuffer に置き換えて 1 本化する。
+        //   b9 は旧 material_override_constants と同じ役割で、
+        //   Phase 6 で自動生成 Material cbuffer の共通レジスタとして接続済み。
         //   別の番号にすると、同じ「マテリアル定数」が 2 か所へ散る。
         static constexpr std::uint32_t material_constant_register = 9;
 

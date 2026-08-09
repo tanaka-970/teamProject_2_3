@@ -25,11 +25,52 @@ namespace ReplayEngine::Rendering
         }
     }
 
+    const char* ToString(ShaderPassBlend blend) noexcept
+    {
+        switch (blend)
+        {
+        case ShaderPassBlend::Inherit:  return "inherit";
+        case ShaderPassBlend::Alpha:    return "alpha";
+        case ShaderPassBlend::Additive: return "additive";
+        case ShaderPassBlend::Multiply: return "multiply";
+        default:                        return "inherit";
+        }
+    }
+
+    bool TryParseShaderPassBlend(std::string_view text, ShaderPassBlend& out) noexcept
+    {
+        if (text == "inherit")  { out = ShaderPassBlend::Inherit;  return true; }
+        if (text == "alpha")    { out = ShaderPassBlend::Alpha;    return true; }
+        if (text == "additive") { out = ShaderPassBlend::Additive; return true; }
+        if (text == "multiply") { out = ShaderPassBlend::Multiply; return true; }
+        return false;
+    }
+
     bool TryParseShaderDomain(std::string_view text, ShaderDomain& out) noexcept
     {
         if (text == "surface")     { out = ShaderDomain::Surface;     return true; }
         if (text == "layer")       { out = ShaderDomain::Layer;       return true; }
         if (text == "postprocess") { out = ShaderDomain::PostProcess; return true; }
+        return false;
+    }
+
+    const char* ToString(ShaderLightingModel model) noexcept
+    {
+        switch (model)
+        {
+        case ShaderLightingModel::Pbr:   return "pbr";
+        case ShaderLightingModel::Toon:  return "toon";
+        case ShaderLightingModel::Unlit: return "unlit";
+        default:                         return "unknown";
+        }
+    }
+
+    bool TryParseShaderLightingModel(std::string_view text,
+        ShaderLightingModel& out) noexcept
+    {
+        if (text == "pbr")   { out = ShaderLightingModel::Pbr;   return true; }
+        if (text == "toon")  { out = ShaderLightingModel::Toon;  return true; }
+        if (text == "unlit") { out = ShaderLightingModel::Unlit; return true; }
         return false;
     }
 

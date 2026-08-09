@@ -29,6 +29,7 @@ namespace ReplayEngine::Components
         case ColliderShape::Box:     return "Box Collider";
         case ColliderShape::Capsule: return "Capsule Collider";
         case ColliderShape::Mesh:    return "Mesh Collider";
+        case ColliderShape::Landscape: return "Landscape Collider";
         }
         return "Collider";
     }

@@ -5,6 +5,7 @@
 #include "../../Scene/Runtime/Scene.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace ReplayEngine::Editor
 {
@@ -44,7 +45,16 @@ namespace ReplayEngine::Editor
             //    これで「Bounds がまったく無い GameObject」でもフォーカスが成立する。
             if (!found_collider_bounds)
             {
-                bounds.Encapsulate(object.GetTransform().WorldPosition());
+                // Pivot 1点だけだと矩形選択が「見えている物体」ではなく原点判定に
+                // なってしまう。Renderer の実メッシュ Bounds は依存方向上ここから取れないため、
+                // Transform の WorldScale を最低限の編集 Bounds として使う。
+                const XMFLOAT3 center = object.GetTransform().WorldPosition();
+                const XMFLOAT3 scale = object.GetTransform().WorldScale();
+                const float ex = (std::max)(0.25f, std::abs(scale.x) * 0.5f);
+                const float ey = (std::max)(0.25f, std::abs(scale.y) * 0.5f);
+                const float ez = (std::max)(0.25f, std::abs(scale.z) * 0.5f);
+                bounds.Encapsulate({ center.x - ex, center.y - ey, center.z - ez },
+                    { center.x + ex, center.y + ey, center.z + ez });
             }
 
             // 3) 子孫も含める。

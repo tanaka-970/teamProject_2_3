@@ -1,19 +1,26 @@
-﻿#include <time.h>
+#include <time.h>
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "framework.h"
 #include "../../../RePlayEngine/Assets/AssetDatabase.h"
+#include "../../../RePlayEngine/Components/Audio/AudioListenerComponent.h"
+#include "../../../RePlayEngine/Components/Audio/AudioSourceComponent.h"
+#include "../../../RePlayEngine/Components/Camera/CameraComponent.h"
 #include "../../../RePlayEngine/Components/Camera/CameraTargetComponent.h"
+#include "../../../RePlayEngine/Components/Camera/FollowTargetComponent.h"
 #include "../../../RePlayEngine/Components/Gameplay/CharacterMotorComponent.h"
 #include "../../../RePlayEngine/Components/Gameplay/StageGameplayComponents.h"
 #include "../../../RePlayEngine/Components/Rendering/LightComponents.h"
@@ -26,11 +33,22 @@
 #include "../../../RePlayEngine/Landscape/LandscapeData.h"
 #include "../../../RePlayEngine/Landscape/LandscapeEditorTool.h"
 #include "../../../RePlayEngine/Landscape/LandscapeRenderer.h"
+#include "../../../RePlayEngine/Components/Landscape/LandscapeComponent.h"
+#include "../../../RePlayEngine/Components/Landscape/LandscapeRendererComponent.h"
+#include "../../../RePlayEngine/Components/Landscape/LandscapeColliderComponent.h"
 #include "../../../RePlayEngine/Object/Registry/BuiltInComponents.h"
 #include "../../../RePlayEngine/Reflection/Registry/PropertyRegistry.h"
 #include "../../../RePlayEngine/Rendering/Materials/MaterialAsset.h"
 #include "../../../RePlayEngine/Rendering/Shaders/ShaderAssetValidation.h"
 #include "../../../RePlayEngine/Rendering/Shaders/ShaderBuiltInValidation.h"
+#include "../../../RePlayEngine/Rendering/Shaders/ShaderMaterialValidation.h"
+#include "../../../RePlayEngine/Rendering/Shaders/ShaderRenderValidation.h"
+#include "../../../RePlayEngine/Rendering/Shaders/ShaderTextureValidation.h"
+#include "../../../RePlayEngine/Rendering/Shaders/ShaderEditorValidation.h"
+#include "../../../RePlayEngine/Rendering/Shaders/ShaderLightingValidation.h"
+#include "../../../RePlayEngine/Rendering/Shaders/ShaderLayerValidation.h"
+#include "../../../RePlayEngine/Rendering/Shaders/ShaderPassValidation.h"
+#include "../../../RePlayEngine/Rendering/ShaderComposer/ShaderComposerValidation.h"
 #include "../../../RePlayEngine/Rendering/Shaders/ShaderCompileValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/BehaviourValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/HandleValidation.h"
@@ -88,6 +106,246 @@ namespace
         if (!(arguments >> command) || command != "--smoke-test") return 0;
         if (!(arguments >> frames)) frames = 120;
         return static_cast<std::uint32_t>((std::clamp)(frames, 30, 3600));
+    }
+
+    const char* D3D11MessageCategoryName(D3D11_MESSAGE_CATEGORY category) noexcept
+    {
+        switch (category)
+        {
+        case D3D11_MESSAGE_CATEGORY_APPLICATION_DEFINED: return "APPLICATION_DEFINED";
+        case D3D11_MESSAGE_CATEGORY_MISCELLANEOUS: return "MISCELLANEOUS";
+        case D3D11_MESSAGE_CATEGORY_INITIALIZATION: return "INITIALIZATION";
+        case D3D11_MESSAGE_CATEGORY_CLEANUP: return "CLEANUP";
+        case D3D11_MESSAGE_CATEGORY_COMPILATION: return "COMPILATION";
+        case D3D11_MESSAGE_CATEGORY_STATE_CREATION: return "STATE_CREATION";
+        case D3D11_MESSAGE_CATEGORY_STATE_SETTING: return "STATE_SETTING";
+        case D3D11_MESSAGE_CATEGORY_STATE_GETTING: return "STATE_GETTING";
+        case D3D11_MESSAGE_CATEGORY_RESOURCE_MANIPULATION: return "RESOURCE_MANIPULATION";
+        case D3D11_MESSAGE_CATEGORY_EXECUTION: return "EXECUTION";
+        case D3D11_MESSAGE_CATEGORY_SHADER: return "SHADER";
+        default: return "UNKNOWN_CATEGORY";
+        }
+    }
+
+    const char* D3D11MessageSeverityName(D3D11_MESSAGE_SEVERITY severity) noexcept
+    {
+        switch (severity)
+        {
+        case D3D11_MESSAGE_SEVERITY_CORRUPTION: return "CORRUPTION";
+        case D3D11_MESSAGE_SEVERITY_ERROR: return "ERROR";
+        case D3D11_MESSAGE_SEVERITY_WARNING: return "WARNING";
+        case D3D11_MESSAGE_SEVERITY_INFO: return "INFO";
+        case D3D11_MESSAGE_SEVERITY_MESSAGE: return "MESSAGE";
+        default: return "UNKNOWN_SEVERITY";
+        }
+    }
+
+    bool TryParseUnsigned(const std::string& text, std::size_t offset,
+        std::uint64_t& value) noexcept
+    {
+        while (offset < text.size() &&
+            !std::isdigit(static_cast<unsigned char>(text[offset])))
+        {
+            ++offset;
+        }
+        if (offset >= text.size()) return false;
+
+        std::uint64_t parsed = 0;
+        while (offset < text.size() &&
+            std::isdigit(static_cast<unsigned char>(text[offset])))
+        {
+            parsed = parsed * 10u +
+                static_cast<std::uint64_t>(text[offset] - '0');
+            ++offset;
+        }
+        value = parsed;
+        return true;
+    }
+
+    struct D3D11StoredMessage
+    {
+        D3D11_MESSAGE_CATEGORY category{};
+        D3D11_MESSAGE_SEVERITY severity{};
+        D3D11_MESSAGE_ID id{};
+        std::string description;
+    };
+
+    struct D3D11LiveObjectFileSummary
+    {
+        std::uint64_t stored_messages = 0;
+        std::uint64_t readable_messages = 0;
+        std::uint64_t live_object_detail_lines = 0;
+        std::uint64_t live_object_summary_count = 0;
+        bool live_object_summary_found = false;
+        std::uint64_t live_device_lines = 0;
+        std::uint64_t live_device_refcount = 0;
+        bool live_device_refcount_found = false;
+        std::uint64_t live_context_lines = 0;
+        std::uint64_t live_debug_interface_lines = 0;
+    };
+
+    void AccumulateD3D11LiveObjectSummary(const std::string& description,
+        D3D11LiveObjectFileSummary& summary)
+    {
+        if (description.find("Live ID3D11Device") != std::string::npos)
+        {
+            ++summary.live_device_lines;
+            const std::size_t refcount_position = description.find("Refcount:");
+            std::uint64_t parsed_refcount = 0;
+            if (refcount_position != std::string::npos &&
+                TryParseUnsigned(description, refcount_position + 9u,
+                    parsed_refcount))
+            {
+                summary.live_device_refcount = parsed_refcount;
+                summary.live_device_refcount_found = true;
+            }
+            return;
+        }
+
+        if (description.find("Live ID3D11DeviceContext") != std::string::npos)
+        {
+            ++summary.live_context_lines;
+            return;
+        }
+
+        if (description.find("Live ID3D11Debug") != std::string::npos ||
+            description.find("Live ID3D11InfoQueue") != std::string::npos)
+        {
+            ++summary.live_debug_interface_lines;
+            return;
+        }
+
+        const bool typed_live_object_line =
+            description.find("Live ") != std::string::npos &&
+            description.find(" at ") != std::string::npos &&
+            description.find("Refcount:") != std::string::npos;
+        if (description.find("Live Object at") != std::string::npos ||
+            typed_live_object_line)
+        {
+            ++summary.live_object_detail_lines;
+            return;
+        }
+
+        if (description.find("Refcount") != std::string::npos)
+        {
+            return;
+        }
+
+        const std::size_t live_position = description.find("Live");
+        const std::size_t object_position = description.find("Object");
+        const std::size_t colon_position =
+            object_position != std::string::npos ?
+            description.find(':', object_position) : std::string::npos;
+        if (live_position == std::string::npos ||
+            object_position == std::string::npos ||
+            colon_position == std::string::npos)
+        {
+            return;
+        }
+
+        std::uint64_t parsed_count = 0;
+        if (TryParseUnsigned(description, colon_position + 1u, parsed_count))
+        {
+            summary.live_object_summary_count = parsed_count;
+            summary.live_object_summary_found = true;
+        }
+    }
+
+    D3D11LiveObjectFileSummary WriteD3D11LiveObjectReportFile(
+        ID3D11InfoQueue* info_queue, bool report_available,
+        HRESULT report_result)
+    {
+        const std::filesystem::path validation_folder =
+            std::filesystem::path("Saved") / "Validation";
+        std::error_code directory_error;
+        std::filesystem::create_directories(validation_folder, directory_error);
+
+        D3D11LiveObjectFileSummary summary{};
+        std::vector<D3D11StoredMessage> messages;
+        HRESULT queue_read_result = info_queue != nullptr ? S_OK : E_NOINTERFACE;
+        if (info_queue)
+        {
+            summary.stored_messages =
+                info_queue->GetNumStoredMessagesAllowedByRetrievalFilter();
+            messages.reserve(static_cast<std::size_t>(
+                (std::min)(summary.stored_messages, static_cast<std::uint64_t>(4096))));
+            for (std::uint64_t index = 0; index < summary.stored_messages; ++index)
+            {
+                SIZE_T message_size = 0;
+                queue_read_result = info_queue->GetMessage(index, nullptr, &message_size);
+                if (FAILED(queue_read_result) || message_size == 0) break;
+
+                std::vector<char> storage(message_size);
+                D3D11_MESSAGE* message =
+                    reinterpret_cast<D3D11_MESSAGE*>(storage.data());
+                queue_read_result = info_queue->GetMessage(index, message, &message_size);
+                if (FAILED(queue_read_result)) break;
+
+                D3D11StoredMessage stored{};
+                stored.category = message->Category;
+                stored.severity = message->Severity;
+                stored.id = message->ID;
+                if (message->pDescription != nullptr &&
+                    message->DescriptionByteLength > 0)
+                {
+                    stored.description.assign(message->pDescription,
+                        message->DescriptionByteLength);
+                    while (!stored.description.empty() &&
+                        stored.description.back() == '\0')
+                    {
+                        stored.description.pop_back();
+                    }
+                }
+                AccumulateD3D11LiveObjectSummary(stored.description, summary);
+                messages.push_back(std::move(stored));
+                ++summary.readable_messages;
+            }
+        }
+
+        const std::filesystem::path report_path =
+            validation_folder / "D3D11LiveObjects.txt";
+        std::ofstream report(report_path, std::ios::binary | std::ios::trunc);
+        if (report)
+        {
+            report << "REPLAY_D3D11_LIVE_OBJECT_REPORT 1\n";
+            report << "D3D11_DEBUG_AVAILABLE " << (report_available ? 1 : 0) << '\n';
+            report << "D3D11_INFO_QUEUE_AVAILABLE " << (info_queue != nullptr ? 1 : 0) << '\n';
+            report << "REPORT_HRESULT 0x" << std::hex << std::setw(8)
+                << std::setfill('0') << static_cast<unsigned long>(report_result)
+                << std::dec << std::setfill(' ') << '\n';
+            report << "INFO_QUEUE_READ_HRESULT 0x" << std::hex << std::setw(8)
+                << std::setfill('0') << static_cast<unsigned long>(queue_read_result)
+                << std::dec << std::setfill(' ') << '\n';
+            report << "INFO_QUEUE_STORED_MESSAGES " << summary.stored_messages << '\n';
+            report << "INFO_QUEUE_READABLE_MESSAGES " << summary.readable_messages << '\n';
+            report << "LIVE_OBJECT_DETAIL_LINES " << summary.live_object_detail_lines << '\n';
+            report << "LIVE_OBJECT_SUMMARY_COUNT ";
+            if (summary.live_object_summary_found) report << summary.live_object_summary_count;
+            else report << "UNKNOWN";
+            report << '\n';
+            report << "LIVE_DEVICE_LINES " << summary.live_device_lines << '\n';
+            report << "LIVE_DEVICE_REFCOUNT ";
+            if (summary.live_device_refcount_found) report << summary.live_device_refcount;
+            else report << "UNKNOWN";
+            report << '\n';
+            report << "LIVE_CONTEXT_LINES " << summary.live_context_lines << '\n';
+            report << "LIVE_DEBUG_INTERFACE_LINES "
+                << summary.live_debug_interface_lines;
+            report << "\n\n";
+
+            for (std::size_t index = 0; index < messages.size(); ++index)
+            {
+                const D3D11StoredMessage& message = messages[index];
+                report << '[' << index << "] "
+                    << D3D11MessageSeverityName(message.severity) << ' '
+                    << D3D11MessageCategoryName(message.category)
+                    << " #" << static_cast<int>(message.id) << '\n'
+                    << message.description << "\n\n";
+            }
+        }
+
+        if (info_queue) info_queue->ClearStoredMessages();
+        return summary;
     }
 
     int RunHeadlessMaterialValidation(const char* command_line)
@@ -330,84 +588,214 @@ namespace
 
         using namespace ReplayEngine::Landscape;
         LandscapeData data;
-        if (!data.Initialize(65, 65, 1.0f))
+        if (!data.Initialize(17, 17, 1.0f))
         {
-            std::fprintf(stderr, "Landscape initialization failed\n");
+            std::fprintf(stderr, "Landscape v2 initialization failed\n");
             return 20;
+        }
+        if (data.VertexCount() != 289 || data.FaceCount() != 512 || data.Chunks().size() != 1)
+        {
+            std::fprintf(stderr, "Landscape v2 base topology mismatch: V=%zu F=%zu chunks=%zu\n",
+                data.VertexCount(), data.FaceCount(), data.Chunks().size());
+            return 21;
         }
 
         LandscapeRenderer renderer;
         LandscapeCollision collision;
-        const int initial_render_chunks = renderer.UpdateDirtyChunks(data);
-        const int initial_collision_chunks = collision.UpdateDirtyChunks(data);
-        if (initial_render_chunks != 4 || initial_collision_chunks != 4)
+        if (renderer.UpdateDirtyChunks(data) != 1 || collision.UpdateDirtyChunks(data) != 1)
         {
-            std::fprintf(stderr, "Initial chunk build failed: render=%d collision=%d\n",
-                initial_render_chunks, initial_collision_chunks);
-            return 21;
+            std::fprintf(stderr, "Landscape v2 initial render/collision build failed\n");
+            return 22;
         }
 
         LandscapeBrush brush;
-        brush.radius = 3.0f;
+        brush.radius = 2.5f;
         brush.strength = 2.0f;
-        brush.falloff = 0.5f;
+        brush.falloff = 0.35f;
+        brush.direction = LandscapeSculptDirection::LocalY;
         LandscapeEditorTool tool;
         if (!tool.BeginStroke(data, LandscapeBrushMode::Raise, brush) ||
-            !tool.ApplySample(8.0f, 8.0f, 1.0f))
+            !tool.ApplySample({ 8.0f, 0.0f, 8.0f }, 1.0f))
         {
-            std::fprintf(stderr, "Landscape brush stroke failed\n");
-            return 22;
+            std::fprintf(stderr, "Landscape v2 sculpt failed\n");
+            return 23;
         }
         std::unique_ptr<LandscapeUndoCommand> stroke = tool.EndStroke();
         const float raised_height = data.HeightAt(8, 8);
         if (stroke == nullptr || stroke->ChangedSampleCount() == 0 || raised_height <= 0.0f)
         {
-            std::fprintf(stderr, "Landscape stroke produced no undoable samples\n");
-            return 23;
-        }
-
-        const int edited_render_chunks = renderer.UpdateDirtyChunks(data);
-        const int edited_collision_chunks = collision.UpdateDirtyChunks(data);
-        if (edited_render_chunks != 1 || edited_collision_chunks != 1)
-        {
-            std::fprintf(stderr, "Landscape dirty update was not localized: render=%d collision=%d\n",
-                edited_render_chunks, edited_collision_chunks);
+            std::fprintf(stderr, "Landscape v2 sculpt produced no undo data\n");
             return 24;
         }
-
         stroke->Undo(data);
         if (std::fabs(data.HeightAt(8, 8)) > 0.00001f)
         {
-            std::fprintf(stderr, "Landscape undo failed\n");
+            std::fprintf(stderr, "Landscape v2 sculpt undo failed\n");
             return 25;
         }
         stroke->Redo(data);
         if (std::fabs(data.HeightAt(8, 8) - raised_height) > 0.00001f)
         {
-            std::fprintf(stderr, "Landscape redo failed\n");
+            std::fprintf(stderr, "Landscape v2 sculpt redo failed\n");
             return 26;
         }
 
-        const std::filesystem::path output_path = std::filesystem::path("Saved") /
-            "Validation" / "LandscapeFoundation.replaylandscape";
-        std::string error;
-        if (!data.Save(output_path, error))
+        // Arbitrary topology: Subdivide / Inset / Extrude / Cut / Tunnel.
+        const std::size_t base_faces = data.FaceCount();
+        if (!data.SubdivideFace(0) || data.FaceCount() != base_faces + 3)
         {
-            std::fprintf(stderr, "Landscape save failed: %s\n", error.c_str());
+            std::fprintf(stderr, "Landscape face subdivide failed\n");
             return 27;
+        }
+        if (!data.InsetFace(1, 0.25f) || !data.ExtrudeFace(2, 1.25f))
+        {
+            std::fprintf(stderr, "Landscape inset/extrude failed\n");
+            return 28;
+        }
+        const std::size_t before_cut = data.FaceCount();
+        if (!data.DeleteFace(3) || data.FaceCount() + 1 != before_cut)
+        {
+            std::fprintf(stderr, "Landscape Cut Hole failed\n");
+            return 29;
+        }
+
+        // Edge Bridge は Face 操作とは別 fresh mesh で、離れた2 edgeを接続できることを確認。
+        LandscapeData bridge;
+        if (!bridge.Initialize(3, 3, 1.0f) ||
+            !bridge.BridgeEdges(0, 1, 3, 4) || bridge.FaceCount() != 10)
+        {
+            std::fprintf(stderr, "Landscape Edge Bridge failed\n");
+            return 30;
+        }
+
+        // 洞窟/Tunnel は別の fresh grid で検証。入口 face を消し、同一 XZ 制約を持たない
+        // arbitrary mesh が生成されることを vertex/face 増加と 3D raycast で確認する。
+        LandscapeData tunnel;
+        if (!tunnel.Initialize(5, 5, 1.0f)) return 31;
+        const std::size_t tunnel_vertices_before = tunnel.VertexCount();
+        const std::size_t tunnel_faces_before = tunnel.FaceCount();
+        if (!tunnel.CreateTunnelFromFace(12, 4.0f, 4, 0.8f) ||
+            tunnel.VertexCount() <= tunnel_vertices_before ||
+            tunnel.FaceCount() <= tunnel_faces_before)
+        {
+            std::fprintf(stderr, "Landscape Cave/Tunnel topology generation failed\n");
+            return 32;
+        }
+        bool has_below_surface = false;
+        for (const LandscapeVertex& vertex : tunnel.Vertices())
+        {
+            if (vertex.position.y < -0.1f) { has_below_surface = true; break; }
+        }
+        if (!has_below_surface)
+        {
+            std::fprintf(stderr, "Landscape Tunnel did not create internal 3D geometry\n");
+            return 33;
+        }
+
+        LandscapeRayHit ray_hit{};
+        if (!tunnel.Raycast({ 2.0f, 5.0f, 2.0f }, { 0.0f, -1.0f, 0.0f },
+            100.0f, ray_hit) || !ray_hit.hit)
+        {
+            std::fprintf(stderr, "Landscape arbitrary mesh raycast failed\n");
+            return 34;
+        }
+
+        // Renderer/Collision cache は topology revision 後も更新できる。
+        LandscapeRenderer topology_renderer;
+        LandscapeCollision topology_collision;
+        if (topology_renderer.UpdateDirtyChunks(tunnel) != 1 ||
+            topology_collision.UpdateDirtyChunks(tunnel) != 1)
+        {
+            std::fprintf(stderr, "Landscape topology render/collision rebuild failed\n");
+            return 35;
+        }
+
+        const std::filesystem::path validation_folder =
+            std::filesystem::path("Saved") / "Validation";
+        std::error_code directory_error;
+        std::filesystem::create_directories(validation_folder, directory_error);
+        const std::filesystem::path output_path =
+            validation_folder / "LandscapeV2.replaylandscape";
+        std::string error;
+        if (!tunnel.Save(output_path, error))
+        {
+            std::fprintf(stderr, "Landscape v2 save failed: %s\n", error.c_str());
+            return 36;
         }
         LandscapeData loaded;
         if (!LandscapeData::Load(output_path, loaded, error) ||
-            loaded.Width() != data.Width() || loaded.Height() != data.Height() ||
-            std::fabs(loaded.HeightAt(8, 8) - raised_height) > 0.00001f)
+            loaded.VertexCount() != tunnel.VertexCount() ||
+            loaded.FaceCount() != tunnel.FaceCount())
         {
-            std::fprintf(stderr, "Landscape reload verification failed: %s\n", error.c_str());
-            return 28;
+            std::fprintf(stderr, "Landscape v2 reload failed: %s\n", error.c_str());
+            return 37;
+        }
+
+        // v1 height-field file migration -> v2 arbitrary mesh.
+        const std::filesystem::path v1_path = validation_folder / "LandscapeV1Migration.replaylandscape";
+        {
+            std::ofstream legacy(v1_path, std::ios::binary | std::ios::trunc);
+            legacy << "REPLAY_LANDSCAPE 1\n3 3 1\n";
+            for (int index = 0; index < 9; ++index)
+                legacy << (index == 4 ? 2.0f : 0.0f) << (index + 1 == 9 ? '\n' : ' ');
+        }
+        LandscapeData migrated;
+        if (!LandscapeData::Load(v1_path, migrated, error) ||
+            migrated.VertexCount() != 9 || migrated.FaceCount() != 8 ||
+            std::fabs(migrated.HeightAt(1, 1) - 2.0f) > 0.00001f)
+        {
+            std::fprintf(stderr, "Landscape v1 -> v2 migration failed: %s\n", error.c_str());
+            return 38;
+        }
+
+        // Component-oriented Scene round trip. Ground is an ordinary GameObject with
+        // Landscape + Renderer + Collider; custom mesh data must survive SceneData.
+        ReplayEngine::Core::RegisterBuiltInComponents();
+        ReplayEngine::Scene::Scene scene("LandscapeComponentValidation");
+        auto* ground = scene.CreateGameObject("Ground");
+        if (ground == nullptr) return 39;
+        auto* component = ground->AddComponent<ReplayEngine::Components::LandscapeComponent>();
+        auto* render_component = ground->AddComponent<ReplayEngine::Components::LandscapeRendererComponent>();
+        auto* collider_component = ground->AddComponent<ReplayEngine::Components::LandscapeColliderComponent>();
+        if (component == nullptr || render_component == nullptr || collider_component == nullptr ||
+            !component->Data().InitializeMesh(loaded.Vertices(), loaded.Indices(),
+                loaded.CellSize(), loaded.Width(), loaded.Height()))
+        {
+            std::fprintf(stderr, "Landscape Component composition failed\n");
+            return 40;
+        }
+        collider_component->RefreshGeometryIfChanged();
+        if (!collider_component->ReadyForQuery() || collider_component->Cooked() == nullptr ||
+            !collider_component->Cooked()->Valid())
+        {
+            std::fprintf(stderr, "Landscape Collider spatial cook failed\n");
+            return 41;
+        }
+        namespace Serialization = ReplayEngine::Scene::Serialization;
+        Serialization::SceneData scene_data;
+        Serialization::CaptureScene(scene, scene_data);
+        ReplayEngine::Scene::Scene restored("RestoredLandscape");
+        Serialization::SceneLoadReport report;
+        if (!Serialization::ApplySceneData(scene_data, restored, report))
+        {
+            std::fprintf(stderr, "Landscape SceneData apply failed\n");
+            return 42;
+        }
+        auto* restored_ground = restored.FindGameObjectByName("Ground");
+        auto* restored_landscape = restored_ground != nullptr
+            ? restored_ground->GetComponent<ReplayEngine::Components::LandscapeComponent>() : nullptr;
+        if (restored_landscape == nullptr ||
+            restored_landscape->Data().VertexCount() != loaded.VertexCount() ||
+            restored_landscape->Data().FaceCount() != loaded.FaceCount() ||
+            restored_ground->GetComponent<ReplayEngine::Components::LandscapeRendererComponent>() == nullptr ||
+            restored_ground->GetComponent<ReplayEngine::Components::LandscapeColliderComponent>() == nullptr)
+        {
+            std::fprintf(stderr, "Landscape Component Scene round-trip mismatch\n");
+            return 43;
         }
 
         std::fprintf(stderr,
-            "Landscape OK: %zu samples, %zu chunks, %zu edited samples, localized 1-chunk rebuild, undo/redo/save/reload OK\n",
-            data.SampleCount(), data.Chunks().size(), stroke->ChangedSampleCount());
+            "Landscape v2 OK: arbitrary mesh, sculpt+undo, topology+bridge, cave/tunnel, raycast, spatial collision cook, save/reload, v1 migration, Component Scene round-trip OK\n");
         return 0;
     }
 
@@ -679,13 +1067,75 @@ namespace
 
         const Core::ComponentTypeID camera_target_type =
             Components::CameraTargetComponent::StaticTypeID();
+        expect(Reflection::PropertyRegistry::Find(camera_target_type, "target_offset") != nullptr,
+            "CameraTargetComponent exposes target_offset");
+        expect(Reflection::PropertyRegistry::Find(camera_target_type, "look_at_offset") != nullptr,
+            "CameraTargetComponent exposes look_at_offset");
+        expect(Reflection::PropertyRegistry::Find(camera_target_type, "priority") != nullptr,
+            "CameraTargetComponent exposes priority");
         expect(Reflection::PropertyRegistry::Find(camera_target_type,
+            "field_of_view_degrees") == nullptr,
+            "CameraTargetComponent no longer owns field_of_view_degrees");
+        expect(Reflection::PropertyRegistry::Find(camera_target_type, "near_clip") == nullptr,
+            "CameraTargetComponent no longer owns near_clip");
+        expect(Reflection::PropertyRegistry::Find(camera_target_type, "far_clip") == nullptr,
+            "CameraTargetComponent no longer owns far_clip");
+        expect(Reflection::PropertyRegistry::Find(camera_target_type, "follow_distance") == nullptr,
+            "CameraTargetComponent no longer owns follow_distance");
+
+        const Core::ComponentTypeID camera_type =
+            Components::CameraComponent::StaticTypeID();
+        expect(Reflection::PropertyRegistry::Find(camera_type, "projection_mode") != nullptr,
+            "CameraComponent exposes projection_mode");
+        expect(Reflection::PropertyRegistry::Find(camera_type,
             "field_of_view_degrees") != nullptr,
-            "CameraTargetComponent exposes field_of_view_degrees");
-        expect(Reflection::PropertyRegistry::Find(camera_target_type, "near_clip") != nullptr,
-            "CameraTargetComponent exposes near_clip");
-        expect(Reflection::PropertyRegistry::Find(camera_target_type, "far_clip") != nullptr,
-            "CameraTargetComponent exposes far_clip");
+            "CameraComponent exposes field_of_view_degrees");
+        expect(Reflection::PropertyRegistry::Find(camera_type, "orthographic_size") != nullptr,
+            "CameraComponent exposes orthographic_size");
+        expect(Reflection::PropertyRegistry::Find(camera_type, "near_clip") != nullptr,
+            "CameraComponent exposes near_clip");
+        expect(Reflection::PropertyRegistry::Find(camera_type, "far_clip") != nullptr,
+            "CameraComponent exposes far_clip");
+        expect(Reflection::PropertyRegistry::Find(camera_type, "priority") != nullptr,
+            "CameraComponent exposes priority");
+        expect(Reflection::PropertyRegistry::Find(camera_type, "viewport_rect") != nullptr,
+            "CameraComponent exposes viewport_rect");
+
+        const Core::ComponentTypeID follow_type =
+            Components::FollowTargetComponent::StaticTypeID();
+        expect(Reflection::PropertyRegistry::Find(follow_type, "follow_distance") != nullptr,
+            "FollowTargetComponent exposes follow_distance");
+        expect(Reflection::PropertyRegistry::Find(follow_type, "follow_height") != nullptr,
+            "FollowTargetComponent exposes follow_height");
+        expect(Reflection::PropertyRegistry::Find(follow_type, "follow_lag") != nullptr,
+            "FollowTargetComponent exposes follow_lag");
+        expect(Reflection::PropertyRegistry::Find(follow_type,
+            "rotation_input_enabled") != nullptr,
+            "FollowTargetComponent exposes rotation_input_enabled");
+
+        const Core::ComponentTypeID listener_type =
+            Components::AudioListenerComponent::StaticTypeID();
+        expect(Reflection::PropertyRegistry::Find(listener_type, "priority") != nullptr,
+            "AudioListenerComponent exposes priority");
+
+        const Core::ComponentTypeID audio_source_type =
+            Components::AudioSourceComponent::StaticTypeID();
+        expect(Reflection::PropertyRegistry::Find(audio_source_type, "clip_path") != nullptr,
+            "AudioSourceComponent exposes clip_path");
+        expect(Reflection::PropertyRegistry::Find(audio_source_type, "loop") != nullptr,
+            "AudioSourceComponent exposes loop");
+        expect(Reflection::PropertyRegistry::Find(audio_source_type, "volume") != nullptr,
+            "AudioSourceComponent exposes volume");
+        expect(Reflection::PropertyRegistry::Find(audio_source_type, "pitch") != nullptr,
+            "AudioSourceComponent exposes pitch");
+        expect(Reflection::PropertyRegistry::Find(audio_source_type, "play_on_start") != nullptr,
+            "AudioSourceComponent exposes play_on_start");
+        expect(Reflection::PropertyRegistry::Find(audio_source_type, "spatial") != nullptr,
+            "AudioSourceComponent exposes spatial");
+        expect(Reflection::PropertyRegistry::Find(audio_source_type, "min_distance") != nullptr,
+            "AudioSourceComponent exposes min_distance");
+        expect(Reflection::PropertyRegistry::Find(audio_source_type, "max_distance") != nullptr,
+            "AudioSourceComponent exposes max_distance");
 
         Scene::Scene world("CameraComponentValidation");
         Core::GameObject* low = world.CreateGameObject("LowPriorityTarget");
@@ -729,14 +1179,58 @@ namespace
         selection = Components::ResolveCameraTargetSelection(world, low->ID());
         expect(!selection.Valid(), "no active camera target produces no selection");
 
-        SceneGame gameplay;
-        gameplay.Initialize(16.0f / 9.0f);
-        const DirectX::XMFLOAT4X4 default_projection =
-            gameplay.GetCamera().GetProjection();
+        Core::GameObject* camera_low = world.CreateGameObject("LowPriorityCamera");
+        Core::GameObject* camera_high = world.CreateGameObject("HighPriorityCamera");
+        expect(camera_low != nullptr && camera_high != nullptr,
+            "camera objects can be created");
+        if (camera_low == nullptr || camera_high == nullptr)
+        {
+            return first_failure != 0 ? first_failure : 862;
+        }
 
-        gameplay.ApplyCameraSettings(30.0f, 0.5f, 200.0f);
-        const DirectX::XMFLOAT4X4 narrow_projection =
-            gameplay.GetCamera().GetProjection();
+        auto* low_camera = camera_low->AddComponent<Components::CameraComponent>();
+        auto* high_camera = camera_high->AddComponent<Components::CameraComponent>();
+        expect(low_camera != nullptr && high_camera != nullptr,
+            "CameraComponent can be attached");
+        if (low_camera == nullptr || high_camera == nullptr)
+        {
+            return first_failure != 0 ? first_failure : 863;
+        }
+
+        low_camera->priority = 2;
+        high_camera->priority = 9;
+        Components::CameraSelection camera_selection =
+            Components::ResolveActiveCameraSelection(world);
+        expect(camera_selection.object == camera_high &&
+            camera_selection.component == high_camera,
+            "highest priority active CameraComponent is selected");
+        high_camera->SetEnabled(false);
+        camera_selection = Components::ResolveActiveCameraSelection(world);
+        expect(camera_selection.object == camera_low &&
+            camera_selection.component == low_camera,
+            "disabled CameraComponent falls back to next priority");
+
+        camera_low->GetTransform().SetLocalPosition({ 1.0f, 2.0f, 3.0f });
+        const DirectX::XMFLOAT3 eye = low_camera->EyePosition();
+        expect(close(eye.x, 1.0f) && close(eye.y, 2.0f) && close(eye.z, 3.0f),
+            "CameraComponent eye position comes from Transform");
+
+        camera_low->GetTransform().SetLocalRotationEuler(
+            { 0.0f, DirectX::XM_PIDIV2, 0.0f });
+        const DirectX::XMFLOAT3 forward = low_camera->Forward();
+        expect(close(forward.x, 1.0f) && close(forward.z, 0.0f),
+            "CameraComponent forward direction comes from Transform rotation");
+
+        DirectX::XMFLOAT4X4 default_projection{};
+        DirectX::XMStoreFloat4x4(&default_projection,
+            low_camera->ProjectionMatrix(16.0f / 9.0f));
+
+        low_camera->field_of_view_degrees = 30.0f;
+        low_camera->near_clip = 0.5f;
+        low_camera->far_clip = 200.0f;
+        DirectX::XMFLOAT4X4 narrow_projection{};
+        DirectX::XMStoreFloat4x4(&narrow_projection,
+            low_camera->ProjectionMatrix(16.0f / 9.0f));
 
         expect(narrow_projection._22 > default_projection._22,
             "field_of_view_degrees rebuilds the Runtime Camera projection");
@@ -747,13 +1241,59 @@ namespace
         expect(close(narrow_projection._43, expected_43),
             "near_clip/far_clip update projection depth offset");
 
-        gameplay.SetAspect(4.0f / 3.0f);
-        const DirectX::XMFLOAT4X4 resized_projection =
-            gameplay.GetCamera().GetProjection();
+        DirectX::XMFLOAT4X4 resized_projection{};
+        DirectX::XMStoreFloat4x4(&resized_projection,
+            low_camera->ProjectionMatrix(4.0f / 3.0f));
         expect(close(resized_projection._22, narrow_projection._22),
-            "SetAspect preserves the active field_of_view_degrees");
+            "projection preserves vertical field_of_view_degrees when aspect changes");
         expect(!close(resized_projection._11, narrow_projection._11),
-            "SetAspect reapplies the projection with the new aspect ratio");
+            "projection reapplies the new aspect ratio");
+
+        low_camera->projection_mode =
+            static_cast<int>(Components::CameraProjectionMode::Orthographic);
+        low_camera->orthographic_size = 20.0f;
+        DirectX::XMFLOAT4X4 orthographic_projection{};
+        DirectX::XMStoreFloat4x4(&orthographic_projection,
+            low_camera->ProjectionMatrix(2.0f));
+        expect(close(orthographic_projection._11, 2.0f / 40.0f),
+            "orthographic projection uses orthographic_size and aspect width");
+        expect(close(orthographic_projection._22, 2.0f / 20.0f),
+            "orthographic projection uses orthographic_size height");
+
+        Core::GameObject* listener_low = world.CreateGameObject("LowPriorityListener");
+        Core::GameObject* listener_high = world.CreateGameObject("HighPriorityListener");
+        expect(listener_low != nullptr && listener_high != nullptr,
+            "audio listener objects can be created");
+        if (listener_low == nullptr || listener_high == nullptr)
+        {
+            return first_failure != 0 ? first_failure : 864;
+        }
+
+        auto* low_listener =
+            listener_low->AddComponent<Components::AudioListenerComponent>();
+        auto* high_listener =
+            listener_high->AddComponent<Components::AudioListenerComponent>();
+        expect(low_listener != nullptr && high_listener != nullptr,
+            "AudioListenerComponent can be attached");
+        if (low_listener == nullptr || high_listener == nullptr)
+        {
+            return first_failure != 0 ? first_failure : 865;
+        }
+
+        low_listener->priority = 3;
+        high_listener->priority = 7;
+        Components::AudioListenerSelection listener_selection =
+            Components::ResolveAudioListenerSelection(world);
+        expect(listener_selection.object == listener_high &&
+            listener_selection.component == high_listener,
+            "highest priority active AudioListenerComponent is selected");
+
+        listener_low->GetTransform().SetLocalPosition({ -1.0f, 4.0f, 8.0f });
+        const DirectX::XMFLOAT3 listener_position = low_listener->Position();
+        expect(close(listener_position.x, -1.0f) &&
+            close(listener_position.y, 4.0f) &&
+            close(listener_position.z, 8.0f),
+            "AudioListenerComponent position comes from Transform");
 
         if (first_failure == 0)
         {
@@ -1022,6 +1562,54 @@ namespace
             return ReplayEngine::Rendering::Validation::RunShaderBuiltInValidation();
         }
 
+        // シェーダ基盤。フェーズ 5（MaterialAsset v3 / 旧版移行）。
+        if (command == "--validate-shader-material")
+        {
+            return ReplayEngine::Rendering::Validation::RunShaderMaterialValidation();
+        }
+
+        // シェーダ基盤。フェーズ 11（照明モデルをShader Asset宣言へ分離）。
+        if (command == "--validate-shader-lighting")
+        {
+            return ReplayEngine::Rendering::Validation::RunShaderLightingValidation();
+        }
+
+        // シェーダ基盤。フェーズ 6（Material -> Catalog -> Render binding）。
+        if (command == "--validate-shader-render")
+        {
+            return ReplayEngine::Rendering::Validation::RunShaderRenderValidation();
+        }
+
+        // シェーダ基盤。フェーズ 12（Texture AssetGUID / t40+ / default）。
+        if (command == "--validate-shader-texture")
+        {
+            return ReplayEngine::Rendering::Validation::RunShaderTextureValidation();
+        }
+
+        // シェーダ基盤。フェーズ 7（Shader Picker / Schema Inspector / 保存保持）。
+        if (command == "--validate-shader-editor")
+        {
+            return ReplayEngine::Rendering::Validation::RunShaderEditorValidation();
+        }
+
+        // シェーダ基盤。フェーズ 10（Layer Shader Asset / GUID Stack）。
+        if (command == "--validate-shader-layer")
+        {
+            return ReplayEngine::Rendering::Validation::RunShaderLayerValidation();
+        }
+
+        // シェーダ基盤。フェーズ 16（Material Layer / Shader-owned Pass 分離）。
+        if (command == "--validate-shader-pass")
+        {
+            return ReplayEngine::Rendering::Validation::RunShaderPassValidation();
+        }
+
+        // Shader Composer v1 (graph save/load -> HLSL -> normal ShaderAsset compile).
+        if (command == "--validate-shader-composer")
+        {
+            return ReplayEngine::Rendering::Validation::RunShaderComposerValidation();
+        }
+
         return -1;
     }
 }
@@ -1098,7 +1686,7 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
 	wcex.hInstance = instance;
 	wcex.hIcon = 0;
 	wcex.hCursor = LoadCursor(NULL, IDC_ARROW);
-	wcex.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+	wcex.hbrBackground = static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
 	wcex.lpszMenuName = NULL;
 	wcex.lpszClassName = APPLICATION_NAME;
 	wcex.hIconSm = 0;
@@ -1106,13 +1694,14 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
 
 	RECT rc{ 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT };
 	AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, FALSE);
-	HWND hwnd = CreateWindowExW(0, APPLICATION_NAME, L"", WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+	HWND hwnd = CreateWindowExW(0, APPLICATION_NAME, L"", WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT, CW_USEDEFAULT, rc.right - rc.left, rc.bottom - rc.top,
 		NULL, NULL, instance, NULL);
-	ShowWindow(hwnd, automated_smoke_test_frames > 0 ? SW_HIDE : cmd_show);
 
     int exit_code = 0;
     Microsoft::WRL::ComPtr<ID3D11Debug> d3d11_debug;
+    Microsoft::WRL::ComPtr<ID3D11InfoQueue> d3d11_info_queue;
+    D3D11LiveObjectFileSummary d3d11_live_report_summary{};
     HRESULT d3d11_live_report_result = E_NOINTERFACE;
     bool d3d11_live_report_available = false;
     {
@@ -1128,21 +1717,54 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
             application.request_shutdown_regression();
         }
 	    SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&application));
-	    exit_code = application.run();
+	    exit_code = application.run(
+            automated_smoke_test_frames > 0 ? SW_HIDE : cmd_show);
         d3d11_debug = application.acquire_d3d11_debug();
+        d3d11_info_queue = application.acquire_d3d11_info_queue();
     }
 
+    // ReportLiveDeviceObjects が出す行だけを測りたいので、直前に古い警告を捨てる。
+    // 出力後は WriteD3D11LiveObjectReportFile が全件を書いてから Clear する。
+    if (d3d11_info_queue) d3d11_info_queue->ClearStoredMessages();
     if (d3d11_debug)
     {
         d3d11_live_report_available = true;
         d3d11_live_report_result = d3d11_debug->ReportLiveDeviceObjects(
             D3D11_RLDO_SUMMARY | D3D11_RLDO_DETAIL | D3D11_RLDO_IGNORE_INTERNAL);
+        d3d11_live_report_summary = WriteD3D11LiveObjectReportFile(
+            d3d11_info_queue.Get(), d3d11_live_report_available,
+            d3d11_live_report_result);
         std::fprintf(stderr, "D3D11 Live Object Report: %s (0x%08lx)\n",
             SUCCEEDED(d3d11_live_report_result) ? "completed" : "failed",
             static_cast<unsigned long>(d3d11_live_report_result));
+        std::fprintf(stderr,
+            "D3D11 Live Object Details: %llu lines, summary ",
+            static_cast<unsigned long long>(
+                d3d11_live_report_summary.live_object_detail_lines));
+        if (d3d11_live_report_summary.live_object_summary_found)
+        {
+            std::fprintf(stderr, "%llu",
+                static_cast<unsigned long long>(
+                    d3d11_live_report_summary.live_object_summary_count));
+        }
+        else
+        {
+            std::fprintf(stderr, "unknown");
+        }
+        std::fprintf(stderr,
+            " (%llu info queue messages, Saved/Validation/D3D11LiveObjects.txt)\n",
+            static_cast<unsigned long long>(
+                d3d11_live_report_summary.readable_messages));
         if (FAILED(d3d11_live_report_result) && exit_code == 0) exit_code = 73;
-        d3d11_debug.Reset();
     }
+    else
+    {
+        d3d11_live_report_summary = WriteD3D11LiveObjectReportFile(
+            d3d11_info_queue.Get(), d3d11_live_report_available,
+            d3d11_live_report_result);
+    }
+    d3d11_info_queue.Reset();
+    d3d11_debug.Reset();
 
 	if (automated_smoke_test_frames > 0)
     {
@@ -1163,6 +1785,19 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
             report << "D3D11_LIVE_REPORT_HRESULT 0x" << std::hex << std::setw(8)
                 << std::setfill('0') << static_cast<unsigned long>(
                     d3d11_live_report_result) << '\n';
+            report << std::dec << std::setfill(' ');
+            report << "D3D11_LIVE_OBJECT_DETAIL_LINES "
+                << d3d11_live_report_summary.live_object_detail_lines << '\n';
+            report << "D3D11_LIVE_OBJECT_SUMMARY_COUNT ";
+            if (d3d11_live_report_summary.live_object_summary_found)
+            {
+                report << d3d11_live_report_summary.live_object_summary_count;
+            }
+            else
+            {
+                report << "UNKNOWN";
+            }
+            report << '\n';
         }
     }
 	if (SUCCEEDED(com_result)) CoUninitialize();

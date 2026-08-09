@@ -1,4 +1,4 @@
-﻿#include "framework.h"
+#include "framework.h"
 #include "gltf_model.h"
 #include "skinned_mesh.h"
 #include "../../RePlayEngine/Assets/AssetCache.h"
@@ -6,6 +6,8 @@
 #include "../../RePlayEngine/Components/Rendering/MeshRendererComponent.h"
 #include "../../RePlayEngine/Components/Rendering/SkinnedMeshRendererComponent.h"
 #include "../../RePlayEngine/Rendering/Materials/MaterialAsset.h"
+#include "../../RePlayEngine/Editor/ShaderEditing/MaterialShaderInspector.h"
+#include "../../RePlayEngine/Editor/ShaderEditing/ShaderStackEditor.h"
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
 #include "../../RePlayEngine/Scene/Serialization/PrefabSerializer.h"
 #include "../../RePlayEngine/Scripting/Core/ScriptComponent.h"
@@ -83,7 +85,8 @@ namespace
 }
 
 bool framework::place_asset_in_object_scene(const ReplayEngine::Assets::AssetRecord& asset,
-    bool add_mesh_collider)
+    bool add_mesh_collider, const DirectX::XMFLOAT3* drop_world_position,
+    ReplayEngine::Core::ObjectID drop_target)
 {
     if (object_scene_play_mode)
     {
@@ -93,12 +96,13 @@ bool framework::place_asset_in_object_scene(const ReplayEngine::Assets::AssetRec
 
     if (asset.kind == ReplayEngine::Assets::AssetKind::Material)
     {
-        ReplayEngine::Core::GameObject* target =
-            object_editor_context.Selection().ResolvePrimary(object_scene);
+        ReplayEngine::Core::GameObject* target = drop_target.Valid()
+            ? object_scene.FindGameObjectByID(drop_target)
+            : object_editor_context.Selection().ResolvePrimary(object_scene);
         if (target == nullptr)
         {
             object_editor_context.SetStatus(
-                "Materialを割り当てるGameObjectを選択してください");
+                "MaterialをGameObject上へドロップするか、割り当て先を選択してください");
             return false;
         }
 
@@ -137,12 +141,13 @@ bool framework::place_asset_in_object_scene(const ReplayEngine::Assets::AssetRec
     {
         namespace Scripting = ReplayEngine::Scripting;
 
-        ReplayEngine::Core::GameObject* target =
-            object_editor_context.Selection().ResolvePrimary(object_scene);
+        ReplayEngine::Core::GameObject* target = drop_target.Valid()
+            ? object_scene.FindGameObjectByID(drop_target)
+            : object_editor_context.Selection().ResolvePrimary(object_scene);
         if (target == nullptr)
         {
             object_editor_context.SetStatus(
-                "Scriptを付けるGameObjectを選択してください");
+                "ScriptをGameObject上へドロップするか、追加先を選択してください");
             return false;
         }
         if (!object_script_runtime)
@@ -203,6 +208,11 @@ bool framework::place_asset_in_object_scene(const ReplayEngine::Assets::AssetRec
             object_editor_context.SetStatus("Prefab配置失敗: " + error);
             return false;
         }
+        if (drop_world_position != nullptr)
+        {
+            if (auto* root_object = object_scene.FindGameObjectByID(root))
+                root_object->GetTransform().SetWorldPosition(*drop_world_position);
+        }
         object_editor_context.CommitEdit();
         object_editor_context.Selection().Select(root, false);
         selected_editor_object = editor_selection::game_object;
@@ -237,13 +247,18 @@ bool framework::place_asset_in_object_scene(const ReplayEngine::Assets::AssetRec
     }
     renderer->mesh_asset = asset.guid;
 
-    const DirectX::XMFLOAT3 eye = editor_camera.Position();
-    const DirectX::XMFLOAT3 forward = editor_camera.Forward();
-    DirectX::XMFLOAT3 position{
-        eye.x + forward.x * 5.0f,
-        eye.y + forward.y * 5.0f,
-        eye.z + forward.z * 5.0f
-    };
+    DirectX::XMFLOAT3 position{};
+    if (drop_world_position != nullptr)
+    {
+        position = *drop_world_position;
+    }
+    else
+    {
+        const DirectX::XMFLOAT3 eye = editor_camera.Position();
+        const DirectX::XMFLOAT3 forward = editor_camera.Forward();
+        position = { eye.x + forward.x * 5.0f, eye.y + forward.y * 5.0f,
+            eye.z + forward.z * 5.0f };
+    }
     if (transform_gizmo.SnapEnabled())
     {
         const float step = transform_gizmo.SnapStep();
@@ -268,7 +283,8 @@ bool framework::place_asset_in_object_scene(const ReplayEngine::Assets::AssetRec
     object_editor_context.CommitEdit();
     object_editor_context.Selection().Select(object->ID(), false);
     selected_editor_object = editor_selection::game_object;
-    object_editor_context.SetStatus("Assetを配置しました: " + asset.display_name);
+    object_editor_context.SetStatus("Assetを配置しました: " + asset.display_name +
+        (add_mesh_collider ? " + Mesh Collider" : ""));
     return true;
 }
 
@@ -316,6 +332,7 @@ bool framework::load_material_editor(const ReplayEngine::Assets::AssetRecord& as
     material_editor_asset = std::move(loaded);
     material_editor_guid = asset.guid;
     material_editor_loaded = true;
+    material_editor_dirty = false;
     material_editor_status = "Materialを読み込みました: " + asset.display_name;
     return true;
 }
@@ -331,6 +348,11 @@ bool framework::save_material_editor()
         return false;
     }
 
+    // Schema-driven Inspector は PropertyBag を正として編集する。
+    // Phase 6/12 の旧互換 field へも同期してから保存し、
+    // fallback 経路と新経路のどちらでも同じ見た目になるようにする。
+    material_editor_asset.SyncPropertiesToLegacyFields();
+
     std::string error;
     if (!ReplayEngine::Rendering::MaterialAsset::Save(
         material_editor_asset, asset->source_path, error))
@@ -342,6 +364,7 @@ bool framework::save_material_editor()
     object_material_failures.erase(material_editor_guid);
     material_editor_status = "MaterialをAtomic Saveしました: " +
         asset->source_path.generic_u8string();
+    material_editor_dirty = false;
     return true;
 }
 
@@ -351,6 +374,14 @@ void framework::draw_material_asset_editor()
         ? nullptr : asset_database.FindByGuid(selected_asset_guid);
     if (selected == nullptr || selected->kind != ReplayEngine::Assets::AssetKind::Material)
         return;
+
+    // 別 Material へ移るとき未保存値を黙って捨てない。
+    // Unity の Asset 編集に近く、選択変更を「保存確認の罠」にしない。
+    if (material_editor_loaded && material_editor_guid != selected->guid &&
+        material_editor_dirty)
+    {
+        if (!save_material_editor()) return;
+    }
     if (!material_editor_loaded || material_editor_guid != selected->guid)
         load_material_editor(*selected);
     if (!material_editor_loaded) return;
@@ -358,78 +389,83 @@ void framework::draw_material_asset_editor()
     ImGui::Separator();
     if (!ImGui::CollapsingHeader("Material Asset", ImGuiTreeNodeFlags_DefaultOpen)) return;
     ImGui::TextDisabled("%s", selected->source_path.generic_u8string().c_str());
-    ImGui::ColorEdit4("Base Color", &material_editor_asset.base_color.x);
-    ImGui::SliderFloat("Metallic", &material_editor_asset.metallic, 0.0f, 1.0f);
-    ImGui::SliderFloat("Roughness", &material_editor_asset.roughness, 0.0f, 1.0f);
-    ImGui::ColorEdit3("Emissive", &material_editor_asset.emissive.x);
-    ImGui::DragFloat("Emissive Strength", &material_editor_asset.emissive_strength,
-        0.05f, 0.0f, 1000.0f);
-    ImGui::SliderFloat("Ambient Occlusion", &material_editor_asset.ambient_occlusion,
-        0.0f, 1.0f);
-    int alpha = static_cast<int>(material_editor_asset.alpha_mode);
-    const char* alpha_modes[]{ "Opaque", "Mask", "Blend" };
-    if (ImGui::Combo("Alpha Mode", &alpha, alpha_modes, IM_ARRAYSIZE(alpha_modes)))
-        material_editor_asset.alpha_mode =
-            static_cast<ReplayEngine::Rendering::MaterialAlphaMode>(alpha);
-    if (material_editor_asset.alpha_mode == ReplayEngine::Rendering::MaterialAlphaMode::Mask)
-        ImGui::SliderFloat("Alpha Cutoff", &material_editor_asset.alpha_cutoff, 0.0f, 1.0f);
-    ImGui::Checkbox("Double Sided", &material_editor_asset.double_sided);
-    const char* shading_models[]{ "FBX Default", "PBR", "Toon", "Unlit", "Pixelate" };
-    ImGui::Combo("Shading Model", &material_editor_asset.shading_model,
-        shading_models, IM_ARRAYSIZE(shading_models));
 
-    const auto texture_guid = [](const char* label, std::string& value)
+    // ---------------------------------------------------------------------
+    // Phase 7: Shader GUID + PropertySchema が Inspector の正本。
+    //
+    // PBR / Toon / Unlit / Pixelate / Project Shader を同じ Picker から選ぶ。
+    // Shader 固有 UI はここへ hard-code せず、#pragma property の Schema から
+    // MaterialShaderInspector が自動生成する。
+    // ---------------------------------------------------------------------
+    const std::string inspector_id = "material_schema_" + selected->guid;
+    const auto inspector = ReplayEngine::Editor::MaterialShaderInspector::Draw(
+        inspector_id.c_str(), material_editor_asset,
+        shader_library.Catalog(), asset_database);
+    if (inspector.changed)
     {
-        char buffer[96]{};
-        strncpy_s(buffer, value.c_str(), _TRUNCATE);
-        if (ImGui::InputText(label, buffer, IM_ARRAYSIZE(buffer))) value = buffer;
-    };
-    if (ImGui::TreeNode("Texture AssetGUIDs"))
+        material_editor_dirty = true;
+
+        // Disk Save を待たず Scene 上へ即時プレビューする。
+        // resolve_object_material() は disk write_time と cache write_time が同じなら
+        // cache を返すため、現在ファイルの時刻を付けた編集コピーを差し込めば
+        // Slider / Shader Picker の結果が次フレームからそのまま見える。
+        std::error_code preview_error;
+        const auto write_time = std::filesystem::last_write_time(
+            selected->source_path, preview_error);
+        if (!preview_error)
+        {
+            cached_material_asset preview;
+            preview.material = material_editor_asset;
+            preview.write_time = write_time;
+            object_material_cache.insert_or_assign(
+                material_editor_guid, std::move(preview));
+            object_material_failures.erase(material_editor_guid);
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // 既存の Layer Stack は Phase 16 の Asset-driven Stack へ移行するまで保持。
+    // Base Shader の選択欄だけ隠し、上の GUID Picker と二重管理しない。
+    // ---------------------------------------------------------------------
+    ImGui::Separator();
+    if (ImGui::TreeNodeEx("Shader Stack", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        texture_guid("Base Color Texture", material_editor_asset.base_color_texture);
-        texture_guid("Normal Texture", material_editor_asset.normal_texture);
-        texture_guid("Metallic Texture", material_editor_asset.metallic_texture);
-        texture_guid("Roughness Texture", material_editor_asset.roughness_texture);
-        texture_guid("Emissive Texture", material_editor_asset.emissive_texture);
-        texture_guid("AO Texture", material_editor_asset.ambient_occlusion_texture);
+        const bool was_active = ImGui::IsAnyItemActive();
+        bool material_outline_bridge = material_editor_asset.layers.Contains(
+            ReplayEngine::Rendering::BuiltInShaderLayers::Outline);
+        const auto stack = ReplayEngine::Editor::ShaderStackEditor::Draw(
+            ("material_stack_" + selected->guid).c_str(),
+            material_editor_asset.shading_model,
+            material_outline_bridge,
+            material_editor_asset.layers,
+            shader_stack_advanced_mode,
+            toon.outline.outline_color,
+            toon.outline.outline_params,
+            material_editor_asset.pixelate_grid,
+            material_editor_asset.pixelate_strength,
+            false, &shader_library.Catalog(), &asset_database);
+
+        if (stack.requires_pbr)     use_pbr_skin = true;
+        if (stack.requires_toon)    enable_toon_shader = true;
+        if (stack.requires_unlit)   enable_unlit_shader = true;
+        if (stack.requires_outline) enable_outline_shader = true;
+
+        // Layer 追加/削除/並べ替え/Property 編集は Editor 自身が changed を返す。
+        // 古い ImGui の操作中判定も fallback として残す。
+        if (stack.changed || ImGui::IsAnyItemActive() || was_active)
+            material_editor_dirty = true;
         ImGui::TreePop();
     }
 
-    // ---- シェーダ調整（唯一の入口）---------------------------------------
-    //
-    // 絵柄・レイヤ・キャラ材質・プリセットはここで編集する。
-    // 以前は「シェーダー調整」タブにも同じ見た目の欄があったが、
-    // そちらはデバッグメッシュ専用で本番マテリアルに効かなかったため撤去した。
-    //
-    // Shading Model はこの Material が持つ値なので、
-    // Material を分ければオブジェクトごとに別の絵柄になる。
     ImGui::Separator();
-    {
-        // ImGui の ID は Material ごとに変える。
-        // 使い回すと、別 Material を選んだときに開閉状態が混ざる。
-        const std::string inspector_id = "material_shader_" + selected->guid;
-        const std::string label = selected->source_path.filename().u8string();
-
-        // レイヤはこの Material 自身のものを渡す。
-        // グローバル配列（shader_layers_static[0]）を渡すと、
-        // どの Material を選んでも同じ層構成になってしまう。
-        //
-        // キャラ材質だけはまだ Material が持っていないため
-        // グローバルを渡している。次段階で Material へ移す。
-        draw_shader_inspector(inspector_id.c_str(), label,
-            material_editor_asset.shading_model,
-            material_editor_asset.outline_pass,
-            material_editor_asset.layers,
-            character_profiles_static[0],
-            material_editor_asset.pixelate_grid,
-            material_editor_asset.pixelate_strength);
-    }
-
-    ImGui::Separator();
-    if (ImGui::Button("Save Material")) save_material_editor();
+    const char* save_label = material_editor_dirty ? "Save Material *" : "Save Material";
+    if (ImGui::Button(save_label)) save_material_editor();
     ImGui::SameLine();
     if (ImGui::Button("Assign to Selected Renderer"))
         place_asset_in_object_scene(*selected, false);
+    ImGui::SameLine();
+    ImGui::TextDisabled(material_editor_dirty ? "未保存" : "保存済み");
+
     ImGui::TextDisabled("%s", material_editor_status.c_str());
 }
 

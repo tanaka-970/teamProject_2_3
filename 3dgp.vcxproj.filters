@@ -49,6 +49,12 @@
     <Filter Include="Shader\PostEffects\Pixelation">
       <UniqueIdentifier>{05dc0a7e-7a6b-4c08-94dd-e98fc197fcf2}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Shader\Layers">
+      <UniqueIdentifier>{a1b2c3d4-1111-4222-8333-444455556666}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shader\Layers\BuiltIn">
+      <UniqueIdentifier>{b2c3d4e5-2222-4333-8444-555566667777}</UniqueIdentifier>
+    </Filter>
     <Filter Include="RePlayEngine">
       <UniqueIdentifier>{b1111111-1111-4111-8111-111111111111}</UniqueIdentifier>
     </Filter>
@@ -57,6 +63,9 @@
     </Filter>
     <Filter Include="RePlayEngine\Assets">
       <UniqueIdentifier>{c3333333-3333-4333-8333-333333333333}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Audio">
+      <UniqueIdentifier>{a50ad479-4b48-4c6f-ad7e-9cf7f2aa15af}</UniqueIdentifier>
     </Filter>
     <Filter Include="RePlayEngine\Editor">
       <UniqueIdentifier>{e1111111-1111-4111-8111-111111111111}</UniqueIdentifier>
@@ -271,6 +280,15 @@
     <Filter Include="RePlayEngine\Components\Camera">
       <UniqueIdentifier>{0519d005-9a2c-470f-87e5-4ca27653fb37}</UniqueIdentifier>
     </Filter>
+    <Filter Include="RePlayEngine\Components\Audio">
+      <UniqueIdentifier>{8b74a58e-56f5-4f48-a2c5-f0b9bb2c5a5f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Components\Common">
+      <UniqueIdentifier>{4cbd1c66-bf29-4a3c-81d4-2e546f67fb17}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\Components\Landscape">
+      <UniqueIdentifier>{9d47309b-1c67-4fe1-9c09-5ec29b04c2ab}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Shader\PostEffects\AmbientOcclusion">
       <UniqueIdentifier>{81f91c0a-8db2-5510-9212-625575a42a0a}</UniqueIdentifier>
     </Filter>
@@ -280,6 +298,12 @@
     <Filter Include="Shader\PostEffects\TemporalAA">
       <UniqueIdentifier>{ee92f3f8-5508-56a8-97ab-cdc94318186f}</UniqueIdentifier>
     </Filter>
+      <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderMaterialValidation.cpp" />
+      <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderLightingValidation.cpp" />
+      <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderRenderValidation.cpp" />
+      <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderTextureValidation.cpp" />
+      <ClCompile Include="RePlayEngine\Rendering\Materials\MaterialBinding.cpp" />
+      <ClCompile Include="RePlayEngine\Rendering\Materials\MaterialGpuBinder.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Source\render\csm_renderer.cpp">
@@ -396,6 +420,9 @@
     <ClCompile Include="Source\app\Editor\framework_scene_document.cpp">
       <Filter>Source\App\Editor</Filter>
     </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_landscape_editor.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
     <ClCompile Include="Source\app\Editor\framework_shader_stack.cpp">
       <Filter>Source\App\Editor</Filter>
     </ClCompile>
@@ -475,6 +502,9 @@
       <Filter>Source\App\Editor</Filter>
     </ClCompile>
     <ClCompile Include="Source\app\Editor\framework_editor_camera.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_editor_camera_presets.cpp">
       <Filter>Source\App\Editor</Filter>
     </ClCompile>
     <ClCompile Include="Source\app\Editor\framework_gizmo.cpp">
@@ -612,6 +642,9 @@
     <ClCompile Include="RePlayEngine\Components\Gameplay\StageGameplayComponents.cpp">
       <Filter>RePlayEngine\Components\Gameplay</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Audio\AudioSystem.cpp">
+      <Filter>RePlayEngine\Audio</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponents.cpp">
       <Filter>RePlayEngine\Object\Registry</Filter>
     </ClCompile>
@@ -666,6 +699,15 @@
     <ClCompile Include="RePlayEngine\Components\Gameplay\PlayerControllerComponent.cpp">
       <Filter>RePlayEngine\Components\Gameplay</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\Audio\AudioSourceComponent.cpp">
+      <Filter>RePlayEngine\Components\Audio</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\Camera\CameraComponent.cpp">
+      <Filter>RePlayEngine\Components\Camera</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\Camera\FollowTargetComponent.cpp">
+      <Filter>RePlayEngine\Components\Camera</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Components\Rendering\AnimatorComponent.cpp">
       <Filter>RePlayEngine\Components\Rendering</Filter>
     </ClCompile>
@@ -673,6 +715,9 @@
       <Filter>RePlayEngine\Components\Rendering</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Components\Rendering\MeshRendererComponent.cpp">
+      <Filter>RePlayEngine\Components\Rendering</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\Rendering\PrimitiveMeshRendererComponent.cpp">
       <Filter>RePlayEngine\Components\Rendering</Filter>
     </ClCompile>
     <ClCompile Include="Source\game\camera_basis_provider.cpp">
@@ -694,6 +739,9 @@
       <Filter>RePlayEngine\Editor\Validation</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorCameraController.cpp">
+      <Filter>RePlayEngine\Editor\Viewport</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\Viewport\EditorCameraPreset.cpp">
       <Filter>RePlayEngine\Editor\Viewport</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorCameraStateStore.cpp">
@@ -774,10 +822,16 @@
     <ClCompile Include="Source\mesh\gltf_model_cache.cpp">
       <Filter>Source\mesh</Filter>
     </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_convenience_tools.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Runtime\Validation\RuntimeSceneValidation.cpp">
       <Filter>RePlayEngine\Runtime\Validation</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Runtime\Scene\SceneFlowService.cpp">
+      <Filter>RePlayEngine\Runtime\Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Runtime\Scene\SceneFlowAsset.cpp">
       <Filter>RePlayEngine\Runtime\Scene</Filter>
     </ClCompile>
     <ClCompile Include="Source\game\Behaviours\SceneTransitionBehaviour.cpp">
@@ -1160,6 +1214,9 @@
     <ClInclude Include="RePlayEngine\Components\Rendering\MeshRendererComponent.h">
       <Filter>RePlayEngine\Components\Rendering</Filter>
     </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Rendering\PrimitiveMeshRendererComponent.h">
+      <Filter>RePlayEngine\Components\Rendering</Filter>
+    </ClInclude>
     <ClInclude Include="RePlayEngine\Components\Rendering\LightComponents.h">
       <Filter>RePlayEngine\Components\Rendering</Filter>
     </ClInclude>
@@ -1174,6 +1231,15 @@
     </ClInclude>
     <ClInclude Include="RePlayEngine\Components\Gameplay\StageGameplayComponents.h">
       <Filter>RePlayEngine\Components\Gameplay</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Editor\EditorNoteComponent.h">
+      <Filter>RePlayEngine\Components</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Audio\AudioService.h">
+      <Filter>RePlayEngine\Audio</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Audio\AudioSystem.h">
+      <Filter>RePlayEngine\Audio</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Object\Registry\BuiltInComponents.h">
       <Filter>RePlayEngine\Object\Registry</Filter>
@@ -1244,7 +1310,22 @@
     <ClInclude Include="RePlayEngine\Components\Gameplay\PlayerControllerComponent.h">
       <Filter>RePlayEngine\Components\Gameplay</Filter>
     </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Audio\AudioListenerComponent.h">
+      <Filter>RePlayEngine\Components\Audio</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Audio\AudioSourceComponent.h">
+      <Filter>RePlayEngine\Components\Audio</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Common\PriorityComponentSelection.h">
+      <Filter>RePlayEngine\Components\Common</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Camera\CameraComponent.h">
+      <Filter>RePlayEngine\Components\Camera</Filter>
+    </ClInclude>
     <ClInclude Include="RePlayEngine\Components\Camera\CameraTargetComponent.h">
+      <Filter>RePlayEngine\Components\Camera</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Camera\FollowTargetComponent.h">
       <Filter>RePlayEngine\Components\Camera</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Components\Rendering\AnimatorComponent.h">
@@ -1272,6 +1353,9 @@
       <Filter>RePlayEngine\Editor\Validation</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Editor\Viewport\EditorCameraController.h">
+      <Filter>RePlayEngine\Editor\Viewport</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\Viewport\EditorCameraPreset.h">
       <Filter>RePlayEngine\Editor\Viewport</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Editor\Viewport\EditorCameraStateStore.h">
@@ -1344,6 +1428,9 @@
       <Filter>RePlayEngine\Runtime\Validation</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Runtime\Scene\SceneFlowService.h">
+      <Filter>RePlayEngine\Runtime\Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Runtime\Scene\SceneFlowAsset.h">
       <Filter>RePlayEngine\Runtime\Scene</Filter>
     </ClInclude>
     <ClInclude Include="Source\game\Behaviours\SceneTransitionBehaviour.h">
@@ -1459,6 +1546,9 @@
     <None Include="Shader\shading_model_hlsl.hlsli">
       <Filter>Shader\Includes</Filter>
     </None>
+    <None Include="Shader\lighting_model_hlsl.hlsli">
+      <Filter>Shader\Includes</Filter>
+    </None>
     <None Include="Shader\skinned_mesh.hlsli">
       <Filter>Shader\Includes</Filter>
     </None>
@@ -1474,6 +1564,13 @@
     <None Include="Shader\Materials\StylizedCharacter\stylized_character_common.hlsli">
       <Filter>Shader\Materials\StylizedCharacter</Filter>
     </None>
+    <None Include="Shader\Layers\Pixelate.hlsl"><Filter>Shader\Layers</Filter></None>
+    <None Include="Shader\Layers\BuiltIn\Pbr.hlsl"><Filter>Shader\Layers\BuiltIn</Filter></None>
+    <None Include="Shader\Layers\BuiltIn\Toon.hlsl"><Filter>Shader\Layers\BuiltIn</Filter></None>
+    <None Include="Shader\Layers\BuiltIn\Unlit.hlsl"><Filter>Shader\Layers\BuiltIn</Filter></None>
+    <None Include="Shader\Layers\BuiltIn\Wireframe.hlsl"><Filter>Shader\Layers\BuiltIn</Filter></None>
+    <None Include="Shader\Layers\BuiltIn\Outline.hlsl"><Filter>Shader\Layers\BuiltIn</Filter></None>
+    <None Include="Shader\Layers\BuiltIn\StylizedCharacter.hlsl"><Filter>Shader\Layers\BuiltIn</Filter></None>
     <None Include="resources\Shaders\Presets\WutheringStylized.replayshader">
       <Filter>Resources\Shaders\Presets</Filter>
     </None>
@@ -1698,6 +1795,9 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="RePlayEngine\Components\Landscape\LandscapeComponent.cpp"><Filter>RePlayEngine\Components\Landscape</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Components\Landscape\LandscapeRendererComponent.cpp"><Filter>RePlayEngine\Components\Landscape</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Components\Landscape\LandscapeColliderComponent.cpp"><Filter>RePlayEngine\Components\Landscape</Filter></ClCompile>
     <ClCompile Include="RePlayEngine\Landscape\LandscapeData.cpp"><Filter>RePlayEngine\Landscape</Filter></ClCompile>
     <ClCompile Include="RePlayEngine\Landscape\LandscapeMeshGenerator.cpp"><Filter>RePlayEngine\Landscape</Filter></ClCompile>
     <ClCompile Include="RePlayEngine\Landscape\LandscapeRenderer.cpp"><Filter>RePlayEngine\Landscape</Filter></ClCompile>
@@ -1707,11 +1807,129 @@
     <ClInclude Include="RePlayEngine\Landscape\LandscapeChunk.h"><Filter>RePlayEngine\Landscape</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Landscape\LandscapeMaterial.h"><Filter>RePlayEngine\Landscape</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Landscape\LandscapeBrush.h"><Filter>RePlayEngine\Landscape</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Landscape\LandscapeComponent.h"><Filter>RePlayEngine\Components\Landscape</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Landscape\LandscapeRendererComponent.h"><Filter>RePlayEngine\Components\Landscape</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Landscape\LandscapeColliderComponent.h"><Filter>RePlayEngine\Components\Landscape</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Landscape\LandscapeData.h"><Filter>RePlayEngine\Landscape</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Landscape\LandscapeMeshGenerator.h"><Filter>RePlayEngine\Landscape</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Landscape\LandscapeRenderer.h"><Filter>RePlayEngine\Landscape</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Landscape\LandscapeCollision.h"><Filter>RePlayEngine\Landscape</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Landscape\LandscapeUndoCommand.h"><Filter>RePlayEngine\Landscape</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Landscape\LandscapeEditorTool.h"><Filter>RePlayEngine\Landscape</Filter></ClInclude>
+      <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderMaterialValidation.h" />
+      <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderLightingValidation.h" />
+      <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderRenderValidation.h" />
+      <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderTextureValidation.h" />
+      <ClInclude Include="RePlayEngine\Rendering\Materials\MaterialBinding.h" />
+      <ClInclude Include="RePlayEngine\Rendering\Materials\MaterialGpuBinder.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="RePlayEngine\Rendering\Materials\MaterialSchema.cpp"><Filter>RePlayEngine\Rendering\Materials</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\ShaderEditing\MaterialShaderInspector.cpp"><Filter>RePlayEngine\Editor\ShaderEditing</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderAssetFactory.cpp"><Filter>RePlayEngine\Rendering</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderEditorValidation.cpp"><Filter>RePlayEngine\Rendering</Filter></ClCompile>
+    <ClInclude Include="RePlayEngine\Rendering\Materials\MaterialSchema.h"><Filter>RePlayEngine\Rendering\Materials</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\ShaderEditing\MaterialShaderInspector.h"><Filter>RePlayEngine\Editor\ShaderEditing</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderAssetFactory.h"><Filter>RePlayEngine\Rendering</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderEditorValidation.h"><Filter>RePlayEngine\Rendering</Filter></ClInclude>
+    <ClCompile Include="RePlayEngine\Editor\ShaderEditing\ShaderPropertyInspector.cpp"><Filter>RePlayEngine\Editor\ShaderEditing</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\ShaderEditing\ShaderComposerEditor.cpp"><Filter>RePlayEngine\Editor\ShaderEditing</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerAsset.cpp"><Filter>RePlayEngine\Rendering</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerGenerator.cpp"><Filter>RePlayEngine\Rendering</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerValidation.cpp"><Filter>RePlayEngine\Rendering</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\Materials\ShaderLayerBinding.cpp"><Filter>RePlayEngine\Rendering\Materials</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\ShaderStack\BuiltInShaderLayers.cpp"><Filter>RePlayEngine\Rendering\ShaderStack</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\ShaderStack\ShaderExecutionPlan.cpp"><Filter>RePlayEngine\Rendering\ShaderStack</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderLayerValidation.cpp"><Filter>RePlayEngine\Rendering</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderPassValidation.cpp"><Filter>RePlayEngine\Rendering</Filter></ClCompile>
+    <ClInclude Include="RePlayEngine\Editor\ShaderEditing\ShaderPropertyInspector.h"><Filter>RePlayEngine\Editor\ShaderEditing</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\ShaderEditing\ShaderComposerEditor.h"><Filter>RePlayEngine\Editor\ShaderEditing</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerAsset.h"><Filter>RePlayEngine\Rendering</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerGenerator.h"><Filter>RePlayEngine\Rendering</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerValidation.h"><Filter>RePlayEngine\Rendering</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\Materials\ShaderLayerBinding.h"><Filter>RePlayEngine\Rendering\Materials</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\ShaderStack\BuiltInShaderLayers.h"><Filter>RePlayEngine\Rendering\ShaderStack</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\ShaderStack\ShaderExecutionPlan.h"><Filter>RePlayEngine\Rendering\ShaderStack</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderLayerValidation.h"><Filter>RePlayEngine\Rendering</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderPassValidation.h"><Filter>RePlayEngine\Rendering</Filter></ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="RePlayEngine\Components\UI">
+      <UniqueIdentifier>{0ff4d8a6-4f44-4e01-98d5-2f8d0f2c4f10}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\UI">
+      <UniqueIdentifier>{6b6e97b7-55db-4f0f-b752-4b0d5fd42753}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RePlayEngine\UI\ThirdParty">
+      <UniqueIdentifier>{d06f461e-c4bd-4b3c-b68d-a044e4fc6f89}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Source\app\Editor\framework_ui_workspace.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\UI\CanvasComponent.cpp">
+      <Filter>RePlayEngine\Components\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\UI\RectTransformComponent.cpp">
+      <Filter>RePlayEngine\Components\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\UI\UIImageComponent.cpp">
+      <Filter>RePlayEngine\Components\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\UI\UITextComponent.cpp">
+      <Filter>RePlayEngine\Components\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\UI\UIButtonComponent.cpp">
+      <Filter>RePlayEngine\Components\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\UI\UIMaskComponent.cpp">
+      <Filter>RePlayEngine\Components\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\UI\UILayout.cpp">
+      <Filter>RePlayEngine\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\UI\FontAtlas.cpp">
+      <Filter>RePlayEngine\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\UI\UIRenderer.cpp">
+      <Filter>RePlayEngine\UI</Filter>
+    </ClCompile>
+    <ClInclude Include="RePlayEngine\Components\UI\CanvasComponent.h">
+      <Filter>RePlayEngine\Components\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\UI\RectTransformComponent.h">
+      <Filter>RePlayEngine\Components\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\UI\UIImageComponent.h">
+      <Filter>RePlayEngine\Components\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\UI\UITextComponent.h">
+      <Filter>RePlayEngine\Components\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\UI\UIButtonComponent.h">
+      <Filter>RePlayEngine\Components\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\UI\UIMaskComponent.h">
+      <Filter>RePlayEngine\Components\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\UI\UILayout.h">
+      <Filter>RePlayEngine\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\UI\FontAtlas.h">
+      <Filter>RePlayEngine\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\UI\UIRenderer.h">
+      <Filter>RePlayEngine\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\UI\ThirdParty\stb_truetype.h">
+      <Filter>RePlayEngine\UI\ThirdParty</Filter>
+    </ClInclude>
+    <FxCompile Include="Shader\ui_ps.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_vs.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
   </ItemGroup>
 </Project>

@@ -1,4 +1,4 @@
-﻿#include "SceneData.h"
+#include "SceneData.h"
 
 #include "../Runtime/Scene.h"
 #include "../../Object/Component/MissingComponent.h"
@@ -290,6 +290,16 @@ namespace ReplayEngine::Scene::Serialization
                         (component_data.module_id.empty()
                             ? std::string{} : " [" + component_data.module_id + "]") +
                         " (" + source.name + ")");
+                    continue;
+                }
+
+                // EditorOnly Component はファイルには残すが Runtime World へは持ち込まない。
+                // RuntimeSceneService は ApplySceneData より前に Services().Runtime() を
+                // 接続するため、Editor 読み込みとの区別を型ごとの if なしで行える。
+                const ReplayEngine::Scene::Scene* owner_scene = target.GetScene();
+                if (!info->runtime_available && owner_scene != nullptr &&
+                    owner_scene->Services().Runtime() != nullptr)
+                {
                     continue;
                 }
 

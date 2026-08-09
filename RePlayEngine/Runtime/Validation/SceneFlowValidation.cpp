@@ -1,9 +1,10 @@
-﻿#include "SceneFlowValidation.h"
+#include "SceneFlowValidation.h"
 
 #include "../API/RuntimeContext.h"
 #include "../Core/RuntimeResult.h"
 #include "../Scene/RuntimeSceneService.h"
 #include "../Scene/SceneFlowService.h"
+#include "../Scene/SceneFlowAsset.h"
 #include "../../Object/GameObject/GameObject.h"
 #include "../../Object/Registry/BuiltInComponents.h"
 #include "../../Project/ProjectSettings.h"
@@ -37,6 +38,7 @@ namespace ReplayEngine::Runtime::Validation
         constexpr const char* guid_unknown = "f10w000000000000000000000000ffff";
 
         constexpr const char* prefab_guid_sample = "9e3f0000000000000000000000000001";
+        constexpr const char* scene_flow_guid_sample = "f10f0000000000000000000000000001";
 
         // 履歴上限を確実に超える回数。上限 16 に対して余裕を持たせる。
         constexpr int history_overflow_transitions = 24;
@@ -180,6 +182,7 @@ namespace ReplayEngine::Runtime::Validation
         Project::ProjectSettings saved;
         saved.SetStartupSceneGuid(guid_title);
         saved.SetDefaultCharacterPrefabGuid(prefab_guid_sample);
+        saved.SetSceneFlowGuid(scene_flow_guid_sample);
 
         Project::ProjectSettings restored;
         const bool round_tripped = SettingsRoundTrip(saved, restored, text, error);
@@ -188,8 +191,11 @@ namespace ReplayEngine::Runtime::Validation
         check.Expect(round_tripped &&
             restored.DefaultCharacterPrefabGuid() == prefab_guid_sample,
             "Startup Scene と Default Character Prefab が独立して保存される");
-        check.Expect(text.find("REPLAY_PROJECT 2") == 0,
-            "保存されるプロジェクト設定のバージョンが 2 になる");
+        check.Expect(round_tripped && restored.SceneFlowGuid() == scene_flow_guid_sample,
+            "Active Scene Flow が AssetGUID として往復する");
+        check.Expect(text.find("REPLAY_PROJECT 3") == 0 &&
+            text.find("SCENE_FLOW") != std::string::npos,
+            "保存されるプロジェクト設定が v3 になり Scene Flow を含む");
 
         Project::ProjectSettings empty_startup;
         empty_startup.SetDefaultCharacterPrefabGuid(prefab_guid_sample);
@@ -214,13 +220,26 @@ namespace ReplayEngine::Runtime::Validation
         check.Expect(v1_read && !migrated.HasStartupScene(),
             "v1 から移行しても Startup Scene は未設定のまま（値を推測しない）");
 
+        // v2 は Startup Scene まであり、Scene Flow はまだ無い。
+        const std::string v2_text =
+            "REPLAY_PROJECT 2\n"
+            "DEFAULT_CONTROLLED_CHARACTER_PREFAB \"" +
+            std::string(prefab_guid_sample) + "\"\n"
+            "STARTUP_SCENE \"" + std::string(guid_title) + "\"\n";
+        Project::ProjectSettings migrated_v2;
+        const bool v2_read = ReadSettingsFromText(migrated_v2, v2_text, error);
+        check.Expect(v2_read && migrated_v2.StartupSceneGuid() == guid_title &&
+            !migrated_v2.HasSceneFlow(),
+            "v2 のプロジェクト設定を読み込み、Scene Flow は未設定として移行できる");
+
         std::ostringstream migrated_out;
         const bool migrated_written =
             Project::ProjectSettingsSerializer::WriteText(migrated, migrated_out, error);
         check.Expect(migrated_written &&
-            migrated_out.str().find("REPLAY_PROJECT 2") == 0 &&
-            migrated_out.str().find("STARTUP_SCENE") != std::string::npos,
-            "v1 を読み込んで保存すると v2 形式になる");
+            migrated_out.str().find("REPLAY_PROJECT 3") == 0 &&
+            migrated_out.str().find("STARTUP_SCENE") != std::string::npos &&
+            migrated_out.str().find("SCENE_FLOW") != std::string::npos,
+            "v1 を読み込んで保存すると v3 形式になる");
 
         Project::ProjectSettings poisoned;
         poisoned.SetStartupSceneGuid(guid_title);
@@ -336,6 +355,52 @@ namespace ReplayEngine::Runtime::Validation
             "Startup Scene の読み込みが完了し Ready になる");
         check.Expect(flow.History().empty() && !flow.CanReturn(),
             "起動 Scene は履歴の起点であり、戻り先を作らない");
+
+        // -----------------------------------------------------------------
+        // Data-driven Scene Flow Asset / 条件分岐
+        // -----------------------------------------------------------------
+
+        SceneFlowAsset flow_asset;
+        flow_asset.name = "Validation Flow";
+        auto& transition = flow_asset.AddTransition();
+        transition.from_scene_guid = guid_title;
+        transition.event_name = "StartGame";
+        transition.to_scene_guid = guid_game;
+        transition.priority = 10;
+        SceneFlowCondition condition;
+        condition.type = SceneFlowConditionType::Int;
+        condition.key = "Keys";
+        condition.op = SceneFlowCompareOp::GreaterEqual;
+        condition.value = 3.0;
+        transition.conditions.push_back(condition);
+
+        std::ostringstream flow_text;
+        check.Expect(SceneFlowAsset::WriteText(flow_asset, flow_text, error),
+            "Scene Flow Asset をテキストへ保存できる");
+        SceneFlowAsset restored_flow_asset;
+        std::istringstream flow_input(flow_text.str());
+        check.Expect(SceneFlowAsset::ReadText(restored_flow_asset, flow_input, error) &&
+            restored_flow_asset.transitions.size() == 1 &&
+            restored_flow_asset.transitions[0].event_name == "StartGame",
+            "Scene Flow Asset の Transition/Condition が往復する");
+
+        flow.SetFlowAsset(restored_flow_asset);
+        check.Expect(runtime.TriggerSceneFlow("StartGame") == RuntimeStatus::SceneMissing,
+            "条件変数が未設定なら Scene Flow は遷移しない");
+        check.Expect(Succeeded(runtime.SetSceneFlowInt("Keys", 3)) &&
+            Succeeded(runtime.TriggerSceneFlow("StartGame")),
+            "条件成立時はイベント名だけで Scene 遷移要求を作れる");
+        flow.Tick();
+        flow.Tick();
+        check.Expect(flow.CurrentSceneGUID() == guid_game && CurrentSceneName(scenes) == "FlowGame",
+            "Scene Flow Trigger が指定先 Scene へ遷移する");
+
+        // 後続の既存 Load 検証は Title から始めるため戻して履歴を消す。
+        check.Expect(Succeeded(flow.ReturnToPreviousScene()),
+            "Scene Flow 遷移も通常履歴へ統合され Return できる");
+        flow.Tick();
+        flow.Tick();
+        flow.ClearHistory();
 
         // -----------------------------------------------------------------
         // Load / 履歴
