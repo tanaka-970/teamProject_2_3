@@ -1347,6 +1347,7 @@ private:
     int landscape_edit_mode{ 0 }; // 0=Sculpt, 1=Topology
     int landscape_topology_selection_mode{ 0 }; // 0=Face, 1=Edge Bridge
     int landscape_brush_mode{ 0 };
+    int landscape_brush_preview_mode{ 1 }; // 0=Ring, 1=Falloff, 2=Grid, 3=Contour, 4=Grid+Contour
     ReplayEngine::Landscape::LandscapeBrush landscape_brush{};
     ReplayEngine::Landscape::LandscapeEditorTool landscape_editor_tool;
     std::size_t landscape_selected_face{ static_cast<std::size_t>(-1) };

@@ -62,6 +62,11 @@ void framework::handle_viewport_selection()
     if (handle_landscape_viewport_edit()) return;
     if (!scene_view_hovered) return;
 
+    const bool suppress_drag_selection =
+        landscape_edit_enabled && active_editor_view == editor_view::scene &&
+        !object_scene_play_mode;
+    if (suppress_drag_selection) viewport_drag_selecting = false;
+
     // 編集カメラがマウスを掴んでいるフレームは選択処理を動かさない。
     // カメラ操作とギズモ操作・矩形選択が同時に走らないようにする。
     if (editor_camera_consumed_input) return;
@@ -86,7 +91,7 @@ void framework::handle_viewport_selection()
         mouse_x < static_cast<float>(client_width) &&
         mouse_y < static_cast<float>(client_height);
 
-    if (!viewport_drag_selecting && scene_view_hovered &&
+    if (!suppress_drag_selection && !viewport_drag_selecting && scene_view_hovered &&
         inside_viewport && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
     {
         viewport_drag_selecting = true;

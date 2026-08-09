@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <limits>
 #include <string>
 
@@ -139,6 +140,187 @@ namespace
         if (depth != nullptr) *depth = screen.z;
         return true;
     }
+
+    DirectX::XMFLOAT3 Add(const DirectX::XMFLOAT3& a,
+        const DirectX::XMFLOAT3& b) noexcept
+    {
+        return { a.x + b.x, a.y + b.y, a.z + b.z };
+    }
+
+    DirectX::XMFLOAT3 Scale(const DirectX::XMFLOAT3& value, float scale) noexcept
+    {
+        return { value.x * scale, value.y * scale, value.z * scale };
+    }
+
+    bool SampleLandscapeSurfaceAtXZ(
+        const ReplayEngine::Landscape::LandscapeData& data,
+        float x, float z, float fallback_y, DirectX::XMFLOAT3& out)
+    {
+        const DirectX::XMFLOAT3 bounds_min = data.BoundsMin();
+        const DirectX::XMFLOAT3 bounds_max = data.BoundsMax();
+        const float height = (std::max)(1.0f, bounds_max.y - bounds_min.y);
+        const float margin = (std::max)(4.0f, height + 2.0f);
+        const DirectX::XMFLOAT3 origin{ x, bounds_max.y + margin, z };
+        const DirectX::XMFLOAT3 direction{ 0.0f, -1.0f, 0.0f };
+
+        ReplayEngine::Landscape::LandscapeRayHit hit{};
+        if (data.Raycast(origin, direction, height + margin * 2.0f, hit))
+        {
+            out = hit.position;
+            return true;
+        }
+
+        out = { x, fallback_y, z };
+        return false;
+    }
+
+    bool DrawProjectedLine(ImDrawList* draw,
+        const ReplayEngine::Core::Transform& transform,
+        const DirectX::XMMATRIX& view, const DirectX::XMMATRIX& projection,
+        float width, float height, float min_x, float min_y,
+        const DirectX::XMFLOAT3& a, const DirectX::XMFLOAT3& b,
+        ImU32 color, float thickness)
+    {
+        ImVec2 screen_a{};
+        ImVec2 screen_b{};
+        if (!ProjectToScene(a, transform, view, projection, width, height,
+            min_x, min_y, screen_a)) return false;
+        if (!ProjectToScene(b, transform, view, projection, width, height,
+            min_x, min_y, screen_b)) return false;
+
+        draw->AddLine(screen_a, screen_b, IM_COL32(12, 18, 14, 180),
+            thickness + 2.0f);
+        draw->AddLine(screen_a, screen_b, color, thickness);
+        return true;
+    }
+
+    void DrawTerrainRing(ImDrawList* draw,
+        const ReplayEngine::Landscape::LandscapeData& data,
+        const ReplayEngine::Core::Transform& transform,
+        const DirectX::XMMATRIX& view, const DirectX::XMMATRIX& projection,
+        float width, float height, float min_x, float min_y,
+        const DirectX::XMFLOAT3& center, float radius,
+        ImU32 color, float thickness)
+    {
+        if (radius <= 0.0f) return;
+
+        const int segments = data.FaceCount() > 10000 ? 36 : 64;
+        DirectX::XMFLOAT3 previous{};
+        bool previous_valid = false;
+        for (int index = 0; index <= segments; ++index)
+        {
+            const float angle = DirectX::XM_2PI *
+                static_cast<float>(index) / static_cast<float>(segments);
+            DirectX::XMFLOAT3 point{};
+            const bool valid = SampleLandscapeSurfaceAtXZ(data,
+                center.x + std::cos(angle) * radius,
+                center.z + std::sin(angle) * radius,
+                center.y, point);
+            point.y += 0.04f;
+
+            if (index > 0 && previous_valid && valid)
+            {
+                DrawProjectedLine(draw, transform, view, projection, width, height,
+                    min_x, min_y, previous, point, color, thickness);
+            }
+            previous = point;
+            previous_valid = valid;
+        }
+    }
+
+    void DrawTerrainGridInBrush(ImDrawList* draw,
+        const ReplayEngine::Landscape::LandscapeData& data,
+        const ReplayEngine::Core::Transform& transform,
+        const DirectX::XMMATRIX& view, const DirectX::XMMATRIX& projection,
+        float width, float height, float min_x, float min_y,
+        const DirectX::XMFLOAT3& center, float radius)
+    {
+        if (radius <= 0.0f) return;
+
+        const float base_spacing = (std::max)(data.CellSize(), radius * 0.25f);
+        const float spacing = (std::max)(0.5f, base_spacing);
+        const int steps = (std::min)(12,
+            static_cast<int>(std::ceil(radius / spacing)));
+        const ImU32 color = IM_COL32(90, 240, 180, 115);
+
+        for (int index = -steps; index <= steps; ++index)
+        {
+            const float offset = static_cast<float>(index) * spacing;
+            if (std::fabs(offset) > radius) continue;
+            const float chord = std::sqrt((std::max)(0.0f,
+                radius * radius - offset * offset));
+
+            DirectX::XMFLOAT3 a{}, b{};
+            SampleLandscapeSurfaceAtXZ(data, center.x - chord, center.z + offset,
+                center.y, a);
+            SampleLandscapeSurfaceAtXZ(data, center.x + chord, center.z + offset,
+                center.y, b);
+            a.y += 0.035f;
+            b.y += 0.035f;
+            DrawProjectedLine(draw, transform, view, projection, width, height,
+                min_x, min_y, a, b, color, 1.0f);
+
+            SampleLandscapeSurfaceAtXZ(data, center.x + offset, center.z - chord,
+                center.y, a);
+            SampleLandscapeSurfaceAtXZ(data, center.x + offset, center.z + chord,
+                center.y, b);
+            a.y += 0.035f;
+            b.y += 0.035f;
+            DrawProjectedLine(draw, transform, view, projection, width, height,
+                min_x, min_y, a, b, color, 1.0f);
+        }
+    }
+
+    void DrawBrushFaceInfluence(ImDrawList* draw,
+        const ReplayEngine::Landscape::LandscapeData& data,
+        const ReplayEngine::Core::Transform& transform,
+        const DirectX::XMMATRIX& view, const DirectX::XMMATRIX& projection,
+        float width, float height, float min_x, float min_y,
+        const DirectX::XMFLOAT3& center, float radius)
+    {
+        if (radius <= 0.0f || data.FaceCount() > 30000) return;
+        const float radius_sq = radius * radius;
+
+        for (std::size_t face = 0; face < data.FaceCount(); ++face)
+        {
+            const DirectX::XMFLOAT3 face_center = data.FaceCenter(face);
+            const float dx = face_center.x - center.x;
+            const float dz = face_center.z - center.z;
+            const float distance_sq = dx * dx + dz * dz;
+            if (distance_sq > radius_sq) continue;
+
+            const float t = 1.0f - std::sqrt(distance_sq) / radius;
+            const DirectX::XMFLOAT3 normal = data.FaceNormal(face);
+            const float slope = 1.0f - (std::max)(0.0f,
+                (std::min)(1.0f, std::fabs(normal.y)));
+            const int alpha = static_cast<int>(24.0f + t * 52.0f + slope * 36.0f);
+            const ImU32 color = IM_COL32(255, 210, 80,
+                (std::min)(96, (std::max)(20, alpha)));
+
+            const std::size_t offset = face * 3;
+            if (offset + 2 >= data.Indices().size()) continue;
+            ImVec2 screen[3]{};
+            bool valid = true;
+            for (int i = 0; i < 3; ++i)
+            {
+                const std::uint32_t vertex = data.Indices()[offset + i];
+                if (vertex >= data.Vertices().size())
+                {
+                    valid = false;
+                    break;
+                }
+                DirectX::XMFLOAT3 p = data.Vertices()[vertex].position;
+                p = Add(p, Scale(normal, 0.025f));
+                if (!ProjectToScene(p, transform, view, projection,
+                    width, height, min_x, min_y, screen[i]))
+                {
+                    valid = false;
+                    break;
+                }
+            }
+            if (valid) draw->AddTriangleFilled(screen[0], screen[1], screen[2], color);
+        }
+    }
 }
 
 void framework::draw_landscape_editor_toolbar()
@@ -188,6 +370,16 @@ void framework::draw_landscape_editor_toolbar()
         ImGui::SameLine();
         ImGui::SetNextItemWidth(90.0f);
         ImGui::DragFloat(u8"Falloff", &landscape_brush.falloff, 0.02f, 0.0f, 1.0f, "%.2f");
+        ImGui::SameLine();
+        const char* preview_modes[] = {
+            "Ring", "Falloff", "Grid", "Contour", "Grid + Contour"
+        };
+        landscape_brush_preview_mode = (std::max)(0,
+            (std::min)(landscape_brush_preview_mode,
+                static_cast<int>(IM_ARRAYSIZE(preview_modes)) - 1));
+        ImGui::SetNextItemWidth(130.0f);
+        ImGui::Combo("Preview", &landscape_brush_preview_mode,
+            preview_modes, IM_ARRAYSIZE(preview_modes));
 
         int direction = static_cast<int>(landscape_brush.direction);
         const char* directions[] = { "World Y", "Vertex Normal" };
@@ -408,19 +600,75 @@ bool framework::handle_landscape_viewport_edit()
         {
             if (landscape_edit_mode == 0)
             {
-                DirectX::XMFLOAT3 radius_point = hit.position;
-                radius_point.x += landscape_brush.radius;
-                ImVec2 edge{};
-                float radius_px = 12.0f;
-                if (ProjectToScene(radius_point, object->GetTransform(), view, projection,
-                    width, height, scene_view_min_x, scene_view_min_y, edge))
+                const auto& transform = object->GetTransform();
+                const int preview_mode = (std::max)(0,
+                    (std::min)(landscape_brush_preview_mode, 4));
+
+                if (preview_mode != 0)
                 {
-                    const float dx = edge.x - center.x;
-                    const float dy = edge.y - center.y;
-                    radius_px = (std::max)(6.0f, std::sqrt(dx * dx + dy * dy));
+                    DrawBrushFaceInfluence(draw, data, transform, view, projection,
+                        width, height, scene_view_min_x, scene_view_min_y,
+                        hit.position, landscape_brush.radius);
                 }
-                draw->AddCircle(center, radius_px, IM_COL32(255, 190, 55, 245), 48, 2.0f);
-                draw->AddCircleFilled(center, 3.0f, IM_COL32(255, 235, 160, 255));
+
+                if (preview_mode == 2 || preview_mode == 4)
+                {
+                    DrawTerrainGridInBrush(draw, data, transform, view, projection,
+                        width, height, scene_view_min_x, scene_view_min_y,
+                        hit.position, landscape_brush.radius);
+                }
+
+                if (preview_mode == 3 || preview_mode == 4)
+                {
+                    DrawTerrainRing(draw, data, transform, view, projection,
+                        width, height, scene_view_min_x, scene_view_min_y,
+                        hit.position, landscape_brush.radius * 0.25f,
+                        IM_COL32(255, 230, 130, 95), 1.0f);
+                    DrawTerrainRing(draw, data, transform, view, projection,
+                        width, height, scene_view_min_x, scene_view_min_y,
+                        hit.position, landscape_brush.radius * 0.5f,
+                        IM_COL32(255, 220, 100, 140), 1.0f);
+                    DrawTerrainRing(draw, data, transform, view, projection,
+                        width, height, scene_view_min_x, scene_view_min_y,
+                        hit.position, landscape_brush.radius * 0.75f,
+                        IM_COL32(255, 205, 75, 175), 1.0f);
+                }
+                else if (preview_mode == 1)
+                {
+                    DrawTerrainRing(draw, data, transform, view, projection,
+                        width, height, scene_view_min_x, scene_view_min_y,
+                        hit.position, landscape_brush.radius * 0.5f,
+                        IM_COL32(255, 230, 135, 135), 1.0f);
+                }
+
+                DrawTerrainRing(draw, data, transform, view, projection,
+                    width, height, scene_view_min_x, scene_view_min_y,
+                    hit.position, landscape_brush.radius,
+                    IM_COL32(255, 190, 55, 245), 2.0f);
+
+                constexpr float cross = 0.35f;
+                DirectX::XMFLOAT3 x0{}, x1{}, z0{}, z1{};
+                SampleLandscapeSurfaceAtXZ(data, hit.position.x - cross,
+                    hit.position.z, hit.position.y, x0);
+                SampleLandscapeSurfaceAtXZ(data, hit.position.x + cross,
+                    hit.position.z, hit.position.y, x1);
+                SampleLandscapeSurfaceAtXZ(data, hit.position.x,
+                    hit.position.z - cross, hit.position.y, z0);
+                SampleLandscapeSurfaceAtXZ(data, hit.position.x,
+                    hit.position.z + cross, hit.position.y, z1);
+                x0.y += 0.06f; x1.y += 0.06f; z0.y += 0.06f; z1.y += 0.06f;
+                DrawProjectedLine(draw, transform, view, projection, width, height,
+                    scene_view_min_x, scene_view_min_y, x0, x1,
+                    IM_COL32(255, 235, 160, 255), 2.0f);
+                DrawProjectedLine(draw, transform, view, projection, width, height,
+                    scene_view_min_x, scene_view_min_y, z0, z1,
+                    IM_COL32(255, 235, 160, 255), 2.0f);
+
+                char radius_text[32]{};
+                std::snprintf(radius_text, sizeof(radius_text),
+                    "R %.1fm", landscape_brush.radius);
+                draw->AddText({ center.x + 8.0f, center.y + 8.0f },
+                    IM_COL32(255, 238, 180, 245), radius_text);
             }
             else if (landscape_topology_selection_mode == 0)
             {
