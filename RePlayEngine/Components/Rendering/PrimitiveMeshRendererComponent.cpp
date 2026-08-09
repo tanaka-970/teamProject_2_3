@@ -36,6 +36,9 @@ namespace ReplayEngine::Components
         out.outline = outline;
         out.cast_shadow = cast_shadow;
         out.receive_shadow = receive_shadow;
+        out.double_sided =
+            primitive_type == static_cast<int>(Plane) ||
+            primitive_type == static_cast<int>(Quad);
         out.skinned = false;
         out.clip_index = -1;
         out.animation_time = 0.0f;

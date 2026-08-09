@@ -1287,7 +1287,7 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
 	wcex.hInstance = instance;
 	wcex.hIcon = 0;
 	wcex.hCursor = LoadCursor(NULL, IDC_ARROW);
-	wcex.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+	wcex.hbrBackground = static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
 	wcex.lpszMenuName = NULL;
 	wcex.lpszClassName = APPLICATION_NAME;
 	wcex.hIconSm = 0;
@@ -1295,10 +1295,9 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
 
 	RECT rc{ 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT };
 	AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, FALSE);
-	HWND hwnd = CreateWindowExW(0, APPLICATION_NAME, L"", WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+	HWND hwnd = CreateWindowExW(0, APPLICATION_NAME, L"", WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT, CW_USEDEFAULT, rc.right - rc.left, rc.bottom - rc.top,
 		NULL, NULL, instance, NULL);
-	ShowWindow(hwnd, automated_smoke_test_frames > 0 ? SW_HIDE : cmd_show);
 
     int exit_code = 0;
     Microsoft::WRL::ComPtr<ID3D11Debug> d3d11_debug;
@@ -1317,7 +1316,8 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
             application.request_shutdown_regression();
         }
 	    SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&application));
-	    exit_code = application.run();
+	    exit_code = application.run(
+            automated_smoke_test_frames > 0 ? SW_HIDE : cmd_show);
         d3d11_debug = application.acquire_d3d11_debug();
     }
 

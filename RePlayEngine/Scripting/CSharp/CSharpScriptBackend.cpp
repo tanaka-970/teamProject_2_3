@@ -844,14 +844,17 @@ namespace ReplayEngine::Scripting::CSharp
             return false;
         }
 
-        const CSharpBuildResult managed_build =
-            CSharpProject::BuildManagedApi(project_root_);
-        if (!managed_build.succeeded)
+        if (CSharpProject::ManagedApiBuildRequired(project_root_))
         {
-            last_build_ = managed_build;
-            SetLastError(managed_build.output_text.empty()
-                ? "Managed API build failed." : managed_build.output_text);
-            return false;
+            const CSharpBuildResult managed_build =
+                CSharpProject::BuildManagedApi(project_root_);
+            if (!managed_build.succeeded)
+            {
+                last_build_ = managed_build;
+                SetLastError(managed_build.output_text.empty()
+                    ? "Managed API build failed." : managed_build.output_text);
+                return false;
+            }
         }
 
         if (!LoadHost()) return false;
@@ -860,6 +863,18 @@ namespace ReplayEngine::Scripting::CSharp
         if (!SetNativeApi()) return false;
 
         initialized_ = true;
+
+        // 変更がなければ dotnet を起動せず、前回の Assembly を直接ロードする。
+        // 初回・ソース変更後・既存 Assembly のロード失敗時だけビルドへ戻る。
+        const std::filesystem::path game_assembly =
+            CSharpProject::GameScriptsAssemblyPath(project_root_);
+        if (!CSharpProject::GameScriptsBuildRequired(project_root_))
+        {
+            last_build_.succeeded = true;
+            last_build_.exit_code = 0;
+            last_build_.output_assembly = game_assembly;
+            if (ReloadLastBuiltAssembly()) return true;
+        }
 
         // User script のコンパイル失敗で Editor 起動を止めない。
         // 成功していた旧 Assembly がある場合は Managed 側が保持する。

@@ -589,6 +589,22 @@ void framework::update_object_scene(float elapsed_time)
     object_editor_context.Selection().PruneMissing(scene);
     sync_object_lights();
 
+    // 削除済み Landscape の GPU メッシュをフレーム更新時に 1 回だけ解放する。
+    // 非表示なだけの Landscape は再表示時の再生成を避けるためキャッシュへ残す。
+    for (auto it = landscape_gpu_mesh_cache.begin(); it != landscape_gpu_mesh_cache.end();)
+    {
+        const ReplayEngine::Core::GameObject* object = scene.FindGameObjectByID(
+            ReplayEngine::Core::ObjectID{ it->first });
+        const bool still_owned = object != nullptr && !object->PendingDestroy() &&
+            object->GetComponent<ReplayEngine::Components::LandscapeComponent>() != nullptr &&
+            object->GetComponent<ReplayEngine::Components::LandscapeRendererComponent>() != nullptr;
+
+        if (!still_owned)
+            it = landscape_gpu_mesh_cache.erase(it);
+        else
+            ++it;
+    }
+
     if (!object_scene_play_mode && object_editor_context.Dirty())
     {
         object_autosave_elapsed += (std::max)(0.0f, elapsed_time);
@@ -687,7 +703,20 @@ void framework::sync_object_lights()
 
     if (!directional_found)
     {
-        pbr.light.directional_color = { 0.0f, 0.0f, 0.0f, 0.0f };
+        // Scene View は配置・選択のための編集画面なので、Light がまだ無い
+        // 空Sceneでも PBR Mesh の形が分かる最低限の補助光を使う。
+        // Play/GameではSceneの照明設定を尊重し、Lightなしなら従来どおり暗闇にする。
+        const bool editor_preview_light =
+            editor_mode && edit_mode_active && !object_scene_play_mode;
+        if (editor_preview_light)
+        {
+            light_direction = { 0.35f, -1.0f, 0.25f, 0.0f };
+            pbr.light.directional_color = { 1.0f, 0.98f, 0.94f, 1.25f };
+        }
+        else
+        {
+            pbr.light.directional_color = { 0.0f, 0.0f, 0.0f, 0.0f };
+        }
         pbr.light.shadow_params.w = 0.0f;
     }
 }
@@ -1480,7 +1509,7 @@ ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
     item.ambient_occlusion = material->ambient_occlusion;
     item.emissive_color = material->emissive;
     item.emissive_strength = material->emissive_strength;
-    item.double_sided = material->double_sided;
+    item.double_sided = source.double_sided || material->double_sided;
     item.outline = material->layers.Contains(BuiltInShaderLayers::Outline);
     item.pixelate_size = material->pixelate_grid;
     item.pixelate_strength = material->pixelate_strength;
@@ -1607,7 +1636,7 @@ void framework::draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shade
             else
             {
                 primitive->render(immediate_context.Get(), item.world, item.tint,
-                    static_forward_shader(SHADING_MODEL_PBR));
+                    static_forward_shader(item.shading_model));
             }
 
             if (item.double_sided)

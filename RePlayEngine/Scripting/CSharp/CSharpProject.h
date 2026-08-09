@@ -90,6 +90,12 @@ namespace ReplayEngine::Scripting::CSharp
         static CSharpBuildResult BuildGameScripts(
             const std::filesystem::path& project_root,
             const std::string& configuration = "Debug");
+        static bool ManagedApiBuildRequired(
+            const std::filesystem::path& project_root,
+            const std::string& configuration = "Debug");
+        static bool GameScriptsBuildRequired(
+            const std::filesystem::path& project_root,
+            const std::string& configuration = "Debug");
 
         static bool OpenVisualStudio(const std::filesystem::path& file,
             int line, std::string& error);

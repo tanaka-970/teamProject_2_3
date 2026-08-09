@@ -445,8 +445,8 @@ void framework::render(float elapsed_time)
             // 【必須】本描画は DepthFunc=EQUAL なので、プリパスで深度を書かなかった
             // メッシュは比較に失敗して画面から丸ごと消える。
             // キャラクターはこの経路でしか描かれないため、ここを外すと何も映らない。
-            draw_object_scene_meshes(nullptr, false, true);
             draw_landscape_scene_meshes(false, true);
+            draw_object_scene_meshes(nullptr, false, true);
 
             // 深度プリパスの描画数は統計へ混ぜない(同じ形状を二重に数えないため)。
         }
@@ -477,8 +477,8 @@ void framework::render(float elapsed_time)
         // 提出リストは update_object_scene() が毎フレーム作り直す。
         //
         // Stage/Characterを含むScene描画はこの提出リスト1本だけ。
-        draw_object_scene_meshes(skinned_mesh_gbuffer_ps.Get(), true);
         draw_landscape_scene_meshes(true, false);
+        draw_object_scene_meshes(skinned_mesh_gbuffer_ps.Get(), true);
 
         deferred.gbuffer_end(immediate_context.Get());
 
@@ -509,6 +509,16 @@ void framework::render(float elapsed_time)
         // GBufferをSRVへ切り替えた後、ライト計算結果をDeferred側の出力へ書く。
         // タイルド版が有効なときはコンピュートシェーダーへ差し替える。
         // デバッグ表示中はPS版のみが対応しているのでそちらを使う。
+        // Object/primitive draws leave their own culling and depth states behind.
+        // The classic deferred pass renders a fullscreen strip, so inheriting a
+        // mesh cull state can reject the entire lighting pass and leave only clear.
+        immediate_context->OMSetBlendState(
+            blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
+        immediate_context->OMSetDepthStencilState(
+            depth_stencil_states[(size_t)DEPTH_STATE::ZT_OFF_ZW_OFF].Get(), 0);
+        immediate_context->RSSetState(
+            rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+
         const bool use_tiled = tiled_deferred.enabled && tiled_deferred.Initialized() &&
             render_graph.DeferredDebugMode() == 0;
         if (use_tiled)

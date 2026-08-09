@@ -220,10 +220,6 @@ bool framework::initialize()
         _ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
     }
 
-    // ロゴ、ロード、ゲームの順に進め、重いモデルと画像はロードシーン内で生成する。
-    // これによりロゴ表示前の起動停止を防ぐ。
-    scene_manager.SetScene(
-        std::make_unique<ReplayEngine::Scene::BootLogoScene>(), device.Get());
     auto loading_scene = std::make_unique<ReplayEngine::Scene::LoadingScene>();
     // 任意アセットの読み込みは「無ければスキップして続行」に統一する。
     // 実行に必須ではないファイルの不足で起動が止まらないようにするため。
@@ -293,7 +289,18 @@ bool framework::initialize()
             return true;
         });
     }
-    scene_manager.QueueScene(std::move(loading_scene), device.Get());
+    // Game 起動ではロゴの裏でロードを進める。Editor 起動では固定長の
+    // ロゴ待ちを省き、暗いロード画面から直接セッションを復元する。
+    if (object_boot_from_startup_scene)
+    {
+        scene_manager.SetScene(
+            std::make_unique<ReplayEngine::Scene::BootLogoScene>(), device.Get());
+        scene_manager.QueueScene(std::move(loading_scene), device.Get());
+    }
+    else
+    {
+        scene_manager.SetScene(std::move(loading_scene), device.Get());
+    }
 
     scene_manager.QueueSceneFactory([this]() -> std::unique_ptr<ReplayEngine::Scene::IScene>
     {

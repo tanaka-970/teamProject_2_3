@@ -654,7 +654,7 @@ public:
         log << "[" << stamp << "] " << reason << '\n';
     }
 
-    int run()
+    int run(int show_command = SW_SHOWDEFAULT)
     {
         MSG msg{};
         log_shutdown_reason("=== 起動 ===");
@@ -682,40 +682,51 @@ public:
         configure_editor_style();
 #endif
 
+        // Device / Shader / Script / Editor の初期化が終わるまで Window は隠す。
+        // 先に表示すると、初回描画まで Windows の背景色だけが長時間見えてしまう。
+        if (show_command != SW_HIDE)
+        {
+            ShowWindow(hwnd, show_command);
+            UpdateWindow(hwnd);
+        }
+
         while (WM_QUIT != msg.message)
         {
-            if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
+            // Drain a bounded batch, then advance one frame. Waiting for the queue to
+            // become completely empty allowed WM_PAINT/input traffic to starve render.
+            for (int message_count = 0; message_count < 64 &&
+                PeekMessage(&msg, NULL, 0, 0, PM_REMOVE); ++message_count)
             {
                 TranslateMessage(&msg);
                 DispatchMessage(&msg);
+                if (msg.message == WM_QUIT) break;
             }
-            else
+            if (msg.message == WM_QUIT) break;
+
+            tictoc.tick();
+            calculate_frame_stats();
+            // 描画中の未捕捉例外で静かに落ちると原因が追えないため、
+            // ここで捕まえて理由を残す。
+            try
             {
-                tictoc.tick();
-                calculate_frame_stats();
-                // 描画中の未捕捉例外で静かに落ちると原因が追えないため、
-                // ここで捕まえて理由を残す。
-                try
+                update(tictoc.time_interval());
+                render(tictoc.time_interval());
+                if (automated_smoke_test_frames > 0 &&
+                    ++automated_smoke_test_frames_rendered >= automated_smoke_test_frames)
                 {
-                    update(tictoc.time_interval());
-                    render(tictoc.time_interval());
-                    if (automated_smoke_test_frames > 0 &&
-                        ++automated_smoke_test_frames_rendered >= automated_smoke_test_frames)
-                    {
-                        automated_smoke_test_frames = 0;
-                        PostMessage(hwnd, WM_CLOSE, 0, 0);
-                    }
+                    automated_smoke_test_frames = 0;
+                    PostMessage(hwnd, WM_CLOSE, 0, 0);
                 }
-                catch (const std::exception& exception)
-                {
-                    log_shutdown_reason((std::string("例外: ") + exception.what()).c_str());
-                    throw;
-                }
-                catch (...)
-                {
-                    log_shutdown_reason("不明な例外");
-                    throw;
-                }
+            }
+            catch (const std::exception& exception)
+            {
+                log_shutdown_reason((std::string("例外: ") + exception.what()).c_str());
+                throw;
+            }
+            catch (...)
+            {
+                log_shutdown_reason("不明な例外");
+                throw;
             }
         }
         log_shutdown_reason("メッセージループを抜けた (WM_QUIT)");
