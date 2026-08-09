@@ -4,7 +4,11 @@
 #include "../Component/MissingComponent.h"
 #include "../../Reflection/Registry/PropertyRegistry.h"
 
+#include "../../Components/Audio/AudioListenerComponent.h"
+#include "../../Components/Audio/AudioSourceComponent.h"
+#include "../../Components/Camera/CameraComponent.h"
 #include "../../Components/Camera/CameraTargetComponent.h"
+#include "../../Components/Camera/FollowTargetComponent.h"
 #include "../../Components/Editor/EditorNoteComponent.h"
 #include "../../Components/Core/TransformComponent.h"
 #include "../../Components/Gameplay/CharacterMotorComponent.h"
@@ -20,6 +24,12 @@
 #include "../../Components/Landscape/LandscapeComponent.h"
 #include "../../Components/Landscape/LandscapeRendererComponent.h"
 #include "../../Components/Landscape/LandscapeColliderComponent.h"
+#include "../../Components/UI/CanvasComponent.h"
+#include "../../Components/UI/RectTransformComponent.h"
+#include "../../Components/UI/UIImageComponent.h"
+#include "../../Components/UI/UITextComponent.h"
+#include "../../Components/UI/UIButtonComponent.h"
+#include "../../Components/UI/UIMaskComponent.h"
 #include "../../Components/Rendering/AnimatorComponent.h"
 #include "../../Components/Rendering/LightComponents.h"
 #include "../../Components/Rendering/MeshRendererComponent.h"
@@ -32,10 +42,15 @@ namespace ReplayEngine::Core
     namespace
     {
         using Components::AnimatorComponent;
+        using Components::AudioListenerComponent;
+        using Components::AudioSourceComponent;
         using Components::BoxColliderComponent;
+        using Components::CameraComponent;
         using Components::CameraTargetComponent;
+        using Components::CanvasComponent;
         using Components::CapsuleColliderComponent;
         using Components::CharacterMotorComponent;
+        using Components::FollowTargetComponent;
         using Components::HealthComponent;
         using Components::MeshColliderComponent;
         using Components::LandscapeComponent;
@@ -50,6 +65,7 @@ namespace ReplayEngine::Core
         using Components::PlayerControllerComponent;
         using Components::PlayerInputComponent;
         using Components::RotatorComponent;
+        using Components::RectTransformComponent;
         using Components::SkinnedMeshRendererComponent;
         using Components::SphereColliderComponent;
         using Components::SpawnPointComponent;
@@ -58,8 +74,13 @@ namespace ReplayEngine::Core
         using Components::KillVolumeComponent;
         using Components::JumpPadComponent;
         using Components::DamageAreaComponent;
+        using Components::UIButtonComponent;
+        using Components::UIImageComponent;
+        using Components::UIMaskComponent;
+        using Components::UITextComponent;
         using Components::TransformComponent;
 
+        using Reflection::Animatable;
         using Reflection::MakeAccessorProperty;
         using Reflection::MakeProperty;
         using Reflection::PropertyRegistry;
@@ -786,36 +807,131 @@ namespace ReplayEngine::Core
                     .Tooltip("追従点は変えずに、カメラが見る点だけをずらす。"));
 
             PropertyRegistry::Register<CameraTargetComponent>(
-                MakeProperty("follow_distance", &CameraTargetComponent::follow_distance)
-                    .Display("追従距離").Range(0.5, 100.0).Step(0.1));
-
-            PropertyRegistry::Register<CameraTargetComponent>(
-                MakeProperty("follow_height", &CameraTargetComponent::follow_height)
-                    .Display("追従高さ").Range(-10.0, 50.0).Step(0.1));
-
-            PropertyRegistry::Register<CameraTargetComponent>(
-                MakeProperty("follow_lag", &CameraTargetComponent::follow_lag)
-                    .Display("追従の速さ").Range(0.1, 60.0).Step(0.1));
-
-            PropertyRegistry::Register<CameraTargetComponent>(
                 MakeProperty("priority", &CameraTargetComponent::priority)
                     .Display("優先度").Range(-100.0, 100.0).Step(1.0));
+        }
 
-            PropertyRegistry::Register<CameraTargetComponent>(
+        void RegisterCamera()
+        {
+            ComponentRegistry::Register<CameraComponent>(
+                ComponentTypeInfo::Describe("Camera", "Camera")
+                    .WithTooltip("GameObject の Transform を姿勢として使う Runtime Camera。"));
+
+            PropertyRegistry::Register<CameraComponent>(
+                MakeProperty("projection_mode", &CameraComponent::projection_mode)
+                    .Display("投影方式")
+                    .AsEnum({ "Perspective", "Orthographic" }));
+
+            PropertyRegistry::Register<CameraComponent>(
                 MakeProperty("field_of_view_degrees",
-                    &CameraTargetComponent::field_of_view_degrees)
-                    .Display("視野角 (度)").Range(1.0, 179.0).Step(0.5)
-                    .Tooltip("この Target が選ばれたときの Runtime Camera の視野角。"));
+                    &CameraComponent::field_of_view_degrees)
+                    .Display("視野角 (度)").Range(1.0, 179.0).Step(0.5));
 
-            PropertyRegistry::Register<CameraTargetComponent>(
-                MakeProperty("near_clip", &CameraTargetComponent::near_clip)
-                    .Display("Near Clip").Range(0.001, 10.0).Step(0.01)
-                    .Tooltip("この Target が選ばれたときの Runtime Camera の Near Clip。"));
+            PropertyRegistry::Register<CameraComponent>(
+                MakeProperty("orthographic_size", &CameraComponent::orthographic_size)
+                    .Display("Orthographic Size").Range(0.01, 10000.0).Step(0.1));
 
-            PropertyRegistry::Register<CameraTargetComponent>(
-                MakeProperty("far_clip", &CameraTargetComponent::far_clip)
-                    .Display("Far Clip").Range(10.0, 100000.0).Step(10.0)
-                    .Tooltip("この Target が選ばれたときの Runtime Camera の Far Clip。"));
+            PropertyRegistry::Register<CameraComponent>(
+                MakeProperty("near_clip", &CameraComponent::near_clip)
+                    .Display("Near Clip").Range(0.001, 10.0).Step(0.01));
+
+            PropertyRegistry::Register<CameraComponent>(
+                MakeProperty("far_clip", &CameraComponent::far_clip)
+                    .Display("Far Clip").Range(10.0, 100000.0).Step(10.0));
+
+            PropertyRegistry::Register<CameraComponent>(
+                MakeProperty("priority", &CameraComponent::priority)
+                    .Display("優先度").Range(-100.0, 100.0).Step(1.0));
+
+            PropertyRegistry::Register<CameraComponent>(
+                MakeProperty("viewport_rect", &CameraComponent::viewport_rect)
+                    .Display("Viewport (x y w h)").Range(0.0, 1.0).Step(0.01)
+                    .Tooltip("Phase 1 では全画面描画だけを使う。"));
+        }
+
+        void RegisterFollowTarget()
+        {
+            ComponentRegistry::Register<FollowTargetComponent>(
+                ComponentTypeInfo::Describe("Follow Target", "Camera")
+                    .WithTooltip("同じ GameObject の Camera を Camera Target へ追従させる。")
+                    .Requires<CameraComponent>());
+
+            PropertyRegistry::Register<FollowTargetComponent>(
+                MakeProperty("follow_distance", &FollowTargetComponent::follow_distance)
+                    .Display("追従距離").Range(0.5, 100.0).Step(0.1));
+
+            PropertyRegistry::Register<FollowTargetComponent>(
+                MakeProperty("follow_height", &FollowTargetComponent::follow_height)
+                    .Display("追従高さ").Range(-10.0, 50.0).Step(0.1));
+
+            PropertyRegistry::Register<FollowTargetComponent>(
+                MakeProperty("follow_lag", &FollowTargetComponent::follow_lag)
+                    .Display("追従の速さ").Range(0.0, 60.0).Step(0.1));
+
+            PropertyRegistry::Register<FollowTargetComponent>(
+                MakeProperty("rotation_input_enabled",
+                    &FollowTargetComponent::rotation_input_enabled)
+                    .Display("回転入力を使う"));
+
+            PropertyRegistry::Register<FollowTargetComponent>(
+                MakeProperty("yaw_offset", &FollowTargetComponent::yaw_offset)
+                    .Display("水平回転オフセット").Step(0.01));
+
+            PropertyRegistry::Register<FollowTargetComponent>(
+                MakeProperty("pitch_offset", &FollowTargetComponent::pitch_offset)
+                    .Display("垂直回転オフセット").Range(-1.4, 1.4).Step(0.01));
+        }
+
+        void RegisterAudioListener()
+        {
+            ComponentRegistry::Register<AudioListenerComponent>(
+                ComponentTypeInfo::Describe("Audio Listener", "Audio")
+                    .WithTooltip("Transform の位置と回転を 3D Audio の聞く位置として使う。"));
+
+            PropertyRegistry::Register<AudioListenerComponent>(
+                MakeProperty("priority", &AudioListenerComponent::priority)
+                    .Display("優先度").Range(-100.0, 100.0).Step(1.0));
+        }
+
+        void RegisterAudioSource()
+        {
+            ComponentRegistry::Register<AudioSourceComponent>(
+                ComponentTypeInfo::Describe("Audio Source", "Audio")
+                    .WithTooltip("PCM .wav を直接パス指定で再生する。"));
+
+            PropertyRegistry::Register<AudioSourceComponent>(
+                MakeProperty("clip_path", &AudioSourceComponent::clip_path)
+                    .Display("Clip Path")
+                    .Tooltip("PCM .wav のファイルパス。AssetDatabase へは統合しない。"));
+
+            PropertyRegistry::Register<AudioSourceComponent>(
+                MakeProperty("loop", &AudioSourceComponent::loop)
+                    .Display("Loop"));
+
+            PropertyRegistry::Register<AudioSourceComponent>(
+                MakeProperty("volume", &AudioSourceComponent::volume)
+                    .Display("Volume").Range(0.0, 4.0).Step(0.01));
+
+            PropertyRegistry::Register<AudioSourceComponent>(
+                MakeProperty("pitch", &AudioSourceComponent::pitch)
+                    .Display("Pitch").Range(0.25, 4.0).Step(0.01));
+
+            PropertyRegistry::Register<AudioSourceComponent>(
+                MakeProperty("play_on_start", &AudioSourceComponent::play_on_start)
+                    .Display("Play On Start"));
+
+            PropertyRegistry::Register<AudioSourceComponent>(
+                MakeProperty("spatial", &AudioSourceComponent::spatial)
+                    .Display("Spatial")
+                    .AsEnum({ "2D", "3D" }));
+
+            PropertyRegistry::Register<AudioSourceComponent>(
+                MakeProperty("min_distance", &AudioSourceComponent::min_distance)
+                    .Display("Min Distance").Range(0.0, 100000.0).Step(0.1));
+
+            PropertyRegistry::Register<AudioSourceComponent>(
+                MakeProperty("max_distance", &AudioSourceComponent::max_distance)
+                    .Display("Max Distance").Range(0.001, 100000.0).Step(0.1));
         }
 
         void RegisterLights()
@@ -861,6 +977,202 @@ namespace ReplayEngine::Core
             PropertyRegistry::Register<SpotLightComponent>(
                 MakeProperty("outer_angle_degrees", &SpotLightComponent::outer_angle_degrees)
                     .Display("外側角度").Range(0.1, 179.0).Step(0.5));
+        }
+
+        void RegisterUI()
+        {
+            ComponentRegistry::Register<RectTransformComponent>(
+                ComponentTypeInfo::Describe("Rect Transform", "UI")
+                    .WithTooltip("Canvas 上の矩形。保存値は anchor / anchored_position / size_delta / pivot だけです。"));
+            PropertyRegistry::Register<RectTransformComponent>(
+                MakeProperty("anchor_min", &RectTransformComponent::anchor_min)
+                    .Display("アンカー最小").Step(0.001));
+            PropertyRegistry::Register<RectTransformComponent>(
+                MakeProperty("anchor_max", &RectTransformComponent::anchor_max)
+                    .Display("アンカー最大").Step(0.001));
+            PropertyRegistry::Register<RectTransformComponent>(
+                MakeProperty("anchored_position", &RectTransformComponent::anchored_position)
+                    .Display("位置").Step(0.5)
+                    .Tooltip("アンカー基準からの相対位置です。"));
+            PropertyRegistry::Register<RectTransformComponent>(
+                MakeProperty("size_delta", &RectTransformComponent::size_delta)
+                    .Display("サイズ差分").Step(0.5)
+                    .Tooltip("アンカーが一点なら矩形サイズ、範囲なら親サイズとの差分です。"));
+            PropertyRegistry::Register<RectTransformComponent>(
+                MakeProperty("pivot", &RectTransformComponent::pivot)
+                    .Display("ピボット").Step(0.001));
+            PropertyRegistry::Register<RectTransformComponent>(
+                MakeProperty("rotation", &RectTransformComponent::rotation)
+                    .Display("回転 (度)").Step(0.5));
+            PropertyRegistry::Register<RectTransformComponent>(
+                MakeProperty("scale", &RectTransformComponent::scale)
+                    .Display("拡大率").Step(0.01));
+            PropertyRegistry::Register<RectTransformComponent>(
+                MakeAccessorProperty<RectTransformComponent>("resolved_rect", PropertyType::Vector4,
+                    [](const RectTransformComponent& component)
+                    { return PropertyValue::MakeVector4(component.ResolvedRect()); },
+                    [](RectTransformComponent&, const PropertyValue&) {})
+                .Display("確定矩形").ReadOnly().RuntimeOnly().NotSerializable().Advanced()
+                .Tooltip("UILayout が毎フレーム計算した結果です。Scene には保存しません。"));
+
+            ComponentRegistry::Register<CanvasComponent>(
+                ComponentTypeInfo::Describe("Canvas", "UI")
+                    .WithTooltip("Screen Space Overlay の UI ルートです。配下の UI を描画順にまとめます。")
+                    .Requires<RectTransformComponent>());
+            PropertyRegistry::Register<CanvasComponent>(
+                MakeProperty("reference_resolution", &CanvasComponent::reference_resolution)
+                    .Display("基準解像度").Step(1.0));
+            PropertyRegistry::Register<CanvasComponent>(
+                MakeProperty("scale_mode", &CanvasComponent::scale_mode)
+                    .Display("スケール方式")
+                    .AsEnum({ "固定ピクセル", "画面サイズに合わせる" })
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<CanvasComponent>(
+                MakeProperty("match_width_or_height", &CanvasComponent::match_width_or_height)
+                    .Display("幅/高さの一致").Range(0.0, 1.0).Step(0.01));
+            PropertyRegistry::Register<CanvasComponent>(
+                MakeProperty("sort_order", &CanvasComponent::sort_order)
+                    .Display("描画順").Step(1.0));
+            PropertyRegistry::Register<CanvasComponent>(
+                MakeProperty("opacity", &CanvasComponent::opacity)
+                    .Display("不透明度").Range(0.0, 1.0).Step(0.01));
+
+            ComponentRegistry::Register<UIImageComponent>(
+                ComponentTypeInfo::Describe("Image", "UI")
+                    .WithTooltip("矩形画像を描きます。Blend は既存の描画ステートを再利用します。")
+                    .Requires<RectTransformComponent>());
+            PropertyRegistry::Register<UIImageComponent>(
+                MakeProperty("sprite", &UIImageComponent::sprite)
+                    .Display("画像").OfAssetType("Image")
+                    .Animation(Animatable::Step)
+                    .Tooltip("AssetDatabase の Image GUID です。未指定なら白矩形で描きます。"));
+            PropertyRegistry::Register<UIImageComponent>(
+                MakeProperty("color", &UIImageComponent::color)
+                    .Display("色").AsColor());
+            PropertyRegistry::Register<UIImageComponent>(
+                MakeProperty("opacity", &UIImageComponent::opacity)
+                    .Display("不透明度").Range(0.0, 1.0).Step(0.01));
+            PropertyRegistry::Register<UIImageComponent>(
+                MakeProperty("fill_amount", &UIImageComponent::fill_amount)
+                    .Display("塗り量").Range(0.0, 1.0).Step(0.01));
+            PropertyRegistry::Register<UIImageComponent>(
+                MakeProperty("fill_method", &UIImageComponent::fill_method)
+                    .Display("塗り方向")
+                    .AsEnum({ "水平", "垂直", "円形 360" })
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<UIImageComponent>(
+                MakeProperty("blend_mode", &UIImageComponent::blend_mode)
+                    .Display("ブレンド")
+                    .AsEnum({ "通常", "加算", "乗算", "スクリーン" })
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<UIImageComponent>(
+                MakeProperty("uv_offset", &UIImageComponent::uv_offset)
+                    .Display("UV オフセット").Step(0.001).Advanced());
+            PropertyRegistry::Register<UIImageComponent>(
+                MakeProperty("uv_scale", &UIImageComponent::uv_scale)
+                    .Display("UV スケール").Step(0.001).Advanced());
+            PropertyRegistry::Register<UIImageComponent>(
+                MakeProperty("nine_slice", &UIImageComponent::nine_slice)
+                    .Display("9 スライス").Step(1.0).Advanced()
+                    .Tooltip("Phase 1 では保存だけ行います。描画分割は Sprite Editor 後に接続します。"));
+            PropertyRegistry::Register<UIImageComponent>(
+                MakeProperty("preserve_aspect", &UIImageComponent::preserve_aspect)
+                    .Display("比率を維持"));
+
+            ComponentRegistry::Register<UITextComponent>(
+                ComponentTypeInfo::Describe("Text", "UI")
+                    .WithTooltip("文字列を 1 文字 1 クアッドで描きます。character_index は Text Animator 用に保持します。")
+                    .Requires<RectTransformComponent>());
+            PropertyRegistry::Register<UITextComponent>(
+                MakeProperty("text", &UITextComponent::text)
+                    .Display("テキスト").Animation(Animatable::Step));
+            PropertyRegistry::Register<UITextComponent>(
+                MakeProperty("font", &UITextComponent::font)
+                    .Display("フォント").Animation(Animatable::Step)
+                    .Tooltip("将来の Font Asset GUID です。未指定でも fallback atlas で描画します。"));
+            PropertyRegistry::Register<UITextComponent>(
+                MakeProperty("font_size", &UITextComponent::font_size)
+                    .Display("文字サイズ").Range(1.0, 512.0).Step(1.0));
+            PropertyRegistry::Register<UITextComponent>(
+                MakeProperty("color", &UITextComponent::color)
+                    .Display("色").AsColor());
+            PropertyRegistry::Register<UITextComponent>(
+                MakeProperty("opacity", &UITextComponent::opacity)
+                    .Display("不透明度").Range(0.0, 1.0).Step(0.01));
+            PropertyRegistry::Register<UITextComponent>(
+                MakeProperty("character_spacing", &UITextComponent::character_spacing)
+                    .Display("文字間隔").Step(0.5));
+            PropertyRegistry::Register<UITextComponent>(
+                MakeProperty("line_spacing", &UITextComponent::line_spacing)
+                    .Display("行間倍率").Range(0.1, 4.0).Step(0.01));
+            PropertyRegistry::Register<UITextComponent>(
+                MakeProperty("horizontal_align", &UITextComponent::horizontal_align)
+                    .Display("横揃え")
+                    .AsEnum({ "左", "中央", "右" })
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<UITextComponent>(
+                MakeProperty("vertical_align", &UITextComponent::vertical_align)
+                    .Display("縦揃え")
+                    .AsEnum({ "上", "中央", "下" })
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<UITextComponent>(
+                MakeProperty("word_wrap", &UITextComponent::word_wrap)
+                    .Display("折り返し"));
+
+            ComponentRegistry::Register<UIButtonComponent>(
+                ComponentTypeInfo::Describe("Button", "UI")
+                    .WithTooltip("Hover / Pressed / Disabled の状態を持つ UI ボタンです。通知は Phase 7 で C# へ接続します。")
+                    .Requires<RectTransformComponent>());
+            PropertyRegistry::Register<UIButtonComponent>(
+                MakeProperty("interactable", &UIButtonComponent::interactable)
+                    .Display("操作可能"));
+            PropertyRegistry::Register<UIButtonComponent>(
+                MakeProperty("target_image", &UIButtonComponent::target_image)
+                    .Display("対象 Image").Animation(Animatable::Step));
+            PropertyRegistry::Register<UIButtonComponent>(
+                MakeProperty("normal_color", &UIButtonComponent::normal_color)
+                    .Display("通常色").AsColor());
+            PropertyRegistry::Register<UIButtonComponent>(
+                MakeProperty("hover_color", &UIButtonComponent::hover_color)
+                    .Display("ホバー色").AsColor());
+            PropertyRegistry::Register<UIButtonComponent>(
+                MakeProperty("pressed_color", &UIButtonComponent::pressed_color)
+                    .Display("押下色").AsColor());
+            PropertyRegistry::Register<UIButtonComponent>(
+                MakeProperty("disabled_color", &UIButtonComponent::disabled_color)
+                    .Display("無効色").AsColor());
+            PropertyRegistry::Register<UIButtonComponent>(
+                MakeProperty("state", &UIButtonComponent::state)
+                    .Display("現在状態")
+                    .AsEnum({ "通常", "ホバー", "押下", "無効" })
+                    .ReadOnly().RuntimeOnly().NotSerializable());
+
+            ComponentRegistry::Register<UIMaskComponent>(
+                ComponentTypeInfo::Describe("Mask", "UI")
+                    .WithTooltip("RectTransform の矩形で子孫 UI を切り抜きます。D3D11 scissor を使います。")
+                    .Requires<RectTransformComponent>());
+            PropertyRegistry::Register<UIMaskComponent>(
+                MakeProperty("enabled_mask", &UIMaskComponent::enabled_mask)
+                    .Display("マスク有効"));
+            PropertyRegistry::Register<UIMaskComponent>(
+                MakeProperty("show_mask_graphic", &UIMaskComponent::show_mask_graphic)
+                    .Display("自身を表示"));
+
+            // ---- 拡張点: UI Effect / Layout Group / Animation ---------------
+            //
+            // 【今は入れていない理由】
+            //   Phase 1 は保存形式、Rect 解決、描画ステート、Mask の入口を固定する段階。
+            //   自動配置や UI Effect は Undo の粒度と RenderGraph 連携を先に決める必要がある。
+            //
+            // 【入れるときにここへ足す】
+            //   ・Layout Group は RectTransform の保存値を書き換えず、UILayout の一時値だけを変更する
+            //   ・UI Effect は UIImage / UIText の直前で Material パラメータを積む
+            //   ・Motion は PropertyDesc::animatable と PropertyValue::Lerp だけを見る
+            //
+            // 【壊してはいけない前提】
+            //   ・UIText は 1 文字 1 クアッドで character_index を持つ
+            //   ・Blend は framework の共有 BLEND_STATE を使う
+            //   ・Mask は Phase 1 では scissor rasterizer state だけを使う
         }
 
         void RegisterEditorNote()
@@ -1020,6 +1332,7 @@ namespace ReplayEngine::Core
         RegisterMeshRenderer();
         RegisterPrimitiveMeshRenderer();
         RegisterLights();
+        RegisterUI();
         RegisterSkinnedMeshRenderer();
         RegisterAnimator();
         RegisterSphereCollider();
@@ -1030,6 +1343,10 @@ namespace ReplayEngine::Core
         RegisterCharacterMotor();
         RegisterPlayerInput();
         RegisterPlayerController();
+        RegisterAudioListener();
+        RegisterAudioSource();
+        RegisterCamera();
+        RegisterFollowTarget();
         RegisterCameraTarget();
         RegisterRotator();
         RegisterHealth();

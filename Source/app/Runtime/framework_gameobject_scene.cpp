@@ -13,7 +13,9 @@
 #include "gltf_model.h"
 #include "skinned_mesh.h"
 
+#include "../../RePlayEngine/Components/Camera/CameraComponent.h"
 #include "../../RePlayEngine/Components/Camera/CameraTargetComponent.h"
+#include "../../RePlayEngine/Components/Camera/FollowTargetComponent.h"
 #include "../../RePlayEngine/Components/Rendering/LightComponents.h"
 #include "../../RePlayEngine/Components/Landscape/LandscapeComponent.h"
 #include "../../RePlayEngine/Components/Landscape/LandscapeRendererComponent.h"
@@ -23,6 +25,7 @@
 #include "../../RePlayEngine/Object/Registry/BuiltInComponents.h"
 #include "../../RePlayEngine/Project/ProjectSettingsSerializer.h"
 #include "../../RePlayEngine/Rendering/Adapter/SceneRenderCollector.h"
+#include "../../RePlayEngine/UI/UILayout.h"
 
 // RuntimeContext.h は EventBus を前方宣言だけしている。
 // Events() の戻り値へ Dispatch() を呼ぶには完全型が要るので、
@@ -426,11 +429,26 @@ void framework::refresh_object_scene_services()
 
     // カメラの橋渡しを毎フレーム張り直す。
     // GameScene が作り直された場合でも参照が古くならないようにするため。
-    if (game_scene != nullptr) object_camera_bridge.Attach(&game_scene->Gameplay().GetCamera());
-    else                       object_camera_bridge.Detach();
+    const ReplayEngine::Components::CameraSelection camera_selection =
+        ReplayEngine::Components::ResolveActiveCameraSelection(scene);
+    if (camera_selection.Valid())
+    {
+        object_camera_bridge.AttachBasis(
+            camera_selection.component->Forward(),
+            camera_selection.component->Right());
+    }
+    else if (game_scene != nullptr)
+    {
+        object_camera_bridge.Attach(&game_scene->Gameplay().GetCamera());
+    }
+    else
+    {
+        object_camera_bridge.Detach();
+    }
 
     ReplayEngine::Scene::SceneServices& services = scene.Services();
     services.SetCameraBasis(&object_camera_bridge);
+    services.SetAudio(&object_audio_system);
     services.SetPlaying(object_runtime_active());
 
     // 地形の問い合わせ先は衝突世界。
@@ -575,9 +593,11 @@ void framework::update_object_scene(float elapsed_time)
 
         // Transform が確定してからカメラを動かす。
         update_object_camera_follow(elapsed_time);
+        object_audio_system.UpdateFromScene(scene);
     }
     else
     {
+        object_audio_system.StopAll();
         // 停止中でも生成・削除の予約だけは反映する。
         // Editor 操作の結果が次のフレームまで残らないようにするため。
         scene.ProcessPendingOperations();
@@ -586,6 +606,28 @@ void framework::update_object_scene(float elapsed_time)
     // 選択が消えた GameObject を指し続けないようにする。
     object_editor_context.Selection().PruneMissing(scene);
     sync_object_lights();
+
+    // Scene::Update は GameObject / Component の平坦な走査だけを担当する。
+    // UI layout は親子順序が必要なので、Scene 更新の外側で明示フェーズとして行う。
+    ReplayEngine::UI::UILayout::Resolve(scene,
+        static_cast<float>(client_width), static_cast<float>(client_height));
+    POINT mouse{};
+    GetCursorPos(&mouse);
+    ScreenToClient(hwnd, &mouse);
+    const float mouse_x = static_cast<float>(mouse.x);
+    const float mouse_y = static_cast<float>(client_height) - static_cast<float>(mouse.y);
+    const bool mouse_down = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+    const bool mouse_pressed = mouse_down && !ui_pointer_down_last;
+    const bool mouse_released = !mouse_down && ui_pointer_down_last;
+    bool input_captured = false;
+#ifdef USE_IMGUI
+    if (editor_mode && ImGui::GetCurrentContext())
+        input_captured = ImGui::GetIO().WantCaptureMouse;
+#endif
+    ReplayEngine::UI::UILayout::UpdateButtons(scene,
+        static_cast<float>(client_width), static_cast<float>(client_height),
+        mouse_x, mouse_y, mouse_down, mouse_pressed, mouse_released, input_captured);
+    ui_pointer_down_last = mouse_down;
 
     // 削除済み Landscape の GPU メッシュをフレーム更新時に 1 回だけ解放する。
     // 非表示なだけの Landscape は再表示時の再生成を避けるためキャッシュへ残す。
@@ -723,28 +765,25 @@ void framework::update_object_camera_follow(float elapsed_time)
 {
     if (game_scene == nullptr) return;
 
-    // 追従対象は CameraTargetComponent の選択規則で決める。
-    // カメラ側は操作対象の具象型を一切知らない。
-    //
-    // 解決の材料は次の 4 つだけ。
-    //   controlledObjectId / CameraTargetComponent / priority / Runtime Scene
-    // GameObject 名も Prefab 名も見ない。
     const ReplayEngine::Scene::Scene& scene = active_object_scene();
+    if (ReplayEngine::Components::ResolveActiveCameraSelection(scene).Valid())
+    {
+        return;
+    }
+
+    // CameraComponent を持たない旧シーンは保存データを書き換えず、既存の
+    // SceneGame カメラ経路へ戻す。新しい追従制御は FollowTargetComponent が担当する。
     const ReplayEngine::Core::ObjectID controlled = scene.Services().ControlledObject();
 
     const ReplayEngine::Components::CameraTargetSelection selection =
         ReplayEngine::Components::ResolveCameraTargetSelection(scene, controlled);
 
-    // CameraTarget が 1 つも無い / すべて無効化されている場合だけ自由カメラへ戻す。
-    // controlledObjectId は変更しない。Fallback は CameraTarget の priority による
-    // 視点選択だけで、操作対象の自動変更ではない。
     if (!selection.Valid())
     {
         game_scene->Gameplay().UpdateFreeCamera(elapsed_time);
         return;
     }
 
-    // 追従点は GameObject のワールド位置 + target_offset。
     const DirectX::XMFLOAT3 world = selection.object->GetTransform().WorldPosition();
     const ReplayEngine::Components::CameraTargetComponent& camera_target = *selection.component;
     const DirectX::XMFLOAT3 anchor{
@@ -755,12 +794,12 @@ void framework::update_object_camera_follow(float elapsed_time)
     game_scene->Gameplay().FollowCameraTarget(
         anchor,
         camera_target.look_at_offset,
-        camera_target.follow_distance,
-        camera_target.follow_height,
-        camera_target.follow_lag,
-        camera_target.field_of_view_degrees,
-        camera_target.near_clip,
-        camera_target.far_clip,
+        6.5f,
+        2.25f,
+        12.0f,
+        50.0f,
+        0.1f,
+        10000.0f,
         elapsed_time);
 }
 
@@ -1302,6 +1341,8 @@ void framework::count_runtime_script_instances(
 void framework::exit_object_play_mode()
 {
     if (!object_scene_play_mode) return;
+
+    object_audio_system.StopAll();
 
     // 先に衝突世界を切り離す。
     // Scene を消してから切り離すと、その間に問い合わせが来た場合に

@@ -15,6 +15,7 @@
 
 #include "framework.h"
 
+#include "../../RePlayEngine/Components/Camera/CameraComponent.h"
 #include "../../RePlayEngine/Editor/Viewport/EditorSelectionBounds.h"
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
 
@@ -43,6 +44,10 @@ DirectX::XMMATRIX framework::viewport_view_matrix() const
 {                                                                                                                                                  //
     if (using_editor_camera()) return editor_camera.ViewMatrix();                                                                                  //
                                                                                                                                                    //
+    const ReplayEngine::Components::CameraSelection camera_selection =
+        ReplayEngine::Components::ResolveActiveCameraSelection(active_object_scene());
+    if (camera_selection.Valid()) return camera_selection.component->ViewMatrix();
+
     if (enable_scene_game && game_scene)                                                                                                           //
     {                                                                                                                                              //
         return DirectX::XMLoadFloat4x4(&game_scene->Gameplay().GetCamera().GetView());                                                             //
@@ -65,6 +70,10 @@ DirectX::XMMATRIX framework::viewport_projection_matrix() const                 
                                                                                                                                                    //
     if (using_editor_camera()) return editor_camera.ProjectionMatrix(aspect);                                                                      //
                                                                                                                                                    //
+    const ReplayEngine::Components::CameraSelection camera_selection =
+        ReplayEngine::Components::ResolveActiveCameraSelection(active_object_scene());
+    if (camera_selection.Valid()) return camera_selection.component->ProjectionMatrix(aspect);
+
     if (enable_scene_game && game_scene)                                                                                                           //
     {                                                                                                                                              //
         return DirectX::XMLoadFloat4x4(&game_scene->Gameplay().GetCamera().GetProjection());                                                       //
@@ -76,6 +85,10 @@ DirectX::XMMATRIX framework::viewport_projection_matrix() const                 
 DirectX::XMFLOAT3 framework::viewport_eye_position() const
 {
     if (using_editor_camera()) return editor_camera.Position();
+
+    const ReplayEngine::Components::CameraSelection camera_selection =
+        ReplayEngine::Components::ResolveActiveCameraSelection(active_object_scene());
+    if (camera_selection.Valid()) return camera_selection.component->EyePosition();
 
     if (enable_scene_game && game_scene)
     {
@@ -99,7 +112,34 @@ ReplayEngine::Editor::EditorViewportCamera::Ray framework::viewport_picking_ray(
     const float client_y = screen_y - static_cast<float>(client_origin.y);
     const float width = (std::max)(1.0f, static_cast<float>(client_width));
     const float height = (std::max)(1.0f, static_cast<float>(client_height));
-    return editor_camera.BuildPickingRay(client_x, client_y, width, height);
+
+    ReplayEngine::Editor::EditorViewportCamera::Ray ray;
+    const DirectX::XMMATRIX view = viewport_view_matrix();
+    const DirectX::XMMATRIX projection = viewport_projection_matrix();
+    const DirectX::XMMATRIX world = DirectX::XMMatrixIdentity();
+
+    const DirectX::XMVECTOR near_point = DirectX::XMVector3Unproject(
+        DirectX::XMVectorSet(client_x, client_y, 0.0f, 1.0f),
+        0.0f, 0.0f, width, height, 0.0f, 1.0f, projection, view, world);
+    const DirectX::XMVECTOR far_point = DirectX::XMVector3Unproject(
+        DirectX::XMVectorSet(client_x, client_y, 1.0f, 1.0f),
+        0.0f, 0.0f, width, height, 0.0f, 1.0f, projection, view, world);
+    DirectX::XMVECTOR direction = DirectX::XMVectorSubtract(far_point, near_point);
+    const float length_sq = DirectX::XMVectorGetX(DirectX::XMVector3LengthSq(direction));
+    DirectX::XMFLOAT3 direction_value{};
+    DirectX::XMStoreFloat3(&direction_value, direction);
+    if (!std::isfinite(length_sq) || length_sq <= 1.0e-8f ||
+        !std::isfinite(direction_value.x) ||
+        !std::isfinite(direction_value.y) ||
+        !std::isfinite(direction_value.z))
+    {
+        return editor_camera.BuildPickingRay(client_x, client_y, width, height);
+    }
+
+    direction = DirectX::XMVector3Normalize(direction);
+    DirectX::XMStoreFloat3(&ray.origin, near_point);
+    DirectX::XMStoreFloat3(&ray.direction, direction);
+    return ray;
 }
 
 // ---------------------------------------------------------------------------

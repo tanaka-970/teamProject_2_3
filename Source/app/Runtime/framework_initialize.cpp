@@ -38,6 +38,11 @@ bool framework::initialize()
     if (!asset_database.Load(asset_database_error))
         object_editor_context.SetStatus("AssetDatabase: " + asset_database_error);
 
+    if (!object_audio_system.Initialize())
+    {
+        push_editor_log("Warning", "Audio は silent mode で起動します");
+    }
+
     UINT create_device_flags{ 0 };
 #ifdef _DEBUG
     create_device_flags |= D3D11_CREATE_DEVICE_DEBUG;
@@ -166,6 +171,10 @@ bool framework::initialize()
     bd.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_DEST_ALPHA; bd.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
     device->CreateBlendState(&bd, blend_states[(size_t)BLEND_STATE::MULTIPLY].GetAddressOf());
 
+    bd.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE; bd.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_COLOR;
+    bd.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE; bd.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
+    device->CreateBlendState(&bd, blend_states[(size_t)BLEND_STATE::SCREEN].GetAddressOf());
+
     D3D11_RASTERIZER_DESC rd{};
     rd.FillMode = D3D11_FILL_SOLID; rd.CullMode = D3D11_CULL_BACK;
     rd.FrontCounterClockwise = TRUE; rd.DepthClipEnable = TRUE;
@@ -176,6 +185,10 @@ bool framework::initialize()
     device->CreateRasterizerState(&rd, rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].GetAddressOf());
     rd.FillMode = D3D11_FILL_WIREFRAME;
     device->CreateRasterizerState(&rd, rasterizer_states[(size_t)RASTER_STATE::WIREFRAME_CULL_NONE].GetAddressOf());
+    rd.FillMode = D3D11_FILL_SOLID;
+    rd.CullMode = D3D11_CULL_NONE;
+    rd.ScissorEnable = TRUE;
+    device->CreateRasterizerState(&rd, rasterizer_states[(size_t)RASTER_STATE::SCISSOR].GetAddressOf());
 
     D3D11_BUFFER_DESC cbd{};
     cbd.ByteWidth = sizeof(scene_constants);
@@ -236,6 +249,10 @@ bool framework::initialize()
     ReplayEngine::Rendering::Stats().Initialize(device.Get());
     lights.initialize(device.Get());
     uiManager.Initalize(device.Get());
+    if (!ui_font_atlas.Initialize(device.Get()))
+        push_editor_log("Warning", "UI FontAtlas を初期化できません。UIText は描画されません");
+    if (!ui_renderer.Initialize(device.Get()))
+        push_editor_log("Warning", "UIRenderer を初期化できません。Canvas UI は描画されません");
     lights.data.light_counts = { 0, 0, 0, 0 };
 
     // 法線テクスチャを持たない材質で使うダミー法線を作る。kwjkshhakjwhhwhhsbkkwhiiwnzkkhjsowjjw

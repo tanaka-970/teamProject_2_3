@@ -16,7 +16,11 @@
 
 #include "framework.h"
 #include "../../../RePlayEngine/Assets/AssetDatabase.h"
+#include "../../../RePlayEngine/Components/Audio/AudioListenerComponent.h"
+#include "../../../RePlayEngine/Components/Audio/AudioSourceComponent.h"
+#include "../../../RePlayEngine/Components/Camera/CameraComponent.h"
 #include "../../../RePlayEngine/Components/Camera/CameraTargetComponent.h"
+#include "../../../RePlayEngine/Components/Camera/FollowTargetComponent.h"
 #include "../../../RePlayEngine/Components/Gameplay/CharacterMotorComponent.h"
 #include "../../../RePlayEngine/Components/Gameplay/StageGameplayComponents.h"
 #include "../../../RePlayEngine/Components/Rendering/LightComponents.h"
@@ -1063,13 +1067,75 @@ namespace
 
         const Core::ComponentTypeID camera_target_type =
             Components::CameraTargetComponent::StaticTypeID();
+        expect(Reflection::PropertyRegistry::Find(camera_target_type, "target_offset") != nullptr,
+            "CameraTargetComponent exposes target_offset");
+        expect(Reflection::PropertyRegistry::Find(camera_target_type, "look_at_offset") != nullptr,
+            "CameraTargetComponent exposes look_at_offset");
+        expect(Reflection::PropertyRegistry::Find(camera_target_type, "priority") != nullptr,
+            "CameraTargetComponent exposes priority");
         expect(Reflection::PropertyRegistry::Find(camera_target_type,
+            "field_of_view_degrees") == nullptr,
+            "CameraTargetComponent no longer owns field_of_view_degrees");
+        expect(Reflection::PropertyRegistry::Find(camera_target_type, "near_clip") == nullptr,
+            "CameraTargetComponent no longer owns near_clip");
+        expect(Reflection::PropertyRegistry::Find(camera_target_type, "far_clip") == nullptr,
+            "CameraTargetComponent no longer owns far_clip");
+        expect(Reflection::PropertyRegistry::Find(camera_target_type, "follow_distance") == nullptr,
+            "CameraTargetComponent no longer owns follow_distance");
+
+        const Core::ComponentTypeID camera_type =
+            Components::CameraComponent::StaticTypeID();
+        expect(Reflection::PropertyRegistry::Find(camera_type, "projection_mode") != nullptr,
+            "CameraComponent exposes projection_mode");
+        expect(Reflection::PropertyRegistry::Find(camera_type,
             "field_of_view_degrees") != nullptr,
-            "CameraTargetComponent exposes field_of_view_degrees");
-        expect(Reflection::PropertyRegistry::Find(camera_target_type, "near_clip") != nullptr,
-            "CameraTargetComponent exposes near_clip");
-        expect(Reflection::PropertyRegistry::Find(camera_target_type, "far_clip") != nullptr,
-            "CameraTargetComponent exposes far_clip");
+            "CameraComponent exposes field_of_view_degrees");
+        expect(Reflection::PropertyRegistry::Find(camera_type, "orthographic_size") != nullptr,
+            "CameraComponent exposes orthographic_size");
+        expect(Reflection::PropertyRegistry::Find(camera_type, "near_clip") != nullptr,
+            "CameraComponent exposes near_clip");
+        expect(Reflection::PropertyRegistry::Find(camera_type, "far_clip") != nullptr,
+            "CameraComponent exposes far_clip");
+        expect(Reflection::PropertyRegistry::Find(camera_type, "priority") != nullptr,
+            "CameraComponent exposes priority");
+        expect(Reflection::PropertyRegistry::Find(camera_type, "viewport_rect") != nullptr,
+            "CameraComponent exposes viewport_rect");
+
+        const Core::ComponentTypeID follow_type =
+            Components::FollowTargetComponent::StaticTypeID();
+        expect(Reflection::PropertyRegistry::Find(follow_type, "follow_distance") != nullptr,
+            "FollowTargetComponent exposes follow_distance");
+        expect(Reflection::PropertyRegistry::Find(follow_type, "follow_height") != nullptr,
+            "FollowTargetComponent exposes follow_height");
+        expect(Reflection::PropertyRegistry::Find(follow_type, "follow_lag") != nullptr,
+            "FollowTargetComponent exposes follow_lag");
+        expect(Reflection::PropertyRegistry::Find(follow_type,
+            "rotation_input_enabled") != nullptr,
+            "FollowTargetComponent exposes rotation_input_enabled");
+
+        const Core::ComponentTypeID listener_type =
+            Components::AudioListenerComponent::StaticTypeID();
+        expect(Reflection::PropertyRegistry::Find(listener_type, "priority") != nullptr,
+            "AudioListenerComponent exposes priority");
+
+        const Core::ComponentTypeID audio_source_type =
+            Components::AudioSourceComponent::StaticTypeID();
+        expect(Reflection::PropertyRegistry::Find(audio_source_type, "clip_path") != nullptr,
+            "AudioSourceComponent exposes clip_path");
+        expect(Reflection::PropertyRegistry::Find(audio_source_type, "loop") != nullptr,
+            "AudioSourceComponent exposes loop");
+        expect(Reflection::PropertyRegistry::Find(audio_source_type, "volume") != nullptr,
+            "AudioSourceComponent exposes volume");
+        expect(Reflection::PropertyRegistry::Find(audio_source_type, "pitch") != nullptr,
+            "AudioSourceComponent exposes pitch");
+        expect(Reflection::PropertyRegistry::Find(audio_source_type, "play_on_start") != nullptr,
+            "AudioSourceComponent exposes play_on_start");
+        expect(Reflection::PropertyRegistry::Find(audio_source_type, "spatial") != nullptr,
+            "AudioSourceComponent exposes spatial");
+        expect(Reflection::PropertyRegistry::Find(audio_source_type, "min_distance") != nullptr,
+            "AudioSourceComponent exposes min_distance");
+        expect(Reflection::PropertyRegistry::Find(audio_source_type, "max_distance") != nullptr,
+            "AudioSourceComponent exposes max_distance");
 
         Scene::Scene world("CameraComponentValidation");
         Core::GameObject* low = world.CreateGameObject("LowPriorityTarget");
@@ -1113,14 +1179,58 @@ namespace
         selection = Components::ResolveCameraTargetSelection(world, low->ID());
         expect(!selection.Valid(), "no active camera target produces no selection");
 
-        SceneGame gameplay;
-        gameplay.Initialize(16.0f / 9.0f);
-        const DirectX::XMFLOAT4X4 default_projection =
-            gameplay.GetCamera().GetProjection();
+        Core::GameObject* camera_low = world.CreateGameObject("LowPriorityCamera");
+        Core::GameObject* camera_high = world.CreateGameObject("HighPriorityCamera");
+        expect(camera_low != nullptr && camera_high != nullptr,
+            "camera objects can be created");
+        if (camera_low == nullptr || camera_high == nullptr)
+        {
+            return first_failure != 0 ? first_failure : 862;
+        }
 
-        gameplay.ApplyCameraSettings(30.0f, 0.5f, 200.0f);
-        const DirectX::XMFLOAT4X4 narrow_projection =
-            gameplay.GetCamera().GetProjection();
+        auto* low_camera = camera_low->AddComponent<Components::CameraComponent>();
+        auto* high_camera = camera_high->AddComponent<Components::CameraComponent>();
+        expect(low_camera != nullptr && high_camera != nullptr,
+            "CameraComponent can be attached");
+        if (low_camera == nullptr || high_camera == nullptr)
+        {
+            return first_failure != 0 ? first_failure : 863;
+        }
+
+        low_camera->priority = 2;
+        high_camera->priority = 9;
+        Components::CameraSelection camera_selection =
+            Components::ResolveActiveCameraSelection(world);
+        expect(camera_selection.object == camera_high &&
+            camera_selection.component == high_camera,
+            "highest priority active CameraComponent is selected");
+        high_camera->SetEnabled(false);
+        camera_selection = Components::ResolveActiveCameraSelection(world);
+        expect(camera_selection.object == camera_low &&
+            camera_selection.component == low_camera,
+            "disabled CameraComponent falls back to next priority");
+
+        camera_low->GetTransform().SetLocalPosition({ 1.0f, 2.0f, 3.0f });
+        const DirectX::XMFLOAT3 eye = low_camera->EyePosition();
+        expect(close(eye.x, 1.0f) && close(eye.y, 2.0f) && close(eye.z, 3.0f),
+            "CameraComponent eye position comes from Transform");
+
+        camera_low->GetTransform().SetLocalRotationEuler(
+            { 0.0f, DirectX::XM_PIDIV2, 0.0f });
+        const DirectX::XMFLOAT3 forward = low_camera->Forward();
+        expect(close(forward.x, 1.0f) && close(forward.z, 0.0f),
+            "CameraComponent forward direction comes from Transform rotation");
+
+        DirectX::XMFLOAT4X4 default_projection{};
+        DirectX::XMStoreFloat4x4(&default_projection,
+            low_camera->ProjectionMatrix(16.0f / 9.0f));
+
+        low_camera->field_of_view_degrees = 30.0f;
+        low_camera->near_clip = 0.5f;
+        low_camera->far_clip = 200.0f;
+        DirectX::XMFLOAT4X4 narrow_projection{};
+        DirectX::XMStoreFloat4x4(&narrow_projection,
+            low_camera->ProjectionMatrix(16.0f / 9.0f));
 
         expect(narrow_projection._22 > default_projection._22,
             "field_of_view_degrees rebuilds the Runtime Camera projection");
@@ -1131,13 +1241,59 @@ namespace
         expect(close(narrow_projection._43, expected_43),
             "near_clip/far_clip update projection depth offset");
 
-        gameplay.SetAspect(4.0f / 3.0f);
-        const DirectX::XMFLOAT4X4 resized_projection =
-            gameplay.GetCamera().GetProjection();
+        DirectX::XMFLOAT4X4 resized_projection{};
+        DirectX::XMStoreFloat4x4(&resized_projection,
+            low_camera->ProjectionMatrix(4.0f / 3.0f));
         expect(close(resized_projection._22, narrow_projection._22),
-            "SetAspect preserves the active field_of_view_degrees");
+            "projection preserves vertical field_of_view_degrees when aspect changes");
         expect(!close(resized_projection._11, narrow_projection._11),
-            "SetAspect reapplies the projection with the new aspect ratio");
+            "projection reapplies the new aspect ratio");
+
+        low_camera->projection_mode =
+            static_cast<int>(Components::CameraProjectionMode::Orthographic);
+        low_camera->orthographic_size = 20.0f;
+        DirectX::XMFLOAT4X4 orthographic_projection{};
+        DirectX::XMStoreFloat4x4(&orthographic_projection,
+            low_camera->ProjectionMatrix(2.0f));
+        expect(close(orthographic_projection._11, 2.0f / 40.0f),
+            "orthographic projection uses orthographic_size and aspect width");
+        expect(close(orthographic_projection._22, 2.0f / 20.0f),
+            "orthographic projection uses orthographic_size height");
+
+        Core::GameObject* listener_low = world.CreateGameObject("LowPriorityListener");
+        Core::GameObject* listener_high = world.CreateGameObject("HighPriorityListener");
+        expect(listener_low != nullptr && listener_high != nullptr,
+            "audio listener objects can be created");
+        if (listener_low == nullptr || listener_high == nullptr)
+        {
+            return first_failure != 0 ? first_failure : 864;
+        }
+
+        auto* low_listener =
+            listener_low->AddComponent<Components::AudioListenerComponent>();
+        auto* high_listener =
+            listener_high->AddComponent<Components::AudioListenerComponent>();
+        expect(low_listener != nullptr && high_listener != nullptr,
+            "AudioListenerComponent can be attached");
+        if (low_listener == nullptr || high_listener == nullptr)
+        {
+            return first_failure != 0 ? first_failure : 865;
+        }
+
+        low_listener->priority = 3;
+        high_listener->priority = 7;
+        Components::AudioListenerSelection listener_selection =
+            Components::ResolveAudioListenerSelection(world);
+        expect(listener_selection.object == listener_high &&
+            listener_selection.component == high_listener,
+            "highest priority active AudioListenerComponent is selected");
+
+        listener_low->GetTransform().SetLocalPosition({ -1.0f, 4.0f, 8.0f });
+        const DirectX::XMFLOAT3 listener_position = low_listener->Position();
+        expect(close(listener_position.x, -1.0f) &&
+            close(listener_position.y, 4.0f) &&
+            close(listener_position.z, 8.0f),
+            "AudioListenerComponent position comes from Transform");
 
         if (first_failure == 0)
         {

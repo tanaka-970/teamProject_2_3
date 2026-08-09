@@ -6,6 +6,7 @@
 #include "../../../RePlayEngine/Rendering/Shaders/BuiltInShaders.h"
 #include "../../../RePlayEngine/Rendering/ShaderStack/BuiltInShaderLayers.h"
 #include "../../../RePlayEngine/Rendering/Materials/ShaderLayerBinding.h"
+#include "../../../RePlayEngine/UI/UILayout.h"
 
 namespace
 {
@@ -1163,6 +1164,28 @@ void framework::render(float elapsed_time)
     // ドライバー任せの競合解消を避けるために明示的に解除する。
     ID3D11ShaderResourceView* null_post_srvs[2]{};
     immediate_context->PSSetShaderResources(0, _countof(null_post_srvs), null_post_srvs);
+
+    ReplayEngine::UI::UILayout::Resolve(active_object_scene(),
+        viewport.Width, viewport.Height);
+    ReplayEngine::UI::UIRenderer::RenderStates ui_states{};
+    ui_states.depth_disabled =
+        depth_stencil_states[(size_t)DEPTH_STATE::ZT_OFF_ZW_OFF].Get();
+    ui_states.rasterizer =
+        rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get();
+    ui_states.rasterizer_scissor =
+        rasterizer_states[(size_t)RASTER_STATE::SCISSOR].Get();
+    ui_states.blend_alpha =
+        blend_states[(size_t)BLEND_STATE::ALPHA].Get();
+    ui_states.blend_add =
+        blend_states[(size_t)BLEND_STATE::ADD].Get();
+    ui_states.blend_multiply =
+        blend_states[(size_t)BLEND_STATE::MULTIPLY].Get();
+    ui_states.blend_screen =
+        blend_states[(size_t)BLEND_STATE::SCREEN].Get();
+    ui_states.sampler =
+        sampler_states[(size_t)SAMPLER_STATE::LINEAR].Get();
+    ui_renderer.Render(immediate_context.Get(), active_object_scene(),
+        &asset_database, ui_font_atlas, viewport.Width, viewport.Height, ui_states);
 
 #ifdef USE_IMGUI
     // update()でNewFrameを通したフレームだけ描く。ロード完了フレームのように

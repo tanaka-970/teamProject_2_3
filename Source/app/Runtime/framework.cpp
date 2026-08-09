@@ -167,6 +167,7 @@ bool framework::uninitialize()
     //    Renderer Component が握っているメッシュ参照はここで切れる。
     object_runtime_scenes.ResetToEmptyWorld();
     object_scene.Clear();
+    object_audio_system.Shutdown();
 
     // 2) LoadingScene の Task はモデル Cache へ書き込むため、
     //    Cache 解放より先に停止・join する。
@@ -182,6 +183,10 @@ bool framework::uninitialize()
     // 5) Material Catalog が作った PixelShader / 既定Texture / Asset Texture。
     //    Device の Live Object Report より先に必ず解放する。
     material_gpu_binder.Clear();
+
+    // 5.5) UI Renderer / FontAtlas。内部の SRV を texture cache より先に手放す。
+    ui_renderer.Release();
+    ui_font_atlas.Release();
 
     // 6) 旧テクスチャキャッシュ (SRV)。
     //    static なので明示的に呼ばないと Report まで生き残る。

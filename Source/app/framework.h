@@ -61,6 +61,9 @@ extern ImWchar glyphRangesJapanese[];
 #include "../../RePlayEngine/Assets/AssetDatabase.h"
 #include "../../RePlayEngine/Assets/AsyncAssetManager.h"
 #include "../../RePlayEngine/Assets/ConcurrentResourceCache.h"
+#include "../../RePlayEngine/UI/FontAtlas.h"
+#include "../../RePlayEngine/UI/UIRenderer.h"
+#include "../../RePlayEngine/Audio/AudioSystem.h"
 #include "../../RePlayEngine/Project/ProjectSettings.h"
 #include "../../RePlayEngine/Editor/Gizmo/TransformGizmo.h"
 #include "../../RePlayEngine/Editor/Gizmo/ViewportPicker.h"
@@ -131,11 +134,11 @@ public:
     enum class DEPTH_STATE { ZT_ON_ZW_ON, ZT_ON_ZW_OFF, ZT_OFF_ZW_ON, ZT_OFF_ZW_OFF };
     Microsoft::WRL::ComPtr<ID3D11DepthStencilState> depth_stencil_states[4];
 
-    enum class BLEND_STATE { NONE, ALPHA, ADD, MULTIPLY };
-    Microsoft::WRL::ComPtr<ID3D11BlendState> blend_states[4];
+    enum class BLEND_STATE { NONE, ALPHA, ADD, MULTIPLY, SCREEN };
+    Microsoft::WRL::ComPtr<ID3D11BlendState> blend_states[5];
 
-    enum class RASTER_STATE { SOLID, WIREFRAME, CULL_NONE, WIREFRAME_CULL_NONE };
-    Microsoft::WRL::ComPtr<ID3D11RasterizerState> rasterizer_states[4];
+    enum class RASTER_STATE { SOLID, WIREFRAME, CULL_NONE, WIREFRAME_CULL_NONE, SCISSOR };
+    Microsoft::WRL::ComPtr<ID3D11RasterizerState> rasterizer_states[5];
 
     struct scene_constants
     {
@@ -433,6 +436,9 @@ public:
     ReplayEngine::Editor::InspectorPanel    object_inspector_panel;
     ReplayEngine::Editor::ValidationPanel   object_validation_panel;
     ReplayEngine::Rendering::RenderItemList object_render_items;
+    ReplayEngine::UI::FontAtlas             ui_font_atlas;
+    ReplayEngine::UI::UIRenderer            ui_renderer;
+    bool ui_pointer_down_last{ false };
 
     // Asset GUID -> メッシュ実体。
     // 読み込めた Asset だけを入れる。null や壊れたエントリは決して登録しない。
@@ -519,6 +525,7 @@ public:
     // 【移行用】Gameplay Component から Camera / Stage 具象型を隠すための橋渡し。
     // 削除条件はそれぞれのヘッダーへ記載してある。
     CameraBasisProvider          object_camera_bridge;
+    ReplayEngine::Audio::AudioSystem object_audio_system;
 
     // --- 衝突 -------------------------------------------------------------
     //
@@ -771,6 +778,8 @@ public:
     LRESULT CALLBACK handle_message(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
     {
 #ifdef USE_IMGUI
+        // IME 入力は ImGui へ先に渡す。将来 UIInputField を足すときは
+        // WM_IME_* をここから横取りせず、Editor / Runtime の入力所有者で分岐する。
         const bool keyboard_message = msg == WM_KEYDOWN || msg == WM_KEYUP ||
             msg == WM_SYSKEYDOWN || msg == WM_SYSKEYUP || msg == WM_CHAR;
         if (editor_mode)
@@ -1260,6 +1269,9 @@ private:
     void draw_console_panel();
     void execute_editor_command(const std::string& command);
     void draw_workspace_panel();
+    void draw_ui_hierarchy();
+    void draw_ui_preview();
+    void draw_ui_inspector();
     void set_editor_workspace(editor_workspace workspace);
     void configure_editor_style();
     void set_edit_mode(bool enabled);
@@ -1324,7 +1336,8 @@ private:
         modeling,
         animation,
         rendering,
-        shader_adjustment
+        shader_adjustment,
+        ui
     };
     enum class editor_view
     {
@@ -1347,6 +1360,20 @@ private:
     bool show_scene_view{ true };
     bool show_scene_notes_panel{ false };
     bool show_scene_flow_panel{ false };
+    bool show_ui_hierarchy_panel{ true };
+    bool show_ui_preview_panel{ true };
+    bool show_ui_inspector_panel{ true };
+    int ui_preview_resolution_index{ 0 };
+    int ui_preview_custom_width{ 1920 };
+    int ui_preview_custom_height{ 1080 };
+    float ui_preview_zoom{ 0.5f };
+    bool ui_preview_grid{ true };
+    float ui_preview_grid_size{ 100.0f };
+    ImVec2 ui_preview_pan{ 0.0f, 0.0f };
+    bool ui_preview_dragging{ false };
+    ReplayEngine::Core::ObjectID ui_preview_drag_object;
+    ImVec2 ui_preview_drag_start_mouse{ 0.0f, 0.0f };
+    DirectX::XMFLOAT2 ui_preview_drag_start_position{ 0.0f, 0.0f };
     bool scene_view_hovered{ false };
     bool scene_view_focused{ false };
     ImVec2 scene_view_overlay_position{ 0.0f, 0.0f };

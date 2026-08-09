@@ -164,6 +164,12 @@ void framework::set_editor_workspace(editor_workspace workspace)
         if (selected_editor_object != editor_selection::rendering)
             selected_editor_object = editor_selection::rendering;
         break;
+    case editor_workspace::ui:
+        selected_editor_object = editor_selection::game_object;
+        show_ui_hierarchy_panel = true;
+        show_ui_preview_panel = true;
+        show_ui_inspector_panel = true;
+        break;
     default: selected_editor_object = editor_selection::world; break;
     }
 }
@@ -283,6 +289,15 @@ void framework::draw_editor_main_menu()
         ImGui::MenuItem("Console", nullptr, &show_console_panel);
         ImGui::MenuItem("Workspace", nullptr, &show_workspace_panel);
         ImGui::MenuItem("Validation / Diagnostics", nullptr, &show_validation_panel);
+        ImGui::Separator();
+        if (ImGui::MenuItem("UI Workspaceへ"))
+            set_editor_workspace(editor_workspace::ui);
+        if (active_editor_workspace == editor_workspace::ui)
+        {
+            ImGui::MenuItem("UI 階層", nullptr, &show_ui_hierarchy_panel);
+            ImGui::MenuItem("Canvas プレビュー", nullptr, &show_ui_preview_panel);
+            ImGui::MenuItem("UI インスペクター", nullptr, &show_ui_inspector_panel);
+        }
         ImGui::Separator();
         ImGui::MenuItem(u8"シーンメモ", nullptr, &show_scene_notes_panel);
         ImGui::MenuItem("Scene Flow", nullptr, &show_scene_flow_panel);
@@ -842,6 +857,12 @@ void framework::draw_search_results()
     if (matches("workspace レンダリング rendering") && ImGui::Selectable("レンダリングWorkspaceへ"))
     {
         set_editor_workspace(editor_workspace::rendering);
+        editor_search_text[0] = '\0';
+    }
+    if (matches("workspace ui canvas userinterface ユーザーインターフェイス") &&
+        ImGui::Selectable("UI Workspaceへ"))
+    {
+        set_editor_workspace(editor_workspace::ui);
         editor_search_text[0] = '\0';
     }
     if (matches("shader material preset シェーダー 材質 プリセット") &&
@@ -1501,6 +1522,13 @@ void framework::draw_workspace_panel()
         ImGui::TextUnformatted("方式: 型付きパラメータ + 順序付き追加パス");
         ImGui::TextDisabled("シェーダーグラフを使わず、安全な範囲で表現を組み合わせます。");
         break;
+    case editor_workspace::ui:
+        ImGui::TextUnformatted("UI Workspace");
+        ImGui::TextDisabled("Canvas、RectTransform、UI Component を編集します。");
+        if (ImGui::Button("UI 階層を開く")) show_ui_hierarchy_panel = true;
+        ImGui::SameLine();
+        if (ImGui::Button("Canvas プレビューを開く")) show_ui_preview_panel = true;
+        break;
     default:
         ImGui::TextUnformatted("基本Workspace");
         ImGui::TextDisabled("シーン編集と実行状態の確認を行います。");
@@ -1540,7 +1568,8 @@ void framework::draw_editor()
     const ImGuiID dockspace_id = ImGui::GetID("RePlayEditorDockSpaceJP2");
     const ImGuiDockNodeFlags dockspace_flags =
         ImGuiDockNodeFlags_PassthruCentralNode |
-        ImGuiDockNodeFlags_NoDockingInCentralNode;
+        (active_editor_workspace == editor_workspace::ui
+            ? ImGuiDockNodeFlags_None : ImGuiDockNodeFlags_NoDockingInCentralNode);
     ImGui::DockSpace(dockspace_id, ImVec2(0, 0), dockspace_flags);
     if (!editor_layout_checked || editor_layout_dirty)
     {
@@ -1562,6 +1591,12 @@ void framework::draw_editor()
             if (active_editor_workspace == editor_workspace::modeling) right_ratio = 0.33f;
             if (active_editor_workspace == editor_workspace::animation) bottom_ratio = 0.36f;
             if (active_editor_workspace == editor_workspace::rendering) left_ratio = 0.16f;
+            if (active_editor_workspace == editor_workspace::ui)
+            {
+                left_ratio = 0.18f;
+                right_ratio = 0.30f;
+                bottom_ratio = 0.20f;
+            }
             if (active_editor_workspace == editor_workspace::shader_adjustment)
             {
                 left_ratio = 0.16f;
@@ -1571,12 +1606,23 @@ void framework::draw_editor()
             ImGuiID left = ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, left_ratio, nullptr, &center);
             ImGuiID right = ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, right_ratio, nullptr, &center);
             ImGuiID bottom = ImGui::DockBuilderSplitNode(center, ImGuiDir_Down, bottom_ratio, nullptr, &center);
-            ImGui::DockBuilderDockWindow("階層", left);
-            ImGui::DockBuilderDockWindow("インスペクター", right);
-            ImGui::DockBuilderDockWindow("プロジェクト", bottom);
-            ImGui::DockBuilderDockWindow("コンソール", bottom);
-            ImGui::DockBuilderDockWindow("ワークスペース", bottom);
-            ImGui::DockBuilderDockWindow("Validation & Diagnostics", bottom);
+            if (active_editor_workspace == editor_workspace::ui)
+            {
+                ImGui::DockBuilderDockWindow("UI 階層", left);
+                ImGui::DockBuilderDockWindow("UI インスペクター", right);
+                ImGui::DockBuilderDockWindow("Canvas プレビュー", center);
+                ImGui::DockBuilderDockWindow("プロジェクト", bottom);
+                ImGui::DockBuilderDockWindow("コンソール", bottom);
+            }
+            else
+            {
+                ImGui::DockBuilderDockWindow("階層", left);
+                ImGui::DockBuilderDockWindow("インスペクター", right);
+                ImGui::DockBuilderDockWindow("プロジェクト", bottom);
+                ImGui::DockBuilderDockWindow("コンソール", bottom);
+                ImGui::DockBuilderDockWindow("ワークスペース", bottom);
+                ImGui::DockBuilderDockWindow("Validation & Diagnostics", bottom);
+            }
             ImGui::DockBuilderFinish(dockspace_id);
         }
     }
@@ -1594,6 +1640,17 @@ void framework::draw_editor()
 
     draw_object_scene_recovery_prompt();
     draw_unsaved_object_scene_prompt();
+
+    if (active_editor_workspace == editor_workspace::ui)
+    {
+        draw_ui_hierarchy();
+        draw_ui_preview();
+        draw_ui_inspector();
+        if (show_project_panel) draw_project_panel();
+        if (show_console_panel) draw_console_panel();
+        draw_search_results();
+        return;
+    }
 
     draw_scene_view_panel();
     if (show_hierarchy_panel) draw_scene_hierarchy();

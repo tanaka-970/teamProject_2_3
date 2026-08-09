@@ -101,7 +101,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;xaudio2.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <IgnoreSpecificDefaultLibraries>
       </IgnoreSpecificDefaultLibraries>
       <IgnoreAllDefaultLibraries>
@@ -135,7 +135,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;xaudio2.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <FxCompile>
       <ShaderModel>5.0</ShaderModel>
@@ -167,7 +167,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>
       </AdditionalLibraryDirectories>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;xaudio2.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <FxCompile>
       <ShaderModel>5.0</ShaderModel>
@@ -198,7 +198,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;xaudio2.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <FxCompile>
       <ShaderModel>5.0</ShaderModel>
@@ -364,6 +364,7 @@
     <ClCompile Include="RePlayEngine\Components\Gameplay\HealthComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Gameplay\StageGameplayCommon.cpp" />
     <ClCompile Include="RePlayEngine\Components\Gameplay\StageGameplayComponents.cpp" />
+    <ClCompile Include="RePlayEngine\Audio\AudioSystem.cpp" />
     <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponents.cpp" />
     <ClCompile Include="RePlayEngine\Scene\Serialization\SceneData.cpp" />
     <ClCompile Include="RePlayEngine\Scene\Serialization\SceneSerializer.cpp" />
@@ -382,6 +383,9 @@
     <ClCompile Include="RePlayEngine\Components\Gameplay\CharacterMotorComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Gameplay\PlayerInputComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Gameplay\PlayerControllerComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Audio\AudioSourceComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Camera\CameraComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Camera\FollowTargetComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Rendering\AnimatorComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Rendering\SkinnedMeshRendererComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Rendering\MeshRendererComponent.cpp" />
@@ -580,6 +584,8 @@
     <ClInclude Include="RePlayEngine\Components\Gameplay\StageGameplayCommon.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\StageGameplayComponents.h" />
     <ClInclude Include="RePlayEngine\Components\Editor\EditorNoteComponent.h" />
+    <ClInclude Include="RePlayEngine\Audio\AudioService.h" />
+    <ClInclude Include="RePlayEngine\Audio\AudioSystem.h" />
     <ClInclude Include="RePlayEngine\Object\Registry\BuiltInComponents.h" />
     <ClInclude Include="RePlayEngine\Scene\Serialization\SceneData.h" />
     <ClInclude Include="RePlayEngine\Scene\Serialization\SceneSerializer.h" />
@@ -603,7 +609,12 @@
     <ClInclude Include="RePlayEngine\Components\Gameplay\CharacterMotorComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\PlayerInputComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\PlayerControllerComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Audio\AudioListenerComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Audio\AudioSourceComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Common\PriorityComponentSelection.h" />
+    <ClInclude Include="RePlayEngine\Components\Camera\CameraComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Camera\CameraTargetComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Camera\FollowTargetComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Rendering\AnimatorComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Rendering\SkinnedMeshRendererComponent.h" />
     <ClInclude Include="Source\game\camera_basis_provider.h" />
@@ -654,7 +665,29 @@
     <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderTextureValidation.h" />
     <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderAssetFactory.h" />
     <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderEditorValidation.h" />
-</ItemGroup>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Source\app\Editor\framework_ui_workspace.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\CanvasComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\RectTransformComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\UIImageComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\UITextComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\UIButtonComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\UIMaskComponent.cpp" />
+    <ClCompile Include="RePlayEngine\UI\UILayout.cpp" />
+    <ClCompile Include="RePlayEngine\UI\FontAtlas.cpp" />
+    <ClCompile Include="RePlayEngine\UI\UIRenderer.cpp" />
+    <ClInclude Include="RePlayEngine\Components\UI\CanvasComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\UI\RectTransformComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\UI\UIImageComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\UI\UITextComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\UI\UIButtonComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\UI\UIMaskComponent.h" />
+    <ClInclude Include="RePlayEngine\UI\UILayout.h" />
+    <ClInclude Include="RePlayEngine\UI\FontAtlas.h" />
+    <ClInclude Include="RePlayEngine\UI\UIRenderer.h" />
+    <ClInclude Include="RePlayEngine\UI\ThirdParty\stb_truetype.h" />
+  </ItemGroup>
   <ItemGroup>
     <None Include=".editorconfig" />
     <None Include=".gitattributes" />
@@ -854,6 +887,18 @@
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
     </FxCompile>
     <FxCompile Include="Shader\sprite_vs.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Vertex</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_ps.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_vs.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Vertex</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Vertex</ShaderType>

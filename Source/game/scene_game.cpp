@@ -44,6 +44,9 @@ void SceneGame::ResetGameplay()
 {
     camera_yaw_offset = 0.0f;
     camera_pitch_offset = 0.0f;
+    camera_rotation_cursor_initialized_ = false;
+    previous_camera_rotation_cursor_x_ = 0;
+    previous_camera_rotation_cursor_y_ = 0;
     ApplyDefaultCameraSettings();
 
     camera.SetLookAt({ 0.0f, 2.25f, -6.5f }, { 0.0f, 1.0f, 0.0f }, { 0, 1, 0 });
@@ -132,10 +135,19 @@ void SceneGame::UpdateCameraRotationInput(float dt)
 {
     // Mouse right-drag rotates the camera ONLY.
     {
-        static POINT prevPos{};
-        POINT cur; GetCursorPos(&cur);
-        POINT delta{ cur.x - prevPos.x, cur.y - prevPos.y };
-        prevPos = cur;
+        POINT cur{};
+        if (!GetCursorPos(&cur)) return;
+        if (!camera_rotation_cursor_initialized_)
+        {
+            previous_camera_rotation_cursor_x_ = cur.x;
+            previous_camera_rotation_cursor_y_ = cur.y;
+            camera_rotation_cursor_initialized_ = true;
+        }
+        POINT delta{
+            cur.x - previous_camera_rotation_cursor_x_,
+            cur.y - previous_camera_rotation_cursor_y_ };
+        previous_camera_rotation_cursor_x_ = cur.x;
+        previous_camera_rotation_cursor_y_ = cur.y;
         if (GetAsyncKeyState(VK_RBUTTON) & 0x8000)
         {
             const float k = 0.006f;
