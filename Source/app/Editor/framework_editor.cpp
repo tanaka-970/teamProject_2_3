@@ -574,20 +574,62 @@ void framework::draw_editor_toolbar()
     //   実行 / 停止      … 今 Play 中かどうかが一目で要る
     //
     // 未保存かどうかはウィンドウタイトルとシーン名の * で分かる。
-    if (ImGui::Button("Move"))
-        transform_gizmo.SetOperation(ReplayEngine::Editor::GizmoOperation::Translate);
+    // モードごとに Scene View のギズモの形が変わる。
+    //   Move   … 軸線 + 先端の丸
+    //   Rotate … 軸まわりの円
+    //   Scale  … 軸線 + 先端の四角
+    //
+    // 選択中のモードはボタンの色でも示す。
+    // 形だけだと Scene View を見ていないと分からず、
+    // ツールバーを見ても «今どれか» が読み取れなかった。
+    const auto gizmo_mode_button = [&](const char* label,
+        ReplayEngine::Editor::GizmoOperation mode, const char* tooltip)
+    {
+        const bool active = transform_gizmo.Operation() == mode;
+        if (active)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Button,
+                ImGui::GetStyle().Colors[ImGuiCol_ButtonActive]);
+        }
+        if (ImGui::Button(label)) transform_gizmo.SetOperation(mode);
+        if (active) ImGui::PopStyleColor();
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tooltip);
+    };
+
+    gizmo_mode_button("Move", ReplayEngine::Editor::GizmoOperation::Translate,
+        u8"移動（既定: Shift+W）\n"
+        u8"軸線の先端が丸。軸をドラッグするとその方向へ動く。\n"
+        u8"ドラッグ中に Esc で取り消し。");
     ImGui::SameLine();
-    if (ImGui::Button("Rotate"))
-        transform_gizmo.SetOperation(ReplayEngine::Editor::GizmoOperation::Rotate);
+    gizmo_mode_button("Rotate", ReplayEngine::Editor::GizmoOperation::Rotate,
+        u8"回転（既定: Shift+E）\n"
+        u8"軸まわりの円。円周を掴んで、円に沿って引くと回る。\n"
+        u8"ドラッグ中に Esc で取り消し。");
     ImGui::SameLine();
-    if (ImGui::Button("Scale"))
-        transform_gizmo.SetOperation(ReplayEngine::Editor::GizmoOperation::Scale);
+    gizmo_mode_button("Scale", ReplayEngine::Editor::GizmoOperation::Scale,
+        u8"拡縮（既定: Shift+R）\n"
+        u8"軸線の先端が四角。軸をドラッグするとその軸だけ伸縮する。\n"
+        u8"ドラッグ中に Esc で取り消し。");
     ImGui::SameLine();
     bool snap = transform_gizmo.SnapEnabled();
     if (ImGui::Checkbox("Snap", &snap)) transform_gizmo.SetSnapEnabled(snap);
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::SetTooltip(
+            u8"ドラッグ量を一定の刻みに丸める。\n"
+            u8"移動・回転・拡縮のどのモードにも効く。");
+    }
     ImGui::SameLine();
     if (ImGui::Button(gizmo_local_space ? "Local" : "World"))
         gizmo_local_space = !gizmo_local_space;
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::SetTooltip(
+            u8"ギズモの軸の向きを切り替える。\n"
+            u8"World … ワールド座標の軸に固定する。\n"
+            u8"Local … 選択しているオブジェクトの回転に追従する。\n"
+            u8"傾いた物を «その物にとっての前» へ動かしたいときは Local。");
+    }
 
     ImGui::SameLine();
     ImGui::Separator();

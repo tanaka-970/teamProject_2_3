@@ -434,6 +434,7 @@ void framework::draw_editor_camera_preset_manager()
         ImGui::Text(u8"Gizmo Move/Rotate/Scale: %s / %s / %s",
             ChordText(edit.gizmo_move).c_str(), ChordText(edit.gizmo_rotate).c_str(),
             ChordText(edit.gizmo_scale).c_str());
+        ImGui::TextDisabled(u8"ギズモは形で見分ける。移動=先端が丸 / 回転=円 / 拡縮=先端が四角。");
         ImGui::End();
         return;
     }
@@ -520,6 +521,22 @@ void framework::draw_editor_camera_preset_manager()
 
     if (ImGui::CollapsingHeader(u8"Gizmo ショートカット", ImGuiTreeNodeFlags_DefaultOpen))
     {
+        ImGui::TextDisabled(u8"Scene View のギズモの種類を切り替えるキー。");
+        ImGui::TextDisabled(u8"モードによってギズモの形そのものが変わる。");
+        ImGui::BulletText(u8"Move   … 軸線 + 先端の丸。軸をドラッグしてその方向へ動かす");
+        ImGui::BulletText(u8"Rotate … 軸まわりの円。円周を掴んで円に沿って引くと回る");
+        ImGui::BulletText(u8"Scale  … 軸線 + 先端の四角。軸をドラッグしてその軸だけ伸縮する");
+        ImGui::Spacing();
+        ImGui::TextDisabled(u8"既定は Shift+W / Shift+E / Shift+R。");
+        ImGui::TextDisabled(u8"Maya 風にするなら Shift を外して W / E / R にする。");
+        ImGui::Spacing();
+        ImGui::TextDisabled(u8"切り替わるのは次をどちらも満たすときだけ。");
+        ImGui::BulletText(u8"GameObject を選択している");
+        ImGui::BulletText(u8"マウスのボタンを押していない");
+        ImGui::TextDisabled(u8"右ドラッグ + WASD で視点を飛ばしている最中に、");
+        ImGui::TextDisabled(u8"意図せずモードが変わるのを防ぐため。");
+        ImGui::Spacing();
+
         changed |= DrawKeyChordEditor(u8"Move Gizmo", edit.gizmo_move);
         changed |= DrawKeyChordEditor(u8"Rotate Gizmo", edit.gizmo_rotate);
         changed |= DrawKeyChordEditor(u8"Scale Gizmo", edit.gizmo_scale);
