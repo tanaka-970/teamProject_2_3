@@ -155,6 +155,25 @@ bool framework::draw_object_transform_gizmo()
     float nearest_handle = 9.0f;
     for (int axis = 0; axis < 3; ++axis)
     {
+        if (rotate_mode)
+        {
+			//回転は円なので、円周のどこを掴んでもその軸まわりに回る。
+            for (int step = 0; step < ring_sample_count; ++step)
+            {
+            //どういう処理か
+            // 
+                if (!ring_point_valid[axis][step] || !ring_point_valid[axis][step + 1]) continue;
+                const float distance = DistanceToSegment(mouse,
+                    ring_points[axis][step], ring_points[axis][step + 1]);
+                if (distance < nearest_handle)
+                {
+                    nearest_handle = distance;
+                    hovered_axis = axis;
+                    hovered_ring_step = step;
+                }
+            }
+            continue;
+        }
         if (!endpoint_valid[axis]) continue;
         const float distance = DistanceToSegment(mouse, center_screen, endpoints[axis]);
         if (distance < nearest_handle)
