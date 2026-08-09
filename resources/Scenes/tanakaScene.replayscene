@@ -1,0 +1,61 @@
+REPLAY_SCENE 11
+SCENE "新しいシーン"
+SCENE_STATE 0
+COLLISION_STATE 2 0
+OBJECT_COUNT 2
+OBJECT
+  ID 1
+  NAME "StageModel"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "MeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "mesh_asset" asset "60412424bb1443240b2bf2160eee6923"
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_override" bool 0
+    PROPERTY "tint" color 1 1 1 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+    PROPERTY "local_position_offset" vec3 0 0 0
+    PROPERTY "local_rotation_offset" vec3 0 0 0
+    PROPERTY "local_scale_multiplier" vec3 1 1 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 2
+  NAME "player"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 4.171912670135498 1.5909994840621948 0 -1.8807080984115601 0.72615706920623779 0 0.05000000074505806 0.05000000074505806 0.05000000074505806
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "MeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "mesh_asset" asset "1bd1358040255f5bd18f3be0d79fbe3c"
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_override" bool 0
+    PROPERTY "tint" color 1 1 1 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+    PROPERTY "local_position_offset" vec3 0 0 0
+    PROPERTY "local_rotation_offset" vec3 0 0 0
+    PROPERTY "local_scale_multiplier" vec3 1 1 1
+  END_COMPONENT
+END_OBJECT
