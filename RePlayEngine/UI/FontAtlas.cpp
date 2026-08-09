@@ -51,7 +51,8 @@ namespace ReplayEngine::UI
             if (size <= 0) return false;
             stream.seekg(0, std::ios::beg);
             out.resize(static_cast<std::size_t>(size));
-            stream.read(reinterpret_cast<char*>(out.data()), size);
+            stream.read(reinterpret_cast<char*>(out.data()),
+                static_cast<std::streamsize>(size));
             return stream.good();
         }
 
@@ -74,6 +75,7 @@ namespace ReplayEngine::UI
     void FontAtlas::Release() noexcept
     {
         glyphs_.clear();
+        baked_glyphs_.clear();
         font_data_.clear();
         baked_font_size_ = 64.0f;
         real_atlas_ = false;
@@ -83,8 +85,7 @@ namespace ReplayEngine::UI
 
     const FontAtlas::GlyphInfo& FontAtlas::Glyph(std::uint32_t codepoint, float font_size)
     {
-        if (glyphs_.find(codepoint) == glyphs_.end())
-            EnsureGlyph(codepoint, font_size);
+        EnsureGlyph(codepoint, font_size);
         return glyphs_.find(codepoint)->second;
     }
 
@@ -187,6 +188,7 @@ namespace ReplayEngine::UI
             return false;
 
         glyphs_.clear();
+        baked_glyphs_.clear();
         for (std::size_t index = 0; index < baked.size(); ++index)
         {
             const stbtt_bakedchar& b = baked[index];
@@ -203,7 +205,7 @@ namespace ReplayEngine::UI
             };
             glyph.bearing = { 0.0f, 0.0f };
             glyph.advance = b.xadvance > 0.0f ? b.xadvance : glyph.size.x;
-            glyphs_[static_cast<std::uint32_t>(32 + index)] = glyph;
+            baked_glyphs_[static_cast<std::uint32_t>(32 + index)] = glyph;
         }
         real_atlas_ = true;
         return true;
@@ -213,8 +215,8 @@ namespace ReplayEngine::UI
     {
         if (real_atlas_ && codepoint >= 32u && codepoint < 128u)
         {
-            const auto found = glyphs_.find(codepoint);
-            if (found != glyphs_.end())
+            const auto found = baked_glyphs_.find(codepoint);
+            if (found != baked_glyphs_.end())
             {
                 const float scale = (std::max)(font_size, 1.0f) / baked_font_size_;
                 GlyphInfo glyph = found->second;

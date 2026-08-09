@@ -10,6 +10,11 @@
 #include "../../RePlayEngine/Scene/Runtime/Scene.h"
 #include "../../RePlayEngine/UI/UILayout.h"
 
+// PushItemFlag / ImGuiItemFlags_Disabled を使うため。
+// 同梱の ImGui は 1.80 WIP で BeginDisabled / EndDisabled がまだ無い。
+// 既存の InspectorPanel.cpp / PropertyDrawer.cpp と同じ取り込み方に合わせる。
+#include "imgui/imgui_internal.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -19,6 +24,21 @@
 
 namespace
 {
+    // 同梱の ImGui (1.80 WIP) には BeginDisabled / EndDisabled がまだ無い。
+    // 操作を実際に止める必要がある場所はこちらを使う。
+    // 見た目だけ淡くしたい場合は PushStyleVar(Alpha) だけで足りる。
+    void BeginDisabledCompat()
+    {
+        ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+        ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+    }
+
+    void EndDisabledCompat()
+    {
+        ImGui::PopStyleVar();
+        ImGui::PopItemFlag();
+    }
+
     using ReplayEngine::Components::CanvasComponent;
     using ReplayEngine::Components::RectTransformComponent;
     using ReplayEngine::Components::UIImageComponent;
@@ -363,7 +383,7 @@ void framework::draw_ui_hierarchy()
 
     Scene::Scene* scene = object_editor_context.GetScene();
     const bool can_edit = object_editor_context.CanEdit();
-    if (!can_edit) ImGui::BeginDisabled();
+    if (!can_edit) BeginDisabledCompat();
     if (ImGui::Button("Canvas")) CreateUIElement(object_editor_context, UIElementKind::Canvas);
     ImGui::SameLine();
     if (ImGui::Button("Image")) CreateUIElement(object_editor_context, UIElementKind::Image);
@@ -373,7 +393,7 @@ void framework::draw_ui_hierarchy()
     if (ImGui::Button("Button")) CreateUIElement(object_editor_context, UIElementKind::Button);
     ImGui::SameLine();
     if (ImGui::Button("Mask")) CreateUIElement(object_editor_context, UIElementKind::Mask);
-    if (!can_edit) ImGui::EndDisabled();
+    if (!can_edit) EndDisabledCompat();
 
     ImGui::Separator();
     if (scene == nullptr)
@@ -609,11 +629,16 @@ void framework::draw_ui_inspector()
 
     object_inspector_panel.DrawContents(object_editor_context);
     ImGui::Separator();
-    ImGui::BeginDisabled();
+    // Motion Workspace への導線。今は押しても何も起きないが、
+    // 先に置いておくことで、後から機能を足したときに導線を探さずに済む。
+    //
+    // ImGuiItemFlags_Disabled を使うと IsItemHovered が false になり
+    // ツールチップを出せないため、ここは見た目だけ淡くして押下を無視する。
+    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
     ImGui::Button("Motion を作成");
-    ImGui::EndDisabled();
+    ImGui::PopStyleVar();
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Phase 3 で Motion Asset 作成へ接続します。");
+        ImGui::SetTooltip("Phase 4 の Motion Workspace で接続します。");
 
     ImGui::End();
 }

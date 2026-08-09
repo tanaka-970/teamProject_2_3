@@ -42,6 +42,7 @@ namespace ReplayEngine::UI
         Microsoft::WRL::ComPtr<ID3D11Device> device_;
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> texture_;
         std::vector<unsigned char> font_data_;
+        std::unordered_map<std::uint32_t, GlyphInfo> baked_glyphs_;
         std::unordered_map<std::uint32_t, GlyphInfo> glyphs_;
         float baked_font_size_ = 64.0f;
         bool real_atlas_ = false;

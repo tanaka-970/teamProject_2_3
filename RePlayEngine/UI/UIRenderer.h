@@ -16,6 +16,26 @@ namespace ReplayEngine::UI
 {
     class FontAtlas;
 
+    // ---- 拡張点: Effect Stack (Phase 6) -----------------------------------
+    //
+    // 【今は入れていない理由】
+    //   Phase 1 の目的は「Motion から動かされる側」を用意すること。
+    //   Effect はオブジェクト単位のオフスクリーン描画になり、
+    //   RT プールと描画順の設計が別途要るため、ここでは扱わない。
+    //
+    // 【入れるときにここへ足す】
+    //   ・Render() の中で、Effect を持つ要素だけ一度 RT へ逃がす分岐を作る
+    //   ・Flush() の呼び出し単位を「RT ごと」に割る（今はテクスチャ / ブレンド /
+    //     シザーの変わり目で割っている。そこへ RT の変わり目を足す）
+    //   ・RenderStates に Effect 用のブレンドとサンプラを追加する
+    //
+    // 【壊してはいけない前提】
+    //   ・Effect は RectTransform の矩形の外へはみ出す（Glow / 影 / Blur）。
+    //     Effect 基底の ExpandBounds() を累積して RT のサイズを決めること。
+    //     矩形と同じ大きさで確保すると発光と影が縁で切れる。
+    //   ・RT はプールから借りる。Effect 付きの要素ごとに確保すると破綻する。
+    //
+    //   詳細は Docs/UI_MOTION_PHASE0_DESIGN.md の 3.7 を参照。
     class UIRenderer final
     {
     public:
