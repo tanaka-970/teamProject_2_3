@@ -1,6 +1,7 @@
 ﻿#include "InspectorPanel.h"
 
 #include "PropertyDrawer.h"
+#include "../Validation/SceneValidator.h"
 #include "PlayerCompositionValidator.h"
 #include "../../Assets/AssetDatabase.h"
 #include "../../Object/Component/MissingComponent.h"
@@ -13,6 +14,11 @@
 #include "../../Scene/Serialization/PrefabSerializer.h"
 #include "../../Scripting/Core/ScriptComponent.h"
 #include "../../Scripting/Core/ScriptTypes.h"
+#include "../../Components/Landscape/LandscapeComponent.h"
+#include "../../Components/Landscape/LandscapeRendererComponent.h"
+#include "../../Components/Landscape/LandscapeColliderComponent.h"
+#include "../../Components/Rendering/PrimitiveMeshRendererComponent.h"
+#include "../../Components/Rendering/LightComponents.h"
 
 #include "imgui/imgui.h"
 #include "imgui/imgui_internal.h"
@@ -186,6 +192,58 @@ namespace ReplayEngine::Editor
         {
             ImGui::TextColored(ImVec4(0.35f, 0.75f, 1.0f, 1.0f),
                 "%zu 個を選択中（主選択を表示）", context.Selection().Count());
+        }
+
+        if (Scene::Scene* scene = context.GetScene())
+        {
+            const bool controlled = scene->Services().ControlledObject() == object.ID();
+            ImGui::TextDisabled("操作対象:");
+            ImGui::SameLine();
+            if (controlled)
+            {
+                ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.5f, 1.0f), "この GameObject");
+            }
+            else if (editable && ImGui::SmallButton("この GameObject を操作対象に設定"))
+            {
+                context.BeginEdit("操作対象を変更");
+                scene->Services().SetControlledObject(object.ID());
+                context.CommitEdit();
+                context.SetStatus(object.Name() + " を操作対象にしました");
+            }
+            else if (!editable)
+            {
+                ImGui::TextDisabled("実行中は変更できません");
+            }
+        }
+
+        // Diagnostics パネルを開かなくても、選択中 GameObject の問題はここで見える。
+        if (Scene::Scene* scene = context.GetScene())
+        {
+            const auto issues = SceneValidator::Validate(*scene, context.GetAssetDatabase());
+            int object_issue_count = 0;
+            for (const ValidationIssue& issue : issues)
+                if (issue.object == object.ID() && issue.severity != ValidationSeverity::Info)
+                    ++object_issue_count;
+            if (object_issue_count > 0 && ImGui::CollapsingHeader("この GameObject の診断", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                for (const ValidationIssue& issue : issues)
+                {
+                    if (issue.object != object.ID() || issue.severity == ValidationSeverity::Info) continue;
+                    const ImVec4 color = issue.severity == ValidationSeverity::Error
+                        ? ImVec4(1.0f, 0.35f, 0.30f, 1.0f)
+                        : ImVec4(1.0f, 0.72f, 0.30f, 1.0f);
+                    ImGui::TextColored(color, "[%s]", issue.code.c_str());
+                    ImGui::SameLine();
+                    ImGui::TextWrapped("%s", issue.message.c_str());
+                    if (!issue.suggestion.empty())
+                    {
+                        ImGui::Indent();
+                        ImGui::TextDisabled("%s", issue.suggestion.c_str());
+                        ImGui::Unindent();
+                    }
+                }
+                ImGui::Separator();
+            }
         }
 
         DrawPrefabHeader(context, object);
@@ -604,7 +662,7 @@ namespace ReplayEngine::Editor
                     [](const PlayerCompositionValidator::Requirement& r) { return r.required; }));
         if (!relevant) return;
 
-        if (!ImGui::CollapsingHeader("操作対象としての構成", ImGuiTreeNodeFlags_DefaultOpen)) return;
+        if (!ImGui::CollapsingHeader("操作構成の診断")) return;
 
         ImGui::Indent();
 
@@ -640,18 +698,8 @@ namespace ReplayEngine::Editor
         const bool editable = context.CanEdit();
         ImGui::Spacing();
 
-        if (!result.is_controlled)
-        {
-            if (!editable) ImGui::TextDisabled("実行中は操作対象を変更できません");
-            else if (ImGui::Button("操作対象に設定"))
-            {
-                context.BeginEdit("操作対象を変更");
-                scene->Services().SetControlledObject(object.ID());
-                context.CommitEdit();
-                context.SetStatus(object.Name() + " を操作対象にしました");
-            }
-            ImGui::SameLine();
-        }
+        // 操作対象の変更は GameObject 共通ヘッダーへ一本化した。
+        // ここは Player テンプレート専用の入口にせず、構成診断だけを担当する。
 
         if (!result.complete && editable)
         {
@@ -904,6 +952,108 @@ namespace ReplayEngine::Editor
                 ImGui::TextWrapped("  %s", script->LastError().c_str());
             }
             ImGui::Separator();
+        }
+
+        // Component の必須/推奨関係と、よくある構成ミスは Inspector 上で即時に見せる。
+        if (info != nullptr && component.Owner() != nullptr)
+        {
+            GameObject& owner = *component.Owner();
+            auto draw_relationships = [&](const std::vector<Core::ComponentTypeID>& ids,
+                                          const char* label, const ImVec4& color)
+            {
+                for (Core::ComponentTypeID dependency_id : ids)
+                {
+                    if (owner.FindComponent(dependency_id) != nullptr) continue;
+                    const std::string dependency_name = ComponentRegistry::DisplayNameOf(dependency_id);
+                    ImGui::TextColored(color, "%s: %s がありません", label, dependency_name.c_str());
+                    if (editable)
+                    {
+                        ImGui::SameLine();
+                        ImGui::PushID(static_cast<int>(dependency_id));
+                        if (ImGui::SmallButton("追加"))
+                        {
+                            context.BeginEdit(dependency_name + " を追加");
+                            if (owner.AddComponent(dependency_id) != nullptr)
+                            {
+                                context.CommitEdit();
+                                context.SetStatus(dependency_name + " を追加しました");
+                            }
+                            else context.CancelEdit();
+                        }
+                        ImGui::PopID();
+                    }
+                }
+            };
+            draw_relationships(info->required_components, "必須", ImVec4(1.0f, 0.38f, 0.32f, 1.0f));
+            draw_relationships(info->recommended_components, "推奨", ImVec4(1.0f, 0.72f, 0.30f, 1.0f));
+        }
+
+        if (auto* landscape = dynamic_cast<Components::LandscapeComponent*>(&component))
+        {
+            GameObject* owner = landscape->Owner();
+            if (!landscape->LastDeserializeError().empty())
+            {
+                ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.3f, 1.0f), "Landscape データ読み込みエラー");
+                ImGui::TextWrapped("%s", landscape->LastDeserializeError().c_str());
+            }
+            if (owner != nullptr && owner->FindComponent(
+                Components::PrimitiveMeshRendererComponent::StaticTypeID()) != nullptr)
+            {
+                ImGui::TextColored(ImVec4(1.0f, 0.72f, 0.3f, 1.0f),
+                    "注意: Primitive Mesh Renderer と Landscape が同じ GameObject にあります。");
+                ImGui::TextWrapped("両方を表示すると重なります。Landscape を使う場合は Primitive 側を無効化してください。");
+            }
+            ImGui::Separator();
+            ImGui::TextDisabled("新規平面: %d x %d / セル %.2f",
+                landscape->default_resolution, landscape->default_resolution, landscape->default_cell_size);
+            if (!editable) ImGui::TextDisabled("実行中は再生成できません");
+            else if (ImGui::Button("設定値で平面を再生成")) ImGui::OpenPopup("ConfirmRegenerateLandscape");
+            if (ImGui::BeginPopupModal("ConfirmRegenerateLandscape", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+            {
+                ImGui::TextUnformatted("現在の Landscape geometry を新しい平面で置き換えます。Undo できます。");
+                if (ImGui::Button("再生成"))
+                {
+                    context.BeginEdit("Landscape を再生成");
+                    if (landscape->GenerateFlat(landscape->default_resolution, landscape->default_resolution,
+                        landscape->default_cell_size, 0.0f))
+                    {
+                        landscape->OnPropertyChanged(nullptr);
+                        context.CommitEdit();
+                        context.SetStatus("Landscape を中央原点の平面として再生成しました");
+                    }
+                    else
+                    {
+                        context.CancelEdit();
+                        context.SetStatus("Landscape の再生成に失敗しました");
+                    }
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("キャンセル")) ImGui::CloseCurrentPopup();
+                ImGui::EndPopup();
+            }
+        }
+
+        if (dynamic_cast<Components::DirectionalLightComponent*>(&component) != nullptr)
+        {
+            Scene::Scene* scene = context.GetScene();
+            int active_directional_lights = 0;
+            if (scene != nullptr)
+            {
+                for (std::size_t i = 0; i < scene->GameObjectCount(); ++i)
+                {
+                    GameObject* candidate = scene->GameObjectAt(i);
+                    if (candidate == nullptr || !candidate->ActiveInHierarchy()) continue;
+                    auto* light = candidate->GetComponent<Components::DirectionalLightComponent>();
+                    if (light != nullptr && light->Enabled()) ++active_directional_lights;
+                }
+            }
+            if (active_directional_lights > 1)
+            {
+                ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.25f, 1.0f),
+                    "Directional Light が %d 個有効です。Runtime は先頭の 1 個だけを使用します。",
+                    active_directional_lights);
+            }
         }
 
         // 静的な登録と、インスタンスごとの申告のどちらかがあれば編集欄を出す。

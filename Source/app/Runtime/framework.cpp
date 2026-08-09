@@ -13,6 +13,13 @@ Microsoft::WRL::ComPtr<ID3D11Debug> framework::acquire_d3d11_debug() const noexc
     return debug;
 }
 
+Microsoft::WRL::ComPtr<ID3D11InfoQueue> framework::acquire_d3d11_info_queue() const noexcept
+{
+    Microsoft::WRL::ComPtr<ID3D11InfoQueue> info_queue;
+    if (device) device.As(&info_queue);
+    return info_queue;
+}
+
 bool framework::is_fullscreen() const
 {
     return borderless_fullscreen;
@@ -195,4 +202,3 @@ bool framework::uninitialize()
 }
 
 framework::~framework() {}
-

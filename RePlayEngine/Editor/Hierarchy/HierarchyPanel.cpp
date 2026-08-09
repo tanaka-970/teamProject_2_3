@@ -500,14 +500,25 @@ namespace ReplayEngine::Editor
             return;
         }
 
-        // Landscape data は local 0..64。33x33 / 2m cell で編集負荷を抑えつつ、GameObject Transform だけで原点中心へ置く。
-        ground->GetTransform().SetLocalPosition({ -32.0f, 0.0f, -32.0f });
+        // GenerateFlat が geometry 自体を Pivot 中心へ生成するため、
+        // 作成経路によって Transform 補正を変えない。
         renderer->tint = { 0.36f, 0.48f, 0.31f, 1.0f };
         collider->double_sided = true;
 
         context.CommitEdit();
         context.Selection().Select(ground->ID(), false);
         context.SetStatus("Landscape Ground を作成しました");
+    }
+
+    void HierarchyPanel::BeginRenameSelection(EditorContext& context)
+    {
+        Scene::Scene* scene = context.GetScene();
+        if (scene == nullptr || !context.CanEdit()) return;
+        GameObject* object = context.Selection().ResolvePrimary(*scene);
+        if (object == nullptr || object->PendingDestroy()) return;
+        renaming_ = object->ID();
+        CopyToBuffer(rename_buffer_, rename_buffer_size, object->Name());
+        context.SetStatus("F2: GameObject 名を変更");
     }
 
     void HierarchyPanel::CreateEmptyGameObject(EditorContext& context, GameObject* parent)

@@ -46,6 +46,20 @@ bool framework::initialize()
         swap_chain.GetAddressOf(), device.GetAddressOf(), NULL, immediate_context.GetAddressOf());
     _ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
 
+#if defined(_DEBUG) || defined(DEBUG)
+    // Live Object Report の中身をあとからファイルへ落とせるように、
+    // Debug Layer のメッセージを作成直後から落とさず蓄積する。
+    if (device)
+    {
+        Microsoft::WRL::ComPtr<ID3D11InfoQueue> info_queue;
+        if (SUCCEEDED(device.As(&info_queue)) && info_queue)
+        {
+            info_queue->SetMessageCountLimit(static_cast<UINT64>(-1));
+            info_queue->PushEmptyStorageFilter();
+        }
+    }
+#endif
+
     Microsoft::WRL::ComPtr<ID3D11Texture2D> back_buffer{};
     hr = swap_chain->GetBuffer(0, __uuidof(ID3D11Texture2D),
         reinterpret_cast<LPVOID*>(back_buffer.GetAddressOf()));

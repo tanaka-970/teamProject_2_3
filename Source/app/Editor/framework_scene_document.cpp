@@ -1,12 +1,15 @@
 ﻿#include "framework.h"
 // Prefab は v7 の SceneData 方式へ移行済み。
 #include "../../RePlayEngine/Scene/Serialization/PrefabSerializer.h"
+#include "../../RePlayEngine/Editor/Viewport/EditorSelectionBounds.h"
 
 #include <commdlg.h>
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <cmath>
+#include <limits>
 
 namespace
 {
@@ -64,7 +67,7 @@ void framework::handle_viewport_selection()
 
     const bool suppress_drag_selection =
         landscape_edit_enabled && active_editor_view == editor_view::scene &&
-        !object_scene_play_mode;
+        !object_scene_play_mode && !ImGui::GetIO().KeyCtrl && !ImGui::GetIO().KeyAlt;
     if (suppress_drag_selection) viewport_drag_selecting = false;
 
     // 編集カメラがマウスを掴んでいるフレームは選択処理を動かさない。
@@ -75,21 +78,21 @@ void framework::handle_viewport_selection()
     // GizmoハンドルがHover/Drag中ならPickingへ入力を渡さない。
     if (draw_object_transform_gizmo()) return;
 
-    POINT client_origin{ 0, 0 };
-    ClientToScreen(hwnd, &client_origin);
     using namespace DirectX;
-
-    // Scene View の描画と同じ行列を使う。
-    // 別々に組み立てると、見えている位置と拾える位置がずれる。
     const XMMATRIX view = viewport_view_matrix();
     const XMMATRIX projection = viewport_projection_matrix();
+    const float scene_width = scene_view_max_x - scene_view_min_x;
+    const float scene_height = scene_view_max_y - scene_view_min_y;
+    POINT client_origin{ 0, 0 };
+    ClientToScreen(hwnd, &client_origin);
+    const float render_width = (std::max)(1.0f, static_cast<float>(client_width));
+    const float render_height = (std::max)(1.0f, static_cast<float>(client_height));
 
     const ImVec2 mouse = ImGui::GetMousePos();
-    const float mouse_x = mouse.x - static_cast<float>(client_origin.x);
-    const float mouse_y = mouse.y - static_cast<float>(client_origin.y);
-    const bool inside_viewport = mouse_x >= 0.0f && mouse_y >= 0.0f &&
-        mouse_x < static_cast<float>(client_width) &&
-        mouse_y < static_cast<float>(client_height);
+    const float mouse_x = mouse.x - scene_view_min_x;
+    const float mouse_y = mouse.y - scene_view_min_y;
+    const bool inside_viewport = scene_width > 1.0f && scene_height > 1.0f &&
+        mouse_x >= 0.0f && mouse_y >= 0.0f && mouse_x < scene_width && mouse_y < scene_height;
 
     if (!suppress_drag_selection && !viewport_drag_selecting && scene_view_hovered &&
         inside_viewport && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
@@ -130,17 +133,25 @@ void framework::handle_viewport_selection()
         {
             const ReplayEngine::Core::GameObject* object = object_scene_view.GameObjectAt(index);
             if (object == nullptr || object->PendingDestroy() || !object->ActiveInHierarchy()) continue;
-            const DirectX::XMFLOAT3 world = object->GetTransform().WorldPosition();
-            const XMVECTOR projected = XMVector3Project(XMLoadFloat3(&world),
-                0.0f, 0.0f, static_cast<float>(client_width), static_cast<float>(client_height),
-                0.0f, 1.0f, projection, view, XMMatrixIdentity());
-            XMFLOAT3 screen{};
-            XMStoreFloat3(&screen, projected);
-            const float screen_x = screen.x + static_cast<float>(client_origin.x);
-            const float screen_y = screen.y + static_cast<float>(client_origin.y);
-            if (screen.z >= 0.0f && screen.z <= 1.0f &&
-                screen_x >= go_minimum_x && screen_x <= go_maximum_x &&
-                screen_y >= go_minimum_y && screen_y <= go_maximum_y)
+            const auto bounds = ReplayEngine::Editor::EditorSelectionBounds::Compute(*object);
+            if (!bounds.valid) continue;
+            const XMFLOAT3 corners[8] = {
+                {bounds.minimum.x,bounds.minimum.y,bounds.minimum.z},{bounds.maximum.x,bounds.minimum.y,bounds.minimum.z},
+                {bounds.minimum.x,bounds.maximum.y,bounds.minimum.z},{bounds.maximum.x,bounds.maximum.y,bounds.minimum.z},
+                {bounds.minimum.x,bounds.minimum.y,bounds.maximum.z},{bounds.maximum.x,bounds.minimum.y,bounds.maximum.z},
+                {bounds.minimum.x,bounds.maximum.y,bounds.maximum.z},{bounds.maximum.x,bounds.maximum.y,bounds.maximum.z} };
+            float min_x=(std::numeric_limits<float>::max)(), min_y=(std::numeric_limits<float>::max)();
+            float max_x=-(std::numeric_limits<float>::max)(), max_y=-(std::numeric_limits<float>::max)();
+            bool any=false;
+            for (const XMFLOAT3& corner : corners)
+            {
+                const XMVECTOR projected=XMVector3Project(XMLoadFloat3(&corner),0,0,render_width,render_height,0,1,projection,view,XMMatrixIdentity());
+                XMFLOAT3 screen{}; XMStoreFloat3(&screen,projected);
+                if (!std::isfinite(screen.x)||!std::isfinite(screen.y)||screen.z<0||screen.z>1) continue;
+                any=true; const float sx=static_cast<float>(client_origin.x)+screen.x, sy=static_cast<float>(client_origin.y)+screen.y;
+                min_x=(std::min)(min_x,sx); min_y=(std::min)(min_y,sy); max_x=(std::max)(max_x,sx); max_y=(std::max)(max_y,sy);
+            }
+            if (any && max_x>=go_minimum_x && min_x<=go_maximum_x && max_y>=go_minimum_y && min_y<=go_maximum_y)
             {
                 object_editor_context.Selection().Select(object->ID(), true);
                 selected_game_object = true;
@@ -159,23 +170,12 @@ void framework::handle_viewport_selection()
         return;
     }
 
-    // 単一クリックでは画面座標をワールド空間のピッキングレイへ変換する。
-    const XMVECTOR near_point = XMVector3Unproject(
-        XMVectorSet(mouse_x, mouse_y, 0.0f, 1.0f), 0.0f, 0.0f,
-        static_cast<float>(client_width), static_cast<float>(client_height),
-        0.0f, 1.0f, projection, view, XMMatrixIdentity());
-    const XMVECTOR far_point = XMVector3Unproject(
-        XMVectorSet(mouse_x, mouse_y, 1.0f, 1.0f), 0.0f, 0.0f,
-        static_cast<float>(client_width), static_cast<float>(client_height),
-        0.0f, 1.0f, projection, view, XMMatrixIdentity());
-    XMFLOAT3 origin{};
-    XMFLOAT3 direction{};
-    XMStoreFloat3(&origin, near_point);
-    XMStoreFloat3(&direction, XMVector3Normalize(far_point - near_point));
-
+    // 単一クリックも Landscape / D&D と同じ共通 ray を使う。
+    // Scene View local -> client viewport の変換を一か所へ集約し、描画とのズレを防ぐ。
+    const auto pick_ray = viewport_picking_ray(mouse_x, mouse_y);
     const ReplayEngine::Core::ObjectID picked_object =
         ReplayEngine::Editor::ViewportPicker::Pick(
-            active_object_scene(), origin, direction);
+            active_object_scene(), pick_ray.origin, pick_ray.direction);
     if (picked_object.Valid())
     {
         object_editor_context.Selection().Select(picked_object, additive);

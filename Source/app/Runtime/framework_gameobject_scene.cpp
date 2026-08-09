@@ -413,13 +413,11 @@ bool framework::object_runtime_active() const noexcept
     //   そのため Editor を開いて F5 を押すまで入力も物理も一切動かず、
     //   「PlayerController があるのに動かない」状態になっていた。
     //
-    // 正しい条件は「編集中でないこと」。
-    //   Editor 非表示（通常のゲーム実行） -> 動く
-    //   Editor 表示 + Edit Mode           -> 止まる（GameObject を編集中）
-    //   Editor 表示 + Play Mode (F5)      -> 動く
-    const bool editing = editor_mode && edit_mode_active && !object_scene_play_mode;
+    // Editor 内で Runtime World を動かす入口は F5 Play Session だけ。
+    // F3 は Editor UI/input capture の切替であり、第2の Play Mode にはしない。
     if (object_scene_play_mode && object_scene_paused) return false;
-    return !editing;
+    if (!editor_mode) return true;
+    return object_scene_play_mode;
 }
 
 void framework::refresh_object_scene_services()
@@ -550,7 +548,7 @@ void framework::update_object_scene(float elapsed_time)
 
     ReplayEngine::Scene::Scene& scene = active_object_scene();
 
-    // 編集中（F3 で停止中）は Component を更新しない。
+    // Editor では F5 Play Session 以外 Component を更新しない。
     // Editor で置いた GameObject が編集中に勝手に動くのを防ぐ。
     if (object_runtime_active())
     {
@@ -860,6 +858,7 @@ bool framework::load_object_scene_from_path(const std::filesystem::path& source)
         return false;
     }
     if (object_scene_play_mode) exit_object_play_mode();
+    reset_landscape_editor_state(true);
 
     // Scene を切り替える前に、今の Scene の編集カメラ状態を残す。
     // 戻ってきたときに同じ視点から再開できる。
@@ -1082,6 +1081,8 @@ void framework::enter_object_play_mode()
         push_editor_log("Info", "既に Play 中のため何もしません");
         return;
     }
+
+    reset_landscape_editor_state(true);
 
     // 編集 Scene の内容を実行用 Scene へ複製する。
     // 直接コピーせず SceneData を経由するのは、
@@ -1870,10 +1871,8 @@ ReplayEngine::Core::GameObject* framework::create_default_landscape_ground(
         return nullptr;
     }
 
-    // 64m x 64m を原点中心へ置く。Landscape内部はlocal 0..64だが、
-    // GameObject Transformで中心を合わせるのでgeometry dataに特別なWorld座標を持たせない。
+    // GenerateFlat 側で geometry を Pivot 中心に生成する。
     landscape->GenerateFlat(33, 33, 2.0f, 0.0f);
-    ground->GetTransform().SetLocalPosition({ -32.0f, 0.0f, -32.0f });
     renderer->tint = { 0.36f, 0.48f, 0.31f, 1.0f };
     collider->double_sided = true;
     return ground;
@@ -1893,6 +1892,7 @@ bool framework::create_object_scene(const std::string& name, bool place_default_
 
     // 実行中に作り直すと、実行用 Scene と編集用 Scene の対応が壊れる。
     if (object_scene_play_mode) exit_object_play_mode();
+    reset_landscape_editor_state(true);
 
     if (!editor_camera_state_key.empty()) save_editor_camera_state();
 
@@ -1901,6 +1901,9 @@ bool framework::create_object_scene(const std::string& name, bool place_default_
     detach_collision_world();
 
     const std::string scene_name = name.empty() ? std::string("新しいシーン") : name;
+
+    // 新規 Scene の既定視点を先に作り、Default Scene だけ後段の LookAt で上書きする。
+    editor_camera.ResetToDefault();
 
     // 1) 空の Scene を作る。GameObject は 1 つも作らない。
     object_scene.Clear();
@@ -2009,9 +2012,8 @@ bool framework::create_object_scene(const std::string& name, bool place_default_
     // 6) 衝突世界を新しい Scene へつなぎ直す。
     attach_collision_world(object_scene);
 
-    // 7) 編集カメラを安全な既定位置へ置く。
-    //    Runtime Camera にも CameraTargetComponent にも触れない。
-    editor_camera.ResetToDefault();
+    // 7) Runtime Camera / CameraTargetComponent には触れない。
+    //    Default Scene の Ground 用 LookAt は上書きせず維持する。
     editor_camera_state_key = make_editor_camera_state_key();
 
     // Default Scene は Ground を選択したまま既定カメラを維持する。

@@ -1,4 +1,4 @@
-REPLAY_ASSET_DB 2 71
+REPLAY_ASSET_DB 2 72
 "60412424bb1443240b2bf2160eee6923" 1 "ExampleStage" "resources/Stage/ExampleStage.cereal" "resources/.replay_cache/models/f9fffac39252a621_v0.replaycache"
 "1bd1358040255f5bd18f3be0d79fbe3c" 1 "AllAnimation1" "resources/AnimationModel/AllAnimation1.cereal" "resources/.replay_cache/models/6a20e727f78fb359_v0.replaycache"
 "e5c4168feb92f8fd7357f6cbc1f66e22" 1 "scene" "resources/Stage/city_3d_model_gltf/scene.gltf" "resources/.replay_cache/models/98fd72a862da8c8f_v0.replaycache"
@@ -70,3 +70,4 @@ REPLAY_ASSET_DB 2 71
 "96f1289d8a7d94f2999b274cffb5331b" 4 "NewItem_af4f21c2" "Shader/Materials/Generated/NewItem_af4f21c2.hlsl" ""
 "a87871932f0726099a50685a7b99c5de" 1 "tie" "resources/model/tie.fbx" ""
 "b170d19537ee356ea4b535b024cd7c6f" 5 "TIE" "resources/Scenes/TIE.replayscene" ""
+"7d026b2a719ea479b8344854b3cec9a8" 5 "terrain" "resources/Scenes/terrain.replayscene" ""

@@ -27,6 +27,7 @@ namespace ReplayEngine::Editor
         void CreateEmpty(EditorContext& context) { CreateEmptyGameObject(context, nullptr); }
         void DuplicateSelection(EditorContext& context) { DuplicateSelected(context); }
         void DestroySelection(EditorContext& context) { DestroySelected(context); }
+        void BeginRenameSelection(EditorContext& context);
 
     private:
         void DrawNode(EditorContext& context, Core::GameObject& object, int depth);

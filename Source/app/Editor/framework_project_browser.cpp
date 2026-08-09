@@ -127,6 +127,42 @@ namespace
         return entries;
     }
 
+    // Search 入力中は current folder だけでなく Project 全体を検索する。
+    // .git/.vs/build 系の隠しフォルダは通常ツリーと同じ規則で再帰しない。
+    std::vector<ProjectEntry> SearchProjectFiles(const std::filesystem::path& root,
+        const std::string& lowered_query)
+    {
+        std::vector<ProjectEntry> entries;
+        if (lowered_query.empty()) return entries;
+        std::error_code error;
+        std::filesystem::recursive_directory_iterator iterator(root,
+            std::filesystem::directory_options::skip_permission_denied, error), end;
+        for (; iterator != end && !error; iterator.increment(error))
+        {
+            if (error) break;
+            const auto& item = *iterator;
+            std::error_code entry_error;
+            const bool directory = item.is_directory(entry_error);
+            if (entry_error) continue;
+            const std::string filename = item.path().filename().u8string();
+            if (directory)
+            {
+                if (filename.empty() || filename.front() == '.' || IsHiddenProjectFolder(filename))
+                    iterator.disable_recursion_pending();
+                continue;
+            }
+            const std::filesystem::path relative = std::filesystem::relative(item.path(), root, entry_error);
+            if (entry_error) continue;
+            const std::string label = relative.generic_u8string();
+            if (ToLowerCopy(label).find(lowered_query) == std::string::npos) continue;
+            ProjectEntry entry; entry.path = item.path(); entry.name = label; entry.is_directory = false;
+            entries.push_back(std::move(entry));
+        }
+        std::sort(entries.begin(), entries.end(), [](const ProjectEntry& a, const ProjectEntry& b)
+        { return ToLowerCopy(a.name) < ToLowerCopy(b.name); });
+        return entries;
+    }
+
     // アイコン画像が無い種別のための文字ラベル。
     // 画像アイコンを用意するまでの繋ぎで、サムネイルとは別物。
     const char* KindBadge(ReplayEngine::Assets::AssetKind kind, bool is_directory)
@@ -211,7 +247,12 @@ ID3D11ShaderResourceView* framework::project_thumbnail_for(
     const HRESULT result = load_texture_from_file(device.Get(),
         path.wstring().c_str(), &view, &description);
     if (FAILED(result)) return nullptr;
-    return view;
+
+    // load_texture_from_file は cache 所有 SRV を CopyTo(AddRef) する。Browser は毎 frame
+    // 呼ぶため、呼び出し分を Release しないと RefCount が frame ごとに増え続ける。
+    ID3D11ShaderResourceView* borrowed = view;
+    if (view != nullptr) view->Release();
+    return borrowed;
 }
 
 // -----------------------------------------------------------------------------
@@ -831,9 +872,11 @@ void framework::draw_project_folder_contents()
     if (error) return;
 
     const std::filesystem::path current = root / project_current_folder;
-    const std::vector<ProjectEntry> entries = ListProjectFolder(current, false);
-
     const std::string query = ToLowerCopy(asset_search_text);
+    const std::vector<ProjectEntry> entries = query.empty()
+        ? ListProjectFolder(current, false)
+        : SearchProjectFiles(root, query);
+
     const float cell = project_thumbnail_size + 22.0f;
     const float available = ImGui::GetContentRegionAvail().x;
     int columns = project_grid_view ? static_cast<int>(available / (cell + 8.0f)) : 1;
@@ -1031,7 +1074,11 @@ void framework::draw_project_folder_contents()
             }
             else if (record != nullptr)
             {
-                place_asset_in_object_scene(*record, asset_drop_add_collider);
+                // Double click は「開く/選択」であり Scene を変更しない。
+                // 配置/割当は Scene View D&D または明示的な配置ボタンだけ。
+                selected_asset_guid = record->guid;
+                project_browser_status = "Asset を選択しました: " + record->display_name +
+                    "（Sceneへ配置するにはドラッグ&ドロップ）";
             }
         }
 
@@ -1111,7 +1158,7 @@ void framework::draw_project_browser()
     }
 
     // --- パンくず ---
-    if (ImGui::SmallButton("Assets"))
+    if (ImGui::SmallButton("Project"))
     {
         project_current_folder.clear();
     }
@@ -1132,8 +1179,10 @@ void framework::draw_project_browser()
 
     // --- 検索とフィルタ ---
     ImGui::SetNextItemWidth(220.0f);
-    ImGui::InputTextWithHint("##ProjectSearch", "Search...",
+    ImGui::InputTextWithHint("##ProjectSearch", "Search Project...",
         asset_search_text, IM_ARRAYSIZE(asset_search_text));
+    if (asset_search_text[0] != '\0' && ImGui::IsItemHovered())
+        ImGui::SetTooltip("Project 全体を再帰検索します");
     ImGui::SameLine();
     const char* filters[] =
         { "All", "Model", "Prefab", "Scene", "Material", "Script", "Shader", "Flow", "Other" };
@@ -1160,7 +1209,7 @@ void framework::draw_project_browser()
         if (project_current_folder.empty()) root_flags |= ImGuiTreeNodeFlags_Selected;
 
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.98f, 0.80f, 0.36f, 1.0f));
-        const bool root_open = ImGui::TreeNodeEx("Assets", root_flags);
+        const bool root_open = ImGui::TreeNodeEx("Project", root_flags);
         ImGui::PopStyleColor();
         if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
         {
@@ -1187,7 +1236,7 @@ void framework::draw_project_browser()
         {
             ImGui::TextDisabled("%s に作成",
                 project_current_folder.empty()
-                    ? "Assets" : project_current_folder.generic_u8string().c_str());
+                    ? "Project" : project_current_folder.generic_u8string().c_str());
             ImGui::Separator();
             ImGui::SetNextItemWidth(200.0f);
             ImGui::InputTextWithHint("##ProjectNewName", "名前",

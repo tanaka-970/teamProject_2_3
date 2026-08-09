@@ -29,7 +29,7 @@
 bool framework::using_editor_camera() const noexcept
 {
     // Viewport が 1 つしかないので、モードで切り替える。
-    //   Edit Mode（F3 で停止中）          -> 編集カメラ
+    //   Scene View                        -> 編集カメラ
     //   Play Mode / 通常実行               -> Runtime Camera
     //
     // 将来 Scene View と Game View を分ける場合は、この関数の戻り値を
@@ -54,8 +54,13 @@ DirectX::XMMATRIX framework::viewport_view_matrix() const
                                                                                                                                                    
 DirectX::XMMATRIX framework::viewport_projection_matrix() const                                                                                    //
 {                                                                                                                                                  //
-    const float aspect = (client_height > 0)                                                                                                       //
-        ? static_cast<float>(client_width) / static_cast<float>(client_height)                                                                     //
+    // 3D scene itself is rendered to the full D3D client viewport. The Scene View is a
+    // transparent ImGui overlay that clips that image; it is NOT a separate render target.
+    // Therefore projection, picking and editor overlays must all use the client aspect.
+    // Using the Scene View content rect here makes the error grow toward the viewport edges
+    // (Landscape brush/edit point, gizmo and selection no longer line up with the image).
+    const float aspect = (client_width > 0 && client_height > 0)
+        ? static_cast<float>(client_width) / static_cast<float>(client_height)
         : (16.0f / 9.0f);                                                                                                                          //
                                                                                                                                                    //
     if (using_editor_camera()) return editor_camera.ProjectionMatrix(aspect);                                                                      //
@@ -82,10 +87,19 @@ DirectX::XMFLOAT3 framework::viewport_eye_position() const
 ReplayEngine::Editor::EditorViewportCamera::Ray framework::viewport_picking_ray(
     float mouse_x, float mouse_y) const
 {
-    // Picking は必ず編集カメラの行列から作る。
-    // Runtime Camera の行列で拾うと、Edit Mode で見えている位置と一致しない。
-    return editor_camera.BuildPickingRay(mouse_x, mouse_y,
-        static_cast<float>(client_width), static_cast<float>(client_height));
+    // Callers pass Scene-View-local mouse coordinates because that is the convenient input
+    // space for editor tools. The actual 3D image, however, is rendered in CLIENT coordinates.
+    // Convert through screen space so the ray is built in exactly the same viewport as D3D.
+    POINT client_origin{ 0, 0 };
+    ClientToScreen(hwnd, &client_origin);
+
+    const float screen_x = scene_view_min_x + mouse_x;
+    const float screen_y = scene_view_min_y + mouse_y;
+    const float client_x = screen_x - static_cast<float>(client_origin.x);
+    const float client_y = screen_y - static_cast<float>(client_origin.y);
+    const float width = (std::max)(1.0f, static_cast<float>(client_width));
+    const float height = (std::max)(1.0f, static_cast<float>(client_height));
+    return editor_camera.BuildPickingRay(client_x, client_y, width, height);
 }
 
 // ---------------------------------------------------------------------------

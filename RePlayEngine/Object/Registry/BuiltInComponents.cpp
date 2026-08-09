@@ -632,7 +632,9 @@ namespace ReplayEngine::Core
             ComponentRegistry::Register<LandscapeComponent>(
                 ComponentTypeInfo::Describe("Landscape", "Landscape")
                     .WithVersion(2)
-                    .WithTooltip("任意三角形Topologyを持つ編集可能な地形。描画と衝突は別Component。"));
+                    .WithTooltip("任意三角形Topologyを持つ編集可能な地形。描画と衝突は別Component。")
+                    .Recommends<LandscapeRendererComponent>()
+                    .Recommends<LandscapeColliderComponent>());
 
             PropertyRegistry::Register<LandscapeComponent>(
                 MakeProperty("default_resolution", &LandscapeComponent::default_resolution)
@@ -645,7 +647,8 @@ namespace ReplayEngine::Core
 
             ComponentRegistry::Register<LandscapeRendererComponent>(
                 ComponentTypeInfo::Describe("Landscape Renderer", "Landscape")
-                    .WithTooltip("Landscape Component の任意Meshを描画する。GPU ResourceはRenderer側が所有。"));
+                    .WithTooltip("Landscape Component の任意Meshを描画する。GPU ResourceはRenderer側が所有。")
+                    .Requires<LandscapeComponent>());
             PropertyRegistry::Register<LandscapeRendererComponent>(
                 MakeProperty("tint", &LandscapeRendererComponent::tint).Display("色").AsColor());
             PropertyRegistry::Register<LandscapeRendererComponent>(
@@ -659,7 +662,8 @@ namespace ReplayEngine::Core
 
             ComponentRegistry::Register<LandscapeColliderComponent>(
                 ComponentTypeInfo::Describe("Landscape Collider", "Landscape")
-                    .WithTooltip("Landscapeの任意Topologyをそのまま衝突形状として使う。"));
+                    .WithTooltip("Landscapeの任意Topologyをそのまま衝突形状として使う。")
+                    .Requires<LandscapeComponent>());
             RegisterColliderCommon<LandscapeColliderComponent>();
             PropertyRegistry::Register<LandscapeColliderComponent>(
                 MakeProperty("double_sided", &LandscapeColliderComponent::double_sided)

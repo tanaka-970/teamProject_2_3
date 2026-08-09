@@ -2,6 +2,8 @@
 
 #include "../../RePlayEngine/Components/Landscape/LandscapeComponent.h"
 #include "../../RePlayEngine/Components/Landscape/LandscapeColliderComponent.h"
+#include "../../RePlayEngine/Components/Landscape/LandscapeRendererComponent.h"
+#include "../../RePlayEngine/Components/Rendering/PrimitiveMeshRendererComponent.h"
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
 
 #include <DirectXMath.h>
@@ -22,6 +24,23 @@ namespace
     // RePlayEngine currently uses ImGui 1.80 WIP. BeginDisabled / EndDisabled
     // were added later, so keep disabled controls compatible with the project's
     // existing ImGui version by using the same pattern as PropertyDrawer.
+
+    struct ImDrawClipScope
+    {
+        ImDrawClipScope(ImDrawList* draw_list, const ImVec2& minimum, const ImVec2& maximum)
+            : draw(draw_list)
+        {
+            if (draw != nullptr) draw->PushClipRect(minimum, maximum, true);
+        }
+        ~ImDrawClipScope()
+        {
+            if (draw != nullptr) draw->PopClipRect();
+        }
+        ImDrawClipScope(const ImDrawClipScope&) = delete;
+        ImDrawClipScope& operator=(const ImDrawClipScope&) = delete;
+        ImDrawList* draw = nullptr;
+    };
+
     struct DisabledScope
     {
         explicit DisabledScope(bool disabled) : active(disabled)
@@ -335,6 +354,68 @@ void framework::draw_landscape_editor_toolbar()
 
     ImGui::Separator();
     ImGui::PushID("LandscapeEditorToolbar");
+
+    // Landscape は普通の GameObject + Component のまま保ちつつ、
+    // 見た目/衝突/Primitive 重複の状態を操作した場所で即座に説明・修復できるようにする。
+    auto* landscape_renderer = object->GetComponent<ReplayEngine::Components::LandscapeRendererComponent>();
+    auto* landscape_collider = object->GetComponent<ReplayEngine::Components::LandscapeColliderComponent>();
+    auto* primitive_renderer = object->GetComponent<ReplayEngine::Components::PrimitiveMeshRendererComponent>();
+    if (landscape_renderer == nullptr)
+    {
+        ImGui::TextColored(ImVec4(1.0f, 0.42f, 0.32f, 1.0f),
+            u8"Landscape Renderer が無いため地形は表示されません。");
+        if (object_editor_context.CanEdit())
+        {
+            ImGui::SameLine();
+            if (ImGui::SmallButton(u8"Rendererを追加"))
+            {
+                object_editor_context.BeginEdit("Landscape Renderer を追加");
+                if (object->AddComponent<ReplayEngine::Components::LandscapeRendererComponent>() != nullptr)
+                {
+                    object_editor_context.CommitEdit();
+                    object_editor_context.SetStatus("Landscape Renderer を追加しました");
+                }
+                else object_editor_context.CancelEdit();
+            }
+        }
+    }
+    if (landscape_collider == nullptr)
+    {
+        ImGui::TextColored(ImVec4(1.0f, 0.72f, 0.30f, 1.0f),
+            u8"Landscape Collider が無いため地形に衝突判定はありません。");
+        if (object_editor_context.CanEdit())
+        {
+            ImGui::SameLine();
+            if (ImGui::SmallButton(u8"Colliderを追加"))
+            {
+                object_editor_context.BeginEdit("Landscape Collider を追加");
+                if (object->AddComponent<ReplayEngine::Components::LandscapeColliderComponent>() != nullptr)
+                {
+                    object_editor_context.CommitEdit();
+                    object_editor_context.SetStatus("Landscape Collider を追加しました");
+                }
+                else object_editor_context.CancelEdit();
+            }
+        }
+    }
+    if (primitive_renderer != nullptr && primitive_renderer->visible)
+    {
+        ImGui::TextColored(ImVec4(1.0f, 0.60f, 0.22f, 1.0f),
+            u8"Primitive と Landscape が同時表示されています。見た目が重なる可能性があります。");
+        if (object_editor_context.CanEdit())
+        {
+            ImGui::SameLine();
+            if (ImGui::SmallButton(u8"Primitive表示をOFF"))
+            {
+                object_editor_context.BeginEdit("Primitive 表示を無効化");
+                primitive_renderer->visible = false;
+                primitive_renderer->OnPropertyChanged("visible");
+                object_editor_context.CommitEdit();
+                object_editor_context.SetStatus("Primitive 表示をOFFにしました。Landscape Component はそのままです");
+            }
+        }
+    }
+
     ImGui::Checkbox(u8"Landscape 編集", &landscape_edit_enabled);
     if (!landscape_edit_enabled)
     {
@@ -363,7 +444,7 @@ void framework::draw_landscape_editor_toolbar()
             brush_modes, IM_ARRAYSIZE(brush_modes));
         ImGui::SameLine();
         ImGui::SetNextItemWidth(100.0f);
-        ImGui::DragFloat(u8"半径", &landscape_brush.radius, 0.1f, 0.1f, 256.0f, "%.2f");
+        ImGui::DragFloat(u8"ローカル半径", &landscape_brush.radius, 0.1f, 0.1f, 256.0f, "%.2f");
         ImGui::SameLine();
         ImGui::SetNextItemWidth(100.0f);
         ImGui::DragFloat(u8"強さ", &landscape_brush.strength, 0.05f, 0.0f, 100.0f, "%.2f");
@@ -382,7 +463,7 @@ void framework::draw_landscape_editor_toolbar()
             preview_modes, IM_ARRAYSIZE(preview_modes));
 
         int direction = static_cast<int>(landscape_brush.direction);
-        const char* directions[] = { "World Y", "Vertex Normal" };
+        const char* directions[] = { "Local Y", "Vertex Normal" };
         ImGui::SetNextItemWidth(130.0f);
         if (ImGui::Combo(u8"方向", &direction, directions, IM_ARRAYSIZE(directions)))
         {
@@ -393,7 +474,7 @@ void framework::draw_landscape_editor_toolbar()
         {
             ImGui::SameLine();
             ImGui::SetNextItemWidth(100.0f);
-            ImGui::DragFloat(u8"高さ", &landscape_brush.flatten_height, 0.05f);
+            ImGui::DragFloat(u8"ローカル高さ", &landscape_brush.flatten_height, 0.05f);
         }
         if (landscape_brush_mode == static_cast<int>(ReplayEngine::Landscape::LandscapeBrushMode::Noise))
         {
@@ -402,7 +483,7 @@ void framework::draw_landscape_editor_toolbar()
             ImGui::DragFloat(u8"Noise Scale", &landscape_brush.noise_scale,
                 0.01f, 0.001f, 100.0f, "%.3f");
         }
-        ImGui::TextDisabled(u8"Scene View を左ドラッグ: ブラシ編集 | Normal方向なら洞窟壁も編集可能");
+        ImGui::TextDisabled(u8"左ドラッグ: 編集 | Ctrl/Alt+左クリック: 通常選択 | Esc: Landscape編集終了 | 値はLocal空間");
     }
     else
     {
@@ -523,6 +604,41 @@ void framework::draw_landscape_editor_toolbar()
 #endif
 }
 
+void framework::reset_landscape_editor_state(bool rollback_stroke)
+{
+#ifdef USE_IMGUI
+    bool had_command = false;
+    if (landscape_editor_tool.StrokeActive())
+    {
+        if (rollback_stroke) landscape_editor_tool.CancelStroke();
+        else had_command = landscape_editor_tool.EndStroke() != nullptr;
+    }
+
+    // Sculpt 中に止めた Collider cook を、選択変更/Scene切替/Play開始でも必ず解除する。
+    // LandscapeEditorTool が保持する非所有 data pointer も Scene を跨いで残さない。
+    ReplayEngine::Scene::Scene& scene = active_object_scene();
+    for (std::size_t index = 0; index < scene.GameObjectCount(); ++index)
+    {
+        auto* object = scene.GameObjectAt(index);
+        if (object == nullptr || object->PendingDestroy()) continue;
+        if (auto* collider = object->GetComponent<ReplayEngine::Components::LandscapeColliderComponent>())
+            collider->EndInteractiveEdit();
+    }
+    if (landscape_stroke_transaction)
+    {
+        if (!rollback_stroke && had_command) object_editor_context.CommitEdit();
+        else object_editor_context.CancelEdit();
+        landscape_stroke_transaction = false;
+    }
+    landscape_edit_enabled = false;
+    landscape_selected_face = no_face;
+    landscape_bridge_a0 = landscape_bridge_a1 = no_vertex;
+    landscape_bridge_b0 = landscape_bridge_b1 = no_vertex;
+#else
+    (void)rollback_stroke;
+#endif
+}
+
 bool framework::handle_landscape_viewport_edit()
 {
 #ifdef USE_IMGUI
@@ -553,25 +669,40 @@ bool framework::handle_landscape_viewport_edit()
     }
 
     if (!landscape_edit_enabled || active_editor_view != editor_view::scene ||
-        object_scene_play_mode || !object_editor_context.CanEdit() || !scene_view_hovered)
-        return false;
-    if (editor_camera_consumed_input) return false;
+        object_scene_play_mode || !object_editor_context.CanEdit()) return false;
 
     ReplayEngine::Scene::Scene& scene = active_object_scene();
     ReplayEngine::Core::GameObject* object = nullptr;
     auto* landscape = SelectedLandscape(object_editor_context, scene, object);
-    if (landscape == nullptr) return false;
+    if (landscape == nullptr)
+    {
+        reset_landscape_editor_state(true);
+        object_editor_context.SetStatus("Landscape 編集を終了しました（Landscape の選択が外れました）");
+        return false;
+    }
+    if (ImGui::IsKeyPressed(VK_ESCAPE))
+    {
+        reset_landscape_editor_state(true);
+        object_editor_context.SetStatus("Landscape 編集を終了しました");
+        return true;
+    }
+    if (!landscape_editor_tool.StrokeActive() &&
+        (ImGui::GetIO().KeyCtrl || ImGui::GetIO().KeyAlt)) return false;
+    if (!scene_view_hovered || editor_camera_consumed_input) return false;
 
-    const float width = scene_view_max_x - scene_view_min_x;
-    const float height = scene_view_max_y - scene_view_min_y;
-    if (width <= 1.0f || height <= 1.0f) return false;
+    // Scene View is only the interactive/clip rect. The 3D scene underneath is rendered to
+    // the full client viewport, so ray creation and world->screen projection must use that
+    // full viewport or the brush/edit point drifts farther away toward the edges.
+    const float scene_width = scene_view_max_x - scene_view_min_x;
+    const float scene_height = scene_view_max_y - scene_view_min_y;
+    if (scene_width <= 1.0f || scene_height <= 1.0f) return false;
     const ImVec2 mouse = ImGui::GetMousePos();
     const float local_x = mouse.x - scene_view_min_x;
     const float local_y = mouse.y - scene_view_min_y;
-    if (local_x < 0.0f || local_y < 0.0f || local_x > width || local_y > height)
+    if (local_x < 0.0f || local_y < 0.0f || local_x > scene_width || local_y > scene_height)
         return false;
 
-    const auto world_ray = editor_camera.BuildPickingRay(local_x, local_y, width, height);
+    const auto world_ray = viewport_picking_ray(local_x, local_y);
     DirectX::XMFLOAT3 ray_origin{};
     DirectX::XMFLOAT3 ray_direction{};
     if (!ToLocalRay(object->GetTransform(), world_ray, ray_origin, ray_direction)) return false;
@@ -582,7 +713,16 @@ bool framework::handle_landscape_viewport_edit()
     const auto& data = landscape->Data();
     const auto view = viewport_view_matrix();
     const auto projection = viewport_projection_matrix();
+    POINT client_origin{ 0, 0 };
+    ClientToScreen(hwnd, &client_origin);
+    const float width = (std::max)(1.0f, static_cast<float>(client_width));
+    const float height = (std::max)(1.0f, static_cast<float>(client_height));
+    const float projection_min_x = static_cast<float>(client_origin.x);
+    const float projection_min_y = static_cast<float>(client_origin.y);
     ImDrawList* draw = ImGui::GetForegroundDrawList();
+    ImDrawClipScope landscape_clip(draw,
+        ImVec2(scene_view_min_x, scene_view_min_y),
+        ImVec2(scene_view_max_x, scene_view_max_y));
 
     std::uint32_t hover_edge_a = no_vertex;
     std::uint32_t hover_edge_b = no_vertex;
@@ -596,7 +736,7 @@ bool framework::handle_landscape_viewport_edit()
     {
         ImVec2 center{};
         if (ProjectToScene(hit.position, object->GetTransform(), view, projection,
-            width, height, scene_view_min_x, scene_view_min_y, center))
+            width, height, projection_min_x, projection_min_y, center))
         {
             if (landscape_edit_mode == 0)
             {
@@ -607,44 +747,61 @@ bool framework::handle_landscape_viewport_edit()
                 if (preview_mode != 0)
                 {
                     DrawBrushFaceInfluence(draw, data, transform, view, projection,
-                        width, height, scene_view_min_x, scene_view_min_y,
+                        width, height, projection_min_x, projection_min_y,
                         hit.position, landscape_brush.radius);
                 }
 
                 if (preview_mode == 2 || preview_mode == 4)
                 {
                     DrawTerrainGridInBrush(draw, data, transform, view, projection,
-                        width, height, scene_view_min_x, scene_view_min_y,
+                        width, height, projection_min_x, projection_min_y,
                         hit.position, landscape_brush.radius);
                 }
 
                 if (preview_mode == 3 || preview_mode == 4)
                 {
                     DrawTerrainRing(draw, data, transform, view, projection,
-                        width, height, scene_view_min_x, scene_view_min_y,
+                        width, height, projection_min_x, projection_min_y,
                         hit.position, landscape_brush.radius * 0.25f,
                         IM_COL32(255, 230, 130, 95), 1.0f);
                     DrawTerrainRing(draw, data, transform, view, projection,
-                        width, height, scene_view_min_x, scene_view_min_y,
+                        width, height, projection_min_x, projection_min_y,
                         hit.position, landscape_brush.radius * 0.5f,
                         IM_COL32(255, 220, 100, 140), 1.0f);
                     DrawTerrainRing(draw, data, transform, view, projection,
-                        width, height, scene_view_min_x, scene_view_min_y,
+                        width, height, projection_min_x, projection_min_y,
                         hit.position, landscape_brush.radius * 0.75f,
                         IM_COL32(255, 205, 75, 175), 1.0f);
                 }
                 else if (preview_mode == 1)
                 {
                     DrawTerrainRing(draw, data, transform, view, projection,
-                        width, height, scene_view_min_x, scene_view_min_y,
+                        width, height, projection_min_x, projection_min_y,
                         hit.position, landscape_brush.radius * 0.5f,
                         IM_COL32(255, 230, 135, 135), 1.0f);
                 }
 
                 DrawTerrainRing(draw, data, transform, view, projection,
-                    width, height, scene_view_min_x, scene_view_min_y,
+                    width, height, projection_min_x, projection_min_y,
                     hit.position, landscape_brush.radius,
                     IM_COL32(255, 190, 55, 245), 2.0f);
+
+                // 穴/崖/洞窟では XZ terrain ring が途切れても、ブラシ自体は消さない。
+                // hit center と同じ投影で screen-space fallback を重ねる。
+                ImVec2 radius_point{};
+                DirectX::XMFLOAT3 radius_local = hit.position;
+                radius_local.x += landscape_brush.radius;
+                float radius_pixels = 12.0f;
+                if (ProjectToScene(radius_local, transform, view, projection, width, height,
+                    projection_min_x, projection_min_y, radius_point))
+                {
+                    const float dx = radius_point.x - center.x;
+                    const float dy = radius_point.y - center.y;
+                    radius_pixels = std::sqrt(dx * dx + dy * dy);
+                }
+                radius_pixels = (std::max)(5.0f, (std::min)(radius_pixels, 4096.0f));
+                draw->AddCircle(center, radius_pixels, IM_COL32(255, 210, 80, 150), 64, 1.25f);
+                draw->AddCircleFilled(center, 3.0f, IM_COL32(255, 238, 180, 255));
 
                 constexpr float cross = 0.35f;
                 DirectX::XMFLOAT3 x0{}, x1{}, z0{}, z1{};
@@ -658,15 +815,15 @@ bool framework::handle_landscape_viewport_edit()
                     hit.position.z + cross, hit.position.y, z1);
                 x0.y += 0.06f; x1.y += 0.06f; z0.y += 0.06f; z1.y += 0.06f;
                 DrawProjectedLine(draw, transform, view, projection, width, height,
-                    scene_view_min_x, scene_view_min_y, x0, x1,
+                    projection_min_x, projection_min_y, x0, x1,
                     IM_COL32(255, 235, 160, 255), 2.0f);
                 DrawProjectedLine(draw, transform, view, projection, width, height,
-                    scene_view_min_x, scene_view_min_y, z0, z1,
+                    projection_min_x, projection_min_y, z0, z1,
                     IM_COL32(255, 235, 160, 255), 2.0f);
 
                 char radius_text[32]{};
                 std::snprintf(radius_text, sizeof(radius_text),
-                    "R %.1fm", landscape_brush.radius);
+                    "R %.1f local", landscape_brush.radius);
                 draw->AddText({ center.x + 8.0f, center.y + 8.0f },
                     IM_COL32(255, 238, 180, 245), radius_text);
             }
@@ -683,7 +840,7 @@ bool framework::handle_landscape_viewport_edit()
                         if (vertex >= data.Vertices().size() ||
                             !ProjectToScene(data.Vertices()[vertex].position,
                                 object->GetTransform(), view, projection, width, height,
-                                scene_view_min_x, scene_view_min_y, screen[i]))
+                                projection_min_x, projection_min_y, screen[i]))
                         {
                             valid = false;
                             break;
@@ -704,10 +861,10 @@ bool framework::handle_landscape_viewport_edit()
                 ImVec2 a{}, b{};
                 if (ProjectToScene(data.Vertices()[hover_edge_a].position,
                     object->GetTransform(), view, projection, width, height,
-                    scene_view_min_x, scene_view_min_y, a) &&
+                    projection_min_x, projection_min_y, a) &&
                     ProjectToScene(data.Vertices()[hover_edge_b].position,
                         object->GetTransform(), view, projection, width, height,
-                        scene_view_min_x, scene_view_min_y, b))
+                        projection_min_x, projection_min_y, b))
                 {
                     draw->AddLine(a, b, IM_COL32(80, 220, 255, 255), 4.0f);
                 }
@@ -726,10 +883,10 @@ bool framework::handle_landscape_viewport_edit()
             ImVec2 a{}, b{};
             if (!ProjectToScene(data.Vertices()[a_index].position,
                 object->GetTransform(), view, projection, width, height,
-                scene_view_min_x, scene_view_min_y, a) ||
+                projection_min_x, projection_min_y, a) ||
                 !ProjectToScene(data.Vertices()[b_index].position,
                     object->GetTransform(), view, projection, width, height,
-                    scene_view_min_x, scene_view_min_y, b)) return;
+                    projection_min_x, projection_min_y, b)) return;
             draw->AddLine(a, b, color, 5.0f);
             draw->AddCircleFilled(a, 3.5f, color);
             draw->AddCircleFilled(b, 3.5f, color);

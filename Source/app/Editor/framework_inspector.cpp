@@ -58,7 +58,7 @@ void framework::draw_shader_adjustment_workspace()
             ImGui::Checkbox("輪郭線パス", &enable_outline_shader);
             ImGui::Checkbox("PBR影パス", &enable_pbr_shadow_shader);
             int output = render_graph.OutputIndex();
-            if (ImGui::Combo("描画出力 (F2)", &output, ReplayEngine::Rendering::RenderGraph::Names()))
+            if (ImGui::Combo("描画出力 (Ctrl+F2)", &output, ReplayEngine::Rendering::RenderGraph::Names()))
                 render_graph.SetOutput(output);
             ImGui::EndTabItem();
         }
@@ -232,7 +232,7 @@ void framework::draw_inspector()
         }
         {
             int output = render_graph.OutputIndex();
-            if (ImGui::Combo("Render Output (F2)", &output, ReplayEngine::Rendering::RenderGraph::Names()))
+            if (ImGui::Combo("Render Output (Ctrl+F2)", &output, ReplayEngine::Rendering::RenderGraph::Names()))
             {
                 render_graph.SetOutput(output);
                 if (render_graph.RequiresDeferred()) enable_deferred = true;

@@ -73,9 +73,9 @@ namespace ReplayEngine::Landscape
             const float dx = vertex.position.x - center.x;
             const float dy = vertex.position.y - center.y;
             const float dz = vertex.position.z - center.z;
-            // WorldY は地形上面の従来操作感を維持し XZ 円で拾う。
+            // LocalY は Landscape ローカル上面の従来操作感を維持し XZ 円で拾う。
             // VertexNormal は洞窟壁を想定し 3D sphere で拾う。
-            const float distance = brush_.direction == LandscapeSculptDirection::WorldY
+            const float distance = brush_.direction == LandscapeSculptDirection::LocalY
                 ? std::sqrt(dx * dx + dz * dz)
                 : std::sqrt(dx * dx + dy * dy + dz * dz);
             if (distance > brush_.radius) continue;
@@ -88,7 +88,7 @@ namespace ReplayEngine::Landscape
 
             const DirectX::XMFLOAT3 before = vertex.position;
             DirectX::XMFLOAT3 after = before;
-            DirectX::XMFLOAT3 direction = brush_.direction == LandscapeSculptDirection::WorldY
+            DirectX::XMFLOAT3 direction = brush_.direction == LandscapeSculptDirection::LocalY
                 ? DirectX::XMFLOAT3{ 0.0f, 1.0f, 0.0f }
                 : vertex.normal;
 
@@ -105,7 +105,7 @@ namespace ReplayEngine::Landscape
                 after.z -= direction.z * amount;
                 break;
             case LandscapeBrushMode::Flatten:
-                if (brush_.direction == LandscapeSculptDirection::WorldY)
+                if (brush_.direction == LandscapeSculptDirection::LocalY)
                 {
                     const float t = (std::min)(1.0f, amount);
                     after.y = before.y + (brush_.flatten_height - before.y) * t;

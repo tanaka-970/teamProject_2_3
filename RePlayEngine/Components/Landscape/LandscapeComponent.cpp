@@ -9,13 +9,27 @@ namespace ReplayEngine::Components
     {
         // Add Component 直後から必ず有効な geometry を持たせる。
         // 33x33 = 1024 cells なので編集確認に十分、Scene 保存も軽い。
-        data_.Initialize(default_resolution, default_resolution, default_cell_size, 0.0f);
+        GenerateFlat(default_resolution, default_resolution, default_cell_size, 0.0f);
     }
 
     bool LandscapeComponent::GenerateFlat(int width, int height, float cell_size,
         float height_value)
     {
         if (!data_.Initialize(width, height, cell_size, height_value)) return false;
+
+        // 新規生成だけ geometry を Pivot 中央へ寄せる。LandscapeData::Initialize は
+        // 旧形式の読み込みにも使われるため、そちらの座標互換性は変えない。
+        const float offset_x = -0.5f * static_cast<float>(width - 1) * cell_size;
+        const float offset_z = -0.5f * static_cast<float>(height - 1) * cell_size;
+        for (std::size_t index = 0; index < data_.VertexCount(); ++index)
+        {
+            DirectX::XMFLOAT3 position = data_.Vertices()[index].position;
+            position.x += offset_x;
+            position.z += offset_z;
+            data_.SetVertexPosition(index, position, false);
+        }
+        data_.FinalizeGeometryEdit();
+
         default_resolution = width == height ? width : default_resolution;
         default_cell_size = cell_size;
         deserialize_error_.clear();

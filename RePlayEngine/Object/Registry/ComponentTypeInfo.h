@@ -79,6 +79,11 @@ namespace ReplayEngine::Core
         //   true  … Collider, AudioSource のように複数あって自然なもの
         bool allow_multiple = false;
 
+        // Component 間の関係。Add Component / Inspector が共通で使う。
+        // required_components は成立に必須、recommended_components は通常用途で推奨。
+        std::vector<ComponentTypeID> required_components;
+        std::vector<ComponentTypeID> recommended_components;
+
         // Editor の Add Component 一覧へ出すか。内部用の型を隠したいときに false。
         bool editor_visible = true;
 
@@ -135,6 +140,20 @@ namespace ReplayEngine::Core
         ComponentTypeInfo& AllowMultipleInstances()
         {
             allow_multiple = true;
+            return *this;
+        }
+
+        template<class T>
+        ComponentTypeInfo& Requires()
+        {
+            required_components.push_back(T::StaticTypeID());
+            return *this;
+        }
+
+        template<class T>
+        ComponentTypeInfo& Recommends()
+        {
+            recommended_components.push_back(T::StaticTypeID());
             return *this;
         }
 

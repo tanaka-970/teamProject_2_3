@@ -13,7 +13,7 @@ namespace ReplayEngine::Landscape
 
     enum class LandscapeSculptDirection
     {
-        WorldY,
+        LocalY,
         VertexNormal,
     };
 
@@ -24,6 +24,6 @@ namespace ReplayEngine::Landscape
         float falloff = 0.5f;
         float flatten_height = 0.0f;
         float noise_scale = 0.35f;
-        LandscapeSculptDirection direction = LandscapeSculptDirection::WorldY;
+        LandscapeSculptDirection direction = LandscapeSculptDirection::LocalY;
     };
 }

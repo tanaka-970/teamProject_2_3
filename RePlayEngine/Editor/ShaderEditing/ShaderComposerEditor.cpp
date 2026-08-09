@@ -465,10 +465,19 @@ namespace ReplayEngine::Editor
     void ShaderComposerEditor::Draw(const std::filesystem::path& project_root,
         Rendering::ShaderLibrary& shader_library, Assets::AssetDatabase& asset_database)
     {
-        if (!visible_ || path_.empty()) return;
+        if (!visible_ || path_.empty())
+        {
+            keyboard_focus_ = false;
+            return;
+        }
         ImGui::SetNextWindowSize(ImVec2(1180, 720), ImGuiCond_FirstUseEver);
         if (!ImGui::Begin("Shader Composer", &visible_, ImGuiWindowFlags_MenuBar))
-        { ImGui::End(); return; }
+        {
+            keyboard_focus_ = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
+            ImGui::End();
+            return;
+        }
+        keyboard_focus_ = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
 
         if (ImGui::BeginMenuBar())
         {

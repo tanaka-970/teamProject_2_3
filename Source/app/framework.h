@@ -635,6 +635,7 @@ public:
         automated_smoke_test_frames_rendered = 0;
     }
     Microsoft::WRL::ComPtr<ID3D11Debug> acquire_d3d11_debug() const noexcept;
+    Microsoft::WRL::ComPtr<ID3D11InfoQueue> acquire_d3d11_info_queue() const noexcept;
 
     // 終了理由と主要な進行状況を Saved/engine_log.txt へ追記する。
     // 「なぜ落ちたか」が分からないと原因の切り分けができないため、
@@ -753,6 +754,9 @@ public:
                 log_shutdown_reason(message.c_str());
             }
         }
+        // Landscape Tool は編集中の LandscapeData を非所有で参照するため、
+        // ImGui/Scene の破棄より前に Stroke と Collider interactive-edit を必ず閉じる。
+        reset_landscape_editor_state(true);
         save_editor_session();
         ImGui_ImplDX11_Shutdown();
         ImGui_ImplWin32_Shutdown();
@@ -775,6 +779,14 @@ public:
             const bool control_down = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
             const bool shortcut_pressed = msg == WM_KEYDOWN && control_down &&
                 (lparam & 0x40000000) == 0 && !ImGui::GetIO().WantTextInput;
+
+            // Focused Tool > Scene > Global の順で shortcut を所有する。
+            const bool focused_tool_owns_shortcut =
+                shader_composer_editor.OwnsKeyboardShortcut() && msg == WM_KEYDOWN &&
+                !ImGui::GetIO().WantTextInput &&
+                (wparam == VK_DELETE || (control_down && wparam == 'S'));
+            if (focused_tool_owns_shortcut) return 0;
+
             if (shortcut_pressed && wparam == 'S')
             {
                 const bool choose_path = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
@@ -853,13 +865,16 @@ public:
             show_render_stats = !show_render_stats;
             return 0;
         }
-        // F5 で GameObject シーンの実行 / 停止を切り替える。
-        // 実行中は編集用 Scene を複製した実行用 Scene が動くため、
-        // Play 中の位置や体力の変化が編集内容へ書き戻らない。
+        // F5 は開始専用、Shift+F5 は停止専用。UI 表示と実装を一致させる。
         if (msg == WM_KEYDOWN && wparam == VK_F5 && editor_mode)
         {
-            if (object_scene_play_mode) exit_object_play_mode();
-            else enter_object_play_mode();
+            const bool shift_down = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+            if (shift_down)
+            {
+                if (object_scene_play_mode) exit_object_play_mode();
+                else object_editor_context.SetStatus("停止する Play Session はありません");
+            }
+            else if (!object_scene_play_mode) enter_object_play_mode();
             return 0;
         }
 #endif
@@ -871,6 +886,15 @@ public:
         }
         if (msg == WM_KEYDOWN && wparam == VK_F2)
         {
+#ifdef USE_IMGUI
+            const bool control_down = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+            if (editor_mode && !control_down)
+            {
+                object_hierarchy_panel.BeginRenameSelection(object_editor_context);
+                return 0;
+            }
+#endif
+            // Render Output は Ctrl+F2。Hierarchy 標準の F2 Rename と競合させない。
             render_graph.CycleOutput();
             if (render_graph.RequiresDeferred()) enable_deferred = true;
             return 0;
@@ -1022,12 +1046,14 @@ private:
     // frameworkの表示状態は触らないため、並列ロード中に安全に使える。
     bool prewarm_model_asset(const std::filesystem::path& path);
     bool place_asset_in_object_scene(const ReplayEngine::Assets::AssetRecord& asset,
-        bool add_mesh_collider);
+        bool add_mesh_collider, const DirectX::XMFLOAT3* drop_world_position = nullptr,
+        ReplayEngine::Core::ObjectID drop_target = ReplayEngine::Core::ObjectID::Invalid());
     void handle_viewport_selection();
     // 選択中の Landscape GameObject にだけ有効な Scene View 編集。
     // Runtime Component へ ImGui 依存を持ち込まず、Editor Tool が data を編集する。
     bool handle_landscape_viewport_edit();
     void draw_landscape_editor_toolbar();
+    void reset_landscape_editor_state(bool rollback_stroke = true);
     void draw_scene_grid_overlay();
     bool draw_object_transform_gizmo();
     void save_editor_session();

@@ -49,7 +49,7 @@ bool framework::scene_view_mouse_world_point(DirectX::XMFLOAT3& out_position,
     if (local_x < 0.0f || local_y < 0.0f || local_x > width || local_y > height)
         return false;
 
-    const auto ray = editor_camera.BuildPickingRay(local_x, local_y, width, height);
+    const auto ray = viewport_picking_ray(local_x, local_y);
     ReplayEngine::Scene::RaycastHit hit{};
     ReplayEngine::Scene::CollisionQueryFilter filter;
     filter.mask = ReplayEngine::Physics::CollisionLayers::all_layers_mask;
@@ -119,13 +119,17 @@ void framework::draw_scene_note_overlay()
 {
 #ifdef USE_IMGUI
     if (object_scene_play_mode || active_editor_view != editor_view::scene) return;
-    const float width = scene_view_max_x - scene_view_min_x;
-    const float height = scene_view_max_y - scene_view_min_y;
-    if (width <= 1.0f || height <= 1.0f) return;
+    const float scene_width = scene_view_max_x - scene_view_min_x;
+    const float scene_height = scene_view_max_y - scene_view_min_y;
+    if (scene_width <= 1.0f || scene_height <= 1.0f) return;
 
     using namespace DirectX;
     const XMMATRIX view = viewport_view_matrix();
     const XMMATRIX projection = viewport_projection_matrix();
+    POINT client_origin{ 0, 0 };
+    ClientToScreen(hwnd, &client_origin);
+    const float width = (std::max)(1.0f, static_cast<float>(client_width));
+    const float height = (std::max)(1.0f, static_cast<float>(client_height));
     ImDrawList* draw = ImGui::GetForegroundDrawList();
     draw->PushClipRect(ImVec2(scene_view_min_x, scene_view_min_y),
         ImVec2(scene_view_max_x, scene_view_max_y), true);
@@ -161,7 +165,8 @@ void framework::draw_scene_note_overlay()
                 projection, view, XMMatrixIdentity()));
             if (screen.z < 0.0f || screen.z > 1.0f) continue;
 
-            const ImVec2 anchor{ scene_view_min_x + screen.x, scene_view_min_y + screen.y };
+            const ImVec2 anchor{ static_cast<float>(client_origin.x) + screen.x,
+                static_cast<float>(client_origin.y) + screen.y };
             if (anchor.x < scene_view_min_x || anchor.x > scene_view_max_x ||
                 anchor.y < scene_view_min_y || anchor.y > scene_view_max_y) continue;
 

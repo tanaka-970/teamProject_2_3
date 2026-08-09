@@ -691,6 +691,20 @@ void framework::draw_scene_view_panel()
         // Landscape を選択しているときだけ専用 Tool を出す。
         // Component 自体に ImGui / Editor 状態を持たせない。
         draw_landscape_editor_toolbar();
+        if (landscape_edit_enabled)
+        {
+            const char* landscape_tool = landscape_edit_mode == 0
+                ? u8"Landscape / Sculpt"
+                : (landscape_topology_selection_mode == 0
+                    ? u8"Landscape / Topology Face"
+                    : u8"Landscape / Topology Edge");
+            ImGui::TextColored(ImVec4(1.0f, 0.72f, 0.25f, 1.0f),
+                u8"ACTIVE TOOL: %s  (Escで終了 / Ctrl・Alt+左クリックで通常選択)", landscape_tool);
+        }
+        else
+        {
+            ImGui::TextDisabled("ACTIVE TOOL: Transform / Scene Selection");
+        }
     }
     else
     {
@@ -728,7 +742,22 @@ void framework::draw_scene_view_panel()
             {
                 const std::string guid(static_cast<const char*>(payload->Data));
                 if (const auto* asset = asset_database.FindByGuid(guid))
-                    place_asset_in_object_scene(*asset, asset_drop_add_collider);
+                {
+                    DirectX::XMFLOAT3 drop_position{};
+                    const bool has_drop_position = scene_view_mouse_world_point(drop_position, nullptr);
+                    ReplayEngine::Core::ObjectID drop_target = ReplayEngine::Core::ObjectID::Invalid();
+                    const ImVec2 mouse = ImGui::GetMousePos();
+                    const float local_x = mouse.x - scene_view_min_x;
+                    const float local_y = mouse.y - scene_view_min_y;
+                    if (local_x >= 0.0f && local_y >= 0.0f)
+                    {
+                        const auto ray = viewport_picking_ray(local_x, local_y);
+                        drop_target = ReplayEngine::Editor::ViewportPicker::Pick(
+                            object_scene, ray.origin, ray.direction);
+                    }
+                    place_asset_in_object_scene(*asset, asset_drop_add_collider,
+                        has_drop_position ? &drop_position : nullptr, drop_target);
+                }
             }
         }
         ImGui::EndDragDropTarget();
@@ -774,11 +803,23 @@ void framework::draw_search_results()
     };
     result("ワールドを編集", "world ワールド 背景", editor_selection::world);
     result("カメラを編集", "camera カメラ 視点", editor_selection::camera);
-    result("操作キャラクターを編集", "player プレイヤー 操作 キャラクター character",
-        editor_selection::game_object);
+    if (matches("player プレイヤー 操作 キャラクター character") &&
+        ImGui::Selectable("操作対象 GameObject を選択"))
+    {
+        ReplayEngine::Scene::Scene& scene = active_object_scene();
+        const ReplayEngine::Core::ObjectID controlled = scene.Services().ControlledObject();
+        if (controlled.Valid() && scene.FindGameObjectByID(controlled) != nullptr)
+        {
+            object_editor_context.Selection().Select(controlled, false);
+            selected_editor_object = editor_selection::game_object;
+        }
+        else object_editor_context.SetStatus("操作対象 GameObject が設定されていません");
+        editor_search_text[0] = '\0';
+        search_input_active = false;
+    }
     result("描画設定を開く", "render rendering 描画 deferred shader", editor_selection::rendering);
     result("ポスト処理を開く", "post process ポスト bloom fxaa", editor_selection::post_process);
-    if (matches("edit play mode 編集 プレイ") && ImGui::Selectable("編集／プレイモードを切り替える"))
+    if (matches("input capture editor 入力 キャプチャ") && ImGui::Selectable("Editor入力キャプチャを切り替える"))
     {
         set_edit_mode(!edit_mode_active);
         editor_search_text[0] = '\0';
@@ -1237,15 +1278,7 @@ void framework::draw_project_panel()
     {
         namespace CSharp = ReplayEngine::Scripting::CSharp;
 
-        ImGui::SetNextItemWidth(180.0f);
-        ImGui::InputTextWithHint("##NewCSharpBehaviourName", "Class name",
-            new_csharp_behaviour_name, IM_ARRAYSIZE(new_csharp_behaviour_name));
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(160.0f);
-        ImGui::InputTextWithHint("##NewCSharpNamespace", "Namespace",
-            new_csharp_namespace, IM_ARRAYSIZE(new_csharp_namespace));
-        ImGui::SameLine();
-        if (ImGui::Button("New C# Behaviour")) create_csharp_behaviour_asset();
+        ImGui::TextDisabled(u8"C# Script の作成は Project Browser の右クリック > Create に統一しました。");
 
         // 一括更新をいちばん目立つ位置へ置く。
         // Catalog 更新と再コンパイルを分けて覚えるのは negligible な区別で、
@@ -1314,11 +1347,7 @@ void framework::draw_project_panel()
             ImGui::TextWrapped("キャッシュ: %s", selected_model_cache_path.c_str());
     }
     ImGui::Separator();
-    ImGui::SetNextItemWidth(180.0f);
-    ImGui::InputTextWithHint("##NewMaterialName", "Material name",
-        new_material_name, IM_ARRAYSIZE(new_material_name));
-    ImGui::SameLine();
-    if (ImGui::Button("New Material")) create_material_asset();
+    ImGui::TextDisabled("Asset 作成は Project Browser の右クリック > Create から行います");
     ImGui::Separator();
     ImGui::Text("Assets: %zu", asset_database.Records().size());
 
@@ -1326,7 +1355,7 @@ void framework::draw_project_panel()
     // フォルダツリー + そのフォルダの中身。作成・改名・D&D はそちら側。
     draw_project_browser();
 
-    ImGui::Checkbox("Model配置時にMesh Colliderを追加", &asset_drop_add_collider);
+    ImGui::Checkbox("SceneへModel配置時にMesh Colliderも追加", &asset_drop_add_collider);
     ImGui::SameLine();
     const auto* selected_asset = selected_asset_guid.empty()
         ? nullptr : asset_database.FindByGuid(selected_asset_guid);
@@ -1426,14 +1455,14 @@ void framework::draw_console_panel()
     ImGui::EndChild();
     ImGui::Separator();
     ImGui::TextColored({ 0.45f, 0.85f, 0.55f, 1.0f }, "[正常] RePlayランタイム動作中");
-    ImGui::Text("現在のモード: %s", edit_mode_active ? "編集（ゲーム停止）" : "プレイ（WASD有効）");
+    ImGui::Text("Editor入力: %s", edit_mode_active ? "編集操作" : "Game View入力キャプチャ");
     ImGui::Text("画面サイズ: %u x %u", client_width, client_height);
     ImGui::TextUnformatted("描画方式: Deferred（固定）");
     const char* outputs[] = { "Final", "HDR Scene", "Bloom", "Deferred Lit",
         "GBuffer Base Color", "GBuffer Normal", "GBuffer Material", "Depth" };
     ImGui::Text("出力: %s", outputs[render_graph.OutputIndex()]);
     ImGui::TextDisabled("Ctrl+S: 保存  Ctrl+Z/Y: 元に戻す/やり直す  Ctrl+D: 複製");
-    ImGui::TextDisabled("F1: エディタ表示  F2: 出力  F3: 編集/プレイ  F11: 全画面");
+    ImGui::TextDisabled("F1: エディタ表示  F2: 名前変更  Ctrl+F2: 出力  F3: 入力キャプチャ  F5: 実行  F11: 全画面");
     ImGui::End();
 }
 

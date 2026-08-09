@@ -85,7 +85,8 @@ namespace
 }
 
 bool framework::place_asset_in_object_scene(const ReplayEngine::Assets::AssetRecord& asset,
-    bool add_mesh_collider)
+    bool add_mesh_collider, const DirectX::XMFLOAT3* drop_world_position,
+    ReplayEngine::Core::ObjectID drop_target)
 {
     if (object_scene_play_mode)
     {
@@ -95,12 +96,13 @@ bool framework::place_asset_in_object_scene(const ReplayEngine::Assets::AssetRec
 
     if (asset.kind == ReplayEngine::Assets::AssetKind::Material)
     {
-        ReplayEngine::Core::GameObject* target =
-            object_editor_context.Selection().ResolvePrimary(object_scene);
+        ReplayEngine::Core::GameObject* target = drop_target.Valid()
+            ? object_scene.FindGameObjectByID(drop_target)
+            : object_editor_context.Selection().ResolvePrimary(object_scene);
         if (target == nullptr)
         {
             object_editor_context.SetStatus(
-                "Materialを割り当てるGameObjectを選択してください");
+                "MaterialをGameObject上へドロップするか、割り当て先を選択してください");
             return false;
         }
 
@@ -139,12 +141,13 @@ bool framework::place_asset_in_object_scene(const ReplayEngine::Assets::AssetRec
     {
         namespace Scripting = ReplayEngine::Scripting;
 
-        ReplayEngine::Core::GameObject* target =
-            object_editor_context.Selection().ResolvePrimary(object_scene);
+        ReplayEngine::Core::GameObject* target = drop_target.Valid()
+            ? object_scene.FindGameObjectByID(drop_target)
+            : object_editor_context.Selection().ResolvePrimary(object_scene);
         if (target == nullptr)
         {
             object_editor_context.SetStatus(
-                "Scriptを付けるGameObjectを選択してください");
+                "ScriptをGameObject上へドロップするか、追加先を選択してください");
             return false;
         }
         if (!object_script_runtime)
@@ -205,6 +208,11 @@ bool framework::place_asset_in_object_scene(const ReplayEngine::Assets::AssetRec
             object_editor_context.SetStatus("Prefab配置失敗: " + error);
             return false;
         }
+        if (drop_world_position != nullptr)
+        {
+            if (auto* root_object = object_scene.FindGameObjectByID(root))
+                root_object->GetTransform().SetWorldPosition(*drop_world_position);
+        }
         object_editor_context.CommitEdit();
         object_editor_context.Selection().Select(root, false);
         selected_editor_object = editor_selection::game_object;
@@ -239,13 +247,18 @@ bool framework::place_asset_in_object_scene(const ReplayEngine::Assets::AssetRec
     }
     renderer->mesh_asset = asset.guid;
 
-    const DirectX::XMFLOAT3 eye = editor_camera.Position();
-    const DirectX::XMFLOAT3 forward = editor_camera.Forward();
-    DirectX::XMFLOAT3 position{
-        eye.x + forward.x * 5.0f,
-        eye.y + forward.y * 5.0f,
-        eye.z + forward.z * 5.0f
-    };
+    DirectX::XMFLOAT3 position{};
+    if (drop_world_position != nullptr)
+    {
+        position = *drop_world_position;
+    }
+    else
+    {
+        const DirectX::XMFLOAT3 eye = editor_camera.Position();
+        const DirectX::XMFLOAT3 forward = editor_camera.Forward();
+        position = { eye.x + forward.x * 5.0f, eye.y + forward.y * 5.0f,
+            eye.z + forward.z * 5.0f };
+    }
     if (transform_gizmo.SnapEnabled())
     {
         const float step = transform_gizmo.SnapStep();
@@ -270,7 +283,8 @@ bool framework::place_asset_in_object_scene(const ReplayEngine::Assets::AssetRec
     object_editor_context.CommitEdit();
     object_editor_context.Selection().Select(object->ID(), false);
     selected_editor_object = editor_selection::game_object;
-    object_editor_context.SetStatus("Assetを配置しました: " + asset.display_name);
+    object_editor_context.SetStatus("Assetを配置しました: " + asset.display_name +
+        (add_mesh_collider ? " + Mesh Collider" : ""));
     return true;
 }
 

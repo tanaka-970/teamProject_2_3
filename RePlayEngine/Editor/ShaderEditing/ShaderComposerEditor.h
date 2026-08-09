@@ -17,8 +17,9 @@ namespace ReplayEngine::Editor
     {
     public:
         bool Open(const std::filesystem::path& path, std::string& error);
-        void Close() noexcept { visible_ = false; }
+        void Close() noexcept { visible_ = false; keyboard_focus_ = false; }
         bool IsVisible() const noexcept { return visible_; }
+        bool OwnsKeyboardShortcut() const noexcept { return visible_ && keyboard_focus_; }
         bool HasAsset() const noexcept { return !path_.empty(); }
         const std::filesystem::path& Path() const noexcept { return path_; }
         void Show() noexcept { if (HasAsset()) visible_ = true; }
@@ -49,6 +50,7 @@ namespace ReplayEngine::Editor
         Rendering::ShaderComposerAsset asset_;
         bool visible_ = false;
         bool dirty_ = false;
+        bool keyboard_focus_ = false;
         std::uint64_t selected_node_ = 0;
         std::uint64_t pending_output_node_ = 0;
         float pan_x_ = 20.0f;
