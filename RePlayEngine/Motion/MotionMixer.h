@@ -10,10 +10,20 @@ namespace ReplayEngine::Motion
     class MotionMixer final
     {
     public:
+        struct Contribution
+        {
+            Reflection::PropertyValue value;
+            float weight = 0.0f;
+            MotionBlendMode mode = MotionBlendMode::Override;
+        };
+
         void BeginFrame();
         void Contribute(const ResolvedMotionBinding& binding,
-            const Reflection::PropertyValue& value, float weight);
+            const Reflection::PropertyValue& value, float weight,
+            MotionBlendMode mode = MotionBlendMode::Override);
         void Apply();
+        bool WasDriven(const Core::Component& component,
+            const std::string& property) const noexcept;
 
     private:
         struct TargetKey
@@ -36,7 +46,8 @@ namespace ReplayEngine::Motion
         {
             Core::Component* component = nullptr;
             const Reflection::PropertyDesc* property = nullptr;
-            Reflection::PropertyValue value;
+            Reflection::PropertyValue base_value;
+            std::vector<Contribution> contributions;
             float total_weight = 0.0f;
         };
 

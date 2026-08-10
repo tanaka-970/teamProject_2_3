@@ -175,6 +175,10 @@ bool framework::initialize()
     bd.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE; bd.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
     device->CreateBlendState(&bd, blend_states[(size_t)BLEND_STATE::SCREEN].GetAddressOf());
 
+    bd.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE; bd.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+    bd.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE; bd.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
+    device->CreateBlendState(&bd, blend_states[(size_t)BLEND_STATE::PREMULTIPLIED].GetAddressOf());
+
     D3D11_RASTERIZER_DESC rd{};
     rd.FillMode = D3D11_FILL_SOLID; rd.CullMode = D3D11_CULL_BACK;
     rd.FrontCounterClockwise = TRUE; rd.DepthClipEnable = TRUE;

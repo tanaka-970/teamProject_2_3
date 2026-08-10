@@ -140,8 +140,8 @@ public:
     enum class DEPTH_STATE { ZT_ON_ZW_ON, ZT_ON_ZW_OFF, ZT_OFF_ZW_ON, ZT_OFF_ZW_OFF };
     Microsoft::WRL::ComPtr<ID3D11DepthStencilState> depth_stencil_states[4];
 
-    enum class BLEND_STATE { NONE, ALPHA, ADD, MULTIPLY, SCREEN };
-    Microsoft::WRL::ComPtr<ID3D11BlendState> blend_states[5];
+    enum class BLEND_STATE { NONE, ALPHA, ADD, MULTIPLY, SCREEN, PREMULTIPLIED };
+    Microsoft::WRL::ComPtr<ID3D11BlendState> blend_states[6];
 
     enum class RASTER_STATE { SOLID, WIREFRAME, CULL_NONE, WIREFRAME_CULL_NONE, SCISSOR };
     Microsoft::WRL::ComPtr<ID3D11RasterizerState> rasterizer_states[5];
@@ -1158,6 +1158,7 @@ private:
     const ReplayEngine::Motion::MotionAsset* resolve_motion_asset(
         const std::string& asset_guid);
     void evaluate_motion_players(ReplayEngine::Scene::Scene& scene, float elapsed_time);
+    void update_ui_sprite_animators(ReplayEngine::Scene::Scene& scene, float elapsed_time);
     void sync_object_lights();
 
     // --- 新規 Scene 作成 ---------------------------------------------------

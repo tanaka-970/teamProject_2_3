@@ -691,18 +691,26 @@
     <ClCompile Include="RePlayEngine\Components\UI\UITextComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\UI\UIButtonComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\UI\UIMaskComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\UISpriteAnimatorComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\UIEffectStackComponent.cpp" />
     <ClCompile Include="RePlayEngine\UI\UILayout.cpp" />
     <ClCompile Include="RePlayEngine\UI\FontAtlas.cpp" />
     <ClCompile Include="RePlayEngine\UI\UIRenderer.cpp" />
+    <ClCompile Include="RePlayEngine\UI\Effects\UIEffect.cpp" />
+    <ClCompile Include="RePlayEngine\UI\Effects\UIRenderTargetPool.cpp" />
     <ClInclude Include="RePlayEngine\Components\UI\CanvasComponent.h" />
     <ClInclude Include="RePlayEngine\Components\UI\RectTransformComponent.h" />
     <ClInclude Include="RePlayEngine\Components\UI\UIImageComponent.h" />
     <ClInclude Include="RePlayEngine\Components\UI\UITextComponent.h" />
     <ClInclude Include="RePlayEngine\Components\UI\UIButtonComponent.h" />
     <ClInclude Include="RePlayEngine\Components\UI\UIMaskComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\UI\UISpriteAnimatorComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\UI\UIEffectStackComponent.h" />
     <ClInclude Include="RePlayEngine\UI\UILayout.h" />
     <ClInclude Include="RePlayEngine\UI\FontAtlas.h" />
     <ClInclude Include="RePlayEngine\UI\UIRenderer.h" />
+    <ClInclude Include="RePlayEngine\UI\Effects\UIEffect.h" />
+    <ClInclude Include="RePlayEngine\UI\Effects\UIRenderTargetPool.h" />
     <ClInclude Include="RePlayEngine\UI\ThirdParty\stb_truetype.h" />
   </ItemGroup>
   <ItemGroup>

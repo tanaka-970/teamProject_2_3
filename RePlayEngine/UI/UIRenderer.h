@@ -4,6 +4,8 @@
 #include <DirectXMath.h>
 #include <wrl.h>
 
+#include "Effects/UIRenderTargetPool.h"
+
 #include <filesystem>
 #include <string>
 #include <unordered_map>
@@ -48,11 +50,13 @@ namespace ReplayEngine::UI
             ID3D11BlendState* blend_add = nullptr;
             ID3D11BlendState* blend_multiply = nullptr;
             ID3D11BlendState* blend_screen = nullptr;
+            ID3D11BlendState* blend_premultiplied = nullptr;
             ID3D11SamplerState* sampler = nullptr;
         };
 
         bool Initialize(ID3D11Device* device);
         void Release() noexcept;
+        void ReleaseTransientTargets() noexcept;
 
         void Render(ID3D11DeviceContext* context,
             Scene::Scene& scene,
@@ -92,5 +96,6 @@ namespace ReplayEngine::UI
         std::unordered_map<std::string, Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>> texture_cache_;
         std::vector<Vertex> vertices_;
         std::size_t vertex_capacity_ = 0;
+        UIRenderTargetPool render_target_pool_;
     };
 }

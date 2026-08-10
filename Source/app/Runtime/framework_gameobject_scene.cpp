@@ -17,6 +17,7 @@
 #include "../../RePlayEngine/Components/Camera/CameraTargetComponent.h"
 #include "../../RePlayEngine/Components/Camera/FollowTargetComponent.h"
 #include "../../RePlayEngine/Components/Motion/MotionPlayerComponent.h"
+#include "../../RePlayEngine/Components/UI/UISpriteAnimatorComponent.h"
 #include "../../RePlayEngine/Components/Rendering/LightComponents.h"
 #include "../../RePlayEngine/Components/Landscape/LandscapeComponent.h"
 #include "../../RePlayEngine/Components/Landscape/LandscapeRendererComponent.h"
@@ -53,6 +54,8 @@
 #include <cstdint>
 #include <filesystem>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace
 {
@@ -557,6 +560,39 @@ void framework::evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
     using ReplayEngine::Motion::MotionTrack;
     using ReplayEngine::Reflection::PropertyValue;
 
+    auto capture_snapshot =
+        [&](const ReplayEngine::Motion::MotionAsset& asset,
+            MotionPlayerComponent& player)
+    {
+        std::vector<MotionPlayerComponent::SnapshotValue> values;
+        values.reserve(asset.tracks.size());
+        for (const MotionTrack& track : asset.tracks)
+        {
+            const ReplayEngine::Motion::ResolvedMotionBinding binding =
+                MotionBindingResolver::Resolve(scene, track.binding);
+            if (!binding.Valid()) continue;
+            MotionPlayerComponent::SnapshotValue snapshot;
+            snapshot.binding = track.binding;
+            snapshot.value = binding.property->Capture(*binding.component);
+            values.push_back(std::move(snapshot));
+        }
+        player.StoreSnapshot(std::move(values));
+    };
+
+    auto contribute_restore =
+        [&](MotionPlayerComponent& player)
+    {
+        for (const MotionPlayerComponent::SnapshotValue& snapshot :
+            player.SnapshotValues())
+        {
+            const ReplayEngine::Motion::ResolvedMotionBinding binding =
+                MotionBindingResolver::Resolve(scene, snapshot.binding);
+            motion_mixer.Contribute(binding, snapshot.value, 1.0f,
+                ReplayEngine::Motion::MotionBlendMode::Override);
+        }
+        player.ConsumeStopRestoreRequest();
+    };
+
     motion_mixer.BeginFrame();
 
     for (std::size_t object_index = 0; object_index < scene.GameObjectCount();
@@ -583,13 +619,32 @@ void framework::evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
 
             MotionPlayerComponent& player =
                 static_cast<MotionPlayerComponent&>(*component);
-            if (!player.ShouldContribute()) continue;
 
             const ReplayEngine::Motion::MotionAsset* asset =
                 resolve_motion_asset(player.motion.guid);
             if (asset == nullptr) continue;
 
+            if (player.HasStopRestoreRequest())
+            {
+                contribute_restore(player);
+                continue;
+            }
+
+            if (!player.ShouldContribute()) continue;
+
+            if (player.NeedsSnapshot())
+            {
+                capture_snapshot(*asset, player);
+            }
+
             player.Advance(asset->duration, elapsed_time);
+            if (player.HasStopRestoreRequest())
+            {
+                contribute_restore(player);
+                continue;
+            }
+
+            const float blend_alpha = player.BlendInAlpha();
             for (const MotionTrack& track : asset->tracks)
             {
                 PropertyValue value;
@@ -598,12 +653,55 @@ void framework::evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
 
                 const ReplayEngine::Motion::ResolvedMotionBinding binding =
                     MotionBindingResolver::Resolve(scene, track.binding);
-                motion_mixer.Contribute(binding, value, player.weight);
+                if (!binding.Valid()) continue;
+
+                if (blend_alpha < 1.0f)
+                {
+                    if (const PropertyValue* base = player.SnapshotFor(track.binding))
+                    {
+                        value = PropertyValue::Lerp(*base, value, blend_alpha);
+                    }
+                }
+                motion_mixer.Contribute(binding, value, player.weight,
+                    track.blend_mode);
             }
         }
     }
 
     motion_mixer.Apply();
+}
+
+void framework::update_ui_sprite_animators(ReplayEngine::Scene::Scene& scene,
+    float elapsed_time)
+{
+    using ReplayEngine::Components::UISpriteAnimatorComponent;
+
+    for (std::size_t object_index = 0; object_index < scene.GameObjectCount();
+        ++object_index)
+    {
+        ReplayEngine::Core::GameObject* object = scene.GameObjectAt(object_index);
+        if (object == nullptr || object->PendingDestroy() ||
+            !object->ActiveInHierarchy())
+        {
+            continue;
+        }
+
+        for (std::size_t component_index = 0;
+            component_index < object->ComponentCount(); ++component_index)
+        {
+            ReplayEngine::Core::Component* component =
+                object->ComponentAt(component_index);
+            if (component == nullptr || component->PendingDestroy() ||
+                !component->ActiveInHierarchy() ||
+                component->TypeID() != UISpriteAnimatorComponent::StaticTypeID())
+            {
+                continue;
+            }
+
+            static_cast<UISpriteAnimatorComponent*>(component)->UpdateSprite(
+                elapsed_time, &motion_mixer);
+        }
+    }
 }
 
 void framework::update_object_scene(float elapsed_time)
@@ -709,6 +807,7 @@ void framework::update_object_scene(float elapsed_time)
         // Motion は Component::OnUpdate からは評価しない。全 Player の寄与を先に集め、
         // 同じ property へ setter を 1 フレーム 1 回だけ呼ぶため、この外部フェーズで扱う。
         evaluate_motion_players(scene, elapsed_time);
+        update_ui_sprite_animators(scene, elapsed_time);
     }
 
     sync_object_lights();

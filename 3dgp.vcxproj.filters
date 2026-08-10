@@ -1914,6 +1914,9 @@
     <Filter Include="RePlayEngine\UI">
       <UniqueIdentifier>{6b6e97b7-55db-4f0f-b752-4b0d5fd42753}</UniqueIdentifier>
     </Filter>
+    <Filter Include="RePlayEngine\UI\Effects">
+      <UniqueIdentifier>{26a0f6d7-4ee1-4e4e-9c1c-9d4e774d3a8a}</UniqueIdentifier>
+    </Filter>
     <Filter Include="RePlayEngine\UI\ThirdParty">
       <UniqueIdentifier>{d06f461e-c4bd-4b3c-b68d-a044e4fc6f89}</UniqueIdentifier>
     </Filter>
@@ -1943,6 +1946,12 @@
     <ClCompile Include="RePlayEngine\Components\UI\UIMaskComponent.cpp">
       <Filter>RePlayEngine\Components\UI</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\UI\UISpriteAnimatorComponent.cpp">
+      <Filter>RePlayEngine\Components\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\UI\UIEffectStackComponent.cpp">
+      <Filter>RePlayEngine\Components\UI</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\UI\UILayout.cpp">
       <Filter>RePlayEngine\UI</Filter>
     </ClCompile>
@@ -1951,6 +1960,12 @@
     </ClCompile>
     <ClCompile Include="RePlayEngine\UI\UIRenderer.cpp">
       <Filter>RePlayEngine\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\UI\Effects\UIEffect.cpp">
+      <Filter>RePlayEngine\UI\Effects</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\UI\Effects\UIRenderTargetPool.cpp">
+      <Filter>RePlayEngine\UI\Effects</Filter>
     </ClCompile>
     <ClInclude Include="RePlayEngine\Components\UI\CanvasComponent.h">
       <Filter>RePlayEngine\Components\UI</Filter>
@@ -1970,6 +1985,12 @@
     <ClInclude Include="RePlayEngine\Components\UI\UIMaskComponent.h">
       <Filter>RePlayEngine\Components\UI</Filter>
     </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\UI\UISpriteAnimatorComponent.h">
+      <Filter>RePlayEngine\Components\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\UI\UIEffectStackComponent.h">
+      <Filter>RePlayEngine\Components\UI</Filter>
+    </ClInclude>
     <ClInclude Include="RePlayEngine\UI\UILayout.h">
       <Filter>RePlayEngine\UI</Filter>
     </ClInclude>
@@ -1978,6 +1999,12 @@
     </ClInclude>
     <ClInclude Include="RePlayEngine\UI\UIRenderer.h">
       <Filter>RePlayEngine\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\UI\Effects\UIEffect.h">
+      <Filter>RePlayEngine\UI\Effects</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\UI\Effects\UIRenderTargetPool.h">
+      <Filter>RePlayEngine\UI\Effects</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\UI\ThirdParty\stb_truetype.h">
       <Filter>RePlayEngine\UI\ThirdParty</Filter>

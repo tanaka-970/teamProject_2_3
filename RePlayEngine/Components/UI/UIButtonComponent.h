@@ -30,6 +30,11 @@ namespace ReplayEngine::Components
         DirectX::XMFLOAT4 hover_color{ 0.86f, 0.86f, 0.86f, 1.0f };
         DirectX::XMFLOAT4 pressed_color{ 0.62f, 0.62f, 0.62f, 1.0f };
         DirectX::XMFLOAT4 disabled_color{ 0.28f, 0.28f, 0.28f, 1.0f };
+        Reflection::AssetReference normal_motion;
+        Reflection::AssetReference hover_motion;
+        Reflection::AssetReference pressed_motion;
+        Reflection::AssetReference disabled_motion;
+        float state_blend_seconds = 0.08f;
         int state = Normal;
     };
 }

@@ -31,6 +31,8 @@
 #include "../../Components/UI/UITextComponent.h"
 #include "../../Components/UI/UIButtonComponent.h"
 #include "../../Components/UI/UIMaskComponent.h"
+#include "../../Components/UI/UIEffectStackComponent.h"
+#include "../../Components/UI/UISpriteAnimatorComponent.h"
 #include "../../Components/Rendering/AnimatorComponent.h"
 #include "../../Components/Rendering/LightComponents.h"
 #include "../../Components/Rendering/MeshRendererComponent.h"
@@ -79,6 +81,8 @@ namespace ReplayEngine::Core
         using Components::UIButtonComponent;
         using Components::UIImageComponent;
         using Components::UIMaskComponent;
+        using Components::UIEffectStackComponent;
+        using Components::UISpriteAnimatorComponent;
         using Components::UITextComponent;
         using Components::TransformComponent;
 
@@ -1081,6 +1085,45 @@ namespace ReplayEngine::Core
                 MakeProperty("preserve_aspect", &UIImageComponent::preserve_aspect)
                     .Display("比率を維持"));
 
+            ComponentRegistry::Register<UISpriteAnimatorComponent>(
+                ComponentTypeInfo::Describe("Sprite Animator", "UI")
+                    .WithTooltip("Sprite Sheet の行列と frame から Image の UV を更新します。")
+                    .Requires<RectTransformComponent>()
+                    .Recommends<UIImageComponent>());
+            PropertyRegistry::Register<UISpriteAnimatorComponent>(
+                MakeProperty("columns", &UISpriteAnimatorComponent::columns)
+                    .Display("列数").Range(1.0, 256.0).Step(1.0)
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<UISpriteAnimatorComponent>(
+                MakeProperty("rows", &UISpriteAnimatorComponent::rows)
+                    .Display("行数").Range(1.0, 256.0).Step(1.0)
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<UISpriteAnimatorComponent>(
+                MakeProperty("start_frame", &UISpriteAnimatorComponent::start_frame)
+                    .Display("開始フレーム").Range(0.0, 65535.0).Step(1.0)
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<UISpriteAnimatorComponent>(
+                MakeProperty("end_frame", &UISpriteAnimatorComponent::end_frame)
+                    .Display("終了フレーム").Range(-1.0, 65535.0).Step(1.0)
+                    .Animation(Animatable::Step)
+                    .Tooltip("-1 なら Sprite Sheet 全体の最後まで使います。"));
+            PropertyRegistry::Register<UISpriteAnimatorComponent>(
+                MakeProperty("frames_per_second",
+                    &UISpriteAnimatorComponent::frames_per_second)
+                    .Display("FPS").Range(0.0, 240.0).Step(0.1));
+            PropertyRegistry::Register<UISpriteAnimatorComponent>(
+                MakeProperty("play_mode", &UISpriteAnimatorComponent::play_mode)
+                    .Display("再生方式")
+                    .AsEnum({ "一回", "ループ", "ピンポン", "逆再生" })
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<UISpriteAnimatorComponent>(
+                MakeProperty("playing", &UISpriteAnimatorComponent::playing)
+                    .Display("再生中").Animation(Animatable::Step));
+            PropertyRegistry::Register<UISpriteAnimatorComponent>(
+                MakeProperty("frame", &UISpriteAnimatorComponent::frame)
+                    .Display("フレーム").Range(0.0, 65535.0).Step(1.0)
+                    .Animation(Animatable::Interpolatable));
+
             ComponentRegistry::Register<UITextComponent>(
                 ComponentTypeInfo::Describe("Text", "UI")
                     .WithTooltip("文字列を 1 文字 1 クアッドで描きます。character_index は Text Animator 用に保持します。")
@@ -1146,6 +1189,25 @@ namespace ReplayEngine::Core
                 MakeProperty("disabled_color", &UIButtonComponent::disabled_color)
                     .Display("無効色").AsColor());
             PropertyRegistry::Register<UIButtonComponent>(
+                MakeProperty("normal_motion", &UIButtonComponent::normal_motion)
+                    .Display("通常 Motion").OfAssetType("Motion")
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<UIButtonComponent>(
+                MakeProperty("hover_motion", &UIButtonComponent::hover_motion)
+                    .Display("ホバー Motion").OfAssetType("Motion")
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<UIButtonComponent>(
+                MakeProperty("pressed_motion", &UIButtonComponent::pressed_motion)
+                    .Display("押下 Motion").OfAssetType("Motion")
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<UIButtonComponent>(
+                MakeProperty("disabled_motion", &UIButtonComponent::disabled_motion)
+                    .Display("無効 Motion").OfAssetType("Motion")
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<UIButtonComponent>(
+                MakeProperty("state_blend_seconds", &UIButtonComponent::state_blend_seconds)
+                    .Display("状態 Blend 秒").Range(0.0, 5.0).Step(0.01));
+            PropertyRegistry::Register<UIButtonComponent>(
                 MakeProperty("state", &UIButtonComponent::state)
                     .Display("現在状態")
                     .AsEnum({ "通常", "ホバー", "押下", "無効" })
@@ -1162,16 +1224,23 @@ namespace ReplayEngine::Core
                 MakeProperty("show_mask_graphic", &UIMaskComponent::show_mask_graphic)
                     .Display("自身を表示"));
 
+            ComponentRegistry::Register<UIEffectStackComponent>(
+                ComponentTypeInfo::Describe("Effect Stack", "UI")
+                    .WithTooltip("UI 要素をオフスクリーンに描いて Effect を順に適用します。")
+                    .Requires<RectTransformComponent>());
+            PropertyRegistry::Register<UIEffectStackComponent>(
+                MakeProperty("enabled", &UIEffectStackComponent::enabled)
+                    .Display("有効").Animation(Animatable::Step));
+            PropertyRegistry::Register<UIEffectStackComponent>(
+                MakeProperty("effect_count", &UIEffectStackComponent::effect_count)
+                    .Display("Effect 数").Range(0.0, 16.0).Step(1.0)
+                    .Animation(Animatable::Step));
+
             // ---- 拡張点: UI Effect / Layout Group / Animation ---------------
             //
-            // 【今は入れていない理由】
-            //   Phase 1 は保存形式、Rect 解決、描画ステート、Mask の入口を固定する段階。
-            //   自動配置や UI Effect は Undo の粒度と RenderGraph 連携を先に決める必要がある。
-            //
-            // 【入れるときにここへ足す】
-            //   ・Layout Group は RectTransform の保存値を書き換えず、UILayout の一時値だけを変更する
-            //   ・UI Effect は UIImage / UIText の直前で Material パラメータを積む
-            //   ・Motion は PropertyDesc::animatable と PropertyValue::Lerp だけを見る
+            // ・Layout Group は RectTransform の保存値を書き換えず、UILayout の一時値だけを変更する。
+            // ・Effect のはみ出し量は UIEffect::ExpandBounds() を stack 全体で累積する。
+            // ・Motion は static property と DynamicProperties() の両方を解決する。
             //
             // 【壊してはいけない前提】
             //   ・UIText は 1 文字 1 クアッドで character_index を持つ
@@ -1192,19 +1261,42 @@ namespace ReplayEngine::Core
                     .Animation(Animatable::Step)
                     .Tooltip("再生する .replaymotion Asset。"));
             PropertyRegistry::Register<MotionPlayerComponent>(
+                MakeProperty("key", &MotionPlayerComponent::key)
+                    .Display("キー")
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<MotionPlayerComponent>(
                 MakeProperty("play_on_start", &MotionPlayerComponent::play_on_start)
                     .Display("開始時に再生")
                     .Animation(Animatable::Step));
             PropertyRegistry::Register<MotionPlayerComponent>(
                 MakeProperty("loop", &MotionPlayerComponent::loop)
-                    .Display("ループ")
+                    .Display("ループ (旧)")
                     .Animation(Animatable::Step));
+            PropertyRegistry::Register<MotionPlayerComponent>(
+                MakeProperty("wrap_mode", &MotionPlayerComponent::wrap_mode)
+                    .Display("終了処理")
+                    .AsEnum({ "一回", "ループ", "ピンポン", "最後で保持" })
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<MotionPlayerComponent>(
+                MakeProperty("auto_stop_on_end", &MotionPlayerComponent::auto_stop_on_end)
+                    .Display("終了時に停止")
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<MotionPlayerComponent>(
+                MakeProperty("blend_in_seconds", &MotionPlayerComponent::blend_in_seconds)
+                    .Display("Blend In 秒").Range(0.0, 30.0).Step(0.01));
             PropertyRegistry::Register<MotionPlayerComponent>(
                 MakeProperty("speed", &MotionPlayerComponent::speed)
                     .Display("再生速度").Range(-8.0, 8.0).Step(0.05));
             PropertyRegistry::Register<MotionPlayerComponent>(
                 MakeProperty("weight", &MotionPlayerComponent::weight)
                     .Display("重み").Range(0.0, 1.0).Step(0.01));
+            PropertyRegistry::Register<MotionPlayerComponent>(
+                MakeProperty("state", &MotionPlayerComponent::state)
+                    .Display("再生状態")
+                    .AsEnum({ "停止", "再生", "一時停止" })
+                    .RuntimeOnly()
+                    .ReadOnly()
+                    .NotSerializable());
             PropertyRegistry::Register<MotionPlayerComponent>(
                 MakeProperty("time", &MotionPlayerComponent::time)
                     .Display("現在時刻")
@@ -1215,15 +1307,9 @@ namespace ReplayEngine::Core
 
             // ---- 拡張点: Motion Runtime -------------------------------------
             //
-            // 【今は入れていない理由】
-            //   Phase 3 は PropertyRegistry へ値を流す最小の評価経路を固定する段階。
-            //   Layer mode / Additive / Baseline は「現在値を壊さない」規則と衝突しやすいため、
-            //   Mixer の蓄積口だけ残して Phase 7 で扱う。
-            //
-            // 【入れるときにここへ足す】
-            //   ・MotionPlayerComponent に layer / blend_mode / fade_in_out を追加する
-            //   ・MotionMixer は同じ property へ setter を 1 回だけ呼ぶ規則を維持する
-            //   ・未バインド property は Apply しない
+            // ・同じ property への setter 呼び出しは MotionMixer::Apply の 1 回だけに保つ。
+            // ・Stop 復帰値は Play 開始時に capture した snapshot から戻す。
+            // ・未バインド property と DynamicProperties() に無い property は Apply しない。
         }
 
         void RegisterEditorNote()

@@ -24,6 +24,7 @@ namespace
     using ReplayEngine::Core::ComponentTypeID;
     using ReplayEngine::Motion::MotionAsset;
     using ReplayEngine::Motion::MotionBinding;
+    using ReplayEngine::Motion::MotionBlendMode;
     using ReplayEngine::Motion::MotionEasing;
     using ReplayEngine::Motion::MotionEvaluator;
     using ReplayEngine::Motion::MotionKeyframe;
@@ -247,10 +248,66 @@ namespace
         return changed;
     }
 
+    const char* MotionBlendModeLabel(MotionBlendMode mode) noexcept
+    {
+        switch (mode)
+        {
+        case MotionBlendMode::Override: return "Override";
+        case MotionBlendMode::Additive: return "Additive";
+        case MotionBlendMode::Multiply: return "Multiply";
+        case MotionBlendMode::Blend: return "Blend";
+        }
+        return "Override";
+    }
+
+    bool DrawBlendModeCombo(const char* label, MotionBlendMode& mode)
+    {
+        constexpr MotionBlendMode modes[] = {
+            MotionBlendMode::Override,
+            MotionBlendMode::Additive,
+            MotionBlendMode::Multiply,
+            MotionBlendMode::Blend,
+        };
+
+        bool changed = false;
+        if (ImGui::BeginCombo(label, MotionBlendModeLabel(mode)))
+        {
+            for (MotionBlendMode candidate : modes)
+            {
+                const bool selected = candidate == mode;
+                if (ImGui::Selectable(MotionBlendModeLabel(candidate), selected))
+                {
+                    mode = candidate;
+                    changed = true;
+                }
+                if (selected) ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+        return changed;
+    }
+
     Component* ResolveBindingComponent(ReplayEngine::Scene::Scene& scene,
         const MotionBinding& binding)
     {
         return ReplayEngine::Motion::MotionBindingResolver::Resolve(scene, binding).component;
+    }
+
+    const PropertyDesc* FindPropertyForComponent(Component& component,
+        const std::string& property)
+    {
+        if (const PropertyDesc* desc = PropertyRegistry::Find(component.TypeID(), property))
+        {
+            return desc;
+        }
+        if (const std::vector<PropertyDesc>* dynamic = component.DynamicProperties())
+        {
+            for (const PropertyDesc& desc : *dynamic)
+            {
+                if (desc.name == property) return &desc;
+            }
+        }
+        return nullptr;
     }
 
     int ComponentTypeIndex(const ReplayEngine::Core::GameObject& object,
@@ -285,6 +342,17 @@ namespace
                 component = candidate;
                 desc = &property;
                 return true;
+            }
+            if (const std::vector<PropertyDesc>* dynamic =
+                candidate->DynamicProperties())
+            {
+                for (const PropertyDesc& property : *dynamic)
+                {
+                    if (property.animatable == Animatable::None) continue;
+                    component = candidate;
+                    desc = &property;
+                    return true;
+                }
             }
         }
         return false;
@@ -493,7 +561,7 @@ void framework::apply_motion_preview_time()
         if (!MotionEvaluator::EvaluateTrack(track, motion_preview_time, value)) continue;
         const ReplayEngine::Motion::ResolvedMotionBinding binding =
             ReplayEngine::Motion::MotionBindingResolver::Resolve(*scene, track.binding);
-        motion_mixer.Contribute(binding, value, 1.0f);
+        motion_mixer.Contribute(binding, value, 1.0f, track.blend_mode);
     }
     motion_mixer.Apply();
 }
@@ -761,6 +829,14 @@ void framework::draw_motion_inspector()
         motion_edit_history.Commit(motion_editor_asset);
         motion_editor_dirty = true;
     }
+    MotionBlendMode blend_mode = track.blend_mode;
+    if (DrawBlendModeCombo("Blend Mode", blend_mode))
+    {
+        motion_edit_history.Begin(motion_editor_asset, "Track Blend Modeを変更");
+        track.blend_mode = blend_mode;
+        motion_edit_history.Commit(motion_editor_asset);
+        motion_editor_dirty = true;
+    }
 
     ReplayEngine::Scene::Scene* scene = object_editor_context.GetScene();
     Component* bound_component = scene != nullptr
@@ -776,7 +852,7 @@ void framework::draw_motion_inspector()
         MotionKeyframe key;
         key.time = motion_preview_time;
         const PropertyDesc* bound_desc = bound_component != nullptr
-            ? PropertyRegistry::Find(bound_component->TypeID(), track.binding.property)
+            ? FindPropertyForComponent(*bound_component, track.binding.property)
             : nullptr;
         key.value = bound_desc != nullptr
             ? bound_desc->Capture(*bound_component) : DefaultValueFor(track.value_type);

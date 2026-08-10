@@ -1182,6 +1182,8 @@ void framework::render(float elapsed_time)
         blend_states[(size_t)BLEND_STATE::MULTIPLY].Get();
     ui_states.blend_screen =
         blend_states[(size_t)BLEND_STATE::SCREEN].Get();
+    ui_states.blend_premultiplied =
+        blend_states[(size_t)BLEND_STATE::PREMULTIPLIED].Get();
     ui_states.sampler =
         sampler_states[(size_t)SAMPLER_STATE::LINEAR].Get();
     ui_renderer.Render(immediate_context.Get(), active_object_scene(),

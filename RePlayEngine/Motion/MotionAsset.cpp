@@ -84,6 +84,44 @@ namespace ReplayEngine::Motion
             return true;
         }
 
+        const char* ToBlendModeString(MotionBlendMode mode) noexcept
+        {
+            switch (mode)
+            {
+            case MotionBlendMode::Override: return "Override";
+            case MotionBlendMode::Additive: return "Additive";
+            case MotionBlendMode::Multiply: return "Multiply";
+            case MotionBlendMode::Blend: return "Blend";
+            }
+            return "Override";
+        }
+
+        bool ParseBlendMode(std::string token, MotionBlendMode& out)
+        {
+            token = Upper(std::move(token));
+            if (token == "OVERRIDE" || token == "0")
+            {
+                out = MotionBlendMode::Override;
+                return true;
+            }
+            if (token == "ADDITIVE" || token == "ADD" || token == "1")
+            {
+                out = MotionBlendMode::Additive;
+                return true;
+            }
+            if (token == "MULTIPLY" || token == "2")
+            {
+                out = MotionBlendMode::Multiply;
+                return true;
+            }
+            if (token == "BLEND" || token == "MIX" || token == "3")
+            {
+                out = MotionBlendMode::Blend;
+                return true;
+            }
+            return false;
+        }
+
         bool ReadValue(std::istream& in, Reflection::PropertyType type,
             Reflection::PropertyValue& out)
         {
@@ -303,6 +341,7 @@ namespace ReplayEngine::Motion
 
         MotionAsset asset;
         MotionTrack* current_track = nullptr;
+        int file_version = 1;
         std::string line;
         int line_number = 0;
         while (std::getline(file, line))
@@ -319,6 +358,10 @@ namespace ReplayEngine::Motion
             else if (head == "DURATION")
             {
                 input >> asset.duration;
+            }
+            else if (head == "MOTION_VERSION" || head == "VERSION")
+            {
+                input >> file_version;
             }
             else if (head == "TRACK")
             {
@@ -376,6 +419,17 @@ namespace ReplayEngine::Motion
                 input >> enabled;
                 current_track->enabled = enabled != 0;
             }
+            else if (head == "BLEND_MODE" && current_track != nullptr)
+            {
+                std::string token;
+                input >> token;
+                if (!ParseBlendMode(token, current_track->blend_mode))
+                {
+                    error = "Motion Asset縺ｮBLEND_MODE縺御ｸ肴ｭ｣縺ｧ縺・ line " +
+                        std::to_string(line_number);
+                    return false;
+                }
+            }
             else if (head == "KEY" && current_track != nullptr)
             {
                 MotionKeyframe key;
@@ -422,6 +476,7 @@ namespace ReplayEngine::Motion
             }
         }
 
+        (void)file_version;
         if (asset.duration < 0.0f) asset.duration = 0.0f;
         asset.SortKeys();
         out = std::move(asset);
@@ -451,6 +506,7 @@ namespace ReplayEngine::Motion
 
         file << std::setprecision(std::numeric_limits<float>::max_digits10);
         file << "MOTION " << std::quoted(asset.name) << '\n';
+        file << "MOTION_VERSION " << MotionAsset::current_version << '\n';
         file << "DURATION " << asset.duration << '\n';
         file << '\n';
 
@@ -471,6 +527,7 @@ namespace ReplayEngine::Motion
             file << "PROPERTY " << std::quoted(track.binding.property) << '\n';
             file << "VALUE_TYPE " << ToMotionTypeString(track.value_type) << '\n';
             file << "ENABLED " << (track.enabled ? 1 : 0) << '\n';
+            file << "BLEND_MODE " << ToBlendModeString(track.blend_mode) << '\n';
 
             for (const MotionKeyframe& key : track.keys)
             {

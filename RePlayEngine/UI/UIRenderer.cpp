@@ -7,6 +7,7 @@
 #include "../Components/UI/RectTransformComponent.h"
 #include "../Components/UI/UIImageComponent.h"
 #include "../Components/UI/UIMaskComponent.h"
+#include "../Components/UI/UIEffectStackComponent.h"
 #include "../Components/UI/UITextComponent.h"
 #include "../Object/GameObject/GameObject.h"
 #include "../Scene/Runtime/Scene.h"
@@ -15,6 +16,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <functional>
 
@@ -26,6 +28,7 @@ namespace ReplayEngine::UI
         using Components::RectTransformComponent;
         using Components::UIImageComponent;
         using Components::UIMaskComponent;
+        using Components::UIEffectStackComponent;
         using Components::UITextComponent;
 
         constexpr int maximum_ui_depth = 64;
@@ -135,11 +138,13 @@ namespace ReplayEngine::UI
             0xFFFFFFFFu, 1)))
             return false;
 
+        render_target_pool_.Initialize(device);
         return true;
     }
 
     void UIRenderer::Release() noexcept
     {
+        render_target_pool_.Release();
         texture_cache_.clear();
         vertices_.clear();
         vertex_capacity_ = 0;
@@ -150,6 +155,11 @@ namespace ReplayEngine::UI
         pixel_shader_.Reset();
         vertex_shader_.Reset();
         device_.Reset();
+    }
+
+    void UIRenderer::ReleaseTransientTargets() noexcept
+    {
+        render_target_pool_.Release();
     }
 
     bool UIRenderer::EnsureVertexCapacity(ID3D11Device* device, std::size_t vertex_count)
@@ -258,6 +268,7 @@ namespace ReplayEngine::UI
         Constants constants{};
         constants.screen_size = { screen_width, screen_height, 0.0f, 0.0f };
         context->UpdateSubresource(constant_buffer_.Get(), 0, nullptr, &constants, 0, 0);
+        render_target_pool_.BeginFrame();
 
         std::vector<Core::GameObject*> canvases;
         for (std::size_t index = 0; index < scene.GameObjectCount(); ++index)
@@ -277,18 +288,19 @@ namespace ReplayEngine::UI
                     (b != nullptr ? b->sort_order : 0);
             });
 
-        const auto append_quad = [this, screen_height](const DirectX::XMFLOAT4& rect,
+        float draw_target_height = screen_height;
+        const auto append_quad = [this, &draw_target_height](const DirectX::XMFLOAT4& rect,
             const DirectX::XMFLOAT4X4& matrix, const DirectX::XMFLOAT4& uv,
             const DirectX::XMFLOAT4& color, float scale)
         {
             const DirectX::XMFLOAT2 p0 = ToScreenPoint(
-                TransformPoint(matrix, rect.x, rect.y), scale, screen_height);
+                TransformPoint(matrix, rect.x, rect.y), scale, draw_target_height);
             const DirectX::XMFLOAT2 p1 = ToScreenPoint(
-                TransformPoint(matrix, rect.x + rect.z, rect.y), scale, screen_height);
+                TransformPoint(matrix, rect.x + rect.z, rect.y), scale, draw_target_height);
             const DirectX::XMFLOAT2 p2 = ToScreenPoint(
-                TransformPoint(matrix, rect.x + rect.z, rect.y + rect.w), scale, screen_height);
+                TransformPoint(matrix, rect.x + rect.z, rect.y + rect.w), scale, draw_target_height);
             const DirectX::XMFLOAT2 p3 = ToScreenPoint(
-                TransformPoint(matrix, rect.x, rect.y + rect.w), scale, screen_height);
+                TransformPoint(matrix, rect.x, rect.y + rect.w), scale, draw_target_height);
 
             const DirectX::XMFLOAT2 uv0{ uv.x, uv.y + uv.w };
             const DirectX::XMFLOAT2 uv1{ uv.x + uv.z, uv.y + uv.w };
@@ -354,6 +366,288 @@ namespace ReplayEngine::UI
             Flush(context, font_atlas.Texture(), states.blend_alpha, states, scissor);
         };
 
+        const auto render_effect_preview = [&](const UIEffectStackComponent& effects,
+            UIImageComponent& image, const RectTransformComponent& rect, float scale,
+            float opacity, const D3D11_RECT* scissor)
+        {
+            if (!effects.HasActiveEffects() || !image.ActiveInHierarchy() ||
+                image.opacity <= 0.0f || image.fill_amount <= 0.0f)
+            {
+                return false;
+            }
+
+            const DirectX::XMFLOAT4 expansion = effects.ExpandBounds();
+            const DirectX::XMFLOAT4 source_rect = rect.ResolvedRect();
+            const float expanded_width = (std::max)(1.0f,
+                source_rect.z + expansion.x + expansion.z);
+            const float expanded_height = (std::max)(1.0f,
+                source_rect.w + expansion.y + expansion.w);
+            const std::uint32_t rt_width = static_cast<std::uint32_t>(
+                std::ceil(expanded_width * scale));
+            const std::uint32_t rt_height = static_cast<std::uint32_t>(
+                std::ceil(expanded_height * scale));
+            UIRenderTarget* target = render_target_pool_.Acquire(rt_width, rt_height);
+            if (target == nullptr || !target->rtv || !target->srv) return false;
+
+            ID3D11RenderTargetView* previous_rtv = nullptr;
+            ID3D11DepthStencilView* previous_dsv = nullptr;
+            context->OMGetRenderTargets(1, &previous_rtv, &previous_dsv);
+            UINT viewport_count = 1;
+            D3D11_VIEWPORT previous_viewport{};
+            context->RSGetViewports(&viewport_count, &previous_viewport);
+
+            const FLOAT clear[4]{ 0.0f, 0.0f, 0.0f, 0.0f };
+            ID3D11RenderTargetView* offscreen = target->rtv.Get();
+            context->OMSetRenderTargets(1, &offscreen, nullptr);
+            context->ClearRenderTargetView(target->rtv.Get(), clear);
+            D3D11_VIEWPORT viewport{};
+            viewport.Width = static_cast<float>(target->width);
+            viewport.Height = static_cast<float>(target->height);
+            viewport.MinDepth = 0.0f;
+            viewport.MaxDepth = 1.0f;
+            context->RSSetViewports(1, &viewport);
+
+            Constants offscreen_constants{};
+            offscreen_constants.screen_size = {
+                static_cast<float>(target->width),
+                static_cast<float>(target->height), 0.0f, 0.0f };
+            context->UpdateSubresource(constant_buffer_.Get(), 0, nullptr,
+                &offscreen_constants, 0, 0);
+
+            DirectX::XMFLOAT4 draw_rect{
+                expansion.x,
+                expansion.y,
+                source_rect.z,
+                source_rect.w };
+            DirectX::XMFLOAT4 uv{ image.uv_offset.x, image.uv_offset.y,
+                image.uv_scale.x, image.uv_scale.y };
+            const float fill = (std::min)((std::max)(image.fill_amount, 0.0f), 1.0f);
+            if (image.fill_method == UIImageComponent::Horizontal)
+            {
+                draw_rect.z *= fill;
+                uv.z *= fill;
+            }
+            else if (image.fill_method == UIImageComponent::Vertical)
+            {
+                draw_rect.w *= fill;
+                uv.w *= fill;
+            }
+
+            DirectX::XMFLOAT4X4 identity{};
+            DirectX::XMStoreFloat4x4(&identity, DirectX::XMMatrixIdentity());
+            draw_target_height = static_cast<float>(target->height);
+            const auto draw_image_pass = [&](const DirectX::XMFLOAT4& pass_rect,
+                DirectX::XMFLOAT4 pass_color)
+            {
+                append_quad(pass_rect, identity, uv, pass_color, scale);
+                Flush(context, TextureFor(image.sprite.guid, asset_database),
+                    BlendForImage(image, states), states, nullptr);
+            };
+
+            for (const UI::UIEffect& effect : effects.effects)
+            {
+                if (!effect.enabled) continue;
+                const UI::UIEffectKind kind =
+                    static_cast<UI::UIEffectKind>(effect.kind);
+                if (kind == UI::UIEffectKind::DropShadow)
+                {
+                    DirectX::XMFLOAT4 shadow_rect = draw_rect;
+                    shadow_rect.x += effect.direction.x * effect.amount;
+                    shadow_rect.y += effect.direction.y * effect.amount;
+                    DirectX::XMFLOAT4 shadow_color = effect.color;
+                    shadow_color.w *= (std::max)(0.0f, effect.intensity) *
+                        image.opacity * opacity;
+                    draw_image_pass(shadow_rect, shadow_color);
+                }
+                else if (kind == UI::UIEffectKind::Glow)
+                {
+                    const float glow_radius = (std::max)(0.0f, effect.radius);
+                    DirectX::XMFLOAT4 glow_rect{
+                        draw_rect.x - glow_radius,
+                        draw_rect.y - glow_radius,
+                        draw_rect.z + glow_radius * 2.0f,
+                        draw_rect.w + glow_radius * 2.0f };
+                    DirectX::XMFLOAT4 glow_color = effect.color;
+                    glow_color.w *= (std::max)(0.0f, effect.intensity) * 0.35f *
+                        image.opacity * opacity;
+                    draw_image_pass(glow_rect, glow_color);
+                }
+                else if (kind == UI::UIEffectKind::Blur)
+                {
+                    const float offset = (std::max)(0.0f, effect.radius) * 0.35f;
+                    DirectX::XMFLOAT4 blur_color = image.color;
+                    blur_color.w *= image.opacity * opacity * 0.18f *
+                        (std::max)(0.0f, effect.intensity);
+                    draw_image_pass({ draw_rect.x - offset, draw_rect.y,
+                        draw_rect.z, draw_rect.w }, blur_color);
+                    draw_image_pass({ draw_rect.x + offset, draw_rect.y,
+                        draw_rect.z, draw_rect.w }, blur_color);
+                    draw_image_pass({ draw_rect.x, draw_rect.y - offset,
+                        draw_rect.z, draw_rect.w }, blur_color);
+                    draw_image_pass({ draw_rect.x, draw_rect.y + offset,
+                        draw_rect.z, draw_rect.w }, blur_color);
+                }
+            }
+            append_quad(draw_rect, identity, uv,
+                MultiplyAlpha(image.color, image.opacity * opacity), scale);
+            Flush(context, TextureFor(image.sprite.guid, asset_database),
+                BlendForImage(image, states), states, nullptr);
+
+            ID3D11ShaderResourceView* null_srv = nullptr;
+            context->PSSetShaderResources(0, 1, &null_srv);
+            context->OMSetRenderTargets(1, &previous_rtv, previous_dsv);
+            if (viewport_count > 0) context->RSSetViewports(1, &previous_viewport);
+            if (previous_rtv != nullptr) previous_rtv->Release();
+            if (previous_dsv != nullptr) previous_dsv->Release();
+
+            constants.screen_size = { screen_width, screen_height, 0.0f, 0.0f };
+            context->UpdateSubresource(constant_buffer_.Get(), 0, nullptr,
+                &constants, 0, 0);
+            draw_target_height = screen_height;
+
+            DirectX::XMFLOAT4 composite_rect{
+                source_rect.x - expansion.x,
+                source_rect.y - expansion.y,
+                expanded_width,
+                expanded_height };
+            append_quad(composite_rect, rect.ResolvedMatrix(),
+                { 0.0f, 0.0f, 1.0f, 1.0f },
+                { 1.0f, 1.0f, 1.0f, 1.0f }, scale);
+            Flush(context, target->srv.Get(), states.blend_alpha, states, scissor);
+            return true;
+        };
+
+        const auto render_text_effect_preview = [&](const UIEffectStackComponent& effects,
+            UITextComponent& text, const RectTransformComponent& rect, float scale,
+            float opacity, const D3D11_RECT* scissor)
+        {
+            if (!effects.HasActiveEffects() || !text.ActiveInHierarchy() ||
+                text.opacity <= 0.0f || text.text.empty())
+            {
+                return false;
+            }
+
+            const DirectX::XMFLOAT4 expansion = effects.ExpandBounds();
+            const DirectX::XMFLOAT4 source_rect = rect.ResolvedRect();
+            const float expanded_width = (std::max)(1.0f,
+                source_rect.z + expansion.x + expansion.z);
+            const float expanded_height = (std::max)(1.0f,
+                source_rect.w + expansion.y + expansion.w);
+            const std::uint32_t rt_width = static_cast<std::uint32_t>(
+                std::ceil(expanded_width * scale));
+            const std::uint32_t rt_height = static_cast<std::uint32_t>(
+                std::ceil(expanded_height * scale));
+            UIRenderTarget* target = render_target_pool_.Acquire(rt_width, rt_height);
+            if (target == nullptr || !target->rtv || !target->srv) return false;
+
+            ID3D11RenderTargetView* previous_rtv = nullptr;
+            ID3D11DepthStencilView* previous_dsv = nullptr;
+            context->OMGetRenderTargets(1, &previous_rtv, &previous_dsv);
+            UINT viewport_count = 1;
+            D3D11_VIEWPORT previous_viewport{};
+            context->RSGetViewports(&viewport_count, &previous_viewport);
+
+            const FLOAT clear[4]{ 0.0f, 0.0f, 0.0f, 0.0f };
+            ID3D11RenderTargetView* offscreen = target->rtv.Get();
+            context->OMSetRenderTargets(1, &offscreen, nullptr);
+            context->ClearRenderTargetView(target->rtv.Get(), clear);
+            D3D11_VIEWPORT viewport{};
+            viewport.Width = static_cast<float>(target->width);
+            viewport.Height = static_cast<float>(target->height);
+            viewport.MinDepth = 0.0f;
+            viewport.MaxDepth = 1.0f;
+            context->RSSetViewports(1, &viewport);
+
+            Constants offscreen_constants{};
+            offscreen_constants.screen_size = {
+                static_cast<float>(target->width),
+                static_cast<float>(target->height), 0.0f, 0.0f };
+            context->UpdateSubresource(constant_buffer_.Get(), 0, nullptr,
+                &offscreen_constants, 0, 0);
+
+            draw_target_height = static_cast<float>(target->height);
+            font_atlas.BuildGlyphs(text, source_rect.z, source_rect.w);
+            const DirectX::XMFLOAT4 color =
+                MultiplyAlpha(text.color, text.opacity * opacity);
+            DirectX::XMFLOAT4X4 identity{};
+            DirectX::XMStoreFloat4x4(&identity, DirectX::XMMatrixIdentity());
+            const auto draw_text_pass = [&](float offset_x, float offset_y,
+                const DirectX::XMFLOAT4& pass_color)
+            {
+                for (const UITextComponent::GlyphQuad& glyph : text.Glyphs())
+                {
+                    const DirectX::XMFLOAT4 glyph_rect{
+                        expansion.x + glyph.position.x + offset_x,
+                        expansion.y + glyph.position.y + offset_y,
+                        glyph.size.x,
+                        glyph.size.y
+                    };
+                    append_quad(glyph_rect, identity, glyph.uv, pass_color, scale);
+                }
+                Flush(context, font_atlas.Texture(), states.blend_alpha, states, nullptr);
+            };
+
+            for (const UI::UIEffect& effect : effects.effects)
+            {
+                if (!effect.enabled) continue;
+                const UI::UIEffectKind kind =
+                    static_cast<UI::UIEffectKind>(effect.kind);
+                if (kind == UI::UIEffectKind::DropShadow)
+                {
+                    DirectX::XMFLOAT4 shadow_color = effect.color;
+                    shadow_color.w *= (std::max)(0.0f, effect.intensity) *
+                        text.opacity * opacity;
+                    draw_text_pass(effect.direction.x * effect.amount,
+                        effect.direction.y * effect.amount, shadow_color);
+                }
+                else if (kind == UI::UIEffectKind::Glow)
+                {
+                    DirectX::XMFLOAT4 glow_color = effect.color;
+                    glow_color.w *= (std::max)(0.0f, effect.intensity) * 0.35f *
+                        text.opacity * opacity;
+                    const float glow_radius = (std::max)(0.0f, effect.radius) * 0.4f;
+                    draw_text_pass(-glow_radius, 0.0f, glow_color);
+                    draw_text_pass(glow_radius, 0.0f, glow_color);
+                    draw_text_pass(0.0f, -glow_radius, glow_color);
+                    draw_text_pass(0.0f, glow_radius, glow_color);
+                }
+                else if (kind == UI::UIEffectKind::Blur)
+                {
+                    DirectX::XMFLOAT4 blur_color = color;
+                    blur_color.w *= 0.18f * (std::max)(0.0f, effect.intensity);
+                    const float offset = (std::max)(0.0f, effect.radius) * 0.35f;
+                    draw_text_pass(-offset, 0.0f, blur_color);
+                    draw_text_pass(offset, 0.0f, blur_color);
+                    draw_text_pass(0.0f, -offset, blur_color);
+                    draw_text_pass(0.0f, offset, blur_color);
+                }
+            }
+            draw_text_pass(0.0f, 0.0f, color);
+
+            ID3D11ShaderResourceView* null_srv = nullptr;
+            context->PSSetShaderResources(0, 1, &null_srv);
+            context->OMSetRenderTargets(1, &previous_rtv, previous_dsv);
+            if (viewport_count > 0) context->RSSetViewports(1, &previous_viewport);
+            if (previous_rtv != nullptr) previous_rtv->Release();
+            if (previous_dsv != nullptr) previous_dsv->Release();
+
+            constants.screen_size = { screen_width, screen_height, 0.0f, 0.0f };
+            context->UpdateSubresource(constant_buffer_.Get(), 0, nullptr,
+                &constants, 0, 0);
+            draw_target_height = screen_height;
+
+            DirectX::XMFLOAT4 composite_rect{
+                source_rect.x - expansion.x,
+                source_rect.y - expansion.y,
+                expanded_width,
+                expanded_height };
+            append_quad(composite_rect, rect.ResolvedMatrix(),
+                { 0.0f, 0.0f, 1.0f, 1.0f },
+                { 1.0f, 1.0f, 1.0f, 1.0f }, scale);
+            Flush(context, target->srv.Get(), states.blend_alpha, states, scissor);
+            return true;
+        };
+
         std::function<void(Core::GameObject&, float, float, const D3D11_RECT*, int)> render_object;
         render_object = [&](Core::GameObject& object, float scale, float opacity,
             const D3D11_RECT* inherited_scissor, int depth)
@@ -383,10 +677,26 @@ namespace ReplayEngine::UI
 
             if (rect != nullptr && render_self)
             {
+                UIEffectStackComponent* effects =
+                    object.GetComponent<UIEffectStackComponent>();
                 if (UIImageComponent* image = object.GetComponent<UIImageComponent>())
-                    render_image(*image, *rect, scale, opacity, active_scissor);
+                {
+                    if (effects == nullptr ||
+                        !render_effect_preview(*effects, *image, *rect, scale,
+                            opacity, active_scissor))
+                    {
+                        render_image(*image, *rect, scale, opacity, active_scissor);
+                    }
+                }
                 if (UITextComponent* text = object.GetComponent<UITextComponent>())
-                    render_text(*text, *rect, scale, opacity, active_scissor);
+                {
+                    if (effects == nullptr ||
+                        !render_text_effect_preview(*effects, *text, *rect, scale,
+                            opacity, active_scissor))
+                    {
+                        render_text(*text, *rect, scale, opacity, active_scissor);
+                    }
+                }
             }
 
             for (Core::GameObject* child : object.Children())

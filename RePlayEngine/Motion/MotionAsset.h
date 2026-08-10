@@ -11,6 +11,14 @@
 
 namespace ReplayEngine::Motion
 {
+    enum class MotionBlendMode
+    {
+        Override = 0,
+        Additive = 1,
+        Multiply = 2,
+        Blend = 3,
+    };
+
     struct MotionBinding
     {
         Core::ObjectID object;
@@ -39,6 +47,7 @@ namespace ReplayEngine::Motion
         MotionBinding binding;
         Reflection::PropertyType value_type = Reflection::PropertyType::Float;
         bool enabled = true;
+        MotionBlendMode blend_mode = MotionBlendMode::Override;
         std::vector<MotionKeyframe> keys;
     };
 
@@ -46,6 +55,7 @@ namespace ReplayEngine::Motion
     {
     public:
         static constexpr const char* file_extension = ".replaymotion";
+        static constexpr int current_version = 2;
 
         std::string name{ "Motion" };
         float duration = 1.0f;

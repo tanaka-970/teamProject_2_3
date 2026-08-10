@@ -184,6 +184,9 @@ bool framework::uninitialize()
     //    Device の Live Object Report より先に必ず解放する。
     material_gpu_binder.Clear();
 
+    // 5.4) UI Effect 用 RT pool。SRV/RTV を UI Renderer 本体より先に明示解放する。
+    ui_renderer.ReleaseTransientTargets();
+
     // 5.5) UI Renderer / FontAtlas。内部の SRV を texture cache より先に手放す。
     ui_renderer.Release();
     ui_font_atlas.Release();

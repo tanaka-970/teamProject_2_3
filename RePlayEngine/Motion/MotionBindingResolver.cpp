@@ -36,6 +36,21 @@ namespace ReplayEngine::Motion
 
         const Reflection::PropertyDesc* desc =
             Reflection::PropertyRegistry::Find(binding.component_type, binding.property);
+        if (desc == nullptr)
+        {
+            if (const std::vector<Reflection::PropertyDesc>* dynamic =
+                target->DynamicProperties())
+            {
+                for (const Reflection::PropertyDesc& candidate : *dynamic)
+                {
+                    if (candidate.name == binding.property)
+                    {
+                        desc = &candidate;
+                        break;
+                    }
+                }
+            }
+        }
         if (desc == nullptr || desc->animatable == Reflection::Animatable::None)
         {
             return {};
