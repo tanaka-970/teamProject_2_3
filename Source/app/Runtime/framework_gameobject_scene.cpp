@@ -831,7 +831,8 @@ void framework::update_object_scene(float elapsed_time)
 #endif
     ReplayEngine::UI::UILayout::UpdateButtons(scene,
         static_cast<float>(client_width), static_cast<float>(client_height),
-        mouse_x, mouse_y, mouse_down, mouse_pressed, mouse_released, input_captured);
+        mouse_x, mouse_y, mouse_down, mouse_pressed, mouse_released, input_captured,
+        object_runtime_active());
     ui_pointer_down_last = mouse_down;
 
     // 削除済み Landscape の GPU メッシュをフレーム更新時に 1 回だけ解放する。

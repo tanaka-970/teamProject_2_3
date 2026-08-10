@@ -4,6 +4,7 @@
 #include "../Components/UI/RectTransformComponent.h"
 #include "../Components/UI/UIButtonComponent.h"
 #include "../Components/UI/UIImageComponent.h"
+#include "../Components/Motion/MotionPlayerComponent.h"
 #include "../Object/GameObject/GameObject.h"
 #include "../Scene/Runtime/Scene.h"
 
@@ -16,6 +17,7 @@ namespace ReplayEngine::UI
     namespace
     {
         using Components::CanvasComponent;
+        using Components::MotionPlayerComponent;
         using Components::RectTransformComponent;
         using Components::UIButtonComponent;
         using Components::UIImageComponent;
@@ -189,10 +191,47 @@ namespace ReplayEngine::UI
             }
         }
 
+        const Reflection::AssetReference* MotionForState(
+            const UIButtonComponent& button, int state) noexcept
+        {
+            switch (state)
+            {
+            case UIButtonComponent::Hover: return &button.hover_motion;
+            case UIButtonComponent::Pressed: return &button.pressed_motion;
+            case UIButtonComponent::Disabled: return &button.disabled_motion;
+            default: return &button.normal_motion;
+            }
+        }
+
+        void PlayButtonMotion(UIButtonComponent& button, int state)
+        {
+            const Reflection::AssetReference* motion = MotionForState(button, state);
+            if (motion == nullptr || !motion->IsAssigned()) return;
+
+            Core::GameObject* owner = button.Owner();
+            if (owner == nullptr) return;
+
+            MotionPlayerComponent* player = owner->GetComponent<MotionPlayerComponent>();
+            if (player == nullptr)
+            {
+                player = owner->AddComponent<MotionPlayerComponent>();
+            }
+            if (player == nullptr) return;
+
+            player->motion = *motion;
+            player->play_on_start = true;
+            player->loop = false;
+            player->wrap_mode = MotionPlayerComponent::ClampForever;
+            player->auto_stop_on_end = false;
+            player->blend_in_seconds = (std::max)(0.0f, button.state_blend_seconds);
+            player->weight = 1.0f;
+            player->PlayFrom(0.0f);
+        }
+
         void UpdateButtonsInTree(Core::GameObject& object,
             float mouse_x, float mouse_y,
             bool mouse_down, bool mouse_released,
-            bool input_captured, int depth)
+            bool input_captured, bool play_state_motions, int depth)
         {
             if (depth > maximum_ui_depth || object.PendingDestroy()) return;
 
@@ -216,8 +255,13 @@ namespace ReplayEngine::UI
                 // Phase 1 は通知の入口だけをここへ置く。C# 連携は Phase 7。
                 // release 時に Hover に戻るので、状態遷移は後段の MotionPlayer へ接続できる。
                 (void)mouse_released;
+                const int previous_state = button->state;
                 button->state = next_state;
                 ApplyButtonVisual(*button);
+                if (play_state_motions && previous_state != next_state)
+                {
+                    PlayButtonMotion(*button, next_state);
+                }
             }
 
             const std::vector<Core::GameObject*> children = object.Children();
@@ -225,7 +269,7 @@ namespace ReplayEngine::UI
             {
                 if (child == nullptr) continue;
                 UpdateButtonsInTree(*child, mouse_x, mouse_y, mouse_down,
-                    mouse_released, input_captured, depth + 1);
+                    mouse_released, input_captured, play_state_motions, depth + 1);
             }
         }
     }
@@ -286,7 +330,7 @@ namespace ReplayEngine::UI
         float screen_width, float screen_height,
         float mouse_x, float mouse_y,
         bool mouse_down, bool mouse_pressed, bool mouse_released,
-        bool input_captured)
+        bool input_captured, bool play_state_motions)
     {
         (void)mouse_pressed;
 
@@ -304,7 +348,7 @@ namespace ReplayEngine::UI
             const float canvas_mouse_y = mouse_y / safe_scale;
 
             UpdateButtonsInTree(*canvas_object, canvas_mouse_x, canvas_mouse_y,
-                mouse_down, mouse_released, input_captured, 0);
+                mouse_down, mouse_released, input_captured, play_state_motions, 0);
         }
     }
 }
