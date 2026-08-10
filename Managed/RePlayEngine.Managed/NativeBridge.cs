@@ -65,6 +65,19 @@ public static unsafe class NativeBridge
         public delegate* unmanaged[Cdecl]<byte*, long, int> SetSceneFlowInt;
         public delegate* unmanaged[Cdecl]<byte*, double, int> SetSceneFlowFloat;
         public delegate* unmanaged[Cdecl]<Vector3, Vector3, float, int, int, ObjectHandle, RaycastHit*, int> Raycast;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, byte*, ComponentHandle*, int> FindMotionPlayer;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, int> MotionPlay;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, float, int> MotionPlayFrom;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, int> MotionPause;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, int> MotionResume;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, int> MotionStop;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, int> MotionReverse;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, float, int> MotionSetTime;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, float, int> MotionSetSpeed;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, float, int> MotionSetWeight;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, int*, int> MotionIsPlaying;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, float*, int> MotionGetTime;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, float*, int> MotionGetDuration;
     }
 
     private sealed class ManagedInstance
@@ -471,6 +484,96 @@ public static unsafe class NativeBridge
         RaycastHit hit = default;
         var status = (RuntimeStatus)api.Raycast(origin, direction, maxDistance, layer, mask, ignore, &hit);
         return new RuntimeResult<RaycastHit>(status, hit);
+    }
+
+    internal static RuntimeResult<ComponentHandle> FindMotionPlayer(ObjectHandle owner, string key)
+    {
+        if (api.FindMotionPlayer == null) return new(RuntimeStatus.ServiceUnavailable);
+        ComponentHandle value = default;
+        fixed (byte* text = Encoding.UTF8.GetBytes(key + "\0"))
+        {
+            return new RuntimeResult<ComponentHandle>(
+                (RuntimeStatus)api.FindMotionPlayer(owner, text, &value),
+                value);
+        }
+    }
+
+    internal static RuntimeStatus MotionPlay(ComponentHandle player)
+    {
+        if (api.MotionPlay == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.MotionPlay(player);
+    }
+
+    internal static RuntimeStatus MotionPlayFrom(ComponentHandle player, float seconds)
+    {
+        if (api.MotionPlayFrom == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.MotionPlayFrom(player, seconds);
+    }
+
+    internal static RuntimeStatus MotionPause(ComponentHandle player)
+    {
+        if (api.MotionPause == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.MotionPause(player);
+    }
+
+    internal static RuntimeStatus MotionResume(ComponentHandle player)
+    {
+        if (api.MotionResume == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.MotionResume(player);
+    }
+
+    internal static RuntimeStatus MotionStop(ComponentHandle player)
+    {
+        if (api.MotionStop == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.MotionStop(player);
+    }
+
+    internal static RuntimeStatus MotionReverse(ComponentHandle player)
+    {
+        if (api.MotionReverse == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.MotionReverse(player);
+    }
+
+    internal static RuntimeStatus MotionSetTime(ComponentHandle player, float seconds)
+    {
+        if (api.MotionSetTime == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.MotionSetTime(player, seconds);
+    }
+
+    internal static RuntimeStatus MotionSetSpeed(ComponentHandle player, float speed)
+    {
+        if (api.MotionSetSpeed == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.MotionSetSpeed(player, speed);
+    }
+
+    internal static RuntimeStatus MotionSetWeight(ComponentHandle player, float weight)
+    {
+        if (api.MotionSetWeight == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.MotionSetWeight(player, weight);
+    }
+
+    internal static RuntimeResult<bool> MotionIsPlaying(ComponentHandle player)
+    {
+        if (api.MotionIsPlaying == null) return new(RuntimeStatus.ServiceUnavailable);
+        int value = 0;
+        var status = (RuntimeStatus)api.MotionIsPlaying(player, &value);
+        return new RuntimeResult<bool>(status, value != 0);
+    }
+
+    internal static RuntimeResult<float> MotionGetTime(ComponentHandle player)
+    {
+        if (api.MotionGetTime == null) return new(RuntimeStatus.ServiceUnavailable);
+        float value = 0.0f;
+        return new RuntimeResult<float>(
+            (RuntimeStatus)api.MotionGetTime(player, &value), value);
+    }
+
+    internal static RuntimeResult<float> MotionGetDuration(ComponentHandle player)
+    {
+        if (api.MotionGetDuration == null) return new(RuntimeStatus.ServiceUnavailable);
+        float value = 0.0f;
+        return new RuntimeResult<float>(
+            (RuntimeStatus)api.MotionGetDuration(player, &value), value);
     }
 
     internal static RuntimeResult<EventSubscription> SubscribeEvent(string eventTypeGuid, ObjectHandle owner)

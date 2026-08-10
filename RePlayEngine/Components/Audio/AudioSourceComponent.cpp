@@ -1,6 +1,7 @@
 #include "AudioSourceComponent.h"
 
 #include "../../Object/GameObject/GameObject.h"
+#include "../../Runtime/API/RuntimeContext.h"
 #include "../../Scene/Runtime/Scene.h"
 #include "../../Scene/Services/SceneServices.h"
 
@@ -45,6 +46,7 @@ namespace ReplayEngine::Components
 
     void AudioSourceComponent::OnDisable()
     {
+        motion_event_subscription_.Release();
         Stop();
         play_on_start_consumed_ = false;
     }
@@ -55,9 +57,12 @@ namespace ReplayEngine::Components
         const bool playing = scene != nullptr && scene->Services().Playing();
         if (!playing)
         {
+            motion_event_subscription_.Release();
             Stop();
             return;
         }
+
+        EnsureMotionEventSubscription();
 
         if (play_on_start && !play_on_start_consumed_)
         {
@@ -76,7 +81,71 @@ namespace ReplayEngine::Components
 
     void AudioSourceComponent::OnRuntimeDestroy()
     {
+        motion_event_subscription_.Release();
         Stop();
+    }
+
+    void AudioSourceComponent::EnsureMotionEventSubscription()
+    {
+        if (motion_event_subscription_.Valid()) return;
+
+        Scene::Scene* scene = GetScene();
+        Runtime::RuntimeContext* runtime =
+            scene != nullptr ? scene->Services().Runtime() : nullptr;
+        if (runtime == nullptr || Owner() == nullptr) return;
+
+        const Runtime::ObjectHandle owner_handle =
+            runtime->Resolver().MakeHandle(Owner());
+        if (owner_handle.IsEmpty()) return;
+
+        motion_event_subscription_ = runtime->Events().Subscribe(
+            Runtime::EngineEvents::MotionEvent,
+            [this](const Runtime::EventRecord& record)
+            {
+                HandleMotionEvent(record);
+            },
+            owner_handle);
+    }
+
+    void AudioSourceComponent::HandleMotionEvent(const Runtime::EventRecord& record)
+    {
+        Scene::Scene* scene = GetScene();
+        Runtime::RuntimeContext* runtime =
+            scene != nullptr ? scene->Services().Runtime() : nullptr;
+        if (runtime == nullptr || Owner() == nullptr || !ActiveInHierarchy()) return;
+
+        const Runtime::ObjectHandle owner_handle =
+            runtime->Resolver().MakeHandle(Owner());
+        if (!record.target.IsEmpty() && record.target != owner_handle) return;
+
+        const Reflection::PropertyValue* name_value =
+            record.payload.Find("name");
+        const std::string name = name_value != nullptr
+            ? name_value->AsString()
+            : std::string();
+
+        if (name == "StopSound")
+        {
+            Stop();
+            return;
+        }
+        if (name != "PlaySound") return;
+
+        const Reflection::PropertyValue* parameter_value =
+            record.payload.Find("parameter");
+        const std::string parameter = parameter_value != nullptr
+            ? parameter_value->AsString()
+            : std::string();
+        if (parameter.empty())
+        {
+            Play();
+            return;
+        }
+
+        const std::string previous_clip = clip_path;
+        clip_path = parameter;
+        Play();
+        clip_path = previous_clip;
     }
 
     Audio::IAudioPlaybackService* AudioSourceComponent::AudioService() const noexcept

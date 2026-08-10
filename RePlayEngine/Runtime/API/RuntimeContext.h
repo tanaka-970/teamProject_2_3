@@ -240,6 +240,23 @@ namespace ReplayEngine::Runtime
         RuntimeStatus SetComponentEnabled(const ComponentHandle& handle, bool enabled);
         RuntimeStatus IsComponentEnabled(const ComponentHandle& handle, bool& out) const;
 
+        // ---- Motion Player -----------------------------------------------------
+
+        RuntimeStatus FindMotionPlayer(const ObjectHandle& owner,
+            const std::string& key, ComponentHandle& out) const;
+        RuntimeStatus MotionPlay(const ComponentHandle& player);
+        RuntimeStatus MotionPlayFrom(const ComponentHandle& player, float seconds);
+        RuntimeStatus MotionPause(const ComponentHandle& player);
+        RuntimeStatus MotionResume(const ComponentHandle& player);
+        RuntimeStatus MotionStop(const ComponentHandle& player);
+        RuntimeStatus MotionReverse(const ComponentHandle& player);
+        RuntimeStatus SetMotionTime(const ComponentHandle& player, float seconds);
+        RuntimeStatus SetMotionSpeed(const ComponentHandle& player, float speed);
+        RuntimeStatus SetMotionWeight(const ComponentHandle& player, float weight);
+        RuntimeStatus IsMotionPlaying(const ComponentHandle& player, bool& out) const;
+        RuntimeStatus GetMotionTime(const ComponentHandle& player, float& out) const;
+        RuntimeStatus GetMotionDuration(const ComponentHandle& player, float& out) const;
+
         // ---- 生成・破棄 ---------------------------------------------------------
 
         // 空の GameObject を作る。生成は即時で、Update 中でも安全

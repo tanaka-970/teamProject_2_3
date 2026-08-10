@@ -1,9 +1,16 @@
 #include "PrimitiveMeshRendererComponent.h"
 
+#include "MaterialOverrideDynamicProperties.h"
 #include "../../Object/GameObject/GameObject.h"
 
 namespace ReplayEngine::Components
 {
+    const std::vector<Reflection::PropertyDesc>*
+        PrimitiveMeshRendererComponent::DynamicProperties() const noexcept
+    {
+        return MaterialOverrideDynamicProperties<PrimitiveMeshRendererComponent>();
+    }
+
     const char* PrimitiveMeshRendererComponent::BuiltinAssetId() const noexcept
     {
         switch (static_cast<PrimitiveType>(primitive_type))
@@ -32,6 +39,13 @@ namespace ReplayEngine::Components
         out.world = owner.GetTransform().WorldMatrixFloat4x4();
         out.tint = tint;
         out.material_override = material_override;
+        out.override_material_base_color = material_base_color;
+        out.override_material_metallic = material_metallic;
+        out.override_material_roughness = material_roughness;
+        out.override_material_ambient_occlusion = material_ambient_occlusion;
+        out.override_material_emissive_color = material_emissive_color;
+        out.override_material_emissive_strength = material_emissive_strength;
+        out.override_material_double_sided = material_double_sided;
         out.shading_model = shading_model;
         out.outline = outline;
         out.cast_shadow = cast_shadow;

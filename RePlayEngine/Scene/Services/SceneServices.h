@@ -8,6 +8,7 @@
 namespace ReplayEngine::Runtime { class RuntimeContext; }
 namespace ReplayEngine::Scripting { class IScriptServices; }
 namespace ReplayEngine::Audio { class IAudioPlaybackService; }
+namespace ReplayEngine::Motion { class MotionMixer; }
 
 namespace ReplayEngine::Scene
 {
@@ -36,6 +37,12 @@ namespace ReplayEngine::Scene
 
         Audio::IAudioPlaybackService* Audio() const noexcept { return audio_; }
         void SetAudio(Audio::IAudioPlaybackService* service) noexcept { audio_ = service; }
+
+        const Motion::MotionMixer* MotionMixer() const noexcept { return motion_mixer_; }
+        void SetMotionMixer(const Motion::MotionMixer* mixer) noexcept
+        {
+            motion_mixer_ = mixer;
+        }
 
         // Runtime API への入口。
         //
@@ -87,6 +94,7 @@ namespace ReplayEngine::Scene
             camera_basis_ = nullptr;
             physics_ = nullptr;
             audio_ = nullptr;
+            motion_mixer_ = nullptr;
             runtime_ = nullptr;
             scripts_ = nullptr;
             controlled_object_ = Core::ObjectID::Invalid();
@@ -97,6 +105,7 @@ namespace ReplayEngine::Scene
         const ICameraBasisProvider* camera_basis_ = nullptr;
         const IPhysicsQueryService* physics_ = nullptr;
         Audio::IAudioPlaybackService* audio_ = nullptr;
+        const Motion::MotionMixer* motion_mixer_ = nullptr;
         Runtime::RuntimeContext* runtime_ = nullptr;
         Scripting::IScriptServices* scripts_ = nullptr;
         Core::ObjectID controlled_object_;

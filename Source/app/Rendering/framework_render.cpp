@@ -3,13 +3,93 @@
 #include "texture.h"
 #include "skinned_mesh.h"
 #include "gltf_model.h"
+#include "../../../RePlayEngine/Components/Core/TransformComponent.h"
+#include "../../../RePlayEngine/Components/Rendering/ParticleEmitterComponent.h"
+#include "../../../RePlayEngine/Components/Rendering/PostProcessVolumeComponent.h"
 #include "../../../RePlayEngine/Rendering/Shaders/BuiltInShaders.h"
 #include "../../../RePlayEngine/Rendering/ShaderStack/BuiltInShaderLayers.h"
 #include "../../../RePlayEngine/Rendering/Materials/ShaderLayerBinding.h"
 #include "../../../RePlayEngine/UI/UILayout.h"
 
+#include <algorithm>
+#include <cmath>
+
 namespace
 {
+    using ReplayEngine::Components::ParticleEmitterComponent;
+    using ReplayEngine::Components::PostProcessVolumeComponent;
+    using ReplayEngine::Components::TransformComponent;
+
+    float clamp_finite(float value, float fallback, float low, float high) noexcept
+    {
+        if (!std::isfinite(value)) return fallback;
+        return (std::min)((std::max)(value, low), high);
+    }
+
+    DirectX::XMFLOAT4 clamp_color(const DirectX::XMFLOAT4& value) noexcept
+    {
+        return {
+            clamp_finite(value.x, 1.0f, 0.0f, 8.0f),
+            clamp_finite(value.y, 1.0f, 0.0f, 8.0f),
+            clamp_finite(value.z, 1.0f, 0.0f, 8.0f),
+            clamp_finite(value.w, 1.0f, 0.0f, 1.0f)
+        };
+    }
+
+    DirectX::XMFLOAT3 normalize_or_up(const DirectX::XMFLOAT3& value) noexcept
+    {
+        const DirectX::XMVECTOR vector = DirectX::XMLoadFloat3(&value);
+        const float length_sq = DirectX::XMVectorGetX(
+            DirectX::XMVector3LengthSq(vector));
+        if (!std::isfinite(length_sq) || length_sq <= 1.0e-8f)
+        {
+            return { 0.0f, 1.0f, 0.0f };
+        }
+
+        DirectX::XMFLOAT3 normalized{};
+        DirectX::XMStoreFloat3(&normalized,
+            DirectX::XMVector3Normalize(vector));
+        return normalized;
+    }
+
+    struct ParticleEmitterSelection
+    {
+        const ReplayEngine::Core::GameObject* object = nullptr;
+        const ParticleEmitterComponent* component = nullptr;
+
+        bool Valid() const noexcept { return object != nullptr && component != nullptr; }
+    };
+
+    ParticleEmitterSelection select_particle_emitter(
+        const ReplayEngine::Scene::Scene& scene)
+    {
+        ParticleEmitterSelection best{};
+        for (std::size_t object_index = 0; object_index < scene.GameObjectCount();
+            ++object_index)
+        {
+            const ReplayEngine::Core::GameObject* object =
+                scene.GameObjectAt(object_index);
+            if (object == nullptr || object->PendingDestroy()) continue;
+
+            for (std::size_t component_index = 0;
+                component_index < object->ComponentCount(); ++component_index)
+            {
+                const auto* emitter = dynamic_cast<const ParticleEmitterComponent*>(
+                    object->ComponentAt(component_index));
+                if (emitter == nullptr || !emitter->emitting ||
+                    !emitter->ActiveInHierarchy())
+                {
+                    continue;
+                }
+                if (!best.Valid() || emitter->priority > best.component->priority)
+                {
+                    best = { object, emitter };
+                }
+            }
+        }
+        return best;
+    }
+
     // 読み込んだFBXの軸方向を、エンジンの左手座標系へ合わせる。
     DirectX::XMMATRIX fbx_coordinate_transform()
     {
@@ -260,6 +340,55 @@ void framework::render(float elapsed_time)
     //
     // Picking・Gizmo・Collider Debug Draw もすべて同じ窓口を通るので、
     // 「見えている位置」と「拾える位置」と「線の位置」がずれない。
+    const ReplayEngine::Rendering::PostProcessPass::Settings original_post_settings =
+        post_process.GetSettings();
+    const bool original_enable_bloom_shader = enable_bloom_shader;
+    const bool original_enable_vignette_shader = enable_vignette_shader;
+    const bool original_enable_ssao = enable_ssao;
+    const bool original_enable_ssr = enable_ssr;
+    const bool original_enable_taa = enable_taa;
+    const float original_luminance_threshold = luminance_threshold;
+    const float original_ssao_radius = ssao_pass.radius;
+    const float original_ssao_intensity = ssao_pass.intensity;
+    const bool original_ssao_pass_enabled = ssao_pass.enabled;
+    const float original_ssr_intensity = ssr_pass.intensity;
+    const bool original_ssr_pass_enabled = ssr_pass.enabled;
+    const bool original_taa_pass_enabled = taa_pass.enabled;
+
+    const auto volume_selection =
+        ReplayEngine::Components::ResolvePostProcessVolumeSelection(
+            active_object_scene());
+    if (volume_selection.Valid())
+    {
+        const PostProcessVolumeComponent& volume = *volume_selection.component;
+        auto& settings = post_process.GetSettings();
+        settings.exposure = clamp_finite(volume.exposure,
+            original_post_settings.exposure, 0.01f, 8.0f);
+        settings.bloom_intensity = clamp_finite(volume.bloom_intensity,
+            original_post_settings.bloom_intensity, 0.0f, 8.0f);
+        settings.vignette_strength = clamp_finite(volume.vignette_intensity,
+            original_post_settings.vignette_strength, 0.0f, 1.0f);
+        settings.color_filter = clamp_color(volume.color_filter);
+
+        enable_bloom_shader = volume.bloom_enabled;
+        enable_vignette_shader = volume.vignette_enabled;
+        enable_ssao = volume.ssao_enabled;
+        enable_ssr = volume.ssr_enabled;
+        enable_taa = volume.taa_enabled;
+        luminance_threshold = clamp_finite(volume.bloom_threshold,
+            original_luminance_threshold, 0.0f, 16.0f);
+
+        ssao_pass.enabled = volume.ssao_enabled;
+        ssao_pass.radius = clamp_finite(volume.ssao_radius,
+            original_ssao_radius, 0.01f, 16.0f);
+        ssao_pass.intensity = clamp_finite(volume.ssao_intensity,
+            original_ssao_intensity, 0.0f, 8.0f);
+        ssr_pass.enabled = volume.ssr_enabled;
+        ssr_pass.intensity = clamp_finite(volume.ssr_intensity,
+            original_ssr_intensity, 0.0f, 8.0f);
+        taa_pass.enabled = volume.taa_enabled;
+    }
+
     const DirectX::XMMATRIX V = viewport_view_matrix();
     const DirectX::XMMATRIX P = viewport_projection_matrix();
 
@@ -312,7 +441,59 @@ void framework::render(float elapsed_time)
     lights.update_constants(immediate_context.Get());
 
     // 描画より先に時間依存のGPUパーティクルと軌跡を進める。
-    if (enable_particles) particles.simulate(immediate_context.Get(), elapsed_time);
+    bool particles_this_frame = enable_particles;
+    BLEND_STATE particle_blend_state = BLEND_STATE::ADD;
+    const ParticleEmitterSelection emitter_selection =
+        select_particle_emitter(active_object_scene());
+    if (emitter_selection.Valid())
+    {
+        const ParticleEmitterComponent& emitter = *emitter_selection.component;
+        DirectX::XMFLOAT3 origin{ 0.0f, 0.0f, 0.0f };
+        if (const TransformComponent* transform =
+            emitter_selection.object->GetComponent<TransformComponent>())
+        {
+            origin = transform->Position();
+        }
+        const DirectX::XMFLOAT3 direction = normalize_or_up(emitter.direction);
+
+        particles.active_count = static_cast<UINT>((std::max)(1,
+            (std::min)(emitter.max_particles,
+                static_cast<int>(particle_system::MAX_COUNT))));
+        particles.constants.spawn_origin = {
+            origin.x, origin.y, origin.z,
+            clamp_finite(emitter.spawn_rate, 0.0f, 0.0f, 20000.0f)
+        };
+        particles.constants.spawn_direction = {
+            direction.x, direction.y, direction.z,
+            clamp_finite(emitter.cone_angle, 0.0f, 0.0f, 3.14159f)
+        };
+        const float lifetime = clamp_finite(emitter.lifetime, 1.0f, 0.01f, 60.0f);
+        const float speed = clamp_finite(emitter.start_speed, 0.0f, 0.0f, 200.0f);
+        particles.constants.spawn_params = { speed, speed, lifetime, lifetime };
+        particles.constants.spawn_color = clamp_color(emitter.start_color);
+        particles.constants.end_color = clamp_color(emitter.end_color);
+        particles.constants.spawn_scalar = {
+            clamp_finite(emitter.start_size, 0.1f, 0.001f, 100.0f),
+            0.0f,
+            clamp_finite(emitter.gravity, 0.0f, -100.0f, 100.0f),
+            clamp_finite(emitter.drag, 0.0f, 0.0f, 20.0f)
+        };
+        particles.constants.end_scalar = {
+            clamp_finite(emitter.end_size, 0.02f, 0.001f, 100.0f),
+            0.0f, 0.0f, 0.0f
+        };
+
+        switch (emitter.blend_mode)
+        {
+        case 1: particle_blend_state = BLEND_STATE::ADD; break;
+        case 2: particle_blend_state = BLEND_STATE::MULTIPLY; break;
+        case 3: particle_blend_state = BLEND_STATE::SCREEN; break;
+        default: particle_blend_state = BLEND_STATE::ALPHA; break;
+        }
+        particles_this_frame = true;
+    }
+
+    if (particles_this_frame) particles.simulate(immediate_context.Get(), elapsed_time);
     if (enable_trail)     test_trail.update(elapsed_time);
 
     // アニメーション付きモデルは例外なく
@@ -1102,10 +1283,11 @@ void framework::render(float elapsed_time)
         }
     }
 
-    if (enable_particles)
+    if (particles_this_frame)
     {
         // 半透明エフェクトは深度テストを行うが、後続を遮らないよう深度を書き込まない。
-        immediate_context->OMSetBlendState(blend_states[(size_t)BLEND_STATE::ADD].Get(), nullptr, 0xFFFFFFFF);
+        immediate_context->OMSetBlendState(
+            blend_states[(size_t)particle_blend_state].Get(), nullptr, 0xFFFFFFFF);
         immediate_context->OMSetDepthStencilState(
             depth_stencil_states[(size_t)DEPTH_STATE::ZT_ON_ZW_OFF].Get(), 0);
         particles.render(immediate_context.Get());
@@ -1174,6 +1356,8 @@ void framework::render(float elapsed_time)
         rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get();
     ui_states.rasterizer_scissor =
         rasterizer_states[(size_t)RASTER_STATE::SCISSOR].Get();
+    ui_states.blend_none =
+        blend_states[(size_t)BLEND_STATE::NONE].Get();
     ui_states.blend_alpha =
         blend_states[(size_t)BLEND_STATE::ALPHA].Get();
     ui_states.blend_add =
@@ -1187,7 +1371,8 @@ void framework::render(float elapsed_time)
     ui_states.sampler =
         sampler_states[(size_t)SAMPLER_STATE::LINEAR].Get();
     ui_renderer.Render(immediate_context.Get(), active_object_scene(),
-        &asset_database, ui_font_atlas, viewport.Width, viewport.Height, ui_states);
+        &asset_database, &shader_library.Catalog(), ui_font_atlas,
+        viewport.Width, viewport.Height, ui_states);
 
 #ifdef USE_IMGUI
     // update()でNewFrameを通したフレームだけ描く。ロード完了フレームのように
@@ -1209,6 +1394,20 @@ void framework::render(float elapsed_time)
 #endif
 
     // GPUクエリを閉じて、揃った計測結果を回収する。
+    post_process.GetSettings() = original_post_settings;
+    enable_bloom_shader = original_enable_bloom_shader;
+    enable_vignette_shader = original_enable_vignette_shader;
+    enable_ssao = original_enable_ssao;
+    enable_ssr = original_enable_ssr;
+    enable_taa = original_enable_taa;
+    luminance_threshold = original_luminance_threshold;
+    ssao_pass.radius = original_ssao_radius;
+    ssao_pass.intensity = original_ssao_intensity;
+    ssao_pass.enabled = original_ssao_pass_enabled;
+    ssr_pass.intensity = original_ssr_intensity;
+    ssr_pass.enabled = original_ssr_pass_enabled;
+    taa_pass.enabled = original_taa_pass_enabled;
+
     ReplayEngine::Rendering::Stats().EndFrame(immediate_context.Get());
 
     // 次フレームの再投影用に今フレームのビュー射影を残し、

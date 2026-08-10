@@ -2,6 +2,7 @@
 #include "shader.h"
 #include "misc.h"
 #include <d3d11sdklayers.h>
+#include <algorithm>
 #include <cstring>
 #include <vector>
 #include <cstdio>
@@ -89,12 +90,15 @@ void particle_system::release() noexcept
     particle_gs.Reset();
     particle_ps.Reset();
     constants = {};
+    active_count = MAX_COUNT;
     initialized = false;
 }
 
 void particle_system::simulate(ID3D11DeviceContext* ctx, float delta_time)
 {
     if (!initialized) return;
+
+    active_count = (std::max)(1u, (std::min)(active_count, MAX_COUNT));
 
     static bool first_run = true;
     constants.simulation_time.x = delta_time;
@@ -115,7 +119,7 @@ void particle_system::simulate(ID3D11DeviceContext* ctx, float delta_time)
     }
 
     ctx->CSSetShader(integrate_cs.Get(), nullptr, 0);
-    ctx->Dispatch((MAX_COUNT + THREADS - 1) / THREADS, 1, 1);
+    ctx->Dispatch((active_count + THREADS - 1) / THREADS, 1, 1);
 
     // UAV detach
     ID3D11UnorderedAccessView* null_uav[1] = { nullptr };
@@ -138,7 +142,7 @@ void particle_system::render(ID3D11DeviceContext* ctx)
 
     ctx->VSSetShaderResources(0, 1, particle_srv.GetAddressOf());
 
-    ctx->Draw(MAX_COUNT, 0);
+    ctx->Draw(active_count, 0);
 
     // detach
     ID3D11ShaderResourceView* null_srv[1] = { nullptr };

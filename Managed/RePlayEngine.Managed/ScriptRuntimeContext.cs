@@ -57,6 +57,12 @@ public sealed class ScriptRuntimeContext
         return NativeBridge.GetComponent(handle, componentTypeId);
     }
 
+    public RuntimeResult<MotionPlayer> FindMotionPlayer(ObjectHandle owner, string key = "")
+    {
+        var result = NativeBridge.FindMotionPlayer(owner, key);
+        return new RuntimeResult<MotionPlayer>(result.Status, new MotionPlayer(result.Value));
+    }
+
     public RuntimeStatus Destroy(ObjectHandle handle)
     {
         return NativeBridge.DestroyGameObject(handle);

@@ -327,6 +327,14 @@ namespace ReplayEngine::Motion
                     return a.time < b.time;
                 });
         }
+        for (MotionEventTrack& track : event_tracks)
+        {
+            std::sort(track.events.begin(), track.events.end(),
+                [](const MotionEvent& a, const MotionEvent& b)
+                {
+                    return a.time < b.time;
+                });
+        }
     }
 
     bool MotionAsset::LoadFromFile(const std::filesystem::path& path,
@@ -341,6 +349,7 @@ namespace ReplayEngine::Motion
 
         MotionAsset asset;
         MotionTrack* current_track = nullptr;
+        MotionEventTrack* current_event_track = nullptr;
         int file_version = 1;
         std::string line;
         int line_number = 0;
@@ -369,16 +378,34 @@ namespace ReplayEngine::Motion
                 input >> std::quoted(track.name);
                 asset.tracks.push_back(std::move(track));
                 current_track = &asset.tracks.back();
+                current_event_track = nullptr;
             }
             else if (head == "END_TRACK")
             {
                 current_track = nullptr;
+            }
+            else if (head == "EVENT_TRACK")
+            {
+                MotionEventTrack track;
+                asset.event_tracks.push_back(std::move(track));
+                current_event_track = &asset.event_tracks.back();
+                current_track = nullptr;
+            }
+            else if (head == "END_EVENT_TRACK")
+            {
+                current_event_track = nullptr;
             }
             else if (head == "OBJECT" && current_track != nullptr)
             {
                 Core::ObjectID::ValueType raw = Core::ObjectID::invalid_value;
                 input >> raw;
                 current_track->binding.object = Core::ObjectID(raw);
+            }
+            else if (head == "OBJECT" && current_event_track != nullptr)
+            {
+                Core::ObjectID::ValueType raw = Core::ObjectID::invalid_value;
+                input >> raw;
+                current_event_track->object = Core::ObjectID(raw);
             }
             else if (head == "COMPONENT_TYPE" && current_track != nullptr)
             {
@@ -474,6 +501,18 @@ namespace ReplayEngine::Motion
 
                 current_track->keys.push_back(std::move(key));
             }
+            else if (head == "EVENT" && current_event_track != nullptr)
+            {
+                MotionEvent event;
+                if (!(input >> event.time >> std::quoted(event.name)))
+                {
+                    error = "Motion Event が不完全です: line " +
+                        std::to_string(line_number);
+                    return false;
+                }
+                input >> std::quoted(event.parameter);
+                current_event_track->events.push_back(std::move(event));
+            }
         }
 
         (void)file_version;
@@ -545,6 +584,18 @@ namespace ReplayEngine::Motion
             }
 
             file << "END_TRACK\n\n";
+        }
+
+        for (const MotionEventTrack& track : asset.event_tracks)
+        {
+            file << "EVENT_TRACK\n";
+            file << "OBJECT " << track.object.Value() << '\n';
+            for (const MotionEvent& event : track.events)
+            {
+                file << "EVENT " << event.time << ' ' << std::quoted(event.name)
+                    << ' ' << std::quoted(event.parameter) << '\n';
+            }
+            file << "END_EVENT_TRACK\n\n";
         }
 
         if (!file)

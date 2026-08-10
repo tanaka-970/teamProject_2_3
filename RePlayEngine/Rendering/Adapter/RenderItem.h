@@ -35,6 +35,13 @@ namespace ReplayEngine::Rendering
         // 旧 Scene 互換。Material が割り当てられているときは Shader と値を
         // MaterialAsset から解決し、この値は追加 tint の有無だけに使う。
         bool material_override = false;
+        DirectX::XMFLOAT4 override_material_base_color{ 1.0f, 1.0f, 1.0f, 1.0f };
+        float override_material_metallic = 0.0f;
+        float override_material_roughness = 0.55f;
+        float override_material_ambient_occlusion = 1.0f;
+        DirectX::XMFLOAT3 override_material_emissive_color{ 0.0f, 0.0f, 0.0f };
+        float override_material_emissive_strength = 0.0f;
+        bool override_material_double_sided = false;
 
         // ワールド行列。親子階層を合成済みの最終値。
         DirectX::XMFLOAT4X4 world{

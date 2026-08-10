@@ -6,16 +6,20 @@
 
 #include "Effects/UIRenderTargetPool.h"
 
+#include <array>
 #include <filesystem>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 namespace ReplayEngine::Assets { class AssetDatabase; }
+namespace ReplayEngine::Rendering { class ShaderCatalog; }
 namespace ReplayEngine::Scene { class Scene; }
 
 namespace ReplayEngine::UI
 {
+    enum class UIEffectKind : int;
+
     class FontAtlas;
 
     // ---- 拡張点: Effect Stack (Phase 6) -----------------------------------
@@ -46,6 +50,7 @@ namespace ReplayEngine::UI
             ID3D11DepthStencilState* depth_disabled = nullptr;
             ID3D11RasterizerState* rasterizer = nullptr;
             ID3D11RasterizerState* rasterizer_scissor = nullptr;
+            ID3D11BlendState* blend_none = nullptr;
             ID3D11BlendState* blend_alpha = nullptr;
             ID3D11BlendState* blend_add = nullptr;
             ID3D11BlendState* blend_multiply = nullptr;
@@ -61,6 +66,7 @@ namespace ReplayEngine::UI
         void Render(ID3D11DeviceContext* context,
             Scene::Scene& scene,
             const Assets::AssetDatabase* asset_database,
+            const Rendering::ShaderCatalog* shader_catalog,
             FontAtlas& font_atlas,
             float screen_width,
             float screen_height,
@@ -79,21 +85,42 @@ namespace ReplayEngine::UI
             DirectX::XMFLOAT4 screen_size{ 1.0f, 1.0f, 0.0f, 0.0f };
         };
 
+        struct EffectConstants
+        {
+            DirectX::XMFLOAT4 effect_color{ 1.0f, 1.0f, 1.0f, 1.0f };
+            DirectX::XMFLOAT4 effect_params0{ 0.0f, 1.0f, 0.5f, 1.0f };
+            DirectX::XMFLOAT4 effect_params1{ 0.0f, 0.0f, 0.0f, 0.0f };
+            DirectX::XMFLOAT4 effect_params2{ 1.0f, -1.0f, 0.0f, 0.0f };
+            DirectX::XMFLOAT4 target_size{ 1.0f, 1.0f, 1.0f, 1.0f };
+        };
+
+        static constexpr std::size_t effect_shader_count = 10;
+
         bool EnsureVertexCapacity(ID3D11Device* device, std::size_t vertex_count);
         ID3D11ShaderResourceView* TextureFor(const std::string& guid,
             const Assets::AssetDatabase* asset_database);
+        ID3D11PixelShader* EffectShaderFor(UIEffectKind kind) const noexcept;
+        ID3D11PixelShader* CustomEffectShaderFor(const std::string& shader_guid,
+            const Assets::AssetDatabase* asset_database,
+            const Rendering::ShaderCatalog* shader_catalog);
         void Flush(ID3D11DeviceContext* context, ID3D11ShaderResourceView* texture,
             ID3D11BlendState* blend_state, const RenderStates& states,
-            const D3D11_RECT* scissor);
+            const D3D11_RECT* scissor,
+            ID3D11PixelShader* pixel_shader_override = nullptr,
+            ID3D11Buffer* pixel_constant_buffer = nullptr);
 
         Microsoft::WRL::ComPtr<ID3D11Device> device_;
         Microsoft::WRL::ComPtr<ID3D11VertexShader> vertex_shader_;
         Microsoft::WRL::ComPtr<ID3D11PixelShader> pixel_shader_;
+        std::array<Microsoft::WRL::ComPtr<ID3D11PixelShader>,
+            effect_shader_count> effect_pixel_shaders_;
         Microsoft::WRL::ComPtr<ID3D11InputLayout> input_layout_;
         Microsoft::WRL::ComPtr<ID3D11Buffer> vertex_buffer_;
         Microsoft::WRL::ComPtr<ID3D11Buffer> constant_buffer_;
+        Microsoft::WRL::ComPtr<ID3D11Buffer> effect_constant_buffer_;
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> white_texture_;
         std::unordered_map<std::string, Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>> texture_cache_;
+        std::unordered_map<std::string, Microsoft::WRL::ComPtr<ID3D11PixelShader>> custom_effect_shader_cache_;
         std::vector<Vertex> vertices_;
         std::size_t vertex_capacity_ = 0;
         UIRenderTargetPool render_target_pool_;

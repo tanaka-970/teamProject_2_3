@@ -92,6 +92,15 @@ namespace ReplayEngine::Scripting::CSharp
         };
         using raycast_callback = int(__cdecl*)(DirectX::XMFLOAT3, DirectX::XMFLOAT3,
             float, int, int, Runtime::ObjectHandle, NativeRaycastHit*);
+        using find_motion_player_callback =
+            int(__cdecl*)(Runtime::ObjectHandle, const char*, Runtime::ComponentHandle*);
+        using motion_component_callback = int(__cdecl*)(Runtime::ComponentHandle);
+        using motion_component_float_callback =
+            int(__cdecl*)(Runtime::ComponentHandle, float);
+        using motion_get_float_callback =
+            int(__cdecl*)(Runtime::ComponentHandle, float*);
+        using motion_get_bool_callback =
+            int(__cdecl*)(Runtime::ComponentHandle, int*);
         using subscribe_event_callback =
             int(__cdecl*)(std::uint64_t, std::uint64_t, Runtime::ObjectHandle,
                 std::uint64_t*);
@@ -132,6 +141,21 @@ namespace ReplayEngine::Scripting::CSharp
             scene_flow_int_callback set_scene_flow_int = nullptr;
             scene_flow_float_callback set_scene_flow_float = nullptr;
             raycast_callback raycast = nullptr;
+
+            // v3 additions. MotionPlayer API は table 末尾へだけ足す。
+            find_motion_player_callback find_motion_player = nullptr;
+            motion_component_callback motion_play = nullptr;
+            motion_component_float_callback motion_play_from = nullptr;
+            motion_component_callback motion_pause = nullptr;
+            motion_component_callback motion_resume = nullptr;
+            motion_component_callback motion_stop = nullptr;
+            motion_component_callback motion_reverse = nullptr;
+            motion_component_float_callback motion_set_time = nullptr;
+            motion_component_float_callback motion_set_speed = nullptr;
+            motion_component_float_callback motion_set_weight = nullptr;
+            motion_get_bool_callback motion_is_playing = nullptr;
+            motion_get_float_callback motion_get_time = nullptr;
+            motion_get_float_callback motion_get_duration = nullptr;
         };
 
         int StatusCode(RuntimeStatus status) noexcept
@@ -371,6 +395,98 @@ namespace ReplayEngine::Scripting::CSharp
             return StatusCode(RuntimeStatus::Ok);
         }
 
+        int NativeFindMotionPlayer(Runtime::ObjectHandle owner, const char* key,
+            Runtime::ComponentHandle* out) noexcept
+        {
+            if (out == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+            *out = Runtime::ComponentHandle::None();
+            if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+            return StatusCode(g_runtime_context->FindMotionPlayer(owner,
+                CString(key), *out));
+        }
+
+        int NativeMotionPlay(Runtime::ComponentHandle player) noexcept
+        {
+            if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+            return StatusCode(g_runtime_context->MotionPlay(player));
+        }
+
+        int NativeMotionPlayFrom(Runtime::ComponentHandle player, float seconds) noexcept
+        {
+            if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+            return StatusCode(g_runtime_context->MotionPlayFrom(player, seconds));
+        }
+
+        int NativeMotionPause(Runtime::ComponentHandle player) noexcept
+        {
+            if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+            return StatusCode(g_runtime_context->MotionPause(player));
+        }
+
+        int NativeMotionResume(Runtime::ComponentHandle player) noexcept
+        {
+            if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+            return StatusCode(g_runtime_context->MotionResume(player));
+        }
+
+        int NativeMotionStop(Runtime::ComponentHandle player) noexcept
+        {
+            if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+            return StatusCode(g_runtime_context->MotionStop(player));
+        }
+
+        int NativeMotionReverse(Runtime::ComponentHandle player) noexcept
+        {
+            if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+            return StatusCode(g_runtime_context->MotionReverse(player));
+        }
+
+        int NativeMotionSetTime(Runtime::ComponentHandle player, float seconds) noexcept
+        {
+            if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+            return StatusCode(g_runtime_context->SetMotionTime(player, seconds));
+        }
+
+        int NativeMotionSetSpeed(Runtime::ComponentHandle player, float speed) noexcept
+        {
+            if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+            return StatusCode(g_runtime_context->SetMotionSpeed(player, speed));
+        }
+
+        int NativeMotionSetWeight(Runtime::ComponentHandle player, float weight) noexcept
+        {
+            if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+            return StatusCode(g_runtime_context->SetMotionWeight(player, weight));
+        }
+
+        int NativeMotionIsPlaying(Runtime::ComponentHandle player, int* out) noexcept
+        {
+            if (out == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+            *out = 0;
+            if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+            bool value = false;
+            const RuntimeStatus status = g_runtime_context->IsMotionPlaying(player, value);
+            if (Runtime::Failed(status)) return StatusCode(status);
+            *out = value ? 1 : 0;
+            return StatusCode(RuntimeStatus::Ok);
+        }
+
+        int NativeMotionGetTime(Runtime::ComponentHandle player, float* out) noexcept
+        {
+            if (out == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+            *out = 0.0f;
+            if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+            return StatusCode(g_runtime_context->GetMotionTime(player, *out));
+        }
+
+        int NativeMotionGetDuration(Runtime::ComponentHandle player, float* out) noexcept
+        {
+            if (out == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+            *out = 0.0f;
+            if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+            return StatusCode(g_runtime_context->GetMotionDuration(player, *out));
+        }
+
         int NativeSubscribeEvent(std::uint64_t high, std::uint64_t low,
             Runtime::ObjectHandle owner, std::uint64_t* out) noexcept
         {
@@ -457,6 +573,19 @@ namespace ReplayEngine::Scripting::CSharp
             table.set_scene_flow_int = &NativeSetSceneFlowInt;
             table.set_scene_flow_float = &NativeSetSceneFlowFloat;
             table.raycast = &NativeRaycast;
+            table.find_motion_player = &NativeFindMotionPlayer;
+            table.motion_play = &NativeMotionPlay;
+            table.motion_play_from = &NativeMotionPlayFrom;
+            table.motion_pause = &NativeMotionPause;
+            table.motion_resume = &NativeMotionResume;
+            table.motion_stop = &NativeMotionStop;
+            table.motion_reverse = &NativeMotionReverse;
+            table.motion_set_time = &NativeMotionSetTime;
+            table.motion_set_speed = &NativeMotionSetSpeed;
+            table.motion_set_weight = &NativeMotionSetWeight;
+            table.motion_is_playing = &NativeMotionIsPlaying;
+            table.motion_get_time = &NativeMotionGetTime;
+            table.motion_get_duration = &NativeMotionGetDuration;
             return table;
         }
 

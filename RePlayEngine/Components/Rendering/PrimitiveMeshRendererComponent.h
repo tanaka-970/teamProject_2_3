@@ -1,11 +1,13 @@
 #pragma once
 
 #include "../../Object/Component/Component.h"
+#include "../../Reflection/Property/PropertyDesc.h"
 #include "../../Rendering/Adapter/IRenderSubmitter.h"
 
 #include <DirectXMath.h>
 
 #include <string>
+#include <vector>
 
 namespace ReplayEngine::Components
 {
@@ -39,6 +41,8 @@ namespace ReplayEngine::Components
 
         bool BuildRenderItem(const Core::GameObject& owner,
             Rendering::RenderItem& out) const override;
+        const std::vector<Reflection::PropertyDesc>* DynamicProperties()
+            const noexcept override;
 
         bool ShouldRender() const noexcept
         {
@@ -54,6 +58,13 @@ namespace ReplayEngine::Components
         std::string material_asset;
         bool material_override = false;
         DirectX::XMFLOAT4 tint{ 1.0f, 1.0f, 1.0f, 1.0f };
+        DirectX::XMFLOAT4 material_base_color{ 1.0f, 1.0f, 1.0f, 1.0f };
+        float material_metallic = 0.0f;
+        float material_roughness = 0.55f;
+        float material_ambient_occlusion = 1.0f;
+        DirectX::XMFLOAT3 material_emissive_color{ 0.0f, 0.0f, 0.0f };
+        float material_emissive_strength = 0.0f;
+        bool material_double_sided = false;
         int shading_model = 1;
         bool outline = false;
         bool cast_shadow = true;

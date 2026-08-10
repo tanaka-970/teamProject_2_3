@@ -455,6 +455,7 @@ void framework::refresh_object_scene_services()
     ReplayEngine::Scene::SceneServices& services = scene.Services();
     services.SetCameraBasis(&object_camera_bridge);
     services.SetAudio(&object_audio_system);
+    services.SetMotionMixer(&motion_mixer);
     services.SetPlaying(object_runtime_active());
 
     // 地形の問い合わせ先は衝突世界。
@@ -593,6 +594,67 @@ void framework::evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
         player.ConsumeStopRestoreRequest();
     };
 
+    const auto crossed_event_time = [](float event_time, float before,
+        float after, float duration, float speed) noexcept
+    {
+        if (duration <= 0.0f || before == after) return false;
+        if (after > before)
+        {
+            if (speed < 0.0f)
+                return event_time < before || event_time >= after;
+            return ((event_time > before) ||
+                (before <= 0.0f && event_time == 0.0f)) && event_time <= after;
+        }
+        if (speed >= 0.0f)
+            return event_time > before || event_time <= after;
+        return event_time < before && event_time >= after;
+    };
+
+    auto publish_motion_events =
+        [&](const ReplayEngine::Motion::MotionAsset& asset,
+            const MotionPlayerComponent& player, float before, float after)
+    {
+        if (object_runtime_context == nullptr || asset.event_tracks.empty()) return;
+
+        const ReplayEngine::Runtime::ObjectHandle source =
+            object_runtime_context->Resolver().MakeHandle(player.Owner());
+        for (const ReplayEngine::Motion::MotionEventTrack& track :
+            asset.event_tracks)
+        {
+            ReplayEngine::Runtime::ObjectHandle target =
+                ReplayEngine::Runtime::ObjectHandle::None();
+            if (track.object.Valid())
+            {
+                target = object_runtime_context->Resolver().FindByObjectID(track.object);
+                if (target.IsEmpty()) continue;
+            }
+
+            for (const ReplayEngine::Motion::MotionEvent& event : track.events)
+            {
+                if (event.name.empty() || !crossed_event_time(event.time,
+                    before, after, asset.duration, player.speed))
+                {
+                    continue;
+                }
+
+                ReplayEngine::Runtime::EventRecord record;
+                record.type = ReplayEngine::Runtime::EngineEvents::MotionEvent;
+                record.type_name = "MotionEvent";
+                record.source = source;
+                record.target = target;
+                record.frame_index = object_runtime_frame_index;
+                record.payload.Set("name",
+                    ReplayEngine::Reflection::PropertyValue::MakeString(event.name));
+                record.payload.Set("parameter",
+                    ReplayEngine::Reflection::PropertyValue::MakeString(
+                        event.parameter));
+                record.payload.Set("time",
+                    ReplayEngine::Reflection::PropertyValue::MakeFloat(event.time));
+                object_runtime_context->Events().Publish(std::move(record));
+            }
+        }
+    };
+
     motion_mixer.BeginFrame();
 
     for (std::size_t object_index = 0; object_index < scene.GameObjectCount();
@@ -637,7 +699,9 @@ void framework::evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
                 capture_snapshot(*asset, player);
             }
 
+            const float previous_motion_time = player.time;
             player.Advance(asset->duration, elapsed_time);
+            publish_motion_events(*asset, player, previous_motion_time, player.time);
             if (player.HasStopRestoreRequest())
             {
                 contribute_restore(player);
@@ -808,6 +872,12 @@ void framework::update_object_scene(float elapsed_time)
         // 同じ property へ setter を 1 フレーム 1 回だけ呼ぶため、この外部フェーズで扱う。
         evaluate_motion_players(scene, elapsed_time);
         update_ui_sprite_animators(scene, elapsed_time);
+        if (object_runtime_context)
+        {
+            object_runtime_context->Events().Dispatch(
+                &object_runtime_context->Resolver());
+            object_runtime_context->FlushDeferredOperations();
+        }
     }
 
     sync_object_lights();
@@ -1750,14 +1820,19 @@ ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
     // material_override は従来どおり「Renderer tint が Material BaseColor を置換」。
     // Catalog shader は BaseColor を b9 から読むため、置換時は b9 側を白にする。
     item.material_base_color = source.material_override
-        ? DirectX::XMFLOAT4{ 1.0f, 1.0f, 1.0f, 1.0f }
-        : material->base_color;
-    item.metallic = material->metallic;
-    item.roughness = material->roughness;
-    item.ambient_occlusion = material->ambient_occlusion;
-    item.emissive_color = material->emissive;
-    item.emissive_strength = material->emissive_strength;
-    item.double_sided = source.double_sided || material->double_sided;
+        ? source.override_material_base_color : material->base_color;
+    item.metallic = source.material_override
+        ? source.override_material_metallic : material->metallic;
+    item.roughness = source.material_override
+        ? source.override_material_roughness : material->roughness;
+    item.ambient_occlusion = source.material_override
+        ? source.override_material_ambient_occlusion : material->ambient_occlusion;
+    item.emissive_color = source.material_override
+        ? source.override_material_emissive_color : material->emissive;
+    item.emissive_strength = source.material_override
+        ? source.override_material_emissive_strength : material->emissive_strength;
+    item.double_sided = source.double_sided || material->double_sided ||
+        (source.material_override && source.override_material_double_sided);
     item.outline = material->layers.Contains(BuiltInShaderLayers::Outline);
     item.pixelate_size = material->pixelate_grid;
     item.pixelate_strength = material->pixelate_strength;
@@ -1769,10 +1844,34 @@ ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
     MaterialAsset binding_material = *material;
     if (source.material_override)
     {
-        const DirectX::XMFLOAT4 white{ 1.0f, 1.0f, 1.0f, 1.0f };
-        binding_material.base_color = white;
+        binding_material.base_color = source.override_material_base_color;
+        binding_material.metallic = source.override_material_metallic;
+        binding_material.roughness = source.override_material_roughness;
+        binding_material.ambient_occlusion = source.override_material_ambient_occlusion;
+        binding_material.emissive = source.override_material_emissive_color;
+        binding_material.emissive_strength = source.override_material_emissive_strength;
+        binding_material.double_sided = source.override_material_double_sided;
         binding_material.properties.Set("prop.BaseColor",
-            ReplayEngine::Reflection::PropertyValue::MakeColor(white));
+            ReplayEngine::Reflection::PropertyValue::MakeColor(
+                source.override_material_base_color));
+        binding_material.properties.Set("prop.Metallic",
+            ReplayEngine::Reflection::PropertyValue::MakeFloat(
+                source.override_material_metallic));
+        binding_material.properties.Set("prop.Roughness",
+            ReplayEngine::Reflection::PropertyValue::MakeFloat(
+                source.override_material_roughness));
+        binding_material.properties.Set("prop.AmbientOcclusion",
+            ReplayEngine::Reflection::PropertyValue::MakeFloat(
+                source.override_material_ambient_occlusion));
+        binding_material.properties.Set("prop.Emissive",
+            ReplayEngine::Reflection::PropertyValue::MakeVector3(
+                source.override_material_emissive_color));
+        binding_material.properties.Set("prop.EmissiveStrength",
+            ReplayEngine::Reflection::PropertyValue::MakeFloat(
+                source.override_material_emissive_strength));
+        binding_material.properties.Set("prop.DoubleSided",
+            ReplayEngine::Reflection::PropertyValue::MakeBool(
+                source.override_material_double_sided));
     }
     const bool resolved = MaterialBindingResolver::Resolve(binding_material,
         shader_library.Catalog(), variant, item.material_binding);

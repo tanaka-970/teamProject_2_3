@@ -1,6 +1,8 @@
 #include "FollowTargetComponent.h"
 
 #include "CameraTargetComponent.h"
+#include "../Core/TransformComponent.h"
+#include "../../Motion/MotionMixer.h"
 #include "../../Object/GameObject/GameObject.h"
 #include "../../Scene/Runtime/Scene.h"
 
@@ -40,6 +42,21 @@ namespace ReplayEngine::Components
         const CameraTargetSelection selection = ResolveCameraTargetSelection(
             *scene, scene->Services().ControlledObject());
         if (!selection.Valid()) return;
+
+        if (yield_to_motion)
+        {
+            const Motion::MotionMixer* mixer = scene->Services().MotionMixer();
+            const TransformComponent* transform =
+                owner->GetComponent<TransformComponent>();
+            if (mixer != nullptr && transform != nullptr &&
+                (mixer->WasDriven(*transform, "position") ||
+                    mixer->WasDriven(*transform, "rotation") ||
+                    mixer->WasDriven(*transform, "scale")))
+            {
+                ResetCursorTracking();
+                return;
+            }
+        }
 
         UpdateRotationInput(delta_time);
 

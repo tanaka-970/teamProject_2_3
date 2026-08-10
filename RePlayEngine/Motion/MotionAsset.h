@@ -51,18 +51,32 @@ namespace ReplayEngine::Motion
         std::vector<MotionKeyframe> keys;
     };
 
+    struct MotionEvent
+    {
+        float time = 0.0f;
+        std::string name;
+        std::string parameter;
+    };
+
+    struct MotionEventTrack
+    {
+        Core::ObjectID object;
+        std::vector<MotionEvent> events;
+    };
+
     class MotionAsset final
     {
     public:
         static constexpr const char* file_extension = ".replaymotion";
-        static constexpr int current_version = 2;
+        static constexpr int current_version = 3;
 
         std::string name{ "Motion" };
         float duration = 1.0f;
         std::vector<MotionTrack> tracks;
+        std::vector<MotionEventTrack> event_tracks;
 
         void SortKeys();
-        bool Empty() const noexcept { return tracks.empty(); }
+        bool Empty() const noexcept { return tracks.empty() && event_tracks.empty(); }
 
         static bool LoadFromFile(const std::filesystem::path& path,
             MotionAsset& out, std::string& error);

@@ -42,6 +42,30 @@ public struct ComponentHandle
     public bool IsEmpty => Owner.IsEmpty || Instance == 0;
 }
 
+public readonly struct MotionPlayer
+{
+    internal MotionPlayer(ComponentHandle handle)
+    {
+        Handle = handle;
+    }
+
+    internal ComponentHandle Handle { get; }
+    public bool IsValid => !Handle.IsEmpty;
+
+    public RuntimeStatus Play() => NativeBridge.MotionPlay(Handle);
+    public RuntimeStatus PlayFrom(float seconds) => NativeBridge.MotionPlayFrom(Handle, seconds);
+    public RuntimeStatus Pause() => NativeBridge.MotionPause(Handle);
+    public RuntimeStatus Resume() => NativeBridge.MotionResume(Handle);
+    public RuntimeStatus Stop() => NativeBridge.MotionStop(Handle);
+    public RuntimeStatus Reverse() => NativeBridge.MotionReverse(Handle);
+    public RuntimeStatus SetTime(float seconds) => NativeBridge.MotionSetTime(Handle, seconds);
+    public RuntimeStatus SetSpeed(float speed) => NativeBridge.MotionSetSpeed(Handle, speed);
+    public RuntimeStatus SetWeight(float weight) => NativeBridge.MotionSetWeight(Handle, weight);
+    public RuntimeResult<bool> IsPlaying() => NativeBridge.MotionIsPlaying(Handle);
+    public RuntimeResult<float> GetTime() => NativeBridge.MotionGetTime(Handle);
+    public RuntimeResult<float> GetDuration() => NativeBridge.MotionGetDuration(Handle);
+}
+
 [StructLayout(LayoutKind.Sequential)]
 public struct ObjectReference
 {

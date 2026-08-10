@@ -163,7 +163,9 @@ namespace ReplayEngine::Rendering
             {
                 if (!asset.shader_id.IsValid())
                     AddError(0, "ShaderGUID がありません");
-                if (asset.domain != ShaderDomain::Surface && asset.domain != ShaderDomain::Layer)
+                if (asset.domain != ShaderDomain::Surface &&
+                    asset.domain != ShaderDomain::Layer &&
+                    asset.domain != ShaderDomain::PostProcess)
                     AddError(0, "Composer v1 は Surface / Layer のみ対応です");
                 if (asset.lighting_model != ShaderLightingModel::Unlit)
                     AddError(0, "Composer v1 の custom output は Unlit のみ対応です。PBR/Toon graph output は次世代で追加します");
@@ -242,61 +244,139 @@ namespace ReplayEngine::Rendering
                     }
                 }
 
-                // ShaderLibrary prepends the canonical b9/t40+ declaration at runtime.
-                // A generated file opened (or compiled) by itself has no such prefix, so emit
-                // an equivalent fallback block.  The runtime prefix defines the guard below
-                // and therefore remains the single source of truth during actual rendering.
-                header << "\n#ifndef REPLAY_MATERIAL_SCHEMA_INJECTED\n";
-                bool has_constant_property = false;
-                for (const ShaderComposerNode& node : asset.nodes)
+                if (asset.domain == ShaderDomain::PostProcess)
                 {
-                    if (node.kind == ShaderComposerNodeKind::FloatProperty ||
-                        node.kind == ShaderComposerNodeKind::ColorProperty)
-                    {
-                        has_constant_property = true;
-                        break;
-                    }
-                }
-                header << "cbuffer REPLAY_MATERIAL_CB : register(b"
-                    << ShaderConstantPacker::material_constant_register << ")\n{\n";
-                if (!has_constant_property)
-                    header << "    float4 _replay_unused;\n";
-                for (const ShaderComposerNode& node : asset.nodes)
-                {
-                    if (node.kind == ShaderComposerNodeKind::FloatProperty)
-                        header << "    float " << node.name << ";\n";
-                    else if (node.kind == ShaderComposerNodeKind::ColorProperty)
-                        header << "    float4 " << node.name << ";\n";
-                }
-                header << "};\n";
-                std::uint32_t texture_slot = ShaderConstantPacker::material_texture_base_slot;
-                for (const ShaderComposerNode& node : asset.nodes)
-                {
-                    if (node.kind != ShaderComposerNodeKind::TextureProperty) continue;
-                    header << "Texture2D " << node.name << " : register(t"
-                        << texture_slot++ << ");\n";
-                }
-                header << "#endif // REPLAY_MATERIAL_SCHEMA_INJECTED\n\n";
+                    header << "\nTexture2D source_texture : register(t0);\n"
+                        << "SamplerState source_sampler : register(s0);\n"
+                        << "SamplerState replay_composer_sampler : register(s0);\n"
+                        << "cbuffer UIEffectConstants : register(b0)\n{\n"
+                        << "    float4 effect_color;\n"
+                        << "    float4 effect_params0;\n"
+                        << "    float4 effect_params1;\n"
+                        << "    float4 effect_params2;\n"
+                        << "    float4 target_size;\n"
+                        << "};\n"
+                        << "struct VSOutput\n{\n"
+                        << "    float4 position : SV_POSITION;\n"
+                        << "    float2 texcoord : TEXCOORD0;\n"
+                        << "};\n"
+                        << "#define frame_params float4(0.0f, 0.0f, effect_params1.w, 0.0f)\n";
 
-                // Composer outputs live under Shader/Materials/Generated or
-                // Shader/Layers/Generated.  Relative includes make the generated source
-                // self-contained for Visual Studio/FXC instead of relying only on the
-                // engine's custom runtime include search paths.
-                header << "#if REPLAY_SKINNED\n"
-                    << "#include \"../../skinned_mesh.hlsli\"\n"
-                    << "#else\n"
-                    << "#include \"../../static_mesh.hlsli\"\n"
-                    << "#endif\n"
-                    << "#include \"../../frame_common.hlsli\"\n\n"
-                    << "SamplerState replay_composer_sampler : register(s1);\n"
-                    << "float replay_composer_noise(float2 p)\n{\n"
-                    << "    p = frac(p * float2(123.34f, 456.21f));\n"
-                    << "    p += dot(p, p + 45.32f);\n"
-                    << "    return frac(p.x * p.y);\n}\n\n";
+                    const char* float_slots[] = {
+                        "effect_params0.x", "effect_params0.y",
+                        "effect_params0.z", "effect_params0.w",
+                        "effect_params1.x", "effect_params1.y",
+                        "effect_params1.z", "effect_params1.w"
+                    };
+                    int float_slot = 0;
+                    for (const ShaderComposerNode& node : asset.nodes)
+                    {
+                        if (node.kind == ShaderComposerNodeKind::FloatProperty)
+                        {
+                            const int slot = float_slot++;
+                            header << "#define " << node.name << ' '
+                                << (slot < static_cast<int>(sizeof(float_slots) / sizeof(float_slots[0]))
+                                    ? float_slots[slot] : "0.0f") << "\n";
+                        }
+                        else if (node.kind == ShaderComposerNodeKind::ColorProperty)
+                        {
+                            header << "#define " << node.name << " effect_color\n";
+                        }
+                        else if (node.kind == ShaderComposerNodeKind::TextureProperty)
+                        {
+                            header << "#define " << node.name << " source_texture\n";
+                        }
+                    }
+
+                    header << "\nfloat replay_composer_noise(float2 p)\n{\n"
+                        << "    p = frac(p * float2(123.34f, 456.21f));\n"
+                        << "    p += dot(p, p + 45.32f);\n"
+                        << "    return frac(p.x * p.y);\n}\n\n";
+                }
+                else
+                {
+                    // ShaderLibrary prepends the canonical b9/t40+ declaration at runtime.
+                    // A generated file opened (or compiled) by itself has no such prefix, so emit
+                    // an equivalent fallback block.  The runtime prefix defines the guard below
+                    // and therefore remains the single source of truth during actual rendering.
+                    header << "\n#ifndef REPLAY_MATERIAL_SCHEMA_INJECTED\n";
+                    bool has_constant_property = false;
+                    for (const ShaderComposerNode& node : asset.nodes)
+                    {
+                        if (node.kind == ShaderComposerNodeKind::FloatProperty ||
+                            node.kind == ShaderComposerNodeKind::ColorProperty)
+                        {
+                            has_constant_property = true;
+                            break;
+                        }
+                    }
+                    header << "cbuffer REPLAY_MATERIAL_CB : register(b"
+                        << ShaderConstantPacker::material_constant_register << ")\n{\n";
+                    if (!has_constant_property)
+                        header << "    float4 _replay_unused;\n";
+                    for (const ShaderComposerNode& node : asset.nodes)
+                    {
+                        if (node.kind == ShaderComposerNodeKind::FloatProperty)
+                            header << "    float " << node.name << ";\n";
+                        else if (node.kind == ShaderComposerNodeKind::ColorProperty)
+                            header << "    float4 " << node.name << ";\n";
+                    }
+                    header << "};\n";
+                    std::uint32_t texture_slot = ShaderConstantPacker::material_texture_base_slot;
+                    for (const ShaderComposerNode& node : asset.nodes)
+                    {
+                        if (node.kind != ShaderComposerNodeKind::TextureProperty) continue;
+                        header << "Texture2D " << node.name << " : register(t"
+                            << texture_slot++ << ");\n";
+                    }
+                    header << "#endif // REPLAY_MATERIAL_SCHEMA_INJECTED\n\n";
+
+                    // Composer outputs live under Shader/Materials/Generated or
+                    // Shader/Layers/Generated.  Relative includes make the generated source
+                    // self-contained for Visual Studio/FXC instead of relying only on the
+                    // engine's custom runtime include search paths.
+                    header << "#if REPLAY_SKINNED\n"
+                        << "#include \"../../skinned_mesh.hlsli\"\n"
+                        << "#else\n"
+                        << "#include \"../../static_mesh.hlsli\"\n"
+                        << "#endif\n"
+                        << "#include \"../../frame_common.hlsli\"\n\n"
+                        << "SamplerState replay_composer_sampler : register(s1);\n"
+                        << "float replay_composer_noise(float2 p)\n{\n"
+                        << "    p = frac(p * float2(123.34f, 456.21f));\n"
+                        << "    p += dot(p, p + 45.32f);\n"
+                        << "    return frac(p.x * p.y);\n}\n\n";
+                }
 
                 statements.str(std::string());
                 statements.clear();
-                if (asset.domain == ShaderDomain::Surface)
+                if (asset.domain == ShaderDomain::PostProcess)
+                {
+                    Value base = Input(*output, 0, {
+                        ShaderComposerValueType::Float4,
+                        "source_texture.Sample(source_sampler, pin.texcoord)", true });
+                    Value emission = Input(*output, 1, {
+                        ShaderComposerValueType::Float3, "float3(0,0,0)", true });
+                    Value opacity = Input(*output, 2, {
+                        ShaderComposerValueType::Float, "1.0f", true });
+                    const std::string base4 = Convert(base, ShaderComposerValueType::Float4);
+                    const std::string emission3 = Convert(emission, ShaderComposerValueType::Float3);
+                    const std::string opacity1 = Convert(opacity, ShaderComposerValueType::Float);
+                    if (base4.empty()) AddError(output->id, "Base Color input 縺ｮ蝙九ｒ float4 縺ｸ螟画鋤縺ｧ縺阪∪縺帙ｓ");
+                    if (emission3.empty()) AddError(output->id, "Emission input 縺ｮ蝙九ｒ float3 縺ｸ螟画鋤縺ｧ縺阪∪縺帙ｓ");
+                    if (opacity1.empty()) AddError(output->id, "Opacity input 縺ｮ蝙九ｒ float 縺ｸ螟画鋤縺ｧ縺阪∪縺帙ｓ");
+                    if (!diagnostics.empty()) return Finish(false, {});
+
+                    header << "float4 main(VSOutput pin) : SV_TARGET\n{\n";
+                    header << statements.str();
+                    header << "    float4 replay_base = " << base4 << ";\n"
+                        << "    float3 replay_emission = " << emission3 << ";\n"
+                        << "    float replay_opacity = saturate(" << opacity1 << ");\n"
+                        << "    replay_base.rgb += replay_emission;\n"
+                        << "    replay_base.a *= replay_opacity;\n"
+                        << "    return replay_base;\n}\n";
+                }
+                else if (asset.domain == ShaderDomain::Surface)
                 {
                     Value base = Input(*output, 0, { ShaderComposerValueType::Float4, "float4(1,1,1,1)", true });
                     Value emission = Input(*output, 1, { ShaderComposerValueType::Float3, "float3(0,0,0)", true });

@@ -10,15 +10,14 @@ namespace ReplayEngine::UI
     {
         Blur = 0,
         Glow = 1,
-        DropShadow = 2,
-        ColorAdjust = 3,
-        Noise = 4,
-        Shake = 5,
-        Mask = 6,
-        Wipe = 7,
-        Dissolve = 8,
-        Distortion = 9,
-        ChromaticAberration = 10,
+        ColorAdjust = 2,
+        Noise = 3,
+        Shake = 4,
+        Mask = 5,
+        Wipe = 6,
+        Dissolve = 7,
+        Distortion = 8,
+        ChromaticAberration = 9,
     };
 
     class UIEffect final
@@ -38,6 +37,7 @@ namespace ReplayEngine::UI
         DirectX::XMFLOAT2 direction{ 1.0f, -1.0f };
         DirectX::XMFLOAT4 color{ 1.0f, 1.0f, 1.0f, 1.0f };
         std::string mask;
+        std::string custom_shader;
 
         DirectX::XMFLOAT4 ExpandBounds() const noexcept;
     };

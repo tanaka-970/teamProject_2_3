@@ -39,11 +39,13 @@ namespace ReplayEngine::Components
         ping_pong_direction_ = speed < 0.0f ? -1 : 1;
         snapshot_valid_ = false;
         stop_restore_requested_ = false;
+        duration_ = 0.0f;
         snapshot_values_.clear();
     }
 
     void MotionPlayerComponent::Advance(float duration, float delta_time) noexcept
     {
+        duration_ = (std::max)(0.0f, duration);
         if (state != Playing || motion.guid.empty()) return;
 
         blend_in_elapsed_ += (std::max)(0.0f, delta_time);
@@ -132,6 +134,50 @@ namespace ReplayEngine::Components
         stop_restore_requested_ = false;
         snapshot_valid_ = false;
         snapshot_values_.clear();
+    }
+
+    void MotionPlayerComponent::Reverse() noexcept
+    {
+        speed = speed == 0.0f ? -1.0f : -speed;
+        ping_pong_direction_ = -ping_pong_direction_;
+    }
+
+    void MotionPlayerComponent::SetTime(float seconds) noexcept
+    {
+        time = (std::max)(0.0f, seconds);
+        if (duration_ > 0.0f)
+        {
+            time = (std::min)(duration_, time);
+        }
+    }
+
+    void MotionPlayerComponent::SetSpeed(float value) noexcept
+    {
+        speed = value;
+        if (speed != 0.0f)
+        {
+            ping_pong_direction_ = speed < 0.0f ? -1 : 1;
+        }
+    }
+
+    void MotionPlayerComponent::SetWeight(float value) noexcept
+    {
+        weight = (std::max)(0.0f, (std::min)(1.0f, value));
+    }
+
+    bool MotionPlayerComponent::IsPlaying() const noexcept
+    {
+        return state == Playing;
+    }
+
+    float MotionPlayerComponent::Time() const noexcept
+    {
+        return time;
+    }
+
+    float MotionPlayerComponent::Duration() const noexcept
+    {
+        return duration_;
     }
 
     bool MotionPlayerComponent::NeedsSnapshot() const noexcept

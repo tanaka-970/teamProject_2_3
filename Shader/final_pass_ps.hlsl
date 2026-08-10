@@ -9,6 +9,7 @@ cbuffer POST_CONSTANT_BUFFER : register(b0)
     float  fxaa_enable;       // 0/1
     float2 screen_size;       // px
     float2 padding_;
+    float4 color_filter;      // PostProcessVolume の色フィルタ
 };
 
 SamplerState sampler_states[3] : register(s0);
@@ -80,6 +81,7 @@ float4 main(VS_OUT pin) : SV_TARGET
     float2 uvc = pin.texcoord - 0.5f;
     float v = saturate(1.0f - dot(uvc, uvc) * (vignette_strength * 4.0f));
     color *= v;
+    color *= color_filter.rgb;
 
     // 5) Gamma (linear -> sRGB)
     color = pow(max(color, 0.0f), 1.0f / 2.2f);

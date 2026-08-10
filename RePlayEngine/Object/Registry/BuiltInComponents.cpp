@@ -32,10 +32,14 @@
 #include "../../Components/UI/UIButtonComponent.h"
 #include "../../Components/UI/UIMaskComponent.h"
 #include "../../Components/UI/UIEffectStackComponent.h"
+#include "../../Components/UI/UIShapeComponent.h"
 #include "../../Components/UI/UISpriteAnimatorComponent.h"
+#include "../../Components/UI/UITextAnimatorComponent.h"
 #include "../../Components/Rendering/AnimatorComponent.h"
 #include "../../Components/Rendering/LightComponents.h"
 #include "../../Components/Rendering/MeshRendererComponent.h"
+#include "../../Components/Rendering/ParticleEmitterComponent.h"
+#include "../../Components/Rendering/PostProcessVolumeComponent.h"
 #include "../../Components/Rendering/PrimitiveMeshRendererComponent.h"
 #include "../../Components/Rendering/SkinnedMeshRendererComponent.h"
 #include "../../Scripting/Core/ScriptComponent.h"
@@ -61,6 +65,8 @@ namespace ReplayEngine::Core
         using Components::LandscapeColliderComponent;
         using Components::MotionPlayerComponent;
         using Components::MeshRendererComponent;
+        using Components::ParticleEmitterComponent;
+        using Components::PostProcessVolumeComponent;
         using Components::PrimitiveMeshRendererComponent;
         using Components::DirectionalLightComponent;
         using Components::EditorNoteComponent;
@@ -82,8 +88,10 @@ namespace ReplayEngine::Core
         using Components::UIImageComponent;
         using Components::UIMaskComponent;
         using Components::UIEffectStackComponent;
+        using Components::UIShapeComponent;
         using Components::UISpriteAnimatorComponent;
         using Components::UITextComponent;
+        using Components::UITextAnimatorComponent;
         using Components::TransformComponent;
 
         using Reflection::Animatable;
@@ -855,6 +863,118 @@ namespace ReplayEngine::Core
                     .Tooltip("Phase 1 では全画面描画だけを使う。"));
         }
 
+        void RegisterPostProcessVolume()
+        {
+            ComponentRegistry::Register<PostProcessVolumeComponent>(
+                ComponentTypeInfo::Describe("Post Process Volume", "Rendering")
+                    .WithTooltip("Scene 上の優先度が最も高い Volume から PostEffect の値を反映する。"));
+
+            PropertyRegistry::Register<PostProcessVolumeComponent>(
+                MakeProperty("priority", &PostProcessVolumeComponent::priority)
+                    .Display("優先度").Range(-100.0, 100.0).Step(1.0)
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<PostProcessVolumeComponent>(
+                MakeProperty("bloom_enabled", &PostProcessVolumeComponent::bloom_enabled)
+                    .Display("Bloom を使う").Animation(Animatable::Step));
+            PropertyRegistry::Register<PostProcessVolumeComponent>(
+                MakeProperty("bloom_threshold", &PostProcessVolumeComponent::bloom_threshold)
+                    .Display("Bloom しきい値").Range(0.0, 16.0).Step(0.01));
+            PropertyRegistry::Register<PostProcessVolumeComponent>(
+                MakeProperty("bloom_intensity", &PostProcessVolumeComponent::bloom_intensity)
+                    .Display("Bloom 強度").Range(0.0, 8.0).Step(0.01));
+            PropertyRegistry::Register<PostProcessVolumeComponent>(
+                MakeProperty("vignette_enabled", &PostProcessVolumeComponent::vignette_enabled)
+                    .Display("ビネットを使う").Animation(Animatable::Step));
+            PropertyRegistry::Register<PostProcessVolumeComponent>(
+                MakeProperty("vignette_intensity", &PostProcessVolumeComponent::vignette_intensity)
+                    .Display("ビネット強度").Range(0.0, 1.0).Step(0.01));
+            PropertyRegistry::Register<PostProcessVolumeComponent>(
+                MakeProperty("ssao_enabled", &PostProcessVolumeComponent::ssao_enabled)
+                    .Display("SSAO を使う").Animation(Animatable::Step));
+            PropertyRegistry::Register<PostProcessVolumeComponent>(
+                MakeProperty("ssao_radius", &PostProcessVolumeComponent::ssao_radius)
+                    .Display("SSAO 半径").Range(0.01, 16.0).Step(0.01));
+            PropertyRegistry::Register<PostProcessVolumeComponent>(
+                MakeProperty("ssao_intensity", &PostProcessVolumeComponent::ssao_intensity)
+                    .Display("SSAO 強度").Range(0.0, 8.0).Step(0.01));
+            PropertyRegistry::Register<PostProcessVolumeComponent>(
+                MakeProperty("ssr_enabled", &PostProcessVolumeComponent::ssr_enabled)
+                    .Display("SSR を使う").Animation(Animatable::Step));
+            PropertyRegistry::Register<PostProcessVolumeComponent>(
+                MakeProperty("ssr_intensity", &PostProcessVolumeComponent::ssr_intensity)
+                    .Display("SSR 強度").Range(0.0, 8.0).Step(0.01));
+            PropertyRegistry::Register<PostProcessVolumeComponent>(
+                MakeProperty("taa_enabled", &PostProcessVolumeComponent::taa_enabled)
+                    .Display("TAA を使う").Animation(Animatable::Step));
+            PropertyRegistry::Register<PostProcessVolumeComponent>(
+                MakeProperty("exposure", &PostProcessVolumeComponent::exposure)
+                    .Display("露出").Range(0.01, 8.0).Step(0.01));
+            PropertyRegistry::Register<PostProcessVolumeComponent>(
+                MakeProperty("color_filter", &PostProcessVolumeComponent::color_filter)
+                    .Display("色フィルタ").AsColor());
+        }
+
+        void RegisterParticleEmitter()
+        {
+            ComponentRegistry::Register<ParticleEmitterComponent>(
+                ComponentTypeInfo::Describe("Particle Emitter", "Rendering")
+                    .WithTooltip("粒子単体ではなく、発生量や寿命などの Emitter Parameter を Motion から動かす。")
+                    .AllowMultipleInstances());
+
+            PropertyRegistry::Register<ParticleEmitterComponent>(
+                MakeProperty("emitting", &ParticleEmitterComponent::emitting)
+                    .Display("発生する").Animation(Animatable::Step));
+            PropertyRegistry::Register<ParticleEmitterComponent>(
+                MakeProperty("priority", &ParticleEmitterComponent::priority)
+                    .Display("優先度").Range(-100.0, 100.0).Step(1.0)
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<ParticleEmitterComponent>(
+                MakeProperty("spawn_rate", &ParticleEmitterComponent::spawn_rate)
+                    .Display("発生量/秒").Range(0.0, 20000.0).Step(1.0));
+            PropertyRegistry::Register<ParticleEmitterComponent>(
+                MakeProperty("lifetime", &ParticleEmitterComponent::lifetime)
+                    .Display("寿命").Range(0.01, 60.0).Step(0.01));
+            PropertyRegistry::Register<ParticleEmitterComponent>(
+                MakeProperty("start_speed", &ParticleEmitterComponent::start_speed)
+                    .Display("初速").Range(0.0, 200.0).Step(0.05));
+            PropertyRegistry::Register<ParticleEmitterComponent>(
+                MakeProperty("gravity", &ParticleEmitterComponent::gravity)
+                    .Display("重力").Range(-100.0, 100.0).Step(0.05));
+            PropertyRegistry::Register<ParticleEmitterComponent>(
+                MakeProperty("drag", &ParticleEmitterComponent::drag)
+                    .Display("抵抗").Range(0.0, 20.0).Step(0.01));
+            PropertyRegistry::Register<ParticleEmitterComponent>(
+                MakeProperty("start_size", &ParticleEmitterComponent::start_size)
+                    .Display("開始サイズ").Range(0.001, 100.0).Step(0.01));
+            PropertyRegistry::Register<ParticleEmitterComponent>(
+                MakeProperty("end_size", &ParticleEmitterComponent::end_size)
+                    .Display("終了サイズ").Range(0.001, 100.0).Step(0.01));
+            PropertyRegistry::Register<ParticleEmitterComponent>(
+                MakeProperty("start_color", &ParticleEmitterComponent::start_color)
+                    .Display("開始色").AsColor());
+            PropertyRegistry::Register<ParticleEmitterComponent>(
+                MakeProperty("end_color", &ParticleEmitterComponent::end_color)
+                    .Display("終了色").AsColor());
+            PropertyRegistry::Register<ParticleEmitterComponent>(
+                MakeProperty("direction", &ParticleEmitterComponent::direction)
+                    .Display("発生方向").Step(0.01));
+            PropertyRegistry::Register<ParticleEmitterComponent>(
+                MakeProperty("cone_angle", &ParticleEmitterComponent::cone_angle)
+                    .Display("拡散角").Range(0.0, 3.14159).Step(0.01));
+            PropertyRegistry::Register<ParticleEmitterComponent>(
+                MakeProperty("sprite", &ParticleEmitterComponent::sprite)
+                    .Display("画像").OfAssetType("Image")
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<ParticleEmitterComponent>(
+                MakeProperty("blend_mode", &ParticleEmitterComponent::blend_mode)
+                    .Display("合成").AsEnum({ "通常", "加算", "乗算", "スクリーン" })
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<ParticleEmitterComponent>(
+                MakeProperty("max_particles", &ParticleEmitterComponent::max_particles)
+                    .Display("最大数").Range(1.0, 10000.0).Step(1.0)
+                    .Animation(Animatable::Step));
+        }
+
         void RegisterFollowTarget()
         {
             ComponentRegistry::Register<FollowTargetComponent>(
@@ -878,6 +998,11 @@ namespace ReplayEngine::Core
                 MakeProperty("rotation_input_enabled",
                     &FollowTargetComponent::rotation_input_enabled)
                     .Display("回転入力を使う"));
+
+            PropertyRegistry::Register<FollowTargetComponent>(
+                MakeProperty("yield_to_motion", &FollowTargetComponent::yield_to_motion)
+                    .Display("Motion 中は追従を止める")
+                    .Tooltip("Motion が同じフレームに Transform を書いた場合は、追従側の上書きを避ける。"));
 
             PropertyRegistry::Register<FollowTargetComponent>(
                 MakeProperty("yaw_offset", &FollowTargetComponent::yaw_offset)
@@ -1165,6 +1290,107 @@ namespace ReplayEngine::Core
             PropertyRegistry::Register<UITextComponent>(
                 MakeProperty("word_wrap", &UITextComponent::word_wrap)
                     .Display("折り返し"));
+
+            ComponentRegistry::Register<UITextAnimatorComponent>(
+                ComponentTypeInfo::Describe("Text Animator", "UI")
+                    .WithTooltip("UIText の文字ごとに Range Selector と Transform を重ねる。")
+                    .Requires<RectTransformComponent>()
+                    .Recommends<UITextComponent>()
+                    .AllowMultipleInstances());
+            PropertyRegistry::Register<UITextAnimatorComponent>(
+                MakeProperty("range_start", &UITextAnimatorComponent::range_start)
+                    .Display("範囲開始").Range(0.0, 1.0).Step(0.01));
+            PropertyRegistry::Register<UITextAnimatorComponent>(
+                MakeProperty("range_end", &UITextAnimatorComponent::range_end)
+                    .Display("範囲終了").Range(0.0, 1.0).Step(0.01));
+            PropertyRegistry::Register<UITextAnimatorComponent>(
+                MakeProperty("range_offset", &UITextAnimatorComponent::range_offset)
+                    .Display("範囲オフセット").Step(0.01));
+            PropertyRegistry::Register<UITextAnimatorComponent>(
+                MakeProperty("range_shape", &UITextAnimatorComponent::range_shape)
+                    .Display("範囲形状")
+                    .AsEnum({ "矩形", "上り", "下り", "三角", "丸", "滑らか" })
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<UITextAnimatorComponent>(
+                MakeProperty("range_smoothness", &UITextAnimatorComponent::range_smoothness)
+                    .Display("境界の滑らかさ").Range(0.0, 1.0).Step(0.01));
+            PropertyRegistry::Register<UITextAnimatorComponent>(
+                MakeProperty("position_offset", &UITextAnimatorComponent::position_offset)
+                    .Display("位置オフセット").Step(0.1));
+            PropertyRegistry::Register<UITextAnimatorComponent>(
+                MakeProperty("rotation", &UITextAnimatorComponent::rotation)
+                    .Display("回転 (度)").Step(0.5));
+            PropertyRegistry::Register<UITextAnimatorComponent>(
+                MakeProperty("scale", &UITextAnimatorComponent::scale)
+                    .Display("拡大率").Step(0.01));
+            PropertyRegistry::Register<UITextAnimatorComponent>(
+                MakeProperty("opacity", &UITextAnimatorComponent::opacity)
+                    .Display("不透明度").Range(0.0, 1.0).Step(0.01));
+            PropertyRegistry::Register<UITextAnimatorComponent>(
+                MakeProperty("color", &UITextAnimatorComponent::color)
+                    .Display("色").AsColor());
+            PropertyRegistry::Register<UITextAnimatorComponent>(
+                MakeProperty("character_spacing", &UITextAnimatorComponent::character_spacing)
+                    .Display("文字間隔").Step(0.1));
+            PropertyRegistry::Register<UITextAnimatorComponent>(
+                MakeProperty("random_seed", &UITextAnimatorComponent::random_seed)
+                    .Display("乱数の種").Step(1.0)
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<UITextAnimatorComponent>(
+                MakeProperty("random_position", &UITextAnimatorComponent::random_position)
+                    .Display("ランダム位置").Step(0.1));
+            PropertyRegistry::Register<UITextAnimatorComponent>(
+                MakeProperty("random_rotation", &UITextAnimatorComponent::random_rotation)
+                    .Display("ランダム回転").Step(0.5));
+            PropertyRegistry::Register<UITextAnimatorComponent>(
+                MakeProperty("anchor", &UITextAnimatorComponent::anchor)
+                    .Display("基準点")
+                    .AsEnum({ "中央", "ベースライン左", "ベースライン中央", "左上", "下中央" })
+                    .Animation(Animatable::Step));
+
+            ComponentRegistry::Register<UIShapeComponent>(
+                ComponentTypeInfo::Describe("Shape", "UI")
+                    .WithTooltip("矩形・円・線・多角形を RectTransform 上に描く。Trim と Dash は Motion から動かせる。")
+                    .Requires<RectTransformComponent>());
+            PropertyRegistry::Register<UIShapeComponent>(
+                MakeProperty("shape", &UIShapeComponent::shape)
+                    .Display("形")
+                    .AsEnum({ "矩形", "円", "線", "多角形", "ベジェ" })
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<UIShapeComponent>(
+                MakeProperty("fill_color", &UIShapeComponent::fill_color)
+                    .Display("塗り色").AsColor());
+            PropertyRegistry::Register<UIShapeComponent>(
+                MakeProperty("stroke_color", &UIShapeComponent::stroke_color)
+                    .Display("線色").AsColor());
+            PropertyRegistry::Register<UIShapeComponent>(
+                MakeProperty("stroke_width", &UIShapeComponent::stroke_width)
+                    .Display("線幅").Range(0.0, 512.0).Step(0.5));
+            PropertyRegistry::Register<UIShapeComponent>(
+                MakeProperty("corner_radius", &UIShapeComponent::corner_radius)
+                    .Display("角丸").Range(0.0, 512.0).Step(0.5));
+            PropertyRegistry::Register<UIShapeComponent>(
+                MakeProperty("sides", &UIShapeComponent::sides)
+                    .Display("角数").Range(3.0, 64.0).Step(1.0)
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<UIShapeComponent>(
+                MakeProperty("trim_start", &UIShapeComponent::trim_start)
+                    .Display("Trim 開始").Range(0.0, 1.0).Step(0.01));
+            PropertyRegistry::Register<UIShapeComponent>(
+                MakeProperty("trim_end", &UIShapeComponent::trim_end)
+                    .Display("Trim 終了").Range(0.0, 1.0).Step(0.01));
+            PropertyRegistry::Register<UIShapeComponent>(
+                MakeProperty("trim_offset", &UIShapeComponent::trim_offset)
+                    .Display("Trim オフセット").Step(0.01));
+            PropertyRegistry::Register<UIShapeComponent>(
+                MakeProperty("dash_length", &UIShapeComponent::dash_length)
+                    .Display("破線の長さ").Range(0.0, 4096.0).Step(0.5));
+            PropertyRegistry::Register<UIShapeComponent>(
+                MakeProperty("dash_gap", &UIShapeComponent::dash_gap)
+                    .Display("破線の間隔").Range(0.0, 4096.0).Step(0.5));
+            PropertyRegistry::Register<UIShapeComponent>(
+                MakeProperty("dash_offset", &UIShapeComponent::dash_offset)
+                    .Display("破線オフセット").Step(0.5));
 
             ComponentRegistry::Register<UIButtonComponent>(
                 ComponentTypeInfo::Describe("Button", "UI")
@@ -1468,6 +1694,8 @@ namespace ReplayEngine::Core
         RegisterTransform();
         RegisterMeshRenderer();
         RegisterPrimitiveMeshRenderer();
+        RegisterPostProcessVolume();
+        RegisterParticleEmitter();
         RegisterLights();
         RegisterUI();
         RegisterMotion();

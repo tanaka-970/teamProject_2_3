@@ -17,6 +17,7 @@ namespace ReplayEngine::Components
         float follow_height = 2.25f;
         float follow_lag = 12.0f;
         bool rotation_input_enabled = true;
+        bool yield_to_motion = true;
 
         float yaw_offset = 0.0f;
         float pitch_offset = 0.0f;

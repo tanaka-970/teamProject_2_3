@@ -225,7 +225,9 @@ namespace ReplayEngine::Rendering
         asset.shader_id = ShaderSource::GenerateID();
         asset.display_name = display_name.empty() ? "New Composer Shader" : display_name;
         asset.category = "Project/Composer";
-        asset.domain = domain == ShaderDomain::Layer ? ShaderDomain::Layer : ShaderDomain::Surface;
+        asset.domain = domain == ShaderDomain::Layer ? ShaderDomain::Layer :
+            domain == ShaderDomain::PostProcess ? ShaderDomain::PostProcess :
+            ShaderDomain::Surface;
         asset.lighting_model = ShaderLightingModel::Unlit;
         asset.generated_hlsl = generated_hlsl;
 
@@ -234,18 +236,22 @@ namespace ReplayEngine::Rendering
         const std::uint64_t tex_id = texture_node.id;
         texture_node.name = "BaseMap";
         texture_node.display_name = "Base Map";
-        texture_node.category = domain == ShaderDomain::Layer ? "Layer" : "Surface";
+        texture_node.category = asset.domain == ShaderDomain::Layer ? "Layer" :
+            asset.domain == ShaderDomain::PostProcess ? "UI Effect" : "Surface";
 
         ShaderComposerNode& color_node = asset.AddNode(ShaderComposerNodeKind::ColorProperty, 250, 250);
         const std::uint64_t color_id = color_node.id;
-        color_node.name = domain == ShaderDomain::Layer ? "Tint" : "BaseColor";
-        color_node.display_name = domain == ShaderDomain::Layer ? "Tint" : "Base Color";
-        color_node.category = domain == ShaderDomain::Layer ? "Layer" : "Surface";
+        color_node.name = asset.domain == ShaderDomain::Layer ||
+            asset.domain == ShaderDomain::PostProcess ? "Tint" : "BaseColor";
+        color_node.display_name = asset.domain == ShaderDomain::Layer ||
+            asset.domain == ShaderDomain::PostProcess ? "Tint" : "Base Color";
+        color_node.category = asset.domain == ShaderDomain::Layer ? "Layer" :
+            asset.domain == ShaderDomain::PostProcess ? "UI Effect" : "Surface";
 
         const std::uint64_t mul_id = asset.AddNode(ShaderComposerNodeKind::Multiply, 500, 150).id;
         const std::uint64_t out_id = asset.AddNode(
-            domain == ShaderDomain::Layer ? ShaderComposerNodeKind::LayerOutput
-                                          : ShaderComposerNodeKind::SurfaceOutput,
+            asset.domain == ShaderDomain::Layer ? ShaderComposerNodeKind::LayerOutput
+                                                : ShaderComposerNodeKind::SurfaceOutput,
             760, 150).id;
         asset.Connect(uv_id, tex_id, 0);
         asset.Connect(tex_id, mul_id, 0);
@@ -263,7 +269,9 @@ namespace ReplayEngine::Rendering
             error = "Shader Composer Asset の path または ShaderGUID が無効です";
             return false;
         }
-        if (asset.domain != ShaderDomain::Surface && asset.domain != ShaderDomain::Layer)
+        if (asset.domain != ShaderDomain::Surface &&
+            asset.domain != ShaderDomain::Layer &&
+            asset.domain != ShaderDomain::PostProcess)
         {
             error = "Shader Composer v1 は surface / layer のみ対応です";
             return false;
@@ -364,7 +372,9 @@ namespace ReplayEngine::Rendering
         if (!ShaderID::TryParse(guid_text, loaded.shader_id) || !loaded.shader_id.IsValid() ||
             !TryParseShaderDomain(domain_text, loaded.domain) ||
             !TryParseShaderLightingModel(lighting_text, loaded.lighting_model) ||
-            (loaded.domain != ShaderDomain::Surface && loaded.domain != ShaderDomain::Layer))
+            (loaded.domain != ShaderDomain::Surface &&
+                loaded.domain != ShaderDomain::Layer &&
+                loaded.domain != ShaderDomain::PostProcess))
         {
             error = "Shader Composer metadata が不正です"; return false;
         }

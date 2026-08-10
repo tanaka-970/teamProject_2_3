@@ -1,11 +1,13 @@
 ﻿#pragma once
 
 #include "../../Object/Component/Component.h"
+#include "../../Reflection/Property/PropertyDesc.h"
 #include "../../Rendering/Adapter/IRenderSubmitter.h"
 
 #include <DirectXMath.h>
 
 #include <string>
+#include <vector>
 
 namespace ReplayEngine::Components
 {
@@ -37,6 +39,8 @@ namespace ReplayEngine::Components
         // IRenderSubmitter
         bool BuildRenderItem(const Core::GameObject& owner,
             Rendering::RenderItem& out) const override;
+        const std::vector<Reflection::PropertyDesc>* DynamicProperties()
+            const noexcept override;
 
         // 描画すべきか。Asset 未指定・非表示・無効ならいずれも false。
         bool ShouldRender() const noexcept
@@ -53,6 +57,13 @@ namespace ReplayEngine::Components
         bool material_override = false;
 
         DirectX::XMFLOAT4 tint{ 1.0f, 1.0f, 1.0f, 1.0f };
+        DirectX::XMFLOAT4 material_base_color{ 1.0f, 1.0f, 1.0f, 1.0f };
+        float material_metallic = 0.0f;
+        float material_roughness = 0.55f;
+        float material_ambient_occlusion = 1.0f;
+        DirectX::XMFLOAT3 material_emissive_color{ 0.0f, 0.0f, 0.0f };
+        float material_emissive_strength = 0.0f;
+        bool material_double_sided = false;
 
         // 0=FBX標準 / 1=PBR / 2=トゥーン / 3=アンリット
         int shading_model = 1;

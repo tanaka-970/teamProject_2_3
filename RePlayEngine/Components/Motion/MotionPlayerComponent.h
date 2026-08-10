@@ -50,6 +50,13 @@ namespace ReplayEngine::Components
         void Resume() noexcept;
         void Stop() noexcept;
         void StopAndKeep() noexcept;
+        void Reverse() noexcept;
+        void SetTime(float seconds) noexcept;
+        void SetSpeed(float value) noexcept;
+        void SetWeight(float value) noexcept;
+        bool IsPlaying() const noexcept;
+        float Time() const noexcept;
+        float Duration() const noexcept;
 
         bool NeedsSnapshot() const noexcept;
         void StoreSnapshot(std::vector<SnapshotValue> values);
@@ -81,5 +88,6 @@ namespace ReplayEngine::Components
         bool stop_restore_requested_ = false;
         float blend_in_elapsed_ = 0.0f;
         int ping_pong_direction_ = 1;
+        float duration_ = 0.0f;
     };
 }

@@ -62,6 +62,7 @@ namespace ReplayEngine::Components
             if (property == "direction") return Reflection::PropertyValue::MakeVector2(effect.direction);
             if (property == "color") return Reflection::PropertyValue::MakeColor(effect.color);
             if (property == "mask") return Reflection::PropertyValue::MakeAssetReference(effect.mask);
+            if (property == "custom_shader") return Reflection::PropertyValue::MakeAssetReference(effect.custom_shader);
             return Reflection::PropertyValue{};
         }
 
@@ -82,6 +83,7 @@ namespace ReplayEngine::Components
             else if (property == "direction") effect.direction = value.AsVector2();
             else if (property == "color") effect.color = value.AsVector4();
             else if (property == "mask") effect.mask = value.AsAssetReference().guid;
+            else if (property == "custom_shader") effect.custom_shader = value.AsAssetReference().guid;
         }
 
         Reflection::PropertyDesc MakeEffectProperty(int index, const char* property,
@@ -167,6 +169,8 @@ namespace ReplayEngine::Components
                 Reflection::PropertyValue::MakeColor(effect.color));
             output.Set(EffectPropertyName(i, "mask"),
                 Reflection::PropertyValue::MakeAssetReference(effect.mask));
+            output.Set(EffectPropertyName(i, "custom_shader"),
+                Reflection::PropertyValue::MakeAssetReference(effect.custom_shader));
         }
     }
 
@@ -228,6 +232,7 @@ namespace ReplayEngine::Components
 
         for (const UI::UIEffect& effect : effects)
         {
+            if (!effect.enabled) continue;
             const DirectX::XMFLOAT4 current = effect.ExpandBounds();
             expansion.x += current.x;
             expansion.y += current.y;
@@ -246,7 +251,7 @@ namespace ReplayEngine::Components
     void UIEffectStackComponent::RebuildDynamicProperties()
     {
         dynamic_properties_.clear();
-        dynamic_properties_.reserve(effects.size() * 14);
+        dynamic_properties_.reserve(effects.size() * 15);
         for (std::size_t index = 0; index < effects.size(); ++index)
         {
             const int i = static_cast<int>(index);
@@ -260,7 +265,7 @@ namespace ReplayEngine::Components
             push(MakeEffectProperty(i, "type", Reflection::PropertyType::Enum,
                 Reflection::Animatable::Step)
                 .Display("種類")
-                .AsEnum({ "Blur", "Glow", "Drop Shadow", "Color Adjust", "Noise",
+                .AsEnum({ "Blur", "Glow", "Color Adjust", "Noise",
                     "Shake", "Mask", "Wipe", "Dissolve", "Distortion",
                     "Chromatic Aberration" }));
             push(MakeEffectProperty(i, "radius", Reflection::PropertyType::Float,
@@ -287,6 +292,12 @@ namespace ReplayEngine::Components
                 Reflection::Animatable::Interpolatable).Display("色").AsColor());
             push(MakeEffectProperty(i, "mask", Reflection::PropertyType::AssetReference,
                 Reflection::Animatable::Step).Display("マスク").OfAssetType("Image"));
+            push(MakeEffectProperty(i, "custom_shader",
+                Reflection::PropertyType::AssetReference,
+                Reflection::Animatable::Step)
+                .Display("カスタムシェーダー")
+                .Tooltip("Shader Composer の PostProcess 出力を UI Effect として使う。")
+                .OfAssetType("Shader"));
         }
     }
 }
