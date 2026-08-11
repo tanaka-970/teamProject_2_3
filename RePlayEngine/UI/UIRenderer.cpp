@@ -636,7 +636,14 @@ namespace ReplayEngine::UI
 
         float draw_target_height = screen_height;
         visual_constants_ = VisualConstants{};
-        const auto configure_visual = [this](const DirectX::XMFLOAT4& fill_color_2,
+        const auto clamp_outline_width = [](float outline_width) noexcept
+        {
+            const float non_negative = (std::max)(outline_width, 0.0f);
+            return (std::min)(non_negative,
+                static_cast<float>(FontAtlas::AtlasPaddingPixels()));
+        };
+        const auto configure_visual = [this, &clamp_outline_width](
+            const DirectX::XMFLOAT4& fill_color_2,
             int fill_mode, float fill_angle, const DirectX::XMFLOAT2& fill_center,
             const DirectX::XMFLOAT4& stroke_color_2, int stroke_mode,
             bool text_mode, float outline_width,
@@ -651,7 +658,7 @@ namespace ReplayEngine::UI
                 fill_center.x, fill_center.y };
             visual_constants_.stroke_color_2 = stroke_color_2;
             visual_constants_.stroke_params = {
-                static_cast<float>(stroke_mode), outline_width,
+                static_cast<float>(stroke_mode), clamp_outline_width(outline_width),
                 text_mode ? 1.0f : 0.0f, 0.0f };
             visual_constants_.outline_color = outline_color;
             visual_constants_.shadow_offset = { shadow_offset.x, shadow_offset.y,
@@ -659,9 +666,10 @@ namespace ReplayEngine::UI
             visual_constants_.shadow_color = shadow_color;
         };
 
-        const auto append_quad = [this, &draw_target_height](const DirectX::XMFLOAT4& rect,
+        const auto emit_quad = [this, &draw_target_height](const DirectX::XMFLOAT4& rect,
             const DirectX::XMFLOAT4X4& matrix, const DirectX::XMFLOAT4& uv,
-            const DirectX::XMFLOAT4& color, float scale)
+            const DirectX::XMFLOAT4& color, float scale,
+            const DirectX::XMFLOAT4& uv_bounds)
         {
             const DirectX::XMFLOAT2 p0 = ToScreenPoint(
                 TransformPoint(matrix, rect.x, rect.y), scale, draw_target_height);
@@ -676,9 +684,6 @@ namespace ReplayEngine::UI
             const DirectX::XMFLOAT2 uv1{ uv.x + uv.z, uv.y + uv.w };
             const DirectX::XMFLOAT2 uv2{ uv.x + uv.z, uv.y };
             const DirectX::XMFLOAT2 uv3{ uv.x, uv.y };
-            const DirectX::XMFLOAT4 uv_bounds{
-                uv.x, uv.y, uv.x + uv.z, uv.y + uv.w };
-
             vertices_.push_back({ p0, uv0, { 0.0f, 1.0f }, color, uv_bounds });
             vertices_.push_back({ p3, uv3, { 0.0f, 0.0f }, color, uv_bounds });
             vertices_.push_back({ p2, uv2, { 1.0f, 0.0f }, color, uv_bounds });
@@ -687,12 +692,30 @@ namespace ReplayEngine::UI
             vertices_.push_back({ p1, uv1, { 1.0f, 1.0f }, color, uv_bounds });
         };
 
-        const auto append_quad_local =
+        const auto append_quad = [&emit_quad](const DirectX::XMFLOAT4& rect,
+            const DirectX::XMFLOAT4X4& matrix, const DirectX::XMFLOAT4& uv,
+            const DirectX::XMFLOAT4& color, float scale)
+        {
+            const DirectX::XMFLOAT4 uv_bounds{
+                uv.x, uv.y, uv.x + uv.z, uv.y + uv.w };
+            emit_quad(rect, matrix, uv, color, scale, uv_bounds);
+        };
+
+        const auto append_quad_with_bounds = [&emit_quad](
+            const DirectX::XMFLOAT4& rect, const DirectX::XMFLOAT4X4& matrix,
+            const DirectX::XMFLOAT4& uv, const DirectX::XMFLOAT4& color,
+            float scale, const DirectX::XMFLOAT4& uv_bounds)
+        {
+            emit_quad(rect, matrix, uv, color, scale, uv_bounds);
+        };
+
+        const auto emit_quad_local =
             [this, &draw_target_height](const DirectX::XMFLOAT4& rect,
                 const DirectX::XMFLOAT4X4& matrix, const DirectX::XMFLOAT4& uv,
                 const DirectX::XMFLOAT4& color, float scale,
                 const DirectX::XMFLOAT2& local_scale, float rotation_degrees,
-                const DirectX::XMFLOAT2& anchor)
+                const DirectX::XMFLOAT2& anchor,
+                const DirectX::XMFLOAT4& uv_bounds)
         {
             const float pivot_x = rect.x + rect.z * anchor.x;
             const float pivot_y = rect.y + rect.w * anchor.y;
@@ -719,15 +742,34 @@ namespace ReplayEngine::UI
             const DirectX::XMFLOAT2 uv1{ uv.x + uv.z, uv.y + uv.w };
             const DirectX::XMFLOAT2 uv2{ uv.x + uv.z, uv.y };
             const DirectX::XMFLOAT2 uv3{ uv.x, uv.y };
-            const DirectX::XMFLOAT4 uv_bounds{
-                uv.x, uv.y, uv.x + uv.z, uv.y + uv.w };
-
             vertices_.push_back({ p0, uv0, { 0.0f, 1.0f }, color, uv_bounds });
             vertices_.push_back({ p3, uv3, { 0.0f, 0.0f }, color, uv_bounds });
             vertices_.push_back({ p2, uv2, { 1.0f, 0.0f }, color, uv_bounds });
             vertices_.push_back({ p0, uv0, { 0.0f, 1.0f }, color, uv_bounds });
             vertices_.push_back({ p2, uv2, { 1.0f, 0.0f }, color, uv_bounds });
             vertices_.push_back({ p1, uv1, { 1.0f, 1.0f }, color, uv_bounds });
+        };
+
+        const auto append_quad_local = [&emit_quad_local](
+            const DirectX::XMFLOAT4& rect, const DirectX::XMFLOAT4X4& matrix,
+            const DirectX::XMFLOAT4& uv, const DirectX::XMFLOAT4& color, float scale,
+            const DirectX::XMFLOAT2& local_scale, float rotation_degrees,
+            const DirectX::XMFLOAT2& anchor)
+        {
+            const DirectX::XMFLOAT4 uv_bounds{
+                uv.x, uv.y, uv.x + uv.z, uv.y + uv.w };
+            emit_quad_local(rect, matrix, uv, color, scale, local_scale,
+                rotation_degrees, anchor, uv_bounds);
+        };
+
+        const auto append_quad_local_with_bounds = [&emit_quad_local](
+            const DirectX::XMFLOAT4& rect, const DirectX::XMFLOAT4X4& matrix,
+            const DirectX::XMFLOAT4& uv, const DirectX::XMFLOAT4& color, float scale,
+            const DirectX::XMFLOAT2& local_scale, float rotation_degrees,
+            const DirectX::XMFLOAT2& anchor, const DirectX::XMFLOAT4& uv_bounds)
+        {
+            emit_quad_local(rect, matrix, uv, color, scale, local_scale,
+                rotation_degrees, anchor, uv_bounds);
         };
 
         const auto append_triangle_local =
@@ -1224,6 +1266,11 @@ namespace ReplayEngine::UI
             const std::vector<UITextComponent::GlyphQuad>& glyphs = text.Glyphs();
             const float glyph_count = (std::max)(1.0f,
                 static_cast<float>(glyphs.size()));
+            const float outline_extent = clamp_outline_width(text.outline_width);
+            const float atlas_width = (std::max)(visual_constants_.atlas_size.x, 1.0f);
+            const float atlas_height = (std::max)(visual_constants_.atlas_size.y, 1.0f);
+            const DirectX::XMFLOAT2 outline_uv_expand{
+                outline_extent / atlas_width, outline_extent / atlas_height };
 
             for (const UITextComponent::GlyphQuad& glyph : glyphs)
             {
@@ -1274,14 +1321,33 @@ namespace ReplayEngine::UI
                     transformed = true;
                 }
 
+                const DirectX::XMFLOAT4 glyph_uv_bounds{
+                    glyph.uv.x, glyph.uv.y,
+                    glyph.uv.x + glyph.uv.z, glyph.uv.y + glyph.uv.w };
+                DirectX::XMFLOAT4 draw_rect = glyph_rect;
+                DirectX::XMFLOAT4 draw_uv = glyph.uv;
+                if (outline_extent > 0.0f)
+                {
+                    // サンプル範囲を確保し、UV は元のグリフ範囲を中心に余白へ広げる。
+                    draw_rect.x -= outline_extent;
+                    draw_rect.y -= outline_extent;
+                    draw_rect.z += outline_extent * 2.0f;
+                    draw_rect.w += outline_extent * 2.0f;
+                    draw_uv.x -= outline_uv_expand.x;
+                    draw_uv.y -= outline_uv_expand.y;
+                    draw_uv.z += outline_uv_expand.x * 2.0f;
+                    draw_uv.w += outline_uv_expand.y * 2.0f;
+                }
+
                 if (transformed)
                 {
-                    append_quad_local(glyph_rect, matrix, glyph.uv, color, scale,
-                        local_scale, rotation, anchor);
+                    append_quad_local_with_bounds(draw_rect, matrix, draw_uv, color,
+                        scale, local_scale, rotation, anchor, glyph_uv_bounds);
                 }
                 else
                 {
-                    append_quad(glyph_rect, matrix, glyph.uv, color, scale);
+                    append_quad_with_bounds(draw_rect, matrix, draw_uv, color, scale,
+                        glyph_uv_bounds);
                 }
             }
         };
