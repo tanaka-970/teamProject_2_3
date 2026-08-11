@@ -364,6 +364,7 @@
     <ClCompile Include="RePlayEngine\Scene\Runtime\Scene.cpp" />
     <ClCompile Include="RePlayEngine\Components\Core\PropertyLinkComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Core\SceneLoaderComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Core\StateComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Core\TransformComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Gameplay\RotatorComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Gameplay\HealthComponent.cpp" />
@@ -600,6 +601,7 @@
     <ClInclude Include="RePlayEngine\Components\Core\PropertyLinkComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Core\PersistentComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Core\SceneLoaderComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Core\StateComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Core\TransformComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Core\PivotComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Rendering\MeshRendererComponent.h" />

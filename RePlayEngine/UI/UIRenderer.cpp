@@ -1267,10 +1267,12 @@ namespace ReplayEngine::UI
             const float glyph_count = (std::max)(1.0f,
                 static_cast<float>(glyphs.size()));
             const float outline_extent = clamp_outline_width(text.outline_width);
-            const float atlas_width = (std::max)(visual_constants_.atlas_size.x, 1.0f);
-            const float atlas_height = (std::max)(visual_constants_.atlas_size.y, 1.0f);
-            const DirectX::XMFLOAT2 outline_uv_expand{
-                outline_extent / atlas_width, outline_extent / atlas_height };
+            const float shadow_extent_x = (std::max)(0.0f,
+                std::fabs(text.shadow_offset.x));
+            const float shadow_extent_y = (std::max)(0.0f,
+                std::fabs(text.shadow_offset.y));
+            const bool has_text_effect = outline_extent > 0.0f ||
+                text.shadow_color.w > 0.0f;
 
             for (const UITextComponent::GlyphQuad& glyph : glyphs)
             {
@@ -1326,17 +1328,36 @@ namespace ReplayEngine::UI
                     glyph.uv.x + glyph.uv.z, glyph.uv.y + glyph.uv.w };
                 DirectX::XMFLOAT4 draw_rect = glyph_rect;
                 DirectX::XMFLOAT4 draw_uv = glyph.uv;
-                if (outline_extent > 0.0f)
+                if (has_text_effect)
                 {
-                    // サンプル範囲を確保し、UV は元のグリフ範囲を中心に余白へ広げる。
-                    draw_rect.x -= outline_extent;
-                    draw_rect.y -= outline_extent;
-                    draw_rect.z += outline_extent * 2.0f;
-                    draw_rect.w += outline_extent * 2.0f;
-                    draw_uv.x -= outline_uv_expand.x;
-                    draw_uv.y -= outline_uv_expand.y;
-                    draw_uv.z += outline_uv_expand.x * 2.0f;
-                    draw_uv.w += outline_uv_expand.y * 2.0f;
+                    // outline_width / shadow_offset は画面ピクセルの値なので、
+                    // CPU 側ではエフェクトを収める分だけクアッドを広げる。
+                    // 実際のしきい値と UV の変化量はシェーダー側で計算するため、
+                    // Text Animator の回転・拡縮でもサンプル方向を固定しない。
+                    const float safe_canvas_scale = (std::max)(
+                        std::fabs(scale), 0.0001f);
+                    const float safe_local_scale_x = (std::max)(
+                        std::fabs(local_scale.x), 0.0001f);
+                    const float safe_local_scale_y = (std::max)(
+                        std::fabs(local_scale.y), 0.0001f);
+                    const float expand_x = (outline_extent + shadow_extent_x) /
+                        (safe_canvas_scale * safe_local_scale_x);
+                    const float expand_y = (outline_extent + shadow_extent_y) /
+                        (safe_canvas_scale * safe_local_scale_y);
+                    draw_rect.x -= expand_x;
+                    draw_rect.y -= expand_y;
+                    draw_rect.z += expand_x * 2.0f;
+                    draw_rect.w += expand_y * 2.0f;
+                    const float safe_glyph_width = (std::max)(
+                        std::fabs(glyph_rect.z), 0.0001f);
+                    const float safe_glyph_height = (std::max)(
+                        std::fabs(glyph_rect.w), 0.0001f);
+                    const float uv_expand_x = expand_x / safe_glyph_width * glyph.uv.z;
+                    const float uv_expand_y = expand_y / safe_glyph_height * glyph.uv.w;
+                    draw_uv.x -= uv_expand_x;
+                    draw_uv.y -= uv_expand_y;
+                    draw_uv.z += uv_expand_x * 2.0f;
+                    draw_uv.w += uv_expand_y * 2.0f;
                 }
 
                 if (transformed)
@@ -1827,10 +1848,21 @@ namespace ReplayEngine::UI
                     const FLOAT clear[4]{ 0.0f, 0.0f, 0.0f, 0.0f };
                     configure_effect_target(*target);
                     context->ClearRenderTargetView(target->rtv.Get(), clear);
-                    for (Core::GameObject* child : object.Children())
-                    {
-                        if (child != nullptr)
-                            render_object(*child, scale, opacity,
+                     std::vector<Core::GameObject*> ordered_children = object.Children();
+                     std::stable_sort(ordered_children.begin(), ordered_children.end(),
+                         [](const Core::GameObject* lhs, const Core::GameObject* rhs)
+                         {
+                             const RectTransformComponent* a = lhs != nullptr
+                                 ? lhs->GetComponent<RectTransformComponent>() : nullptr;
+                             const RectTransformComponent* b = rhs != nullptr
+                                 ? rhs->GetComponent<RectTransformComponent>() : nullptr;
+                             return (a != nullptr ? a->sort_order : 0) <
+                                 (b != nullptr ? b->sort_order : 0);
+                         });
+                     for (Core::GameObject* child : ordered_children)
+                     {
+                         if (child != nullptr)
+                             render_object(*child, scale, opacity,
                                 inherited_scissor, depth + 1);
                     }
 
@@ -1886,10 +1918,21 @@ namespace ReplayEngine::UI
                 }
             }
 
-            for (Core::GameObject* child : object.Children())
-            {
-                if (child != nullptr)
-                    render_object(*child, scale, opacity, active_scissor, depth + 1);
+             std::vector<Core::GameObject*> ordered_children = object.Children();
+             std::stable_sort(ordered_children.begin(), ordered_children.end(),
+                 [](const Core::GameObject* lhs, const Core::GameObject* rhs)
+                 {
+                     const RectTransformComponent* a = lhs != nullptr
+                         ? lhs->GetComponent<RectTransformComponent>() : nullptr;
+                     const RectTransformComponent* b = rhs != nullptr
+                         ? rhs->GetComponent<RectTransformComponent>() : nullptr;
+                     return (a != nullptr ? a->sort_order : 0) <
+                         (b != nullptr ? b->sort_order : 0);
+                 });
+             for (Core::GameObject* child : ordered_children)
+             {
+                 if (child != nullptr)
+                     render_object(*child, scale, opacity, active_scissor, depth + 1);
             }
         };
 

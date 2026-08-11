@@ -651,6 +651,9 @@
     <ClCompile Include="RePlayEngine\Components\Core\SceneLoaderComponent.cpp">
       <Filter>RePlayEngine\Components\Core</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\Core\StateComponent.cpp">
+      <Filter>RePlayEngine\Components\Core</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Components\Gameplay\RotatorComponent.cpp">
       <Filter>RePlayEngine\Components\Gameplay</Filter>
     </ClCompile>
@@ -1290,6 +1293,9 @@
       <Filter>RePlayEngine\Components\Core</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Components\Core\SceneLoaderComponent.h">
+      <Filter>RePlayEngine\Components\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Core\StateComponent.h">
       <Filter>RePlayEngine\Components\Core</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Components\Core\PivotComponent.h">

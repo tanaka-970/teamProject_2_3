@@ -13,6 +13,7 @@
 #include "../../Components/Core/PropertyLinkComponent.h"
 #include "../../Components/Core/PersistentComponent.h"
 #include "../../Components/Core/SceneLoaderComponent.h"
+#include "../../Components/Core/StateComponent.h"
 #include "../../Components/Core/TransformComponent.h"
 #include "../../Components/Core/PivotComponent.h"
 #include "../../Components/Gameplay/CharacterMotorComponent.h"
@@ -84,6 +85,7 @@ namespace ReplayEngine::Core
         using Components::PropertyLinkComponent;
         using Components::PersistentComponent;
         using Components::SceneLoaderComponent;
+        using Components::StateComponent;
         using Components::RotatorComponent;
         using Components::RectTransformComponent;
         using Components::SkinnedMeshRendererComponent;
@@ -1328,6 +1330,27 @@ namespace ReplayEngine::Core
                     .RuntimeOnly().ReadOnly().NotSerializable());
         }
 
+        void RegisterState()
+        {
+            ComponentRegistry::Register<StateComponent>(
+                ComponentTypeInfo::Describe("State", "Core")
+                    .WithTooltip("名前付きの状態を保持し、変更を Motion Player へ通知します。"));
+            PropertyRegistry::Register<StateComponent>(
+                MakeAccessorProperty<StateComponent>("state_count", PropertyType::Int,
+                    [](const StateComponent& component)
+                    { return PropertyValue::MakeInt(component.StateCount()); },
+                    [](StateComponent& component, const PropertyValue& value)
+                    { component.SetStateCount(value.AsInt(2)); })
+                    .Display("状態の数").Range(2.0, 16.0).Step(1.0));
+            PropertyRegistry::Register<StateComponent>(
+                MakeAccessorProperty<StateComponent>("current_state", PropertyType::String,
+                    [](const StateComponent& component)
+                    { return PropertyValue::MakeString(component.CurrentState()); },
+                    [](StateComponent& component, const PropertyValue& value)
+                    { component.SetCurrentState(value.AsString()); })
+                    .Display("現在の状態").RuntimeOnly().NotSerializable());
+        }
+
         void RegisterUI()
         {
             ComponentRegistry::Register<RectTransformComponent>(
@@ -1356,6 +1379,11 @@ namespace ReplayEngine::Core
             PropertyRegistry::Register<RectTransformComponent>(
                 MakeProperty("scale", &RectTransformComponent::scale)
                     .Display("拡大率").Step(0.01));
+            PropertyRegistry::Register<RectTransformComponent>(
+                MakeProperty("sort_order", &RectTransformComponent::sort_order)
+                    .Display("描画順").Step(1.0)
+                    .Animation(Animatable::Step)
+                    .Tooltip("同じ Canvas 内の兄弟 UI の描画順です。値が大きいほど手前に描きます。"));
             PropertyRegistry::Register<RectTransformComponent>(
                 MakeAccessorProperty<RectTransformComponent>("resolved_rect", PropertyType::Vector4,
                     [](const RectTransformComponent& component)
@@ -1828,7 +1856,7 @@ namespace ReplayEngine::Core
                     .AsEnum({ "開始時", "押された", "離された", "カーソルが乗った",
                         "カーソルが外れた", "有効になった", "無効になった",
                         "シーン遷移の開始", "シーン遷移の完了", "イベントを受け取った",
-                        "手動のみ" })
+                        "手動のみ", "状態が変わった" })
                     .Animation(Animatable::Step)
                     .Tooltip("この Motion を再生するきっかけ。手動のみなら Play 呼び出しで再生する。"));
             PropertyRegistry::Register<MotionPlayerComponent>(
@@ -1840,6 +1868,10 @@ namespace ReplayEngine::Core
                 MakeProperty("trigger_source", &MotionPlayerComponent::trigger_source)
                     .Display("対象")
                     .Tooltip("監視する GameObject。未指定なら Motion Player と同じ GameObject。"));
+            PropertyRegistry::Register<MotionPlayerComponent>(
+                MakeProperty("trigger_state", &MotionPlayerComponent::trigger_state)
+                    .Display("対象の状態")
+                    .Tooltip("状態トリガーでこの名前になったときだけ再生します。空欄なら全状態。"));
             PropertyRegistry::Register<MotionPlayerComponent>(
                 MakeProperty("loop", &MotionPlayerComponent::loop)
                     .Display("ループ (旧)")
@@ -1865,6 +1897,18 @@ namespace ReplayEngine::Core
                 MakeProperty("speed", &MotionPlayerComponent::speed)
                     .Display("再生速度").Range(-8.0, 8.0).Step(0.05));
             PropertyRegistry::Register<MotionPlayerComponent>(
+                MakeProperty("random_seed", &MotionPlayerComponent::random_seed)
+                    .Display("乱数の種").Step(1.0)
+                    .Tooltip("0 なら再生ごとに変化し、固定値なら同じ Object ごとに再現します。"));
+            PropertyRegistry::Register<MotionPlayerComponent>(
+                MakeProperty("time_offset_random", &MotionPlayerComponent::time_offset_random)
+                    .Display("開始時刻のばらつき").Range(0.0, 10.0).Step(0.01)
+                    .Tooltip("開始時刻を指定秒数の範囲で前後にずらします。"));
+            PropertyRegistry::Register<MotionPlayerComponent>(
+                MakeProperty("speed_random", &MotionPlayerComponent::speed_random)
+                    .Display("速度のばらつき").Range(0.0, 1.0).Step(0.01)
+                    .Tooltip("再生速度を ± の割合でばらつかせます。"));
+            PropertyRegistry::Register<MotionPlayerComponent>(
                 MakeProperty("weight", &MotionPlayerComponent::weight)
                     .Display("重み").Range(0.0, 1.0).Step(0.01));
             PropertyRegistry::Register<MotionPlayerComponent>(
@@ -1875,11 +1919,14 @@ namespace ReplayEngine::Core
                     .ReadOnly()
                     .NotSerializable());
             PropertyRegistry::Register<MotionPlayerComponent>(
-                MakeProperty("time", &MotionPlayerComponent::time)
+                MakeAccessorProperty<MotionPlayerComponent>("time", PropertyType::Float,
+                    [](const MotionPlayerComponent& component)
+                    { return PropertyValue::MakeFloat(component.Time()); },
+                    [](MotionPlayerComponent& component, const PropertyValue& value)
+                    { component.SetTime(value.AsFloat()); })
                     .Display("現在時刻")
                     .Unit("秒")
                     .RuntimeOnly()
-                    .ReadOnly()
                     .NotSerializable());
 
             // ---- 拡張点: Motion Runtime -------------------------------------
@@ -2051,6 +2098,7 @@ namespace ReplayEngine::Core
         RegisterLights();
         RegisterUI();
         RegisterMotion();
+        RegisterState();
         RegisterPropertyLink();
         RegisterScenePersistence();
         RegisterSkinnedMeshRenderer();
