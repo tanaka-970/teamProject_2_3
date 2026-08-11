@@ -1,0 +1,137 @@
+[Window][階層]
+Pos=0,23
+Size=255,877
+Collapsed=0
+DockId=0x00000001,0
+
+[Window][インスペクター]
+Pos=1255,23
+Size=345,877
+Collapsed=0
+
+[Window][プロジェクト]
+Pos=257,540
+Size=992,360
+Collapsed=0
+DockId=0x00000006,3
+
+[Window][コンソール]
+Pos=257,540
+Size=992,360
+Collapsed=0
+DockId=0x00000006,4
+
+[Window][ワークスペース]
+Pos=321,657
+Size=932,243
+Collapsed=0
+
+[Window][Validation & Diagnostics]
+Pos=321,657
+Size=932,243
+Collapsed=0
+
+[Window][RePlay Editor DockSpace]
+Pos=0,0
+Size=1600,900
+Collapsed=0
+
+[Window][Debug##Default]
+Pos=60,60
+Size=400,400
+Collapsed=0
+
+[Window][描画統計 (F4)]
+Pos=312,865
+Size=250,139
+Collapsed=1
+
+[Window][未保存のシーン]
+Pos=23,282
+Size=540,131
+Collapsed=0
+
+[Window][Scene Recovery]
+Pos=60,60
+Size=16,39
+Collapsed=0
+
+[Window][シェーダ一覧]
+Pos=60,60
+Size=720,480
+Collapsed=0
+
+[Window][Shader Composer]
+Pos=60,60
+Size=1180,720
+Collapsed=0
+
+[Window][シーンメモ]
+Pos=60,60
+Size=352,97
+Collapsed=0
+
+[Window][カメラ操作プリセット]
+Pos=301,287
+Size=551,894
+Collapsed=0
+
+[Window][UI 階層]
+Pos=0,23
+Size=287,877
+Collapsed=0
+
+[Window][UI インスペクター]
+Pos=1207,23
+Size=393,877
+Collapsed=0
+
+[Window][Canvas プレビュー]
+Pos=289,23
+Size=32,700
+Collapsed=0
+
+[Window][Motion レイヤー]
+Pos=0,23
+Size=255,877
+Collapsed=0
+DockId=0x00000001,1
+
+[Window][Motion インスペクター]
+Pos=1251,23
+Size=349,877
+Collapsed=0
+DockId=0x00000004,0
+
+[Window][Motion プレビュー]
+Pos=257,540
+Size=992,360
+Collapsed=0
+DockId=0x00000006,0
+
+[Window][タイムライン]
+Pos=257,540
+Size=992,360
+Collapsed=0
+DockId=0x00000006,1
+
+[Window][グラフエディター]
+Pos=257,540
+Size=992,360
+Collapsed=0
+DockId=0x00000006,2
+
+[Window][ゲームを書き出す]
+Pos=617,372
+Size=366,191
+Collapsed=0
+
+[Docking][Data]
+DockSpace       ID=0x423A1A7E Window=0x79783E97 Pos=0,23 Size=1600,877 Split=X
+  DockNode      ID=0x00000001 Parent=0x423A1A7E SizeRef=255,900 Selected=0xBEF87340
+  DockNode      ID=0x00000002 Parent=0x423A1A7E SizeRef=1343,900 Split=X
+    DockNode    ID=0x00000003 Parent=0x00000002 SizeRef=992,900 Split=Y
+      DockNode  ID=0x00000005 Parent=0x00000003 SizeRef=992,538 CentralNode=1
+      DockNode  ID=0x00000006 Parent=0x00000003 SizeRef=992,360 Selected=0x9E217D77
+    DockNode    ID=0x00000004 Parent=0x00000002 SizeRef=349,900 Selected=0x75B0EA85
+

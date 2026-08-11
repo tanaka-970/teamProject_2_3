@@ -283,6 +283,8 @@ namespace ReplayEngine::UI
                 D3D11_INPUT_PER_VERTEX_DATA, 0 },
             { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 24,
                 D3D11_INPUT_PER_VERTEX_DATA, 0 },
+            { "TEXCOORD", 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 40,
+                D3D11_INPUT_PER_VERTEX_DATA, 0 },
         };
 
         if (FAILED(create_vs_from_cso(device, "ui_vs.cso",
@@ -674,13 +676,15 @@ namespace ReplayEngine::UI
             const DirectX::XMFLOAT2 uv1{ uv.x + uv.z, uv.y + uv.w };
             const DirectX::XMFLOAT2 uv2{ uv.x + uv.z, uv.y };
             const DirectX::XMFLOAT2 uv3{ uv.x, uv.y };
+            const DirectX::XMFLOAT4 uv_bounds{
+                uv.x, uv.y, uv.x + uv.z, uv.y + uv.w };
 
-            vertices_.push_back({ p0, uv0, { 0.0f, 1.0f }, color });
-            vertices_.push_back({ p3, uv3, { 0.0f, 0.0f }, color });
-            vertices_.push_back({ p2, uv2, { 1.0f, 0.0f }, color });
-            vertices_.push_back({ p0, uv0, { 0.0f, 1.0f }, color });
-            vertices_.push_back({ p2, uv2, { 1.0f, 0.0f }, color });
-            vertices_.push_back({ p1, uv1, { 1.0f, 1.0f }, color });
+            vertices_.push_back({ p0, uv0, { 0.0f, 1.0f }, color, uv_bounds });
+            vertices_.push_back({ p3, uv3, { 0.0f, 0.0f }, color, uv_bounds });
+            vertices_.push_back({ p2, uv2, { 1.0f, 0.0f }, color, uv_bounds });
+            vertices_.push_back({ p0, uv0, { 0.0f, 1.0f }, color, uv_bounds });
+            vertices_.push_back({ p2, uv2, { 1.0f, 0.0f }, color, uv_bounds });
+            vertices_.push_back({ p1, uv1, { 1.0f, 1.0f }, color, uv_bounds });
         };
 
         const auto append_quad_local =
@@ -715,13 +719,15 @@ namespace ReplayEngine::UI
             const DirectX::XMFLOAT2 uv1{ uv.x + uv.z, uv.y + uv.w };
             const DirectX::XMFLOAT2 uv2{ uv.x + uv.z, uv.y };
             const DirectX::XMFLOAT2 uv3{ uv.x, uv.y };
+            const DirectX::XMFLOAT4 uv_bounds{
+                uv.x, uv.y, uv.x + uv.z, uv.y + uv.w };
 
-            vertices_.push_back({ p0, uv0, { 0.0f, 1.0f }, color });
-            vertices_.push_back({ p3, uv3, { 0.0f, 0.0f }, color });
-            vertices_.push_back({ p2, uv2, { 1.0f, 0.0f }, color });
-            vertices_.push_back({ p0, uv0, { 0.0f, 1.0f }, color });
-            vertices_.push_back({ p2, uv2, { 1.0f, 0.0f }, color });
-            vertices_.push_back({ p1, uv1, { 1.0f, 1.0f }, color });
+            vertices_.push_back({ p0, uv0, { 0.0f, 1.0f }, color, uv_bounds });
+            vertices_.push_back({ p3, uv3, { 0.0f, 0.0f }, color, uv_bounds });
+            vertices_.push_back({ p2, uv2, { 1.0f, 0.0f }, color, uv_bounds });
+            vertices_.push_back({ p0, uv0, { 0.0f, 1.0f }, color, uv_bounds });
+            vertices_.push_back({ p2, uv2, { 1.0f, 0.0f }, color, uv_bounds });
+            vertices_.push_back({ p1, uv1, { 1.0f, 1.0f }, color, uv_bounds });
         };
 
         const auto append_triangle_local =
@@ -804,7 +810,7 @@ namespace ReplayEngine::UI
         std::vector<DirectX::XMFLOAT2> shape_path;
         std::vector<float> shape_lengths;
         const auto build_shape_path = [&](const UIShapeComponent& shape,
-            const DirectX::XMFLOAT4& rect, bool& closed)
+            const DirectX::XMFLOAT4& rect, float scale, bool& closed)
         {
             shape_path.clear();
             closed = true;
@@ -845,7 +851,7 @@ namespace ReplayEngine::UI
                     // させる。上下の弧をつなぐと curvature=1 で円になり、
                     // curvature が 0 へ近づくほど両方が同じ直線へ収束する。
                     const float radius = 0.5f / curvature;
-                    const float center_offset = (std::sqrt)(
+                    const float half_chord_height = (std::sqrt)(
                         (std::max)(0.0f, radius * radius - 0.25f));
                     const auto to_rect = [&rect](float x, float y)
                     {
@@ -853,19 +859,52 @@ namespace ReplayEngine::UI
                             rect.x + rect.z * x,
                             rect.y + rect.w * y };
                     };
-                    for (int step = 0; step <= 32; ++step)
+
+                    const float top_center_y = 0.5f + half_chord_height;
+                    const float bottom_center_y = 0.5f - half_chord_height;
+                    const float top_delta = (std::sqrt)(
+                        (std::max)(0.0f, radius * radius - 0.25f));
+                    float top_start = std::atan2(-top_delta, -0.5f);
+                    if (top_start < 0.0f) top_start += 2.0f * pi;
+                    float top_end = std::atan2(-top_delta, 0.5f);
+                    if (top_end < 0.0f) top_end += 2.0f * pi;
+                    if (top_end <= top_start) top_end += 2.0f * pi;
+                    const float bottom_start = std::atan2(top_delta, 0.5f);
+                    const float bottom_end = std::atan2(top_delta, -0.5f);
+                    const float arc_angle = top_end - top_start;
+
+                    // 弦のサグが 0.5px 以下になる分割数を求める。固定 32 分割では
+                    // 大きい UI の端点付近で弧の近似が粗くなり、ストロークの継ぎ目に
+                    // 隙間が見えるため、画面上の半径に応じて増減させる。
+                    const float pixel_radius = (std::max)(
+                        std::fabs(rect.z), std::fabs(rect.w)) *
+                        (std::max)(std::fabs(scale), 0.0001f) * radius;
+                    const float max_angle = pixel_radius > 0.5f
+                        ? 2.0f * (std::acos)((std::max)(-1.0f, (std::min)(1.0f,
+                            1.0f - 0.5f / pixel_radius)))
+                        : arc_angle;
+                    constexpr int maximum_arc_subdivisions = 256;
+                    const int subdivisions = (std::min)(maximum_arc_subdivisions,
+                        (std::max)(1, static_cast<int>(std::ceil(
+                            arc_angle / (std::max)(0.0001f, max_angle)))));
+
+                    for (int step = 0; step <= subdivisions; ++step)
                     {
-                        const float x = static_cast<float>(step) / 32.0f - 0.5f;
-                        const float y = 0.5f + center_offset -
-                            (std::sqrt)((std::max)(0.0f, radius * radius - x * x));
-                        shape_path.push_back(to_rect(x + 0.5f, y));
+                        const float t = static_cast<float>(step) /
+                            static_cast<float>(subdivisions);
+                        const float angle = Lerp(top_start, top_end, t);
+                        shape_path.push_back(to_rect(
+                            0.5f + std::cos(angle) * radius,
+                            top_center_y + std::sin(angle) * radius));
                     }
-                    for (int step = 32; step >= 0; --step)
+                    for (int step = 1; step <= subdivisions; ++step)
                     {
-                        const float x = static_cast<float>(step) / 32.0f - 0.5f;
-                        const float y = 0.5f - center_offset +
-                            (std::sqrt)((std::max)(0.0f, radius * radius - x * x));
-                        shape_path.push_back(to_rect(x + 0.5f, y));
+                        const float t = static_cast<float>(step) /
+                            static_cast<float>(subdivisions);
+                        const float angle = Lerp(bottom_start, bottom_end, t);
+                        shape_path.push_back(to_rect(
+                            0.5f + std::cos(angle) * radius,
+                            bottom_center_y + std::sin(angle) * radius));
                     }
                 }
                 break;
@@ -1101,7 +1140,7 @@ namespace ReplayEngine::UI
 
             const DirectX::XMFLOAT4 r = rect.ResolvedRect();
             bool closed = true;
-            build_shape_path(shape, r, closed);
+            build_shape_path(shape, r, scale, closed);
             if (shape_path.empty()) return;
 
             const DirectX::XMFLOAT4X4 matrix = rect.ResolvedMatrix();
