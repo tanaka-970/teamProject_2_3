@@ -101,7 +101,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;dxguid.lib;xaudio2.lib;xinput.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;dxguid.lib;xaudio2.lib;xinput.lib;shell32.lib;comdlg32.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <IgnoreSpecificDefaultLibraries>
       </IgnoreSpecificDefaultLibraries>
       <IgnoreAllDefaultLibraries>
@@ -135,7 +135,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;dxguid.lib;xaudio2.lib;xinput.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;dxguid.lib;xaudio2.lib;xinput.lib;shell32.lib;comdlg32.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <FxCompile>
       <ShaderModel>5.0</ShaderModel>
@@ -167,7 +167,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>
       </AdditionalLibraryDirectories>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;xaudio2.lib;xinput.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;xaudio2.lib;xinput.lib;shell32.lib;comdlg32.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <FxCompile>
       <ShaderModel>5.0</ShaderModel>
@@ -198,7 +198,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;xaudio2.lib;xinput.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;xaudio2.lib;xinput.lib;shell32.lib;comdlg32.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <FxCompile>
       <ShaderModel>5.0</ShaderModel>
@@ -243,6 +243,7 @@
     <ClCompile Include="RePlayEngine\Editor\ShaderEditing\ShaderPresetEditor.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Rendering\PostProcessEditor.cpp" />
     <ClCompile Include="RePlayEngine\Physics\MeshCollisionCooker.cpp" />
+    <ClCompile Include="RePlayEngine\Physics\PhysicsDynamicsWorld.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\ShaderPresets\ShaderPresetSerializer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\ShaderPresets\BuiltInShaderPresets.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Materials\CharacterMaterialGpuData.cpp" />
@@ -280,6 +281,7 @@
     <ClCompile Include="Source\app\Editor\framework_editor_camera_presets.cpp" />
     <ClCompile Include="Source\app\Editor\framework_gizmo.cpp" />
     <ClCompile Include="Source\app\Editor\framework_scene_document.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_standalone_export.cpp" />
     <ClCompile Include="Source\app\Editor\framework_landscape_editor.cpp" />
     <ClCompile Include="Source\app\Editor\framework_shader_stack.cpp" />
     <ClCompile Include="Source\app\Editor\framework_character_material.cpp" />
@@ -389,6 +391,7 @@
     <ClCompile Include="RePlayEngine\Scene\Serialization\PrefabSerializer.cpp" />
     <ClCompile Include="RePlayEngine\Scene\Services\PlayerControlSystem.cpp" />
     <ClCompile Include="RePlayEngine\Components\Physics\SphereColliderComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Physics\RigidbodyComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Gameplay\CharacterMotorComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Gameplay\PlayerInputComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Gameplay\PlayerControllerComponent.cpp" />
@@ -500,6 +503,7 @@
     <ClInclude Include="RePlayEngine\Core\Components\IComponent.h" />
     <ClInclude Include="RePlayEngine\Physics\SphereCast.h" />
     <ClInclude Include="RePlayEngine\Physics\MeshCollisionCooker.h" />
+    <ClInclude Include="RePlayEngine\Physics\PhysicsDynamicsWorld.h" />
     <ClInclude Include="RePlayEngine\Scene\IScene.h" />
     <ClInclude Include="RePlayEngine\Scene\SceneManager.h" />
     <ClInclude Include="RePlayEngine\Scene\BootLogoScene.h" />
@@ -625,6 +629,7 @@
     <ClInclude Include="RePlayEngine\Scene\Services\RespawnService.h" />
     <ClInclude Include="RePlayEngine\Rendering\Adapter\IRenderSubmitter.h" />
     <ClInclude Include="RePlayEngine\Components\Physics\SphereColliderComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Physics\RigidbodyComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\CharacterMotorComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\PlayerInputComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\PlayerControllerComponent.h" />
@@ -651,6 +656,7 @@
     <ClInclude Include="RePlayEngine\Physics\CookedMeshCollision.h" />
     <ClInclude Include="RePlayEngine\Components\Physics\MeshColliderComponent.h" />
     <ClInclude Include="RePlayEngine\Scene\Services\SceneCollisionWorld.h" />
+    <ClInclude Include="RePlayEngine\Scene\Services\IPhysicsDynamicsService.h" />
     <ClInclude Include="RePlayEngine\Components\Physics\ColliderComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Physics\BoxColliderComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Physics\CapsuleColliderComponent.h" />

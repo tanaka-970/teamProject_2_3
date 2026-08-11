@@ -12,6 +12,8 @@
 
 void framework::scan_shader_library()
 {
+    if (standalone_game_mode) return;
+
     // ログをエディタの Console と Saved/Diagnostics へ流す。
     //
     // エンジン側から Editor を直接呼ばないよう、関数オブジェクトで渡す。
@@ -24,11 +26,12 @@ void framework::scan_shader_library()
             push_editor_log(severity, message, file, line);
         });
 
-    shader_library.ScanAll(std::filesystem::current_path());
+    shader_library.ScanAll(content_root_path());
 }
 
 void framework::poll_shader_source_changes(float elapsed_time)
 {
+    if (standalone_game_mode) return;
     if (!shader_auto_recompile) return;
 
     // 毎フレーム全部の更新時刻を取りに行くと、

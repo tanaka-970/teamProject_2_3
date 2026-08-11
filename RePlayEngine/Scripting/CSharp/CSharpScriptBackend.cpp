@@ -1,4 +1,4 @@
-#include "CSharpScriptBackend.h"
+﻿#include "CSharpScriptBackend.h"
 
 #include "../Core/ScriptValue.h"
 #include "../../Runtime/API/RuntimeContext.h"
@@ -950,10 +950,54 @@ namespace ReplayEngine::Scripting::CSharp
             return nullptr;
 #endif
         }
+
+        bool FileExists(const std::filesystem::path& path)
+        {
+            std::error_code error;
+            return std::filesystem::exists(path, error) && !error;
+        }
+
+        std::filesystem::path ManagedApiAssemblyPathForMode(
+            const std::filesystem::path& root, bool packaged_mode)
+        {
+            if (!packaged_mode) return CSharpProject::ManagedApiAssemblyPath(root);
+            const std::filesystem::path release =
+                CSharpProject::ManagedApiAssemblyPath(root, "Release");
+            if (FileExists(release)) return release;
+            const std::filesystem::path debug =
+                CSharpProject::ManagedApiAssemblyPath(root, "Debug");
+            return FileExists(debug) ? debug : release;
+        }
+
+        std::filesystem::path ManagedApiRuntimeConfigPathForMode(
+            const std::filesystem::path& root, bool packaged_mode)
+        {
+            if (!packaged_mode) return CSharpProject::ManagedApiRuntimeConfigPath(root);
+            const std::filesystem::path release =
+                CSharpProject::ManagedApiRuntimeConfigPath(root, "Release");
+            if (FileExists(release)) return release;
+            const std::filesystem::path debug =
+                CSharpProject::ManagedApiRuntimeConfigPath(root, "Debug");
+            return FileExists(debug) ? debug : release;
+        }
+
+        std::filesystem::path GameScriptsAssemblyPathForMode(
+            const std::filesystem::path& root, bool packaged_mode)
+        {
+            if (!packaged_mode) return CSharpProject::GameScriptsAssemblyPath(root);
+            const std::filesystem::path release =
+                CSharpProject::GameScriptsAssemblyPath(root, "Release");
+            if (FileExists(release)) return release;
+            const std::filesystem::path debug =
+                CSharpProject::GameScriptsAssemblyPath(root, "Debug");
+            return FileExists(debug) ? debug : release;
+        }
     }
 
-    CSharpScriptBackend::CSharpScriptBackend(std::filesystem::path project_root)
-        : project_root_(NormalizeRoot(std::move(project_root)))
+    CSharpScriptBackend::CSharpScriptBackend(std::filesystem::path project_root,
+        bool packaged_mode)
+        : project_root_(NormalizeRoot(std::move(project_root))),
+          packaged_mode_(packaged_mode)
     {
     }
 
@@ -965,6 +1009,28 @@ namespace ReplayEngine::Scripting::CSharp
     bool CSharpScriptBackend::Initialize()
     {
         if (initialized_) return true;
+
+        if (packaged_mode_)
+        {
+            if (!LoadHost()) return false;
+            if (!LoadManagedApi()) return false;
+            if (!ResolveManagedEntryPoints()) return false;
+            if (!SetNativeApi()) return false;
+
+            initialized_ = true;
+            const std::filesystem::path game_assembly =
+                GameScriptsAssemblyPathForMode(project_root_, true);
+            std::error_code filesystem_error;
+            if (std::filesystem::exists(game_assembly, filesystem_error) &&
+                !filesystem_error)
+            {
+                last_build_.succeeded = true;
+                last_build_.exit_code = 0;
+                last_build_.output_assembly = game_assembly;
+                ReloadLastBuiltAssembly();
+            }
+            return true;
+        }
 
         std::string error;
         if (!CSharpProject::EnsureProjectFiles(project_root_, error))
@@ -1116,7 +1182,7 @@ namespace ReplayEngine::Scripting::CSharp
         }
 
         const std::filesystem::path runtime_config =
-            CSharpProject::ManagedApiRuntimeConfigPath(project_root_);
+            ManagedApiRuntimeConfigPathForMode(project_root_, packaged_mode_);
         if (!std::filesystem::exists(runtime_config))
         {
             SetLastError("Managed API runtimeconfig is missing: " +
@@ -1162,7 +1228,7 @@ namespace ReplayEngine::Scripting::CSharp
             reinterpret_cast<load_assembly_and_get_function_pointer_fn>(
                 load_assembly_and_get_function_pointer_);
         const std::filesystem::path assembly =
-            CSharpProject::ManagedApiAssemblyPath(project_root_);
+            ManagedApiAssemblyPathForMode(project_root_, packaged_mode_);
         const std::wstring assembly_path = assembly.wstring();
         const wchar_t* type_name = L"ReplayEngine.NativeBridge, RePlayEngine.Managed";
         const wchar_t* unmanaged_callers_only =

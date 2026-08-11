@@ -905,8 +905,8 @@ void framework::draw_ui_preview()
             if (record == nullptr || record->kind != Assets::AssetKind::Image)
                 return nullptr;
 
-            const std::filesystem::path& path = record->cache_path.empty()
-                ? record->source_path : record->cache_path;
+            const std::filesystem::path path = content_path(record->cache_path.empty()
+                ? record->source_path : record->cache_path);
             if (path.empty()) return nullptr;
             return project_thumbnail_for(path);
         };

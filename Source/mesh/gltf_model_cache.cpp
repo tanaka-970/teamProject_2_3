@@ -1,4 +1,4 @@
-// glTFモデルのディスクキャッシュ。
+﻿// glTFモデルのディスクキャッシュ。
 //
 // glTFの解析(accessorから1頂点ずつ展開)とジオメトリ構築で3.7秒かかっていた。
 // 展開済みの頂点/インデックス/AABB/マテリアル参照/LODをそのままバイナリで
@@ -97,7 +97,7 @@ std::filesystem::path gltf_model::MeshCachePath(const std::string& filename) con
 
     char name[64]{};
     sprintf_s(name, "%016llx.replaymesh", static_cast<unsigned long long>(hash));
-    return std::filesystem::path("resources") / ".replay_cache" / "meshes" / name;
+    return CacheRoot() / "meshes" / name;
 }
 
 bool gltf_model::SaveMeshCache(const std::string& filename) const

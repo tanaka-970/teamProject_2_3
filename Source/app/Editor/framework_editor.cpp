@@ -250,6 +250,7 @@ void framework::draw_editor_main_menu()
         }
         else if (ImGui::MenuItem("Save", "Ctrl+S")) save_object_scene(false);
         if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S")) save_object_scene(true);
+        if (ImGui::MenuItem(u8"ゲームを書き出す...")) open_export_game_dialog();
         ImGui::Separator();
         if (ImGui::MenuItem("Exit"))
             request_object_scene_action(object_scene_action::exit_application);
@@ -1138,8 +1139,7 @@ void framework::push_editor_log(std::string severity, std::string message,
     {
         static bool truncated = false;
         std::error_code folder_error;
-        const std::filesystem::path folder =
-            std::filesystem::path("Saved") / "Diagnostics";
+        const std::filesystem::path folder = saved_path("Diagnostics");
         std::filesystem::create_directories(folder, folder_error);
 
         std::ofstream sink(folder / "editor_log.txt",
@@ -1179,7 +1179,7 @@ void framework::snapshot_csharp_script_write_times()
 
     csharp_source_write_times.clear();
     for (const CSharp::CSharpBehaviourInfo& info :
-        CSharp::CSharpProject::DiscoverBehaviours(std::filesystem::current_path()))
+        CSharp::CSharpProject::DiscoverBehaviours(content_root_path()))
     {
         std::error_code error;
         const std::filesystem::file_time_type time =
@@ -1194,6 +1194,8 @@ void framework::poll_csharp_script_changes(float elapsed_time)
 {
     namespace CSharp = ReplayEngine::Scripting::CSharp;
 
+    if (standalone_game_mode) return;
+
     csharp_scan_accumulator += elapsed_time;
     if (csharp_scan_accumulator < 1.0f) return;
     csharp_scan_accumulator = 0.0f;
@@ -1205,7 +1207,7 @@ void framework::poll_csharp_script_changes(float elapsed_time)
     bool changed_this_scan = false;
 
     for (const CSharp::CSharpBehaviourInfo& info :
-        CSharp::CSharpProject::DiscoverBehaviours(std::filesystem::current_path()))
+        CSharp::CSharpProject::DiscoverBehaviours(content_root_path()))
     {
         std::error_code error;
         const std::filesystem::file_time_type time =
@@ -1284,7 +1286,7 @@ bool framework::refresh_csharp_scripts()
     }
 
     std::string error;
-    if (!CSharp::CSharpProject::RefreshCatalog(std::filesystem::current_path(),
+    if (!CSharp::CSharpProject::RefreshCatalog(content_root_path(),
         asset_database, object_script_runtime->Catalog(), error))
     {
         editor_command_result = "C# Catalog 更新失敗: " + error;
@@ -1414,7 +1416,7 @@ bool framework::create_csharp_behaviour_asset()
 
     CSharp::CSharpBehaviourInfo info;
     std::string error;
-    if (!CSharp::CSharpProject::CreateBehaviour(std::filesystem::current_path(),
+    if (!CSharp::CSharpProject::CreateBehaviour(content_root_path(),
         new_csharp_behaviour_name, new_csharp_namespace, info, error))
     {
         editor_command_result = "C# Behaviour 作成失敗: " + error;
@@ -1538,10 +1540,10 @@ void framework::draw_project_panel()
         }
         ImGui::TextDisabled("%s",
             CSharp::CSharpProject::GameScriptsProjectPath(
-                std::filesystem::current_path()).generic_u8string().c_str());
+                content_root_path()).generic_u8string().c_str());
         ImGui::TextDisabled("%s",
             CSharp::CSharpProject::GameScriptsSolutionPath(
-                std::filesystem::current_path()).generic_u8string().c_str());
+                content_root_path()).generic_u8string().c_str());
         ImGui::Separator();
     }
 
@@ -1871,6 +1873,7 @@ void framework::draw_editor()
 
     draw_object_scene_recovery_prompt();
     draw_unsaved_object_scene_prompt();
+    draw_export_game_dialog();
 
     if (active_editor_workspace == editor_workspace::ui)
     {
@@ -1913,10 +1916,7 @@ void framework::draw_editor()
     draw_editor_camera_preset_manager();
     draw_shader_catalog_panel();
     {
-        std::error_code composer_root_error;
-        const std::filesystem::path composer_root = std::filesystem::current_path(composer_root_error);
-        if (!composer_root_error)
-            shader_composer_editor.Draw(composer_root, shader_library, asset_database);
+        shader_composer_editor.Draw(content_root_path(), shader_library, asset_database);
     }
     draw_golden_panel();
     if (show_validation_panel)

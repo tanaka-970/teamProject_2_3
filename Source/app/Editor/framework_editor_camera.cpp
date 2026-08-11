@@ -434,6 +434,8 @@ std::string framework::make_editor_camera_state_key() const
 
 void framework::load_editor_camera_state()
 {
+    if (standalone_game_mode) return;
+
     namespace EditorNS = ReplayEngine::Editor;
 
     editor_camera_state_key = make_editor_camera_state_key();
@@ -460,6 +462,8 @@ void framework::load_editor_camera_state()
 
 void framework::save_editor_camera_state()
 {
+    if (standalone_game_mode) return;
+
     namespace EditorNS = ReplayEngine::Editor;
 
     if (editor_camera_state_key.empty())

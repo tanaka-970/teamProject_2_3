@@ -351,6 +351,9 @@
     <ClCompile Include="RePlayEngine\Physics\MeshCollisionCooker.cpp">
       <Filter>RePlayEngine\Physics</Filter>
     </ClCompile>
+      <ClCompile Include="RePlayEngine\Physics\PhysicsDynamicsWorld.cpp">
+        <Filter>RePlayEngine\Physics</Filter>
+      </ClCompile>
     <ClCompile Include="RePlayEngine\Scene\BootLogoScene.cpp">
       <Filter>RePlayEngine\Scene</Filter>
     </ClCompile>
@@ -424,6 +427,9 @@
       <Filter>Source\App\Editor</Filter>
     </ClCompile>
     <ClCompile Include="Source\app\Editor\framework_scene_document.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_standalone_export.cpp">
       <Filter>Source\App\Editor</Filter>
     </ClCompile>
     <ClCompile Include="Source\app\Editor\framework_landscape_editor.cpp">
@@ -723,6 +729,9 @@
     <ClCompile Include="RePlayEngine\Components\Physics\SphereColliderComponent.cpp">
       <Filter>RePlayEngine\Components\Physics</Filter>
     </ClCompile>
+      <ClCompile Include="RePlayEngine\Components\Physics\RigidbodyComponent.cpp">
+        <Filter>RePlayEngine\Components\Physics</Filter>
+      </ClCompile>
     <ClCompile Include="RePlayEngine\Components\Gameplay\CharacterMotorComponent.cpp">
       <Filter>RePlayEngine\Components\Gameplay</Filter>
     </ClCompile>
@@ -953,6 +962,9 @@
     <ClInclude Include="RePlayEngine\Physics\MeshCollisionCooker.h">
       <Filter>RePlayEngine\Physics</Filter>
     </ClInclude>
+      <ClInclude Include="RePlayEngine\Physics\PhysicsDynamicsWorld.h">
+        <Filter>RePlayEngine\Physics</Filter>
+      </ClInclude>
     <ClInclude Include="RePlayEngine\Scene\IScene.h">
       <Filter>RePlayEngine\Scene</Filter>
     </ClInclude>
@@ -1364,6 +1376,9 @@
     <ClInclude Include="RePlayEngine\Components\Physics\SphereColliderComponent.h">
       <Filter>RePlayEngine\Components\Physics</Filter>
     </ClInclude>
+      <ClInclude Include="RePlayEngine\Components\Physics\RigidbodyComponent.h">
+        <Filter>RePlayEngine\Components\Physics</Filter>
+      </ClInclude>
     <ClInclude Include="RePlayEngine\Components\Gameplay\CharacterMotorComponent.h">
       <Filter>RePlayEngine\Components\Gameplay</Filter>
     </ClInclude>
@@ -1442,6 +1457,9 @@
     <ClInclude Include="RePlayEngine\Scene\Services\SceneCollisionWorld.h">
       <Filter>RePlayEngine\Scene\Services</Filter>
     </ClInclude>
+      <ClInclude Include="RePlayEngine\Scene\Services\IPhysicsDynamicsService.h">
+        <Filter>RePlayEngine\Scene\Services</Filter>
+      </ClInclude>
     <ClInclude Include="RePlayEngine\Components\Physics\ColliderComponent.h">
       <Filter>RePlayEngine\Components\Physics</Filter>
     </ClInclude>

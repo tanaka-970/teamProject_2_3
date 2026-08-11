@@ -196,6 +196,7 @@ void framework::handle_viewport_selection()
 
 void framework::save_editor_session()
 {
+    if (standalone_game_mode) return;
     if (!editor_session_active) return;
     remember_active_editor_view();
 
@@ -219,6 +220,8 @@ void framework::save_editor_session()
 
 void framework::restore_editor_session()
 {
+    if (standalone_game_mode || object_boot_from_startup_scene) return;
+
     editor_layout_checked = false;
     editor_layout_dirty = true;
     editor_layout_saved_version = 0;
