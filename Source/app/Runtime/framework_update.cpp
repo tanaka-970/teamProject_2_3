@@ -18,7 +18,8 @@ void framework::update(float elapsed_time)
     if (editor_mode && ImGui::GetCurrentContext())
     {
         keyboard_captured = ImGui::GetIO().WantCaptureKeyboard;
-        mouse_captured = ImGui::GetIO().WantCaptureMouse;
+        // Scene View 上のクリックは Editor パネルではなく View / UI 操作用に通す。
+        mouse_captured = ImGui::GetIO().WantCaptureMouse && !scene_view_hovered;
     }
 #endif
     game_input.BeginFrame(keyboard_captured, mouse_captured);

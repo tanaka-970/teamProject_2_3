@@ -57,6 +57,8 @@ namespace ReplayEngine::UI
             ID3D11BlendState* blend_screen = nullptr;
             ID3D11BlendState* blend_premultiplied = nullptr;
             ID3D11SamplerState* sampler = nullptr;
+            float scissor_offset_x = 0.0f;
+            float scissor_offset_y = 0.0f;
         };
 
         bool Initialize(ID3D11Device* device);

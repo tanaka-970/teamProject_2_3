@@ -551,7 +551,15 @@ namespace ReplayEngine::UI
         {
             context->RSSetState(states.rasterizer_scissor != nullptr
                 ? states.rasterizer_scissor : states.rasterizer);
-            context->RSSetScissorRects(1, scissor);
+            D3D11_RECT target_scissor = *scissor;
+            // D3D11 scissor は render target 座標なので、Scene View viewport の左上を足す。
+            const LONG offset_x = static_cast<LONG>(std::floor(states.scissor_offset_x));
+            const LONG offset_y = static_cast<LONG>(std::floor(states.scissor_offset_y));
+            target_scissor.left += offset_x;
+            target_scissor.top += offset_y;
+            target_scissor.right += offset_x;
+            target_scissor.bottom += offset_y;
+            context->RSSetScissorRects(1, &target_scissor);
         }
         else
         {

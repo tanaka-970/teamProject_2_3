@@ -1018,6 +1018,14 @@ public:
 
 private:
     enum class editor_workspace;
+    struct object_ui_viewport
+    {
+        float left{ 0.0f };
+        float top{ 0.0f };
+        float width{ 1.0f };
+        float height{ 1.0f };
+    };
+
     bool initialize();
     void update(float elapsed_time);
     void render(float elapsed_time);
@@ -1121,6 +1129,7 @@ private:
     // 実装はすべて Source/app/Runtime/framework_gameobject_scene.cpp にある。
     void initialize_object_scene();
     void update_object_scene(float elapsed_time);
+    object_ui_viewport object_ui_viewport_target() const noexcept;
     bool save_object_scene(bool choose_path);
     bool load_object_scene(bool choose_path);
     bool load_object_scene_from_path(const std::filesystem::path& path);
@@ -1414,6 +1423,9 @@ private:
         scene,
         game
     };
+    // DockBuilder の構成を変えたら上げる。
+    // imgui.ini に残った古い split を再利用させず、次回起動時に再構築するための版。
+    static constexpr int editor_layout_version{ 2 };
     editor_selection selected_editor_object{ editor_selection::world };
     editor_workspace active_editor_workspace{ editor_workspace::general };
     editor_view active_editor_view{ editor_view::scene };
@@ -1430,8 +1442,9 @@ private:
         editor_view::scene
     };
     bool editor_view_tab_sync_pending{ false };
+    int editor_layout_saved_version{ 0 };
     bool editor_layout_checked{ false };
-    bool editor_layout_dirty{ false };
+    bool editor_layout_dirty{ true };
     bool editor_hide_requested{ false };
     bool editor_session_active{ false };
     bool show_hierarchy_panel{ true };

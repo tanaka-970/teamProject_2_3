@@ -2,13 +2,13 @@ REPLAY_SCENE 11
 SCENE "新しいシーン"
 SCENE_STATE 0
 COLLISION_STATE 2 0
-OBJECT_COUNT 2
+OBJECT_COUNT 4
 OBJECT
   ID 3
   NAME "GameObject"
   ENABLED 1
   PARENT 0
-  TRANSFORM 0 0 0 0 0 0 1 1 1
+  TRANSFORM 0 0 0 0 0 0 0.5 0.5 0.5
   PREFAB "" 0 0
   COMPONENT_COUNT 1
   COMPONENT "MeshRendererComponent" 1
@@ -46,4 +46,79 @@ OBJECT
   TRANSFORM 0 0 0 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 0
+END_OBJECT
+OBJECT
+  ID 5
+  NAME "Canvas"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "CanvasComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "reference_resolution" vec2 1920 1080
+    PROPERTY "scale_mode" enum 1
+    PROPERTY "match_width_or_height" float 0.5
+    PROPERTY "sort_order" int 0
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "anchor_min" vec2 0 0
+    PROPERTY "anchor_max" vec2 1 1
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 0 0
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 6
+  NAME "Image"
+  ENABLED 1
+  PARENT 5
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -712 364
+    PROPERTY "size_delta" vec2 160 80
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.62348175048828125 0.050484351813793182 0.050484351813793182 1
+    PROPERTY "opacity" float 1
+    PROPERTY "fill_amount" float 1
+    PROPERTY "fill_method" enum 0
+    PROPERTY "blend_mode" enum 0
+    PROPERTY "uv_offset" vec2 0 0
+    PROPERTY "uv_scale" vec2 1 1
+    PROPERTY "nine_slice" vec4 0 0 0 0
+    PROPERTY "preserve_aspect" bool 0
+  END_COMPONENT
 END_OBJECT

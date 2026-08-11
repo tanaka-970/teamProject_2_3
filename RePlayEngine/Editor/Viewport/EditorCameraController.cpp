@@ -127,7 +127,11 @@ namespace ReplayEngine::Editor
             if (mode_ != Mode::None)
             {
                 ignore_next_delta_ = true;
-                if (mode_ == Mode::Orbit &&
+                if (mode_ == Mode::Fly)
+                {
+                    camera.SetOrbitPivotToViewCenter();
+                }
+                else if (mode_ == Mode::Orbit &&
                     camera.OrbitDistance() <= EditorViewportCamera::minimum_orbit_distance)
                 {
                     camera.SetOrbitPivotToViewCenter();
@@ -202,15 +206,39 @@ namespace ReplayEngine::Editor
             }
         }
 
+        auto build_move_axes = [&]()
+        {
+            EditorViewportCamera::MoveAxes axes;
+            if (KeyChordHeld(preset.move_forward, input, true)) axes.forward += 1.0f;
+            if (KeyChordHeld(preset.move_back, input, true)) axes.forward -= 1.0f;
+            if (KeyChordHeld(preset.move_right, input, true)) axes.right += 1.0f;
+            if (KeyChordHeld(preset.move_left, input, true)) axes.right -= 1.0f;
+            if (KeyChordHeld(preset.move_up, input, true)) axes.up += 1.0f;
+            if (KeyChordHeld(preset.move_down, input, true)) axes.up -= 1.0f;
+            return axes;
+        };
+        const EditorViewportCamera::MoveAxes move_axes = build_move_axes();
+        const bool fly_movement_requested =
+            move_axes.forward != 0.0f || move_axes.right != 0.0f || move_axes.up != 0.0f;
+
+        auto movement_multiplier = [&]()
+        {
+            float multiplier = 1.0f;
+            if (ModifierDown(preset.fast_modifier, input)) multiplier *= camera.fast_multiplier;
+            if (ModifierDown(preset.slow_modifier, input)) multiplier *= camera.slow_multiplier;
+            return multiplier;
+        };
+
         if (input.wheel != 0.0f)
         {
-            if (mode_ == Mode::Fly && preset.wheel_changes_speed_while_look)
+            if (mode_ == Mode::Fly && preset.wheel_changes_speed_while_look &&
+                fly_movement_requested)
             {
-                const float factor = input.wheel > 0.0f ? 1.15f : (1.0f / 1.15f);
+                const float factor = std::pow(1.15f, input.wheel);
                 camera.move_speed = (std::max)(camera.move_speed * factor, 0.001f);
                 consumed = true;
             }
-            else if (can_begin)
+            else if (can_begin || mode_ != Mode::None)
             {
                 camera.Zoom(input.wheel);
                 consumed = true;
@@ -240,29 +268,9 @@ namespace ReplayEngine::Editor
             }
         }
 
-        auto build_move_axes = [&]()
-        {
-            EditorViewportCamera::MoveAxes axes;
-            if (KeyChordHeld(preset.move_forward, input, true)) axes.forward += 1.0f;
-            if (KeyChordHeld(preset.move_back, input, true)) axes.forward -= 1.0f;
-            if (KeyChordHeld(preset.move_right, input, true)) axes.right += 1.0f;
-            if (KeyChordHeld(preset.move_left, input, true)) axes.right -= 1.0f;
-            if (KeyChordHeld(preset.move_up, input, true)) axes.up += 1.0f;
-            if (KeyChordHeld(preset.move_down, input, true)) axes.up -= 1.0f;
-            return axes;
-        };
-
-        auto movement_multiplier = [&]()
-        {
-            float multiplier = 1.0f;
-            if (ModifierDown(preset.fast_modifier, input)) multiplier *= camera.fast_multiplier;
-            if (ModifierDown(preset.slow_modifier, input)) multiplier *= camera.slow_multiplier;
-            return multiplier;
-        };
-
         if (mode_ == Mode::None && can_begin && preset.keyboard_fly_without_look)
         {
-            const auto axes = build_move_axes();
+            const auto axes = move_axes;
             if (axes.forward != 0.0f || axes.right != 0.0f || axes.up != 0.0f)
             {
                 camera.Fly(axes, movement_multiplier(),
@@ -281,7 +289,7 @@ namespace ReplayEngine::Editor
                 camera.Look(delta_x * Sign(preset.invert_look_x),
                     delta_y * Sign(preset.invert_look_y));
             }
-            const auto axes = build_move_axes();
+            const auto axes = move_axes;
             camera.Fly(axes, movement_multiplier(),
                 (std::min)(input.delta_time, maximum_delta_time),
                 preset.world_vertical_move);

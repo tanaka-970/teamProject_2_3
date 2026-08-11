@@ -1489,11 +1489,17 @@ void framework::render(float elapsed_time)
     render_camera_override = nullptr;
     render_matrix_override_active = false;
     render_camera_aspect = 0.0f;
-    // 最後の Camera が小さい Viewport でも、UI/ImGui は従来どおり画面全体へ描く。
-    immediate_context->RSSetViewports(1, &viewport);
+    const object_ui_viewport ui_target = object_ui_viewport_target();
+    D3D11_VIEWPORT ui_viewport = viewport;
+    ui_viewport.TopLeftX = ui_target.left;
+    ui_viewport.TopLeftY = ui_target.top;
+    ui_viewport.Width = ui_target.width;
+    ui_viewport.Height = ui_target.height;
+    // Editor では Scene View の矩形へ、実行時は従来どおりウィンドウ全体へ描く。
+    immediate_context->RSSetViewports(1, &ui_viewport);
 
     ReplayEngine::UI::UILayout::Resolve(active_object_scene(),
-        viewport.Width, viewport.Height);
+        ui_target.width, ui_target.height);
     ReplayEngine::UI::UIRenderer::RenderStates ui_states{};
     ui_states.depth_disabled =
         depth_stencil_states[(size_t)DEPTH_STATE::ZT_OFF_ZW_OFF].Get();
@@ -1515,9 +1521,13 @@ void framework::render(float elapsed_time)
         blend_states[(size_t)BLEND_STATE::PREMULTIPLIED].Get();
     ui_states.sampler =
         sampler_states[(size_t)SAMPLER_STATE::LINEAR].Get();
+    ui_states.scissor_offset_x = ui_target.left;
+    ui_states.scissor_offset_y = ui_target.top;
     ui_renderer.Render(immediate_context.Get(), active_object_scene(),
         &asset_database, &shader_library.Catalog(), ui_font_atlas,
-        viewport.Width, viewport.Height, ui_states);
+        ui_target.width, ui_target.height, ui_states);
+    // UI 用の viewport override は UIRenderer の間だけ。ImGui と次フレームは client 全体へ戻す。
+    immediate_context->RSSetViewports(1, &viewport);
 
 #ifdef USE_IMGUI
     // update()でNewFrameを通したフレームだけ描く。ロード完了フレームのように

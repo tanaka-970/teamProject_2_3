@@ -433,6 +433,26 @@ bool framework::object_runtime_active() const noexcept
     return object_scene_play_mode;
 }
 
+framework::object_ui_viewport framework::object_ui_viewport_target() const noexcept
+{
+    object_ui_viewport target{};
+    target.width = (std::max)(1.0f, static_cast<float>(client_width));
+    target.height = (std::max)(1.0f, static_cast<float>(client_height));
+
+#ifdef USE_IMGUI
+    if (editor_mode && !object_scene_play_mode && scene_view_overlay_valid)
+    {
+        // Editor では Scene View の矩形へ、実行時は従来どおりウィンドウ全体へ描く。
+        target.left = scene_view_overlay_position.x;
+        target.top = scene_view_overlay_position.y;
+        target.width = (std::max)(1.0f, scene_view_overlay_size.x);
+        target.height = (std::max)(1.0f, scene_view_overlay_size.y);
+    }
+#endif
+
+    return target;
+}
+
 void framework::refresh_object_scene_services()
 {
     ReplayEngine::Scene::Scene& scene = active_object_scene();
@@ -1089,24 +1109,26 @@ void framework::update_object_scene(float elapsed_time)
 
     sync_object_lights();
 
-    // Scene::Update は GameObject / Component の平坦な走査だけを担当する。
-    // UI layout は親子順序が必要なので、Scene 更新の外側で明示フェーズとして行う。
+    const object_ui_viewport ui_viewport = object_ui_viewport_target();
+    // UI layout / hit test は描画先と同じ矩形基準で解決する。
+    // Editor 編集中は Scene View、Play / standalone はウィンドウ全体を使う。
     ReplayEngine::UI::UILayout::Resolve(scene,
-        static_cast<float>(client_width), static_cast<float>(client_height));
+        ui_viewport.width, ui_viewport.height);
     POINT mouse{ game_input.PointerScreenX(), game_input.PointerScreenY() };
     ScreenToClient(hwnd, &mouse);
-    const float mouse_x = static_cast<float>(mouse.x);
-    const float mouse_y = static_cast<float>(client_height) - static_cast<float>(mouse.y);
+    const float mouse_x = static_cast<float>(mouse.x) - ui_viewport.left;
+    const float mouse_y = ui_viewport.height -
+        (static_cast<float>(mouse.y) - ui_viewport.top);
     const bool mouse_down = game_input.Held("PrimaryClick");
     const bool mouse_pressed = mouse_down && !ui_pointer_down_last;
     const bool mouse_released = !mouse_down && ui_pointer_down_last;
     bool input_captured = false;
 #ifdef USE_IMGUI
     if (editor_mode && ImGui::GetCurrentContext())
-        input_captured = ImGui::GetIO().WantCaptureMouse;
+        input_captured = ImGui::GetIO().WantCaptureMouse && !scene_view_hovered;
 #endif
     ReplayEngine::UI::UILayout::UpdateButtons(scene,
-        static_cast<float>(client_width), static_cast<float>(client_height),
+        ui_viewport.width, ui_viewport.height,
         mouse_x, mouse_y, mouse_down, mouse_pressed, mouse_released, input_captured,
         object_runtime_active());
     ui_pointer_down_last = mouse_down;

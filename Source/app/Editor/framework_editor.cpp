@@ -1820,6 +1820,16 @@ void framework::draw_editor()
                 ImGui::DockBuilderDockWindow("Validation & Diagnostics", bottom);
             }
             ImGui::DockBuilderFinish(dockspace_id);
+            if (ImGuiDockNode* central = ImGui::DockBuilderGetCentralNode(dockspace_id))
+            {
+                if (central->Windows.Size > 0)
+                {
+                    push_editor_log("Warning",
+                        "Editor layout: central node に Dock されたウィンドウがあります。Scene View と重なる可能性があります。");
+                }
+            }
+            editor_layout_saved_version = editor_layout_version;
+            save_editor_session();
         }
     }
     if (ImGuiDockNode* central = ImGui::DockBuilderGetCentralNode(dockspace_id))

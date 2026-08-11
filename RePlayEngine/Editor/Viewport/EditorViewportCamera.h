@@ -155,7 +155,7 @@ namespace ReplayEngine::Editor
 
         // フォーカス時の距離の下限・上限。
         static constexpr float minimum_focus_distance = 0.2f;
-        static constexpr float maximum_focus_distance = 5000.0f;
+        static constexpr float maximum_focus_distance = maximum_orbit_distance;
 
     private:
         // Forward / Right / Up を yaw と pitch から作り直す唯一の場所。

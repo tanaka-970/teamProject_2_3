@@ -201,6 +201,7 @@ void framework::save_editor_session()
     std::ofstream state(EditorSessionStatePath(), std::ios::trunc);
     if (!state) return;
     state << "REPLAY_EDITOR_SESSION " << EditorSessionVersion << '\n';
+    state << "LAYOUT_VERSION " << editor_layout_saved_version << '\n';
     state << "OBJECT_SCENE_PATH " << std::quoted(object_scene_path.generic_string()) << '\n';
     for (const std::filesystem::path& path : recent_scene_paths)
         state << "RECENT_SCENE " << std::quoted(path.generic_u8string()) << '\n';
@@ -213,22 +214,52 @@ void framework::save_editor_session()
 
 void framework::restore_editor_session()
 {
+    editor_layout_checked = false;
+    editor_layout_dirty = true;
+    editor_layout_saved_version = 0;
+
     std::ifstream state(EditorSessionStatePath());
     if (!state) return;
 
     std::string signature;
     int version = 0;
     if (!(state >> signature >> version) || signature != "REPLAY_EDITOR_SESSION" ||
-        version < 2 || version > EditorSessionVersion) return;
+        version < 2 || version > EditorSessionVersion)
+    {
+        push_editor_log("Warning",
+            "Editor session を読み取れません。既定値で起動します",
+            EditorSessionStatePath());
+        return;
+    }
 
     std::string scene_path;
     int workspace = static_cast<int>(editor_workspace::general);
     int view = static_cast<int>(editor_view::scene);
+    int restored_layout_version = 0;
+    bool layout_version_read = false;
+    bool layout_version_invalid = false;
     std::vector<std::filesystem::path> restored_recent_scenes;
     std::string key;
     while (state >> key)
     {
-        if (key == "OBJECT_SCENE_PATH") state >> std::quoted(scene_path);
+        if (key == "LAYOUT_VERSION")
+        {
+            std::string value_line;
+            std::getline(state, value_line);
+            std::istringstream parser(value_line);
+            int parsed_version = 0;
+            char trailing = '\0';
+            if ((parser >> parsed_version) && !(parser >> trailing))
+            {
+                restored_layout_version = parsed_version;
+                layout_version_read = true;
+            }
+            else
+            {
+                layout_version_invalid = true;
+            }
+        }
+        else if (key == "OBJECT_SCENE_PATH") state >> std::quoted(scene_path);
         else if (key == "RECENT_SCENE")
         {
             std::string recent_path;
@@ -290,8 +321,16 @@ void framework::restore_editor_session()
     edit_mode_active = true;
     editor_mode = true;
     editor_session_active = true;
-    editor_layout_checked = false;
-    editor_layout_dirty = false;
+    editor_layout_saved_version =
+        (!layout_version_invalid && layout_version_read) ? restored_layout_version : 0;
+    editor_layout_dirty = layout_version_invalid || !layout_version_read ||
+        editor_layout_saved_version != editor_layout_version;
+    if (layout_version_invalid)
+    {
+        push_editor_log("Warning",
+            "Editor layout version を読み取れません。既定レイアウトを再構築します",
+            EditorSessionStatePath());
+    }
     object_editor_context.SetStatus("前回の編集セッションを復元しました");
 }
 
