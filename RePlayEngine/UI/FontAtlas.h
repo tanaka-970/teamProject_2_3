@@ -17,6 +17,8 @@ namespace ReplayEngine::UI
     class FontAtlas final
     {
     public:
+        static constexpr int AtlasPaddingPixels() noexcept { return 8; }
+
         struct GlyphInfo
         {
             DirectX::XMFLOAT4 uv{ 0.0f, 0.0f, 1.0f, 1.0f };

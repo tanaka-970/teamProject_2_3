@@ -20,7 +20,7 @@ namespace ReplayEngine::UI
         constexpr const char* fallback_face_key = "__replay_default_font__";
         constexpr int atlas_width = 2048;
         constexpr int atlas_height = 2048;
-        constexpr int atlas_padding = 2;
+        constexpr int atlas_padding = FontAtlas::AtlasPaddingPixels();
 
         std::uint32_t DecodeUtf8(const std::string& text, std::size_t& offset)
         {

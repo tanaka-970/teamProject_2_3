@@ -42,62 +42,72 @@ float GradientAmount(float2 uv)
     return amount;
 }
 
-float2 ClampGlyphUV(float2 uv, float4 uv_bounds)
-{
-    float2 atlas_texel = 1.0f / max(atlas_size.xy, float2(1.0f, 1.0f));
-    float2 minimum = uv_bounds.xy + atlas_texel * 0.5f;
-    float2 maximum = max(uv_bounds.zw - atlas_texel * 0.5f, minimum);
-    return clamp(uv, minimum, maximum);
-}
-
 float GlyphAlpha(float2 uv, float4 uv_bounds)
 {
-    return ui_texture.Sample(ui_sampler, ClampGlyphUV(uv, uv_bounds)).a;
+    float alpha = 0.0f;
+    if (uv.x >= uv_bounds.x && uv.y >= uv_bounds.y &&
+        uv.x <= uv_bounds.z && uv.y <= uv_bounds.w)
+    {
+        alpha = ui_texture.Sample(ui_sampler, uv).a;
+    }
+    return alpha;
 }
 
 float4 main(PS_INPUT input) : SV_TARGET
 {
+    float4 result = input.color;
     if (stroke_params.z > 0.5f)
     {
         // 縁取りも影も無い既存 Text は、従来の単純なサンプル経路をそのまま使う。
         if (stroke_params.y <= 0.0f && shadow_color.a <= 0.0f)
-            return ui_texture.Sample(ui_sampler, input.uv) * input.color;
+        {
+            result = ui_texture.Sample(ui_sampler, input.uv) * input.color;
+        }
+        else
+        {
+            float alpha = GlyphAlpha(input.uv, input.uv_bounds);
+            float2 texel = 1.0f / max(atlas_size.xy, float2(1.0f, 1.0f));
+            float outline_width = min(max(stroke_params.y, 0.0f), atlas_size.z);
+            float2 outline_step = texel * outline_width;
+            float outline = 0.0f;
+            if (alpha <= 0.0f)
+            {
+                outline = max(outline, GlyphAlpha(input.uv +
+                    float2(outline_step.x, 0.0f), input.uv_bounds));
+                outline = max(outline, GlyphAlpha(input.uv -
+                    float2(outline_step.x, 0.0f), input.uv_bounds));
+                outline = max(outline, GlyphAlpha(input.uv +
+                    float2(0.0f, outline_step.y), input.uv_bounds));
+                outline = max(outline, GlyphAlpha(input.uv -
+                    float2(0.0f, outline_step.y), input.uv_bounds));
+                outline = max(outline, GlyphAlpha(input.uv + outline_step,
+                    input.uv_bounds));
+                outline = max(outline, GlyphAlpha(input.uv +
+                    float2(outline_step.x, -outline_step.y), input.uv_bounds));
+                outline = max(outline, GlyphAlpha(input.uv +
+                    float2(-outline_step.x, outline_step.y), input.uv_bounds));
+                outline = max(outline, GlyphAlpha(input.uv - outline_step,
+                    input.uv_bounds));
+            }
 
-        float4 glyph_sample = ui_texture.Sample(ui_sampler,
-            ClampGlyphUV(input.uv, input.uv_bounds));
-        float alpha = glyph_sample.a;
-        float2 texel = 1.0f / max(atlas_size.xy, float2(1.0f, 1.0f));
-        float2 outline_step = texel * max(stroke_params.y, 0.0f);
-        float outline = 0.0f;
-        outline = max(outline, GlyphAlpha(input.uv + float2(outline_step.x, 0.0f),
-            input.uv_bounds));
-        outline = max(outline, GlyphAlpha(input.uv - float2(outline_step.x, 0.0f),
-            input.uv_bounds));
-        outline = max(outline, GlyphAlpha(input.uv + float2(0.0f, outline_step.y),
-            input.uv_bounds));
-        outline = max(outline, GlyphAlpha(input.uv - float2(0.0f, outline_step.y),
-            input.uv_bounds));
-        outline = max(outline, GlyphAlpha(input.uv + outline_step, input.uv_bounds));
-        outline = max(outline, GlyphAlpha(input.uv + float2(outline_step.x, -outline_step.y),
-            input.uv_bounds));
-        outline = max(outline, GlyphAlpha(input.uv + float2(-outline_step.x, outline_step.y),
-            input.uv_bounds));
-        outline = max(outline, GlyphAlpha(input.uv - outline_step, input.uv_bounds));
-
-        float shadow = GlyphAlpha(input.uv - shadow_offset.xy * texel, input.uv_bounds);
-        float4 result = shadow_color * shadow;
-        result = lerp(result, outline_color, outline);
-        result = lerp(result, input.color, alpha);
-        result.a = max(result.a, alpha * input.color.a);
-        return result;
+            float shadow = GlyphAlpha(input.uv - shadow_offset.xy * texel,
+                input.uv_bounds);
+            result = shadow_color * shadow;
+            result = lerp(result, outline_color, outline);
+            result = lerp(result, input.color, alpha);
+            result.a = max(result.a, alpha * input.color.a);
+        }
     }
-
-    float4 color = input.color;
-    float amount = GradientAmount(input.gradient_uv);
-    color = lerp(color, fill_color_2, amount);
-    if (stroke_params.x > 0.5f)
+    else
     {
-        color = lerp(color, stroke_color_2, saturate(input.gradient_uv.x));
+        float4 color = input.color;
+        float amount = GradientAmount(input.gradient_uv);
+        color = lerp(color, fill_color_2, amount);
+        if (stroke_params.x > 0.5f)
+        {
+            color = lerp(color, stroke_color_2, saturate(input.gradient_uv.x));
+        }
+        result = ui_texture.Sample(ui_sampler, input.uv) * color;
     }
-    return ui_texture.Sample(ui_sampler, input.uv) * color;
+    return result;
 }
