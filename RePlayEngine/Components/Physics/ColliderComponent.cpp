@@ -1,4 +1,4 @@
-#include "ColliderComponent.h"
+﻿#include "ColliderComponent.h"
 
 #include "../../Object/GameObject/GameObject.h"
 #include "../../Scene/Runtime/Scene.h"
@@ -96,7 +96,7 @@ namespace ReplayEngine::Components
             if (component == nullptr || component == this) continue;
             const auto* collider = dynamic_cast<const ColliderComponent*>(component);
             if (collider == nullptr) continue;
-            highest = std::max(highest, collider->collider_key);
+            highest = (std::max)(highest, collider->collider_key);
         }
         collider_key = highest + 1;
     }

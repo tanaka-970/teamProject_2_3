@@ -1,4 +1,4 @@
-// Scene View の編集カメラと framework の接続部。
+﻿// Scene View の編集カメラと framework の接続部。
 //
 // 【この 1 ファイルにまとめている理由】
 //   ImGui / Win32 から入力を読むのはここだけ。
@@ -42,6 +42,9 @@ bool framework::using_editor_camera() const noexcept
 
 DirectX::XMMATRIX framework::viewport_view_matrix() const
 {                                                                                                                                                  //
+    if (render_matrix_override_active)
+        return DirectX::XMLoadFloat4x4(&render_view_override);
+    if (render_camera_override != nullptr) return render_camera_override->ViewMatrix();
     if (using_editor_camera()) return editor_camera.ViewMatrix();                                                                                  //
                                                                                                                                                    //
     const ReplayEngine::Components::CameraSelection camera_selection =
@@ -64,10 +67,16 @@ DirectX::XMMATRIX framework::viewport_projection_matrix() const                 
     // Therefore projection, picking and editor overlays must all use the client aspect.
     // Using the Scene View content rect here makes the error grow toward the viewport edges
     // (Landscape brush/edit point, gizmo and selection no longer line up with the image).
-    const float aspect = (client_width > 0 && client_height > 0)
-        ? static_cast<float>(client_width) / static_cast<float>(client_height)
-        : (16.0f / 9.0f);                                                                                                                          //
+    const float aspect = render_camera_aspect > 0.0f
+        ? render_camera_aspect
+        : ((client_width > 0 && client_height > 0)
+            ? static_cast<float>(client_width) / static_cast<float>(client_height)
+            : (16.0f / 9.0f));                                                                                                                     //
                                                                                                                                                    //
+    if (render_matrix_override_active)
+        return DirectX::XMLoadFloat4x4(&render_projection_override);
+    if (render_camera_override != nullptr)
+        return render_camera_override->ProjectionMatrix(aspect);
     if (using_editor_camera()) return editor_camera.ProjectionMatrix(aspect);                                                                      //
                                                                                                                                                    //
     const ReplayEngine::Components::CameraSelection camera_selection =
@@ -84,6 +93,8 @@ DirectX::XMMATRIX framework::viewport_projection_matrix() const                 
                                                                                                                                                    //
 DirectX::XMFLOAT3 framework::viewport_eye_position() const
 {
+    if (render_matrix_override_active) return render_eye_override;
+    if (render_camera_override != nullptr) return render_camera_override->EyePosition();
     if (using_editor_camera()) return editor_camera.Position();
 
     const ReplayEngine::Components::CameraSelection camera_selection =

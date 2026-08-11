@@ -1,7 +1,8 @@
-#pragma once
+﻿#pragma once
 
 #include "../../Object/Component/Component.h"
 #include "../../Reflection/Property/PropertyDesc.h"
+#include "../../Rendering/Shaders/ShaderAsset.h"
 #include "../../UI/Effects/UIEffect.h"
 
 #include <DirectXMath.h>
@@ -26,6 +27,11 @@ namespace ReplayEngine::Components
         bool HasActiveEffects() const noexcept;
         DirectX::XMFLOAT4 ExpandBounds() const noexcept;
 
+        // ShaderCatalog の Schema を同期し、Custom Effect の Property を
+        // DynamicProperties() へ追加する。GPU や AssetDatabase は保持しない。
+        void SetCustomShaderSchema(std::size_t effect_index,
+            Rendering::ShaderPropertySchemaRef schema);
+
         bool enabled = true;
         int effect_count = 0;
         std::vector<UI::UIEffect> effects;
@@ -35,5 +41,6 @@ namespace ReplayEngine::Components
         void RebuildDynamicProperties();
 
         std::vector<Reflection::PropertyDesc> dynamic_properties_;
+        std::vector<Rendering::ShaderPropertySchemaRef> custom_schemas_;
     };
 }

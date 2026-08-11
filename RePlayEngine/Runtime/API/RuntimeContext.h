@@ -25,11 +25,11 @@ namespace ReplayEngine::Runtime
         float delta_time = 0.0f;
         float fixed_delta_time = 1.0f / 60.0f;
 
-        // タイムスケールの影響を受けない経過時間。
-        // まだタイムスケール機能が無いため delta_time と同じ値が入る。
-        // 別フィールドにしてあるのは、後から入れたときに
-        // 利用側のコードを書き換えずに済ませるため。
+        // タイムスケールの影響を受けない経過時間。Editor/UI/ロード演出はこれを使う。
         float unscaled_delta_time = 0.0f;
+
+        // Scene の共通時間倍率。0 でゲーム時間だけを完全停止する。
+        float time_scale = 1.0f;
 
         std::uint64_t frame_index = 0;
     };
@@ -189,6 +189,7 @@ namespace ReplayEngine::Runtime
         float DeltaTime() const noexcept { return time_.delta_time; }
         float FixedDeltaTime() const noexcept { return time_.fixed_delta_time; }
         float UnscaledDeltaTime() const noexcept { return time_.unscaled_delta_time; }
+        float TimeScale() const noexcept { return time_.time_scale; }
         std::uint64_t FrameIndex() const noexcept { return time_.frame_index; }
 
         // ---- Object -----------------------------------------------------------

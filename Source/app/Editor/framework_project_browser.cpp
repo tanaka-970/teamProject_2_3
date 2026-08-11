@@ -1,4 +1,4 @@
-#include "framework.h"
+﻿#include "framework.h"
 #include "texture.h"
 #include "../../RePlayEngine/Assets/AssetCache.h"
 #include "../../RePlayEngine/Editor/Style/EditorStyle.h"
@@ -182,6 +182,7 @@ namespace
         case AssetKind::Shader:   return "SHADER";
         case AssetKind::SceneFlow:return "FLOW";
         case AssetKind::Motion:   return "MOTION";
+        case AssetKind::Font:     return "FONT";
         default:                  return "FILE";
         }
     }
@@ -200,6 +201,7 @@ namespace
         case AssetKind::Shader:   return ImVec4(0.98f, 0.67f, 0.28f, 1.0f);
         case AssetKind::SceneFlow:return ImVec4(0.55f, 0.86f, 1.00f, 1.0f);
         case AssetKind::Motion:   return ImVec4(0.95f, 0.78f, 0.36f, 1.0f);
+        case AssetKind::Font:     return ImVec4(0.80f, 0.92f, 0.98f, 1.0f);
         default:                  return ImVec4(0.72f, 0.72f, 0.72f, 1.0f);
         }
     }
@@ -228,6 +230,8 @@ ReplayEngine::Assets::AssetKind framework::project_kind_for(
     if (IsImageExtension(extension)) return AssetKind::Image;
     if (extension == ".wav" || extension == ".mp3" || extension == ".ogg")
         return AssetKind::Audio;
+    if (extension == ".ttf" || extension == ".otf" || extension == ".ttc")
+        return AssetKind::Font;
     if (extension == ".hlsl" || extension == ".fx" || extension == ".cso" ||
         extension == ReplayEngine::Rendering::ShaderComposerAsset::file_extension)
         return AssetKind::Shader;
@@ -965,7 +969,7 @@ void framework::draw_project_folder_contents()
             ? AssetKind::Unknown : project_kind_for(entry.path);
         if (!entry.is_directory && asset_type_filter != 0)
         {
-            int filter_type = 9;
+            int filter_type = 10;
             if (kind == AssetKind::Model) filter_type = 1;
             else if (ToLowerCopy(entry.path.extension().u8string()) == ".replayprefab")
                 filter_type = 2;
@@ -976,6 +980,7 @@ void framework::draw_project_folder_contents()
             else if (kind == AssetKind::Shader) filter_type = 6;
             else if (kind == AssetKind::SceneFlow) filter_type = 7;
             else if (kind == AssetKind::Motion) filter_type = 8;
+            else if (kind == AssetKind::Font) filter_type = 9;
             if (asset_type_filter != filter_type) continue;
         }
 
@@ -1272,7 +1277,7 @@ void framework::draw_project_browser()
         ImGui::SetTooltip("Project 全体を再帰検索します");
     ImGui::SameLine();
     const char* filters[] =
-        { "All", "Model", "Prefab", "Scene", "Material", "Script", "Shader", "Flow", "Motion", "Other" };
+        { "All", "Model", "Prefab", "Scene", "Material", "Script", "Shader", "Flow", "Motion", "Font", "Other" };
     ImGui::SetNextItemWidth(120.0f);
     ImGui::Combo("##ProjectFilter", &asset_type_filter, filters, IM_ARRAYSIZE(filters));
     ImGui::SameLine();

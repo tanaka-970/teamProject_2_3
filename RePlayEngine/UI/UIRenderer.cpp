@@ -1,4 +1,4 @@
-#include "UIRenderer.h"
+﻿#include "UIRenderer.h"
 
 #include "FontAtlas.h"
 #include "UILayout.h"
@@ -13,6 +13,7 @@
 #include "../Components/UI/UITextAnimatorComponent.h"
 #include "../Object/GameObject/GameObject.h"
 #include "../Rendering/Shaders/ShaderCatalog.h"
+#include "../Rendering/Shaders/ShaderConstantPacker.h"
 #include "../Rendering/Shaders/ShaderAsset.h"
 #include "../Scene/Runtime/Scene.h"
 #include "../../Source/core/shader.h"
@@ -38,6 +39,50 @@ namespace ReplayEngine::UI
         using Components::UIShapeComponent;
         using Components::UITextComponent;
         using Components::UITextAnimatorComponent;
+
+        bool LookupEffectShaderProperty(const std::string& saved_name,
+            DirectX::XMFLOAT4& out, void* user)
+        {
+            if (user == nullptr) return false;
+            const auto* bag = static_cast<const Reflection::PropertyBag*>(user);
+            const Reflection::PropertyValue* value = bag->Find(saved_name);
+            if (value == nullptr) return false;
+
+            switch (value->Type())
+            {
+            case Reflection::PropertyType::Float:
+                out = { value->AsFloat(), 0.0f, 0.0f, 0.0f };
+                return true;
+            case Reflection::PropertyType::Double:
+                out = { static_cast<float>(value->AsDouble()), 0.0f, 0.0f, 0.0f };
+                return true;
+            case Reflection::PropertyType::Int:
+            case Reflection::PropertyType::Enum:
+                out = { static_cast<float>(value->AsInt()), 0.0f, 0.0f, 0.0f };
+                return true;
+            case Reflection::PropertyType::Bool:
+                out = { value->AsBool() ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
+                return true;
+            case Reflection::PropertyType::Vector2:
+            {
+                const DirectX::XMFLOAT2 v = value->AsVector2();
+                out = { v.x, v.y, 0.0f, 0.0f };
+                return true;
+            }
+            case Reflection::PropertyType::Vector3:
+            {
+                const DirectX::XMFLOAT3 v = value->AsVector3();
+                out = { v.x, v.y, v.z, 0.0f };
+                return true;
+            }
+            case Reflection::PropertyType::Vector4:
+            case Reflection::PropertyType::Color:
+                out = value->AsVector4();
+                return true;
+            default:
+                return false;
+            }
+        }
 
         constexpr int maximum_ui_depth = 64;
 
@@ -294,6 +339,8 @@ namespace ReplayEngine::UI
         vertices_.clear();
         vertex_capacity_ = 0;
         white_texture_.Reset();
+        custom_effect_constant_buffer_.Reset();
+        custom_effect_constant_buffer_size_ = 0;
         effect_constant_buffer_.Reset();
         constant_buffer_.Reset();
         vertex_buffer_.Reset();
@@ -330,6 +377,33 @@ namespace ReplayEngine::UI
             return false;
         }
         vertex_capacity_ = next_capacity;
+        return true;
+    }
+
+    bool UIRenderer::EnsureCustomEffectConstantBuffer(std::uint32_t byte_width)
+    {
+        if (device_ == nullptr) return false;
+        const std::uint32_t aligned = (std::max)(16u,
+            Rendering::ShaderConstantPacker::Align16(byte_width));
+        if (custom_effect_constant_buffer_ != nullptr &&
+            custom_effect_constant_buffer_size_ == aligned)
+        {
+            return true;
+        }
+
+        // GetAddressOf は既存ポインタを Release しないため、作り直す前に必ず Reset。
+        custom_effect_constant_buffer_.Reset();
+        custom_effect_constant_buffer_size_ = 0;
+        D3D11_BUFFER_DESC desc{};
+        desc.ByteWidth = aligned;
+        desc.Usage = D3D11_USAGE_DEFAULT;
+        desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+        if (FAILED(device_->CreateBuffer(&desc, nullptr,
+            custom_effect_constant_buffer_.GetAddressOf())))
+        {
+            return false;
+        }
+        custom_effect_constant_buffer_size_ = aligned;
         return true;
     }
 
@@ -375,12 +449,6 @@ namespace ReplayEngine::UI
         {
             return nullptr;
         }
-        if (const auto found = custom_effect_shader_cache_.find(shader_guid);
-            found != custom_effect_shader_cache_.end())
-        {
-            return found->second.Get();
-        }
-
         const Assets::AssetRecord* record = asset_database->FindByGuid(shader_guid);
         if (record == nullptr || record->kind != Assets::AssetKind::Shader)
             return nullptr;
@@ -412,20 +480,30 @@ namespace ReplayEngine::UI
 
         const Rendering::ShaderCatalog::VariantResult& variant =
             matched->At(Rendering::ShaderVariant::Static);
-        if (!variant.compiled || !variant.bytecode) return nullptr;
+        // 最新コンパイルが失敗しても、Catalog が保持する最後の成功 bytecode は使い続ける。
+        if (!variant.bytecode) return nullptr;
 
-        Microsoft::WRL::ComPtr<ID3D11PixelShader> shader;
-        if (FAILED(device_->CreatePixelShader(
-            variant.bytecode->GetBufferPointer(),
-            variant.bytecode->GetBufferSize(), nullptr, shader.GetAddressOf())) ||
-            !shader)
+        CachedCustomEffectShader& cached = custom_effect_shader_cache_[shader_guid];
+        const std::size_t bytecode_size = variant.bytecode->GetBufferSize();
+        if (cached.shader && cached.bytecode_identity == variant.bytecode.Get() &&
+            cached.bytecode_size == bytecode_size)
         {
-            return nullptr;
+            return cached.shader.Get();
         }
 
-        ID3D11PixelShader* result = shader.Get();
-        custom_effect_shader_cache_[shader_guid] = shader;
-        return result;
+        Microsoft::WRL::ComPtr<ID3D11PixelShader> replacement;
+        if (FAILED(device_->CreatePixelShader(
+            variant.bytecode->GetBufferPointer(), bytecode_size, nullptr,
+            replacement.GetAddressOf())) || !replacement)
+        {
+            // Hot Reload の新 bytecode だけ作成に失敗しても、直前の成功 PS は残す。
+            return cached.shader.Get();
+        }
+
+        cached.shader = replacement;
+        cached.bytecode_identity = variant.bytecode.Get();
+        cached.bytecode_size = bytecode_size;
+        return cached.shader.Get();
     }
 
     void UIRenderer::Flush(ID3D11DeviceContext* context, ID3D11ShaderResourceView* texture,
@@ -1048,7 +1126,7 @@ namespace ReplayEngine::UI
                 return;
 
             const DirectX::XMFLOAT4 r = rect.ResolvedRect();
-            font_atlas.BuildGlyphs(text, r.z, r.w);
+            font_atlas.BuildGlyphs(text, r.z, r.w, asset_database);
             const DirectX::XMFLOAT4 color = MultiplyAlpha(text.color, text.opacity * opacity);
             append_text_glyphs(object, text, r, rect.ResolvedMatrix(), color, scale);
             Flush(context, font_atlas.Texture(), states.blend_alpha, states, scissor);
@@ -1074,6 +1152,35 @@ namespace ReplayEngine::UI
             draw_target_height = static_cast<float>(target.height);
         };
 
+        const auto custom_effect_entry = [&](const std::string& shader_guid)
+            -> const Rendering::ShaderCatalog::Entry*
+        {
+            if (shader_guid.empty() || asset_database == nullptr || shader_catalog == nullptr)
+                return nullptr;
+            const Assets::AssetRecord* record = asset_database->FindByGuid(shader_guid);
+            if (record == nullptr || record->kind != Assets::AssetKind::Shader) return nullptr;
+
+            const auto normalize = [](std::filesystem::path path)
+            {
+                std::error_code error;
+                std::filesystem::path absolute = path.is_absolute()
+                    ? path : std::filesystem::absolute(path, error);
+                if (error) absolute = path;
+                error.clear();
+                const std::filesystem::path canonical =
+                    std::filesystem::weakly_canonical(absolute, error);
+                return error ? absolute.lexically_normal() : canonical.lexically_normal();
+            };
+
+            const std::filesystem::path source = normalize(record->source_path);
+            for (const Rendering::ShaderCatalog::Entry& entry : shader_catalog->All())
+            {
+                if (entry.info.domain != Rendering::ShaderDomain::PostProcess) continue;
+                if (normalize(entry.info.source_path) == source) return &entry;
+            }
+            return nullptr;
+        };
+
         const auto apply_effect_passes = [&](const UIEffectStackComponent& effects,
             UIRenderTarget*& current, UIRenderTarget* first, UIRenderTarget* second)
         {
@@ -1086,9 +1193,14 @@ namespace ReplayEngine::UI
             for (const UI::UIEffect& effect : effects.effects)
             {
                 if (!effect.enabled) continue;
-                ID3D11PixelShader* effect_shader =
-                    CustomEffectShaderFor(effect.custom_shader,
-                        asset_database, shader_catalog);
+                const Rendering::ShaderCatalog::Entry* custom_entry =
+                    custom_effect_entry(effect.custom_shader);
+                ID3D11PixelShader* effect_shader = custom_entry != nullptr
+                    ? CustomEffectShaderFor(effect.custom_shader,
+                        asset_database, shader_catalog)
+                    : nullptr;
+                const bool using_custom_shader = effect_shader != nullptr &&
+                    custom_entry != nullptr;
                 if (effect_shader == nullptr)
                 {
                     effect_shader = EffectShaderFor(
@@ -1117,12 +1229,58 @@ namespace ReplayEngine::UI
                 context->UpdateSubresource(effect_constant_buffer_.Get(), 0, nullptr,
                     &effect_constants, 0, 0);
 
+                std::vector<std::uint32_t> custom_texture_slots;
+                if (using_custom_shader && custom_entry->schema)
+                {
+                    const Rendering::ShaderPropertySchema& schema = *custom_entry->schema;
+                    std::vector<std::uint8_t> packed;
+                    Rendering::ShaderConstantPacker::Pack(schema,
+                        &LookupEffectShaderProperty,
+                        const_cast<Reflection::PropertyBag*>(&effect.custom_parameters), packed);
+                    if (!packed.empty() &&
+                        EnsureCustomEffectConstantBuffer(
+                            static_cast<std::uint32_t>(packed.size())))
+                    {
+                        context->UpdateSubresource(custom_effect_constant_buffer_.Get(),
+                            0, nullptr, packed.data(), 0, 0);
+                        ID3D11Buffer* custom_cb = custom_effect_constant_buffer_.Get();
+                        context->PSSetConstantBuffers(
+                            Rendering::ShaderConstantPacker::material_constant_register,
+                            1, &custom_cb);
+                    }
+
+                    for (const Rendering::ShaderProperty& property : schema.Properties())
+                    {
+                        if (property.kind != Rendering::ShaderPropertyKind::Texture) continue;
+                        const Reflection::PropertyValue* value =
+                            effect.custom_parameters.Find(property.SavedName());
+                        const std::string guid = value != nullptr
+                            ? value->AsAssetReference().guid : std::string{};
+                        ID3D11ShaderResourceView* custom_texture =
+                            TextureFor(guid, asset_database);
+                        context->PSSetShaderResources(property.texture_slot, 1,
+                            &custom_texture);
+                        custom_texture_slots.push_back(property.texture_slot);
+                    }
+                }
+
                 append_quad({ 0.0f, 0.0f, width, height }, identity,
                     { 0.0f, 0.0f, 1.0f, 1.0f },
                     { 1.0f, 1.0f, 1.0f, 1.0f }, 1.0f);
                 Flush(context, current->srv.Get(),
                     states.blend_none != nullptr ? states.blend_none : states.blend_alpha,
                     states, nullptr, effect_shader, effect_constant_buffer_.Get());
+
+                if (using_custom_shader)
+                {
+                    ID3D11Buffer* null_custom_cb = nullptr;
+                    context->PSSetConstantBuffers(
+                        Rendering::ShaderConstantPacker::material_constant_register,
+                        1, &null_custom_cb);
+                    ID3D11ShaderResourceView* null_custom_srv = nullptr;
+                    for (const std::uint32_t slot : custom_texture_slots)
+                        context->PSSetShaderResources(slot, 1, &null_custom_srv);
+                }
 
                 ID3D11ShaderResourceView* null_srv = nullptr;
                 context->PSSetShaderResources(0, 1, &null_srv);
@@ -1266,7 +1424,7 @@ namespace ReplayEngine::UI
             configure_effect_target(*target);
             context->ClearRenderTargetView(target->rtv.Get(), clear);
 
-            font_atlas.BuildGlyphs(text, source_rect.z, source_rect.w);
+            font_atlas.BuildGlyphs(text, source_rect.z, source_rect.w, asset_database);
             const DirectX::XMFLOAT4 color =
                 MultiplyAlpha(text.color, text.opacity * opacity);
             DirectX::XMFLOAT4X4 identity{};

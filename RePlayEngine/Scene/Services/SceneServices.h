@@ -2,6 +2,7 @@
 
 #include "ICameraBasisProvider.h"
 #include "IPhysicsQueryService.h"
+#include "IInputService.h"
 #include "RespawnService.h"
 #include "../../Core/ObjectID/ObjectID.h"
 
@@ -34,6 +35,9 @@ namespace ReplayEngine::Scene
 
         const IPhysicsQueryService* Physics() const noexcept { return physics_; }
         void SetPhysics(const IPhysicsQueryService* service) noexcept { physics_ = service; }
+
+        const IInputService* Input() const noexcept { return input_; }
+        void SetInput(const IInputService* service) noexcept { input_ = service; }
 
         Audio::IAudioPlaybackService* Audio() const noexcept { return audio_; }
         void SetAudio(Audio::IAudioPlaybackService* service) noexcept { audio_ = service; }
@@ -93,6 +97,7 @@ namespace ReplayEngine::Scene
         {
             camera_basis_ = nullptr;
             physics_ = nullptr;
+            input_ = nullptr;
             audio_ = nullptr;
             motion_mixer_ = nullptr;
             runtime_ = nullptr;
@@ -104,6 +109,7 @@ namespace ReplayEngine::Scene
     private:
         const ICameraBasisProvider* camera_basis_ = nullptr;
         const IPhysicsQueryService* physics_ = nullptr;
+        const IInputService* input_ = nullptr;
         Audio::IAudioPlaybackService* audio_ = nullptr;
         const Motion::MotionMixer* motion_mixer_ = nullptr;
         Runtime::RuntimeContext* runtime_ = nullptr;

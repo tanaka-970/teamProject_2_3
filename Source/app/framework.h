@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <windows.h>
 #include <tchar.h>
@@ -39,6 +39,7 @@ extern ImWchar glyphRangesJapanese[];
 #include "lights_manager.h"
 #include "shading_model.h"
 #include "../game/game_scene.h"
+#include "../game/game_input.h"
 #include "../../RePlayEngine/Scene/SceneManager.h"
 #include "../../RePlayEngine/Rendering/Passes/PostProcessPass.h"
 #include "../../RePlayEngine/Rendering/Passes/BloomPass.h"
@@ -113,6 +114,11 @@ extern ImWchar glyphRangesJapanese[];
 #include <string>
 
 class gltf_model;
+
+namespace ReplayEngine::Components
+{
+    class CameraComponent;
+}
 
 CONST LONG SCREEN_WIDTH{ 1600 };
 CONST LONG SCREEN_HEIGHT{ 900 };
@@ -535,6 +541,7 @@ public:
     // 削除条件はそれぞれのヘッダーへ記載してある。
     CameraBasisProvider          object_camera_bridge;
     ReplayEngine::Audio::AudioSystem object_audio_system;
+    GameInput::InputState game_input;
 
     // --- 衝突 -------------------------------------------------------------
     //
@@ -560,6 +567,7 @@ public:
     std::unordered_set<std::string> object_collision_failures;
 
     // 固定時間更新（CharacterMotor の物理用）。
+    float            object_time_scale{ 1.0f };
     float            object_fixed_time_step{ 1.0f / 60.0f };
     float            object_fixed_accumulator{ 0.0f };
     int              object_max_fixed_substeps{ 5 };
@@ -581,6 +589,17 @@ public:
     //   「Edit Mode なら編集カメラ / Play・実行中なら Runtime Camera」と切り替える。
     ReplayEngine::Editor::EditorViewportCamera   editor_camera;
     ReplayEngine::Editor::EditorCameraController editor_camera_controller;
+
+    // render() の 1 Camera pass だけが設定する一時 Override。Scene/Prefab へ保存しない。
+    // これにより複数 Runtime Camera と Editor の Front/Side/Top が、既存の
+    // viewport_* 行列窓口をそのまま共有できる。
+    const ReplayEngine::Components::CameraComponent* render_camera_override{ nullptr };
+    bool render_matrix_override_active{ false };
+    DirectX::XMFLOAT4X4 render_view_override{};
+    DirectX::XMFLOAT4X4 render_projection_override{};
+    DirectX::XMFLOAT3 render_eye_override{ 0.0f, 0.0f, 0.0f };
+    float render_camera_aspect{ 0.0f };
+    bool editor_auxiliary_views{ false };
 
     // 操作方法はユーザーごとの preset。Scene には保存しない。
     // Shared preset は Editor/CameraPresets、Personal preset は Saved/Editor/CameraPresets。
@@ -1008,7 +1027,8 @@ private:
 
     // SSAO/SSR/TAAが共有するフレーム定数を作ってb9へ載せる。
     void update_frame_constants(const DirectX::XMMATRIX& view,
-        const DirectX::XMMATRIX& projection, float elapsed_time);
+        const DirectX::XMMATRIX& projection, float elapsed_time,
+        bool advance_effect_time = true);
     ID3D11PixelShader* skinned_forward_shader(int shading) const;
     ID3D11PixelShader* static_forward_shader(int shading) const;
     ReplayEngine::Rendering::ShaderLightingModel deferred_lighting_model(
@@ -1157,7 +1177,10 @@ private:
     void refresh_object_scene_services();
     const ReplayEngine::Motion::MotionAsset* resolve_motion_asset(
         const std::string& asset_guid);
-    void evaluate_motion_players(ReplayEngine::Scene::Scene& scene, float elapsed_time);
+    void prepare_material_motion_bindings(ReplayEngine::Scene::Scene& scene);
+    void prepare_ui_effect_shader_schemas(ReplayEngine::Scene::Scene& scene);
+    void evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
+        float scaled_delta_time, float unscaled_delta_time);
     void update_ui_sprite_animators(ReplayEngine::Scene::Scene& scene, float elapsed_time);
     void sync_object_lights();
 
@@ -1268,7 +1291,10 @@ private:
     void draw_collider_debug_overlay();
     void draw_collision_diagnostics_panel();
     const skinned_mesh::animation::keyframe* resolve_object_keyframe(
-        skinned_mesh& mesh, int clip_index, float animation_time) const;
+        skinned_mesh& mesh, int clip_index, float animation_time, bool loop) const;
+    const skinned_mesh::animation::keyframe* resolve_render_item_keyframe(
+        skinned_mesh& mesh, const ReplayEngine::Rendering::RenderItem& item,
+        skinned_mesh::animation::keyframe& blended_keyframe) const;
     void draw_project_panel();
 
     // --- Project ブラウザ (Unity 型 2 ペイン) ------------------------------
@@ -1420,6 +1446,8 @@ private:
     bool motion_composition_loaded{ false };
     int motion_selected_track{ -1 };
     int motion_selected_key{ -1 };
+    int motion_selected_event_track{ -1 };
+    int motion_selected_event{ -1 };
     bool motion_preview_active{ false };
     bool motion_preview_loop{ false };
     float motion_preview_time{ 0.0f };
@@ -1605,6 +1633,13 @@ private:
     void draw_material_asset_editor();
     bool gizmo_local_space{ false };
     bool show_scene_grid{ true };
+    // Pivot の Snap は Transform の Grid Snap と別物。
+    // 選択オブジェクトの CookedMeshCollision 上の実ジオメトリへ吸着する。
+    bool pivot_edit_mode{ false };
+    int pivot_snap_mode{ 1 }; // 0=Surface, 1=Vertex, 2=Edge
+    bool snap_primary_pivot_to_mesh(int mode);
+    DirectX::XMFLOAT3 resolve_object_pivot_world(ReplayEngine::Core::GameObject& object,
+        ReplayEngine::Scene::Scene& scene) const;
     float scene_grid_step{ 1.0f };
     struct ObjectGizmoState
     {
@@ -1612,6 +1647,7 @@ private:
         DirectX::XMFLOAT3 world_position{};
         DirectX::XMFLOAT3 local_rotation{};
         DirectX::XMFLOAT3 local_scale{ 1.0f, 1.0f, 1.0f };
+        DirectX::XMFLOAT3 pivot_world{};
     };
     std::vector<ObjectGizmoState> object_gizmo_states;
     bool object_gizmo_dragging{ false };

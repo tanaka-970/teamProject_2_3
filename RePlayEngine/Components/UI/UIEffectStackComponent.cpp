@@ -1,7 +1,8 @@
-#include "UIEffectStackComponent.h"
+﻿#include "UIEffectStackComponent.h"
 
 #include "../../Reflection/Property/PropertyBag.h"
 #include "../../Reflection/Property/PropertyValue.h"
+#include "../../Rendering/Materials/MaterialSchema.h"
 
 #include <algorithm>
 #include <cctype>
@@ -63,6 +64,12 @@ namespace ReplayEngine::Components
             if (property == "color") return Reflection::PropertyValue::MakeColor(effect.color);
             if (property == "mask") return Reflection::PropertyValue::MakeAssetReference(effect.mask);
             if (property == "custom_shader") return Reflection::PropertyValue::MakeAssetReference(effect.custom_shader);
+            if (property.rfind("custom.", 0) == 0)
+            {
+                const std::string saved_name = "prop." + property.substr(7);
+                const Reflection::PropertyValue* value = effect.custom_parameters.Find(saved_name);
+                return value != nullptr ? *value : Reflection::PropertyValue{};
+            }
             return Reflection::PropertyValue{};
         }
 
@@ -84,13 +91,17 @@ namespace ReplayEngine::Components
             else if (property == "color") effect.color = value.AsVector4();
             else if (property == "mask") effect.mask = value.AsAssetReference().guid;
             else if (property == "custom_shader") effect.custom_shader = value.AsAssetReference().guid;
+            else if (property.rfind("custom.", 0) == 0)
+            {
+                effect.custom_parameters.Set("prop." + property.substr(7), value);
+            }
         }
 
-        Reflection::PropertyDesc MakeEffectProperty(int index, const char* property,
+        Reflection::PropertyDesc MakeEffectProperty(int index, std::string property,
             Reflection::PropertyType type, Reflection::Animatable animatable)
         {
             Reflection::PropertyDesc desc;
-            desc.name = EffectPropertyName(index, property);
+            desc.name = EffectPropertyName(index, property.c_str());
             desc.type = type;
             desc.animatable = animatable;
             desc.serializable = true;
@@ -117,6 +128,34 @@ namespace ReplayEngine::Components
                 WriteEffectValue(stack.effects[static_cast<std::size_t>(index)],
                     property, value);
             };
+            return desc;
+        }
+
+        Reflection::PropertyDesc MakeCustomEffectProperty(int index,
+            const Rendering::ShaderProperty& property)
+        {
+            Reflection::PropertyDesc desc = MakeEffectProperty(index,
+                "custom." + property.name,
+                Rendering::MaterialSchema::PropertyTypeFor(property.kind),
+                property.kind == Rendering::ShaderPropertyKind::Texture
+                    ? Reflection::Animatable::None
+                    : (property.kind == Rendering::ShaderPropertyKind::Toggle ||
+                        property.kind == Rendering::ShaderPropertyKind::Enum
+                        ? Reflection::Animatable::Step
+                        : Reflection::Animatable::Interpolatable));
+            desc.display_name = property.DisplayName();
+            desc.category = property.category.empty() ? "Custom Shader" : property.category;
+            desc.tooltip = property.tooltip;
+            if (property.kind == Rendering::ShaderPropertyKind::Range)
+            {
+                desc.has_range = true;
+                desc.minimum = property.minimum;
+                desc.maximum = property.maximum;
+            }
+            if (property.kind == Rendering::ShaderPropertyKind::Enum)
+                desc.enum_labels = property.enum_names;
+            if (property.kind == Rendering::ShaderPropertyKind::Texture)
+                desc.asset_type = "Image";
             return desc;
         }
     }
@@ -171,6 +210,14 @@ namespace ReplayEngine::Components
                 Reflection::PropertyValue::MakeAssetReference(effect.mask));
             output.Set(EffectPropertyName(i, "custom_shader"),
                 Reflection::PropertyValue::MakeAssetReference(effect.custom_shader));
+            for (const Reflection::PropertyBag::Entry& parameter :
+                effect.custom_parameters.Entries())
+            {
+                const std::string name = parameter.name.rfind("prop.", 0) == 0
+                    ? parameter.name.substr(5) : parameter.name;
+                output.Set(EffectPropertyName(i, ("custom." + name).c_str()),
+                    parameter.value);
+            }
         }
     }
 
@@ -215,6 +262,22 @@ namespace ReplayEngine::Components
         }
     }
 
+    void UIEffectStackComponent::SetCustomShaderSchema(std::size_t effect_index,
+        Rendering::ShaderPropertySchemaRef schema)
+    {
+        if (effect_index >= effects.size()) return;
+        if (custom_schemas_.size() != effects.size()) custom_schemas_.resize(effects.size());
+        if (custom_schemas_[effect_index] == schema) return;
+
+        custom_schemas_[effect_index] = std::move(schema);
+        if (custom_schemas_[effect_index])
+        {
+            Rendering::MaterialSchema::EnsurePropertyBag(
+                effects[effect_index].custom_parameters, *custom_schemas_[effect_index]);
+        }
+        RebuildDynamicProperties();
+    }
+
     bool UIEffectStackComponent::HasActiveEffects() const noexcept
     {
         if (!enabled) return false;
@@ -246,12 +309,13 @@ namespace ReplayEngine::Components
     {
         effect_count = (std::max)(0, (std::min)(max_effect_count, effect_count));
         effects.resize(static_cast<std::size_t>(effect_count));
+        custom_schemas_.resize(static_cast<std::size_t>(effect_count));
     }
 
     void UIEffectStackComponent::RebuildDynamicProperties()
     {
         dynamic_properties_.clear();
-        dynamic_properties_.reserve(effects.size() * 15);
+        dynamic_properties_.reserve(effects.size() * 24);
         for (std::size_t index = 0; index < effects.size(); ++index)
         {
             const int i = static_cast<int>(index);
@@ -298,6 +362,15 @@ namespace ReplayEngine::Components
                 .Display("カスタムシェーダー")
                 .Tooltip("Shader Composer の PostProcess 出力を UI Effect として使う。")
                 .OfAssetType("Shader"));
+
+            if (index < custom_schemas_.size() && custom_schemas_[index])
+            {
+                for (const Rendering::ShaderProperty& property :
+                    custom_schemas_[index]->Properties())
+                {
+                    push(MakeCustomEffectProperty(i, property));
+                }
+            }
         }
     }
 }

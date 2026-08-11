@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../../Object/Component/Component.h"
 #include "../../Reflection/Property/References.h"
@@ -58,6 +58,16 @@ namespace ReplayEngine::Components
         float Time() const noexcept;
         float Duration() const noexcept;
 
+        // Event Track は Advance 前の位置から「実際に通過した区間」を復元するために
+        // wrap と PingPong の進行方向だけを読む。再生状態の所有権は Player に残す。
+        int RuntimeWrapMode() const noexcept { return EffectiveWrapMode(); }
+        int PlaybackDirection() const noexcept
+        {
+            if (speed == 0.0f) return 0;
+            return EffectiveWrapMode() == PingPong
+                ? ping_pong_direction_ : (speed < 0.0f ? -1 : 1);
+        }
+
         bool NeedsSnapshot() const noexcept;
         void StoreSnapshot(std::vector<SnapshotValue> values);
         const Reflection::PropertyValue* SnapshotFor(
@@ -73,6 +83,8 @@ namespace ReplayEngine::Components
         bool loop = false;
         int wrap_mode = Once;
         bool auto_stop_on_end = false;
+        // Pause Menu や演出用。true の Player だけ unscaled delta で進める。
+        bool ignore_time_scale = false;
         float blend_in_seconds = 0.0f;
         float speed = 1.0f;
         float weight = 1.0f;

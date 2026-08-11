@@ -38,6 +38,13 @@ bool framework::initialize()
     if (!asset_database.Load(asset_database_error))
         object_editor_context.SetStatus("AssetDatabase: " + asset_database_error);
 
+    std::string input_bindings_error;
+    if (!game_input.LoadBindings(std::filesystem::path("Saved") / "Editor" /
+        "InputBindings.ini", input_bindings_error) && !input_bindings_error.empty())
+    {
+        push_editor_log("Warning", "InputBindings: " + input_bindings_error);
+    }
+
     if (!object_audio_system.Initialize())
     {
         push_editor_log("Warning", "Audio は silent mode で起動します");

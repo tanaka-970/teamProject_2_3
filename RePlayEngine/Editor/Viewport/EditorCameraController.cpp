@@ -1,4 +1,4 @@
-#include "EditorCameraController.h"
+﻿#include "EditorCameraController.h"
 
 #include <algorithm>
 #include <cmath>
@@ -207,7 +207,7 @@ namespace ReplayEngine::Editor
             if (mode_ == Mode::Fly && preset.wheel_changes_speed_while_look)
             {
                 const float factor = input.wheel > 0.0f ? 1.15f : (1.0f / 1.15f);
-                camera.move_speed = std::max(camera.move_speed * factor, 0.001f);
+                camera.move_speed = (std::max)(camera.move_speed * factor, 0.001f);
                 consumed = true;
             }
             else if (can_begin)
@@ -232,7 +232,7 @@ namespace ReplayEngine::Editor
 
             if (yaw_axis != 0.0f || pitch_axis != 0.0f || roll_axis != 0.0f)
             {
-                const float dt = std::min(input.delta_time, maximum_delta_time);
+                const float dt = (std::min)(input.delta_time, maximum_delta_time);
                 const float radians = DirectX::XMConvertToRadians(
                     preset.keyboard_rotation_degrees) * dt;
                 camera.Rotate(yaw_axis * radians, pitch_axis * radians, roll_axis * radians);
@@ -266,7 +266,7 @@ namespace ReplayEngine::Editor
             if (axes.forward != 0.0f || axes.right != 0.0f || axes.up != 0.0f)
             {
                 camera.Fly(axes, movement_multiplier(),
-                    std::min(input.delta_time, maximum_delta_time),
+                    (std::min)(input.delta_time, maximum_delta_time),
                     preset.world_vertical_move);
                 consumed = true;
             }
@@ -283,7 +283,7 @@ namespace ReplayEngine::Editor
             }
             const auto axes = build_move_axes();
             camera.Fly(axes, movement_multiplier(),
-                std::min(input.delta_time, maximum_delta_time),
+                (std::min)(input.delta_time, maximum_delta_time),
                 preset.world_vertical_move);
             consumed = true;
             break;

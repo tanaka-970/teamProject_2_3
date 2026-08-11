@@ -1,4 +1,4 @@
-#include "EditorViewportCamera.h"
+﻿#include "EditorViewportCamera.h"
 
 #include <algorithm>
 #include <cmath>
@@ -236,8 +236,8 @@ namespace ReplayEngine::Editor
         distance = std::clamp(distance, minimum_focus_distance, maximum_focus_distance);
 
         // near / far の内側に収める。far を越えると対象ごと消える。
-        distance = std::min(distance, far_clip * 0.5f);
-        distance = std::max(distance, near_clip * 4.0f);
+        distance = (std::min)(distance, far_clip * 0.5f);
+        distance = (std::max)(distance, near_clip * 4.0f);
 
         orbit_pivot_ = center;
         orbit_distance_ = std::clamp(distance,
@@ -304,8 +304,8 @@ namespace ReplayEngine::Editor
         const float safe_aspect = (aspect > 1.0e-4f) ? aspect : (16.0f / 9.0f);
         const float fov = DirectX::XMConvertToRadians(
             std::clamp(field_of_view_degrees, 1.0f, 179.0f));
-        const float near_plane = std::max(near_clip, 1.0e-3f);
-        const float far_plane = std::max(far_clip, near_plane * 10.0f);
+        const float near_plane = (std::max)(near_clip, 1.0e-3f);
+        const float far_plane = (std::max)(far_clip, near_plane * 10.0f);
         return DirectX::XMMatrixPerspectiveFovLH(fov, safe_aspect, near_plane, far_plane);
     }
 

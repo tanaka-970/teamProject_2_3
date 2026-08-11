@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <d3d11.h>
 #include <DirectXMath.h>
@@ -85,6 +85,13 @@ namespace ReplayEngine::UI
             DirectX::XMFLOAT4 screen_size{ 1.0f, 1.0f, 0.0f, 0.0f };
         };
 
+        struct CachedCustomEffectShader
+        {
+            Microsoft::WRL::ComPtr<ID3D11PixelShader> shader;
+            const void* bytecode_identity = nullptr;
+            std::size_t bytecode_size = 0;
+        };
+
         struct EffectConstants
         {
             DirectX::XMFLOAT4 effect_color{ 1.0f, 1.0f, 1.0f, 1.0f };
@@ -97,6 +104,7 @@ namespace ReplayEngine::UI
         static constexpr std::size_t effect_shader_count = 10;
 
         bool EnsureVertexCapacity(ID3D11Device* device, std::size_t vertex_count);
+        bool EnsureCustomEffectConstantBuffer(std::uint32_t byte_width);
         ID3D11ShaderResourceView* TextureFor(const std::string& guid,
             const Assets::AssetDatabase* asset_database);
         ID3D11PixelShader* EffectShaderFor(UIEffectKind kind) const noexcept;
@@ -118,9 +126,11 @@ namespace ReplayEngine::UI
         Microsoft::WRL::ComPtr<ID3D11Buffer> vertex_buffer_;
         Microsoft::WRL::ComPtr<ID3D11Buffer> constant_buffer_;
         Microsoft::WRL::ComPtr<ID3D11Buffer> effect_constant_buffer_;
+        Microsoft::WRL::ComPtr<ID3D11Buffer> custom_effect_constant_buffer_;
+        std::uint32_t custom_effect_constant_buffer_size_ = 0;
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> white_texture_;
         std::unordered_map<std::string, Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>> texture_cache_;
-        std::unordered_map<std::string, Microsoft::WRL::ComPtr<ID3D11PixelShader>> custom_effect_shader_cache_;
+        std::unordered_map<std::string, CachedCustomEffectShader> custom_effect_shader_cache_;
         std::vector<Vertex> vertices_;
         std::size_t vertex_capacity_ = 0;
         UIRenderTargetPool render_target_pool_;

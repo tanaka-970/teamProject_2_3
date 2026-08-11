@@ -1,5 +1,6 @@
 ﻿#pragma once
 
+#include "MaterialOverrideDynamicProperties.h"
 #include "../../Object/Component/Component.h"
 #include "../../Reflection/Property/PropertyDesc.h"
 #include "../../Rendering/Adapter/IRenderSubmitter.h"
@@ -44,6 +45,9 @@ namespace ReplayEngine::Components
             Rendering::RenderItem& out) const override;
         const std::vector<Reflection::PropertyDesc>* DynamicProperties()
             const noexcept override;
+        void OnMotionPropertyApplied(const char* property_name) override;
+        void PrepareMaterialMotion(const Rendering::MaterialAsset* material,
+            const Rendering::ShaderPropertySchema* schema);
 
         // 実際に描くべきか。Component の有効状態と visible の両方を見る。
         bool ShouldRender() const noexcept
@@ -58,6 +62,10 @@ namespace ReplayEngine::Components
 
         // trueならRenderer側の色・描画方式をMaterial Assetより優先する。
         bool material_override = false;
+
+        // Motion の Material Track 用一時値。Scene/Prefab の正本にはしない。
+        mutable MaterialMotionOverrideState material_motion_state;
+        mutable std::vector<Reflection::PropertyDesc> material_dynamic_properties_cache;
 
         DirectX::XMFLOAT4 tint{ 1.0f, 1.0f, 1.0f, 1.0f };
         DirectX::XMFLOAT4 material_base_color{ 1.0f, 1.0f, 1.0f, 1.0f };

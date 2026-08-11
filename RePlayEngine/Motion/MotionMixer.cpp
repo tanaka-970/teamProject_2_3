@@ -1,4 +1,4 @@
-#include "MotionMixer.h"
+﻿#include "MotionMixer.h"
 
 #include "../Object/Component/Component.h"
 
@@ -231,6 +231,8 @@ namespace ReplayEngine::Motion
             }
 
             accumulator.property->Apply(*accumulator.component, value);
+            accumulator.component->OnMotionPropertyApplied(
+                accumulator.property->name.c_str());
         }
     }
 

@@ -1,4 +1,6 @@
-#pragma once
+﻿#pragma once
+
+#include "../../Reflection/Property/PropertyBag.h"
 
 #include <DirectXMath.h>
 
@@ -38,6 +40,9 @@ namespace ReplayEngine::UI
         DirectX::XMFLOAT4 color{ 1.0f, 1.0f, 1.0f, 1.0f };
         std::string mask;
         std::string custom_shader;
+
+        // Shader Composer の #pragma property 値。未知項目も PropertyBag のまま保持する。
+        Reflection::PropertyBag custom_parameters;
 
         DirectX::XMFLOAT4 ExpandBounds() const noexcept;
     };

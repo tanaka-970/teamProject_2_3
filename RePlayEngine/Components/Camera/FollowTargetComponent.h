@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../../Object/Component/Component.h"
 
@@ -27,10 +27,5 @@ namespace ReplayEngine::Components
 
     private:
         void UpdateRotationInput(float delta_time);
-        void ResetCursorTracking() noexcept;
-
-        bool cursor_initialized_ = false;
-        long previous_cursor_x_ = 0;
-        long previous_cursor_y_ = 0;
     };
 }

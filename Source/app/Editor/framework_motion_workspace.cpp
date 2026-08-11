@@ -1,4 +1,4 @@
-#include "framework.h"
+﻿#include "framework.h"
 
 #include "../../RePlayEngine/Components/UI/UIImageComponent.h"
 #include "../../RePlayEngine/Motion/MotionBindingResolver.h"
@@ -27,6 +27,8 @@ namespace
     using ReplayEngine::Motion::MotionBlendMode;
     using ReplayEngine::Motion::MotionEasing;
     using ReplayEngine::Motion::MotionEvaluator;
+    using ReplayEngine::Motion::MotionEvent;
+    using ReplayEngine::Motion::MotionEventTrack;
     using ReplayEngine::Motion::MotionKeyframe;
     using ReplayEngine::Motion::MotionTrack;
     using ReplayEngine::Reflection::Animatable;
@@ -415,6 +417,8 @@ bool framework::open_motion_asset(const ReplayEngine::Assets::AssetRecord& asset
     motion_editor_dirty = false;
     motion_selected_track = motion_editor_asset.tracks.empty() ? -1 : 0;
     motion_selected_key = -1;
+    motion_selected_event_track = -1;
+    motion_selected_event = -1;
     motion_preview_time = 0.0f;
     motion_edit_history.Clear();
     motion_asset_cache[motion_editor_guid] = motion_editor_asset;
@@ -476,6 +480,8 @@ bool framework::undo_motion_edit()
         ? -1 : (std::min)(motion_selected_track,
             static_cast<int>(motion_editor_asset.tracks.size()) - 1);
     motion_selected_key = -1;
+    motion_selected_event_track = -1;
+    motion_selected_event = -1;
     motion_editor_dirty = true;
     if (!motion_editor_guid.empty())
         motion_asset_cache[motion_editor_guid] = motion_editor_asset;
@@ -493,6 +499,8 @@ bool framework::redo_motion_edit()
         ? -1 : (std::min)(motion_selected_track,
             static_cast<int>(motion_editor_asset.tracks.size()) - 1);
     motion_selected_key = -1;
+    motion_selected_event_track = -1;
+    motion_selected_event = -1;
     motion_editor_dirty = true;
     if (!motion_editor_guid.empty())
         motion_asset_cache[motion_editor_guid] = motion_editor_asset;
@@ -620,6 +628,8 @@ void framework::draw_motion_layers()
             motion_editor_asset.tracks.push_back(std::move(track));
             motion_selected_track = static_cast<int>(motion_editor_asset.tracks.size()) - 1;
             motion_selected_key = -1;
+            motion_selected_event_track = -1;
+            motion_selected_event = -1;
             motion_edit_history.Commit(motion_editor_asset);
             motion_editor_dirty = true;
         }
@@ -662,6 +672,8 @@ void framework::draw_motion_layers()
             motion_editor_asset.tracks.push_back(std::move(track));
             motion_selected_track = static_cast<int>(motion_editor_asset.tracks.size()) - 1;
             motion_selected_key = -1;
+            motion_selected_event_track = -1;
+            motion_selected_event = -1;
             motion_edit_history.Commit(motion_editor_asset);
             motion_editor_dirty = true;
         }
@@ -803,11 +815,155 @@ void framework::draw_motion_inspector()
         motion_editor_dirty = true;
     }
 
+    ImGui::Separator();
+    if (ImGui::Button("Event Track追加"))
+    {
+        stop_motion_preview();
+        motion_edit_history.Begin(motion_editor_asset, "Event Trackを追加");
+        MotionEventTrack event_track;
+        ReplayEngine::Scene::Scene* scene = object_editor_context.GetScene();
+        if (scene != nullptr)
+        {
+            if (ReplayEngine::Core::GameObject* selected =
+                object_editor_context.Selection().ResolvePrimary(*scene))
+            {
+                event_track.object = selected->ID();
+            }
+        }
+        motion_editor_asset.event_tracks.push_back(std::move(event_track));
+        motion_selected_event_track =
+            static_cast<int>(motion_editor_asset.event_tracks.size()) - 1;
+        motion_selected_event = -1;
+        motion_selected_track = -1;
+        motion_selected_key = -1;
+        motion_edit_history.Commit(motion_editor_asset);
+        motion_editor_dirty = true;
+    }
+
+    if (motion_selected_event_track >= 0 &&
+        motion_selected_event_track < static_cast<int>(motion_editor_asset.event_tracks.size()))
+    {
+        MotionEventTrack& event_track =
+            motion_editor_asset.event_tracks[motion_selected_event_track];
+        ImGui::Separator();
+        ImGui::Text("Event Track %d", motion_selected_event_track + 1);
+        ImGui::Text("送信先 ObjectID: %s", event_track.object.Valid()
+            ? event_track.object.ToString().c_str() : "(なし / broadcast)");
+
+        if (ImGui::Button("選択中Objectを送信先にする"))
+        {
+            ReplayEngine::Scene::Scene* scene = object_editor_context.GetScene();
+            ReplayEngine::Core::GameObject* selected = scene != nullptr
+                ? object_editor_context.Selection().ResolvePrimary(*scene) : nullptr;
+            if (selected != nullptr)
+            {
+                motion_edit_history.Begin(motion_editor_asset, "Event送信先を変更");
+                event_track.object = selected->ID();
+                motion_edit_history.Commit(motion_editor_asset);
+                motion_editor_dirty = true;
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("送信先なし"))
+        {
+            motion_edit_history.Begin(motion_editor_asset, "Event送信先を解除");
+            event_track.object = ReplayEngine::Core::ObjectID::Invalid();
+            motion_edit_history.Commit(motion_editor_asset);
+            motion_editor_dirty = true;
+        }
+
+        if (ImGui::Button("Event追加"))
+        {
+            motion_edit_history.Begin(motion_editor_asset, "Eventを追加");
+            MotionEvent event;
+            event.time = (std::max)(0.0f,
+                (std::min)(motion_editor_asset.duration, motion_preview_time));
+            event.name = "PlaySound";
+            event_track.events.push_back(std::move(event));
+            motion_editor_asset.SortKeys();
+            motion_selected_event = -1;
+            for (int i = 0; i < static_cast<int>(event_track.events.size()); ++i)
+            {
+                if (event_track.events[i].time == motion_preview_time)
+                    motion_selected_event = i;
+            }
+            motion_edit_history.Commit(motion_editor_asset);
+            motion_editor_dirty = true;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Event Track削除"))
+        {
+            stop_motion_preview();
+            motion_edit_history.Begin(motion_editor_asset, "Event Trackを削除");
+            motion_editor_asset.event_tracks.erase(
+                motion_editor_asset.event_tracks.begin() + motion_selected_event_track);
+            motion_selected_event_track = -1;
+            motion_selected_event = -1;
+            motion_edit_history.Commit(motion_editor_asset);
+            motion_editor_dirty = true;
+            ImGui::End();
+            return;
+        }
+
+        if (motion_selected_event >= 0 &&
+            motion_selected_event < static_cast<int>(event_track.events.size()))
+        {
+            MotionEvent& event = event_track.events[motion_selected_event];
+            ImGui::Separator();
+            ImGui::Text("Event %d", motion_selected_event + 1);
+            float event_time = event.time;
+            if (ImGui::DragFloat("Event時刻", &event_time, 0.01f, 0.0f,
+                motion_editor_asset.duration))
+            {
+                motion_edit_history.Begin(motion_editor_asset, "Event時刻を変更");
+                event.time = (std::max)(0.0f,
+                    (std::min)(motion_editor_asset.duration, event_time));
+                motion_editor_asset.SortKeys();
+                motion_selected_event = -1;
+                motion_edit_history.Commit(motion_editor_asset);
+                motion_editor_dirty = true;
+                ImGui::End();
+                return;
+            }
+
+            char event_name[256]{};
+            strncpy_s(event_name, event.name.c_str(), _TRUNCATE);
+            if (ImGui::InputText("Event名", event_name, IM_ARRAYSIZE(event_name)))
+            {
+                motion_edit_history.Begin(motion_editor_asset, "Event名を変更");
+                event.name = event_name;
+                motion_edit_history.Commit(motion_editor_asset);
+                motion_editor_dirty = true;
+            }
+            char event_parameter[512]{};
+            strncpy_s(event_parameter, event.parameter.c_str(), _TRUNCATE);
+            if (ImGui::InputText("Parameter", event_parameter,
+                IM_ARRAYSIZE(event_parameter)))
+            {
+                motion_edit_history.Begin(motion_editor_asset, "Event Parameterを変更");
+                event.parameter = event_parameter;
+                motion_edit_history.Commit(motion_editor_asset);
+                motion_editor_dirty = true;
+            }
+            if (ImGui::Button("Event削除"))
+            {
+                motion_edit_history.Begin(motion_editor_asset, "Eventを削除");
+                event_track.events.erase(event_track.events.begin() + motion_selected_event);
+                motion_selected_event = -1;
+                motion_edit_history.Commit(motion_editor_asset);
+                motion_editor_dirty = true;
+            }
+        }
+
+        ImGui::TextDisabled("Event Track は値を持たないため Graph Editor には表示しません。");
+        ImGui::End();
+        return;
+    }
+
     if (motion_selected_track < 0 ||
         motion_selected_track >= static_cast<int>(motion_editor_asset.tracks.size()))
     {
-        ImGui::Separator();
-        ImGui::TextDisabled("Trackを選択してください。");
+        ImGui::TextDisabled("Track または Event Track を選択してください。");
         ImGui::End();
         return;
     }
@@ -954,6 +1110,8 @@ void framework::draw_motion_timeline()
         {
             motion_selected_track = track_index;
             motion_selected_key = -1;
+            motion_selected_event_track = -1;
+            motion_selected_event = -1;
         }
         ImGui::SameLine();
         const ImVec2 origin = ImGui::GetCursorScreenPos();
@@ -972,6 +1130,51 @@ void framework::draw_motion_timeline()
             {
                 motion_selected_track = track_index;
                 motion_selected_key = key_index;
+                motion_selected_event_track = -1;
+                motion_selected_event = -1;
+            }
+            ImGui::PopID();
+        }
+        ImGui::SetCursorScreenPos(ImVec2(origin.x, origin.y + 18.0f));
+        ImGui::PopID();
+    }
+
+    for (int event_track_index = 0;
+        event_track_index < static_cast<int>(motion_editor_asset.event_tracks.size());
+        ++event_track_index)
+    {
+        MotionEventTrack& track = motion_editor_asset.event_tracks[event_track_index];
+        ImGui::PushID(100000 + event_track_index);
+        const std::string label = track.object.Valid()
+            ? "Event: " + track.object.ToString() : "Event: Broadcast";
+        if (ImGui::Selectable(label.c_str(),
+            motion_selected_event_track == event_track_index,
+            ImGuiSelectableFlags_SpanAllColumns, ImVec2(110.0f, 0.0f)))
+        {
+            motion_selected_event_track = event_track_index;
+            motion_selected_event = -1;
+            motion_selected_track = -1;
+            motion_selected_key = -1;
+        }
+        ImGui::SameLine();
+        const ImVec2 origin = ImGui::GetCursorScreenPos();
+        ImDrawList* draw_list = ImGui::GetWindowDrawList();
+        draw_list->AddLine(origin, ImVec2(origin.x + width, origin.y),
+            IM_COL32(150, 110, 70, 255), 1.0f);
+        for (int event_index = 0;
+            event_index < static_cast<int>(track.events.size()); ++event_index)
+        {
+            const float t = motion_editor_asset.duration > 0.0f
+                ? track.events[event_index].time / motion_editor_asset.duration : 0.0f;
+            ImGui::SetCursorScreenPos(ImVec2(origin.x + width * t, origin.y - 6.0f));
+            ImGui::PushID(event_index);
+            if (ImGui::SmallButton(motion_selected_event_track == event_track_index &&
+                motion_selected_event == event_index ? "●" : "○"))
+            {
+                motion_selected_event_track = event_track_index;
+                motion_selected_event = event_index;
+                motion_selected_track = -1;
+                motion_selected_key = -1;
             }
             ImGui::PopID();
         }

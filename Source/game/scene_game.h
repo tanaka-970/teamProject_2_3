@@ -1,9 +1,11 @@
-#pragma once
+﻿#pragma once
 
 #include "camera.h"
 #include "free_camera_controller.h"
 
 #include <DirectXMath.h>
+
+namespace GameInput { class InputState; }
 
 // ゲーム側が持つカメラ操作を束ねる入れ物。
 //
@@ -36,11 +38,11 @@ public:
         const DirectX::XMFLOAT3& look_at_offset,
         float distance, float height, float lag,
         float field_of_view_degrees, float near_clip, float far_clip,
-        float delta_time);
+        float delta_time, const GameInput::InputState& input);
 
     // 追従対象が無いときのカメラ。自由移動コントローラーへ委ねる。
     // 「対象が居ないから旧 Player を追う」という経路は存在しない。
-    void UpdateFreeCamera(float delta_time);
+    void UpdateFreeCamera(float delta_time, const GameInput::InputState& input);
 
     Camera& GetCamera() { return camera; }
 
@@ -52,7 +54,7 @@ public:
 
 private:
     // カメラ回転入力（右ドラッグ / IJKL）。
-    void UpdateCameraRotationInput(float delta_time);
+    void UpdateCameraRotationInput(float delta_time, const GameInput::InputState& input);
     void ApplyDefaultCameraSettings();
     void RefreshProjection();
 
@@ -62,7 +64,4 @@ private:
     float camera_field_of_view_degrees_ = 50.0f;
     float camera_near_clip_ = 0.1f;
     float camera_far_clip_ = 10000.0f;
-    bool camera_rotation_cursor_initialized_ = false;
-    long previous_camera_rotation_cursor_x_ = 0;
-    long previous_camera_rotation_cursor_y_ = 0;
 };

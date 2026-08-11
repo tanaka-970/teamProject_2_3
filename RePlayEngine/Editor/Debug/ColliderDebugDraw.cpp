@@ -1,4 +1,4 @@
-#include "ColliderDebugDraw.h"
+﻿#include "ColliderDebugDraw.h"
 
 #include "../../Components/Gameplay/CharacterMotorComponent.h"
 #include "../../Components/Physics/BoxColliderComponent.h"
@@ -34,7 +34,7 @@ namespace ReplayEngine::Editor
             const XMFLOAT3& axis_b, float radius, int segments,
             std::uint32_t color, std::vector<DebugLine>& out)
         {
-            const int steps = std::max(4, segments);
+            const int steps = (std::max)(4, segments);
             XMFLOAT3 previous{};
             for (int index = 0; index <= steps; ++index)
             {
@@ -59,7 +59,7 @@ namespace ReplayEngine::Editor
             const XMFLOAT3& to, float radius, int segments,
             std::uint32_t color, std::vector<DebugLine>& out)
         {
-            const int steps = std::max(2, segments / 2);
+            const int steps = (std::max)(2, segments / 2);
             XMFLOAT3 previous{};
             for (int index = 0; index <= steps; ++index)
             {

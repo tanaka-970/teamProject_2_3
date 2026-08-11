@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <d3d11.h>
 #include <DirectXMath.h>
@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <vector>
 
+namespace ReplayEngine::Assets { class AssetDatabase; }
 namespace ReplayEngine::Components { class UITextComponent; }
 
 namespace ReplayEngine::UI
@@ -27,24 +28,35 @@ namespace ReplayEngine::UI
         bool Initialize(ID3D11Device* device);
         void Release() noexcept;
 
-        ID3D11ShaderResourceView* Texture() const noexcept { return texture_.Get(); }
+        ID3D11ShaderResourceView* Texture() const noexcept;
 
         const GlyphInfo& Glyph(std::uint32_t codepoint, float font_size);
         void BuildGlyphs(Components::UITextComponent& text_component,
-            float width, float height);
+            float width, float height, const Assets::AssetDatabase* asset_database);
 
     private:
-        bool EnsureTexture(ID3D11Device* device);
-        bool LoadDefaultFont();
-        bool BuildDefaultAtlas(ID3D11Device* device);
-        bool EnsureGlyph(std::uint32_t codepoint, float font_size);
+        struct FaceAtlas final
+        {
+            Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> texture;
+            std::vector<unsigned char> font_data;
+            std::vector<std::uint32_t> requested_codepoints;
+            std::unordered_map<std::uint32_t, GlyphInfo> baked_glyphs;
+            std::unordered_map<std::uint32_t, GlyphInfo> scaled_glyphs;
+            bool valid_font = false;
+        };
+
+        bool EnsureFallbackFace();
+        bool SelectFace(const std::string& font_guid,
+            const Assets::AssetDatabase* asset_database);
+        bool EnsureCodepoints(FaceAtlas& face, const std::string& text);
+        bool RebuildFace(FaceAtlas& face);
+        bool EnsureWhiteTexture(FaceAtlas& face);
+        FaceAtlas* ActiveFace() noexcept;
+        const FaceAtlas* ActiveFace() const noexcept;
 
         Microsoft::WRL::ComPtr<ID3D11Device> device_;
-        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> texture_;
-        std::vector<unsigned char> font_data_;
-        std::unordered_map<std::uint32_t, GlyphInfo> baked_glyphs_;
-        std::unordered_map<std::uint32_t, GlyphInfo> glyphs_;
+        std::unordered_map<std::string, FaceAtlas> faces_;
+        std::string active_face_key_;
         float baked_font_size_ = 64.0f;
-        bool real_atlas_ = false;
     };
 }

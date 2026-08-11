@@ -1,8 +1,9 @@
-#include "UILayout.h"
+﻿#include "UILayout.h"
 
 #include "../Components/UI/CanvasComponent.h"
 #include "../Components/UI/RectTransformComponent.h"
 #include "../Components/UI/UIButtonComponent.h"
+#include "../Scene/Services/IInputService.h"
 #include "../Components/UI/UIImageComponent.h"
 #include "../Components/Motion/MotionPlayerComponent.h"
 #include "../Object/GameObject/GameObject.h"
@@ -228,6 +229,64 @@ namespace ReplayEngine::UI
             player->PlayFrom(0.0f);
         }
 
+        void GatherFocusableButtons(Core::GameObject& object,
+            std::vector<UIButtonComponent*>& out, int depth)
+        {
+            if (depth > maximum_ui_depth || object.PendingDestroy()) return;
+            if (auto* button = object.GetComponent<UIButtonComponent>())
+            {
+                if (button->navigation_enabled && button->interactable &&
+                    button->ActiveInHierarchy()) out.push_back(button);
+                else button->focused = false;
+            }
+            for (Core::GameObject* child : object.Children())
+            {
+                if (child != nullptr) GatherFocusableButtons(*child, out, depth + 1);
+            }
+        }
+
+        void ResolveButtonFocus(Scene::Scene& scene)
+        {
+            const Scene::IInputService* input = scene.Services().Input();
+            if (input == nullptr) return;
+
+            std::vector<UIButtonComponent*> buttons;
+            for (std::size_t i = 0; i < scene.GameObjectCount(); ++i)
+            {
+                Core::GameObject* object = scene.GameObjectAt(i);
+                if (object == nullptr || object->Parent() != nullptr) continue;
+                GatherFocusableButtons(*object, buttons, 0);
+            }
+            if (buttons.empty()) return;
+
+            std::stable_sort(buttons.begin(), buttons.end(),
+                [](const UIButtonComponent* a, const UIButtonComponent* b)
+                { return a->navigation_order < b->navigation_order; });
+
+            int focused_index = -1;
+            for (std::size_t i = 0; i < buttons.size(); ++i)
+            {
+                if (!buttons[i]->focused) continue;
+                if (focused_index < 0) focused_index = static_cast<int>(i);
+                else buttons[i]->focused = false;
+            }
+
+            const bool forward = input->Pressed("NavigateDown") ||
+                input->Pressed("NavigateRight");
+            const bool backward = input->Pressed("NavigateUp") ||
+                input->Pressed("NavigateLeft");
+            if (focused_index < 0 && (forward || backward || input->Pressed("UISubmit")))
+                focused_index = backward ? static_cast<int>(buttons.size()) - 1 : 0;
+            else if (focused_index >= 0 && forward)
+                focused_index = (focused_index + 1) % static_cast<int>(buttons.size());
+            else if (focused_index >= 0 && backward)
+                focused_index = (focused_index - 1 + static_cast<int>(buttons.size())) %
+                    static_cast<int>(buttons.size());
+
+            for (std::size_t i = 0; i < buttons.size(); ++i)
+                buttons[i]->focused = static_cast<int>(i) == focused_index;
+        }
+
         void UpdateButtonsInTree(Core::GameObject& object,
             float mouse_x, float mouse_y,
             bool mouse_down, bool mouse_released,
@@ -247,8 +306,16 @@ namespace ReplayEngine::UI
                     if (const auto* rect = object.GetComponent<RectTransformComponent>())
                     {
                         const bool hovered = HitTest(*rect, mouse_x, mouse_y);
-                        if (hovered && mouse_down) next_state = UIButtonComponent::Pressed;
-                        else if (hovered)          next_state = UIButtonComponent::Hover;
+                        const Scene::Scene* scene = button->GetScene();
+                        const Scene::IInputService* input = scene != nullptr
+                            ? scene->Services().Input() : nullptr;
+                        if (hovered) button->focused = button->navigation_enabled;
+                        const bool submit_down = button->focused && input != nullptr &&
+                            input->Held("UISubmit");
+                        if ((hovered && mouse_down) || submit_down)
+                            next_state = UIButtonComponent::Pressed;
+                        else if (hovered || button->focused)
+                            next_state = UIButtonComponent::Hover;
                     }
                 }
 
@@ -333,6 +400,8 @@ namespace ReplayEngine::UI
         bool input_captured, bool play_state_motions)
     {
         (void)mouse_pressed;
+
+        if (!input_captured) ResolveButtonFocus(scene);
 
         std::vector<Core::GameObject*> canvases;
         GatherCanvases(scene, canvases);

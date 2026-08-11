@@ -1,4 +1,4 @@
-// GameObject / Component 基盤と既存 framework の接続部。
+﻿// GameObject / Component 基盤と既存 framework の接続部。
 //
 // この 1 ファイルへ新基盤との橋渡しをまとめている理由:
 //   framework 側の既存ファイル（描画・入力・エディタ）への変更を最小限に抑え、
@@ -17,8 +17,12 @@
 #include "../../RePlayEngine/Components/Camera/CameraTargetComponent.h"
 #include "../../RePlayEngine/Components/Camera/FollowTargetComponent.h"
 #include "../../RePlayEngine/Components/Motion/MotionPlayerComponent.h"
+#include "../../RePlayEngine/Components/UI/UIEffectStackComponent.h"
 #include "../../RePlayEngine/Components/UI/UISpriteAnimatorComponent.h"
 #include "../../RePlayEngine/Components/Rendering/LightComponents.h"
+#include "../../RePlayEngine/Components/Rendering/MeshRendererComponent.h"
+#include "../../RePlayEngine/Components/Rendering/PrimitiveMeshRendererComponent.h"
+#include "../../RePlayEngine/Components/Rendering/SkinnedMeshRendererComponent.h"
 #include "../../RePlayEngine/Components/Landscape/LandscapeComponent.h"
 #include "../../RePlayEngine/Components/Landscape/LandscapeRendererComponent.h"
 #include "../../RePlayEngine/Components/Landscape/LandscapeColliderComponent.h"
@@ -454,6 +458,7 @@ void framework::refresh_object_scene_services()
 
     ReplayEngine::Scene::SceneServices& services = scene.Services();
     services.SetCameraBasis(&object_camera_bridge);
+    services.SetInput(&game_input);
     services.SetAudio(&object_audio_system);
     services.SetMotionMixer(&motion_mixer);
     services.SetPlaying(object_runtime_active());
@@ -552,8 +557,109 @@ const ReplayEngine::Motion::MotionAsset* framework::resolve_motion_asset(
     return &inserted.first->second;
 }
 
+void framework::prepare_material_motion_bindings(ReplayEngine::Scene::Scene& scene)
+{
+    using ReplayEngine::Components::MeshRendererComponent;
+    using ReplayEngine::Components::PrimitiveMeshRendererComponent;
+    using ReplayEngine::Components::SkinnedMeshRendererComponent;
+    using ReplayEngine::Rendering::MaterialAsset;
+    using ReplayEngine::Rendering::ShaderID;
+    using ReplayEngine::Rendering::ShaderPropertySchema;
+
+    auto resolve_schema = [this](const MaterialAsset* material)
+        -> const ShaderPropertySchema*
+    {
+        if (material == nullptr || material->shader_guid.empty()) return nullptr;
+        ShaderID shader_id;
+        if (!ShaderID::TryParse(material->shader_guid, shader_id) || !shader_id.IsValid())
+            return nullptr;
+        const auto* entry = shader_library.Catalog().Find(shader_id);
+        return entry != nullptr && entry->schema ? entry->schema.get() : nullptr;
+    };
+
+    for (std::size_t object_index = 0; object_index < scene.GameObjectCount(); ++object_index)
+    {
+        ReplayEngine::Core::GameObject* object = scene.GameObjectAt(object_index);
+        if (object == nullptr || object->PendingDestroy()) continue;
+
+        for (std::size_t component_index = 0;
+            component_index < object->ComponentCount(); ++component_index)
+        {
+            ReplayEngine::Core::Component* component = object->ComponentAt(component_index);
+            if (component == nullptr || component->PendingDestroy()) continue;
+
+            if (component->TypeID() == MeshRendererComponent::StaticTypeID())
+            {
+                auto& renderer = static_cast<MeshRendererComponent&>(*component);
+                const MaterialAsset* material = resolve_object_material(renderer.material_asset);
+                renderer.PrepareMaterialMotion(material, resolve_schema(material));
+            }
+            else if (component->TypeID() == SkinnedMeshRendererComponent::StaticTypeID())
+            {
+                auto& renderer = static_cast<SkinnedMeshRendererComponent&>(*component);
+                const MaterialAsset* material = resolve_object_material(renderer.material_asset);
+                renderer.PrepareMaterialMotion(material, resolve_schema(material));
+            }
+            else if (component->TypeID() == PrimitiveMeshRendererComponent::StaticTypeID())
+            {
+                auto& renderer = static_cast<PrimitiveMeshRendererComponent&>(*component);
+                const MaterialAsset* material = resolve_object_material(renderer.material_asset);
+                renderer.PrepareMaterialMotion(material, resolve_schema(material));
+            }
+        }
+    }
+}
+
+void framework::prepare_ui_effect_shader_schemas(ReplayEngine::Scene::Scene& scene)
+{
+    using ReplayEngine::Assets::AssetKind;
+    using ReplayEngine::Components::UIEffectStackComponent;
+    using ReplayEngine::Rendering::ShaderCatalog;
+    using ReplayEngine::Rendering::ShaderDomain;
+
+    const auto normalize = [](std::filesystem::path path)
+    {
+        std::error_code error;
+        std::filesystem::path absolute = path.is_absolute()
+            ? path : std::filesystem::absolute(path, error);
+        if (error) absolute = path;
+        error.clear();
+        const std::filesystem::path canonical =
+            std::filesystem::weakly_canonical(absolute, error);
+        return error ? absolute.lexically_normal() : canonical.lexically_normal();
+    };
+
+    for (std::size_t object_index = 0; object_index < scene.GameObjectCount(); ++object_index)
+    {
+        ReplayEngine::Core::GameObject* object = scene.GameObjectAt(object_index);
+        if (object == nullptr || object->PendingDestroy()) continue;
+        auto* stack = object->GetComponent<UIEffectStackComponent>();
+        if (stack == nullptr) continue;
+
+        for (std::size_t effect_index = 0; effect_index < stack->effects.size(); ++effect_index)
+        {
+            const ReplayEngine::UI::UIEffect& effect = stack->effects[effect_index];
+            ReplayEngine::Rendering::ShaderPropertySchemaRef schema;
+            const ReplayEngine::Assets::AssetRecord* record =
+                asset_database.FindByGuid(effect.custom_shader);
+            if (record != nullptr && record->kind == AssetKind::Shader)
+            {
+                const std::filesystem::path source = normalize(record->source_path);
+                for (const ShaderCatalog::Entry& entry : shader_library.Catalog().All())
+                {
+                    if (entry.info.domain != ShaderDomain::PostProcess) continue;
+                    if (normalize(entry.info.source_path) != source) continue;
+                    schema = entry.schema;
+                    break;
+                }
+            }
+            stack->SetCustomShaderSchema(effect_index, std::move(schema));
+        }
+    }
+}
+
 void framework::evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
-    float elapsed_time)
+    float scaled_delta_time, float unscaled_delta_time)
 {
     using ReplayEngine::Components::MotionPlayerComponent;
     using ReplayEngine::Motion::MotionBindingResolver;
@@ -594,63 +700,147 @@ void framework::evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
         player.ConsumeStopRestoreRequest();
     };
 
-    const auto crossed_event_time = [](float event_time, float before,
-        float after, float duration, float speed) noexcept
+    // Event は「current == event.time」で見ない。
+    // フレーム間に通過した再生座標を展開し、その区間へ Event が何回入ったかを数える。
+    // これにより 1 フレームで複数周しても、Loop/PingPong の端でも取りこぼさない。
+    const auto publish_motion_event =
+        [&](const ReplayEngine::Motion::MotionEventTrack& track,
+            const ReplayEngine::Motion::MotionEvent& event,
+            const MotionPlayerComponent& player)
     {
-        if (duration <= 0.0f || before == after) return false;
-        if (after > before)
+        if (object_runtime_context == nullptr || event.name.empty()) return;
+
+        ReplayEngine::Runtime::ObjectHandle target =
+            ReplayEngine::Runtime::ObjectHandle::None();
+        if (track.object.Valid())
         {
-            if (speed < 0.0f)
-                return event_time < before || event_time >= after;
-            return ((event_time > before) ||
-                (before <= 0.0f && event_time == 0.0f)) && event_time <= after;
+            target = object_runtime_context->Resolver().FindByObjectID(track.object);
+            if (target.IsEmpty()) return;
         }
-        if (speed >= 0.0f)
-            return event_time > before || event_time <= after;
-        return event_time < before && event_time >= after;
+
+        ReplayEngine::Runtime::EventRecord record;
+        record.type = ReplayEngine::Runtime::EngineEvents::MotionEvent;
+        record.type_name = "MotionEvent";
+        record.source = object_runtime_context->Resolver().MakeHandle(player.Owner());
+        record.target = target;
+        record.frame_index = object_runtime_frame_index;
+        record.payload.Set("name",
+            ReplayEngine::Reflection::PropertyValue::MakeString(event.name));
+        record.payload.Set("parameter",
+            ReplayEngine::Reflection::PropertyValue::MakeString(event.parameter));
+        record.payload.Set("time",
+            ReplayEngine::Reflection::PropertyValue::MakeFloat(event.time));
+        object_runtime_context->Events().Publish(std::move(record));
+    };
+
+    const auto publish_repeated = [](long long first, long long last,
+        const auto& callback)
+    {
+        if (last < first) return;
+        for (long long i = first; i <= last; ++i) callback(i);
     };
 
     auto publish_motion_events =
         [&](const ReplayEngine::Motion::MotionAsset& asset,
-            const MotionPlayerComponent& player, float before, float after)
+            const MotionPlayerComponent& player, float before, float delta_time,
+            int direction_before)
     {
-        if (object_runtime_context == nullptr || asset.event_tracks.empty()) return;
-
-        const ReplayEngine::Runtime::ObjectHandle source =
-            object_runtime_context->Resolver().MakeHandle(player.Owner());
-        for (const ReplayEngine::Motion::MotionEventTrack& track :
-            asset.event_tracks)
+        if (object_runtime_context == nullptr || asset.event_tracks.empty() ||
+            asset.duration <= 0.0f || delta_time <= 0.0f || player.speed == 0.0f)
         {
-            ReplayEngine::Runtime::ObjectHandle target =
-                ReplayEngine::Runtime::ObjectHandle::None();
-            if (track.object.Valid())
-            {
-                target = object_runtime_context->Resolver().FindByObjectID(track.object);
-                if (target.IsEmpty()) continue;
-            }
+            return;
+        }
 
+        const double duration = static_cast<double>(asset.duration);
+        const int wrap_mode = player.RuntimeWrapMode();
+        const double epsilon = 1.0e-9;
+
+        for (const ReplayEngine::Motion::MotionEventTrack& track : asset.event_tracks)
+        {
             for (const ReplayEngine::Motion::MotionEvent& event : track.events)
             {
-                if (event.name.empty() || !crossed_event_time(event.time,
-                    before, after, asset.duration, player.speed))
+                if (event.name.empty() || event.time < 0.0f ||
+                    event.time > asset.duration)
                 {
                     continue;
                 }
 
-                ReplayEngine::Runtime::EventRecord record;
-                record.type = ReplayEngine::Runtime::EngineEvents::MotionEvent;
-                record.type_name = "MotionEvent";
-                record.source = source;
-                record.target = target;
-                record.frame_index = object_runtime_frame_index;
-                record.payload.Set("name",
-                    ReplayEngine::Reflection::PropertyValue::MakeString(event.name));
-                record.payload.Set("parameter",
-                    ReplayEngine::Reflection::PropertyValue::MakeString(
-                        event.parameter));
-                record.payload.Set("time",
-                    ReplayEngine::Reflection::PropertyValue::MakeFloat(event.time));
-                object_runtime_context->Events().Publish(std::move(record));
+                const double event_time = static_cast<double>(event.time);
+                auto emit = [&](long long) { publish_motion_event(track, event, player); };
+
+                if (wrap_mode == MotionPlayerComponent::Loop)
+                {
+                    const double travel = static_cast<double>(delta_time) *
+                        static_cast<double>(player.speed);
+                    const double from = static_cast<double>(before);
+                    const double to = from + travel;
+                    if (travel > 0.0)
+                    {
+                        const long long first = static_cast<long long>(std::floor(
+                            (from - event_time) / duration)) + 1;
+                        const long long last = static_cast<long long>(std::floor(
+                            (to - event_time + epsilon) / duration));
+                        publish_repeated(first, last, emit);
+                    }
+                    else if (travel < 0.0)
+                    {
+                        const long long first = static_cast<long long>(std::ceil(
+                            (to - event_time - epsilon) / duration));
+                        const long long last = static_cast<long long>(std::ceil(
+                            (from - event_time) / duration)) - 1;
+                        publish_repeated(first, last, emit);
+                    }
+                    continue;
+                }
+
+                if (wrap_mode == MotionPlayerComponent::PingPong)
+                {
+                    if (direction_before == 0) continue;
+                    const double period = duration * 2.0;
+                    const double phase_from = direction_before > 0
+                        ? static_cast<double>(before)
+                        : period - static_cast<double>(before);
+                    const double phase_to = phase_from +
+                        static_cast<double>(delta_time) * std::fabs(
+                            static_cast<double>(player.speed));
+
+                    auto emit_phase_series = [&](double base)
+                    {
+                        const long long first = static_cast<long long>(std::floor(
+                            (phase_from - base) / period)) + 1;
+                        const long long last = static_cast<long long>(std::floor(
+                            (phase_to - base + epsilon) / period));
+                        publish_repeated(first, last, emit);
+                    };
+
+                    emit_phase_series(event_time);
+                    // 端点は往路/復路が同じ位相になる。二重発火させない。
+                    if (event_time > 0.0 && event_time < duration)
+                        emit_phase_series(period - event_time);
+                    continue;
+                }
+
+                // Once / ClampForever は端をまたがないので単一区間。
+                const double travel = static_cast<double>(delta_time) *
+                    static_cast<double>(player.speed);
+                double after = static_cast<double>(before) + travel;
+                after = (std::max)(0.0, (std::min)(duration, after));
+                if (travel > 0.0)
+                {
+                    if (event_time > static_cast<double>(before) &&
+                        event_time <= after + epsilon)
+                    {
+                        emit(0);
+                    }
+                }
+                else if (travel < 0.0)
+                {
+                    if (event_time < static_cast<double>(before) &&
+                        event_time + epsilon >= after)
+                    {
+                        emit(0);
+                    }
+                }
             }
         }
     };
@@ -699,9 +889,13 @@ void framework::evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
                 capture_snapshot(*asset, player);
             }
 
+            const float player_delta_time = player.ignore_time_scale
+                ? unscaled_delta_time : scaled_delta_time;
             const float previous_motion_time = player.time;
-            player.Advance(asset->duration, elapsed_time);
-            publish_motion_events(*asset, player, previous_motion_time, player.time);
+            const int previous_playback_direction = player.PlaybackDirection();
+            player.Advance(asset->duration, player_delta_time);
+            publish_motion_events(*asset, player, previous_motion_time, player_delta_time,
+                previous_playback_direction);
             if (player.HasStopRestoreRequest())
             {
                 contribute_restore(player);
@@ -809,13 +1003,20 @@ void framework::update_object_scene(float elapsed_time)
         }
     }
 
+    // ゲーム時間と実時間をここで一度だけ分ける。
+    // C# hot reload / Shader監視 / Editor は実時間、Scene と既定 Motion はゲーム時間。
+    const float unscaled_delta_time = (std::max)(0.0f, elapsed_time);
+    const float safe_time_scale = (std::max)(0.0f, (std::min)(100.0f, object_time_scale));
+    const float scaled_delta_time = unscaled_delta_time * safe_time_scale;
+
     // Runtime API 側へ時間を渡す。World が入れ替わっても接続は残る。
     if (object_runtime_context)
     {
         ReplayEngine::Runtime::RuntimeTime runtime_time;
-        runtime_time.delta_time = elapsed_time;
-        runtime_time.unscaled_delta_time = elapsed_time;
+        runtime_time.delta_time = scaled_delta_time;
+        runtime_time.unscaled_delta_time = unscaled_delta_time;
         runtime_time.fixed_delta_time = object_fixed_time_step;
+        runtime_time.time_scale = safe_time_scale;
         runtime_time.frame_index = object_runtime_frame_index;
         object_runtime_context->SetTime(runtime_time);
     }
@@ -825,15 +1026,20 @@ void framework::update_object_scene(float elapsed_time)
 
     ReplayEngine::Scene::Scene& scene = active_object_scene();
 
+    // Motion Editor は Play 中でなくても Property 一覧を使う。
+    // Material / Custom Effect の動的 Schema は毎フレームここで同期する。
+    prepare_material_motion_bindings(scene);
+    prepare_ui_effect_shader_schemas(scene);
+
     // Editor では F5 Play Session 以外 Component を更新しない。
     // Editor で置いた GameObject が編集中に勝手に動くのを防ぐ。
     if (object_runtime_active())
     {
         // 順序: Update（入力・意思決定）→ FixedUpdate（物理）→ LateUpdate → カメラ
         // 入力は Update で読み、FixedUpdate がその値を消費する。
-        scene.Update(elapsed_time);
-        update_object_fixed_step(elapsed_time);
-        scene.LateUpdate(elapsed_time);
+        scene.Update(scaled_delta_time);
+        update_object_fixed_step(scaled_delta_time);
+        scene.LateUpdate(scaled_delta_time);
 
         // 位置が確定してから Trigger を判定する。
         // FixedUpdate の途中で判定すると、まだ押し戻されていない位置で
@@ -851,7 +1057,7 @@ void framework::update_object_scene(float elapsed_time)
         }
 
         // Transform が確定してからカメラを動かす。
-        update_object_camera_follow(elapsed_time);
+        update_object_camera_follow(scaled_delta_time);
         object_audio_system.UpdateFromScene(scene);
     }
     else
@@ -870,8 +1076,9 @@ void framework::update_object_scene(float elapsed_time)
         // 順序: Scene::Update -> Motion Mixer -> UI Layout -> Render。
         // Motion は Component::OnUpdate からは評価しない。全 Player の寄与を先に集め、
         // 同じ property へ setter を 1 フレーム 1 回だけ呼ぶため、この外部フェーズで扱う。
-        evaluate_motion_players(scene, elapsed_time);
-        update_ui_sprite_animators(scene, elapsed_time);
+        evaluate_motion_players(scene, scaled_delta_time, unscaled_delta_time);
+        // UI sprite animation は Pause Menu / Loading 表示を止めないため実時間。
+        update_ui_sprite_animators(scene, unscaled_delta_time);
         if (object_runtime_context)
         {
             object_runtime_context->Events().Dispatch(
@@ -886,12 +1093,11 @@ void framework::update_object_scene(float elapsed_time)
     // UI layout は親子順序が必要なので、Scene 更新の外側で明示フェーズとして行う。
     ReplayEngine::UI::UILayout::Resolve(scene,
         static_cast<float>(client_width), static_cast<float>(client_height));
-    POINT mouse{};
-    GetCursorPos(&mouse);
+    POINT mouse{ game_input.PointerScreenX(), game_input.PointerScreenY() };
     ScreenToClient(hwnd, &mouse);
     const float mouse_x = static_cast<float>(mouse.x);
     const float mouse_y = static_cast<float>(client_height) - static_cast<float>(mouse.y);
-    const bool mouse_down = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+    const bool mouse_down = game_input.Held("PrimaryClick");
     const bool mouse_pressed = mouse_down && !ui_pointer_down_last;
     const bool mouse_released = !mouse_down && ui_pointer_down_last;
     bool input_captured = false;
@@ -1056,7 +1262,7 @@ void framework::update_object_camera_follow(float elapsed_time)
 
     if (!selection.Valid())
     {
-        game_scene->Gameplay().UpdateFreeCamera(elapsed_time);
+        game_scene->Gameplay().UpdateFreeCamera(elapsed_time, game_input);
         return;
     }
 
@@ -1076,7 +1282,8 @@ void framework::update_object_camera_follow(float elapsed_time)
         50.0f,
         0.1f,
         10000.0f,
-        elapsed_time);
+        elapsed_time,
+        game_input);
 }
 
 // ---------------------------------------------------------------------------
@@ -1480,6 +1687,7 @@ void framework::enter_object_play_mode()
 
     // Play 開始時に貯まっていた時間を捨てる。開始直後に物理が飛ぶのを防ぐ。
     object_fixed_accumulator = 0.0f;
+    object_time_scale = 1.0f;
     object_collision_events.Reset();
 
     object_scene_play_mode = true;
@@ -1634,6 +1842,7 @@ void framework::exit_object_play_mode()
     object_collision_events.Reset();
 
     object_fixed_accumulator = 0.0f;
+    object_time_scale = 1.0f;
 
     object_scene_play_mode = false;
     object_scene_paused = false;
@@ -1873,6 +2082,74 @@ ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
             ReplayEngine::Reflection::PropertyValue::MakeBool(
                 source.override_material_double_sided));
     }
+
+    // Motion の material.* は Renderer の永続 material_override とは別物。
+    // Asset を直接変更せず、この draw 用コピーにだけ重ねる。停止した次フレームには
+    // PrepareMaterialMotionProperties が active mask / bag を消すため完全に元へ戻る。
+    using namespace ReplayEngine::Components;
+    const std::uint32_t motion_mask = source.material_motion_fixed_mask;
+    if ((motion_mask & MaterialMotionBaseColor) != 0)
+    {
+        item.material_base_color = source.override_material_base_color;
+        binding_material.base_color = source.override_material_base_color;
+        binding_material.properties.Set("prop.BaseColor",
+            ReplayEngine::Reflection::PropertyValue::MakeColor(
+                source.override_material_base_color));
+    }
+    if ((motion_mask & MaterialMotionMetallic) != 0)
+    {
+        item.metallic = source.override_material_metallic;
+        binding_material.metallic = source.override_material_metallic;
+        binding_material.properties.Set("prop.Metallic",
+            ReplayEngine::Reflection::PropertyValue::MakeFloat(
+                source.override_material_metallic));
+    }
+    if ((motion_mask & MaterialMotionRoughness) != 0)
+    {
+        item.roughness = source.override_material_roughness;
+        binding_material.roughness = source.override_material_roughness;
+        binding_material.properties.Set("prop.Roughness",
+            ReplayEngine::Reflection::PropertyValue::MakeFloat(
+                source.override_material_roughness));
+    }
+    if ((motion_mask & MaterialMotionAmbientOcclusion) != 0)
+    {
+        item.ambient_occlusion = source.override_material_ambient_occlusion;
+        binding_material.ambient_occlusion = source.override_material_ambient_occlusion;
+        binding_material.properties.Set("prop.AmbientOcclusion",
+            ReplayEngine::Reflection::PropertyValue::MakeFloat(
+                source.override_material_ambient_occlusion));
+    }
+    if ((motion_mask & MaterialMotionEmissiveColor) != 0)
+    {
+        item.emissive_color = source.override_material_emissive_color;
+        binding_material.emissive = source.override_material_emissive_color;
+        binding_material.properties.Set("prop.Emissive",
+            ReplayEngine::Reflection::PropertyValue::MakeVector3(
+                source.override_material_emissive_color));
+    }
+    if ((motion_mask & MaterialMotionEmissiveStrength) != 0)
+    {
+        item.emissive_strength = source.override_material_emissive_strength;
+        binding_material.emissive_strength = source.override_material_emissive_strength;
+        binding_material.properties.Set("prop.EmissiveStrength",
+            ReplayEngine::Reflection::PropertyValue::MakeFloat(
+                source.override_material_emissive_strength));
+    }
+    if ((motion_mask & MaterialMotionDoubleSided) != 0)
+    {
+        item.double_sided = source.double_sided || source.override_material_double_sided;
+        binding_material.double_sided = source.override_material_double_sided;
+        binding_material.properties.Set("prop.DoubleSided",
+            ReplayEngine::Reflection::PropertyValue::MakeBool(
+                source.override_material_double_sided));
+    }
+    for (const ReplayEngine::Reflection::PropertyBag::Entry& entry :
+        source.material_motion_properties.Entries())
+    {
+        binding_material.properties.Set(entry.name, entry.value);
+    }
+
     const bool resolved = MaterialBindingResolver::Resolve(binding_material,
         shader_library.Catalog(), variant, item.material_binding);
     // binding_material は一時コピーなので、LayerStack の借用先だけ元Assetへ戻す。
@@ -1995,12 +2272,12 @@ void framework::draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shade
         skinned_mesh* mesh = resolve_object_mesh(item.mesh_asset);
         if (mesh == nullptr) continue;
 
-        // Animator が決めたクリップと時刻から姿勢を求める。
-        // 静的メッシュ扱いの提出（skinned=false）ではバインドポーズのまま描く。
-        // 深度プリパスでも同じ姿勢で描かないと、本描画と深度が一致しない。
-        const skinned_mesh::animation::keyframe* keyframe = item.skinned
-            ? resolve_object_keyframe(*mesh, item.clip_index, item.animation_time)
-            : nullptr;
+        // Animator の current / previous clip と blend factor は RenderItem だけを
+        // 介して Renderer へ渡す。Motion Runtime とは混ぜず、既存の
+        // skinned_mesh::blend_animations() で姿勢を作る。
+        skinned_mesh::animation::keyframe blended_keyframe;
+        const skinned_mesh::animation::keyframe* keyframe =
+            resolve_render_item_keyframe(*mesh, item, blended_keyframe);
 
         if (depth_only)
         {
@@ -2158,7 +2435,7 @@ void framework::clear_object_material_cache() noexcept
 }
 
 const skinned_mesh::animation::keyframe* framework::resolve_object_keyframe(
-    skinned_mesh& mesh, int clip_index, float animation_time) const
+    skinned_mesh& mesh, int clip_index, float animation_time, bool loop) const
 {
     if (clip_index < 0) return nullptr;
     if (mesh.animation_clips.empty()) return nullptr;
@@ -2171,13 +2448,20 @@ const skinned_mesh::animation::keyframe* framework::resolve_object_keyframe(
     const float sampling_rate = clip.sampling_rate > 0.0f ? clip.sampling_rate : 60.0f;
     const float duration = static_cast<float>(clip.sequence.size()) / sampling_rate;
 
-    // ループは提出された時刻をここで畳んで解決する。
-    // Animator はクリップ長を知らないので、長さを知っている側で処理する。
+    // クリップ長を知っている Renderer 側で Loop / Clamp を確定する。
+    // Animator は clip index と時間だけを持ち、mesh の実データへ依存しない。
     float time = animation_time;
     if (duration > 0.0f)
     {
-        time = std::fmod(time, duration);
-        if (time < 0.0f) time += duration;
+        if (loop)
+        {
+            time = std::fmod(time, duration);
+            if (time < 0.0f) time += duration;
+        }
+        else
+        {
+            time = (std::max)(0.0f, (std::min)(duration, time));
+        }
     }
 
     int frame = static_cast<int>(time * sampling_rate);
@@ -2187,6 +2471,34 @@ const skinned_mesh::animation::keyframe* framework::resolve_object_keyframe(
         frame = static_cast<int>(clip.sequence.size()) - 1;
     }
     return &clip.sequence.at(static_cast<std::size_t>(frame));
+}
+
+const skinned_mesh::animation::keyframe* framework::resolve_render_item_keyframe(
+    skinned_mesh& mesh, const ReplayEngine::Rendering::RenderItem& item,
+    skinned_mesh::animation::keyframe& blended_keyframe) const
+{
+    if (!item.skinned) return nullptr;
+
+    const skinned_mesh::animation::keyframe* current = resolve_object_keyframe(
+        mesh, item.clip_index, item.animation_time, item.animation_loop);
+    if (current == nullptr || item.previous_clip_index < 0 ||
+        item.animation_blend_factor >= 1.0f)
+    {
+        return current;
+    }
+
+    const skinned_mesh::animation::keyframe* previous = resolve_object_keyframe(
+        mesh, item.previous_clip_index, item.previous_animation_time,
+        item.previous_animation_loop);
+    if (previous == nullptr || previous->nodes.size() != current->nodes.size())
+        return current;
+
+    const skinned_mesh::animation::keyframe* sources[2]{ previous, current };
+    mesh.blend_animations(sources,
+        (std::max)(0.0f, (std::min)(1.0f, item.animation_blend_factor)),
+        blended_keyframe);
+    mesh.update_animation(blended_keyframe);
+    return &blended_keyframe;
 }
 
 // ---------------------------------------------------------------------------

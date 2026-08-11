@@ -11,6 +11,7 @@
 #include "../../Components/Camera/FollowTargetComponent.h"
 #include "../../Components/Editor/EditorNoteComponent.h"
 #include "../../Components/Core/TransformComponent.h"
+#include "../../Components/Core/PivotComponent.h"
 #include "../../Components/Gameplay/CharacterMotorComponent.h"
 #include "../../Components/Gameplay/HealthComponent.h"
 #include "../../Components/Gameplay/PlayerControllerComponent.h"
@@ -74,6 +75,7 @@ namespace ReplayEngine::Core
         using Components::SpotLightComponent;
         using Components::PlayerControllerComponent;
         using Components::PlayerInputComponent;
+        using Components::PivotComponent;
         using Components::RotatorComponent;
         using Components::RectTransformComponent;
         using Components::SkinnedMeshRendererComponent;
@@ -163,6 +165,34 @@ namespace ReplayEngine::Core
                     [](TransformComponent& component, const PropertyValue& value)
                     { component.SetScale(value.AsVector3()); })
                 .Display("拡大率").Step(0.01).NotSerializable());
+        }
+
+        void RegisterPivot()
+        {
+            ComponentRegistry::Register<PivotComponent>(
+                ComponentTypeInfo::Describe(u8"Pivot", u8"Core")
+                    .WithTooltip(u8"回転・拡縮の基準点。編集しても Transform の原点や配置は動かない。"));
+
+            PropertyRegistry::Register<PivotComponent>(
+                MakeProperty("mode", &PivotComponent::mode)
+                    .Display(u8"基準点の決め方")
+                    .AsEnum({ u8"自分の原点", u8"境界の中心", u8"境界の面",
+                        u8"ローカル座標", u8"ワールド座標", u8"別オブジェクト" })
+                    .Animation(Animatable::Step)
+                    .Tooltip(u8"回転・拡縮のときだけ使う基準点の解決方法。"));
+
+            PropertyRegistry::Register<PivotComponent>(
+                MakeProperty("local_point", &PivotComponent::local_point)
+                    .Display(u8"基準点")
+                    .Step(0.01)
+                    .Animation(Animatable::Interpolatable)
+                    .Tooltip(u8"ローカル/ワールド基準点、または境界面を選ぶ方向。"));
+
+            PropertyRegistry::Register<PivotComponent>(
+                MakeProperty("target", &PivotComponent::target)
+                    .Display(u8"対象オブジェクト")
+                    .Animation(Animatable::None)
+                    .Tooltip(u8"別オブジェクトを基準点にするときの参照。"));
         }
 
         void RegisterMeshRenderer()
@@ -485,34 +515,62 @@ namespace ReplayEngine::Core
         {
             ComponentRegistry::Register<AnimatorComponent>(
                 ComponentTypeInfo::Describe("Animator", "Rendering")
-                    .WithTooltip("Character Motor の状態から Idle / Walk / Jump を切り替える。"));
+                    .WithTooltip("スケルタルアニメーションの data-driven State / Transition を再生する。"
+                        "State が未設定の既存 Scene は従来の Idle / Walk / Jump 設定を使う。"));
 
             PropertyRegistry::Register<AnimatorComponent>(
-                MakeProperty("idle_clip", &AnimatorComponent::idle_clip)
-                    .Display("待機クリップ").Range(-1.0, 255.0).Step(1.0)
-                    .Tooltip("-1 なら切り替えない。"));
+                MakeAccessorProperty<AnimatorComponent>("state_count", PropertyType::Int,
+                    [](const AnimatorComponent& component)
+                    { return PropertyValue::MakeInt(component.StateCount()); },
+                    [](AnimatorComponent& component, const PropertyValue& value)
+                    { component.SetStateCount(value.AsInt()); })
+                .Display("State 数").Range(0.0, 64.0).Step(1.0)
+                .Animation(Animatable::None)
+                .Tooltip("0 のときだけ旧 Idle / Walk / Jump 互換経路を使う。"));
 
             PropertyRegistry::Register<AnimatorComponent>(
-                MakeProperty("walk_clip", &AnimatorComponent::walk_clip)
-                    .Display("移動クリップ").Range(-1.0, 255.0).Step(1.0));
+                MakeProperty("default_state", &AnimatorComponent::default_state)
+                    .Display("開始 State").Animation(Animatable::None)
+                    .Tooltip("空または存在しない名前なら先頭 State から開始する。"));
 
             PropertyRegistry::Register<AnimatorComponent>(
-                MakeProperty("jump_clip", &AnimatorComponent::jump_clip)
-                    .Display("ジャンプクリップ").Range(-1.0, 255.0).Step(1.0));
+                MakeAccessorProperty<AnimatorComponent>("transition_count", PropertyType::Int,
+                    [](const AnimatorComponent& component)
+                    { return PropertyValue::MakeInt(component.TransitionCount()); },
+                    [](AnimatorComponent& component, const PropertyValue& value)
+                    { component.SetTransitionCount(value.AsInt()); })
+                .Display("Transition 数").Range(0.0, 256.0).Step(1.0)
+                .Animation(Animatable::None)
+                .Tooltip("保存順が評価優先順位。1 フレームに成立させる遷移は 1 本だけ。"));
 
             PropertyRegistry::Register<AnimatorComponent>(
                 MakeProperty("playback_speed", &AnimatorComponent::playback_speed)
-                    .Display("再生速度").Range(0.0, 5.0).Step(0.01));
-
-            PropertyRegistry::Register<AnimatorComponent>(
-                MakeProperty("loop", &AnimatorComponent::loop).Display("ループ"));
-
-            PropertyRegistry::Register<AnimatorComponent>(
-                MakeProperty("walk_speed_threshold", &AnimatorComponent::walk_speed_threshold)
-                    .Display("移動とみなす速度").Range(0.0, 10.0).Step(0.01));
+                    .Display("全体再生速度").Range(0.0, 5.0).Step(0.01));
 
             PropertyRegistry::Register<AnimatorComponent>(
                 MakeProperty("playing", &AnimatorComponent::playing).Display("再生"));
+
+            // 旧 Scene の保存名は絶対に消さない。State Machine を使う Scene では
+            // advanced な互換値として残り、states が空なら従来どおり実処理にも使われる。
+            PropertyRegistry::Register<AnimatorComponent>(
+                MakeProperty("idle_clip", &AnimatorComponent::idle_clip)
+                    .Display("旧: 待機クリップ").Range(-1.0, 255.0).Step(1.0).Advanced());
+
+            PropertyRegistry::Register<AnimatorComponent>(
+                MakeProperty("walk_clip", &AnimatorComponent::walk_clip)
+                    .Display("旧: 移動クリップ").Range(-1.0, 255.0).Step(1.0).Advanced());
+
+            PropertyRegistry::Register<AnimatorComponent>(
+                MakeProperty("jump_clip", &AnimatorComponent::jump_clip)
+                    .Display("旧: ジャンプクリップ").Range(-1.0, 255.0).Step(1.0).Advanced());
+
+            PropertyRegistry::Register<AnimatorComponent>(
+                MakeProperty("loop", &AnimatorComponent::loop)
+                    .Display("旧: ループ").Advanced());
+
+            PropertyRegistry::Register<AnimatorComponent>(
+                MakeProperty("walk_speed_threshold", &AnimatorComponent::walk_speed_threshold)
+                    .Display("旧: 移動とみなす速度").Range(0.0, 10.0).Step(0.01).Advanced());
         }
 
         // すべての Collider に共通するプロパティ。
@@ -858,9 +916,15 @@ namespace ReplayEngine::Core
                     .Display("優先度").Range(-100.0, 100.0).Step(1.0));
 
             PropertyRegistry::Register<CameraComponent>(
+                MakeProperty("viewport_enabled", &CameraComponent::viewport_enabled)
+                    .Display("分割 Viewport を使う")
+                    .Animation(Animatable::Step)
+                    .Tooltip("有効な Camera が 1 台でもあれば、各 Camera を viewport_rect へ合成する。"));
+
+            PropertyRegistry::Register<CameraComponent>(
                 MakeProperty("viewport_rect", &CameraComponent::viewport_rect)
                     .Display("Viewport (x y w h)").Range(0.0, 1.0).Step(0.01)
-                    .Tooltip("Phase 1 では全画面描画だけを使う。"));
+                    .Tooltip("画面左上を (0,0)、右下を (1,1) とする正規化矩形。"));
         }
 
         void RegisterPostProcessVolume()
@@ -1260,8 +1324,8 @@ namespace ReplayEngine::Core
                 MakeProperty("font", &UITextComponent::font)
                     .Display("フォント").OfAssetType("Font")
                     .Animation(Animatable::Step)
-                    .Tooltip("フォント Asset を選ぶ。まだ取り込み経路が無いので候補は空です。"
-                        "未指定でも fallback atlas で描画します。"));
+                    .Tooltip(u8"Project Browser へ取り込んだ TTF / OTF / TTC を選ぶ。"
+                        u8"未指定・Missing の場合は日本語対応のシステムフォントへフォールバックする。"));
             PropertyRegistry::Register<UITextComponent>(
                 MakeProperty("font_size", &UITextComponent::font_size)
                     .Display("文字サイズ").Range(1.0, 512.0).Step(1.0));
@@ -1431,6 +1495,14 @@ namespace ReplayEngine::Core
                     .Display("無効 Motion").OfAssetType("Motion")
                     .Animation(Animatable::Step));
             PropertyRegistry::Register<UIButtonComponent>(
+                MakeProperty("navigation_enabled", &UIButtonComponent::navigation_enabled)
+                    .Display("パッド/キーでフォーカス")
+                    .Tooltip("有効なら十字キー/方向キーの UI フォーカス対象になる。"));
+            PropertyRegistry::Register<UIButtonComponent>(
+                MakeProperty("navigation_order", &UIButtonComponent::navigation_order)
+                    .Display("フォーカス順").Step(1.0)
+                    .Tooltip("小さい順にフォーカスを移動する。同値なら Hierarchy 順。"));
+            PropertyRegistry::Register<UIButtonComponent>(
                 MakeProperty("state_blend_seconds", &UIButtonComponent::state_blend_seconds)
                     .Display("状態 Blend 秒").Range(0.0, 5.0).Step(0.01));
             PropertyRegistry::Register<UIButtonComponent>(
@@ -1507,6 +1579,11 @@ namespace ReplayEngine::Core
                 MakeProperty("auto_stop_on_end", &MotionPlayerComponent::auto_stop_on_end)
                     .Display("終了時に停止")
                     .Animation(Animatable::Step));
+            PropertyRegistry::Register<MotionPlayerComponent>(
+                MakeProperty("ignore_time_scale", &MotionPlayerComponent::ignore_time_scale)
+                    .Display("Time Scaleを無視")
+                    .Tooltip("Pause中も動かしたいUI/演出では有効にする。"));
+
             PropertyRegistry::Register<MotionPlayerComponent>(
                 MakeProperty("blend_in_seconds", &MotionPlayerComponent::blend_in_seconds)
                     .Display("Blend In 秒").Range(0.0, 30.0).Step(0.01));
@@ -1692,6 +1769,7 @@ namespace ReplayEngine::Core
         RegisterMissingComponent();
 
         RegisterTransform();
+        RegisterPivot();
         RegisterMeshRenderer();
         RegisterPrimitiveMeshRenderer();
         RegisterPostProcessVolume();

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../../Object/Component/Component.h"
 #include "../../Reflection/Property/References.h"
@@ -35,6 +35,11 @@ namespace ReplayEngine::Components
         Reflection::AssetReference pressed_motion;
         Reflection::AssetReference disabled_motion;
         float state_blend_seconds = 0.08f;
+        bool navigation_enabled = true;
+        int navigation_order = 0;
         int state = Normal;
+
+        // Runtime のフォーカス状態。Scene には保存しない。
+        bool focused = false;
     };
 }

@@ -101,7 +101,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;xaudio2.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;dxguid.lib;xaudio2.lib;xinput.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <IgnoreSpecificDefaultLibraries>
       </IgnoreSpecificDefaultLibraries>
       <IgnoreAllDefaultLibraries>
@@ -135,7 +135,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;xaudio2.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;dxguid.lib;xaudio2.lib;xinput.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <FxCompile>
       <ShaderModel>5.0</ShaderModel>
@@ -167,7 +167,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>
       </AdditionalLibraryDirectories>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;xaudio2.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;xaudio2.lib;xinput.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <FxCompile>
       <ShaderModel>5.0</ShaderModel>
@@ -198,7 +198,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;xaudio2.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;xaudio2.lib;xinput.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <FxCompile>
       <ShaderModel>5.0</ShaderModel>
@@ -293,6 +293,7 @@
     <ClCompile Include="Source\mesh\static_mesh.cpp" />
     <ClCompile Include="Source\core\texture.cpp" />
     <ClCompile Include="Source\game\camera.cpp" />
+    <ClCompile Include="Source\game\game_input.cpp" />
     <ClCompile Include="Source\game\free_camera_controller.cpp" />
     <ClCompile Include="RePlayEngine\Physics\SphereCast.cpp" />
     <ClCompile Include="Source\game\scene_game.cpp" />
@@ -591,6 +592,7 @@
     <ClInclude Include="RePlayEngine\Reflection\Registry\PropertyRegistry.h" />
     <ClInclude Include="RePlayEngine\Scene\Runtime\Scene.h" />
     <ClInclude Include="RePlayEngine\Components\Core\TransformComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Core\PivotComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Rendering\MeshRendererComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Rendering\PrimitiveMeshRendererComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Rendering\LightComponents.h" />
@@ -617,6 +619,7 @@
     <ClInclude Include="RePlayEngine\Scene\Serialization\PrefabSerializer.h" />
     <ClInclude Include="RePlayEngine\Scene\Services\ICameraBasisProvider.h" />
     <ClInclude Include="RePlayEngine\Scene\Services\IPhysicsQueryService.h" />
+    <ClInclude Include="RePlayEngine\Scene\Services\IInputService.h" />
     <ClInclude Include="RePlayEngine\Scene\Services\SceneServices.h" />
     <ClInclude Include="RePlayEngine\Scene\Services\PlayerControlSystem.h" />
     <ClInclude Include="RePlayEngine\Scene\Services\RespawnService.h" />

@@ -501,6 +501,9 @@
     <ClCompile Include="Source\game\free_camera_controller.cpp">
       <Filter>Source\Game</Filter>
     </ClCompile>
+    <ClCompile Include="Source\game\game_input.cpp">
+      <Filter>Source\Game</Filter>
+    </ClCompile>
     <ClCompile Include="Source\mesh\UI.cpp">
       <Filter>Source\Game\UI</Filter>
     </ClCompile>
@@ -1262,6 +1265,9 @@
     <ClInclude Include="RePlayEngine\Components\Core\TransformComponent.h">
       <Filter>RePlayEngine\Components\Core</Filter>
     </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Core\PivotComponent.h">
+      <Filter>RePlayEngine\Components\Core</Filter>
+    </ClInclude>
     <ClInclude Include="RePlayEngine\Components\Rendering\MeshRendererComponent.h">
       <Filter>RePlayEngine\Components\Rendering</Filter>
     </ClInclude>
@@ -1338,6 +1344,9 @@
       <Filter>RePlayEngine\Scene\Services</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Scene\Services\IPhysicsQueryService.h">
+      <Filter>RePlayEngine\Scene\Services</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Scene\Services\IInputService.h">
       <Filter>RePlayEngine\Scene\Services</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Scene\Services\SceneServices.h">

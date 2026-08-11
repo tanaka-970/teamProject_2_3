@@ -2,6 +2,9 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cerrno>
+#include <cmath>
+#include <cstdlib>
 #include <sstream>
 
 namespace
@@ -43,7 +46,7 @@ void framework::execute_editor_command(const std::string& command)
     {
         editor_command_result =
             "deferred | bloom [on/off/toggle] | save | undo | redo | duplicate | objects | "
-            "workspace [general/placement/modeling/animation/rendering] | fullscreen";
+            "workspace [general/placement/modeling/animation/rendering] | timescale [0..100] | fullscreen";
         return;
     }
     if (name == "deferred")
@@ -110,6 +113,27 @@ void framework::execute_editor_command(const std::string& command)
             return;
         }
         editor_command_result = "ワークスペースを切り替えました";
+        return;
+    }
+    if (name == "timescale" || name == "時間倍率")
+    {
+        if (argument.empty())
+        {
+            editor_command_result = "Time Scale: " + std::to_string(object_time_scale);
+            return;
+        }
+        errno = 0;
+        char* parse_end = nullptr;
+        const float parsed = std::strtof(argument.c_str(), &parse_end);
+        if (parse_end == argument.c_str() || parse_end == nullptr || *parse_end != '\0' ||
+            errno == ERANGE || !std::isfinite(parsed))
+        {
+            editor_command_result = "使い方: timescale [0..100]";
+            return;
+        }
+
+        object_time_scale = (std::max)(0.0f, (std::min)(100.0f, parsed));
+        editor_command_result = "Time Scale: " + std::to_string(object_time_scale);
         return;
     }
     if (name == "fullscreen")

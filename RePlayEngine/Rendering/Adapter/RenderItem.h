@@ -1,12 +1,14 @@
-#pragma once
+﻿#pragma once
 
 #include "../../Core/ObjectID/ObjectID.h"
+#include "../../Reflection/Property/PropertyBag.h"
 #include "../Shaders/ShaderAsset.h"
 #include "../Materials/MaterialBinding.h"
 
 #include <DirectXMath.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -35,6 +37,12 @@ namespace ReplayEngine::Rendering
         // 旧 Scene 互換。Material が割り当てられているときは Shader と値を
         // MaterialAsset から解決し、この値は追加 tint の有無だけに使う。
         bool material_override = false;
+
+        // Motion がこのフレームだけ Material に重ねる値。
+        // Material Asset 本体を書き換えないため、描画提出にだけ運ぶ。
+        std::uint32_t material_motion_fixed_mask = 0;
+        Reflection::PropertyBag material_motion_properties;
+
         DirectX::XMFLOAT4 override_material_base_color{ 1.0f, 1.0f, 1.0f, 1.0f };
         float override_material_metallic = 0.0f;
         float override_material_roughness = 0.55f;
@@ -103,6 +111,13 @@ namespace ReplayEngine::Rendering
 
         // false なら時間を進めず、その姿勢で止める。
         bool animation_playing = true;
+
+        // data-driven Animator の遷移元。-1 ならブレンドしない。
+        int previous_clip_index = -1;
+        float previous_animation_time = 0.0f;
+        float animation_blend_factor = 1.0f;
+        bool animation_loop = true;
+        bool previous_animation_loop = true;
     };
 
     // 1 フレーム分の描画提出リスト。

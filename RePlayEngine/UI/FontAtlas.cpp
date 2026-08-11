@@ -1,5 +1,6 @@
-#include "FontAtlas.h"
+﻿#include "FontAtlas.h"
 
+#include "../Assets/AssetDatabase.h"
 #include "../Components/UI/UITextComponent.h"
 #define STBTT_STATIC
 #define STB_TRUETYPE_IMPLEMENTATION
@@ -10,11 +11,17 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 
 namespace ReplayEngine::UI
 {
     namespace
     {
+        constexpr const char* fallback_face_key = "__replay_default_font__";
+        constexpr int atlas_width = 2048;
+        constexpr int atlas_height = 2048;
+        constexpr int atlas_padding = 2;
+
         std::uint32_t DecodeUtf8(const std::string& text, std::size_t& offset)
         {
             const unsigned char c0 = static_cast<unsigned char>(text[offset++]);
@@ -22,12 +29,14 @@ namespace ReplayEngine::UI
             if ((c0 & 0xE0) == 0xC0 && offset < text.size())
             {
                 const unsigned char c1 = static_cast<unsigned char>(text[offset++]);
+                if ((c1 & 0xC0) != 0x80) return 0x25A1u;
                 return ((c0 & 0x1Fu) << 6) | (c1 & 0x3Fu);
             }
             if ((c0 & 0xF0) == 0xE0 && offset + 1 < text.size())
             {
                 const unsigned char c1 = static_cast<unsigned char>(text[offset++]);
                 const unsigned char c2 = static_cast<unsigned char>(text[offset++]);
+                if ((c1 & 0xC0) != 0x80 || (c2 & 0xC0) != 0x80) return 0x25A1u;
                 return ((c0 & 0x0Fu) << 12) | ((c1 & 0x3Fu) << 6) | (c2 & 0x3Fu);
             }
             if ((c0 & 0xF8) == 0xF0 && offset + 2 < text.size())
@@ -35,14 +44,15 @@ namespace ReplayEngine::UI
                 const unsigned char c1 = static_cast<unsigned char>(text[offset++]);
                 const unsigned char c2 = static_cast<unsigned char>(text[offset++]);
                 const unsigned char c3 = static_cast<unsigned char>(text[offset++]);
+                if ((c1 & 0xC0) != 0x80 || (c2 & 0xC0) != 0x80 || (c3 & 0xC0) != 0x80)
+                    return 0x25A1u;
                 return ((c0 & 0x07u) << 18) | ((c1 & 0x3Fu) << 12) |
                     ((c2 & 0x3Fu) << 6) | (c3 & 0x3Fu);
             }
             return 0x25A1u;
         }
 
-        bool ReadBinaryFile(const std::filesystem::path& path,
-            std::vector<unsigned char>& out)
+        bool ReadBinaryFile(const std::filesystem::path& path, std::vector<unsigned char>& out)
         {
             std::ifstream stream(path, std::ios::binary);
             if (!stream) return false;
@@ -51,14 +61,13 @@ namespace ReplayEngine::UI
             if (size <= 0) return false;
             stream.seekg(0, std::ios::beg);
             out.resize(static_cast<std::size_t>(size));
-            stream.read(reinterpret_cast<char*>(out.data()),
-                static_cast<std::streamsize>(size));
+            stream.read(reinterpret_cast<char*>(out.data()), static_cast<std::streamsize>(size));
             return stream.good();
         }
 
-        bool IsFullWidth(std::uint32_t codepoint) noexcept
+        bool ContainsCodepoint(const std::vector<std::uint32_t>& values, std::uint32_t codepoint)
         {
-            return codepoint >= 0x1100u;
+            return std::find(values.begin(), values.end(), codepoint) != values.end();
         }
     }
 
@@ -67,254 +76,303 @@ namespace ReplayEngine::UI
         Release();
         if (device == nullptr) return false;
         device_ = device;
-        if (LoadDefaultFont() && BuildDefaultAtlas(device))
-            return true;
-        return EnsureTexture(device);
+        active_face_key_ = fallback_face_key;
+        return EnsureFallbackFace();
     }
 
     void FontAtlas::Release() noexcept
     {
-        glyphs_.clear();
-        baked_glyphs_.clear();
-        font_data_.clear();
-        baked_font_size_ = 64.0f;
-        real_atlas_ = false;
-        texture_.Reset();
+        faces_.clear();
+        active_face_key_.clear();
         device_.Reset();
+        baked_font_size_ = 64.0f;
     }
 
-    const FontAtlas::GlyphInfo& FontAtlas::Glyph(std::uint32_t codepoint, float font_size)
+    FontAtlas::FaceAtlas* FontAtlas::ActiveFace() noexcept
     {
-        EnsureGlyph(codepoint, font_size);
-        return glyphs_.find(codepoint)->second;
+        const auto found = faces_.find(active_face_key_);
+        return found != faces_.end() ? &found->second : nullptr;
     }
 
-    bool FontAtlas::EnsureTexture(ID3D11Device* device)
+    const FontAtlas::FaceAtlas* FontAtlas::ActiveFace() const noexcept
     {
-        if (texture_) return true;
+        const auto found = faces_.find(active_face_key_);
+        return found != faces_.end() ? &found->second : nullptr;
+    }
 
+    ID3D11ShaderResourceView* FontAtlas::Texture() const noexcept
+    {
+        const FaceAtlas* face = ActiveFace();
+        return face != nullptr ? face->texture.Get() : nullptr;
+    }
+
+    bool FontAtlas::EnsureWhiteTexture(FaceAtlas& face)
+    {
+        if (face.texture || device_ == nullptr) return face.texture != nullptr;
         const std::uint32_t pixel = 0xFFFFFFFFu;
         D3D11_TEXTURE2D_DESC desc{};
-        desc.Width = 1;
-        desc.Height = 1;
-        desc.MipLevels = 1;
-        desc.ArraySize = 1;
+        desc.Width = 1; desc.Height = 1; desc.MipLevels = 1; desc.ArraySize = 1;
         desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-        desc.SampleDesc.Count = 1;
-        desc.Usage = D3D11_USAGE_DEFAULT;
+        desc.SampleDesc.Count = 1; desc.Usage = D3D11_USAGE_DEFAULT;
         desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-
-        D3D11_SUBRESOURCE_DATA init{};
-        init.pSysMem = &pixel;
-        init.SysMemPitch = sizeof(pixel);
-
+        D3D11_SUBRESOURCE_DATA init{}; init.pSysMem = &pixel; init.SysMemPitch = sizeof(pixel);
         Microsoft::WRL::ComPtr<ID3D11Texture2D> texture;
-        if (FAILED(device->CreateTexture2D(&desc, &init, texture.GetAddressOf())))
-            return false;
-
+        if (FAILED(device_->CreateTexture2D(&desc, &init, texture.GetAddressOf()))) return false;
         D3D11_SHADER_RESOURCE_VIEW_DESC srv{};
-        srv.Format = desc.Format;
-        srv.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+        srv.Format = desc.Format; srv.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
         srv.Texture2D.MipLevels = 1;
-        return SUCCEEDED(device->CreateShaderResourceView(texture.Get(), &srv, texture_.GetAddressOf()));
+        face.texture.Reset();
+        return SUCCEEDED(device_->CreateShaderResourceView(texture.Get(), &srv, face.texture.GetAddressOf()));
     }
 
-    bool FontAtlas::LoadDefaultFont()
+    bool FontAtlas::EnsureFallbackFace()
     {
-        font_data_.clear();
+        FaceAtlas& face = faces_[fallback_face_key];
+        if (!face.font_data.empty() || face.texture) return true;
         const std::filesystem::path candidates[] =
         {
             L"C:\\Windows\\Fonts\\meiryo.ttc",
             L"C:\\Windows\\Fonts\\YuGothM.ttc",
-            L"C:\\Windows\\Fonts\\arial.ttf",
+            L"C:\\Windows\\Fonts\\msgothic.ttc",
             L"C:\\Windows\\Fonts\\segoeui.ttf",
         };
         for (const std::filesystem::path& path : candidates)
         {
-            if (ReadBinaryFile(path, font_data_))
-                return true;
+            if (ReadBinaryFile(path, face.font_data))
+            {
+                face.valid_font = true;
+                break;
+            }
         }
-        return false;
+        for (std::uint32_t cp = 32; cp < 128; ++cp) face.requested_codepoints.push_back(cp);
+        if (face.valid_font && RebuildFace(face)) return true;
+        return EnsureWhiteTexture(face);
     }
 
-    bool FontAtlas::BuildDefaultAtlas(ID3D11Device* device)
+    bool FontAtlas::SelectFace(const std::string& font_guid,
+        const Assets::AssetDatabase* asset_database)
     {
-        if (device == nullptr || font_data_.empty()) return false;
+        if (font_guid.empty() || asset_database == nullptr)
+        {
+            active_face_key_ = fallback_face_key;
+            return EnsureFallbackFace();
+        }
 
-        constexpr int atlas_width = 512;
-        constexpr int atlas_height = 512;
-        std::vector<unsigned char> alpha(atlas_width * atlas_height);
-        std::array<stbtt_bakedchar, 96> baked{};
+        auto found = faces_.find(font_guid);
+        if (found != faces_.end())
+        {
+            active_face_key_ = font_guid;
+            return found->second.texture != nullptr || found->second.valid_font;
+        }
 
-        const int offset = stbtt_GetFontOffsetForIndex(font_data_.data(), 0);
-        const int bake_result = stbtt_BakeFontBitmap(font_data_.data(),
-            offset >= 0 ? offset : 0,
-            baked_font_size_,
-            alpha.data(), atlas_width, atlas_height,
-            32, static_cast<int>(baked.size()), baked.data());
-        if (bake_result <= 0) return false;
+        FaceAtlas face;
+        const Assets::AssetRecord* record = asset_database->FindByGuid(font_guid);
+        if (record == nullptr || record->kind != Assets::AssetKind::Font ||
+            !ReadBinaryFile(record->source_path, face.font_data))
+        {
+            // Asset が一時的に見つからなくても参照値は UIText に残す。
+            // 描画だけ fallback にし、Asset が戻れば次回起動で復帰できる。
+            active_face_key_ = fallback_face_key;
+            return EnsureFallbackFace();
+        }
+        face.valid_font = true;
+        for (std::uint32_t cp = 32; cp < 128; ++cp) face.requested_codepoints.push_back(cp);
+        faces_.emplace(font_guid, std::move(face));
+        active_face_key_ = font_guid;
+        FaceAtlas& inserted = faces_.find(font_guid)->second;
+        if (!RebuildFace(inserted)) return EnsureWhiteTexture(inserted);
+        return true;
+    }
 
+    bool FontAtlas::EnsureCodepoints(FaceAtlas& face, const std::string& text)
+    {
+        bool changed = false;
+        std::size_t offset = 0;
+        while (offset < text.size())
+        {
+            const std::uint32_t codepoint = DecodeUtf8(text, offset);
+            if (codepoint == '\r' || codepoint == '\n') continue;
+            if (!ContainsCodepoint(face.requested_codepoints, codepoint))
+            {
+                face.requested_codepoints.push_back(codepoint);
+                changed = true;
+            }
+        }
+        if (!changed) return true;
+        return face.valid_font ? RebuildFace(face) : EnsureWhiteTexture(face);
+    }
+
+    bool FontAtlas::RebuildFace(FaceAtlas& face)
+    {
+        if (device_ == nullptr || !face.valid_font || face.font_data.empty()) return false;
+        stbtt_fontinfo info{};
+        const int offset = stbtt_GetFontOffsetForIndex(face.font_data.data(), 0);
+        if (!stbtt_InitFont(&info, face.font_data.data(), offset >= 0 ? offset : 0)) return false;
+
+        const float scale = stbtt_ScaleForPixelHeight(&info, baked_font_size_);
+        std::vector<unsigned char> alpha(static_cast<std::size_t>(atlas_width) * atlas_height, 0);
+        std::unordered_map<std::uint32_t, GlyphInfo> baked;
+        int pen_x = atlas_padding;
+        int pen_y = atlas_padding;
+        int row_height = 0;
+
+        for (std::uint32_t codepoint : face.requested_codepoints)
+        {
+            int advance = 0, left_bearing = 0;
+            stbtt_GetCodepointHMetrics(&info, static_cast<int>(codepoint), &advance, &left_bearing);
+            int x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+            stbtt_GetCodepointBitmapBox(&info, static_cast<int>(codepoint), scale, scale,
+                &x0, &y0, &x1, &y1);
+            const int glyph_width = (std::max)(0, x1 - x0);
+            const int glyph_height = (std::max)(0, y1 - y0);
+            if (pen_x + glyph_width + atlas_padding > atlas_width)
+            {
+                pen_x = atlas_padding;
+                pen_y += row_height + atlas_padding;
+                row_height = 0;
+            }
+            if (pen_y + glyph_height + atlas_padding > atlas_height) break;
+
+            if (glyph_width > 0 && glyph_height > 0)
+            {
+                stbtt_MakeCodepointBitmap(&info,
+                    alpha.data() + static_cast<std::size_t>(pen_y) * atlas_width + pen_x,
+                    glyph_width, glyph_height, atlas_width, scale, scale,
+                    static_cast<int>(codepoint));
+            }
+            GlyphInfo glyph{};
+            glyph.uv = { static_cast<float>(pen_x) / atlas_width,
+                static_cast<float>(pen_y) / atlas_height,
+                static_cast<float>(glyph_width) / atlas_width,
+                static_cast<float>(glyph_height) / atlas_height };
+            glyph.size = { static_cast<float>(glyph_width), static_cast<float>(glyph_height) };
+            glyph.bearing = { static_cast<float>(x0), 0.0f };
+            glyph.advance = static_cast<float>(advance) * scale;
+            baked[codepoint] = glyph;
+            pen_x += glyph_width + atlas_padding;
+            row_height = (std::max)(row_height, glyph_height);
+        }
+
+        if (baked.empty()) return false;
         std::vector<std::uint32_t> rgba(static_cast<std::size_t>(atlas_width) * atlas_height);
         for (std::size_t index = 0; index < rgba.size(); ++index)
         {
             const std::uint32_t a = static_cast<std::uint32_t>(alpha[index]);
             rgba[index] = (a << 24) | 0x00FFFFFFu;
         }
-
         D3D11_TEXTURE2D_DESC desc{};
-        desc.Width = atlas_width;
-        desc.Height = atlas_height;
-        desc.MipLevels = 1;
-        desc.ArraySize = 1;
-        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-        desc.SampleDesc.Count = 1;
-        desc.Usage = D3D11_USAGE_DEFAULT;
-        desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-
-        D3D11_SUBRESOURCE_DATA init{};
-        init.pSysMem = rgba.data();
+        desc.Width = atlas_width; desc.Height = atlas_height; desc.MipLevels = 1; desc.ArraySize = 1;
+        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM; desc.SampleDesc.Count = 1;
+        desc.Usage = D3D11_USAGE_DEFAULT; desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        D3D11_SUBRESOURCE_DATA init{}; init.pSysMem = rgba.data();
         init.SysMemPitch = atlas_width * sizeof(std::uint32_t);
-
         Microsoft::WRL::ComPtr<ID3D11Texture2D> texture;
-        if (FAILED(device->CreateTexture2D(&desc, &init, texture.GetAddressOf())))
-            return false;
-
+        if (FAILED(device_->CreateTexture2D(&desc, &init, texture.GetAddressOf()))) return false;
         D3D11_SHADER_RESOURCE_VIEW_DESC srv{};
-        srv.Format = desc.Format;
-        srv.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+        srv.Format = desc.Format; srv.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
         srv.Texture2D.MipLevels = 1;
-        texture_.Reset();
-        if (FAILED(device->CreateShaderResourceView(texture.Get(), &srv, texture_.GetAddressOf())))
+        face.texture.Reset();
+        if (FAILED(device_->CreateShaderResourceView(texture.Get(), &srv, face.texture.GetAddressOf())))
             return false;
-
-        glyphs_.clear();
-        baked_glyphs_.clear();
-        for (std::size_t index = 0; index < baked.size(); ++index)
-        {
-            const stbtt_bakedchar& b = baked[index];
-            GlyphInfo glyph{};
-            glyph.uv = {
-                static_cast<float>(b.x0) / static_cast<float>(atlas_width),
-                static_cast<float>(b.y0) / static_cast<float>(atlas_height),
-                static_cast<float>(b.x1 - b.x0) / static_cast<float>(atlas_width),
-                static_cast<float>(b.y1 - b.y0) / static_cast<float>(atlas_height)
-            };
-            glyph.size = {
-                static_cast<float>(b.x1 - b.x0),
-                static_cast<float>(b.y1 - b.y0)
-            };
-            glyph.bearing = { 0.0f, 0.0f };
-            glyph.advance = b.xadvance > 0.0f ? b.xadvance : glyph.size.x;
-            baked_glyphs_[static_cast<std::uint32_t>(32 + index)] = glyph;
-        }
-        real_atlas_ = true;
+        face.baked_glyphs = std::move(baked);
+        face.scaled_glyphs.clear();
         return true;
     }
 
-    bool FontAtlas::EnsureGlyph(std::uint32_t codepoint, float font_size)
+    const FontAtlas::GlyphInfo& FontAtlas::Glyph(std::uint32_t codepoint, float font_size)
     {
-        if (real_atlas_ && codepoint >= 32u && codepoint < 128u)
+        FaceAtlas* face = ActiveFace();
+        if (face == nullptr)
         {
-            const auto found = baked_glyphs_.find(codepoint);
-            if (found != baked_glyphs_.end())
-            {
-                const float scale = (std::max)(font_size, 1.0f) / baked_font_size_;
-                GlyphInfo glyph = found->second;
-                glyph.size.x *= scale;
-                glyph.size.y *= scale;
-                glyph.advance *= scale;
-                glyphs_[codepoint] = glyph;
-                return true;
-            }
+            active_face_key_ = fallback_face_key;
+            EnsureFallbackFace();
+            face = ActiveFace();
         }
-
-        const float size = (std::max)(font_size, 1.0f);
-        GlyphInfo glyph{};
-        const float width_rate = IsFullWidth(codepoint) ? 0.92f : 0.54f;
-        glyph.size = { size * width_rate, size };
-        glyph.bearing = { 0.0f, 0.0f };
-        glyph.advance = glyph.size.x;
-        glyph.uv = { 0.0f, 0.0f, 1.0f, 1.0f };
-        glyphs_[codepoint] = glyph;
-        return true;
+        auto baked = face->baked_glyphs.find(codepoint);
+        if (baked == face->baked_glyphs.end())
+        {
+            if (!ContainsCodepoint(face->requested_codepoints, codepoint))
+                face->requested_codepoints.push_back(codepoint);
+            if (face->valid_font) RebuildFace(*face);
+            baked = face->baked_glyphs.find(codepoint);
+        }
+        if (baked == face->baked_glyphs.end())
+        {
+            // フォントがグリフを持たない場合も layout を止めない。
+            GlyphInfo missing{};
+            const float size = (std::max)(font_size, 1.0f);
+            missing.size = { size * 0.92f, size };
+            missing.advance = missing.size.x;
+            face->scaled_glyphs[codepoint] = missing;
+            return face->scaled_glyphs.find(codepoint)->second;
+        }
+        const float size_scale = (std::max)(font_size, 1.0f) / baked_font_size_;
+        GlyphInfo scaled = baked->second;
+        scaled.size.x *= size_scale;
+        scaled.size.y *= size_scale;
+        scaled.bearing.x *= size_scale;
+        scaled.bearing.y *= size_scale;
+        scaled.advance *= size_scale;
+        face->scaled_glyphs[codepoint] = scaled;
+        return face->scaled_glyphs.find(codepoint)->second;
     }
 
     void FontAtlas::BuildGlyphs(Components::UITextComponent& text_component,
-        float width, float height)
+        float width, float height, const Assets::AssetDatabase* asset_database)
     {
-        std::vector<Components::UITextComponent::GlyphQuad>& glyphs =
-            text_component.MutableGlyphs();
-        glyphs.clear();
+        SelectFace(text_component.font.guid, asset_database);
+        FaceAtlas* face = ActiveFace();
+        if (face != nullptr) EnsureCodepoints(*face, text_component.text);
 
+        std::vector<Components::UITextComponent::GlyphQuad>& glyphs = text_component.MutableGlyphs();
+        glyphs.clear();
         const float font_size = (std::max)(1.0f, text_component.font_size);
         const float line_height = font_size * (std::max)(0.1f, text_component.line_spacing);
         const float wrap_width = text_component.word_wrap ? (std::max)(1.0f, width) : 1.0e9f;
-
-        std::vector<std::size_t> line_starts;
+        std::vector<std::size_t> line_starts{ 0 };
         std::vector<float> line_widths;
-        line_starts.push_back(0);
-
-        float x = 0.0f;
-        float y = 0.0f;
+        float x = 0.0f, y = 0.0f;
         int character_index = 0;
         std::size_t offset = 0;
         while (offset < text_component.text.size())
         {
-            const std::size_t before = offset;
             const std::uint32_t codepoint = DecodeUtf8(text_component.text, offset);
             if (codepoint == '\r') continue;
             if (codepoint == '\n')
             {
-                line_widths.push_back(x);
-                x = 0.0f;
-                y += line_height;
-                line_starts.push_back(glyphs.size());
-                ++character_index;
-                continue;
+                line_widths.push_back(x); x = 0.0f; y += line_height;
+                line_starts.push_back(glyphs.size()); ++character_index; continue;
             }
-
             const GlyphInfo& glyph = Glyph(codepoint, font_size);
             const float advance = glyph.advance + text_component.character_spacing;
             if (text_component.word_wrap && x > 0.0f && x + advance > wrap_width)
             {
-                line_widths.push_back(x);
-                x = 0.0f;
-                y += line_height;
+                line_widths.push_back(x); x = 0.0f; y += line_height;
                 line_starts.push_back(glyphs.size());
             }
-
             Components::UITextComponent::GlyphQuad quad{};
             quad.position = { x + glyph.bearing.x, y + glyph.bearing.y };
-            quad.size = glyph.size;
-            quad.uv = glyph.uv;
-            quad.character_index = character_index;
-            quad.advance = glyph.advance;
+            quad.size = glyph.size; quad.uv = glyph.uv;
+            quad.character_index = character_index; quad.advance = glyph.advance;
             glyphs.push_back(quad);
-
-            x += advance;
-            ++character_index;
-            (void)before;
+            x += advance; ++character_index;
         }
         line_widths.push_back(x);
-
-        const float total_height = line_height * static_cast<float>((std::max)(std::size_t{ 1 }, line_widths.size()));
+        const float total_height = line_height * static_cast<float>((std::max)(std::size_t{1}, line_widths.size()));
         float vertical_offset = 0.0f;
         if (text_component.vertical_align == Components::UITextComponent::Middle)
             vertical_offset = (height - total_height) * 0.5f;
         else if (text_component.vertical_align == Components::UITextComponent::Bottom)
             vertical_offset = height - total_height;
-
         for (std::size_t line = 0; line < line_widths.size(); ++line)
         {
             const std::size_t start = line_starts[(std::min)(line, line_starts.size() - 1)];
-            const std::size_t end = line + 1 < line_starts.size()
-                ? line_starts[line + 1] : glyphs.size();
+            const std::size_t end = line + 1 < line_starts.size() ? line_starts[line + 1] : glyphs.size();
             float horizontal_offset = 0.0f;
             if (text_component.horizontal_align == Components::UITextComponent::Center)
                 horizontal_offset = (width - line_widths[line]) * 0.5f;
             else if (text_component.horizontal_align == Components::UITextComponent::Right)
                 horizontal_offset = width - line_widths[line];
-
             for (std::size_t index = start; index < end; ++index)
             {
                 glyphs[index].position.x += horizontal_offset;

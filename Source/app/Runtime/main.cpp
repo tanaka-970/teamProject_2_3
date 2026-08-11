@@ -1,4 +1,4 @@
-#include <time.h>
+﻿#include <time.h>
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -13,6 +13,10 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+#if defined(_DEBUG)
+#include <dxgidebug.h>
+#endif
 
 #include "framework.h"
 #include "../../../RePlayEngine/Assets/AssetDatabase.h"
@@ -798,6 +802,157 @@ namespace
             "Landscape v2 OK: arbitrary mesh, sculpt+undo, topology+bridge, cave/tunnel, raycast, spatial collision cook, save/reload, v1 migration, Component Scene round-trip OK\n");
         return 0;
     }
+
+
+#if defined(_DEBUG)
+    struct DXGILiveObjectFileSummary
+    {
+        std::uint64_t stored_messages = 0;
+        std::uint64_t readable_messages = 0;
+        std::uint64_t live_object_lines = 0;
+        std::uint64_t live_d3d11_device_lines = 0;
+    };
+
+    void AccumulateDXGILiveObjectSummary(const std::string& description,
+        DXGILiveObjectFileSummary& summary) noexcept
+    {
+        // DXGI の ReportLiveObjects は Description に "Live ..." を出す。
+        // Summary 行や内部メッセージを数えず、実体の Live 行だけを合格判定に使う。
+        if (description.find("Live ") == std::string::npos) return;
+        ++summary.live_object_lines;
+        if (description.find("Live ID3D11Device") != std::string::npos)
+        {
+            ++summary.live_d3d11_device_lines;
+        }
+    }
+
+    DXGILiveObjectFileSummary WriteDXGILiveObjectReportFile(
+        IDXGIInfoQueue* info_queue, bool report_available, HRESULT report_result)
+    {
+        const std::filesystem::path validation_folder =
+            std::filesystem::path("Saved") / "Validation";
+        std::error_code directory_error;
+        std::filesystem::create_directories(validation_folder, directory_error);
+
+        DXGILiveObjectFileSummary summary{};
+        std::vector<std::string> messages;
+        HRESULT queue_read_result = info_queue != nullptr ? S_OK : E_NOINTERFACE;
+        if (info_queue != nullptr)
+        {
+            summary.stored_messages =
+                info_queue->GetNumStoredMessagesAllowedByRetrievalFilters(DXGI_DEBUG_ALL);
+            messages.reserve(static_cast<std::size_t>(
+                (std::min)(summary.stored_messages, static_cast<std::uint64_t>(4096))));
+            for (std::uint64_t index = 0; index < summary.stored_messages; ++index)
+            {
+                SIZE_T message_size = 0;
+                queue_read_result = info_queue->GetMessage(
+                    DXGI_DEBUG_ALL, index, nullptr, &message_size);
+                if (FAILED(queue_read_result) || message_size == 0) break;
+
+                std::vector<unsigned char> storage(message_size);
+                DXGI_INFO_QUEUE_MESSAGE* message =
+                    reinterpret_cast<DXGI_INFO_QUEUE_MESSAGE*>(storage.data());
+                queue_read_result = info_queue->GetMessage(
+                    DXGI_DEBUG_ALL, index, message, &message_size);
+                if (FAILED(queue_read_result)) break;
+
+                std::string description;
+                if (message->pDescription != nullptr &&
+                    message->DescriptionByteLength > 0)
+                {
+                    description.assign(message->pDescription,
+                        message->DescriptionByteLength);
+                    while (!description.empty() && description.back() == '\0')
+                    {
+                        description.pop_back();
+                    }
+                }
+                AccumulateDXGILiveObjectSummary(description, summary);
+                messages.push_back(std::move(description));
+                ++summary.readable_messages;
+            }
+        }
+
+        const std::filesystem::path report_path =
+            validation_folder / "DXGILiveObjects.txt";
+        std::ofstream report(report_path, std::ios::binary | std::ios::trunc);
+        if (report)
+        {
+            report << "REPLAY_DXGI_LIVE_OBJECT_REPORT 1\n";
+            report << "DXGI_DEBUG_AVAILABLE " << (report_available ? 1 : 0) << '\n';
+            report << "DXGI_INFO_QUEUE_AVAILABLE " << (info_queue != nullptr ? 1 : 0) << '\n';
+            report << "REPORT_HRESULT 0x" << std::hex << std::setw(8)
+                << std::setfill('0') << static_cast<unsigned long>(report_result)
+                << std::dec << std::setfill(' ') << '\n';
+            report << "INFO_QUEUE_READ_HRESULT 0x" << std::hex << std::setw(8)
+                << std::setfill('0') << static_cast<unsigned long>(queue_read_result)
+                << std::dec << std::setfill(' ') << '\n';
+            report << "DXGI_INFO_QUEUE_STORED_MESSAGES " << summary.stored_messages << '\n';
+            report << "DXGI_INFO_QUEUE_READABLE_MESSAGES " << summary.readable_messages << '\n';
+            report << "DXGI_LIVE_OBJECT_LINES " << summary.live_object_lines << '\n';
+            report << "DXGI_LIVE_D3D11_DEVICE_LINES "
+                << summary.live_d3d11_device_lines << "\n\n";
+            for (std::size_t index = 0; index < messages.size(); ++index)
+            {
+                report << '[' << index << "] " << messages[index] << '\n';
+            }
+        }
+        if (info_queue != nullptr) info_queue->ClearStoredMessages(DXGI_DEBUG_ALL);
+        return summary;
+    }
+
+    bool AcquireDXGIDebugInterfaces(
+        Microsoft::WRL::ComPtr<IDXGIDebug1>& debug,
+        Microsoft::WRL::ComPtr<IDXGIInfoQueue>& info_queue,
+        HMODULE& module) noexcept
+    {
+        // Debug interface は Runtime の所有物にしない。
+        // Device を作る前からプロセス全体を追跡し、Device 解放後に検査するため
+        // WinMain のローカル寿命だけで保持する。
+        // GetProcAddress 用に自分の module ref を 1 本持ち、最終レポート後に
+        // 必ず FreeLibrary する。GetModuleHandle の借用参照に依存すると、
+        // 起動順によって関数ポインタの寿命が変わるため。
+        module = ::LoadLibraryW(L"dxgi.dll");
+        if (module == nullptr) return false;
+
+        using GetDebugInterface1Fn = HRESULT(WINAPI*)(UINT, REFIID, void**);
+        const auto get_debug_interface = reinterpret_cast<GetDebugInterface1Fn>(
+            ::GetProcAddress(module, "DXGIGetDebugInterface1"));
+        if (get_debug_interface == nullptr)
+        {
+            ::FreeLibrary(module);
+            module = nullptr;
+            return false;
+        }
+
+        debug.Reset();
+        info_queue.Reset();
+        HRESULT result = get_debug_interface(0, __uuidof(IDXGIDebug1),
+            reinterpret_cast<void**>(debug.GetAddressOf()));
+        if (FAILED(result) || !debug)
+        {
+            ::FreeLibrary(module);
+            module = nullptr;
+            return false;
+        }
+
+        result = get_debug_interface(0, __uuidof(IDXGIInfoQueue),
+            reinterpret_cast<void**>(info_queue.GetAddressOf()));
+        if (FAILED(result) || !info_queue)
+        {
+            debug.Reset();
+            ::FreeLibrary(module);
+            module = nullptr;
+            return false;
+        }
+
+        info_queue->SetMessageCountLimit(DXGI_DEBUG_ALL, UINT64_MAX);
+        info_queue->PushEmptyStorageFilter(DXGI_DEBUG_ALL);
+        info_queue->ClearStoredMessages(DXGI_DEBUG_ALL);
+        return true;
+    }
+#endif
 
     int RunHeadlessLargeSceneValidation(const char* command_line)
     {
@@ -1704,6 +1859,15 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
     D3D11LiveObjectFileSummary d3d11_live_report_summary{};
     HRESULT d3d11_live_report_result = E_NOINTERFACE;
     bool d3d11_live_report_available = false;
+#if defined(_DEBUG)
+    Microsoft::WRL::ComPtr<IDXGIDebug1> dxgi_debug;
+    Microsoft::WRL::ComPtr<IDXGIInfoQueue> dxgi_info_queue;
+    HMODULE dxgi_debug_module = nullptr;
+    DXGILiveObjectFileSummary dxgi_live_report_summary{};
+    HRESULT dxgi_live_report_result = E_NOINTERFACE;
+    const bool dxgi_live_report_available =
+        AcquireDXGIDebugInterfaces(dxgi_debug, dxgi_info_queue, dxgi_debug_module);
+#endif
     {
 	    framework application(hwnd);
         application.set_automated_smoke_test_frames(automated_smoke_test_frames);
@@ -1765,6 +1929,42 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
     }
     d3d11_info_queue.Reset();
     d3d11_debug.Reset();
+
+#if defined(_DEBUG)
+    // D3D11 Debug 自身が Device を生かす参照を手放したあとで、
+    // プロセス全体を追跡する DXGI から最終確認する。
+    if (dxgi_live_report_available && dxgi_debug && dxgi_info_queue)
+    {
+        dxgi_info_queue->ClearStoredMessages(DXGI_DEBUG_ALL);
+        dxgi_live_report_result = dxgi_debug->ReportLiveObjects(
+            DXGI_DEBUG_ALL, static_cast<DXGI_DEBUG_RLO_FLAGS>(
+                DXGI_DEBUG_RLO_DETAIL | DXGI_DEBUG_RLO_IGNORE_INTERNAL));
+        dxgi_live_report_summary = WriteDXGILiveObjectReportFile(
+            dxgi_info_queue.Get(), true, dxgi_live_report_result);
+        std::fprintf(stderr,
+            "DXGI Live Object Report: %llu live lines (%s)\n",
+            static_cast<unsigned long long>(dxgi_live_report_summary.live_object_lines),
+            SUCCEEDED(dxgi_live_report_result) ? "completed" : "failed");
+        if (FAILED(dxgi_live_report_result) && exit_code == 0) exit_code = 74;
+        if (shutdown_regression_requested &&
+            dxgi_live_report_summary.live_object_lines != 0 && exit_code == 0)
+        {
+            exit_code = 75;
+        }
+    }
+    else
+    {
+        dxgi_live_report_summary = WriteDXGILiveObjectReportFile(
+            dxgi_info_queue.Get(), false, dxgi_live_report_result);
+    }
+    dxgi_info_queue.Reset();
+    dxgi_debug.Reset();
+    if (dxgi_debug_module != nullptr)
+    {
+        ::FreeLibrary(dxgi_debug_module);
+        dxgi_debug_module = nullptr;
+    }
+#endif
 
 	if (automated_smoke_test_frames > 0)
     {

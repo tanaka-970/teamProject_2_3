@@ -1,4 +1,4 @@
-#include "FollowTargetComponent.h"
+﻿#include "FollowTargetComponent.h"
 
 #include "CameraTargetComponent.h"
 #include "../Core/TransformComponent.h"
@@ -6,7 +6,6 @@
 #include "../../Object/GameObject/GameObject.h"
 #include "../../Scene/Runtime/Scene.h"
 
-#include <windows.h>
 #include <algorithm>
 #include <cmath>
 
@@ -53,7 +52,6 @@ namespace ReplayEngine::Components
                     mixer->WasDriven(*transform, "rotation") ||
                     mixer->WasDriven(*transform, "scale")))
             {
-                ResetCursorTracking();
                 return;
             }
         }
@@ -99,53 +97,31 @@ namespace ReplayEngine::Components
 
     void FollowTargetComponent::OnDisable()
     {
-        ResetCursorTracking();
     }
 
     void FollowTargetComponent::UpdateRotationInput(float delta_time)
     {
-        if (!rotation_input_enabled)
-        {
-            ResetCursorTracking();
-            return;
-        }
+        if (!rotation_input_enabled) return;
 
-        POINT cursor{};
-        if (!GetCursorPos(&cursor)) return;
+        Scene::Scene* scene = GetScene();
+        const Scene::IInputService* input = scene != nullptr
+            ? scene->Services().Input() : nullptr;
+        if (input == nullptr) return;
 
-        if (!cursor_initialized_)
-        {
-            previous_cursor_x_ = cursor.x;
-            previous_cursor_y_ = cursor.y;
-            cursor_initialized_ = true;
-        }
-
-        const long delta_x = cursor.x - previous_cursor_x_;
-        const long delta_y = cursor.y - previous_cursor_y_;
-        previous_cursor_x_ = cursor.x;
-        previous_cursor_y_ = cursor.y;
-
-        if (GetAsyncKeyState(VK_RBUTTON) & 0x8000)
+        if (input->Held("CameraRotate"))
         {
             constexpr float radians_per_pixel = 0.006f;
-            yaw_offset += static_cast<float>(delta_x) * radians_per_pixel;
-            pitch_offset += -static_cast<float>(delta_y) * radians_per_pixel;
+            yaw_offset += input->PointerDeltaX() * radians_per_pixel;
+            pitch_offset += -input->PointerDeltaY() * radians_per_pixel;
         }
 
         const float key_rotate_speed = 1.8f * (std::max)(0.0f, delta_time);
-        if (GetAsyncKeyState('J') & 0x8000) yaw_offset -= key_rotate_speed;
-        if (GetAsyncKeyState('L') & 0x8000) yaw_offset += key_rotate_speed;
-        if (GetAsyncKeyState('I') & 0x8000) pitch_offset += key_rotate_speed;
-        if (GetAsyncKeyState('K') & 0x8000) pitch_offset -= key_rotate_speed;
+        if (input->Held("CameraYawLeft")) yaw_offset -= key_rotate_speed;
+        if (input->Held("CameraYawRight")) yaw_offset += key_rotate_speed;
+        if (input->Held("CameraPitchUp")) pitch_offset += key_rotate_speed;
+        if (input->Held("CameraPitchDown")) pitch_offset -= key_rotate_speed;
 
         constexpr float pitch_limit = 1.40f;
-        pitch_offset = std::clamp(pitch_offset, -pitch_limit, pitch_limit);
-    }
-
-    void FollowTargetComponent::ResetCursorTracking() noexcept
-    {
-        cursor_initialized_ = false;
-        previous_cursor_x_ = 0;
-        previous_cursor_y_ = 0;
+        pitch_offset = (std::max)(-pitch_limit, (std::min)(pitch_limit, pitch_offset));
     }
 }

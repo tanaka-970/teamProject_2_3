@@ -1,4 +1,4 @@
-#include "ShaderComposerGenerator.h"
+﻿#include "ShaderComposerGenerator.h"
 #include "../Shaders/ShaderConstantPacker.h"
 
 #include <algorithm>
@@ -262,33 +262,43 @@ namespace ReplayEngine::Rendering
                         << "};\n"
                         << "#define frame_params float4(0.0f, 0.0f, effect_params1.w, 0.0f)\n";
 
-                    const char* float_slots[] = {
-                        "effect_params0.x", "effect_params0.y",
-                        "effect_params0.z", "effect_params0.w",
-                        "effect_params1.x", "effect_params1.y",
-                        "effect_params1.z", "effect_params1.w"
-                    };
-                    int float_slot = 0;
+                    // UI Effect も Surface と同じ #pragma property -> b9/t40+ を正本にする。
+                    // 旧実装の「先頭8 floatだけ b0 へ詰める」方式では Property 数に上限があり、
+                    // Color/Texture が全項目で同じ値へ潰れていた。Runtime では ShaderLibrary が
+                    // canonical declaration を前置するため、ここは単体コンパイル用 fallback だけ。
+                    header << "\n#ifndef REPLAY_MATERIAL_SCHEMA_INJECTED\n";
+                    bool has_constant_property = false;
+                    for (const ShaderComposerNode& node : asset.nodes)
+                    {
+                        if (node.kind == ShaderComposerNodeKind::FloatProperty ||
+                            node.kind == ShaderComposerNodeKind::ColorProperty)
+                        {
+                            has_constant_property = true;
+                            break;
+                        }
+                    }
+                    header << "cbuffer REPLAY_MATERIAL_CB : register(b"
+                        << ShaderConstantPacker::material_constant_register << ")\n{\n";
+                    if (!has_constant_property)
+                        header << "    float4 _replay_unused;\n";
                     for (const ShaderComposerNode& node : asset.nodes)
                     {
                         if (node.kind == ShaderComposerNodeKind::FloatProperty)
-                        {
-                            const int slot = float_slot++;
-                            header << "#define " << node.name << ' '
-                                << (slot < static_cast<int>(sizeof(float_slots) / sizeof(float_slots[0]))
-                                    ? float_slots[slot] : "0.0f") << "\n";
-                        }
+                            header << "    float " << node.name << ";\n";
                         else if (node.kind == ShaderComposerNodeKind::ColorProperty)
-                        {
-                            header << "#define " << node.name << " effect_color\n";
-                        }
-                        else if (node.kind == ShaderComposerNodeKind::TextureProperty)
-                        {
-                            header << "#define " << node.name << " source_texture\n";
-                        }
+                            header << "    float4 " << node.name << ";\n";
                     }
+                    header << "};\n";
+                    std::uint32_t texture_slot = ShaderConstantPacker::material_texture_base_slot;
+                    for (const ShaderComposerNode& node : asset.nodes)
+                    {
+                        if (node.kind != ShaderComposerNodeKind::TextureProperty) continue;
+                        header << "Texture2D " << node.name << " : register(t"
+                            << texture_slot++ << ");\n";
+                    }
+                    header << "#endif // REPLAY_MATERIAL_SCHEMA_INJECTED\n\n";
 
-                    header << "\nfloat replay_composer_noise(float2 p)\n{\n"
+                    header << "float replay_composer_noise(float2 p)\n{\n"
                         << "    p = frac(p * float2(123.34f, 456.21f));\n"
                         << "    p += dot(p, p + 45.32f);\n"
                         << "    return frac(p.x * p.y);\n}\n\n";
@@ -362,9 +372,9 @@ namespace ReplayEngine::Rendering
                     const std::string base4 = Convert(base, ShaderComposerValueType::Float4);
                     const std::string emission3 = Convert(emission, ShaderComposerValueType::Float3);
                     const std::string opacity1 = Convert(opacity, ShaderComposerValueType::Float);
-                    if (base4.empty()) AddError(output->id, "Base Color input 縺ｮ蝙九ｒ float4 縺ｸ螟画鋤縺ｧ縺阪∪縺帙ｓ");
-                    if (emission3.empty()) AddError(output->id, "Emission input 縺ｮ蝙九ｒ float3 縺ｸ螟画鋤縺ｧ縺阪∪縺帙ｓ");
-                    if (opacity1.empty()) AddError(output->id, "Opacity input 縺ｮ蝙九ｒ float 縺ｸ螟画鋤縺ｧ縺阪∪縺帙ｓ");
+                    if (base4.empty()) AddError(output->id, "Base Color input の型を float4 へ変換できません");
+                    if (emission3.empty()) AddError(output->id, "Emission input の型を float3 へ変換できません");
+                    if (opacity1.empty()) AddError(output->id, "Opacity input の型を float へ変換できません");
                     if (!diagnostics.empty()) return Finish(false, {});
 
                     header << "float4 main(VSOutput pin) : SV_TARGET\n{\n";

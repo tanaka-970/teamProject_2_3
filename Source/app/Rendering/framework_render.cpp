@@ -1,9 +1,10 @@
-#include "framework.h"
+﻿#include "framework.h"
 #include "shader.h"
 #include "texture.h"
 #include "skinned_mesh.h"
 #include "gltf_model.h"
 #include "../../../RePlayEngine/Components/Core/TransformComponent.h"
+#include "../../../RePlayEngine/Components/Camera/CameraComponent.h"
 #include "../../../RePlayEngine/Components/Rendering/ParticleEmitterComponent.h"
 #include "../../../RePlayEngine/Components/Rendering/PostProcessVolumeComponent.h"
 #include "../../../RePlayEngine/Rendering/Shaders/BuiltInShaders.h"
@@ -13,6 +14,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 namespace
 {
@@ -123,7 +125,7 @@ void framework::store_debug_mesh_world(DirectX::XMFLOAT4X4& world) const
 }
 
 void framework::update_frame_constants(const DirectX::XMMATRIX& view,
-    const DirectX::XMMATRIX& projection, float elapsed_time)
+    const DirectX::XMMATRIX& projection, float elapsed_time, bool advance_effect_time)
 {
     if (!frame_constants_cb) return;
 
@@ -154,18 +156,19 @@ void framework::update_frame_constants(const DirectX::XMMATRIX& view,
     const float near_plane = p._33 != 0.0f ? -p._43 / p._33 : 0.1f;
     const float far_plane = (p._33 - 1.0f) != 0.0f ? p._43 / (p._33 - 1.0f) : 10000.0f;
 
-    frame_constants.camera_position = enable_scene_game && game_scene
-        ? DirectX::XMFLOAT4(game_scene->Gameplay().GetCamera().GetEye().x,
-            game_scene->Gameplay().GetCamera().GetEye().y,
-            game_scene->Gameplay().GetCamera().GetEye().z, 1.0f)
-        : camera_position;
+    // CameraComponent / 補助 View / 従来 Camera のどれを描いていても、
+    // view/projection と同じ窓口から Eye を取る。ここだけ旧 Gameplay Camera を
+    // 直接読むと、分割 Viewport で鏡面・SSAO の視点だけ別 Camera になる。
+    const DirectX::XMFLOAT3 frame_eye = viewport_eye_position();
+    frame_constants.camera_position =
+        { frame_eye.x, frame_eye.y, frame_eye.z, 1.0f };
     const float width = static_cast<float>(SCREEN_WIDTH);
     const float height = static_cast<float>(SCREEN_HEIGHT);
     frame_constants.screen_size = { width, height, 1.0f / width, 1.0f / height };
     frame_constants.camera_planes = { near_plane, far_plane, tan_half_fov_y, aspect };
     // z is accumulated effect/composer time. Golden capture passes elapsed_time=0,
     // so visual regression remains deterministic instead of advancing while capturing.
-    shader_composer_time += (std::max)(0.0f, elapsed_time);
+    if (advance_effect_time) shader_composer_time += (std::max)(0.0f, elapsed_time);
     frame_constants.frame_params = { static_cast<float>(frame_index), elapsed_time, shader_composer_time, 0.0f };
 
     // TAAのジッター量(NDC)。射影行列へ加算済みの値をそのまま共有し、
@@ -389,8 +392,143 @@ void framework::render(float elapsed_time)
         taa_pass.enabled = volume.taa_enabled;
     }
 
-    const DirectX::XMMATRIX V = viewport_view_matrix();
-    const DirectX::XMMATRIX P = viewport_projection_matrix();
+    struct CameraRenderPass
+    {
+        const ReplayEngine::Components::CameraComponent* camera = nullptr;
+        bool matrix_override = false;
+        DirectX::XMFLOAT4X4 view{};
+        DirectX::XMFLOAT4X4 projection{};
+        DirectX::XMFLOAT3 eye{ 0.0f, 0.0f, 0.0f };
+        D3D11_VIEWPORT output{};
+    };
+
+    auto make_output_viewport = [&](const DirectX::XMFLOAT4& rect)
+    {
+        D3D11_VIEWPORT output = viewport;
+        const float x = clamp_finite(rect.x, 0.0f, 0.0f, 1.0f);
+        const float y = clamp_finite(rect.y, 0.0f, 0.0f, 1.0f);
+        const float width = (std::min)(
+            clamp_finite(rect.z, 1.0f, 0.01f, 1.0f), 1.0f - x);
+        const float height = (std::min)(
+            clamp_finite(rect.w, 1.0f, 0.01f, 1.0f), 1.0f - y);
+        output.TopLeftX = viewport.TopLeftX + x * viewport.Width;
+        output.TopLeftY = viewport.TopLeftY + y * viewport.Height;
+        output.Width = (std::max)(1.0f, width * viewport.Width);
+        output.Height = (std::max)(1.0f, height * viewport.Height);
+        return output;
+    };
+
+    std::vector<CameraRenderPass> camera_render_passes;
+    if (using_editor_camera())
+    {
+        // Scene View 本体は従来どおり全面を使う。Picking/Gizmo は client 全体を
+        // 前提にしているため、4 分割へ置き換えると編集座標がずれる。補助 View は
+        // 右側へ重ねるだけにし、既存 Scene View の操作基盤を変えない。
+        CameraRenderPass main_pass{};
+        main_pass.output = viewport;
+        camera_render_passes.push_back(main_pass);
+
+        if (editor_auxiliary_views)
+        {
+            const DirectX::XMFLOAT3 center = editor_camera.OrbitPivot();
+            const float distance = (std::max)(editor_camera.OrbitDistance(), 1.0f);
+            const float ortho_height = (std::max)(1.0f, distance * 1.5f);
+
+            auto add_auxiliary = [&](const DirectX::XMFLOAT3& eye,
+                const DirectX::XMFLOAT3& up, const DirectX::XMFLOAT4& rect)
+            {
+                CameraRenderPass pass{};
+                pass.matrix_override = true;
+                pass.eye = eye;
+                pass.output = make_output_viewport(rect);
+                const float aspect = pass.output.Width / pass.output.Height;
+                const DirectX::XMMATRIX view_matrix = DirectX::XMMatrixLookAtLH(
+                    DirectX::XMLoadFloat3(&eye), DirectX::XMLoadFloat3(&center),
+                    DirectX::XMLoadFloat3(&up));
+                const DirectX::XMMATRIX projection_matrix =
+                    DirectX::XMMatrixOrthographicLH(ortho_height * aspect,
+                        ortho_height, 0.05f, 10000.0f);
+                DirectX::XMStoreFloat4x4(&pass.view, view_matrix);
+                DirectX::XMStoreFloat4x4(&pass.projection, projection_matrix);
+                camera_render_passes.push_back(pass);
+            };
+
+            add_auxiliary({ center.x, center.y, center.z - distance },
+                { 0.0f, 1.0f, 0.0f }, { 0.72f, 0.02f, 0.26f, 0.28f });
+            add_auxiliary({ center.x - distance, center.y, center.z },
+                { 0.0f, 1.0f, 0.0f }, { 0.72f, 0.35f, 0.26f, 0.28f });
+            add_auxiliary({ center.x, center.y + distance, center.z },
+                { 0.0f, 0.0f, 1.0f }, { 0.72f, 0.68f, 0.26f, 0.28f });
+        }
+    }
+    else
+    {
+        // viewport_enabled を使っている Scene だけ複数 Camera へ切り替える。
+        // 旧 Scene は値を持たない = false なので、これまで通り「priority 最大の
+        // Camera 1 台を全画面」で描く経路へそのまま落ちる。
+        const ReplayEngine::Scene::Scene& scene_for_cameras = active_object_scene();
+        for (std::size_t object_index = 0;
+            object_index < scene_for_cameras.GameObjectCount(); ++object_index)
+        {
+            const ReplayEngine::Core::GameObject* object =
+                scene_for_cameras.GameObjectAt(object_index);
+            if (object == nullptr || object->PendingDestroy()) continue;
+            const auto* camera = object->GetComponent<
+                ReplayEngine::Components::CameraComponent>();
+            if (camera == nullptr || !camera->ActiveInHierarchy() ||
+                !camera->viewport_enabled) continue;
+
+            CameraRenderPass pass{};
+            pass.camera = camera;
+            pass.output = make_output_viewport(camera->viewport_rect);
+            camera_render_passes.push_back(pass);
+        }
+
+        std::stable_sort(camera_render_passes.begin(), camera_render_passes.end(),
+            [](const CameraRenderPass& lhs, const CameraRenderPass& rhs)
+            {
+                return lhs.camera->priority < rhs.camera->priority;
+            });
+
+        if (camera_render_passes.empty())
+        {
+            CameraRenderPass legacy_pass{};
+            legacy_pass.output = viewport;
+            camera_render_passes.push_back(legacy_pass);
+        }
+    }
+
+    const bool multiple_camera_passes = camera_render_passes.size() > 1;
+    if (multiple_camera_passes)
+    {
+        // Temporal 履歴は Camera ごとに保持する必要がある。共有履歴のまま TAA を
+        // 回すと別 Camera の前フレームを再投影するため、複数 View 中だけ無効化する。
+        // 将来 Camera ごとの履歴を持たせる場合はここを拡張点にする。
+        enable_taa = false;
+        taa_pass.enabled = false;
+        previous_view_projection_valid = false;
+    }
+
+    for (std::size_t camera_pass_index = 0;
+        camera_pass_index < camera_render_passes.size(); ++camera_pass_index)
+    {
+        const CameraRenderPass& camera_pass = camera_render_passes[camera_pass_index];
+        render_camera_override = camera_pass.camera;
+        render_matrix_override_active = camera_pass.matrix_override;
+        if (camera_pass.matrix_override)
+        {
+            render_view_override = camera_pass.view;
+            render_projection_override = camera_pass.projection;
+            render_eye_override = camera_pass.eye;
+        }
+        render_camera_aspect = camera_pass.output.Width / camera_pass.output.Height;
+        const D3D11_VIEWPORT camera_output_viewport = camera_pass.output;
+
+        // 複数 Camera では前の Camera の履歴を次の Camera へ渡さない。
+        if (multiple_camera_passes) previous_view_projection_valid = false;
+
+        const DirectX::XMMATRIX V = viewport_view_matrix();
+        const DirectX::XMMATRIX P = viewport_projection_matrix();
 
     // 以降の全描画パスが共有するカメラと主光源の定数を一度だけ更新する。
     scene_constants scene{};
@@ -405,7 +543,7 @@ void framework::render(float elapsed_time)
     immediate_context->PSSetConstantBuffers(1, 1, constant_buffers[0].GetAddressOf());
 
     // SSAO/SSR/TAAが参照するカメラ行列群をb4へ載せる。
-    update_frame_constants(V, P, elapsed_time);
+    update_frame_constants(V, P, elapsed_time, camera_pass_index == 0);
 
     // 視錐台カリング用の平面をこのフレームのビュー射影から作る。
     // 各メッシュは描画直前にこれを参照して画面外のプリミティブを捨てる。
@@ -415,7 +553,7 @@ void framework::render(float elapsed_time)
         culling.frustum.BuildFromViewProjection(scene.view_projection);
         // 自動LODは画面上の投影サイズで段を決めるので、行列と画面高さを渡す。
         DirectX::XMStoreFloat4x4(&culling.view_projection, P);
-        culling.screen_height = static_cast<float>(SCREEN_HEIGHT);
+        culling.screen_height = camera_output_viewport.Height;
         culling.camera_position = { scene.camera_position.x,
             scene.camera_position.y, scene.camera_position.z };
     }
@@ -493,8 +631,10 @@ void framework::render(float elapsed_time)
         particles_this_frame = true;
     }
 
-    if (particles_this_frame) particles.simulate(immediate_context.Get(), elapsed_time);
-    if (enable_trail)     test_trail.update(elapsed_time);
+    if (camera_pass_index == 0 && particles_this_frame)
+        particles.simulate(immediate_context.Get(), elapsed_time);
+    if (camera_pass_index == 0 && enable_trail)
+        test_trail.update(elapsed_time);
 
     // アニメーション付きモデルは例外なく
     // SkinnedMeshRendererComponent + AnimatorComponent が提出し、
@@ -866,9 +1006,9 @@ void framework::render(float elapsed_time)
                 if (item.mesh_asset.empty()) continue;
                 skinned_mesh* mesh = resolve_object_mesh(item.mesh_asset);
                 if (mesh == nullptr) continue;
-                const auto* keyframe = item.skinned
-                    ? resolve_object_keyframe(*mesh, item.clip_index, item.animation_time)
-                    : nullptr;
+                skinned_mesh::animation::keyframe blended_keyframe;
+                const auto* keyframe =
+                    resolve_render_item_keyframe(*mesh, item, blended_keyframe);
 
                 bool outline_drawn = false;
                 if (item.material_binding.layers != nullptr)
@@ -1093,11 +1233,9 @@ void framework::render(float elapsed_time)
 
             // Animator が決めたクリップと時刻から姿勢を求める。
             // クリップ長を知っているのは Renderer 側なので、ループ処理もここで解決する。
+            skinned_mesh::animation::keyframe blended_keyframe;
             const skinned_mesh::animation::keyframe* item_keyframe =
-                item.skinned
-                    ? resolve_object_keyframe(*scene_mesh, item.clip_index,
-                        item.animation_time)
-                    : nullptr;
+                resolve_render_item_keyframe(*scene_mesh, item, blended_keyframe);
 
             ID3D11PixelShader* catalog_shader = nullptr;
             bool catalog_bound = false;
@@ -1322,7 +1460,7 @@ void framework::render(float elapsed_time)
     }
 
     immediate_context->OMSetRenderTargets(1, render_target_view.GetAddressOf(), nullptr);
-    immediate_context->RSSetViewports(1, &viewport);
+    immediate_context->RSSetViewports(1, &camera_output_viewport);
 
     if (output == ReplayEngine::Rendering::RenderOutput::Final && enable_final_pass_shader)
     {
@@ -1346,6 +1484,13 @@ void framework::render(float elapsed_time)
     // ドライバー任せの競合解消を避けるために明示的に解除する。
     ID3D11ShaderResourceView* null_post_srvs[2]{};
     immediate_context->PSSetShaderResources(0, _countof(null_post_srvs), null_post_srvs);
+    }
+
+    render_camera_override = nullptr;
+    render_matrix_override_active = false;
+    render_camera_aspect = 0.0f;
+    // 最後の Camera が小さい Viewport でも、UI/ImGui は従来どおり画面全体へ描く。
+    immediate_context->RSSetViewports(1, &viewport);
 
     ReplayEngine::UI::UILayout::Resolve(active_object_scene(),
         viewport.Width, viewport.Height);
@@ -1412,8 +1557,17 @@ void framework::render(float elapsed_time)
 
     // 次フレームの再投影用に今フレームのビュー射影を残し、
     // ジッター/ノイズ列を進めるためのフレーム番号を更新する。
-    previous_view_projection = frame_constants.view_projection;
-    previous_view_projection_valid = true;
+    if (multiple_camera_passes)
+    {
+        // Camera ごとの履歴をまだ永続保持していないため、次フレームも必ず
+        // 履歴無しから始める。単一 Camera の既存 TAA 経路は従来どおり。
+        previous_view_projection_valid = false;
+    }
+    else
+    {
+        previous_view_projection = frame_constants.view_projection;
+        previous_view_projection_valid = true;
+    }
 
     // 基準画像を撮る間はフレーム番号も止める。
     //

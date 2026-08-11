@@ -168,7 +168,7 @@ namespace ReplayEngine::Components
             // 接地は「一番下の半球」で見る。
             // 中心で見ると、カプセルの下半分ぶん床へめり込んだ位置で接地判定になる。
             const float half_cylinder =
-                std::max(0.0f, capsule.EffectiveHeight() * 0.5f - capsule.EffectiveRadius());
+                (std::max)(0.0f, capsule.EffectiveHeight() * 0.5f - capsule.EffectiveRadius());
             shape.ground_offset.y -= half_cylinder;
             shape.valid = shape.radius > 0.0f;
             break;
@@ -180,8 +180,8 @@ namespace ReplayEngine::Components
 
             // 内接球。角は拾えないが、本来より小さい球なので
             // 「本当は当たらない場所で止まる」ことはない。
-            shape.radius = std::min({ half.x, half.y, half.z });
-            shape.ground_offset.y -= std::max(0.0f, half.y - shape.radius);
+            shape.radius = (std::min)({ half.x, half.y, half.z });
+            shape.ground_offset.y -= (std::max)(0.0f, half.y - shape.radius);
             shape.valid = shape.radius > 0.0f;
             break;
         }

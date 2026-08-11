@@ -1,4 +1,4 @@
-#include "CookedMeshCollision.h"
+﻿#include "CookedMeshCollision.h"
 
 #include <algorithm>
 #include <cfloat>
@@ -44,7 +44,7 @@ namespace ReplayEngine::Physics
         std::shared_ptr<CookedMeshCollisionData> data(new CookedMeshCollisionData());
         data->key_ = std::move(key);
         data->key_.settings.cell_size =
-            std::max(minimum_cell_size, data->key_.settings.cell_size);
+            (std::max)(minimum_cell_size, data->key_.settings.cell_size);
         data->triangles_ = std::move(local_triangles);
         data->BuildGrid();
         return data;
@@ -69,25 +69,25 @@ namespace ReplayEngine::Physics
         {
             for (const XMFLOAT3& vertex : triangle.vertices)
             {
-                bounds_min_.x = std::min(bounds_min_.x, vertex.x);
-                bounds_min_.y = std::min(bounds_min_.y, vertex.y);
-                bounds_min_.z = std::min(bounds_min_.z, vertex.z);
-                bounds_max_.x = std::max(bounds_max_.x, vertex.x);
-                bounds_max_.y = std::max(bounds_max_.y, vertex.y);
-                bounds_max_.z = std::max(bounds_max_.z, vertex.z);
+                bounds_min_.x = (std::min)(bounds_min_.x, vertex.x);
+                bounds_min_.y = (std::min)(bounds_min_.y, vertex.y);
+                bounds_min_.z = (std::min)(bounds_min_.z, vertex.z);
+                bounds_max_.x = (std::max)(bounds_max_.x, vertex.x);
+                bounds_max_.y = (std::max)(bounds_max_.y, vertex.y);
+                bounds_max_.z = (std::max)(bounds_max_.z, vertex.z);
             }
         }
 
         const float cell = key_.settings.cell_size;
-        const float width = std::max(0.0f, bounds_max_.x - bounds_min_.x);
-        const float depth = std::max(0.0f, bounds_max_.z - bounds_min_.z);
+        const float width = (std::max)(0.0f, bounds_max_.x - bounds_min_.x);
+        const float depth = (std::max)(0.0f, bounds_max_.z - bounds_min_.z);
 
-        cell_count_x_ = std::max(1, static_cast<int>(width / cell) + 1);
-        cell_count_z_ = std::max(1, static_cast<int>(depth / cell) + 1);
+        cell_count_x_ = (std::max)(1, static_cast<int>(width / cell) + 1);
+        cell_count_z_ = (std::max)(1, static_cast<int>(depth / cell) + 1);
 
         // メッシュが極端に大きい・セルが極端に小さい場合にメモリが爆発しないよう抑える。
-        cell_count_x_ = std::min(cell_count_x_, maximum_cells_per_axis);
-        cell_count_z_ = std::min(cell_count_z_, maximum_cells_per_axis);
+        cell_count_x_ = (std::min)(cell_count_x_, maximum_cells_per_axis);
+        cell_count_z_ = (std::min)(cell_count_z_, maximum_cells_per_axis);
 
         cells_.assign(static_cast<std::size_t>(cell_count_x_) *
             static_cast<std::size_t>(cell_count_z_), {});
@@ -97,10 +97,10 @@ namespace ReplayEngine::Physics
         for (std::uint32_t index = 0; index < triangles_.size(); ++index)
         {
             const Triangle& triangle = triangles_[index];
-            const float min_x = std::min({ triangle.vertices[0].x, triangle.vertices[1].x, triangle.vertices[2].x });
-            const float max_x = std::max({ triangle.vertices[0].x, triangle.vertices[1].x, triangle.vertices[2].x });
-            const float min_z = std::min({ triangle.vertices[0].z, triangle.vertices[1].z, triangle.vertices[2].z });
-            const float max_z = std::max({ triangle.vertices[0].z, triangle.vertices[1].z, triangle.vertices[2].z });
+            const float min_x = (std::min)({ triangle.vertices[0].x, triangle.vertices[1].x, triangle.vertices[2].x });
+            const float max_x = (std::max)({ triangle.vertices[0].x, triangle.vertices[1].x, triangle.vertices[2].x });
+            const float min_z = (std::min)({ triangle.vertices[0].z, triangle.vertices[1].z, triangle.vertices[2].z });
+            const float max_z = (std::max)({ triangle.vertices[0].z, triangle.vertices[1].z, triangle.vertices[2].z });
 
             int x0 = 0, x1 = 0, z0 = 0, z1 = 0;
             CellRange(min_x, max_x, min_z, max_z, x0, x1, z0, z1);
@@ -123,10 +123,10 @@ namespace ReplayEngine::Physics
         z0 = static_cast<int>((min_z - bounds_min_.z) / cell);
         z1 = static_cast<int>((max_z - bounds_min_.z) / cell);
 
-        x0 = std::max(0, std::min(x0, cell_count_x_ - 1));
-        x1 = std::max(0, std::min(x1, cell_count_x_ - 1));
-        z0 = std::max(0, std::min(z0, cell_count_z_ - 1));
-        z1 = std::max(0, std::min(z1, cell_count_z_ - 1));
+        x0 = (std::max)(0, (std::min)(x0, cell_count_x_ - 1));
+        x1 = (std::max)(0, (std::min)(x1, cell_count_x_ - 1));
+        z0 = (std::max)(0, (std::min)(z0, cell_count_z_ - 1));
+        z1 = (std::max)(0, (std::min)(z1, cell_count_z_ - 1));
     }
 
     void CookedMeshCollisionData::CollectTriangles(const XMFLOAT3& local_aabb_min,

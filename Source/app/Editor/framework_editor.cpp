@@ -1,4 +1,5 @@
-#include "framework.h"
+﻿#include "framework.h"
+#include "../../RePlayEngine/Components/Core/PivotComponent.h"
 #include "../../RePlayEngine/Components/Gameplay/CharacterMotorComponent.h"
 #include "../../RePlayEngine/Components/Gameplay/PlayerControllerComponent.h"
 #include "../../RePlayEngine/Components/Gameplay/PlayerInputComponent.h"
@@ -315,10 +316,26 @@ void framework::draw_editor_main_menu()
         ImGui::MenuItem("Workspace", nullptr, &show_workspace_panel);
         ImGui::MenuItem("Validation / Diagnostics", nullptr, &show_validation_panel);
         ImGui::Separator();
-        if (ImGui::MenuItem("UI Workspaceへ"))
+        // Workspace の往復。
+        //
+        // UI / Motion へ行く項目だけがあって「戻る」が無いと、
+        // 一度移動したユーザーが Scene へ帰れなくなる。
+        // 現在いる Workspace には印を付け、どこにいるかを分かるようにする。
+        if (ImGui::MenuItem(u8"Scene Workspaceへ", nullptr,
+            active_editor_workspace == editor_workspace::general))
+        {
+            set_editor_workspace(editor_workspace::general);
+        }
+        if (ImGui::MenuItem("UI Workspaceへ", nullptr,
+            active_editor_workspace == editor_workspace::ui))
+        {
             set_editor_workspace(editor_workspace::ui);
-        if (ImGui::MenuItem("Motion Workspaceへ"))
+        }
+        if (ImGui::MenuItem("Motion Workspaceへ", nullptr,
+            active_editor_workspace == editor_workspace::motion))
+        {
             set_editor_workspace(editor_workspace::motion);
+        }
         if (active_editor_workspace == editor_workspace::ui)
         {
             ImGui::MenuItem("UI 階層", nullptr, &show_ui_hierarchy_panel);
@@ -664,6 +681,40 @@ void framework::draw_editor_toolbar()
             u8"World … ワールド座標の軸に固定する。\n"
             u8"Local … 選択しているオブジェクトの回転に追従する。\n"
             u8"傾いた物を «その物にとっての前» へ動かしたいときは Local。");
+    }
+
+    ReplayEngine::Core::GameObject* pivot_object =
+        object_editor_context.Selection().ResolvePrimary(active_object_scene());
+    const bool has_pivot = pivot_object != nullptr &&
+        pivot_object->GetComponent<ReplayEngine::Components::PivotComponent>() != nullptr;
+    ImGui::SameLine();
+    if (ImGui::Button(pivot_edit_mode ? u8"Pivot:ON" : u8"Pivot"))
+        pivot_edit_mode = has_pivot ? !pivot_edit_mode : false;
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip(has_pivot
+            ? u8"Pivot 編集補助。Transform は動かさず基準点だけを編集する。"
+            : u8"選択オブジェクトへ Pivot Component を追加すると使える。");
+    if (pivot_edit_mode && has_pivot)
+    {
+        ImGui::SameLine();
+        if (ImGui::Button(u8"面Snap")) snap_primary_pivot_to_mesh(0);
+        ImGui::SameLine();
+        if (ImGui::Button(u8"頂点Snap")) snap_primary_pivot_to_mesh(1);
+        ImGui::SameLine();
+        if (ImGui::Button(u8"辺Snap")) snap_primary_pivot_to_mesh(2);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip(u8"CookedMeshCollision の実三角形へ正確に吸着する。");
+    }
+
+    ImGui::SameLine();
+    bool auxiliary_views = editor_auxiliary_views;
+    if (ImGui::Checkbox(u8"補助View", &auxiliary_views))
+        editor_auxiliary_views = auxiliary_views;
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::SetTooltip(
+            u8"Scene View の右側へ Front / Side / Top を重ねて表示する。\n"
+            u8"メイン View は全面のままなので Picking / Gizmo の座標は変わらない。");
     }
 
     ImGui::SameLine();
