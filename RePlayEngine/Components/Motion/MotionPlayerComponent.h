@@ -7,6 +7,7 @@
 #include "../../Runtime/Events/EventBus.h"
 
 #include <string>
+#include <cstdint>
 #include <vector>
 
 namespace ReplayEngine::Components
@@ -45,6 +46,7 @@ namespace ReplayEngine::Components
             TriggerSceneCompleted = 8,
             TriggerEventReceived = 9,
             TriggerManualOnly = 10,
+            TriggerStateChanged = 11,
         };
 
         struct SnapshotValue
@@ -84,9 +86,9 @@ namespace ReplayEngine::Components
         int RuntimeWrapMode() const noexcept { return EffectiveWrapMode(); }
         int PlaybackDirection() const noexcept
         {
-            if (speed == 0.0f) return 0;
+            if (effective_speed_ == 0.0f) return 0;
             return EffectiveWrapMode() == PingPong
-                ? ping_pong_direction_ : (speed < 0.0f ? -1 : 1);
+                ? ping_pong_direction_ : (effective_speed_ < 0.0f ? -1 : 1);
         }
 
         bool NeedsSnapshot() const noexcept;
@@ -104,6 +106,7 @@ namespace ReplayEngine::Components
         int trigger = TriggerStart;
         float trigger_delay = 0.0f;
         Reflection::ComponentReference trigger_source;
+        std::string trigger_state;
         bool loop = false;
         int wrap_mode = Once;
         bool auto_stop_on_end = false;
@@ -115,6 +118,9 @@ namespace ReplayEngine::Components
         int state = Stopped;
 
         float time = 0.0f;
+        int random_seed = 0;
+        float time_offset_random = 0.0f;
+        float speed_random = 0.0f;
 
     private:
         int EffectiveWrapMode() const noexcept;
@@ -125,10 +131,13 @@ namespace ReplayEngine::Components
         void HandleButtonStateChanged(const Runtime::EventRecord& record);
         void HandleMotionEvent(const Runtime::EventRecord& record);
         void HandleSceneTransition(const Runtime::EventRecord& record);
+        void HandleStateChanged(const Runtime::EventRecord& record);
+        void PrepareRandomizedPlayback() noexcept;
 
         std::vector<SnapshotValue> snapshot_values_;
         Runtime::ScopedSubscription button_state_subscription_;
         Runtime::ScopedSubscription motion_event_subscription_;
+        Runtime::ScopedSubscription state_changed_subscription_;
         Runtime::ScopedSubscription scene_started_subscription_;
         Runtime::ScopedSubscription scene_completed_subscription_;
         bool snapshot_valid_ = false;
@@ -138,5 +147,10 @@ namespace ReplayEngine::Components
         float trigger_elapsed_ = 0.0f;
         int ping_pong_direction_ = 1;
         float duration_ = 0.0f;
+        float effective_speed_ = 1.0f;
+        float random_speed_factor_ = 1.0f;
+        float start_time_offset_ = 0.0f;
+        std::uint64_t random_play_count_ = 0;
+        std::uint64_t random_nonce_ = 0;
     };
 }

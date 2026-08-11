@@ -142,10 +142,10 @@ namespace ReplayEngine::UI
             DirectX::XMFLOAT4 outline_color{ 0.0f, 0.0f, 0.0f, 1.0f };
             DirectX::XMFLOAT4 shadow_offset{ 0.0f, 0.0f, 0.0f, 0.0f };
             DirectX::XMFLOAT4 shadow_color{ 0.0f, 0.0f, 0.0f, 0.0f };
-            // FontAtlas は 2048x2048 の固定アトラス。fwidth ではなく、
-            // この実寸から 1 テクセルを求めて縁取りをサンプルする。
-            // z はグリフ間のアトラス余白。CPU とシェーダーで同じ上限を使う。
-            DirectX::XMFLOAT4 atlas_size{ 2048.0f, 2048.0f, 8.0f, 0.0f };
+            // x/y = アトラスの実寸、z = SDF の spread。境界のぼかしは
+            // 画面上の変化量なので、シェーダーでは fwidth(distance) を使う。
+            DirectX::XMFLOAT4 atlas_size{ 2048.0f, 2048.0f,
+                8.0f, 0.0f };
         };
 
         static constexpr std::size_t effect_shader_count = 10;

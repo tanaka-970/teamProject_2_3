@@ -25,9 +25,15 @@
 #include "../../../RePlayEngine/Components/Camera/CameraComponent.h"
 #include "../../../RePlayEngine/Components/Camera/CameraTargetComponent.h"
 #include "../../../RePlayEngine/Components/Camera/FollowTargetComponent.h"
+#include "../../../RePlayEngine/Components/Core/PropertyLinkComponent.h"
+#include "../../../RePlayEngine/Components/Core/StateComponent.h"
 #include "../../../RePlayEngine/Components/Gameplay/CharacterMotorComponent.h"
 #include "../../../RePlayEngine/Components/Gameplay/StageGameplayComponents.h"
 #include "../../../RePlayEngine/Components/Motion/MotionPlayerComponent.h"
+#include "../../../RePlayEngine/Components/Physics/BoxColliderComponent.h"
+#include "../../../RePlayEngine/Components/Physics/RigidbodyComponent.h"
+#include "../../../RePlayEngine/Components/Physics/SphereColliderComponent.h"
+#include "../../../RePlayEngine/Components/UI/CanvasComponent.h"
 #include "../../../RePlayEngine/Components/Rendering/LightComponents.h"
 #include "../../../RePlayEngine/Components/Rendering/MeshRendererComponent.h"
 #include "../../../RePlayEngine/Editor/Core/EditorContext.h"
@@ -55,6 +61,7 @@
 #include "../../../RePlayEngine/Rendering/Shaders/ShaderPassValidation.h"
 #include "../../../RePlayEngine/Rendering/ShaderComposer/ShaderComposerValidation.h"
 #include "../../../RePlayEngine/Rendering/Shaders/ShaderCompileValidation.h"
+#include "../../../RePlayEngine/Physics/PhysicsDynamicsWorld.h"
 #include "../../../RePlayEngine/Runtime/Validation/BehaviourValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/HandleValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/RuntimeSceneValidation.h"
@@ -1925,6 +1932,299 @@ namespace
         return ok ? 0 : 1420;
     }
 
+    int RunHeadlessPhysicsValidation(const char* command_line)
+    {
+        std::istringstream arguments(command_line != nullptr ? command_line : "");
+        std::string command;
+        if (!(arguments >> command) || command != "--validate-physics") return -1;
+
+        ReplayEngine::Core::RegisterBuiltInComponents();
+        ReplayEngine::Scene::Scene scene("PhysicsValidation");
+        ReplayEngine::Core::GameObject* ground = scene.CreateGameObject("Ground");
+        ReplayEngine::Core::GameObject* body = scene.CreateGameObject("Body");
+        auto* ground_rigidbody = ground != nullptr
+            ? ground->AddComponent<ReplayEngine::Components::RigidbodyComponent>() : nullptr;
+        auto* ground_collider = ground != nullptr
+            ? ground->AddComponent<ReplayEngine::Components::BoxColliderComponent>() : nullptr;
+        auto* body_rigidbody = body != nullptr
+            ? body->AddComponent<ReplayEngine::Components::RigidbodyComponent>() : nullptr;
+        auto* body_collider = body != nullptr
+            ? body->AddComponent<ReplayEngine::Components::SphereColliderComponent>() : nullptr;
+
+        bool ok = ground != nullptr && body != nullptr && ground_rigidbody != nullptr &&
+            ground_collider != nullptr && body_rigidbody != nullptr && body_collider != nullptr;
+        std::vector<std::string> lines;
+        if (ok)
+        {
+            ground->GetTransform().SetLocalPosition({ 0.0f, -1.0f, 0.0f });
+            ground_rigidbody->body_type =
+                ReplayEngine::Components::RigidbodyComponent::BodyType_Static;
+            ground_collider->size = { 20.0f, 1.0f, 20.0f };
+            body->GetTransform().SetLocalPosition({ 0.0f, 3.0f, 0.0f });
+            body_rigidbody->body_type =
+                ReplayEngine::Components::RigidbodyComponent::BodyType_Dynamic;
+            body_rigidbody->gravity_scale = 1.0f;
+            body_collider->radius = 0.5f;
+
+            ReplayEngine::Scene::PhysicsDynamicsWorld physics;
+            physics.AttachScene(&scene);
+            const float fixed_delta = 1.0f / 60.0f;
+            physics.Step(fixed_delta);
+            const float start_y = body->GetTransform().LocalPosition().y;
+            for (int frame = 0; frame < 180; ++frame) physics.Step(fixed_delta);
+            const float settled_y = body->GetTransform().LocalPosition().y;
+            const float before_pause = settled_y;
+            physics.Step(0.0f);
+            const float after_pause = body->GetTransform().LocalPosition().y;
+
+            const bool fell = settled_y < start_y - 0.1f;
+            const bool stopped_at_ground = settled_y > -0.25f && settled_y < 0.75f;
+            const bool pause_stopped = std::fabs(after_pause - before_pause) < 0.00001f;
+            const bool body_table_ok = physics.BodyCount() == 2 &&
+                physics.DynamicBodyCount() == 1;
+            ok = fell && stopped_at_ground && pause_stopped && body_table_ok;
+            lines.push_back(std::string("FALL ") + (fell ? "OK" : "NG"));
+            lines.push_back(std::string("GROUND_CONTACT ") +
+                (stopped_at_ground ? "OK" : "NG"));
+            lines.push_back(std::string("TIME_SCALE_ZERO ") +
+                (pause_stopped ? "OK" : "NG"));
+            lines.push_back(std::string("BODY_TABLE ") +
+                (body_table_ok ? "OK" : "NG"));
+            physics.DetachScene();
+            const bool detached = physics.BodyCount() == 0 && physics.AttachedScene() == nullptr;
+            ok = ok && detached;
+            lines.push_back(std::string("DETACH ") + (detached ? "OK" : "NG"));
+        }
+        else
+        {
+            lines.push_back("SCENE_SETUP NG");
+        }
+
+        WriteValidationResultFile("Physics.txt", "REPLAY_PHYSICS_VALIDATION", ok, lines);
+        std::fprintf(stderr, "physics validation: RESULT %s\n", ok ? "OK" : "NG");
+        return ok ? 0 : 1430;
+    }
+
+    int RunHeadlessMotionTriggerValidation(const char* command_line)
+    {
+        std::istringstream arguments(command_line != nullptr ? command_line : "");
+        std::string command;
+        if (!(arguments >> command) || command != "--validate-motion-trigger") return -1;
+
+        ReplayEngine::Core::RegisterBuiltInComponents();
+        ReplayEngine::Scene::Scene scene("MotionTriggerValidation");
+        ReplayEngine::Core::GameObject* state_object = scene.CreateGameObject("StateSource");
+        ReplayEngine::Core::GameObject* first_object = scene.CreateGameObject("FirstPlayer");
+        ReplayEngine::Core::GameObject* second_object = scene.CreateGameObject("SecondPlayer");
+        auto* state = state_object != nullptr
+            ? state_object->AddComponent<ReplayEngine::Components::StateComponent>() : nullptr;
+        auto* first = first_object != nullptr
+            ? first_object->AddComponent<ReplayEngine::Components::MotionPlayerComponent>() : nullptr;
+        auto* second = second_object != nullptr
+            ? second_object->AddComponent<ReplayEngine::Components::MotionPlayerComponent>() : nullptr;
+
+        bool ok = state != nullptr && first != nullptr && second != nullptr;
+        std::vector<std::string> lines;
+        if (ok)
+        {
+            state->SetStateCount(3);
+            state->states[1].name = "Playing";
+            const auto configure = [state_object, state](
+                ReplayEngine::Components::MotionPlayerComponent& player)
+            {
+                player.motion.guid = "validation-shared-motion";
+                player.trigger =
+                    ReplayEngine::Components::MotionPlayerComponent::TriggerStateChanged;
+                player.trigger_delay = 0.1f;
+                player.trigger_state = "Playing";
+                player.trigger_source.owner = state_object->ID();
+                player.trigger_source.component = state->StableID();
+            };
+            configure(*first);
+            configure(*second);
+
+            const std::vector<ReplayEngine::Reflection::PropertyDesc>* dynamic =
+                state->DynamicProperties();
+            bool state_name_is_dynamic = false;
+            if (dynamic != nullptr)
+            {
+                for (const auto& property : *dynamic)
+                {
+                    if (property.name == "states[1].name") state_name_is_dynamic = true;
+                }
+            }
+            const auto* delay_property = ReplayEngine::Reflection::PropertyRegistry::Find(
+                first->TypeID(), "trigger_delay");
+            const bool same_asset = first->motion.guid == second->motion.guid;
+            const bool independent_owners = first_object->ID() != second_object->ID();
+            const bool separate_sources = first->trigger_source.owner == state_object->ID() &&
+                second->trigger_source.owner == state_object->ID() &&
+                first->trigger_source.component == second->trigger_source.component;
+            const bool delay_is_six_fixed_steps =
+                (5.0f / 60.0f) < first->trigger_delay &&
+                (6.0f / 60.0f) >= first->trigger_delay;
+            const bool state_transition = state->SetCurrentState("Playing");
+            ok = state_name_is_dynamic && delay_property != nullptr && same_asset &&
+                independent_owners && separate_sources && delay_is_six_fixed_steps &&
+                state_transition &&
+                ReplayEngine::Components::MotionPlayerComponent::TriggerStateChanged == 11;
+            lines.push_back(std::string("STATE_DYNAMIC_PROPERTY ") +
+                (state_name_is_dynamic ? "OK" : "NG"));
+            lines.push_back(std::string("SHARED_ASSET ") + (same_asset ? "OK" : "NG"));
+            lines.push_back(std::string("INDEPENDENT_PLAYERS ") +
+                (independent_owners ? "OK" : "NG"));
+            lines.push_back(std::string("STATE_SOURCE_BINDING ") +
+                (separate_sources ? "OK" : "NG"));
+            lines.push_back(std::string("DELAY_0_1_SECONDS ") +
+                (delay_is_six_fixed_steps ? "OK" : "NG"));
+            lines.push_back(std::string("STATE_TRANSITION ") +
+                (state_transition ? "OK" : "NG"));
+        }
+        else
+        {
+            lines.push_back("SCENE_SETUP NG");
+        }
+
+        WriteValidationResultFile("MotionTrigger.txt",
+            "REPLAY_MOTION_TRIGGER_VALIDATION", ok, lines);
+        std::fprintf(stderr, "motion-trigger validation: RESULT %s\n", ok ? "OK" : "NG");
+        return ok ? 0 : 1440;
+    }
+
+    int RunHeadlessPropertyLinkValidation(const char* command_line)
+    {
+        std::istringstream arguments(command_line != nullptr ? command_line : "");
+        std::string command;
+        if (!(arguments >> command) || command != "--validate-property-link") return -1;
+
+        ReplayEngine::Core::RegisterBuiltInComponents();
+        ReplayEngine::Scene::Scene scene("PropertyLinkValidation");
+        ReplayEngine::Core::GameObject* source_object = scene.CreateGameObject("Source");
+        ReplayEngine::Core::GameObject* target_object = scene.CreateGameObject("Target");
+        ReplayEngine::Core::GameObject* first_link_object = scene.CreateGameObject("LinkA");
+        ReplayEngine::Core::GameObject* second_link_object = scene.CreateGameObject("LinkB");
+        auto* source = source_object != nullptr
+            ? source_object->AddComponent<ReplayEngine::Components::CanvasComponent>() : nullptr;
+        auto* target = target_object != nullptr
+            ? target_object->AddComponent<ReplayEngine::Components::CanvasComponent>() : nullptr;
+        auto* first_link = first_link_object != nullptr
+            ? first_link_object->AddComponent<ReplayEngine::Components::PropertyLinkComponent>() : nullptr;
+        auto* second_link = second_link_object != nullptr
+            ? second_link_object->AddComponent<ReplayEngine::Components::PropertyLinkComponent>() : nullptr;
+
+        bool ok = source != nullptr && target != nullptr && first_link != nullptr &&
+            second_link != nullptr;
+        std::vector<std::string> lines;
+        if (ok)
+        {
+            first_link->source_object.owner = source_object->ID();
+            first_link->source_object.component = source->StableID();
+            first_link->source_property = "opacity";
+            first_link->target_object.owner = target_object->ID();
+            first_link->target_object.component = target->StableID();
+            first_link->target_property = "opacity";
+            first_link->source_min = 0.0f;
+            first_link->source_max = 1.0f;
+            first_link->target_min = 0.0f;
+            first_link->target_max = 1.0f;
+            first_link->clamp = true;
+            source->opacity = 0.25f;
+            target->opacity = 0.0f;
+            ReplayEngine::Components::PropertyLinkComponent::EvaluateAll(scene, 0.0f);
+            const bool mapped = std::fabs(target->opacity - 0.25f) < 0.00001f;
+
+            second_link->source_object.owner = target_object->ID();
+            second_link->source_object.component = target->StableID();
+            second_link->source_property = "opacity";
+            second_link->target_object.owner = source_object->ID();
+            second_link->target_object.component = source->StableID();
+            second_link->target_property = "opacity";
+            second_link->source_min = 0.0f;
+            second_link->source_max = 1.0f;
+            second_link->target_min = 0.0f;
+            second_link->target_max = 1.0f;
+            source->opacity = 0.75f;
+            target->opacity = 0.25f;
+            ReplayEngine::Components::PropertyLinkComponent::EvaluateAll(scene, 0.0f);
+            const bool cycle_held = std::fabs(source->opacity - 0.75f) < 0.00001f &&
+                std::fabs(target->opacity - 0.25f) < 0.00001f;
+            ok = mapped && cycle_held;
+            lines.push_back(std::string("RANGE_MAPPING ") + (mapped ? "OK" : "NG"));
+            lines.push_back(std::string("CYCLE_GUARD ") + (cycle_held ? "OK" : "NG"));
+        }
+        else
+        {
+            lines.push_back("SCENE_SETUP NG");
+        }
+
+        WriteValidationResultFile("PropertyLink.txt",
+            "REPLAY_PROPERTY_LINK_VALIDATION", ok, lines);
+        std::fprintf(stderr, "property-link validation: RESULT %s\n", ok ? "OK" : "NG");
+        return ok ? 0 : 1450;
+    }
+
+    int RunHeadlessScenePersistenceValidation(const char* command_line)
+    {
+        std::istringstream arguments(command_line != nullptr ? command_line : "");
+        std::string command;
+        if (!(arguments >> command) || command != "--validate-scene-persistence") return -1;
+
+        ReplayEngine::Core::RegisterBuiltInComponents();
+        namespace Serialization = ReplayEngine::Scene::Serialization;
+        ReplayEngine::Scene::Scene source("PersistenceSource");
+        ReplayEngine::Core::GameObject* root = source.CreateGameObject("PersistentRoot");
+        ReplayEngine::Core::GameObject* child = source.CreateGameObject("PersistentChild");
+        bool ok = root != nullptr && child != nullptr && child->SetParent(root, false);
+        std::vector<std::string> lines;
+        Serialization::SceneData captured;
+        Serialization::SceneData loaded;
+        std::string error;
+        std::stringstream stream;
+        if (ok)
+        {
+            root->GetTransform().SetLocalPosition({ 1.0f, 2.0f, 3.0f });
+            child->GetTransform().SetLocalPosition({ 0.0f, 4.0f, 0.0f });
+            Serialization::CaptureScene(source, captured);
+            ok = Serialization::SceneSerializer::WriteText(captured, stream, error);
+            stream.seekg(0);
+            ok = ok && Serialization::SceneSerializer::ReadText(loaded, stream, error);
+            lines.push_back(std::string("TEXT_ROUND_TRIP ") + (ok ? "OK" : "NG"));
+        }
+        else
+        {
+            lines.push_back("SCENE_SETUP NG");
+        }
+
+        ReplayEngine::Scene::Scene restored("PersistenceRestored");
+        ReplayEngine::Core::GameObject* stale = restored.CreateGameObject("StaleObject");
+        const ReplayEngine::Core::ObjectID stale_id = stale != nullptr
+            ? stale->ID() : ReplayEngine::Core::ObjectID::Invalid();
+        Serialization::SceneLoadReport report;
+        if (ok)
+        {
+            ok = Serialization::ApplySceneData(loaded, restored, report);
+            ReplayEngine::Core::GameObject* restored_root = restored.FindGameObjectByID(root->ID());
+            ReplayEngine::Core::GameObject* restored_child = restored.FindGameObjectByID(child->ID());
+            const bool hierarchy_ok = restored_root != nullptr && restored_child != nullptr &&
+                restored_root->Name() == "PersistentRoot" &&
+                restored_child->Parent() == restored_root &&
+                restored.FindGameObjectByID(stale_id) == nullptr;
+            ok = ok && hierarchy_ok && report.skipped_components == 0;
+            lines.push_back(std::string("REPLACE_SCENE ") + (hierarchy_ok ? "OK" : "NG"));
+
+            Serialization::SceneLoadReport second_report;
+            const bool repeated = Serialization::ApplySceneData(loaded, restored, second_report) &&
+                restored.GameObjectCount() == loaded.objects.size();
+            ok = ok && repeated;
+            lines.push_back(std::string("REPEAT_LOAD ") + (repeated ? "OK" : "NG"));
+        }
+
+        WriteValidationResultFile("ScenePersistence.txt",
+            "REPLAY_SCENE_PERSISTENCE_VALIDATION", ok, lines);
+        std::fprintf(stderr, "scene-persistence validation: RESULT %s\n", ok ? "OK" : "NG");
+        return ok ? 0 : 1460;
+    }
+
     // Phase 2 (Serialization Foundation) の検証。
     // どれもファイルを触らず、メモリ上の文字列で往復を確かめる。
     // 既存の Scene / Prefab 原本は一切変更しない。
@@ -1954,6 +2254,22 @@ namespace
         if (command == "--validate-motion-events")
         {
             return RunHeadlessMotionEventsValidation();
+        }
+        if (command == "--validate-physics")
+        {
+            return RunHeadlessPhysicsValidation(command_line);
+        }
+        if (command == "--validate-motion-trigger")
+        {
+            return RunHeadlessMotionTriggerValidation(command_line);
+        }
+        if (command == "--validate-property-link")
+        {
+            return RunHeadlessPropertyLinkValidation(command_line);
+        }
+        if (command == "--validate-scene-persistence")
+        {
+            return RunHeadlessScenePersistenceValidation(command_line);
         }
 
         // Phase 3-5。Behaviour を使う検証は、先にゲーム側の登録を通しておく。

@@ -1,11 +1,13 @@
-#include "MotionPlayerComponent.h"
+﻿#include "MotionPlayerComponent.h"
 
 #include "../../Object/GameObject/GameObject.h"
 #include "../../Runtime/API/RuntimeContext.h"
 #include "../../Scene/Runtime/Scene.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <utility>
 
 namespace ReplayEngine::Components
@@ -22,13 +24,39 @@ namespace ReplayEngine::Components
                 a.property == b.property &&
                 a.relative_path == b.relative_path;
         }
+
+        std::uint64_t MixRandom(std::uint64_t value) noexcept
+        {
+            value ^= value >> 30;
+            value *= 0xbf58476d1ce4e5b9ull;
+            value ^= value >> 27;
+            value *= 0x94d049bb133111ebull;
+            return value ^ (value >> 31);
+        }
+
+        float SignedRandom(std::uint64_t value) noexcept
+        {
+            const std::uint32_t bits = static_cast<std::uint32_t>(MixRandom(value));
+            const float normalized = static_cast<float>(bits) /
+                static_cast<float>(0xffffffffu);
+            return normalized * 2.0f - 1.0f;
+        }
     }
 
     void MotionPlayerComponent::OnRuntimeAwake()
     {
         // 壊れた Scene でも自動再生が無言で消えないよう、既定値へ戻す。
-        if (trigger < TriggerStart || trigger > TriggerManualOnly)
+        if (trigger < TriggerStart || trigger > TriggerStateChanged)
             trigger = TriggerStart;
+        const std::uint64_t owner_id = Owner() != nullptr
+            ? Owner()->ID().Value() : 0;
+        const std::uint64_t clock_value = static_cast<std::uint64_t>(
+            std::chrono::steady_clock::now().time_since_epoch().count());
+        random_nonce_ = MixRandom(clock_value ^ owner_id);
+        random_play_count_ = 0;
+        effective_speed_ = speed;
+        random_speed_factor_ = 1.0f;
+        start_time_offset_ = 0.0f;
         StopAndKeep();
         EnsureTriggerSubscriptions();
         if (play_on_start && trigger == TriggerStart)
@@ -62,7 +90,7 @@ namespace ReplayEngine::Components
     {
         time = 0.0f;
         blend_in_elapsed_ = 0.0f;
-        ping_pong_direction_ = speed < 0.0f ? -1 : 1;
+        ping_pong_direction_ = effective_speed_ < 0.0f ? -1 : 1;
         snapshot_valid_ = false;
         stop_restore_requested_ = false;
         trigger_pending_ = false;
@@ -110,7 +138,7 @@ namespace ReplayEngine::Components
         const int mode = EffectiveWrapMode();
         if (mode == PingPong)
         {
-            time += delta_time * std::fabs(speed) *
+            time += delta_time * std::fabs(effective_speed_) *
                 static_cast<float>(ping_pong_direction_);
             while (time > duration || time < 0.0f)
             {
@@ -128,7 +156,7 @@ namespace ReplayEngine::Components
             return;
         }
 
-        time += delta_time * speed;
+        time += delta_time * effective_speed_;
         if (mode == Loop)
         {
             time = std::fmod(time, duration);
@@ -140,7 +168,8 @@ namespace ReplayEngine::Components
         }
         else
         {
-            const bool reached_end = speed >= 0.0f ? time >= duration : time <= 0.0f;
+            const bool reached_end = effective_speed_ >= 0.0f
+                ? time >= duration : time <= 0.0f;
             time = (std::max)(0.0f, (std::min)(duration, time));
             if (reached_end && auto_stop_on_end)
             {
@@ -157,7 +186,8 @@ namespace ReplayEngine::Components
     void MotionPlayerComponent::PlayFrom(float seconds) noexcept
     {
         ResetPlayback();
-        time = (std::max)(0.0f, seconds);
+        PrepareRandomizedPlayback();
+        time = (std::max)(0.0f, seconds + start_time_offset_);
         state = Playing;
     }
 
@@ -194,6 +224,7 @@ namespace ReplayEngine::Components
     void MotionPlayerComponent::Reverse() noexcept
     {
         speed = speed == 0.0f ? -1.0f : -speed;
+        effective_speed_ = speed * random_speed_factor_;
         ping_pong_direction_ = -ping_pong_direction_;
     }
 
@@ -209,10 +240,33 @@ namespace ReplayEngine::Components
     void MotionPlayerComponent::SetSpeed(float value) noexcept
     {
         speed = value;
+        effective_speed_ = speed * random_speed_factor_;
         if (speed != 0.0f)
         {
-            ping_pong_direction_ = speed < 0.0f ? -1 : 1;
+            ping_pong_direction_ = effective_speed_ < 0.0f ? -1 : 1;
         }
+    }
+
+    void MotionPlayerComponent::PrepareRandomizedPlayback() noexcept
+    {
+        ++random_play_count_;
+        const Core::GameObject* owner = Owner();
+        const std::uint64_t owner_id = owner != nullptr ? owner->ID().Value() : 0;
+        const std::uint64_t configured_seed = static_cast<std::uint64_t>(
+            static_cast<std::int64_t>(random_seed));
+        std::uint64_t seed = MixRandom(owner_id ^ configured_seed);
+        if (random_seed == 0)
+            seed = MixRandom(seed ^ random_nonce_ ^ random_play_count_);
+
+        const float safe_time_random = std::isfinite(time_offset_random)
+            ? (std::max)(0.0f, time_offset_random) : 0.0f;
+        const float safe_speed_random = std::isfinite(speed_random)
+            ? (std::max)(0.0f, speed_random) : 0.0f;
+        start_time_offset_ = SignedRandom(seed) * safe_time_random;
+        random_speed_factor_ = (std::max)(0.0f,
+            1.0f + SignedRandom(seed ^ 0x9e3779b97f4a7c15ull) * safe_speed_random);
+        effective_speed_ = speed * random_speed_factor_;
+        ping_pong_direction_ = effective_speed_ < 0.0f ? -1 : 1;
     }
 
     void MotionPlayerComponent::SetWeight(float value) noexcept
@@ -347,6 +401,16 @@ namespace ReplayEngine::Components
                 }, owner_handle);
         }
 
+        if (trigger == TriggerStateChanged && !state_changed_subscription_.Valid())
+        {
+            state_changed_subscription_ = runtime->Events().Subscribe(
+                Runtime::EngineEvents::StateChanged,
+                [this](const Runtime::EventRecord& record)
+                {
+                    HandleStateChanged(record);
+                }, owner_handle);
+        }
+
         if (trigger == TriggerSceneStarted && !scene_started_subscription_.Valid())
         {
             scene_started_subscription_ = Runtime::EventBus::Global().Subscribe(
@@ -372,6 +436,7 @@ namespace ReplayEngine::Components
     {
         button_state_subscription_.Release();
         motion_event_subscription_.Release();
+        state_changed_subscription_.Release();
         scene_started_subscription_.Release();
         scene_completed_subscription_.Release();
     }
@@ -400,8 +465,11 @@ namespace ReplayEngine::Components
 
         // ButtonStateChanged は発行元 Component の StableID も持つ。
         // 古い／汎用イベントにこの値が無い場合は Object 単位の参照として扱う。
-        if (const Reflection::PropertyValue* component =
-            record.payload.Find("button_component"))
+        const Reflection::PropertyValue* component =
+            record.payload.Find("button_component");
+        if (component == nullptr)
+            component = record.payload.Find("state_component");
+        if (component != nullptr)
         {
             return component->AsUInt64() == trigger_source.component;
         }
@@ -457,6 +525,18 @@ namespace ReplayEngine::Components
                 target_owner->FindComponentByStableID(trigger_source.component) != nullptr;
         }
         if (!matches) return;
+        RequestTrigger();
+    }
+
+    void MotionPlayerComponent::HandleStateChanged(const Runtime::EventRecord& record)
+    {
+        if (trigger != TriggerStateChanged || !ActiveInHierarchy() ||
+            !MatchesTriggerSource(record)) return;
+        if (!trigger_state.empty())
+        {
+            const Reflection::PropertyValue* state = record.payload.Find("state");
+            if (state == nullptr || state->AsString() != trigger_state) return;
+        }
         RequestTrigger();
     }
 

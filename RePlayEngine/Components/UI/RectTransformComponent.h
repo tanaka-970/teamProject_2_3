@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../../Object/Component/Component.h"
 
@@ -20,6 +20,7 @@ namespace ReplayEngine::Components
         DirectX::XMFLOAT2 pivot{ 0.5f, 0.5f };
         float rotation = 0.0f;
         DirectX::XMFLOAT2 scale{ 1.0f, 1.0f };
+        int sort_order = 0;
 
         const DirectX::XMFLOAT4& ResolvedRect() const noexcept { return resolved_rect_; }
         const DirectX::XMFLOAT4X4& ResolvedMatrix() const noexcept { return resolved_matrix_; }
