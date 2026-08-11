@@ -153,6 +153,7 @@ void framework::initialize_runtime_services()
     object_script_runtime->Initialize();
 
     object_runtime_scenes.SetRuntimeContext(object_runtime_context.get());
+    object_runtime_scenes.SetSceneFlowService(object_scene_flow.get());
     object_runtime_scenes.SetAssetResolver(&object_scene_resolver);
     object_runtime_scenes.SetCollisionDispatcher(&object_collision_events);
 
@@ -171,12 +172,16 @@ void framework::initialize_runtime_services()
     sync_runtime_scene_flow_asset();
 
     object_runtime_scenes.ActiveWorld().Services().SetRuntime(object_runtime_context.get());
+    object_runtime_scenes.ActiveWorld().Services().SetRuntimeScene(&object_runtime_scenes);
+    object_runtime_scenes.ActiveWorld().Services().SetSceneFlow(object_scene_flow.get());
     object_runtime_scenes.ActiveWorld().Services().SetAudio(&object_audio_system);
 
     // 編集 Scene からも Schema を引けるようにする。
     // Play セッションはまだ無いので、Inspector の表示だけが動く。
     // インスタンスの生成は PlaySessionActive() が false のあいだ起きない。
     object_scene.Services().SetScripts(object_script_runtime.get());
+    object_scene.Services().SetRuntimeScene(nullptr);
+    object_scene.Services().SetSceneFlow(nullptr);
     object_scene.Services().SetAudio(&object_audio_system);
 
     if (!standalone_game_mode) refresh_csharp_scripts();

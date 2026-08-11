@@ -318,6 +318,9 @@ bool framework::uninitialize()
     // 1) Scene を止めて GameObject / Component / Behaviour を破棄する。
     //    Renderer Component が握っているメッシュ参照はここで切れる。
     object_runtime_scenes.ResetToEmptyWorld();
+    object_runtime_scenes.ActiveWorld().Services().SetRuntimeScene(nullptr);
+    object_runtime_scenes.ActiveWorld().Services().SetSceneFlow(nullptr);
+    object_runtime_scenes.ActiveWorld().Services().SetRuntime(nullptr);
     object_scene.Clear();
     object_audio_system.Shutdown();
 

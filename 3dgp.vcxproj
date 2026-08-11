@@ -362,6 +362,8 @@
     <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourValidation.cpp" />
     <ClCompile Include="Source\game\Behaviours\ValidationBehaviours.cpp" />
     <ClCompile Include="RePlayEngine\Scene\Runtime\Scene.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Core\PropertyLinkComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Core\SceneLoaderComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Core\TransformComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Gameplay\RotatorComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Gameplay\HealthComponent.cpp" />
@@ -595,6 +597,9 @@
     <ClInclude Include="Source\game\Behaviours\ValidationBehaviours.h" />
     <ClInclude Include="RePlayEngine\Reflection\Registry\PropertyRegistry.h" />
     <ClInclude Include="RePlayEngine\Scene\Runtime\Scene.h" />
+    <ClInclude Include="RePlayEngine\Components\Core\PropertyLinkComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Core\PersistentComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Core\SceneLoaderComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Core\TransformComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Core\PivotComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Rendering\MeshRendererComponent.h" />

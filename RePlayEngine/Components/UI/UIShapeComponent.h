@@ -20,13 +20,33 @@ namespace ReplayEngine::Components
             BezierPath = 4,
         };
 
+        enum FillMode : int
+        {
+            Solid = 0,
+            LinearGradient = 1,
+            RadialGradient = 2,
+        };
+
+        enum StrokeMode : int
+        {
+            StrokeSolid = 0,
+            StrokeAlongLength = 1,
+        };
+
         UIShapeComponent() = default;
 
         int shape = Rectangle;
         DirectX::XMFLOAT4 fill_color{ 1.0f, 1.0f, 1.0f, 1.0f };
+        DirectX::XMFLOAT4 fill_color_2{ 1.0f, 1.0f, 1.0f, 1.0f };
+        int fill_mode = Solid;
+        float fill_angle = 0.0f;
+        DirectX::XMFLOAT2 fill_center{ 0.5f, 0.5f };
         DirectX::XMFLOAT4 stroke_color{ 1.0f, 1.0f, 1.0f, 1.0f };
+        DirectX::XMFLOAT4 stroke_color_2{ 1.0f, 1.0f, 1.0f, 1.0f };
+        int stroke_mode = StrokeSolid;
         float stroke_width = 0.0f;
         float corner_radius = 0.0f;
+        float arc_curvature = 1.0f;
         int sides = 5;
         float trim_start = 0.0f;
         float trim_end = 1.0f;

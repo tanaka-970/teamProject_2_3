@@ -17,8 +17,10 @@
 #include "../../RePlayEngine/Components/Camera/CameraTargetComponent.h"
 #include "../../RePlayEngine/Components/Camera/FollowTargetComponent.h"
 #include "../../RePlayEngine/Components/Motion/MotionPlayerComponent.h"
+#include "../../RePlayEngine/Components/Core/PropertyLinkComponent.h"
 #include "../../RePlayEngine/Components/UI/UIEffectStackComponent.h"
 #include "../../RePlayEngine/Components/UI/UISpriteAnimatorComponent.h"
+#include "../../RePlayEngine/Components/UI/UITextComponent.h"
 #include "../../RePlayEngine/Components/Rendering/LightComponents.h"
 #include "../../RePlayEngine/Components/Rendering/MeshRendererComponent.h"
 #include "../../RePlayEngine/Components/Rendering/PrimitiveMeshRendererComponent.h"
@@ -502,6 +504,8 @@ void framework::refresh_object_scene_services()
     services.SetAudio(&object_audio_system);
     services.SetMotionMixer(&motion_mixer);
     services.SetPlaying(object_runtime_active());
+    services.SetRuntimeScene(object_runtime_active() ? &object_runtime_scenes : nullptr);
+    services.SetSceneFlow(object_runtime_active() ? object_scene_flow.get() : nullptr);
 
     // 地形の問い合わせ先は衝突世界。
     // 旧 Stage を直接 Physics サービスへ挿すことはもうしない。
@@ -1010,6 +1014,37 @@ void framework::update_ui_sprite_animators(ReplayEngine::Scene::Scene& scene,
     }
 }
 
+void framework::update_ui_number_displays(ReplayEngine::Scene::Scene& scene)
+{
+    using ReplayEngine::Components::UITextComponent;
+
+    for (std::size_t object_index = 0;
+        object_index < scene.GameObjectCount(); ++object_index)
+    {
+        ReplayEngine::Core::GameObject* object = scene.GameObjectAt(object_index);
+        if (object == nullptr || object->PendingDestroy() ||
+            !object->ActiveInHierarchy())
+        {
+            continue;
+        }
+
+        for (std::size_t component_index = 0;
+            component_index < object->ComponentCount(); ++component_index)
+        {
+            ReplayEngine::Core::Component* component =
+                object->ComponentAt(component_index);
+            if (component == nullptr || component->PendingDestroy() ||
+                !component->ActiveInHierarchy() ||
+                component->TypeID() != UITextComponent::StaticTypeID())
+            {
+                continue;
+            }
+
+            static_cast<UITextComponent*>(component)->UpdateNumberDisplay(scene);
+        }
+    }
+}
+
 void framework::update_object_scene(float elapsed_time)
 {
     // Scene 遷移はフレームの先頭で進める。
@@ -1162,6 +1197,9 @@ void framework::update_object_scene(float elapsed_time)
         // Motion は Component::OnUpdate からは評価しない。全 Player の寄与を先に集め、
         // 同じ property へ setter を 1 フレーム 1 回だけ呼ぶため、この外部フェーズで扱う。
         evaluate_motion_players(scene, scaled_delta_time, unscaled_delta_time);
+        ReplayEngine::Components::PropertyLinkComponent::EvaluateAll(
+            scene, unscaled_delta_time);
+        update_ui_number_displays(scene);
         // UI sprite animation は Pause Menu / Loading 表示を止めないため実時間。
         update_ui_sprite_animators(scene, unscaled_delta_time);
         if (object_runtime_context)

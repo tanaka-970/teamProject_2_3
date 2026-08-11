@@ -27,12 +27,31 @@ namespace ReplayEngine::Components
             Screen = 3,
         };
 
+        enum FillMode : int
+        {
+            Solid = 0,
+            LinearGradient = 1,
+            RadialGradient = 2,
+        };
+
+        enum StrokeMode : int
+        {
+            StrokeSolid = 0,
+            StrokeAlongLength = 1,
+        };
+
         UIImageComponent() = default;
 
         void OnAttach() override;
 
         Reflection::AssetReference sprite;
         DirectX::XMFLOAT4 color{ 1.0f, 1.0f, 1.0f, 1.0f };
+        DirectX::XMFLOAT4 fill_color_2{ 1.0f, 1.0f, 1.0f, 1.0f };
+        int fill_mode = Solid;
+        float fill_angle = 0.0f;
+        DirectX::XMFLOAT2 fill_center{ 0.5f, 0.5f };
+        int stroke_mode = StrokeSolid;
+        DirectX::XMFLOAT4 stroke_color_2{ 1.0f, 1.0f, 1.0f, 1.0f };
         float opacity = 1.0f;
         float fill_amount = 1.0f;
         int fill_method = Horizontal;

@@ -10,6 +10,9 @@
 #include "../../Components/Camera/CameraTargetComponent.h"
 #include "../../Components/Camera/FollowTargetComponent.h"
 #include "../../Components/Editor/EditorNoteComponent.h"
+#include "../../Components/Core/PropertyLinkComponent.h"
+#include "../../Components/Core/PersistentComponent.h"
+#include "../../Components/Core/SceneLoaderComponent.h"
 #include "../../Components/Core/TransformComponent.h"
 #include "../../Components/Core/PivotComponent.h"
 #include "../../Components/Gameplay/CharacterMotorComponent.h"
@@ -78,6 +81,9 @@ namespace ReplayEngine::Core
         using Components::PlayerControllerComponent;
         using Components::PlayerInputComponent;
         using Components::PivotComponent;
+        using Components::PropertyLinkComponent;
+        using Components::PersistentComponent;
+        using Components::SceneLoaderComponent;
         using Components::RotatorComponent;
         using Components::RectTransformComponent;
         using Components::SkinnedMeshRendererComponent;
@@ -1242,6 +1248,86 @@ namespace ReplayEngine::Core
                     .Display("外側角度").Range(0.1, 179.0).Step(0.5));
         }
 
+        void RegisterPropertyLink()
+        {
+            ComponentRegistry::Register<PropertyLinkComponent>(
+                ComponentTypeInfo::Describe("Property Link", "Motion")
+                    .WithTooltip("Motion Mixer 後に数値プロパティを別の Component へ接続します。循環接続は無効化します。"));
+            PropertyRegistry::Register<PropertyLinkComponent>(
+                MakeProperty("source_object", &PropertyLinkComponent::source_object)
+                    .Display("接続元 Component"));
+            PropertyRegistry::Register<PropertyLinkComponent>(
+                MakeProperty("source_property", &PropertyLinkComponent::source_property)
+                    .Display("接続元プロパティ"));
+            PropertyRegistry::Register<PropertyLinkComponent>(
+                MakeProperty("target_object", &PropertyLinkComponent::target_object)
+                    .Display("接続先 Component"));
+            PropertyRegistry::Register<PropertyLinkComponent>(
+                MakeProperty("target_property", &PropertyLinkComponent::target_property)
+                    .Display("接続先プロパティ"));
+            PropertyRegistry::Register<PropertyLinkComponent>(
+                MakeProperty("source_min", &PropertyLinkComponent::source_min)
+                    .Display("元の最小値").Step(0.01)
+                    .Animation(Animatable::Interpolatable));
+            PropertyRegistry::Register<PropertyLinkComponent>(
+                MakeProperty("source_max", &PropertyLinkComponent::source_max)
+                    .Display("元の最大値").Step(0.01)
+                    .Animation(Animatable::Interpolatable));
+            PropertyRegistry::Register<PropertyLinkComponent>(
+                MakeProperty("target_min", &PropertyLinkComponent::target_min)
+                    .Display("先の最小値").Step(0.01)
+                    .Animation(Animatable::Interpolatable));
+            PropertyRegistry::Register<PropertyLinkComponent>(
+                MakeProperty("target_max", &PropertyLinkComponent::target_max)
+                    .Display("先の最大値").Step(0.01)
+                    .Animation(Animatable::Interpolatable));
+            PropertyRegistry::Register<PropertyLinkComponent>(
+                MakeProperty("invert", &PropertyLinkComponent::invert)
+                    .Display("反転"));
+            PropertyRegistry::Register<PropertyLinkComponent>(
+                MakeProperty("clamp", &PropertyLinkComponent::clamp)
+                    .Display("範囲内に制限"));
+            PropertyRegistry::Register<PropertyLinkComponent>(
+                MakeProperty("easing", &PropertyLinkComponent::easing)
+                    .Display("イージング")
+                    .AsEnum({ "Linear", "Step", "EaseInQuad", "EaseOutQuad",
+                        "EaseInOutQuad", "EaseInCubic", "EaseOutCubic",
+                        "EaseInOutCubic", "EaseInBack", "EaseOutBack",
+                        "EaseInOutBack", "EaseInElastic", "EaseOutElastic",
+                        "EaseInOutElastic", "CustomBezier" })
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<PropertyLinkComponent>(
+                MakeProperty("smoothing", &PropertyLinkComponent::smoothing)
+                    .Display("平滑化").Range(0.0, 60.0).Step(0.01)
+                    .Animation(Animatable::Interpolatable)
+                    .Tooltip("0 は即時反映。大きいほどゆっくり追従します。"));
+        }
+
+        void RegisterScenePersistence()
+        {
+            ComponentRegistry::Register<PersistentComponent>(
+                ComponentTypeInfo::Describe("Persistent", "Scene")
+                    .WithTooltip("Scene 直下のルートを Scene 遷移後も同じ実体として保持します。"));
+
+            ComponentRegistry::Register<SceneLoaderComponent>(
+                ComponentTypeInfo::Describe("Scene Loader", "Scene")
+                    .WithTooltip("既存の SceneFlowService / RuntimeSceneService の進捗を公開します。"));
+            PropertyRegistry::Register<SceneLoaderComponent>(
+                MakeProperty<SceneLoaderComponent>("progress", &SceneLoaderComponent::progress)
+                    .Display("進捗")
+                    .Range(0.0f, 1.0f)
+                    .RuntimeOnly().ReadOnly().NotSerializable());
+            PropertyRegistry::Register<SceneLoaderComponent>(
+                MakeProperty<SceneLoaderComponent>("is_loading", &SceneLoaderComponent::is_loading)
+                    .Display("読込中")
+                    .RuntimeOnly().ReadOnly().NotSerializable());
+            PropertyRegistry::Register<SceneLoaderComponent>(
+                MakeProperty<SceneLoaderComponent>("state", &SceneLoaderComponent::state)
+                    .Display("状態")
+                    .AsEnum({ "Idle", "Loading", "ReadyToSwap", "Swapping", "Completed", "Failed" })
+                    .RuntimeOnly().ReadOnly().NotSerializable());
+        }
+
         void RegisterUI()
         {
             ComponentRegistry::Register<RectTransformComponent>(
@@ -1280,11 +1366,16 @@ namespace ReplayEngine::Core
 
             ComponentRegistry::Register<CanvasComponent>(
                 ComponentTypeInfo::Describe("Canvas", "UI")
-                    .WithTooltip("Screen Space Overlay の UI ルートです。配下の UI を描画順にまとめます。")
+                    .WithTooltip("Screen Space / World Space の UI ルートです。配下の UI を描画順にまとめます。")
                     .Requires<RectTransformComponent>());
             PropertyRegistry::Register<CanvasComponent>(
                 MakeProperty("reference_resolution", &CanvasComponent::reference_resolution)
                     .Display("基準解像度").Step(1.0));
+            PropertyRegistry::Register<CanvasComponent>(
+                MakeProperty("render_mode", &CanvasComponent::render_mode)
+                    .Display("描画モード")
+                    .AsEnum({ "Screen Space Overlay", "World Space" })
+                    .Animation(Animatable::Step));
             PropertyRegistry::Register<CanvasComponent>(
                 MakeProperty("scale_mode", &CanvasComponent::scale_mode)
                     .Display("スケール方式")
@@ -1312,6 +1403,32 @@ namespace ReplayEngine::Core
             PropertyRegistry::Register<UIImageComponent>(
                 MakeProperty("color", &UIImageComponent::color)
                     .Display("色").AsColor());
+            PropertyRegistry::Register<UIImageComponent>(
+                MakeProperty("fill_color_2", &UIImageComponent::fill_color_2)
+                    .Display("塗りの終端色").AsColor()
+                    .Animation(Animatable::Interpolatable));
+            PropertyRegistry::Register<UIImageComponent>(
+                MakeProperty("fill_mode", &UIImageComponent::fill_mode)
+                    .Display("塗りの種類")
+                    .AsEnum({ "単色", "線形", "放射" })
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<UIImageComponent>(
+                MakeProperty("fill_angle", &UIImageComponent::fill_angle)
+                    .Display("塗りの向き").Range(-360.0, 360.0).Step(1.0)
+                    .Animation(Animatable::Interpolatable));
+            PropertyRegistry::Register<UIImageComponent>(
+                MakeProperty("fill_center", &UIImageComponent::fill_center)
+                    .Display("塗りの中心").Step(0.001)
+                    .Animation(Animatable::Interpolatable));
+            PropertyRegistry::Register<UIImageComponent>(
+                MakeProperty("stroke_mode", &UIImageComponent::stroke_mode)
+                    .Display("線の色の種類")
+                    .AsEnum({ "単色", "長さに沿う" })
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<UIImageComponent>(
+                MakeProperty("stroke_color_2", &UIImageComponent::stroke_color_2)
+                    .Display("線の終端色").AsColor()
+                    .Animation(Animatable::Interpolatable));
             PropertyRegistry::Register<UIImageComponent>(
                 MakeProperty("opacity", &UIImageComponent::opacity)
                     .Display("不透明度").Range(0.0, 1.0).Step(0.01));
@@ -1422,6 +1539,35 @@ namespace ReplayEngine::Core
             PropertyRegistry::Register<UITextComponent>(
                 MakeProperty("word_wrap", &UITextComponent::word_wrap)
                     .Display("折り返し"));
+            PropertyRegistry::Register<UITextComponent>(
+                MakeProperty("number_source", &UITextComponent::number_source)
+                    .Display("数値の接続元"));
+            PropertyRegistry::Register<UITextComponent>(
+                MakeProperty("number_source_property", &UITextComponent::number_source_property)
+                    .Display("数値プロパティ"));
+            PropertyRegistry::Register<UITextComponent>(
+                MakeProperty("number_format", &UITextComponent::number_format)
+                    .Display("数値書式")
+                    .Tooltip("例: {0:0}%"));
+            PropertyRegistry::Register<UITextComponent>(
+                MakeProperty("number_digits", &UITextComponent::number_digits)
+                    .Display("小数桁").Range(0.0, 4.0).Step(1.0));
+            PropertyRegistry::Register<UITextComponent>(
+                MakeProperty("outline_width", &UITextComponent::outline_width)
+                    .Display("縁取り幅").Range(0.0, 32.0).Step(0.5)
+                    .Animation(Animatable::Interpolatable));
+            PropertyRegistry::Register<UITextComponent>(
+                MakeProperty("outline_color", &UITextComponent::outline_color)
+                    .Display("縁取り色").AsColor()
+                    .Animation(Animatable::Interpolatable));
+            PropertyRegistry::Register<UITextComponent>(
+                MakeProperty("shadow_offset", &UITextComponent::shadow_offset)
+                    .Display("影オフセット").Step(0.5)
+                    .Animation(Animatable::Interpolatable));
+            PropertyRegistry::Register<UITextComponent>(
+                MakeProperty("shadow_color", &UITextComponent::shadow_color)
+                    .Display("影色").AsColor()
+                    .Animation(Animatable::Interpolatable));
 
             ComponentRegistry::Register<UITextAnimatorComponent>(
                 ComponentTypeInfo::Describe("Text Animator", "UI")
@@ -1493,14 +1639,44 @@ namespace ReplayEngine::Core
                 MakeProperty("fill_color", &UIShapeComponent::fill_color)
                     .Display("塗り色").AsColor());
             PropertyRegistry::Register<UIShapeComponent>(
+                MakeProperty("fill_color_2", &UIShapeComponent::fill_color_2)
+                    .Display("塗りの終端色").AsColor()
+                    .Animation(Animatable::Interpolatable));
+            PropertyRegistry::Register<UIShapeComponent>(
+                MakeProperty("fill_mode", &UIShapeComponent::fill_mode)
+                    .Display("塗りの種類")
+                    .AsEnum({ "単色", "線形", "放射" })
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<UIShapeComponent>(
+                MakeProperty("fill_angle", &UIShapeComponent::fill_angle)
+                    .Display("塗りの向き").Range(-360.0, 360.0).Step(1.0)
+                    .Animation(Animatable::Interpolatable));
+            PropertyRegistry::Register<UIShapeComponent>(
+                MakeProperty("fill_center", &UIShapeComponent::fill_center)
+                    .Display("塗りの中心").Step(0.001)
+                    .Animation(Animatable::Interpolatable));
+            PropertyRegistry::Register<UIShapeComponent>(
                 MakeProperty("stroke_color", &UIShapeComponent::stroke_color)
                     .Display("線色").AsColor());
+            PropertyRegistry::Register<UIShapeComponent>(
+                MakeProperty("stroke_color_2", &UIShapeComponent::stroke_color_2)
+                    .Display("線の終端色").AsColor()
+                    .Animation(Animatable::Interpolatable));
+            PropertyRegistry::Register<UIShapeComponent>(
+                MakeProperty("stroke_mode", &UIShapeComponent::stroke_mode)
+                    .Display("線の色の種類")
+                    .AsEnum({ "単色", "長さに沿う" })
+                    .Animation(Animatable::Step));
             PropertyRegistry::Register<UIShapeComponent>(
                 MakeProperty("stroke_width", &UIShapeComponent::stroke_width)
                     .Display("線幅").Range(0.0, 512.0).Step(0.5));
             PropertyRegistry::Register<UIShapeComponent>(
                 MakeProperty("corner_radius", &UIShapeComponent::corner_radius)
                     .Display("角丸").Range(0.0, 512.0).Step(0.5));
+            PropertyRegistry::Register<UIShapeComponent>(
+                MakeProperty("arc_curvature", &UIShapeComponent::arc_curvature)
+                    .Display("弧の曲がり").Range(0.0, 1.0).Step(0.01)
+                    .Animation(Animatable::Interpolatable));
             PropertyRegistry::Register<UIShapeComponent>(
                 MakeProperty("sides", &UIShapeComponent::sides)
                     .Display("角数").Range(3.0, 64.0).Step(1.0)
@@ -1581,7 +1757,7 @@ namespace ReplayEngine::Core
 
             ComponentRegistry::Register<UIMaskComponent>(
                 ComponentTypeInfo::Describe("Mask", "UI")
-                    .WithTooltip("RectTransform の矩形で子孫 UI を切り抜きます。D3D11 scissor を使います。")
+                    .WithTooltip("矩形は D3D11 scissor、画像と形状は既存 Mask Effect で子孫 UI を切り抜きます。")
                     .Requires<RectTransformComponent>());
             PropertyRegistry::Register<UIMaskComponent>(
                 MakeProperty("enabled_mask", &UIMaskComponent::enabled_mask)
@@ -1589,6 +1765,18 @@ namespace ReplayEngine::Core
             PropertyRegistry::Register<UIMaskComponent>(
                 MakeProperty("show_mask_graphic", &UIMaskComponent::show_mask_graphic)
                     .Display("自身を表示"));
+            PropertyRegistry::Register<UIMaskComponent>(
+                MakeProperty("mask_mode", &UIMaskComponent::mask_mode)
+                    .Display("マスク方式")
+                    .AsEnum({ "矩形", "画像", "形状" })
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<UIMaskComponent>(
+                MakeProperty("mask_image", &UIMaskComponent::mask_image)
+                    .Display("マスク画像").OfAssetType("Image"));
+            PropertyRegistry::Register<UIMaskComponent>(
+                MakeProperty("softness", &UIMaskComponent::softness)
+                    .Display("境界の柔らかさ").Range(0.0, 1.0).Step(0.01)
+                    .Animation(Animatable::Interpolatable));
 
             ComponentRegistry::Register<UIEffectStackComponent>(
                 ComponentTypeInfo::Describe("Effect Stack", "UI")
@@ -1611,7 +1799,7 @@ namespace ReplayEngine::Core
             // 【壊してはいけない前提】
             //   ・UIText は 1 文字 1 クアッドで character_index を持つ
             //   ・Blend は framework の共有 BLEND_STATE を使う
-            //   ・Mask は Phase 1 では scissor rasterizer state だけを使う
+            //   ・矩形 Mask は既存 scissor、画像/形状 Mask は既存 Effect Stack の RT を使う
         }
 
         void RegisterMotion()
@@ -1863,6 +2051,8 @@ namespace ReplayEngine::Core
         RegisterLights();
         RegisterUI();
         RegisterMotion();
+        RegisterPropertyLink();
+        RegisterScenePersistence();
         RegisterSkinnedMeshRenderer();
         RegisterAnimator();
         RegisterRigidbody();
