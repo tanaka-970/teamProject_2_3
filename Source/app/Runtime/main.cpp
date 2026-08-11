@@ -117,6 +117,17 @@ namespace
         return text;
     }
 
+    void StripUtf8Bom(std::string& text)
+    {
+        if (text.size() >= 3 &&
+            static_cast<unsigned char>(text[0]) == 0xEFu &&
+            static_cast<unsigned char>(text[1]) == 0xBBu &&
+            static_cast<unsigned char>(text[2]) == 0xBFu)
+        {
+            text.erase(0, 3);
+        }
+    }
+
     std::string LowerCopy(std::string text)
     {
         for (char& character : text)
@@ -223,7 +234,16 @@ namespace
         }
 
         std::string line;
-        if (!std::getline(stream, line) || TrimCopy(line) != "REPLAY_GAME 1")
+        if (!std::getline(stream, line))
+        {
+            config.warnings.push_back(".replaygame の先頭行が不正です。既定値で続行します: " +
+                config.file.generic_u8string());
+            return config;
+        }
+        // PowerShell の UTF-8 出力などが付ける BOM はヘッダー文字列ではない。
+        // 先頭行だけから除去し、2 行目以降のデータはそのまま解釈する。
+        StripUtf8Bom(line);
+        if (TrimCopy(line) != "REPLAY_GAME 1")
         {
             config.warnings.push_back(".replaygame の先頭行が不正です。既定値で続行します: " +
                 config.file.generic_u8string());
@@ -2169,7 +2189,11 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
     const GameLaunchConfig game_launch =
         LoadGameLaunchConfig(executable_layout.executable_directory);
     for (const std::string& warning : game_launch.warnings)
-        OutputDebugStringA(("[ReplayGame] " + warning + "\n").c_str());
+    {
+        const std::string message = "[ReplayGame] " + warning + "\n";
+        OutputDebugStringA(message.c_str());
+        std::fprintf(stderr, "%s", message.c_str());
+    }
 
 	srand(static_cast<unsigned int>(time(nullptr)));
 

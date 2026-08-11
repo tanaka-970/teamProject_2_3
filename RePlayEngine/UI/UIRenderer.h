@@ -93,6 +93,8 @@ namespace ReplayEngine::UI
             DirectX::XMFLOAT2 uv{ 0.0f, 0.0f };
             DirectX::XMFLOAT2 gradient_uv{ 0.0f, 0.0f };
             DirectX::XMFLOAT4 color{ 1.0f, 1.0f, 1.0f, 1.0f };
+            // Text のグリフ単位でアトラス内のサンプル範囲を制限する。
+            DirectX::XMFLOAT4 uv_bounds{ 0.0f, 0.0f, 1.0f, 1.0f };
         };
 
         struct Constants
@@ -140,6 +142,9 @@ namespace ReplayEngine::UI
             DirectX::XMFLOAT4 outline_color{ 0.0f, 0.0f, 0.0f, 1.0f };
             DirectX::XMFLOAT4 shadow_offset{ 0.0f, 0.0f, 0.0f, 0.0f };
             DirectX::XMFLOAT4 shadow_color{ 0.0f, 0.0f, 0.0f, 0.0f };
+            // FontAtlas は 2048x2048 の固定アトラス。fwidth ではなく、
+            // この実寸から 1 テクセルを求めて縁取りをサンプルする。
+            DirectX::XMFLOAT4 atlas_size{ 2048.0f, 2048.0f, 0.0f, 0.0f };
         };
 
         static constexpr std::size_t effect_shader_count = 10;

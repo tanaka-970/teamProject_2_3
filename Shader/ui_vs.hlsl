@@ -12,6 +12,7 @@ struct VS_INPUT
     float2 uv       : TEXCOORD0;
     float2 gradient_uv : TEXCOORD1;
     float4 color    : COLOR0;
+    float4 uv_bounds : TEXCOORD2;
 };
 
 struct VS_OUTPUT
@@ -20,6 +21,7 @@ struct VS_OUTPUT
     float2 uv       : TEXCOORD0;
     float2 gradient_uv : TEXCOORD1;
     float4 color    : COLOR0;
+    float4 uv_bounds : TEXCOORD2;
 };
 
 VS_OUTPUT main(VS_INPUT input)
@@ -50,5 +52,6 @@ VS_OUTPUT main(VS_INPUT input)
     output.uv = input.uv;
     output.gradient_uv = input.gradient_uv;
     output.color = input.color;
+    output.uv_bounds = input.uv_bounds;
     return output;
 }
