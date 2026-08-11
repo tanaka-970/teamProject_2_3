@@ -551,14 +551,23 @@ namespace ReplayEngine::UI
         {
             context->RSSetState(states.rasterizer_scissor != nullptr
                 ? states.rasterizer_scissor : states.rasterizer);
-            D3D11_RECT target_scissor = *scissor;
-            // D3D11 scissor は render target 座標なので、Scene View viewport の左上を足す。
-            const LONG offset_x = static_cast<LONG>(std::floor(states.scissor_offset_x));
-            const LONG offset_y = static_cast<LONG>(std::floor(states.scissor_offset_y));
-            target_scissor.left += offset_x;
-            target_scissor.top += offset_y;
-            target_scissor.right += offset_x;
-            target_scissor.bottom += offset_y;
+            const float scale_x = states.viewport_scale_x > 0.0001f
+                ? states.viewport_scale_x : 1.0f;
+            const float scale_y = states.viewport_scale_y > 0.0001f
+                ? states.viewport_scale_y : 1.0f;
+            D3D11_RECT target_scissor{};
+            // D3D11 scissor は render target 座標なので、Scene View viewport の左上と
+            // 表示倍率を反映する。論理解像度だけを変えると Mask がずれる。
+            target_scissor.left = static_cast<LONG>(
+                std::floor(states.scissor_offset_x + scissor->left * scale_x));
+            target_scissor.top = static_cast<LONG>(
+                std::floor(states.scissor_offset_y + scissor->top * scale_y));
+            target_scissor.right = static_cast<LONG>(
+                std::ceil(states.scissor_offset_x + scissor->right * scale_x));
+            target_scissor.bottom = static_cast<LONG>(
+                std::ceil(states.scissor_offset_y + scissor->bottom * scale_y));
+            if (states.scissor_bounds_enabled)
+                target_scissor = IntersectScissor(target_scissor, states.scissor_bounds);
             context->RSSetScissorRects(1, &target_scissor);
         }
         else

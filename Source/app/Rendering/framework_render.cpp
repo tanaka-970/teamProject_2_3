@@ -1498,8 +1498,10 @@ void framework::render(float elapsed_time)
     // Editor では Scene View の矩形へ、実行時は従来どおりウィンドウ全体へ描く。
     immediate_context->RSSetViewports(1, &ui_viewport);
 
+    const float ui_logical_width = (std::max)(1.0f, ui_target.logical_width);
+    const float ui_logical_height = (std::max)(1.0f, ui_target.logical_height);
     ReplayEngine::UI::UILayout::Resolve(active_object_scene(),
-        ui_target.width, ui_target.height);
+        ui_logical_width, ui_logical_height);
     ReplayEngine::UI::UIRenderer::RenderStates ui_states{};
     ui_states.depth_disabled =
         depth_stencil_states[(size_t)DEPTH_STATE::ZT_OFF_ZW_OFF].Get();
@@ -1523,9 +1525,18 @@ void framework::render(float elapsed_time)
         sampler_states[(size_t)SAMPLER_STATE::LINEAR].Get();
     ui_states.scissor_offset_x = ui_target.left;
     ui_states.scissor_offset_y = ui_target.top;
+    ui_states.viewport_scale_x = ui_target.width / ui_logical_width;
+    ui_states.viewport_scale_y = ui_target.height / ui_logical_height;
+    ui_states.scissor_bounds_enabled = true;
+    ui_states.scissor_bounds.left = 0;
+    ui_states.scissor_bounds.top = 0;
+    ui_states.scissor_bounds.right = static_cast<LONG>((std::max)(
+        1.0f, static_cast<float>(client_width)));
+    ui_states.scissor_bounds.bottom = static_cast<LONG>((std::max)(
+        1.0f, static_cast<float>(client_height)));
     ui_renderer.Render(immediate_context.Get(), active_object_scene(),
         &asset_database, &shader_library.Catalog(), ui_font_atlas,
-        ui_target.width, ui_target.height, ui_states);
+        ui_logical_width, ui_logical_height, ui_states);
     // UI 用の viewport override は UIRenderer の間だけ。ImGui と次フレームは client 全体へ戻す。
     immediate_context->RSSetViewports(1, &viewport);
 

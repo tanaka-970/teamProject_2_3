@@ -438,6 +438,8 @@ framework::object_ui_viewport framework::object_ui_viewport_target() const noexc
     object_ui_viewport target{};
     target.width = (std::max)(1.0f, static_cast<float>(client_width));
     target.height = (std::max)(1.0f, static_cast<float>(client_height));
+    target.logical_width = target.width;
+    target.logical_height = target.height;
 
 #ifdef USE_IMGUI
     if (editor_mode && !object_scene_play_mode && scene_view_overlay_valid)
@@ -447,6 +449,24 @@ framework::object_ui_viewport framework::object_ui_viewport_target() const noexc
         target.top = scene_view_overlay_position.y;
         target.width = (std::max)(1.0f, scene_view_overlay_size.x);
         target.height = (std::max)(1.0f, scene_view_overlay_size.y);
+        target.logical_width = target.width;
+        target.logical_height = target.height;
+
+        if (active_editor_workspace == editor_workspace::ui)
+        {
+            int logical_width = 0;
+            int logical_height = 0;
+            ui_preview_resolution_size(logical_width, logical_height);
+            target.logical_width = (std::max)(1.0f, static_cast<float>(logical_width));
+            target.logical_height = (std::max)(1.0f, static_cast<float>(logical_height));
+            const float zoom = (std::max)(0.10f, ui_preview_zoom);
+            const float view_width = (std::max)(1.0f, target.logical_width * zoom);
+            const float view_height = (std::max)(1.0f, target.logical_height * zoom);
+            target.left += (target.width - view_width) * 0.5f;
+            target.top += (target.height - view_height) * 0.5f;
+            target.width = view_width;
+            target.height = view_height;
+        }
     }
 #endif
 
@@ -1112,13 +1132,19 @@ void framework::update_object_scene(float elapsed_time)
     const object_ui_viewport ui_viewport = object_ui_viewport_target();
     // UI layout / hit test は描画先と同じ矩形基準で解決する。
     // Editor 編集中は Scene View、Play / standalone はウィンドウ全体を使う。
+    const float ui_logical_width = (std::max)(1.0f, ui_viewport.logical_width);
+    const float ui_logical_height = (std::max)(1.0f, ui_viewport.logical_height);
     ReplayEngine::UI::UILayout::Resolve(scene,
-        ui_viewport.width, ui_viewport.height);
+        ui_logical_width, ui_logical_height);
     POINT mouse{ game_input.PointerScreenX(), game_input.PointerScreenY() };
     ScreenToClient(hwnd, &mouse);
-    const float mouse_x = static_cast<float>(mouse.x) - ui_viewport.left;
-    const float mouse_y = ui_viewport.height -
-        (static_cast<float>(mouse.y) - ui_viewport.top);
+    const float viewport_width = (std::max)(1.0f, ui_viewport.width);
+    const float viewport_height = (std::max)(1.0f, ui_viewport.height);
+    const float mouse_x = (static_cast<float>(mouse.x) - ui_viewport.left) *
+        (ui_logical_width / viewport_width);
+    const float mouse_y = ui_logical_height -
+        ((static_cast<float>(mouse.y) - ui_viewport.top) *
+            (ui_logical_height / viewport_height));
     const bool mouse_down = game_input.Held("PrimaryClick");
     const bool mouse_pressed = mouse_down && !ui_pointer_down_last;
     const bool mouse_released = !mouse_down && ui_pointer_down_last;
@@ -1128,7 +1154,7 @@ void framework::update_object_scene(float elapsed_time)
         input_captured = ImGui::GetIO().WantCaptureMouse && !scene_view_hovered;
 #endif
     ReplayEngine::UI::UILayout::UpdateButtons(scene,
-        ui_viewport.width, ui_viewport.height,
+        ui_logical_width, ui_logical_height,
         mouse_x, mouse_y, mouse_down, mouse_pressed, mouse_released, input_captured,
         object_runtime_active());
     ui_pointer_down_last = mouse_down;

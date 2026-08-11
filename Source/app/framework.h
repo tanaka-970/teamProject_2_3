@@ -1024,6 +1024,8 @@ private:
         float top{ 0.0f };
         float width{ 1.0f };
         float height{ 1.0f };
+        float logical_width{ 1.0f };
+        float logical_height{ 1.0f };
     };
 
     bool initialize();
@@ -1336,6 +1338,8 @@ private:
     void draw_ui_hierarchy();
     void draw_ui_preview();
     void draw_ui_inspector();
+    void draw_ui_scene_overlay();
+    void ui_preview_resolution_size(int& width, int& height) const noexcept;
     bool open_motion_asset(const ReplayEngine::Assets::AssetRecord& asset);
     bool save_current_motion_asset();
     bool undo_motion_edit();
@@ -1425,7 +1429,7 @@ private:
     };
     // DockBuilder の構成を変えたら上げる。
     // imgui.ini に残った古い split を再利用させず、次回起動時に再構築するための版。
-    static constexpr int editor_layout_version{ 2 };
+    static constexpr int editor_layout_version{ 3 };
     editor_selection selected_editor_object{ editor_selection::world };
     editor_workspace active_editor_workspace{ editor_workspace::general };
     editor_view active_editor_view{ editor_view::scene };
@@ -1438,7 +1442,7 @@ private:
         editor_view::scene,
         editor_view::scene,
         editor_view::scene,
-        editor_view::game,
+        editor_view::scene,
         editor_view::scene
     };
     bool editor_view_tab_sync_pending{ false };
@@ -1457,7 +1461,7 @@ private:
     bool show_scene_notes_panel{ false };
     bool show_scene_flow_panel{ false };
     bool show_ui_hierarchy_panel{ true };
-    bool show_ui_preview_panel{ true };
+    bool show_ui_preview_panel{ false };
     bool show_ui_inspector_panel{ true };
     bool show_motion_layers_panel{ true };
     bool show_motion_preview_panel{ true };
@@ -1500,6 +1504,7 @@ private:
     float ui_preview_grid_size{ 100.0f };
     ImVec2 ui_preview_pan{ 0.0f, 0.0f };
     bool ui_preview_dragging{ false };
+    bool ui_scene_view_input_consumed{ false };
     ReplayEngine::Core::ObjectID ui_preview_drag_object;
     ImVec2 ui_preview_drag_start_mouse{ 0.0f, 0.0f };
     DirectX::XMFLOAT2 ui_preview_drag_start_position{ 0.0f, 0.0f };

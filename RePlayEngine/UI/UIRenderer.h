@@ -59,6 +59,10 @@ namespace ReplayEngine::UI
             ID3D11SamplerState* sampler = nullptr;
             float scissor_offset_x = 0.0f;
             float scissor_offset_y = 0.0f;
+            float viewport_scale_x = 1.0f;
+            float viewport_scale_y = 1.0f;
+            bool scissor_bounds_enabled = false;
+            D3D11_RECT scissor_bounds{};
         };
 
         bool Initialize(ID3D11Device* device);
