@@ -1,4 +1,4 @@
-#include "framework.h"
+﻿#include "framework.h"
 
 #include "../../../RePlayEngine/Rendering/Shaders/ShaderConstantPacker.h"
 // 「Visual Studio で開く」に使う。C# の .cs を開く経路と同じものを流用する。
@@ -6,21 +6,6 @@
 #include "../../../RePlayEngine/Scripting/CSharp/CSharpProject.h"
 
 // シェーダ資産の走査と一覧表示。
-//
-// 【今の段階でできること】
-//   ・Shader/Materials, Shader/Layers, Shader/PostProcess の .hlsl を走査する
-//   ・#pragma から名前・分類・プロパティを読む
-//   ・GUID が無ければ採番してファイルへ書き戻す
-//   ・定数バッファの配置を決める
-//
-//   ・定数バッファを自動生成して D3DCompile へ通す
-//   ・保存を検出して自動で再コンパイルする
-//   ・エラー行をクリックして Visual Studio の該当行を開く
-//
-// 【まだできないこと】
-//   ・描画に使うこと（フェーズ 4 以降）
-//   ・Material から選ぶこと（フェーズ 5 以降）
-//
 // この一覧は「宣言がそのまま Inspector の項目になる」ことを
 // 目で確かめるためのもの。property を 1 行足して保存し、
 // 「再走査」を押せば欄が増える。C++ は 1 行も書かなくてよい。

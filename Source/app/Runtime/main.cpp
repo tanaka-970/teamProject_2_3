@@ -27,6 +27,7 @@
 #include "../../../RePlayEngine/Components/Camera/FollowTargetComponent.h"
 #include "../../../RePlayEngine/Components/Gameplay/CharacterMotorComponent.h"
 #include "../../../RePlayEngine/Components/Gameplay/StageGameplayComponents.h"
+#include "../../../RePlayEngine/Components/Motion/MotionPlayerComponent.h"
 #include "../../../RePlayEngine/Components/Rendering/LightComponents.h"
 #include "../../../RePlayEngine/Components/Rendering/MeshRendererComponent.h"
 #include "../../../RePlayEngine/Editor/Core/EditorContext.h"
@@ -63,6 +64,7 @@
 #include "../../../RePlayEngine/Scripting/Validation/CSharpScriptValidation.h"
 #include "../../../RePlayEngine/Scripting/Validation/ScriptCoreValidation.h"
 #include "../../game/Behaviours/ValidationBehaviours.h"
+#include "../../game/game_input.h"
 #include "../../../RePlayEngine/Scene/Runtime/Scene.h"
 #include "../../../RePlayEngine/Scene/Serialization/SceneData.h"
 #include "../../../RePlayEngine/Scene/Serialization/PrefabSerializer.h"
@@ -110,6 +112,101 @@ namespace
         if (!(arguments >> command) || command != "--smoke-test") return 0;
         if (!(arguments >> frames)) frames = 120;
         return static_cast<std::uint32_t>((std::clamp)(frames, 30, 3600));
+    }
+
+    std::filesystem::path ValidationFolder()
+    {
+        return std::filesystem::path("Saved") / "Validation";
+    }
+
+    void WriteValidationResultFile(const char* file_name, const char* header,
+        bool ok, const std::vector<std::string>& lines)
+    {
+        const std::filesystem::path folder = ValidationFolder();
+        std::error_code directory_error;
+        std::filesystem::create_directories(folder, directory_error);
+
+        std::ofstream report(folder / file_name, std::ios::binary | std::ios::trunc);
+        if (!report) return;
+
+        report << header << " 1\n";
+        report << "RESULT " << (ok ? "OK" : "NG") << '\n';
+        for (const std::string& line : lines) report << line << '\n';
+    }
+
+    long long CountInclusive(long long first, long long last) noexcept
+    {
+        return last >= first ? (last - first + 1) : 0;
+    }
+
+    long long CountMotionEventTriggers(int wrap_mode, double duration,
+        double before, double delta_time, double speed,
+        int direction_before, double event_time) noexcept
+    {
+        using ReplayEngine::Components::MotionPlayerComponent;
+
+        if (duration <= 0.0 || delta_time <= 0.0 || speed == 0.0 ||
+            event_time < 0.0 || event_time > duration)
+        {
+            return 0;
+        }
+
+        constexpr double epsilon = 1.0e-9;
+        if (wrap_mode == MotionPlayerComponent::Loop)
+        {
+            const double travel = delta_time * speed;
+            const double to = before + travel;
+            if (travel > 0.0)
+            {
+                const long long first = static_cast<long long>(std::floor(
+                    (before - event_time) / duration)) + 1;
+                const long long last = static_cast<long long>(std::floor(
+                    (to - event_time + epsilon) / duration));
+                return CountInclusive(first, last);
+            }
+            if (travel < 0.0)
+            {
+                const long long first = static_cast<long long>(std::ceil(
+                    (to - event_time - epsilon) / duration));
+                const long long last = static_cast<long long>(std::ceil(
+                    (before - event_time) / duration)) - 1;
+                return CountInclusive(first, last);
+            }
+            return 0;
+        }
+
+        if (wrap_mode == MotionPlayerComponent::PingPong)
+        {
+            if (direction_before == 0) return 0;
+            const double period = duration * 2.0;
+            const double phase_from = direction_before > 0
+                ? before : period - before;
+            const double phase_to = phase_from + delta_time * std::fabs(speed);
+
+            const auto count_phase_series = [phase_from, phase_to, period](double base)
+            {
+                const long long first = static_cast<long long>(std::floor(
+                    (phase_from - base) / period)) + 1;
+                const long long last = static_cast<long long>(std::floor(
+                    (phase_to - base + 1.0e-9) / period));
+                return CountInclusive(first, last);
+            };
+
+            long long count = count_phase_series(event_time);
+            // 0 と duration は往路/復路の位相が同じなので、片側だけ数える。
+            if (event_time > 0.0 && event_time < duration)
+                count += count_phase_series(period - event_time);
+            return count;
+        }
+
+        const double travel = delta_time * speed;
+        double after = before + travel;
+        after = (std::max)(0.0, (std::min)(duration, after));
+        if (travel > 0.0)
+            return event_time > before && event_time <= after + epsilon ? 1 : 0;
+        if (travel < 0.0)
+            return event_time < before && event_time + epsilon >= after ? 1 : 0;
+        return 0;
     }
 
     const char* D3D11MessageCategoryName(D3D11_MESSAGE_CATEGORY category) noexcept
@@ -1555,6 +1652,84 @@ namespace
         return first_failure;
     }
 
+    int RunHeadlessInputValidation()
+    {
+        std::string error;
+        const bool ok = GameInput::InputState::ValidateDeterministicQueries(error);
+
+        std::vector<std::string> lines;
+        lines.push_back("CHECKS pressed held released idle");
+        if (!error.empty()) lines.push_back("ERROR " + error);
+        WriteValidationResultFile("InputState.txt",
+            "REPLAY_INPUT_STATE_VALIDATION", ok, lines);
+
+        std::fprintf(stderr, "input validation: RESULT %s\n", ok ? "OK" : "NG");
+        if (!ok && !error.empty())
+            std::fprintf(stderr, "input validation error: %s\n", error.c_str());
+        return ok ? 0 : 1410;
+    }
+
+    int RunHeadlessMotionEventsValidation()
+    {
+        using ReplayEngine::Components::MotionPlayerComponent;
+
+        struct Case
+        {
+            const char* name;
+            int wrap_mode;
+            double duration;
+            double before;
+            double delta_time;
+            double speed;
+            int direction_before;
+            double event_time;
+            long long expected;
+        };
+
+        const std::vector<Case> cases = {
+            { "loop_start_zero_small_delta", MotionPlayerComponent::Loop,
+                1.0, 0.0, 0.1, 1.0, 1, 0.0, 0 },
+            { "loop_start_zero_ten_seconds", MotionPlayerComponent::Loop,
+                1.0, 0.0, 10.0, 1.0, 1, 0.0, 10 },
+            { "loop_quarter_ten_seconds", MotionPlayerComponent::Loop,
+                1.0, 0.0, 10.0, 1.0, 1, 0.25, 10 },
+            { "reverse_loop_cross_zero", MotionPlayerComponent::Loop,
+                1.0, 0.1, 0.2, -1.0, -1, 0.0, 1 },
+            { "reverse_loop_start_at_duration", MotionPlayerComponent::Loop,
+                1.0, 1.0, 10.0, -1.0, -1, 1.0, 10 },
+            { "pingpong_duration_endpoint_once", MotionPlayerComponent::PingPong,
+                1.0, 0.9, 0.2, 1.0, 1, 1.0, 1 },
+            { "pingpong_zero_endpoint_once", MotionPlayerComponent::PingPong,
+                1.0, 0.1, 0.2, 1.0, -1, 0.0, 1 },
+        };
+
+        bool ok = true;
+        std::vector<std::string> lines;
+        lines.reserve(cases.size() + 1);
+        for (const Case& test : cases)
+        {
+            const long long actual = CountMotionEventTriggers(test.wrap_mode,
+                test.duration, test.before, test.delta_time, test.speed,
+                test.direction_before, test.event_time);
+            const bool passed = actual == test.expected;
+            ok = ok && passed;
+
+            std::ostringstream row;
+            row << "CASE " << test.name
+                << " EXPECTED " << test.expected
+                << " ACTUAL " << actual
+                << " " << (passed ? "OK" : "NG");
+            lines.push_back(row.str());
+        }
+
+        WriteValidationResultFile("MotionEvents.txt",
+            "REPLAY_MOTION_EVENTS_VALIDATION", ok, lines);
+
+        std::fprintf(stderr, "motion-events validation: RESULT %s (%zu cases)\n",
+            ok ? "OK" : "NG", cases.size());
+        return ok ? 0 : 1420;
+    }
+
     // Phase 2 (Serialization Foundation) の検証。
     // どれもファイルを触らず、メモリ上の文字列で往復を確かめる。
     // 既存の Scene / Prefab 原本は一切変更しない。
@@ -1576,6 +1751,14 @@ namespace
         if (command == "--validate-scene-version")
         {
             return Validation::RunSceneVersionValidation();
+        }
+        if (command == "--validate-input")
+        {
+            return RunHeadlessInputValidation();
+        }
+        if (command == "--validate-motion-events")
+        {
+            return RunHeadlessMotionEventsValidation();
         }
 
         // Phase 3-5。Behaviour を使う検証は、先にゲーム側の登録を通しておく。

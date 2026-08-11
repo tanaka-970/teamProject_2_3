@@ -192,6 +192,7 @@ void framework::handle_viewport_selection()
 void framework::save_editor_session()
 {
     if (!editor_session_active) return;
+    remember_active_editor_view();
 
     std::error_code directory_error;
     std::filesystem::create_directories(EditorSessionFolder(), directory_error);
@@ -205,6 +206,9 @@ void framework::save_editor_session()
         state << "RECENT_SCENE " << std::quoted(path.generic_u8string()) << '\n';
     state << "WORKSPACE " << static_cast<int>(active_editor_workspace) << '\n';
     state << "VIEW " << static_cast<int>(active_editor_view) << '\n';
+    for (std::size_t index = 0; index < editor_view_by_workspace.size(); ++index)
+        state << "WORKSPACE_VIEW " << index << ' ' <<
+            static_cast<int>(editor_view_by_workspace[index]) << '\n';
 }
 
 void framework::restore_editor_session()
@@ -234,6 +238,21 @@ void framework::restore_editor_session()
         }
         else if (key == "WORKSPACE") state >> workspace;
         else if (key == "VIEW") state >> view;
+        else if (key == "WORKSPACE_VIEW")
+        {
+            int saved_workspace = -1;
+            int saved_view = static_cast<int>(editor_view::scene);
+            state >> saved_workspace >> saved_view;
+            if (saved_workspace >= 0 &&
+                saved_workspace < static_cast<int>(editor_view_by_workspace.size()))
+            {
+                saved_view = std::clamp(saved_view, 0,
+                    static_cast<int>(editor_view::game));
+                editor_view_by_workspace[
+                    static_cast<std::size_t>(saved_workspace)] =
+                    static_cast<editor_view>(saved_view);
+            }
+        }
         else
         {
             std::string ignored;
@@ -265,6 +284,8 @@ void framework::restore_editor_session()
     view = std::clamp(view, 0, static_cast<int>(editor_view::game));
     active_editor_workspace = static_cast<editor_workspace>(workspace);
     active_editor_view = static_cast<editor_view>(view);
+    remember_active_editor_view();
+    editor_view_tab_sync_pending = true;
     selected_editor_object = editor_selection::world;
     edit_mode_active = true;
     editor_mode = true;

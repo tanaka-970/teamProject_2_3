@@ -48,6 +48,8 @@ namespace GameInput
     public:
         InputState();
 
+        static bool ValidateDeterministicQueries(std::string& error);
+
         // 1 フレームに 1 回だけ呼ぶ。
         // keyboard_captured=true の間も実デバイス状態は更新し続けるが、Action/Axis へは
         // キーボード入力を公開しない。ImGui の文字入力から Gameplay へ漏らさないため。

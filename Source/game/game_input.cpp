@@ -23,6 +23,69 @@ namespace GameInput
         ResetDefaultBindings();
     }
 
+    bool InputState::ValidateDeterministicQueries(std::string& error)
+    {
+        error.clear();
+
+        InputState input;
+        const auto set_jump_state = [&input](bool previous_down, bool current_down)
+        {
+            input.keyboard_previous_.fill(0);
+            input.keyboard_current_.fill(0);
+            input.previous_keyboard_captured_ = false;
+            input.keyboard_captured_ = false;
+            input.previous_mouse_captured_ = false;
+            input.mouse_captured_ = false;
+            if (previous_down) input.keyboard_previous_[VK_SPACE] = 0x80u;
+            if (current_down) input.keyboard_current_[VK_SPACE] = 0x80u;
+            for (InputState::PadSnapshot& pad : input.pads_)
+            {
+                pad.current = {};
+                pad.previous = {};
+                pad.connected = false;
+                pad.previous_connected = false;
+            }
+        };
+
+        const auto expect_stable = [&input, &error](const char* label,
+            bool pressed, bool held, bool released)
+        {
+            const bool pressed_a = input.Pressed("Jump");
+            const bool pressed_b = input.Pressed("Jump");
+            const bool held_a = input.Held("Jump");
+            const bool held_b = input.Held("Jump");
+            const bool released_a = input.Released("Jump");
+            const bool released_b = input.Released("Jump");
+            if (pressed_a == pressed && pressed_b == pressed &&
+                held_a == held && held_b == held &&
+                released_a == released && released_b == released)
+            {
+                return true;
+            }
+
+            std::ostringstream stream;
+            stream << label << " expected P/H/R="
+                << pressed << '/' << held << '/' << released
+                << " actual P=" << pressed_a << ',' << pressed_b
+                << " H=" << held_a << ',' << held_b
+                << " R=" << released_a << ',' << released_b;
+            error = stream.str();
+            return false;
+        };
+
+        set_jump_state(false, true);
+        if (!expect_stable("pressed", true, true, false)) return false;
+
+        set_jump_state(true, true);
+        if (!expect_stable("held", false, true, false)) return false;
+
+        set_jump_state(true, false);
+        if (!expect_stable("released", false, false, true)) return false;
+
+        set_jump_state(false, false);
+        return expect_stable("idle", false, false, false);
+    }
+
     void InputState::ResetDefaultBindings()
     {
         actions_.clear();

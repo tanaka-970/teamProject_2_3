@@ -142,12 +142,29 @@ void framework::configure_editor_style()
     ImGui::GetIO().FontGlobalScale = dpi * ui_font_scale;
 }
 
+void framework::remember_active_editor_view()
+{
+    const std::size_t workspace_index = static_cast<std::size_t>(active_editor_workspace);
+    if (workspace_index < editor_view_by_workspace.size())
+        editor_view_by_workspace[workspace_index] = active_editor_view;
+}
+
+void framework::apply_remembered_editor_view(editor_workspace workspace)
+{
+    const std::size_t workspace_index = static_cast<std::size_t>(workspace);
+    active_editor_view = workspace_index < editor_view_by_workspace.size()
+        ? editor_view_by_workspace[workspace_index] : editor_view::scene;
+    editor_view_tab_sync_pending = true;
+}
+
 void framework::set_editor_workspace(editor_workspace workspace)
 {
     if (active_editor_workspace == workspace) return;
     const editor_workspace previous_workspace = active_editor_workspace;
+    remember_active_editor_view();
     if (previous_workspace == editor_workspace::motion) stop_motion_preview();
     active_editor_workspace = workspace;
+    apply_remembered_editor_view(active_editor_workspace);
     editor_layout_dirty = true;
     switch (active_editor_workspace)
     {
@@ -801,16 +818,25 @@ void framework::draw_scene_view_panel()
 
     if (ImGui::BeginTabBar("SceneGameTabs"))
     {
-        if (ImGui::BeginTabItem("Scene"))
+        const ImGuiTabItemFlags scene_flags =
+            editor_view_tab_sync_pending && active_editor_view == editor_view::scene
+                ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None;
+        const ImGuiTabItemFlags game_flags =
+            editor_view_tab_sync_pending && active_editor_view == editor_view::game
+                ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None;
+        if (ImGui::BeginTabItem("Scene", nullptr, scene_flags))
         {
             active_editor_view = editor_view::scene;
+            remember_active_editor_view();
             ImGui::EndTabItem();
         }
-        if (ImGui::BeginTabItem("Game"))
+        if (ImGui::BeginTabItem("Game", nullptr, game_flags))
         {
             active_editor_view = editor_view::game;
+            remember_active_editor_view();
             ImGui::EndTabItem();
         }
+        editor_view_tab_sync_pending = false;
         ImGui::EndTabBar();
     }
 
@@ -1707,11 +1733,12 @@ void framework::draw_editor()
     }
 
     const ImGuiID dockspace_id = ImGui::GetID("RePlayEditorDockSpaceJP2");
+    // Scene View は central node の矩形へ透明ウィンドウとして重ねる。
+    // ここに別パネルを Dock すると同じ座標で描かれて文字が読めなくなるため、
+    // central node は全 Workspace で Scene View 専用に空ける。
     const ImGuiDockNodeFlags dockspace_flags =
         ImGuiDockNodeFlags_PassthruCentralNode |
-        (active_editor_workspace == editor_workspace::ui ||
-            active_editor_workspace == editor_workspace::motion
-            ? ImGuiDockNodeFlags_None : ImGuiDockNodeFlags_NoDockingInCentralNode);
+        ImGuiDockNodeFlags_NoDockingInCentralNode;
     ImGui::DockSpace(dockspace_id, ImVec2(0, 0), dockspace_flags);
     if (!editor_layout_checked || editor_layout_dirty)
     {
@@ -1754,21 +1781,32 @@ void framework::draw_editor()
             ImGuiID left = ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, left_ratio, nullptr, &center);
             ImGuiID right = ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, right_ratio, nullptr, &center);
             ImGuiID bottom = ImGui::DockBuilderSplitNode(center, ImGuiDir_Down, bottom_ratio, nullptr, &center);
+            ImGuiID ui_preview = 0;
+            if (active_editor_workspace == editor_workspace::ui)
+            {
+                // UI Workspace は central node をさらに左右へ割る。
+                // 左側だけ Canvas プレビューに使い、残った central node は Scene View 専用に空ける。
+                ui_preview = ImGui::DockBuilderSplitNode(center,
+                    ImGuiDir_Left, 0.50f, nullptr, &center);
+            }
             if (active_editor_workspace == editor_workspace::ui)
             {
                 ImGui::DockBuilderDockWindow("UI 階層", left);
                 ImGui::DockBuilderDockWindow("UI インスペクター", right);
-                ImGui::DockBuilderDockWindow("Canvas プレビュー", center);
+                ImGui::DockBuilderDockWindow("Canvas プレビュー", ui_preview);
                 ImGui::DockBuilderDockWindow("プロジェクト", bottom);
                 ImGui::DockBuilderDockWindow("コンソール", bottom);
             }
             else if (active_editor_workspace == editor_workspace::motion)
             {
                 ImGui::DockBuilderDockWindow("Motion レイヤー", left);
+                ImGui::DockBuilderDockWindow("階層", left);
                 ImGui::DockBuilderDockWindow("Motion インスペクター", right);
-                ImGui::DockBuilderDockWindow("Motion プレビュー", center);
+                // Motion Workspace でも central node には Dock しない。
+                // 3D 表示は draw_scene_view_panel() がこの空き領域へ配置する。
                 ImGui::DockBuilderDockWindow("タイムライン", bottom);
                 ImGui::DockBuilderDockWindow("グラフエディター", bottom);
+                ImGui::DockBuilderDockWindow("Motion プレビュー", bottom);
                 ImGui::DockBuilderDockWindow("プロジェクト", bottom);
                 ImGui::DockBuilderDockWindow("コンソール", bottom);
             }
@@ -1801,17 +1839,22 @@ void framework::draw_editor()
 
     if (active_editor_workspace == editor_workspace::ui)
     {
+        draw_scene_view_panel();
         draw_ui_hierarchy();
         draw_ui_preview();
         draw_ui_inspector();
         if (show_project_panel) draw_project_panel();
         if (show_console_panel) draw_console_panel();
         draw_search_results();
+        if (active_editor_view == editor_view::scene) handle_viewport_selection();
+        draw_collider_debug_overlay();
         return;
     }
 
     if (active_editor_workspace == editor_workspace::motion)
     {
+        draw_scene_view_panel();
+        if (show_hierarchy_panel) draw_scene_hierarchy();
         draw_motion_layers();
         draw_motion_preview();
         draw_motion_inspector();
@@ -1820,6 +1863,8 @@ void framework::draw_editor()
         if (show_project_panel) draw_project_panel();
         if (show_console_panel) draw_console_panel();
         draw_search_results();
+        if (active_editor_view == editor_view::scene) handle_viewport_selection();
+        draw_collider_debug_overlay();
         return;
     }
 

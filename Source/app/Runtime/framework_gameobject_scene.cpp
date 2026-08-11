@@ -2015,15 +2015,25 @@ ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
     item.lighting_model = deferred_lighting_model(source.shading_model);
 
     const MaterialAsset* material = resolve_object_material(source.material_asset);
-    if (material == nullptr) return item;
+    const bool has_material_asset = material != nullptr;
+    MaterialAsset fallback_material;
+    if (!has_material_asset)
+    {
+        // Material Asset が無い Renderer でも、Renderer 側の描画方式と
+        // material.* Motion は同じ解決経路へ流す。
+        fallback_material.shading_model = source.shading_model;
+        material = &fallback_material;
+    }
 
     // 旧 .cso fallback では従来どおり Material の base_color を頂点 tint に使う。
-    item.legacy_tint = source.material_override ? source.tint : material->base_color;
+    item.legacy_tint = has_material_asset
+        ? (source.material_override ? source.tint : material->base_color)
+        : source.tint;
 
     // Catalog shader では BaseColor は b9 から渡す。pin.color は Renderer 側の
     // 追加 tint にだけ使い、同じ色を二重に掛けない。
-    item.tint = source.material_override
-        ? source.tint : DirectX::XMFLOAT4{ 1.0f, 1.0f, 1.0f, 1.0f };
+    item.tint = has_material_asset && !source.material_override
+        ? DirectX::XMFLOAT4{ 1.0f, 1.0f, 1.0f, 1.0f } : source.tint;
 
     item.shading_model = material->shading_model; // fallback のためだけに保持
     // material_override は従来どおり「Renderer tint が Material BaseColor を置換」。
@@ -2042,7 +2052,8 @@ ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
         ? source.override_material_emissive_strength : material->emissive_strength;
     item.double_sided = source.double_sided || material->double_sided ||
         (source.material_override && source.override_material_double_sided);
-    item.outline = material->layers.Contains(BuiltInShaderLayers::Outline);
+    item.outline = has_material_asset
+        ? material->layers.Contains(BuiltInShaderLayers::Outline) : source.outline;
     item.pixelate_size = material->pixelate_grid;
     item.pixelate_strength = material->pixelate_strength;
 
@@ -2153,7 +2164,7 @@ ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
     const bool resolved = MaterialBindingResolver::Resolve(binding_material,
         shader_library.Catalog(), variant, item.material_binding);
     // binding_material は一時コピーなので、LayerStack の借用先だけ元Assetへ戻す。
-    item.material_binding.layers = &material->layers;
+    item.material_binding.layers = has_material_asset ? &material->layers : nullptr;
 
     if (resolved && item.material_binding.usable_shader)
     {
@@ -2189,6 +2200,8 @@ ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
 
     // Pixelate は surface shader と layer の両方から有効になる。
     item.pixelate_enabled = item.material_binding.shader == BuiltInShaders::Pixelate;
+    if (!has_material_asset) return item;
+
     for (const ShaderLayer& layer : material->layers.Layers())
     {
         if (!layer.enabled) continue;

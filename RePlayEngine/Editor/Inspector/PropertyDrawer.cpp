@@ -486,6 +486,20 @@ namespace ReplayEngine::Editor
             }
             return changed;
         }
+
+        bool IsMaterialDynamicProperty(const PropertyDesc& desc)
+        {
+            constexpr const char prefix[] = "material.";
+            return desc.name.rfind(prefix, 0) == 0;
+        }
+
+        bool MaterialDynamicPropertiesDisabled(Core::Component& component)
+        {
+            const PropertyDesc* override_desc =
+                PropertyRegistry::Find(component.TypeID(), "material_override");
+            if (override_desc == nullptr) return false;
+            return !override_desc->Capture(component).AsBool(false);
+        }
     }
 
     bool PropertyDrawer::Draw(const PropertyDesc& desc, Core::Component& component,
@@ -1054,9 +1068,13 @@ namespace ReplayEngine::Editor
         // 呼ばれる側の約束（Component::DynamicProperties のコメントを参照）。
         if (const std::vector<PropertyDesc>* dynamic = component.DynamicProperties())
         {
+            const bool material_dynamic_disabled =
+                MaterialDynamicPropertiesDisabled(component);
             for (const PropertyDesc& desc : *dynamic)
             {
                 ImGui::PushID(desc.name.c_str());
+                const DisabledScope disabled(material_dynamic_disabled &&
+                    IsMaterialDynamicProperty(desc));
                 if (Draw(desc, component, assets, scene)) changed = true;
                 ImGui::PopID();
             }

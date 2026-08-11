@@ -1,4 +1,4 @@
-REPLAY_ASSET_DB 2 77
+REPLAY_ASSET_DB 2 80
 "60412424bb1443240b2bf2160eee6923" 1 "ExampleStage" "resources/Stage/ExampleStage.cereal" "resources/.replay_cache/models/f9fffac39252a621_v0.replaycache"
 "1bd1358040255f5bd18f3be0d79fbe3c" 1 "AllAnimation1" "resources/AnimationModel/AllAnimation1.cereal" "resources/.replay_cache/models/6a20e727f78fb359_v0.replaycache"
 "e5c4168feb92f8fd7357f6cbc1f66e22" 1 "scene" "resources/Stage/city_3d_model_gltf/scene.gltf" "resources/.replay_cache/models/98fd72a862da8c8f_v0.replaycache"
@@ -76,3 +76,6 @@ REPLAY_ASSET_DB 2 77
 "d63cb39a396422bacc809eebfe99b791" 10 "UIMotion" "UIMotion.replaymotion" ""
 "0029ab19684b85f8283a1e4841d75de7" 10 "NewMotion2" "NewMotion2.replaymotion" ""
 "d64a076e39a151bd54f5fd1e35c17192" 10 "NewMotion3" "NewMotion3.replaymotion" ""
+"841225b44a4dc0eb4e9aa1b02d771a22" 5 "test1" "resources/Scenes/test1.replayscene" ""
+"1f04d306144876c66bbc39a2ae896421" 10 "NewMotion4" "NewMotion4.replaymotion" ""
+"11dde598967cc8c629ba2bb4cfac6983" 6 "NewItem" "resources/NewItem.replaymaterial" ""

@@ -5,6 +5,7 @@
 #include <sstream>
 #include <filesystem>
 #include <vector>
+#include <array>
 #include <algorithm>
 #include "skinned_mesh.h"
 #include "misc.h"
@@ -1339,6 +1340,8 @@ private:
     void capture_motion_preview_targets();
     void apply_motion_preview_time();
     void set_editor_workspace(editor_workspace workspace);
+    void remember_active_editor_view();
+    void apply_remembered_editor_view(editor_workspace workspace);
     void configure_editor_style();
     void set_edit_mode(bool enabled);
     bool resize_back_buffers(UINT width, UINT height);
@@ -1414,6 +1417,19 @@ private:
     editor_selection selected_editor_object{ editor_selection::world };
     editor_workspace active_editor_workspace{ editor_workspace::general };
     editor_view active_editor_view{ editor_view::scene };
+    // Scene/Game タブは Workspace ごとに覚える。
+    // UI は完成画面をすぐ見たいので初回だけ Game、Motion は 3D 編集用なので Scene。
+    std::array<editor_view, 8> editor_view_by_workspace{
+        editor_view::scene,
+        editor_view::scene,
+        editor_view::scene,
+        editor_view::scene,
+        editor_view::scene,
+        editor_view::scene,
+        editor_view::game,
+        editor_view::scene
+    };
+    bool editor_view_tab_sync_pending{ false };
     bool editor_layout_checked{ false };
     bool editor_layout_dirty{ false };
     bool editor_hide_requested{ false };
@@ -1444,6 +1460,9 @@ private:
     bool motion_editor_loaded{ false };
     bool motion_editor_dirty{ false };
     bool motion_composition_loaded{ false };
+    // Track を追加するときのプロパティ検索欄。
+    // 1 つの GameObject でも動かせる項目は数十個あるので、絞り込みが無いと探せない。
+    std::array<char, 64> motion_property_picker_filter{};
     int motion_selected_track{ -1 };
     int motion_selected_key{ -1 };
     int motion_selected_event_track{ -1 };

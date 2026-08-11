@@ -1,4 +1,4 @@
-#include "framework.h"
+﻿#include "framework.h"
 
 #include "../../RePlayEngine/Components/UI/CanvasComponent.h"
 #include "../../RePlayEngine/Components/UI/RectTransformComponent.h"
@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <string>
 #include <vector>
@@ -45,6 +46,7 @@ namespace
     using ReplayEngine::Components::UITextComponent;
     using ReplayEngine::Components::UIButtonComponent;
     using ReplayEngine::Components::UIMaskComponent;
+    namespace Assets = ReplayEngine::Assets;
     namespace Core = ReplayEngine::Core;
     namespace Scene = ReplayEngine::Scene;
 
@@ -244,15 +246,37 @@ namespace
             color.x, color.y, color.z, color.w * fallback_alpha));
     }
 
+    void PreviewQuad(const RectTransformComponent& rect,
+        const DirectX::XMFLOAT4& draw_rect, const ImVec2& origin,
+        float canvas_height, float zoom, ImVec2 out[4])
+    {
+        const DirectX::XMFLOAT4X4 m = rect.ResolvedMatrix();
+        out[0] = ToPreviewPoint(TransformPoint(m, draw_rect.x, draw_rect.y), origin, canvas_height, zoom);
+        out[1] = ToPreviewPoint(TransformPoint(m, draw_rect.x + draw_rect.z, draw_rect.y), origin, canvas_height, zoom);
+        out[2] = ToPreviewPoint(TransformPoint(m, draw_rect.x + draw_rect.z, draw_rect.y + draw_rect.w), origin, canvas_height, zoom);
+        out[3] = ToPreviewPoint(TransformPoint(m, draw_rect.x, draw_rect.y + draw_rect.w), origin, canvas_height, zoom);
+    }
+
     void PreviewQuad(const RectTransformComponent& rect, const ImVec2& origin,
         float canvas_height, float zoom, ImVec2 out[4])
     {
-        const DirectX::XMFLOAT4 r = rect.ResolvedRect();
-        const DirectX::XMFLOAT4X4 m = rect.ResolvedMatrix();
-        out[0] = ToPreviewPoint(TransformPoint(m, r.x, r.y), origin, canvas_height, zoom);
-        out[1] = ToPreviewPoint(TransformPoint(m, r.x + r.z, r.y), origin, canvas_height, zoom);
-        out[2] = ToPreviewPoint(TransformPoint(m, r.x + r.z, r.y + r.w), origin, canvas_height, zoom);
-        out[3] = ToPreviewPoint(TransformPoint(m, r.x, r.y + r.w), origin, canvas_height, zoom);
+        PreviewQuad(rect, rect.ResolvedRect(), origin, canvas_height, zoom, out);
+    }
+
+    void ApplyUIImageFill(const UIImageComponent& image,
+        DirectX::XMFLOAT4& draw_rect, DirectX::XMFLOAT4& uv)
+    {
+        const float fill = (std::min)((std::max)(image.fill_amount, 0.0f), 1.0f);
+        if (image.fill_method == UIImageComponent::Horizontal)
+        {
+            draw_rect.z *= fill;
+            uv.z *= fill;
+        }
+        else if (image.fill_method == UIImageComponent::Vertical)
+        {
+            draw_rect.w *= fill;
+            uv.w *= fill;
+        }
     }
 
     bool RectHit(const RectTransformComponent& rect, float x, float y)
@@ -286,7 +310,8 @@ namespace
 
     void DrawPreviewObject(ImDrawList* draw_list, Core::GameObject& object,
         const ImVec2& origin, float canvas_height, float zoom,
-        Core::ObjectID selected)
+        Core::ObjectID selected,
+        const std::function<ID3D11ShaderResourceView*(const UIImageComponent&)>& texture_for_image)
     {
         RectTransformComponent* rect = object.GetComponent<RectTransformComponent>();
         if (rect != nullptr && HasUIComponent(object))
@@ -295,7 +320,42 @@ namespace
             PreviewQuad(*rect, origin, canvas_height, zoom, p);
 
             if (const UIImageComponent* image = object.GetComponent<UIImageComponent>())
-                draw_list->AddQuadFilled(p[0], p[1], p[2], p[3], ColorToU32(image->color, image->opacity));
+            {
+                if (image->opacity > 0.0f && image->fill_amount > 0.0f)
+                {
+                    DirectX::XMFLOAT4 draw_rect = rect->ResolvedRect();
+                    DirectX::XMFLOAT4 uv{ image->uv_offset.x, image->uv_offset.y,
+                        image->uv_scale.x, image->uv_scale.y };
+                    ApplyUIImageFill(*image, draw_rect, uv);
+
+                    if (draw_rect.z > 0.0f && draw_rect.w > 0.0f)
+                    {
+                        ImVec2 image_points[4]{};
+                        PreviewQuad(*rect, draw_rect, origin, canvas_height, zoom,
+                            image_points);
+                        const ImU32 tint = ColorToU32(image->color, image->opacity);
+                        ID3D11ShaderResourceView* texture = texture_for_image(*image);
+                        if (texture != nullptr)
+                        {
+                            const ImVec2 uv0(uv.x, uv.y + uv.w);
+                            const ImVec2 uv1(uv.x + uv.z, uv.y + uv.w);
+                            const ImVec2 uv2(uv.x + uv.z, uv.y);
+                            const ImVec2 uv3(uv.x, uv.y);
+                            draw_list->AddImageQuad(
+                                reinterpret_cast<ImTextureID>(texture),
+                                image_points[0], image_points[1],
+                                image_points[2], image_points[3],
+                                uv0, uv1, uv2, uv3, tint);
+                        }
+                        else
+                        {
+                            draw_list->AddQuadFilled(image_points[0],
+                                image_points[1], image_points[2], image_points[3],
+                                tint);
+                        }
+                    }
+                }
+            }
             else if (object.GetComponent<CanvasComponent>() == nullptr)
                 draw_list->AddQuadFilled(p[0], p[1], p[2], p[3],
                     ImGui::ColorConvertFloat4ToU32(ImVec4(0.18f, 0.20f, 0.22f, 0.18f)));
@@ -323,7 +383,7 @@ namespace
         for (Core::GameObject* child : object.Children())
         {
             if (child != nullptr) DrawPreviewObject(draw_list, *child,
-                origin, canvas_height, zoom, selected);
+                origin, canvas_height, zoom, selected, texture_for_image);
         }
     }
 
@@ -568,12 +628,28 @@ void framework::draw_ui_preview()
                 IM_COL32(255, 255, 255, 24));
     }
 
+    const auto preview_texture_for_image =
+        [this](const UIImageComponent& image) -> ID3D11ShaderResourceView*
+        {
+            if (image.sprite.guid.empty()) return nullptr;
+            const Assets::AssetRecord* record =
+                asset_database.FindByGuid(image.sprite.guid);
+            if (record == nullptr || record->kind != Assets::AssetKind::Image)
+                return nullptr;
+
+            const std::filesystem::path& path = record->cache_path.empty()
+                ? record->source_path : record->cache_path;
+            if (path.empty()) return nullptr;
+            return project_thumbnail_for(path);
+        };
+
     for (Core::GameObject* canvas : SortedCanvases(*scene))
     {
         if (canvas != nullptr)
             DrawPreviewObject(draw_list, *canvas, origin,
                 static_cast<float>(preview_height), ui_preview_zoom,
-                object_editor_context.Selection().Primary());
+                object_editor_context.Selection().Primary(),
+                preview_texture_for_image);
     }
     draw_list->AddRect(origin, ImVec2(origin.x + canvas_size.x, origin.y + canvas_size.y),
         IM_COL32(230, 230, 235, 180), 0.0f, 0, 1.5f);
