@@ -56,7 +56,12 @@ namespace ReplayEngine::Runtime
         // World の破棄中に走る OnRuntimeDestroy が破棄済みの Context を触る。
         // 先に外しておけば、その順序に依存しなくなる。
         if (active_) active_->Services().SetRuntime(nullptr);
+        if (active_) active_->Services().SetRuntimeScene(nullptr);
+        if (active_) active_->Services().SetSceneFlow(nullptr);
         if (staging_) staging_->Services().SetRuntime(nullptr);
+        if (staging_) staging_->Services().SetRuntimeScene(nullptr);
+        if (staging_) staging_->Services().SetSceneFlow(nullptr);
+        scene_flow_ = nullptr;
     }
 
     Core::WorldInstanceID RuntimeSceneService::ActiveWorldID() const noexcept
@@ -188,6 +193,8 @@ namespace ReplayEngine::Runtime
             runtime_->Rebind(*active_);
             active_->Services().SetRuntime(runtime_);
         }
+        active_->Services().SetRuntimeScene(this);
+        active_->Services().SetSceneFlow(scene_flow_);
 
         // 空の World でも対称に呼ぶ。
         //
@@ -300,6 +307,8 @@ namespace ReplayEngine::Runtime
         // 編集 Scene 側は最初から Services が張ってあり、同じデータでも
         // そちらだけ Loaded になる。その食い違いがここで生まれていた。
         if (runtime_ != nullptr) staging->Services().SetRuntime(runtime_);
+        staging->Services().SetRuntimeScene(this);
+        staging->Services().SetSceneFlow(scene_flow_);
         if (world_lifecycle_ != nullptr) world_lifecycle_->OnWorldBuilding(*staging);
 
         Serialization::SceneLoadReport report;
@@ -373,6 +382,11 @@ namespace ReplayEngine::Runtime
         // 新規要求の受付停止をここで行える。
         if (world_lifecycle_ != nullptr) world_lifecycle_->OnWorldUnloading(*active_);
 
+        // Persistent ルートだけは World の寿命をまたいで引き取る。
+        // それ以外は通常どおり Clear() で明示破棄する。
+        std::vector<std::unique_ptr<Core::GameObject>> persistent_roots =
+            active_->DetachPersistentRoots();
+
         // 旧 World から Runtime への参照を先に外す。
         //
         // 外さないと、このあとの Clear() で走る OnRuntimeDestroy が
@@ -404,12 +418,16 @@ namespace ReplayEngine::Runtime
         active_ = std::move(staging_);
         staging_.reset();
 
+        active_->AdoptPersistentRoots(std::move(persistent_roots));
+
         // ---- 再接続 -----------------------------------------------------------
         if (runtime_ != nullptr)
         {
             runtime_->Rebind(*active_);
             active_->Services().SetRuntime(runtime_);
         }
+        active_->Services().SetRuntimeScene(this);
+        active_->Services().SetSceneFlow(scene_flow_);
 
         // ---- Runtime 開始 -----------------------------------------------------
         //

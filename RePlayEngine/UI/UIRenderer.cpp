@@ -279,7 +279,9 @@ namespace ReplayEngine::UI
                 D3D11_INPUT_PER_VERTEX_DATA, 0 },
             { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 8,
                 D3D11_INPUT_PER_VERTEX_DATA, 0 },
-            { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 16,
+            { "TEXCOORD", 1, DXGI_FORMAT_R32G32_FLOAT, 0, 16,
+                D3D11_INPUT_PER_VERTEX_DATA, 0 },
+            { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 24,
                 D3D11_INPUT_PER_VERTEX_DATA, 0 },
         };
 
@@ -323,6 +325,11 @@ namespace ReplayEngine::UI
             effect_constant_buffer_.GetAddressOf())))
             return false;
 
+        cb_desc.ByteWidth = sizeof(VisualConstants);
+        if (FAILED(device->CreateBuffer(&cb_desc, nullptr,
+            visual_constant_buffer_.GetAddressOf())))
+            return false;
+
         if (FAILED(make_dummy_texture(device, white_texture_.GetAddressOf(),
             0xFFFFFFFFu, 1)))
             return false;
@@ -342,9 +349,11 @@ namespace ReplayEngine::UI
         custom_effect_constant_buffer_.Reset();
         custom_effect_constant_buffer_size_ = 0;
         effect_constant_buffer_.Reset();
+        visual_constant_buffer_.Reset();
         constant_buffer_.Reset();
         vertex_buffer_.Reset();
         input_layout_.Reset();
+        world_space_canvas_ = false;
         for (Microsoft::WRL::ComPtr<ID3D11PixelShader>& shader : effect_pixel_shaders_)
         {
             shader.Reset();
@@ -534,16 +543,23 @@ namespace ReplayEngine::UI
             ? pixel_shader_override : pixel_shader_.Get(), nullptr, 0);
         ID3D11Buffer* cb = constant_buffer_.Get();
         context->VSSetConstantBuffers(0, 1, &cb);
-        if (pixel_constant_buffer != nullptr)
+        if (pixel_constant_buffer == nullptr && visual_constant_buffer_ != nullptr)
         {
-            ID3D11Buffer* ps_cb = pixel_constant_buffer;
+            context->UpdateSubresource(visual_constant_buffer_.Get(), 0, nullptr,
+                &visual_constants_, 0, 0);
+        }
+        ID3D11Buffer* ps_cb = pixel_constant_buffer != nullptr
+            ? pixel_constant_buffer : visual_constant_buffer_.Get();
+        if (ps_cb != nullptr)
+        {
             context->PSSetConstantBuffers(0, 1, &ps_cb);
         }
         ID3D11ShaderResourceView* srv = texture != nullptr ? texture : white_texture_.Get();
         context->PSSetShaderResources(0, 1, &srv);
         ID3D11SamplerState* sampler = states.sampler;
         context->PSSetSamplers(0, 1, &sampler);
-        context->OMSetDepthStencilState(states.depth_disabled, 0);
+        context->OMSetDepthStencilState(world_space_canvas_ &&
+            states.depth_enabled != nullptr ? states.depth_enabled : states.depth_disabled, 0);
         context->OMSetBlendState(blend_state != nullptr ? blend_state : states.blend_alpha,
             nullptr, 0xFFFFFFFF);
 
@@ -594,6 +610,7 @@ namespace ReplayEngine::UI
 
         Constants constants{};
         constants.screen_size = { screen_width, screen_height, 0.0f, 0.0f };
+        constants.world_view_projection = states.world_view_projection;
         context->UpdateSubresource(constant_buffer_.Get(), 0, nullptr, &constants, 0, 0);
         render_target_pool_.BeginFrame();
 
@@ -616,6 +633,30 @@ namespace ReplayEngine::UI
             });
 
         float draw_target_height = screen_height;
+        visual_constants_ = VisualConstants{};
+        const auto configure_visual = [this](const DirectX::XMFLOAT4& fill_color_2,
+            int fill_mode, float fill_angle, const DirectX::XMFLOAT2& fill_center,
+            const DirectX::XMFLOAT4& stroke_color_2, int stroke_mode,
+            bool text_mode, float outline_width,
+            const DirectX::XMFLOAT4& outline_color,
+            const DirectX::XMFLOAT2& shadow_offset,
+            const DirectX::XMFLOAT4& shadow_color)
+        {
+            visual_constants_.fill_color_2 = fill_color_2;
+            visual_constants_.fill_params = {
+                static_cast<float>(fill_mode),
+                DirectX::XMConvertToRadians(fill_angle),
+                fill_center.x, fill_center.y };
+            visual_constants_.stroke_color_2 = stroke_color_2;
+            visual_constants_.stroke_params = {
+                static_cast<float>(stroke_mode), outline_width,
+                text_mode ? 1.0f : 0.0f, 0.0f };
+            visual_constants_.outline_color = outline_color;
+            visual_constants_.shadow_offset = { shadow_offset.x, shadow_offset.y,
+                0.0f, 0.0f };
+            visual_constants_.shadow_color = shadow_color;
+        };
+
         const auto append_quad = [this, &draw_target_height](const DirectX::XMFLOAT4& rect,
             const DirectX::XMFLOAT4X4& matrix, const DirectX::XMFLOAT4& uv,
             const DirectX::XMFLOAT4& color, float scale)
@@ -634,12 +675,12 @@ namespace ReplayEngine::UI
             const DirectX::XMFLOAT2 uv2{ uv.x + uv.z, uv.y };
             const DirectX::XMFLOAT2 uv3{ uv.x, uv.y };
 
-            vertices_.push_back({ p0, uv0, color });
-            vertices_.push_back({ p3, uv3, color });
-            vertices_.push_back({ p2, uv2, color });
-            vertices_.push_back({ p0, uv0, color });
-            vertices_.push_back({ p2, uv2, color });
-            vertices_.push_back({ p1, uv1, color });
+            vertices_.push_back({ p0, uv0, { 0.0f, 1.0f }, color });
+            vertices_.push_back({ p3, uv3, { 0.0f, 0.0f }, color });
+            vertices_.push_back({ p2, uv2, { 1.0f, 0.0f }, color });
+            vertices_.push_back({ p0, uv0, { 0.0f, 1.0f }, color });
+            vertices_.push_back({ p2, uv2, { 1.0f, 0.0f }, color });
+            vertices_.push_back({ p1, uv1, { 1.0f, 1.0f }, color });
         };
 
         const auto append_quad_local =
@@ -675,30 +716,42 @@ namespace ReplayEngine::UI
             const DirectX::XMFLOAT2 uv2{ uv.x + uv.z, uv.y };
             const DirectX::XMFLOAT2 uv3{ uv.x, uv.y };
 
-            vertices_.push_back({ p0, uv0, color });
-            vertices_.push_back({ p3, uv3, color });
-            vertices_.push_back({ p2, uv2, color });
-            vertices_.push_back({ p0, uv0, color });
-            vertices_.push_back({ p2, uv2, color });
-            vertices_.push_back({ p1, uv1, color });
+            vertices_.push_back({ p0, uv0, { 0.0f, 1.0f }, color });
+            vertices_.push_back({ p3, uv3, { 0.0f, 0.0f }, color });
+            vertices_.push_back({ p2, uv2, { 1.0f, 0.0f }, color });
+            vertices_.push_back({ p0, uv0, { 0.0f, 1.0f }, color });
+            vertices_.push_back({ p2, uv2, { 1.0f, 0.0f }, color });
+            vertices_.push_back({ p1, uv1, { 1.0f, 1.0f }, color });
         };
 
         const auto append_triangle_local =
             [this, &draw_target_height](const DirectX::XMFLOAT2& a,
                 const DirectX::XMFLOAT2& b, const DirectX::XMFLOAT2& c,
-                const DirectX::XMFLOAT4X4& matrix, const DirectX::XMFLOAT4& color,
-                float scale)
+                const DirectX::XMFLOAT4& bounds, const DirectX::XMFLOAT4X4& matrix,
+                const DirectX::XMFLOAT4& color, float scale)
         {
             const DirectX::XMFLOAT2 uv{ 0.0f, 0.0f };
+            const float width = (std::max)(0.0001f, std::fabs(bounds.z));
+            const float height = (std::max)(0.0001f, std::fabs(bounds.w));
+            const auto gradient_uv = [&bounds, width, height](
+                const DirectX::XMFLOAT2& point)
+            {
+                return DirectX::XMFLOAT2{
+                    (point.x - bounds.x) / width,
+                    (point.y - bounds.y) / height };
+            };
+            const DirectX::XMFLOAT2 uv0 = gradient_uv(a);
+            const DirectX::XMFLOAT2 uv1 = gradient_uv(b);
+            const DirectX::XMFLOAT2 uv2 = gradient_uv(c);
             const DirectX::XMFLOAT2 p0 = ToScreenPoint(
                 TransformPoint(matrix, a.x, a.y), scale, draw_target_height);
             const DirectX::XMFLOAT2 p1 = ToScreenPoint(
                 TransformPoint(matrix, b.x, b.y), scale, draw_target_height);
             const DirectX::XMFLOAT2 p2 = ToScreenPoint(
                 TransformPoint(matrix, c.x, c.y), scale, draw_target_height);
-            vertices_.push_back({ p0, uv, color });
-            vertices_.push_back({ p1, uv, color });
-            vertices_.push_back({ p2, uv, color });
+            vertices_.push_back({ p0, uv, uv0, color });
+            vertices_.push_back({ p1, uv, uv1, color });
+            vertices_.push_back({ p2, uv, uv2, color });
         };
 
         const auto append_line_segment_local =
@@ -726,12 +779,12 @@ namespace ReplayEngine::UI
             const DirectX::XMFLOAT2 q2{ p1.x + nx, p1.y + ny };
             const DirectX::XMFLOAT2 q3{ p1.x - nx, p1.y - ny };
 
-            vertices_.push_back({ q0, uv, color });
-            vertices_.push_back({ q1, uv, color });
-            vertices_.push_back({ q2, uv, color });
-            vertices_.push_back({ q0, uv, color });
-            vertices_.push_back({ q2, uv, color });
-            vertices_.push_back({ q3, uv, color });
+            vertices_.push_back({ q0, uv, { 0.0f, 0.0f }, color });
+            vertices_.push_back({ q1, uv, { 0.0f, 1.0f }, color });
+            vertices_.push_back({ q2, uv, { 1.0f, 1.0f }, color });
+            vertices_.push_back({ q0, uv, { 0.0f, 0.0f }, color });
+            vertices_.push_back({ q2, uv, { 1.0f, 1.0f }, color });
+            vertices_.push_back({ q3, uv, { 1.0f, 0.0f }, color });
         };
 
         const auto local_distance = [](const DirectX::XMFLOAT2& a,
@@ -776,11 +829,45 @@ namespace ReplayEngine::UI
             {
             case UIShapeComponent::Circle:
             {
-                const float cx = rect.x + rect.z * 0.5f;
-                const float cy = rect.y + rect.w * 0.5f;
-                const float rx = rect.z * 0.5f;
-                const float ry = rect.w * 0.5f;
-                append_arc(cx, cy, rx, ry, 0.0f, pi * 2.0f, 64);
+                const float curvature = Clamp01(shape.arc_curvature);
+                if (curvature <= 0.0001f)
+                {
+                    // 半径無限大の極限は直線。曲率 0 を特別扱いして
+                    // 1 / curvature の計算を行わない。
+                    closed = false;
+                    shape_path.push_back({ rect.x, rect.y + rect.w * 0.5f });
+                    shape_path.push_back({ rect.x + rect.z, rect.y + rect.w * 0.5f });
+                    break;
+                }
+                else
+                {
+                    // 正規化した横幅 1 の弦に対し、半径を 1 / curvature に比例
+                    // させる。上下の弧をつなぐと curvature=1 で円になり、
+                    // curvature が 0 へ近づくほど両方が同じ直線へ収束する。
+                    const float radius = 0.5f / curvature;
+                    const float center_offset = (std::sqrt)(
+                        (std::max)(0.0f, radius * radius - 0.25f));
+                    const auto to_rect = [&rect](float x, float y)
+                    {
+                        return DirectX::XMFLOAT2{
+                            rect.x + rect.z * x,
+                            rect.y + rect.w * y };
+                    };
+                    for (int step = 0; step <= 32; ++step)
+                    {
+                        const float x = static_cast<float>(step) / 32.0f - 0.5f;
+                        const float y = 0.5f + center_offset -
+                            (std::sqrt)((std::max)(0.0f, radius * radius - x * x));
+                        shape_path.push_back(to_rect(x + 0.5f, y));
+                    }
+                    for (int step = 32; step >= 0; --step)
+                    {
+                        const float x = static_cast<float>(step) / 32.0f - 0.5f;
+                        const float y = 0.5f - center_offset +
+                            (std::sqrt)((std::max)(0.0f, radius * radius - x * x));
+                        shape_path.push_back(to_rect(x + 0.5f, y));
+                    }
+                }
                 break;
             }
             case UIShapeComponent::Line:
@@ -999,6 +1086,9 @@ namespace ReplayEngine::UI
 
             append_quad(draw_rect, rect.ResolvedMatrix(), uv,
                 MultiplyAlpha(image.color, image.opacity * opacity), scale);
+            configure_visual(image.fill_color_2, image.fill_mode, image.fill_angle,
+                image.fill_center, image.stroke_color_2, image.stroke_mode,
+                false, 0.0f, {}, {}, {});
             Flush(context, TextureFor(image.sprite.guid, asset_database),
                 BlendForImage(image, states), states, scissor);
         };
@@ -1015,8 +1105,11 @@ namespace ReplayEngine::UI
             if (shape_path.empty()) return;
 
             const DirectX::XMFLOAT4X4 matrix = rect.ResolvedMatrix();
-            if (closed && shape.shape != UIShapeComponent::Line &&
-                shape.fill_color.w * opacity > 0.0f && shape_path.size() >= 3)
+            const bool has_fill = closed && shape.shape != UIShapeComponent::Line &&
+                shape.fill_color.w * opacity > 0.0f && shape_path.size() >= 3;
+            const bool split_draws = shape.fill_mode != UIShapeComponent::Solid ||
+                shape.stroke_mode != UIShapeComponent::StrokeSolid;
+            if (has_fill)
             {
                 DirectX::XMFLOAT2 center{ 0.0f, 0.0f };
                 for (const DirectX::XMFLOAT2& point : shape_path)
@@ -1031,11 +1124,20 @@ namespace ReplayEngine::UI
 
                 const DirectX::XMFLOAT4 fill =
                     MultiplyAlpha(shape.fill_color, opacity);
+                configure_visual(shape.fill_color_2, shape.fill_mode,
+                    shape.fill_angle, shape.fill_center,
+                    shape.stroke_color_2, shape.stroke_mode,
+                    false, 0.0f, {}, {}, {});
                 for (std::size_t index = 0; index < shape_path.size(); ++index)
                 {
                     append_triangle_local(center, shape_path[index],
                         shape_path[(index + 1) % shape_path.size()],
-                        matrix, fill, scale);
+                        r, matrix, fill, scale);
+                }
+                if (split_draws)
+                {
+                    Flush(context, white_texture_.Get(), states.blend_alpha,
+                        states, scissor);
                 }
             }
 
@@ -1046,9 +1148,19 @@ namespace ReplayEngine::UI
                 stroke_width = 1.0f;
                 stroke = shape.fill_color;
             }
+            configure_visual(shape.fill_color_2, UIShapeComponent::Solid,
+                0.0f, { 0.5f, 0.5f }, shape.stroke_color_2,
+                shape.stroke_mode, false, 0.0f, {}, {}, {});
             append_stroked_path(shape, matrix, MultiplyAlpha(stroke, opacity),
                 stroke_width, scale, closed);
-            Flush(context, white_texture_.Get(), states.blend_alpha, states, scissor);
+            if (!split_draws || !has_fill)
+            {
+                Flush(context, white_texture_.Get(), states.blend_alpha, states, scissor);
+            }
+            else if (!vertices_.empty())
+            {
+                Flush(context, white_texture_.Get(), states.blend_alpha, states, scissor);
+            }
         };
 
         const auto animator_anchor = [](int anchor) noexcept
@@ -1146,6 +1258,9 @@ namespace ReplayEngine::UI
             font_atlas.BuildGlyphs(text, r.z, r.w, asset_database);
             const DirectX::XMFLOAT4 color = MultiplyAlpha(text.color, text.opacity * opacity);
             append_text_glyphs(object, text, r, rect.ResolvedMatrix(), color, scale);
+            configure_visual({}, 0, 0.0f, { 0.5f, 0.5f }, {}, 0, true,
+                text.outline_width, text.outline_color,
+                text.shadow_offset, text.shadow_color);
             Flush(context, font_atlas.Texture(), states.blend_alpha, states, scissor);
         };
 
@@ -1160,7 +1275,7 @@ namespace ReplayEngine::UI
             viewport.MaxDepth = 1.0f;
             context->RSSetViewports(1, &viewport);
 
-            Constants offscreen_constants{};
+            Constants offscreen_constants = constants;
             offscreen_constants.screen_size = {
                 static_cast<float>(target.width),
                 static_cast<float>(target.height), 0.0f, 0.0f };
@@ -1240,11 +1355,35 @@ namespace ReplayEngine::UI
                 effect_constants.effect_params1 = {
                     effect.angle, effect.progress, effect.softness, effect.speed };
                 effect_constants.effect_params2 = {
-                    effect.direction.x, effect.direction.y, effect.seed, 0.0f };
+                    effect.direction.x, effect.direction.y, effect.seed,
+                    0.0f };
+                const bool is_mask_effect = static_cast<UI::UIEffectKind>(effect.kind) ==
+                    UI::UIEffectKind::Mask;
+                ID3D11ShaderResourceView* mask_texture = nullptr;
+                if (is_mask_effect && !effect.mask.empty())
+                {
+                    mask_texture = TextureFor(effect.mask, asset_database);
+                }
+                if (is_mask_effect)
+                {
+                    const float center_x = effect.direction.x > 0.0f &&
+                        effect.direction.x < 1.0f ? effect.direction.x : 0.5f;
+                    const float center_y = effect.direction.y > 0.0f &&
+                        effect.direction.y < 1.0f ? effect.direction.y : 0.5f;
+                    const float half_width = effect.seed > 0.0f &&
+                        effect.seed < 1.0f ? effect.seed : 0.5f;
+                    const float half_height = effect.speed > 0.0f &&
+                        effect.speed < 1.0f ? effect.speed : 0.5f;
+                    effect_constants.effect_params2 = {
+                        center_x, center_y, half_width, half_height };
+                    effect_constants.effect_params1.w = effect.mask.empty()
+                        ? 0.0f : 1.0f;
+                }
                 effect_constants.target_size = {
                     width, height, 1.0f / width, 1.0f / height };
                 context->UpdateSubresource(effect_constant_buffer_.Get(), 0, nullptr,
                     &effect_constants, 0, 0);
+                context->PSSetShaderResources(1, 1, &mask_texture);
 
                 std::vector<std::uint32_t> custom_texture_slots;
                 if (using_custom_shader && custom_entry->schema)
@@ -1301,6 +1440,7 @@ namespace ReplayEngine::UI
 
                 ID3D11ShaderResourceView* null_srv = nullptr;
                 context->PSSetShaderResources(0, 1, &null_srv);
+                context->PSSetShaderResources(1, 1, &null_srv);
                 current = destination;
             }
 
@@ -1370,6 +1510,9 @@ namespace ReplayEngine::UI
             DirectX::XMStoreFloat4x4(&identity, DirectX::XMMatrixIdentity());
             append_quad(draw_rect, identity, uv,
                 MultiplyAlpha(image.color, image.opacity * opacity), scale);
+            configure_visual(image.fill_color_2, image.fill_mode, image.fill_angle,
+                image.fill_center, image.stroke_color_2, image.stroke_mode,
+                false, 0.0f, {}, {}, {});
             Flush(context, TextureFor(image.sprite.guid, asset_database),
                 states.blend_alpha, states, nullptr);
 
@@ -1396,6 +1539,8 @@ namespace ReplayEngine::UI
             append_quad(composite_rect, rect.ResolvedMatrix(),
                 { 0.0f, 0.0f, 1.0f, 1.0f },
                 { 1.0f, 1.0f, 1.0f, 1.0f }, scale);
+            configure_visual({}, 0, 0.0f, { 0.5f, 0.5f }, {}, 0,
+                false, 0.0f, {}, {}, {});
             Flush(context, current->srv.Get(), BlendForImage(image, states),
                 states, scissor);
             return true;
@@ -1449,6 +1594,9 @@ namespace ReplayEngine::UI
             const auto draw_text_source = [&]()
             {
                 append_text_glyphs(object, text, expansion, identity, color, scale);
+                configure_visual({}, 0, 0.0f, { 0.5f, 0.5f }, {}, 0, true,
+                    text.outline_width, text.outline_color,
+                    text.shadow_offset, text.shadow_color);
                 Flush(context, font_atlas.Texture(), states.blend_alpha, states, nullptr);
             };
 
@@ -1477,6 +1625,8 @@ namespace ReplayEngine::UI
             append_quad(composite_rect, rect.ResolvedMatrix(),
                 { 0.0f, 0.0f, 1.0f, 1.0f },
                 { 1.0f, 1.0f, 1.0f, 1.0f }, scale);
+            configure_visual({}, 0, 0.0f, { 0.5f, 0.5f }, {}, 0,
+                false, 0.0f, {}, {}, {});
             Flush(context, current->srv.Get(), states.blend_alpha, states, scissor);
             return true;
         };
@@ -1491,6 +1641,7 @@ namespace ReplayEngine::UI
             RectTransformComponent* rect = object.GetComponent<RectTransformComponent>();
             D3D11_RECT local_scissor{};
             const D3D11_RECT* active_scissor = inherited_scissor;
+            const UIMaskComponent* special_mask = nullptr;
             bool render_self = true;
 
             if (rect != nullptr)
@@ -1499,10 +1650,21 @@ namespace ReplayEngine::UI
                 {
                     if (mask->ActiveInHierarchy() && mask->enabled_mask)
                     {
-                        local_scissor = MakeScissor(*rect, scale, screen_width, screen_height);
-                        if (inherited_scissor != nullptr)
-                            local_scissor = IntersectScissor(*inherited_scissor, local_scissor);
-                        active_scissor = &local_scissor;
+                        if (mask->mask_mode == UIMaskComponent::Rectangle)
+                        {
+                            local_scissor = MakeScissor(*rect, scale,
+                                screen_width, screen_height);
+                            if (inherited_scissor != nullptr)
+                                local_scissor = IntersectScissor(*inherited_scissor,
+                                    local_scissor);
+                            active_scissor = &local_scissor;
+                        }
+                        else
+                        {
+                            // 画像／形状 Mask は既存 Effect Stack の Mask pass へ送る。
+                            // ここでは新しい子描画経路を作らず、下の offscreen 合成だけを行う。
+                            special_mask = mask;
+                        }
                         render_self = mask->show_mask_graphic;
                     }
                 }
@@ -1536,6 +1698,89 @@ namespace ReplayEngine::UI
                 }
             }
 
+            if (special_mask != nullptr)
+            {
+                const std::uint32_t target_width = static_cast<std::uint32_t>(
+                    (std::max)(1.0f, std::ceil(screen_width * scale)));
+                const std::uint32_t target_height = static_cast<std::uint32_t>(
+                    (std::max)(1.0f, std::ceil(screen_height * scale)));
+                UIRenderTarget* target = render_target_pool_.Acquire(
+                    target_width, target_height);
+                UIRenderTarget* scratch = render_target_pool_.Acquire(
+                    target_width, target_height);
+
+                if (target != nullptr && scratch != nullptr && target->rtv &&
+                    target->srv && scratch->rtv && scratch->srv)
+                {
+                    ID3D11RenderTargetView* previous_rtv = nullptr;
+                    ID3D11DepthStencilView* previous_dsv = nullptr;
+                    context->OMGetRenderTargets(1, &previous_rtv, &previous_dsv);
+                    UINT viewport_count = 1;
+                    D3D11_VIEWPORT previous_viewport{};
+                    context->RSGetViewports(&viewport_count, &previous_viewport);
+
+                    const FLOAT clear[4]{ 0.0f, 0.0f, 0.0f, 0.0f };
+                    configure_effect_target(*target);
+                    context->ClearRenderTargetView(target->rtv.Get(), clear);
+                    for (Core::GameObject* child : object.Children())
+                    {
+                        if (child != nullptr)
+                            render_object(*child, scale, opacity,
+                                inherited_scissor, depth + 1);
+                    }
+
+                    UIEffectStackComponent mask_effects;
+                    UI::UIEffect mask_effect;
+                    mask_effect.kind = static_cast<int>(UI::UIEffectKind::Mask);
+                    mask_effect.softness = Clamp01(special_mask->softness);
+                    const DirectX::XMFLOAT4 mask_rect = rect != nullptr
+                        ? rect->ResolvedRect() : DirectX::XMFLOAT4{};
+                    mask_effect.direction = {
+                        (mask_rect.x + mask_rect.z * 0.5f) /
+                            (std::max)(1.0f, screen_width),
+                        (mask_rect.y + mask_rect.w * 0.5f) /
+                            (std::max)(1.0f, screen_height) };
+                    mask_effect.seed = mask_rect.z /
+                        (std::max)(1.0f, screen_width) * 0.5f;
+                    mask_effect.speed = mask_rect.w /
+                        (std::max)(1.0f, screen_height) * 0.5f;
+                    if (special_mask->mask_mode == UIMaskComponent::Shape)
+                    {
+                        mask_effect.amount = 1.0f;
+                    }
+                    else
+                    {
+                        mask_effect.mask = special_mask->mask_image.guid;
+                    }
+                    mask_effects.effects.push_back(mask_effect);
+                    UIRenderTarget* current = target;
+                    apply_effect_passes(mask_effects, current, target, scratch);
+
+                    context->OMSetRenderTargets(1, &previous_rtv, previous_dsv);
+                    if (viewport_count > 0)
+                        context->RSSetViewports(1, &previous_viewport);
+                    if (previous_rtv != nullptr) previous_rtv->Release();
+                    if (previous_dsv != nullptr) previous_dsv->Release();
+
+                    constants.screen_size = {
+                        screen_width, screen_height, 0.0f, 0.0f };
+                    context->UpdateSubresource(constant_buffer_.Get(), 0, nullptr,
+                        &constants, 0, 0);
+                    draw_target_height = screen_height;
+                    DirectX::XMFLOAT4X4 identity{};
+                    DirectX::XMStoreFloat4x4(&identity,
+                        DirectX::XMMatrixIdentity());
+                    append_quad({ 0.0f, 0.0f, screen_width, screen_height },
+                        identity, { 0.0f, 0.0f, 1.0f, 1.0f },
+                        { 1.0f, 1.0f, 1.0f, 1.0f }, scale);
+                    configure_visual({}, 0, 0.0f, { 0.5f, 0.5f }, {}, 0,
+                        false, 0.0f, {}, {}, {});
+                    Flush(context, current->srv.Get(), states.blend_alpha,
+                        states, inherited_scissor);
+                    return;
+                }
+            }
+
             for (Core::GameObject* child : object.Children())
             {
                 if (child != nullptr)
@@ -1551,9 +1796,33 @@ namespace ReplayEngine::UI
 
             const float scale = UILayout::CanvasScale(*canvas, screen_width, screen_height);
             const float safe_scale = scale > 0.0001f ? scale : 1.0f;
+            // UILayout の解決矩形は共通のまま、World Space だけを Canvas の
+            // ワールド変換とカメラ行列で投影する。平面の高さを 1 とし、
+            // reference_resolution の比率で幅を決める。
+            world_space_canvas_ = canvas->render_mode == CanvasComponent::WorldSpace;
+            if (world_space_canvas_)
+            {
+                const float reference_width = canvas->reference_resolution.x > 0.0f
+                    ? canvas->reference_resolution.x : 1920.0f;
+                const float reference_height = canvas->reference_resolution.y > 0.0f
+                    ? canvas->reference_resolution.y : 1080.0f;
+                constants.world_canvas_params = {
+                    1.0f, reference_width / reference_height, 1.0f, 0.0f };
+                DirectX::XMStoreFloat4x4(&constants.world_canvas_matrix,
+                    canvas_object->GetTransform().WorldMatrix());
+            }
+            else
+            {
+                constants.world_canvas_params = { 0.0f, 0.0f, 0.0f, 0.0f };
+                DirectX::XMStoreFloat4x4(&constants.world_canvas_matrix,
+                    DirectX::XMMatrixIdentity());
+            }
+            context->UpdateSubresource(constant_buffer_.Get(), 0, nullptr,
+                &constants, 0, 0);
             render_object(*canvas_object, safe_scale,
                 (std::min)((std::max)(canvas->opacity, 0.0f), 1.0f), nullptr, 0);
         }
+        world_space_canvas_ = false;
 
         ID3D11ShaderResourceView* null_srv = nullptr;
         context->PSSetShaderResources(0, 1, &null_srv);

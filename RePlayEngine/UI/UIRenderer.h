@@ -48,6 +48,14 @@ namespace ReplayEngine::UI
         struct RenderStates
         {
             ID3D11DepthStencilState* depth_disabled = nullptr;
+            // World Space は UI 合成パス上で描くため、通常は深度なしを選ぶ。
+            // 呼び出し側が深度付きの描画先を用意した場合だけ利用する。
+            ID3D11DepthStencilState* depth_enabled = nullptr;
+            DirectX::XMFLOAT4X4 world_view_projection{
+                1.0f, 0.0f, 0.0f, 0.0f,
+                0.0f, 1.0f, 0.0f, 0.0f,
+                0.0f, 0.0f, 1.0f, 0.0f,
+                0.0f, 0.0f, 0.0f, 1.0f };
             ID3D11RasterizerState* rasterizer = nullptr;
             ID3D11RasterizerState* rasterizer_scissor = nullptr;
             ID3D11BlendState* blend_none = nullptr;
@@ -83,12 +91,26 @@ namespace ReplayEngine::UI
         {
             DirectX::XMFLOAT2 position{ 0.0f, 0.0f };
             DirectX::XMFLOAT2 uv{ 0.0f, 0.0f };
+            DirectX::XMFLOAT2 gradient_uv{ 0.0f, 0.0f };
             DirectX::XMFLOAT4 color{ 1.0f, 1.0f, 1.0f, 1.0f };
         };
 
         struct Constants
         {
             DirectX::XMFLOAT4 screen_size{ 1.0f, 1.0f, 0.0f, 0.0f };
+            DirectX::XMFLOAT4X4 world_canvas_matrix{
+                1.0f, 0.0f, 0.0f, 0.0f,
+                0.0f, 1.0f, 0.0f, 0.0f,
+                0.0f, 0.0f, 1.0f, 0.0f,
+                0.0f, 0.0f, 0.0f, 1.0f };
+            DirectX::XMFLOAT4X4 world_view_projection{
+                1.0f, 0.0f, 0.0f, 0.0f,
+                0.0f, 1.0f, 0.0f, 0.0f,
+                0.0f, 0.0f, 1.0f, 0.0f,
+                0.0f, 0.0f, 0.0f, 1.0f };
+            // x = World Space 有効、y = Canvas 平面幅、z = Canvas 平面高さ。
+            DirectX::XMFLOAT4 world_canvas_params{
+                0.0f, 0.0f, 0.0f, 0.0f };
         };
 
         struct CachedCustomEffectShader
@@ -105,6 +127,19 @@ namespace ReplayEngine::UI
             DirectX::XMFLOAT4 effect_params1{ 0.0f, 0.0f, 0.0f, 0.0f };
             DirectX::XMFLOAT4 effect_params2{ 1.0f, -1.0f, 0.0f, 0.0f };
             DirectX::XMFLOAT4 target_size{ 1.0f, 1.0f, 1.0f, 1.0f };
+        };
+
+        struct VisualConstants
+        {
+            DirectX::XMFLOAT4 fill_color_2{ 1.0f, 1.0f, 1.0f, 1.0f };
+            // x = fill mode, y = angle in radians, z/w = fill center.
+            DirectX::XMFLOAT4 fill_params{ 0.0f, 0.0f, 0.5f, 0.5f };
+            DirectX::XMFLOAT4 stroke_color_2{ 1.0f, 1.0f, 1.0f, 1.0f };
+            // x = stroke mode, y = outline width, z = text mode.
+            DirectX::XMFLOAT4 stroke_params{ 0.0f, 0.0f, 0.0f, 0.0f };
+            DirectX::XMFLOAT4 outline_color{ 0.0f, 0.0f, 0.0f, 1.0f };
+            DirectX::XMFLOAT4 shadow_offset{ 0.0f, 0.0f, 0.0f, 0.0f };
+            DirectX::XMFLOAT4 shadow_color{ 0.0f, 0.0f, 0.0f, 0.0f };
         };
 
         static constexpr std::size_t effect_shader_count = 10;
@@ -132,6 +167,9 @@ namespace ReplayEngine::UI
         Microsoft::WRL::ComPtr<ID3D11Buffer> vertex_buffer_;
         Microsoft::WRL::ComPtr<ID3D11Buffer> constant_buffer_;
         Microsoft::WRL::ComPtr<ID3D11Buffer> effect_constant_buffer_;
+        Microsoft::WRL::ComPtr<ID3D11Buffer> visual_constant_buffer_;
+        // GPU へ送る前の CPU 側の値。バッチごとに組み立ててから 1 回だけ転送する。
+        VisualConstants visual_constants_{};
         Microsoft::WRL::ComPtr<ID3D11Buffer> custom_effect_constant_buffer_;
         std::uint32_t custom_effect_constant_buffer_size_ = 0;
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> white_texture_;
@@ -139,6 +177,7 @@ namespace ReplayEngine::UI
         std::unordered_map<std::string, CachedCustomEffectShader> custom_effect_shader_cache_;
         std::vector<Vertex> vertices_;
         std::size_t vertex_capacity_ = 0;
+        bool world_space_canvas_ = false;
         UIRenderTargetPool render_target_pool_;
     };
 }

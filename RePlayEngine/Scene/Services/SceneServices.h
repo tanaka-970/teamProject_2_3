@@ -7,7 +7,12 @@
 #include "RespawnService.h"
 #include "../../Core/ObjectID/ObjectID.h"
 
-namespace ReplayEngine::Runtime { class RuntimeContext; }
+namespace ReplayEngine::Runtime
+{
+    class RuntimeContext;
+    class RuntimeSceneService;
+    class SceneFlowService;
+}
 namespace ReplayEngine::Scripting { class IScriptServices; }
 namespace ReplayEngine::Audio { class IAudioPlaybackService; }
 namespace ReplayEngine::Motion { class MotionMixer; }
@@ -68,6 +73,24 @@ namespace ReplayEngine::Scene
         Runtime::RuntimeContext* Runtime() const noexcept { return runtime_; }
         void SetRuntime(Runtime::RuntimeContext* context) noexcept { runtime_ = context; }
 
+        // Scene 遷移の実体へ触れる入口。SceneLoaderComponent が進捗を読むために使う。
+        // 実体は framework / RuntimeSceneService が所有し、ここは非所有参照だけを持つ。
+        Runtime::RuntimeSceneService* RuntimeScene() const noexcept
+        {
+            return runtime_scene_;
+        }
+        void SetRuntimeScene(Runtime::RuntimeSceneService* service) noexcept
+        {
+            runtime_scene_ = service;
+        }
+
+        // SceneFlow の状態を読む入口。遷移要求そのものは既存の SceneFlowService が受け持つ。
+        Runtime::SceneFlowService* SceneFlow() const noexcept { return scene_flow_; }
+        void SetSceneFlow(Runtime::SceneFlowService* service) noexcept
+        {
+            scene_flow_ = service;
+        }
+
         // スクリプト機構への入口。Runtime と同じ扱いで、非所有参照だけを持つ。
         //
         // 未接続 (nullptr) がありうるのも同じ理由:
@@ -112,6 +135,8 @@ namespace ReplayEngine::Scene
             audio_ = nullptr;
             motion_mixer_ = nullptr;
             runtime_ = nullptr;
+            runtime_scene_ = nullptr;
+            scene_flow_ = nullptr;
             scripts_ = nullptr;
             controlled_object_ = Core::ObjectID::Invalid();
             playing_ = false;
@@ -125,6 +150,8 @@ namespace ReplayEngine::Scene
         Audio::IAudioPlaybackService* audio_ = nullptr;
         const Motion::MotionMixer* motion_mixer_ = nullptr;
         Runtime::RuntimeContext* runtime_ = nullptr;
+        Runtime::RuntimeSceneService* runtime_scene_ = nullptr;
+        Runtime::SceneFlowService* scene_flow_ = nullptr;
         Scripting::IScriptServices* scripts_ = nullptr;
         Core::ObjectID controlled_object_;
         RespawnService respawn_;

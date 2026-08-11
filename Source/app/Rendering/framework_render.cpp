@@ -1505,6 +1505,10 @@ void framework::render(float elapsed_time)
     ReplayEngine::UI::UIRenderer::RenderStates ui_states{};
     ui_states.depth_disabled =
         depth_stencil_states[(size_t)DEPTH_STATE::ZT_OFF_ZW_OFF].Get();
+    ui_states.depth_enabled =
+        depth_stencil_states[(size_t)DEPTH_STATE::ZT_ON_ZW_OFF].Get();
+    DirectX::XMStoreFloat4x4(&ui_states.world_view_projection,
+        viewport_view_matrix() * viewport_projection_matrix());
     ui_states.rasterizer =
         rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get();
     ui_states.rasterizer_scissor =

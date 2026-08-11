@@ -8,8 +8,11 @@
 #include <string>
 #include <vector>
 
+namespace ReplayEngine::Scene { class Scene; }
+
 namespace ReplayEngine::Components
 {
+
     class UITextComponent final : public Core::Component
     {
         REPLAY_COMPONENT_BODY(UITextComponent)
@@ -52,6 +55,18 @@ namespace ReplayEngine::Components
         int horizontal_align = Center;
         int vertical_align = Middle;
         bool word_wrap = true;
+
+        Reflection::ComponentReference number_source;
+        std::string number_source_property;
+        std::string number_format;
+        int number_digits = 0;
+        float outline_width = 0.0f;
+        DirectX::XMFLOAT4 outline_color{ 0.0f, 0.0f, 0.0f, 1.0f };
+        DirectX::XMFLOAT2 shadow_offset{ 0.0f, 0.0f };
+        DirectX::XMFLOAT4 shadow_color{ 0.0f, 0.0f, 0.0f, 0.0f };
+
+        // PropertyLink の評価後に、指定された数値を Text へ反映する。
+        void UpdateNumberDisplay(const ReplayEngine::Scene::Scene& scene);
 
         const std::vector<GlyphQuad>& Glyphs() const noexcept { return glyphs_; }
         std::vector<GlyphQuad>& MutableGlyphs() noexcept { return glyphs_; }

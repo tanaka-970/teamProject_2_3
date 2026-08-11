@@ -1250,6 +1250,7 @@ private:
     void evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
         float scaled_delta_time, float unscaled_delta_time);
     void update_ui_sprite_animators(ReplayEngine::Scene::Scene& scene, float elapsed_time);
+    void update_ui_number_displays(ReplayEngine::Scene::Scene& scene);
     void sync_object_lights();
 
     // --- 新規 Scene 作成 ---------------------------------------------------
