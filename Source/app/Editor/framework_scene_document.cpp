@@ -59,6 +59,11 @@ namespace
 void framework::handle_viewport_selection()
 {
     if (!edit_mode_active || !game_scene) return;
+    if (ui_scene_view_input_consumed)
+    {
+        viewport_drag_selecting = false;
+        return;
+    }
 
     // Landscape Tool は左ドラッグを Sculpt / Face 選択へ使う。
     // Stroke の mouse-up は Viewport 外でも拾う必要があるため Hover 判定より先。

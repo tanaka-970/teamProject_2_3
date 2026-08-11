@@ -187,7 +187,7 @@ void framework::set_editor_workspace(editor_workspace workspace)
     case editor_workspace::ui:
         selected_editor_object = editor_selection::game_object;
         show_ui_hierarchy_panel = true;
-        show_ui_preview_panel = true;
+        show_ui_preview_panel = false;
         show_ui_inspector_panel = true;
         break;
     case editor_workspace::motion:
@@ -356,7 +356,6 @@ void framework::draw_editor_main_menu()
         if (active_editor_workspace == editor_workspace::ui)
         {
             ImGui::MenuItem("UI 階層", nullptr, &show_ui_hierarchy_panel);
-            ImGui::MenuItem("Canvas プレビュー", nullptr, &show_ui_preview_panel);
             ImGui::MenuItem("UI インスペクター", nullptr, &show_ui_inspector_panel);
         }
         if (active_editor_workspace == editor_workspace::motion)
@@ -382,7 +381,7 @@ void framework::draw_editor_main_menu()
         // 描画やシェーダを触る前に基準を撮っておくこと。
         ImGui::MenuItem(u8"スクリーンショット回帰", nullptr, &show_golden_panel);
         ImGui::Separator();
-        if (ImGui::MenuItem("Reset Layout")) editor_layout_dirty = true;
+        if (ImGui::MenuItem(u8"レイアウトを初期化")) editor_layout_dirty = true;
 
         // 見た目の調整。人によって画面サイズも見やすい大きさも違うので、
         // 固定値で決め打ちせずここで変えられるようにする。
@@ -824,13 +823,13 @@ void framework::draw_scene_view_panel()
         const ImGuiTabItemFlags game_flags =
             editor_view_tab_sync_pending && active_editor_view == editor_view::game
                 ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None;
-        if (ImGui::BeginTabItem("Scene", nullptr, scene_flags))
+        if (ImGui::BeginTabItem(u8"シーン", nullptr, scene_flags))
         {
             active_editor_view = editor_view::scene;
             remember_active_editor_view();
             ImGui::EndTabItem();
         }
-        if (ImGui::BeginTabItem("Game", nullptr, game_flags))
+        if (ImGui::BeginTabItem(u8"ゲーム", nullptr, game_flags))
         {
             active_editor_view = editor_view::game;
             remember_active_editor_view();
@@ -842,37 +841,71 @@ void framework::draw_scene_view_panel()
 
     if (active_editor_view == editor_view::scene)
     {
-        const char* modes[] = { "Shaded", "Unlit", "Wireframe", "Shaded Wireframe", "Collision" };
-        ImGui::SetNextItemWidth(150.0f);
-        ImGui::Combo("##SceneDrawMode", &scene_view_draw_mode, modes, IM_ARRAYSIZE(modes));
-        ImGui::SameLine();
-        ImGui::Checkbox("Collider", &show_collider_debug_draw);
-        ImGui::SameLine();
-        ImGui::Checkbox("Grid", &show_scene_grid);
-        ImGui::SameLine();
-        ImGui::TextDisabled("Perspective | %s | %s | %s",
-            gizmo_local_space ? "Local" : "World",
-            transform_gizmo.SnapEnabled() ? "Snap" : "Free",
-            object_scene_play_mode ? (object_scene_paused ? "Paused" : "Playing") : "Editing");
-        ensure_editor_camera_presets_loaded();
-        ImGui::TextDisabled(u8"Camera preset: %s | カメラ > プリセット管理 で操作を自由設定",
-            active_editor_camera_preset().name.c_str());
-        // Landscape を選択しているときだけ専用 Tool を出す。
-        // Component 自体に ImGui / Editor 状態を持たせない。
-        draw_landscape_editor_toolbar();
-        if (landscape_edit_enabled)
+        if (active_editor_workspace == editor_workspace::ui)
         {
-            const char* landscape_tool = landscape_edit_mode == 0
-                ? u8"Landscape / Sculpt"
-                : (landscape_topology_selection_mode == 0
-                    ? u8"Landscape / Topology Face"
-                    : u8"Landscape / Topology Edge");
-            ImGui::TextColored(ImVec4(1.0f, 0.72f, 0.25f, 1.0f),
-                u8"ACTIVE TOOL: %s  (Escで終了 / Ctrl・Alt+左クリックで通常選択)", landscape_tool);
+            const char* resolutions[] = {
+                "1920 x 1080", "1280 x 720", "1080 x 1920", u8"カスタム"
+            };
+            ImGui::SetNextItemWidth(140.0f);
+            ImGui::Combo("##UISceneResolution", &ui_preview_resolution_index,
+                resolutions, IM_ARRAYSIZE(resolutions));
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(105.0f);
+            ImGui::SliderFloat(u8"拡大", &ui_preview_zoom, 0.10f, 2.0f, "%.2f");
+            ImGui::SameLine();
+            ImGui::Checkbox(u8"グリッド", &ui_preview_grid);
+            if (ui_preview_resolution_index == 3)
+            {
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(70.0f);
+                ImGui::InputInt("W##UISceneCustomWidth", &ui_preview_custom_width, 0, 0);
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(70.0f);
+                ImGui::InputInt("H##UISceneCustomHeight", &ui_preview_custom_height, 0, 0);
+                ui_preview_custom_width = (std::max)(1, ui_preview_custom_width);
+                ui_preview_custom_height = (std::max)(1, ui_preview_custom_height);
+            }
         }
         else
         {
-            ImGui::TextDisabled("ACTIVE TOOL: Transform / Scene Selection");
+            const char* modes[] = {
+                u8"陰影付き", u8"陰影なし", u8"ワイヤーフレーム",
+                u8"陰影付きワイヤーフレーム", u8"衝突"
+            };
+            ImGui::SetNextItemWidth(150.0f);
+            ImGui::Combo("##SceneDrawMode", &scene_view_draw_mode, modes, IM_ARRAYSIZE(modes));
+            ImGui::SameLine();
+            ImGui::Checkbox(u8"コライダー", &show_collider_debug_draw);
+            ImGui::SameLine();
+            ImGui::Checkbox(u8"グリッド", &show_scene_grid);
+            ImGui::SameLine();
+            ImGui::TextDisabled("Perspective | %s | %s | %s",
+                gizmo_local_space ? "Local" : "World",
+                transform_gizmo.SnapEnabled() ? "Snap" : "Free",
+                object_scene_play_mode ? (object_scene_paused ? "Paused" : "Playing") : "Editing");
+        }
+        if (active_editor_workspace != editor_workspace::ui)
+        {
+            ensure_editor_camera_presets_loaded();
+            ImGui::TextDisabled(u8"Camera preset: %s | カメラ > プリセット管理 で操作を自由設定",
+                active_editor_camera_preset().name.c_str());
+            // Landscape を選択しているときだけ専用 Tool を出す。
+            // Component 自体に ImGui / Editor 状態を持たせない。
+            draw_landscape_editor_toolbar();
+            if (landscape_edit_enabled)
+            {
+                const char* landscape_tool = landscape_edit_mode == 0
+                    ? u8"Landscape / Sculpt"
+                    : (landscape_topology_selection_mode == 0
+                        ? u8"Landscape / Topology Face"
+                        : u8"Landscape / Topology Edge");
+                ImGui::TextColored(ImVec4(1.0f, 0.72f, 0.25f, 1.0f),
+                    u8"ACTIVE TOOL: %s  (Escで終了 / Ctrl・Alt+左クリックで通常選択)", landscape_tool);
+            }
+            else
+            {
+                ImGui::TextDisabled("ACTIVE TOOL: Transform / Scene Selection");
+            }
         }
     }
     else
@@ -898,6 +931,7 @@ void framework::draw_scene_view_panel()
     scene_view_max_y = maximum.y;
     scene_view_hovered = ImGui::IsItemHovered();
     scene_view_focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
+    draw_ui_scene_overlay();
 
     // 右クリックの Play From Here / Checkpoint / Scene Memo。
     // InvisibleButton の直後に置くことで ContextItem の対象を確実に Viewport にする。
@@ -1588,13 +1622,13 @@ void framework::draw_console_panel()
     }
     ImGui::TextWrapped("%s", editor_command_result.c_str());
     ImGui::Separator();
-    if (ImGui::Button("Clear Logs"))
+    if (ImGui::Button(u8"ログを消去"))
     {
         editor_log_entries.clear();
         selected_editor_log_index = -1;
     }
     ImGui::SameLine();
-    ImGui::Text("Editor Logs: %zu", editor_log_entries.size());
+    ImGui::Text(u8"エディタログ: %zu", editor_log_entries.size());
     if (ImGui::BeginChild("EditorLogEntries", ImVec2(0.0f, 150.0f), true))
     {
         for (int index = 0; index < static_cast<int>(editor_log_entries.size()); ++index)
@@ -1781,19 +1815,10 @@ void framework::draw_editor()
             ImGuiID left = ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, left_ratio, nullptr, &center);
             ImGuiID right = ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, right_ratio, nullptr, &center);
             ImGuiID bottom = ImGui::DockBuilderSplitNode(center, ImGuiDir_Down, bottom_ratio, nullptr, &center);
-            ImGuiID ui_preview = 0;
-            if (active_editor_workspace == editor_workspace::ui)
-            {
-                // UI Workspace は central node をさらに左右へ割る。
-                // 左側だけ Canvas プレビューに使い、残った central node は Scene View 専用に空ける。
-                ui_preview = ImGui::DockBuilderSplitNode(center,
-                    ImGuiDir_Left, 0.50f, nullptr, &center);
-            }
             if (active_editor_workspace == editor_workspace::ui)
             {
                 ImGui::DockBuilderDockWindow("UI 階層", left);
                 ImGui::DockBuilderDockWindow("UI インスペクター", right);
-                ImGui::DockBuilderDockWindow("Canvas プレビュー", ui_preview);
                 ImGui::DockBuilderDockWindow("プロジェクト", bottom);
                 ImGui::DockBuilderDockWindow("コンソール", bottom);
             }
@@ -1851,7 +1876,6 @@ void framework::draw_editor()
     {
         draw_scene_view_panel();
         draw_ui_hierarchy();
-        draw_ui_preview();
         draw_ui_inspector();
         if (show_project_panel) draw_project_panel();
         if (show_console_panel) draw_console_panel();
@@ -2036,6 +2060,6 @@ void framework::draw_controlled_character_diagnostics()
 
     if (ImGui::Button("衝突の診断ウィンドウを開く")) show_collision_diagnostics = true;
     ImGui::SameLine();
-    ImGui::Checkbox("Collider を描画", &show_collider_debug_draw);
+    ImGui::Checkbox(u8"コライダーを描画", &show_collider_debug_draw);
 #endif
 }
