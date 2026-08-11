@@ -722,7 +722,7 @@ void framework::evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
         for (const MotionTrack& track : asset.tracks)
         {
             const ReplayEngine::Motion::ResolvedMotionBinding binding =
-                MotionBindingResolver::Resolve(scene, track.binding);
+                MotionBindingResolver::Resolve(scene, track.binding, player.Owner());
             if (!binding.Valid()) continue;
             MotionPlayerComponent::SnapshotValue snapshot;
             snapshot.binding = track.binding;
@@ -739,7 +739,7 @@ void framework::evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
             player.SnapshotValues())
         {
             const ReplayEngine::Motion::ResolvedMotionBinding binding =
-                MotionBindingResolver::Resolve(scene, snapshot.binding);
+                MotionBindingResolver::Resolve(scene, snapshot.binding, player.Owner());
             motion_mixer.Contribute(binding, snapshot.value, 1.0f,
                 ReplayEngine::Motion::MotionBlendMode::Override);
         }
@@ -922,6 +922,10 @@ void framework::evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
                 resolve_motion_asset(player.motion.guid);
             if (asset == nullptr) continue;
 
+            const float player_delta_time = player.ignore_time_scale
+                ? unscaled_delta_time : scaled_delta_time;
+            player.AdvanceTriggerDelay(player_delta_time);
+
             if (player.HasStopRestoreRequest())
             {
                 contribute_restore(player);
@@ -935,8 +939,6 @@ void framework::evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
                 capture_snapshot(*asset, player);
             }
 
-            const float player_delta_time = player.ignore_time_scale
-                ? unscaled_delta_time : scaled_delta_time;
             const float previous_motion_time = player.time;
             const int previous_playback_direction = player.PlaybackDirection();
             player.Advance(asset->duration, player_delta_time);
@@ -956,7 +958,7 @@ void framework::evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
                     continue;
 
                 const ReplayEngine::Motion::ResolvedMotionBinding binding =
-                    MotionBindingResolver::Resolve(scene, track.binding);
+                    MotionBindingResolver::Resolve(scene, track.binding, player.Owner());
                 if (!binding.Valid()) continue;
 
                 if (blend_alpha < 1.0f)
@@ -1117,27 +1119,10 @@ void framework::update_object_scene(float elapsed_time)
     // 選択が消えた GameObject を指し続けないようにする。
     object_editor_context.Selection().PruneMissing(scene);
 
-    if (object_runtime_active())
-    {
-        // 順序: Scene::Update -> Motion Mixer -> UI Layout -> Render。
-        // Motion は Component::OnUpdate からは評価しない。全 Player の寄与を先に集め、
-        // 同じ property へ setter を 1 フレーム 1 回だけ呼ぶため、この外部フェーズで扱う。
-        evaluate_motion_players(scene, scaled_delta_time, unscaled_delta_time);
-        // UI sprite animation は Pause Menu / Loading 表示を止めないため実時間。
-        update_ui_sprite_animators(scene, unscaled_delta_time);
-        if (object_runtime_context)
-        {
-            object_runtime_context->Events().Dispatch(
-                &object_runtime_context->Resolver());
-            object_runtime_context->FlushDeferredOperations();
-        }
-    }
-
-    sync_object_lights();
-
+    // UI の状態変化は Motion 評価より前に確定する。
+    // UpdateButtons は ButtonStateChanged を EventBus へ積むため、ここで
+    // 一度配送してから Motion を評価すると、押下／ホバーが同じフレームに反映される。
     const object_ui_viewport ui_viewport = object_ui_viewport_target();
-    // UI layout / hit test は描画先と同じ矩形基準で解決する。
-    // Editor 編集中は Scene View、Play / standalone はウィンドウ全体を使う。
     const float ui_logical_width = (std::max)(1.0f, ui_viewport.logical_width);
     const float ui_logical_height = (std::max)(1.0f, ui_viewport.logical_height);
     ReplayEngine::UI::UILayout::Resolve(scene,
@@ -1164,6 +1149,34 @@ void framework::update_object_scene(float elapsed_time)
         mouse_x, mouse_y, mouse_down, mouse_pressed, mouse_released, input_captured,
         object_runtime_active());
     ui_pointer_down_last = mouse_down;
+
+    if (object_runtime_active())
+    {
+        if (object_runtime_context)
+        {
+            object_runtime_context->Events().Dispatch(
+                &object_runtime_context->Resolver());
+        }
+
+        // 順序: Scene::Update -> UI状態／トリガー -> Motion Mixer -> UI Layout -> Render。
+        // Motion は Component::OnUpdate からは評価しない。全 Player の寄与を先に集め、
+        // 同じ property へ setter を 1 フレーム 1 回だけ呼ぶため、この外部フェーズで扱う。
+        evaluate_motion_players(scene, scaled_delta_time, unscaled_delta_time);
+        // UI sprite animation は Pause Menu / Loading 表示を止めないため実時間。
+        update_ui_sprite_animators(scene, unscaled_delta_time);
+        if (object_runtime_context)
+        {
+            object_runtime_context->Events().Dispatch(
+                &object_runtime_context->Resolver());
+            object_runtime_context->FlushDeferredOperations();
+        }
+    }
+
+    // Motion が RectTransform を書いた後に最終レイアウトを確定する。
+    // 先頭の Resolve は hit test 用、こちらが描画用の正本になる。
+    ReplayEngine::UI::UILayout::Resolve(scene,
+        ui_logical_width, ui_logical_height);
+    sync_object_lights();
 
     // 削除済み Landscape の GPU メッシュをフレーム更新時に 1 回だけ解放する。
     // 非表示なだけの Landscape は再表示時の再生成を避けるためキャッシュへ残す。

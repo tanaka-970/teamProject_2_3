@@ -4,6 +4,7 @@
 #include "../../Reflection/Property/References.h"
 #include "../../Reflection/Property/PropertyValue.h"
 #include "../../Motion/MotionAsset.h"
+#include "../../Runtime/Events/EventBus.h"
 
 #include <string>
 #include <vector>
@@ -30,6 +31,22 @@ namespace ReplayEngine::Components
             ClampForever = 3,
         };
 
+        // 保存互換のため、既存値を途中へ挿入しない。
+        enum Trigger : int
+        {
+            TriggerStart = 0,
+            TriggerPressed = 1,
+            TriggerReleased = 2,
+            TriggerHoverEnter = 3,
+            TriggerHoverExit = 4,
+            TriggerEnabled = 5,
+            TriggerDisabled = 6,
+            TriggerSceneStarted = 7,
+            TriggerSceneCompleted = 8,
+            TriggerEventReceived = 9,
+            TriggerManualOnly = 10,
+        };
+
         struct SnapshotValue
         {
             Motion::MotionBinding binding;
@@ -39,10 +56,14 @@ namespace ReplayEngine::Components
         MotionPlayerComponent() = default;
 
         void OnRuntimeAwake() override;
+        void OnEnable() override;
+        void OnDisable() override;
+        void OnRuntimeDestroy() override;
 
         bool ShouldContribute() const noexcept;
         void ResetPlayback() noexcept;
         void Advance(float duration, float delta_time) noexcept;
+        void AdvanceTriggerDelay(float delta_time) noexcept;
 
         void Play() noexcept;
         void PlayFrom(float seconds) noexcept;
@@ -80,6 +101,9 @@ namespace ReplayEngine::Components
         Reflection::AssetReference motion;
         std::string key;
         bool play_on_start = true;
+        int trigger = TriggerStart;
+        float trigger_delay = 0.0f;
+        Reflection::ComponentReference trigger_source;
         bool loop = false;
         int wrap_mode = Once;
         bool auto_stop_on_end = false;
@@ -94,11 +118,24 @@ namespace ReplayEngine::Components
 
     private:
         int EffectiveWrapMode() const noexcept;
+        void RequestTrigger() noexcept;
+        void EnsureTriggerSubscriptions();
+        void ReleaseTriggerSubscriptions() noexcept;
+        bool MatchesTriggerSource(const Runtime::EventRecord& record) const noexcept;
+        void HandleButtonStateChanged(const Runtime::EventRecord& record);
+        void HandleMotionEvent(const Runtime::EventRecord& record);
+        void HandleSceneTransition(const Runtime::EventRecord& record);
 
         std::vector<SnapshotValue> snapshot_values_;
+        Runtime::ScopedSubscription button_state_subscription_;
+        Runtime::ScopedSubscription motion_event_subscription_;
+        Runtime::ScopedSubscription scene_started_subscription_;
+        Runtime::ScopedSubscription scene_completed_subscription_;
         bool snapshot_valid_ = false;
         bool stop_restore_requested_ = false;
+        bool trigger_pending_ = false;
         float blend_in_elapsed_ = 0.0f;
+        float trigger_elapsed_ = 0.0f;
         int ping_pong_direction_ = 1;
         float duration_ = 0.0f;
     };

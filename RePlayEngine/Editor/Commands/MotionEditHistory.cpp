@@ -17,10 +17,12 @@ namespace ReplayEngine::Editor
         bool SameBinding(const Motion::MotionBinding& a,
             const Motion::MotionBinding& b) noexcept
         {
-            return a.object == b.object &&
+            return a.origin == b.origin &&
+                a.object == b.object &&
                 a.component_type == b.component_type &&
                 a.component_index == b.component_index &&
-                a.property == b.property;
+                a.property == b.property &&
+                a.relative_path == b.relative_path;
         }
 
         bool SameKey(const Motion::MotionKeyframe& a,

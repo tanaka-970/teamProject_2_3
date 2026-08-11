@@ -127,6 +127,8 @@ namespace ReplayEngine::Runtime
             Reflection::MakeTypeGUID("a1000000000000000000000000000007");
         inline constexpr Reflection::TypeGUID MotionEvent =
             Reflection::MakeTypeGUID("a1000000000000000000000000000008");
+        inline constexpr Reflection::TypeGUID ButtonStateChanged =
+            Reflection::MakeTypeGUID("a1000000000000000000000000000009");
     }
 
     // イベントの発行と購読。

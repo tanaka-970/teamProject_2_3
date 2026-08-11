@@ -375,6 +375,8 @@ namespace ReplayEngine::Motion
             else if (head == "TRACK")
             {
                 MotionTrack track;
+                // 起点情報を持たない旧 Asset は絶対参照として読む。
+                track.binding.origin = static_cast<int>(MotionBindingOrigin::Absolute);
                 input >> std::quoted(track.name);
                 asset.tracks.push_back(std::move(track));
                 current_track = &asset.tracks.back();
@@ -406,6 +408,25 @@ namespace ReplayEngine::Motion
                 Core::ObjectID::ValueType raw = Core::ObjectID::invalid_value;
                 input >> raw;
                 current_event_track->object = Core::ObjectID(raw);
+            }
+            else if ((head == "BINDING_ORIGIN" || head == "ORIGIN") &&
+                current_track != nullptr)
+            {
+                int origin = static_cast<int>(MotionBindingOrigin::Absolute);
+                if (!(input >> origin) ||
+                    origin < static_cast<int>(MotionBindingOrigin::Absolute) ||
+                    origin > static_cast<int>(MotionBindingOrigin::ChildPath))
+                {
+                    error = "Motion AssetのBINDING_ORIGINが不正です: line " +
+                        std::to_string(line_number);
+                    return false;
+                }
+                current_track->binding.origin = origin;
+            }
+            else if ((head == "BINDING_PATH" || head == "PATH") &&
+                current_track != nullptr)
+            {
+                input >> std::quoted(current_track->binding.relative_path);
             }
             else if (head == "COMPONENT_TYPE" && current_track != nullptr)
             {
@@ -553,6 +574,8 @@ namespace ReplayEngine::Motion
         {
             file << "TRACK " << std::quoted(track.name) << '\n';
             file << "OBJECT " << track.binding.object.Value() << '\n';
+            file << "BINDING_ORIGIN " << track.binding.origin << '\n';
+            file << "BINDING_PATH " << std::quoted(track.binding.relative_path) << '\n';
             if (const Core::ComponentTypeInfo* info =
                 Core::ComponentRegistry::Find(track.binding.component_type))
             {

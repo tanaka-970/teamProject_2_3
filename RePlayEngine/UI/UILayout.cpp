@@ -7,10 +7,13 @@
 #include "../Components/UI/UIImageComponent.h"
 #include "../Components/Motion/MotionPlayerComponent.h"
 #include "../Object/GameObject/GameObject.h"
+#include "../Runtime/API/RuntimeContext.h"
+#include "../Runtime/Events/EventBus.h"
 #include "../Scene/Runtime/Scene.h"
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 #include <vector>
 
 namespace ReplayEngine::UI
@@ -319,12 +322,36 @@ namespace ReplayEngine::UI
                     }
                 }
 
-                // Phase 1 は通知の入口だけをここへ置く。C# 連携は Phase 7。
-                // release 時に Hover に戻るので、状態遷移は後段の MotionPlayer へ接続できる。
+                // 状態が変わったフレームだけ EventBus へ通知する。
+                // release 時に Hover / Normal へ戻るため、Pressed と Released を
+                // 同じ状態値から判別できる。
                 (void)mouse_released;
                 const int previous_state = button->state;
                 button->state = next_state;
                 ApplyButtonVisual(*button);
+                if (previous_state != next_state)
+                {
+                    if (Runtime::RuntimeContext* runtime =
+                        button->GetScene() != nullptr
+                            ? button->GetScene()->Services().Runtime() : nullptr)
+                    {
+                        if (Core::GameObject* owner = button->Owner())
+                        {
+                            Runtime::EventRecord record;
+                            record.type = Runtime::EngineEvents::ButtonStateChanged;
+                            record.type_name = "ButtonStateChanged";
+                            record.source = runtime->Resolver().MakeHandle(owner);
+                            record.frame_index = runtime->FrameIndex();
+                            record.payload.Set("previous_state",
+                                Reflection::PropertyValue::MakeInt(previous_state));
+                            record.payload.Set("state",
+                                Reflection::PropertyValue::MakeInt(next_state));
+                            record.payload.Set("button_component",
+                                Reflection::PropertyValue::MakeUInt64(button->StableID()));
+                            runtime->Events().Publish(std::move(record));
+                        }
+                    }
+                }
                 if (play_state_motions && previous_state != next_state)
                 {
                     PlayButtonMotion(*button, next_state);

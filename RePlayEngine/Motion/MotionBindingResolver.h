@@ -6,6 +6,7 @@
 namespace ReplayEngine::Core
 {
     class Component;
+    class GameObject;
 }
 
 namespace ReplayEngine::Scene
@@ -27,6 +28,7 @@ namespace ReplayEngine::Motion
     {
     public:
         static ResolvedMotionBinding Resolve(Scene::Scene& scene,
-            const MotionBinding& binding) noexcept;
+            const MotionBinding& binding,
+            Core::GameObject* origin_object = nullptr) noexcept;
     };
 }
