@@ -1635,6 +1635,24 @@ namespace ReplayEngine::Core
                     .Display("開始時に再生")
                     .Animation(Animatable::Step));
             PropertyRegistry::Register<MotionPlayerComponent>(
+                MakeProperty("trigger", &MotionPlayerComponent::trigger)
+                    .Display("きっかけ")
+                    .AsEnum({ "開始時", "押された", "離された", "カーソルが乗った",
+                        "カーソルが外れた", "有効になった", "無効になった",
+                        "シーン遷移の開始", "シーン遷移の完了", "イベントを受け取った",
+                        "手動のみ" })
+                    .Animation(Animatable::Step)
+                    .Tooltip("この Motion を再生するきっかけ。手動のみなら Play 呼び出しで再生する。"));
+            PropertyRegistry::Register<MotionPlayerComponent>(
+                MakeProperty("trigger_delay", &MotionPlayerComponent::trigger_delay)
+                    .Display("開始を遅らせる秒数")
+                    .Range(0.0, 10.0).Step(0.01)
+                    .Tooltip("きっかけを受けてから再生を始めるまでの秒数。"));
+            PropertyRegistry::Register<MotionPlayerComponent>(
+                MakeProperty("trigger_source", &MotionPlayerComponent::trigger_source)
+                    .Display("対象")
+                    .Tooltip("監視する GameObject。未指定なら Motion Player と同じ GameObject。"));
+            PropertyRegistry::Register<MotionPlayerComponent>(
                 MakeProperty("loop", &MotionPlayerComponent::loop)
                     .Display("ループ (旧)")
                     .Animation(Animatable::Step));

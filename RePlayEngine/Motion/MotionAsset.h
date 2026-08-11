@@ -11,6 +11,16 @@
 
 namespace ReplayEngine::Motion
 {
+    // Motion の対象 GameObject をどこから解決するか。
+    // 保存済み Asset との互換性のため、値は途中へ挿入せず末尾へ追加する。
+    enum class MotionBindingOrigin : int
+    {
+        Absolute = 0,
+        Self = 1,
+        Parent = 2,
+        ChildPath = 3,
+    };
+
     enum class MotionBlendMode
     {
         Override = 0,
@@ -21,14 +31,32 @@ namespace ReplayEngine::Motion
 
     struct MotionBinding
     {
+        // 新しく Editor で作る Binding は Self を既定にする。
+        // LoadFromFile は起点情報のない旧 Asset を Absolute へ明示的に戻す。
+        int origin = static_cast<int>(MotionBindingOrigin::Self);
         Core::ObjectID object;
         Core::ComponentTypeID component_type = Core::invalid_component_type_id;
         int component_index = 0;
         std::string property;
+        std::string relative_path;
 
         bool Valid() const noexcept
         {
-            return object.Valid() && component_type != Core::invalid_component_type_id &&
+            if (origin < static_cast<int>(MotionBindingOrigin::Absolute) ||
+                origin > static_cast<int>(MotionBindingOrigin::ChildPath))
+            {
+                return false;
+            }
+            if (origin == static_cast<int>(MotionBindingOrigin::Absolute) && !object.Valid())
+            {
+                return false;
+            }
+            if (origin == static_cast<int>(MotionBindingOrigin::ChildPath) &&
+                relative_path.empty())
+            {
+                return false;
+            }
+            return component_type != Core::invalid_component_type_id &&
                 component_index >= 0 && !property.empty();
         }
     };
@@ -68,7 +96,7 @@ namespace ReplayEngine::Motion
     {
     public:
         static constexpr const char* file_extension = ".replaymotion";
-        static constexpr int current_version = 3;
+        static constexpr int current_version = 4;
 
         std::string name{ "Motion" };
         float duration = 1.0f;

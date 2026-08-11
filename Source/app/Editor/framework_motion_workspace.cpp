@@ -24,6 +24,7 @@ namespace
     using ReplayEngine::Core::ComponentTypeID;
     using ReplayEngine::Motion::MotionAsset;
     using ReplayEngine::Motion::MotionBinding;
+    using ReplayEngine::Motion::MotionBindingOrigin;
     using ReplayEngine::Motion::MotionBlendMode;
     using ReplayEngine::Motion::MotionEasing;
     using ReplayEngine::Motion::MotionEvaluator;
@@ -315,6 +316,45 @@ namespace
                 if (ImGui::Selectable(MotionBlendModeLabel(candidate), selected))
                 {
                     mode = candidate;
+                    changed = true;
+                }
+                if (selected) ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+        return changed;
+    }
+
+    const char* MotionBindingOriginLabel(int origin) noexcept
+    {
+        switch (static_cast<MotionBindingOrigin>(origin))
+        {
+        case MotionBindingOrigin::Absolute: return "絶対";
+        case MotionBindingOrigin::Self: return "自分";
+        case MotionBindingOrigin::Parent: return "親";
+        case MotionBindingOrigin::ChildPath: return "名前で子を探す";
+        }
+        return "絶対";
+    }
+
+    bool DrawMotionBindingOriginCombo(const char* label, int& origin)
+    {
+        constexpr int origins[] = {
+            static_cast<int>(MotionBindingOrigin::Absolute),
+            static_cast<int>(MotionBindingOrigin::Self),
+            static_cast<int>(MotionBindingOrigin::Parent),
+            static_cast<int>(MotionBindingOrigin::ChildPath),
+        };
+
+        bool changed = false;
+        if (ImGui::BeginCombo(label, MotionBindingOriginLabel(origin)))
+        {
+            for (const int candidate : origins)
+            {
+                const bool selected = candidate == origin;
+                if (ImGui::Selectable(MotionBindingOriginLabel(candidate), selected))
+                {
+                    origin = candidate;
                     changed = true;
                 }
                 if (selected) ImGui::SetItemDefaultFocus();
@@ -1132,6 +1172,29 @@ void framework::draw_motion_inspector()
         track.blend_mode = blend_mode;
         motion_edit_history.Commit(motion_editor_asset);
         motion_editor_dirty = true;
+    }
+
+    int binding_origin = track.binding.origin;
+    if (DrawMotionBindingOriginCombo("バインド起点", binding_origin) &&
+        binding_origin != track.binding.origin)
+    {
+        motion_edit_history.Begin(motion_editor_asset, "Motionの起点を変更");
+        track.binding.origin = binding_origin;
+        motion_edit_history.Commit(motion_editor_asset);
+        motion_editor_dirty = true;
+    }
+    if (track.binding.origin == static_cast<int>(MotionBindingOrigin::ChildPath))
+    {
+        char relative_path[512]{};
+        strncpy_s(relative_path, track.binding.relative_path.c_str(), _TRUNCATE);
+        if (ImGui::InputText("子への相対パス", relative_path,
+            IM_ARRAYSIZE(relative_path)))
+        {
+            motion_edit_history.Begin(motion_editor_asset, "Motionの子パスを変更");
+            track.binding.relative_path = relative_path;
+            motion_edit_history.Commit(motion_editor_asset);
+            motion_editor_dirty = true;
+        }
     }
 
     ReplayEngine::Scene::Scene* scene = object_editor_context.GetScene();
