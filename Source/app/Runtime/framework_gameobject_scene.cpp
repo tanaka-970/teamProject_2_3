@@ -327,7 +327,7 @@ void framework::initialize_object_scene()
                 "新規 Scene を作成しました（Landscape Ground の生成に失敗）");
         }
     }
-    check_object_scene_recovery();
+    if (!standalone_game_mode) check_object_scene_recovery();
 
     // 編集中も Component の OnStart を回したいので Scene は開始状態にしておく。
     // 実際にゲームロジックが走るかどうかは Edit Mode 判定で制御する。
@@ -340,7 +340,7 @@ void framework::initialize_object_scene()
 
     // Scene View の編集カメラを、この Scene 用に保存された状態から復元する。
     // 保存が無い / 壊れていても、既定位置になるだけで Scene の読み込みには影響しない。
-    load_editor_camera_state();
+    if (!standalone_game_mode) load_editor_camera_state();
 
     // 新規 Basic Scene だけは保存済みの「未保存Sceneカメラ」を使い回さない。
     // Ground が見えない状態から始まると生成失敗に見えるため、64m四方を
@@ -366,7 +366,7 @@ void framework::load_project_settings()
     namespace Project = ReplayEngine::Project;
 
     std::string error;
-    const auto path = Project::ProjectSettingsSerializer::DefaultPath();
+    const auto path = content_path(Project::ProjectSettingsSerializer::DefaultPath());
     if (Project::ProjectSettingsSerializer::LoadFromFile(project_settings, path, error))
     {
         project_settings_status = "プロジェクト設定を読み込みました";
@@ -554,6 +554,11 @@ void framework::update_object_fixed_step(float elapsed_time)
     {
         object_fixed_accumulator -= object_fixed_time_step;
         scene.FixedUpdate(object_fixed_time_step);
+        // Component の FixedUpdate（入力・力の蓄積）の後に Solver を 1 回だけ進める。
+        // Transform 同期は Solver の末尾で行うため、同じ刻み内の更新順が一定になる。
+        object_collision_world.Refresh();
+        object_physics_dynamics_world.Step(object_fixed_time_step);
+        object_collision_world.Refresh();
         ++steps;
     }
 
@@ -583,12 +588,13 @@ const ReplayEngine::Motion::MotionAsset* framework::resolve_motion_asset(
 
     ReplayEngine::Motion::MotionAsset asset;
     std::string error;
-    if (!ReplayEngine::Motion::MotionAsset::LoadFromFile(record->source_path,
+    const std::filesystem::path motion_path = content_path(record->source_path);
+    if (!ReplayEngine::Motion::MotionAsset::LoadFromFile(motion_path,
         asset, error))
     {
         if (motion_asset_load_failures.insert(asset_guid).second)
         {
-            push_editor_log("Warning", error, record->source_path);
+            push_editor_log("Warning", error, motion_path);
         }
         return nullptr;
     }
@@ -684,7 +690,7 @@ void framework::prepare_ui_effect_shader_schemas(ReplayEngine::Scene::Scene& sce
                 asset_database.FindByGuid(effect.custom_shader);
             if (record != nullptr && record->kind == AssetKind::Shader)
             {
-                const std::filesystem::path source = normalize(record->source_path);
+                const std::filesystem::path source = normalize(content_path(record->source_path));
                 for (const ShaderCatalog::Entry& entry : shader_library.Catalog().All())
                 {
                     if (entry.info.domain != ShaderDomain::PostProcess) continue;
@@ -1175,7 +1181,8 @@ void framework::update_object_scene(float elapsed_time)
             ++it;
     }
 
-    if (!object_scene_play_mode && object_editor_context.Dirty())
+    if (!standalone_game_mode && !object_scene_play_mode &&
+        object_editor_context.Dirty())
     {
         object_autosave_elapsed += (std::max)(0.0f, elapsed_time);
         if (object_autosave_elapsed >= 60.0f)
@@ -1480,8 +1487,8 @@ bool framework::load_object_scene_from_path(const std::filesystem::path& source)
 
     // 新しい Scene に対応する編集カメラ状態を読み込む。
     // 保存が無ければ既定位置になる。
-    load_editor_camera_state();
-    check_object_scene_recovery();
+    if (!standalone_game_mode) load_editor_camera_state();
+    if (!standalone_game_mode) check_object_scene_recovery();
     save_editor_session();
     return true;
 }
@@ -1949,7 +1956,7 @@ skinned_mesh* framework::resolve_object_mesh(const std::string& asset_guid)
     //    skinned_mesh が読めるのは FBX と、その .cereal キャッシュだけ。
     //    .obj は static_mesh 用、.glb / .gltf は既存のステージ経路が扱うので、
     //    ここへ渡すと必ず失敗する。渡す前に弾く。
-    const std::filesystem::path source = record->source_path;
+    const std::filesystem::path source = content_path(record->source_path);
     std::string extension = source.extension().string();
     for (char& character : extension)
     {
@@ -2023,9 +2030,10 @@ const ReplayEngine::Rendering::MaterialAsset* framework::resolve_object_material
     const ReplayEngine::Assets::AssetRecord* record = asset_database.FindByGuid(asset_guid);
     if (record == nullptr || record->kind != AssetKind::Material) return nullptr;
 
+    const std::filesystem::path material_path = content_path(record->source_path);
     std::error_code filesystem_error;
     const auto write_time = std::filesystem::last_write_time(
-        record->source_path, filesystem_error);
+        material_path, filesystem_error);
     if (filesystem_error)
     {
         object_material_failures.insert(asset_guid);
@@ -2038,7 +2046,7 @@ const ReplayEngine::Rendering::MaterialAsset* framework::resolve_object_material
 
     MaterialAsset loaded;
     std::string error;
-    if (!MaterialAsset::Load(record->source_path, loaded, error))
+    if (!MaterialAsset::Load(material_path, loaded, error))
     {
         if (object_material_failures.insert(asset_guid).second)
             OutputDebugStringA(("[Material] " + error + " (GUID: " + asset_guid + ")\n").c_str());

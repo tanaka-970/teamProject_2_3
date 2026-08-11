@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "ICameraBasisProvider.h"
+#include "IPhysicsDynamicsService.h"
 #include "IPhysicsQueryService.h"
 #include "IInputService.h"
 #include "RespawnService.h"
@@ -35,6 +36,15 @@ namespace ReplayEngine::Scene
 
         const IPhysicsQueryService* Physics() const noexcept { return physics_; }
         void SetPhysics(const IPhysicsQueryService* service) noexcept { physics_ = service; }
+
+        const IPhysicsDynamicsService* PhysicsDynamics() const noexcept
+        {
+            return physics_dynamics_;
+        }
+        void SetPhysicsDynamics(const IPhysicsDynamicsService* service) noexcept
+        {
+            physics_dynamics_ = service;
+        }
 
         const IInputService* Input() const noexcept { return input_; }
         void SetInput(const IInputService* service) noexcept { input_ = service; }
@@ -97,6 +107,7 @@ namespace ReplayEngine::Scene
         {
             camera_basis_ = nullptr;
             physics_ = nullptr;
+            physics_dynamics_ = nullptr;
             input_ = nullptr;
             audio_ = nullptr;
             motion_mixer_ = nullptr;
@@ -109,6 +120,7 @@ namespace ReplayEngine::Scene
     private:
         const ICameraBasisProvider* camera_basis_ = nullptr;
         const IPhysicsQueryService* physics_ = nullptr;
+        const IPhysicsDynamicsService* physics_dynamics_ = nullptr;
         const IInputService* input_ = nullptr;
         Audio::IAudioPlaybackService* audio_ = nullptr;
         const Motion::MotionMixer* motion_mixer_ = nullptr;

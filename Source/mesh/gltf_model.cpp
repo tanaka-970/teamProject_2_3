@@ -1,4 +1,4 @@
-#include "gltf_model.h"
+﻿#include "gltf_model.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -19,11 +19,19 @@
 #include <filesystem>
 #include <chrono>
 #include <functional>
+#include <utility>
 
 using namespace DirectX;
 
 namespace
 {
+    std::filesystem::path& GltfCacheRootStorage()
+    {
+        static std::filesystem::path root =
+            std::filesystem::path("resources") / ".replay_cache";
+        return root;
+    }
+
     const unsigned char* AccessorBytes(const tinygltf::Model& model,
         const tinygltf::Accessor& accessor, size_t& stride)
     {
@@ -217,6 +225,17 @@ namespace
     }
 }
 
+void gltf_model::SetCacheRoot(std::filesystem::path root)
+{
+    if (root.empty()) root = std::filesystem::path("resources") / ".replay_cache";
+    GltfCacheRootStorage() = std::move(root);
+}
+
+const std::filesystem::path& gltf_model::CacheRoot()
+{
+    return GltfCacheRootStorage();
+}
+
 gltf_model::gltf_model(ID3D11Device* device, const std::string& filename)
 {
     source_filename_ = filename;
@@ -322,7 +341,7 @@ std::filesystem::path gltf_model::LodCachePath() const
     }
     char name[64]{};
     sprintf_s(name, "%016llx_lod0.replaylod", static_cast<unsigned long long>(hash));
-    return std::filesystem::path("resources") / ".replay_cache" / "lods" / name;
+    return CacheRoot() / "lods" / name;
 }
 
 bool gltf_model::CreateLodBuffers(ID3D11Device* device, LodLevel& level,

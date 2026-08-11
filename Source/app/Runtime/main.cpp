@@ -104,6 +104,184 @@ namespace
         return false;
     }
 
+    std::string TrimCopy(std::string text)
+    {
+        const auto is_space = [](unsigned char c) noexcept
+        {
+            return std::isspace(c) != 0;
+        };
+        while (!text.empty() && is_space(static_cast<unsigned char>(text.front())))
+            text.erase(text.begin());
+        while (!text.empty() && is_space(static_cast<unsigned char>(text.back())))
+            text.pop_back();
+        return text;
+    }
+
+    std::string LowerCopy(std::string text)
+    {
+        for (char& character : text)
+        {
+            character = static_cast<char>(
+                std::tolower(static_cast<unsigned char>(character)));
+        }
+        return text;
+    }
+
+    struct ExecutableLayout
+    {
+        std::filesystem::path executable_path;
+        std::filesystem::path executable_directory;
+        std::filesystem::path content_root;
+    };
+
+    ExecutableLayout ResolveExecutableLayout()
+    {
+        ExecutableLayout layout;
+        std::array<wchar_t, 32768> executable_path{};
+        const DWORD path_length = GetModuleFileNameW(nullptr, executable_path.data(),
+            static_cast<DWORD>(executable_path.size()));
+        if (path_length > 0 && path_length < executable_path.size())
+        {
+            layout.executable_path = std::filesystem::path(
+                std::wstring(executable_path.data(), path_length));
+            layout.executable_directory = layout.executable_path.parent_path();
+            layout.content_root = layout.executable_directory;
+
+            std::error_code error;
+            const std::filesystem::path packaged_resources =
+                layout.executable_directory / "resources";
+            if (!std::filesystem::is_directory(packaged_resources, error) || error)
+            {
+                const std::filesystem::path visual_studio_root =
+                    (layout.executable_directory / ".." / "..").lexically_normal();
+                error.clear();
+                if (std::filesystem::is_directory(
+                    visual_studio_root / "resources", error) && !error)
+                {
+                    layout.content_root = visual_studio_root;
+                }
+            }
+        }
+        else
+        {
+            std::error_code error;
+            layout.content_root = std::filesystem::current_path(error);
+            layout.executable_directory = layout.content_root;
+        }
+        return layout;
+    }
+
+    struct GameLaunchConfig
+    {
+        bool file_found = false;
+        bool file_loaded = false;
+        std::filesystem::path file;
+        std::string name{ "RePlayGame" };
+        std::filesystem::path startup_scene;
+        UINT window_width{ SCREEN_WIDTH };
+        UINT window_height{ SCREEN_HEIGHT };
+        bool fullscreen = false;
+        std::vector<std::string> warnings;
+    };
+
+    std::filesystem::path FindReplayGameFile(const std::filesystem::path& folder,
+        std::vector<std::string>& warnings)
+    {
+        std::error_code error;
+        if (!std::filesystem::is_directory(folder, error) || error) return {};
+
+        std::vector<std::filesystem::path> files;
+        for (std::filesystem::directory_iterator it(folder, error), end;
+            !error && it != end; it.increment(error))
+        {
+            if (!it->is_regular_file(error)) continue;
+            if (LowerCopy(it->path().extension().string()) == ".replaygame")
+                files.push_back(it->path());
+        }
+        std::sort(files.begin(), files.end());
+        if (files.size() > 1)
+        {
+            warnings.push_back("複数の .replaygame があるため先頭を使います: " +
+                files.front().filename().generic_u8string());
+        }
+        return files.empty() ? std::filesystem::path{} : files.front();
+    }
+
+    GameLaunchConfig LoadGameLaunchConfig(const std::filesystem::path& executable_directory)
+    {
+        GameLaunchConfig config;
+        config.file = FindReplayGameFile(executable_directory, config.warnings);
+        config.file_found = !config.file.empty();
+        if (!config.file_found) return config;
+
+        std::ifstream stream(config.file, std::ios::binary);
+        if (!stream)
+        {
+            config.warnings.push_back(".replaygame を開けません。既定値で続行します: " +
+                config.file.generic_u8string());
+            return config;
+        }
+
+        std::string line;
+        if (!std::getline(stream, line) || TrimCopy(line) != "REPLAY_GAME 1")
+        {
+            config.warnings.push_back(".replaygame の先頭行が不正です。既定値で続行します: " +
+                config.file.generic_u8string());
+            return config;
+        }
+
+        config.file_loaded = true;
+        int line_number = 1;
+        while (std::getline(stream, line))
+        {
+            ++line_number;
+            line = TrimCopy(line);
+            if (line.empty() || line.front() == '#') continue;
+
+            std::istringstream parser(line);
+            std::string key;
+            parser >> key;
+            if (key == "NAME")
+            {
+                std::string rest;
+                std::getline(parser, rest);
+                rest = TrimCopy(rest);
+                if (!rest.empty()) config.name = rest;
+                else config.warnings.push_back("NAME が空です。既定名を使います");
+            }
+            else if (key == "STARTUP_SCENE")
+            {
+                std::string rest;
+                std::getline(parser, rest);
+                rest = TrimCopy(rest);
+                if (!rest.empty()) config.startup_scene = std::filesystem::u8path(rest);
+            }
+            else if (key == "WINDOW")
+            {
+                int width = 0;
+                int height = 0;
+                if ((parser >> width >> height) && width > 0 && height > 0)
+                {
+                    config.window_width = static_cast<UINT>((std::max)(width, 1));
+                    config.window_height = static_cast<UINT>((std::max)(height, 1));
+                }
+                else
+                {
+                    config.warnings.push_back("WINDOW が不正です: line " +
+                        std::to_string(line_number));
+                }
+            }
+            else if (key == "FULLSCREEN")
+            {
+                int value = 0;
+                if (parser >> value) config.fullscreen = value != 0;
+                else config.warnings.push_back("FULLSCREEN が不正です: line " +
+                    std::to_string(line_number));
+            }
+        }
+        return config;
+    }
+
     std::uint32_t ParseAutomatedSmokeTestFrames(const char* command_line)
     {
         std::istringstream arguments(command_line != nullptr ? command_line : "");
@@ -116,7 +294,7 @@ namespace
 
     std::filesystem::path ValidationFolder()
     {
-        return std::filesystem::path("Saved") / "Validation";
+        return framework::shutdown_log_folder() / "Validation";
     }
 
     void WriteValidationResultFile(const char* file_name, const char* header,
@@ -356,8 +534,7 @@ namespace
         ID3D11InfoQueue* info_queue, bool report_available,
         HRESULT report_result)
     {
-        const std::filesystem::path validation_folder =
-            std::filesystem::path("Saved") / "Validation";
+        const std::filesystem::path validation_folder = ValidationFolder();
         std::error_code directory_error;
         std::filesystem::create_directories(validation_folder, directory_error);
 
@@ -457,7 +634,7 @@ namespace
 
         using ReplayEngine::Rendering::MaterialAlphaMode;
         using ReplayEngine::Rendering::MaterialAsset;
-        const std::filesystem::path folder = std::filesystem::path("Saved") / "Validation";
+        const std::filesystem::path folder = ValidationFolder();
         const std::filesystem::path material_path = folder / "MaterialFoundation.replaymaterial";
 
         MaterialAsset material;
@@ -576,8 +753,8 @@ namespace
         child->GetTransform().SetLocalPosition({ 0.0f, 4.0f, 0.0f });
 
         namespace Serialization = ReplayEngine::Scene::Serialization;
-        const std::filesystem::path prefab_path = std::filesystem::path("Saved") /
-            "Validation" / "PrefabFoundation.replayprefab";
+        const std::filesystem::path prefab_path =
+            ValidationFolder() / "PrefabFoundation.replayprefab";
         constexpr const char* source_guid = "validation-prefab-guid";
         std::string error;
         const ReplayEngine::Core::ObjectID original_root = root->ID();
@@ -811,8 +988,7 @@ namespace
             return 35;
         }
 
-        const std::filesystem::path validation_folder =
-            std::filesystem::path("Saved") / "Validation";
+        const std::filesystem::path validation_folder = ValidationFolder();
         std::error_code directory_error;
         std::filesystem::create_directories(validation_folder, directory_error);
         const std::filesystem::path output_path =
@@ -926,8 +1102,7 @@ namespace
     DXGILiveObjectFileSummary WriteDXGILiveObjectReportFile(
         IDXGIInfoQueue* info_queue, bool report_available, HRESULT report_result)
     {
-        const std::filesystem::path validation_folder =
-            std::filesystem::path("Saved") / "Validation";
+        const std::filesystem::path validation_folder = ValidationFolder();
         std::error_code directory_error;
         std::filesystem::create_directories(validation_folder, directory_error);
 
@@ -1143,8 +1318,8 @@ namespace
         namespace Serialization = ReplayEngine::Scene::Serialization;
         Serialization::SceneData captured;
         Serialization::CaptureScene(scene, captured);
-        const std::filesystem::path output = std::filesystem::path("Saved") /
-            "Validation" / "LargeScene1000.replayscene";
+        const std::filesystem::path output =
+            ValidationFolder() / "LargeScene1000.replayscene";
         std::string error;
         const auto save_begin = clock::now();
         if (!Serialization::SceneSerializer::SaveToFile(captured, output, error))
@@ -1247,8 +1422,8 @@ namespace
 
         Serialization::SceneData captured;
         Serialization::CaptureScene(scene, captured);
-        const std::filesystem::path roundtrip_path = std::filesystem::path("Saved") /
-            "Validation" / (scene_path.stem().string() + ".roundtrip.replayscene");
+        const std::filesystem::path roundtrip_path = ValidationFolder() /
+            (scene_path.stem().string() + ".roundtrip.replayscene");
         if (!Serialization::SceneSerializer::SaveToFile(captured, roundtrip_path, error))
         {
             std::fprintf(stderr, "Round-trip save failed: %s\n", error.c_str());
@@ -1986,28 +2161,15 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
     // WICの画像読み込みはCOMを使うため、エンジンの生存期間中は初期化状態を維持する。
     // シーン切り替え後もWICファクトリを確実に利用できるようにする。
 	const HRESULT com_result = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    // 相対パスの基準を実行ファイルの場所へ統一する。
-    // Visual Studioの作業ディレクトリ設定に依存せず、直接起動でも同じ動作にする。
-	std::array<wchar_t, 32768> executable_path{};
-	const DWORD path_length = GetModuleFileNameW(nullptr, executable_path.data(),
-		static_cast<DWORD>(executable_path.size()));
-	if (path_length > 0 && path_length < executable_path.size())
-	{
-		std::wstring directory(executable_path.data(), path_length);
-		const size_t separator = directory.find_last_of(L"\\/");
-		if (separator != std::wstring::npos)
-		{
-			directory.resize(separator);
-			const std::wstring packaged_resources = directory + L"\\resources";
-			const DWORD attributes = GetFileAttributesW(packaged_resources.c_str());
-			if (attributes == INVALID_FILE_ATTRIBUTES || !(attributes & FILE_ATTRIBUTE_DIRECTORY))
-			{
-        // Visual Studioの配置は「プロジェクト/x64/構成/3dgp.exe」となる。
-				directory += L"\\..\\..";
-			}
-			SetCurrentDirectoryW(directory.c_str());
-		}
-	}
+    // 読み込みの基準は exe の隣に置かれた配布フォルダ。
+    // Visual Studio 配置(x64/Debug)だけは project root へ戻して従来の編集起動を保つ。
+    const ExecutableLayout executable_layout = ResolveExecutableLayout();
+    if (!executable_layout.content_root.empty())
+        SetCurrentDirectoryW(executable_layout.content_root.wstring().c_str());
+    const GameLaunchConfig game_launch =
+        LoadGameLaunchConfig(executable_layout.executable_directory);
+    for (const std::string& warning : game_launch.warnings)
+        OutputDebugStringA(("[ReplayGame] " + warning + "\n").c_str());
 
 	srand(static_cast<unsigned int>(time(nullptr)));
 
@@ -2030,7 +2192,9 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
 	wcex.hIconSm = 0;
 	RegisterClassExW(&wcex);
 
-	RECT rc{ 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT };
+	RECT rc{ 0, 0,
+        static_cast<LONG>(game_launch.window_width),
+        static_cast<LONG>(game_launch.window_height) };
 	AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, FALSE);
 	HWND hwnd = CreateWindowExW(0, APPLICATION_NAME, L"", WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT, CW_USEDEFAULT, rc.right - rc.left, rc.bottom - rc.top,
@@ -2053,8 +2217,20 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
 #endif
     {
 	    framework application(hwnd);
+        application.configure_content_root(executable_layout.content_root);
+        if (game_launch.file_found)
+        {
+            application.configure_standalone_game(
+                executable_layout.content_root, game_launch.name);
+            if (!game_launch.startup_scene.empty())
+                application.set_startup_scene_path(game_launch.startup_scene);
+        }
+        application.set_startup_window_size(
+            game_launch.window_width, game_launch.window_height);
+        if (game_launch.fullscreen) application.request_startup_fullscreen();
         application.set_automated_smoke_test_frames(automated_smoke_test_frames);
-        if (ParseStartupSceneBoot(cmd_line)) application.request_startup_scene_boot();
+        if (ParseStartupSceneBoot(cmd_line) || game_launch.file_found)
+            application.request_startup_scene_boot();
         if (shutdown_regression_requested)
         {
             // 数フレーム描画してから終了させる。
@@ -2153,8 +2329,7 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
     {
         std::fprintf(stderr, "Runtime smoke test: %u rendered frames, exit code %d\n",
             automated_smoke_test_frames, exit_code);
-        const std::filesystem::path validation_folder =
-            std::filesystem::path("Saved") / "Validation";
+        const std::filesystem::path validation_folder = ValidationFolder();
         std::error_code directory_error;
         std::filesystem::create_directories(validation_folder, directory_error);
         std::ofstream report(validation_folder / "RuntimeSmoke.txt",

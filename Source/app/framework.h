@@ -7,6 +7,7 @@
 #include <vector>
 #include <array>
 #include <algorithm>
+#include <utility>
 #include "skinned_mesh.h"
 #include "misc.h"
 #include "high_resolution_timer.h"
@@ -96,6 +97,7 @@ extern ImWchar glyphRangesJapanese[];
 #include "../../RePlayEngine/Rendering/Adapter/RenderItem.h"
 #include "../../RePlayEngine/Scene/Services/PlayerControlSystem.h"
 #include "../../RePlayEngine/Scene/Services/SceneCollisionWorld.h"
+#include "../../RePlayEngine/Physics/PhysicsDynamicsWorld.h"
 #include "../../RePlayEngine/Editor/Debug/ColliderDebugDraw.h"
 #include "../../RePlayEngine/Editor/Validation/ValidationPanel.h"
 #include "../../RePlayEngine/Editor/ShaderEditing/ShaderComposerEditor.h"
@@ -427,8 +429,14 @@ public:
         ReplayEngine::Core::invalid_world_instance_id };
 
     // 起動時に Startup Scene から Runtime を始めるか。
-    // main.cpp が --game を受け取ったときだけ true になる。
+    // main.cpp が --game または .replaygame を受け取ったときだけ true になる。
     bool object_boot_from_startup_scene{ false };
+
+    // 書き出したゲームとして起動しているか。
+    // Editor UI を削らず、実行時分岐だけで通さないための判定。
+    bool standalone_game_mode{ false };
+    std::string standalone_game_name{ "RePlayGame" };
+    std::filesystem::path standalone_startup_scene_path;
 
     // Runtime World が「今このフレームで動かしている World」かどうか。
     //
@@ -534,6 +542,17 @@ public:
     // BeginPopupModal の戻り値だけでは、開いていないのか閉じられたのかが分からない。
     bool object_unsaved_prompt_open{ false };
 
+    bool export_game_dialog_open{ false };
+    bool export_overwrite_prompt_open{ false };
+    bool export_exporting{ false };
+    char export_game_name[128]{ "MyGame" };
+    char export_folder[512]{};
+    char export_startup_scene[512]{};
+    std::filesystem::path export_pending_root;
+    std::filesystem::path export_pending_scene;
+    std::string export_status;
+    std::vector<std::string> export_errors;
+
     // 操作対象を型ではなく ObjectID で持つ。
     // 人型からメカ・ドローンへ変えても GameObject のクラス型は変わらない。
     ReplayEngine::Scene::PlayerControlSystem player_control_system;
@@ -555,6 +574,8 @@ public:
     //   Component -> GetScene() -> Services().Physics() -> object_collision_world
     //   Motor は具象型を知らず、IPhysicsQueryService としてしか触らない。
     ReplayEngine::Scene::SceneCollisionWorld  object_collision_world;
+    // Query と Dynamics は別サービスとして維持する。
+    ReplayEngine::Scene::PhysicsDynamicsWorld object_physics_dynamics_world;
     ReplayEngine::Physics::CookedMeshCollisionCache object_collision_cook_cache;
 
     // Editor の Scene View へ形を描くための線分。毎フレーム作り直す。
@@ -670,17 +691,47 @@ public:
         automated_smoke_test_frames = frames;
         automated_smoke_test_frames_rendered = 0;
     }
+    void configure_content_root(std::filesystem::path content_root);
+    void configure_standalone_game(std::filesystem::path content_root,
+        std::string game_name);
+    void set_startup_scene_path(std::filesystem::path scene_path);
+    void set_startup_window_size(UINT width, UINT height) noexcept;
+    void request_startup_fullscreen() noexcept { startup_fullscreen_requested = true; }
+    bool standalone_game() const noexcept { return standalone_game_mode; }
+    const std::filesystem::path& content_root_path() const noexcept
+    {
+        return content_root_path_;
+    }
+    const std::filesystem::path& saved_root_path() const noexcept
+    {
+        return saved_root_path_;
+    }
+    std::filesystem::path content_path(const std::filesystem::path& relative) const;
+    std::filesystem::path saved_path(const std::filesystem::path& relative = {}) const;
+    std::filesystem::path collision_cache_path(const std::string& identity) const;
     Microsoft::WRL::ComPtr<ID3D11Debug> acquire_d3d11_debug() const noexcept;
     Microsoft::WRL::ComPtr<ID3D11InfoQueue> acquire_d3d11_info_queue() const noexcept;
 
     // 終了理由と主要な進行状況を Saved/engine_log.txt へ追記する。
     // 「なぜ落ちたか」が分からないと原因の切り分けができないため、
     // 例外や異常終了だけでなく正常終了の経路も残す。
+    static void set_shutdown_log_folder(std::filesystem::path folder)
+    {
+        shutdown_log_folder() = std::move(folder);
+    }
+
+    static std::filesystem::path& shutdown_log_folder()
+    {
+        static std::filesystem::path folder{ "Saved" };
+        return folder;
+    }
+
     static void log_shutdown_reason(const char* reason)
     {
         std::error_code error;
-        std::filesystem::create_directories("Saved", error);
-        std::ofstream log("Saved/engine_log.txt", std::ios::app);
+        const std::filesystem::path folder = shutdown_log_folder();
+        std::filesystem::create_directories(folder, error);
+        std::ofstream log(folder / "engine_log.txt", std::ios::app);
         if (!log) return;
         const auto now = std::chrono::system_clock::to_time_t(
             std::chrono::system_clock::now());
@@ -725,6 +776,7 @@ public:
         {
             ShowWindow(hwnd, show_command);
             UpdateWindow(hwnd);
+            if (startup_fullscreen_requested) toggle_fullscreen();
         }
 
         while (WM_QUIT != msg.message)
@@ -793,7 +845,7 @@ public:
         // Landscape Tool は編集中の LandscapeData を非所有で参照するため、
         // ImGui/Scene の破棄より前に Stroke と Collider interactive-edit を必ず閉じる。
         reset_landscape_editor_state(true);
-        save_editor_session();
+        if (!standalone_game_mode) save_editor_session();
         ImGui_ImplDX11_Shutdown();
         ImGui_ImplWin32_Shutdown();
         ImGui::DestroyContext();
@@ -901,7 +953,7 @@ public:
                 }
             }
         }
-        if (msg == WM_KEYDOWN && wparam == VK_F1)
+        if (!standalone_game_mode && msg == WM_KEYDOWN && wparam == VK_F1)
         {
             editor_mode = !editor_mode;
             set_edit_mode(editor_mode);
@@ -1058,6 +1110,10 @@ private:
     void draw_editor();
     void draw_editor_main_menu();
     void draw_editor_toolbar();
+    void open_export_game_dialog();
+    void draw_export_game_dialog();
+    bool export_standalone_game(const std::filesystem::path& export_root,
+        const std::filesystem::path& startup_scene, bool overwrite_existing);
     void draw_scene_view_panel();
 
     // --- 制作便利機能: Scene Memo / Play From Here / Scene Flow -------------
@@ -1388,12 +1444,15 @@ private:
 
 private:
     float luminance_threshold{ 1.0f };
+    std::filesystem::path content_root_path_;
+    std::filesystem::path saved_root_path_;
     UINT client_width{ SCREEN_WIDTH };
     UINT client_height{ SCREEN_HEIGHT };
     UINT pending_client_width{ SCREEN_WIDTH };
     UINT pending_client_height{ SCREEN_HEIGHT };
     bool resize_pending{ false };
     bool borderless_fullscreen{ false };
+    bool startup_fullscreen_requested{ false };
     DWORD windowed_style{ WS_OVERLAPPEDWINDOW | WS_VISIBLE };
     DWORD windowed_ex_style{ 0 };
     RECT windowed_rect{ 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT };

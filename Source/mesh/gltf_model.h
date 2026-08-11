@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <d3d11.h>
 #include <wrl.h>
@@ -18,6 +18,7 @@ class gltf_model
 {
 public:
     explicit gltf_model(ID3D11Device* device, const std::string& filename);
+    static void SetCacheRoot(std::filesystem::path root);
     // LOD生成スレッドを回収してから破棄する。
     ~gltf_model();
     gltf_model(const gltf_model&) = delete;
@@ -63,6 +64,8 @@ public:
         bool depth_only = false);
 
 private:
+    static const std::filesystem::path& CacheRoot();
+
     struct Vertex
     {
         DirectX::XMFLOAT3 position{};

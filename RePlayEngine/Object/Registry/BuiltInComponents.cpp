@@ -21,6 +21,7 @@
 #include "../../Components/Physics/BoxColliderComponent.h"
 #include "../../Components/Physics/CapsuleColliderComponent.h"
 #include "../../Components/Physics/MeshColliderComponent.h"
+#include "../../Components/Physics/RigidbodyComponent.h"
 #include "../../Components/Physics/SphereColliderComponent.h"
 #include "../../Components/Landscape/LandscapeComponent.h"
 #include "../../Components/Landscape/LandscapeRendererComponent.h"
@@ -61,6 +62,7 @@ namespace ReplayEngine::Core
         using Components::FollowTargetComponent;
         using Components::HealthComponent;
         using Components::MeshColliderComponent;
+        using Components::RigidbodyComponent;
         using Components::LandscapeComponent;
         using Components::LandscapeRendererComponent;
         using Components::LandscapeColliderComponent;
@@ -618,6 +620,72 @@ namespace ReplayEngine::Core
                 MakeProperty<T, bool>("debug_draw", &T::debug_draw)
                     .Display("形状を表示")
                     .Tooltip("Editor の Scene View へ形状を描く。"));
+        }
+
+        void RegisterRigidbody()
+        {
+            ComponentRegistry::Register<RigidbodyComponent>(
+                ComponentTypeInfo::Describe("Rigidbody", "Physics")
+                    .WithTooltip(
+                        "質量・重力・摩擦を使って Collider を動かす動的剛体。"
+                        "Transform を直接書き換える場合は次の FixedUpdate で物理値に同期される。")
+                    .Recommends<SphereColliderComponent>()
+                    .Recommends<BoxColliderComponent>()
+                    .Recommends<CapsuleColliderComponent>());
+
+            PropertyRegistry::Register<RigidbodyComponent>(
+                MakeProperty("body_type", &RigidbodyComponent::body_type)
+                    .Display("種別")
+                    .AsEnum({ "静的", "キネマティック", "動的" })
+                    .Tooltip("Mesh / Landscape を Dynamic にした場合は警告を出して Kinematic として扱う。"));
+            PropertyRegistry::Register<RigidbodyComponent>(
+                MakeProperty("mass", &RigidbodyComponent::mass)
+                    .Display("質量").Range(0.001, 10000.0).Step(0.01));
+            PropertyRegistry::Register<RigidbodyComponent>(
+                MakeProperty("linear_damping", &RigidbodyComponent::linear_damping)
+                    .Display("移動の減衰").Range(0.0, 10.0).Step(0.01));
+            PropertyRegistry::Register<RigidbodyComponent>(
+                MakeProperty("angular_damping", &RigidbodyComponent::angular_damping)
+                    .Display("回転の減衰").Range(0.0, 10.0).Step(0.01));
+            PropertyRegistry::Register<RigidbodyComponent>(
+                MakeProperty("gravity_scale", &RigidbodyComponent::gravity_scale)
+                    .Display("重力の倍率").Range(-10.0, 10.0).Step(0.01));
+            PropertyRegistry::Register<RigidbodyComponent>(
+                MakeProperty("restitution", &RigidbodyComponent::restitution)
+                    .Display("反発").Range(0.0, 1.0).Step(0.01));
+            PropertyRegistry::Register<RigidbodyComponent>(
+                MakeProperty("friction", &RigidbodyComponent::friction)
+                    .Display("摩擦").Range(0.0, 2.0).Step(0.01));
+            PropertyRegistry::Register<RigidbodyComponent>(
+                MakeProperty("freeze_position", &RigidbodyComponent::freeze_position)
+                    .Display("位置を固定").Tooltip("X / Y / Z が 0.5 以上の軸を固定する。"));
+            PropertyRegistry::Register<RigidbodyComponent>(
+                MakeProperty("freeze_rotation", &RigidbodyComponent::freeze_rotation)
+                    .Display("回転を固定").Tooltip("X / Y / Z が 0.5 以上の軸を固定する。"));
+            PropertyRegistry::Register<RigidbodyComponent>(
+                MakeProperty("start_asleep", &RigidbodyComponent::start_asleep)
+                    .Display("停止状態で開始"));
+            PropertyRegistry::Register<RigidbodyComponent>(
+                MakeProperty("use_ccd", &RigidbodyComponent::use_ccd)
+                    .Display("高速移動の貫通対策")
+                    .Tooltip("CCD は Phase 3 で有効化する。設定値は先に保存できる。"));
+
+            PropertyRegistry::Register<RigidbodyComponent>(
+                MakeProperty("linear_velocity", &RigidbodyComponent::linear_velocity)
+                    .Display("移動速度").RuntimeOnly().ReadOnly().NotSerializable());
+            PropertyRegistry::Register<RigidbodyComponent>(
+                MakeProperty("angular_velocity", &RigidbodyComponent::angular_velocity)
+                    .Display("回転速度").RuntimeOnly().ReadOnly().NotSerializable());
+            PropertyRegistry::Register<RigidbodyComponent>(
+                MakeProperty("is_sleeping", &RigidbodyComponent::is_sleeping)
+                    .Display("停止中").RuntimeOnly().ReadOnly().NotSerializable());
+            PropertyRegistry::Register<RigidbodyComponent>(
+                MakeAccessorProperty<RigidbodyComponent>("status", PropertyType::String,
+                    [](const RigidbodyComponent& component)
+                    { return PropertyValue::MakeString(component.StatusMessage()); },
+                    [](RigidbodyComponent&, const PropertyValue&) {})
+                    .Display("状態").ReadOnly().NotSerializable()
+                    .Tooltip("Collider が無い場合や Dynamic 非対応形状はここへ警告を表示する。"));
         }
 
         void RegisterSphereCollider()
@@ -1779,6 +1847,7 @@ namespace ReplayEngine::Core
         RegisterMotion();
         RegisterSkinnedMeshRenderer();
         RegisterAnimator();
+        RegisterRigidbody();
         RegisterSphereCollider();
         RegisterBoxCollider();
         RegisterCapsuleCollider();
