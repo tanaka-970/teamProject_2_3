@@ -234,6 +234,8 @@
     <ClCompile Include="RePlayEngine\Editor\ShaderEditing\ShaderComposerEditor.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerAsset.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerGenerator.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerGeneratorFile.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerGeneratorNodes.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerValidation.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Materials\ShaderLayerBinding.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\ShaderStack\BuiltInShaderLayers.cpp" />
@@ -258,6 +260,9 @@
     <ClCompile Include="Source\core\framebuffer.cpp" />
     <ClCompile Include="Source\core\fullscreen_quad.cpp" />
     <ClCompile Include="Source\mesh\geometric_primitive.cpp" />
+    <ClCompile Include="Source\mesh\geometric_primitive_capsule.cpp" />
+    <ClCompile Include="Source\mesh\geometric_primitive_cylinder.cpp" />
+    <ClCompile Include="Source\mesh\geometric_primitive_sphere.cpp" />
     <ClCompile Include="Source\mesh\gltf_model.cpp" />
     <ClCompile Include="Source\mesh\gltf_modelLoad.cpp" />
     <ClCompile Include="Source\mesh\gltf_modelTexture.cpp" />
@@ -295,6 +300,8 @@
     <ClCompile Include="Source\app\Editor\framework_editor_scene_view.cpp" />
     <ClCompile Include="Source\app\Runtime\framework.cpp" />
     <ClCompile Include="Source\app\Editor\framework_asset_browser.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_asset_browser_material.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_asset_browser_model.cpp" />
     <ClCompile Include="Source\app\Editor\framework_editor_commands.cpp" />
     <ClCompile Include="Source\app\Runtime\framework_initialize.cpp" />
     <ClCompile Include="Source\app\Editor\framework_editor.cpp" />
@@ -375,6 +382,8 @@
     <ClCompile Include="Source\app\Editor\framework_project_browser_view.cpp" />
     <ClCompile Include="Source\app\Editor\framework_project_browser_entry.cpp" />
     <ClCompile Include="Source\app\Editor\framework_convenience_tools.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_convenience_tools_play.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_convenience_tools_scene_flow.cpp" />
     <ClCompile Include="Source\app\Editor\framework_shader_catalog.cpp" />
     <ClCompile Include="Source\app\Editor\framework_golden.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Capture\GoldenImage.cpp" />
@@ -414,6 +423,9 @@
     <ClCompile Include="RePlayEngine\Scripting\Validation\CSharpScriptValidation.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\Validation\ScriptCoreValidation.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\API\RuntimeContext.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\API\RuntimeContextMotion.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\API\RuntimeContextScene.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\API\RuntimeContextServices.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourValidation.cpp" />
     <ClCompile Include="Source\game\Behaviours\ValidationBehaviours.cpp" />
     <ClCompile Include="RePlayEngine\Scene\Runtime\Scene.cpp" />
@@ -428,6 +440,9 @@
     <ClCompile Include="RePlayEngine\Audio\AudioSystem.cpp" />
     <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponents.cpp" />
     <ClCompile Include="RePlayEngine\Scene\Serialization\SceneData.cpp" />
+    <ClCompile Include="RePlayEngine\Scene\Serialization\SceneDataApply.cpp" />
+    <ClCompile Include="RePlayEngine\Scene\Serialization\SceneDataDuplicate.cpp" />
+    <ClCompile Include="RePlayEngine\Scene\Serialization\SceneDataPrefab.cpp" />
     <ClCompile Include="RePlayEngine\Scene\Serialization\SceneSerializer.cpp" />
     <ClCompile Include="RePlayEngine\Scene\Serialization\SceneSerializerInternal.cpp" />
     <ClCompile Include="RePlayEngine\Scene\Serialization\SceneSerializerWrite.cpp" />
@@ -495,6 +510,8 @@
     <ClCompile Include="Source\app\Runtime\framework_collision_mesh_source.cpp" />
     <ClCompile Include="Source\app\Editor\framework_collider_debug.cpp" />
     <ClCompile Include="RePlayEngine\Landscape\LandscapeData.cpp" />
+    <ClCompile Include="RePlayEngine\Landscape\LandscapeDataSerialization.cpp" />
+    <ClCompile Include="RePlayEngine\Landscape\LandscapeDataTopology.cpp" />
     <ClCompile Include="RePlayEngine\Landscape\LandscapeMeshGenerator.cpp" />
     <ClCompile Include="RePlayEngine\Landscape\LandscapeRenderer.cpp" />
     <ClCompile Include="RePlayEngine\Landscape\LandscapeCollision.cpp" />
@@ -558,6 +575,7 @@
     <ClInclude Include="RePlayEngine\Editor\ShaderEditing\ShaderComposerEditor.h" />
     <ClInclude Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerAsset.h" />
     <ClInclude Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerGenerator.h" />
+    <ClInclude Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerGeneratorInternal.h" />
     <ClInclude Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerValidation.h" />
     <ClInclude Include="RePlayEngine\Rendering\Materials\ShaderLayerBinding.h" />
     <ClInclude Include="RePlayEngine\Rendering\ShaderStack\BuiltInShaderLayers.h" />
@@ -579,6 +597,7 @@
     <ClInclude Include="Source\app\framework.h" />
     <ClInclude Include="Source\app\Editor\framework_motion_workspaceInternal.h" />
     <ClInclude Include="Source\app\Editor\framework_project_browserInternal.h" />
+    <ClInclude Include="Source\app\Editor\framework_asset_browserInternal.h" />
     <ClInclude Include="Source\app\Runtime\mainInternal.h" />
     <ClInclude Include="Source\core\fullscreen_quad.h" />
     <ClInclude Include="Source\mesh\geometric_primitive.h" />
@@ -689,6 +708,7 @@
     <ClInclude Include="RePlayEngine\Audio\AudioSystem.h" />
     <ClInclude Include="RePlayEngine\Object\Registry\BuiltInComponents.h" />
     <ClInclude Include="RePlayEngine\Scene\Serialization\SceneData.h" />
+    <ClInclude Include="RePlayEngine\Scene\Serialization\SceneDataInternal.h" />
     <ClInclude Include="RePlayEngine\Scene\Serialization\SceneSerializer.h" />
     <ClInclude Include="RePlayEngine\Scene\Serialization\SceneSerializerInternal.h" />
     <ClInclude Include="RePlayEngine\Editor\Core\EditorContext.h" />
@@ -749,6 +769,7 @@
     <ClInclude Include="RePlayEngine\Landscape\LandscapeMaterial.h" />
     <ClInclude Include="RePlayEngine\Landscape\LandscapeBrush.h" />
     <ClInclude Include="RePlayEngine\Landscape\LandscapeData.h" />
+    <ClInclude Include="RePlayEngine\Landscape\LandscapeDataInternal.h" />
     <ClInclude Include="RePlayEngine\Landscape\LandscapeMeshGenerator.h" />
     <ClInclude Include="RePlayEngine\Landscape\LandscapeRenderer.h" />
     <ClInclude Include="RePlayEngine\Landscape\LandscapeCollision.h" />

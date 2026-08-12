@@ -375,6 +375,15 @@
     <ClCompile Include="Source\mesh\geometric_primitive.cpp">
       <Filter>Source\Mesh</Filter>
     </ClCompile>
+    <ClCompile Include="Source\mesh\geometric_primitive_capsule.cpp">
+      <Filter>Source\Mesh</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\mesh\geometric_primitive_cylinder.cpp">
+      <Filter>Source\Mesh</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\mesh\geometric_primitive_sphere.cpp">
+      <Filter>Source\Mesh</Filter>
+    </ClCompile>
     <ClCompile Include="Source\mesh\gltf_model.cpp">
       <Filter>Source\Mesh</Filter>
     </ClCompile>
@@ -481,6 +490,12 @@
       <Filter>Source\App\Runtime</Filter>
     </ClCompile>
     <ClCompile Include="Source\app\Editor\framework_asset_browser.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_asset_browser_material.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_asset_browser_model.cpp">
       <Filter>Source\App\Editor</Filter>
     </ClCompile>
     <ClCompile Include="Source\app\Editor\framework_editor_commands.cpp">
@@ -744,6 +759,15 @@
     <ClCompile Include="RePlayEngine\Runtime\API\RuntimeContext.cpp">
       <Filter>RePlayEngine\Runtime\API</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Runtime\API\RuntimeContextMotion.cpp">
+      <Filter>RePlayEngine\Runtime\API</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Runtime\API\RuntimeContextScene.cpp">
+      <Filter>RePlayEngine\Runtime\API</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Runtime\API\RuntimeContextServices.cpp">
+      <Filter>RePlayEngine\Runtime\API</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourValidation.cpp">
       <Filter>RePlayEngine\Runtime\Validation</Filter>
     </ClCompile>
@@ -823,6 +847,15 @@
       <Filter>RePlayEngine\Object\Registry</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Scene\Serialization\SceneData.cpp">
+      <Filter>RePlayEngine\Scene\Serialization</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scene\Serialization\SceneDataApply.cpp">
+      <Filter>RePlayEngine\Scene\Serialization</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scene\Serialization\SceneDataDuplicate.cpp">
+      <Filter>RePlayEngine\Scene\Serialization</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scene\Serialization\SceneDataPrefab.cpp">
       <Filter>RePlayEngine\Scene\Serialization</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Scene\Serialization\SceneSerializer.cpp">
@@ -1053,6 +1086,12 @@
     <ClCompile Include="Source\app\Editor\framework_convenience_tools.cpp">
       <Filter>Source\App\Editor</Filter>
     </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_convenience_tools_play.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_convenience_tools_scene_flow.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Runtime\Validation\RuntimeSceneValidation.cpp">
       <Filter>RePlayEngine\Runtime\Validation</Filter>
     </ClCompile>
@@ -1170,6 +1209,9 @@
       <Filter>Source\App</Filter>
     </ClInclude>
     <ClInclude Include="Source\app\Editor\framework_motion_workspaceInternal.h">
+      <Filter>Source\App\Editor</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\app\Editor\framework_asset_browserInternal.h">
       <Filter>Source\App\Editor</Filter>
     </ClInclude>
     <ClInclude Include="Source\app\Editor\framework_project_browserInternal.h">
@@ -1539,6 +1581,9 @@
       <Filter>RePlayEngine\Object\Registry</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Scene\Serialization\SceneData.h">
+      <Filter>RePlayEngine\Scene\Serialization</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Scene\Serialization\SceneDataInternal.h">
       <Filter>RePlayEngine\Scene\Serialization</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Scene\Serialization\SceneSerializer.h">
@@ -2108,6 +2153,8 @@
     <ClCompile Include="RePlayEngine\Components\Landscape\LandscapeRendererComponent.cpp"><Filter>RePlayEngine\Components\Landscape</Filter></ClCompile>
     <ClCompile Include="RePlayEngine\Components\Landscape\LandscapeColliderComponent.cpp"><Filter>RePlayEngine\Components\Landscape</Filter></ClCompile>
     <ClCompile Include="RePlayEngine\Landscape\LandscapeData.cpp"><Filter>RePlayEngine\Landscape</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Landscape\LandscapeDataSerialization.cpp"><Filter>RePlayEngine\Landscape</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Landscape\LandscapeDataTopology.cpp"><Filter>RePlayEngine\Landscape</Filter></ClCompile>
     <ClCompile Include="RePlayEngine\Landscape\LandscapeMeshGenerator.cpp"><Filter>RePlayEngine\Landscape</Filter></ClCompile>
     <ClCompile Include="RePlayEngine\Landscape\LandscapeRenderer.cpp"><Filter>RePlayEngine\Landscape</Filter></ClCompile>
     <ClCompile Include="RePlayEngine\Landscape\LandscapeCollision.cpp"><Filter>RePlayEngine\Landscape</Filter></ClCompile>
@@ -2120,6 +2167,7 @@
     <ClInclude Include="RePlayEngine\Components\Landscape\LandscapeRendererComponent.h"><Filter>RePlayEngine\Components\Landscape</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Components\Landscape\LandscapeColliderComponent.h"><Filter>RePlayEngine\Components\Landscape</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Landscape\LandscapeData.h"><Filter>RePlayEngine\Landscape</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Landscape\LandscapeDataInternal.h"><Filter>RePlayEngine\Landscape</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Landscape\LandscapeMeshGenerator.h"><Filter>RePlayEngine\Landscape</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Landscape\LandscapeRenderer.h"><Filter>RePlayEngine\Landscape</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Landscape\LandscapeCollision.h"><Filter>RePlayEngine\Landscape</Filter></ClInclude>
@@ -2145,6 +2193,8 @@
     <ClCompile Include="RePlayEngine\Editor\ShaderEditing\ShaderComposerEditor.cpp"><Filter>RePlayEngine\Editor\ShaderEditing</Filter></ClCompile>
     <ClCompile Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerAsset.cpp"><Filter>RePlayEngine\Rendering</Filter></ClCompile>
     <ClCompile Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerGenerator.cpp"><Filter>RePlayEngine\Rendering</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerGeneratorFile.cpp"><Filter>RePlayEngine\Rendering</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerGeneratorNodes.cpp"><Filter>RePlayEngine\Rendering</Filter></ClCompile>
     <ClCompile Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerValidation.cpp"><Filter>RePlayEngine\Rendering</Filter></ClCompile>
     <ClCompile Include="RePlayEngine\Rendering\Materials\ShaderLayerBinding.cpp"><Filter>RePlayEngine\Rendering\Materials</Filter></ClCompile>
     <ClCompile Include="RePlayEngine\Rendering\ShaderStack\BuiltInShaderLayers.cpp"><Filter>RePlayEngine\Rendering\ShaderStack</Filter></ClCompile>
@@ -2155,6 +2205,7 @@
     <ClInclude Include="RePlayEngine\Editor\ShaderEditing\ShaderComposerEditor.h"><Filter>RePlayEngine\Editor\ShaderEditing</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerAsset.h"><Filter>RePlayEngine\Rendering</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerGenerator.h"><Filter>RePlayEngine\Rendering</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerGeneratorInternal.h"><Filter>RePlayEngine\Rendering</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerValidation.h"><Filter>RePlayEngine\Rendering</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Rendering\Materials\ShaderLayerBinding.h"><Filter>RePlayEngine\Rendering\Materials</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Rendering\ShaderStack\BuiltInShaderLayers.h"><Filter>RePlayEngine\Rendering\ShaderStack</Filter></ClInclude>
