@@ -378,6 +378,18 @@
     <ClCompile Include="Source\mesh\gltf_model.cpp">
       <Filter>Source\Mesh</Filter>
     </ClCompile>
+    <ClCompile Include="Source\mesh\gltf_modelLoad.cpp">
+      <Filter>Source\Mesh</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\mesh\gltf_modelTexture.cpp">
+      <Filter>Source\Mesh</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\mesh\gltf_modelLod.cpp">
+      <Filter>Source\Mesh</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\mesh\gltf_modelRender.cpp">
+      <Filter>Source\Mesh</Filter>
+    </ClCompile>
     <ClCompile Include="Source\render\lights_manager.cpp">
       <Filter>Source\Render</Filter>
     </ClCompile>
@@ -531,6 +543,18 @@
     <ClCompile Include="Source\mesh\skinned_mesh.cpp">
       <Filter>Source\Mesh</Filter>
     </ClCompile>
+    <ClCompile Include="Source\mesh\skinned_meshImport.cpp">
+      <Filter>Source\Mesh</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\mesh\skinned_meshAnimation.cpp">
+      <Filter>Source\Mesh</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\mesh\skinned_meshDevice.cpp">
+      <Filter>Source\Mesh</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\mesh\skinned_meshRender.cpp">
+      <Filter>Source\Mesh</Filter>
+    </ClCompile>
     <ClCompile Include="Source\mesh\sprite.cpp">
       <Filter>Source\Mesh</Filter>
     </ClCompile>
@@ -669,6 +693,21 @@
     <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpProject.cpp">
       <Filter>RePlayEngine\Scripting\CSharp</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpProjectInternal.cpp">
+      <Filter>RePlayEngine\Scripting\CSharp</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpProjectGeneration.cpp">
+      <Filter>RePlayEngine\Scripting\CSharp</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpProjectDiscovery.cpp">
+      <Filter>RePlayEngine\Scripting\CSharp</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpProjectBuild.cpp">
+      <Filter>RePlayEngine\Scripting\CSharp</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpProjectVisualStudio.cpp">
+      <Filter>RePlayEngine\Scripting\CSharp</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackend.cpp">
       <Filter>RePlayEngine\Scripting\CSharp</Filter>
     </ClCompile>
@@ -732,6 +771,18 @@
     <ClCompile Include="RePlayEngine\Reflection\Property\PropertyValue.cpp">
       <Filter>RePlayEngine\Reflection\Property</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Reflection\Property\PropertyValueAccessors.cpp">
+      <Filter>RePlayEngine\Reflection\Property</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Reflection\Property\PropertyValueComparison.cpp">
+      <Filter>RePlayEngine\Reflection\Property</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Reflection\Property\PropertyValueConversion.cpp">
+      <Filter>RePlayEngine\Reflection\Property</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Reflection\Property\PropertyValueInterpolation.cpp">
+      <Filter>RePlayEngine\Reflection\Property</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Reflection\Property\PropertyBag.cpp">
       <Filter>RePlayEngine\Reflection\Property</Filter>
     </ClCompile>
@@ -775,6 +826,15 @@
       <Filter>RePlayEngine\Scene\Serialization</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Scene\Serialization\SceneSerializer.cpp">
+      <Filter>RePlayEngine\Scene\Serialization</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scene\Serialization\SceneSerializerInternal.cpp">
+      <Filter>RePlayEngine\Scene\Serialization</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scene\Serialization\SceneSerializerWrite.cpp">
+      <Filter>RePlayEngine\Scene\Serialization</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scene\Serialization\SceneSerializerRead.cpp">
       <Filter>RePlayEngine\Scene\Serialization</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Editor\Core\EditorContext.cpp">
@@ -1127,6 +1187,9 @@
     <ClInclude Include="Source\mesh\gltf_model.h">
       <Filter>Source\Mesh</Filter>
     </ClInclude>
+    <ClInclude Include="Source\mesh\gltf_modelInternal.h">
+      <Filter>Source\Mesh</Filter>
+    </ClInclude>
     <ClInclude Include="Source\core\high_resolution_timer.h">
       <Filter>Source\Core</Filter>
     </ClInclude>
@@ -1173,6 +1236,9 @@
       <Filter>Source\Core</Filter>
     </ClInclude>
     <ClInclude Include="Source\mesh\skinned_mesh.h">
+      <Filter>Source\Mesh</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\mesh\skinned_meshInternal.h">
       <Filter>Source\Mesh</Filter>
     </ClInclude>
     <ClInclude Include="Source\mesh\sprite.h">
@@ -1320,6 +1386,9 @@
       <Filter>RePlayEngine\Scripting\Core</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Scripting\CSharp\CSharpProject.h">
+      <Filter>RePlayEngine\Scripting\CSharp</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Scripting\CSharp\CSharpProjectInternal.h">
       <Filter>RePlayEngine\Scripting\CSharp</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackend.h">
@@ -1473,6 +1542,9 @@
       <Filter>RePlayEngine\Scene\Serialization</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Scene\Serialization\SceneSerializer.h">
+      <Filter>RePlayEngine\Scene\Serialization</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Scene\Serialization\SceneSerializerInternal.h">
       <Filter>RePlayEngine\Scene\Serialization</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Editor\Core\EditorContext.h">

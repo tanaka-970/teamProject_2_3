@@ -259,6 +259,10 @@
     <ClCompile Include="Source\core\fullscreen_quad.cpp" />
     <ClCompile Include="Source\mesh\geometric_primitive.cpp" />
     <ClCompile Include="Source\mesh\gltf_model.cpp" />
+    <ClCompile Include="Source\mesh\gltf_modelLoad.cpp" />
+    <ClCompile Include="Source\mesh\gltf_modelTexture.cpp" />
+    <ClCompile Include="Source\mesh\gltf_modelLod.cpp" />
+    <ClCompile Include="Source\mesh\gltf_modelRender.cpp" />
     <ClCompile Include="Source\mesh\gltf_model_cache.cpp" />
     <ClCompile Include="Source\render\lights_manager.cpp" />
     <ClCompile Include="Source\render\pbr_renderer.cpp" />
@@ -315,6 +319,10 @@
     <ClCompile Include="Source\app\Rendering\framework_render.cpp" />
     <ClCompile Include="Source\core\shader.cpp" />
     <ClCompile Include="Source\mesh\skinned_mesh.cpp" />
+    <ClCompile Include="Source\mesh\skinned_meshImport.cpp" />
+    <ClCompile Include="Source\mesh\skinned_meshAnimation.cpp" />
+    <ClCompile Include="Source\mesh\skinned_meshDevice.cpp" />
+    <ClCompile Include="Source\mesh\skinned_meshRender.cpp" />
     <ClCompile Include="Source\mesh\sprite.cpp" />
     <ClCompile Include="Source\mesh\sprite_batch.cpp" />
     <ClCompile Include="Source\mesh\static_mesh.cpp" />
@@ -333,6 +341,10 @@
     <ClCompile Include="RePlayEngine\Object\GameObject\GameObject.cpp" />
     <ClCompile Include="RePlayEngine\Object\Registry\ComponentRegistry.cpp" />
     <ClCompile Include="RePlayEngine\Reflection\Property\PropertyValue.cpp" />
+    <ClCompile Include="RePlayEngine\Reflection\Property\PropertyValueAccessors.cpp" />
+    <ClCompile Include="RePlayEngine\Reflection\Property\PropertyValueComparison.cpp" />
+    <ClCompile Include="RePlayEngine\Reflection\Property\PropertyValueConversion.cpp" />
+    <ClCompile Include="RePlayEngine\Reflection\Property\PropertyValueInterpolation.cpp" />
     <ClCompile Include="RePlayEngine\Reflection\Property\PropertyBag.cpp" />
     <ClCompile Include="RePlayEngine\Reflection\Registry\PropertyRegistry.cpp" />
     <ClCompile Include="RePlayEngine\Reflection\Registry\TypeGUID.cpp" />
@@ -385,6 +397,11 @@
     <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderLibrary.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderSource.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpProject.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpProjectInternal.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpProjectGeneration.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpProjectDiscovery.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpProjectBuild.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpProjectVisualStudio.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackend.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendHost.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendAssembly.cpp" />
@@ -412,6 +429,9 @@
     <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponents.cpp" />
     <ClCompile Include="RePlayEngine\Scene\Serialization\SceneData.cpp" />
     <ClCompile Include="RePlayEngine\Scene\Serialization\SceneSerializer.cpp" />
+    <ClCompile Include="RePlayEngine\Scene\Serialization\SceneSerializerInternal.cpp" />
+    <ClCompile Include="RePlayEngine\Scene\Serialization\SceneSerializerWrite.cpp" />
+    <ClCompile Include="RePlayEngine\Scene\Serialization\SceneSerializerRead.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Core\EditorContext.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Selection\EditorSelection.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Commands\SceneEditHistory.cpp" />
@@ -563,6 +583,7 @@
     <ClInclude Include="Source\core\fullscreen_quad.h" />
     <ClInclude Include="Source\mesh\geometric_primitive.h" />
     <ClInclude Include="Source\mesh\gltf_model.h" />
+    <ClInclude Include="Source\mesh\gltf_modelInternal.h" />
     <ClInclude Include="Source\core\high_resolution_timer.h" />
     <ClInclude Include="imgui\imconfig.h" />
     <ClInclude Include="imgui\imgui.h" />
@@ -579,6 +600,7 @@
     <ClInclude Include="Source\render\shading_model.h" />
     <ClInclude Include="Source\core\shader.h" />
     <ClInclude Include="Source\mesh\skinned_mesh.h" />
+    <ClInclude Include="Source\mesh\skinned_meshInternal.h" />
     <ClInclude Include="Source\mesh\sprite.h" />
     <ClInclude Include="Source\mesh\sprite_batch.h" />
     <ClInclude Include="Source\mesh\static_mesh.h" />
@@ -636,6 +658,7 @@
     <ClInclude Include="RePlayEngine\Scripting\Core\ScriptValue.h" />
     <ClInclude Include="RePlayEngine\Scripting\Core\ScriptWorld.h" />
     <ClInclude Include="RePlayEngine\Scripting\CSharp\CSharpProject.h" />
+    <ClInclude Include="RePlayEngine\Scripting\CSharp\CSharpProjectInternal.h" />
     <ClInclude Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackend.h" />
     <ClInclude Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendHostInternal.h" />
     <ClInclude Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendNativeInternal.h" />
@@ -667,6 +690,7 @@
     <ClInclude Include="RePlayEngine\Object\Registry\BuiltInComponents.h" />
     <ClInclude Include="RePlayEngine\Scene\Serialization\SceneData.h" />
     <ClInclude Include="RePlayEngine\Scene\Serialization\SceneSerializer.h" />
+    <ClInclude Include="RePlayEngine\Scene\Serialization\SceneSerializerInternal.h" />
     <ClInclude Include="RePlayEngine\Editor\Core\EditorContext.h" />
     <ClInclude Include="RePlayEngine\Editor\Selection\EditorSelection.h" />
     <ClInclude Include="RePlayEngine\Editor\Commands\SceneEditHistory.h" />
