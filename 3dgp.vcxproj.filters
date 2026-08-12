@@ -354,6 +354,12 @@
       <ClCompile Include="RePlayEngine\Physics\PhysicsDynamicsWorld.cpp">
         <Filter>RePlayEngine\Physics</Filter>
       </ClCompile>
+      <ClCompile Include="RePlayEngine\Physics\PhysicsDynamicsWorldSolver.cpp">
+        <Filter>RePlayEngine\Physics</Filter>
+      </ClCompile>
+      <ClInclude Include="RePlayEngine\Physics\PhysicsDynamicsWorldInternal.h">
+        <Filter>RePlayEngine\Physics</Filter>
+      </ClInclude>
     <ClCompile Include="RePlayEngine\Scene\BootLogoScene.cpp">
       <Filter>RePlayEngine\Scene</Filter>
     </ClCompile>
@@ -498,6 +504,12 @@
     <ClCompile Include="Source\app\Editor\framework_landscape_editor.cpp">
       <Filter>Source\App\Editor</Filter>
     </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_landscape_editor_viewport.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClInclude Include="Source\app\Editor\framework_landscape_editorInternal.h">
+      <Filter>Source\App\Editor</Filter>
+    </ClInclude>
     <ClCompile Include="Source\app\Editor\framework_shader_stack.cpp">
       <Filter>Source\App\Editor</Filter>
     </ClCompile>
@@ -804,9 +816,21 @@
     <ClCompile Include="RePlayEngine\Editor\Inspector\InspectorPanel.cpp">
       <Filter>RePlayEngine\Editor\Inspector</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\Inspector\InspectorPanelMultiSelection.cpp">
+      <Filter>RePlayEngine\Editor\Inspector</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\Inspector\InspectorPanelComponents.cpp">
+      <Filter>RePlayEngine\Editor\Inspector</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Editor\Inspector\PropertyDrawer.cpp">
       <Filter>RePlayEngine\Editor\Inspector</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\Inspector\PropertyDrawerDraw.cpp">
+      <Filter>RePlayEngine\Editor\Inspector</Filter>
+    </ClCompile>
+    <ClInclude Include="RePlayEngine\Editor\Inspector\PropertyDrawerInternal.h">
+      <Filter>RePlayEngine\Editor\Inspector</Filter>
+    </ClInclude>
     <ClCompile Include="RePlayEngine\Editor\ComponentBrowser\AddComponentPanel.cpp">
       <Filter>RePlayEngine\Editor\ComponentBrowser</Filter>
     </ClCompile>
@@ -2084,6 +2108,15 @@
     <ClCompile Include="Source\app\Editor\framework_ui_workspace.cpp">
       <Filter>Source\App\Editor</Filter>
     </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_ui_workspace_preview.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_ui_workspace_overlay.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClInclude Include="Source\app\Editor\framework_ui_workspaceInternal.h">
+      <Filter>Source\App\Editor</Filter>
+    </ClInclude>
     <ClCompile Include="Source\app\Editor\framework_motion_workspace.cpp">
       <Filter>Source\App\Editor</Filter>
     </ClCompile>

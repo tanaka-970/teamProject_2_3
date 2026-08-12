@@ -244,6 +244,8 @@
     <ClCompile Include="RePlayEngine\Editor\Rendering\PostProcessEditor.cpp" />
     <ClCompile Include="RePlayEngine\Physics\MeshCollisionCooker.cpp" />
     <ClCompile Include="RePlayEngine\Physics\PhysicsDynamicsWorld.cpp" />
+    <ClCompile Include="RePlayEngine\Physics\PhysicsDynamicsWorldSolver.cpp" />
+    <ClInclude Include="RePlayEngine\Physics\PhysicsDynamicsWorldInternal.h" />
     <ClCompile Include="RePlayEngine\Rendering\ShaderPresets\ShaderPresetSerializer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\ShaderPresets\BuiltInShaderPresets.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Materials\CharacterMaterialGpuData.cpp" />
@@ -304,6 +306,8 @@
     <ClCompile Include="Source\app\Editor\framework_scene_document.cpp" />
     <ClCompile Include="Source\app\Editor\framework_standalone_export.cpp" />
     <ClCompile Include="Source\app\Editor\framework_landscape_editor.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_landscape_editor_viewport.cpp" />
+    <ClInclude Include="Source\app\Editor\framework_landscape_editorInternal.h" />
     <ClCompile Include="Source\app\Editor\framework_shader_stack.cpp" />
     <ClCompile Include="Source\app\Editor\framework_character_material.cpp" />
     <ClCompile Include="Source\app\Editor\framework_post_process.cpp" />
@@ -421,7 +425,11 @@
     <ClCompile Include="RePlayEngine\Components\Motion\MotionPlayerComponent.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Hierarchy\HierarchyPanel.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Inspector\InspectorPanel.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Inspector\InspectorPanelMultiSelection.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Inspector\InspectorPanelComponents.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Inspector\PropertyDrawer.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Inspector\PropertyDrawerDraw.cpp" />
+    <ClInclude Include="RePlayEngine\Editor\Inspector\PropertyDrawerInternal.h" />
     <ClCompile Include="RePlayEngine\Editor\ComponentBrowser\AddComponentPanel.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Adapter\SceneRenderCollector.cpp" />
     <ClCompile Include="Source\app\Runtime\framework_gameobject_scene.cpp" />
@@ -742,6 +750,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Source\app\Editor\framework_ui_workspace.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_ui_workspace_preview.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_ui_workspace_overlay.cpp" />
+    <ClInclude Include="Source\app\Editor\framework_ui_workspaceInternal.h" />
     <ClCompile Include="Source\app\Editor\framework_motion_workspace.cpp" />
     <ClCompile Include="Source\app\Editor\framework_motion_workspace_edit.cpp" />
     <ClCompile Include="Source\app\Editor\framework_motion_workspace_layers.cpp" />
