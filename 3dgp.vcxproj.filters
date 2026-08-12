@@ -579,6 +579,9 @@
     <ClCompile Include="Source\mesh\static_mesh.cpp">
       <Filter>Source\Mesh</Filter>
     </ClCompile>
+    <ClCompile Include="Source\mesh\static_mesh_runtime.cpp">
+      <Filter>Source\Mesh</Filter>
+    </ClCompile>
     <ClCompile Include="Source\core\texture.cpp">
       <Filter>Source\Core</Filter>
     </ClCompile>
@@ -598,6 +601,9 @@
       <Filter>RePlayEngine\Rendering\Materials</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Rendering\Materials\MaterialAsset.cpp">
+      <Filter>RePlayEngine\Rendering\Materials</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\Materials\MaterialAssetLoad.cpp">
       <Filter>RePlayEngine\Rendering\Materials</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Rendering\Deferred\deferred_renderer.cpp">
@@ -636,7 +642,13 @@
     <ClCompile Include="Source\app\Editor\framework_editor_camera_presets.cpp">
       <Filter>Source\App\Editor</Filter>
     </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_editor_camera_preset_ui.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
     <ClCompile Include="Source\app\Editor\framework_gizmo.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_gizmo_pivot.cpp">
       <Filter>Source\App\Editor</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Core\ObjectID\ObjectID.cpp">
@@ -679,6 +691,9 @@
       <Filter>RePlayEngine\Scripting\Core</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Scripting\Core\ScriptComponent.cpp">
+      <Filter>RePlayEngine\Scripting\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scripting\Core\ScriptComponentRuntime.cpp">
       <Filter>RePlayEngine\Scripting\Core</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Scripting\Core\ScriptError.cpp">
@@ -888,6 +903,9 @@
     <ClCompile Include="RePlayEngine\Motion\MotionAsset.cpp">
       <Filter>RePlayEngine\Motion</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Motion\MotionAssetLoad.cpp">
+      <Filter>RePlayEngine\Motion</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Motion\CompositionAsset.cpp">
       <Filter>RePlayEngine\Motion</Filter>
     </ClCompile>
@@ -904,6 +922,9 @@
       <Filter>RePlayEngine\Components\Motion</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Editor\Hierarchy\HierarchyPanel.cpp">
+      <Filter>RePlayEngine\Editor\Hierarchy</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\Hierarchy\HierarchyPanelCommands.cpp">
       <Filter>RePlayEngine\Editor\Hierarchy</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Editor\Inspector\InspectorPanel.cpp">
@@ -1003,6 +1024,9 @@
       <Filter>RePlayEngine\Editor\Viewport</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorCameraPreset.cpp">
+      <Filter>RePlayEngine\Editor\Viewport</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\Viewport\EditorCameraPresetPersistence.cpp">
       <Filter>RePlayEngine\Editor\Viewport</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorCameraStateStore.cpp">
@@ -1317,6 +1341,9 @@
       <Filter>RePlayEngine\Rendering\Materials</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Rendering\Materials\MaterialAsset.h">
+      <Filter>RePlayEngine\Rendering\Materials</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\Materials\MaterialAssetInternal.h">
       <Filter>RePlayEngine\Rendering\Materials</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Rendering\Deferred\deferred_renderer.h">
@@ -2184,6 +2211,7 @@
     <ClCompile Include="RePlayEngine\Rendering\Materials\MaterialSchema.cpp"><Filter>RePlayEngine\Rendering\Materials</Filter></ClCompile>
     <ClCompile Include="RePlayEngine\Editor\ShaderEditing\MaterialShaderInspector.cpp"><Filter>RePlayEngine\Editor\ShaderEditing</Filter></ClCompile>
     <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderAssetFactory.cpp"><Filter>RePlayEngine\Rendering</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderSourceFile.cpp"><Filter>RePlayEngine\Rendering</Filter></ClCompile>
     <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderEditorValidation.cpp"><Filter>RePlayEngine\Rendering</Filter></ClCompile>
     <ClInclude Include="RePlayEngine\Rendering\Materials\MaterialSchema.h"><Filter>RePlayEngine\Rendering\Materials</Filter></ClInclude>
     <ClInclude Include="RePlayEngine\Editor\ShaderEditing\MaterialShaderInspector.h"><Filter>RePlayEngine\Editor\ShaderEditing</Filter></ClInclude>
@@ -2301,6 +2329,9 @@
       <Filter>RePlayEngine\UI</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\UI\FontAtlas.cpp">
+      <Filter>RePlayEngine\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\UI\FontAtlasSdf.cpp">
       <Filter>RePlayEngine\UI</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\UI\UIRenderer.cpp">

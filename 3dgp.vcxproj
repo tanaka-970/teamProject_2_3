@@ -252,6 +252,7 @@
     <ClCompile Include="RePlayEngine\Rendering\ShaderPresets\BuiltInShaderPresets.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Materials\CharacterMaterialGpuData.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Materials\MaterialAsset.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Materials\MaterialAssetLoad.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Materials\MaterialSchema.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Materials\MaterialBinding.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Materials\MaterialGpuBinder.cpp" />
@@ -313,7 +314,9 @@
     <ClCompile Include="Source\app\Editor\framework_project_settings.cpp" />
     <ClCompile Include="Source\app\Editor\framework_editor_camera.cpp" />
     <ClCompile Include="Source\app\Editor\framework_editor_camera_presets.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_editor_camera_preset_ui.cpp" />
     <ClCompile Include="Source\app\Editor\framework_gizmo.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_gizmo_pivot.cpp" />
     <ClCompile Include="Source\app\Editor\framework_scene_document.cpp" />
     <ClCompile Include="Source\app\Editor\framework_standalone_export.cpp" />
     <ClCompile Include="Source\app\Editor\framework_landscape_editor.cpp" />
@@ -333,6 +336,7 @@
     <ClCompile Include="Source\mesh\sprite.cpp" />
     <ClCompile Include="Source\mesh\sprite_batch.cpp" />
     <ClCompile Include="Source\mesh\static_mesh.cpp" />
+    <ClCompile Include="Source\mesh\static_mesh_runtime.cpp" />
     <ClCompile Include="Source\core\texture.cpp" />
     <ClCompile Include="Source\game\camera.cpp" />
     <ClCompile Include="Source\game\game_input.cpp" />
@@ -367,6 +371,7 @@
     <ClCompile Include="RePlayEngine\Runtime\Scene\RuntimeSceneService.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\Core\MockScriptBackend.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\Core\ScriptComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\Core\ScriptComponentRuntime.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\Core\ScriptError.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\Core\ScriptFieldSchema.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\Core\ScriptLanguage.cpp" />
@@ -405,6 +410,7 @@
     <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderCompileValidation.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderLibrary.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderSource.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderSourceFile.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpProject.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpProjectInternal.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpProjectGeneration.cpp" />
@@ -453,12 +459,14 @@
     <ClCompile Include="RePlayEngine\Editor\Commands\MotionEditHistory.cpp" />
     <ClCompile Include="RePlayEngine\Motion\MotionEasing.cpp" />
     <ClCompile Include="RePlayEngine\Motion\MotionAsset.cpp" />
+    <ClCompile Include="RePlayEngine\Motion\MotionAssetLoad.cpp" />
     <ClCompile Include="RePlayEngine\Motion\CompositionAsset.cpp" />
     <ClCompile Include="RePlayEngine\Motion\MotionEvaluator.cpp" />
     <ClCompile Include="RePlayEngine\Motion\MotionBindingResolver.cpp" />
     <ClCompile Include="RePlayEngine\Motion\MotionMixer.cpp" />
     <ClCompile Include="RePlayEngine\Components\Motion\MotionPlayerComponent.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Hierarchy\HierarchyPanel.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Hierarchy\HierarchyPanelCommands.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Inspector\InspectorPanel.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Inspector\InspectorPanelMultiSelection.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Inspector\InspectorPanelComponents.cpp" />
@@ -492,6 +500,7 @@
     <ClCompile Include="RePlayEngine\Editor\Validation\ValidationPanel.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorCameraController.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorCameraPreset.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Viewport\EditorCameraPresetPersistence.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorCameraStateStore.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorSelectionBounds.cpp" />
     <ClCompile Include="RePlayEngine\Project\ProjectSettings.cpp" />
@@ -556,6 +565,7 @@
     <ClInclude Include="RePlayEngine\Rendering\Materials\CharacterMaterialProfile.h" />
     <ClInclude Include="RePlayEngine\Rendering\Materials\CharacterMaterialGpuData.h" />
     <ClInclude Include="RePlayEngine\Rendering\Materials\MaterialAsset.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Materials\MaterialAssetInternal.h" />
     <ClInclude Include="RePlayEngine\Rendering\Materials\MaterialSchema.h" />
     <ClInclude Include="RePlayEngine\Rendering\Materials\MaterialBinding.h" />
     <ClInclude Include="RePlayEngine\Rendering\Materials\MaterialGpuBinder.h" />
@@ -814,6 +824,7 @@
     <ClCompile Include="RePlayEngine\Components\UI\UIEffectStackComponent.cpp" />
     <ClCompile Include="RePlayEngine\UI\UILayout.cpp" />
     <ClCompile Include="RePlayEngine\UI\FontAtlas.cpp" />
+    <ClCompile Include="RePlayEngine\UI\FontAtlasSdf.cpp" />
     <ClCompile Include="RePlayEngine\UI\UIRenderer.cpp" />
     <ClCompile Include="RePlayEngine\UI\UIRendererRender.cpp" />
     <ClCompile Include="RePlayEngine\UI\Effects\UIEffect.cpp" />
