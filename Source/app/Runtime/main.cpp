@@ -79,6 +79,41 @@ namespace ReplayEngine::Runtime::Detail
         return false;
     }
 
+    bool ParseCaptureFrame(const char* command_line, std::string& capture_name)
+    {
+        capture_name = "claude";
+
+        std::istringstream arguments(command_line != nullptr ? command_line : "");
+        std::string token;
+        while (arguments >> token)
+        {
+            if (token != "--capture-frame") continue;
+
+            std::string candidate;
+            if (!(arguments >> candidate) || candidate.rfind("--", 0) == 0)
+                return true;
+
+            const bool contains_control_character = std::any_of(
+                candidate.begin(), candidate.end(), [](unsigned char character) noexcept
+                {
+                    return std::iscntrl(character) != 0;
+                });
+            const bool contains_invalid_path =
+                candidate.find("..") != std::string::npos ||
+                candidate.find_first_of("\\/:*?\"<>|") != std::string::npos;
+            if (contains_control_character || contains_invalid_path)
+            {
+                // 撮影名はそのままファイル名になるため、親フォルダへ抜けられる文字や
+                // Windows のファイル名に使えない文字は受け入れず、既定名へ戻す。
+                return true;
+            }
+
+            capture_name = candidate;
+            return true;
+        }
+        return false;
+    }
+
     std::string TrimCopy(std::string text)
     {
         const auto is_space = [](unsigned char c) noexcept

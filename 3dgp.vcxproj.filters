@@ -474,6 +474,9 @@
     <ClCompile Include="Source\app\Runtime\framework_gameobject_scene_rendering_draw.cpp">
       <Filter>Source\App\Runtime</Filter>
     </ClCompile>
+    <ClCompile Include="Source\app\Runtime\framework_gameobject_scene_rendering_line.cpp">
+      <Filter>Source\App\Runtime</Filter>
+    </ClCompile>
     <ClCompile Include="Source\app\Runtime\framework_gameobject_scene_rendering_animation.cpp">
       <Filter>Source\App\Runtime</Filter>
     </ClCompile>
@@ -1054,6 +1057,12 @@
       <Filter>RePlayEngine\Components\Rendering</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Components\Rendering\PrimitiveMeshRendererComponent.cpp">
+      <Filter>RePlayEngine\Components\Rendering</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\Rendering\LineRendererComponent.cpp">
+      <Filter>RePlayEngine\Components\Rendering</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\Rendering\TrailComponent.cpp">
       <Filter>RePlayEngine\Components\Rendering</Filter>
     </ClCompile>
     <ClCompile Include="Source\game\camera_basis_provider.cpp">
@@ -1647,6 +1656,12 @@
       <Filter>RePlayEngine\Components\Rendering</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Components\Rendering\PrimitiveMeshRendererComponent.h">
+      <Filter>RePlayEngine\Components\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Rendering\LineRendererComponent.h">
+      <Filter>RePlayEngine\Components\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Rendering\TrailComponent.h">
       <Filter>RePlayEngine\Components\Rendering</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Components\Rendering\LightComponents.h">
@@ -2497,6 +2512,105 @@
       <Filter>Shader</Filter>
     </FxCompile>
     <FxCompile Include="Shader\ui_effect_chromatic_aberration.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_kuwahara.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_halftone.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_directional_blur.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_radial_blur.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_rotational_blur.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_vignette.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_light_streaks.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_lens_distortion.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_posterize.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_threshold.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_color_ramp.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_levels.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_temperature.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_edge_detect.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_outline.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_long_shadow.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_cross_hatch.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_brush_stroke.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_mosaic.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_crystallize.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_stained_glass.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_twirl.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_spherize.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_ripple.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_polar_coordinates.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_scanlines.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_crt.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_glitch.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_dither.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_vhs.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_letterbox.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\line_stroke_vs.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\line_stroke_ps.hlsl">
       <Filter>Shader</Filter>
     </FxCompile>
     <FxCompile Include="Shader\ui_vs.hlsl">

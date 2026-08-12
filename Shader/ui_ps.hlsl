@@ -11,6 +11,9 @@ cbuffer ui_visual_constants : register(b0)
     float4 shadow_offset;
     float4 shadow_color;
     float4 atlas_size;
+    float4 fill_color_3;
+    float4 fill_color_4;
+    float4 fill_stops;
 };
 
 struct PS_INPUT
@@ -38,6 +41,27 @@ float GradientAmount(float2 uv)
         }
     }
     return amount;
+}
+
+float4 GradientColor(float4 first_color, float amount)
+{
+    const float stop2 = max(saturate(fill_stops.x), 0.0001f);
+    float4 color = lerp(first_color, fill_color_2, saturate(amount / stop2));
+    if (fill_stops.y >= 0.0f)
+    {
+        const float stop3 = max(saturate(fill_stops.y), stop2 + 0.0001f);
+        color = lerp(color, fill_color_3,
+            saturate((amount - stop2) / (stop3 - stop2)));
+    }
+    if (fill_stops.z >= 0.0f)
+    {
+        const float previous_stop = fill_stops.y >= 0.0f
+            ? max(saturate(fill_stops.y), stop2 + 0.0001f) : stop2;
+        const float stop4 = max(saturate(fill_stops.z), previous_stop + 0.0001f);
+        color = lerp(color, fill_color_4,
+            saturate((amount - previous_stop) / (stop4 - previous_stop)));
+    }
+    return color;
 }
 
 float SdfSpread()
@@ -130,7 +154,7 @@ float4 main(PS_INPUT input) : SV_TARGET
     {
         float4 color = input.color;
         const float amount = GradientAmount(input.gradient_uv);
-        color = lerp(color, fill_color_2, amount);
+        color = GradientColor(color, amount);
         if (stroke_params.x > 0.5f)
         {
             color = lerp(color, stroke_color_2, saturate(input.gradient_uv.x));

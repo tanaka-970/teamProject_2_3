@@ -23,6 +23,7 @@
 
 using ReplayEngine::Runtime::Detail::ParseShutdownRegression;
 using ReplayEngine::Runtime::Detail::ParseStartupSceneBoot;
+using ReplayEngine::Runtime::Detail::ParseCaptureFrame;
 using ReplayEngine::Runtime::Detail::ResolveExecutableLayout;
 using ReplayEngine::Runtime::Detail::ExecutableLayout;
 using ReplayEngine::Runtime::Detail::LoadGameLaunchConfig;
@@ -76,6 +77,9 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
     const std::uint32_t automated_smoke_test_frames =
         ParseAutomatedSmokeTestFrames(cmd_line);
     const bool shutdown_regression_requested = ParseShutdownRegression(cmd_line);
+    std::string capture_frame_name;
+    const bool capture_frame_requested =
+        ParseCaptureFrame(cmd_line, capture_frame_name);
 
     // WICの画像読み込みはCOMを使うため、エンジンの生存期間中は初期化状態を維持する。
     // シーン切り替え後もWICファクトリを確実に利用できるようにする。
@@ -124,6 +128,8 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
 		NULL, NULL, instance, NULL);
 
     int exit_code = 0;
+    bool capture_frame_ok = false;
+    std::string capture_frame_summary;
     Microsoft::WRL::ComPtr<ID3D11Debug> d3d11_debug;
     Microsoft::WRL::ComPtr<ID3D11InfoQueue> d3d11_info_queue;
     D3D11LiveObjectFileSummary d3d11_live_report_summary{};
@@ -162,9 +168,25 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
                 automated_smoke_test_frames > 0 ? automated_smoke_test_frames : 60u);
             application.request_shutdown_regression();
         }
+
+        if (capture_frame_requested)
+        {
+            application.set_automated_smoke_test_frames(
+                automated_smoke_test_frames > 0 ? automated_smoke_test_frames : 240u);
+            application.request_automated_frame_capture(capture_frame_name);
+        }
 	    SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&application));
+
+	    // 通常の自動検証は従来どおり隠すが、撮影は実際に人が見る表示経路を通す。
+        const bool hide_automated_window = !capture_frame_requested &&
+            (automated_smoke_test_frames > 0 || shutdown_regression_requested);
 	    exit_code = application.run(
-            automated_smoke_test_frames > 0 ? SW_HIDE : cmd_show);
+            hide_automated_window ? SW_HIDE : cmd_show);
+        if (capture_frame_requested)
+        {
+            capture_frame_ok = application.golden_last_capture_ok();
+            capture_frame_summary = application.golden_last_capture_summary();
+        }
         d3d11_debug = application.acquire_d3d11_debug();
         d3d11_info_queue = application.acquire_d3d11_info_queue();
     }
@@ -248,6 +270,15 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
     }
 #endif
 
+	if (capture_frame_requested)
+    {
+        const char* summary = capture_frame_summary.empty()
+            ? u8"撮影結果を取得できませんでした"
+            : capture_frame_summary.c_str();
+        std::fprintf(stderr, "frame capture: RESULT %s (%s)\n",
+            capture_frame_ok ? "OK" : "NG", summary);
+        if (!capture_frame_ok && exit_code == 0) exit_code = 1470;
+    }
 	if (automated_smoke_test_frames > 0)
     {
         std::fprintf(stderr, "Runtime smoke test: %u rendered frames, exit code %d\n",
@@ -284,4 +315,3 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
 	if (SUCCEEDED(com_result)) CoUninitialize();
 	return exit_code;
 }
-

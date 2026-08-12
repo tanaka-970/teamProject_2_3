@@ -341,6 +341,7 @@ bool framework::uninitialize()
 
     // 5.4) UI Effect 用 RT pool。SRV/RTV を UI Renderer 本体より先に明示解放する。
     ui_renderer.ReleaseTransientTargets();
+    line_stroke_renderer.Release();
 
     // 5.5) UI Renderer / FontAtlas。内部の SRV を texture cache より先に手放す。
     ui_renderer.Release();

@@ -1,4 +1,4 @@
-REPLAY_ASSET_DB 2 81
+REPLAY_ASSET_DB 2 85
 "60412424bb1443240b2bf2160eee6923" 1 "ExampleStage" "resources/Stage/ExampleStage.cereal" "resources/.replay_cache/models/f9fffac39252a621_v0.replaycache"
 "1bd1358040255f5bd18f3be0d79fbe3c" 1 "AllAnimation1" "resources/AnimationModel/AllAnimation1.cereal" "resources/.replay_cache/models/6a20e727f78fb359_v0.replaycache"
 "e5c4168feb92f8fd7357f6cbc1f66e22" 1 "scene" "resources/Stage/city_3d_model_gltf/scene.gltf" "resources/.replay_cache/models/98fd72a862da8c8f_v0.replaycache"
@@ -80,3 +80,7 @@ REPLAY_ASSET_DB 2 81
 "1f04d306144876c66bbc39a2ae896421" 10 "NewMotion4" "NewMotion4.replaymotion" ""
 "11dde598967cc8c629ba2bb4cfac6983" 6 "NewItem" "resources/NewItem.replaymaterial" ""
 "4b1cc717379d3741e0721660d7137274" 5 "ClaudeYouTest" "resources/Scenes/ClaudeYouTest.replayscene" ""
+"f820520f4d55ad8d1620951ee5347876" 5 "ClaudeVerify" "resources/Scenes/ClaudeVerify.replayscene" ""
+"584145bd0287a2fbc3b3d3940624ad8c" 10 "NewMotion5" "NewMotion5.replaymotion" ""
+"92a6a2af8bdf4204e4e2fee74126a547" 5 "UI" "resources/Scenes/UI.replayscene" ""
+"cf3d60404fb6bf4b0824ce52ceb316e0" 5 "test10" "resources/Scenes/test10.replayscene" ""

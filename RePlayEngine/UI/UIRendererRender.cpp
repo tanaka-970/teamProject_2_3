@@ -353,12 +353,13 @@ namespace ReplayEngine::UI
         vertices_.clear();
     }
     void UIRenderer::Render(ID3D11DeviceContext* context,
-            Scene::Scene& scene,
-            const Assets::AssetDatabase* asset_database,
-            const Rendering::ShaderCatalog* shader_catalog,
-            FontAtlas& font_atlas,
+        Scene::Scene& scene,
+        const Assets::AssetDatabase* asset_database,
+        const Rendering::ShaderCatalog* shader_catalog,
+        FontAtlas& font_atlas,
         float screen_width,
         float screen_height,
+        float effect_time,
         const RenderStates& states)
     {
         if (context == nullptr || device_ == nullptr || !vertex_shader_ || !pixel_shader_)
@@ -418,6 +419,11 @@ namespace ReplayEngine::UI
             visual_constants_.shadow_offset = { shadow_offset.x, shadow_offset.y,
                 0.0f, 0.0f };
             visual_constants_.shadow_color = shadow_color;
+            // 3・4 色目は Shape が明示した描画だけで有効にする。
+            // ここで戻さないと、直前の Shape の多色設定が Image / Text へ漏れる。
+            visual_constants_.fill_color_3 = { 1.0f, 1.0f, 1.0f, 1.0f };
+            visual_constants_.fill_color_4 = { 1.0f, 1.0f, 1.0f, 1.0f };
+            visual_constants_.fill_stops = { 1.0f, -1.0f, -1.0f, 0.0f };
         };
 
         const auto emit_quad = [this, &draw_target_height](const DirectX::XMFLOAT4& rect,
@@ -559,7 +565,8 @@ namespace ReplayEngine::UI
         const auto append_line_segment_local =
             [this, &draw_target_height](const DirectX::XMFLOAT2& a,
                 const DirectX::XMFLOAT2& b, const DirectX::XMFLOAT4X4& matrix,
-                const DirectX::XMFLOAT4& color, float width, float scale)
+                const DirectX::XMFLOAT4& color, float width, float scale,
+                float gradient_u0, float gradient_u1)
         {
             const float pixel_width = width * scale;
             if (pixel_width <= 0.0f || color.w <= 0.0f) return;
@@ -581,12 +588,12 @@ namespace ReplayEngine::UI
             const DirectX::XMFLOAT2 q2{ p1.x + nx, p1.y + ny };
             const DirectX::XMFLOAT2 q3{ p1.x - nx, p1.y - ny };
 
-            vertices_.push_back({ q0, uv, { 0.0f, 0.0f }, color });
-            vertices_.push_back({ q1, uv, { 0.0f, 1.0f }, color });
-            vertices_.push_back({ q2, uv, { 1.0f, 1.0f }, color });
-            vertices_.push_back({ q0, uv, { 0.0f, 0.0f }, color });
-            vertices_.push_back({ q2, uv, { 1.0f, 1.0f }, color });
-            vertices_.push_back({ q3, uv, { 1.0f, 0.0f }, color });
+            vertices_.push_back({ q0, uv, { gradient_u0, 0.0f }, color });
+            vertices_.push_back({ q1, uv, { gradient_u0, 1.0f }, color });
+            vertices_.push_back({ q2, uv, { gradient_u1, 1.0f }, color });
+            vertices_.push_back({ q0, uv, { gradient_u0, 0.0f }, color });
+            vertices_.push_back({ q2, uv, { gradient_u1, 1.0f }, color });
+            vertices_.push_back({ q3, uv, { gradient_u1, 0.0f }, color });
         };
 
         const auto local_distance = [](const DirectX::XMFLOAT2& a,
@@ -753,6 +760,58 @@ namespace ReplayEngine::UI
                 }
                 break;
             }
+            case UIShapeComponent::Superellipse:
+            {
+                constexpr int subdivisions = 128;
+                const float exponent = (std::max)(0.25f,
+                    (std::min)(16.0f, shape.superellipse_exponent));
+                const float power = 2.0f / exponent;
+                const float cx = rect.x + rect.z * 0.5f;
+                const float cy = rect.y + rect.w * 0.5f;
+                const float rx = rect.z * 0.5f;
+                const float ry = rect.w * 0.5f;
+                for (int segment = 0; segment < subdivisions; ++segment)
+                {
+                    const float angle = 2.0f * pi * static_cast<float>(segment) /
+                        static_cast<float>(subdivisions);
+                    const float cosine = std::cos(angle);
+                    const float sine = std::sin(angle);
+                    const float x = std::copysign(
+                        (std::pow)(std::fabs(cosine), power), cosine);
+                    const float y = std::copysign(
+                        (std::pow)(std::fabs(sine), power), sine);
+                    shape_path.push_back({ cx + x * rx, cy + y * ry });
+                }
+                break;
+            }
+            case UIShapeComponent::PolarFormula:
+            {
+                constexpr int subdivisions = 160;
+                const float cx = rect.x + rect.z * 0.5f;
+                const float cy = rect.y + rect.w * 0.5f;
+                const float rx = rect.z * 0.5f;
+                const float ry = rect.w * 0.5f;
+                const float base_radius = (std::max)(0.05f,
+                    (std::min)(1.5f, shape.polar_base_radius));
+                const float amplitude = (std::max)(-1.0f,
+                    (std::min)(1.0f, shape.polar_amplitude));
+                const float lobes = (std::max)(1.0f,
+                    (std::min)(32.0f, shape.polar_lobes));
+                const float rotation = DirectX::XMConvertToRadians(
+                    shape.polar_rotation);
+                for (int segment = 0; segment < subdivisions; ++segment)
+                {
+                    const float theta = 2.0f * pi * static_cast<float>(segment) /
+                        static_cast<float>(subdivisions);
+                    const float radial = base_radius +
+                        amplitude * std::cos(lobes * theta);
+                    const float angle = theta + rotation;
+                    shape_path.push_back({
+                        cx + std::cos(angle) * rx * radial,
+                        cy + std::sin(angle) * ry * radial });
+                }
+                break;
+            }
             default:
             {
                 const float radius = (std::min)(
@@ -843,7 +902,8 @@ namespace ReplayEngine::UI
                 if (abs_b <= abs_a) return;
                 if (!dashed)
                 {
-                    append_line_segment_local(a, b, matrix, color, stroke_width, scale);
+                    append_line_segment_local(a, b, matrix, color, stroke_width, scale,
+                        abs_a / total_length, abs_b / total_length);
                     return;
                 }
 
@@ -861,7 +921,8 @@ namespace ReplayEngine::UI
                         const float ta = (cursor - abs_a) / (abs_b - abs_a);
                         const float tb = (next - abs_a) / (abs_b - abs_a);
                         append_line_segment_local(lerp_point(a, b, ta),
-                            lerp_point(a, b, tb), matrix, color, stroke_width, scale);
+                            lerp_point(a, b, tb), matrix, color, stroke_width, scale,
+                            cursor / total_length, next / total_length);
                         cursor = next;
                     }
                     else
@@ -963,6 +1024,11 @@ namespace ReplayEngine::UI
                     shape.fill_angle, shape.fill_center,
                     shape.stroke_color_2, shape.stroke_mode,
                     false, 0.0f, {}, {}, {});
+                visual_constants_.fill_color_3 = shape.fill_color_3;
+                visual_constants_.fill_color_4 = shape.fill_color_4;
+                visual_constants_.fill_stops = {
+                    shape.fill_stop_2, shape.fill_stop_3,
+                    shape.fill_stop_4, 0.0f };
                 for (std::size_t index = 0; index < shape_path.size(); ++index)
                 {
                     append_triangle_local(center, shape_path[index],
@@ -1236,7 +1302,13 @@ namespace ReplayEngine::UI
                     effect.angle, effect.progress, effect.softness, effect.speed };
                 effect_constants.effect_params2 = {
                     effect.direction.x, effect.direction.y, effect.seed,
-                    0.0f };
+                    effect_time };
+                effect_constants.effect_color_2 = effect.color_2;
+                effect_constants.effect_color_3 = effect.color_3;
+                effect_constants.effect_color_4 = effect.color_4;
+                effect_constants.effect_color_stops = {
+                    effect.color_stop_2, effect.color_stop_3,
+                    effect.color_stop_4, 0.0f };
                 const bool is_mask_effect = static_cast<UI::UIEffectKind>(effect.kind) ==
                     UI::UIEffectKind::Mask;
                 ID3D11ShaderResourceView* mask_texture = nullptr;
