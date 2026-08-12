@@ -20,9 +20,6 @@ namespace ReplayEngine::Scene::Serialization
 
     namespace
     {
-        // 保存 ObjectID -> 実際に作られた GameObject の対応表。
-        using ObjectRemap = std::unordered_map<ObjectID, GameObject*>;
-
         // 参照値を配置先の ObjectID へ付け替える。
         //
         // clear_unresolved の意味:
@@ -102,6 +99,38 @@ namespace ReplayEngine::Scene::Serialization
                 result.Set(entry.name, RemapReferenceValue(entry.value, *remap, clear_unresolved));
             }
             return result;
+        }
+    }
+
+    void RemapLiveObjectReferences(const std::vector<GameObject*>& objects,
+        const ObjectRemap& remap)
+    {
+        if (remap.empty())
+        {
+            // 衝突がない通常の Scene 遷移では、Persistent 階層の全 Component に
+            // Capture/Apply を行う必要がない。setter の clamp や OnSerialize の
+            // 副作用を不要な場面で発生させないため、ここで往復を止める。
+            return;
+        }
+
+        for (GameObject* object : objects)
+        {
+            if (object == nullptr || object->PendingDestroy()) continue;
+
+            for (std::size_t index = 0; index < object->ComponentCount(); ++index)
+            {
+                Core::Component* component = object->ComponentAt(index);
+                if (component == nullptr || component->PendingDestroy()) continue;
+
+                Reflection::PropertyBag values;
+                PropertyRegistry::Capture(*component, values);
+
+                // 対応表に載るのは今回振り直した ID だけなので、
+                // 載っていない参照は持ち越し先で有効な値として残す。
+                // true にすると、振り直していない Persistent への参照まで切れてしまう。
+                PropertyRegistry::Apply(*component,
+                    RemapReferences(values, &remap, false));
+            }
         }
     }
 

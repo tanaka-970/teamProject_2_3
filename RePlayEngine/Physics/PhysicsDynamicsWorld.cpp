@@ -323,8 +323,15 @@ namespace ReplayEngine::Scene
         out.collider = collider.GetColliderID();
         out.layer = Layers::ClampLayer(collider.collision_layer);
         out.mask = collider.collision_mask;
-        out.friction = 0.5f;
-        out.restitution = 0.0f;
+        const Core::GameObject* owner = collider.Owner();
+        const auto* rigidbody = owner != nullptr
+            ? owner->GetComponent<Components::RigidbodyComponent>() : nullptr;
+        // ShapeProxy は Solver に渡る前の唯一の関門なので、ここで材質値を正常化する。
+        // Solver 側では値が正常だと仮定し、両側で二重にクランプして正本を曖昧にしない。
+        out.friction = rigidbody != nullptr
+            ? (std::max)(0.0f, SafeFloat(rigidbody->friction, 0.5f)) : 0.5f;
+        out.restitution = rigidbody != nullptr
+            ? Clamp01(SafeFloat(rigidbody->restitution, 0.0f)) : 0.0f;
 
         switch (collider.Shape())
         {
@@ -924,8 +931,10 @@ namespace ReplayEngine::Scene
 
     void PhysicsDynamicsWorld::Step(float fixed_delta_time)
     {
-        dynamic_body_count_ = 0;
-        sleeping_body_count_ = 0;
+        // Body カウンタは BuildBodyStates() の先頭でリセットしてから実際に集計する。
+        // ここで重複して 0 にすると、timeScale 0 で走らなかった step の直後に
+        // 最後に実行された step 時点の Body 表が空に見える。表を空にするのは
+        // AttachScene()/DetachScene() の責務なので、ここではカウンタを保持する。
         if (scene_ == nullptr || fixed_delta_time <= 0.0f) return;
 
         const std::uint32_t generation = scene_->StructureGeneration();
@@ -945,9 +954,11 @@ namespace ReplayEngine::Scene
         excluded_query_objects.reserve(states.size() + static_shapes.size());
         for (const BodyState& body : states)
         {
-            // Dynamic body 同士は下の pair Solver が正本。Kinematic の primitive も
-            // pair Solver で扱うため Query から除外する。
-            if (body.dynamic || (body.kinematic && body.has_shape))
+            // primitive 形状を持つ Body は Dynamic / Kinematic / Static を問わず
+            // 下の pair Solver が正本なので Query から除外する。Mesh / Landscape
+            // は has_shape が false のため、これまでどおり Query が正本のままになる。
+            // body.dynamic は形状なし Dynamic の既存除外も保つため残している。
+            if (body.dynamic || body.has_shape)
                 excluded_query_objects.push_back(body.object);
         }
         for (const ShapeProxy& shape : static_shapes)

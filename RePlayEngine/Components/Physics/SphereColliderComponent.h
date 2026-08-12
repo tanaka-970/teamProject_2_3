@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "ColliderComponent.h"
 
@@ -24,8 +24,6 @@ namespace ReplayEngine::Components
         REPLAY_COMPONENT_BODY(SphereColliderComponent)
 
     public:
-        SphereColliderComponent();
-
         ColliderShape Shape() const noexcept override { return ColliderShape::Sphere; }
 
         bool ComputeWorldBounds(DirectX::XMFLOAT3& minimum,
@@ -40,7 +38,11 @@ namespace ReplayEngine::Components
         // 非一様な拡縮では最大軸を採る。すり抜けるより、少し早めに当たる方が安全なため。
         float EffectiveRadius() const noexcept;
 
-        // 旧実装と同じ既定値。挙動を変えないためそのまま引き継ぐ。
+        // 中心オフセットは 0 が既定で、判定球を GameObject の原点に一致させる。
+        // 以前は旧 Player に合わせて 0.38 が入っていたが、題材固有の値を
+        // エンジンの既定値に持たせない方針のため外した。足元を原点にしたい
+        // ゲーム側は Inspector の「中心オフセット」へ明示的に設定する。
+        // 半径は旧実装と同じ既定値。形状の既定値なのでそのまま引き継ぐ。
         float radius = 0.38f;
 
         // 壁へ押し戻す際に残す余白。0 だと面に貼り付いて再衝突し続ける。
