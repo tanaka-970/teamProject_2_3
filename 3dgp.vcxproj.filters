@@ -660,6 +660,30 @@
     <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackend.cpp">
       <Filter>RePlayEngine\Scripting\CSharp</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendHost.cpp">
+      <Filter>RePlayEngine\Scripting\CSharp</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendAssembly.cpp">
+      <Filter>RePlayEngine\Scripting\CSharp</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendInstances.cpp">
+      <Filter>RePlayEngine\Scripting\CSharp</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendErrors.cpp">
+      <Filter>RePlayEngine\Scripting\CSharp</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendNative.cpp">
+      <Filter>RePlayEngine\Scripting\CSharp</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendNativeScene.cpp">
+      <Filter>RePlayEngine\Scripting\CSharp</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendNativeMotion.cpp">
+      <Filter>RePlayEngine\Scripting\CSharp</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendNativeEvents.cpp">
+      <Filter>RePlayEngine\Scripting\CSharp</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Scripting\Validation\CSharpScriptValidation.cpp">
       <Filter>RePlayEngine\Scripting\Validation</Filter>
     </ClCompile>
@@ -1061,6 +1085,12 @@
     <ClInclude Include="Source\app\framework.h">
       <Filter>Source\App</Filter>
     </ClInclude>
+    <ClInclude Include="Source\app\Editor\framework_motion_workspaceInternal.h">
+      <Filter>Source\App\Editor</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\app\Editor\framework_project_browserInternal.h">
+      <Filter>Source\App\Editor</Filter>
+    </ClInclude>
     <ClInclude Include="Source\app\Runtime\mainInternal.h">
       <Filter>Source\App\Runtime</Filter>
     </ClInclude>
@@ -1269,6 +1299,15 @@
       <Filter>RePlayEngine\Scripting\CSharp</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackend.h">
+      <Filter>RePlayEngine\Scripting\CSharp</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendHostInternal.h">
+      <Filter>RePlayEngine\Scripting\CSharp</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendNativeInternal.h">
+      <Filter>RePlayEngine\Scripting\CSharp</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendInternal.h">
       <Filter>RePlayEngine\Scripting\CSharp</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Scripting\Validation\CSharpScriptValidation.h">
@@ -2046,6 +2085,36 @@
       <Filter>Source\App\Editor</Filter>
     </ClCompile>
     <ClCompile Include="Source\app\Editor\framework_motion_workspace.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_motion_workspace_edit.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_motion_workspace_layers.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_motion_workspace_preview.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_motion_workspace_inspector.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_motion_workspace_timeline.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_project_browser_assets.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_project_browser_shader_creation.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_project_browser_rename.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_project_browser_view.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_project_browser_entry.cpp">
       <Filter>Source\App\Editor</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Components\UI\CanvasComponent.cpp">
