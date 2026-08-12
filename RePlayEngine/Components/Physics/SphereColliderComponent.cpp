@@ -7,12 +7,6 @@
 
 namespace ReplayEngine::Components
 {
-    SphereColliderComponent::SphereColliderComponent()
-    {
-        // 旧 Player と同じ既定値。基底が持つ center_offset へ設定する。
-        center_offset = DirectX::XMFLOAT3{ 0.0f, 0.38f, 0.0f };
-    }
-
     float SphereColliderComponent::EffectiveRadius() const noexcept
     {
         const Core::GameObject* owner = Owner();

@@ -2,6 +2,7 @@
 
 #include "../../Object/Registry/ComponentRegistry.h"
 #include "../../Components/Core/PersistentComponent.h"
+#include "../Serialization/SceneData.h"
 
 #include <algorithm>
 #include <functional>
@@ -178,14 +179,44 @@ namespace ReplayEngine::Scene
         for (GameObject* duplicate : duplicate_objects) DestroyGameObject(duplicate);
         ProcessPendingOperations();
 
-        // 保存データ上の ID が旧 Persistent 階層と衝突する場合も、古い実体を残す。
+        // 新 Scene と Persistent 階層の両方より上へ進めておく。
+        // 先に上限を確定しないと、衝突した ID の振り直し先が別の ID と重なる。
+        for (const auto& object : objects_)
+        {
+            if (object != nullptr) id_generator_.EnsureAbove(object->ID());
+        }
         for (GameObject* adopted : adopted_objects)
         {
-            GameObject* conflict = FindGameObjectByID(adopted->ID());
-            if (conflict == nullptr) continue;
-            DestroyGameObject(conflict);
+            if (adopted != nullptr) id_generator_.EnsureAbove(adopted->ID());
         }
-        ProcessPendingOperations();
+
+        Serialization::ObjectRemap object_remap;
+        for (GameObject* adopted : adopted_objects)
+        {
+            if (adopted == nullptr) continue;
+            if (FindGameObjectByID(adopted->ID()) == nullptr) continue;
+
+            const ObjectID previous_id = adopted->ID();
+            object_remap.emplace(previous_id, adopted);
+            // 保存ファイルの ID はファイル内の参照が指しているため変えられない。
+            // メモリ上の Persistent 階層は参照をその場で直せるので、こちらを振り直す。
+            adopted->id_ = id_generator_.Next();
+        }
+
+        const std::vector<GameObject*> adopted_list(
+            adopted_objects.begin(), adopted_objects.end());
+        Serialization::RemapLiveObjectReferences(adopted_list, object_remap);
+
+        // ---- 拡張点: Persistent 階層の外部参照 -------------------------------
+        //
+        // 【今は入れていない理由】
+        //   旧 Scene 側への参照は今回の ID 衝突とは別の問題で、
+        //   「切る」か「保持する」かの方針決定が必要なため。
+        // 【入れるときにここへ足す】
+        //   持ち越し階層の外を指す参照を検出する処理を、上の付け替えの直後へ足す。
+        // 【壊してはいけない前提】
+        //   MissingComponent の思想に合わせ、値を黙って捨てない。
+        // -----------------------------------------------------------------------------
 
         for (auto& root : roots)
         {

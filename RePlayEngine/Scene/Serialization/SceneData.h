@@ -10,6 +10,7 @@
 
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace ReplayEngine::Scene
@@ -24,6 +25,11 @@ namespace ReplayEngine::Core
 
 namespace ReplayEngine::Scene::Serialization
 {
+    // SceneData.cpp の保存データ用参照付け替えと同じ規則を、
+    // Scene 遷移で生きた Persistent 階層へ適用するための対応表。
+    // 型をここへ出して、Scene.cpp が別の参照付け替え規則を持たないようにする。
+    using ObjectRemap = std::unordered_map<Core::ObjectID, Core::GameObject*>;
+
     // Scene とファイルの間に挟む中間データ。
     //
     // なぜ中間層を置くか:
@@ -200,6 +206,11 @@ namespace ReplayEngine::Scene::Serialization
     // ComponentRegistry で serializable=false の型も保存しない
     // （TransformComponent は GameObject 側の transform として保存済みのため）。
     void CaptureScene(const Scene& scene, SceneData& output);
+
+    // 生きている GameObject が持つ ObjectID 参照を付け替える。
+    // Scene 遷移で Persistent 階層を新しい Scene の ID 空間へ移すときに使う。
+    void RemapLiveObjectReferences(const std::vector<Core::GameObject*>& objects,
+        const ObjectRemap& remap);
 
     // SceneData の内容で Scene を作り直す（メインスレッドで実行すること）。
     //
