@@ -672,6 +672,15 @@
     <ClCompile Include="RePlayEngine\Runtime\Validation\SerializationValidation.cpp">
       <Filter>RePlayEngine\Runtime\Validation</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Runtime\Validation\SerializationValidationSupport.cpp">
+      <Filter>RePlayEngine\Runtime\Validation</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Runtime\Validation\SerializationValidationMissingComponent.cpp">
+      <Filter>RePlayEngine\Runtime\Validation</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Runtime\Validation\SerializationValidationSceneVersion.cpp">
+      <Filter>RePlayEngine\Runtime\Validation</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Runtime\Behaviour\BehaviourComponent.cpp">
       <Filter>RePlayEngine\Runtime\Behaviour</Filter>
     </ClCompile>
@@ -771,6 +780,15 @@
     <ClCompile Include="RePlayEngine\Scripting\Validation\ScriptCoreValidation.cpp">
       <Filter>RePlayEngine\Scripting\Validation</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Scripting\Validation\ScriptCoreValidationSupport.cpp">
+      <Filter>RePlayEngine\Scripting\Validation</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scripting\Validation\ScriptCoreLifecycleValidation.cpp">
+      <Filter>RePlayEngine\Scripting\Validation</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Scripting\Validation\ScriptCoreSerializationValidation.cpp">
+      <Filter>RePlayEngine\Scripting\Validation</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Runtime\API\RuntimeContext.cpp">
       <Filter>RePlayEngine\Runtime\API</Filter>
     </ClCompile>
@@ -784,6 +802,18 @@
       <Filter>RePlayEngine\Runtime\API</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourValidation.cpp">
+      <Filter>RePlayEngine\Runtime\Validation</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourValidationSupport.cpp">
+      <Filter>RePlayEngine\Runtime\Validation</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourEventValidation.cpp">
+      <Filter>RePlayEngine\Runtime\Validation</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourRuntimeApiValidation.cpp">
+      <Filter>RePlayEngine\Runtime\Validation</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourCollisionValidation.cpp">
       <Filter>RePlayEngine\Runtime\Validation</Filter>
     </ClCompile>
     <ClCompile Include="Source\game\Behaviours\ValidationBehaviours.cpp">
@@ -859,6 +889,30 @@
       <Filter>RePlayEngine\Audio</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponents.cpp">
+      <Filter>RePlayEngine\Object\Registry</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponentsCore.cpp">
+      <Filter>RePlayEngine\Object\Registry</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponentsRendering.cpp">
+      <Filter>RePlayEngine\Object\Registry</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponentsGameplay.cpp">
+      <Filter>RePlayEngine\Object\Registry</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponentsScripting.cpp">
+      <Filter>RePlayEngine\Object\Registry</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponentsPhysics.cpp">
+      <Filter>RePlayEngine\Object\Registry</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponentsCameraAudio.cpp">
+      <Filter>RePlayEngine\Object\Registry</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponentsUI.cpp">
+      <Filter>RePlayEngine\Object\Registry</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponentsMotionEditor.cpp">
       <Filter>RePlayEngine\Object\Registry</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Scene\Serialization\SceneData.cpp">
@@ -1232,6 +1286,12 @@
     <ClInclude Include="Source\app\framework.h">
       <Filter>Source\App</Filter>
     </ClInclude>
+    <ClInclude Include="Source\app\framework_application.h">
+      <Filter>Source\App</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\app\framework_class.h">
+      <Filter>Source\App</Filter>
+    </ClInclude>
     <ClInclude Include="Source\app\Editor\framework_motion_workspaceInternal.h">
       <Filter>Source\App\Editor</Filter>
     </ClInclude>
@@ -1400,6 +1460,9 @@
     <ClInclude Include="RePlayEngine\Runtime\Validation\SerializationValidation.h">
       <Filter>RePlayEngine\Runtime\Validation</Filter>
     </ClInclude>
+    <ClInclude Include="RePlayEngine\Runtime\Validation\SerializationValidationInternal.h">
+      <Filter>RePlayEngine\Runtime\Validation</Filter>
+    </ClInclude>
     <ClInclude Include="RePlayEngine\Runtime\Behaviour\BehaviourEvents.h">
       <Filter>RePlayEngine\Runtime\Behaviour</Filter>
     </ClInclude>
@@ -1478,6 +1541,9 @@
     <ClInclude Include="RePlayEngine\Scripting\Validation\ScriptCoreValidation.h">
       <Filter>RePlayEngine\Scripting\Validation</Filter>
     </ClInclude>
+    <ClInclude Include="RePlayEngine\Scripting\Validation\ScriptCoreValidationInternal.h">
+      <Filter>RePlayEngine\Scripting\Validation</Filter>
+    </ClInclude>
     <ClInclude Include="RePlayEngine\Runtime\Scene\WorldLifecycleListener.h">
       <Filter>RePlayEngine\Runtime\Scene</Filter>
     </ClInclude>
@@ -1485,6 +1551,9 @@
       <Filter>RePlayEngine\Runtime\API</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Runtime\Validation\BehaviourValidation.h">
+      <Filter>RePlayEngine\Runtime\Validation</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Runtime\Validation\BehaviourValidationInternal.h">
       <Filter>RePlayEngine\Runtime\Validation</Filter>
     </ClInclude>
     <ClInclude Include="Source\game\Behaviours\ValidationBehaviours.h">
@@ -1605,6 +1674,9 @@
       <Filter>RePlayEngine\Audio</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Object\Registry\BuiltInComponents.h">
+      <Filter>RePlayEngine\Object\Registry</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Object\Registry\BuiltInComponentsInternal.h">
       <Filter>RePlayEngine\Object\Registry</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Scene\Serialization\SceneData.h">
@@ -1808,6 +1880,9 @@
     <ClInclude Include="RePlayEngine\Runtime\Validation\RuntimeSceneValidation.h">
       <Filter>RePlayEngine\Runtime\Validation</Filter>
     </ClInclude>
+    <ClInclude Include="RePlayEngine\Runtime\Validation\RuntimeSceneValidationInternal.h">
+      <Filter>RePlayEngine\Runtime\Validation</Filter>
+    </ClInclude>
     <ClInclude Include="RePlayEngine\Runtime\Scene\SceneFlowService.h">
       <Filter>RePlayEngine\Runtime\Scene</Filter>
     </ClInclude>
@@ -1821,6 +1896,9 @@
       <Filter>RePlayEngine\Runtime\Validation</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Editor\Validation\EditorIntegrationValidation.h">
+      <Filter>RePlayEngine\Editor\Validation</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\Validation\EditorIntegrationValidationInternal.h">
       <Filter>RePlayEngine\Editor\Validation</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Editor\Validation\AnimationUndoValidation.h">
