@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "CSharpScriptBackend.h"
+#include "CSharpProjectInternal.h"
 
 #include "../Core/ScriptValue.h"
 #include "../../Runtime/API/RuntimeContext.h"
@@ -39,18 +40,6 @@ namespace ReplayEngine::Scripting::CSharp::Detail
             return result;
         }
 
-        inline std::wstring ToWide(const std::string& text)
-        {
-            if (text.empty()) return std::wstring();
-            const int size = MultiByteToWideChar(CP_UTF8, 0, text.data(),
-                static_cast<int>(text.size()), nullptr, 0);
-            if (size <= 0) return std::wstring();
-            std::wstring result(static_cast<std::size_t>(size), L'\0');
-            MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()),
-                result.data(), size);
-            return result;
-        }
-
         inline std::vector<char> Utf8CString(const std::filesystem::path& path)
         {
             std::string text = path.generic_u8string();
@@ -63,14 +52,6 @@ namespace ReplayEngine::Scripting::CSharp::Detail
             std::vector<char> result(text.begin(), text.end());
             result.push_back('\0');
             return result;
-        }
-
-        inline std::filesystem::path NormalizeRoot(std::filesystem::path root)
-        {
-            std::error_code error;
-            if (root.empty()) root = std::filesystem::current_path(error);
-            if (error) return root.lexically_normal();
-            return std::filesystem::absolute(root, error).lexically_normal();
         }
 
         inline std::filesystem::path FindHostFxr()
