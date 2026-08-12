@@ -408,6 +408,57 @@
     <ClCompile Include="Source\app\Runtime\main.cpp">
       <Filter>Source\App\Runtime</Filter>
     </ClCompile>
+    <ClCompile Include="Source\app\Runtime\mainValidation.cpp">
+      <Filter>Source\App\Runtime</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Runtime\mainValidationScene.cpp">
+      <Filter>Source\App\Runtime</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Runtime\mainValidationRuntime.cpp">
+      <Filter>Source\App\Runtime</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Runtime\mainApplication.cpp">
+      <Filter>Source\App\Runtime</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Runtime\mainDiagnostics.cpp">
+      <Filter>Source\App\Runtime</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Runtime\mainValidationLandscape.cpp">
+      <Filter>Source\App\Runtime</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Runtime\mainValidationSceneWorld.cpp">
+      <Filter>Source\App\Runtime</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Runtime\mainValidationPhysics.cpp">
+      <Filter>Source\App\Runtime</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Runtime\mainValidationMotion.cpp">
+      <Filter>Source\App\Runtime</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Runtime\framework_gameobject_scene_motion.cpp">
+      <Filter>Source\App\Runtime</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Runtime\framework_gameobject_scene_runtime.cpp">
+      <Filter>Source\App\Runtime</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Runtime\framework_gameobject_scene_play.cpp">
+      <Filter>Source\App\Runtime</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Runtime\framework_gameobject_scene_rendering_draw.cpp">
+      <Filter>Source\App\Runtime</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Runtime\framework_gameobject_scene_rendering_animation.cpp">
+      <Filter>Source\App\Runtime</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Runtime\framework_gameobject_scene_serialization_creation.cpp">
+      <Filter>Source\App\Runtime</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_editor_docking.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_editor_scene_view.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
     <ClCompile Include="Source\app\Runtime\framework.cpp">
       <Filter>Source\App\Runtime</Filter>
     </ClCompile>
@@ -421,6 +472,18 @@
       <Filter>Source\App\Runtime</Filter>
     </ClCompile>
     <ClCompile Include="Source\app\Editor\framework_editor.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_editor_scene.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_editor_scripting.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_editor_panels.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_editor_diagnostics.cpp">
       <Filter>Source\App\Editor</Filter>
     </ClCompile>
     <ClCompile Include="Source\app\Editor\framework_inspector.cpp">
@@ -729,6 +792,12 @@
     <ClCompile Include="Source\app\Runtime\framework_gameobject_scene.cpp">
       <Filter>Source\App\Runtime</Filter>
     </ClCompile>
+    <ClCompile Include="Source\app\Runtime\framework_gameobject_scene_serialization.cpp">
+      <Filter>Source\App\Runtime</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Runtime\framework_gameobject_scene_rendering.cpp">
+      <Filter>Source\App\Runtime</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Scene\Serialization\PrefabSerializer.cpp">
       <Filter>RePlayEngine\Scene\Serialization</Filter>
     </ClCompile>
@@ -991,6 +1060,9 @@
     </ClInclude>
     <ClInclude Include="Source\app\framework.h">
       <Filter>Source\App</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\app\Runtime\mainInternal.h">
+      <Filter>Source\App\Runtime</Filter>
     </ClInclude>
     <ClInclude Include="Source\core\fullscreen_quad.h">
       <Filter>Source\Core</Filter>
@@ -2007,6 +2079,9 @@
       <Filter>RePlayEngine\UI</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\UI\UIRenderer.cpp">
+      <Filter>RePlayEngine\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\UI\UIRendererRender.cpp">
       <Filter>RePlayEngine\UI</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\UI\Effects\UIEffect.cpp">
