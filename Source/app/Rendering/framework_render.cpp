@@ -16,6 +16,11 @@
 #include <cmath>
 #include <vector>
 
+// 分割一覧（framework_render.cpp）:
+//   分割なし。framework::render() が初期化・Scene View／Game View・各描画パス・後処理・UI・Present
+//   までを一つの描画経路として順序どおりに実行する単一関数で、関数本文を変更せずに分割できない。
+//   SAFETY_RULES 6.2 の従来経路を保つため、このファイルはそのまま残す。
+
 namespace
 {
     using ReplayEngine::Components::ParticleEmitterComponent;
