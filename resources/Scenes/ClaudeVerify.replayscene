@@ -175,8 +175,8 @@ OBJECT
     TYPE_MODULE ""
     TYPE_VERSION 1
     PROPERTY_COUNT 8
-    PROPERTY "text" string "縁取りテスト Outline 123"
-    PROPERTY "font_size" float 96
+    PROPERTY "text" string "縁ABC"
+    PROPERTY "font_size" float 240
     PROPERTY "color" color 1 1 1 1
     PROPERTY "opacity" float 1
     PROPERTY "horizontal_align" enum 1

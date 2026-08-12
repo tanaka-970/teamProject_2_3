@@ -55,6 +55,7 @@
 #include "../../RePlayEngine/Editor/Gizmo/TransformGizmo.h"
 #include "../../RePlayEngine/Editor/Gizmo/ViewportPicker.h"
 #include "../../RePlayEngine/Components/Editor/EditorNoteComponent.h"
+#include "../../RePlayEngine/Components/Rendering/LineRendererComponent.h"
 #include "../../RePlayEngine/Physics/MeshCollisionCooker.h"
 #include "../../RePlayEngine/Landscape/LandscapeBrush.h"
 #include "../../RePlayEngine/Landscape/LandscapeEditorTool.h"
@@ -430,6 +431,7 @@ public:
     ReplayEngine::Rendering::RenderItemList object_render_items;
     ReplayEngine::UI::FontAtlas             ui_font_atlas;
     ReplayEngine::UI::UIRenderer            ui_renderer;
+    ReplayEngine::Rendering::LineStrokeRenderer line_stroke_renderer;
     bool ui_pointer_down_last{ false };
 
     // Asset GUID -> メッシュ実体。
@@ -768,11 +770,30 @@ public:
             {
                 update(tictoc.time_interval());
                 render(tictoc.time_interval());
-                if (automated_smoke_test_frames > 0 &&
-                    ++automated_smoke_test_frames_rendered >= automated_smoke_test_frames)
+                if (automated_smoke_test_frames > 0)
                 {
-                    automated_smoke_test_frames = 0;
-                    PostMessage(hwnd, WM_CLOSE, 0, 0);
+                    const std::uint32_t rendered_frames =
+                        ++automated_smoke_test_frames_rendered;
+                    if (automated_frame_capture_pending)
+                    {
+                        // TAA の収束と撮影後の Present・終了処理に必要な時間を残すため、
+                        // 終了の 32 フレーム前で 1 回だけ要求する。短い実行では撮り逃しを
+                        // 避けることを優先し、総フレーム数の半分で要求する。
+                        const std::uint32_t capture_request_frame =
+                            automated_smoke_test_frames > 32u
+                            ? automated_smoke_test_frames - 32u
+                            : automated_smoke_test_frames / 2u;
+                        if (rendered_frames >= capture_request_frame)
+                        {
+                            automated_frame_capture_pending = false;
+                            request_golden(golden_request_kind::capture);
+                        }
+                    }
+                    if (rendered_frames >= automated_smoke_test_frames)
+                    {
+                        automated_smoke_test_frames = 0;
+                        PostMessage(hwnd, WM_CLOSE, 0, 0);
+                    }
                 }
             }
             catch (const std::exception& exception)
@@ -1205,6 +1226,8 @@ private:
     // LandscapeRendererComponent 用の procedural static mesh 描画。
     // AssetGUIDを介さず、LandscapeData::Revision が変わったときだけGPU Meshを作り直す。
     void draw_landscape_scene_meshes(bool gbuffer_pass, bool depth_only = false);
+    void update_line_trails(float elapsed_time);
+    void draw_line_strokes();
     void clear_object_mesh_cache() noexcept;
     void clear_object_material_cache() noexcept;
     bool object_runtime_active() const noexcept;
@@ -1394,6 +1417,7 @@ private:
 
     std::uint32_t automated_smoke_test_frames{ 0 };
     std::uint32_t automated_smoke_test_frames_rendered{ 0 };
+    bool automated_frame_capture_pending{ false };
     float shader_composer_time{ 0.0f }; // elapsed_time が 0 の Golden Capture 中は進めない
     uint32_t frames{ 0 };
     float elapsed_time{ 0.0f };
@@ -1636,6 +1660,12 @@ private:
     ReplayEngine::Rendering::Capture::Image golden_self_check_first;
     bool golden_self_check_has_first{ false };
 
+public:
+    void request_automated_frame_capture(const std::string& name);
+    bool golden_last_capture_ok() const noexcept;
+    const std::string& golden_last_capture_summary() const noexcept;
+
+private:
     // 撮影待ちの間はワールドを止める。update / render から見る。
     bool golden_capture_pending() const noexcept
     {

@@ -45,11 +45,13 @@
 #include "../../Components/UI/UITextAnimatorComponent.h"
 #include "../../Components/Rendering/AnimatorComponent.h"
 #include "../../Components/Rendering/LightComponents.h"
+#include "../../Components/Rendering/LineRendererComponent.h"
 #include "../../Components/Rendering/MeshRendererComponent.h"
 #include "../../Components/Rendering/ParticleEmitterComponent.h"
 #include "../../Components/Rendering/PostProcessVolumeComponent.h"
 #include "../../Components/Rendering/PrimitiveMeshRendererComponent.h"
 #include "../../Components/Rendering/SkinnedMeshRendererComponent.h"
+#include "../../Components/Rendering/TrailComponent.h"
 #include "../../Scripting/Core/ScriptComponent.h"
 
 // BuiltInComponents の分割内部で登録実装だけが共有する宣言であり、外部から使うものではない。
@@ -71,6 +73,7 @@ namespace ReplayEngine::Core::Detail
         using Components::LandscapeComponent;
         using Components::LandscapeRendererComponent;
         using Components::LandscapeColliderComponent;
+        using Components::LineRendererComponent;
         using Components::MotionPlayerComponent;
         using Components::MeshRendererComponent;
         using Components::ParticleEmitterComponent;
@@ -106,6 +109,7 @@ namespace ReplayEngine::Core::Detail
         using Components::UITextComponent;
         using Components::UITextAnimatorComponent;
         using Components::TransformComponent;
+        using Components::TrailComponent;
 
         using Reflection::Animatable;
         using Reflection::MakeAccessorProperty;
@@ -137,6 +141,7 @@ namespace ReplayEngine::Core::Detail
     void RegisterCamera();
     void RegisterPostProcessVolume();
     void RegisterParticleEmitter();
+    void RegisterLineRenderers();
     void RegisterFollowTarget();
     void RegisterAudioListener();
     void RegisterAudioSource();

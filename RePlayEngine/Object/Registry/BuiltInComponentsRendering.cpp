@@ -348,6 +348,126 @@ namespace ReplayEngine::Core::Detail
                     .Animation(Animatable::Step));
         }
 
+        template<typename ComponentType>
+        void RegisterLineStrokeProperties()
+        {
+            PropertyRegistry::Register<ComponentType>(
+                MakeProperty("width_start", &ComponentType::width_start)
+                    .Display("始点の太さ").Range(0.0, 1000.0).Step(0.001)
+                    .Tooltip("ライン始点の幅（ワールド単位）。"));
+            PropertyRegistry::Register<ComponentType>(
+                MakeProperty("width_end", &ComponentType::width_end)
+                    .Display("終点の太さ").Range(0.0, 1000.0).Step(0.001)
+                    .Tooltip("途中の幅は始点から終点へ線形補間する。"));
+            PropertyRegistry::Register<ComponentType>(
+                MakeProperty("billboard", &ComponentType::billboard)
+                    .Display("カメラへ向ける")
+                    .Tooltip("無効なら進行方向とワールド上方向から帯の向きを決める。"));
+            PropertyRegistry::Register<ComponentType>(
+                MakeProperty("uv_mode", &ComponentType::uv_mode)
+                    .Display("UV の張り方")
+                    .AsEnum({ "全長へ伸縮", "距離で繰り返し" })
+                    .Animation(Animatable::Step)
+                    .Tooltip("全長を 0..1 に伸縮するか、ワールド距離で反復するかを選ぶ。"));
+            PropertyRegistry::Register<ComponentType>(
+                MakeProperty("uv_tiling", &ComponentType::uv_tiling)
+                    .Display("繰り返し").Range(0.0001, 10000.0).Step(0.001)
+                    .Tooltip("距離で繰り返すときの 1 周期の長さ。"));
+            PropertyRegistry::Register<ComponentType>(
+                MakeProperty("uv_scroll", &ComponentType::uv_scroll)
+                    .Display("UV スクロール").Step(0.001)
+                    .Tooltip("Motion で動かすとテクスチャが線に沿って流れる。"));
+            PropertyRegistry::Register<ComponentType>(
+                MakeProperty("texture", &ComponentType::texture)
+                    .Display("テクスチャ").OfAssetType("Image")
+                    .Animation(Animatable::Step)
+                    .Tooltip("リボンへ貼る画像。未設定なら白テクスチャを使う。"));
+            PropertyRegistry::Register<ComponentType>(
+                MakeProperty("fill_color", &ComponentType::fill_color)
+                    .Display("色").AsColor()
+                    .Tooltip("単色、または線形グラデーションの始点色。"));
+            PropertyRegistry::Register<ComponentType>(
+                MakeProperty("fill_color_2", &ComponentType::fill_color_2)
+                    .Display("色 2").AsColor()
+                    .Tooltip("線形グラデーションの終点色。"));
+            PropertyRegistry::Register<ComponentType>(
+                MakeProperty("fill_mode", &ComponentType::fill_mode)
+                    .Display("塗り方").AsEnum({ "単色", "線形" })
+                    .Animation(Animatable::Step)
+                    .Tooltip("線形は線に沿った U 方向で色 1 から色 2 へ補間する。"));
+            PropertyRegistry::Register<ComponentType>(
+                MakeProperty("trim_start", &ComponentType::trim_start)
+                    .Display("Trim 開始").Range(0.0, 1.0).Step(0.001)
+                    .Tooltip("全長を 0..1 としたときの描画開始位置。"));
+            PropertyRegistry::Register<ComponentType>(
+                MakeProperty("trim_end", &ComponentType::trim_end)
+                    .Display("Trim 終了").Range(0.0, 1.0).Step(0.001)
+                    .Tooltip("Motion で 0 から 1 へ動かすと線を書き出せる。"));
+            PropertyRegistry::Register<ComponentType>(
+                MakeProperty("trim_offset", &ComponentType::trim_offset)
+                    .Display("Trim オフセット").Step(0.001)
+                    .Tooltip("Trim 区間を全長に沿って循環移動する。"));
+        }
+
+        void RegisterLineRenderers()
+        {
+            ComponentRegistry::Register<LineRendererComponent>(
+                ComponentTypeInfo::Describe("3D ライン", "Rendering")
+                    .WithTooltip("ローカル座標の点を自由に置き、Motion で各点を動かせる 3D リボン。"));
+            PropertyRegistry::Register<LineRendererComponent>(
+                MakeProperty("point_count", &LineRendererComponent::point_count)
+                    .Display("点の数").Range(0.0, 2147483647.0).Step(1.0)
+                    .Animation(Animatable::None)
+                    .Tooltip("固定上限はない。増やすと points[i] が動的に増える。"));
+            PropertyRegistry::Register<LineRendererComponent>(
+                MakeProperty("smoothing", &LineRendererComponent::smoothing)
+                    .Display("曲線の滑らかさ").Range(0.0, 255.0).Step(1.0)
+                    .Animation(Animatable::Step)
+                    .Tooltip("1 以上で制御点を必ず通る Catmull-Rom 曲線にする。"));
+            PropertyRegistry::Register<LineRendererComponent>(
+                MakeProperty("closed", &LineRendererComponent::closed)
+                    .Display("閉じる").Animation(Animatable::Step)
+                    .Tooltip("最後の点と最初の点をつないで閉じた線にする。"));
+            RegisterLineStrokeProperties<LineRendererComponent>();
+
+            ComponentRegistry::Register<TrailComponent>(
+                ComponentTypeInfo::Describe("軌跡", "Rendering")
+                    .WithTooltip("Transform 確定後の移動履歴から、自動で同じ 3D リボンを生成する。"));
+            PropertyRegistry::Register<TrailComponent>(
+                MakeProperty("emitting", &TrailComponent::emitting)
+                    .Display("発生中").Animation(Animatable::Step)
+                    .Tooltip("無効にすると新しい点を止め、既存の軌跡だけを寿命まで残す。"));
+            PropertyRegistry::Register<TrailComponent>(
+                MakeProperty("lifetime", &TrailComponent::lifetime)
+                    .Display("寿命（秒）").Range(0.0, 3600.0).Step(0.001)
+                    .Tooltip("点数ではなく寿命で自然な上限を決める。"));
+            PropertyRegistry::Register<TrailComponent>(
+                MakeProperty("min_distance", &TrailComponent::min_distance)
+                    .Display("最小間隔").Range(0.0, 10000.0).Step(0.001)
+                    .Tooltip("前の点からこの距離以上動いたときだけ点を足す。"));
+            PropertyRegistry::Register<TrailComponent>(
+                MakeProperty("max_points", &TrailComponent::max_points)
+                    .Display("点数の上限").Range(0.0, 2147483647.0).Step(1.0)
+                    .Animation(Animatable::Step)
+                    .Tooltip("0 は上限なし。暴走を抑えたい場面だけ指定する保険。"));
+            PropertyRegistry::Register<TrailComponent>(
+                MakeProperty("world_space", &TrailComponent::world_space)
+                    .Display("ワールド空間に残す").Animation(Animatable::Step)
+                    .Tooltip("有効なら親が動いても軌跡は通過位置に残る。"));
+            RegisterLineStrokeProperties<TrailComponent>();
+
+            // ---- 拡張点: 3D ラインの表現 ---------------------------------
+            //
+            // 【今は入れていない理由】
+            //   破線、端キャップ、点ごとの色・太さは、共通リボン生成と
+            //   Motion 駆動の形を先に安定させるため今回の最小核から外した。
+            // 【入れるときにここへ足す】
+            //   両 Component へ同名 Property を追加し、LineStrokeRenderer の
+            //   共通頂点生成だけを拡張する。旧 trail とは統合しない。
+            // 【壊してはいけない前提】
+            //   points と履歴に固定長配列を導入せず、Line / Trail の描画実装を分岐させない。
+        }
+
         void RegisterLights()
         {
             ComponentRegistry::Register<DirectionalLightComponent>(

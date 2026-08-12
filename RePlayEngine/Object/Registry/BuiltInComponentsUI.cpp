@@ -312,7 +312,8 @@ namespace ReplayEngine::Core::Detail
             PropertyRegistry::Register<UIShapeComponent>(
                 MakeProperty("shape", &UIShapeComponent::shape)
                     .Display("形")
-                    .AsEnum({ "矩形", "円", "線", "多角形", "ベジェ" })
+                    .AsEnum({ "矩形", "円", "線", "多角形", "ベジェ",
+                        "スーパー楕円", "極座標式" })
                     .Animation(Animatable::Step));
             PropertyRegistry::Register<UIShapeComponent>(
                 MakeProperty("fill_color", &UIShapeComponent::fill_color)
@@ -321,6 +322,31 @@ namespace ReplayEngine::Core::Detail
                 MakeProperty("fill_color_2", &UIShapeComponent::fill_color_2)
                     .Display("塗りの終端色").AsColor()
                     .Animation(Animatable::Interpolatable));
+            PropertyRegistry::Register<UIShapeComponent>(
+                MakeProperty("fill_color_3", &UIShapeComponent::fill_color_3)
+                    .Display("塗り色 3").AsColor()
+                    .Animation(Animatable::Interpolatable)
+                    .Tooltip("色 3 の位置が 0 以上のときだけ使う。"));
+            PropertyRegistry::Register<UIShapeComponent>(
+                MakeProperty("fill_color_4", &UIShapeComponent::fill_color_4)
+                    .Display("塗り色 4").AsColor()
+                    .Animation(Animatable::Interpolatable)
+                    .Tooltip("色 4 の位置が 0 以上のときだけ使う。"));
+            PropertyRegistry::Register<UIShapeComponent>(
+                MakeProperty("fill_stop_2", &UIShapeComponent::fill_stop_2)
+                    .Display("色 2 の位置").Range(0.0, 1.0).Step(0.001)
+                    .Animation(Animatable::Interpolatable)
+                    .Tooltip("既存の 2 色グラデーションでは 1 のまま使う。"));
+            PropertyRegistry::Register<UIShapeComponent>(
+                MakeProperty("fill_stop_3", &UIShapeComponent::fill_stop_3)
+                    .Display("色 3 の位置").Range(-1.0, 1.0).Step(0.001)
+                    .Animation(Animatable::Interpolatable)
+                    .Tooltip("-1 は未設定。0 以上にすると色 3 を有効にする。"));
+            PropertyRegistry::Register<UIShapeComponent>(
+                MakeProperty("fill_stop_4", &UIShapeComponent::fill_stop_4)
+                    .Display("色 4 の位置").Range(-1.0, 1.0).Step(0.001)
+                    .Animation(Animatable::Interpolatable)
+                    .Tooltip("-1 は未設定。0 以上にすると色 4 を有効にする。"));
             PropertyRegistry::Register<UIShapeComponent>(
                 MakeProperty("fill_mode", &UIShapeComponent::fill_mode)
                     .Display("塗りの種類")
@@ -360,6 +386,31 @@ namespace ReplayEngine::Core::Detail
                 MakeProperty("sides", &UIShapeComponent::sides)
                     .Display("角数").Range(3.0, 64.0).Step(1.0)
                     .Animation(Animatable::Step));
+            PropertyRegistry::Register<UIShapeComponent>(
+                MakeProperty("superellipse_exponent",
+                    &UIShapeComponent::superellipse_exponent)
+                    .Display("スーパー楕円の指数").Range(0.25, 16.0).Step(0.01)
+                    .Animation(Animatable::Interpolatable)
+                    .Tooltip("2 で楕円。大きいほど四角、小さいほど星形へ連続変形する。"));
+            PropertyRegistry::Register<UIShapeComponent>(
+                MakeProperty("polar_base_radius", &UIShapeComponent::polar_base_radius)
+                    .Display("極座標の基本半径").Range(0.05, 1.5).Step(0.001)
+                    .Animation(Animatable::Interpolatable)
+                    .Tooltip("r(θ) = a + b cos(kθ) の a。"));
+            PropertyRegistry::Register<UIShapeComponent>(
+                MakeProperty("polar_amplitude", &UIShapeComponent::polar_amplitude)
+                    .Display("極座標の振幅").Range(-1.0, 1.0).Step(0.001)
+                    .Animation(Animatable::Interpolatable)
+                    .Tooltip("r(θ) = a + b cos(kθ) の b。0 なら円。"));
+            PropertyRegistry::Register<UIShapeComponent>(
+                MakeProperty("polar_lobes", &UIShapeComponent::polar_lobes)
+                    .Display("花弁 / 歯数").Range(1.0, 32.0).Step(0.01)
+                    .Animation(Animatable::Interpolatable)
+                    .Tooltip("r(θ) = a + b cos(kθ) の k。Motion で連続変形できる。"));
+            PropertyRegistry::Register<UIShapeComponent>(
+                MakeProperty("polar_rotation", &UIShapeComponent::polar_rotation)
+                    .Display("極座標の回転").Range(-360.0, 360.0).Step(0.1)
+                    .Animation(Animatable::Interpolatable));
             PropertyRegistry::Register<UIShapeComponent>(
                 MakeProperty("trim_start", &UIShapeComponent::trim_start)
                     .Display("Trim 開始").Range(0.0, 1.0).Step(0.01));

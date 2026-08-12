@@ -640,6 +640,8 @@ void framework::render(float elapsed_time)
         particles.simulate(immediate_context.Get(), elapsed_time);
     if (camera_pass_index == 0 && enable_trail)
         test_trail.update(elapsed_time);
+    if (camera_pass_index == 0)
+        update_line_trails(elapsed_time);
 
     // アニメーション付きモデルは例外なく
     // SkinnedMeshRendererComponent + AnimatorComponent が提出し、
@@ -1426,6 +1428,10 @@ void framework::render(float elapsed_time)
         }
     }
 
+    // Component 版の 3D ライン / 軌跡は、透明 3D エフェクトと同じく
+    // 深度を読むが書かない Forward 合成へ置く。
+    draw_line_strokes();
+
     if (particles_this_frame)
     {
         // 半透明エフェクトは深度テストを行うが、後続を遮らないよう深度を書き込まない。
@@ -1545,7 +1551,7 @@ void framework::render(float elapsed_time)
         1.0f, static_cast<float>(client_height)));
     ui_renderer.Render(immediate_context.Get(), active_object_scene(),
         &asset_database, &shader_library.Catalog(), ui_font_atlas,
-        ui_logical_width, ui_logical_height, ui_states);
+        ui_logical_width, ui_logical_height, shader_composer_time, ui_states);
     // UI 用の viewport override は UIRenderer の間だけ。ImGui と次フレームは client 全体へ戻す。
     immediate_context->RSSetViewports(1, &viewport);
 

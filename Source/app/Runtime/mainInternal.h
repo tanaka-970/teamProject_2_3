@@ -16,6 +16,7 @@ namespace ReplayEngine::Runtime::Detail
 {
     bool ParseShutdownRegression(const char* command_line);
     bool ParseStartupSceneBoot(const char* command_line);
+    bool ParseCaptureFrame(const char* command_line, std::string& capture_name);
     std::string TrimCopy(std::string text);
     void StripUtf8Bom(std::string& text);
     std::string LowerCopy(std::string text);

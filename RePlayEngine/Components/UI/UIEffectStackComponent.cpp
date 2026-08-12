@@ -29,7 +29,8 @@ namespace ReplayEngine::Components
             const std::string prefix = "effects[";
             if (name.compare(0, prefix.size(), prefix) != 0) return false;
             const std::size_t close = name.find(']', prefix.size());
-            if (close == std::string::npos || close + 2 > name.size() ||
+            if (close == std::string::npos || close == prefix.size() ||
+                close + 2 > name.size() ||
                 name[close + 1] != '.')
             {
                 return false;
@@ -39,7 +40,9 @@ namespace ReplayEngine::Components
             for (std::size_t i = prefix.size(); i < close; ++i)
             {
                 if (!std::isdigit(static_cast<unsigned char>(name[i]))) return false;
-                parsed = parsed * 10 + (name[i] - '0');
+                const int digit = name[i] - '0';
+                if (parsed > (max_effect_count - 1 - digit) / 10) return false;
+                parsed = parsed * 10 + digit;
             }
             index = parsed;
             property = name.substr(close + 2);
@@ -62,6 +65,12 @@ namespace ReplayEngine::Components
             if (property == "seed") return Reflection::PropertyValue::MakeFloat(effect.seed);
             if (property == "direction") return Reflection::PropertyValue::MakeVector2(effect.direction);
             if (property == "color") return Reflection::PropertyValue::MakeColor(effect.color);
+            if (property == "color_2") return Reflection::PropertyValue::MakeColor(effect.color_2);
+            if (property == "color_3") return Reflection::PropertyValue::MakeColor(effect.color_3);
+            if (property == "color_4") return Reflection::PropertyValue::MakeColor(effect.color_4);
+            if (property == "color_stop_2") return Reflection::PropertyValue::MakeFloat(effect.color_stop_2);
+            if (property == "color_stop_3") return Reflection::PropertyValue::MakeFloat(effect.color_stop_3);
+            if (property == "color_stop_4") return Reflection::PropertyValue::MakeFloat(effect.color_stop_4);
             if (property == "mask") return Reflection::PropertyValue::MakeAssetReference(effect.mask);
             if (property == "custom_shader") return Reflection::PropertyValue::MakeAssetReference(effect.custom_shader);
             if (property.rfind("custom.", 0) == 0)
@@ -89,6 +98,12 @@ namespace ReplayEngine::Components
             else if (property == "seed") effect.seed = value.AsFloat(effect.seed);
             else if (property == "direction") effect.direction = value.AsVector2();
             else if (property == "color") effect.color = value.AsVector4();
+            else if (property == "color_2") effect.color_2 = value.AsVector4();
+            else if (property == "color_3") effect.color_3 = value.AsVector4();
+            else if (property == "color_4") effect.color_4 = value.AsVector4();
+            else if (property == "color_stop_2") effect.color_stop_2 = value.AsFloat(effect.color_stop_2);
+            else if (property == "color_stop_3") effect.color_stop_3 = value.AsFloat(effect.color_stop_3);
+            else if (property == "color_stop_4") effect.color_stop_4 = value.AsFloat(effect.color_stop_4);
             else if (property == "mask") effect.mask = value.AsAssetReference().guid;
             else if (property == "custom_shader") effect.custom_shader = value.AsAssetReference().guid;
             else if (property.rfind("custom.", 0) == 0)
@@ -206,6 +221,18 @@ namespace ReplayEngine::Components
                 Reflection::PropertyValue::MakeVector2(effect.direction));
             output.Set(EffectPropertyName(i, "color"),
                 Reflection::PropertyValue::MakeColor(effect.color));
+            output.Set(EffectPropertyName(i, "color_2"),
+                Reflection::PropertyValue::MakeColor(effect.color_2));
+            output.Set(EffectPropertyName(i, "color_3"),
+                Reflection::PropertyValue::MakeColor(effect.color_3));
+            output.Set(EffectPropertyName(i, "color_4"),
+                Reflection::PropertyValue::MakeColor(effect.color_4));
+            output.Set(EffectPropertyName(i, "color_stop_2"),
+                Reflection::PropertyValue::MakeFloat(effect.color_stop_2));
+            output.Set(EffectPropertyName(i, "color_stop_3"),
+                Reflection::PropertyValue::MakeFloat(effect.color_stop_3));
+            output.Set(EffectPropertyName(i, "color_stop_4"),
+                Reflection::PropertyValue::MakeFloat(effect.color_stop_4));
             output.Set(EffectPropertyName(i, "mask"),
                 Reflection::PropertyValue::MakeAssetReference(effect.mask));
             output.Set(EffectPropertyName(i, "custom_shader"),
@@ -258,6 +285,17 @@ namespace ReplayEngine::Components
         if (property_name == nullptr || std::string(property_name) == "effect_count")
         {
             ResizeEffects();
+            RebuildDynamicProperties();
+            return;
+        }
+
+        int effect_index = 0;
+        std::string property;
+        if (ParseEffectPropertyName(property_name, effect_index, property) &&
+            property == "type")
+        {
+            // 種類を変えた直後に、その Effect が実際に使う項目だけへ差し替える。
+            // 保存名は effects[i].radius などのままなので、Scene と Motion Binding は変わらない。
             RebuildDynamicProperties();
         }
     }
@@ -329,33 +367,456 @@ namespace ReplayEngine::Components
             push(MakeEffectProperty(i, "type", Reflection::PropertyType::Enum,
                 Reflection::Animatable::Step)
                 .Display("種類")
-                .AsEnum({ "Blur", "Glow", "Color Adjust", "Noise",
-                    "Shake", "Mask", "Wipe", "Dissolve", "Distortion",
-                    "Chromatic Aberration" }));
-            push(MakeEffectProperty(i, "radius", Reflection::PropertyType::Float,
-                Reflection::Animatable::Interpolatable).Display("半径").Range(0.0, 512.0).Step(0.1));
-            push(MakeEffectProperty(i, "intensity", Reflection::PropertyType::Float,
-                Reflection::Animatable::Interpolatable).Display("強度").Range(0.0, 32.0).Step(0.01));
-            push(MakeEffectProperty(i, "threshold", Reflection::PropertyType::Float,
-                Reflection::Animatable::Interpolatable).Display("しきい値").Range(0.0, 1.0).Step(0.01));
-            push(MakeEffectProperty(i, "amount", Reflection::PropertyType::Float,
-                Reflection::Animatable::Interpolatable).Display("量").Range(-512.0, 512.0).Step(0.1));
-            push(MakeEffectProperty(i, "angle", Reflection::PropertyType::Float,
-                Reflection::Animatable::Interpolatable).Display("角度").Range(-360.0, 360.0).Step(0.1));
-            push(MakeEffectProperty(i, "progress", Reflection::PropertyType::Float,
-                Reflection::Animatable::Interpolatable).Display("進行").Range(0.0, 1.0).Step(0.001));
-            push(MakeEffectProperty(i, "softness", Reflection::PropertyType::Float,
-                Reflection::Animatable::Interpolatable).Display("柔らかさ").Range(0.0, 1.0).Step(0.001));
-            push(MakeEffectProperty(i, "speed", Reflection::PropertyType::Float,
-                Reflection::Animatable::Interpolatable).Display("速度").Step(0.01));
-            push(MakeEffectProperty(i, "seed", Reflection::PropertyType::Float,
-                Reflection::Animatable::Interpolatable).Display("Seed").Step(1.0));
-            push(MakeEffectProperty(i, "direction", Reflection::PropertyType::Vector2,
-                Reflection::Animatable::Interpolatable).Display("方向").Step(0.01));
-            push(MakeEffectProperty(i, "color", Reflection::PropertyType::Color,
-                Reflection::Animatable::Interpolatable).Display("色").AsColor());
-            push(MakeEffectProperty(i, "mask", Reflection::PropertyType::AssetReference,
-                Reflection::Animatable::Step).Display("マスク").OfAssetType("Image"));
+                .Tooltip("適用する Effect の種類。変更すると、その種類が使う項目だけを表示する。")
+                .AsEnum({ "ぼかし", "発光", "色調補正", "ノイズ",
+                    "揺れ", "マスク", "ワイプ", "ディゾルブ", "歪み",
+                    "色収差", "クワハラ", "網点",
+                    "方向ブラー", "放射ブラー", "回転ブラー",
+                    "ビネット", "光条", "レンズ歪み",
+                    "ポスタライズ", "二値化", "カラーランプ", "レベル補正",
+                    "色温度", "エッジ検出", "輪郭線", "ロングシャドウ",
+                    "クロスハッチング", "ブラシストローク", "モザイク", "結晶化",
+                    "ステンドグラス", "渦巻き", "球面化", "波紋",
+                    "極座標", "走査線", "CRT", "グリッチ",
+                    "ディザ", "VHS", "レターボックス" }));
+
+            const auto add_float = [&](const char* name, const char* display,
+                const char* tooltip, double minimum, double maximum, double step)
+            {
+                push(MakeEffectProperty(i, name, Reflection::PropertyType::Float,
+                    Reflection::Animatable::Interpolatable)
+                    .Display(display).Tooltip(tooltip)
+                    .Range(minimum, maximum).Step(step));
+            };
+            const auto add_named_color = [&](const char* name, const char* display,
+                const char* tooltip)
+            {
+                push(MakeEffectProperty(i, name, Reflection::PropertyType::Color,
+                    Reflection::Animatable::Interpolatable)
+                    .Display(display).Tooltip(tooltip).AsColor());
+            };
+            const auto add_color = [&](const char* display, const char* tooltip)
+            {
+                add_named_color("color", display, tooltip);
+            };
+            const auto add_seed = [&]()
+            {
+                add_float("seed", "乱数 Seed",
+                    "同じ値なら同じ揺れ・ノイズになる。", -65536.0, 65536.0, 1.0);
+            };
+
+            switch (static_cast<UI::UIEffectKind>(effects[index].kind))
+            {
+            case UI::UIEffectKind::Blur:
+                add_float("radius", "ぼかし半径", "ぼかしを広げる距離（ピクセル）。",
+                    0.0, 512.0, 0.1);
+                add_float("intensity", "適用量", "元画像からぼかし画像へ混ぜる割合。",
+                    0.0, 1.0, 0.01);
+                break;
+            case UI::UIEffectKind::Glow:
+                add_float("radius", "光の半径", "発光を広げる距離（ピクセル）。",
+                    0.0, 512.0, 0.1);
+                add_float("intensity", "光の強さ", "加算する発光の強さ。",
+                    0.0, 32.0, 0.01);
+                add_float("threshold", "発光しきい値",
+                    "この明るさ以上の部分から光を作る。0 なら色を問わず光る。",
+                    0.0, 1.0, 0.01);
+                add_color("光の色", "発光へ掛ける色と不透明度。");
+                break;
+            case UI::UIEffectKind::ColorAdjust:
+                add_float("radius", "彩度", "1 が元の彩度、0 でグレースケール。",
+                    0.0, 8.0, 0.01);
+                add_float("intensity", "コントラスト", "1 が元のコントラスト。",
+                    0.0, 8.0, 0.01);
+                add_float("amount", "明るさ", "RGB へ加える量。0 が中立。",
+                    -1.0, 1.0, 0.01);
+                add_float("angle", "色相", "色相を回す角度（度）。",
+                    -360.0, 360.0, 0.1);
+                add_color("色の乗算", "色調整の最後に RGB へ掛ける色。");
+                break;
+            case UI::UIEffectKind::Noise:
+                add_float("intensity", "ノイズ量", "加える粒状ノイズの強さ。",
+                    0.0, 2.0, 0.01);
+                add_float("amount", "粒の大きさ", "同じノイズ値を共有するセルの大きさ。",
+                    1.0, 256.0, 0.1);
+                add_float("speed", "流れる速度", "時間に対するノイズの変化速度。",
+                    -32.0, 32.0, 0.01);
+                add_seed();
+                add_color("ノイズの色", "ノイズへ掛ける RGB。");
+                break;
+            case UI::UIEffectKind::Shake:
+                add_float("amount", "揺れ幅", "位置をずらす最大距離（ピクセル）。",
+                    0.0, 512.0, 0.1);
+                add_float("intensity", "強度", "揺れ幅へ掛ける倍率。",
+                    0.0, 32.0, 0.01);
+                add_float("speed", "揺れる速度", "時間に対する揺れの速さ。",
+                    -32.0, 32.0, 0.01);
+                add_seed();
+                break;
+            case UI::UIEffectKind::Mask:
+                add_float("amount", "形状", "0 で矩形、1 で円。途中の値は連続補間する。",
+                    0.0, 1.0, 0.01);
+                add_float("angle", "回転", "マスク形状の回転角度（度）。",
+                    -360.0, 360.0, 0.1);
+                add_float("softness", "境界の柔らかさ", "形状または画像の境界をぼかす量。",
+                    0.0, 1.0, 0.001);
+                push(MakeEffectProperty(i, "direction", Reflection::PropertyType::Vector2,
+                    Reflection::Animatable::Interpolatable)
+                    .Display("中心").Tooltip("正規化座標で指定するマスク中心。0.5, 0.5 が中央。")
+                    .Step(0.01));
+                add_float("seed", "横半径", "矩形または円の横半径（正規化座標）。",
+                    0.0001, 1.0, 0.001);
+                add_float("speed", "縦半径", "矩形または円の縦半径（正規化座標）。",
+                    0.0001, 1.0, 0.001);
+                push(MakeEffectProperty(i, "mask", Reflection::PropertyType::AssetReference,
+                    Reflection::Animatable::Step).Display("マスク画像")
+                    .Tooltip("設定した場合は画像のアルファで切り抜く。")
+                    .OfAssetType("Image"));
+                break;
+            case UI::UIEffectKind::Wipe:
+                add_float("progress", "進行", "0 から 1 でワイプを進める。",
+                    0.0, 1.0, 0.001);
+                add_float("angle", "方向", "ワイプ境界の角度（度）。",
+                    -360.0, 360.0, 0.1);
+                add_float("softness", "境界の柔らかさ", "ワイプ境界をぼかす量。",
+                    0.0001, 1.0, 0.001);
+                break;
+            case UI::UIEffectKind::Dissolve:
+                add_float("progress", "進行", "0 から 1 で消失を進める。",
+                    0.0, 1.0, 0.001);
+                add_float("threshold", "縁の幅", "消え際に着色する帯の幅。",
+                    0.0001, 1.0, 0.001);
+                add_seed();
+                add_color("縁の色", "消え際の帯へ使う色。");
+                break;
+            case UI::UIEffectKind::Distortion:
+                add_float("threshold", "波の周波数", "画面内に作る波の細かさ。",
+                    0.001, 128.0, 0.01);
+                add_float("amount", "歪み幅", "UV をずらす距離（ピクセル）。",
+                    -512.0, 512.0, 0.1);
+                add_float("intensity", "強度", "歪み幅へ掛ける倍率。",
+                    0.0, 32.0, 0.01);
+                add_float("speed", "流れる速度", "波が時間方向へ進む速さ。",
+                    -32.0, 32.0, 0.01);
+                add_seed();
+                break;
+            case UI::UIEffectKind::ChromaticAberration:
+                add_float("amount", "色ずれ距離", "RGB チャンネルを離す距離（ピクセル）。",
+                    0.0, 512.0, 0.1);
+                add_float("intensity", "強度", "色ずれ距離へ掛ける倍率。",
+                    0.0, 32.0, 0.01);
+                break;
+            case UI::UIEffectKind::Kuwahara:
+                add_float("radius", "筆面の半径", "8 セクタを調べる広がり（ピクセル）。",
+                    0.0, 128.0, 0.1);
+                add_float("intensity", "適用量", "元画像から平坦化画像へ混ぜる割合。",
+                    0.0, 1.0, 0.01);
+                break;
+            case UI::UIEffectKind::Halftone:
+                add_float("radius", "網の間隔", "網点セルの間隔（ピクセル）。",
+                    1.0, 256.0, 0.1);
+                add_float("intensity", "適用量", "元画像から網点画像へ混ぜる割合。",
+                    0.0, 1.0, 0.01);
+                add_float("angle", "網の角度", "RGB 各版へ加える全体回転（度）。",
+                    -360.0, 360.0, 0.1);
+                add_float("softness", "点の柔らかさ", "網点の縁をぼかす量。",
+                    0.0, 1.0, 0.001);
+                add_color("網点の色", "白なら元の色相を保つ。");
+                break;
+            case UI::UIEffectKind::DirectionalBlur:
+                add_float("angle", "流す角度", "ぼかしを伸ばす方向（度）。",
+                    -360.0, 360.0, 0.1);
+                add_float("amount", "距離", "進行方向へ流す距離（ピクセル）。",
+                    0.0, 512.0, 0.1);
+                add_float("intensity", "適用量", "元画像から方向ブラーへ混ぜる割合。",
+                    0.0, 1.0, 0.01);
+                break;
+            case UI::UIEffectKind::RadialBlur:
+                push(MakeEffectProperty(i, "direction", Reflection::PropertyType::Vector2,
+                    Reflection::Animatable::Interpolatable).Display("中心")
+                    .Tooltip("放射の中心。0.5, 0.5 が中央。").Step(0.01));
+                add_float("amount", "強さ", "中心から伸ばす最大距離（ピクセル）。",
+                    -512.0, 512.0, 0.1);
+                add_float("intensity", "適用量", "元画像から放射ブラーへ混ぜる割合。",
+                    0.0, 1.0, 0.01);
+                break;
+            case UI::UIEffectKind::RotationalBlur:
+                push(MakeEffectProperty(i, "direction", Reflection::PropertyType::Vector2,
+                    Reflection::Animatable::Interpolatable).Display("中心")
+                    .Tooltip("回転の中心。0.5, 0.5 が中央。").Step(0.01));
+                add_float("angle", "回転量", "ブラーが覆う角度（度）。",
+                    -180.0, 180.0, 0.1);
+                add_float("intensity", "適用量", "元画像から回転ブラーへ混ぜる割合。",
+                    0.0, 1.0, 0.01);
+                break;
+            case UI::UIEffectKind::Vignette:
+                add_float("radius", "中心の半径", "効果が始まる中心領域の半径。",
+                    0.0, 1.5, 0.001);
+                add_float("softness", "境界の柔らかさ", "中心から周辺へ移る幅。",
+                    0.0001, 1.0, 0.001);
+                add_float("intensity", "強さ", "周辺へ重ねる色の量。",
+                    0.0, 1.0, 0.01);
+                add_color("周辺の色", "黒で周辺減光、明色で中心を強調できる。");
+                break;
+            case UI::UIEffectKind::LightStreaks:
+                add_float("amount", "光条の本数", "中心から伸ばす方向の数。最大 8 本。",
+                    1.0, 8.0, 1.0);
+                add_float("radius", "光条の長さ", "明部を伸ばす距離（ピクセル）。",
+                    0.0, 512.0, 0.1);
+                add_float("angle", "基準角度", "最初の光条の角度（度）。",
+                    -360.0, 360.0, 0.1);
+                add_float("threshold", "明部しきい値", "光条の発生元にする明るさ。",
+                    0.0, 1.0, 0.01);
+                add_float("intensity", "光の強さ", "光条を加算する強さ。",
+                    0.0, 16.0, 0.01);
+                add_color("光条の色", "光条へ掛ける色。");
+                break;
+            case UI::UIEffectKind::LensDistortion:
+                push(MakeEffectProperty(i, "direction", Reflection::PropertyType::Vector2,
+                    Reflection::Animatable::Interpolatable).Display("中心")
+                    .Tooltip("レンズ歪みの中心。0.5, 0.5 が中央。").Step(0.01));
+                add_float("amount", "歪み量", "正で樽型、負で糸巻き型。",
+                    -2.0, 2.0, 0.001);
+                add_float("intensity", "適用量", "元画像から歪み画像へ混ぜる割合。",
+                    0.0, 1.0, 0.01);
+                break;
+            case UI::UIEffectKind::Posterize:
+                add_float("amount", "階調数", "各 RGB チャンネルに残す段階数。",
+                    2.0, 64.0, 1.0);
+                add_float("intensity", "適用量", "元画像から減色画像へ混ぜる割合。",
+                    0.0, 1.0, 0.01);
+                break;
+            case UI::UIEffectKind::Threshold:
+                add_float("threshold", "しきい値", "白へ切り替える明るさ。",
+                    0.0, 1.0, 0.001);
+                add_float("softness", "境界の柔らかさ", "二値境界を連続的にする幅。",
+                    0.0, 1.0, 0.001);
+                add_float("intensity", "適用量", "元画像から二値画像へ混ぜる割合。",
+                    0.0, 1.0, 0.01);
+                add_color("白側の色", "しきい値以上の領域に使う色。");
+                break;
+            case UI::UIEffectKind::ColorRamp:
+                add_color("色 1", "明度 0 に割り当てる色。");
+                add_named_color("color_2", "色 2", "第 2 色。");
+                add_named_color("color_3", "色 3", "第 3 色。");
+                add_named_color("color_4", "色 4", "明度 1 側の第 4 色。");
+                add_float("color_stop_2", "色 2 の位置", "色 2 を置く明度位置。",
+                    0.0, 1.0, 0.001);
+                add_float("color_stop_3", "色 3 の位置", "色 3 を置く明度位置。",
+                    0.0, 1.0, 0.001);
+                add_float("color_stop_4", "色 4 の位置", "色 4 を置く明度位置。",
+                    0.0, 1.0, 0.001);
+                add_float("intensity", "適用量", "元画像からカラーランプへ混ぜる割合。",
+                    0.0, 1.0, 0.01);
+                break;
+            case UI::UIEffectKind::Levels:
+                add_float("threshold", "入力の黒点", "これ以下の入力を黒へ寄せる。",
+                    0.0, 1.0, 0.001);
+                add_float("amount", "入力の白点", "これ以上の入力を白へ寄せる。",
+                    0.0, 1.0, 0.001);
+                add_float("angle", "ガンマ補正", "0 が中立。正で明るく、負で暗くする。",
+                    -4.0, 4.0, 0.001);
+                push(MakeEffectProperty(i, "direction", Reflection::PropertyType::Vector2,
+                    Reflection::Animatable::Interpolatable).Display("出力の黒点 / 白点")
+                    .Tooltip("補正後の出力範囲。既定は 0, 1。").Step(0.001));
+                add_float("intensity", "適用量", "元画像からレベル補正へ混ぜる割合。",
+                    0.0, 1.0, 0.01);
+                break;
+            case UI::UIEffectKind::Temperature:
+                add_float("angle", "色温度", "負で寒色、正で暖色へ寄せる。",
+                    -1.0, 1.0, 0.001);
+                add_float("progress", "ティント", "負で緑、正でマゼンタへ寄せる。",
+                    -1.0, 1.0, 0.001);
+                add_float("intensity", "適用量", "元画像から色温度補正へ混ぜる割合。",
+                    0.0, 1.0, 0.01);
+                break;
+            case UI::UIEffectKind::EdgeDetect:
+                add_float("radius", "輪郭の太さ", "Sobel のサンプル間隔（ピクセル）。",
+                    0.25, 16.0, 0.01);
+                add_float("intensity", "輪郭の強さ", "検出した勾配へ掛ける強さ。",
+                    0.0, 32.0, 0.01);
+                add_color("輪郭の色", "検出した輪郭へ使う色。");
+                break;
+            case UI::UIEffectKind::Outline:
+                add_float("radius", "線の太さ", "元画像の外へ広げる距離（ピクセル）。",
+                    0.0, 64.0, 0.1);
+                add_float("intensity", "線の濃さ", "輪郭線の不透明度へ掛ける量。",
+                    0.0, 4.0, 0.01);
+                add_color("線の色", "元画像へ重ねる輪郭線の色。");
+                break;
+            case UI::UIEffectKind::LongShadow:
+                add_float("angle", "影の角度", "影を押し出す方向（度）。",
+                    -360.0, 360.0, 0.1);
+                add_float("amount", "影の長さ", "影を伸ばす距離（ピクセル）。",
+                    0.0, 1024.0, 0.1);
+                add_float("intensity", "影の濃さ", "影の不透明度へ掛ける量。",
+                    0.0, 4.0, 0.01);
+                add_color("影の色", "押し出した影へ使う色。");
+                break;
+            case UI::UIEffectKind::CrossHatch:
+                add_float("radius", "線の間隔", "ハッチ線どうしの間隔（ピクセル）。",
+                    2.0, 128.0, 0.1);
+                add_float("angle", "線の角度", "基準となる斜線の角度（度）。",
+                    -360.0, 360.0, 0.1);
+                add_float("amount", "濃度の段数", "明度に応じて重ねる斜線方向の数。",
+                    1.0, 4.0, 1.0);
+                add_float("softness", "線の柔らかさ", "線の縁をぼかす量。",
+                    0.0, 1.0, 0.001);
+                add_float("intensity", "適用量", "元画像から線画へ混ぜる割合。",
+                    0.0, 1.0, 0.01);
+                add_color("線の色", "ハッチ線へ使う色。");
+                break;
+            case UI::UIEffectKind::BrushStroke:
+                add_float("radius", "筆の長さ", "構造に沿って平均する長軸（ピクセル）。",
+                    1.0, 128.0, 0.1);
+                add_float("amount", "筆の幅", "構造をまたいで平均する短軸（ピクセル）。",
+                    0.5, 64.0, 0.1);
+                add_float("threshold", "向きの乱れ", "輪郭方向へ加える微小な乱れ。",
+                    0.0, 1.0, 0.001);
+                add_float("intensity", "適用量", "元画像から筆致画像へ混ぜる割合。",
+                    0.0, 1.0, 0.01);
+                add_seed();
+                break;
+            case UI::UIEffectKind::Mosaic:
+                add_float("radius", "セル幅", "正方セルの大きさ（ピクセル）。",
+                    1.0, 512.0, 0.1);
+                add_float("intensity", "適用量", "元画像からモザイクへ混ぜる割合。",
+                    0.0, 1.0, 0.01);
+                break;
+            case UI::UIEffectKind::Crystallize:
+                add_float("radius", "セル幅", "ボロノイセルの大きさ（ピクセル）。",
+                    2.0, 512.0, 0.1);
+                add_float("threshold", "セルの乱れ", "セル中心を格子からずらす割合。",
+                    0.0, 1.0, 0.001);
+                add_float("intensity", "適用量", "元画像から結晶化画像へ混ぜる割合。",
+                    0.0, 1.0, 0.01);
+                add_seed();
+                break;
+            case UI::UIEffectKind::StainedGlass:
+                add_float("radius", "セル幅", "ステンドグラス片の大きさ（ピクセル）。",
+                    2.0, 512.0, 0.1);
+                add_float("threshold", "縁の幅", "セル境界へ描く線の太さ。",
+                    0.0, 0.5, 0.001);
+                add_float("softness", "縁の柔らかさ", "境界線のアンチエイリアス幅。",
+                    0.0, 1.0, 0.001);
+                add_float("intensity", "適用量", "元画像からステンドグラスへ混ぜる割合。",
+                    0.0, 1.0, 0.01);
+                add_seed();
+                add_color("縁の色", "セル境界へ使う色。");
+                break;
+            case UI::UIEffectKind::Twirl:
+                push(MakeEffectProperty(i, "direction", Reflection::PropertyType::Vector2,
+                    Reflection::Animatable::Interpolatable).Display("中心")
+                    .Tooltip("渦の中心。0.5, 0.5 が中央。").Step(0.01));
+                add_float("angle", "渦の強さ", "中心で加える回転角度（度）。",
+                    -1440.0, 1440.0, 0.1);
+                add_float("radius", "渦の半径", "効果が消える中心からの半径。",
+                    0.001, 1.5, 0.001);
+                add_float("intensity", "適用量", "元画像から渦画像へ混ぜる割合。",
+                    0.0, 1.0, 0.01);
+                break;
+            case UI::UIEffectKind::Spherize:
+                push(MakeEffectProperty(i, "direction", Reflection::PropertyType::Vector2,
+                    Reflection::Animatable::Interpolatable).Display("中心")
+                    .Tooltip("球面効果の中心。0.5, 0.5 が中央。").Step(0.01));
+                add_float("angle", "膨らみ量", "正で膨張、負で収縮。",
+                    -1.0, 1.0, 0.001);
+                add_float("radius", "球面の半径", "効果が消える中心からの半径。",
+                    0.001, 1.5, 0.001);
+                add_float("intensity", "適用量", "元画像から球面画像へ混ぜる割合。",
+                    0.0, 1.0, 0.01);
+                break;
+            case UI::UIEffectKind::Ripple:
+                push(MakeEffectProperty(i, "direction", Reflection::PropertyType::Vector2,
+                    Reflection::Animatable::Interpolatable).Display("中心")
+                    .Tooltip("波紋の中心。0.5, 0.5 が中央。").Step(0.01));
+                add_float("radius", "波長", "波 1 周期の長さ（ピクセル）。",
+                    1.0, 512.0, 0.1);
+                add_float("amount", "振幅", "UV をずらす最大距離（ピクセル）。",
+                    -128.0, 128.0, 0.1);
+                add_float("speed", "広がる速度", "時間に対して位相を進める速さ。",
+                    -32.0, 32.0, 0.01);
+                add_float("intensity", "適用量", "元画像から波紋画像へ混ぜる割合。",
+                    0.0, 1.0, 0.01);
+                add_seed();
+                break;
+            case UI::UIEffectKind::PolarCoordinates:
+                push(MakeEffectProperty(i, "direction", Reflection::PropertyType::Vector2,
+                    Reflection::Animatable::Interpolatable).Display("中心")
+                    .Tooltip("極座標の中心。0.5, 0.5 が中央。").Step(0.01));
+                add_float("progress", "変換量", "0 で元画像、1 で直交座標から極座標へ変換。",
+                    0.0, 1.0, 0.001);
+                add_float("angle", "回転", "輪へ巻く開始角度（度）。",
+                    -360.0, 360.0, 0.1);
+                break;
+            case UI::UIEffectKind::Scanlines:
+                add_float("radius", "線の間隔", "走査線の周期（ピクセル）。",
+                    1.0, 128.0, 0.1);
+                add_float("intensity", "線の濃さ", "走査線へ重ねる色の量。",
+                    0.0, 1.0, 0.01);
+                add_float("speed", "流れる速度", "走査線が縦へ動く速度。",
+                    -512.0, 512.0, 0.1);
+                add_color("線の色", "走査線へ重ねる色。");
+                break;
+            case UI::UIEffectKind::CRT:
+                add_float("progress", "画面の湾曲", "ブラウン管状の樽型歪み。",
+                    0.0, 1.0, 0.001);
+                add_float("radius", "走査線の間隔", "横走査線の周期（ピクセル）。",
+                    1.0, 64.0, 0.1);
+                add_float("intensity", "走査線の濃さ", "横線による減光量。",
+                    0.0, 1.0, 0.01);
+                add_float("threshold", "縁の減光", "画面周辺を暗くする量。",
+                    0.0, 1.0, 0.01);
+                add_float("softness", "縁の柔らかさ", "画面外周のぼかし幅。",
+                    0.0001, 1.0, 0.001);
+                break;
+            case UI::UIEffectKind::Glitch:
+                add_float("radius", "帯の高さ", "横ずれを共有する帯の高さ（ピクセル）。",
+                    1.0, 256.0, 0.1);
+                add_float("amount", "ずれ量", "帯を横へ動かす最大距離（ピクセル）。",
+                    0.0, 512.0, 0.1);
+                add_float("threshold", "発生頻度", "ずれる帯の割合。",
+                    0.0, 1.0, 0.001);
+                add_float("intensity", "チャンネルずれ", "RGB を離す距離（ピクセル）。",
+                    0.0, 64.0, 0.1);
+                add_float("speed", "変化速度", "帯パターンが切り替わる速さ。",
+                    0.0, 64.0, 0.01);
+                add_seed();
+                break;
+            case UI::UIEffectKind::Dither:
+                add_float("amount", "階調数", "ディザ後に残す明度段階数。",
+                    2.0, 64.0, 1.0);
+                add_float("radius", "行列サイズ", "Bayer 行列の大きさ。2 / 4 / 8 を使う。",
+                    2.0, 8.0, 2.0);
+                add_float("intensity", "適用量", "元画像からディザ画像へ混ぜる割合。",
+                    0.0, 1.0, 0.01);
+                break;
+            case UI::UIEffectKind::VHS:
+                add_float("radius", "横揺れ", "走査行を横へ揺らす距離（ピクセル）。",
+                    0.0, 128.0, 0.1);
+                add_float("amount", "横にじみ", "過去方向へ色を引く距離（ピクセル）。",
+                    0.0, 128.0, 0.1);
+                add_float("threshold", "色ずれ", "RGB チャンネルを離す距離（ピクセル）。",
+                    0.0, 64.0, 0.1);
+                add_float("softness", "ノイズ量", "加えるテープノイズの強さ。",
+                    0.0, 1.0, 0.001);
+                add_float("speed", "変化速度", "揺れとノイズが流れる速さ。",
+                    0.0, 64.0, 0.01);
+                add_seed();
+                break;
+            case UI::UIEffectKind::Letterbox:
+                add_float("radius", "画面比", "残す表示領域の横 / 縦比。",
+                    0.1, 8.0, 0.001);
+                add_float("softness", "帯の柔らかさ", "黒帯の内側境界をぼかす幅。",
+                    0.0, 0.25, 0.0001);
+                add_float("intensity", "帯の濃さ", "帯色の不透明度へ掛ける量。",
+                    0.0, 1.0, 0.01);
+                add_color("帯の色", "上下または左右へ置く額縁色。");
+                break;
+            default:
+                break;
+            }
+
             push(MakeEffectProperty(i, "custom_shader",
                 Reflection::PropertyType::AssetReference,
                 Reflection::Animatable::Step)

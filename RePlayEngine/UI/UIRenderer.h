@@ -84,6 +84,7 @@ namespace ReplayEngine::UI
             FontAtlas& font_atlas,
             float screen_width,
             float screen_height,
+            float effect_time,
             const RenderStates& states);
 
     private:
@@ -129,6 +130,11 @@ namespace ReplayEngine::UI
             DirectX::XMFLOAT4 effect_params1{ 0.0f, 0.0f, 0.0f, 0.0f };
             DirectX::XMFLOAT4 effect_params2{ 1.0f, -1.0f, 0.0f, 0.0f };
             DirectX::XMFLOAT4 target_size{ 1.0f, 1.0f, 1.0f, 1.0f };
+            // 既存 12 種が読む先頭 5 レジスタは動かさず、拡張値は末尾へ置く。
+            DirectX::XMFLOAT4 effect_color_2{ 1.0f, 1.0f, 1.0f, 1.0f };
+            DirectX::XMFLOAT4 effect_color_3{ 1.0f, 1.0f, 1.0f, 1.0f };
+            DirectX::XMFLOAT4 effect_color_4{ 1.0f, 1.0f, 1.0f, 1.0f };
+            DirectX::XMFLOAT4 effect_color_stops{ 0.333333f, 0.666667f, 1.0f, 0.0f };
         };
 
         struct VisualConstants
@@ -146,9 +152,13 @@ namespace ReplayEngine::UI
             // 画面上の変化量なので、シェーダーでは fwidth(distance) を使う。
             DirectX::XMFLOAT4 atlas_size{ 2048.0f, 2048.0f,
                 8.0f, 0.0f };
+            DirectX::XMFLOAT4 fill_color_3{ 1.0f, 1.0f, 1.0f, 1.0f };
+            DirectX::XMFLOAT4 fill_color_4{ 1.0f, 1.0f, 1.0f, 1.0f };
+            // x/y/z = 色 2/3/4 の位置。y/z が負なら色 3/4 は未設定。
+            DirectX::XMFLOAT4 fill_stops{ 1.0f, -1.0f, -1.0f, 0.0f };
         };
 
-        static constexpr std::size_t effect_shader_count = 10;
+        static constexpr std::size_t effect_shader_count = 41;
 
         bool EnsureVertexCapacity(ID3D11Device* device, std::size_t vertex_count);
         bool EnsureCustomEffectConstantBuffer(std::uint32_t byte_width);
