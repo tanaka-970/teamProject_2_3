@@ -55,8 +55,8 @@ OBJECT
     TYPE_VERSION 1
     PROPERTY_COUNT 8
     PROPERTY "anchor_min" vec2 0.5 0.5
-    PROPERTY "anchor_max" vec2 0.5 0.5
-    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "anchor_max" vec2 1.3999999761581421 1.3660000562667847
+    PROPERTY "anchored_position" vec2 -822.2548828125 -488.4334716796875
     PROPERTY "size_delta" vec2 160 80
     PROPERTY "pivot" vec2 0.5 0.5
     PROPERTY "rotation" float 0
@@ -69,8 +69,8 @@ OBJECT
     TYPE_MODULE ""
     TYPE_VERSION 1
     PROPERTY_COUNT 16
-    PROPERTY "sprite" assetref ""
-    PROPERTY "color" color 0.82591092586517334 0.16384468972682953 0.16384468972682953 1
+    PROPERTY "sprite" assetref "4895d90a3b03c22cfcbbc684c56f9431"
+    PROPERTY "color" color 1 0.99998998641967773 0.99998998641967773 1
     PROPERTY "fill_color_2" color 1 1 1 1
     PROPERTY "fill_mode" enum 0
     PROPERTY "fill_angle" float 0
@@ -91,38 +91,50 @@ OBJECT
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
-    PROPERTY_COUNT 32
+    PROPERTY_COUNT 44
     PROPERTY "enabled" bool 1
     PROPERTY "effect_count" int 2
-    PROPERTY "effects[0].enabled" bool 1
-    PROPERTY "effects[0].type" enum 1
-    PROPERTY "effects[0].radius" float 13
-    PROPERTY "effects[0].intensity" float 1
-    PROPERTY "effects[0].threshold" float 0.5
-    PROPERTY "effects[0].amount" float 0.5
+    PROPERTY "effects[0].enabled" bool 0
+    PROPERTY "effects[0].type" enum 8
+    PROPERTY "effects[0].threshold" float 0
+    PROPERTY "effects[0].amount" float 15.100000381469727
+    PROPERTY "effects[0].intensity" float 1.1799999475479126
+    PROPERTY "effects[0].speed" float 1.7599999904632568
+    PROPERTY "effects[0].seed" float 0
+    PROPERTY "effects[0].custom_shader" assetref ""
+    PROPERTY "effects[1].enabled" bool 1
+    PROPERTY "effects[1].type" enum 40
+    PROPERTY "effects[1].radius" float 600
+    PROPERTY "effects[1].softness" float 0.38400000333786011
+    PROPERTY "effects[1].intensity" float 25.290000915527344
+    PROPERTY "effects[1].color" color 1 1 1 0.14117647707462311
+    PROPERTY "effects[1].custom_shader" assetref ""
+    PROPERTY "effects[0].radius" float 8
     PROPERTY "effects[0].angle" float 0
     PROPERTY "effects[0].progress" float 0
     PROPERTY "effects[0].softness" float 0
-    PROPERTY "effects[0].speed" float 0
-    PROPERTY "effects[0].seed" float 0
     PROPERTY "effects[0].direction" vec2 1 -1
     PROPERTY "effects[0].color" color 1 1 1 1
+    PROPERTY "effects[0].color_2" color 1 1 1 1
+    PROPERTY "effects[0].color_3" color 1 1 1 1
+    PROPERTY "effects[0].color_4" color 1 1 1 1
+    PROPERTY "effects[0].color_stop_2" float 0.33333298563957214
+    PROPERTY "effects[0].color_stop_3" float 0.66666698455810547
+    PROPERTY "effects[0].color_stop_4" float 1
     PROPERTY "effects[0].mask" assetref ""
-    PROPERTY "effects[0].custom_shader" assetref ""
-    PROPERTY "effects[1].enabled" bool 1
-    PROPERTY "effects[1].type" enum 9
-    PROPERTY "effects[1].radius" float 8
-    PROPERTY "effects[1].intensity" float 1
-    PROPERTY "effects[1].threshold" float 0.5
-    PROPERTY "effects[1].amount" float 26.100000381469727
-    PROPERTY "effects[1].angle" float 0
-    PROPERTY "effects[1].progress" float 0
-    PROPERTY "effects[1].softness" float 0
-    PROPERTY "effects[1].speed" float 0
-    PROPERTY "effects[1].seed" float 0
-    PROPERTY "effects[1].direction" vec2 1 -1
-    PROPERTY "effects[1].color" color 1 1 1 1
+    PROPERTY "effects[1].threshold" float 63.945999145507812
+    PROPERTY "effects[1].amount" float 128
+    PROPERTY "effects[1].angle" float -49.554000854492188
+    PROPERTY "effects[1].progress" float 0.93199998140335083
+    PROPERTY "effects[1].speed" float 14.479999542236328
+    PROPERTY "effects[1].seed" float 432
+    PROPERTY "effects[1].direction" vec2 2.2999999523162842 -0.34000000357627869
+    PROPERTY "effects[1].color_2" color 0.89068824052810669 0.13702894747257233 0.13702894747257233 0.0078431377187371254
+    PROPERTY "effects[1].color_3" color 1 1 1 1
+    PROPERTY "effects[1].color_4" color 1 1 1 1
+    PROPERTY "effects[1].color_stop_2" float 0.53630000352859497
+    PROPERTY "effects[1].color_stop_3" float 0.66666698455810547
+    PROPERTY "effects[1].color_stop_4" float 1
     PROPERTY "effects[1].mask" assetref ""
-    PROPERTY "effects[1].custom_shader" assetref ""
   END_COMPONENT
 END_OBJECT
