@@ -1,0 +1,151 @@
+REPLAY_SCENE 11
+SCENE "新しいシーン"
+SCENE_STATE 0
+COLLISION_STATE 2 0
+OBJECT_COUNT 3
+OBJECT
+  ID 6
+  NAME "Canvas"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "CanvasComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 6
+    PROPERTY "reference_resolution" vec2 1920 1080
+    PROPERTY "render_mode" enum 0
+    PROPERTY "scale_mode" enum 1
+    PROPERTY "match_width_or_height" float 0.5
+    PROPERTY "sort_order" int 0
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0 0
+    PROPERTY "anchor_max" vec2 1 1
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 0 0
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 7
+  NAME "Image"
+  ENABLED 1
+  PARENT 6
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.22400000691413879 0.38499999046325684
+    PROPERTY "anchor_max" vec2 0.86400002241134644 1.0099999904632568
+    PROPERTY "anchored_position" vec2 -74.5 -215.5
+    PROPERTY "size_delta" vec2 160 80
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 16
+    PROPERTY "sprite" assetref "4895d90a3b03c22cfcbbc684c56f9431"
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "fill_color_2" color 1 1 1 1
+    PROPERTY "fill_mode" enum 0
+    PROPERTY "fill_angle" float 0
+    PROPERTY "fill_center" vec2 0.5 0.5
+    PROPERTY "stroke_mode" enum 0
+    PROPERTY "stroke_color_2" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "fill_amount" float 1
+    PROPERTY "fill_method" enum 0
+    PROPERTY "blend_mode" enum 0
+    PROPERTY "uv_offset" vec2 0 0
+    PROPERTY "uv_scale" vec2 1 1
+    PROPERTY "nine_slice" vec4 0 0 0 0
+    PROPERTY "preserve_aspect" bool 0
+  END_COMPONENT
+  COMPONENT "UIEffectStackComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 46
+    PROPERTY "enabled" bool 1
+    PROPERTY "effect_count" int 2
+    PROPERTY "effects[0].enabled" bool 1
+    PROPERTY "effects[0].type" enum 10
+    PROPERTY "effects[0].radius" float 5
+    PROPERTY "effects[0].intensity" float 1
+    PROPERTY "effects[0].custom_shader" assetref ""
+    PROPERTY "effects[1].enabled" bool 0
+    PROPERTY "effects[1].type" enum 38
+    PROPERTY "effects[1].amount" float 6
+    PROPERTY "effects[1].radius" float 4
+    PROPERTY "effects[1].intensity" float 1
+    PROPERTY "effects[1].custom_shader" assetref ""
+    PROPERTY "effects[0].threshold" float 0.05000000074505806
+    PROPERTY "effects[0].amount" float 0.94999998807907104
+    PROPERTY "effects[0].angle" float 0.15000000596046448
+    PROPERTY "effects[0].progress" float 0.99900001287460327
+    PROPERTY "effects[0].softness" float 0.31600001454353333
+    PROPERTY "effects[0].speed" float 7.429999828338623
+    PROPERTY "effects[0].seed" float 1
+    PROPERTY "effects[0].direction" vec2 0 1
+    PROPERTY "effects[0].color" color 1 1 1 1
+    PROPERTY "effects[0].color_2" color 0 0.26255488395690918 1 1
+    PROPERTY "effects[0].color_3" color 0.3081781268119812 0.94999998807907104 0.11999998241662979 1
+    PROPERTY "effects[0].color_4" color 1 0.94999998807907104 0.55000001192092896 1
+    PROPERTY "effects[0].color_stop_2" float 0.33333298563957214
+    PROPERTY "effects[0].color_stop_3" float 0.66666698455810547
+    PROPERTY "effects[0].color_stop_4" float 1
+    PROPERTY "effects[0].mask" assetref ""
+    PROPERTY "effects[0].waveform" enum 3
+    PROPERTY "effects[1].threshold" float 0.18000000715255737
+    PROPERTY "effects[1].angle" float 0
+    PROPERTY "effects[1].progress" float 0.11999999731779099
+    PROPERTY "effects[1].softness" float 0.34999999403953552
+    PROPERTY "effects[1].speed" float 8
+    PROPERTY "effects[1].seed" float 0
+    PROPERTY "effects[1].direction" vec2 1 -1
+    PROPERTY "effects[1].color" color 1 1 1 1
+    PROPERTY "effects[1].color_2" color 1 1 1 1
+    PROPERTY "effects[1].color_3" color 1 1 1 1
+    PROPERTY "effects[1].color_4" color 1 1 1 1
+    PROPERTY "effects[1].color_stop_2" float 0.33333298563957214
+    PROPERTY "effects[1].color_stop_3" float 0.66666698455810547
+    PROPERTY "effects[1].color_stop_4" float 1
+    PROPERTY "effects[1].mask" assetref ""
+    PROPERTY "effects[1].waveform" enum 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 8
+  NAME "Image"
+  ENABLED 1
+  PARENT 6
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 0
+END_OBJECT

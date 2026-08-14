@@ -1415,18 +1415,26 @@ namespace ReplayEngine::UI
             const DirectX::XMFLOAT4 source_rect = rect.ResolvedRect();
             const DirectX::XMFLOAT4 expansion = effects.ExpandBounds(
                 source_rect.z * scale, source_rect.w * scale);
-            const float expanded_width = (std::max)(1.0f,
-                source_rect.z + expansion.x + expansion.z);
-            const float expanded_height = (std::max)(1.0f,
-                source_rect.w + expansion.y + expansion.w);
             // Effect の変位量は target_size.zw を使う実ピクセル単位なので、
-            // expansion へ Canvas 拡大率を掛けてはいけない。
+            // RT の確保量へ Canvas 拡大率を掛けてはいけない。
+            // 一方 composite_rect は論理単位で積まれ、描画時に scale が掛かる。
+            // したがって確保量は「論理単位へ戻して」から矩形へ足す。
+            // ここを実ピクセルのまま足すと、RT の実幅が
+            // source*scale + expansion なのに矩形の実幅が (source + expansion)*scale となり、
+            // scale != 1 のとき結果が縮んで位置もずれる。
+            const float inverse_scale = 1.0f / (std::max)(0.0001f, scale);
+            const float expand_left = expansion.x * inverse_scale;
+            const float expand_top = expansion.y * inverse_scale;
+            const float expand_right = expansion.z * inverse_scale;
+            const float expand_bottom = expansion.w * inverse_scale;
+            const float expanded_width = (std::max)(1.0f,
+                source_rect.z + expand_left + expand_right);
+            const float expanded_height = (std::max)(1.0f,
+                source_rect.w + expand_top + expand_bottom);
             const std::uint32_t rt_width = static_cast<std::uint32_t>(
-                std::ceil((std::max)(1.0f,
-                    source_rect.z * scale + expansion.x + expansion.z)));
+                std::ceil((std::max)(1.0f, expanded_width * scale)));
             const std::uint32_t rt_height = static_cast<std::uint32_t>(
-                std::ceil((std::max)(1.0f,
-                    source_rect.w * scale + expansion.y + expansion.w)));
+                std::ceil((std::max)(1.0f, expanded_height * scale)));
             UIRenderTarget* target = render_target_pool_.Acquire(rt_width, rt_height);
             UIRenderTarget* scratch = render_target_pool_.Acquire(rt_width, rt_height);
             if (target == nullptr || scratch == nullptr ||
@@ -1491,8 +1499,8 @@ namespace ReplayEngine::UI
             draw_target_height = screen_height;
 
             DirectX::XMFLOAT4 composite_rect{
-                source_rect.x - expansion.x,
-                source_rect.y - expansion.y,
+                source_rect.x - expand_left,
+                source_rect.y - expand_top,
                 expanded_width,
                 expanded_height };
             append_quad(composite_rect, rect.ResolvedMatrix(),
@@ -1519,17 +1527,21 @@ namespace ReplayEngine::UI
             const DirectX::XMFLOAT4 source_rect = rect.ResolvedRect();
             const DirectX::XMFLOAT4 expansion = effects.ExpandBounds(
                 source_rect.z * scale, source_rect.w * scale);
+            // Text も Image と同じ扱い。確保量は実ピクセルなので、
+            // 論理単位の composite_rect へ足す前に拡大率で割り戻す。
+            const float inverse_scale = 1.0f / (std::max)(0.0001f, scale);
+            const float expand_left = expansion.x * inverse_scale;
+            const float expand_top = expansion.y * inverse_scale;
+            const float expand_right = expansion.z * inverse_scale;
+            const float expand_bottom = expansion.w * inverse_scale;
             const float expanded_width = (std::max)(1.0f,
-                source_rect.z + expansion.x + expansion.z);
+                source_rect.z + expand_left + expand_right);
             const float expanded_height = (std::max)(1.0f,
-                source_rect.w + expansion.y + expansion.w);
-            // Text も Image と同じく、確保量は実ピクセルのまま RT へ足す。
+                source_rect.w + expand_top + expand_bottom);
             const std::uint32_t rt_width = static_cast<std::uint32_t>(
-                std::ceil((std::max)(1.0f,
-                    source_rect.z * scale + expansion.x + expansion.z)));
+                std::ceil((std::max)(1.0f, expanded_width * scale)));
             const std::uint32_t rt_height = static_cast<std::uint32_t>(
-                std::ceil((std::max)(1.0f,
-                    source_rect.w * scale + expansion.y + expansion.w)));
+                std::ceil((std::max)(1.0f, expanded_height * scale)));
             UIRenderTarget* target = render_target_pool_.Acquire(rt_width, rt_height);
             UIRenderTarget* scratch = render_target_pool_.Acquire(rt_width, rt_height);
             if (target == nullptr || scratch == nullptr ||
@@ -1581,8 +1593,8 @@ namespace ReplayEngine::UI
             draw_target_height = screen_height;
 
             DirectX::XMFLOAT4 composite_rect{
-                source_rect.x - expansion.x,
-                source_rect.y - expansion.y,
+                source_rect.x - expand_left,
+                source_rect.y - expand_top,
                 expanded_width,
                 expanded_height };
             append_quad(composite_rect, rect.ResolvedMatrix(),
