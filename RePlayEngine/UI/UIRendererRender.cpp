@@ -92,6 +92,19 @@ namespace ReplayEngine::UI
 
         constexpr int maximum_ui_depth = 64;
 
+        // Phase 1 の背景取り込みは、現在の描画先から切り出す領域だけを表す。
+        // Pool の format を増やさず、検証できない描画先は caller で Legacy へ戻す。
+        struct BackdropCapturePlan
+        {
+            Microsoft::WRL::ComPtr<ID3D11Texture2D> source_texture;
+            D3D11_BOX source_box{};
+            D3D11_RECT output_rect{};
+            std::uint32_t destination_x = 0;
+            std::uint32_t destination_y = 0;
+            std::uint32_t width = 0;
+            std::uint32_t height = 0;
+        };
+
         DirectX::XMFLOAT2 TransformPoint(const DirectX::XMFLOAT4X4& matrix,
             float x, float y) noexcept
         {
@@ -1402,6 +1415,321 @@ namespace ReplayEngine::UI
             context->PSSetConstantBuffers(0, 1, &null_cb);
         };
 
+        // UI の論理座標から、現在の描画先（Scene View の offset / zoom を含む）の
+        // 実ピクセル座標へ変換する。Flush の scissor 変換と同じ値を使う。
+        const auto to_output_point = [&](const DirectX::XMFLOAT2& canvas_point,
+            float canvas_scale)
+        {
+            const DirectX::XMFLOAT2 screen_point = ToScreenPoint(canvas_point,
+                canvas_scale, screen_height);
+            const float scale_x = states.viewport_scale_x > 0.0001f
+                ? states.viewport_scale_x : 1.0f;
+            const float scale_y = states.viewport_scale_y > 0.0001f
+                ? states.viewport_scale_y : 1.0f;
+            return DirectX::XMFLOAT2{
+                states.scissor_offset_x + screen_point.x * scale_x,
+                states.scissor_offset_y + screen_point.y * scale_y };
+        };
+
+        const auto capture_scale_for = [&](const RectTransformComponent& rect,
+            const DirectX::XMFLOAT4& source_rect, float canvas_scale,
+            float& out_scale)
+        {
+            if (world_space_canvas_ || source_rect.z <= 0.0001f ||
+                source_rect.w <= 0.0001f)
+            {
+                return false;
+            }
+
+            const DirectX::XMFLOAT4X4 matrix = rect.ResolvedMatrix();
+            const DirectX::XMFLOAT2 p0 = to_output_point(
+                TransformPoint(matrix, source_rect.x, source_rect.y), canvas_scale);
+            const DirectX::XMFLOAT2 p1 = to_output_point(
+                TransformPoint(matrix, source_rect.x + source_rect.z, source_rect.y),
+                canvas_scale);
+            const DirectX::XMFLOAT2 p2 = to_output_point(
+                TransformPoint(matrix, source_rect.x + source_rect.z,
+                    source_rect.y + source_rect.w), canvas_scale);
+            const DirectX::XMFLOAT2 p3 = to_output_point(
+                TransformPoint(matrix, source_rect.x, source_rect.y + source_rect.w),
+                canvas_scale);
+            constexpr float alignment_epsilon = 0.01f;
+            if (std::fabs(p0.y - p1.y) > alignment_epsilon ||
+                std::fabs(p1.x - p2.x) > alignment_epsilon ||
+                std::fabs(p2.y - p3.y) > alignment_epsilon ||
+                std::fabs(p3.x - p0.x) > alignment_epsilon ||
+                p1.x <= p0.x || p0.y <= p3.y)
+            {
+                return false;
+            }
+
+            const float scale_x = (p1.x - p0.x) / source_rect.z;
+            const float scale_y = (p0.y - p3.y) / source_rect.w;
+            if (scale_x <= 0.0001f || scale_y <= 0.0001f ||
+                std::fabs(scale_x - scale_y) >
+                    (std::max)(scale_x, scale_y) * 0.0001f)
+            {
+                return false;
+            }
+            out_scale = scale_x;
+            return true;
+        };
+
+        const auto make_backdrop_capture_plan = [&](const RectTransformComponent& rect,
+            const DirectX::XMFLOAT4& composite_rect, float canvas_scale,
+            const D3D11_RECT* scissor, BackdropCapturePlan& plan)
+        {
+            const DirectX::XMFLOAT4X4 matrix = rect.ResolvedMatrix();
+            const DirectX::XMFLOAT2 p0 = to_output_point(
+                TransformPoint(matrix, composite_rect.x, composite_rect.y), canvas_scale);
+            const DirectX::XMFLOAT2 p1 = to_output_point(
+                TransformPoint(matrix, composite_rect.x + composite_rect.z,
+                    composite_rect.y), canvas_scale);
+            const DirectX::XMFLOAT2 p2 = to_output_point(
+                TransformPoint(matrix, composite_rect.x + composite_rect.z,
+                    composite_rect.y + composite_rect.w), canvas_scale);
+            const DirectX::XMFLOAT2 p3 = to_output_point(
+                TransformPoint(matrix, composite_rect.x,
+                    composite_rect.y + composite_rect.w), canvas_scale);
+            const float min_x = (std::min)({ p0.x, p1.x, p2.x, p3.x });
+            const float max_x = (std::max)({ p0.x, p1.x, p2.x, p3.x });
+            const float min_y = (std::min)({ p0.y, p1.y, p2.y, p3.y });
+            const float max_y = (std::max)({ p0.y, p1.y, p2.y, p3.y });
+            D3D11_RECT full_rect{};
+            full_rect.left = static_cast<LONG>(std::floor(min_x));
+            full_rect.top = static_cast<LONG>(std::floor(min_y));
+            full_rect.right = static_cast<LONG>(std::ceil(max_x));
+            full_rect.bottom = static_cast<LONG>(std::ceil(max_y));
+            if (full_rect.right <= full_rect.left || full_rect.bottom <= full_rect.top)
+                return false;
+
+            Microsoft::WRL::ComPtr<ID3D11RenderTargetView> source_view;
+            context->OMGetRenderTargets(1, source_view.GetAddressOf(), nullptr);
+            if (!source_view) return false;
+            Microsoft::WRL::ComPtr<ID3D11Resource> source_resource;
+            source_view->GetResource(source_resource.GetAddressOf());
+            if (!source_resource ||
+                FAILED(source_resource.As(&plan.source_texture)) ||
+                !plan.source_texture)
+            {
+                return false;
+            }
+
+            D3D11_TEXTURE2D_DESC source_desc{};
+            plan.source_texture->GetDesc(&source_desc);
+            if (source_desc.Format != DXGI_FORMAT_R8G8B8A8_UNORM ||
+                source_desc.SampleDesc.Count != 1)
+            {
+                return false;
+            }
+
+            D3D11_RECT copy_rect = full_rect;
+            const D3D11_RECT source_bounds{ 0, 0,
+                static_cast<LONG>(source_desc.Width),
+                static_cast<LONG>(source_desc.Height) };
+            copy_rect = IntersectScissor(copy_rect, source_bounds);
+            if (scissor != nullptr)
+            {
+                const float scale_x = states.viewport_scale_x > 0.0001f
+                    ? states.viewport_scale_x : 1.0f;
+                const float scale_y = states.viewport_scale_y > 0.0001f
+                    ? states.viewport_scale_y : 1.0f;
+                D3D11_RECT output_scissor{};
+                output_scissor.left = static_cast<LONG>(std::floor(
+                    states.scissor_offset_x + scissor->left * scale_x));
+                output_scissor.top = static_cast<LONG>(std::floor(
+                    states.scissor_offset_y + scissor->top * scale_y));
+                output_scissor.right = static_cast<LONG>(std::ceil(
+                    states.scissor_offset_x + scissor->right * scale_x));
+                output_scissor.bottom = static_cast<LONG>(std::ceil(
+                    states.scissor_offset_y + scissor->bottom * scale_y));
+                if (states.scissor_bounds_enabled)
+                    output_scissor = IntersectScissor(output_scissor,
+                        states.scissor_bounds);
+                copy_rect = IntersectScissor(copy_rect, output_scissor);
+            }
+            if (copy_rect.right <= copy_rect.left || copy_rect.bottom <= copy_rect.top)
+                return false;
+
+            plan.output_rect = full_rect;
+            plan.width = static_cast<std::uint32_t>(full_rect.right - full_rect.left);
+            plan.height = static_cast<std::uint32_t>(full_rect.bottom - full_rect.top);
+            plan.destination_x = static_cast<std::uint32_t>(
+                copy_rect.left - full_rect.left);
+            plan.destination_y = static_cast<std::uint32_t>(
+                copy_rect.top - full_rect.top);
+            plan.source_box.left = static_cast<UINT>(copy_rect.left);
+            plan.source_box.top = static_cast<UINT>(copy_rect.top);
+            plan.source_box.right = static_cast<UINT>(copy_rect.right);
+            plan.source_box.bottom = static_cast<UINT>(copy_rect.bottom);
+            plan.source_box.front = 0;
+            plan.source_box.back = 1;
+            return plan.width > 0 && plan.height > 0;
+        };
+
+        const auto render_effect_with_backdrop = [&](const UIEffectStackComponent& effects,
+            const RectTransformComponent& rect, const DirectX::XMFLOAT4& source_rect,
+            float canvas_scale, const D3D11_RECT* scissor, const auto& draw_source)
+        {
+            if (!effects.HasActiveEffects() || states.blend_none == nullptr)
+                return false;
+
+            float capture_scale = 1.0f;
+            if (!capture_scale_for(rect, source_rect, canvas_scale, capture_scale))
+                return false;
+
+            const DirectX::XMFLOAT4 expansion = effects.ExpandBounds(
+                source_rect.z * capture_scale, source_rect.w * capture_scale);
+            const float inverse_scale = 1.0f / (std::max)(0.0001f, capture_scale);
+            const float expanded_width = (std::max)(1.0f,
+                source_rect.z + (expansion.x + expansion.z) * inverse_scale);
+            const float expanded_height = (std::max)(1.0f,
+                source_rect.w + (expansion.y + expansion.w) * inverse_scale);
+            const DirectX::XMFLOAT4 composite_rect{
+                source_rect.x - expansion.x * inverse_scale,
+                source_rect.y - expansion.y * inverse_scale,
+                expanded_width,
+                expanded_height };
+            BackdropCapturePlan plan{};
+            if (!make_backdrop_capture_plan(rect, composite_rect, canvas_scale,
+                scissor, plan))
+            {
+                return false;
+            }
+
+            UIRenderTarget* target = render_target_pool_.Acquire(plan.width, plan.height);
+            UIRenderTarget* scratch = render_target_pool_.Acquire(plan.width, plan.height);
+            if (target == nullptr || scratch == nullptr || !target->texture ||
+                !target->rtv || !target->srv || !scratch->texture ||
+                !scratch->rtv || !scratch->srv ||
+                target->texture.Get() == plan.source_texture.Get() ||
+                scratch->texture.Get() == plan.source_texture.Get())
+            {
+                return false;
+            }
+
+            ID3D11ShaderResourceView* null_srvs[2]{};
+            context->PSSetShaderResources(0, _countof(null_srvs), null_srvs);
+            const FLOAT clear[4]{ 0.0f, 0.0f, 0.0f, 0.0f };
+            context->ClearRenderTargetView(target->rtv.Get(), clear);
+            context->CopySubresourceRegion(target->texture.Get(), 0,
+                plan.destination_x, plan.destination_y, 0, plan.source_texture.Get(), 0,
+                &plan.source_box);
+
+            ID3D11RenderTargetView* previous_rtv = nullptr;
+            ID3D11DepthStencilView* previous_dsv = nullptr;
+            context->OMGetRenderTargets(1, &previous_rtv, &previous_dsv);
+            UINT viewport_count = 1;
+            D3D11_VIEWPORT previous_viewport{};
+            context->RSGetViewports(&viewport_count, &previous_viewport);
+
+            const DirectX::XMFLOAT4X4 matrix = rect.ResolvedMatrix();
+            const DirectX::XMFLOAT2 source_p0 = to_output_point(
+                TransformPoint(matrix, source_rect.x, source_rect.y), canvas_scale);
+            const DirectX::XMFLOAT2 source_p2 = to_output_point(
+                TransformPoint(matrix, source_rect.x + source_rect.z,
+                    source_rect.y + source_rect.w), canvas_scale);
+            const float source_left = (std::min)(source_p0.x, source_p2.x);
+            const float source_bottom = (std::max)(source_p0.y, source_p2.y);
+            DirectX::XMFLOAT4 draw_rect{
+                (source_left - static_cast<float>(plan.output_rect.left)) / capture_scale,
+                (static_cast<float>(plan.height) -
+                    (source_bottom - static_cast<float>(plan.output_rect.top))) /
+                    capture_scale,
+                source_rect.z,
+                source_rect.w };
+
+            configure_effect_target(*target);
+            draw_source(draw_rect, capture_scale);
+
+            ID3D11ShaderResourceView* null_srv = nullptr;
+            context->PSSetShaderResources(0, 1, &null_srv);
+            UIRenderTarget* current = target;
+            apply_effect_passes(effects, current, target, scratch);
+
+            context->OMSetRenderTargets(1, &previous_rtv, previous_dsv);
+            if (viewport_count > 0) context->RSSetViewports(1, &previous_viewport);
+            if (previous_rtv != nullptr) previous_rtv->Release();
+            if (previous_dsv != nullptr) previous_dsv->Release();
+
+            constants.screen_size = { screen_width, screen_height, 0.0f, 0.0f };
+            context->UpdateSubresource(constant_buffer_.Get(), 0, nullptr,
+                &constants, 0, 0);
+            draw_target_height = screen_height;
+            append_quad(composite_rect, rect.ResolvedMatrix(),
+                { 0.0f, 0.0f, 1.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f },
+                canvas_scale);
+            configure_visual({}, 0, 0.0f, { 0.5f, 0.5f }, {}, 0,
+                false, 0.0f, {}, {}, {});
+            Flush(context, current->srv.Get(), states.blend_none, states, scissor);
+            return true;
+        };
+
+        const auto render_image_effect_with_backdrop = [&](
+            const UIEffectStackComponent& effects, UIImageComponent& image,
+            const RectTransformComponent& rect, float scale, float opacity,
+            const D3D11_RECT* scissor)
+        {
+            if (!image.ActiveInHierarchy() || image.opacity <= 0.0f ||
+                image.fill_amount <= 0.0f)
+            {
+                return false;
+            }
+            const DirectX::XMFLOAT4 source_rect = rect.ResolvedRect();
+            return render_effect_with_backdrop(effects, rect, source_rect, scale,
+                scissor, [&](const DirectX::XMFLOAT4& draw_rect, float capture_scale)
+                {
+                    DirectX::XMFLOAT4 source = draw_rect;
+                    DirectX::XMFLOAT4 uv{ image.uv_offset.x, image.uv_offset.y,
+                        image.uv_scale.x, image.uv_scale.y };
+                    const float fill = (std::min)((std::max)(image.fill_amount, 0.0f),
+                        1.0f);
+                    if (image.fill_method == UIImageComponent::Horizontal)
+                    {
+                        source.z *= fill;
+                        uv.z *= fill;
+                    }
+                    else if (image.fill_method == UIImageComponent::Vertical)
+                    {
+                        source.w *= fill;
+                        uv.w *= fill;
+                    }
+                    DirectX::XMFLOAT4X4 identity{};
+                    DirectX::XMStoreFloat4x4(&identity, DirectX::XMMatrixIdentity());
+                    append_quad(source, identity, uv,
+                        MultiplyAlpha(image.color, image.opacity * opacity), capture_scale);
+                    configure_visual(image.fill_color_2, image.fill_mode, image.fill_angle,
+                        image.fill_center, image.stroke_color_2, image.stroke_mode,
+                        false, 0.0f, {}, {}, {});
+                    Flush(context, TextureFor(image.sprite.guid, asset_database),
+                        BlendForImage(image, states), states, nullptr);
+                });
+        };
+
+        const auto render_text_effect_with_backdrop = [&](const Core::GameObject& object,
+            const UIEffectStackComponent& effects, UITextComponent& text,
+            const RectTransformComponent& rect, float scale, float opacity,
+            const D3D11_RECT* scissor)
+        {
+            if (!text.ActiveInHierarchy() || text.opacity <= 0.0f || text.text.empty())
+                return false;
+            const DirectX::XMFLOAT4 source_rect = rect.ResolvedRect();
+            return render_effect_with_backdrop(effects, rect, source_rect, scale,
+                scissor, [&](const DirectX::XMFLOAT4& draw_rect, float capture_scale)
+                {
+                    font_atlas.BuildGlyphs(text, source_rect.z, source_rect.w,
+                        asset_database);
+                    DirectX::XMFLOAT4X4 identity{};
+                    DirectX::XMStoreFloat4x4(&identity, DirectX::XMMatrixIdentity());
+                    append_text_glyphs(object, text, draw_rect, identity,
+                        MultiplyAlpha(text.color, text.opacity * opacity), capture_scale);
+                    configure_visual({}, 0, 0.0f, { 0.5f, 0.5f }, {}, 0, true,
+                        text.outline_width, text.outline_color,
+                        text.shadow_offset, text.shadow_color);
+                    Flush(context, font_atlas.Texture(), states.blend_alpha, states, nullptr);
+                });
+        };
+
         const auto render_effect_preview = [&](const UIEffectStackComponent& effects,
             UIImageComponent& image, const RectTransformComponent& rect, float scale,
             float opacity, const D3D11_RECT* scissor)
@@ -1606,9 +1934,10 @@ namespace ReplayEngine::UI
             return true;
         };
 
-        std::function<void(Core::GameObject&, float, float, const D3D11_RECT*, int)> render_object;
+        std::function<void(Core::GameObject&, float, float, const D3D11_RECT*, int, bool)>
+            render_object;
         render_object = [&](Core::GameObject& object, float scale, float opacity,
-            const D3D11_RECT* inherited_scissor, int depth)
+            const D3D11_RECT* inherited_scissor, int depth, bool backdrop_allowed)
         {
             if (depth > maximum_ui_depth || object.PendingDestroy() || !object.ActiveInHierarchy())
                 return;
@@ -1655,18 +1984,26 @@ namespace ReplayEngine::UI
                 }
                 if (UIImageComponent* image = object.GetComponent<UIImageComponent>())
                 {
-                    if (effects == nullptr ||
+                    const bool backdrop_rendered = backdrop_allowed && effects != nullptr &&
+                        effects->capture_backdrop &&
+                        render_image_effect_with_backdrop(*effects, *image, *rect, scale,
+                            opacity, active_scissor);
+                    if (!backdrop_rendered && (effects == nullptr ||
                         !render_effect_preview(*effects, *image, *rect, scale,
-                            opacity, active_scissor))
+                            opacity, active_scissor)))
                     {
                         render_image(*image, *rect, scale, opacity, active_scissor);
                     }
                 }
                 if (UITextComponent* text = object.GetComponent<UITextComponent>())
                 {
-                    if (effects == nullptr ||
+                    const bool backdrop_rendered = backdrop_allowed && effects != nullptr &&
+                        effects->capture_backdrop &&
+                        render_text_effect_with_backdrop(object, *effects, *text, *rect,
+                            scale, opacity, active_scissor);
+                    if (!backdrop_rendered && (effects == nullptr ||
                         !render_text_effect_preview(object, *effects, *text, *rect, scale,
-                            opacity, active_scissor))
+                            opacity, active_scissor)))
                     {
                         render_text(object, *text, *rect, scale, opacity, active_scissor);
                     }
@@ -1712,7 +2049,7 @@ namespace ReplayEngine::UI
                      {
                          if (child != nullptr)
                              render_object(*child, scale, opacity,
-                                inherited_scissor, depth + 1);
+                                inherited_scissor, depth + 1, false);
                     }
 
                     UIEffectStackComponent mask_effects;
@@ -1781,7 +2118,8 @@ namespace ReplayEngine::UI
              for (Core::GameObject* child : ordered_children)
              {
                  if (child != nullptr)
-                     render_object(*child, scale, opacity, active_scissor, depth + 1);
+                     render_object(*child, scale, opacity, active_scissor, depth + 1,
+                        backdrop_allowed);
             }
         };
 
@@ -1817,7 +2155,7 @@ namespace ReplayEngine::UI
             context->UpdateSubresource(constant_buffer_.Get(), 0, nullptr,
                 &constants, 0, 0);
             render_object(*canvas_object, safe_scale,
-                (std::min)((std::max)(canvas->opacity, 0.0f), 1.0f), nullptr, 0);
+                (std::min)((std::max)(canvas->opacity, 0.0f), 1.0f), nullptr, 0, true);
         }
         world_space_canvas_ = false;
 

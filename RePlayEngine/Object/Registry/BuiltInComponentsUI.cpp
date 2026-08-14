@@ -516,6 +516,11 @@ namespace ReplayEngine::Core::Detail
                 MakeProperty("enabled", &UIEffectStackComponent::enabled)
                     .Display("有効").Animation(Animatable::Step));
             PropertyRegistry::Register<UIEffectStackComponent>(
+                MakeProperty("capture_backdrop", &UIEffectStackComponent::capture_backdrop)
+                    .Display("背景を取り込む").Animation(Animatable::Step)
+                    .Tooltip("この要素より前に描かれた画素を Effect の入力へ含めます。"
+                        "Screen Space Overlay の軸揃え Image / Text だけで使えます。"));
+            PropertyRegistry::Register<UIEffectStackComponent>(
                 MakeProperty("effect_count", &UIEffectStackComponent::effect_count)
                     .Display("Effect 数").Range(0.0, 16.0).Step(1.0)
                     .Animation(Animatable::Step));
