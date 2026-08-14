@@ -103,5 +103,41 @@ namespace ReplayEngine::Scripting::CSharp::Detail
                 std::uint64_t*);
         using unsubscribe_event_callback = int(__cdecl*)(std::uint64_t);
         using poll_event_callback = int(__cdecl*)(std::uint64_t, char*, int);
+
+        // v4 Runtime Service / Component / Runtime UI callbacks.
+        using available_callback = int(__cdecl*)();
+        using input_bool_callback = int(__cdecl*)(const char*, int, int*);
+        using input_axis_callback = int(__cdecl*)(const char*, int, float*);
+        using input_pointer_callback = int(__cdecl*)(float*);
+        using audio_play_callback = int(__cdecl*)(const char*, int, float, float, int,
+            DirectX::XMFLOAT3, float, float, std::uint64_t*);
+        using audio_stop_callback = int(__cdecl*)(std::uint64_t);
+        using audio_update_callback = int(__cdecl*)(std::uint64_t, const char*, int,
+            float, float, int, DirectX::XMFLOAT3, float, float);
+        using save_set_bool_callback = int(__cdecl*)(const char*, const char*, int);
+        using save_set_int_callback = int(__cdecl*)(const char*, const char*, std::int64_t);
+        using save_set_double_callback = int(__cdecl*)(const char*, const char*, double);
+        using save_set_string_callback = int(__cdecl*)(const char*, const char*, const char*);
+        using save_get_bool_callback = int(__cdecl*)(const char*, const char*, int*);
+        using save_get_int_callback = int(__cdecl*)(const char*, const char*, std::int64_t*);
+        using save_get_double_callback = int(__cdecl*)(const char*, const char*, double*);
+        using save_get_string_callback = int(__cdecl*)(const char*, const char*, char*, int);
+        using save_has_key_callback = int(__cdecl*)(const char*, const char*, int*);
+        using save_key_callback = int(__cdecl*)(const char*, const char*);
+        using save_slot_callback = int(__cdecl*)(const char*);
+        using create_ui_element_callback = int(__cdecl*)(const char*, Runtime::ObjectHandle,
+            Runtime::ObjectHandle*);
+        using set_ui_text_callback = int(__cdecl*)(Runtime::ObjectHandle, const char*);
+        using get_ui_text_callback = int(__cdecl*)(Runtime::ObjectHandle, char*, int);
+        using set_ui_color_callback = int(__cdecl*)(Runtime::ObjectHandle, DirectX::XMFLOAT4);
+        using set_ui_rect_callback = int(__cdecl*)(Runtime::ObjectHandle, DirectX::XMFLOAT2,
+            DirectX::XMFLOAT2, DirectX::XMFLOAT2, float, int);
+        using set_ui_button_callback = int(__cdecl*)(Runtime::ObjectHandle, int);
+        using add_component_callback = int(__cdecl*)(Runtime::ObjectHandle, std::uint32_t,
+            Runtime::ComponentHandle*);
+        using get_components_callback = int(__cdecl*)(Runtime::ObjectHandle, std::uint32_t,
+            Runtime::ComponentHandle*, int, int*);
+        using set_component_enabled_callback = int(__cdecl*)(Runtime::ComponentHandle, int);
+        using get_component_enabled_callback = int(__cdecl*)(Runtime::ComponentHandle, int*);
 #endif
 }

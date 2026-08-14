@@ -4,6 +4,9 @@
 #include "../Handles/HandleResolver.h"
 #include "../Handles/RuntimeHandles.h"
 #include "../../Scene/Services/IPhysicsQueryService.h"
+#include "../../Scene/Services/IInputService.h"
+#include "../../Audio/AudioService.h"
+#include "RuntimeSaveGameService.h"
 
 #include <DirectXMath.h>
 
@@ -158,6 +161,20 @@ namespace ReplayEngine::Runtime
         }
         void SetLogSink(IRuntimeLogSink* sink) noexcept { log_sink_ = sink; }
         void SetTime(const RuntimeTime& time) noexcept { time_ = time; }
+
+        // frameworkが所有する既存Serviceを非所有参照で接続する。
+        void SetInputService(const Scene::IInputService* service) noexcept
+        {
+            input_service_ = service;
+        }
+        void SetAudioService(Audio::IAudioPlaybackService* service) noexcept
+        {
+            audio_service_ = service;
+        }
+        void SetSaveGameService(ISaveGameService* service) noexcept
+        {
+            save_game_service_ = service;
+        }
 
         // World の入れ替えでは切らない。framework が持つ接続なので Rebind でも残す。
         void SetSceneFlow(ISceneFlow* flow) noexcept { scene_flow_ = flow; }
@@ -352,16 +369,66 @@ namespace ReplayEngine::Runtime
         void LogError(const std::string& message,
             const ObjectHandle& source = ObjectHandle::None()) const;
 
-        // ---- 未実装 Service ------------------------------------------------------
-        //
-        // Audio / Input Action / SaveGame / Runtime UI はまだ無い。
-        // 呼べる API を用意して 0 や true を返す「動いているように見える実装」は置かない。
-        // 存在を問い合わせる手段だけを提供し、答えは常に false。
-        // 実装が入った時点でここを差し替える。
-        bool AudioAvailable() const noexcept { return false; }
-        bool InputActionAvailable() const noexcept { return false; }
-        bool SaveGameAvailable() const noexcept { return false; }
-        bool RuntimeUIAvailable() const noexcept { return false; }
+        // ---- Input Action -------------------------------------------------------
+
+        bool InputActionAvailable() const noexcept;
+        RuntimeStatus InputHeld(const std::string& action, int player_slot, bool& out) const;
+        RuntimeStatus InputPressed(const std::string& action, int player_slot, bool& out) const;
+        RuntimeStatus InputReleased(const std::string& action, int player_slot, bool& out) const;
+        RuntimeStatus InputAxis(const std::string& axis, int player_slot, float& out) const;
+        RuntimeStatus InputPointerDeltaX(float& out) const;
+        RuntimeStatus InputPointerDeltaY(float& out) const;
+
+        // ---- Audio --------------------------------------------------------------
+
+        bool AudioAvailable() const noexcept;
+        RuntimeStatus PlayAudio(const std::string& clip_path, bool loop, float volume,
+            float pitch, int spatial_mode, const DirectX::XMFLOAT3& position,
+            float min_distance, float max_distance, std::uint64_t& out) const;
+        RuntimeStatus StopAudio(std::uint64_t voice) const;
+        RuntimeStatus UpdateAudio(std::uint64_t voice, const std::string& clip_path,
+            bool loop, float volume, float pitch, int spatial_mode,
+            const DirectX::XMFLOAT3& position, float min_distance,
+            float max_distance) const;
+
+        // ---- SaveGame -----------------------------------------------------------
+
+        bool SaveGameAvailable() const noexcept;
+        RuntimeStatus SaveBool(const std::string& slot, const std::string& key, bool value) const;
+        RuntimeStatus SaveInt(const std::string& slot, const std::string& key,
+            std::int64_t value) const;
+        RuntimeStatus SaveDouble(const std::string& slot, const std::string& key,
+            double value) const;
+        RuntimeStatus SaveString(const std::string& slot, const std::string& key,
+            const std::string& value) const;
+        RuntimeStatus LoadBool(const std::string& slot, const std::string& key,
+            bool& out) const;
+        RuntimeStatus LoadInt(const std::string& slot, const std::string& key,
+            std::int64_t& out) const;
+        RuntimeStatus LoadDouble(const std::string& slot, const std::string& key,
+            double& out) const;
+        RuntimeStatus LoadString(const std::string& slot, const std::string& key,
+            std::string& out) const;
+        RuntimeStatus HasSaveKey(const std::string& slot, const std::string& key,
+            bool& out) const;
+        RuntimeStatus DeleteSaveKey(const std::string& slot, const std::string& key) const;
+        RuntimeStatus SaveGame(const std::string& slot) const;
+        RuntimeStatus LoadGame(const std::string& slot) const;
+        RuntimeStatus DeleteSave(const std::string& slot) const;
+
+        // ---- Runtime UI ---------------------------------------------------------
+
+        bool RuntimeUIAvailable() const noexcept;
+        RuntimeStatus CreateUIElement(const std::string& name, const ObjectHandle& parent,
+            ObjectHandle& out);
+        RuntimeStatus SetUIText(const ObjectHandle& object, const std::string& text);
+        RuntimeStatus GetUIText(const ObjectHandle& object, std::string& out) const;
+        RuntimeStatus SetUIImageColor(const ObjectHandle& object,
+            const DirectX::XMFLOAT4& color);
+        RuntimeStatus SetUIRect(const ObjectHandle& object,
+            const DirectX::XMFLOAT2& position, const DirectX::XMFLOAT2& size,
+            const DirectX::XMFLOAT2& scale, float rotation, int sort_order);
+        RuntimeStatus SetUIButtonInteractable(const ObjectHandle& object, bool interactable);
 
     private:
         struct PendingInstantiation
@@ -386,6 +453,9 @@ namespace ReplayEngine::Runtime
         IPrefabInstantiator* prefab_instantiator_ = nullptr;
         IRuntimeLogSink* log_sink_ = nullptr;
         ISceneFlow* scene_flow_ = nullptr;
+        const Scene::IInputService* input_service_ = nullptr;
+        Audio::IAudioPlaybackService* audio_service_ = nullptr;
+        ISaveGameService* save_game_service_ = nullptr;
 
         RuntimeTime time_;
         std::vector<PendingInstantiation> pending_instantiations_;

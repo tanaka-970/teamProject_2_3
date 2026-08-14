@@ -14,6 +14,11 @@
 #include "../../Object/Registry/ComponentRegistry.h"
 #include "../../Scene/Runtime/Scene.h"
 
+#include <algorithm>
+#include <functional>
+#include <unordered_set>
+#include <vector>
+
 namespace ReplayEngine::Runtime
 {
     using Core::Component;
@@ -274,19 +279,60 @@ namespace ReplayEngine::Runtime
     RuntimeStatus RuntimeContext::AddComponent(const ObjectHandle& handle,
         Core::ComponentTypeID type_id, ComponentHandle& out)
     {
+        out = ComponentHandle::None();
         RuntimeStatus status = RuntimeStatus::Ok;
         GameObject* object = ResolveObject(handle, status);
         if (object == nullptr) return status;
 
-        if (Core::ComponentRegistry::Find(type_id) == nullptr)
+        const Core::ComponentTypeInfo* requested = Core::ComponentRegistry::Find(type_id);
+        if (requested == nullptr || !requested->runtime_available)
         {
             return RuntimeStatus::TypeMismatch;
         }
 
-        Component* created = Core::ComponentRegistry::Create(type_id, *object);
-        if (created == nullptr) return RuntimeStatus::UnsupportedOperation;
+        // EditorのAddComponentPanelが持つ依存解決と同じメタデータをRuntimeでも使う。
+        // 依存の型ごとに分岐を書かず、ComponentTypeInfo.required_componentsだけを見る。
+        std::vector<Core::ComponentTypeID> creation_order;
+        std::unordered_set<Core::ComponentTypeID> visiting;
+        std::unordered_set<Core::ComponentTypeID> planned;
+        std::function<bool(Core::ComponentTypeID)> collect;
+        collect = [&](Core::ComponentTypeID current) -> bool
+        {
+            const Core::ComponentTypeInfo* info =
+                Core::ComponentRegistry::Find(current);
+            if (info == nullptr || !info->runtime_available || !info->factory)
+                return false;
+            if (!visiting.insert(current).second) return false;
 
-        out = resolver_.MakeHandle(created);
+            for (const Core::ComponentTypeID required_id : info->required_components)
+            {
+                if (object->FindComponent(required_id) != nullptr) continue;
+                if (!collect(required_id))
+                {
+                    visiting.erase(current);
+                    return false;
+                }
+            }
+            visiting.erase(current);
+
+            const bool already_present = object->FindComponent(current) != nullptr;
+            if ((!already_present || info->allow_multiple) && planned.insert(current).second)
+                creation_order.push_back(current);
+            return true;
+        };
+
+        if (!collect(type_id)) return RuntimeStatus::ComponentDependencyMissing;
+
+        Component* requested_component = object->FindComponent(type_id);
+        for (const Core::ComponentTypeID create_id : creation_order)
+        {
+            Component* created = Core::ComponentRegistry::Create(create_id, *object);
+            if (created == nullptr) return RuntimeStatus::UnsupportedOperation;
+            if (create_id == type_id) requested_component = created;
+        }
+        if (requested_component == nullptr) return RuntimeStatus::UnsupportedOperation;
+
+        out = resolver_.MakeHandle(requested_component);
         return RuntimeStatus::Ok;
     }
 
@@ -344,6 +390,22 @@ namespace ReplayEngine::Runtime
 
         GameObject* owner = component->Owner();
         if (owner == nullptr) return RuntimeStatus::ComponentDestroyed;
+
+        // 必須依存を壊してComponentだけが残る状態をRuntime APIから作らない。
+        for (std::size_t index = 0; index < owner->ComponentCount(); ++index)
+        {
+            Component* other = owner->ComponentAt(index);
+            if (other == nullptr || other == component || other->PendingDestroy()) continue;
+            const Core::ComponentTypeInfo* info =
+                Core::ComponentRegistry::Find(other->TypeID());
+            if (info == nullptr) continue;
+            if (std::find(info->required_components.begin(),
+                info->required_components.end(), component->TypeID()) !=
+                info->required_components.end())
+            {
+                return RuntimeStatus::ComponentHasDependents;
+            }
+        }
 
         return owner->RemoveComponent(component)
             ? RuntimeStatus::Ok : RuntimeStatus::UnsupportedOperation;

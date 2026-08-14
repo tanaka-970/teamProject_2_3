@@ -227,6 +227,16 @@ namespace GameInput
         return it != axes_.end() ? &it->second : nullptr;
     }
 
+    bool InputState::ActionAvailable(std::string_view action) const noexcept
+    {
+        return FindAction(action) != nullptr;
+    }
+
+    bool InputState::AxisAvailable(std::string_view axis) const noexcept
+    {
+        return FindAxis(axis) != nullptr;
+    }
+
     const InputState::PadSnapshot* InputState::Pad(int player_slot) const noexcept
     {
         if (player_slot < 0 || player_slot >= static_cast<int>(pads_.size())) return nullptr;

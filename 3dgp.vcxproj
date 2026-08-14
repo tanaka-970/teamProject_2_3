@@ -430,6 +430,7 @@
     <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendNativeScene.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendNativeMotion.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendNativeEvents.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendNativeServices.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\Validation\CSharpScriptValidation.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\Validation\ScriptCoreValidation.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\Validation\ScriptCoreValidationSupport.cpp" />
@@ -439,6 +440,7 @@
     <ClCompile Include="RePlayEngine\Runtime\API\RuntimeContextMotion.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\API\RuntimeContextScene.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\API\RuntimeContextServices.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\API\RuntimeSaveGameService.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourValidation.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourValidationSupport.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourEventValidation.cpp" />
@@ -721,6 +723,7 @@
     <ClInclude Include="RePlayEngine\Scripting\Validation\ScriptCoreValidationInternal.h" />
     <ClInclude Include="RePlayEngine\Runtime\Scene\WorldLifecycleListener.h" />
     <ClInclude Include="RePlayEngine\Runtime\API\RuntimeContext.h" />
+    <ClInclude Include="RePlayEngine\Runtime\API\RuntimeSaveGameService.h" />
     <ClInclude Include="RePlayEngine\Runtime\Validation\BehaviourValidation.h" />
     <ClInclude Include="RePlayEngine\Runtime\Validation\BehaviourValidationInternal.h" />
     <ClInclude Include="Source\game\Behaviours\ValidationBehaviours.h" />
@@ -1326,6 +1329,12 @@
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
     </FxCompile>
     <FxCompile Include="Shader\ui_effect_letterbox.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_waveform.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>

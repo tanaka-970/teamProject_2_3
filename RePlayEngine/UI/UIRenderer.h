@@ -135,6 +135,7 @@ namespace ReplayEngine::UI
             DirectX::XMFLOAT4 effect_color_3{ 1.0f, 1.0f, 1.0f, 1.0f };
             DirectX::XMFLOAT4 effect_color_4{ 1.0f, 1.0f, 1.0f, 1.0f };
             DirectX::XMFLOAT4 effect_color_stops{ 0.333333f, 0.666667f, 1.0f, 0.0f };
+            DirectX::XMFLOAT4 effect_params3{ 0.0f, 0.0f, 0.0f, 0.0f };
         };
 
         struct VisualConstants
@@ -158,7 +159,7 @@ namespace ReplayEngine::UI
             DirectX::XMFLOAT4 fill_stops{ 1.0f, -1.0f, -1.0f, 0.0f };
         };
 
-        static constexpr std::size_t effect_shader_count = 41;
+        static constexpr std::size_t effect_shader_count = 42;
 
         bool EnsureVertexCapacity(ID3D11Device* device, std::size_t vertex_count);
         bool EnsureCustomEffectConstantBuffer(std::uint32_t byte_width);

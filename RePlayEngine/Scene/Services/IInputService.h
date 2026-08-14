@@ -19,6 +19,11 @@ namespace ReplayEngine::Scene
         virtual bool Released(std::string_view action, int player_slot = 0) const noexcept = 0;
         virtual float Axis(std::string_view axis, int player_slot = 0) const noexcept = 0;
 
+        // Runtime APIが未知のAction/Axisを入力値の「false/0」と区別するための照会。
+        // 既存のテスト用入力サービスとの互換性を保つため既定値は true とする。
+        virtual bool ActionAvailable(std::string_view /*action*/) const noexcept { return true; }
+        virtual bool AxisAvailable(std::string_view /*axis*/) const noexcept { return true; }
+
         // ポインタ差分もフレーム先頭の同じスナップショットから読む。
         // Component が GetCursorPos を直接呼んで独自の「前回値」を持たないための入口。
         virtual float PointerDeltaX() const noexcept = 0;

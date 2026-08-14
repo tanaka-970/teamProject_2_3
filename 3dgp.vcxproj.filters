@@ -777,6 +777,9 @@
     <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendNativeEvents.cpp">
       <Filter>RePlayEngine\Scripting\CSharp</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendNativeServices.cpp">
+      <Filter>RePlayEngine\Scripting\CSharp</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Scripting\Validation\CSharpScriptValidation.cpp">
       <Filter>RePlayEngine\Scripting\Validation</Filter>
     </ClCompile>
@@ -802,6 +805,9 @@
       <Filter>RePlayEngine\Runtime\API</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Runtime\API\RuntimeContextServices.cpp">
+      <Filter>RePlayEngine\Runtime\API</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Runtime\API\RuntimeSaveGameService.cpp">
       <Filter>RePlayEngine\Runtime\API</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourValidation.cpp">
@@ -1557,6 +1563,9 @@
       <Filter>RePlayEngine\Runtime\Scene</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Runtime\API\RuntimeContext.h">
+      <Filter>RePlayEngine\Runtime\API</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Runtime\API\RuntimeSaveGameService.h">
       <Filter>RePlayEngine\Runtime\API</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Runtime\Validation\BehaviourValidation.h">
@@ -2605,6 +2614,9 @@
       <Filter>Shader</Filter>
     </FxCompile>
     <FxCompile Include="Shader\ui_effect_letterbox.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_waveform.hlsl">
       <Filter>Shader</Filter>
     </FxCompile>
     <FxCompile Include="Shader\line_stroke_vs.hlsl">

@@ -1303,6 +1303,8 @@ namespace ReplayEngine::UI
                 effect_constants.effect_params2 = {
                     effect.direction.x, effect.direction.y, effect.seed,
                     effect_time };
+                effect_constants.effect_params3 = {
+                    static_cast<float>(effect.waveform), 0.0f, 0.0f, 0.0f };
                 effect_constants.effect_color_2 = effect.color_2;
                 effect_constants.effect_color_3 = effect.color_3;
                 effect_constants.effect_color_4 = effect.color_4;

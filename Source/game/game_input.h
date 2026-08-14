@@ -59,6 +59,8 @@ namespace GameInput
         bool Pressed(std::string_view action, int player_slot = 0) const noexcept override;
         bool Released(std::string_view action, int player_slot = 0) const noexcept override;
         float Axis(std::string_view axis, int player_slot = 0) const noexcept override;
+        bool ActionAvailable(std::string_view action) const noexcept override;
+        bool AxisAvailable(std::string_view axis) const noexcept override;
         float PointerDeltaX() const noexcept override
         {
             return mouse_captured_ ? 0.0f : mouse_delta_x_;

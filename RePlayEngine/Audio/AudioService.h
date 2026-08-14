@@ -38,6 +38,10 @@ namespace ReplayEngine::Audio
     public:
         virtual ~IAudioPlaybackService() = default;
 
+        // 既存のモック/Component向け実装を壊さない既定値。
+        // AudioSystemはXAudio2のsilent modeを正しく反映してoverrideする。
+        virtual bool Available() const noexcept { return true; }
+
         virtual AudioVoiceHandle Play(const AudioPlaybackParams& params) = 0;
         virtual void Stop(AudioVoiceHandle handle) noexcept = 0;
         virtual void UpdateVoice(AudioVoiceHandle handle,
