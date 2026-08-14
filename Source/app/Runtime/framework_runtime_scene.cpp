@@ -166,6 +166,10 @@ void framework::initialize_runtime_services()
 
     object_runtime_context->SetPrefabInstantiator(&object_prefab_instantiator);
     object_runtime_context->SetSceneFlow(object_scene_flow.get());
+    object_runtime_context->SetInputService(&game_input);
+    object_runtime_context->SetAudioService(&object_audio_system);
+    object_save_game.SetRoot(saved_path(std::filesystem::path("Runtime") / "SaveGame"));
+    object_runtime_context->SetSaveGameService(&object_save_game);
 
     // ProjectSettings の Active Scene Flow を Runtime へ接続する。
     // 未設定/欠損なら空のままにし、直接 LoadScene の既存経路は壊さない。

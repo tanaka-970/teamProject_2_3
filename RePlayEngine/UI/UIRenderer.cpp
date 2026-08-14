@@ -91,6 +91,7 @@ namespace ReplayEngine::UI
             "ui_effect_dither.cso",
             "ui_effect_vhs.cso",
             "ui_effect_letterbox.cso",
+            "ui_effect_waveform.cso",
         };
         for (std::size_t index = 0; index < effect_cso_names.size(); ++index)
         {

@@ -73,6 +73,7 @@ namespace ReplayEngine::Components
             if (property == "color_stop_4") return Reflection::PropertyValue::MakeFloat(effect.color_stop_4);
             if (property == "mask") return Reflection::PropertyValue::MakeAssetReference(effect.mask);
             if (property == "custom_shader") return Reflection::PropertyValue::MakeAssetReference(effect.custom_shader);
+            if (property == "waveform") return Reflection::PropertyValue::MakeEnum(effect.waveform);
             if (property.rfind("custom.", 0) == 0)
             {
                 const std::string saved_name = "prop." + property.substr(7);
@@ -106,6 +107,7 @@ namespace ReplayEngine::Components
             else if (property == "color_stop_4") effect.color_stop_4 = value.AsFloat(effect.color_stop_4);
             else if (property == "mask") effect.mask = value.AsAssetReference().guid;
             else if (property == "custom_shader") effect.custom_shader = value.AsAssetReference().guid;
+            else if (property == "waveform") effect.waveform = value.AsInt(effect.waveform);
             else if (property.rfind("custom.", 0) == 0)
             {
                 effect.custom_parameters.Set("prop." + property.substr(7), value);
@@ -237,6 +239,8 @@ namespace ReplayEngine::Components
                 Reflection::PropertyValue::MakeAssetReference(effect.mask));
             output.Set(EffectPropertyName(i, "custom_shader"),
                 Reflection::PropertyValue::MakeAssetReference(effect.custom_shader));
+            output.Set(EffectPropertyName(i, "waveform"),
+                Reflection::PropertyValue::MakeEnum(effect.waveform));
             for (const Reflection::PropertyBag::Entry& parameter :
                 effect.custom_parameters.Entries())
             {
@@ -282,7 +286,15 @@ namespace ReplayEngine::Components
 
     void UIEffectStackComponent::OnPropertyChanged(const char* property_name)
     {
-        if (property_name == nullptr || std::string(property_name) == "effect_count")
+        if (property_name == nullptr)
+        {
+            ResizeEffects();
+            RebuildDynamicProperties();
+            return;
+        }
+
+        const std::string changed_property(property_name);
+        if (changed_property == "effect_count")
         {
             ResizeEffects();
             RebuildDynamicProperties();
@@ -291,9 +303,31 @@ namespace ReplayEngine::Components
 
         int effect_index = 0;
         std::string property;
-        if (ParseEffectPropertyName(property_name, effect_index, property) &&
+        if (ParseEffectPropertyName(changed_property, effect_index, property) &&
             property == "type")
         {
+            if (effect_index >= 0 &&
+                static_cast<std::size_t>(effect_index) < effects.size())
+            {
+                UI::UIEffect& effect = effects[static_cast<std::size_t>(effect_index)];
+                if (static_cast<UI::UIEffectKind>(effect.kind) == UI::UIEffectKind::Waveform)
+                {
+                    // 各スロットの意味は種類ごとに違うため、種類を変えた時点で
+                    // 前の値は意味を失う。条件付きで残すより、ここで必ず波形用の
+                    // 値へ差し替えるほうが利用者に分かりやすい。
+                    effect.amount = 9.0f;
+                    effect.radius = 420.0f;
+                    effect.speed = 2.0f;
+                    effect.softness = 0.0f;
+                    effect.progress = 0.25f;
+                    effect.intensity = 0.6f;
+                    effect.angle = 0.0f;
+                    effect.direction = DirectX::XMFLOAT2{ 0.0f, 1.0f };
+                    effect.threshold = 0.15f;
+                    effect.waveform = 0;
+                }
+            }
+
             // 種類を変えた直後に、その Effect が実際に使う項目だけへ差し替える。
             // 保存名は effects[i].radius などのままなので、Scene と Motion Binding は変わらない。
             RebuildDynamicProperties();
@@ -378,7 +412,7 @@ namespace ReplayEngine::Components
                     "クロスハッチング", "ブラシストローク", "モザイク", "結晶化",
                     "ステンドグラス", "渦巻き", "球面化", "波紋",
                     "極座標", "走査線", "CRT", "グリッチ",
-                    "ディザ", "VHS", "レターボックス" }));
+                    "ディザ", "VHS", "レターボックス", "波形" }));
 
             const auto add_float = [&](const char* name, const char* display,
                 const char* tooltip, double minimum, double maximum, double step)
@@ -405,6 +439,14 @@ namespace ReplayEngine::Components
                     "同じ値なら同じ揺れ・ノイズになる。", -65536.0, 65536.0, 1.0);
             };
 
+            // ---- 拡張点: UI Effect 種類別プロパティ -------------------------
+            //
+            // 【今は入れていない理由】
+            //   種類ごとの既定値は 41 種すべての挙動に影響するため、ここでは作らない。
+            // 【入れるときにここへ足す】
+            //   既存 UIEffect のスロットへ意味を割り当て、必要な項目だけを表示する。
+            // 【壊してはいけない前提】
+            //   UIEffect の保存形式と UIRenderer の定数パッキングは共有なので変更しない。
             switch (static_cast<UI::UIEffectKind>(effects[index].kind))
             {
             case UI::UIEffectKind::Blur:
@@ -812,6 +854,43 @@ namespace ReplayEngine::Components
                 add_float("intensity", "帯の濃さ", "帯色の不透明度へ掛ける量。",
                     0.0, 1.0, 0.01);
                 add_color("帯の色", "上下または左右へ置く額縁色。");
+                break;
+            case UI::UIEffectKind::Waveform:
+                push(MakeEffectProperty(i, "waveform", Reflection::PropertyType::Enum,
+                    Reflection::Animatable::Step)
+                    .Display("波形")
+                    .Tooltip("波の基本形。鋭さとうねりで変化を加える。")
+                    .AsEnum({ "正弦波", "三角波", "のこぎり波", "パルス", "ランダム" }));
+                add_float("amount", "振幅",
+                    "波の高さ（ピクセル）。推奨: ゆらゆら 6、心電図 10。",
+                    0.0, 256.0, 0.1);
+                add_float("radius", "波長",
+                    "山から山までの距離（ピクセル）。推奨: ゆらゆら 120、心電図 90。",
+                    1.0, 2048.0, 0.1);
+                add_float("speed", "流れる速度",
+                    "波が進む速さ。0 で静止。推奨: ゆらゆら 2、心電図 6。",
+                    -32.0, 32.0, 0.01);
+                add_float("softness", "波の鋭さ",
+                    "値が大きいほど波形の山谷を鋭くする。",
+                    0.0, 1.0, 0.001);
+                add_float("progress", "うねりの量",
+                    "低周波のうねりを重ねる割合。",
+                    0.0, 1.0, 0.001);
+                add_float("intensity", "太さ変調",
+                    "波の山は元の太さのまま、谷で細くする度合い。",
+                    0.0, 1.0, 0.001);
+                add_float("angle", "波の向き",
+                    "波が進む向き（度）。0 で横。",
+                    -360.0, 360.0, 0.1);
+                push(MakeEffectProperty(i, "direction", Reflection::PropertyType::Vector2,
+                    Reflection::Animatable::Interpolatable)
+                    .Display("適用範囲 (開始 / 終了)")
+                    .Tooltip("波の向きに沿った適用範囲。既定の 1, -1 は全域。")
+                    .Range(0.0, 1.0).Step(0.001));
+                add_float("threshold", "境界のぼかし",
+                    "適用範囲の端で振幅と太さ変調を 0 へ落とす幅。",
+                    0.0, 0.5, 0.001);
+                add_seed();
                 break;
             default:
                 break;

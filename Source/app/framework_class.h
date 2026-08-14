@@ -51,6 +51,7 @@
 #include "../../RePlayEngine/UI/FontAtlas.h"
 #include "../../RePlayEngine/UI/UIRenderer.h"
 #include "../../RePlayEngine/Audio/AudioSystem.h"
+#include "../../RePlayEngine/Runtime/API/RuntimeSaveGameService.h"
 #include "../../RePlayEngine/Project/ProjectSettings.h"
 #include "../../RePlayEngine/Editor/Gizmo/TransformGizmo.h"
 #include "../../RePlayEngine/Editor/Gizmo/ViewportPicker.h"
@@ -532,6 +533,7 @@ public:
     CameraBasisProvider          object_camera_bridge;
     ReplayEngine::Audio::AudioSystem object_audio_system;
     GameInput::InputState game_input;
+    ReplayEngine::Runtime::RuntimeSaveGameService object_save_game;
 
     // --- 衝突 -------------------------------------------------------------
     //

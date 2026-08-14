@@ -51,6 +51,7 @@ namespace ReplayEngine::UI
         Dither = 38,
         VHS = 39,
         Letterbox = 40,
+        Waveform = 41,
 
         // 拡張点: 残像は履歴 RT、LUT は入力テクスチャの設計が先に必要。
         // トーンカーブは Motion と共有する曲線型、レンズフレアは光源位置が必要。
@@ -86,6 +87,7 @@ namespace ReplayEngine::UI
 
         // Shader Composer の #pragma property 値。未知項目も PropertyBag のまま保持する。
         Reflection::PropertyBag custom_parameters;
+        int waveform = 0;
 
         DirectX::XMFLOAT4 ExpandBounds() const noexcept;
     };

@@ -20,6 +20,13 @@ public enum RuntimeStatus : int
     ServiceUnavailable = 13,
     InvalidArgument = 14,
     DeferredOperationRejected = 15,
+    SaveSlotNotFound = 16,
+    SaveKeyNotFound = 17,
+    SaveTypeMismatch = 18,
+    SaveCorrupt = 19,
+    SaveIOFailure = 20,
+    ComponentDependencyMissing = 21,
+    ComponentHasDependents = 22,
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -40,6 +47,19 @@ public struct ComponentHandle
     public uint TypeId;
 
     public bool IsEmpty => Owner.IsEmpty || Instance == 0;
+}
+
+public readonly struct AudioVoice
+{
+    internal AudioVoice(ulong id)
+    {
+        Id = id;
+    }
+
+    internal ulong Id { get; }
+    public bool IsValid => Id != 0;
+
+    public RuntimeStatus Stop() => NativeBridge.StopAudio(this);
 }
 
 public readonly struct MotionPlayer

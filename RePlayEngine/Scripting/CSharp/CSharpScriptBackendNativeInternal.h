@@ -78,6 +78,44 @@ namespace ReplayEngine::Scripting::CSharp::Detail
             motion_get_bool_callback motion_is_playing = nullptr;
             motion_get_float_callback motion_get_time = nullptr;
             motion_get_float_callback motion_get_duration = nullptr;
+
+            // v4 additions. Runtime Service / Component / Runtime UI API。
+            available_callback input_available = nullptr;
+            input_bool_callback input_held = nullptr;
+            input_bool_callback input_pressed = nullptr;
+            input_bool_callback input_released = nullptr;
+            input_axis_callback input_axis = nullptr;
+            input_pointer_callback input_pointer_delta_x = nullptr;
+            input_pointer_callback input_pointer_delta_y = nullptr;
+            available_callback audio_available = nullptr;
+            audio_play_callback audio_play = nullptr;
+            audio_stop_callback audio_stop = nullptr;
+            audio_update_callback audio_update = nullptr;
+            available_callback save_available = nullptr;
+            save_set_bool_callback save_set_bool = nullptr;
+            save_set_int_callback save_set_int = nullptr;
+            save_set_double_callback save_set_double = nullptr;
+            save_set_string_callback save_set_string = nullptr;
+            save_get_bool_callback save_get_bool = nullptr;
+            save_get_int_callback save_get_int = nullptr;
+            save_get_double_callback save_get_double = nullptr;
+            save_get_string_callback save_get_string = nullptr;
+            save_has_key_callback save_has_key = nullptr;
+            save_key_callback save_delete_key = nullptr;
+            save_slot_callback save_game = nullptr;
+            save_slot_callback load_game = nullptr;
+            save_slot_callback delete_save = nullptr;
+            available_callback runtime_ui_available = nullptr;
+            create_ui_element_callback create_ui_element = nullptr;
+            set_ui_text_callback set_ui_text = nullptr;
+            get_ui_text_callback get_ui_text = nullptr;
+            set_ui_color_callback set_ui_image_color = nullptr;
+            set_ui_rect_callback set_ui_rect = nullptr;
+            set_ui_button_callback set_ui_button_interactable = nullptr;
+            add_component_callback add_component = nullptr;
+            get_components_callback get_components = nullptr;
+            set_component_enabled_callback set_component_enabled = nullptr;
+            get_component_enabled_callback get_component_enabled = nullptr;
         };
     inline int StatusCode(RuntimeStatus status) noexcept
     {
@@ -167,6 +205,55 @@ namespace ReplayEngine::Scripting::CSharp::Detail
     int NativeUnsubscribeEvent(std::uint64_t subscription) noexcept;
     int NativePollEvent(std::uint64_t subscription, char* output,
         int output_capacity) noexcept;
+
+    int NativeInputAvailable() noexcept;
+    int NativeInputHeld(const char* action, int player_slot, int* out) noexcept;
+    int NativeInputPressed(const char* action, int player_slot, int* out) noexcept;
+    int NativeInputReleased(const char* action, int player_slot, int* out) noexcept;
+    int NativeInputAxis(const char* axis, int player_slot, float* out) noexcept;
+    int NativeInputPointerDeltaX(float* out) noexcept;
+    int NativeInputPointerDeltaY(float* out) noexcept;
+    int NativeAudioAvailable() noexcept;
+    int NativeAudioPlay(const char* clip_path, int loop, float volume, float pitch,
+        int spatial_mode, DirectX::XMFLOAT3 position, float min_distance,
+        float max_distance, std::uint64_t* out) noexcept;
+    int NativeAudioStop(std::uint64_t voice) noexcept;
+    int NativeAudioUpdate(std::uint64_t voice, const char* clip_path, int loop,
+        float volume, float pitch, int spatial_mode, DirectX::XMFLOAT3 position,
+        float min_distance, float max_distance) noexcept;
+    int NativeSaveAvailable() noexcept;
+    int NativeSaveSetBool(const char* slot, const char* key, int value) noexcept;
+    int NativeSaveSetInt(const char* slot, const char* key, std::int64_t value) noexcept;
+    int NativeSaveSetDouble(const char* slot, const char* key, double value) noexcept;
+    int NativeSaveSetString(const char* slot, const char* key, const char* value) noexcept;
+    int NativeSaveGetBool(const char* slot, const char* key, int* out) noexcept;
+    int NativeSaveGetInt(const char* slot, const char* key, std::int64_t* out) noexcept;
+    int NativeSaveGetDouble(const char* slot, const char* key, double* out) noexcept;
+    int NativeSaveGetString(const char* slot, const char* key, char* output,
+        int output_capacity) noexcept;
+    int NativeSaveHasKey(const char* slot, const char* key, int* out) noexcept;
+    int NativeSaveDeleteKey(const char* slot, const char* key) noexcept;
+    int NativeSaveGame(const char* slot) noexcept;
+    int NativeLoadGame(const char* slot) noexcept;
+    int NativeDeleteSave(const char* slot) noexcept;
+    int NativeRuntimeUIAvailable() noexcept;
+    int NativeCreateUIElement(const char* name, Runtime::ObjectHandle parent,
+        Runtime::ObjectHandle* out) noexcept;
+    int NativeSetUIText(Runtime::ObjectHandle object, const char* text) noexcept;
+    int NativeGetUIText(Runtime::ObjectHandle object, char* output,
+        int output_capacity) noexcept;
+    int NativeSetUIImageColor(Runtime::ObjectHandle object,
+        DirectX::XMFLOAT4 color) noexcept;
+    int NativeSetUIRect(Runtime::ObjectHandle object, DirectX::XMFLOAT2 position,
+        DirectX::XMFLOAT2 size, DirectX::XMFLOAT2 scale, float rotation,
+        int sort_order) noexcept;
+    int NativeSetUIButtonInteractable(Runtime::ObjectHandle object, int interactable) noexcept;
+    int NativeAddComponent(Runtime::ObjectHandle object, std::uint32_t type_id,
+        Runtime::ComponentHandle* out) noexcept;
+    int NativeGetComponents(Runtime::ObjectHandle object, std::uint32_t type_id,
+        Runtime::ComponentHandle* output, int capacity, int* count) noexcept;
+    int NativeSetComponentEnabled(Runtime::ComponentHandle component, int enabled) noexcept;
+    int NativeGetComponentEnabled(Runtime::ComponentHandle component, int* out) noexcept;
 
     NativeApiTable MakeNativeApiTable() noexcept;
 }
