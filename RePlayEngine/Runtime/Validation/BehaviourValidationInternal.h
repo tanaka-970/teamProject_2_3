@@ -91,6 +91,9 @@ namespace ReplayEngine::Runtime::Validation::Detail::BehaviourValidation
             LifecycleProbeBehaviour* added_probe = nullptr;
             bool update_mutation_done = false;
 
+            float motion_value = 0.0f;
+            int motion_setter_count = 0;
+
             // Awake の中で自分の破棄を要求するか。
             bool destroy_in_awake = false;
 
