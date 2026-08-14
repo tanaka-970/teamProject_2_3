@@ -45,7 +45,7 @@ void framework::execute_editor_command(const std::string& command)
     if (name == "help" || name == "ヘルプ")
     {
         editor_command_result =
-            "deferred | bloom [on/off/toggle] | save | undo | redo | duplicate | objects | "
+            "deferred | bloom [on/off/toggle] | save | undo | redo | copy | paste | duplicate | objects | "
             "workspace [general/placement/modeling/animation/rendering] | timescale [0..100] | fullscreen";
         return;
     }
@@ -85,6 +85,39 @@ void framework::execute_editor_command(const std::string& command)
     if (name == "duplicate" || name == "複製")
     {
         object_hierarchy_panel.DuplicateSelection(object_editor_context);
+        editor_command_result = object_editor_context.Status();
+        return;
+    }
+    if (name == "copy" || name == "コピー")
+    {
+#ifdef USE_IMGUI
+        std::string clipboard_text;
+        std::string error;
+        if (object_hierarchy_panel.CopySelection(object_editor_context, clipboard_text, error))
+        {
+            ImGui::SetClipboardText(clipboard_text.c_str());
+            object_editor_context.SetStatus("GameObject をコピーしました");
+        }
+        else object_editor_context.SetStatus(error);
+#else
+        object_editor_context.SetStatus("クリップボードは ImGui 有効時のみ使えます");
+#endif
+        editor_command_result = object_editor_context.Status();
+        return;
+    }
+    if (name == "paste" || name == "貼り付け")
+    {
+#ifdef USE_IMGUI
+        std::string error;
+        const char* clipboard_text = ImGui::GetClipboardText();
+        if (!object_hierarchy_panel.PasteSelection(object_editor_context,
+            clipboard_text != nullptr ? clipboard_text : "", error))
+        {
+            object_editor_context.SetStatus("貼り付けできません: " + error);
+        }
+#else
+        object_editor_context.SetStatus("クリップボードは ImGui 有効時のみ使えます");
+#endif
         editor_command_result = object_editor_context.Status();
         return;
     }

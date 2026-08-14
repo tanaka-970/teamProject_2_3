@@ -901,6 +901,31 @@ public:
                 object_hierarchy_panel.DuplicateSelection(object_editor_context);
                 return 0;
             }
+            if (shortcut_pressed && (wparam == 'C' || wparam == 'V'))
+            {
+                std::string clipboard_error;
+                if (wparam == 'C')
+                {
+                    std::string clipboard_text;
+                    if (object_hierarchy_panel.CopySelection(object_editor_context,
+                        clipboard_text, clipboard_error))
+                    {
+                        ImGui::SetClipboardText(clipboard_text.c_str());
+                        object_editor_context.SetStatus("GameObject をコピーしました");
+                    }
+                    else object_editor_context.SetStatus(clipboard_error);
+                }
+                else
+                {
+                    const char* clipboard_text = ImGui::GetClipboardText();
+                    if (!object_hierarchy_panel.PasteSelection(object_editor_context,
+                        clipboard_text != nullptr ? clipboard_text : "", clipboard_error))
+                    {
+                        object_editor_context.SetStatus("貼り付けできません: " + clipboard_error);
+                    }
+                }
+                return 0;
+            }
             if (msg == WM_KEYDOWN && wparam == VK_DELETE &&
                 !ImGui::GetIO().WantTextInput &&
                 selected_editor_object == editor_selection::game_object)
