@@ -62,6 +62,15 @@ namespace ReplayEngine::Scene::Serialization
                 ? Core::ComponentAvailabilityPolicy::Runtime
                 : Core::ComponentAvailabilityPolicy::Editor;
 
+            // 欠落依存の自動追加が、後続の保存 Component の StableID を
+            // 先取りしないようにする。保存 ID 自体は結線時に明示復元できるので、
+            // 自動採番だけを保存範囲より上へ進めておく。
+            for (const ComponentData& component_data : source.components)
+            {
+                if (component_data.stable_id != Core::invalid_component_stable_id)
+                    target.EnsureComponentStableIDAbove(component_data.stable_id);
+            }
+
             // 保存されている型は StableID 付きの生成まで既定値で先取りしない。
             // Component 同士の保存順も変えず、欠落している依存だけを途中へ差し込む。
             std::vector<Core::ComponentTypeID> saved_types;

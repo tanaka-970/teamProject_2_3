@@ -98,10 +98,8 @@ namespace ReplayEngine::Scripting
 
         // 同一フレーム内の呼び出し順のヒント。
         //
-        // Phase 1 では保存・表示だけで、実際のソートは行わない。
-        // BehaviourComponent::execution_order と同じ扱いで、
-        // Scene 全体の実行順対応は別作業として分離する。
-        std::int32_t ExecutionOrder() const noexcept { return execution_order_; }
+        // Scene の 3 更新フェーズ内で使う。後段の Motion 等は移動しない。
+        std::int32_t ExecutionOrder() const noexcept override { return execution_order_; }
         void SetExecutionOrder(std::int32_t value) { execution_order_ = value; }
 
         // 現在のスクリプト型。asset_guid_ と class_name_ から導かれる。
