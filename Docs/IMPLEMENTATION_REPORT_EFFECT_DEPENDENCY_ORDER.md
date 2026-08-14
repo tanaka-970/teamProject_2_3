@@ -236,7 +236,7 @@ Editor の追加入口は 4/4 を共通化した。
 
 - Debug x64 (`3dgp.sln`): 成功、警告 0、エラー 0
 - `--validate-behaviour`
-  - Execution order: 9 checks passed
+  - Execution order / Motion setter: 10 checks passed
   - Component dependency: 16 checks passed
   - Behaviour lifecycle: 28 checks passed
 - `--validate-script-lifecycle`: 48 checks passed
@@ -253,6 +253,7 @@ Editor の追加入口は 4/4 を共通化した。
 - disabled、削除予約、更新中追加／削除
 - 複数 fixed substep
 - ScriptComponent の 3 フェーズ昇順
+- 同一 Property への Motion 2 寄与でも setter は 1 回
 
 依存の自動検証は次を含む。
 
@@ -291,4 +292,3 @@ Editor の追加入口は 4/4 を共通化した。
 - `f515963` — エフェクトスタックの修正
 - `b48d477` — 依存関係・実行順序の実装保存
 - `a2f437d` — 依存関係と実行順序の検証を追加
-

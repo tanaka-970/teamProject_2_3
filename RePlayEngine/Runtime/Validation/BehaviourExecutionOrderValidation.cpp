@@ -1,5 +1,7 @@
 #include "BehaviourValidationInternal.h"
 
+#include "../../Motion/MotionMixer.h"
+
 namespace ReplayEngine::Runtime::Validation::Detail::BehaviourValidation
 {
     int RunExecutionOrderValidation()
@@ -147,6 +149,41 @@ namespace ReplayEngine::Runtime::Validation::Detail::BehaviourValidation
                     mutator->added_probe->update_count == 1,
                     "追加 Component は次フレームから 1 回だけ実行される");
             }
+        }
+
+        // Motion は Scene の後段ステージのまま。複数寄与も Apply の setter は 1 回。
+        {
+            Scene::Scene world("MotionSetterCount");
+            Core::GameObject* object = world.CreateGameObject("MotionTarget");
+            auto* probe = object != nullptr
+                ? object->AddComponent<LifecycleProbeBehaviour>() : nullptr;
+
+            Reflection::PropertyDesc property;
+            property.name = "motion_value";
+            property.type = Reflection::PropertyType::Float;
+            property.animatable = Reflection::Animatable::Interpolatable;
+            property.getter = [](const Core::Component& component)
+            {
+                const auto& target = static_cast<const LifecycleProbeBehaviour&>(component);
+                return Reflection::PropertyValue::MakeFloat(target.motion_value);
+            };
+            property.setter = [](Core::Component& component,
+                const Reflection::PropertyValue& value)
+            {
+                auto& target = static_cast<LifecycleProbeBehaviour&>(component);
+                target.motion_value = value.AsFloat(target.motion_value);
+                ++target.motion_setter_count;
+            };
+
+            Motion::ResolvedMotionBinding binding{ probe, &property };
+            Motion::MotionMixer mixer;
+            mixer.BeginFrame();
+            mixer.Contribute(binding, Reflection::PropertyValue::MakeFloat(2.0f), 1.0f);
+            mixer.Contribute(binding, Reflection::PropertyValue::MakeFloat(6.0f), 1.0f);
+            mixer.Apply();
+            check.Expect(probe != nullptr && probe->motion_setter_count == 1 &&
+                mixer.WasDriven(*probe, property.name),
+                "同一 Property への複数 Motion 寄与でも setter は 1 回だけ");
         }
 
         return check.Report("Execution order validation");
