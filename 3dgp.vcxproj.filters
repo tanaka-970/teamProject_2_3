@@ -813,7 +813,13 @@
     <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourValidation.cpp">
       <Filter>RePlayEngine\Runtime\Validation</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourExecutionOrderValidation.cpp">
+      <Filter>RePlayEngine\Runtime\Validation</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourValidationSupport.cpp">
+      <Filter>RePlayEngine\Runtime\Validation</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Runtime\Validation\ComponentDependencyValidation.cpp">
       <Filter>RePlayEngine\Runtime\Validation</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourEventValidation.cpp">

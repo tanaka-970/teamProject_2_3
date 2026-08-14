@@ -443,7 +443,9 @@
     <ClCompile Include="RePlayEngine\Runtime\API\RuntimeContextServices.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\API\RuntimeSaveGameService.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourExecutionOrderValidation.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourValidationSupport.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Validation\ComponentDependencyValidation.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourEventValidation.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourRuntimeApiValidation.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourCollisionValidation.cpp" />
