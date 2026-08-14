@@ -194,6 +194,8 @@ namespace ReplayEngine::Runtime::Validation::Detail::BehaviourValidation
         };
 
     void RegisterProbe();
+    int RunExecutionOrderValidation();
+    int RunComponentDependencyValidation();
     bool ContainsInOrder(const std::vector<std::string>& calls,
         const char* first, const char* second);
 }

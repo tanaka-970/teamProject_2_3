@@ -186,13 +186,32 @@ namespace ReplayEngine::Scripting::Validation
         // ---- execution_order の安定性 -----------------------------------------------
 
         {
-            std::vector<ObjectID> first_order;
-            for (const MockScriptBackend::CallEntry& entry : lua.CallLog())
+            inactive_script->SetExecutionOrder(-100);
+            normal_script->SetExecutionOrder(0);
+            disabled_script->SetExecutionOrder(100);
+            const std::vector<ObjectID> expected = {
+                inactive_object->ID(), normal_object->ID(), active_object->ID(),
+            };
+            lua.ClearCallLog();
+            fixture.world.Update(0.016f);
+            fixture.world.FixedUpdate(0.016f);
+            fixture.world.LateUpdate(0.016f);
+
+            const auto collect = [&lua](ScriptCallback callback)
             {
-                if (entry.callback != ScriptCallback::Update) continue;
-                first_order.push_back(entry.object);
-            }
-            check.Expect(!first_order.empty(), "Update の呼び出し記録が取れる");
+                std::vector<ObjectID> result;
+                for (const MockScriptBackend::CallEntry& entry : lua.CallLog())
+                {
+                    if (entry.callback == callback) result.push_back(entry.object);
+                }
+                return result;
+            };
+            check.Expect(collect(ScriptCallback::Update) == expected,
+                "Script Update は execution_order -100, 0, 100 の順");
+            check.Expect(collect(ScriptCallback::FixedUpdate) == expected,
+                "Script FixedUpdate は execution_order -100, 0, 100 の順");
+            check.Expect(collect(ScriptCallback::LateUpdate) == expected,
+                "Script LateUpdate は execution_order -100, 0, 100 の順");
 
             lua.ClearCallLog();
             fixture.world.Update(0.016f);
@@ -213,7 +232,7 @@ namespace ReplayEngine::Scripting::Validation
             }
 
             check.Expect(second == third,
-                "execution_order が同じとき、呼び出し順は毎フレーム安定している");
+                "execution_order の呼び出し順は毎フレーム安定している");
         }
 
         // ---- 要件 2-c の続き: Awake していないスクリプトの破棄 ------------------------
