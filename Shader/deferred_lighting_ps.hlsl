@@ -58,12 +58,11 @@ float4 main(VS_OUT pin) : SV_TARGET
     float4 par  = gb_param.Load(int3(pixel_position, 0));
     float  z    = gb_depth.Load(int3(pixel_position, 0)).r;
 
-    uint original_shading_model = (uint) round(base.a * 255.0f);
     float2 sampled_uv = pin.texcoord;
-    if (original_shading_model == SHADING_MODEL_PIXELATE)
+    if (HasPixelateSettings(emi))
     {
-        float pixel_size = max(emi.a, 1.0f);
-        float strength = saturate(nor.a);
+        float pixel_size = DecodePixelateSize(emi);
+        float strength = DecodePixelateStrength(nor);
         float2 cell_center = (floor(pin.position.xy / pixel_size) + 0.5f) * pixel_size;
         int2 sampled_position = clamp(int2(lerp(pin.position.xy, cell_center, strength)),
             int2(0, 0), render_size - 1);
@@ -126,11 +125,11 @@ float4 main(VS_OUT pin) : SV_TARGET
     if (debug_mode == 7) return float4(shadow_visibility.xxx, 1);
 
     float3 color = 0;
-    if (g.shading_model == SHADING_MODEL_UNLIT)
+    if (g.lighting_model == REPLAY_LIGHTING_UNLIT)
     {
         color = g.base_color + g.emissive;
     }
-    else if (g.shading_model == SHADING_MODEL_TOON)
+    else if (g.lighting_model == REPLAY_LIGHTING_TOON)
     {
         float ndl = dot(N, L);
         float u = toon_ramp_band(ndl);

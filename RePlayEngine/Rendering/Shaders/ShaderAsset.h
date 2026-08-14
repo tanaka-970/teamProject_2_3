@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ReplayEngine::Rendering
@@ -35,6 +36,26 @@ namespace ReplayEngine::Rendering
 
     const char* ToString(ShaderDomain domain) noexcept;
     bool TryParseShaderDomain(std::string_view text, ShaderDomain& out) noexcept;
+
+    // 遅延描画で使う照明式。
+    //
+    // ShaderID や旧 shading_model の番号とは別物。
+    // GBuffer に保存するのは「どのシェーダか」ではなく、
+    // 最終照明を PBR / Toon / Unlit のどれで評価するかだけ。
+    //
+    // 数値は HLSL の REPLAY_LIGHTING_* と必ず一致させること。
+    enum class ShaderLightingModel : std::int32_t
+    {
+        Pbr = 0,
+        Toon = 1,
+        Unlit = 2,
+    };
+
+    inline constexpr std::uint32_t shader_lighting_model_count = 3;
+
+    const char* ToString(ShaderLightingModel model) noexcept;
+    bool TryParseShaderLightingModel(std::string_view text,
+        ShaderLightingModel& out) noexcept;
 
     // 同じシェーダを、頂点の入り方の違いで 2 通りコンパイルする。
     //
@@ -65,19 +86,38 @@ namespace ReplayEngine::Rendering
 
     const char* ToString(ShaderVariant variant) noexcept;
 
+    // Shader-owned additional pass. Material Layer とは別物。
+    // Layer はユーザーが順番を変えるが、Pass は Shader 作者が宣言した順に固定する。
+    enum class ShaderPassBlend : std::int32_t
+    {
+        Inherit = 0,
+        Alpha,
+        Additive,
+        Multiply,
+    };
+
+    const char* ToString(ShaderPassBlend blend) noexcept;
+    bool TryParseShaderPassBlend(std::string_view text, ShaderPassBlend& out) noexcept;
+
+    struct ShaderPassInfo final
+    {
+        std::string name;
+        std::string entry_point;
+        ShaderPassBlend blend = ShaderPassBlend::Inherit;
+    };
+
     // HLSL へ渡す define 名。#if REPLAY_SKINNED で分岐する。
     inline constexpr const char* shader_variant_define = "REPLAY_SKINNED";
 
     // このドメインがその変種を使うか。
     //
-    // surface だけが 2 通り要る。
-    // layer と postprocess は画面全体にかけるもので、
-    // 頂点の入り方に依存しないので Static だけでよい。
+    // surface と layer はメッシュの Pixel Shader 入力を受けるため 2 通り要る。
+    // postprocess だけは画面全体にかけ、頂点の入り方に依存しないので Static のみ。
     constexpr bool ShaderDomainUsesVariant(ShaderDomain domain,
         ShaderVariant variant) noexcept
     {
         if (variant == ShaderVariant::Static) return true;
-        return domain == ShaderDomain::Surface;
+        return domain == ShaderDomain::Surface || domain == ShaderDomain::Layer;
     }
 
     // Inspector に出す 1 項目の種別。
@@ -116,6 +156,13 @@ namespace ReplayEngine::Rendering
 
         // Inspector の表示名。"基本色"。空なら name を使う。
         std::string display_name;
+
+        // Inspector の見出し。空なら "Shader Properties" へ入る。
+        // Shader 固有 UI を C++ へ書かず、宣言側だけで整理できるようにする。
+        std::string category;
+
+        // 項目にマウスを重ねたときの説明。空なら何も出さない。
+        std::string tooltip;
 
         ShaderPropertyKind kind = ShaderPropertyKind::Float;
 
@@ -210,7 +257,17 @@ namespace ReplayEngine::Rendering
         std::string category;      // "Lit/Standard"
         ShaderDomain domain = ShaderDomain::Surface;
 
+        // #pragma replay_lighting。未指定は PBR。
+        // 不明な名前を読んだときは lighting_model_valid=false になり、
+        // ShaderLibrary は Catalog へ登録しない。勝手に PBR へ丸めない。
+        ShaderLightingModel lighting_model = ShaderLightingModel::Pbr;
+        bool lighting_model_valid = true;
+
         std::vector<ShaderProperty> properties;
+
+        // #pragma replay_pass "Glow" GlowPass additive
+        // 宣言順が描画順。Material 側から並べ替えない。
+        std::vector<ShaderPassInfo> passes;
 
         // Inspector のドロップダウンに出す表示名。
         // category が空なら name だけ、あれば "category/name"。

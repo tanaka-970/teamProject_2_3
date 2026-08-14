@@ -412,7 +412,7 @@ namespace ReplayEngine::Rendering::Capture
             diff_out->rgba.assign(out.total_pixels * 4u, 0u);
         }
 
-        const int limit = std::max(0, tolerance);
+        const int limit = (std::max)(0, tolerance);
         bool found_first = false;
 
         for (std::size_t index = 0; index < out.total_pixels; ++index)
@@ -426,10 +426,10 @@ namespace ReplayEngine::Rendering::Capture
             {
                 const int delta = std::abs(static_cast<int>(a[channel]) -
                     static_cast<int>(b[channel]));
-                worst = std::max(worst, delta);
+                worst = (std::max)(worst, delta);
             }
 
-            out.max_channel_delta = std::max(out.max_channel_delta, worst);
+            out.max_channel_delta = (std::max)(out.max_channel_delta, worst);
 
             const bool differs = worst > limit;
             if (differs)
@@ -452,7 +452,7 @@ namespace ReplayEngine::Rendering::Capture
                 {
                     // 差分は赤。強さで差の大きさが分かるようにする。
                     d[0] = static_cast<std::uint8_t>(
-                        std::min(255, 128 + worst * 2));
+                        (std::min)(255, 128 + worst * 2));
                     d[1] = 0u;
                     d[2] = 0u;
                 }

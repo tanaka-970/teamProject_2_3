@@ -13,6 +13,23 @@
 
 namespace ReplayEngine::Reflection
 {
+    // Timeline から動かせるかどうか。
+    //
+    // Sprite や Text のようにキーは打ちたいが補間できない値があるため、
+    // bool ではなく 3 値にする。Motion Editor はこの値だけを見て、
+    // Ease の表示可否を判断できる。
+    enum class Animatable
+    {
+        None,
+        Step,
+        Interpolatable,
+    };
+
+    namespace Detail
+    {
+        constexpr Animatable DefaultAnimatableFor(PropertyType type) noexcept;
+    }
+
     // Component のプロパティ 1 つ分の定義。
     //
     // ここに登録した内容は Inspector の描画と Scene の保存の「両方」から参照される。
@@ -73,6 +90,10 @@ namespace ReplayEngine::Reflection
         // Array の要素型。type が Array のときだけ意味を持つ。
         PropertyType array_element_type = PropertyType::Bool;
 
+        // Timeline から動かせるかどうか。
+        // MakeProperty / MakeAccessorProperty が PropertyType から既定値を入れる。
+        Animatable animatable = Animatable::None;
+
         Getter getter;
         Setter setter;
 
@@ -90,17 +111,42 @@ namespace ReplayEngine::Reflection
         }
 
         PropertyDesc& Step(double value) { step = value; return *this; }
-        PropertyDesc& ReadOnly() { read_only = true; return *this; }
+        PropertyDesc& ReadOnly()
+        {
+            read_only = true;
+            animatable = Animatable::None;
+            return *this;
+        }
         PropertyDesc& HiddenInEditor() { editor_visible = false; return *this; }
-        PropertyDesc& NotSerializable() { serializable = false; return *this; }
+        PropertyDesc& NotSerializable()
+        {
+            serializable = false;
+            animatable = Animatable::None;
+            return *this;
+        }
 
         // 内部表現はそのままに、意味だけを変える。
         //   XMFLOAT4 のメンバを色として扱う  -> AsColor()
         //   std::string のメンバを Asset として扱う -> AsAssetPath()
         //   int のメンバを列挙として扱う     -> AsEnum({...})
-        PropertyDesc& AsColor() { type = PropertyType::Color; return *this; }
-        PropertyDesc& AsQuaternion() { type = PropertyType::Quaternion; return *this; }
-        PropertyDesc& AsAssetPath() { type = PropertyType::AssetPath; return *this; }
+        PropertyDesc& AsColor()
+        {
+            type = PropertyType::Color;
+            animatable = Detail::DefaultAnimatableFor(type);
+            return *this;
+        }
+        PropertyDesc& AsQuaternion()
+        {
+            type = PropertyType::Quaternion;
+            animatable = Detail::DefaultAnimatableFor(type);
+            return *this;
+        }
+        PropertyDesc& AsAssetPath()
+        {
+            type = PropertyType::AssetPath;
+            animatable = Detail::DefaultAnimatableFor(type);
+            return *this;
+        }
 
         // 内部は int のまま、Inspector での意味だけを変える。
         //   Layer 番号        -> AsCollisionLayer()     … Layer 名の一覧から選ぶ
@@ -110,22 +156,26 @@ namespace ReplayEngine::Reflection
         PropertyDesc& AsCollisionLayer()
         {
             type = PropertyType::CollisionLayer;
+            animatable = Detail::DefaultAnimatableFor(type);
             return *this;
         }
         PropertyDesc& AsCollisionMask()
         {
             type = PropertyType::CollisionMask;
+            animatable = Detail::DefaultAnimatableFor(type);
             return *this;
         }
         PropertyDesc& AsColliderReference()
         {
             type = PropertyType::ColliderReference;
+            animatable = Detail::DefaultAnimatableFor(type);
             return *this;
         }
 
         PropertyDesc& AsEnum(std::vector<std::string> labels)
         {
             type = PropertyType::Enum;
+            animatable = Detail::DefaultAnimatableFor(type);
             enum_labels = std::move(labels);
             return *this;
         }
@@ -136,6 +186,16 @@ namespace ReplayEngine::Reflection
         PropertyDesc& Unit(std::string value) { unit = std::move(value); return *this; }
         PropertyDesc& RuntimeOnly() { runtime_only = true; return *this; }
         PropertyDesc& Advanced() { advanced = true; return *this; }
+        PropertyDesc& Animation(Animatable value)
+        {
+            animatable = (read_only || !serializable) ? Animatable::None : value;
+            return *this;
+        }
+        PropertyDesc& NotAnimatable()
+        {
+            animatable = Animatable::None;
+            return *this;
+        }
 
         // AssetReference が受け付ける Asset の種類を絞る。
         PropertyDesc& OfAssetType(std::string kind)
@@ -182,6 +242,41 @@ namespace ReplayEngine::Reflection
     namespace Detail
     {
         template<class> inline constexpr bool always_false_v = false;
+
+        constexpr Animatable DefaultAnimatableFor(PropertyType type) noexcept
+        {
+            switch (type)
+            {
+            case PropertyType::Float:
+            case PropertyType::Double:
+            case PropertyType::Vector2:
+            case PropertyType::Vector3:
+            case PropertyType::Vector4:
+            case PropertyType::Quaternion:
+            case PropertyType::Color:
+            case PropertyType::Int:
+            case PropertyType::Int64:
+            case PropertyType::UInt64:
+                return Animatable::Interpolatable;
+
+            case PropertyType::Bool:
+            case PropertyType::String:
+            case PropertyType::Enum:
+            case PropertyType::CollisionLayer:
+            case PropertyType::CollisionMask:
+                return Animatable::Step;
+
+            case PropertyType::AssetPath:
+            case PropertyType::AssetReference:
+            case PropertyType::SceneReference:
+            case PropertyType::ObjectReference:
+            case PropertyType::ComponentReference:
+            case PropertyType::ColliderReference:
+            case PropertyType::Array:
+                return Animatable::None;
+            }
+            return Animatable::None;
+        }
 
         // std::vector<T> かどうかの判定。配列プロパティの受け付けに使う。
         template<class T> struct VectorTraits : std::false_type
@@ -342,6 +437,7 @@ namespace ReplayEngine::Reflection
         desc.name = std::move(name);
         desc.type = Detail::DeducePropertyType<M>();
         desc.array_element_type = Detail::DeduceArrayElementType<M>();
+        desc.animatable = Detail::DefaultAnimatableFor(desc.type);
 
         desc.getter = [member](const Core::Component& component) -> PropertyValue
         {
@@ -375,6 +471,7 @@ namespace ReplayEngine::Reflection
         PropertyDesc desc;
         desc.name = std::move(name);
         desc.type = type;
+        desc.animatable = Detail::DefaultAnimatableFor(type);
 
         desc.getter = [get](const Core::Component& component) -> PropertyValue
         {

@@ -1,9 +1,28 @@
-#include "MeshRendererComponent.h"
+﻿#include "MeshRendererComponent.h"
 
+#include "MaterialOverrideDynamicProperties.h"
 #include "../../Object/GameObject/GameObject.h"
 
 namespace ReplayEngine::Components
 {
+    const std::vector<Reflection::PropertyDesc>*
+        MeshRendererComponent::DynamicProperties() const noexcept
+    {
+        return MaterialOverrideDynamicProperties(*this);
+    }
+
+    void MeshRendererComponent::PrepareMaterialMotion(
+        const Rendering::MaterialAsset* material,
+        const Rendering::ShaderPropertySchema* schema)
+    {
+        PrepareMaterialMotionProperties(*this, material, schema);
+    }
+
+    void MeshRendererComponent::OnMotionPropertyApplied(const char* property_name)
+    {
+        MarkMaterialMotionProperty(*this, property_name);
+    }
+
     bool MeshRendererComponent::BuildRenderItem(const Core::GameObject& owner,
         Rendering::RenderItem& out) const
     {
@@ -26,6 +45,29 @@ namespace ReplayEngine::Components
             DirectX::XMLoadFloat4x4(&owner_world));
         out.tint = tint;
         out.material_override = material_override;
+        out.material_motion_fixed_mask = material_motion_state.fixed_active_mask;
+        out.material_motion_properties = material_motion_state.active_values;
+        out.override_material_base_color =
+            (material_motion_state.fixed_active_mask & MaterialMotionBaseColor) != 0
+            ? material_motion_state.driven_base_color : material_base_color;
+        out.override_material_metallic =
+            (material_motion_state.fixed_active_mask & MaterialMotionMetallic) != 0
+            ? material_motion_state.driven_metallic : material_metallic;
+        out.override_material_roughness =
+            (material_motion_state.fixed_active_mask & MaterialMotionRoughness) != 0
+            ? material_motion_state.driven_roughness : material_roughness;
+        out.override_material_ambient_occlusion =
+            (material_motion_state.fixed_active_mask & MaterialMotionAmbientOcclusion) != 0
+            ? material_motion_state.driven_ambient_occlusion : material_ambient_occlusion;
+        out.override_material_emissive_color =
+            (material_motion_state.fixed_active_mask & MaterialMotionEmissiveColor) != 0
+            ? material_motion_state.driven_emissive_color : material_emissive_color;
+        out.override_material_emissive_strength =
+            (material_motion_state.fixed_active_mask & MaterialMotionEmissiveStrength) != 0
+            ? material_motion_state.driven_emissive_strength : material_emissive_strength;
+        out.override_material_double_sided =
+            (material_motion_state.fixed_active_mask & MaterialMotionDoubleSided) != 0
+            ? material_motion_state.driven_double_sided : material_double_sided;
         out.shading_model = shading_model;
         out.outline = outline;
         out.cast_shadow = cast_shadow;

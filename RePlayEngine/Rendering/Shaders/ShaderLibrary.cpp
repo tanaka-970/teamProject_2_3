@@ -104,10 +104,25 @@ namespace ReplayEngine::Rendering
                 //
                 // 捨てると「#pragma を書いたのに欄が出ない」の原因が
                 // 一切分からなくなる。1 件ずつ行番号付きで出す。
+                bool has_fatal_parse_issue = false;
                 for (const ShaderSource::ParseIssue& issue : parsed.issues)
                 {
                     ++report.parse_issues;
-                    Log("Warning", issue.message, entry.path(), issue.line);
+                    if (issue.fatal) has_fatal_parse_issue = true;
+                    Log(issue.fatal ? "Error" : "Warning",
+                        issue.message, entry.path(), issue.line);
+                }
+
+                // replay_lighting の不明値など、意味を勝手に補えない宣言は
+                // Catalog へ入れない。PBR へ黙って丸めると、指定したのに
+                // 見た目が変わらない原因になる。
+                if (has_fatal_parse_issue || !parsed.info.lighting_model_valid)
+                {
+                    ++report.failed;
+                    Log("Error",
+                        "致命的なシェーダ宣言エラーのため登録しません",
+                        entry.path());
+                    continue;
                 }
 
                 if (needs_guid)
@@ -161,6 +176,13 @@ namespace ReplayEngine::Rendering
                 catalog_entry.info = parsed.info;
                 catalog_entry.schema = std::make_shared<ShaderPropertySchema>(
                     parsed.info.id, parsed.info.properties, 1);
+                catalog_entry.passes.reserve(parsed.info.passes.size());
+                for (const ShaderPassInfo& pass_info : parsed.info.passes)
+                {
+                    ShaderCatalog::PassResult pass;
+                    pass.info = pass_info;
+                    catalog_entry.passes.push_back(std::move(pass));
+                }
 
                 // 変種のコンパイル結果は既定で「まだ試していない」。
                 // このあと CompileAll がまとめて埋める。
@@ -222,8 +244,21 @@ namespace ReplayEngine::Rendering
         {
             std::ifstream stream(path, std::ios::binary);
             if (!stream) return std::string();
-            return std::string((std::istreambuf_iterator<char>(stream)),
+            std::string text((std::istreambuf_iterator<char>(stream)),
                 std::istreambuf_iterator<char>());
+
+            // Visual Studio の「UTF-8 with signature」で保存された HLSL も受ける。
+            // ShaderLibrary は generated cbuffer をソース先頭へ差し込むため、
+            // 元ファイルの BOM を残すと BOM がストリーム途中へ移動して D3DCompile が
+            // FbxDefault 等を失敗させる。Parser と Compiler の両方で正規化する。
+            if (text.size() >= 3 &&
+                static_cast<unsigned char>(text[0]) == 0xEF &&
+                static_cast<unsigned char>(text[1]) == 0xBB &&
+                static_cast<unsigned char>(text[2]) == 0xBF)
+            {
+                text.erase(0, 3);
+            }
+            return text;
         }
     }
 
@@ -236,14 +271,41 @@ namespace ReplayEngine::Rendering
             if (!entry.UsesVariant(variant)) continue;
             if (!CompileVariant(entry, variant, debug_build)) all_ok = false;
         }
+
+        // Shader-owned pass は Material Layer とは独立。
+        // 宣言順を固定したまま、それぞれの entry point を同じ source/schema からコンパイルする。
+        for (ShaderCatalog::PassResult& pass : entry.passes)
+        {
+            for (int index = 0; index < shader_variant_count; ++index)
+            {
+                const ShaderVariant variant = static_cast<ShaderVariant>(index);
+                if (!entry.UsesVariant(variant)) continue;
+                if (!CompilePassVariant(entry, pass, variant, debug_build)) all_ok = false;
+            }
+        }
         return all_ok;
     }
 
     bool ShaderLibrary::CompileVariant(ShaderCatalog::Entry& entry,
         ShaderVariant variant, bool debug_build)
     {
-        ShaderCatalog::VariantResult& result = entry.At(variant);
+        const DomainEntryPoint domain_entry = EntryPointFor(entry.info.domain);
+        return CompileVariantInto(entry, entry.At(variant), variant,
+            domain_entry.entry, std::string(), debug_build);
+    }
 
+    bool ShaderLibrary::CompilePassVariant(ShaderCatalog::Entry& entry,
+        ShaderCatalog::PassResult& pass, ShaderVariant variant, bool debug_build)
+    {
+        return CompileVariantInto(entry, pass.At(variant), variant,
+            pass.info.entry_point.c_str(), "Pass " + pass.info.name + ": ", debug_build);
+    }
+
+    bool ShaderLibrary::CompileVariantInto(ShaderCatalog::Entry& entry,
+        ShaderCatalog::VariantResult& result, ShaderVariant variant,
+        const char* entry_point, const std::string& diagnostic_prefix,
+        bool debug_build)
+    {
         const std::string source = ReadAllText(entry.info.source_path);
         if (source.empty())
         {
@@ -252,72 +314,38 @@ namespace ReplayEngine::Rendering
             ShaderDiagnostic item;
             item.severity = ShaderDiagnostic::Severity::Error;
             item.file = entry.info.source_path;
-            item.message = "ソースを読めません";
+            item.message = diagnostic_prefix + "ソースを読めません";
             result.diagnostics.push_back(item);
             return false;
         }
 
-        // cbuffer を自動生成してソースの先頭へ差し込む。
-        //
-        // 人に書かせない理由:
-        //   HLSL の 16 バイト境界規則を踏み外すと値が 1 つずれる。
-        //   ずれてもエラーにならず、絵が「なんとなく変」になるだけなので
-        //   原因の特定が非常に難しい。宣言 1 か所から作れば食い違わない。
         std::string declaration;
         if (entry.schema)
-        {
             declaration = ShaderConstantPacker::GenerateHlslDeclaration(*entry.schema);
-        }
 
-        // #line で行番号を元ソースへ戻す。
         std::ostringstream combined;
-
-        // 生成した側で出たエラーが、人が書いた側の行を指さないようにする。
-        // 名前を分けておけば「これは自分が書いた行ではない」と分かる。
         combined << "#line 1 \"REPLAY_GENERATED\"\n";
         combined << declaration;
-
-        // ここから先は人が書いた .hlsl の 1 行目。
-        //
-        // これが無いと、差し込んだ cbuffer のぶんだけ行番号がずれて、
-        // 「エラーの行をクリックしたら別の行へ飛ぶ」ことになる。
         combined << "#line 1 \"" << entry.info.source_path.generic_u8string() << "\"\n";
         combined << source;
 
         ShaderCompiler::Options options = ShaderCompiler::DefaultOptions(debug_build);
-
-        // 変種は define で切り替える。
-        //
-        // ファイルを 2 つに分けない理由は、分けた瞬間に片方だけ直す事故が
-        // 起きるから。実際 static_mesh_*_ps.hlsl と skinned_mesh_*_ps.hlsl は
-        // 接線の作り方以外ほぼ同じ内容が二重に書かれている。
         options.defines.emplace_back(shader_variant_define,
             variant == ShaderVariant::Skinned ? "1" : "0");
 
-        const DomainEntryPoint entry_point = EntryPointFor(entry.info.domain);
-
-        // 失敗時に bytecode を触らない。
-        // 直前に成功したものが残り、描画が続けられる。
+        const DomainEntryPoint domain_entry = EntryPointFor(entry.info.domain);
         Microsoft::WRL::ComPtr<ID3DBlob> bytecode = result.bytecode;
-
         const ShaderCompileResult compiled = ShaderCompiler::CompileSource(
             combined.str(), entry.info.source_path,
-            entry_point.entry, entry_point.target, options, bytecode);
+            entry_point != nullptr && *entry_point != '\0' ? entry_point : domain_entry.entry,
+            domain_entry.target, options, bytecode);
 
         result.diagnostics = compiled.diagnostics;
-
-        // どの変種で出た診断か分かるようにしておく。
-        //
-        // Static は通って Skinned だけ落ちることがあり、
-        // そのとき「どちらの話か」が分からないと直しようがない。
         if (!result.diagnostics.empty())
         {
-            const std::string tag =
-                std::string("[") + ToString(variant) + "] ";
+            const std::string tag = diagnostic_prefix + "[" + ToString(variant) + "] ";
             for (ShaderDiagnostic& item : result.diagnostics)
-            {
                 item.message = tag + item.message;
-            }
         }
 
         if (compiled.succeeded)
@@ -328,10 +356,7 @@ namespace ReplayEngine::Rendering
             return true;
         }
 
-        // 【失敗しても消さない】
-        //   compiled は false にするが、bytecode と schema は残す。
-        //   Material が参照している ShaderID も生きたままなので、
-        //   構文エラーを直せば設定を失わずに戻ってこられる。
+        // Compile failure は last successful bytecode を保持する。
         result.compiled = false;
         return false;
     }
@@ -358,6 +383,23 @@ namespace ReplayEngine::Rendering
                     Log(severity,
                         (item.code.empty() ? std::string() : item.code + ": ") +
                         item.message, item.file, item.line);
+                }
+            }
+            for (const ShaderCatalog::PassResult& pass : entry.passes)
+            {
+                for (int index = 0; index < shader_variant_count; ++index)
+                {
+                    const ShaderVariant variant = static_cast<ShaderVariant>(index);
+                    if (!entry.UsesVariant(variant)) continue;
+                    for (const ShaderDiagnostic& item : pass.At(variant).diagnostics)
+                    {
+                        const char* severity =
+                            item.severity == ShaderDiagnostic::Severity::Error
+                            ? "Error" : "Warning";
+                        Log(severity,
+                            (item.code.empty() ? std::string() : item.code + ": ") +
+                            item.message, item.file, item.line);
+                    }
                 }
             }
 
@@ -406,6 +448,23 @@ namespace ReplayEngine::Rendering
                     item.message, item.file, item.line);
             }
         }
+        for (const ShaderCatalog::PassResult& pass : entry->passes)
+        {
+            for (int index = 0; index < shader_variant_count; ++index)
+            {
+                const ShaderVariant variant = static_cast<ShaderVariant>(index);
+                if (!entry->UsesVariant(variant)) continue;
+                for (const ShaderDiagnostic& item : pass.At(variant).diagnostics)
+                {
+                    const char* severity =
+                        item.severity == ShaderDiagnostic::Severity::Error
+                        ? "Error" : "Warning";
+                    Log(severity,
+                        (item.code.empty() ? std::string() : item.code + ": ") +
+                        item.message, item.file, item.line);
+                }
+            }
+        }
         return ok;
     }
 
@@ -444,13 +503,47 @@ namespace ReplayEngine::Rendering
                     entry.info.DisplayName(), entry.info.source_path);
             }
 
-            if (parsed.succeeded && !needs_guid && !id_changed)
+            bool has_fatal_parse_issue = false;
+            if (!parsed.succeeded)
             {
-                for (const ShaderSource::ParseIssue& issue : parsed.issues)
-                {
-                    Log("Warning", issue.message, entry.info.source_path, issue.line);
-                }
+                Log("Error", "シェーダを再解析できません。直前に成功した bytecode/schema を維持します",
+                    entry.info.source_path);
+                continue;
+            }
 
+            for (const ShaderSource::ParseIssue& issue : parsed.issues)
+            {
+                if (issue.fatal) has_fatal_parse_issue = true;
+                Log(issue.fatal ? "Error" : "Warning", issue.message,
+                    entry.info.source_path, issue.line);
+            }
+
+            // Hot Reload 中も ScanAll と同じ安全規則を使う。
+            // 致命的な pragma / lighting 宣言が壊れた状態で新 source を compile すると、
+            // HLSL 自体は通ってしまって古い schema と新しい bytecode が混ざる場合がある。
+            // その状態を作らず、最後に成功した metadata + bytecode を丸ごと維持する。
+            if (has_fatal_parse_issue || !parsed.info.lighting_model_valid)
+            {
+                Log("Error",
+                    "致命的なシェーダ宣言エラーです。直前に成功した bytecode/schema を維持します",
+                    entry.info.source_path);
+                continue;
+            }
+            if (needs_guid)
+            {
+                Log("Error",
+                    "replay_guid が消えています。Hot Reload では自動採番せず、直前の Shader を維持します",
+                    entry.info.source_path);
+                continue;
+            }
+            if (id_changed)
+            {
+                // 上で再走査を促すログを出している。古い ID の Entry へ新しい GUID の
+                // bytecode を入れない。
+                continue;
+            }
+
+            {
                 std::uint32_t buffer_size = 0;
                 ShaderConstantPacker::AssignOffsets(parsed.info.properties, buffer_size);
 
@@ -462,9 +555,24 @@ namespace ReplayEngine::Rendering
                 const std::uint32_t revision =
                     entry.schema ? entry.schema->Revision() + 1 : 1;
 
+                // Pass 宣言変更でも last-successful bytecode を可能な限り保持する。
+                std::vector<ShaderCatalog::PassResult> replacement_passes;
+                replacement_passes.reserve(parsed.info.passes.size());
+                for (const ShaderPassInfo& pass_info : parsed.info.passes)
+                {
+                    auto found = std::find_if(entry.passes.begin(), entry.passes.end(),
+                        [&pass_info](const ShaderCatalog::PassResult& old_pass)
+                        { return old_pass.info.entry_point == pass_info.entry_point; });
+                    ShaderCatalog::PassResult pass;
+                    if (found != entry.passes.end()) pass = *found;
+                    pass.info = pass_info;
+                    replacement_passes.push_back(std::move(pass));
+                }
+
                 entry.info = parsed.info;
                 entry.schema = std::make_shared<ShaderPropertySchema>(
                     parsed.info.id, parsed.info.properties, revision);
+                entry.passes = std::move(replacement_passes);
             }
 
             Log("Info", "シェーダの変更を検出しました: " + entry.info.DisplayName(),

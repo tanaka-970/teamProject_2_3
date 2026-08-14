@@ -1,12 +1,30 @@
 #pragma once
 
 #include <d3d11.h>
+#include <d3d11sdklayers.h>
 #include <wrl.h>
 
 #include <cstdint>
+#include <cstring>
 
 namespace ReplayEngine::Rendering
 {
+    namespace Detail
+    {
+        inline void SetRenderTextureDebugName(ID3D11DeviceChild* object,
+            const char* name)
+        {
+#if defined(_DEBUG) || defined(DEBUG)
+            if (object == nullptr || name == nullptr || *name == '\0') return;
+            object->SetPrivateData(WKPDID_D3DDebugObjectName,
+                static_cast<UINT>(std::strlen(name)), name);
+#else
+            (void)object;
+            (void)name;
+#endif
+        }
+    }
+
     // SSAO/SSR/TAA/タイルドDeferredが使う、書式を指定できる小さなレンダーテクスチャ。
     // 既存のframebufferはR8G8B8A8固定なので、HDRや1chの中間結果はこちらを使う。
     class RenderTexture final
@@ -37,6 +55,11 @@ namespace ReplayEngine::Rendering
             if (with_unordered_access &&
                 FAILED(device->CreateUnorderedAccessView(texture.Get(), nullptr,
                     unordered_access_view.GetAddressOf()))) return false;
+            if (with_unordered_access)
+            {
+                Detail::SetRenderTextureDebugName(unordered_access_view.Get(),
+                    "RenderTexture.unordered_access_view RePlayEngine/Rendering/RenderTexture.h");
+            }
 
             this->width = width;
             this->height = height;

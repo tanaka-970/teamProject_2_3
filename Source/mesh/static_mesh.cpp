@@ -1,4 +1,9 @@
-﻿#include "shader.h"
+// static_mesh のうち、OBJ / MTL からの読み込みだけを持つ。
+//
+//   static_mesh.cpp          ... OBJ / MTL の検証・読み込み（このファイル）
+//   static_mesh_runtime.cpp  ... Procedural geometry の生成・更新と描画
+
+#include "shader.h"
 #include "misc.h"
 #include "static_mesh.h"
 
@@ -461,124 +466,4 @@ static_mesh::static_mesh(ID3D11Device* device, const wchar_t* obj_filename, bool
 	// ここまで到達したときだけ描画可能とみなす。
 	// 呼び出し側は is_loaded() が false のメッシュを描画してはいけない。
 	loaded_ = true;
-}
-
-void static_mesh::render(ID3D11DeviceContext* immediate_context,
-	const XMFLOAT4X4& world,
-	const XMFLOAT4& material_color,
-	ID3D11PixelShader* alternative_pixel_shader,
-	ID3D11VertexShader* alternative_vertex_shader,
-	ID3D11InputLayout* alternative_input_layout,
-	bool bind_pixel_shader,
-	bool write_motion_vectors)
-{
-	if (write_motion_vectors && motion_object_constant_buffer)
-	{
-		// 剛体なので前フレームのワールド行列を渡すだけでモーションベクターが出る。
-		const motion_vectors::FrameContext& motion_frame = motion_vectors::Frame();
-		motion_vectors::ObjectConstants motion_object{};
-		motion_object.previous_world = motion_history_valid ? previous_world : world;
-		motion_object.previous_view_projection = motion_frame.previous_view_projection;
-		motion_object.params = { motion_frame.enabled && motion_history_valid ? 1.0f : 0.0f,
-			motion_frame.current_jitter.x, motion_frame.current_jitter.y, 0.0f };
-		motion_object.params2 = { motion_frame.previous_jitter.x,
-			motion_frame.previous_jitter.y, 0.0f, 0.0f };
-		immediate_context->UpdateSubresource(
-			motion_object_constant_buffer.Get(), 0, nullptr, &motion_object, 0, 0);
-		immediate_context->VSSetConstantBuffers(
-			6, 1, motion_object_constant_buffer.GetAddressOf());
-
-		// PS へも同じ Buffer を渡す。
-		//
-		// G-Buffer の Pixel Shader が compute_motion_vector() を呼んでおり、
-		// その中で b6 の motion_params / motion_params2 を読んでいる。
-		// つまり PS 側も b6 に 160 バイトを期待している。
-		// VS だけに Bind すると、PS の b6 にはトゥーン材質 (80 バイト) が
-		// 残ったままになり、毎フレーム
-		//   "80 bytes provided, 160 bytes expected" の警告が出る。
-		immediate_context->PSSetConstantBuffers(
-			6, 1, motion_object_constant_buffer.GetAddressOf());
-
-		// 同一フレーム内で二度呼ばれても履歴は一度だけ進める。
-		if (motion_frame_id != motion_frame.frame_id)
-		{
-			motion_frame_id = motion_frame.frame_id;
-			previous_world = world;
-			motion_history_valid = true;
-		}
-	}
-
-	uint32_t stride{ sizeof(vertex) };
-	uint32_t offset{ 0 };
-	immediate_context->IASetVertexBuffers(0, 1, vertex_buffer.GetAddressOf(), &stride, &offset);
-	immediate_context->IASetIndexBuffer(index_buffer.Get(), DXGI_FORMAT_R32_UINT, 0);
-	immediate_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	immediate_context->IASetInputLayout(alternative_input_layout ? alternative_input_layout : input_layout.Get());
-
-	immediate_context->VSSetShader(alternative_vertex_shader ? alternative_vertex_shader : vertex_shader.Get(), nullptr, 0);
-	if (bind_pixel_shader)
-	{
-		alternative_pixel_shader
-			? immediate_context->PSSetShader(alternative_pixel_shader, nullptr, 0)
-			: immediate_context->PSSetShader(pixel_shader.Get(), nullptr, 0);
-	}
-	else
-	{
-		immediate_context->PSSetShader(nullptr, nullptr, 0);
-	}
-
-#if 0
-	immediate_context->PSSetShaderResources(0, 1, shader_resource_view.GetAddressOf());
-
-	D3D11_BUFFER_DESC buffer_desc{};
-	index_buffer->GetDesc(&buffer_desc);
-	immediate_context->DrawIndexed(buffer_desc.ByteWidth / sizeof(uint32_t), 0, 0);
-#else
-	for (const material& material : materials)
-	{
-		immediate_context->PSSetShaderResources(0, 1, material.shader_resource_views[0].GetAddressOf());
-		immediate_context->PSSetShaderResources(1, 1, material.shader_resource_views[1].GetAddressOf());
-
-		constants data{ world, material_color };
-		XMStoreFloat4(&data.material_color, XMLoadFloat4(&material_color) * XMLoadFloat4(&material.Kd));
-		immediate_context->UpdateSubresource(constant_buffer.Get(), 0, 0, &data, 0, 0);
-		immediate_context->VSSetConstantBuffers(0, 1, constant_buffer.GetAddressOf());
-		immediate_context->PSSetConstantBuffers(0, 1, constant_buffer.GetAddressOf());
-
-		for (const subset& subset : subsets)
-		{
-			if (material.name == subset.usemtl)
-			{
-				ReplayEngine::Rendering::Stats().CountDrawIndexed(subset.index_count);
-				immediate_context->DrawIndexed(subset.index_count, subset.index_start, 0);
-			}
-		}
-	}
-#endif
-}
-
-void static_mesh::create_com_buffers(ID3D11Device* device, vertex* vertices, size_t vertex_count, uint32_t* indices, size_t index_count)
-{
-	HRESULT hr = S_OK;
-
-	D3D11_BUFFER_DESC buffer_desc{};
-	D3D11_SUBRESOURCE_DATA subresource_data{};
-	buffer_desc.ByteWidth = static_cast<UINT>(sizeof(vertex) * vertex_count);
-	buffer_desc.Usage = D3D11_USAGE_DEFAULT;
-	buffer_desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-	buffer_desc.CPUAccessFlags = 0;
-	buffer_desc.MiscFlags = 0;
-	buffer_desc.StructureByteStride = 0;
-	subresource_data.pSysMem = vertices;
-	subresource_data.SysMemPitch = 0;
-	subresource_data.SysMemSlicePitch = 0;
-	hr = device->CreateBuffer(&buffer_desc, &subresource_data, vertex_buffer.ReleaseAndGetAddressOf());
-	_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
-
-	buffer_desc.ByteWidth = static_cast<UINT>(sizeof(uint32_t) * index_count);
-	buffer_desc.Usage = D3D11_USAGE_DEFAULT;
-	buffer_desc.BindFlags = D3D11_BIND_INDEX_BUFFER;
-	subresource_data.pSysMem = indices;
-	hr = device->CreateBuffer(&buffer_desc, &subresource_data, index_buffer.ReleaseAndGetAddressOf());
-	_ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
 }

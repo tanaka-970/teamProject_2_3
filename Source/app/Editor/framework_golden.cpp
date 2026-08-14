@@ -28,6 +28,24 @@
 
 namespace Capture = ReplayEngine::Rendering::Capture;
 
+void framework::request_automated_frame_capture(const std::string& name)
+{
+    // Startup Scene の読み込みは非同期なので、ここでは要求を覚えるだけにする。
+    // 実際の撮影要求は、描画済みフレームを数える終了処理から十分待って積む。
+    golden_name = name;
+    automated_frame_capture_pending = true;
+}
+
+bool framework::golden_last_capture_ok() const noexcept
+{
+    return golden_last_ok;
+}
+
+const std::string& framework::golden_last_capture_summary() const noexcept
+{
+    return golden_last_summary;
+}
+
 void framework::request_golden(golden_request_kind kind)
 {
     golden_request = kind;

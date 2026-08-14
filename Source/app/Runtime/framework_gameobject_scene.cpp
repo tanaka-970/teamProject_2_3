@@ -1,31 +1,39 @@
-﻿// GameObject / Component 基盤と既存 framework の接続部。
+﻿// GameObject / Component 基盤のうち「初期化・Scene access・固定更新・UI更新」を持つ。
 //
-// この 1 ファイルへ新基盤との橋渡しをまとめている理由:
-//   framework 側の既存ファイル（描画・入力・エディタ）への変更を最小限に抑え、
-//   どこが新基盤との境界なのかを一目で分かるようにするため。
+//   framework_gameobject_scene.cpp                        … 初期化、設定、Scene access、固定更新（このファイル）
+//   framework_gameobject_scene_motion.cpp                 … Motion Asset / Binding / Player 更新
+//   framework_gameobject_scene_runtime.cpp                … Runtime Scene 更新、Light同期、Camera Follow
+//   framework_gameobject_scene_play.cpp                   … Play Mode の開始・終了
+//   framework_gameobject_scene_serialization.cpp          … 保存・復旧・Scene 操作
+//   framework_gameobject_scene_serialization_creation.cpp … Default Ground と新規 Scene 生成
+//   framework_gameobject_scene_rendering.cpp              … Mesh / Material 解決
+//   framework_gameobject_scene_rendering_draw.cpp         … Object / Landscape 描画
+//   framework_gameobject_scene_rendering_animation.cpp    … Mesh cache / Animation 解決
 //
-// 依存方向:
-//   framework  ->  RePlayEngine (Scene / GameObject / Component / Editor)  の一方向。
-//   RePlayEngine 側から framework を参照している箇所は無い。
-
+// 関数本体は分割前のまま移動し、処理順と分岐は変更しない。
 #include "framework.h"
 
-#include "gltf_model.h"
-#include "skinned_mesh.h"
-
+#include "../../RePlayEngine/Components/Camera/CameraComponent.h"
 #include "../../RePlayEngine/Components/Camera/CameraTargetComponent.h"
+#include "../../RePlayEngine/Components/Camera/FollowTargetComponent.h"
+#include "../../RePlayEngine/Components/Motion/MotionPlayerComponent.h"
+#include "../../RePlayEngine/Components/Core/PropertyLinkComponent.h"
+#include "../../RePlayEngine/Components/UI/UIEffectStackComponent.h"
+#include "../../RePlayEngine/Components/UI/UISpriteAnimatorComponent.h"
+#include "../../RePlayEngine/Components/UI/UITextComponent.h"
 #include "../../RePlayEngine/Components/Rendering/LightComponents.h"
+#include "../../RePlayEngine/Components/Rendering/MeshRendererComponent.h"
+#include "../../RePlayEngine/Components/Rendering/PrimitiveMeshRendererComponent.h"
+#include "../../RePlayEngine/Components/Rendering/SkinnedMeshRendererComponent.h"
+#include "../../RePlayEngine/Components/Landscape/LandscapeComponent.h"
+#include "../../RePlayEngine/Components/Landscape/LandscapeRendererComponent.h"
 #include "../../RePlayEngine/Object/Registry/BuiltInComponents.h"
 #include "../../RePlayEngine/Project/ProjectSettingsSerializer.h"
 #include "../../RePlayEngine/Rendering/Adapter/SceneRenderCollector.h"
-
-// RuntimeContext.h は EventBus を前方宣言だけしている。
-// Events() の戻り値へ Dispatch() を呼ぶには完全型が要るので、
-// 使う .cpp 側でだけ include する。
-// framework.h や RuntimeContext.h へ広げると、EventBus を使わない
-// 翻訳単位まで巻き込むことになる。
+#include "../../RePlayEngine/Motion/MotionBindingResolver.h"
+#include "../../RePlayEngine/Motion/MotionEvaluator.h"
+#include "../../RePlayEngine/UI/UILayout.h"
 #include "../../RePlayEngine/Runtime/Events/EventBus.h"
-#include "../../RePlayEngine/Scene/Serialization/PrefabSerializer.h"
 #include "../../RePlayEngine/Scene/Serialization/SceneData.h"
 #include "../../RePlayEngine/Scene/Serialization/SceneSerializer.h"
 #include "../../RePlayEngine/Scripting/CSharp/CSharpScriptBackend.h"
@@ -35,57 +43,18 @@
 #include "../../RePlayEngine/Scripting/Core/ScriptTypes.h"
 #include "../../game/Behaviours/ValidationBehaviours.h"
 
-#include <commdlg.h>
 #include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace
 {
     namespace SceneSerialization = ReplayEngine::Scene::Serialization;
-
-    std::filesystem::path BrowseObjectSceneFile(HWND owner, bool save,
-        const std::filesystem::path& current)
-    {
-        wchar_t filename[32768]{};
-        if (!current.empty())
-        {
-            const std::wstring initial = std::filesystem::absolute(current).wstring();
-            wcsncpy_s(filename, initial.c_str(), _TRUNCATE);
-        }
-
-        static const wchar_t filter[] =
-            L"RePlayEngine Scene (*.replayscene)\0*.replayscene\0All Files (*.*)\0*.*\0\0";
-        OPENFILENAMEW dialog{};
-        dialog.lStructSize = sizeof(dialog);
-        dialog.hwndOwner = owner;
-        dialog.lpstrFile = filename;
-        dialog.nMaxFile = static_cast<DWORD>(_countof(filename));
-        dialog.lpstrFilter = filter;
-        dialog.lpstrDefExt = L"replayscene";
-        dialog.lpstrTitle = save ? L"Save RePlayEngine Scene" : L"Open RePlayEngine Scene";
-        dialog.Flags = OFN_EXPLORER | OFN_NOCHANGEDIR | OFN_PATHMUSTEXIST |
-            (save ? OFN_OVERWRITEPROMPT : OFN_FILEMUSTEXIST);
-        const BOOL accepted = save ? GetSaveFileNameW(&dialog) : GetOpenFileNameW(&dialog);
-        return accepted ? std::filesystem::path(filename) : std::filesystem::path{};
-    }
-
-    std::filesystem::path AutosavePathFor(const std::filesystem::path& scene_path)
-    {
-        const std::string source = scene_path.lexically_normal().generic_string();
-        std::uint64_t hash = 1469598103934665603ull;
-        for (const unsigned char byte : source)
-        {
-            hash ^= byte;
-            hash *= 1099511628211ull;
-        }
-        const std::string stem = scene_path.stem().empty() ? "Untitled" : scene_path.stem().string();
-        return std::filesystem::path("Saved") / "Autosave" /
-            (stem + "_" + std::to_string(hash) + ".autosave.replayscene");
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -96,14 +65,15 @@ namespace
 //
 //   1. Component 型を登録する
 //   2. プロジェクト設定を読み込む
-    //   3. 現行Sceneを読み込む（GameObject / Component / Property / Collider 参照 /
-//      controlledObjectId がここで復元される）
-//   4. Scene を開始する
-//   5. 衝突世界を Scene へ Attach する
+//   3. Sessionで指定された現行Sceneがあれば、その内容をそのまま読み込む
+//   4. Sceneがまだ存在しない初回起動だけ、通常GameObject + Componentで
+//      Landscape Ground + Sun の Basic Scene を作る
+//   5. Scene を開始する
+//   6. 衝突世界を Scene へ Attach する
 //
-// ここで GameObject を作ることも、Prefab を配置することも、
-// Component をコードから付け足すことも一切しない。
-// Scene ファイルの内容がそのまま起動後の状態になる。
+// 既存Sceneをロードするときは自動GameObjectを追加しない。
+// Basic Sceneの自動生成は「読み込むSceneが無い初回」だけに限定し、
+// Empty Sceneはユーザー操作で引き続き完全な空Sceneとして作成できる。
 void framework::initialize_object_scene()
 {
     // Component 型の登録。Scene を作る前・読む前に 1 回だけ。
@@ -126,6 +96,8 @@ void framework::initialize_object_scene()
     object_editor_context.SetAssetDatabase(&asset_database);
     object_editor_context.SetScenePath(object_scene_path);
 
+    bool created_startup_basic_scene = false;
+
     // Sessionで復元されたSceneがあれば後段で読み込む。ここでは固定Sampleへ
     // 依存せず、明示されたSceneパスがある場合だけ読み込む。
     // 「Scene が無いから既定のキャラクターを置く」ことはしない。
@@ -136,10 +108,37 @@ void framework::initialize_object_scene()
     }
     else
     {
-        object_editor_context.SetStatus(
-            "シーンファイルがありません（空のシーンとして開始しました）");
+        // 初回起動は「何もない空間」ではなく、すぐ Sculpt と衝突確認を始められる
+        // Basic Scene にする。特殊な World Terrain は作らず、通常の GameObject +
+        // Landscape / Renderer / Collider Component だけで構成する。
+        ReplayEngine::Core::GameObject* ground = create_default_landscape_ground(object_scene);
+        created_startup_basic_scene = ground != nullptr;
+        if (ReplayEngine::Core::GameObject* sun = object_scene.CreateGameObject("Sun"))
+        {
+            sun->GetTransform().SetLocalRotationEuler({ -0.75f, 0.4f, 0.0f });
+            if (auto* light = sun->AddComponent<
+                ReplayEngine::Components::DirectionalLightComponent>())
+            {
+                light->color = { 1.0f, 0.96f, 0.88f, 1.0f };
+                light->intensity = 3.5f;
+                light->cast_shadows = true;
+            }
+        }
+        if (ground != nullptr)
+        {
+            object_editor_context.Selection().Select(ground->ID(), false);
+            selected_editor_object = editor_selection::game_object;
+            object_editor_context.MarkDirty();
+            object_editor_context.SetStatus(
+                "新規 Basic Scene を作成しました（Landscape Ground + Sun）");
+        }
+        else
+        {
+            object_editor_context.SetStatus(
+                "新規 Scene を作成しました（Landscape Ground の生成に失敗）");
+        }
     }
-    check_object_scene_recovery();
+    if (!standalone_game_mode) check_object_scene_recovery();
 
     // 編集中も Component の OnStart を回したいので Scene は開始状態にしておく。
     // 実際にゲームロジックが走るかどうかは Edit Mode 判定で制御する。
@@ -152,7 +151,13 @@ void framework::initialize_object_scene()
 
     // Scene View の編集カメラを、この Scene 用に保存された状態から復元する。
     // 保存が無い / 壊れていても、既定位置になるだけで Scene の読み込みには影響しない。
-    load_editor_camera_state();
+    if (!standalone_game_mode) load_editor_camera_state();
+
+    // 新規 Basic Scene だけは保存済みの「未保存Sceneカメラ」を使い回さない。
+    // Ground が見えない状態から始まると生成失敗に見えるため、64m四方を
+    // 斜め上から一目で確認できる位置へ合わせる。既存Sceneのカメラは触らない。
+    if (created_startup_basic_scene)
+        editor_camera.LookAt({ 0.0f, 30.0f, -42.0f }, { 0.0f, 0.0f, 0.0f });
 
     // Runtime 側のサービスを組み立てる。
     // World の所有者はここで確定し、以降 framework が Scene を値で持つことはない。
@@ -162,17 +167,13 @@ void framework::initialize_object_scene()
     //   Runtime World が有効になるのは Play (F5) か、--game 起動のときだけ。
     if (object_boot_from_startup_scene) begin_startup_scene();
 }
-
 // ---------------------------------------------------------------------------
-// プロジェクト設定
-// ---------------------------------------------------------------------------
-
 void framework::load_project_settings()
 {
     namespace Project = ReplayEngine::Project;
 
     std::string error;
-    const auto path = Project::ProjectSettingsSerializer::DefaultPath();
+    const auto path = content_path(Project::ProjectSettingsSerializer::DefaultPath());
     if (Project::ProjectSettingsSerializer::LoadFromFile(project_settings, path, error))
     {
         project_settings_status = "プロジェクト設定を読み込みました";
@@ -218,9 +219,6 @@ const ReplayEngine::Scene::Scene& framework::active_object_scene() const noexcep
 {
     return object_runtime_world_active ? object_runtime_scenes.ActiveWorld() : object_scene;
 }
-
-// ---------------------------------------------------------------------------
-// 更新
 // ---------------------------------------------------------------------------
 
 bool framework::object_runtime_active() const noexcept
@@ -232,13 +230,51 @@ bool framework::object_runtime_active() const noexcept
     //   そのため Editor を開いて F5 を押すまで入力も物理も一切動かず、
     //   「PlayerController があるのに動かない」状態になっていた。
     //
-    // 正しい条件は「編集中でないこと」。
-    //   Editor 非表示（通常のゲーム実行） -> 動く
-    //   Editor 表示 + Edit Mode           -> 止まる（GameObject を編集中）
-    //   Editor 表示 + Play Mode (F5)      -> 動く
-    const bool editing = editor_mode && edit_mode_active && !object_scene_play_mode;
+    // Editor 内で Runtime World を動かす入口は F5 Play Session だけ。
+    // F3 は Editor UI/input capture の切替であり、第2の Play Mode にはしない。
     if (object_scene_play_mode && object_scene_paused) return false;
-    return !editing;
+    if (!editor_mode) return true;
+    return object_scene_play_mode;
+}
+
+framework::object_ui_viewport framework::object_ui_viewport_target() const noexcept
+{
+    object_ui_viewport target{};
+    target.width = (std::max)(1.0f, static_cast<float>(client_width));
+    target.height = (std::max)(1.0f, static_cast<float>(client_height));
+    target.logical_width = target.width;
+    target.logical_height = target.height;
+
+#ifdef USE_IMGUI
+    if (editor_mode && !object_scene_play_mode && scene_view_overlay_valid)
+    {
+        // Editor では Scene View の矩形へ、実行時は従来どおりウィンドウ全体へ描く。
+        target.left = scene_view_overlay_position.x;
+        target.top = scene_view_overlay_position.y;
+        target.width = (std::max)(1.0f, scene_view_overlay_size.x);
+        target.height = (std::max)(1.0f, scene_view_overlay_size.y);
+        target.logical_width = target.width;
+        target.logical_height = target.height;
+
+        if (active_editor_workspace == editor_workspace::ui)
+        {
+            int logical_width = 0;
+            int logical_height = 0;
+            ui_preview_resolution_size(logical_width, logical_height);
+            target.logical_width = (std::max)(1.0f, static_cast<float>(logical_width));
+            target.logical_height = (std::max)(1.0f, static_cast<float>(logical_height));
+            const float zoom = (std::max)(0.10f, ui_preview_zoom);
+            const float view_width = (std::max)(1.0f, target.logical_width * zoom);
+            const float view_height = (std::max)(1.0f, target.logical_height * zoom);
+            target.left += (target.width - view_width) * 0.5f;
+            target.top += (target.height - view_height) * 0.5f;
+            target.width = view_width;
+            target.height = view_height;
+        }
+    }
+#endif
+
+    return target;
 }
 
 void framework::refresh_object_scene_services()
@@ -247,12 +283,31 @@ void framework::refresh_object_scene_services()
 
     // カメラの橋渡しを毎フレーム張り直す。
     // GameScene が作り直された場合でも参照が古くならないようにするため。
-    if (game_scene != nullptr) object_camera_bridge.Attach(&game_scene->Gameplay().GetCamera());
-    else                       object_camera_bridge.Detach();
+    const ReplayEngine::Components::CameraSelection camera_selection =
+        ReplayEngine::Components::ResolveActiveCameraSelection(scene);
+    if (camera_selection.Valid())
+    {
+        object_camera_bridge.AttachBasis(
+            camera_selection.component->Forward(),
+            camera_selection.component->Right());
+    }
+    else if (game_scene != nullptr)
+    {
+        object_camera_bridge.Attach(&game_scene->Gameplay().GetCamera());
+    }
+    else
+    {
+        object_camera_bridge.Detach();
+    }
 
     ReplayEngine::Scene::SceneServices& services = scene.Services();
     services.SetCameraBasis(&object_camera_bridge);
+    services.SetInput(&game_input);
+    services.SetAudio(&object_audio_system);
+    services.SetMotionMixer(&motion_mixer);
     services.SetPlaying(object_runtime_active());
+    services.SetRuntimeScene(object_runtime_active() ? &object_runtime_scenes : nullptr);
+    services.SetSceneFlow(object_runtime_active() ? object_scene_flow.get() : nullptr);
 
     // 地形の問い合わせ先は衝突世界。
     // 旧 Stage を直接 Physics サービスへ挿すことはもうしない。
@@ -305,6 +360,11 @@ void framework::update_object_fixed_step(float elapsed_time)
     {
         object_fixed_accumulator -= object_fixed_time_step;
         scene.FixedUpdate(object_fixed_time_step);
+        // Component の FixedUpdate（入力・力の蓄積）の後に Solver を 1 回だけ進める。
+        // Transform 同期は Solver の末尾で行うため、同じ刻み内の更新順が一定になる。
+        object_collision_world.Refresh();
+        object_physics_dynamics_world.Step(object_fixed_time_step);
+        object_collision_world.Refresh();
         ++steps;
     }
 
@@ -312,1203 +372,66 @@ void framework::update_object_fixed_step(float elapsed_time)
     if (steps >= object_max_fixed_substeps) object_fixed_accumulator = 0.0f;
 }
 
-void framework::update_object_scene(float elapsed_time)
+void framework::update_ui_sprite_animators(ReplayEngine::Scene::Scene& scene,
+    float elapsed_time)
 {
-    // Scene 遷移はフレームの先頭で進める。
-    //
-    // ここが「World を入れ替えてよい安全点」。
-    // Update / Trigger の最中に入れ替えると、走査中の配列と実体が同時に消える。
-    // SceneTransitionBehaviour が OnTriggerEnter で出した要求も、
-    // 次のフレームのこの位置で初めて実際の切り替えになる。
-    tick_runtime_scene_flow();
-    poll_csharp_script_changes(elapsed_time);
+    using ReplayEngine::Components::UISpriteAnimatorComponent;
 
-    // .hlsl の保存もここで拾う。
-    //
-    // C# と同じ位置に置く理由は同じ。描画の最中に
-    // バイトコードを差し替えないための同期点がここだから。
-    poll_shader_source_changes(elapsed_time);
-
-    // スクリプトの同期点。
-    //
-    // ここは World を入れ替えてよい安全点と同じ位置で、
-    // Update / Trigger のどれも走っていない。
-    // Schema の差し替え（ホットリロード）はこの 1 か所だけで行う。
-    //
-    // 【これは第二の更新経路ではない】
-    //   ライフサイクル Callback を 1 つも呼ばない。
-    //   Component の有効・無効も削除予約も見ない。
-    //   やるのは Schema の差し替えと Field 値の移送だけ。
-    //   スクリプトの Update は Scene::Update -> ScriptComponent::OnUpdate の
-    //   1 本しか存在しない。
-    if (object_script_runtime)
+    for (std::size_t object_index = 0; object_index < scene.GameObjectCount();
+        ++object_index)
     {
-        object_script_runtime->ApplyPendingSchemaSwaps(elapsed_time);
-
-        // 抑制済みのぶんだけがここへ来る。同じエラーが毎フレーム出ても
-        // ログは埋まらない（最初の 5 回 -> 以降 1 秒ごとの集約）。
-        for (const std::string& line : object_script_runtime->DrainPendingLogLines())
+        ReplayEngine::Core::GameObject* object = scene.GameObjectAt(object_index);
+        if (object == nullptr || object->PendingDestroy() ||
+            !object->ActiveInHierarchy())
         {
-            log_shutdown_reason(line.c_str());
-        }
-    }
-
-    // Runtime API 側へ時間を渡す。World が入れ替わっても接続は残る。
-    if (object_runtime_context)
-    {
-        ReplayEngine::Runtime::RuntimeTime runtime_time;
-        runtime_time.delta_time = elapsed_time;
-        runtime_time.unscaled_delta_time = elapsed_time;
-        runtime_time.fixed_delta_time = object_fixed_time_step;
-        runtime_time.frame_index = object_runtime_frame_index;
-        object_runtime_context->SetTime(runtime_time);
-    }
-    ++object_runtime_frame_index;
-
-    refresh_object_scene_services();
-
-    ReplayEngine::Scene::Scene& scene = active_object_scene();
-
-    // 編集中（F3 で停止中）は Component を更新しない。
-    // Editor で置いた GameObject が編集中に勝手に動くのを防ぐ。
-    if (object_runtime_active())
-    {
-        // 順序: Update（入力・意思決定）→ FixedUpdate（物理）→ LateUpdate → カメラ
-        // 入力は Update で読み、FixedUpdate がその値を消費する。
-        scene.Update(elapsed_time);
-        update_object_fixed_step(elapsed_time);
-        scene.LateUpdate(elapsed_time);
-
-        // 位置が確定してから Trigger を判定する。
-        // FixedUpdate の途中で判定すると、まだ押し戻されていない位置で
-        // Enter が出てしまい、次のフレームですぐ Exit になる。
-        dispatch_collision_triggers();
-
-        // Behaviour への Collision 配送。Trigger とは経路が完全に分かれている。
-        object_collision_events.Dispatch(scene, object_runtime_frame_index);
-
-        // Behaviour が積んだイベントと遅延生成を、この同期点で流し切る。
-        if (object_runtime_context)
-        {
-            object_runtime_context->Events().Dispatch(&object_runtime_context->Resolver());
-            object_runtime_context->FlushDeferredOperations();
-        }
-
-        // Transform が確定してからカメラを動かす。
-        update_object_camera_follow(elapsed_time);
-    }
-    else
-    {
-        // 停止中でも生成・削除の予約だけは反映する。
-        // Editor 操作の結果が次のフレームまで残らないようにするため。
-        scene.ProcessPendingOperations();
-    }
-
-    // 選択が消えた GameObject を指し続けないようにする。
-    object_editor_context.Selection().PruneMissing(scene);
-    sync_object_lights();
-
-    if (!object_scene_play_mode && object_editor_context.Dirty())
-    {
-        object_autosave_elapsed += (std::max)(0.0f, elapsed_time);
-        if (object_autosave_elapsed >= 60.0f)
-        {
-            autosave_object_scene();
-            object_autosave_elapsed = 0.0f;
-        }
-    }
-    else
-    {
-        object_autosave_elapsed = 0.0f;
-    }
-
-    // 描画提出リストを作り直す。ここでは D3D に触れない。
-    ReplayEngine::Rendering::SceneRenderCollector::Collect(scene, object_render_items);
-}
-
-void framework::sync_object_lights()
-{
-    using ReplayEngine::Components::DirectionalLightComponent;
-    using ReplayEngine::Components::PointLightComponent;
-    using ReplayEngine::Components::SpotLightComponent;
-    using namespace DirectX;
-
-    const ReplayEngine::Scene::Scene& scene = active_object_scene();
-    lights.data.light_counts = { 0, 0, 0, 0 };
-    bool directional_found = false;
-
-    for (std::size_t index = 0; index < scene.GameObjectCount(); ++index)
-    {
-        const ReplayEngine::Core::GameObject* object = scene.GameObjectAt(index);
-        if (object == nullptr || object->PendingDestroy() || !object->ActiveInHierarchy()) continue;
-
-        if (!directional_found)
-        {
-            const DirectionalLightComponent* light = object->GetComponent<DirectionalLightComponent>();
-            if (light != nullptr && light->ActiveInHierarchy())
-            {
-                const XMFLOAT4 rotation = object->GetTransform().WorldRotationQuaternion();
-                XMVECTOR direction = XMVector3Rotate(XMVectorSet(0.0f, -1.0f, 0.0f, 0.0f),
-                    XMLoadFloat4(&rotation));
-                direction = XMVector3Normalize(direction);
-                XMStoreFloat4(&light_direction, direction);
-                light_direction.w = 0.0f;
-                pbr.light.directional_color = {
-                    light->color.x, light->color.y, light->color.z,
-                    (std::max)(0.0f, light->intensity) };
-                pbr.light.shadow_params.w = light->cast_shadows ? 1.0f : 0.0f;
-                directional_found = true;
-            }
-        }
-
-        if (lights.data.light_counts.x < lights_manager::POINT_LIGHT_MAX)
-        {
-            const PointLightComponent* light = object->GetComponent<PointLightComponent>();
-            if (light != nullptr && light->ActiveInHierarchy())
-            {
-                const int slot = lights.data.light_counts.x++;
-                const XMFLOAT3 position = object->GetTransform().WorldPosition();
-                lights.data.point_lights[slot].position = {
-                    position.x, position.y, position.z, (std::max)(0.01f, light->range) };
-                lights.data.point_lights[slot].color = {
-                    light->color.x, light->color.y, light->color.z,
-                    (std::max)(0.0f, light->intensity) };
-            }
-        }
-
-        if (lights.data.light_counts.y < lights_manager::SPOT_LIGHT_MAX)
-        {
-            const SpotLightComponent* light = object->GetComponent<SpotLightComponent>();
-            if (light != nullptr && light->ActiveInHierarchy())
-            {
-                const int slot = lights.data.light_counts.y++;
-                const XMFLOAT3 position = object->GetTransform().WorldPosition();
-                const XMFLOAT4 rotation = object->GetTransform().WorldRotationQuaternion();
-                XMVECTOR direction = XMVector3Rotate(XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f),
-                    XMLoadFloat4(&rotation));
-                direction = XMVector3Normalize(direction);
-                XMFLOAT3 direction_value{};
-                XMStoreFloat3(&direction_value, direction);
-                const float outer = (std::max)(0.1f, (std::min)(179.0f, light->outer_angle_degrees));
-                const float inner = (std::max)(0.1f, (std::min)(outer, light->inner_angle_degrees));
-                lights.data.spot_lights[slot].position = {
-                    position.x, position.y, position.z, (std::max)(0.01f, light->range) };
-                lights.data.spot_lights[slot].direction = {
-                    direction_value.x, direction_value.y, direction_value.z,
-                    std::cos(XMConvertToRadians(inner)) };
-                lights.data.spot_lights[slot].color = {
-                    light->color.x, light->color.y, light->color.z,
-                    std::cos(XMConvertToRadians(outer)) };
-                lights.data.spot_lights[slot].params.x = (std::max)(0.0f, light->intensity);
-            }
-        }
-    }
-
-    if (!directional_found)
-    {
-        pbr.light.directional_color = { 0.0f, 0.0f, 0.0f, 0.0f };
-        pbr.light.shadow_params.w = 0.0f;
-    }
-}
-
-void framework::update_object_camera_follow(float elapsed_time)
-{
-    if (game_scene == nullptr) return;
-
-    // 追従対象は CameraTargetComponent の選択規則で決める。
-    // カメラ側は操作対象の具象型を一切知らない。
-    //
-    // 解決の材料は次の 4 つだけ。
-    //   controlledObjectId / CameraTargetComponent / priority / Runtime Scene
-    // GameObject 名も Prefab 名も見ない。
-    const ReplayEngine::Scene::Scene& scene = active_object_scene();
-    const ReplayEngine::Core::ObjectID controlled = scene.Services().ControlledObject();
-
-    const ReplayEngine::Components::CameraTargetSelection selection =
-        ReplayEngine::Components::ResolveCameraTargetSelection(scene, controlled);
-
-    // CameraTarget が 1 つも無い / すべて無効化されている場合だけ自由カメラへ戻す。
-    // controlledObjectId は変更しない。Fallback は CameraTarget の priority による
-    // 視点選択だけで、操作対象の自動変更ではない。
-    if (!selection.Valid())
-    {
-        game_scene->Gameplay().UpdateFreeCamera(elapsed_time);
-        return;
-    }
-
-    // 追従点は GameObject のワールド位置 + target_offset。
-    const DirectX::XMFLOAT3 world = selection.object->GetTransform().WorldPosition();
-    const ReplayEngine::Components::CameraTargetComponent& camera_target = *selection.component;
-    const DirectX::XMFLOAT3 anchor{
-        world.x + camera_target.target_offset.x,
-        world.y + camera_target.target_offset.y,
-        world.z + camera_target.target_offset.z };
-
-    game_scene->Gameplay().FollowCameraTarget(
-        anchor,
-        camera_target.look_at_offset,
-        camera_target.follow_distance,
-        camera_target.follow_height,
-        camera_target.follow_lag,
-        camera_target.field_of_view_degrees,
-        camera_target.near_clip,
-        camera_target.far_clip,
-        elapsed_time);
-}
-
-// ---------------------------------------------------------------------------
-// 保存・読み込み
-// ---------------------------------------------------------------------------
-//
-// Editor パネルの描画はここでは行わない。
-// 既存の「階層」「インスペクター」ウィンドウの中へ埋め込む形にしてあり、
-// HierarchyPanel::DrawContents / InspectorPanel::DrawContents を
-// framework_editor.cpp と framework_inspector.cpp から直接呼んでいる。
-// 同じ内容のウィンドウを新旧で二重に出さないため、この配置にしている。
-
-bool framework::save_object_scene(bool choose_path)
-{
-    if (object_scene_play_mode)
-    {
-        // 実行中の一時的な変化（HP の減少・移動後の位置）をファイルへ焼き込まない。
-        object_editor_context.SetStatus("実行中はシーンを保存できません");
-        return false;
-    }
-
-    const std::filesystem::path previous_path = object_scene_path;
-    std::filesystem::path destination = object_scene_path;
-    if (choose_path || destination.empty())
-    {
-        destination = BrowseObjectSceneFile(hwnd, true, destination);
-        if (destination.empty())
-        {
-            object_editor_context.SetStatus("保存をキャンセルしました");
-            return false;
-        }
-        if (destination.extension().empty())
-            destination += ReplayEngine::Scene::Serialization::SceneSerializer::file_extension;
-    }
-
-    // メインスレッドでスナップショットを取ってから書き出す。
-    // Scene の実体をファイル処理へ渡さないことで、
-    // 将来書き込みだけを別スレッドへ回せる形にしてある。
-    SceneSerialization::SceneData data;
-    SceneSerialization::CaptureScene(object_scene, data);
-
-    std::string error;
-    if (!SceneSerialization::SceneSerializer::SaveToFile(data, destination, error))
-    {
-        object_editor_context.SetStatus("保存に失敗しました: " + error);
-        return false;
-    }
-
-    object_scene_path = std::move(destination);
-    object_editor_context.SetScenePath(object_scene_path);
-    object_editor_context.ClearDirty();
-    object_autosave_elapsed = 0.0f;
-    register_object_scene_asset();
-    add_recent_object_scene(object_scene_path);
-    std::error_code remove_error;
-    if (!previous_path.empty())
-        std::filesystem::remove(AutosavePathFor(previous_path), remove_error);
-    remove_error.clear();
-    std::filesystem::remove(AutosavePathFor(object_scene_path), remove_error);
-    object_recovery_available = false;
-    editor_camera_state_key = make_editor_camera_state_key();
-    save_editor_camera_state();
-    save_editor_session();
-    object_editor_context.SetStatus("保存しました: " + object_scene_path.filename().string());
-    return true;
-}
-
-bool framework::load_object_scene(bool choose_path)
-{
-    std::filesystem::path source = object_scene_path;
-    if (choose_path)
-    {
-        source = BrowseObjectSceneFile(hwnd, false, source);
-        if (source.empty())
-        {
-            object_editor_context.SetStatus("読み込みをキャンセルしました");
-            return false;
-        }
-        if (object_editor_context.Dirty())
-        {
-            request_object_scene_action(object_scene_action::open_path, source);
-            return false;
-        }
-    }
-
-    return load_object_scene_from_path(source);
-}
-
-bool framework::load_object_scene_from_path(const std::filesystem::path& source)
-{
-    if (source.empty())
-    {
-        object_editor_context.SetStatus("読み込むシーンが指定されていません");
-        return false;
-    }
-    if (object_scene_play_mode) exit_object_play_mode();
-
-    // Scene を切り替える前に、今の Scene の編集カメラ状態を残す。
-    // 戻ってきたときに同じ視点から再開できる。
-    if (!editor_camera_state_key.empty()) save_editor_camera_state();
-
-    SceneSerialization::SceneData data;
-    std::string error;
-    if (!SceneSerialization::SceneSerializer::LoadFromFile(data, source, error))
-    {
-        // 旧形式・破損・未存在。いずれもクラッシュさせず、現在の Scene を維持する。
-        object_editor_context.SetStatus("読み込めませんでした: " + error);
-        return false;
-    }
-
-    // Scene の中身が総入れ替えになるので、先に衝突世界を切り離す。
-    // 古い ObjectID / ColliderID を持ったまま新しい Scene を引くと、
-    // まったく別の GameObject へ当たることになる。
-    detach_collision_world();
-
-    SceneSerialization::SceneLoadReport report;
-    SceneSerialization::ApplySceneData(data, object_scene, report);
-    object_editor_context.ResetSceneState();
-
-    // 読み込み後に Scene を開始する。
-    // ApplySceneData の中では OnStart / OnEnable を呼ばないので、
-    // 途中まで構築された状態で Component が動くことはない。
-    object_scene.Start();
-
-    object_editor_context.AttachScene(&object_scene);
-    object_scene_path = source;
-    object_editor_context.SetScenePath(object_scene_path);
-    object_editor_context.ClearDirty();
-    register_object_scene_asset();
-    add_recent_object_scene(object_scene_path);
-
-    // 新しい Scene の Backend Mode と移行済み集合でつなぎ直す。
-    attach_collision_world(object_scene);
-
-    std::string status = "読み込みました: " + object_scene_path.filename().string();
-    if (!report.Clean())
-    {
-        status += "（警告 " + std::to_string(report.warnings.size()) + " 件）";
-        for (const std::string& warning : report.warnings)
-        {
-            OutputDebugStringA(("[Scene] " + warning + "\n").c_str());
-        }
-    }
-    object_editor_context.SetStatus(status);
-
-    // 新しい Scene に対応する編集カメラ状態を読み込む。
-    // 保存が無ければ既定位置になる。
-    load_editor_camera_state();
-    check_object_scene_recovery();
-    save_editor_session();
-    return true;
-}
-
-bool framework::autosave_object_scene()
-{
-    if (object_scene_play_mode || !object_editor_context.Dirty()) return false;
-
-    SceneSerialization::SceneData data;
-    SceneSerialization::CaptureScene(object_scene, data);
-    const std::filesystem::path path = AutosavePathFor(object_scene_path);
-    std::string error;
-    if (!SceneSerialization::SceneSerializer::SaveToFile(data, path, error))
-    {
-        object_autosave_status = "Autosave failed: " + error;
-        return false;
-    }
-    object_autosave_status = "Autosaved: " + path.filename().string();
-    return true;
-}
-
-void framework::check_object_scene_recovery()
-{
-    object_recovery_path = AutosavePathFor(object_scene_path);
-    object_recovery_available = false;
-    object_recovery_prompt_opened = false;
-
-    std::error_code error;
-    if (!std::filesystem::exists(object_recovery_path, error) || error) return;
-    const auto autosave_time = std::filesystem::last_write_time(object_recovery_path, error);
-    if (error) return;
-    if (!std::filesystem::exists(object_scene_path, error) || error)
-    {
-        object_recovery_available = true;
-        return;
-    }
-    const auto scene_time = std::filesystem::last_write_time(object_scene_path, error);
-    object_recovery_available = !error && autosave_time > scene_time;
-}
-
-void framework::register_object_scene_asset()
-{
-    object_scene_asset_guid.clear();
-    if (object_scene_path.empty()) return;
-
-    const ReplayEngine::Assets::AssetRecord& record = asset_database.Register(
-        object_scene_path, ReplayEngine::Assets::AssetKind::Scene);
-    object_scene_asset_guid = record.guid;
-    std::string error;
-    if (!asset_database.Save(error))
-        OutputDebugStringA(("[Scene] AssetDatabase save failed: " + error + "\n").c_str());
-}
-
-void framework::add_recent_object_scene(const std::filesystem::path& path)
-{
-    if (path.empty()) return;
-    const std::filesystem::path normalized =
-        ReplayEngine::Assets::AssetDatabase::NormalizeProjectPath(path);
-    std::string key = normalized.generic_u8string();
-    std::transform(key.begin(), key.end(), key.begin(),
-        [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
-
-    recent_scene_paths.erase(std::remove_if(recent_scene_paths.begin(), recent_scene_paths.end(),
-        [&key](const std::filesystem::path& candidate)
-        {
-            std::string candidate_key = ReplayEngine::Assets::AssetDatabase::
-                NormalizeProjectPath(candidate).generic_u8string();
-            std::transform(candidate_key.begin(), candidate_key.end(), candidate_key.begin(),
-                [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
-            return candidate_key == key;
-        }), recent_scene_paths.end());
-    recent_scene_paths.insert(recent_scene_paths.begin(), normalized);
-    constexpr std::size_t maximum_recent_scenes = 10;
-    if (recent_scene_paths.size() > maximum_recent_scenes)
-        recent_scene_paths.resize(maximum_recent_scenes);
-}
-
-void framework::discard_object_scene_autosave()
-{
-    std::error_code error;
-    std::filesystem::remove(AutosavePathFor(object_scene_path), error);
-    object_recovery_available = false;
-    object_autosave_elapsed = 0.0f;
-    object_autosave_status.clear();
-}
-
-void framework::request_object_scene_action(object_scene_action action,
-    std::filesystem::path path)
-{
-    // 新規 / 開く / 終了 はどれも編集シーンに対する操作。
-    // Play 中のまま進むと save_object_scene が
-    // 「実行中はシーンを保存できません」で false を返し、
-    // 「保存して終了」を押しても何も起きず終了できなくなる。
-    // 先に実行を止めてから確認へ進む。
-    if (object_scene_play_mode) exit_object_play_mode();
-
-    pending_object_scene_action = action;
-    pending_object_scene_path = std::move(path);
-    if (object_editor_context.Dirty())
-    {
-        object_scene_unsaved_prompt_requested = true;
-        editor_mode = true;
-        set_edit_mode(true);
-        return;
-    }
-    execute_pending_object_scene_action();
-}
-
-void framework::execute_pending_object_scene_action()
-{
-    const object_scene_action action = pending_object_scene_action;
-    const std::filesystem::path path = pending_object_scene_path;
-    pending_object_scene_action = object_scene_action::none;
-    pending_object_scene_path.clear();
-
-    switch (action)
-    {
-    case object_scene_action::new_empty:
-        create_object_scene(u8"新しいシーン", false);
-        break;
-    case object_scene_action::new_default:
-        create_object_scene(u8"新しいシーン", true);
-        break;
-    case object_scene_action::open_path:
-        load_object_scene_from_path(path);
-        break;
-    case object_scene_action::exit_application:
-        PostMessage(hwnd, WM_CLOSE, 0, 0);
-        break;
-    default:
-        break;
-    }
-}
-
-bool framework::confirm_object_scene_close()
-{
-    // ユーザーが既に「保存して終了 / 破棄して終了」を選んでいる。
-    // ここで Dirty を見直すと、確認のあとに何かが Dirty を立て直しただけで
-    // 終了できなくなる。選んだ結果を尊重してそのまま閉じる。
-    if (object_exit_confirmed) return true;
-
-    if (!object_editor_context.Dirty()) return true;
-    request_object_scene_action(object_scene_action::exit_application);
-    return false;
-}
-
-// ---------------------------------------------------------------------------
-// Play Mode
-// ---------------------------------------------------------------------------
-//
-// 【編集カメラと Runtime Camera の関係】
-//   Play 開始時に編集カメラの値を Runtime Camera へ写さない。
-//   Play 終了時に Runtime Camera の値を編集カメラへ取り込まない。
-//   editor_camera は Play の出入りで一切書き換えられないので、
-//   Play 前の視点がそのまま残る。切り替わるのは
-//   「描画にどちらの行列を使うか」だけ（using_editor_camera）。
-
-void framework::enter_object_play_mode()
-{
-    // 呼ばれたこと自体を必ず残す。
-    // 「Play を押しても何も起きない」ときに、ボタンが繋がっていないのか
-    // 中で弾かれているのかを切り分けられないと追えない。
-    push_editor_log("Info", "Play 開始要求を受けました");
-
-    if (object_scene_play_mode)
-    {
-        push_editor_log("Info", "既に Play 中のため何もしません");
-        return;
-    }
-
-    // 編集 Scene の内容を実行用 Scene へ複製する。
-    // 直接コピーせず SceneData を経由するのは、
-    // Scene が生ポインタで結ばれておりコピー不可なため。
-    // これにより Play 中の変更が編集 Scene へ戻らないことが構造的に保証される。
-    initialize_runtime_services();
-
-    // 編集 Scene の内容を RuntimeSceneService へ渡す。
-    //
-    // framework が自分で Scene を組み立てて持たない理由:
-    //   持つと Runtime World の所有者が 2 つになる。どちらが本物かが
-    //   場所ごとに変わり、Scene 切り替えのたびに食い違う。
-    //   組み立ても入れ替えもサービス側の 1 経路へ寄せる。
-    //
-    // SceneData を経由するのは Scene がコピー不可なため。
-    // これにより Play 中の変更が編集 Scene へ戻らないことが構造的に保証される。
-    SceneSerialization::SceneData snapshot;
-    SceneSerialization::CaptureScene(object_scene, snapshot);
-
-    // 未保存の Scene には AssetGUID が無い。空のまま渡す。
-    // 空の場合、この World に対する Reload は InvalidRequest になるだけで、
-    // 別の Scene が代わりに読まれることはない。
-    const ReplayEngine::Runtime::SceneRequestResult request =
-        object_runtime_scenes.RequestAdopt(snapshot, object_scene_asset_guid);
-    if (request != ReplayEngine::Runtime::SceneRequestResult::Accepted)
-    {
-        // status だけだとプロジェクトタブを開いていないと見えない。
-        // Play に入れないのは重大なので Console へも Error として出す。
-        const std::string reason =
-            "Play を開始できません（Scene 遷移が進行中です）。SceneRequestResult=" +
-            std::to_string(static_cast<int>(request));
-        object_editor_context.SetStatus(reason);
-        push_editor_log("Error", reason);
-        return;
-    }
-
-    // 構築と入れ替えをその場で済ませる。
-    // Play 開始はフレーム境界を挟む必要がないうえ、
-    // ここで済ませないと 1 フレームだけ「Play 中なのに空の World」になる。
-    object_runtime_scenes.Tick();   // Staging World の構築
-    object_runtime_scenes.Tick();   // 入れ替えと Scene::Start()
-
-    if (object_runtime_scenes.State() != ReplayEngine::Runtime::SceneLoadState::Completed)
-    {
-        // 失敗しても編集 Scene には一切触れていない。そのまま Edit Mode を続ける。
-        //
-        // ここで黙って戻ると「Play を押しても EDIT MODE のまま」に見え、
-        // 原因がまったく分からなくなる。Console へ理由を必ず残す。
-        const std::string reason =
-            "実行用 Scene を構築できませんでした: " + object_runtime_scenes.LastError() +
-            " / SceneLoadState=" +
-            std::to_string(static_cast<int>(object_runtime_scenes.State()));
-        object_editor_context.SetStatus(reason);
-        push_editor_log("Error", reason);
-        return;
-    }
-
-    ReplayEngine::Scene::Scene& runtime_world = object_runtime_scenes.ActiveWorld();
-
-    // 衝突世界を Runtime World へ差し替える。
-    // 編集 Scene の ObjectID / ColliderID はここで完全に捨てられるので、
-    // Play 中に編集 Scene の Collider へ当たることはない。
-    attach_collision_world(runtime_world);
-
-    // Play 開始時に貯まっていた時間を捨てる。開始直後に物理が飛ぶのを防ぐ。
-    object_fixed_accumulator = 0.0f;
-    object_collision_events.Reset();
-
-    object_scene_play_mode = true;
-    object_scene_paused = false;
-    object_runtime_world_active = true;
-    object_bound_world_instance = object_runtime_scenes.ActiveWorldID();
-    object_editor_context.SetPlayMode(true);
-    object_editor_context.AttachScene(&runtime_world);
-    object_editor_context.ResetSceneState();
-    object_editor_context.SetStatus("実行中（編集シーンは保持されています）");
-
-    // ---- Play 直後の全数診断 ------------------------------------------------
-    //
-    // Inspector が見ているのは編集 Scene の Component で、実際に動くのは
-    // ここで作られた実行用 World の複製の方。複製側の状態は Inspector から
-    // 一切見えないため、ここで洗いざらい出す。
-    //
-    // 「Play しても動かない」の原因になり得るものを全部並べる:
-    //   ScriptRuntime が無い / Backend が無い / Backend 未初期化 /
-    //   Assembly 未ロード / Play セッション未開始 / Catalog が空 /
-    //   型が Catalog に無い / Schema 未解決 / インスタンス生成失敗
-    {
-        namespace Scripting = ReplayEngine::Scripting;
-
-        push_editor_log("Info", "===== Play 診断 開始 =====");
-
-        if (!object_script_runtime)
-        {
-            push_editor_log("Error", "ScriptRuntime がありません。C# は動きません");
-        }
-        else
-        {
-            push_editor_log("Info", std::string("Play セッション: ") +
-                (object_script_runtime->PlaySessionActive() ? "有効" : "*** 無効 ***"));
-
-            auto* backend = dynamic_cast<Scripting::CSharp::CSharpScriptBackend*>(
-                object_script_runtime->Backend(Scripting::ScriptLanguage::CSharp));
-            if (backend == nullptr)
-            {
-                push_editor_log("Error", "C# Backend が接続されていません");
-            }
-            else
-            {
-                push_editor_log(backend->Initialized() ? "Info" : "Error",
-                    std::string("C# Backend 初期化: ") +
-                    (backend->Initialized() ? "済" : "*** 未 ***"));
-                push_editor_log(backend->AssemblyLoaded() ? "Info" : "Error",
-                    std::string("C# Assembly ロード: ") +
-                    (backend->AssemblyLoaded() ? "済" : "*** 未 ***"));
-                push_editor_log("Info", "C# 生存インスタンス数: " +
-                    std::to_string(backend->LiveInstanceCount()));
-                if (!backend->LastErrorMessage().empty())
-                {
-                    push_editor_log("Error",
-                        "C# Backend 直近エラー: " + backend->LastErrorMessage());
-                }
-            }
-
-            const auto& all = object_script_runtime->Catalog().All();
-            push_editor_log(all.empty() ? "Error" : "Info",
-                "Catalog 登録数: " + std::to_string(all.size()));
-            for (const Scripting::ScriptTypeDescriptor& descriptor : all)
-            {
-                const bool can = backend != nullptr &&
-                    backend->CanInstantiate(descriptor.type_id);
-                push_editor_log(can ? "Info" : "Warning",
-                    "  Catalog: " + descriptor.DisplayName() +
-                    " / class=" + descriptor.class_name +
-                    " / typeid=" + descriptor.type_id.ToString() +
-                    " / asset=" + descriptor.asset_guid +
-                    " / 生成可否=" + (can ? "可" : "*** 不可 ***") +
-                    (descriptor.last_error.empty()
-                        ? std::string() : " / エラー=" + descriptor.last_error));
-            }
-        }
-
-        std::size_t script_total = 0;
-        std::size_t script_with_instance = 0;
-        for (ReplayEngine::Core::GameObject* root : runtime_world.RootGameObjects())
-        {
-            if (root == nullptr) continue;
-            count_runtime_script_instances(*root, script_total, script_with_instance);
-        }
-        push_editor_log(script_total == 0 ? "Error"
-            : (script_with_instance == script_total ? "Info" : "Warning"),
-            "実行用 World の Script Component: " + std::to_string(script_total) +
-            " 個 / インスタンス生成済み " + std::to_string(script_with_instance) + " 個");
-
-        if (script_total == 0)
-        {
-            push_editor_log("Error",
-                "実行用 World に Script Component が 1 つもありません。"
-                "編集 Scene から実行用 Scene への複製で落ちています");
-        }
-
-        push_editor_log("Info", "===== Play 診断 終了 =====");
-    }
-}
-
-// 実行用 World の Script Component を数える。
-// Play 直後の 1 回だけ呼ぶ診断用。
-void framework::count_runtime_script_instances(
-    ReplayEngine::Core::GameObject& object,
-    std::size_t& total, std::size_t& with_instance)
-{
-    for (std::size_t index = 0; index < object.ComponentCount(); ++index)
-    {
-        ReplayEngine::Core::Component* component = object.ComponentAt(index);
-        if (component == nullptr) continue;
-        auto* script = dynamic_cast<ReplayEngine::Scripting::ScriptComponent*>(component);
-        if (script == nullptr) continue;
-
-        ++total;
-        if (script->HasInstance()) ++with_instance;
-
-        push_editor_log(script->HasInstance() ? "Info" : "Error",
-            "  [" + object.Name() + "] 状態=" +
-            ReplayEngine::Scripting::ToString(script->Status()) +
-            " / インスタンス=" + (script->HasInstance() ? "あり" : "*** なし ***") +
-            " / class=" + script->ClassName() +
-            " / typeid=" + script->ScriptType().ToString() +
-            " / asset=" + script->ScriptAssetGUID() +
-            " / Schema=" + (script->Schema() ? "あり" : "*** なし ***") +
-            " / enabled=" + (script->Enabled() ? "true" : "false") +
-            (script->LastError().empty()
-                ? std::string() : " / 理由=" + script->LastError()));
-    }
-
-    for (ReplayEngine::Core::GameObject* child : object.Children())
-    {
-        if (child != nullptr) count_runtime_script_instances(*child, total, with_instance);
-    }
-}
-
-void framework::exit_object_play_mode()
-{
-    if (!object_scene_play_mode) return;
-
-    // 先に衝突世界を切り離す。
-    // Scene を消してから切り離すと、その間に問い合わせが来た場合に
-    // 破棄済みの GameObject を引きに行ってしまう。
-    detach_collision_world();
-
-    // Runtime World を捨てる。
-    //
-    // 編集 Scene へ書き戻すことはしない。
-    // Play 中の変更（生成された Prefab、動いた Transform、増えた Component）は
-    // すべてここで消える。暗黙保存の経路そのものを置かない。
-    object_runtime_scenes.ResetToEmptyWorld();
-    object_collision_events.Reset();
-
-    object_fixed_accumulator = 0.0f;
-
-    object_scene_play_mode = false;
-    object_scene_paused = false;
-    object_runtime_world_active = false;
-    object_bound_world_instance = object_runtime_scenes.ActiveWorldID();
-
-    // 編集 Scene へ戻す。Play 中の Selection と Undo 履歴はここで捨てる。
-    // Runtime の操作が Edit Mode の Undo へ混ざらないのはこのため。
-    object_editor_context.SetPlayMode(false);
-    object_editor_context.AttachScene(&object_scene);
-    object_editor_context.ResetSceneState();
-
-    // 編集 Scene の衝突世界を張り直す。
-    attach_collision_world(object_scene);
-    object_editor_context.SetStatus("編集モードへ戻りました");
-}
-
-// ---------------------------------------------------------------------------
-// 描画
-// ---------------------------------------------------------------------------
-
-skinned_mesh* framework::resolve_object_mesh(const std::string& asset_guid)
-{
-    // 1) Asset 未指定。Editor で MeshRenderer を付けただけの状態はこれになる。
-    //    正常な状態なので警告も出さず、静かに描画対象から外す。
-    if (asset_guid.empty()) return nullptr;
-    if (!device) return nullptr;
-
-    // 2) 読み込み済みならそれを返す。キャッシュには有効なメッシュしか入らない。
-    const auto cached = object_mesh_cache.find(asset_guid);
-    if (cached != object_mesh_cache.end()) return cached->second.get();
-
-    // 3) 一度失敗した Asset は再試行しない。ログも一度きりで済む。
-    if (object_mesh_failures.find(asset_guid) != object_mesh_failures.end()) return nullptr;
-
-    // 失敗を記録してログへ出す。以降このフレームでは何も返さない。
-    const auto give_up = [this, &asset_guid](const std::string& reason) -> skinned_mesh*
-    {
-        object_mesh_failures.insert(asset_guid);
-        const std::string message = "[Mesh] " + reason + " (GUID: " + asset_guid + ")";
-        OutputDebugStringA((message + "\n").c_str());
-        // Editor のステータス欄にも出して、原因が画面から分かるようにする。
-        object_editor_context.SetStatus(message);
-        return nullptr;
-    };
-
-    // 4) GUID が AssetDatabase で解決できるか。
-    //    古い Scene ファイルや EditorSession に残った GUID はここで弾かれる。
-    const ReplayEngine::Assets::AssetRecord* record = asset_database.FindByGuid(asset_guid);
-    if (record == nullptr)
-    {
-        return give_up("Asset がプロジェクトに登録されていません");
-    }
-
-    // 5) 対応拡張子かどうか。
-    //    skinned_mesh が読めるのは FBX と、その .cereal キャッシュだけ。
-    //    .obj は static_mesh 用、.glb / .gltf は既存のステージ経路が扱うので、
-    //    ここへ渡すと必ず失敗する。渡す前に弾く。
-    const std::filesystem::path source = record->source_path;
-    std::string extension = source.extension().string();
-    for (char& character : extension)
-    {
-        character = static_cast<char>(::tolower(static_cast<unsigned char>(character)));
-    }
-    if (extension != ".fbx" && extension != ".cereal")
-    {
-        return give_up("この形式は GameObject の描画へ接続していません（" +
-            (extension.empty() ? std::string("拡張子なし") : extension) + "）: " +
-            source.generic_string());
-    }
-
-    // 6) 実ファイルが存在するか。
-    //    skinned_mesh は .cereal キャッシュを読むので、そちらの有無を見る。
-    std::filesystem::path cache = source;
-    cache.replace_extension(L".cereal");
-
-    std::error_code filesystem_error;
-    if (!std::filesystem::exists(cache, filesystem_error) || filesystem_error)
-    {
-        return give_up("実行用の .cereal キャッシュが見つかりません: " + cache.generic_string());
-    }
-
-    // 7) ここまで通ってから構築する。
-    std::unique_ptr<skinned_mesh> loaded;
-    try
-    {
-        loaded = std::make_unique<skinned_mesh>(device.Get(), source.string().c_str());
-    }
-    catch (...)
-    {
-        // 既存プロジェクトは例外を前提にしていないため、ここで受け止めて
-        // 「描けない Asset」として扱う。Scene 全体の描画は継続する。
-        return give_up("メッシュの読み込みに失敗しました: " + source.generic_string());
-    }
-
-    if (!loaded)
-    {
-        return give_up("メッシュを構築できませんでした: " + source.generic_string());
-    }
-
-    // 8) 成功したものだけをキャッシュへ入れる。
-    skinned_mesh* raw = loaded.get();
-    object_mesh_cache.emplace(asset_guid, std::move(loaded));
-    return raw;
-}
-
-const ReplayEngine::Rendering::MaterialAsset* framework::resolve_object_material(
-    const std::string& asset_guid)
-{
-    using ReplayEngine::Assets::AssetKind;
-    using ReplayEngine::Rendering::MaterialAsset;
-
-    if (asset_guid.empty()) return nullptr;
-    const ReplayEngine::Assets::AssetRecord* record = asset_database.FindByGuid(asset_guid);
-    if (record == nullptr || record->kind != AssetKind::Material) return nullptr;
-
-    std::error_code filesystem_error;
-    const auto write_time = std::filesystem::last_write_time(
-        record->source_path, filesystem_error);
-    if (filesystem_error)
-    {
-        object_material_failures.insert(asset_guid);
-        return nullptr;
-    }
-
-    const auto cached = object_material_cache.find(asset_guid);
-    if (cached != object_material_cache.end() && cached->second.write_time == write_time)
-        return &cached->second.material;
-
-    MaterialAsset loaded;
-    std::string error;
-    if (!MaterialAsset::Load(record->source_path, loaded, error))
-    {
-        if (object_material_failures.insert(asset_guid).second)
-            OutputDebugStringA(("[Material] " + error + " (GUID: " + asset_guid + ")\n").c_str());
-        return nullptr;
-    }
-
-    object_material_failures.erase(asset_guid);
-    cached_material_asset entry;
-    entry.material = std::move(loaded);
-    entry.write_time = write_time;
-    auto inserted = object_material_cache.insert_or_assign(asset_guid, std::move(entry));
-    return &inserted.first->second.material;
-}
-
-ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
-    const ReplayEngine::Rendering::RenderItem& source)
-{
-    ReplayEngine::Rendering::RenderItem item = source;
-    const ReplayEngine::Rendering::MaterialAsset* material =
-        resolve_object_material(source.material_asset);
-    if (material == nullptr) return item;
-
-    // 【マテリアルが唯一の真実】
-    //
-    // 絵柄（shading_model）は必ずマテリアルの指定を使う。
-    //
-    // 以前は material_override が true だと Renderer 側の shading_model が
-    // 優先され、マテリアルでトゥーンを選んでも PBR のままだった。
-    // 「マテリアルを割り当てたのに絵が変わらない」原因がこれ。
-    //
-    // Unity では Renderer に絵柄の指定は無く、マテリアルだけが決める。
-    // material_override は色の上書き（tint）だけに意味を限定する。
-    item.shading_model = material->shading_model;
-    if (!source.material_override)
-    {
-        item.tint = material->base_color;
-    }
-    item.metallic = material->metallic;
-    item.roughness = material->roughness;
-    item.ambient_occlusion = material->ambient_occlusion;
-    item.emissive_strength = (std::max)({ material->emissive.x,
-        material->emissive.y, material->emissive.z }) * material->emissive_strength;
-    item.double_sided = material->double_sided;
-    return item;
-}
-
-void framework::draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shader,
-    bool gbuffer_pass, bool depth_only)
-{
-    if (object_render_items.Empty()) return;
-
-    for (const ReplayEngine::Rendering::RenderItem& source_item : object_render_items.Items())
-    {
-        const ReplayEngine::Rendering::RenderItem item =
-            resolve_render_item_material(source_item);
-        // Asset 未指定・解決不可・読み込み失敗のいずれでも nullptr が返る。
-        // その場合はこの GameObject を描かずに次へ進むだけで、実行は継続する。
-        if (item.mesh_asset.empty()) continue;
-        skinned_mesh* mesh = resolve_object_mesh(item.mesh_asset);
-        if (mesh == nullptr) continue;
-
-        // Animator が決めたクリップと時刻から姿勢を求める。
-        // 静的メッシュ扱いの提出（skinned=false）ではバインドポーズのまま描く。
-        // 深度プリパスでも同じ姿勢で描かないと、本描画と深度が一致しない。
-        const skinned_mesh::animation::keyframe* keyframe = item.skinned
-            ? resolve_object_keyframe(*mesh, item.clip_index, item.animation_time)
-            : nullptr;
-
-        if (depth_only)
-        {
-            // 深度プリパス。ピクセルシェーダーを外し、モーションベクターも書かない。
-            //
-            // 【ここを通さないと何も見えない】
-            //   本描画は DepthFunc=EQUAL で走る。プリパスで深度を書いていない
-            //   メッシュは深度比較に必ず失敗し、画面から丸ごと消える。
-            //   GBuffer へ出すものは、例外なくここでも描くこと。
-            if (item.double_sided)
-                immediate_context->RSSetState(
-                    rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
-            mesh->render(immediate_context.Get(), item.world, item.tint,
-                keyframe, nullptr, nullptr, nullptr, false, false);
-            if (item.double_sided)
-                immediate_context->RSSetState(
-                    rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
             continue;
         }
 
-        // GBuffer パスでは Component が指定した描画方式を材質定数へ流す。
-        if (gbuffer_pass) bind_gbuffer_material(deferred_shading_model(item.shading_model),
-            false, 6.0f, 1.0f, item.metallic, item.roughness,
-            item.ambient_occlusion, item.emissive_strength);
-
-        // 最後の引数がモーションベクター出力。GBuffer パスだけで真にする
-        // （複数回渡すと前フレーム姿勢が壊れる）。
-        if (item.double_sided)
-            immediate_context->RSSetState(
-                rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
-        mesh->render(immediate_context.Get(), item.world, item.tint,
-            keyframe, override_pixel_shader, nullptr, nullptr, true, gbuffer_pass);
-        if (item.double_sided)
-            immediate_context->RSSetState(
-                rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
-    }
-}
-
-void framework::clear_object_mesh_cache() noexcept
-{
-    object_mesh_cache.clear();
-    object_mesh_failures.clear();
-}
-
-void framework::clear_object_material_cache() noexcept
-{
-    object_material_cache.clear();
-    object_material_failures.clear();
-}
-
-const skinned_mesh::animation::keyframe* framework::resolve_object_keyframe(
-    skinned_mesh& mesh, int clip_index, float animation_time) const
-{
-    if (clip_index < 0) return nullptr;
-    if (mesh.animation_clips.empty()) return nullptr;
-    if (clip_index >= static_cast<int>(mesh.animation_clips.size())) return nullptr;
-
-    const skinned_mesh::animation& clip = mesh.animation_clips.at(
-        static_cast<std::size_t>(clip_index));
-    if (clip.sequence.empty()) return nullptr;
-
-    const float sampling_rate = clip.sampling_rate > 0.0f ? clip.sampling_rate : 60.0f;
-    const float duration = static_cast<float>(clip.sequence.size()) / sampling_rate;
-
-    // ループは提出された時刻をここで畳んで解決する。
-    // Animator はクリップ長を知らないので、長さを知っている側で処理する。
-    float time = animation_time;
-    if (duration > 0.0f)
-    {
-        time = std::fmod(time, duration);
-        if (time < 0.0f) time += duration;
-    }
-
-    int frame = static_cast<int>(time * sampling_rate);
-    if (frame < 0) frame = 0;
-    if (frame >= static_cast<int>(clip.sequence.size()))
-    {
-        frame = static_cast<int>(clip.sequence.size()) - 1;
-    }
-    return &clip.sequence.at(static_cast<std::size_t>(frame));
-}
-
-// ---------------------------------------------------------------------------
-// 新規 Scene 作成
-// ---------------------------------------------------------------------------
-//
-// ここが Prefab を配置する唯一の場所。
-//
-// 【なぜ「唯一」と言い切れるか】
-//   PrefabSerializer::Instantiate を呼ぶのは、この関数と load_prefab()
-//   （ユーザーが Prefab ファイルを選んで配置する操作）の 2 か所だけ。
-//   どちらもユーザーの明示操作からしか呼ばれない。
-//   起動処理・Scene 読み込み・Component 不足の検出からは呼ばれない。
-
-bool framework::create_object_scene(const std::string& name, bool place_default_character)
-{
-    namespace Project = ReplayEngine::Project;
-
-    if (object_editor_context.Dirty())
-    {
-        request_object_scene_action(place_default_character
-            ? object_scene_action::new_default
-            : object_scene_action::new_empty);
-        return false;
-    }
-
-    // 実行中に作り直すと、実行用 Scene と編集用 Scene の対応が壊れる。
-    if (object_scene_play_mode) exit_object_play_mode();
-
-    if (!editor_camera_state_key.empty()) save_editor_camera_state();
-
-    // Scene の中身が総入れ替えになるので、先に衝突世界を切り離す。
-    // 古い ObjectID / ColliderID を持ったまま新しい Scene を引かせない。
-    detach_collision_world();
-
-    const std::string scene_name = name.empty() ? std::string("新しいシーン") : name;
-
-    // 1) 空の Scene を作る。GameObject は 1 つも作らない。
-    object_scene.Clear();
-    object_editor_context.ResetSceneState();
-    object_scene.SetName(scene_name);
-    object_scene.Services().SetControlledObject(ReplayEngine::Core::ObjectID::Invalid());
-    player_control_system.Clear();
-
-    // 選択と Undo 履歴を作り直す。前の Scene の ObjectID を指し続けさせない。
-    object_editor_context.AttachScene(&object_scene);
-
-    std::string status = "空のシーンを作成しました";
-
-    // 2) Default を選んだときだけ Prefab を 1 体配置する。
-    if (place_default_character)
-    {
-        // Default Sceneは起動直後から材質を確認できるよう、通常のLight Componentを置く。
-        // グローバルな固定ライトへは戻さず、Hierarchy/Inspector/Scene保存の対象にする。
-        if (ReplayEngine::Core::GameObject* sun = object_scene.CreateGameObject("Sun"))
+        for (std::size_t component_index = 0;
+            component_index < object->ComponentCount(); ++component_index)
         {
-            sun->GetTransform().SetLocalRotationEuler({ -0.75f, 0.4f, 0.0f });
-            if (auto* light = sun->AddComponent<
-                ReplayEngine::Components::DirectionalLightComponent>())
+            ReplayEngine::Core::Component* component =
+                object->ComponentAt(component_index);
+            if (component == nullptr || component->PendingDestroy() ||
+                !component->ActiveInHierarchy() ||
+                component->TypeID() != UISpriteAnimatorComponent::StaticTypeID())
             {
-                light->color = { 1.0f, 0.96f, 0.88f, 1.0f };
-                light->intensity = 3.5f;
-                light->cast_shadows = true;
+                continue;
             }
-        }
 
-        const Project::PrefabReferenceStatus prefab = resolve_default_character_prefab();
-
-        if (prefab.IsUnset())
-        {
-            // 未設定でもクラッシュさせない。空シーンとして成立させる。
-            status = "既定の操作キャラクター Prefab が未設定のため、空のシーンを作成しました";
-        }
-        else if (prefab.IsMissing())
-        {
-            status = "既定の操作キャラクター Prefab が見つかりません（Missing Prefab）。"
-                "空のシーンを作成しました";
-        }
-        else
-        {
-            std::string error;
-            SceneSerialization::SceneLoadReport report;
-            const ReplayEngine::Core::ObjectID root =
-                SceneSerialization::PrefabSerializer::Instantiate(
-                    object_scene, prefab.path, error, &report, prefab.guid);
-
-            if (!root.Valid())
-            {
-                status = "既定の操作キャラクター Prefab を配置できませんでした: " + error;
-            }
-            else
-            {
-                // 3) 配置した Prefab のルートを操作対象にする。
-                //    GameObject 名でも Prefab 名でもなく、配置結果の ObjectID で指す。
-                object_scene.Services().SetControlledObject(root);
-                player_control_system.SetControlledObject(root);
-                object_editor_context.Selection().Select(root, false);
-
-                status = "既定の操作キャラクターを 1 体配置しました: " +
-                    prefab.DisplayLabel();
-                if (!report.Clean())
-                {
-                    status += "（警告 " + std::to_string(report.warnings.size()) + " 件）";
-                    for (const std::string& warning : report.warnings)
-                    {
-                        OutputDebugStringA(("[Prefab] " + warning + "\n").c_str());
-                    }
-                }
-            }
+            static_cast<UISpriteAnimatorComponent*>(component)->UpdateSprite(
+                elapsed_time, &motion_mixer);
         }
     }
+}
 
-    // 4) Scene を開始する。ここで初めて OnStart / OnEnable が走る。
-    object_scene.Start();
+void framework::update_ui_number_displays(ReplayEngine::Scene::Scene& scene)
+{
+    using ReplayEngine::Components::UITextComponent;
 
-    // 5) 新規 Scene は未保存として開始する。ユーザーが Save / Save As を選ぶまで
-    //    既存 Asset を上書きせず、ファイルも自動生成しない。
-    object_scene_path.clear();
-    object_scene_asset_guid.clear();
-    object_editor_context.SetScenePath(object_scene_path);
-    object_editor_context.MarkDirty();
-    object_recovery_available = false;
-    object_autosave_elapsed = 0.0f;
-
-    // 6) 衝突世界を新しい Scene へつなぎ直す。
-    attach_collision_world(object_scene);
-
-    // 7) 編集カメラを安全な既定位置へ置く。
-    //    Runtime Camera にも CameraTargetComponent にも触れない。
-    editor_camera.ResetToDefault();
-    editor_camera_state_key = make_editor_camera_state_key();
-
-    // Default Scene で Prefab を配置できた場合だけ、その 1 体へ一度フォーカスする。
-    // 既存 Scene の読み込みではこれをしない（勝手に視点を動かさない）。
-    if (place_default_character && object_scene.Services().ControlledObject().Valid())
+    for (std::size_t object_index = 0;
+        object_index < scene.GameObjectCount(); ++object_index)
     {
-        focus_editor_camera_on_selection();
-    }
-    save_editor_camera_state();
+        ReplayEngine::Core::GameObject* object = scene.GameObjectAt(object_index);
+        if (object == nullptr || object->PendingDestroy() ||
+            !object->ActiveInHierarchy())
+        {
+            continue;
+        }
 
-    object_editor_context.SetStatus(status + "（未保存）");
-    return true;
+        for (std::size_t component_index = 0;
+            component_index < object->ComponentCount(); ++component_index)
+        {
+            ReplayEngine::Core::Component* component =
+                object->ComponentAt(component_index);
+            if (component == nullptr || component->PendingDestroy() ||
+                !component->ActiveInHierarchy() ||
+                component->TypeID() != UITextComponent::StaticTypeID())
+            {
+                continue;
+            }
+
+            static_cast<UITextComponent*>(component)->UpdateNumberDisplay(scene);
+        }
+    }
 }

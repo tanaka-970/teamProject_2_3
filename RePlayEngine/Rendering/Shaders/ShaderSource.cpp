@@ -1,3 +1,8 @@
+// Shader Source のうち、#pragma replay_* と property 宣言の解析だけを持つ。
+//
+//   ShaderSource.cpp      ... pragma / property parser（このファイル）
+//   ShaderSourceFile.cpp  ... source file 読み込みと GUID 付与
+
 #include "ShaderSource.h"
 
 #include <algorithm>
@@ -14,14 +19,6 @@ namespace ReplayEngine::Rendering
 {
     namespace
     {
-        std::string ReadAllText(const std::filesystem::path& path)
-        {
-            std::ifstream stream(path, std::ios::binary);
-            if (!stream) return std::string();
-            return std::string((std::istreambuf_iterator<char>(stream)),
-                std::istreambuf_iterator<char>());
-        }
-
         void TrimInPlace(std::string& text)
         {
             const auto not_space = [](unsigned char c) { return !std::isspace(c); };
@@ -190,23 +187,6 @@ namespace ReplayEngine::Rendering
         }
     }
 
-    ShaderID ShaderSource::GenerateID()
-    {
-        // CSharpProject::GenerateTypeGuid と同じ考え方。
-        // 乱数だけだと同一プロセス内で近い値が出るので時刻を混ぜる。
-        std::random_device device;
-        const auto now = static_cast<std::uint64_t>(
-            std::chrono::high_resolution_clock::now().time_since_epoch().count());
-
-        ShaderID id;
-        id.high = (static_cast<std::uint64_t>(device()) << 32) ^ device() ^ now;
-        id.low = (static_cast<std::uint64_t>(device()) << 32) ^ device() ^ (now >> 7);
-
-        // 万一 0 になったら作り直す。0 は無効値。
-        if (!id.IsValid()) id.high = 1;
-        return id;
-    }
-
     ShaderSource::ParseResult ShaderSource::ParseText(const std::string& text,
         const std::filesystem::path& source_path, bool& out_needs_guid)
     {
@@ -217,6 +197,7 @@ namespace ReplayEngine::Rendering
         std::istringstream stream(text);
         std::string raw;
         int line_number = 0;
+        bool lighting_directive_seen = false;
 
         while (std::getline(stream, raw))
         {
@@ -280,6 +261,88 @@ namespace ReplayEngine::Rendering
                 continue;
             }
 
+            if (directive == "replay_lighting")
+            {
+                if (lighting_directive_seen)
+                {
+                    result.info.lighting_model_valid = false;
+                    result.issues.push_back({ line_number,
+                        "replay_lighting が重複しています", true });
+                    continue;
+                }
+                lighting_directive_seen = true;
+
+                if (tokens.size() < 3)
+                {
+                    result.info.lighting_model_valid = false;
+                    result.issues.push_back({ line_number,
+                        "replay_lighting に値がありません", true });
+                    continue;
+                }
+
+                ShaderLightingModel model = ShaderLightingModel::Pbr;
+                if (!TryParseShaderLightingModel(tokens[2], model))
+                {
+                    // 既定値は PBR だが、不明な名前を PBR として通してはいけない。
+                    // valid=false を残し、ShaderLibrary が Catalog 登録を止める。
+                    result.info.lighting_model_valid = false;
+                    result.issues.push_back({ line_number,
+                        "replay_lighting が不明です: " + tokens[2], true });
+                    continue;
+                }
+
+                result.info.lighting_model = model;
+                result.info.lighting_model_valid = true;
+                continue;
+            }
+
+            if (directive == "replay_pass")
+            {
+                // #pragma replay_pass "Display Name" EntryPoint [inherit|alpha|additive|multiply]
+                // 宣言順をそのまま固定描画順として保存する。
+                if (tokens.size() < 4)
+                {
+                    result.issues.push_back({ line_number,
+                        "replay_pass は表示名と entry point が必要です", true });
+                    continue;
+                }
+
+                ShaderPassInfo pass;
+                pass.name = tokens[2];
+                pass.entry_point = tokens[3];
+                if (pass.name.empty() || pass.entry_point.empty() || pass.entry_point == "main")
+                {
+                    result.issues.push_back({ line_number,
+                        "replay_pass の名前/entry point が不正です（main は base pass 専用）", true });
+                    continue;
+                }
+                if (tokens.size() >= 5 &&
+                    !TryParseShaderPassBlend(tokens[4], pass.blend))
+                {
+                    result.issues.push_back({ line_number,
+                        "replay_pass blend が不明です: " + tokens[4], true });
+                    continue;
+                }
+
+                bool duplicate = false;
+                for (const ShaderPassInfo& existing : result.info.passes)
+                {
+                    if (existing.name == pass.name || existing.entry_point == pass.entry_point)
+                    {
+                        duplicate = true;
+                        break;
+                    }
+                }
+                if (duplicate)
+                {
+                    result.issues.push_back({ line_number,
+                        "replay_pass の名前または entry point が重複しています", true });
+                    continue;
+                }
+                result.info.passes.push_back(std::move(pass));
+                continue;
+            }
+
             if (directive != "property") continue;
 
             // #pragma property <kind> <name> ["表示名"] [range] [{enum}] [= 既定]
@@ -325,6 +388,34 @@ namespace ReplayEngine::Rendering
                     {
                         property.default_texture = tokens[index + 1];
                         ++index;
+                    }
+                    continue;
+                }
+                if (token == "category")
+                {
+                    if (index + 1 < tokens.size())
+                    {
+                        property.category = tokens[index + 1];
+                        ++index;
+                    }
+                    else
+                    {
+                        result.issues.push_back({ line_number,
+                            "property category に値がありません" });
+                    }
+                    continue;
+                }
+                if (token == "tooltip")
+                {
+                    if (index + 1 < tokens.size())
+                    {
+                        property.tooltip = tokens[index + 1];
+                        ++index;
+                    }
+                    else
+                    {
+                        result.issues.push_back({ line_number,
+                            "property tooltip に値がありません" });
                     }
                     continue;
                 }
@@ -384,93 +475,4 @@ namespace ReplayEngine::Rendering
         return result;
     }
 
-    ShaderSource::ParseResult ShaderSource::ParseFile(
-        const std::filesystem::path& path, bool& out_needs_guid)
-    {
-        const std::string text = ReadAllText(path);
-        if (text.empty())
-        {
-            ParseResult result;
-            result.info.source_path = path;
-            result.succeeded = false;
-            result.issues.push_back({ 0,
-                "ファイルを読めないか空です: " + path.generic_u8string() });
-            out_needs_guid = false;
-            return result;
-        }
-        return ParseText(text, path, out_needs_guid);
-    }
-
-    bool ShaderSource::AssignGuid(const std::filesystem::path& path,
-        ShaderID& out_id, std::string& error)
-    {
-        error.clear();
-
-        const std::string original = ReadAllText(path);
-        if (original.empty())
-        {
-            error = "ファイルを読めないか空です: " + path.generic_u8string();
-            return false;
-        }
-
-        // 既に持っているなら振らない。
-        //
-        // 一度振った GUID を書き換えると、そのシェーダを使っている
-        // 全マテリアルの参照が切れる。ここは二重の安全弁。
-        bool needs_guid = true;
-        const ParseResult existing = ParseText(original, path, needs_guid);
-        if (!needs_guid && existing.info.id.IsValid())
-        {
-            out_id = existing.info.id;
-            return true;
-        }
-
-        const ShaderID id = GenerateID();
-
-        std::ostringstream rewritten;
-        rewritten << "#pragma replay_guid \"" << id.ToString() << "\"\n";
-        rewritten << original;
-
-        // 一時ファイルへ書いてから差し替える。
-        // 直接上書きすると、書き込み中に落ちたときソースが失われる。
-        std::filesystem::path temporary = path;
-        temporary += L".tmp";
-
-        {
-            std::ofstream stream(temporary, std::ios::binary | std::ios::trunc);
-            if (!stream)
-            {
-                error = "一時ファイルを作成できません: " + temporary.generic_u8string();
-                return false;
-            }
-            const std::string text = rewritten.str();
-            stream.write(text.data(), static_cast<std::streamsize>(text.size()));
-            if (!stream)
-            {
-                error = "一時ファイルへ書き込めません";
-                return false;
-            }
-        }
-
-        std::error_code filesystem_error;
-        std::filesystem::rename(temporary, path, filesystem_error);
-        if (filesystem_error)
-        {
-            // rename が失敗する環境向けに copy + remove で再試行する。
-            std::filesystem::copy_file(temporary, path,
-                std::filesystem::copy_options::overwrite_existing, filesystem_error);
-            if (filesystem_error)
-            {
-                error = "GUID を書き戻せません: " + path.generic_u8string();
-                std::error_code ignored;
-                std::filesystem::remove(temporary, ignored);
-                return false;
-            }
-            std::error_code ignored;
-            std::filesystem::remove(temporary, ignored);
-        }
-
-        out_id = id;
-        return true;
-    }
 }

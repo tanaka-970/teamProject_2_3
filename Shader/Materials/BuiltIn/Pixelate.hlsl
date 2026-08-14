@@ -20,11 +20,13 @@
 #pragma replay_name     "Pixelate"
 #pragma replay_category "BuiltIn"
 #pragma replay_domain   surface
+#pragma replay_lighting pbr
 
-#pragma property texture BaseMap           "基本色マップ"     default white
-#pragma property range   PixelSize         "セル幅"     1..64 = 6.0
-#pragma property range   PixelateStrength  "強さ"       0..1  = 1.0
-#pragma property range   PixelateOpacity   "不透明度"   0..1  = 1.0
-#pragma property toggle  UseGBufferColor   "GBuffer の色を使う" = false
+#pragma property texture BaseMap           "基本色マップ"     default white category "Pixelate"
+#pragma property range   PixelSize         "セル幅"     1..64 = 6.0 category "Pixelate"
+#pragma property range   PixelateStrength  "強さ"       0..1  = 1.0 category "Pixelate"
+#pragma property range   PixelateOpacity   "不透明度"   0..1  = 1.0 category "Pixelate"
+#pragma property toggle  UseGBufferColor   "GBuffer の色を使う" = false category "Pixelate"
 
+#define REPLAY_MATERIAL_PROPERTIES 1
 #include "PostEffects/Pixelation/object_pixelate_ps.hlsl"

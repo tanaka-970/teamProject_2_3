@@ -18,7 +18,7 @@ cbuffer FRAME_CONSTANT_BUFFER : register(b4)
     float4 frame_screen_size;   // x=w, y=h, z=1/w, w=1/h
     float4 frame_camera_planes; // x=near, y=far, z=tan(fovY/2), w=aspect
     float4 frame_jitter;        // xy=今フレーム, zw=前フレーム (NDC)
-    float4 frame_params;        // x=frame_index, y=elapsed_time
+    float4 frame_params;        // x=frame_index, y=delta_time, z=accumulated_effect_time
 };
 
 // UVは左上原点。NDCへ変換するときにYを反転する。

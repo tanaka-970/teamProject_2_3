@@ -10,6 +10,7 @@
 
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace ReplayEngine::Scene
@@ -24,6 +25,11 @@ namespace ReplayEngine::Core
 
 namespace ReplayEngine::Scene::Serialization
 {
+    // SceneData.cpp の保存データ用参照付け替えと同じ規則を、
+    // Scene 遷移で生きた Persistent 階層へ適用するための対応表。
+    // 型をここへ出して、Scene.cpp が別の参照付け替え規則を持たないようにする。
+    using ObjectRemap = std::unordered_map<Core::ObjectID, Core::GameObject*>;
+
     // Scene とファイルの間に挟む中間データ。
     //
     // なぜ中間層を置くか:
@@ -181,6 +187,11 @@ namespace ReplayEngine::Scene::Serialization
         // 採番し直した ComponentStableID の数（保存値が 0 または重複していた）。
         int repaired_component_ids = 0;
 
+        // required_components に従って保存データ外から補った Component 数と、
+        // 補えずに残った依存辺の数。欠落していても Scene 読み込みは継続する。
+        int automatically_added_components = 0;
+        int unresolved_component_dependencies = 0;
+
         bool Clean() const noexcept { return warnings.empty(); }
         void Clear() noexcept
         {
@@ -191,6 +202,8 @@ namespace ReplayEngine::Scene::Serialization
             unknown_properties = 0;
             missing_components = 0;
             repaired_component_ids = 0;
+            automatically_added_components = 0;
+            unresolved_component_dependencies = 0;
         }
     };
 
@@ -200,6 +213,11 @@ namespace ReplayEngine::Scene::Serialization
     // ComponentRegistry で serializable=false の型も保存しない
     // （TransformComponent は GameObject 側の transform として保存済みのため）。
     void CaptureScene(const Scene& scene, SceneData& output);
+
+    // 生きている GameObject が持つ ObjectID 参照を付け替える。
+    // Scene 遷移で Persistent 階層を新しい Scene の ID 空間へ移すときに使う。
+    void RemapLiveObjectReferences(const std::vector<Core::GameObject*>& objects,
+        const ObjectRemap& remap);
 
     // SceneData の内容で Scene を作り直す（メインスレッドで実行すること）。
     //

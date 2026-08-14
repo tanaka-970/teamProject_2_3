@@ -72,6 +72,18 @@ namespace ReplayEngine::Scene
         void DestroyGameObject(Core::GameObject* object) noexcept;
         void DestroyGameObject(Core::ObjectID id) noexcept;
 
+        // 明示的な Scene 所有の破棄入口。遷移・終了処理はこれを使う。
+        void Destroy(Core::GameObject* object) noexcept;
+
+        // PersistentComponent を持つ Scene 直下のルートと、その子孫を
+        // Component の破棄なしで一時的に所有から外す。子に付いた
+        // PersistentComponent は独立したルートとしては扱わない。
+        std::vector<std::unique_ptr<Core::GameObject>> DetachPersistentRoots();
+
+        // DetachPersistentRoots() の戻り値をこの Scene が引き取る。
+        // 同名・同 ID の新しい Persistent オブジェクトは破棄し、古い実体を残す。
+        void AdoptPersistentRoots(std::vector<std::unique_ptr<Core::GameObject>> roots);
+
         // 全 GameObject を即座に破棄する。Update 中に呼ばないこと。
         // SetParent 経由でコンテナ操作を行うため noexcept は付けない。
         void Clear();

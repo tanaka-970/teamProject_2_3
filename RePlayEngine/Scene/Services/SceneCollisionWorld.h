@@ -92,6 +92,7 @@ namespace ReplayEngine::Scene
         // 直近に返した Hit の出所。診断表示用。
         const CollisionSourceInfo& LastGroundSource() const noexcept { return last_ground_source_; }
         const CollisionSourceInfo& LastSweepSource() const noexcept { return last_sweep_source_; }
+        const CollisionSourceInfo& LastRaySource() const noexcept { return last_ray_source_; }
 
         // 登録表 1 件分。Debug Draw と診断 UI が読む。
         struct Registration
@@ -129,6 +130,14 @@ namespace ReplayEngine::Scene
         bool QueryGroundFiltered(const DirectX::XMFLOAT3& origin, float radius,
             float up_offset, float down_distance, float walkable_normal_y,
             const CollisionQueryFilter& filter, GroundHit& hit) const override;
+
+        bool Raycast(const DirectX::XMFLOAT3& origin,
+            const DirectX::XMFLOAT3& direction, float max_distance,
+            RaycastHit& hit) const override;
+
+        bool RaycastFiltered(const DirectX::XMFLOAT3& origin,
+            const DirectX::XMFLOAT3& direction, float max_distance,
+            const CollisionQueryFilter& filter, RaycastHit& hit) const override;
 
     private:
         // Scene の構成世代が変わっていたら登録表を作り直す。
@@ -211,6 +220,7 @@ namespace ReplayEngine::Scene
         std::size_t rescan_count_ = 0;
         mutable CollisionSourceInfo last_ground_source_;
         mutable CollisionSourceInfo last_sweep_source_;
+        mutable CollisionSourceInfo last_ray_source_;
 
         // クエリごとのヒープ確保を避けるための作業領域。
         // 参考プロジェクトの ScratchIndices と同じ考え方。

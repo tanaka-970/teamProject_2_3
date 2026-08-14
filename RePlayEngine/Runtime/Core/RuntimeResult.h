@@ -42,6 +42,15 @@ namespace ReplayEngine::Runtime
         ServiceUnavailable = 13,   // 未実装 / 未接続の Service を呼んだ
         InvalidArgument = 14,
         DeferredOperationRejected = 15,
+
+        // ---- Runtime Service / Component ---------------------------------
+        SaveSlotNotFound = 16,
+        SaveKeyNotFound = 17,
+        SaveTypeMismatch = 18,
+        SaveCorrupt = 19,
+        SaveIOFailure = 20,
+        ComponentDependencyMissing = 21,
+        ComponentHasDependents = 22,
     };
 
     // ログ・Inspector 表示用。翻訳せず enum 名をそのまま返す（機械可読なまま保つ）。

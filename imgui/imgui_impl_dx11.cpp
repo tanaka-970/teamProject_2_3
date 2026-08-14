@@ -33,6 +33,7 @@
 // DirectX
 #include <stdio.h>
 #include <d3d11.h>
+#include <d3d11sdklayers.h>
 #include <d3dcompiler.h>
 #if defined(_MSC_VER)
 #pragma comment(lib, "d3dcompiler") // Automatically link with d3dcompiler.lib as we are using D3DCompile() below.
@@ -55,6 +56,18 @@ static ID3D11RasterizerState*   g_pRasterizerState = NULL;
 static ID3D11BlendState*        g_pBlendState = NULL;
 static ID3D11DepthStencilState* g_pDepthStencilState = NULL;
 static int                      g_VertexBufferSize = 5000, g_IndexBufferSize = 10000;
+
+static void ImGui_ImplDX11_SetDebugName(ID3D11DeviceChild* object, const char* name)
+{
+#if defined(_DEBUG) || defined(DEBUG)
+    if (object == NULL || name == NULL || name[0] == '\0')
+        return;
+    object->SetPrivateData(WKPDID_D3DDebugObjectName, (UINT)strlen(name), name);
+#else
+    (void)object;
+    (void)name;
+#endif
+}
 
 struct VERTEX_CONSTANT_BUFFER
 {
@@ -526,6 +539,8 @@ bool    ImGui_ImplDX11_CreateDeviceObjects()
         desc.FrontFace.StencilFunc = D3D11_COMPARISON_ALWAYS;
         desc.BackFace = desc.FrontFace;
         g_pd3dDevice->CreateDepthStencilState(&desc, &g_pDepthStencilState);
+        ImGui_ImplDX11_SetDebugName(g_pDepthStencilState,
+            "ImGui_ImplDX11.g_pDepthStencilState imgui/imgui_impl_dx11.cpp");
     }
 
     ImGui_ImplDX11_CreateFontsTexture();
@@ -535,11 +550,14 @@ bool    ImGui_ImplDX11_CreateDeviceObjects()
 
 void    ImGui_ImplDX11_InvalidateDeviceObjects()
 {
-    if (!g_pd3dDevice)
-        return;
-
     if (g_pFontSampler) { g_pFontSampler->Release(); g_pFontSampler = NULL; }
-    if (g_pFontTextureView) { g_pFontTextureView->Release(); g_pFontTextureView = NULL; ImGui::GetIO().Fonts->TexID = NULL; } // We copied g_pFontTextureView to io.Fonts->TexID so let's clear that as well.
+    if (g_pFontTextureView)
+    {
+        g_pFontTextureView->Release();
+        g_pFontTextureView = NULL;
+        if (ImGui::GetCurrentContext())
+            ImGui::GetIO().Fonts->TexID = NULL;
+    } // We copied g_pFontTextureView to io.Fonts->TexID so let's clear that as well.
     if (g_pIB) { g_pIB->Release(); g_pIB = NULL; }
     if (g_pVB) { g_pVB->Release(); g_pVB = NULL; }
 

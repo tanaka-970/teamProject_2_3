@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../ShaderStack/ShaderLayerStack.h"
+#include "../../Reflection/Property/PropertyBag.h"
 
 #include <DirectXMath.h>
 
@@ -20,9 +21,9 @@ namespace ReplayEngine::Rendering
     // Texture欄はAssetDatabaseのGUIDで保持し、ファイル移動で参照を壊さない。
     struct MaterialAsset final
     {
-        // version 2 で層構造（layers）を追加した。
-        // version 1 のファイルも読める。読んだ場合 layers は空になる。
-        static constexpr int current_version = 2;
+        // v2: layer stack / v3: shader_guid + PropertyBag / v4: Layer ShaderGUID + Layer PropertyBag。
+        // v1〜v3 は読み込み時に移行し、保存は常に v4。
+        static constexpr int current_version = 4;
         static constexpr const char* file_extension = ".replaymaterial";
 
         DirectX::XMFLOAT4 base_color{ 1.0f, 1.0f, 1.0f, 1.0f };
@@ -42,6 +43,17 @@ namespace ReplayEngine::Rendering
         bool double_sided = false;
         int shading_model = 1;
 
+        // ---- version 3 ----------------------------------------------------
+        // Shader は固定 enum ではなく GUID で参照する。空なら旧 shading_model から
+        // 組み込み GUID へ移行する。properties は未知項目も捨てずに保持する。
+        std::string shader_guid;
+        Reflection::PropertyBag properties;
+
+        // 旧 fixed-field / 専用描画経路との移行 bridge。
+        // 新規 Shader/Layer の正本には使わず、Windows 回帰確認後に段階的に縮小する。
+        void SyncLegacyFieldsToProperties();
+        void SyncPropertiesToLegacyFields();
+
         // ---- 重ね掛け（この Material 固有）------------------------------
         //
         // 以前はレイヤがグローバル配列（shader_layers_static[0]）にあり、
@@ -52,8 +64,8 @@ namespace ReplayEngine::Rendering
         // 描画順は layers の並び順。先頭から順に描く。
         ShaderLayerStack layers;
 
-        // 輪郭線パスを使うか。layers に Outline が入っていれば true になる。
-        bool outline_pass = false;
+        // Outline は bool ではなく BuiltInShaderLayers::Outline を layers に持つ。
+        // v2/v3 の OUTLINE_PASS は Load 時だけ移行する。
 
         // ピクセル化の設定。SHADING_MODEL_PIXELATE と Pixelate レイヤが使う。
         float pixelate_grid = 6.0f;

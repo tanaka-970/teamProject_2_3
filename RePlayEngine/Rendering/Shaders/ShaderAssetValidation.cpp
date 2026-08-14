@@ -442,13 +442,14 @@ namespace ReplayEngine::Rendering::Validation
             check.Expect(three_three[1].constant_offset == 16,
                 "2 つ目の float3 が次の境界へ送られる");
 
-            // float + float3 も境界を跨ぐ。
+            // float + float3 は同じ 16 バイトレジスタにちょうど収まる。
+            // float が先頭 4 バイト、float3 が残り 12 バイトを使う。
             auto one_three = make({ ShaderPropertyKind::Float,
                 ShaderPropertyKind::Float3 });
             ShaderConstantPacker::AssignOffsets(one_three, size);
-            check.Expect(size == 32, "float + float3 は 32 バイト");
-            check.Expect(one_three[1].constant_offset == 16,
-                "float3 が境界へ送られる");
+            check.Expect(size == 16, "float + float3 は 16 バイトに収まる");
+            check.Expect(one_three[1].constant_offset == 4,
+                "float3 が float の直後から始まる");
 
             // float + float2 は残り 12 なので入る。
             auto one_two = make({ ShaderPropertyKind::Float,

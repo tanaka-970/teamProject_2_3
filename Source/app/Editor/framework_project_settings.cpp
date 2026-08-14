@@ -202,6 +202,75 @@ void framework::draw_project_settings_panel()
         ImGui::TreePop();
     }
 
+    ImGui::Separator();
+
+    // ---- Active Scene Flow --------------------------------------------------
+    // Scene 遷移条件そのものは .replaysceneflow Asset に保存し、
+    // ProjectSettings は「どの Flow を使うか」だけを GUID で持つ。
+    ImGui::TextUnformatted("Active Scene Flow");
+    const Project::AssetReferenceStatus flow =
+        project_settings.ResolveSceneFlow(asset_database);
+    const std::string flow_preview = flow.IsMissing()
+        ? std::string("[ Missing Scene Flow ]")
+        : (flow.IsResolved() ? (flow.display_name.empty()
+            ? flow.path.filename().u8string() : flow.display_name)
+            : std::string("（未設定）"));
+
+    if (flow.IsMissing())
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.45f, 0.35f, 1.0f));
+    ImGui::SetNextItemWidth(-1.0f);
+    if (ImGui::BeginCombo("##ActiveSceneFlow", flow_preview.c_str()))
+    {
+        if (ImGui::Selectable("（未設定）", flow.IsUnset()))
+        {
+            project_settings.ClearSceneFlow();
+            save_project_settings();
+            sync_runtime_scene_flow_asset();
+        }
+        for (const auto& record : asset_database.Records())
+        {
+            if (record.kind != ReplayEngine::Assets::AssetKind::SceneFlow) continue;
+            const bool selected = record.guid == project_settings.SceneFlowGuid();
+            const std::string label = record.display_name.empty()
+                ? record.source_path.filename().u8string() : record.display_name;
+            ImGui::PushID(record.guid.c_str());
+            if (ImGui::Selectable(label.c_str(), selected))
+            {
+                project_settings.SetSceneFlowGuid(record.guid);
+                save_project_settings();
+                sync_runtime_scene_flow_asset();
+            }
+            if (selected) ImGui::SetItemDefaultFocus();
+            ImGui::PopID();
+        }
+        ImGui::EndCombo();
+    }
+    if (flow.IsMissing()) ImGui::PopStyleColor();
+
+    if (flow.IsResolved())
+        ImGui::TextDisabled("Path: %s", flow.path.generic_u8string().c_str());
+    else if (flow.IsMissing())
+        ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.35f, 1.0f),
+            "この Scene Flow はプロジェクトに見つかりません（参照は保持）");
+    else
+        ImGui::TextDisabled("未設定なら TriggerSceneFlow は遷移せず、既存 LoadScene はそのまま使えます");
+
+    if (flow.IsResolved() && ImGui::Button("Scene Flow を開く"))
+    {
+        if (const auto* record = asset_database.FindByGuid(flow.guid))
+            load_scene_flow_editor(*record);
+    }
+    if (project_settings.HasSceneFlow())
+    {
+        ImGui::SameLine();
+        if (ImGui::Button("解除##ClearSceneFlow"))
+        {
+            project_settings.ClearSceneFlow();
+            save_project_settings();
+            sync_runtime_scene_flow_asset();
+        }
+    }
+
     // 保存の結果はここへ出る。失敗した場合も同じ場所に理由が出る。
     ImGui::TextDisabled("%s", project_settings_status.c_str());
 

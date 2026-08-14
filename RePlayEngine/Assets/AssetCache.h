@@ -21,7 +21,19 @@ namespace ReplayEngine::Assets
         //
         // 必ず末尾へ足すこと。値は .replaydb へ整数として書かれているので、
         // 途中へ挿入すると既存の Asset の種別が別のものへ化ける。化けました
-        Script
+        Script,
+
+        // .replaysceneflow。既存値を壊さないよう必ず末尾。
+        SceneFlow,
+
+        // .ttf / .otf。UIText のフォント欄が「フォントだけ」を候補に出せるようにする。
+        // まだ取り込み経路は用意していないので候補は空になるが、
+        // 種類を分けておかないとフォント欄にモデルやマテリアルまで並んでしまう。
+        // 既存値を壊さないよう必ず末尾。
+        Font,
+
+        // .replaymotion / .replaycomp。既存値を壊さないよう必ず末尾。
+        Motion
     };
 
     struct AssetCacheEntry

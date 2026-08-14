@@ -111,6 +111,10 @@ namespace ReplayEngine::Rendering
         stream << "// ---- ここから ShaderConstantPacker の自動生成 ----\n";
         stream << "// このブロックは手で書かないこと。\n";
         stream << "// #pragma property の宣言から毎回作り直される。\n";
+        // Composer-generated files carry a standalone declaration for editor/IntelliSense.
+        // Runtime compilation prepends this canonical schema, so tell the source to skip
+        // its fallback and avoid duplicate cbuffer/Texture declarations.
+        stream << "#define REPLAY_MATERIAL_SCHEMA_INJECTED 1\n";
 
         // X3568 "unknown pragma ignored" を黙らせる。
         //

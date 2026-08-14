@@ -1,9 +1,19 @@
+﻿// Hierarchy Panel のうち、検索・選択・Drag & Drop を含むツリー描画だけを持つ。
+//
+//   HierarchyPanel.cpp          ... Hierarchy tree の描画と操作（このファイル）
+//   HierarchyPanelCommands.cpp  ... 作成・複製・削除 command
+
 #include "HierarchyPanel.h"
 
 #include "../Core/EditorContext.h"
 #include "../../Assets/AssetDatabase.h"
 #include "../../Object/GameObject/GameObject.h"
 #include "../../Object/Registry/ComponentRegistry.h"
+#include "../../Components/Rendering/MeshRendererComponent.h"
+#include "../../Components/Rendering/PrimitiveMeshRendererComponent.h"
+#include "../../Components/Landscape/LandscapeComponent.h"
+#include "../../Components/Landscape/LandscapeRendererComponent.h"
+#include "../../Components/Landscape/LandscapeColliderComponent.h"
 #include "../../Scene/Runtime/Scene.h"
 #include "../../Scene/Serialization/SceneData.h"
 
@@ -86,9 +96,14 @@ namespace ReplayEngine::Editor
 
         if (editable)
         {
-            if (ImGui::Button("GameObject を作成"))
+            if (ImGui::Button("+ 作成"))
             {
-                CreateEmptyGameObject(context, nullptr);
+                ImGui::OpenPopup("HierarchyCreatePopup");
+            }
+            if (ImGui::BeginPopup("HierarchyCreatePopup"))
+            {
+                DrawCreateMenu(context, nullptr);
+                ImGui::EndPopup();
             }
             ImGui::SameLine();
             if (ImGui::Button("複製")) DuplicateSelected(context);
@@ -367,14 +382,17 @@ namespace ReplayEngine::Editor
     {
         const bool editable = context.CanEdit();
 
-        if (ImGui::MenuItem("GameObject を作成", nullptr, false, editable))
+        if (editable)
         {
-            CreateEmptyGameObject(context, nullptr);
+            if (ImGui::BeginMenu(object != nullptr ? "子を作成" : "作成"))
+            {
+                DrawCreateMenu(context, object);
+                ImGui::EndMenu();
+            }
         }
-        if (object != nullptr &&
-            ImGui::MenuItem("子として GameObject を作成", nullptr, false, editable))
+        else
         {
-            CreateEmptyGameObject(context, object);
+            ImGui::MenuItem("作成", nullptr, false, false);
         }
 
         if (object == nullptr) return;
@@ -396,74 +414,15 @@ namespace ReplayEngine::Editor
         if (ImGui::MenuItem("削除", "Del", false, editable)) DestroySelected(context);
     }
 
-    void HierarchyPanel::CreateEmptyGameObject(EditorContext& context, GameObject* parent)
+    void HierarchyPanel::BeginRenameSelection(EditorContext& context)
     {
         Scene::Scene* scene = context.GetScene();
         if (scene == nullptr || !context.CanEdit()) return;
-
-        context.BeginEdit("GameObject を作成");
-        GameObject* created = scene->CreateGameObject("GameObject");
-        if (created == nullptr)
-        {
-            context.CancelEdit();
-            return;
-        }
-        if (parent != nullptr) created->SetParent(parent, false);
-
-        context.CommitEdit();
-        context.Selection().Select(created->ID(), false);
-        context.SetStatus("GameObject を作成しました");
+        GameObject* object = context.Selection().ResolvePrimary(*scene);
+        if (object == nullptr || object->PendingDestroy()) return;
+        renaming_ = object->ID();
+        CopyToBuffer(rename_buffer_, rename_buffer_size, object->Name());
+        context.SetStatus("F2: GameObject 名を変更");
     }
 
-    void HierarchyPanel::DuplicateSelected(EditorContext& context)
-    {
-        Scene::Scene* scene = context.GetScene();
-        if (scene == nullptr || !context.CanEdit()) return;
-        if (context.Selection().Empty()) return;
-
-        // 走査中に Scene が伸びるので、対象 ID を先に控える。
-        const std::vector<ObjectID> targets = context.Selection().All();
-
-        context.BeginEdit("GameObject を複製");
-        std::vector<ObjectID> created_ids;
-        for (const ObjectID id : targets)
-        {
-            GameObject* source = scene->FindGameObjectByID(id);
-            if (source == nullptr) continue;
-
-            GameObject* clone = Scene::Serialization::DuplicateGameObject(*scene, *source, true);
-            if (clone != nullptr) created_ids.push_back(clone->ID());
-        }
-
-        if (created_ids.empty())
-        {
-            context.CancelEdit();
-            return;
-        }
-        context.CommitEdit();
-
-        context.Selection().Clear();
-        for (const ObjectID id : created_ids) context.Selection().Select(id, true);
-        context.SetStatus(std::to_string(created_ids.size()) + " 個を複製しました");
-    }
-
-    void HierarchyPanel::DestroySelected(EditorContext& context)
-    {
-        Scene::Scene* scene = context.GetScene();
-        if (scene == nullptr || !context.CanEdit()) return;
-        if (context.Selection().Empty()) return;
-
-        const std::vector<ObjectID> targets = context.Selection().All();
-
-        context.BeginEdit("GameObject を削除");
-        for (const ObjectID id : targets)
-        {
-            // 削除予約が立つだけ。実体は CommitEdit の中で破棄される。
-            scene->DestroyGameObject(id);
-        }
-        context.CommitEdit();
-
-        context.Selection().Clear();
-        context.SetStatus(std::to_string(targets.size()) + " 個を削除しました");
-    }
 }

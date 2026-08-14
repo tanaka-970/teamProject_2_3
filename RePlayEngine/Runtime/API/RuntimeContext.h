@@ -4,6 +4,9 @@
 #include "../Handles/HandleResolver.h"
 #include "../Handles/RuntimeHandles.h"
 #include "../../Scene/Services/IPhysicsQueryService.h"
+#include "../../Scene/Services/IInputService.h"
+#include "../../Audio/AudioService.h"
+#include "RuntimeSaveGameService.h"
 
 #include <DirectXMath.h>
 
@@ -25,11 +28,11 @@ namespace ReplayEngine::Runtime
         float delta_time = 0.0f;
         float fixed_delta_time = 1.0f / 60.0f;
 
-        // タイムスケールの影響を受けない経過時間。
-        // まだタイムスケール機能が無いため delta_time と同じ値が入る。
-        // 別フィールドにしてあるのは、後から入れたときに
-        // 利用側のコードを書き換えずに済ませるため。
+        // タイムスケールの影響を受けない経過時間。Editor/UI/ロード演出はこれを使う。
         float unscaled_delta_time = 0.0f;
+
+        // Scene の共通時間倍率。0 でゲーム時間だけを完全停止する。
+        float time_scale = 1.0f;
 
         std::uint64_t frame_index = 0;
     };
@@ -82,6 +85,25 @@ namespace ReplayEngine::Runtime
         virtual RuntimeStatus RequestSceneLoad(const std::string& asset_guid) = 0;
         virtual RuntimeStatus RequestSceneReload() = 0;
         virtual RuntimeStatus RequestReturnToPreviousScene() = 0;
+
+        // Scene Flow Asset を使う上位のイベント駆動遷移。
+        // 既存のテスト用 ISceneFlow 実装を壊さないため、追加 API は既定で未対応。
+        virtual RuntimeStatus RequestSceneFlowTrigger(const std::string& /*event_name*/)
+        {
+            return RuntimeStatus::UnsupportedOperation;
+        }
+        virtual RuntimeStatus SetSceneFlowBool(const std::string& /*key*/, bool /*value*/)
+        {
+            return RuntimeStatus::UnsupportedOperation;
+        }
+        virtual RuntimeStatus SetSceneFlowInt(const std::string& /*key*/, std::int64_t /*value*/)
+        {
+            return RuntimeStatus::UnsupportedOperation;
+        }
+        virtual RuntimeStatus SetSceneFlowFloat(const std::string& /*key*/, double /*value*/)
+        {
+            return RuntimeStatus::UnsupportedOperation;
+        }
 
         // プロセスを落とさない。要求として記録するだけ。
         virtual RuntimeStatus RequestQuitApplication(const std::string& reason) = 0;
@@ -140,6 +162,20 @@ namespace ReplayEngine::Runtime
         void SetLogSink(IRuntimeLogSink* sink) noexcept { log_sink_ = sink; }
         void SetTime(const RuntimeTime& time) noexcept { time_ = time; }
 
+        // frameworkが所有する既存Serviceを非所有参照で接続する。
+        void SetInputService(const Scene::IInputService* service) noexcept
+        {
+            input_service_ = service;
+        }
+        void SetAudioService(Audio::IAudioPlaybackService* service) noexcept
+        {
+            audio_service_ = service;
+        }
+        void SetSaveGameService(ISaveGameService* service) noexcept
+        {
+            save_game_service_ = service;
+        }
+
         // World の入れ替えでは切らない。framework が持つ接続なので Rebind でも残す。
         void SetSceneFlow(ISceneFlow* flow) noexcept { scene_flow_ = flow; }
 
@@ -170,6 +206,7 @@ namespace ReplayEngine::Runtime
         float DeltaTime() const noexcept { return time_.delta_time; }
         float FixedDeltaTime() const noexcept { return time_.fixed_delta_time; }
         float UnscaledDeltaTime() const noexcept { return time_.unscaled_delta_time; }
+        float TimeScale() const noexcept { return time_.time_scale; }
         std::uint64_t FrameIndex() const noexcept { return time_.frame_index; }
 
         // ---- Object -----------------------------------------------------------
@@ -221,6 +258,23 @@ namespace ReplayEngine::Runtime
         RuntimeStatus SetComponentEnabled(const ComponentHandle& handle, bool enabled);
         RuntimeStatus IsComponentEnabled(const ComponentHandle& handle, bool& out) const;
 
+        // ---- Motion Player -----------------------------------------------------
+
+        RuntimeStatus FindMotionPlayer(const ObjectHandle& owner,
+            const std::string& key, ComponentHandle& out) const;
+        RuntimeStatus MotionPlay(const ComponentHandle& player);
+        RuntimeStatus MotionPlayFrom(const ComponentHandle& player, float seconds);
+        RuntimeStatus MotionPause(const ComponentHandle& player);
+        RuntimeStatus MotionResume(const ComponentHandle& player);
+        RuntimeStatus MotionStop(const ComponentHandle& player);
+        RuntimeStatus MotionReverse(const ComponentHandle& player);
+        RuntimeStatus SetMotionTime(const ComponentHandle& player, float seconds);
+        RuntimeStatus SetMotionSpeed(const ComponentHandle& player, float speed);
+        RuntimeStatus SetMotionWeight(const ComponentHandle& player, float weight);
+        RuntimeStatus IsMotionPlaying(const ComponentHandle& player, bool& out) const;
+        RuntimeStatus GetMotionTime(const ComponentHandle& player, float& out) const;
+        RuntimeStatus GetMotionDuration(const ComponentHandle& player, float& out) const;
+
         // ---- 生成・破棄 ---------------------------------------------------------
 
         // 空の GameObject を作る。生成は即時で、Update 中でも安全
@@ -271,6 +325,12 @@ namespace ReplayEngine::Runtime
         RuntimeStatus ReloadCurrentScene();
         RuntimeStatus ReturnToPreviousScene();
 
+        // Scene Flow Asset のイベントを発火し、条件に一致した遷移を要求する。
+        RuntimeStatus TriggerSceneFlow(const std::string& event_name);
+        RuntimeStatus SetSceneFlowBool(const std::string& key, bool value);
+        RuntimeStatus SetSceneFlowInt(const std::string& key, std::int64_t value);
+        RuntimeStatus SetSceneFlowFloat(const std::string& key, double value);
+
         // アプリケーションの終了要求。ここではプロセスを終了しない。
         RuntimeStatus QuitApplication(const std::string& reason = std::string());
 
@@ -293,6 +353,11 @@ namespace ReplayEngine::Runtime
             const DirectX::XMFLOAT3& end, float radius, float maximum_normal_y,
             const ObjectHandle& ignore, Scene::SphereSweepHit& out) const;
 
+        RuntimeStatus Raycast(const DirectX::XMFLOAT3& origin,
+            const DirectX::XMFLOAT3& direction, float max_distance,
+            int layer, int mask, const ObjectHandle& ignore,
+            Scene::RaycastHit& out) const;
+
         // ---- Log ----------------------------------------------------------------
 
         void Log(LogLevel level, const std::string& message,
@@ -304,16 +369,66 @@ namespace ReplayEngine::Runtime
         void LogError(const std::string& message,
             const ObjectHandle& source = ObjectHandle::None()) const;
 
-        // ---- 未実装 Service ------------------------------------------------------
-        //
-        // Audio / Input Action / SaveGame / Runtime UI はまだ無い。
-        // 呼べる API を用意して 0 や true を返す「動いているように見える実装」は置かない。
-        // 存在を問い合わせる手段だけを提供し、答えは常に false。
-        // 実装が入った時点でここを差し替える。
-        bool AudioAvailable() const noexcept { return false; }
-        bool InputActionAvailable() const noexcept { return false; }
-        bool SaveGameAvailable() const noexcept { return false; }
-        bool RuntimeUIAvailable() const noexcept { return false; }
+        // ---- Input Action -------------------------------------------------------
+
+        bool InputActionAvailable() const noexcept;
+        RuntimeStatus InputHeld(const std::string& action, int player_slot, bool& out) const;
+        RuntimeStatus InputPressed(const std::string& action, int player_slot, bool& out) const;
+        RuntimeStatus InputReleased(const std::string& action, int player_slot, bool& out) const;
+        RuntimeStatus InputAxis(const std::string& axis, int player_slot, float& out) const;
+        RuntimeStatus InputPointerDeltaX(float& out) const;
+        RuntimeStatus InputPointerDeltaY(float& out) const;
+
+        // ---- Audio --------------------------------------------------------------
+
+        bool AudioAvailable() const noexcept;
+        RuntimeStatus PlayAudio(const std::string& clip_path, bool loop, float volume,
+            float pitch, int spatial_mode, const DirectX::XMFLOAT3& position,
+            float min_distance, float max_distance, std::uint64_t& out) const;
+        RuntimeStatus StopAudio(std::uint64_t voice) const;
+        RuntimeStatus UpdateAudio(std::uint64_t voice, const std::string& clip_path,
+            bool loop, float volume, float pitch, int spatial_mode,
+            const DirectX::XMFLOAT3& position, float min_distance,
+            float max_distance) const;
+
+        // ---- SaveGame -----------------------------------------------------------
+
+        bool SaveGameAvailable() const noexcept;
+        RuntimeStatus SaveBool(const std::string& slot, const std::string& key, bool value) const;
+        RuntimeStatus SaveInt(const std::string& slot, const std::string& key,
+            std::int64_t value) const;
+        RuntimeStatus SaveDouble(const std::string& slot, const std::string& key,
+            double value) const;
+        RuntimeStatus SaveString(const std::string& slot, const std::string& key,
+            const std::string& value) const;
+        RuntimeStatus LoadBool(const std::string& slot, const std::string& key,
+            bool& out) const;
+        RuntimeStatus LoadInt(const std::string& slot, const std::string& key,
+            std::int64_t& out) const;
+        RuntimeStatus LoadDouble(const std::string& slot, const std::string& key,
+            double& out) const;
+        RuntimeStatus LoadString(const std::string& slot, const std::string& key,
+            std::string& out) const;
+        RuntimeStatus HasSaveKey(const std::string& slot, const std::string& key,
+            bool& out) const;
+        RuntimeStatus DeleteSaveKey(const std::string& slot, const std::string& key) const;
+        RuntimeStatus SaveGame(const std::string& slot) const;
+        RuntimeStatus LoadGame(const std::string& slot) const;
+        RuntimeStatus DeleteSave(const std::string& slot) const;
+
+        // ---- Runtime UI ---------------------------------------------------------
+
+        bool RuntimeUIAvailable() const noexcept;
+        RuntimeStatus CreateUIElement(const std::string& name, const ObjectHandle& parent,
+            ObjectHandle& out);
+        RuntimeStatus SetUIText(const ObjectHandle& object, const std::string& text);
+        RuntimeStatus GetUIText(const ObjectHandle& object, std::string& out) const;
+        RuntimeStatus SetUIImageColor(const ObjectHandle& object,
+            const DirectX::XMFLOAT4& color);
+        RuntimeStatus SetUIRect(const ObjectHandle& object,
+            const DirectX::XMFLOAT2& position, const DirectX::XMFLOAT2& size,
+            const DirectX::XMFLOAT2& scale, float rotation, int sort_order);
+        RuntimeStatus SetUIButtonInteractable(const ObjectHandle& object, bool interactable);
 
     private:
         struct PendingInstantiation
@@ -338,6 +453,9 @@ namespace ReplayEngine::Runtime
         IPrefabInstantiator* prefab_instantiator_ = nullptr;
         IRuntimeLogSink* log_sink_ = nullptr;
         ISceneFlow* scene_flow_ = nullptr;
+        const Scene::IInputService* input_service_ = nullptr;
+        Audio::IAudioPlaybackService* audio_service_ = nullptr;
+        ISaveGameService* save_game_service_ = nullptr;
 
         RuntimeTime time_;
         std::vector<PendingInstantiation> pending_instantiations_;

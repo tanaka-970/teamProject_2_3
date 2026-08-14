@@ -93,6 +93,19 @@ public:
 	const std::wstring& load_error() const noexcept { return load_error_; }
 
 	static_mesh(ID3D11Device* device, const wchar_t* obj_filename, bool flipping_v_coordinates/*UNIT.14*/);
+	// Fileを介さないprocedural mesh。Landscape / Built-in Primitive用。
+	static_mesh(ID3D11Device* device, const std::vector<vertex>& vertices,
+		const std::vector<uint32_t>& indices);
+
+	// Procedural mesh の geometry だけを更新する。
+	// Shader / InputLayout / Material / dummy texture は再生成しない。
+	// Landscape の Sculpt 中に static_mesh 自体を毎フレーム作り直すと、
+	// CSO 読み込みや texture 作成まで繰り返して極端に重くなるため、
+	// GPU vertex/index buffer の差し替えだけを行う入口を分ける。
+	bool update_procedural_geometry(ID3D11Device* device,
+		const std::vector<vertex>& vertices,
+		const std::vector<uint32_t>& indices);
+
 	virtual ~static_mesh() = default;
 
 	void render(ID3D11DeviceContext* immediate_context,

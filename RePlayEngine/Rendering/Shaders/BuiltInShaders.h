@@ -38,6 +38,7 @@ namespace ReplayEngine::Rendering
         {
             ShaderID id;
             int shading_model = 0;
+            ShaderLightingModel lighting_model = ShaderLightingModel::Pbr;
             const char* display_name = "";
             const char* relative_path = "";
         };
@@ -51,6 +52,13 @@ namespace ReplayEngine::Rendering
         // 勝手に既定値へ丸めないこと。丸めると
         // 「保存されていた選択と違うものが黙って付く」ことになる。
         ShaderID FromShadingModel(int shading_model) noexcept;
+
+        // 旧 shading_model または ShaderID から、遅延描画用の照明式を引く。
+        // 見つからないときは false。勝手に PBR へ丸めない。
+        bool TryGetLightingModelFromShadingModel(int shading_model,
+            ShaderLightingModel& out) noexcept;
+        bool TryGetLightingModel(ShaderID id,
+            ShaderLightingModel& out) noexcept;
 
         // 組み込みかどうか。
         bool IsBuiltIn(ShaderID id) noexcept;

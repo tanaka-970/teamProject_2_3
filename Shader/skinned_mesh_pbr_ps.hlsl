@@ -4,6 +4,15 @@
 
 float4 main(VS_OUT pin) : SV_TARGET
 {
+#ifdef REPLAY_MATERIAL_PROPERTIES
+    float4 base_sample = BaseMap.Sample(pbr_sampler_anisotropic, pin.texcoord) * BaseColor;
+    float3 base = pow(max(base_sample.rgb, 0.0f), 2.2f);
+    float alpha = base_sample.a;
+    float metallic = saturate(MetallicMap.Sample(pbr_sampler_linear, pin.texcoord).r * Metallic);
+    float roughness = max(RoughnessMap.Sample(pbr_sampler_linear, pin.texcoord).r * Roughness, 0.045f);
+    float occlusion = saturate(OcclusionMap.Sample(pbr_sampler_linear, pin.texcoord).r * AmbientOcclusion);
+    float3 emissive = EmissiveMap.Sample(pbr_sampler_linear, pin.texcoord).rgb * Emissive * EmissiveStrength;
+#else
     float4 base_sample = pbr_base_color.Sample(pbr_sampler_anisotropic, pin.texcoord);
     float3 base = pow(max(base_sample.rgb, 0.0f), 2.2f);
     float alpha = base_sample.a;
@@ -14,6 +23,7 @@ float4 main(VS_OUT pin) : SV_TARGET
     float occlusion = (mr.r > 0.0f) ? mr.r : 1.0f;
 
     float3 emissive = pbr_emissive_map.Sample(pbr_sampler_linear, pin.texcoord).rgb;
+#endif
 
     float3 N = normalize(pin.world_normal.xyz);
     float3 T = normalize(pin.world_tangent.xyz);

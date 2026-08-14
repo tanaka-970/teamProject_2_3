@@ -10,6 +10,20 @@ void framework::update(float elapsed_time)
     // 「あると思って見ていない」状態になるから。
     if (golden_capture_pending()) elapsed_time = 0.0f;
 
+    // OS / XInput の状態はフレーム先頭で 1 回だけ採取する。
+    // ImGui が文字入力を取っている間はキーボードを Gameplay へ公開しない。
+    bool keyboard_captured = false;
+    bool mouse_captured = false;
+#ifdef USE_IMGUI
+    if (editor_mode && ImGui::GetCurrentContext())
+    {
+        keyboard_captured = ImGui::GetIO().WantCaptureKeyboard;
+        // Scene View 上のクリックは Editor パネルではなく View / UI 操作用に通す。
+        mouse_captured = ImGui::GetIO().WantCaptureMouse && !scene_view_hovered;
+    }
+#endif
+    game_input.BeginFrame(keyboard_captured, mouse_captured);
+
     async_asset_manager.PumpMainThread();
     if (scene_manager.IsExclusive())
     {
@@ -17,7 +31,7 @@ void framework::update(float elapsed_time)
         return;
     }
 
-    if (!editor_mode || !edit_mode_active)
+    if (!editor_mode || object_scene_play_mode)
     {
         scene_manager.Update(elapsed_time);
     }

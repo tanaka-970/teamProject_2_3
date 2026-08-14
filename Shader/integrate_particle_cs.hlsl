@@ -64,7 +64,8 @@ void main(uint3 dtid : SV_DispatchThreadID)
         p.rotation   += spawn_scalar.y * simulation_time.x;
         // 寿命に応じてアルファをフェード
         float t = saturate(p.age / max(p.life, 0.0001f));
-        p.color.a = spawn_color.a * (1.0f - t);
+        p.color = lerp(spawn_color, end_color, t);
+        p.size = lerp(spawn_scalar.x, end_scalar.x, t);
     }
 
     particles[dtid.x] = p;

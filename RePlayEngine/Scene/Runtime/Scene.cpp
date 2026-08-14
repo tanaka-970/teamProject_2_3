@@ -1,8 +1,13 @@
 #include "Scene.h"
 
 #include "../../Object/Registry/ComponentRegistry.h"
+#include "../../Components/Core/PersistentComponent.h"
+#include "../Serialization/SceneData.h"
 
 #include <algorithm>
+#include <functional>
+#include <unordered_set>
+#include <windows.h>
 
 namespace ReplayEngine::Scene
 {
@@ -71,6 +76,167 @@ namespace ReplayEngine::Scene
     void Scene::DestroyGameObject(ObjectID id) noexcept
     {
         DestroyGameObject(FindGameObjectByID(id));
+    }
+
+    void Scene::Destroy(GameObject* object) noexcept
+    {
+        DestroyGameObject(object);
+    }
+
+    std::vector<std::unique_ptr<GameObject>> Scene::DetachPersistentRoots()
+    {
+        std::vector<GameObject*> roots;
+        std::unordered_set<GameObject*> transfer_set;
+        std::unordered_set<std::string> persistent_names;
+
+        // 子に付いた印は独立した移行単位にしない。親が Persistent なら
+        // 親の階層に含まれて移行し、親が無ければ警告だけでその Scene に残る。
+        for (const auto& object : objects_)
+        {
+            if (!object || object->PendingDestroy()) continue;
+            if (object->GetComponent<Components::PersistentComponent>() == nullptr) continue;
+            if (object->Parent() != nullptr)
+            {
+                OutputDebugStringA("[RePlayEngine] 子 GameObject の PersistentComponent は無視します。\n");
+                continue;
+            }
+            if (!persistent_names.insert(object->Name()).second)
+            {
+                OutputDebugStringA("[RePlayEngine] 同名の Persistent GameObject は先着を残して破棄します。\n");
+                DestroyGameObject(object.get());
+                continue;
+            }
+            roots.push_back(object.get());
+        }
+
+        ProcessPendingOperations();
+
+        const std::function<void(GameObject*)> collect =
+            [&collect, &transfer_set](GameObject* object)
+        {
+            if (object == nullptr || !transfer_set.insert(object).second) return;
+            for (GameObject* child : object->Children()) collect(child);
+        };
+        for (GameObject* root : roots) collect(root);
+
+        std::vector<std::unique_ptr<GameObject>> detached;
+        detached.reserve(transfer_set.size());
+        for (auto iterator = objects_.begin(); iterator != objects_.end();)
+        {
+            GameObject* object = iterator->get();
+            if (transfer_set.find(object) == transfer_set.end())
+            {
+                ++iterator;
+                continue;
+            }
+
+            RemoveFromLookup(object);
+            object->scene_ = nullptr;
+            detached.push_back(std::move(*iterator));
+            iterator = objects_.erase(iterator);
+        }
+
+        if (!detached.empty()) BumpStructureGeneration();
+        return detached;
+    }
+
+    void Scene::AdoptPersistentRoots(std::vector<std::unique_ptr<GameObject>> roots)
+    {
+        if (roots.empty()) return;
+
+        std::vector<GameObject*> root_objects;
+        std::unordered_set<GameObject*> adopted_objects;
+        const std::function<void(GameObject*)> collect =
+            [&collect, &adopted_objects](GameObject* object)
+        {
+            if (object == nullptr || !adopted_objects.insert(object).second) return;
+            for (GameObject* child : object->Children()) collect(child);
+        };
+
+        for (const auto& root : roots)
+        {
+            if (!root) continue;
+            root_objects.push_back(root.get());
+            collect(root.get());
+        }
+
+        // 新 Scene 側に同名の Persistent ルートがある場合は、読み込んだ新しい
+        // 実体を残さず、旧 World から移した実体を正本にする。
+        std::unordered_set<GameObject*> duplicate_objects;
+        for (GameObject* old_root : root_objects)
+        {
+            for (const auto& object : objects_)
+            {
+                if (!object || object->PendingDestroy() ||
+                    object->GetComponent<Components::PersistentComponent>() == nullptr ||
+                    object->Parent() != nullptr || object->Name() != old_root->Name())
+                {
+                    continue;
+                }
+                duplicate_objects.insert(object.get());
+            }
+        }
+        for (GameObject* duplicate : duplicate_objects) DestroyGameObject(duplicate);
+        ProcessPendingOperations();
+
+        // 新 Scene と Persistent 階層の両方より上へ進めておく。
+        // 先に上限を確定しないと、衝突した ID の振り直し先が別の ID と重なる。
+        for (const auto& object : objects_)
+        {
+            if (object != nullptr) id_generator_.EnsureAbove(object->ID());
+        }
+        for (GameObject* adopted : adopted_objects)
+        {
+            if (adopted != nullptr) id_generator_.EnsureAbove(adopted->ID());
+        }
+
+        Serialization::ObjectRemap object_remap;
+        for (GameObject* adopted : adopted_objects)
+        {
+            if (adopted == nullptr) continue;
+            if (FindGameObjectByID(adopted->ID()) == nullptr) continue;
+
+            const ObjectID previous_id = adopted->ID();
+            object_remap.emplace(previous_id, adopted);
+            // 保存ファイルの ID はファイル内の参照が指しているため変えられない。
+            // メモリ上の Persistent 階層は参照をその場で直せるので、こちらを振り直す。
+            adopted->id_ = id_generator_.Next();
+        }
+
+        const std::vector<GameObject*> adopted_list(
+            adopted_objects.begin(), adopted_objects.end());
+        Serialization::RemapLiveObjectReferences(adopted_list, object_remap);
+
+        // ---- 拡張点: Persistent 階層の外部参照 -------------------------------
+        //
+        // 【今は入れていない理由】
+        //   旧 Scene 側への参照は今回の ID 衝突とは別の問題で、
+        //   「切る」か「保持する」かの方針決定が必要なため。
+        // 【入れるときにここへ足す】
+        //   持ち越し階層の外を指す参照を検出する処理を、上の付け替えの直後へ足す。
+        // 【壊してはいけない前提】
+        //   MissingComponent の思想に合わせ、値を黙って捨てない。
+        // -----------------------------------------------------------------------------
+
+        for (auto& root : roots)
+        {
+            if (!root) continue;
+            const std::function<void(GameObject*)> rebind =
+                [&rebind, this](GameObject* object)
+            {
+                if (object == nullptr) return;
+                object->scene_ = this;
+                generation_by_id_[object->ID()] =
+                    (std::max)(generation_by_id_[object->ID()], object->generation_);
+                id_generator_.EnsureAbove(object->ID());
+                id_lookup_[object->ID()] = object;
+                for (GameObject* child : object->Children()) rebind(child);
+            };
+            rebind(root.get());
+            objects_.push_back(std::move(root));
+        }
+
+        BumpStructureGeneration();
     }
 
     void Scene::Clear()

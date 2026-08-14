@@ -5,11 +5,11 @@ namespace ReplayEngine::Rendering::BuiltInShaders
     const std::vector<Definition>& All()
     {
         static const std::vector<Definition> definitions = {
-            { FbxDefault, 0, "標準",     "Materials/BuiltIn/FbxDefault.hlsl" },
-            { Pbr,        1, "PBR",      "Materials/BuiltIn/Pbr.hlsl" },
-            { Toon,       2, "Toon",     "Materials/BuiltIn/Toon.hlsl" },
-            { Unlit,      3, "Unlit",    "Materials/BuiltIn/Unlit.hlsl" },
-            { Pixelate,   4, "Pixelate", "Materials/BuiltIn/Pixelate.hlsl" },
+            { FbxDefault, 0, ShaderLightingModel::Pbr,   "標準",     "Materials/BuiltIn/FbxDefault.hlsl" },
+            { Pbr,        1, ShaderLightingModel::Pbr,   "PBR",      "Materials/BuiltIn/Pbr.hlsl" },
+            { Toon,       2, ShaderLightingModel::Toon,  "Toon",     "Materials/BuiltIn/Toon.hlsl" },
+            { Unlit,      3, ShaderLightingModel::Unlit, "Unlit",    "Materials/BuiltIn/Unlit.hlsl" },
+            { Pixelate,   4, ShaderLightingModel::Pbr,   "Pixelate", "Materials/BuiltIn/Pixelate.hlsl" },
         };
         return definitions;
     }
@@ -27,6 +27,33 @@ namespace ReplayEngine::Rendering::BuiltInShaders
         // しかも画面には何も出ないので誰も気付けない。
         // 呼び出し側が「不明」として扱い、理由を出すこと。
         return ShaderID{};
+    }
+
+    bool TryGetLightingModelFromShadingModel(int shading_model,
+        ShaderLightingModel& out) noexcept
+    {
+        for (const Definition& definition : All())
+        {
+            if (definition.shading_model == shading_model)
+            {
+                out = definition.lighting_model;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool TryGetLightingModel(ShaderID id, ShaderLightingModel& out) noexcept
+    {
+        for (const Definition& definition : All())
+        {
+            if (definition.id == id)
+            {
+                out = definition.lighting_model;
+                return true;
+            }
+        }
+        return false;
     }
 
     bool IsBuiltIn(ShaderID id) noexcept
