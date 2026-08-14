@@ -453,6 +453,8 @@ namespace ReplayEngine::Components
 
     void UIEffectStackComponent::OnSerialize(Reflection::PropertyBag& output) const
     {
+        output.Set("capture_backdrop",
+            Reflection::PropertyValue::MakeBool(capture_backdrop));
         output.Set("effect_count",
             Reflection::PropertyValue::MakeInt(static_cast<int>(effects.size())));
         for (std::size_t index = 0; index < effects.size(); ++index)
@@ -516,6 +518,10 @@ namespace ReplayEngine::Components
 
     void UIEffectStackComponent::OnDeserialize(const Reflection::PropertyBag& input)
     {
+        if (const Reflection::PropertyValue* backdrop = input.Find("capture_backdrop"))
+        {
+            capture_backdrop = backdrop->AsBool(false);
+        }
         int inferred_count = effect_count;
         if (const Reflection::PropertyValue* stored_count = input.Find("effect_count"))
         {
