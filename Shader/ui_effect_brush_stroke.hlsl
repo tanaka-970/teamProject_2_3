@@ -1,17 +1,19 @@
 Texture2D source_texture : register(t0);
+Texture2D mask_texture : register(t1);
 SamplerState source_sampler : register(s0);
 
 cbuffer UIEffectConstants : register(b0)
 {
     float4 effect_color;
     float4 effect_params0; // brush length, intensity, jitter, brush width
-    float4 effect_params1;
+    float4 effect_params1; // angle, progress = stamp size, softness = variation, speed
     float4 effect_params2; // direction.xy, seed, time
     float4 target_size;
     float4 effect_color_2;
     float4 effect_color_3;
     float4 effect_color_4;
     float4 effect_color_stops;
+    float4 effect_params3; // x = waveform, y = optional texture is bound
 };
 
 struct VSOutput { float4 position : SV_POSITION; float2 uv : TEXCOORD0; };
@@ -78,5 +80,28 @@ float4 main(VSOutput input) : SV_TARGET
     }
     brushed /= max(weight_sum, 0.0001);
     const float4 source = source_texture.Sample(source_sampler, input.uv);
-    return lerp(source, brushed, saturate(effect_params0.y));
+    float brush_amount = saturate(effect_params0.y);
+    if (effect_params3.y > 0.5)
+    {
+        // 筆跡はセルごとに貼る。seed から作る角度と大きさの揺れは、同じ seed
+        // なら同じになる。threshold の輪郭方向 jitter とは別の役割である。
+        const float stamp_size = max(effect_params1.y, 1.0);
+        const float2 stamp_grid = input.uv * target_size.xy / stamp_size;
+        const float2 stamp_cell = floor(stamp_grid);
+        const float variation = saturate(effect_params1.z);
+        const float rotation = (Hash(stamp_cell + effect_params2.z) - 0.5) *
+            6.28318530718 * variation;
+        const float stamp_scale = 1.0 +
+            (Hash(stamp_cell.yx + effect_params2.z + 17.0) - 0.5) *
+            0.7 * variation;
+        float sine;
+        float cosine;
+        sincos(rotation, sine, cosine);
+        const float2 local = (frac(stamp_grid) - 0.5) / max(stamp_scale, 0.1);
+        const float2 stamp_uv = frac(float2(
+            local.x * cosine - local.y * sine,
+            local.x * sine + local.y * cosine) + 0.5);
+        brush_amount *= mask_texture.Sample(source_sampler, stamp_uv).a;
+    }
+    return lerp(source, brushed, brush_amount);
 }

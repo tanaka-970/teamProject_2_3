@@ -82,10 +82,14 @@ float4 main(VSOutput input) : SV_TARGET
         const float mean_luminance = weighted_luminance * inverse_weight;
         const float variance = max(weighted_luminance_squared * inverse_weight -
             mean_luminance * mean_luminance, 0.0);
-        // q = 4 gives low-variance fans a strong but continuous preference.
-        // Scaling normalized luminance variance keeps the weighting effective.
-        const float variance_weight = 1.0 /
-            (1.0 + pow(variance * 64.0, 4.0));
+        // 標準偏差で分散の小さいセクタを選ぶ。softness は「面の硬さ」で、
+        // 高いほど選択を強める。最低重みを置くため、極端な設定でも
+        // confidence_sum が 0 になって黒く抜けることはない。
+        const float deviation = sqrt(variance);
+        const float hardness = saturate(effect_params1.z);
+        const float selectivity = lerp(8.0, 256.0, hardness);
+        const float variance_weight = max(1.0e-5,
+            1.0 / (1.0 + pow(deviation * selectivity, 8.0)));
         filtered_sum += sector_mean * variance_weight;
         confidence_sum += variance_weight;
     }
