@@ -13,6 +13,30 @@ namespace ReplayEngine::Runtime::Validation::Detail::BehaviourValidation
                     .InModule("RePlayEngine.Validation"));
             BehaviourRegistry::Register(LifecycleProbeBehaviour::StaticTypeGUID(),
                 BehaviourRegistry::Native());
+
+            Core::ComponentRegistry::Register<DependencyBaseComponent>(
+                Core::ComponentTypeInfo::Describe("Dependency Base", "Internal")
+                    .HiddenInEditor());
+            Core::ComponentRegistry::Register<DependencyMiddleComponent>(
+                Core::ComponentTypeInfo::Describe("Dependency Middle", "Internal")
+                    .HiddenInEditor()
+                    .Requires<DependencyBaseComponent>());
+            Core::ComponentRegistry::Register<DependencyLeafComponent>(
+                Core::ComponentTypeInfo::Describe("Dependency Leaf", "Internal")
+                    .HiddenInEditor()
+                    .Requires<DependencyMiddleComponent>());
+            Core::ComponentRegistry::Register<DependencyBrokenComponent>(
+                Core::ComponentTypeInfo::Describe("Dependency Broken", "Internal")
+                    .HiddenInEditor()
+                    .Requires<DependencyMissingComponent>());
+            Core::ComponentRegistry::Register<DependencyCycleAComponent>(
+                Core::ComponentTypeInfo::Describe("Dependency Cycle A", "Internal")
+                    .HiddenInEditor()
+                    .Requires<DependencyCycleBComponent>());
+            Core::ComponentRegistry::Register<DependencyCycleBComponent>(
+                Core::ComponentTypeInfo::Describe("Dependency Cycle B", "Internal")
+                    .HiddenInEditor()
+                    .Requires<DependencyCycleAComponent>());
         }
 
         bool ContainsInOrder(const std::vector<std::string>& calls,

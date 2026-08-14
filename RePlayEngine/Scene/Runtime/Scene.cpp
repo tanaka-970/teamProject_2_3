@@ -14,6 +14,90 @@ namespace ReplayEngine::Scene
     using Core::GameObject;
     using Core::ObjectID;
 
+    namespace
+    {
+        struct OrderedComponentCandidate
+        {
+            Core::Component* component = nullptr;
+            std::int32_t execution_order = 0;
+            std::size_t discovery_index = 0;
+        };
+
+        bool HasNonZeroExecutionOrder(const Scene& scene)
+        {
+            const std::size_t object_count = scene.GameObjectCount();
+            for (std::size_t i = 0; i < object_count &&
+                i < scene.GameObjectCount(); ++i)
+            {
+                GameObject* object = scene.GameObjectAt(i);
+                if (object == nullptr) continue;
+                const std::size_t component_count = object->ComponentCount();
+                for (std::size_t j = 0; j < component_count &&
+                    j < object->ComponentCount(); ++j)
+                {
+                    Core::Component* component = object->ComponentAt(j);
+                    if (component == nullptr) continue;
+                    if (component->ExecutionOrder() != 0) return true;
+                }
+            }
+            return false;
+        }
+
+        std::vector<OrderedComponentCandidate> CollectOrderedCandidates(const Scene& scene)
+        {
+            std::vector<OrderedComponentCandidate> candidates;
+            std::size_t discovery_index = 0;
+            const std::size_t object_count = scene.GameObjectCount();
+            for (std::size_t i = 0; i < object_count &&
+                i < scene.GameObjectCount(); ++i)
+            {
+                GameObject* object = scene.GameObjectAt(i);
+                if (object == nullptr) continue;
+                const std::size_t component_count = object->ComponentCount();
+                for (std::size_t j = 0; j < component_count &&
+                    j < object->ComponentCount(); ++j)
+                {
+                    Core::Component* component = object->ComponentAt(j);
+                    // フェーズ開始時に存在する実体を snapshot する。
+                    // Active 判定は呼び出し直前に再確認するため、ここでは絞らない。
+                    if (component != nullptr)
+                    {
+                        candidates.push_back({ component, component->ExecutionOrder(),
+                            discovery_index });
+                    }
+                    ++discovery_index;
+                }
+            }
+
+            std::sort(candidates.begin(), candidates.end(),
+                [](const OrderedComponentCandidate& lhs,
+                    const OrderedComponentCandidate& rhs)
+                {
+                    if (lhs.execution_order != rhs.execution_order)
+                        return lhs.execution_order < rhs.execution_order;
+                    return lhs.discovery_index < rhs.discovery_index;
+                });
+            return candidates;
+        }
+
+        template<class Callback>
+        void RunOrderedCandidates(const Scene& scene, Callback callback)
+        {
+            const std::vector<OrderedComponentCandidate> candidates =
+                CollectOrderedCandidates(scene);
+            for (const OrderedComponentCandidate& candidate : candidates)
+            {
+                Core::Component* component = candidate.component;
+                if (component == nullptr || component->PendingDestroy() ||
+                    !component->ActiveInHierarchy())
+                {
+                    continue;
+                }
+                callback(*component);
+            }
+        }
+    }
+
     Scene::Scene() = default;
 
     Scene::Scene(std::string name) : name_(std::move(name))
@@ -341,19 +425,29 @@ namespace ReplayEngine::Scene
         SynchronizeStates();
 
         updating_ = true;
-        const std::size_t object_count = objects_.size();
-        for (std::size_t i = 0; i < object_count && i < objects_.size(); ++i)
+        if (!HasNonZeroExecutionOrder(*this))
         {
-            GameObject* object = objects_[i].get();
-            if (object == nullptr || !object->ActiveInHierarchy()) continue;
-
-            const std::size_t component_count = object->ComponentCount();
-            for (std::size_t j = 0; j < component_count && j < object->ComponentCount(); ++j)
+            const std::size_t object_count = objects_.size();
+            for (std::size_t i = 0; i < object_count && i < objects_.size(); ++i)
             {
-                Core::Component* component = object->ComponentAt(j);
-                if (component == nullptr || !component->ActiveInHierarchy()) continue;
-                component->OnUpdate(delta_time);
+                GameObject* object = objects_[i].get();
+                if (object == nullptr || !object->ActiveInHierarchy()) continue;
+
+                const std::size_t component_count = object->ComponentCount();
+                for (std::size_t j = 0; j < component_count && j < object->ComponentCount(); ++j)
+                {
+                    Core::Component* component = object->ComponentAt(j);
+                    if (component == nullptr || !component->ActiveInHierarchy()) continue;
+                    component->OnUpdate(delta_time);
+                }
             }
+        }
+        else
+        {
+            RunOrderedCandidates(*this, [delta_time](Core::Component& component)
+                {
+                    component.OnUpdate(delta_time);
+                });
         }
         updating_ = false;
 
@@ -365,19 +459,30 @@ namespace ReplayEngine::Scene
         if (!started_ || loading_) return;
 
         updating_ = true;
-        const std::size_t object_count = objects_.size();
-        for (std::size_t i = 0; i < object_count && i < objects_.size(); ++i)
+        if (!HasNonZeroExecutionOrder(*this))
         {
-            GameObject* object = objects_[i].get();
-            if (object == nullptr || !object->ActiveInHierarchy()) continue;
-
-            const std::size_t component_count = object->ComponentCount();
-            for (std::size_t j = 0; j < component_count && j < object->ComponentCount(); ++j)
+            const std::size_t object_count = objects_.size();
+            for (std::size_t i = 0; i < object_count && i < objects_.size(); ++i)
             {
-                Core::Component* component = object->ComponentAt(j);
-                if (component == nullptr || !component->ActiveInHierarchy()) continue;
-                component->OnFixedUpdate(fixed_delta_time);
+                GameObject* object = objects_[i].get();
+                if (object == nullptr || !object->ActiveInHierarchy()) continue;
+
+                const std::size_t component_count = object->ComponentCount();
+                for (std::size_t j = 0; j < component_count && j < object->ComponentCount(); ++j)
+                {
+                    Core::Component* component = object->ComponentAt(j);
+                    if (component == nullptr || !component->ActiveInHierarchy()) continue;
+                    component->OnFixedUpdate(fixed_delta_time);
+                }
             }
+        }
+        else
+        {
+            RunOrderedCandidates(*this,
+                [fixed_delta_time](Core::Component& component)
+                {
+                    component.OnFixedUpdate(fixed_delta_time);
+                });
         }
         updating_ = false;
 
@@ -389,19 +494,29 @@ namespace ReplayEngine::Scene
         if (!started_ || loading_) return;
 
         updating_ = true;
-        const std::size_t object_count = objects_.size();
-        for (std::size_t i = 0; i < object_count && i < objects_.size(); ++i)
+        if (!HasNonZeroExecutionOrder(*this))
         {
-            GameObject* object = objects_[i].get();
-            if (object == nullptr || !object->ActiveInHierarchy()) continue;
-
-            const std::size_t component_count = object->ComponentCount();
-            for (std::size_t j = 0; j < component_count && j < object->ComponentCount(); ++j)
+            const std::size_t object_count = objects_.size();
+            for (std::size_t i = 0; i < object_count && i < objects_.size(); ++i)
             {
-                Core::Component* component = object->ComponentAt(j);
-                if (component == nullptr || !component->ActiveInHierarchy()) continue;
-                component->OnLateUpdate(delta_time);
+                GameObject* object = objects_[i].get();
+                if (object == nullptr || !object->ActiveInHierarchy()) continue;
+
+                const std::size_t component_count = object->ComponentCount();
+                for (std::size_t j = 0; j < component_count && j < object->ComponentCount(); ++j)
+                {
+                    Core::Component* component = object->ComponentAt(j);
+                    if (component == nullptr || !component->ActiveInHierarchy()) continue;
+                    component->OnLateUpdate(delta_time);
+                }
             }
+        }
+        else
+        {
+            RunOrderedCandidates(*this, [delta_time](Core::Component& component)
+                {
+                    component.OnLateUpdate(delta_time);
+                });
         }
         updating_ = false;
 
