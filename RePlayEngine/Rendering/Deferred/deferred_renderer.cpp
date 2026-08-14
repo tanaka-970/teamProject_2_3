@@ -1,26 +1,31 @@
 #include "deferred_renderer.h"
 #include "shader.h"
 
+#include <d3d11sdklayers.h>
+
+#include <cstring>
+
 using namespace DirectX;
+
+namespace
+{
+    void SetDebugName(ID3D11DeviceChild* object, const char* name)
+    {
+#if defined(_DEBUG) || defined(DEBUG)
+        if (object == nullptr || name == nullptr || *name == '\0') return;
+        object->SetPrivateData(WKPDID_D3DDebugObjectName,
+            static_cast<UINT>(std::strlen(name)), name);
+#else
+        (void)object;
+        (void)name;
+#endif
+    }
+}
 
 bool deferred_renderer::initialize(ID3D11Device* device, UINT w, UINT h)
 {
-    initialized = false;
-    for (UINT i = 0; i < GBUFFER_COUNT; ++i)
-    {
-        gbuffer_tex[i].Reset();
-        gbuffer_rtv[i].Reset();
-        gbuffer_srv[i].Reset();
-    }
-    depth_tex.Reset();
-    depth_dsv.Reset();
-    depth_srv.Reset();
-    lit_tex.Reset();
-    lit_rtv.Reset();
-    lit_srv.Reset();
-    deferred_cb_buffer.Reset();
-    fullscreen_vs.Reset();
-    lighting_ps.Reset();
+    release();
+    if (!device || w == 0 || h == 0) return false;
 
     width = w;
     height = h;
@@ -96,6 +101,8 @@ bool deferred_renderer::initialize(ID3D11Device* device, UINT w, UINT h)
         if (FAILED(device->CreateRenderTargetView(lit_tex.Get(), nullptr, lit_rtv.GetAddressOf()))) return false;
         if (FAILED(device->CreateShaderResourceView(lit_tex.Get(), nullptr, lit_srv.GetAddressOf()))) return false;
         if (FAILED(device->CreateUnorderedAccessView(lit_tex.Get(), nullptr, lit_uav.GetAddressOf()))) return false;
+        SetDebugName(lit_uav.Get(),
+            "deferred_renderer.lit_uav RePlayEngine/Rendering/Deferred/deferred_renderer.cpp");
     }
 
     D3D11_BUFFER_DESC bd{};
@@ -113,6 +120,8 @@ bool deferred_renderer::initialize(ID3D11Device* device, UINT w, UINT h)
         dsd.DepthFunc = D3D11_COMPARISON_EQUAL;
         if (FAILED(device->CreateDepthStencilState(&dsd, depth_equal_state.GetAddressOf())))
             return false;
+        SetDebugName(depth_equal_state.Get(),
+            "deferred_renderer.depth_equal_state RePlayEngine/Rendering/Deferred/deferred_renderer.cpp");
     }
 
     create_vs_from_cso(device, "fullscreen_quad_vs.cso",
@@ -121,6 +130,31 @@ bool deferred_renderer::initialize(ID3D11Device* device, UINT w, UINT h)
 
     initialized = true;
     return true;
+}
+
+void deferred_renderer::release() noexcept
+{
+    initialized = false;
+    for (UINT i = 0; i < GBUFFER_COUNT; ++i)
+    {
+        gbuffer_tex[i].Reset();
+        gbuffer_rtv[i].Reset();
+        gbuffer_srv[i].Reset();
+    }
+    depth_tex.Reset();
+    depth_dsv.Reset();
+    depth_srv.Reset();
+    lit_tex.Reset();
+    lit_rtv.Reset();
+    lit_srv.Reset();
+    lit_uav.Reset();
+    deferred_cb_buffer.Reset();
+    fullscreen_vs.Reset();
+    lighting_ps.Reset();
+    depth_equal_state.Reset();
+    width = 0;
+    height = 0;
+    viewport = {};
 }
 
 void deferred_renderer::depth_prepass_begin(ID3D11DeviceContext* ctx)

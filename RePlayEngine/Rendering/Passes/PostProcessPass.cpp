@@ -30,7 +30,8 @@ namespace ReplayEngine::Rendering
             bloom_enabled ? settings_.bloom_intensity : 0.0f,
             vignette_enabled ? settings_.vignette_strength : 0.0f,
             fxaa_enabled ? settings_.fxaa_enable : 0.0f,
-            { width, height }, { 0.0f, 0.0f }
+            { width, height }, { 0.0f, 0.0f },
+            settings_.color_filter
         };
         context->UpdateSubresource(constants_.Get(), 0, nullptr, &data, 0, 0);
         context->PSSetConstantBuffers(0, 1, constants_.GetAddressOf());

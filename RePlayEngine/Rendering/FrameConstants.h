@@ -21,7 +21,7 @@ namespace ReplayEngine::Rendering
         DirectX::XMFLOAT4   screen_size{ 1.0f, 1.0f, 1.0f, 1.0f };   // x=w, y=h, z=1/w, w=1/h
         DirectX::XMFLOAT4   camera_planes{ 0.1f, 10000.0f, 1.0f, 1.0f }; // x=near, y=far, z=tan(fovY/2), w=aspect
         DirectX::XMFLOAT4   jitter{};             // xy=今フレームのNDCジッター, zw=前フレーム
-        DirectX::XMFLOAT4   frame_params{};       // x=frame_index, y=elapsed_time, z/w=予約
+        DirectX::XMFLOAT4   frame_params{};       // x=frame_index, y=delta_time, z=accumulated_effect_time, w=reserved
     };
     static_assert(sizeof(FrameConstants) % 16 == 0, "定数バッファは16バイト境界に揃える");
 }

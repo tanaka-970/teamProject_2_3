@@ -1,17 +1,29 @@
-﻿#include "RuntimeContext.h"
+﻿// RuntimeContext のうち「Context の接続」と「Object API」だけを持つ。
+//
+//   RuntimeContext.cpp          … Context 接続と Object・Transform・Component API（このファイル）
+//   RuntimeContextMotion.cpp    … Motion Player API
+//   RuntimeContextScene.cpp     … Scene 遷移と Prefab 生成 API
+//   RuntimeContextServices.cpp  … Physics と Log の Service API
+
+#include "RuntimeContext.h"
 
 #include "../Events/EventBus.h"
+#include "../../Components/Motion/MotionPlayerComponent.h"
 #include "../../Object/Component/Component.h"
 #include "../../Object/GameObject/GameObject.h"
 #include "../../Object/Registry/ComponentRegistry.h"
 #include "../../Scene/Runtime/Scene.h"
+
+#include <algorithm>
+#include <functional>
+#include <unordered_set>
+#include <vector>
 
 namespace ReplayEngine::Runtime
 {
     using Core::Component;
     using Core::GameObject;
     using Core::ObjectID;
-
     RuntimeContext::RuntimeContext(Scene::Scene& world) noexcept
         : world_(&world),
         resolver_(world, &diagnostics_),
@@ -267,19 +279,60 @@ namespace ReplayEngine::Runtime
     RuntimeStatus RuntimeContext::AddComponent(const ObjectHandle& handle,
         Core::ComponentTypeID type_id, ComponentHandle& out)
     {
+        out = ComponentHandle::None();
         RuntimeStatus status = RuntimeStatus::Ok;
         GameObject* object = ResolveObject(handle, status);
         if (object == nullptr) return status;
 
-        if (Core::ComponentRegistry::Find(type_id) == nullptr)
+        const Core::ComponentTypeInfo* requested = Core::ComponentRegistry::Find(type_id);
+        if (requested == nullptr || !requested->runtime_available)
         {
             return RuntimeStatus::TypeMismatch;
         }
 
-        Component* created = Core::ComponentRegistry::Create(type_id, *object);
-        if (created == nullptr) return RuntimeStatus::UnsupportedOperation;
+        // EditorのAddComponentPanelが持つ依存解決と同じメタデータをRuntimeでも使う。
+        // 依存の型ごとに分岐を書かず、ComponentTypeInfo.required_componentsだけを見る。
+        std::vector<Core::ComponentTypeID> creation_order;
+        std::unordered_set<Core::ComponentTypeID> visiting;
+        std::unordered_set<Core::ComponentTypeID> planned;
+        std::function<bool(Core::ComponentTypeID)> collect;
+        collect = [&](Core::ComponentTypeID current) -> bool
+        {
+            const Core::ComponentTypeInfo* info =
+                Core::ComponentRegistry::Find(current);
+            if (info == nullptr || !info->runtime_available || !info->factory)
+                return false;
+            if (!visiting.insert(current).second) return false;
 
-        out = resolver_.MakeHandle(created);
+            for (const Core::ComponentTypeID required_id : info->required_components)
+            {
+                if (object->FindComponent(required_id) != nullptr) continue;
+                if (!collect(required_id))
+                {
+                    visiting.erase(current);
+                    return false;
+                }
+            }
+            visiting.erase(current);
+
+            const bool already_present = object->FindComponent(current) != nullptr;
+            if ((!already_present || info->allow_multiple) && planned.insert(current).second)
+                creation_order.push_back(current);
+            return true;
+        };
+
+        if (!collect(type_id)) return RuntimeStatus::ComponentDependencyMissing;
+
+        Component* requested_component = object->FindComponent(type_id);
+        for (const Core::ComponentTypeID create_id : creation_order)
+        {
+            Component* created = Core::ComponentRegistry::Create(create_id, *object);
+            if (created == nullptr) return RuntimeStatus::UnsupportedOperation;
+            if (create_id == type_id) requested_component = created;
+        }
+        if (requested_component == nullptr) return RuntimeStatus::UnsupportedOperation;
+
+        out = resolver_.MakeHandle(requested_component);
         return RuntimeStatus::Ok;
     }
 
@@ -302,7 +355,6 @@ namespace ReplayEngine::Runtime
         out = component->Enabled();
         return RuntimeStatus::Ok;
     }
-
     // ---- 生成・破棄 ---------------------------------------------------------
 
     RuntimeStatus RuntimeContext::CreateGameObject(const std::string& name,
@@ -339,206 +391,23 @@ namespace ReplayEngine::Runtime
         GameObject* owner = component->Owner();
         if (owner == nullptr) return RuntimeStatus::ComponentDestroyed;
 
-        return owner->RemoveComponent(component)
-            ? RuntimeStatus::Ok : RuntimeStatus::UnsupportedOperation;
-    }
-
-    // ---- Scene 遷移 ----------------------------------------------------------
-    //
-    // どれも「要求を渡すだけ」。ここで World を触らない。
-    // 未接続なら ServiceUnavailable。遷移したふりはしない。
-
-    RuntimeStatus RuntimeContext::LoadScene(const std::string& asset_guid)
-    {
-        if (scene_flow_ == nullptr) return RuntimeStatus::ServiceUnavailable;
-        if (asset_guid.empty()) return RuntimeStatus::InvalidArgument;
-        return scene_flow_->RequestSceneLoad(asset_guid);
-    }
-
-    RuntimeStatus RuntimeContext::ReloadCurrentScene()
-    {
-        if (scene_flow_ == nullptr) return RuntimeStatus::ServiceUnavailable;
-        return scene_flow_->RequestSceneReload();
-    }
-
-    RuntimeStatus RuntimeContext::ReturnToPreviousScene()
-    {
-        if (scene_flow_ == nullptr) return RuntimeStatus::ServiceUnavailable;
-        return scene_flow_->RequestReturnToPreviousScene();
-    }
-
-    RuntimeStatus RuntimeContext::QuitApplication(const std::string& reason)
-    {
-        if (scene_flow_ == nullptr) return RuntimeStatus::ServiceUnavailable;
-        return scene_flow_->RequestQuitApplication(reason);
-    }
-
-    bool RuntimeContext::SceneTransitionInProgress() const noexcept
-    {
-        return scene_flow_ != nullptr && scene_flow_->SceneTransitionInProgress();
-    }
-
-    const std::string& RuntimeContext::CurrentSceneGuid() const noexcept
-    {
-        // 未接続でも参照を返せるようにするための空文字列。
-        static const std::string empty;
-        return scene_flow_ != nullptr ? scene_flow_->CurrentSceneGuid() : empty;
-    }
-
-    // ---- Prefab -------------------------------------------------------------
-
-    RuntimeStatus RuntimeContext::InstantiatePrefab(const std::string& asset_guid,
-        const DirectX::XMFLOAT3& position, const DirectX::XMFLOAT3& rotation_euler,
-        const DirectX::XMFLOAT3& scale, const ObjectHandle& parent, ObjectHandle& out)
-    {
-        if (asset_guid.empty()) return RuntimeStatus::InvalidArgument;
-
-        // 未接続なら「できません」と返す。何もせず成功を返さない。
-        if (prefab_instantiator_ == nullptr) return RuntimeStatus::ServiceUnavailable;
-
-        ObjectID parent_id = ObjectID::Invalid();
-        if (!parent.IsEmpty())
+        // 必須依存を壊してComponentだけが残る状態をRuntime APIから作らない。
+        for (std::size_t index = 0; index < owner->ComponentCount(); ++index)
         {
-            RuntimeStatus status = RuntimeStatus::Ok;
-            const GameObject* parent_object = ResolveObject(parent, status);
-            if (parent_object == nullptr) return status;
-            parent_id = parent_object->ID();
-        }
-
-        ObjectID created = ObjectID::Invalid();
-        const RuntimeStatus status = prefab_instantiator_->InstantiatePrefab(
-            asset_guid, *world_, position, rotation_euler, scale, parent_id, created);
-        if (Failed(status)) return status;
-
-        out = resolver_.FindByObjectID(created);
-        return out.IsEmpty() ? RuntimeStatus::SceneLoadFailed : RuntimeStatus::Ok;
-    }
-
-    RuntimeStatus RuntimeContext::InstantiatePrefabDeferred(const std::string& asset_guid,
-        const DirectX::XMFLOAT3& position, const DirectX::XMFLOAT3& rotation_euler,
-        const DirectX::XMFLOAT3& scale, const ObjectHandle& parent)
-    {
-        if (asset_guid.empty()) return RuntimeStatus::InvalidArgument;
-        if (prefab_instantiator_ == nullptr) return RuntimeStatus::ServiceUnavailable;
-
-        PendingInstantiation pending;
-        pending.asset_guid = asset_guid;
-        pending.position = position;
-        pending.rotation = rotation_euler;
-        pending.scale = scale;
-
-        // 親は ObjectID で覚える。Handle のまま持つと、
-        // 実行までの間に World が入れ替わった場合の判定が二重になる。
-        // World が変われば ObjectID の解決自体が失敗するので、これで足りる。
-        if (!parent.IsEmpty())
-        {
-            RuntimeStatus status = RuntimeStatus::Ok;
-            const GameObject* parent_object = ResolveObject(parent, status);
-            if (parent_object == nullptr) return status;
-            pending.parent = parent_object->ID();
-        }
-
-        pending_instantiations_.push_back(std::move(pending));
-        return RuntimeStatus::Ok;
-    }
-
-    void RuntimeContext::FlushDeferredOperations()
-    {
-        if (pending_instantiations_.empty()) return;
-        if (prefab_instantiator_ == nullptr)
-        {
-            // 実行できないまま溜め続けない。捨てたことはログへ残す。
-            LogWarning("Prefab の生成要求を破棄しました（Instantiator が未接続）。");
-            pending_instantiations_.clear();
-            return;
-        }
-
-        // 引き取ってから実行する。実行中に新しい要求が積まれても、
-        // それは次の同期点で処理される（同じフレームで無限に増えない）。
-        std::vector<PendingInstantiation> batch;
-        batch.swap(pending_instantiations_);
-
-        for (const PendingInstantiation& pending : batch)
-        {
-            ObjectID created = ObjectID::Invalid();
-            const RuntimeStatus status = prefab_instantiator_->InstantiatePrefab(
-                pending.asset_guid, *world_, pending.position, pending.rotation,
-                pending.scale, pending.parent, created);
-            if (Failed(status))
+            Component* other = owner->ComponentAt(index);
+            if (other == nullptr || other == component || other->PendingDestroy()) continue;
+            const Core::ComponentTypeInfo* info =
+                Core::ComponentRegistry::Find(other->TypeID());
+            if (info == nullptr) continue;
+            if (std::find(info->required_components.begin(),
+                info->required_components.end(), component->TypeID()) !=
+                info->required_components.end())
             {
-                LogWarning(std::string("Prefab の生成に失敗しました: ") +
-                    ToString(status) + " (" + pending.asset_guid + ")");
+                return RuntimeStatus::ComponentHasDependents;
             }
         }
-    }
 
-    // ---- Physics ------------------------------------------------------------
-
-    bool RuntimeContext::PhysicsAvailable() const noexcept
-    {
-        const Scene::IPhysicsQueryService* physics = world_->Services().Physics();
-        return physics != nullptr && physics->CollisionAvailable();
-    }
-
-    RuntimeStatus RuntimeContext::QueryGround(const DirectX::XMFLOAT3& origin, float radius,
-        float up_offset, float down_distance, float walkable_normal_y,
-        const ObjectHandle& ignore, Scene::GroundHit& out) const
-    {
-        const Scene::IPhysicsQueryService* physics = world_->Services().Physics();
-        if (physics == nullptr || !physics->CollisionAvailable())
-        {
-            return RuntimeStatus::ServiceUnavailable;
-        }
-
-        Scene::CollisionQueryFilter filter;
-        if (!ignore.IsEmpty()) filter.ignore_object = ignore.object;
-
-        physics->QueryGroundFiltered(origin, radius, up_offset, down_distance,
-            walkable_normal_y, filter, out);
-        return RuntimeStatus::Ok;
-    }
-
-    RuntimeStatus RuntimeContext::SweepSphere(const DirectX::XMFLOAT3& start,
-        const DirectX::XMFLOAT3& end, float radius, float maximum_normal_y,
-        const ObjectHandle& ignore, Scene::SphereSweepHit& out) const
-    {
-        const Scene::IPhysicsQueryService* physics = world_->Services().Physics();
-        if (physics == nullptr || !physics->CollisionAvailable())
-        {
-            return RuntimeStatus::ServiceUnavailable;
-        }
-
-        Scene::CollisionQueryFilter filter;
-        if (!ignore.IsEmpty()) filter.ignore_object = ignore.object;
-
-        physics->SweepSphereFiltered(start, end, radius, maximum_normal_y, filter, out);
-        return RuntimeStatus::Ok;
-    }
-
-    // ---- Log ----------------------------------------------------------------
-
-    void RuntimeContext::Log(LogLevel level, const std::string& message,
-        const ObjectHandle& source) const
-    {
-        // 出力先が無ければ捨てる。ここで OutputDebugString を直接呼ばない。
-        // Runtime 層が Windows API と Editor の表示方法へ依存しないようにするため。
-        if (log_sink_ != nullptr) log_sink_->Write(level, message, source);
-    }
-
-    void RuntimeContext::LogInfo(const std::string& message, const ObjectHandle& source) const
-    {
-        Log(LogLevel::Info, message, source);
-    }
-
-    void RuntimeContext::LogWarning(const std::string& message,
-        const ObjectHandle& source) const
-    {
-        Log(LogLevel::Warning, message, source);
-    }
-
-    void RuntimeContext::LogError(const std::string& message,
-        const ObjectHandle& source) const
-    {
-        Log(LogLevel::Error, message, source);
+        return owner->RemoveComponent(component)
+            ? RuntimeStatus::Ok : RuntimeStatus::UnsupportedOperation;
     }
 }

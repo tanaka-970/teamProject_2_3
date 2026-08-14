@@ -1,4 +1,4 @@
-// SceneCollisionWorld のうち「Trigger の重なり判定とイベント配送」だけを持つ。
+﻿// SceneCollisionWorld のうち「Trigger の重なり判定とイベント配送」だけを持つ。
 //
 // 【Enter / Stay / Exit の作り方】
 //   接触しているペアを覚えておき、フレーム番号で「今回も見えたか」を判定する。
@@ -78,6 +78,7 @@ namespace ReplayEngine::Scene
                 return radius > 0.0f;
             }
             case Components::ColliderShape::Mesh:
+            case Components::ColliderShape::Landscape:
             {
                 XMFLOAT3 minimum{};
                 XMFLOAT3 maximum{};
@@ -122,9 +123,9 @@ namespace ReplayEngine::Scene
 
             // 箱の中で最も近い点までの距離で判定する。
             // 中に入っていれば各軸の差が 0 になり、距離 0 で必ず重なりになる。
-            const float dx = std::max(0.0f, std::fabs(local.x) - half.x);
-            const float dy = std::max(0.0f, std::fabs(local.y) - half.y);
-            const float dz = std::max(0.0f, std::fabs(local.z) - half.z);
+            const float dx = (std::max)(0.0f, std::fabs(local.x) - half.x);
+            const float dy = (std::max)(0.0f, std::fabs(local.y) - half.y);
+            const float dz = (std::max)(0.0f, std::fabs(local.z) - half.z);
             return (dx * dx + dy * dy + dz * dz) <= sphere_radius * sphere_radius;
         }
     }
@@ -175,6 +176,7 @@ namespace ReplayEngine::Scene
             return SphereOverlapsBox(box, probe_center, probe_radius);
         }
         case Components::ColliderShape::Mesh:
+        case Components::ColliderShape::Landscape:
         {
             // 【制限】Mesh Trigger は内外判定を行わない。
             //   閉じたメッシュとは限らないため、内側かどうかを正しく決められない。

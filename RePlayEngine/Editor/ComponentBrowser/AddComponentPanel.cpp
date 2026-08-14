@@ -2,6 +2,7 @@
 
 #include "../Core/EditorContext.h"
 #include "../../Object/GameObject/GameObject.h"
+#include "../../Object/Registry/ComponentDependencyRules.h"
 #include "../../Object/Registry/ComponentRegistry.h"
 #include "../../Runtime/Behaviour/BehaviourRegistry.h"
 #include "../../Scene/Runtime/Scene.h"
@@ -54,6 +55,17 @@ namespace ReplayEngine::Editor
                 ToLower(script.DisplayName()).find(lowered_query) != std::string::npos ||
                 ToLower(script.class_name).find(lowered_query) != std::string::npos ||
                 ToLower(script.asset_guid).find(lowered_query) != std::string::npos;
+        }
+
+        std::string RelationshipNames(const std::vector<Core::ComponentTypeID>& ids)
+        {
+            std::string result;
+            for (Core::ComponentTypeID id : ids)
+            {
+                if (!result.empty()) result += ", ";
+                result += ComponentRegistry::DisplayNameOf(id);
+            }
+            return result;
         }
 
         std::vector<std::string> ScriptCategories(
@@ -144,16 +156,28 @@ namespace ReplayEngine::Editor
                 else if (ImGui::Selectable(("  " + info.DisplayName()).c_str()))
                 {
                     context.BeginEdit(info.DisplayName() + " を追加");
-                    if (target.AddComponent(info.type_id) != nullptr)
+                    const Core::ComponentDependencyPlan plan =
+                        Core::ComponentDependencyRules::PlanRequiredAdd(target,
+                            info.type_id, Core::ComponentAvailabilityPolicy::Editor);
+                    const Core::ComponentDependencyApplyResult result =
+                        Core::ComponentDependencyRules::ApplyRequiredAddPlan(target, plan);
+                    if (result.Succeeded())
                     {
                         context.CommitEdit();
-                        context.SetStatus(info.DisplayName() + " を追加しました");
+                        std::string status = info.DisplayName() + " を追加しました";
+                        if (result.automatically_added > 0)
+                            status += "（必須 Component " +
+                                std::to_string(result.automatically_added) + " 個を自動追加）";
+                        context.SetStatus(status);
                         added = true;
                     }
                     else
                     {
                         context.CancelEdit();
-                        context.SetStatus(info.DisplayName() + " を追加できませんでした");
+                        const Core::ComponentDependencyIssue& issue = result.issue.Any()
+                            ? result.issue : plan.issue;
+                        context.SetStatus(info.DisplayName() + " を追加できませんでした: " +
+                            Core::ComponentDependencyRules::DescribeIssue(issue));
                     }
                     ImGui::CloseCurrentPopup();
                 }
@@ -168,6 +192,18 @@ namespace ReplayEngine::Editor
                 {
                     ImGui::BeginTooltip();
                     if (!info.tooltip.empty()) ImGui::TextUnformatted(info.tooltip.c_str());
+                    if (!info.required_components.empty())
+                    {
+                        ImGui::Separator();
+                        const std::string names = RelationshipNames(info.required_components);
+                        ImGui::TextColored(ImVec4(1.0f, 0.68f, 0.30f, 1.0f), "必須: %s", names.c_str());
+                        ImGui::TextDisabled("不足分は追加時に自動で補います");
+                    }
+                    if (!info.recommended_components.empty())
+                    {
+                        const std::string names = RelationshipNames(info.recommended_components);
+                        ImGui::TextDisabled("推奨: %s", names.c_str());
+                    }
                     if (behaviour != nullptr)
                     {
                         ImGui::Separator();

@@ -1,0 +1,298 @@
+#include "framework.h"
+#include "framework_asset_browserInternal.h"
+#include "gltf_model.h"
+#include "skinned_mesh.h"
+#include "../../RePlayEngine/Assets/AssetCache.h"
+#include "../../RePlayEngine/Components/Physics/MeshColliderComponent.h"
+#include "../../RePlayEngine/Components/Rendering/MeshRendererComponent.h"
+#include "../../RePlayEngine/Components/Rendering/SkinnedMeshRendererComponent.h"
+#include "../../RePlayEngine/Rendering/Materials/MaterialAsset.h"
+#include "../../RePlayEngine/Editor/ShaderEditing/MaterialShaderInspector.h"
+#include "../../RePlayEngine/Editor/ShaderEditing/ShaderStackEditor.h"
+#include "../../RePlayEngine/Object/GameObject/GameObject.h"
+#include "../../RePlayEngine/Scene/Serialization/PrefabSerializer.h"
+#include "../../RePlayEngine/Scripting/Core/ScriptComponent.h"
+#include "../../RePlayEngine/Scripting/Core/ScriptRuntime.h"
+#include "../../RePlayEngine/Scripting/Core/ScriptTypeCatalog.h"
+
+#include <commdlg.h>
+#include <cmath>
+#include <filesystem>
+#include <fstream>
+#include <regex>
+#include <system_error>
+namespace
+{
+    std::string WideToUtf8(const std::wstring& text)
+    {
+        if (text.empty()) return {};
+        const int size = WideCharToMultiByte(CP_UTF8, 0, text.data(),
+            static_cast<int>(text.size()), nullptr, 0, nullptr, nullptr);
+        if (size <= 0) return {};
+        std::string result(static_cast<size_t>(size), '\0');
+        WideCharToMultiByte(CP_UTF8, 0, text.data(), static_cast<int>(text.size()),
+            result.data(), size, nullptr, nullptr);
+        return result;
+    }
+
+    bool CopyGltfDependencies(const std::filesystem::path& source,
+        const std::filesystem::path& destination_folder, std::error_code& error)
+    {
+        std::ifstream stream(source, std::ios::binary);
+        if (!stream) return false;
+        const std::string json((std::istreambuf_iterator<char>(stream)),
+            std::istreambuf_iterator<char>());
+        const std::regex uri_expression(R"re("uri"\s*:\s*"([^"]+)")re");
+        for (std::sregex_iterator current(json.begin(), json.end(), uri_expression), end;
+            current != end; ++current)
+        {
+            const std::string uri = (*current)[1].str();
+            if (uri.rfind("data:", 0) == 0 || uri.find("://") != std::string::npos) continue;
+            const auto relative = std::filesystem::u8path(uri).lexically_normal();
+            if (relative.empty() || relative.is_absolute() || relative.generic_string().rfind("../", 0) == 0)
+                continue;
+            const auto dependency_source = source.parent_path() / relative;
+            const auto dependency_destination = destination_folder / relative;
+            std::filesystem::create_directories(dependency_destination.parent_path(), error);
+            if (error) return false;
+            std::filesystem::copy_file(dependency_source, dependency_destination,
+                std::filesystem::copy_options::overwrite_existing, error);
+            if (error) return false;
+        }
+        return true;
+    }
+}
+
+using framework_asset_browser::Detail::LowerExtension;
+
+bool framework::browse_model_asset()
+{
+    wchar_t filename[32768]{};
+    OPENFILENAMEW dialog{};
+    dialog.lStructSize = sizeof(dialog);
+    dialog.hwndOwner = hwnd;
+    dialog.lpstrFile = filename;
+    dialog.nMaxFile = static_cast<DWORD>(_countof(filename));
+    dialog.lpstrFilter =
+        L"対応モデル (*.fbx;*.cereal;*.glb;*.gltf)\0*.fbx;*.cereal;*.glb;*.gltf\0"
+        L"FBXキャッシュ (*.fbx;*.cereal)\0*.fbx;*.cereal\0"
+        L"glTF 2.0 (*.glb;*.gltf)\0*.glb;*.gltf\0"
+        L"すべてのファイル (*.*)\0*.*\0\0";
+    dialog.nFilterIndex = 1;
+    dialog.lpstrTitle = L"配置するモデルを選択";
+    dialog.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST |
+        OFN_EXPLORER | OFN_NOCHANGEDIR | OFN_HIDEREADONLY;
+
+    if (!GetOpenFileNameW(&dialog)) return false;
+    return load_model_asset_async(filename);
+}
+
+bool framework::prewarm_model_asset(const std::filesystem::path& path)
+{
+    std::error_code error;
+    if (path.empty() || !std::filesystem::exists(path, error)) return false;
+
+    const std::wstring extension = LowerExtension(path);
+    try
+    {
+        if (extension == L".glb" || extension == L".gltf")
+        {
+            const auto model = gltf_model_cache.Load(path, [this, path]
+            {
+                return std::make_shared<gltf_model>(device.Get(), path.string());
+            });
+            return model && model->IsLoaded();
+        }
+        if (extension == L".fbx" || extension == L".cereal")
+        {
+            // .fbxはランタイム変換を避け、隣の.cerealキャッシュがある場合だけ載せる。
+            auto cache = path;
+            cache.replace_extension(L".cereal");
+            if (!std::filesystem::exists(cache, error)) return false;
+            return skinned_mesh_cache.Load(path, [this, path]
+            {
+                return std::make_shared<skinned_mesh>(device.Get(), path.string().c_str());
+            }) != nullptr;
+        }
+    }
+    catch (...)
+    {
+        // 先読みは失敗しても本来のロードで再試行できるため、ここで握り潰す。
+        return false;
+    }
+    return false;
+}
+
+bool framework::load_model_asset_async(const std::wstring& filename)
+{
+    const std::filesystem::path path(filename);
+    async_stage_load_active = true;
+    model_asset_status = "モデルを並列ロードしています...";
+    async_asset_manager.QueueTask(path, ReplayEngine::Assets::AssetKind::Model,
+        [this, path](ReplayEngine::Assets::AsyncAssetResult& result)
+        {
+            const std::wstring extension = LowerExtension(path);
+            if (extension == L".glb" || extension == L".gltf")
+            {
+                auto candidate = gltf_model_cache.Load(path, [this, path]
+                {
+                    return std::make_shared<gltf_model>(device.Get(), path.string());
+                });
+                if (!candidate || !candidate->IsLoaded())
+                    result.error = candidate ? candidate->Error() : "glTFモデルを生成できません";
+                return;
+            }
+            if (extension == L".fbx" || extension == L".cereal")
+            {
+                auto cache = path;
+                cache.replace_extension(L".cereal");
+                if (!std::filesystem::exists(cache))
+                {
+                    result.error = "同じ場所に実行用.cerealキャッシュが必要です";
+                    return;
+                }
+                skinned_mesh_cache.Load(path, [this, path]
+                {
+                    return std::make_shared<skinned_mesh>(device.Get(), path.string().c_str());
+                });
+                return;
+            }
+            result.error = "未対応のモデル形式です";
+        },
+        [this](ReplayEngine::Assets::AsyncAssetResult&& result)
+        {
+            async_stage_load_active = false;
+            if (!result.Succeeded())
+            {
+                model_asset_status = "読み込み失敗: " + result.error;
+                return;
+            }
+            load_model_asset_now(result.path.wstring());
+        });
+    return true;
+}
+
+bool framework::load_model_asset_now(const std::wstring& filename)
+{
+    const std::filesystem::path path(filename);
+    const std::wstring extension = LowerExtension(path);
+    selected_model_asset_path = WideToUtf8(path.wstring());
+
+    try
+    {
+        if (extension == L".glb" || extension == L".gltf")
+        {
+            auto candidate = gltf_model_cache.Load(path, [this, path]
+            {
+                return std::make_shared<gltf_model>(device.Get(), path.string());
+            });
+            if (!candidate->IsLoaded())
+            {
+                model_asset_status = "読み込み失敗: " + candidate->Error();
+                return false;
+            }
+
+            stage_gltf_model = std::move(candidate);
+            outline_per_stage = false;
+            model_asset_status = "glTF素材を読み込みました（配置プレビュー中）";
+        }
+        else if (extension == L".fbx" || extension == L".cereal")
+        {
+            std::filesystem::path cache = path;
+            cache.replace_extension(L".cereal");
+            if (!std::filesystem::exists(cache))
+            {
+                model_asset_status = "同じ場所に実行用.cerealキャッシュが必要です";
+                return false;
+            }
+
+            auto candidate = skinned_mesh_cache.Load(path, [this, path]
+            {
+                return std::make_shared<skinned_mesh>(device.Get(), path.string().c_str());
+            });
+            skinned_meshes[1] = std::move(candidate);
+            stage_gltf_model.reset();
+            model_asset_status = "FBXキャッシュ素材を読み込みました（配置プレビュー中）";
+        }
+        else
+        {
+            model_asset_status = "未対応のモデル形式です";
+            return false;
+        }
+    }
+    catch (const std::exception& exception)
+    {
+        model_asset_status = "読み込み失敗: ";
+        model_asset_status += exception.what();
+        return false;
+    }
+    catch (...)
+    {
+        model_asset_status = "モデル読み込み中に不明なエラーが発生しました";
+        return false;
+    }
+
+    ReplayEngine::Assets::AssetCache cache;
+    ReplayEngine::Assets::AssetCacheEntry cache_entry{};
+    std::string cache_error;
+    if (cache.StoreSourceFile(path, ReplayEngine::Assets::AssetKind::Model,
+        cache_entry, cache_error))
+    {
+        selected_model_cache_path = WideToUtf8(cache_entry.cache_path.wstring());
+        std::filesystem::path registered_source = path;
+        const auto normalized_source = ReplayEngine::Assets::AssetDatabase::NormalizeProjectPath(path);
+        if (normalized_source.is_absolute())
+        {
+            const auto& temporary_record = asset_database.Register(path,
+                ReplayEngine::Assets::AssetKind::Model, cache_entry.cache_path);
+            const std::string temporary_guid = temporary_record.guid;
+            const auto imported_folder = std::filesystem::path("resources") / "Imported" /
+                temporary_guid.substr(0, 8);
+            std::error_code import_error;
+            std::filesystem::create_directories(imported_folder, import_error);
+            registered_source = imported_folder / path.filename();
+            std::filesystem::copy_file(path, registered_source,
+                std::filesystem::copy_options::overwrite_existing, import_error);
+            if (!import_error && extension == L".gltf")
+                CopyGltfDependencies(path, imported_folder, import_error);
+            if (!import_error && (extension == L".fbx" || extension == L".cereal"))
+            {
+                auto source_cereal = path;
+                source_cereal.replace_extension(L".cereal");
+                auto imported_cereal = registered_source;
+                imported_cereal.replace_extension(L".cereal");
+                if (std::filesystem::exists(source_cereal))
+                    std::filesystem::copy_file(source_cereal, imported_cereal,
+                        std::filesystem::copy_options::overwrite_existing, import_error);
+            }
+            if (import_error)
+            {
+                registered_source = path;
+                model_asset_status += " / resourcesへの取込失敗";
+            }
+            else
+            {
+                asset_database.Remove(temporary_guid);
+                selected_model_asset_path = WideToUtf8(registered_source.wstring());
+                model_asset_status += " / resourcesへ取込済み";
+            }
+        }
+        const auto& record = asset_database.Register(registered_source,
+            ReplayEngine::Assets::AssetKind::Model, cache_entry.cache_path);
+        selected_model_asset_guid = record.guid;
+        std::string database_error;
+        asset_database.Save(database_error);
+        model_asset_status += " / 共通キャッシュ作成済み";
+    }
+    else
+    {
+        selected_model_cache_path.clear();
+        model_asset_status += " / キャッシュ失敗: " + cache_error;
+    }
+
+    selected_asset_guid = selected_model_asset_guid;
+    set_editor_workspace(editor_workspace::placement);
+    selected_editor_object = editor_selection::game_object;
+    model_asset_status += " / Asset Browserへ登録済み";
+    return true;
+}

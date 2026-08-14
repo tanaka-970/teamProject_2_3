@@ -60,6 +60,62 @@ public static unsafe class NativeBridge
         public delegate* unmanaged[Cdecl]<ulong, ulong, ObjectHandle, ulong*, int> SubscribeEvent;
         public delegate* unmanaged[Cdecl]<ulong, int> UnsubscribeEvent;
         public delegate* unmanaged[Cdecl]<ulong, byte*, int, int> PollEvent;
+        public delegate* unmanaged[Cdecl]<byte*, int> TriggerSceneFlow;
+        public delegate* unmanaged[Cdecl]<byte*, int, int> SetSceneFlowBool;
+        public delegate* unmanaged[Cdecl]<byte*, long, int> SetSceneFlowInt;
+        public delegate* unmanaged[Cdecl]<byte*, double, int> SetSceneFlowFloat;
+        public delegate* unmanaged[Cdecl]<Vector3, Vector3, float, int, int, ObjectHandle, RaycastHit*, int> Raycast;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, byte*, ComponentHandle*, int> FindMotionPlayer;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, int> MotionPlay;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, float, int> MotionPlayFrom;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, int> MotionPause;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, int> MotionResume;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, int> MotionStop;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, int> MotionReverse;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, float, int> MotionSetTime;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, float, int> MotionSetSpeed;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, float, int> MotionSetWeight;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, int*, int> MotionIsPlaying;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, float*, int> MotionGetTime;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, float*, int> MotionGetDuration;
+
+        // v4 Runtime Service / Component / Runtime UI API。
+        public delegate* unmanaged[Cdecl]<int> InputAvailable;
+        public delegate* unmanaged[Cdecl]<byte*, int, int*, int> InputHeld;
+        public delegate* unmanaged[Cdecl]<byte*, int, int*, int> InputPressed;
+        public delegate* unmanaged[Cdecl]<byte*, int, int*, int> InputReleased;
+        public delegate* unmanaged[Cdecl]<byte*, int, float*, int> InputAxis;
+        public delegate* unmanaged[Cdecl]<float*, int> InputPointerDeltaX;
+        public delegate* unmanaged[Cdecl]<float*, int> InputPointerDeltaY;
+        public delegate* unmanaged[Cdecl]<int> AudioAvailable;
+        public delegate* unmanaged[Cdecl]<byte*, int, float, float, int, Vector3, float, float, ulong*, int> AudioPlay;
+        public delegate* unmanaged[Cdecl]<ulong, int> AudioStop;
+        public delegate* unmanaged[Cdecl]<ulong, byte*, int, float, float, int, Vector3, float, float, int> AudioUpdate;
+        public delegate* unmanaged[Cdecl]<int> SaveAvailable;
+        public delegate* unmanaged[Cdecl]<byte*, byte*, int, int> SaveSetBool;
+        public delegate* unmanaged[Cdecl]<byte*, byte*, long, int> SaveSetInt;
+        public delegate* unmanaged[Cdecl]<byte*, byte*, double, int> SaveSetDouble;
+        public delegate* unmanaged[Cdecl]<byte*, byte*, byte*, int> SaveSetString;
+        public delegate* unmanaged[Cdecl]<byte*, byte*, int*, int> SaveGetBool;
+        public delegate* unmanaged[Cdecl]<byte*, byte*, long*, int> SaveGetInt;
+        public delegate* unmanaged[Cdecl]<byte*, byte*, double*, int> SaveGetDouble;
+        public delegate* unmanaged[Cdecl]<byte*, byte*, byte*, int, int> SaveGetString;
+        public delegate* unmanaged[Cdecl]<byte*, byte*, int*, int> SaveHasKey;
+        public delegate* unmanaged[Cdecl]<byte*, byte*, int> SaveDeleteKey;
+        public delegate* unmanaged[Cdecl]<byte*, int> SaveGame;
+        public delegate* unmanaged[Cdecl]<byte*, int> LoadGame;
+        public delegate* unmanaged[Cdecl]<byte*, int> DeleteSave;
+        public delegate* unmanaged[Cdecl]<int> RuntimeUIAvailable;
+        public delegate* unmanaged[Cdecl]<byte*, ObjectHandle, ObjectHandle*, int> CreateUIElement;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, byte*, int> SetUIText;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, byte*, int, int> GetUIText;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, Color, int> SetUIImageColor;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, Vector2, Vector2, Vector2, float, int, int> SetUIRect;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, int, int> SetUIButtonInteractable;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, uint, ComponentHandle*, int> AddComponent;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, uint, ComponentHandle*, int, int*, int> GetComponents;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, int, int> SetComponentEnabled;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, int*, int> GetComponentEnabled;
     }
 
     private sealed class ManagedInstance
@@ -378,6 +434,49 @@ public static unsafe class NativeBridge
         return new RuntimeResult<ComponentHandle>((RuntimeStatus)api.GetComponent(handle, componentTypeId, &value), value);
     }
 
+    internal static RuntimeResult<ComponentHandle> AddComponent(ObjectHandle handle, uint componentTypeId)
+    {
+        if (api.AddComponent == null) return new(RuntimeStatus.ServiceUnavailable);
+        ComponentHandle value = default;
+        return new RuntimeResult<ComponentHandle>(
+            (RuntimeStatus)api.AddComponent(handle, componentTypeId, &value), value);
+    }
+
+    internal static RuntimeResult<ComponentHandle[]> GetComponents(ObjectHandle handle,
+        uint componentTypeId)
+    {
+        if (api.GetComponents == null) return new(RuntimeStatus.ServiceUnavailable);
+        int count = 0;
+        var status = (RuntimeStatus)api.GetComponents(handle, componentTypeId, null, 0, &count);
+        if (status != RuntimeStatus.Ok) return new(status);
+        if (count <= 0) return new RuntimeResult<ComponentHandle[]>(RuntimeStatus.Ok,
+            Array.Empty<ComponentHandle>());
+
+        var values = new ComponentHandle[count];
+        fixed (ComponentHandle* output = values)
+        {
+            status = (RuntimeStatus)api.GetComponents(handle, componentTypeId,
+                output, values.Length, &count);
+        }
+        if (status != RuntimeStatus.Ok) return new(status);
+        if (count != values.Length) Array.Resize(ref values, Math.Clamp(count, 0, values.Length));
+        return new RuntimeResult<ComponentHandle[]>(RuntimeStatus.Ok, values);
+    }
+
+    internal static RuntimeStatus SetComponentEnabled(ComponentHandle handle, bool enabled)
+    {
+        if (api.SetComponentEnabled == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.SetComponentEnabled(handle, enabled ? 1 : 0);
+    }
+
+    internal static RuntimeResult<bool> IsComponentEnabled(ComponentHandle handle)
+    {
+        if (api.GetComponentEnabled == null) return new(RuntimeStatus.ServiceUnavailable);
+        int value = 0;
+        var status = (RuntimeStatus)api.GetComponentEnabled(handle, &value);
+        return new RuntimeResult<bool>(status, value != 0);
+    }
+
     internal static RuntimeStatus DestroyGameObject(ObjectHandle handle)
     {
         if (api.DestroyGameObject == null) return RuntimeStatus.ServiceUnavailable;
@@ -388,6 +487,322 @@ public static unsafe class NativeBridge
     {
         if (api.DestroyComponent == null) return RuntimeStatus.ServiceUnavailable;
         return (RuntimeStatus)api.DestroyComponent(handle);
+    }
+
+    // ---- v4 Runtime Services -----------------------------------------------
+
+    internal static bool InputAvailable()
+    {
+        return api.InputAvailable != null && api.InputAvailable() != 0;
+    }
+
+    internal static RuntimeResult<bool> InputHeld(string action, int playerSlot)
+    {
+        if (api.InputHeld == null) return new(RuntimeStatus.ServiceUnavailable);
+        int value = 0;
+        fixed (byte* text = Encoding.UTF8.GetBytes(action + "\0"))
+        {
+            var status = (RuntimeStatus)api.InputHeld(text, playerSlot, &value);
+            return new RuntimeResult<bool>(status, value != 0);
+        }
+    }
+
+    internal static RuntimeResult<bool> InputPressed(string action, int playerSlot)
+    {
+        if (api.InputPressed == null) return new(RuntimeStatus.ServiceUnavailable);
+        int value = 0;
+        fixed (byte* text = Encoding.UTF8.GetBytes(action + "\0"))
+        {
+            var status = (RuntimeStatus)api.InputPressed(text, playerSlot, &value);
+            return new RuntimeResult<bool>(status, value != 0);
+        }
+    }
+
+    internal static RuntimeResult<bool> InputReleased(string action, int playerSlot)
+    {
+        if (api.InputReleased == null) return new(RuntimeStatus.ServiceUnavailable);
+        int value = 0;
+        fixed (byte* text = Encoding.UTF8.GetBytes(action + "\0"))
+        {
+            var status = (RuntimeStatus)api.InputReleased(text, playerSlot, &value);
+            return new RuntimeResult<bool>(status, value != 0);
+        }
+    }
+
+    internal static RuntimeResult<float> InputAxis(string axis, int playerSlot)
+    {
+        if (api.InputAxis == null) return new(RuntimeStatus.ServiceUnavailable);
+        float value = 0.0f;
+        fixed (byte* text = Encoding.UTF8.GetBytes(axis + "\0"))
+        {
+            var status = (RuntimeStatus)api.InputAxis(text, playerSlot, &value);
+            return new RuntimeResult<float>(status, value);
+        }
+    }
+
+    internal static RuntimeResult<float> InputPointerDeltaX()
+    {
+        if (api.InputPointerDeltaX == null) return new(RuntimeStatus.ServiceUnavailable);
+        float value = 0.0f;
+        var status = (RuntimeStatus)api.InputPointerDeltaX(&value);
+        return new RuntimeResult<float>(status, value);
+    }
+
+    internal static RuntimeResult<float> InputPointerDeltaY()
+    {
+        if (api.InputPointerDeltaY == null) return new(RuntimeStatus.ServiceUnavailable);
+        float value = 0.0f;
+        var status = (RuntimeStatus)api.InputPointerDeltaY(&value);
+        return new RuntimeResult<float>(status, value);
+    }
+
+    internal static bool AudioAvailable()
+    {
+        return api.AudioAvailable != null && api.AudioAvailable() != 0;
+    }
+
+    internal static RuntimeResult<AudioVoice> PlayAudio(string clipPath, bool loop,
+        float volume, float pitch, int spatialMode, Vector3 position,
+        float minDistance, float maxDistance)
+    {
+        if (api.AudioPlay == null) return new(RuntimeStatus.ServiceUnavailable);
+        ulong value = 0;
+        fixed (byte* clip = Encoding.UTF8.GetBytes(clipPath + "\0"))
+        {
+            var status = (RuntimeStatus)api.AudioPlay(clip, loop ? 1 : 0, volume, pitch,
+                spatialMode, position, minDistance, maxDistance, &value);
+            return new RuntimeResult<AudioVoice>(status, new AudioVoice(value));
+        }
+    }
+
+    internal static RuntimeStatus StopAudio(AudioVoice voice)
+    {
+        if (api.AudioStop == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.AudioStop(voice.Id);
+    }
+
+    internal static RuntimeStatus UpdateAudio(AudioVoice voice, string clipPath, bool loop,
+        float volume, float pitch, int spatialMode, Vector3 position,
+        float minDistance, float maxDistance)
+    {
+        if (api.AudioUpdate == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* clip = Encoding.UTF8.GetBytes(clipPath + "\0"))
+        {
+            return (RuntimeStatus)api.AudioUpdate(voice.Id, clip, loop ? 1 : 0,
+                volume, pitch, spatialMode, position, minDistance, maxDistance);
+        }
+    }
+
+    internal static bool SaveAvailable()
+    {
+        return api.SaveAvailable != null && api.SaveAvailable() != 0;
+    }
+
+    internal static RuntimeStatus SaveSetBool(string slot, string key, bool value)
+    {
+        if (api.SaveSetBool == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* slotText = Encoding.UTF8.GetBytes(slot + "\0"))
+        fixed (byte* keyText = Encoding.UTF8.GetBytes(key + "\0"))
+        {
+            return (RuntimeStatus)api.SaveSetBool(slotText, keyText, value ? 1 : 0);
+        }
+    }
+
+    internal static RuntimeStatus SaveSetInt(string slot, string key, long value)
+    {
+        if (api.SaveSetInt == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* slotText = Encoding.UTF8.GetBytes(slot + "\0"))
+        fixed (byte* keyText = Encoding.UTF8.GetBytes(key + "\0"))
+        {
+            return (RuntimeStatus)api.SaveSetInt(slotText, keyText, value);
+        }
+    }
+
+    internal static RuntimeStatus SaveSetDouble(string slot, string key, double value)
+    {
+        if (api.SaveSetDouble == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* slotText = Encoding.UTF8.GetBytes(slot + "\0"))
+        fixed (byte* keyText = Encoding.UTF8.GetBytes(key + "\0"))
+        {
+            return (RuntimeStatus)api.SaveSetDouble(slotText, keyText, value);
+        }
+    }
+
+    internal static RuntimeStatus SaveSetString(string slot, string key, string value)
+    {
+        if (api.SaveSetString == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* slotText = Encoding.UTF8.GetBytes(slot + "\0"))
+        fixed (byte* keyText = Encoding.UTF8.GetBytes(key + "\0"))
+        fixed (byte* valueText = Encoding.UTF8.GetBytes(value + "\0"))
+        {
+            return (RuntimeStatus)api.SaveSetString(slotText, keyText, valueText);
+        }
+    }
+
+    internal static RuntimeResult<bool> SaveGetBool(string slot, string key)
+    {
+        if (api.SaveGetBool == null) return new(RuntimeStatus.ServiceUnavailable);
+        int value = 0;
+        fixed (byte* slotText = Encoding.UTF8.GetBytes(slot + "\0"))
+        fixed (byte* keyText = Encoding.UTF8.GetBytes(key + "\0"))
+        {
+            var status = (RuntimeStatus)api.SaveGetBool(slotText, keyText, &value);
+            return new RuntimeResult<bool>(status, value != 0);
+        }
+    }
+
+    internal static RuntimeResult<long> SaveGetInt(string slot, string key)
+    {
+        if (api.SaveGetInt == null) return new(RuntimeStatus.ServiceUnavailable);
+        long value = 0;
+        fixed (byte* slotText = Encoding.UTF8.GetBytes(slot + "\0"))
+        fixed (byte* keyText = Encoding.UTF8.GetBytes(key + "\0"))
+        {
+            var status = (RuntimeStatus)api.SaveGetInt(slotText, keyText, &value);
+            return new RuntimeResult<long>(status, value);
+        }
+    }
+
+    internal static RuntimeResult<double> SaveGetDouble(string slot, string key)
+    {
+        if (api.SaveGetDouble == null) return new(RuntimeStatus.ServiceUnavailable);
+        double value = 0.0;
+        fixed (byte* slotText = Encoding.UTF8.GetBytes(slot + "\0"))
+        fixed (byte* keyText = Encoding.UTF8.GetBytes(key + "\0"))
+        {
+            var status = (RuntimeStatus)api.SaveGetDouble(slotText, keyText, &value);
+            return new RuntimeResult<double>(status, value);
+        }
+    }
+
+    internal static RuntimeResult<string> SaveGetString(string slot, string key)
+    {
+        if (api.SaveGetString == null) return new(RuntimeStatus.ServiceUnavailable);
+        const int capacity = 64 * 1024 + 1;
+        var buffer = new byte[capacity];
+        fixed (byte* slotText = Encoding.UTF8.GetBytes(slot + "\0"))
+        fixed (byte* keyText = Encoding.UTF8.GetBytes(key + "\0"))
+        fixed (byte* output = buffer)
+        {
+            var status = (RuntimeStatus)api.SaveGetString(slotText, keyText, output, capacity);
+            if (status != RuntimeStatus.Ok) return new(status);
+        }
+        int length = Array.IndexOf(buffer, (byte)0);
+        if (length < 0) length = buffer.Length;
+        return new RuntimeResult<string>(RuntimeStatus.Ok,
+            Encoding.UTF8.GetString(buffer, 0, length));
+    }
+
+    internal static RuntimeResult<bool> SaveHasKey(string slot, string key)
+    {
+        if (api.SaveHasKey == null) return new(RuntimeStatus.ServiceUnavailable);
+        int value = 0;
+        fixed (byte* slotText = Encoding.UTF8.GetBytes(slot + "\0"))
+        fixed (byte* keyText = Encoding.UTF8.GetBytes(key + "\0"))
+        {
+            var status = (RuntimeStatus)api.SaveHasKey(slotText, keyText, &value);
+            return new RuntimeResult<bool>(status, value != 0);
+        }
+    }
+
+    internal static RuntimeStatus SaveDeleteKey(string slot, string key)
+    {
+        if (api.SaveDeleteKey == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* slotText = Encoding.UTF8.GetBytes(slot + "\0"))
+        fixed (byte* keyText = Encoding.UTF8.GetBytes(key + "\0"))
+        {
+            return (RuntimeStatus)api.SaveDeleteKey(slotText, keyText);
+        }
+    }
+
+    internal static RuntimeStatus SaveGame(string slot)
+    {
+        if (api.SaveGame == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(slot + "\0"))
+        {
+            return (RuntimeStatus)api.SaveGame(text);
+        }
+    }
+
+    internal static RuntimeStatus LoadGame(string slot)
+    {
+        if (api.LoadGame == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(slot + "\0"))
+        {
+            return (RuntimeStatus)api.LoadGame(text);
+        }
+    }
+
+    internal static RuntimeStatus DeleteSave(string slot)
+    {
+        if (api.DeleteSave == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(slot + "\0"))
+        {
+            return (RuntimeStatus)api.DeleteSave(text);
+        }
+    }
+
+    internal static bool RuntimeUIAvailable()
+    {
+        return api.RuntimeUIAvailable != null && api.RuntimeUIAvailable() != 0;
+    }
+
+    internal static RuntimeResult<ObjectHandle> CreateUIElement(string name, ObjectHandle parent)
+    {
+        if (api.CreateUIElement == null) return new(RuntimeStatus.ServiceUnavailable);
+        ObjectHandle value = default;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+        {
+            var status = (RuntimeStatus)api.CreateUIElement(text, parent, &value);
+            return new RuntimeResult<ObjectHandle>(status, value);
+        }
+    }
+
+    internal static RuntimeStatus SetUIText(ObjectHandle handle, string text)
+    {
+        if (api.SetUIText == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* value = Encoding.UTF8.GetBytes(text + "\0"))
+        {
+            return (RuntimeStatus)api.SetUIText(handle, value);
+        }
+    }
+
+    internal static RuntimeResult<string> GetUIText(ObjectHandle handle)
+    {
+        if (api.GetUIText == null) return new(RuntimeStatus.ServiceUnavailable);
+        const int capacity = 64 * 1024 + 1;
+        var buffer = new byte[capacity];
+        var status = (RuntimeStatus)api.GetUIText(handle, null, 0);
+        if (status != RuntimeStatus.InvalidArgument && status != RuntimeStatus.Ok)
+            return new(status);
+        fixed (byte* output = buffer)
+        {
+            status = (RuntimeStatus)api.GetUIText(handle, output, capacity);
+        }
+        if (status != RuntimeStatus.Ok) return new(status);
+        int length = Array.IndexOf(buffer, (byte)0);
+        if (length < 0) length = buffer.Length;
+        return new RuntimeResult<string>(RuntimeStatus.Ok,
+            Encoding.UTF8.GetString(buffer, 0, length));
+    }
+
+    internal static RuntimeStatus SetUIImageColor(ObjectHandle handle, Color color)
+    {
+        if (api.SetUIImageColor == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.SetUIImageColor(handle, color);
+    }
+
+    internal static RuntimeStatus SetUIRect(ObjectHandle handle, Vector2 position,
+        Vector2 size, Vector2 scale, float rotation, int sortOrder)
+    {
+        if (api.SetUIRect == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.SetUIRect(handle, position, size, scale, rotation, sortOrder);
+    }
+
+    internal static RuntimeStatus SetUIButtonInteractable(ObjectHandle handle, bool interactable)
+    {
+        if (api.SetUIButtonInteractable == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.SetUIButtonInteractable(handle, interactable ? 1 : 0);
     }
 
     internal static RuntimeResult<ObjectHandle> Instantiate(string guid, Vector3 position, Vector3 rotationEuler, Vector3 scale, ObjectHandle parent)
@@ -421,6 +836,141 @@ public static unsafe class NativeBridge
     {
         if (api.ReturnToPreviousScene == null) return RuntimeStatus.ServiceUnavailable;
         return (RuntimeStatus)api.ReturnToPreviousScene();
+    }
+
+    internal static RuntimeStatus TriggerSceneFlow(string eventName)
+    {
+        if (api.TriggerSceneFlow == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(eventName + "\0"))
+        {
+            return (RuntimeStatus)api.TriggerSceneFlow(text);
+        }
+    }
+
+    internal static RuntimeStatus SetSceneFlowBool(string key, bool value)
+    {
+        if (api.SetSceneFlowBool == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(key + "\0"))
+        {
+            return (RuntimeStatus)api.SetSceneFlowBool(text, value ? 1 : 0);
+        }
+    }
+
+    internal static RuntimeStatus SetSceneFlowInt(string key, long value)
+    {
+        if (api.SetSceneFlowInt == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(key + "\0"))
+        {
+            return (RuntimeStatus)api.SetSceneFlowInt(text, value);
+        }
+    }
+
+    internal static RuntimeStatus SetSceneFlowFloat(string key, double value)
+    {
+        if (api.SetSceneFlowFloat == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(key + "\0"))
+        {
+            return (RuntimeStatus)api.SetSceneFlowFloat(text, value);
+        }
+    }
+
+    internal static RuntimeResult<RaycastHit> Raycast(Vector3 origin, Vector3 direction,
+        float maxDistance, int layer, int mask, ObjectHandle ignore)
+    {
+        if (api.Raycast == null) return new(RuntimeStatus.ServiceUnavailable);
+        RaycastHit hit = default;
+        var status = (RuntimeStatus)api.Raycast(origin, direction, maxDistance, layer, mask, ignore, &hit);
+        return new RuntimeResult<RaycastHit>(status, hit);
+    }
+
+    internal static RuntimeResult<ComponentHandle> FindMotionPlayer(ObjectHandle owner, string key)
+    {
+        if (api.FindMotionPlayer == null) return new(RuntimeStatus.ServiceUnavailable);
+        ComponentHandle value = default;
+        fixed (byte* text = Encoding.UTF8.GetBytes(key + "\0"))
+        {
+            return new RuntimeResult<ComponentHandle>(
+                (RuntimeStatus)api.FindMotionPlayer(owner, text, &value),
+                value);
+        }
+    }
+
+    internal static RuntimeStatus MotionPlay(ComponentHandle player)
+    {
+        if (api.MotionPlay == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.MotionPlay(player);
+    }
+
+    internal static RuntimeStatus MotionPlayFrom(ComponentHandle player, float seconds)
+    {
+        if (api.MotionPlayFrom == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.MotionPlayFrom(player, seconds);
+    }
+
+    internal static RuntimeStatus MotionPause(ComponentHandle player)
+    {
+        if (api.MotionPause == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.MotionPause(player);
+    }
+
+    internal static RuntimeStatus MotionResume(ComponentHandle player)
+    {
+        if (api.MotionResume == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.MotionResume(player);
+    }
+
+    internal static RuntimeStatus MotionStop(ComponentHandle player)
+    {
+        if (api.MotionStop == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.MotionStop(player);
+    }
+
+    internal static RuntimeStatus MotionReverse(ComponentHandle player)
+    {
+        if (api.MotionReverse == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.MotionReverse(player);
+    }
+
+    internal static RuntimeStatus MotionSetTime(ComponentHandle player, float seconds)
+    {
+        if (api.MotionSetTime == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.MotionSetTime(player, seconds);
+    }
+
+    internal static RuntimeStatus MotionSetSpeed(ComponentHandle player, float speed)
+    {
+        if (api.MotionSetSpeed == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.MotionSetSpeed(player, speed);
+    }
+
+    internal static RuntimeStatus MotionSetWeight(ComponentHandle player, float weight)
+    {
+        if (api.MotionSetWeight == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.MotionSetWeight(player, weight);
+    }
+
+    internal static RuntimeResult<bool> MotionIsPlaying(ComponentHandle player)
+    {
+        if (api.MotionIsPlaying == null) return new(RuntimeStatus.ServiceUnavailable);
+        int value = 0;
+        var status = (RuntimeStatus)api.MotionIsPlaying(player, &value);
+        return new RuntimeResult<bool>(status, value != 0);
+    }
+
+    internal static RuntimeResult<float> MotionGetTime(ComponentHandle player)
+    {
+        if (api.MotionGetTime == null) return new(RuntimeStatus.ServiceUnavailable);
+        float value = 0.0f;
+        return new RuntimeResult<float>(
+            (RuntimeStatus)api.MotionGetTime(player, &value), value);
+    }
+
+    internal static RuntimeResult<float> MotionGetDuration(ComponentHandle player)
+    {
+        if (api.MotionGetDuration == null) return new(RuntimeStatus.ServiceUnavailable);
+        float value = 0.0f;
+        return new RuntimeResult<float>(
+            (RuntimeStatus)api.MotionGetDuration(player, &value), value);
     }
 
     internal static RuntimeResult<EventSubscription> SubscribeEvent(string eventTypeGuid, ObjectHandle owner)

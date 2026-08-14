@@ -7,7 +7,7 @@
 class particle_system
 {
 public:
-    static constexpr UINT MAX_COUNT = 4096;
+    static constexpr UINT MAX_COUNT = 10000;
     static constexpr UINT THREADS   = 64;
 
     struct particle
@@ -24,6 +24,8 @@ public:
 
     struct particle_constants
     {
+        DirectX::XMFLOAT4 end_color       { 1, 0.2f, 0.05f, 0.0f };
+        DirectX::XMFLOAT4 end_scalar      { 0.02f, 0.0f, 0.0f, 0.0f };    // x=end_size
         DirectX::XMFLOAT4 spawn_origin    { 0, 0, 0, 200.0f };           // w=spawn_rate
         DirectX::XMFLOAT4 spawn_direction { 0, 1, 0, 0.4f };             // w=cone angle
         DirectX::XMFLOAT4 spawn_params    { 1.0f, 4.0f, 0.5f, 1.5f };    // min/max speed, min/max life
@@ -46,9 +48,11 @@ public:
     Microsoft::WRL::ComPtr<ID3D11PixelShader>         particle_ps;
 
     particle_constants constants{};
+    UINT active_count{ MAX_COUNT };
     bool initialized{ false };
 
     bool initialize(ID3D11Device* device);
+    void release() noexcept;
     void simulate(ID3D11DeviceContext* ctx, float delta_time);
     void render(ID3D11DeviceContext* ctx);
 };

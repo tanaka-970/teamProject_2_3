@@ -1,4 +1,4 @@
-#include "CapsuleColliderComponent.h"
+﻿#include "CapsuleColliderComponent.h"
 
 #include "../../Object/GameObject/GameObject.h"
 
@@ -27,10 +27,10 @@ namespace ReplayEngine::Components
         float lateral = 1.0f;
         switch (axis)
         {
-        case Axis_X: lateral = std::max(std::fabs(scale.y), std::fabs(scale.z)); break;
-        case Axis_Z: lateral = std::max(std::fabs(scale.x), std::fabs(scale.y)); break;
+        case Axis_X: lateral = (std::max)(std::fabs(scale.y), std::fabs(scale.z)); break;
+        case Axis_Z: lateral = (std::max)(std::fabs(scale.x), std::fabs(scale.y)); break;
         case Axis_Y:
-        default:     lateral = std::max(std::fabs(scale.x), std::fabs(scale.z)); break;
+        default:     lateral = (std::max)(std::fabs(scale.x), std::fabs(scale.z)); break;
         }
         if (lateral <= 0.0f) lateral = 1.0f;
         return radius * lateral;
@@ -52,7 +52,7 @@ namespace ReplayEngine::Components
         // 直径を下回る高さは形状として成り立たないので切り上げる。
         const float scaled = height * along;
         const float diameter = EffectiveRadius() * 2.0f;
-        return std::max(scaled, diameter);
+        return (std::max)(scaled, diameter);
     }
 
     bool CapsuleColliderComponent::HeightTooSmall() const noexcept
@@ -64,7 +64,7 @@ namespace ReplayEngine::Components
     {
         const XMFLOAT3 center = WorldCenter();
         const float half_cylinder =
-            std::max(0.0f, EffectiveHeight() * 0.5f - EffectiveRadius());
+            (std::max)(0.0f, EffectiveHeight() * 0.5f - EffectiveRadius());
 
         XMFLOAT3 direction{ 0.0f, 1.0f, 0.0f };
         switch (axis)
@@ -105,13 +105,13 @@ namespace ReplayEngine::Components
         WorldSegment(start, end);
 
         minimum = XMFLOAT3{
-            std::min(start.x, end.x) - effective_radius,
-            std::min(start.y, end.y) - effective_radius,
-            std::min(start.z, end.z) - effective_radius };
+            (std::min)(start.x, end.x) - effective_radius,
+            (std::min)(start.y, end.y) - effective_radius,
+            (std::min)(start.z, end.z) - effective_radius };
         maximum = XMFLOAT3{
-            std::max(start.x, end.x) + effective_radius,
-            std::max(start.y, end.y) + effective_radius,
-            std::max(start.z, end.z) + effective_radius };
+            (std::max)(start.x, end.x) + effective_radius,
+            (std::max)(start.y, end.y) + effective_radius,
+            (std::max)(start.z, end.z) + effective_radius };
         return true;
     }
 

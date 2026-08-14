@@ -1,12 +1,21 @@
 ﻿#pragma once
 
 #include "ICameraBasisProvider.h"
+#include "IPhysicsDynamicsService.h"
 #include "IPhysicsQueryService.h"
+#include "IInputService.h"
 #include "RespawnService.h"
 #include "../../Core/ObjectID/ObjectID.h"
 
-namespace ReplayEngine::Runtime { class RuntimeContext; }
+namespace ReplayEngine::Runtime
+{
+    class RuntimeContext;
+    class RuntimeSceneService;
+    class SceneFlowService;
+}
 namespace ReplayEngine::Scripting { class IScriptServices; }
+namespace ReplayEngine::Audio { class IAudioPlaybackService; }
+namespace ReplayEngine::Motion { class MotionMixer; }
 
 namespace ReplayEngine::Scene
 {
@@ -33,6 +42,27 @@ namespace ReplayEngine::Scene
         const IPhysicsQueryService* Physics() const noexcept { return physics_; }
         void SetPhysics(const IPhysicsQueryService* service) noexcept { physics_ = service; }
 
+        const IPhysicsDynamicsService* PhysicsDynamics() const noexcept
+        {
+            return physics_dynamics_;
+        }
+        void SetPhysicsDynamics(const IPhysicsDynamicsService* service) noexcept
+        {
+            physics_dynamics_ = service;
+        }
+
+        const IInputService* Input() const noexcept { return input_; }
+        void SetInput(const IInputService* service) noexcept { input_ = service; }
+
+        Audio::IAudioPlaybackService* Audio() const noexcept { return audio_; }
+        void SetAudio(Audio::IAudioPlaybackService* service) noexcept { audio_ = service; }
+
+        const Motion::MotionMixer* MotionMixer() const noexcept { return motion_mixer_; }
+        void SetMotionMixer(const Motion::MotionMixer* mixer) noexcept
+        {
+            motion_mixer_ = mixer;
+        }
+
         // Runtime API への入口。
         //
         // 未接続 (nullptr) がありうるのは意図的:
@@ -42,6 +72,24 @@ namespace ReplayEngine::Scene
         //   接続し直す。ここは非所有参照だけを持つ。
         Runtime::RuntimeContext* Runtime() const noexcept { return runtime_; }
         void SetRuntime(Runtime::RuntimeContext* context) noexcept { runtime_ = context; }
+
+        // Scene 遷移の実体へ触れる入口。SceneLoaderComponent が進捗を読むために使う。
+        // 実体は framework / RuntimeSceneService が所有し、ここは非所有参照だけを持つ。
+        Runtime::RuntimeSceneService* RuntimeScene() const noexcept
+        {
+            return runtime_scene_;
+        }
+        void SetRuntimeScene(Runtime::RuntimeSceneService* service) noexcept
+        {
+            runtime_scene_ = service;
+        }
+
+        // SceneFlow の状態を読む入口。遷移要求そのものは既存の SceneFlowService が受け持つ。
+        Runtime::SceneFlowService* SceneFlow() const noexcept { return scene_flow_; }
+        void SetSceneFlow(Runtime::SceneFlowService* service) noexcept
+        {
+            scene_flow_ = service;
+        }
 
         // スクリプト機構への入口。Runtime と同じ扱いで、非所有参照だけを持つ。
         //
@@ -82,7 +130,13 @@ namespace ReplayEngine::Scene
         {
             camera_basis_ = nullptr;
             physics_ = nullptr;
+            physics_dynamics_ = nullptr;
+            input_ = nullptr;
+            audio_ = nullptr;
+            motion_mixer_ = nullptr;
             runtime_ = nullptr;
+            runtime_scene_ = nullptr;
+            scene_flow_ = nullptr;
             scripts_ = nullptr;
             controlled_object_ = Core::ObjectID::Invalid();
             playing_ = false;
@@ -91,7 +145,13 @@ namespace ReplayEngine::Scene
     private:
         const ICameraBasisProvider* camera_basis_ = nullptr;
         const IPhysicsQueryService* physics_ = nullptr;
+        const IPhysicsDynamicsService* physics_dynamics_ = nullptr;
+        const IInputService* input_ = nullptr;
+        Audio::IAudioPlaybackService* audio_ = nullptr;
+        const Motion::MotionMixer* motion_mixer_ = nullptr;
         Runtime::RuntimeContext* runtime_ = nullptr;
+        Runtime::RuntimeSceneService* runtime_scene_ = nullptr;
+        Runtime::SceneFlowService* scene_flow_ = nullptr;
         Scripting::IScriptServices* scripts_ = nullptr;
         Core::ObjectID controlled_object_;
         RespawnService respawn_;

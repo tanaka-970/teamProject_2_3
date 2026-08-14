@@ -1,0 +1,20 @@
+REPLAY_SHADER_COMPOSER 1
+SHADER_GUID "56fe52c52b72fb9cf2d62a84ba79f9c0"
+DISPLAY_NAME "NewItem"
+CATEGORY "Project/Composer"
+DOMAIN surface
+LIGHTING unlit
+GENERATED_HLSL "Shader/Materials/Generated/NewItem_56fe52c5.hlsl"
+NEXT_NODE_ID 6
+NODE_COUNT 5
+NODE 1 uv 40 80 0 0 1 1 0 1 1 1 1 "" "" "" "" "white"
+NODE 2 texture_property 250 60 0 0 1 1 0 1 1 1 1 "BaseMap" "Base Map" "Surface" "" "white"
+NODE 3 color_property 250 250 0 0 1 1 0 1 1 1 1 "BaseColor" "Base Color" "Surface" "" "white"
+NODE 4 multiply 500 150 0 0 1 1 0 1 1 1 1 "" "" "" "" "white"
+NODE 5 surface_output 760 150 0 0 1 1 0 1 1 1 1 "" "" "" "" "white"
+CONNECTION_COUNT 4
+CONNECTION 1 0 2 0
+CONNECTION 2 0 4 0
+CONNECTION 3 0 4 1
+CONNECTION 4 0 5 0
+END_SHADER_COMPOSER

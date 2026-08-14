@@ -1,4 +1,4 @@
-#include "MeshColliderComponent.h"
+﻿#include "MeshColliderComponent.h"
 
 #include "../Rendering/MeshRendererComponent.h"
 #include "../Rendering/SkinnedMeshRendererComponent.h"
@@ -127,10 +127,10 @@ namespace ReplayEngine::Components
         const float ax = std::fabs(scale.x);
         const float ay = std::fabs(scale.y);
         const float az = std::fabs(scale.z);
-        const float minimum = std::max(scale_epsilon, std::min({ ax, ay, az }));
-        const float maximum = std::max({ ax, ay, az });
+        const float minimum = (std::max)(scale_epsilon, (std::min)({ ax, ay, az }));
+        const float maximum = (std::max)({ ax, ay, az });
 
-        uniform_scale_ = (maximum - minimum) <= scale_epsilon * std::max(1.0f, maximum);
+        uniform_scale_ = (maximum - minimum) <= scale_epsilon * (std::max)(1.0f, maximum);
         negative_scale_ = (scale.x * scale.y * scale.z) < 0.0f;
 
         // 半径をローカルへ移すときの倍率。
@@ -161,12 +161,12 @@ namespace ReplayEngine::Components
                 XMStoreFloat3(&transformed,
                     XMVector3TransformCoord(XMLoadFloat3(&point), world));
 
-                world_bounds_min_.x = std::min(world_bounds_min_.x, transformed.x);
-                world_bounds_min_.y = std::min(world_bounds_min_.y, transformed.y);
-                world_bounds_min_.z = std::min(world_bounds_min_.z, transformed.z);
-                world_bounds_max_.x = std::max(world_bounds_max_.x, transformed.x);
-                world_bounds_max_.y = std::max(world_bounds_max_.y, transformed.y);
-                world_bounds_max_.z = std::max(world_bounds_max_.z, transformed.z);
+                world_bounds_min_.x = (std::min)(world_bounds_min_.x, transformed.x);
+                world_bounds_min_.y = (std::min)(world_bounds_min_.y, transformed.y);
+                world_bounds_min_.z = (std::min)(world_bounds_min_.z, transformed.z);
+                world_bounds_max_.x = (std::max)(world_bounds_max_.x, transformed.x);
+                world_bounds_max_.y = (std::max)(world_bounds_max_.y, transformed.y);
+                world_bounds_max_.z = (std::max)(world_bounds_max_.z, transformed.z);
             }
         }
 

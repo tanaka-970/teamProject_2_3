@@ -44,15 +44,18 @@ void framework::attach_collision_world(ReplayEngine::Scene::Scene& scene)
     // AttachScene の中で登録表と接触ペアが捨てられる。
     // 古い Scene の ObjectID / ColliderID は 1 件も残らない。
     object_collision_world.AttachScene(&scene);
+    object_physics_dynamics_world.AttachScene(&scene);
 
     ReplayEngine::Scene::SceneServices& services = scene.Services();
 
     // Component からの問い合わせ先を衝突世界にする。
     services.SetPhysics(&object_collision_world);
+    services.SetPhysicsDynamics(&object_physics_dynamics_world);
 }
 
 void framework::detach_collision_world()
 {
+    object_physics_dynamics_world.DetachScene();
     object_collision_world.DetachScene();
 
     // 参照が 0 になった Cook データを表から外す。
@@ -74,6 +77,7 @@ void framework::refresh_collision_world()
     }
 
     services.SetPhysics(&object_collision_world);
+    services.SetPhysicsDynamics(&object_physics_dynamics_world);
 
     // 登録表の突き合わせと、Cook / Transform の更新。
     // Scene の構成が変わっていないフレームでは全走査しない。

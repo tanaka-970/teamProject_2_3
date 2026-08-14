@@ -13,6 +13,7 @@ namespace ReplayEngine::Scene { class Scene; }
 namespace ReplayEngine::Runtime
 {
     class RuntimeContext;
+    class SceneFlowService;
     class EventBus;
     class CollisionEventDispatcher;
     class IWorldLifecycleListener;
@@ -89,8 +90,9 @@ namespace ReplayEngine::Runtime
     // ---------------------------------------------------------------------
     // 所有関係:
     //   このサービスが Runtime World を unique_ptr で所有する。
-    //   入れ替えは unique_ptr の差し替えなので、旧 World の実体は
-    //   その場で破棄され、持ち越しは起きない。
+    //   入れ替えは unique_ptr の差し替えなので、通常の旧 World 実体は
+    //   その場で破棄される。ただし Scene 直下の PersistentComponent ルートだけは、
+    //   差し替え前に一時退避し、新 World が同じ実体を引き取る。
     class RuntimeSceneService final
     {
     public:
@@ -109,6 +111,10 @@ namespace ReplayEngine::Runtime
 
         // World が入れ替わったときに再接続する相手。どれも非所有。
         void SetRuntimeContext(RuntimeContext* context) noexcept { runtime_ = context; }
+        void SetSceneFlowService(SceneFlowService* service) noexcept
+        {
+            scene_flow_ = service;
+        }
         void SetCollisionDispatcher(CollisionEventDispatcher* dispatcher) noexcept
         {
             collision_dispatcher_ = dispatcher;
@@ -207,6 +213,21 @@ namespace ReplayEngine::Runtime
         // ---- 状態 --------------------------------------------------------------
 
         SceneLoadState State() const noexcept { return state_; }
+        // SceneLoaderComponent が UI へ出すための 0..1 の進捗。
+        // 現在の実装は「Staging 構築」と「World 入れ替え」の 2 段を公開する。
+        float Progress() const noexcept
+        {
+            switch (state_)
+            {
+            case SceneLoadState::Loading:     return 0.5f;
+            case SceneLoadState::ReadyToSwap: return 0.75f;
+            case SceneLoadState::Swapping:    return 0.9f;
+            case SceneLoadState::Completed:   return 1.0f;
+            case SceneLoadState::Failed:      return 0.0f;
+            case SceneLoadState::Idle:        return 1.0f;
+            }
+            return 0.0f;
+        }
         bool IsBusy() const noexcept
         {
             return state_ == SceneLoadState::Loading ||
@@ -276,6 +297,7 @@ namespace ReplayEngine::Runtime
 
         const ISceneAssetResolver* asset_resolver_ = nullptr;
         RuntimeContext* runtime_ = nullptr;
+        SceneFlowService* scene_flow_ = nullptr;
         CollisionEventDispatcher* collision_dispatcher_ = nullptr;
         IWorldLifecycleListener* world_lifecycle_ = nullptr;
 

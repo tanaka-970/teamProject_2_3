@@ -104,8 +104,36 @@ namespace ReplayEngine::Rendering
     void SsrPass::CaptureHistory(ID3D11DeviceContext* context, ID3D11Resource* lit_color)
     {
         if (!initialized_ || !context || !lit_color || !history_.texture) return;
-        // 書式とサイズが一致している前提でGPU内コピーする。
-        context->CopyResource(history_.texture.Get(), lit_color);
+
+        // CopyResource requires identical texture dimensions/format/sample layout.
+        // Window resize normally recreates this pass, but keep this guard here as the
+        // final safety net so a missed resize path never floods the D3D11 debug layer.
+        Microsoft::WRL::ComPtr<ID3D11Texture2D> source_texture;
+        if (FAILED(lit_color->QueryInterface(IID_PPV_ARGS(source_texture.GetAddressOf()))))
+        {
+            history_valid_ = false;
+            return;
+        }
+
+        D3D11_TEXTURE2D_DESC source_desc{};
+        D3D11_TEXTURE2D_DESC history_desc{};
+        source_texture->GetDesc(&source_desc);
+        history_.texture->GetDesc(&history_desc);
+        const bool compatible =
+            source_desc.Width == history_desc.Width &&
+            source_desc.Height == history_desc.Height &&
+            source_desc.MipLevels == history_desc.MipLevels &&
+            source_desc.ArraySize == history_desc.ArraySize &&
+            source_desc.Format == history_desc.Format &&
+            source_desc.SampleDesc.Count == history_desc.SampleDesc.Count &&
+            source_desc.SampleDesc.Quality == history_desc.SampleDesc.Quality;
+        if (!compatible)
+        {
+            history_valid_ = false;
+            return;
+        }
+
+        context->CopyResource(history_.texture.Get(), source_texture.Get());
         history_valid_ = true;
     }
 

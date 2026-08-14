@@ -79,6 +79,11 @@ namespace ReplayEngine::Core
         //   true  … Collider, AudioSource のように複数あって自然なもの
         bool allow_multiple = false;
 
+        // Component 間の関係。Add Component / Inspector が共通で使う。
+        // required_components は成立に必須、recommended_components は通常用途で推奨。
+        std::vector<ComponentTypeID> required_components;
+        std::vector<ComponentTypeID> recommended_components;
+
         // Editor の Add Component 一覧へ出すか。内部用の型を隠したいときに false。
         bool editor_visible = true;
 
@@ -91,6 +96,11 @@ namespace ReplayEngine::Core
 
         // GameObject を作った時点で自動的に付くか。TransformComponent 用。
         bool built_in = false;
+
+        // Runtime World に実体化するか。
+        // false は Scene/Prefab には保存するが、RuntimeSceneService が構築する
+        // World では生成しない Editor Annotation 等に使う。
+        bool runtime_available = true;
 
         // 実体を作る関数。owner への結線は GameObject 側が行うので、ここでは生成だけ。
         Factory factory;
@@ -133,6 +143,20 @@ namespace ReplayEngine::Core
             return *this;
         }
 
+        template<class T>
+        ComponentTypeInfo& Requires()
+        {
+            required_components.push_back(T::StaticTypeID());
+            return *this;
+        }
+
+        template<class T>
+        ComponentTypeInfo& Recommends()
+        {
+            recommended_components.push_back(T::StaticTypeID());
+            return *this;
+        }
+
         ComponentTypeInfo& HiddenInEditor()
         {
             editor_visible = false;
@@ -154,6 +178,12 @@ namespace ReplayEngine::Core
         ComponentTypeInfo& AsBuiltIn()
         {
             built_in = true;
+            return *this;
+        }
+
+        ComponentTypeInfo& EditorOnly()
+        {
+            runtime_available = false;
             return *this;
         }
 

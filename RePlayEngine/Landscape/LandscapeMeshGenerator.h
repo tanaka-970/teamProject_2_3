@@ -2,19 +2,11 @@
 
 #include "LandscapeData.h"
 
-#include <DirectXMath.h>
 #include <cstdint>
 #include <vector>
 
 namespace ReplayEngine::Landscape
 {
-    struct LandscapeVertex
-    {
-        DirectX::XMFLOAT3 position{};
-        DirectX::XMFLOAT3 normal{ 0, 1, 0 };
-        DirectX::XMFLOAT2 uv{};
-    };
-
     struct LandscapeMeshData
     {
         LandscapeChunkCoord coord;

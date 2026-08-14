@@ -1,25 +1,18 @@
-// レイヤ用シェーダの第 1 号。
-//
-// 層の種類を C++ の enum に足さずに増やせることを示すための見本。
-// フェーズ 10 でレイヤの実体がこちらへ移る。
-//
-// 今は Window → シェーダ一覧 に "Layer" として並ぶだけ。
-
 #pragma replay_guid     "00000000000000000000000000000101"
 #pragma replay_name     "Pixelate"
-#pragma replay_category "Stylize"
+#pragma replay_category "BuiltIn"
 #pragma replay_domain   layer
-
-#pragma property range PixelSize "セル幅"   1..64 = 6
-#pragma property range Strength  "強さ"     0..1  = 1
-#pragma property range Opacity   "不透明度" 0..1  = 0.45
-
-// cbuffer は書かない。上の #pragma property から自動生成される。
-// PixelSize / Strength / Opacity はそのまま参照できる。
-
-float4 main(float4 position : SV_POSITION) : SV_TARGET
+#pragma replay_lighting unlit
+#pragma property texture BaseMap   "Base Map" default white category "Pixelate"
+#pragma property range PixelSize   "Pixel Size" 1..64 = 6 category "Pixelate"
+#pragma property range Strength    "Strength" 0..1 = 1 category "Pixelate"
+#pragma property range Opacity     "Opacity" 0..1 = 0.45 category "Pixelate"
+struct REPLAY_LAYER_INPUT { float4 position:SV_POSITION; float4 color:COLOR; float2 texcoord:TEXCOORD; };
+SamplerState replay_layer_sampler : register(s1);
+float4 main(REPLAY_LAYER_INPUT pin):SV_TARGET
 {
-    float2 cell = floor(position.xy / PixelSize) * PixelSize;
-    float3 color = float3(cell * 0.001f, Strength);
-    return float4(color, Opacity);
+    float size=max(PixelSize,1.0); float2 q=(floor(pin.position.xy/size)+0.5)*size;
+    float2 d=(pin.position.xy-q)/size; float mask=1.0-smoothstep(0.35,0.48,length(d));
+    float4 c=BaseMap.Sample(replay_layer_sampler,pin.texcoord)*pin.color;
+    c.rgb*=lerp(1.0,mask,saturate(Strength)); c.a*=Opacity; return c;
 }
