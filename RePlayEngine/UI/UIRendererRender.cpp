@@ -1412,16 +1412,21 @@ namespace ReplayEngine::UI
                 return false;
             }
 
-            const DirectX::XMFLOAT4 expansion = effects.ExpandBounds();
             const DirectX::XMFLOAT4 source_rect = rect.ResolvedRect();
+            const DirectX::XMFLOAT4 expansion = effects.ExpandBounds(
+                source_rect.z * scale, source_rect.w * scale);
             const float expanded_width = (std::max)(1.0f,
                 source_rect.z + expansion.x + expansion.z);
             const float expanded_height = (std::max)(1.0f,
                 source_rect.w + expansion.y + expansion.w);
+            // Effect の変位量は target_size.zw を使う実ピクセル単位なので、
+            // expansion へ Canvas 拡大率を掛けてはいけない。
             const std::uint32_t rt_width = static_cast<std::uint32_t>(
-                std::ceil(expanded_width * scale));
+                std::ceil((std::max)(1.0f,
+                    source_rect.z * scale + expansion.x + expansion.z)));
             const std::uint32_t rt_height = static_cast<std::uint32_t>(
-                std::ceil(expanded_height * scale));
+                std::ceil((std::max)(1.0f,
+                    source_rect.w * scale + expansion.y + expansion.w)));
             UIRenderTarget* target = render_target_pool_.Acquire(rt_width, rt_height);
             UIRenderTarget* scratch = render_target_pool_.Acquire(rt_width, rt_height);
             if (target == nullptr || scratch == nullptr ||
@@ -1511,16 +1516,20 @@ namespace ReplayEngine::UI
                 return false;
             }
 
-            const DirectX::XMFLOAT4 expansion = effects.ExpandBounds();
             const DirectX::XMFLOAT4 source_rect = rect.ResolvedRect();
+            const DirectX::XMFLOAT4 expansion = effects.ExpandBounds(
+                source_rect.z * scale, source_rect.w * scale);
             const float expanded_width = (std::max)(1.0f,
                 source_rect.z + expansion.x + expansion.z);
             const float expanded_height = (std::max)(1.0f,
                 source_rect.w + expansion.y + expansion.w);
+            // Text も Image と同じく、確保量は実ピクセルのまま RT へ足す。
             const std::uint32_t rt_width = static_cast<std::uint32_t>(
-                std::ceil(expanded_width * scale));
+                std::ceil((std::max)(1.0f,
+                    source_rect.z * scale + expansion.x + expansion.z)));
             const std::uint32_t rt_height = static_cast<std::uint32_t>(
-                std::ceil(expanded_height * scale));
+                std::ceil((std::max)(1.0f,
+                    source_rect.w * scale + expansion.y + expansion.w)));
             UIRenderTarget* target = render_target_pool_.Acquire(rt_width, rt_height);
             UIRenderTarget* scratch = render_target_pool_.Acquire(rt_width, rt_height);
             if (target == nullptr || scratch == nullptr ||

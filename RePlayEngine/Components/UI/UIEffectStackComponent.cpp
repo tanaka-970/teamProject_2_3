@@ -175,6 +175,268 @@ namespace ReplayEngine::Components
                 desc.asset_type = "Image";
             return desc;
         }
+
+        void ResetDefaultsForKind(UI::UIEffect& effect, UI::UIEffectKind kind)
+        {
+            // seed は種類をまたいで利用者が管理する値なので、ここでは変更しない。
+            switch (kind)
+            {
+            case UI::UIEffectKind::Blur:
+                effect.radius = 8.0f;
+                effect.intensity = 1.0f;
+                break;
+            case UI::UIEffectKind::Glow:
+                effect.radius = 12.0f;
+                effect.intensity = 1.5f;
+                effect.threshold = 0.0f;
+                effect.color = { 1.0f, 1.0f, 1.0f, 1.0f };
+                break;
+            case UI::UIEffectKind::ColorAdjust:
+                effect.radius = 1.0f;
+                effect.intensity = 1.0f;
+                effect.amount = 0.0f;
+                effect.angle = 0.0f;
+                effect.color = { 1.0f, 1.0f, 1.0f, 1.0f };
+                break;
+            case UI::UIEffectKind::Noise:
+                effect.intensity = 0.08f;
+                effect.amount = 2.0f;
+                effect.speed = 1.0f;
+                effect.color = { 1.0f, 1.0f, 1.0f, 1.0f };
+                break;
+            case UI::UIEffectKind::Shake:
+                effect.amount = 6.0f;
+                effect.intensity = 1.0f;
+                effect.speed = 8.0f;
+                break;
+            case UI::UIEffectKind::Mask:
+                effect.amount = 1.0f;
+                effect.angle = 0.0f;
+                effect.softness = 0.02f;
+                effect.direction = { 0.5f, 0.5f };
+                effect.speed = 0.5f;
+                break;
+            case UI::UIEffectKind::Wipe:
+                effect.progress = 0.5f;
+                effect.angle = 0.0f;
+                effect.softness = 0.05f;
+                break;
+            case UI::UIEffectKind::Dissolve:
+                effect.progress = 0.35f;
+                effect.threshold = 0.08f;
+                effect.color = { 1.0f, 0.35f, 0.05f, 1.0f };
+                break;
+            case UI::UIEffectKind::Distortion:
+                effect.threshold = 12.0f;
+                effect.amount = 6.0f;
+                effect.intensity = 1.0f;
+                effect.speed = 1.0f;
+                break;
+            case UI::UIEffectKind::ChromaticAberration:
+                effect.amount = 4.0f;
+                effect.intensity = 1.0f;
+                break;
+            case UI::UIEffectKind::Kuwahara:
+                effect.radius = 5.0f;
+                effect.intensity = 1.0f;
+                break;
+            case UI::UIEffectKind::Halftone:
+                effect.radius = 8.0f;
+                effect.intensity = 1.0f;
+                effect.angle = 15.0f;
+                effect.softness = 0.15f;
+                effect.color = { 1.0f, 1.0f, 1.0f, 1.0f };
+                break;
+            case UI::UIEffectKind::DirectionalBlur:
+                effect.angle = 0.0f;
+                effect.amount = 12.0f;
+                effect.intensity = 1.0f;
+                break;
+            case UI::UIEffectKind::RadialBlur:
+                effect.direction = { 0.5f, 0.5f };
+                effect.amount = 16.0f;
+                effect.intensity = 1.0f;
+                break;
+            case UI::UIEffectKind::RotationalBlur:
+                effect.direction = { 0.5f, 0.5f };
+                effect.angle = 12.0f;
+                effect.intensity = 1.0f;
+                break;
+            case UI::UIEffectKind::Vignette:
+                effect.radius = 0.35f;
+                effect.softness = 0.35f;
+                effect.intensity = 0.65f;
+                effect.color = { 0.0f, 0.0f, 0.0f, 1.0f };
+                break;
+            case UI::UIEffectKind::LightStreaks:
+                effect.amount = 4.0f;
+                effect.radius = 24.0f;
+                effect.angle = 0.0f;
+                effect.threshold = 0.6f;
+                effect.intensity = 1.2f;
+                effect.color = { 1.0f, 1.0f, 1.0f, 1.0f };
+                break;
+            case UI::UIEffectKind::LensDistortion:
+                effect.direction = { 0.5f, 0.5f };
+                effect.amount = 0.2f;
+                effect.intensity = 1.0f;
+                break;
+            case UI::UIEffectKind::Posterize:
+                effect.amount = 6.0f;
+                effect.intensity = 1.0f;
+                break;
+            case UI::UIEffectKind::Threshold:
+                effect.threshold = 0.5f;
+                effect.softness = 0.04f;
+                effect.intensity = 1.0f;
+                effect.color = { 1.0f, 1.0f, 1.0f, 1.0f };
+                break;
+            case UI::UIEffectKind::ColorRamp:
+                effect.color = { 0.02f, 0.02f, 0.08f, 1.0f };
+                effect.color_2 = { 0.12f, 0.18f, 0.55f, 1.0f };
+                effect.color_3 = { 0.95f, 0.32f, 0.12f, 1.0f };
+                effect.color_4 = { 1.0f, 0.95f, 0.55f, 1.0f };
+                effect.color_stop_2 = 0.333333f;
+                effect.color_stop_3 = 0.666667f;
+                effect.color_stop_4 = 1.0f;
+                effect.intensity = 1.0f;
+                break;
+            case UI::UIEffectKind::Levels:
+                effect.threshold = 0.05f;
+                effect.amount = 0.95f;
+                effect.angle = 0.15f;
+                effect.direction = { 0.0f, 1.0f };
+                effect.intensity = 1.0f;
+                break;
+            case UI::UIEffectKind::Temperature:
+                effect.angle = 0.35f;
+                effect.progress = 0.05f;
+                effect.intensity = 1.0f;
+                break;
+            case UI::UIEffectKind::EdgeDetect:
+                effect.radius = 1.0f;
+                effect.intensity = 2.0f;
+                effect.color = { 1.0f, 1.0f, 1.0f, 1.0f };
+                break;
+            case UI::UIEffectKind::Outline:
+                effect.radius = 3.0f;
+                effect.intensity = 1.0f;
+                effect.color = { 0.0f, 0.0f, 0.0f, 1.0f };
+                break;
+            case UI::UIEffectKind::LongShadow:
+                effect.angle = 45.0f;
+                effect.amount = 24.0f;
+                effect.intensity = 1.0f;
+                effect.color = { 0.0f, 0.0f, 0.0f, 0.75f };
+                break;
+            case UI::UIEffectKind::CrossHatch:
+                effect.radius = 8.0f;
+                effect.angle = 45.0f;
+                effect.amount = 3.0f;
+                effect.softness = 0.1f;
+                effect.intensity = 0.85f;
+                effect.color = { 0.05f, 0.05f, 0.05f, 1.0f };
+                break;
+            case UI::UIEffectKind::BrushStroke:
+                effect.radius = 8.0f;
+                effect.amount = 3.0f;
+                effect.threshold = 0.1f;
+                effect.intensity = 0.8f;
+                break;
+            case UI::UIEffectKind::Mosaic:
+                effect.radius = 12.0f;
+                effect.intensity = 1.0f;
+                break;
+            case UI::UIEffectKind::Crystallize:
+                effect.radius = 24.0f;
+                effect.threshold = 0.45f;
+                effect.intensity = 1.0f;
+                break;
+            case UI::UIEffectKind::StainedGlass:
+                effect.radius = 24.0f;
+                effect.threshold = 0.12f;
+                effect.softness = 0.2f;
+                effect.intensity = 1.0f;
+                effect.color = { 0.0f, 0.0f, 0.0f, 1.0f };
+                break;
+            case UI::UIEffectKind::Twirl:
+                effect.direction = { 0.5f, 0.5f };
+                effect.angle = 180.0f;
+                effect.radius = 0.45f;
+                effect.intensity = 1.0f;
+                break;
+            case UI::UIEffectKind::Spherize:
+                effect.direction = { 0.5f, 0.5f };
+                effect.angle = 0.55f;
+                effect.radius = 0.45f;
+                effect.intensity = 1.0f;
+                break;
+            case UI::UIEffectKind::Ripple:
+                effect.direction = { 0.5f, 0.5f };
+                effect.radius = 48.0f;
+                effect.amount = 6.0f;
+                effect.speed = 2.0f;
+                effect.intensity = 1.0f;
+                break;
+            case UI::UIEffectKind::PolarCoordinates:
+                effect.direction = { 0.5f, 0.5f };
+                effect.progress = 0.65f;
+                effect.angle = 0.0f;
+                break;
+            case UI::UIEffectKind::Scanlines:
+                effect.radius = 4.0f;
+                effect.intensity = 0.25f;
+                effect.speed = 30.0f;
+                effect.color = { 0.0f, 0.0f, 0.0f, 1.0f };
+                break;
+            case UI::UIEffectKind::CRT:
+                effect.progress = 0.12f;
+                effect.radius = 4.0f;
+                effect.intensity = 0.2f;
+                effect.threshold = 0.25f;
+                effect.softness = 0.35f;
+                break;
+            case UI::UIEffectKind::Glitch:
+                effect.radius = 12.0f;
+                effect.amount = 8.0f;
+                effect.threshold = 0.18f;
+                effect.intensity = 2.0f;
+                effect.speed = 8.0f;
+                break;
+            case UI::UIEffectKind::Dither:
+                effect.amount = 6.0f;
+                effect.radius = 4.0f;
+                effect.intensity = 1.0f;
+                break;
+            case UI::UIEffectKind::VHS:
+                effect.radius = 3.0f;
+                effect.amount = 4.0f;
+                effect.threshold = 1.0f;
+                effect.softness = 0.04f;
+                effect.speed = 1.5f;
+                break;
+            case UI::UIEffectKind::Letterbox:
+                effect.radius = 2.35f;
+                effect.softness = 0.01f;
+                effect.intensity = 1.0f;
+                effect.color = { 0.0f, 0.0f, 0.0f, 1.0f };
+                break;
+            case UI::UIEffectKind::Waveform:
+                effect.amount = 9.0f;
+                effect.radius = 420.0f;
+                effect.speed = 2.0f;
+                effect.softness = 0.0f;
+                effect.progress = 0.25f;
+                effect.intensity = 0.6f;
+                effect.angle = 0.0f;
+                effect.direction = { 0.0f, 1.0f };
+                effect.threshold = 0.15f;
+                effect.waveform = 0;
+                break;
+            default:
+                break;
+            }
+        }
     }
 
     UIEffectStackComponent::UIEffectStackComponent()
@@ -282,6 +544,10 @@ namespace ReplayEngine::Components
             WriteEffectValue(effects[static_cast<std::size_t>(index)],
                 property, entry.value);
         }
+
+        // type は上のループで復元される。項目一覧は kind に依存するため、
+        // 復元し終えた値でもう一度組み直す。
+        RebuildDynamicProperties();
     }
 
     void UIEffectStackComponent::OnPropertyChanged(const char* property_name)
@@ -310,22 +576,8 @@ namespace ReplayEngine::Components
                 static_cast<std::size_t>(effect_index) < effects.size())
             {
                 UI::UIEffect& effect = effects[static_cast<std::size_t>(effect_index)];
-                if (static_cast<UI::UIEffectKind>(effect.kind) == UI::UIEffectKind::Waveform)
-                {
-                    // 各スロットの意味は種類ごとに違うため、種類を変えた時点で
-                    // 前の値は意味を失う。条件付きで残すより、ここで必ず波形用の
-                    // 値へ差し替えるほうが利用者に分かりやすい。
-                    effect.amount = 9.0f;
-                    effect.radius = 420.0f;
-                    effect.speed = 2.0f;
-                    effect.softness = 0.0f;
-                    effect.progress = 0.25f;
-                    effect.intensity = 0.6f;
-                    effect.angle = 0.0f;
-                    effect.direction = DirectX::XMFLOAT2{ 0.0f, 1.0f };
-                    effect.threshold = 0.15f;
-                    effect.waveform = 0;
-                }
+                ResetDefaultsForKind(effect,
+                    static_cast<UI::UIEffectKind>(effect.kind));
             }
 
             // 種類を変えた直後に、その Effect が実際に使う項目だけへ差し替える。
@@ -360,7 +612,8 @@ namespace ReplayEngine::Components
         return false;
     }
 
-    DirectX::XMFLOAT4 UIEffectStackComponent::ExpandBounds() const noexcept
+    DirectX::XMFLOAT4 UIEffectStackComponent::ExpandBounds(float target_width,
+        float target_height) const noexcept
     {
         DirectX::XMFLOAT4 expansion{ 0.0f, 0.0f, 0.0f, 0.0f };
         if (!enabled) return expansion;
@@ -368,12 +621,23 @@ namespace ReplayEngine::Components
         for (const UI::UIEffect& effect : effects)
         {
             if (!effect.enabled) continue;
-            const DirectX::XMFLOAT4 current = effect.ExpandBounds();
+            const float current_width = target_width + expansion.x + expansion.z;
+            const float current_height = target_height + expansion.y + expansion.w;
+            const DirectX::XMFLOAT4 current = effect.ExpandBounds(
+                current_width, current_height);
             expansion.x += current.x;
             expansion.y += current.y;
             expansion.z += current.z;
             expansion.w += current.w;
         }
+
+        // 16 段の大半径 Effect で D3D11 のテクスチャ上限を超えないよう、
+        // 実用上の上限を片側 2048px とする。超過時も Effect 全体は無効化しない。
+        constexpr float max_expansion = 2048.0f;
+        expansion.x = (std::min)(expansion.x, max_expansion);
+        expansion.y = (std::min)(expansion.y, max_expansion);
+        expansion.z = (std::min)(expansion.z, max_expansion);
+        expansion.w = (std::min)(expansion.w, max_expansion);
         return expansion;
     }
 

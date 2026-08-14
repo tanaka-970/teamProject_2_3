@@ -25,7 +25,8 @@ namespace ReplayEngine::Components
         void OnPropertyChanged(const char* property_name) override;
 
         bool HasActiveEffects() const noexcept;
-        DirectX::XMFLOAT4 ExpandBounds() const noexcept;
+        DirectX::XMFLOAT4 ExpandBounds(float target_width,
+            float target_height) const noexcept;
 
         // ShaderCatalog の Schema を同期し、Custom Effect の Property を
         // DynamicProperties() へ追加する。GPU や AssetDatabase は保持しない。

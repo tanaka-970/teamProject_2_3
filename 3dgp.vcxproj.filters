@@ -846,6 +846,9 @@
     <ClCompile Include="RePlayEngine\Object\Registry\ComponentRegistry.cpp">
       <Filter>RePlayEngine\Object\Registry</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Object\Registry\ComponentDependencyRules.cpp">
+      <Filter>RePlayEngine\Object\Registry</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Reflection\Property\PropertyValue.cpp">
       <Filter>RePlayEngine\Reflection\Property</Filter>
     </ClCompile>
@@ -1626,6 +1629,9 @@
       <Filter>RePlayEngine\Object\Registry</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Object\Registry\ComponentRegistry.h">
+      <Filter>RePlayEngine\Object\Registry</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Object\Registry\ComponentDependencyRules.h">
       <Filter>RePlayEngine\Object\Registry</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Reflection\Property\PropertyValue.h">

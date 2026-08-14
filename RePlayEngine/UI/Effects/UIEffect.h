@@ -89,6 +89,7 @@ namespace ReplayEngine::UI
         Reflection::PropertyBag custom_parameters;
         int waveform = 0;
 
-        DirectX::XMFLOAT4 ExpandBounds() const noexcept;
+        DirectX::XMFLOAT4 ExpandBounds(float target_width,
+            float target_height) const noexcept;
     };
 }

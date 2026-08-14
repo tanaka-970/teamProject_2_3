@@ -323,12 +323,17 @@ namespace ReplayEngine::Runtime
         // データは保持されており、型が戻れば復元されるため。
         // ただし診断へ必ず残す。
         if (runtime_ != nullptr && (report.missing_components != 0 ||
-            report.unknown_properties != 0 || report.skipped_components != 0))
+            report.unknown_properties != 0 || report.skipped_components != 0 ||
+            report.unresolved_component_dependencies != 0))
         {
             runtime_->LogWarning("Scene 読み込み時の注意: Missing Component " +
                 std::to_string(report.missing_components) + " 件, 未知プロパティ " +
                 std::to_string(report.unknown_properties) + " 件, 生成失敗 " +
-                std::to_string(report.skipped_components) + " 件 (GUID " +
+                std::to_string(report.skipped_components) + " 件, 依存自動補完 " +
+                std::to_string(report.automatically_added_components) +
+                " 件, 依存未解決 " +
+                std::to_string(report.unresolved_component_dependencies) +
+                " 件 (GUID " +
                 pending_scene_guid_ + ")");
         }
 

@@ -9,6 +9,7 @@
 #include "PlayerCompositionValidator.h"
 #include "../../Assets/AssetDatabase.h"
 #include "../../Object/Component/MissingComponent.h"
+#include "../../Object/Registry/ComponentDependencyRules.h"
 #include "../../Object/Registry/ComponentRegistry.h"
 #include "../Core/EditorContext.h"
 #include "../../Object/GameObject/GameObject.h"
@@ -270,12 +271,32 @@ namespace ReplayEngine::Editor
                         if (ImGui::SmallButton("追加"))
                         {
                             context.BeginEdit(dependency_name + " を追加");
-                            if (owner.AddComponent(dependency_id) != nullptr)
+                            const Core::ComponentDependencyPlan plan =
+                                Core::ComponentDependencyRules::PlanRequiredAdd(owner,
+                                    dependency_id,
+                                    Core::ComponentAvailabilityPolicy::Editor);
+                            const Core::ComponentDependencyApplyResult result =
+                                Core::ComponentDependencyRules::ApplyRequiredAddPlan(owner, plan);
+                            if (result.Succeeded())
                             {
                                 context.CommitEdit();
-                                context.SetStatus(dependency_name + " を追加しました");
+                                std::string status = dependency_name + " を追加しました";
+                                if (result.automatically_added > 0)
+                                {
+                                    status += "（必須 Component " +
+                                        std::to_string(result.automatically_added) +
+                                        " 個を自動追加）";
+                                }
+                                context.SetStatus(status);
                             }
-                            else context.CancelEdit();
+                            else
+                            {
+                                context.CancelEdit();
+                                const Core::ComponentDependencyIssue& issue = result.issue.Any()
+                                    ? result.issue : plan.issue;
+                                context.SetStatus(dependency_name + " を追加できませんでした: " +
+                                    Core::ComponentDependencyRules::DescribeIssue(issue));
+                            }
                         }
                         ImGui::PopID();
                     }
@@ -416,6 +437,12 @@ namespace ReplayEngine::Editor
         }
 
         ImGui::Spacing();
+        std::vector<Core::Component*> dependents;
+        if (component.Owner() != nullptr)
+        {
+            dependents = Core::ComponentDependencyRules::FindDirectDependents(
+                *component.Owner(), component);
+        }
         if (!removable)
         {
             ImGui::TextDisabled("このコンポーネントは削除できません");
@@ -423,6 +450,17 @@ namespace ReplayEngine::Editor
         else if (!editable)
         {
             ImGui::TextDisabled("実行中は削除できません");
+        }
+        else if (!dependents.empty())
+        {
+            ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+            ImGui::PushStyleVar(ImGuiStyleVar_Alpha,
+                ImGui::GetStyle().Alpha * 0.5f);
+            ImGui::Button("コンポーネントを削除");
+            ImGui::PopStyleVar();
+            ImGui::PopItemFlag();
+            ImGui::TextDisabled("%s が必須として使用中",
+                ComponentRegistry::DisplayNameOf(dependents.front()->TypeID()).c_str());
         }
         else if (ImGui::Button("コンポーネントを削除"))
         {
