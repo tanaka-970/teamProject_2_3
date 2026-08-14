@@ -9,6 +9,7 @@
 #include "PlayerCompositionValidator.h"
 #include "../../Assets/AssetDatabase.h"
 #include "../../Object/Component/MissingComponent.h"
+#include "../../Object/Registry/ComponentDependencyRules.h"
 #include "../../Object/Registry/ComponentRegistry.h"
 #include "../Core/EditorContext.h"
 #include "../../Object/GameObject/GameObject.h"
@@ -31,6 +32,7 @@
 #include <cmath>
 #include <cstring>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace ReplayEngine::Editor
@@ -47,6 +49,43 @@ namespace ReplayEngine::Editor
             const Reflection::PropertyValue& b)
         {
             return Reflection::ValuesEqual(a, b);
+        }
+
+        std::string BulkRemovalBlockReason(const std::vector<GameObject*>& objects,
+            const std::vector<Core::Component*>& components)
+        {
+            std::string reason;
+            for (std::size_t index = 0; index < objects.size() &&
+                index < components.size(); ++index)
+            {
+                GameObject* object = objects[index];
+                Core::Component* component = components[index];
+                if (object == nullptr || component == nullptr || component->PendingDestroy())
+                {
+                    if (!reason.empty()) reason += "; ";
+                    reason += object != nullptr ? object->Name() : "(null)";
+                    reason += ": 削除対象が無効";
+                    continue;
+                }
+                if (!ComponentRegistry::IsRemovable(component->TypeID()))
+                {
+                    if (!reason.empty()) reason += "; ";
+                    reason += object->Name() + ": 削除不可";
+                    continue;
+                }
+
+                const std::vector<Core::Component*> dependents =
+                    Core::ComponentDependencyRules::FindDirectDependents(
+                        *object, *component);
+                for (Core::Component* dependent : dependents)
+                {
+                    if (!reason.empty()) reason += "; ";
+                    reason += object->Name() + ": " +
+                        ComponentRegistry::DisplayNameOf(dependent->TypeID()) +
+                        " が必須として使用中";
+                }
+            }
+            return reason;
         }
     }
 
@@ -134,19 +173,63 @@ namespace ReplayEngine::Editor
                 if (ImGui::Selectable(info.DisplayName().c_str()))
                 {
                     context.BeginEdit(info.DisplayName() + " を一括追加");
-                    int added = 0;
+                    std::vector<std::pair<GameObject*, Core::ComponentDependencyPlan>> plans;
+                    std::string planning_error;
                     for (GameObject* object : objects)
                     {
                         if (object == nullptr) continue;
-                        if (!info.allow_multiple && object->FindComponent(info.type_id) != nullptr) continue;
-                        if (object->AddComponent(info.type_id) != nullptr) ++added;
+                        if (!info.allow_multiple &&
+                            object->FindComponent(info.type_id) != nullptr) continue;
+                        Core::ComponentDependencyPlan plan =
+                            Core::ComponentDependencyRules::PlanRequiredAdd(*object,
+                                info.type_id,
+                                Core::ComponentAvailabilityPolicy::Editor);
+                        if (!plan.Valid())
+                        {
+                            planning_error = object->Name() + ": " +
+                                Core::ComponentDependencyRules::DescribeIssue(plan.issue);
+                            break;
+                        }
+                        plans.emplace_back(object, std::move(plan));
                     }
-                    if (added > 0)
+
+                    int added = 0;
+                    std::size_t dependencies_added = 0;
+                    bool apply_failed = false;
+                    for (const auto& entry : plans)
+                    {
+                        if (!planning_error.empty()) break;
+                        const Core::ComponentDependencyApplyResult result =
+                            Core::ComponentDependencyRules::ApplyRequiredAddPlan(
+                                *entry.first, entry.second);
+                        if (!result.Succeeded())
+                        {
+                            planning_error = entry.first->Name() + ": " +
+                                Core::ComponentDependencyRules::DescribeIssue(result.issue);
+                            apply_failed = true;
+                            break;
+                        }
+                        ++added;
+                        dependencies_added += result.automatically_added;
+                    }
+                    if (added > 0 && planning_error.empty() && !apply_failed)
                     {
                         context.CommitEdit();
-                        context.SetStatus(info.DisplayName() + " を " + std::to_string(added) + " 個へ追加しました");
+                        std::string status = info.DisplayName() + " を " +
+                            std::to_string(added) + " 個へ追加しました";
+                        if (dependencies_added > 0)
+                        {
+                            status += "（必須 Component " +
+                                std::to_string(dependencies_added) + " 個を自動追加）";
+                        }
+                        context.SetStatus(status);
                     }
-                    else context.CancelEdit();
+                    else
+                    {
+                        context.CancelEdit();
+                        if (!planning_error.empty())
+                            context.SetStatus("一括追加を中止しました: " + planning_error);
+                    }
                     ImGui::CloseCurrentPopup();
                 }
             }
@@ -246,18 +329,62 @@ namespace ReplayEngine::Editor
         }
 
         const bool removable = ComponentRegistry::IsRemovable(type_id);
-        if (removable && editable && ImGui::Button("選択対象から一括削除"))
+        const std::string removal_block_reason =
+            BulkRemovalBlockReason(objects, components);
+        if (!removable)
+        {
+            ImGui::TextDisabled("このコンポーネントは一括削除できません");
+        }
+        else if (!editable)
+        {
+            ImGui::TextDisabled("実行中は一括削除できません");
+        }
+        else if (!removal_block_reason.empty())
+        {
+            ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+            ImGui::PushStyleVar(ImGuiStyleVar_Alpha,
+                ImGui::GetStyle().Alpha * 0.5f);
+            ImGui::Button("選択対象から一括削除");
+            ImGui::PopStyleVar();
+            ImGui::PopItemFlag();
+            ImGui::TextWrapped("一括削除不可: %s", removal_block_reason.c_str());
+        }
+        else if (ImGui::Button("選択対象から一括削除"))
+        {
             ImGui::OpenPopup("ConfirmBulkRemove");
+        }
         if (ImGui::BeginPopupModal("ConfirmBulkRemove", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
             ImGui::Text("%zu 個の GameObject から %s を削除しますか？", objects.size(), title.c_str());
             if (ImGui::Button("削除"))
             {
                 context.BeginEdit(title + " を一括削除");
-                for (std::size_t index = 0; index < objects.size(); ++index)
-                    objects[index]->RemoveComponent(components[index]);
-                context.CommitEdit();
-                context.SetStatus(title + " を一括削除しました");
+                const std::string rechecked =
+                    BulkRemovalBlockReason(objects, components);
+                if (!rechecked.empty())
+                {
+                    context.CancelEdit();
+                    context.SetStatus("一括削除を中止しました: " + rechecked);
+                }
+                else
+                {
+                    bool removed_all = true;
+                    for (std::size_t index = 0; index < objects.size(); ++index)
+                    {
+                        if (!objects[index]->RemoveComponent(components[index]))
+                            removed_all = false;
+                    }
+                    if (removed_all)
+                    {
+                        context.CommitEdit();
+                        context.SetStatus(title + " を一括削除しました");
+                    }
+                    else
+                    {
+                        context.CancelEdit();
+                        context.SetStatus(title + " の一括削除に失敗しました");
+                    }
+                }
                 ImGui::CloseCurrentPopup();
             }
             ImGui::SameLine();
@@ -329,23 +456,48 @@ namespace ReplayEngine::Editor
             {
                 context.BeginEdit("不足 Component を追加");
                 int added = 0;
+                std::size_t dependencies_added = 0;
+                std::string failure;
                 for (const auto& requirement : result.requirements)
                 {
                     if (!requirement.required || requirement.present) continue;
                     const auto* info = Core::ComponentRegistry::Find(requirement.type_name);
                     if (info == nullptr) continue;
-                    // AddComponent は重複禁止型なら既存を返すので二重追加にならない。
                     if (object.FindComponent(info->type_id) != nullptr) continue;
-                    if (object.AddComponent(info->type_id) != nullptr) ++added;
+                    const Core::ComponentDependencyPlan plan =
+                        Core::ComponentDependencyRules::PlanRequiredAdd(object,
+                            info->type_id,
+                            Core::ComponentAvailabilityPolicy::Editor);
+                    const Core::ComponentDependencyApplyResult add_result =
+                        Core::ComponentDependencyRules::ApplyRequiredAddPlan(object, plan);
+                    if (!add_result.Succeeded())
+                    {
+                        const Core::ComponentDependencyIssue& issue = add_result.issue.Any()
+                            ? add_result.issue : plan.issue;
+                        failure = requirement.display_name + ": " +
+                            Core::ComponentDependencyRules::DescribeIssue(issue);
+                        break;
+                    }
+                    ++added;
+                    dependencies_added += add_result.automatically_added;
                 }
-                if (added > 0)
+                if (added > 0 && failure.empty())
                 {
                     context.CommitEdit();
-                    context.SetStatus(std::to_string(added) + " 個の Component を追加しました");
+                    std::string status = std::to_string(added) +
+                        " 個の Component を追加しました";
+                    if (dependencies_added > 0)
+                    {
+                        status += "（必須 Component " +
+                            std::to_string(dependencies_added) + " 個を自動追加）";
+                    }
+                    context.SetStatus(status);
                 }
                 else
                 {
                     context.CancelEdit();
+                    if (!failure.empty())
+                        context.SetStatus("不足 Component の追加を中止しました: " + failure);
                 }
             }
             ImGui::SameLine();

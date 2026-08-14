@@ -187,6 +187,11 @@ namespace ReplayEngine::Scene::Serialization
         // 採番し直した ComponentStableID の数（保存値が 0 または重複していた）。
         int repaired_component_ids = 0;
 
+        // required_components に従って保存データ外から補った Component 数と、
+        // 補えずに残った依存辺の数。欠落していても Scene 読み込みは継続する。
+        int automatically_added_components = 0;
+        int unresolved_component_dependencies = 0;
+
         bool Clean() const noexcept { return warnings.empty(); }
         void Clear() noexcept
         {
@@ -197,6 +202,8 @@ namespace ReplayEngine::Scene::Serialization
             unknown_properties = 0;
             missing_components = 0;
             repaired_component_ids = 0;
+            automatically_added_components = 0;
+            unresolved_component_dependencies = 0;
         }
     };
 

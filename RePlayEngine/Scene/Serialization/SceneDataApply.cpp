@@ -3,6 +3,7 @@
 
 #include "../Runtime/Scene.h"
 #include "../../Object/Component/MissingComponent.h"
+#include "../../Object/Registry/ComponentDependencyRules.h"
 #include "../../Object/Registry/ComponentRegistry.h"
 #include "../../Reflection/Registry/PropertyRegistry.h"
 
@@ -54,6 +55,28 @@ namespace ReplayEngine::Scene::Serialization
             const ObjectRemap* object_remap,
             bool clear_unresolved_references)
         {
+            const ReplayEngine::Scene::Scene* owner_scene = target.GetScene();
+            const bool runtime_world = owner_scene != nullptr &&
+                owner_scene->Services().Runtime() != nullptr;
+            const Core::ComponentAvailabilityPolicy availability = runtime_world
+                ? Core::ComponentAvailabilityPolicy::Runtime
+                : Core::ComponentAvailabilityPolicy::Editor;
+
+            // 保存されている型は StableID 付きの生成まで既定値で先取りしない。
+            // Component 同士の保存順も変えず、欠落している依存だけを途中へ差し込む。
+            std::vector<Core::ComponentTypeID> saved_types;
+            for (const ComponentData& component_data : source.components)
+            {
+                const ComponentTypeInfo* info = ComponentRegistry::Resolve(
+                    component_data.type_guid, component_data.type_name);
+                if (info == nullptr || (runtime_world && !info->runtime_available)) continue;
+                if (std::find(saved_types.begin(), saved_types.end(), info->type_id) ==
+                    saved_types.end())
+                {
+                    saved_types.push_back(info->type_id);
+                }
+            }
+
             for (const ComponentData& component_data : source.components)
             {
                 // 型の解決は必ず Resolve を通す。
@@ -125,11 +148,47 @@ namespace ReplayEngine::Scene::Serialization
                 // EditorOnly Component はファイルには残すが Runtime World へは持ち込まない。
                 // RuntimeSceneService は ApplySceneData より前に Services().Runtime() を
                 // 接続するため、Editor 読み込みとの区別を型ごとの if なしで行える。
-                const ReplayEngine::Scene::Scene* owner_scene = target.GetScene();
                 if (!info->runtime_available && owner_scene != nullptr &&
                     owner_scene->Services().Runtime() != nullptr)
                 {
                     continue;
+                }
+
+                for (Core::ComponentTypeID dependency_id : info->required_components)
+                {
+                    if (target.FindComponent(dependency_id) != nullptr) continue;
+                    if (std::find(saved_types.begin(), saved_types.end(), dependency_id) !=
+                        saved_types.end())
+                    {
+                        continue;
+                    }
+
+                    const Core::ComponentDependencyPlan plan =
+                        Core::ComponentDependencyRules::PlanRequiredAdd(target,
+                            dependency_id, availability, saved_types);
+                    if (!plan.Valid())
+                    {
+                        report.warnings.push_back(
+                            "必須 Component の補完計画に失敗しました: " +
+                            ComponentRegistry::DisplayNameOf(info->type_id) + " -> " +
+                            Core::ComponentDependencyRules::DescribeIssue(plan.issue) +
+                            " (" + source.name + ")");
+                        continue;
+                    }
+
+                    const Core::ComponentDependencyApplyResult added =
+                        Core::ComponentDependencyRules::ApplyRequiredAddPlan(target, plan);
+                    if (!added.Succeeded())
+                    {
+                        report.warnings.push_back(
+                            "必須 Component を補完できませんでした: " +
+                            ComponentRegistry::DisplayNameOf(info->type_id) + " -> " +
+                            Core::ComponentDependencyRules::DescribeIssue(added.issue) +
+                            " (" + source.name + ")");
+                        continue;
+                    }
+                    report.automatically_added_components +=
+                        static_cast<int>(added.added_types.size());
                 }
 
                 Core::Component* component = ComponentRegistry::CreateWithStableID(
@@ -163,6 +222,28 @@ namespace ReplayEngine::Scene::Serialization
                     report.warnings.push_back(
                         "この型が知らないプロパティを保持しました（保存時に書き戻します）: " +
                         component_data.type_name + "." + name);
+                }
+            }
+
+            // 生成を止めない方針なので、最後に残った不足を独立した件数で報告する。
+            // 上位は Prefab の root を受け取りつつ、この値から不完全な構成を検知できる。
+            for (std::size_t index = 0; index < target.ComponentCount(); ++index)
+            {
+                Core::Component* component = target.ComponentAt(index);
+                if (component == nullptr || component->PendingDestroy()) continue;
+                const ComponentTypeInfo* component_info =
+                    ComponentRegistry::Find(component->TypeID());
+                if (component_info == nullptr) continue;
+                for (Core::ComponentTypeID dependency_id :
+                    component_info->required_components)
+                {
+                    if (target.FindComponent(dependency_id) != nullptr) continue;
+                    ++report.unresolved_component_dependencies;
+                    report.warnings.push_back(
+                        "必須 Component が未解決のままです: " +
+                        ComponentRegistry::DisplayNameOf(component->TypeID()) + " -> " +
+                        ComponentRegistry::DisplayNameOf(dependency_id) +
+                        " (" + source.name + ")");
                 }
             }
         }

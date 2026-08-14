@@ -29,7 +29,7 @@ float4 main(VSOutput input) : SV_TARGET
     const float rectangle = max(abs(local.x), abs(local.y));
     const float circle = length(local);
     const float shape = lerp(rectangle, circle, saturate(effect_params0.w));
-    const float edge = saturate((0.5 - shape) / max(effect_params1.z, 0.0001));
+    const float edge = saturate((1.0 - shape) / max(effect_params1.z, 0.0001));
     color.a *= edge;
     if (effect_params1.w > 0.5f)
     {

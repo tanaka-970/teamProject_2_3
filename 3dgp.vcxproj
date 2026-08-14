@@ -352,6 +352,7 @@
     <ClCompile Include="RePlayEngine\Object\Component\MissingComponent.cpp" />
     <ClCompile Include="RePlayEngine\Object\GameObject\GameObject.cpp" />
     <ClCompile Include="RePlayEngine\Object\Registry\ComponentRegistry.cpp" />
+    <ClCompile Include="RePlayEngine\Object\Registry\ComponentDependencyRules.cpp" />
     <ClCompile Include="RePlayEngine\Reflection\Property\PropertyValue.cpp" />
     <ClCompile Include="RePlayEngine\Reflection\Property\PropertyValueAccessors.cpp" />
     <ClCompile Include="RePlayEngine\Reflection\Property\PropertyValueComparison.cpp" />
@@ -676,6 +677,7 @@
     <ClInclude Include="RePlayEngine\Object\GameObject\GameObject.h" />
     <ClInclude Include="RePlayEngine\Object\Registry\ComponentTypeInfo.h" />
     <ClInclude Include="RePlayEngine\Object\Registry\ComponentRegistry.h" />
+    <ClInclude Include="RePlayEngine\Object\Registry\ComponentDependencyRules.h" />
     <ClInclude Include="RePlayEngine\Reflection\Property\PropertyValue.h" />
     <ClInclude Include="RePlayEngine\Reflection\Property\PropertyDesc.h" />
     <ClInclude Include="RePlayEngine\Reflection\Property\PropertyBag.h" />

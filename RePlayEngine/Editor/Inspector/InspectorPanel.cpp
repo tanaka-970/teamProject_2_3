@@ -13,6 +13,7 @@
 #include "PlayerCompositionValidator.h"
 #include "../../Assets/AssetDatabase.h"
 #include "../../Object/Component/MissingComponent.h"
+#include "../../Object/Registry/ComponentDependencyRules.h"
 #include "../../Object/Registry/ComponentRegistry.h"
 #include "../Core/EditorContext.h"
 #include "../../Object/GameObject/GameObject.h"
@@ -126,9 +127,26 @@ namespace ReplayEngine::Editor
         if (pending_removal_ != nullptr)
         {
             context.BeginEdit(pending_removal_label_ + " を削除");
-            object->RemoveComponent(pending_removal_);
-            context.CommitEdit();
-            context.SetStatus(pending_removal_label_ + " を削除しました");
+            const std::vector<Core::Component*> dependents =
+                Core::ComponentDependencyRules::FindDirectDependents(
+                    *object, *pending_removal_);
+            if (!dependents.empty())
+            {
+                context.CancelEdit();
+                context.SetStatus(pending_removal_label_ + " は " +
+                    Core::ComponentRegistry::DisplayNameOf(
+                        dependents.front()->TypeID()) + " が必須として使用中です");
+            }
+            else if (object->RemoveComponent(pending_removal_))
+            {
+                context.CommitEdit();
+                context.SetStatus(pending_removal_label_ + " を削除しました");
+            }
+            else
+            {
+                context.CancelEdit();
+                context.SetStatus(pending_removal_label_ + " を削除できませんでした");
+            }
             pending_removal_ = nullptr;
             pending_removal_label_.clear();
         }

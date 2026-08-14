@@ -105,6 +105,16 @@ framework::runtime_prefab_instantiator::InstantiatePrefab(
             world, owner_->content_path(record->source_path), error, &report, asset_guid);
     if (!root.Valid()) return RRuntime::RuntimeStatus::SceneLoadFailed;
 
+    // Prefab は不完全でも配置を継続するが、依存欠落を成功の陰へ隠さない。
+    if (report.unresolved_component_dependencies > 0 &&
+        owner_->object_runtime_context != nullptr)
+    {
+        owner_->object_runtime_context->LogWarning(
+            "Prefab 配置時に未解決の Component 依存が " +
+            std::to_string(report.unresolved_component_dependencies) +
+            " 件あります (GUID " + asset_guid + ")");
+    }
+
     ReplayEngine::Core::GameObject* object = world.FindGameObjectByID(root);
     if (object == nullptr) return RRuntime::RuntimeStatus::SceneLoadFailed;
 
@@ -478,6 +488,9 @@ void framework::draw_runtime_diagnostics_panel()
         object_runtime_scenes.LastLoadReport();
     ImGui::Text(u8"直近の読み込み: Missing %d / 未知プロパティ %d / 復元失敗 %d",
         report.missing_components, report.unknown_properties, report.skipped_components);
+    ImGui::Text(u8"Component 依存: 自動補完 %d / 未解決 %d",
+        report.automatically_added_components,
+        report.unresolved_component_dependencies);
 
     ImGui::Text(u8"Load %llu / Swap %llu / 失敗 %llu",
         static_cast<unsigned long long>(object_runtime_scenes.LoadCount()),
