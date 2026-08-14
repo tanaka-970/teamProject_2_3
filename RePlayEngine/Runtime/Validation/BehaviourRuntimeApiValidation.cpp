@@ -131,8 +131,18 @@ namespace ReplayEngine::Runtime::Validation
             "Physics 未接続の問い合わせは ServiceUnavailable");
 
         check.Expect(!runtime.AudioAvailable() && !runtime.InputActionAvailable() &&
-            !runtime.SaveGameAvailable() && !runtime.RuntimeUIAvailable(),
-            "未実装 Service は利用不可を明示する（偽の成功を返さない）");
+            !runtime.SaveGameAvailable(),
+            "未接続 Service は利用不可を明示する（偽の成功を返さない）");
+
+        // Runtime UI だけは接続する Service が無い。
+        // 既存の UI Component を World 経由で直接触る設計なので、
+        // World があれば利用可能と答えるのが正しい（RUNTIME_API_1_2_DESIGN.md）。
+        // ただし「利用可能」が無条件の成功を意味しないことをここで固定する。
+        check.Expect(runtime.RuntimeUIAvailable(),
+            "Runtime UI は World があれば利用可能（接続する Service が無い）");
+        check.Expect(runtime.SetUIText(ObjectHandle::None(), "text") !=
+            RuntimeStatus::Ok,
+            "利用可能でも、無効な Handle への UI 操作は成功しない");
 
         // 遅延生成の要求は Instantiator が無ければ受け付けない
         check.Expect(runtime.InstantiatePrefabDeferred("guid", DirectX::XMFLOAT3{ 0,0,0 },

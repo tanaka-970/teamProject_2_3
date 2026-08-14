@@ -5,6 +5,16 @@
 #include <limits>
 #include <string_view>
 
+// windows.h が LoadString を LoadStringW へ展開するため、ここで無効化する。
+// RuntimeContext::LoadString は SaveGame の文字列読み出しで、Win32 の
+// リソース文字列読み込みとは無関係。展開されると
+// 「LoadStringW は RuntimeContext のメンバーではありません」で止まる。
+// このプロジェクトは NOMINMAX 方式を採らず必要な箇所だけ個別に外す流儀
+// （SAFETY_RULES.md 1.1 の std::max と同じ扱い）。
+#ifdef LoadString
+#undef LoadString
+#endif
+
 namespace ReplayEngine::Scripting::CSharp::Detail
 {
     namespace
