@@ -127,6 +127,39 @@ namespace ReplayEngine::Scene::Serialization
                     object_data.id.Value(), root->ID());
             }
         }
+        else if (root != nullptr)
+        {
+            // Clipboard paste reuses InstantiateSceneData.  Ctrl+D と同じく
+            // Prefab link は残し、部分木の外にあった instance root は貼り付けた
+            // 部分木の根へ付け替える。Prefab 配置（GUID 指定あり）の経路は上のまま。
+            std::unordered_map<ObjectID, ObjectID> parent_ids;
+            parent_ids.reserve(data.objects.size());
+            for (const GameObjectData& object_data : data.objects)
+                parent_ids.emplace(object_data.id, object_data.parent_id);
+
+            for (const GameObjectData& object_data : data.objects)
+            {
+                if (object_data.prefab_source_guid.empty()) continue;
+                const auto found = saved_to_object.find(object_data.id);
+                if (found == saved_to_object.end()) continue;
+
+                GameObject* instance_root = found->second;
+                ObjectID ancestor = object_data.parent_id;
+                std::unordered_set<ObjectID> visited;
+                while (ancestor.Valid())
+                {
+                    if (!visited.insert(ancestor).second) break;
+                    const auto parent = saved_to_object.find(ancestor);
+                    if (parent == saved_to_object.end()) break;
+                    instance_root = parent->second;
+                    const auto parent_data = parent_ids.find(ancestor);
+                    if (parent_data == parent_ids.end()) break;
+                    ancestor = parent_data->second;
+                }
+                found->second->SetPrefabInstanceInfo(object_data.prefab_source_guid,
+                    object_data.prefab_local_id, instance_root->ID());
+            }
+        }
 
         scene.ProcessPendingOperations();
         return root;

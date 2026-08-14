@@ -88,23 +88,30 @@ bool framework::scene_view_mouse_world_point(DirectX::XMFLOAT3& out_position,
 ReplayEngine::Core::GameObject* framework::create_scene_note_at(
     const DirectX::XMFLOAT3& world_position, const std::string& text)
 {
-    if (object_scene_play_mode) return nullptr;
+    if (!object_editor_context.CanEdit()) return nullptr;
 
+    object_editor_context.BeginEdit("シーンメモを追加");
     ReplayEngine::Core::GameObject* object = object_scene.CreateGameObject("Scene Note");
-    if (object == nullptr) return nullptr;
+    if (object == nullptr)
+    {
+        object_editor_context.CancelEdit();
+        return nullptr;
+    }
     object->GetTransform().SetWorldPosition(world_position);
 
     EditorNoteComponent* note = object->AddComponent<EditorNoteComponent>();
     if (note == nullptr)
     {
         object_scene.DestroyGameObject(object);
+        object_scene.ProcessPendingOperations();
+        object_editor_context.CancelEdit();
         return nullptr;
     }
     note->text = text.empty() ? std::string("ここを修正") : text;
 
     object_editor_context.Selection().Select(object->ID(), false);
     selected_editor_object = editor_selection::game_object;
-    object_editor_context.MarkDirty();
+    object_editor_context.CommitEdit();
     object_editor_context.SetStatus("シーンメモを追加しました");
     show_scene_notes_panel = true;
     return object;
@@ -219,7 +226,7 @@ void framework::draw_scene_notes_panel()
     ImGui::SameLine();
     const ReplayEngine::Core::ObjectID selected_note_target =
         object_editor_context.Selection().Primary();
-    const bool can_attach_note = selected_note_target.Valid() && !object_scene_play_mode;
+    const bool can_attach_note = selected_note_target.Valid() && object_editor_context.CanEdit();
     if (can_attach_note)
     {
         if (ImGui::Button("選択GameObjectにメモ追加"))
@@ -227,11 +234,13 @@ void framework::draw_scene_notes_panel()
             if (ReplayEngine::Core::GameObject* selected =
                 object_scene.FindGameObjectByID(selected_note_target))
             {
+                object_editor_context.BeginEdit("シーンメモを追加");
                 if (selected->AddComponent<EditorNoteComponent>() != nullptr)
                 {
-                    object_editor_context.MarkDirty();
+                    object_editor_context.CommitEdit();
                     object_editor_context.SetStatus("選択GameObjectにシーンメモを追加しました");
                 }
+                else object_editor_context.CancelEdit();
             }
         }
     }
@@ -253,10 +262,11 @@ void framework::draw_scene_notes_panel()
             ImGui::PushID(object);
             ImGui::PushID(static_cast<int>(n));
             bool completed = note->completed;
-            if (ImGui::Checkbox("##done", &completed))
+            if (ImGui::Checkbox("##done", &completed) && object_editor_context.CanEdit())
             {
+                object_editor_context.BeginEdit("シーンメモの完了状態を変更");
                 note->completed = completed;
-                object_editor_context.MarkDirty();
+                object_editor_context.CommitEdit();
             }
             ImGui::SameLine();
             const std::string label = std::string(NoteCategoryName(note->category)) +
