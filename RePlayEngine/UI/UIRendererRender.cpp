@@ -1327,10 +1327,13 @@ namespace ReplayEngine::UI
                 const bool is_mask_effect = static_cast<UI::UIEffectKind>(effect.kind) ==
                     UI::UIEffectKind::Mask;
                 ID3D11ShaderResourceView* mask_texture = nullptr;
-                if (is_mask_effect && !effect.mask.empty())
+                // t1 は全 UI Effect に共通の任意 Image 入力。Mask 専用にせず、
+                // Dissolve / Noise / BrushStroke も同じ GUID 解決を使う。
+                if (!effect.mask.empty())
                 {
                     mask_texture = TextureFor(effect.mask, asset_database);
                 }
+                effect_constants.effect_params3.y = mask_texture != nullptr ? 1.0f : 0.0f;
                 if (is_mask_effect)
                 {
                     const float center_x = effect.direction.x > 0.0f &&
@@ -1343,8 +1346,8 @@ namespace ReplayEngine::UI
                         effect.speed < 1.0f ? effect.speed : 0.5f;
                     effect_constants.effect_params2 = {
                         center_x, center_y, half_width, half_height };
-                    effect_constants.effect_params1.w = effect.mask.empty()
-                        ? 0.0f : 1.0f;
+                    effect_constants.effect_params1.w = mask_texture != nullptr
+                        ? 1.0f : 0.0f;
                 }
                 effect_constants.target_size = {
                     width, height, 1.0f / width, 1.0f / height };

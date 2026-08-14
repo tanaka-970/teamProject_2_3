@@ -199,6 +199,8 @@ namespace ReplayEngine::Components
                 effect.color = { 1.0f, 1.0f, 1.0f, 1.0f };
                 break;
             case UI::UIEffectKind::Noise:
+                effect.radius = 32.0f;
+                effect.angle = 0.0f;
                 effect.intensity = 0.08f;
                 effect.amount = 2.0f;
                 effect.speed = 1.0f;
@@ -222,6 +224,8 @@ namespace ReplayEngine::Components
                 effect.softness = 0.05f;
                 break;
             case UI::UIEffectKind::Dissolve:
+                effect.radius = 64.0f;
+                effect.angle = 0.0f;
                 effect.progress = 0.35f;
                 effect.threshold = 0.08f;
                 effect.color = { 1.0f, 0.35f, 0.05f, 1.0f };
@@ -239,6 +243,7 @@ namespace ReplayEngine::Components
             case UI::UIEffectKind::Kuwahara:
                 effect.radius = 5.0f;
                 effect.intensity = 1.0f;
+                effect.softness = 0.6f;
                 break;
             case UI::UIEffectKind::Halftone:
                 effect.radius = 8.0f;
@@ -342,6 +347,8 @@ namespace ReplayEngine::Components
                 effect.amount = 3.0f;
                 effect.threshold = 0.1f;
                 effect.intensity = 0.8f;
+                effect.progress = 32.0f;
+                effect.softness = 0.35f;
                 break;
             case UI::UIEffectKind::Mosaic:
                 effect.radius = 12.0f;
@@ -351,6 +358,10 @@ namespace ReplayEngine::Components
                 effect.radius = 24.0f;
                 effect.threshold = 0.45f;
                 effect.intensity = 1.0f;
+                effect.progress = 0.25f;
+                effect.angle = 35.0f;
+                effect.softness = 0.12f;
+                effect.color = { 1.0f, 1.0f, 1.0f, 1.0f };
                 break;
             case UI::UIEffectKind::StainedGlass:
                 effect.radius = 24.0f;
@@ -709,6 +720,17 @@ namespace ReplayEngine::Components
                     "同じ値なら同じ揺れ・ノイズになる。", -65536.0, 65536.0, 1.0);
             };
 
+            // ---- 拡張点: マスクテクスチャの直接編集 -------------------------
+            //
+            // 【今は入れていない理由】
+            //   画像編集には筆・消しゴム・履歴・保存先の設計が必要であり、
+            //   Effect パラメータの修正と混ぜると両方の責務が曖昧になる。
+            // 【入れるときにここへ足す】
+            //   Asset 参照欄の隣に Image 編集画面を開くボタンを置く。
+            // 【壊してはいけない前提】
+            //   Effect は Image の GUID を持つだけで、未指定なら手続き的な
+            //   従来経路を通る。Asset の保存形式も変えない。
+
             // ---- 拡張点: UI Effect 種類別プロパティ -------------------------
             //
             // 【今は入れていない理由】
@@ -747,6 +769,14 @@ namespace ReplayEngine::Components
                 add_color("色の乗算", "色調整の最後に RGB へ掛ける色。");
                 break;
             case UI::UIEffectKind::Noise:
+                push(MakeEffectProperty(i, "mask", Reflection::PropertyType::AssetReference,
+                    Reflection::Animatable::Step).Display("ノイズのテクスチャ")
+                    .Tooltip("設定した場合は手続き的な粒の代わりにこの模様を使う。")
+                    .OfAssetType("Image"));
+                add_float("radius", "テクスチャの大きさ",
+                    "ノイズテクスチャの繰り返し単位（ピクセル）。", 1.0, 1024.0, 0.1);
+                add_float("angle", "テクスチャの向き",
+                    "ノイズテクスチャを回す角度（度）。", -360.0, 360.0, 0.1);
                 add_float("intensity", "ノイズ量", "加える粒状ノイズの強さ。",
                     0.0, 2.0, 0.01);
                 add_float("amount", "粒の大きさ", "同じノイズ値を共有するセルの大きさ。",
@@ -794,6 +824,14 @@ namespace ReplayEngine::Components
                     0.0001, 1.0, 0.001);
                 break;
             case UI::UIEffectKind::Dissolve:
+                push(MakeEffectProperty(i, "mask", Reflection::PropertyType::AssetReference,
+                    Reflection::Animatable::Step).Display("溶けかたのテクスチャ")
+                    .Tooltip("設定した場合は明るい所から先に消える。")
+                    .OfAssetType("Image"));
+                add_float("radius", "テクスチャの大きさ",
+                    "溶けかたテクスチャの繰り返し単位（ピクセル）。", 1.0, 1024.0, 0.1);
+                add_float("angle", "テクスチャの向き",
+                    "溶けかたテクスチャを回す角度（度）。", -360.0, 360.0, 0.1);
                 add_float("progress", "進行", "0 から 1 で消失を進める。",
                     0.0, 1.0, 0.001);
                 add_float("threshold", "縁の幅", "消え際に着色する帯の幅。",
@@ -823,6 +861,9 @@ namespace ReplayEngine::Components
                     0.0, 128.0, 0.1);
                 add_float("intensity", "適用量", "元画像から平坦化画像へ混ぜる割合。",
                     0.0, 1.0, 0.01);
+                add_float("softness", "面の硬さ",
+                    "0 でぼかし寄り、1 で分散の小さい面を強く選ぶ。",
+                    0.0, 1.0, 0.001);
                 break;
             case UI::UIEffectKind::Halftone:
                 add_float("radius", "網の間隔", "網点セルの間隔（ピクセル）。",
@@ -979,6 +1020,14 @@ namespace ReplayEngine::Components
                 add_color("線の色", "ハッチ線へ使う色。");
                 break;
             case UI::UIEffectKind::BrushStroke:
+                push(MakeEffectProperty(i, "mask", Reflection::PropertyType::AssetReference,
+                    Reflection::Animatable::Step).Display("筆跡のテクスチャ")
+                    .Tooltip("設定した場合は筆跡そのものとして使う。")
+                    .OfAssetType("Image"));
+                add_float("progress", "筆跡の大きさ",
+                    "筆跡テクスチャを貼る単位（ピクセル）。", 1.0, 1024.0, 0.1);
+                add_float("softness", "筆跡のばらつき",
+                    "筆跡ごとの大きさと向きの散らばり。", 0.0, 1.0, 0.001);
                 add_float("radius", "筆の長さ", "構造に沿って平均する長軸（ピクセル）。",
                     1.0, 128.0, 0.1);
                 add_float("amount", "筆の幅", "構造をまたいで平均する短軸（ピクセル）。",
@@ -1002,6 +1051,13 @@ namespace ReplayEngine::Components
                     0.0, 1.0, 0.001);
                 add_float("intensity", "適用量", "元画像から結晶化画像へ混ぜる割合。",
                     0.0, 1.0, 0.01);
+                add_float("progress", "面の陰影",
+                    "セル中心からの向きで付ける明暗の量。", 0.0, 1.0, 0.001);
+                add_float("angle", "光の向き", "面の陰影を付ける方向（度）。",
+                    -360.0, 360.0, 0.1);
+                add_float("softness", "縁の輝き", "セル境界を光らせる量。",
+                    0.0, 1.0, 0.001);
+                add_color("縁の色", "セル境界の輝きへ使う色。");
                 add_seed();
                 break;
             case UI::UIEffectKind::StainedGlass:
