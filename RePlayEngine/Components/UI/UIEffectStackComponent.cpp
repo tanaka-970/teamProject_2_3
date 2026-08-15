@@ -5,6 +5,7 @@
 #include "../../Rendering/Materials/MaterialSchema.h"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cstdio>
 #include <string>
@@ -15,6 +16,33 @@ namespace ReplayEngine::Components
     namespace
     {
         constexpr int max_effect_count = 16;
+        constexpr int brush_pattern_count = 16;
+        constexpr std::array<const char*, brush_pattern_count> brush_pattern_labels{
+            "ドライ平刷毛（右細り）", "細い横筋", "熊手ブラシ（右細り）",
+            "乾いた角平刷毛", "曲線スウィッシュ", "絵の具多めの平刷毛",
+            "粒状スカンブル", "滑らかな楕円筆", "乾いた散点ブラシ",
+            "細いドライドラッグ", "絵の具多めの熊手筆", "短い乾いた払い",
+            "粗い散布ブラシ", "平行ストリーク", "太い扇形ブラシ",
+            "広い単独テーパーブラシ"
+        };
+
+        bool TryBrushPatternWeightProperty(const std::string& property, int& index)
+        {
+            constexpr const char* prefix = "brush_pattern_weight_";
+            const std::size_t prefix_length = std::char_traits<char>::length(prefix);
+            if (property.compare(0, prefix_length, prefix) != 0) return false;
+            const std::string suffix = property.substr(prefix_length);
+            if (suffix.empty()) return false;
+            int parsed = 0;
+            for (const char character : suffix)
+            {
+                if (!std::isdigit(static_cast<unsigned char>(character))) return false;
+                parsed = parsed * 10 + (character - '0');
+                if (parsed >= brush_pattern_count) return false;
+            }
+            index = parsed;
+            return true;
+        }
 
         std::string EffectPropertyName(int index, const char* name)
         {
@@ -73,6 +101,18 @@ namespace ReplayEngine::Components
             if (property == "color_stop_4") return Reflection::PropertyValue::MakeFloat(effect.color_stop_4);
             if (property == "mask") return Reflection::PropertyValue::MakeAssetReference(effect.mask);
             if (property == "custom_shader") return Reflection::PropertyValue::MakeAssetReference(effect.custom_shader);
+            if (property == "brush_atlas_enabled")
+                return Reflection::PropertyValue::MakeBool(effect.brush_atlas_enabled);
+            if (property == "brush_instanced_renderer_enabled")
+                return Reflection::PropertyValue::MakeBool(effect.brush_instanced_renderer_enabled);
+            if (property == "brush_pattern_mode")
+                return Reflection::PropertyValue::MakeEnum(effect.brush_pattern_mode);
+            if (property == "brush_pattern_index")
+                return Reflection::PropertyValue::MakeEnum(effect.brush_pattern_index);
+            int brush_weight_index = 0;
+            if (TryBrushPatternWeightProperty(property, brush_weight_index))
+                return Reflection::PropertyValue::MakeFloat(
+                    effect.brush_pattern_weights[static_cast<std::size_t>(brush_weight_index)]);
             if (property == "waveform") return Reflection::PropertyValue::MakeEnum(effect.waveform);
             if (property.rfind("custom.", 0) == 0)
             {
@@ -107,10 +147,27 @@ namespace ReplayEngine::Components
             else if (property == "color_stop_4") effect.color_stop_4 = value.AsFloat(effect.color_stop_4);
             else if (property == "mask") effect.mask = value.AsAssetReference().guid;
             else if (property == "custom_shader") effect.custom_shader = value.AsAssetReference().guid;
-            else if (property == "waveform") effect.waveform = value.AsInt(effect.waveform);
-            else if (property.rfind("custom.", 0) == 0)
+            else if (property == "brush_atlas_enabled")
+                effect.brush_atlas_enabled = value.AsBool(effect.brush_atlas_enabled);
+            else if (property == "brush_instanced_renderer_enabled")
+                effect.brush_instanced_renderer_enabled =
+                    value.AsBool(effect.brush_instanced_renderer_enabled);
+            else if (property == "brush_pattern_mode")
+                effect.brush_pattern_mode = value.AsInt(effect.brush_pattern_mode);
+            else if (property == "brush_pattern_index")
+                effect.brush_pattern_index = value.AsInt(effect.brush_pattern_index);
+            else
             {
-                effect.custom_parameters.Set("prop." + property.substr(7), value);
+                int brush_weight_index = 0;
+                if (TryBrushPatternWeightProperty(property, brush_weight_index))
+                    effect.brush_pattern_weights[static_cast<std::size_t>(brush_weight_index)] =
+                        value.AsFloat(effect.brush_pattern_weights[
+                            static_cast<std::size_t>(brush_weight_index)]);
+                else if (property == "waveform") effect.waveform = value.AsInt(effect.waveform);
+                else if (property.rfind("custom.", 0) == 0)
+                {
+                    effect.custom_parameters.Set("prop." + property.substr(7), value);
+                }
             }
         }
 
@@ -349,6 +406,12 @@ namespace ReplayEngine::Components
                 effect.intensity = 0.8f;
                 effect.progress = 32.0f;
                 effect.softness = 0.35f;
+                effect.angle = 0.75f;
+                effect.brush_atlas_enabled = false;
+                effect.brush_instanced_renderer_enabled = false;
+                effect.brush_pattern_mode = 0;
+                effect.brush_pattern_index = 0;
+                effect.brush_pattern_weights.fill(1.0f);
                 break;
             case UI::UIEffectKind::Mosaic:
                 effect.radius = 12.0f;
@@ -514,6 +577,21 @@ namespace ReplayEngine::Components
                 Reflection::PropertyValue::MakeAssetReference(effect.mask));
             output.Set(EffectPropertyName(i, "custom_shader"),
                 Reflection::PropertyValue::MakeAssetReference(effect.custom_shader));
+            output.Set(EffectPropertyName(i, "brush_atlas_enabled"),
+                Reflection::PropertyValue::MakeBool(effect.brush_atlas_enabled));
+            output.Set(EffectPropertyName(i, "brush_instanced_renderer_enabled"),
+                Reflection::PropertyValue::MakeBool(effect.brush_instanced_renderer_enabled));
+            output.Set(EffectPropertyName(i, "brush_pattern_mode"),
+                Reflection::PropertyValue::MakeEnum(effect.brush_pattern_mode));
+            output.Set(EffectPropertyName(i, "brush_pattern_index"),
+                Reflection::PropertyValue::MakeEnum(effect.brush_pattern_index));
+            for (int brush_index = 0; brush_index < brush_pattern_count; ++brush_index)
+            {
+                output.Set(EffectPropertyName(i,
+                    ("brush_pattern_weight_" + std::to_string(brush_index)).c_str()),
+                    Reflection::PropertyValue::MakeFloat(effect.brush_pattern_weights[
+                        static_cast<std::size_t>(brush_index)]));
+            }
             output.Set(EffectPropertyName(i, "waveform"),
                 Reflection::PropertyValue::MakeEnum(effect.waveform));
             for (const Reflection::PropertyBag::Entry& parameter :
@@ -560,6 +638,18 @@ namespace ReplayEngine::Components
             if (index < 0 || static_cast<std::size_t>(index) >= effects.size()) continue;
             WriteEffectValue(effects[static_cast<std::size_t>(index)],
                 property, entry.value);
+        }
+
+        // 旧 BrushStroke の angle は Shader 側で未使用だった。アトラスを有効にして
+        // 保存された既存シーンだけは、その旧初期値を今回の輪郭初期値へ移行する。
+        // 通常マスクと、ユーザーがすでに調整した値は一切変更しない。
+        for (UI::UIEffect& effect : effects)
+        {
+            if (static_cast<UI::UIEffectKind>(effect.kind) == UI::UIEffectKind::BrushStroke &&
+                effect.brush_atlas_enabled && effect.angle == 0.15f)
+            {
+                effect.angle = 0.75f;
+            }
         }
 
         // type は上のループで復元される。項目一覧は kind に依存するため、
@@ -1022,12 +1112,54 @@ namespace ReplayEngine::Components
             case UI::UIEffectKind::BrushStroke:
                 push(MakeEffectProperty(i, "mask", Reflection::PropertyType::AssetReference,
                     Reflection::Animatable::Step).Display("筆跡のテクスチャ")
-                    .Tooltip("設定した場合は筆跡そのものとして使う。")
+                    .Tooltip("通常の筆跡画像、または 4 x 4 の筆跡アトラスを指定する。")
                     .OfAssetType("Image"));
+                push(MakeEffectProperty(i, "brush_atlas_enabled",
+                    Reflection::PropertyType::Bool, Reflection::Animatable::Step)
+                    .Display("筆跡アトラスを使う")
+                    .Tooltip("有効ならテクスチャを 4 x 4 の16種類アトラスとして読む。"
+                        "画像欄が空なら標準の brush_masks_atlas を使う。"
+                        "無効なら従来どおり画像全体を1種類の筆跡として使う。"));
+                push(MakeEffectProperty(i, "brush_instanced_renderer_enabled",
+                    Reflection::PropertyType::Bool, Reflection::Animatable::Step)
+                    .Display("独立ストローク描画（試験）")
+                    .Tooltip("調整中のインスタンス筆描画を使う。無効なら安定済みの"
+                        "アトラスフィルター経路を使う。"));
+                push(MakeEffectProperty(i, "brush_pattern_mode",
+                    Reflection::PropertyType::Enum, Reflection::Animatable::Step)
+                    .Display("アトラスの選び方")
+                    .Tooltip("単体は指定番号だけ、重み付きランダムはスタンプごとに比率で選ぶ。")
+                    .AsEnum({ "単体", "重み付きランダム" }));
+                push(MakeEffectProperty(i, "brush_pattern_index",
+                    Reflection::PropertyType::Enum, Reflection::Animatable::Step)
+                    .Display("単体の筆跡")
+                    .Tooltip("単体モードで使うアトラス内の筆跡。重みがすべて0の時の予備選択でもある。")
+                    .AsEnum({
+                        "ドライ平刷毛（右細り）", "細い横筋", "熊手ブラシ（右細り）",
+                        "乾いた角平刷毛", "曲線スウィッシュ", "絵の具多めの平刷毛",
+                        "粒状スカンブル", "滑らかな楕円筆", "乾いた散点ブラシ",
+                        "細いドライドラッグ", "絵の具多めの熊手筆", "短い乾いた払い",
+                        "粗い散布ブラシ", "平行ストリーク", "太い扇形ブラシ",
+                        "広い単独テーパーブラシ" }));
+                for (int brush_index = 0; brush_index < brush_pattern_count; ++brush_index)
+                {
+                    push(MakeEffectProperty(i,
+                        "brush_pattern_weight_" + std::to_string(brush_index),
+                        Reflection::PropertyType::Float,
+                        Reflection::Animatable::Interpolatable)
+                        .Display(std::string("比率: ") + brush_pattern_labels[
+                            static_cast<std::size_t>(brush_index)])
+                        .Tooltip("重み付きランダム時の相対的な選ばれやすさ。"
+                            "1 と 3 なら、おおむね 1:3 で選ばれる。")
+                        .Range(0.0, 100.0).Step(0.1));
+                }
                 add_float("progress", "筆跡の大きさ",
                     "筆跡テクスチャを貼る単位（ピクセル）。", 1.0, 1024.0, 0.1);
                 add_float("softness", "筆跡のばらつき",
                     "筆跡ごとの大きさと向きの散らばり。", 0.0, 1.0, 0.001);
+                add_float("angle", "筆致の輪郭",
+                    "0 で柔らかく、1 で色面と毛束の縁をくっきり出す。",
+                    0.0, 1.0, 0.001);
                 add_float("radius", "筆の長さ", "構造に沿って平均する長軸（ピクセル）。",
                     1.0, 128.0, 0.1);
                 add_float("amount", "筆の幅", "構造をまたいで平均する短軸（ピクセル）。",
