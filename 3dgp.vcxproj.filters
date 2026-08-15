@@ -573,6 +573,9 @@
     <ClCompile Include="Source\mesh\skinned_meshRender.cpp">
       <Filter>Source\Mesh</Filter>
     </ClCompile>
+    <ClCompile Include="Source\mesh\skinned_meshGltf.cpp">
+      <Filter>Source\Mesh</Filter>
+    </ClCompile>
     <ClCompile Include="Source\mesh\sprite.cpp">
       <Filter>Source\Mesh</Filter>
     </ClCompile>

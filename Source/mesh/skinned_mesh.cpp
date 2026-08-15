@@ -27,6 +27,21 @@ using namespace DirectX;
 
 skinned_mesh::skinned_mesh(ID3D11Device* device, const char* fbx_filename, bool triangulate, float sampling_rate)
 {
+    std::filesystem::path source_filename(fbx_filename ? fbx_filename : "");
+    std::string source_extension = source_filename.extension().string();
+    std::transform(source_extension.begin(), source_extension.end(), source_extension.begin(),
+        [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
+    if (source_extension == ".glb" || source_extension == ".gltf")
+    {
+        // glTF を別 Renderer へ再実装せず、既存の骨・Animator・影・TAA 経路が
+        // 読める skinned_mesh の CPU 表現へ一度だけ変換する。
+        if (!import_gltf(device, source_filename, sampling_rate))
+            throw std::runtime_error("glTFモデルをスキンメッシュへ変換できません: " +
+                source_filename.string());
+        create_com_objects(device, fbx_filename);
+        return;
+    }
+
     // UNIT30 手順5: シリアライズファイルのパスを作成 [cite: 316, 323]
     std::filesystem::path cereal_filename(fbx_filename);
     cereal_filename.replace_extension("cereal");

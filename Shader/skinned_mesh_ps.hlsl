@@ -17,6 +17,8 @@ float4 main(VS_OUT pin) : SV_TARGET
     float4 color = texture_maps[0].Sample(sampler_states[ANISOTROPIC], pin.texcoord);
 #endif
     float alpha = color.a;
+    if (gltf_pbr.w > 0.5f && gltf_alpha.x > 0.5f)
+        clip(alpha * pin.color.a - (gltf_alpha.x < 1.5f ? gltf_alpha.y : 0.01f));
 
     const float GAMMA = 2.2;
     color.rgb = pow(saturate(color.rgb), GAMMA);

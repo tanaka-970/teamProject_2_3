@@ -294,35 +294,30 @@ skinned_mesh* framework::resolve_object_mesh(const std::string& asset_guid)
         return give_up("Asset がプロジェクトに登録されていません");
     }
 
-    // 5) 対応拡張子かどうか。
-    //    skinned_mesh が読めるのは FBX と、その .cereal キャッシュだけ。
-    //    .obj は static_mesh 用、.glb / .gltf は既存のステージ経路が扱うので、
-    //    ここへ渡すと必ず失敗する。渡す前に弾く。
+    // 5) 対応拡張子かどうか。GLB/glTF は内容に Skin がある場合だけ
+    //    skinned_mesh 表現へ変換し、既存 Animator/影/TAA を再利用する。
     const std::filesystem::path source = content_path(record->source_path);
     std::string extension = source.extension().string();
     for (char& character : extension)
     {
         character = static_cast<char>(::tolower(static_cast<unsigned char>(character)));
     }
-    // glTF/GLB は resolve_object_gltf() が既存 gltf_model_cache へ接続する。
-    // ここで失敗扱いにすると、正常に読めた GLB まで次フレームから止まる。
-    if (extension == ".glb" || extension == ".gltf") return nullptr;
-    if (extension != ".fbx" && extension != ".cereal")
+    const bool gltf_source = extension == ".glb" || extension == ".gltf";
+    if (!gltf_source && extension != ".fbx" && extension != ".cereal")
     {
         return give_up("この形式は GameObject の描画へ接続していません（" +
             (extension.empty() ? std::string("拡張子なし") : extension) + "）: " +
             source.generic_string());
     }
 
-    // 6) 実ファイルが存在するか。
-    //    skinned_mesh は .cereal キャッシュを読むので、そちらの有無を見る。
-    std::filesystem::path cache = source;
-    cache.replace_extension(L".cereal");
-
-    std::error_code filesystem_error;
-    if (!std::filesystem::exists(cache, filesystem_error) || filesystem_error)
+    // FBXだけは従来どおり隣接.cereal必須。GLB/glTFは本体から直接変換する。
+    if (!gltf_source)
     {
-        return give_up("実行用の .cereal キャッシュが見つかりません: " + cache.generic_string());
+        std::filesystem::path cache = source;
+        cache.replace_extension(L".cereal");
+        std::error_code filesystem_error;
+        if (!std::filesystem::exists(cache, filesystem_error) || filesystem_error)
+            return give_up("実行用の .cereal キャッシュが見つかりません: " + cache.generic_string());
     }
 
     // 7) ここまで通ってから構築する。

@@ -10,6 +10,7 @@
 #include <directxmath.h>
 #include <vector>
 #include <string>
+#include <filesystem>
 #ifndef REPLAY_ENABLE_FBX_IMPORTER
 #define REPLAY_ENABLE_FBX_IMPORTER 0
 #endif
@@ -216,6 +217,11 @@ public:
         DirectX::XMFLOAT4 material_color;
         // UNIT23 手順2 *6 追加 [cite: 18-19]
         DirectX::XMFLOAT4X4 bone_transforms[MAX_BONES]{ { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 } };
+        // GLB 内蔵 Material を使う描画だけが参照する。w=0 の既存
+        // FBX/.cereal 経路では Shader 側も従来の b9/t0/t1 をそのまま使う。
+        DirectX::XMFLOAT4 gltf_pbr{ 0.0f, 0.55f, 1.0f, 0.0f };
+        DirectX::XMFLOAT4 gltf_emissive{ 0.0f, 0.0f, 0.0f, 0.0f };
+        DirectX::XMFLOAT4 gltf_alpha{ 0.0f, 0.5f, 0.0f, 1.0f };
     };
 
     // TAAのモーションベクター用に、前フレームのボーン姿勢だけを載せる定数バッファ。
@@ -305,6 +311,27 @@ public:
 
     std::unordered_map<uint64_t, material> materials;
 
+    // 既存 cereal の material レイアウトを変えると全 FBX キャッシュが壊れる。
+    // glTF 固有値は別表に置き、GLB の直接 import 時だけ使う。
+    struct gltf_material_info
+    {
+        float metallic = 1.0f;
+        float roughness = 1.0f;
+        float occlusion = 1.0f;
+        DirectX::XMFLOAT3 emissive{ 0.0f, 0.0f, 0.0f };
+        float emissive_strength = 1.0f;
+        int alpha_mode = 0; // OPAQUE=0, MASK=1, BLEND=2
+        float alpha_cutoff = 0.5f;
+        bool double_sided = false;
+        bool unlit = false;
+        float normal_scale = 1.0f;
+    };
+
+    const gltf_material_info* GltfMaterial(uint64_t unique_id) const noexcept;
+    bool IsGltf() const noexcept { return imported_gltf_; }
+    bool HasAnimations() const noexcept { return !animation_clips.empty(); }
+    bool HasDoubleSidedMaterials() const noexcept;
+
 #if REPLAY_ENABLE_FBX_IMPORTER
     void fetch_materials(FbxScene* fbx_scene, std::unordered_map<uint64_t, material>& materials);
 #endif
@@ -348,9 +375,17 @@ public:
         bool bind_pixel_shader = true, // 引数追加
         // trueのときだけ前フレーム姿勢をVSへ載せ、履歴を更新する。
         // G-Bufferパスで1回だけ渡すこと(複数回渡すと前フレーム姿勢が壊れる)。
-        bool write_motion_vectors = false);
+        bool write_motion_vectors = false,
+        // Material Asset が明示されていない GLB だけ true。
+        // false は従来 FBX と完全に同じ Shader 経路を保つ。
+        bool use_embedded_gltf_materials = false);
 protected:
     scene scene_view;
+private:
+    bool import_gltf(ID3D11Device* device, const std::filesystem::path& filename,
+        float sampling_rate);
+    std::unordered_map<uint64_t, gltf_material_info> gltf_materials_;
+    bool imported_gltf_ = false;
 public:
 	// 追加: デバイスリソースの明示解放
 	void release_device_resources();
