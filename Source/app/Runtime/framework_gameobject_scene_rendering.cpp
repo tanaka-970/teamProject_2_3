@@ -202,6 +202,65 @@ namespace
 // ---------------------------------------------------------------------------
 
 
+gltf_model* framework::resolve_object_gltf(const std::string& asset_guid)
+{
+    if (asset_guid.empty() || !device) return nullptr;
+
+    const ReplayEngine::Assets::AssetRecord* record = asset_database.FindByGuid(asset_guid);
+    if (record == nullptr) return nullptr;
+
+    const std::filesystem::path source = content_path(record->source_path);
+    std::string extension = source.extension().string();
+    for (char& character : extension)
+    {
+        character = static_cast<char>(::tolower(static_cast<unsigned char>(character)));
+    }
+    if (extension != ".glb" && extension != ".gltf") return nullptr;
+    if (object_mesh_failures.find(asset_guid) != object_mesh_failures.end()) return nullptr;
+
+    const auto give_up = [this, &asset_guid](const std::string& reason) -> gltf_model*
+    {
+        object_mesh_failures.insert(asset_guid);
+        const std::string message = "[Mesh] " + reason + " (GUID: " + asset_guid + ")";
+        OutputDebugStringA((message + "\n").c_str());
+        object_editor_context.SetStatus(message);
+        return nullptr;
+    };
+
+    std::error_code filesystem_error;
+    if (!std::filesystem::exists(source, filesystem_error) || filesystem_error)
+    {
+        return give_up("glTF/GLB ファイルが見つかりません: " + source.generic_string());
+    }
+
+    try
+    {
+        // Asset Browser のプレビューと GameObject は同じキャッシュを共有する。
+        // 参考実装の Repository と同じく、モデル本体を Object ごとに複製しない。
+        const auto loaded = gltf_model_cache.Load(source, [this, source]
+        {
+            return std::make_shared<gltf_model>(device.Get(), source.string());
+        });
+        if (!loaded || !loaded->IsLoaded())
+        {
+            return give_up(loaded && !loaded->Error().empty()
+                ? "glTF/GLB の読み込みに失敗しました: " + loaded->Error()
+                : "glTF/GLB を構築できませんでした: " + source.generic_string());
+        }
+        return loaded.get();
+    }
+    catch (const std::exception& exception)
+    {
+        return give_up("glTF/GLB の読み込みに失敗しました: " +
+            std::string(exception.what()));
+    }
+    catch (...)
+    {
+        return give_up("glTF/GLB の読み込み中に不明なエラーが発生しました: " +
+            source.generic_string());
+    }
+}
+
 skinned_mesh* framework::resolve_object_mesh(const std::string& asset_guid)
 {
     // 1) Asset 未指定。Editor で MeshRenderer を付けただけの状態はこれになる。
@@ -245,6 +304,9 @@ skinned_mesh* framework::resolve_object_mesh(const std::string& asset_guid)
     {
         character = static_cast<char>(::tolower(static_cast<unsigned char>(character)));
     }
+    // glTF/GLB は resolve_object_gltf() が既存 gltf_model_cache へ接続する。
+    // ここで失敗扱いにすると、正常に読めた GLB まで次フレームから止まる。
+    if (extension == ".glb" || extension == ".gltf") return nullptr;
     if (extension != ".fbx" && extension != ".cereal")
     {
         return give_up("この形式は GameObject の描画へ接続していません（" +

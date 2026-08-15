@@ -1239,6 +1239,7 @@ private:
 
     // Editor の Runtime 診断パネル。読み取り専用。
     void draw_runtime_diagnostics_panel();
+    gltf_model* resolve_object_gltf(const std::string& asset_guid);
     skinned_mesh* resolve_object_mesh(const std::string& asset_guid);
     static_mesh* resolve_builtin_primitive_mesh(const std::string& builtin_id);
     const ReplayEngine::Rendering::MaterialAsset* resolve_object_material(
