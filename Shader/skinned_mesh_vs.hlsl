@@ -4,6 +4,8 @@
 VS_OUT main(VS_IN vin)
 {
 	VS_OUT vout;
+	vin.position.xyz += vin.morph_position * gltf_morph.x;
+	vin.normal.xyz += vin.morph_normal * gltf_morph.x;
 
 	// 前フレームのボーン姿勢でも同じ頂点をスキニングしておく。
 	// アニメーションによる動きをモーションベクターへ載せるために必要。

@@ -186,10 +186,10 @@ bool framework::place_asset_in_object_scene(const ReplayEngine::Assets::AssetRec
     // Unity/Unreal と同じく、ファイル拡張子ではなく内容で Renderer を選ぶ。
     // Skin/Animation の無い GLB は軽い MeshRenderer のままにする。
     gltf_model* gltf = resolve_object_gltf(asset.guid);
-    const bool animated_gltf = gltf != nullptr &&
-        (gltf->HasSkins() || gltf->HasAnimations());
+    const bool skinned_gltf = gltf != nullptr && gltf->HasSkins();
+    const bool animated_gltf = gltf != nullptr && gltf->HasAnimations();
     bool renderer_added = false;
-    if (animated_gltf)
+    if (skinned_gltf || animated_gltf)
     {
         auto* renderer = object->AddComponent<
             ReplayEngine::Components::SkinnedMeshRendererComponent>();
@@ -198,9 +198,12 @@ bool framework::place_asset_in_object_scene(const ReplayEngine::Assets::AssetRec
             renderer->mesh_asset = asset.guid;
             renderer->visual_rotation_offset = { 0.0f, 0.0f, 0.0f };
             renderer->apply_fbx_coordinate_transform = false;
-            auto* animator = object->AddComponent<
-                ReplayEngine::Components::AnimatorComponent>();
-            if (animator != nullptr) animator->idle_clip = 0;
+            if (animated_gltf)
+            {
+                auto* animator = object->AddComponent<
+                    ReplayEngine::Components::AnimatorComponent>();
+                if (animator != nullptr) animator->idle_clip = 0;
+            }
             renderer_added = true;
         }
     }

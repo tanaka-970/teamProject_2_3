@@ -161,6 +161,10 @@ public:
         // UNIT22 追加項目
         float bone_weights[MAX_BONE_INFLUENCES]{ 1, 0, 0, 0 }; // ウェイト
         uint32_t bone_indices[MAX_BONE_INFLUENCES]{}; // ボーン番号
+        // glTF Morph Target 0。cerealへは書かないため既存FBXキャッシュの
+        // バイナリ形式は変わらず、読み込んだFBXでは常に0になる。
+        DirectX::XMFLOAT3 morph_position{};
+        DirectX::XMFLOAT3 morph_normal{};
 
         template<class T>
         void serialize(T& archive)
@@ -186,6 +190,7 @@ public:
                 DirectX::XMFLOAT3 scaling{ 1, 1, 1 };      // スケーリング [cite: 327]
                 DirectX::XMFLOAT4 rotation{ 0, 0, 0, 1 }; // 回転（クォータニオン） [cite: 329]
                 DirectX::XMFLOAT3 translation{ 0, 0, 0 }; // 平行移動
+                float morph_weight = 0.0f;
 
                 template<class T>
                 void serialize(T& archive)
@@ -222,6 +227,7 @@ public:
         DirectX::XMFLOAT4 gltf_pbr{ 0.0f, 0.55f, 1.0f, 0.0f };
         DirectX::XMFLOAT4 gltf_emissive{ 0.0f, 0.0f, 0.0f, 0.0f };
         DirectX::XMFLOAT4 gltf_alpha{ 0.0f, 0.5f, 0.0f, 1.0f };
+        DirectX::XMFLOAT4 gltf_morph{}; // x=target0 weight
     };
 
     // TAAのモーションベクター用に、前フレームのボーン姿勢だけを載せる定数バッファ。
@@ -276,6 +282,7 @@ public:
     public:
         // ユニット21
         DirectX::XMFLOAT4X4 default_global_transform{ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 };
+        float default_morph_weight = 0.0f;
         template<class T>
         void serialize(T& archive)
         {

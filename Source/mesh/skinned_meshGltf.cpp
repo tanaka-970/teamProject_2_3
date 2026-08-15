@@ -23,17 +23,32 @@ namespace
         XMFLOAT3 translation{ 0.0f, 0.0f, 0.0f };
     };
 
+    const unsigned char* BufferViewData(const tinygltf::Model& model,
+        int view_index, std::size_t byte_offset, std::size_t& available)
+    {
+        available = 0;
+        if (view_index < 0 || view_index >= static_cast<int>(model.bufferViews.size()))
+            return nullptr;
+        const auto& view = model.bufferViews[static_cast<std::size_t>(view_index)];
+        if (view.buffer < 0 || view.buffer >= static_cast<int>(model.buffers.size())) return nullptr;
+        const auto& buffer = model.buffers[static_cast<std::size_t>(view.buffer)];
+        if (byte_offset > view.byteLength) return nullptr;
+        const std::size_t offset = view.byteOffset + byte_offset;
+        if (offset > buffer.data.size()) return nullptr;
+        available = (std::min)(view.byteLength - byte_offset, buffer.data.size() - offset);
+        return buffer.data.data() + offset;
+    }
+
     const unsigned char* AccessorData(const tinygltf::Model& model,
-        const tinygltf::Accessor& accessor, std::size_t& stride)
+        const tinygltf::Accessor& accessor, std::size_t& stride, std::size_t& available)
     {
         if (accessor.bufferView < 0 ||
             accessor.bufferView >= static_cast<int>(model.bufferViews.size())) return nullptr;
         const auto& view = model.bufferViews[static_cast<std::size_t>(accessor.bufferView)];
-        if (view.buffer < 0 || view.buffer >= static_cast<int>(model.buffers.size())) return nullptr;
-        const auto& buffer = model.buffers[static_cast<std::size_t>(view.buffer)];
-        stride = accessor.ByteStride(view);
-        const std::size_t offset = view.byteOffset + accessor.byteOffset;
-        return offset < buffer.data.size() ? buffer.data.data() + offset : nullptr;
+        const int byte_stride = accessor.ByteStride(view);
+        if (byte_stride <= 0) return nullptr;
+        stride = static_cast<std::size_t>(byte_stride);
+        return BufferViewData(model, accessor.bufferView, accessor.byteOffset, available);
     }
 
     int ComponentCount(int type)
@@ -108,21 +123,64 @@ namespace
         if (accessor_index < 0 || accessor_index >= static_cast<int>(model.accessors.size()))
             return false;
         const auto& accessor = model.accessors[static_cast<std::size_t>(accessor_index)];
-        if (ComponentCount(accessor.type) < wanted_components || accessor.sparse.isSparse)
+        if (ComponentCount(accessor.type) < wanted_components)
             return false;
-        std::size_t stride = 0;
-        const unsigned char* bytes = AccessorData(model, accessor, stride);
         const std::size_t component_size = ComponentSize(accessor.componentType);
-        if (!bytes || component_size == 0 || stride < component_size * wanted_components)
-            return false;
-        values.resize(accessor.count * static_cast<std::size_t>(wanted_components));
-        for (std::size_t i = 0; i < accessor.count; ++i)
+        if (component_size == 0) return false;
+        values.assign(accessor.count * static_cast<std::size_t>(wanted_components), 0.0f);
+
+        if (accessor.bufferView >= 0)
         {
-            for (int c = 0; c < wanted_components; ++c)
+            std::size_t stride = 0, available = 0;
+            const unsigned char* bytes = AccessorData(model, accessor, stride, available);
+            const std::size_t element_size = component_size * static_cast<std::size_t>(wanted_components);
+            const std::size_t required = accessor.count == 0 ? 0 :
+                (accessor.count - 1) * stride + element_size;
+            if (!bytes || stride < element_size || required > available) return false;
+            for (std::size_t i = 0; i < accessor.count; ++i)
             {
-                values[i * static_cast<std::size_t>(wanted_components) + c] =
-                    static_cast<float>(ReadComponent(bytes + i * stride + c * component_size,
-                        accessor.componentType, accessor.normalized));
+                for (int c = 0; c < wanted_components; ++c)
+                {
+                    values[i * static_cast<std::size_t>(wanted_components) + c] =
+                        static_cast<float>(ReadComponent(bytes + i * stride + c * component_size,
+                            accessor.componentType, accessor.normalized));
+                }
+            }
+        }
+        else if (!accessor.sparse.isSparse)
+            return false;
+
+        if (accessor.sparse.isSparse)
+        {
+            const std::size_t sparse_count = accessor.sparse.count > 0
+                ? static_cast<std::size_t>(accessor.sparse.count) : 0;
+            if (sparse_count > accessor.count) return false;
+            std::size_t index_available = 0, value_available = 0;
+            const unsigned char* index_bytes = BufferViewData(model,
+                accessor.sparse.indices.bufferView, accessor.sparse.indices.byteOffset,
+                index_available);
+            const unsigned char* value_bytes = BufferViewData(model,
+                accessor.sparse.values.bufferView, accessor.sparse.values.byteOffset,
+                value_available);
+            const std::size_t index_size = ComponentSize(accessor.sparse.indices.componentType);
+            const std::size_t value_stride = component_size *
+                static_cast<std::size_t>(ComponentCount(accessor.type));
+            if (!index_bytes || !value_bytes || index_size == 0 || value_stride == 0 ||
+                sparse_count * index_size > index_available ||
+                sparse_count * value_stride > value_available) return false;
+            for (std::size_t sparse = 0; sparse < sparse_count; ++sparse)
+            {
+                const std::size_t destination = static_cast<std::size_t>(ReadComponent(
+                    index_bytes + sparse * index_size,
+                    accessor.sparse.indices.componentType, false));
+                if (destination >= accessor.count) return false;
+                for (int c = 0; c < wanted_components; ++c)
+                {
+                    values[destination * static_cast<std::size_t>(wanted_components) + c] =
+                        static_cast<float>(ReadComponent(
+                            value_bytes + sparse * value_stride + c * component_size,
+                            accessor.componentType, accessor.normalized));
+                }
             }
         }
         return true;
@@ -134,10 +192,12 @@ namespace
         if (accessor_index < 0 || accessor_index >= static_cast<int>(model.accessors.size()))
             return false;
         const auto& accessor = model.accessors[static_cast<std::size_t>(accessor_index)];
-        std::size_t stride = 0;
-        const unsigned char* bytes = AccessorData(model, accessor, stride);
+        std::size_t stride = 0, available = 0;
+        const unsigned char* bytes = AccessorData(model, accessor, stride, available);
         const std::size_t component_size = ComponentSize(accessor.componentType);
-        if (!bytes || component_size == 0) return false;
+        const std::size_t required = accessor.count == 0 ? 0 :
+            (accessor.count - 1) * stride + component_size;
+        if (!bytes || component_size == 0 || required > available) return false;
         values.resize(accessor.count);
         for (std::size_t i = 0; i < accessor.count; ++i)
             values[i] = static_cast<std::uint32_t>(ReadComponent(
@@ -253,6 +313,59 @@ namespace
         if (!extension.IsObject() || !extension.Has(name)) return fallback;
         const tinygltf::Value& value = extension.Get(name);
         return value.IsNumber() ? value.GetNumberAsDouble() : fallback;
+    }
+
+    struct UvTransform
+    {
+        float offset_x = 0.0f;
+        float offset_y = 0.0f;
+        float scale_x = 1.0f;
+        float scale_y = 1.0f;
+        float rotation = 0.0f;
+        int texcoord = -1;
+    };
+
+    UvTransform ReadUvTransform(const tinygltf::TextureInfo& texture)
+    {
+        UvTransform result;
+        const auto found = texture.extensions.find("KHR_texture_transform");
+        if (found == texture.extensions.end() || !found->second.IsObject()) return result;
+        const tinygltf::Value& extension = found->second;
+        if (extension.Has("offset") && extension.Get("offset").IsArray() &&
+            extension.Get("offset").ArrayLen() >= 2)
+        {
+            result.offset_x = static_cast<float>(extension.Get("offset").Get(0).GetNumberAsDouble());
+            result.offset_y = static_cast<float>(extension.Get("offset").Get(1).GetNumberAsDouble());
+        }
+        if (extension.Has("scale") && extension.Get("scale").IsArray() &&
+            extension.Get("scale").ArrayLen() >= 2)
+        {
+            result.scale_x = static_cast<float>(extension.Get("scale").Get(0).GetNumberAsDouble());
+            result.scale_y = static_cast<float>(extension.Get("scale").Get(1).GetNumberAsDouble());
+        }
+        result.rotation = static_cast<float>(ExtensionNumber(extension, "rotation", 0.0));
+        if (extension.Has("texCoord") && extension.Get("texCoord").IsNumber())
+            result.texcoord = extension.Get("texCoord").GetNumberAsInt();
+        return result;
+    }
+
+    int ValueTextureIndex(const tinygltf::Value& extension, const char* name)
+    {
+        if (!extension.IsObject() || !extension.Has(name)) return -1;
+        const tinygltf::Value& texture = extension.Get(name);
+        if (!texture.IsObject() || !texture.Has("index") || !texture.Get("index").IsNumber()) return -1;
+        return texture.Get("index").GetNumberAsInt();
+    }
+
+    void ReadColorArray(const tinygltf::Value& extension, const char* name,
+        float* destination, int count)
+    {
+        if (!extension.IsObject() || !extension.Has(name)) return;
+        const tinygltf::Value& values = extension.Get(name);
+        if (!values.IsArray() || values.ArrayLen() < static_cast<std::size_t>(count)) return;
+        for (int i = 0; i < count; ++i)
+            if (values.Get(static_cast<std::size_t>(i)).IsNumber())
+                destination[i] = static_cast<float>(values.Get(static_cast<std::size_t>(i)).GetNumberAsDouble());
     }
 
     void GenerateNormals(std::vector<skinned_mesh::vertex>& vertices,
@@ -458,13 +571,24 @@ bool skinned_mesh::import_gltf(ID3D11Device*, const std::filesystem::path& filen
             info.emissive_strength = static_cast<float>(
                 ExtensionNumber(found->second, "emissiveStrength", 1.0));
         info.unlit = source.extensions.find("KHR_materials_unlit") != source.extensions.end();
+        int base_texture_index = pbr.baseColorTexture.index;
         if (const auto found = source.extensions.find("KHR_materials_pbrSpecularGlossiness");
             found != source.extensions.end())
         {
             const double glossiness = ExtensionNumber(found->second, "glossinessFactor", 1.0);
             info.roughness = static_cast<float>((std::max)(0.0, (std::min)(1.0, 1.0 - glossiness)));
+            float diffuse[4]{ value.Kd.x, value.Kd.y, value.Kd.z, value.Kd.w };
+            ReadColorArray(found->second, "diffuseFactor", diffuse, 4);
+            value.Kd = { diffuse[0], diffuse[1], diffuse[2], diffuse[3] };
+            const int extension_texture = ValueTextureIndex(found->second, "diffuseTexture");
+            if (extension_texture >= 0) base_texture_index = extension_texture;
+            float specular[3]{ 1.0f, 1.0f, 1.0f };
+            ReadColorArray(found->second, "specularFactor", specular, 3);
+            const float maximum_specular = (std::max)(specular[0], (std::max)(specular[1], specular[2]));
+            info.metallic = (std::max)(0.0f, (std::min)(1.0f,
+                (maximum_specular - 0.04f) / 0.96f));
         }
-        value.texture_filenames[0] = cache_image(ImageIndex(model, pbr.baseColorTexture.index), 0,
+        value.texture_filenames[0] = cache_image(ImageIndex(model, base_texture_index), 0,
             info.alpha_mode == 0 && value.Kd.w >= 0.999f
                 ? ReplayEngine::Assets::TextureCompressor::Format::BC1
                 : ReplayEngine::Assets::TextureCompressor::Format::BC3);
@@ -505,15 +629,22 @@ bool skinned_mesh::import_gltf(ID3D11Device*, const std::filesystem::path& filen
             const auto position_attribute = primitive.attributes.find("POSITION");
             if (position_attribute == primitive.attributes.end()) continue;
             std::vector<float> positions, normals, tangents, texcoords, joints, weights;
+            std::vector<float> morph_positions, morph_normals;
             if (!ReadAccessor(model, position_attribute->second, 3, positions)) continue;
             if (const auto found = primitive.attributes.find("NORMAL"); found != primitive.attributes.end())
                 ReadAccessor(model, found->second, 3, normals);
             if (const auto found = primitive.attributes.find("TANGENT"); found != primitive.attributes.end())
                 ReadAccessor(model, found->second, 4, tangents);
             int texcoord_set = 0;
+            UvTransform uv_transform;
             if (primitive.material >= 0 && primitive.material < static_cast<int>(model.materials.size()))
-                texcoord_set = model.materials[static_cast<std::size_t>(primitive.material)]
-                    .pbrMetallicRoughness.baseColorTexture.texCoord;
+            {
+                const auto& base_texture = model.materials[static_cast<std::size_t>(primitive.material)]
+                    .pbrMetallicRoughness.baseColorTexture;
+                texcoord_set = base_texture.texCoord;
+                uv_transform = ReadUvTransform(base_texture);
+                if (uv_transform.texcoord >= 0) texcoord_set = uv_transform.texcoord;
+            }
             const std::string texcoord_name = "TEXCOORD_" + std::to_string(texcoord_set);
             if (const auto found = primitive.attributes.find(texcoord_name); found != primitive.attributes.end())
                 ReadAccessor(model, found->second, 2, texcoords);
@@ -521,6 +652,16 @@ bool skinned_mesh::import_gltf(ID3D11Device*, const std::filesystem::path& filen
                 ReadAccessor(model, found->second, 4, joints);
             if (const auto found = primitive.attributes.find("WEIGHTS_0"); found != primitive.attributes.end())
                 ReadAccessor(model, found->second, 4, weights);
+            // 現行頂点形式はtarget 0をGPUで直接処理する。追加targetは読み込みを
+            // 失敗させず無視し、既存FBXの頂点・cereal形式には影響させない。
+            if (!primitive.targets.empty())
+            {
+                const auto& target = primitive.targets.front();
+                if (const auto found = target.find("POSITION"); found != target.end())
+                    ReadAccessor(model, found->second, 3, morph_positions);
+                if (const auto found = target.find("NORMAL"); found != target.end())
+                    ReadAccessor(model, found->second, 3, morph_normals);
+            }
 
             mesh destination;
             destination.unique_id = (static_cast<std::uint64_t>(original_node) + 1) * 65536ull + primitive_index;
@@ -528,6 +669,10 @@ bool skinned_mesh::import_gltf(ID3D11Device*, const std::filesystem::path& filen
                 "_" + std::to_string(primitive_index);
             destination.node_index = static_cast<int64_t>(ordered_node);
             destination.default_global_transform = bind_globals[ordered_node];
+            if (!node.weights.empty())
+                destination.default_morph_weight = static_cast<float>(node.weights.front());
+            else if (!source_mesh.weights.empty())
+                destination.default_morph_weight = static_cast<float>(source_mesh.weights.front());
             destination.vertices.resize(positions.size() / 3);
             for (std::size_t vertex_index = 0; vertex_index < destination.vertices.size(); ++vertex_index)
             {
@@ -540,8 +685,23 @@ bool skinned_mesh::import_gltf(ID3D11Device*, const std::filesystem::path& filen
                 if (tangents.size() >= (vertex_index + 1) * 4)
                     vertex.tangent = { -tangents[vertex_index * 4], tangents[vertex_index * 4 + 1],
                         tangents[vertex_index * 4 + 2], -tangents[vertex_index * 4 + 3] };
+                if (morph_positions.size() >= (vertex_index + 1) * 3)
+                    vertex.morph_position = { -morph_positions[vertex_index * 3],
+                        morph_positions[vertex_index * 3 + 1],
+                        morph_positions[vertex_index * 3 + 2] };
+                if (morph_normals.size() >= (vertex_index + 1) * 3)
+                    vertex.morph_normal = { -morph_normals[vertex_index * 3],
+                        morph_normals[vertex_index * 3 + 1],
+                        morph_normals[vertex_index * 3 + 2] };
                 if (texcoords.size() >= (vertex_index + 1) * 2)
-                    vertex.texcoord = { texcoords[vertex_index * 2], texcoords[vertex_index * 2 + 1] };
+                {
+                    const float u = texcoords[vertex_index * 2] * uv_transform.scale_x;
+                    const float v = texcoords[vertex_index * 2 + 1] * uv_transform.scale_y;
+                    const float cosine = std::cos(uv_transform.rotation);
+                    const float sine = std::sin(uv_transform.rotation);
+                    vertex.texcoord = { uv_transform.offset_x + cosine * u - sine * v,
+                        uv_transform.offset_y + sine * u + cosine * v };
+                }
                 float total_weight = 0.0f;
                 for (int influence = 0; influence < MAX_BONE_INFLUENCES; ++influence)
                 {
@@ -649,6 +809,20 @@ bool skinned_mesh::import_gltf(ID3D11Device*, const std::filesystem::path& filen
             channels.push_back(std::move(channel));
         }
         if (channels.empty()) continue;
+        std::vector<float> default_morph_weights(node_count, 0.0f);
+        for (std::size_t node_index = 0; node_index < node_count; ++node_index)
+        {
+            const auto& animation_node = model.nodes[node_index];
+            if (!animation_node.weights.empty())
+                default_morph_weights[node_index] = static_cast<float>(animation_node.weights.front());
+            else if (animation_node.mesh >= 0 &&
+                animation_node.mesh < static_cast<int>(model.meshes.size()) &&
+                !model.meshes[static_cast<std::size_t>(animation_node.mesh)].weights.empty())
+            {
+                default_morph_weights[node_index] = static_cast<float>(
+                    model.meshes[static_cast<std::size_t>(animation_node.mesh)].weights.front());
+            }
+        }
         animation clip;
         clip.name = source_animation.name.empty()
             ? "Animation" + std::to_string(animation_index) : source_animation.name;
@@ -659,12 +833,14 @@ bool skinned_mesh::import_gltf(ID3D11Device*, const std::filesystem::path& filen
         {
             const float time = start + static_cast<float>(frame) / sampling_rate;
             std::vector<NodePose> pose = original_bind;
+            std::vector<float> morph_weights = default_morph_weights;
             for (const ChannelData& channel : channels)
             {
-                if (channel.node < 0 || channel.node >= static_cast<int>(pose.size()) || channel.path == "weights") continue;
+                if (channel.node < 0 || channel.node >= static_cast<int>(pose.size())) continue;
                 const XMVECTOR value = SampleChannel(channel.times, channel.values, channel.components,
                     channel.interpolation, time, channel.path == "rotation");
-                if (channel.path == "scale") XMStoreFloat3(&pose[channel.node].scale, value);
+                if (channel.path == "weights") morph_weights[channel.node] = XMVectorGetX(value);
+                else if (channel.path == "scale") XMStoreFloat3(&pose[channel.node].scale, value);
                 else if (channel.path == "rotation") XMStoreFloat4(&pose[channel.node].rotation, value);
                 else if (channel.path == "translation") XMStoreFloat3(&pose[channel.node].translation, value);
             }
@@ -678,6 +854,7 @@ bool skinned_mesh::import_gltf(ID3D11Device*, const std::filesystem::path& filen
                 destination.scaling = converted.scale;
                 destination.rotation = converted.rotation;
                 destination.translation = converted.translation;
+                destination.morph_weight = morph_weights[original];
                 const XMMATRIX parent = scene_view.nodes[ordered].parent_index < 0
                     ? XMMatrixIdentity()
                     : XMLoadFloat4x4(&keyframe.nodes[

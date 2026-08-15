@@ -55,6 +55,7 @@ void skinned_mesh::render(ID3D11DeviceContext* immediate_context,
         {
             const animation::keyframe::node& mesh_node{ keyframe->nodes.at(mesh.node_index) };
             XMStoreFloat4x4(&data.world, XMLoadFloat4x4(&mesh_node.global_transform) * XMLoadFloat4x4(&world));
+            data.gltf_morph.x = mesh_node.morph_weight;
 
             const size_t bone_count{ mesh.bind_pose.bones.size() };
             _ASSERT_EXPR(bone_count < MAX_BONES, L"The value of the 'bone_count' has exceeded MAX_BONES.");
@@ -75,6 +76,7 @@ void skinned_mesh::render(ID3D11DeviceContext* immediate_context,
         else
         {
             XMStoreFloat4x4(&data.world, XMLoadFloat4x4(&mesh.default_global_transform) * XMLoadFloat4x4(&world));
+            data.gltf_morph.x = mesh.default_morph_weight;
             for (size_t bone_index = 0; bone_index < MAX_BONES; ++bone_index)
             {
                 data.bone_transforms[bone_index] = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 };
