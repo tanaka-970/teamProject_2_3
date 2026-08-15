@@ -12,6 +12,7 @@
 #include "../../RePlayEngine/Rendering/Frustum.h"
 #include "../../RePlayEngine/Rendering/MeshSimplifier.h"
 #include "../../RePlayEngine/Assets/ParallelLoader.h"
+#include "../../RePlayEngine/Assets/TextureCompressor.h"
 
 #include <algorithm>
 #include <cctype>
@@ -153,6 +154,8 @@ bool gltf_model::PrepareDeviceResources(ID3D11Device* device)
     if (FAILED(device->CreateBuffer(&constant_desc, nullptr,
         motion_object_constant_buffer_.GetAddressOf()))) return false;
     make_dummy_texture(device, white_texture_.GetAddressOf(), 0xffffffff, 4);
+    // 0xAABBGGRR = RGBA(128,128,255,255)。Normal Map未指定の正しい既定値。
+    make_dummy_texture(device, neutral_normal_texture_.GetAddressOf(), 0xffff8080, 4);
     return vertex_shader_ && pixel_shader_ && input_layout_ && constant_buffer_;
 }
 
@@ -202,6 +205,43 @@ bool gltf_model::Load(ID3D11Device* device, const std::string& filename)
 
     timings_.parse_ms = elapsed_ms(load_start);
     timings_.image_count = static_cast<int>(model.images.size());
+
+    // GLB内蔵画像にはURIが無い。メッシュキャッシュだけ保存すると次回起動時に
+    // 画像を再取得できないため、用途別BC形式のDDSを既存gltf Cache配下へ置く。
+    // モデルのパス・サイズ・更新時刻を含むMeshCacheキーを流用するので、
+    // GLB差し替え時には古いTextureを誤って読むことがない。
+    struct EmbeddedTextureCache
+    {
+        bool base_color_used = false;
+        bool normal_used = false;
+        bool orm_used = false;
+        std::string base_color_uri;
+        std::string normal_uri;
+        std::string orm_uri;
+    };
+    std::vector<EmbeddedTextureCache> embedded_texture_cache(model.images.size());
+    const auto image_index_of = [&model](int texture_index) -> int
+    {
+        if (texture_index < 0 ||
+            texture_index >= static_cast<int>(model.textures.size())) return -1;
+        const int image_index = model.textures[texture_index].source;
+        return image_index >= 0 && image_index < static_cast<int>(model.images.size())
+            ? image_index : -1;
+    };
+    for (const auto& material : model.materials)
+    {
+        const auto& pbr = material.pbrMetallicRoughness;
+        if (const int image = image_index_of(pbr.baseColorTexture.index); image >= 0)
+            embedded_texture_cache[image].base_color_used = true;
+        if (const int image = image_index_of(material.normalTexture.index); image >= 0)
+            embedded_texture_cache[image].normal_used = true;
+        if (const int image = image_index_of(pbr.metallicRoughnessTexture.index); image >= 0)
+            embedded_texture_cache[image].orm_used = true;
+        if (const int image = image_index_of(material.occlusionTexture.index); image >= 0)
+            embedded_texture_cache[image].orm_used = true;
+    }
+    const std::filesystem::path texture_cache_directory =
+        CacheRoot() / "textures" / MeshCachePath(filename).stem();
 
     // 画像のデコード → ミップ生成 → GPUテクスチャ作成 を1枚単位で並列化する。
     // 各画像は独立しており ID3D11Device::Create系はスレッドセーフなので、
@@ -261,6 +301,31 @@ bool gltf_model::Load(ID3D11Device* device, const std::string& filename)
 
         CreateTextureWithMipChain(device, rgba, width, height,
             image_views[i].GetAddressOf());
+
+        // 外部URIは従来どおり元画像の隣にDDSを作る。ここではGLB内蔵画像だけを
+        // 既存TextureCompressorへ渡し、デコード済みRGBAを再利用する。
+        if (image.uri.empty())
+        {
+            using Compressor = ReplayEngine::Assets::TextureCompressor;
+            auto& cache = embedded_texture_cache[i];
+            const auto save = [&](const char* suffix, Compressor::Format format,
+                std::string& output_uri)
+            {
+                std::filesystem::path path = texture_cache_directory /
+                    ("image_" + std::to_string(i) + suffix + ".dds");
+                std::error_code error;
+                if (std::filesystem::exists(path, error) ||
+                    Compressor::CompressRgba(rgba.data(), static_cast<int>(width),
+                        static_cast<int>(height), path, format).succeeded)
+                    output_uri = std::filesystem::absolute(path).lexically_normal().string();
+            };
+            if (cache.base_color_used)
+                save("_base", Compressor::Format::Auto, cache.base_color_uri);
+            if (cache.normal_used)
+                save("_normal", Compressor::Format::BC5, cache.normal_uri);
+            if (cache.orm_used)
+                save("_orm", Compressor::Format::BC1, cache.orm_uri);
+        }
     });
     timings_.image_decode_ms = elapsed_ms(image_start);
 
@@ -286,21 +351,35 @@ bool gltf_model::Load(ID3D11Device* device, const std::string& filename)
         };
 
         // キャッシュ経路で再読み込みできるよう、画像ファイルの場所も残す。
-        const auto resolve_uri = [&](int texture_index) -> std::string
+        const auto resolve_uri = [&](int texture_index, const std::string& embedded_uri)
+            -> std::string
         {
             if (texture_index < 0 ||
                 texture_index >= static_cast<int>(model.textures.size())) return {};
             const int image_index = model.textures[texture_index].source;
             if (image_index < 0 ||
                 image_index >= static_cast<int>(model.images.size())) return {};
-            return model.images[image_index].uri;
+            return model.images[image_index].uri.empty()
+                ? embedded_uri : model.images[image_index].uri;
         };
 
-        materials_[i].base_color_uri = resolve_uri(source.baseColorTexture.index);
-        materials_[i].normal_uri = resolve_uri(model.materials[i].normalTexture.index);
-        materials_[i].orm_uri = resolve_uri(source.metallicRoughnessTexture.index);
+        const auto cached_uri = [&](int texture_index,
+            std::string EmbeddedTextureCache::* member) -> std::string
+        {
+            const int image_index = image_index_of(texture_index);
+            return image_index >= 0 ? embedded_texture_cache[image_index].*member : std::string{};
+        };
+
+        materials_[i].base_color_uri = resolve_uri(source.baseColorTexture.index,
+            cached_uri(source.baseColorTexture.index, &EmbeddedTextureCache::base_color_uri));
+        materials_[i].normal_uri = resolve_uri(model.materials[i].normalTexture.index,
+            cached_uri(model.materials[i].normalTexture.index, &EmbeddedTextureCache::normal_uri));
+        materials_[i].orm_uri = resolve_uri(source.metallicRoughnessTexture.index,
+            cached_uri(source.metallicRoughnessTexture.index, &EmbeddedTextureCache::orm_uri));
         if (materials_[i].orm_uri.empty())
-            materials_[i].orm_uri = resolve_uri(model.materials[i].occlusionTexture.index);
+            materials_[i].orm_uri = resolve_uri(model.materials[i].occlusionTexture.index,
+                cached_uri(model.materials[i].occlusionTexture.index,
+                    &EmbeddedTextureCache::orm_uri));
 
         materials_[i].base_color_texture = resolve(source.baseColorTexture.index);
         materials_[i].normal_texture = resolve(model.materials[i].normalTexture.index);

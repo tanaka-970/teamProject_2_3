@@ -48,6 +48,9 @@ public:
     bool HasAnimations() const noexcept { return has_animations_; }
     const std::string& Error() const noexcept { return error_; }
     size_t PrimitiveCount() const noexcept { return primitives_.size(); }
+    // 全Primitiveを含むモデル空間AABB。描画時と同じnode_transform適用済み。
+    bool ComputeBounds(DirectX::XMFLOAT3& minimum,
+        DirectX::XMFLOAT3& maximum) const noexcept;
     const std::vector<ReplayEngine::Physics::Triangle>& CollisionTriangles() const noexcept
     {
         return collision_triangles_;
@@ -156,6 +159,9 @@ private:
     std::vector<Material> materials_;
     std::vector<ReplayEngine::Physics::Triangle> collision_triangles_;
     Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> white_texture_;
+    // Normal未指定時にnullをSampleすると(-1,-1,-1)として扱われ、
+    // モデル全体の法線が壊れるため、接空間の無変形Normalを共有する。
+    Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> neutral_normal_texture_;
     Microsoft::WRL::ComPtr<ID3D11VertexShader> vertex_shader_;
     Microsoft::WRL::ComPtr<ID3D11PixelShader> pixel_shader_;
     Microsoft::WRL::ComPtr<ID3D11InputLayout> input_layout_;
