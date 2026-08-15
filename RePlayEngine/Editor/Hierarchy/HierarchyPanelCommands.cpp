@@ -11,19 +11,223 @@
 #include "../../Components/Landscape/LandscapeColliderComponent.h"
 #include "../../Scene/Runtime/Scene.h"
 #include "../../Scene/Serialization/SceneData.h"
+#include "../../Scene/Serialization/SceneSerializer.h"
 
 #include "imgui/imgui.h"
 
 #include <algorithm>
 #include <cctype>
 #include <cstring>
+#include <sstream>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace ReplayEngine::Editor
 {
     using Core::GameObject;
     using Core::ObjectID;
+
+    namespace
+    {
+        constexpr const char* clipboard_header = "REPLAY_CLIPBOARD 1\n";
+        constexpr std::size_t maximum_clipboard_objects = 100000;
+
+        bool ValidateClipboardData(const Scene::Serialization::SceneData& data,
+            std::string& error)
+        {
+            if (data.objects.empty())
+            {
+                error = "GameObject がありません。";
+                return false;
+            }
+            if (data.objects.size() > maximum_clipboard_objects)
+            {
+                error = "GameObject は 100,000 件までです。";
+                return false;
+            }
+
+            std::unordered_map<ObjectID, ObjectID> parents;
+            parents.reserve(data.objects.size());
+            for (const Scene::Serialization::GameObjectData& object : data.objects)
+            {
+                if (!object.id.Valid() || !parents.emplace(object.id, object.parent_id).second)
+                {
+                    error = "GameObject ID が不正または重複しています。";
+                    return false;
+                }
+            }
+            for (const auto& entry : parents)
+            {
+                ObjectID current = entry.first;
+                std::unordered_set<ObjectID> ancestors;
+                while (current.Valid())
+                {
+                    if (!ancestors.insert(current).second)
+                    {
+                        error = "親子関係が循環しています。";
+                        return false;
+                    }
+                    const auto found = parents.find(current);
+                    if (found == parents.end())
+                    {
+                        error = "親 GameObject がクリップボード内にありません。";
+                        return false;
+                    }
+                    current = found->second;
+                }
+            }
+            return true;
+        }
+    }
+
+    bool HierarchyPanel::CopySelection(EditorContext& context, std::string& clipboard_text,
+        std::string& error) const
+    {
+        clipboard_text.clear();
+        error.clear();
+        Scene::Scene* scene = context.GetScene();
+        if (scene == nullptr || context.Selection().Empty())
+        {
+            error = "コピーする GameObject を選択してください。";
+            return false;
+        }
+
+        Scene::Serialization::SceneData copied;
+        const std::vector<ObjectID> selected = context.Selection().All();
+        for (const ObjectID id : selected)
+        {
+            GameObject* object = scene->FindGameObjectByID(id);
+            if (object == nullptr || object->PendingDestroy()) continue;
+
+            bool selected_ancestor = false;
+            for (const GameObject* parent = object->Parent(); parent != nullptr;
+                parent = parent->Parent())
+            {
+                if (context.Selection().IsSelected(parent->ID()))
+                {
+                    selected_ancestor = true;
+                    break;
+                }
+            }
+            if (selected_ancestor) continue;
+
+            Scene::Serialization::SceneData subtree;
+            if (!Scene::Serialization::CaptureGameObjectSubtree(*scene, id, subtree)) continue;
+            if (subtree.objects.size() > maximum_clipboard_objects ||
+                copied.objects.size() > maximum_clipboard_objects - subtree.objects.size())
+            {
+                error = "GameObject は 100,000 件までコピーできます。";
+                return false;
+            }
+            copied.objects.insert(copied.objects.end(), subtree.objects.begin(), subtree.objects.end());
+        }
+        if (copied.objects.empty())
+        {
+            error = "コピーできる GameObject がありません。";
+            return false;
+        }
+
+        std::ostringstream stream;
+        if (!Scene::Serialization::SceneSerializer::WriteText(copied, stream, error)) return false;
+        clipboard_text = clipboard_header + stream.str();
+        return true;
+    }
+
+    bool HierarchyPanel::PasteSelection(EditorContext& context,
+        const std::string& clipboard_text, std::string& error)
+    {
+        error.clear();
+        if (clipboard_text.compare(0, std::strlen(clipboard_header), clipboard_header) != 0)
+        {
+            error = "RePlay Engine の GameObject クリップボードではありません。";
+            return false;
+        }
+
+        Scene::Serialization::SceneData data;
+        std::istringstream stream(clipboard_text.substr(std::strlen(clipboard_header)));
+        if (!Scene::Serialization::SceneSerializer::ReadText(data, stream, error)) return false;
+        return PasteSceneData(context, data, error);
+    }
+
+    bool HierarchyPanel::PasteSceneData(EditorContext& context,
+        const Scene::Serialization::SceneData& data, std::string& error)
+    {
+        error.clear();
+        Scene::Scene* scene = context.GetScene();
+        if (scene == nullptr || !context.CanEdit())
+        {
+            error = "停止してから貼り付けてください。";
+            return false;
+        }
+        if (!ValidateClipboardData(data, error)) return false;
+
+        // 複数選択では最初に選ばれたものを親とする。貼り付け後に選択を更新する前に解決する。
+        GameObject* destination_parent = nullptr;
+        const std::vector<ObjectID>& selected = context.Selection().All();
+        if (!selected.empty()) destination_parent = scene->FindGameObjectByID(selected.front());
+        if (destination_parent != nullptr && destination_parent->PendingDestroy()) destination_parent = nullptr;
+
+        std::unordered_set<ObjectID> existing_ids;
+        existing_ids.reserve(scene->GameObjectCount());
+        for (std::size_t index = 0; index < scene->GameObjectCount(); ++index)
+        {
+            const GameObject* object = scene->GameObjectAt(index);
+            if (object != nullptr && !object->PendingDestroy()) existing_ids.insert(object->ID());
+        }
+
+        context.BeginEdit("GameObject を貼り付け");
+        Scene::Serialization::SceneLoadReport report;
+        if (Scene::Serialization::InstantiateSceneData(data, *scene, report) == nullptr)
+        {
+            for (std::size_t index = 0; index < scene->GameObjectCount(); ++index)
+            {
+                GameObject* object = scene->GameObjectAt(index);
+                if (object != nullptr && !object->PendingDestroy() &&
+                    existing_ids.find(object->ID()) == existing_ids.end())
+                {
+                    scene->DestroyGameObject(object->ID());
+                }
+            }
+            scene->ProcessPendingOperations();
+            context.CancelEdit();
+            error = "GameObject を貼り付けられませんでした。";
+            return false;
+        }
+
+        std::vector<ObjectID> created_roots;
+        for (GameObject* root : scene->RootGameObjects())
+        {
+            if (root == nullptr || root->PendingDestroy() ||
+                existing_ids.find(root->ID()) != existing_ids.end()) continue;
+            if (destination_parent != nullptr) root->SetParent(destination_parent, false);
+            root->SetName(root->Name() + " コピー");
+            created_roots.push_back(root->ID());
+        }
+        if (created_roots.empty())
+        {
+            for (std::size_t index = 0; index < scene->GameObjectCount(); ++index)
+            {
+                GameObject* object = scene->GameObjectAt(index);
+                if (object != nullptr && !object->PendingDestroy() &&
+                    existing_ids.find(object->ID()) == existing_ids.end())
+                {
+                    scene->DestroyGameObject(object->ID());
+                }
+            }
+            scene->ProcessPendingOperations();
+            context.CancelEdit();
+            error = "貼り付けた GameObject を特定できませんでした。";
+            return false;
+        }
+        context.CommitEdit();
+
+        context.Selection().Clear();
+        for (const ObjectID id : created_roots) context.Selection().Select(id, true);
+        context.SetStatus(std::to_string(created_roots.size()) + " 個を貼り付けました");
+        return true;
+    }
 
     void HierarchyPanel::DrawCreateMenu(EditorContext& context, GameObject* parent)
     {

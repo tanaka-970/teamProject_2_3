@@ -18,12 +18,18 @@ float4 main(VS_OUT pin) : SV_TARGET
     float alpha = base_sample.a;
 
     float3 mr = pbr_metallic_roughness.Sample(pbr_sampler_linear, pin.texcoord).rgb;
-    float metallic = mr.b;
-    float roughness = max(mr.g, 0.55f);
-    float occlusion = (mr.r > 0.0f) ? mr.r : 1.0f;
+    float metallic = gltf_pbr.w > 0.5f ? mr.b * gltf_pbr.x : mr.b;
+    float roughness = gltf_pbr.w > 0.5f
+        ? max(mr.g * gltf_pbr.y, 0.045f) : max(mr.g, 0.55f);
+    float occlusion = gltf_pbr.w > 0.5f
+        ? saturate(mr.r * gltf_pbr.z) : ((mr.r > 0.0f) ? mr.r : 1.0f);
 
     float3 emissive = pbr_emissive_map.Sample(pbr_sampler_linear, pin.texcoord).rgb;
+    if (gltf_pbr.w > 0.5f) emissive *= gltf_emissive.rgb * gltf_emissive.w;
 #endif
+
+    if (gltf_pbr.w > 0.5f && gltf_alpha.x > 0.5f)
+        clip(alpha * pin.color.a - (gltf_alpha.x < 1.5f ? gltf_alpha.y : 0.01f));
 
     float3 N = normalize(pin.world_normal.xyz);
     float3 T = normalize(pin.world_tangent.xyz);

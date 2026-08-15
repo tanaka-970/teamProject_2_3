@@ -5,6 +5,7 @@
 #include "../../Core/ObjectID/RuntimeIdentity.h"
 #include "../../Core/Threading/ThreadPolicy.h"
 
+#include <cstdint>
 #include <memory>
 #include <vector>
 
@@ -126,6 +127,10 @@ namespace ReplayEngine::Core
         {
             return ThreadPolicy::MainThreadOnly;
         }
+
+        // Update / FixedUpdate / LateUpdate の各フェーズ内だけで使う順序キー。
+        // 既定 0 は保存済み Scene の従来順を変えない。
+        virtual std::int32_t ExecutionOrder() const noexcept { return 0; }
 
         // ---- 保存 ----------------------------------------------------------
         // 既定の保存経路は PropertyRegistry。ここへ登録したプロパティは

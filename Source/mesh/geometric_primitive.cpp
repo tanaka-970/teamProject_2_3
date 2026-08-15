@@ -1,10 +1,10 @@
-// geometric_primitive のうち「描画基盤」と「Cube 生成」だけを持つ。
+﻿// geometric_primitive のうち「描画基盤」と「Cube 生成」だけを持つ。
 //
 //   geometric_primitive.cpp           … 描画基盤と Cube 生成（このファイル）
 //   geometric_primitive_cylinder.cpp  … Cylinder 生成
 //   geometric_primitive_sphere.cpp    … Sphere 生成
 //   geometric_primitive_capsule.cpp   … Capsule 生成
-
+//まぁあれよあれ、ただのリファクタリングよ
 // UNIT.11
 #include "shader.h"
 #include "misc.h"

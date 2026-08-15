@@ -59,10 +59,13 @@ namespace ReplayEngine::Runtime
     public:
         // 同一フレーム内での呼び出し順のヒント。小さいほど先。
         //
-        // 現時点では Scene が GameObject 順・Component 順で回すため参照されない。
-        // 将来 Execution Order を導入するときに、保存形式と Inspector を
-        // 作り直さずに済むよう、値だけ先に持たせてある。
+        // Scene の Update / FixedUpdate / LateUpdate 内で参照される。
         std::int32_t execution_order = 0;
+
+        std::int32_t ExecutionOrder() const noexcept override
+        {
+            return execution_order;
+        }
 
         // ---- 安全な参照 ----------------------------------------------------
 

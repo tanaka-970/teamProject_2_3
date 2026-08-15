@@ -4,6 +4,7 @@
 
 #include <DirectXMath.h>
 
+#include <array>
 #include <string>
 
 namespace ReplayEngine::UI
@@ -84,6 +85,16 @@ namespace ReplayEngine::UI
         float color_stop_4 = 1.0f;
         std::string mask;
         std::string custom_shader;
+
+        // BrushStroke だけが使う atlas 制御。false の間は mask 全体を従来どおり
+        // 1 枚の筆跡として読むため、既存 Scene の見た目を変えない。
+        bool brush_atlas_enabled = false;
+        // 独立ストローク描画は現在調整中のため明示的な opt-in とする。
+        // false は既存のアトラスフィルター経路を使う。
+        bool brush_instanced_renderer_enabled = false;
+        int brush_pattern_mode = 0;
+        int brush_pattern_index = 0;
+        std::array<float, 16> brush_pattern_weights{};
 
         // Shader Composer の #pragma property 値。未知項目も PropertyBag のまま保持する。
         Reflection::PropertyBag custom_parameters;

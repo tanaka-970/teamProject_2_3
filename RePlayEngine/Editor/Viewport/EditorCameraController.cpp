@@ -165,7 +165,15 @@ namespace ReplayEngine::Editor
 
         bool consumed = false;
 
-        if (can_begin && KeyChordPressed(preset.focus, input))
+        // Focus は Scene View のマウス操作ではなく、現在の選択へカメラを寄せる
+        // Editor コマンドとして扱う。Hierarchy で Object を選んだ直後は
+        // viewport_focused=false / ui_wants_keyboard=true になるが、その状態でも
+        // F が効かないと小さいモデルを画面へ呼び戻せない。
+        // TextInput・Popup・Gizmo 操作中だけは文字入力や他操作を奪わない。
+        const bool can_focus_selection = input.window_focused &&
+            !input.ui_text_input_active && !input.ui_popup_open &&
+            !input.gizmo_dragging;
+        if (can_focus_selection && KeyChordPressed(preset.focus, input))
         {
             focus_requested_ = true;
             consumed = true;

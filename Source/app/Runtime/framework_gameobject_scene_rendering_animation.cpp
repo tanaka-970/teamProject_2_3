@@ -54,6 +54,9 @@
 void framework::clear_object_mesh_cache() noexcept
 {
     object_mesh_cache.clear();
+    // GameObject と Asset Browser が共有するGLB実体を、DeviceのLive Object確認前に解放する。
+    stage_gltf_model.reset();
+    gltf_model_cache.Clear();
     builtin_primitive_mesh_cache.clear();
     landscape_gpu_mesh_cache.clear();
     object_mesh_failures.clear();

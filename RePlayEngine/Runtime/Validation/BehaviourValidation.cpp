@@ -166,6 +166,20 @@ namespace ReplayEngine::Runtime::Validation
             check.Expect(!resolver.IsValid(handle), "破棄後の Handle は無効");
         }
 
+        const int execution_order_result = RunExecutionOrderValidation();
+        if (execution_order_result != 0)
+        {
+            world.Services().SetRuntime(nullptr);
+            return execution_order_result;
+        }
+
+        const int dependency_result = RunComponentDependencyValidation();
+        if (dependency_result != 0)
+        {
+            world.Services().SetRuntime(nullptr);
+            return dependency_result;
+        }
+
         world.Services().SetRuntime(nullptr);
         return check.Report("Behaviour validation");
     }

@@ -2,7 +2,10 @@
 
 #include "../../Core/ObjectID/ObjectID.h"
 
+#include <string>
+
 namespace ReplayEngine::Core { class GameObject; }
+namespace ReplayEngine::Scene::Serialization { struct SceneData; }
 
 namespace ReplayEngine::Editor
 {
@@ -28,6 +31,15 @@ namespace ReplayEngine::Editor
         void DuplicateSelection(EditorContext& context) { DuplicateSelected(context); }
         void DestroySelection(EditorContext& context) { DestroySelected(context); }
         void BeginRenameSelection(EditorContext& context);
+
+        // Clipboard I/O itself belongs to framework (ImGui).  This panel owns the
+        // scene-safe part so keyboard, menu, command and validation share one path.
+        bool CopySelection(EditorContext& context, std::string& clipboard_text,
+            std::string& error) const;
+        bool PasteSelection(EditorContext& context, const std::string& clipboard_text,
+            std::string& error);
+        bool PasteSceneData(EditorContext& context,
+            const Scene::Serialization::SceneData& data, std::string& error);
 
     private:
         void DrawNode(EditorContext& context, Core::GameObject& object, int depth);

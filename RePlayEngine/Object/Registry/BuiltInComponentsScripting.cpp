@@ -69,9 +69,7 @@ namespace ReplayEngine::Core::Detail
                     .Display("Class")
                     .Tooltip("C# の完全修飾クラス名。Lua では使わない。"));
 
-            // Phase 1 では保存・表示だけ。実際の実行順ソートは行わない。
-            // BehaviourComponent::execution_order と同じ扱いで、
-            // Scene 全体の実行順対応は別作業として分離する。
+            // Scene の各更新フェーズ内だけを並べ、後段ステージは動かさない。
             PropertyRegistry::Register<ScriptComponent>(
                 MakeAccessorProperty<ScriptComponent>(ScriptNames::execution_order,
                     PropertyType::Int,
@@ -86,8 +84,9 @@ namespace ReplayEngine::Core::Detail
                             static_cast<std::int32_t>(value.AsInt(0)));
                     })
                     .Display("Execution Order")
-                    .Tooltip("小さいほど先。現時点では保存と表示のみで、"
-                        "実際の呼び出し順は GameObject 順・Component 順のまま。"));
+                    .Tooltip("小さいほど各 Update フェーズ内で先に実行。"
+                        "同値は Hierarchy / Component の保存順。"
+                        "Motion / プロパティ接続 / UI レイアウトなどの後段は動きません。"));
 
             // Script Asset が一時的に見つからない状態でも
             // 「どのスクリプト型だったか」を保てるようにするため保存する。

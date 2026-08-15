@@ -4,6 +4,7 @@
 
 #include <DirectXMath.h>
 
+#include <functional>
 #include <vector>
 
 namespace ReplayEngine::Scene { class Scene; }
@@ -39,6 +40,11 @@ namespace ReplayEngine::Editor
         DirectX::XMFLOAT3 Center() const noexcept;
     };
 
+    // Renderer の実体は Source 層が所有するため、EditorSelectionBounds 自身は
+    // メッシュ型へ依存しない。呼び出し側が必要なときだけ実Boundsを供給する。
+    using RenderBoundsProvider =
+        std::function<bool(const Core::GameObject&, WorldBounds&)>;
+
     class EditorSelectionBounds final
     {
     public:
@@ -51,5 +57,11 @@ namespace ReplayEngine::Editor
         // 対象が 1 つも見つからなければ valid = false。
         static WorldBounds Compute(const Scene::Scene& scene,
             const std::vector<Core::ObjectID>& selection);
+
+        // Collider が無い GameObject では、Transform の仮Boundsへ落ちる前に
+        // Renderer の実Boundsを問い合わせる。
+        static WorldBounds Compute(const Scene::Scene& scene,
+            const std::vector<Core::ObjectID>& selection,
+            const RenderBoundsProvider& render_bounds_provider);
     };
 }

@@ -5,6 +5,7 @@
 #include <wrl.h>
 
 #include "Effects/UIRenderTargetPool.h"
+#include "../Rendering/Effects/EffectChain.h"
 
 #include <array>
 #include <filesystem>
@@ -116,27 +117,6 @@ namespace ReplayEngine::UI
                 0.0f, 0.0f, 0.0f, 0.0f };
         };
 
-        struct CachedCustomEffectShader
-        {
-            Microsoft::WRL::ComPtr<ID3D11PixelShader> shader;
-            const void* bytecode_identity = nullptr;
-            std::size_t bytecode_size = 0;
-        };
-
-        struct EffectConstants
-        {
-            DirectX::XMFLOAT4 effect_color{ 1.0f, 1.0f, 1.0f, 1.0f };
-            DirectX::XMFLOAT4 effect_params0{ 0.0f, 1.0f, 0.5f, 1.0f };
-            DirectX::XMFLOAT4 effect_params1{ 0.0f, 0.0f, 0.0f, 0.0f };
-            DirectX::XMFLOAT4 effect_params2{ 1.0f, -1.0f, 0.0f, 0.0f };
-            DirectX::XMFLOAT4 target_size{ 1.0f, 1.0f, 1.0f, 1.0f };
-            // 既存 12 種が読む先頭 5 レジスタは動かさず、拡張値は末尾へ置く。
-            DirectX::XMFLOAT4 effect_color_2{ 1.0f, 1.0f, 1.0f, 1.0f };
-            DirectX::XMFLOAT4 effect_color_3{ 1.0f, 1.0f, 1.0f, 1.0f };
-            DirectX::XMFLOAT4 effect_color_4{ 1.0f, 1.0f, 1.0f, 1.0f };
-            DirectX::XMFLOAT4 effect_color_stops{ 0.333333f, 0.666667f, 1.0f, 0.0f };
-            DirectX::XMFLOAT4 effect_params3{ 0.0f, 0.0f, 0.0f, 0.0f };
-        };
 
         struct VisualConstants
         {
@@ -159,16 +139,9 @@ namespace ReplayEngine::UI
             DirectX::XMFLOAT4 fill_stops{ 1.0f, -1.0f, -1.0f, 0.0f };
         };
 
-        static constexpr std::size_t effect_shader_count = 42;
-
         bool EnsureVertexCapacity(ID3D11Device* device, std::size_t vertex_count);
-        bool EnsureCustomEffectConstantBuffer(std::uint32_t byte_width);
         ID3D11ShaderResourceView* TextureFor(const std::string& guid,
             const Assets::AssetDatabase* asset_database);
-        ID3D11PixelShader* EffectShaderFor(UIEffectKind kind) const noexcept;
-        ID3D11PixelShader* CustomEffectShaderFor(const std::string& shader_guid,
-            const Assets::AssetDatabase* asset_database,
-            const Rendering::ShaderCatalog* shader_catalog);
         void Flush(ID3D11DeviceContext* context, ID3D11ShaderResourceView* texture,
             ID3D11BlendState* blend_state, const RenderStates& states,
             const D3D11_RECT* scissor,
@@ -178,23 +151,18 @@ namespace ReplayEngine::UI
         Microsoft::WRL::ComPtr<ID3D11Device> device_;
         Microsoft::WRL::ComPtr<ID3D11VertexShader> vertex_shader_;
         Microsoft::WRL::ComPtr<ID3D11PixelShader> pixel_shader_;
-        std::array<Microsoft::WRL::ComPtr<ID3D11PixelShader>,
-            effect_shader_count> effect_pixel_shaders_;
         Microsoft::WRL::ComPtr<ID3D11InputLayout> input_layout_;
         Microsoft::WRL::ComPtr<ID3D11Buffer> vertex_buffer_;
         Microsoft::WRL::ComPtr<ID3D11Buffer> constant_buffer_;
-        Microsoft::WRL::ComPtr<ID3D11Buffer> effect_constant_buffer_;
         Microsoft::WRL::ComPtr<ID3D11Buffer> visual_constant_buffer_;
         // GPU へ送る前の CPU 側の値。バッチごとに組み立ててから 1 回だけ転送する。
         VisualConstants visual_constants_{};
-        Microsoft::WRL::ComPtr<ID3D11Buffer> custom_effect_constant_buffer_;
-        std::uint32_t custom_effect_constant_buffer_size_ = 0;
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> white_texture_;
         std::unordered_map<std::string, Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>> texture_cache_;
-        std::unordered_map<std::string, CachedCustomEffectShader> custom_effect_shader_cache_;
         std::vector<Vertex> vertices_;
         std::size_t vertex_capacity_ = 0;
         bool world_space_canvas_ = false;
         UIRenderTargetPool render_target_pool_;
+        Rendering::Effects::EffectChain effect_chain_;
     };
 }

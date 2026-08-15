@@ -17,8 +17,7 @@
 #include "../Components/UI/UITextAnimatorComponent.h"
 #include "../Object/GameObject/GameObject.h"
 #include "../Rendering/Shaders/ShaderCatalog.h"
-#include "../Rendering/Shaders/ShaderConstantPacker.h"
-#include "../Rendering/Shaders/ShaderAsset.h"
+#include "../Rendering/Effects/EffectChain.h"
 #include "../Scene/Runtime/Scene.h"
 #include "../../Source/core/shader.h"
 #include "../../Source/core/texture.h"
@@ -28,7 +27,6 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
-#include <filesystem>
 #include <functional>
 #include <string>
 #include <vector>
@@ -46,51 +44,20 @@ namespace ReplayEngine::UI
         using Components::UITextComponent;
         using Components::UITextAnimatorComponent;
 
-        bool LookupEffectShaderProperty(const std::string& saved_name,
-            DirectX::XMFLOAT4& out, void* user)
-        {
-            if (user == nullptr) return false;
-            const auto* bag = static_cast<const Reflection::PropertyBag*>(user);
-            const Reflection::PropertyValue* value = bag->Find(saved_name);
-            if (value == nullptr) return false;
-
-            switch (value->Type())
-            {
-            case Reflection::PropertyType::Float:
-                out = { value->AsFloat(), 0.0f, 0.0f, 0.0f };
-                return true;
-            case Reflection::PropertyType::Double:
-                out = { static_cast<float>(value->AsDouble()), 0.0f, 0.0f, 0.0f };
-                return true;
-            case Reflection::PropertyType::Int:
-            case Reflection::PropertyType::Enum:
-                out = { static_cast<float>(value->AsInt()), 0.0f, 0.0f, 0.0f };
-                return true;
-            case Reflection::PropertyType::Bool:
-                out = { value->AsBool() ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
-                return true;
-            case Reflection::PropertyType::Vector2:
-            {
-                const DirectX::XMFLOAT2 v = value->AsVector2();
-                out = { v.x, v.y, 0.0f, 0.0f };
-                return true;
-            }
-            case Reflection::PropertyType::Vector3:
-            {
-                const DirectX::XMFLOAT3 v = value->AsVector3();
-                out = { v.x, v.y, v.z, 0.0f };
-                return true;
-            }
-            case Reflection::PropertyType::Vector4:
-            case Reflection::PropertyType::Color:
-                out = value->AsVector4();
-                return true;
-            default:
-                return false;
-            }
-        }
-
         constexpr int maximum_ui_depth = 64;
+
+        // Phase 1 の背景取り込みは、現在の描画先から切り出す領域だけを表す。
+        // Pool の format を増やさず、検証できない描画先は caller で Legacy へ戻す。
+        struct BackdropCapturePlan
+        {
+            Microsoft::WRL::ComPtr<ID3D11Texture2D> source_texture;
+            D3D11_BOX source_box{};
+            D3D11_RECT output_rect{};
+            std::uint32_t destination_x = 0;
+            std::uint32_t destination_y = 0;
+            std::uint32_t width = 0;
+            std::uint32_t height = 0;
+        };
 
         DirectX::XMFLOAT2 TransformPoint(const DirectX::XMFLOAT4X4& matrix,
             float x, float y) noexcept
@@ -1230,176 +1197,369 @@ namespace ReplayEngine::UI
             draw_target_height = static_cast<float>(target.height);
         };
 
-        const auto custom_effect_entry = [&](const std::string& shader_guid)
-            -> const Rendering::ShaderCatalog::Entry*
-        {
-            if (shader_guid.empty() || asset_database == nullptr || shader_catalog == nullptr)
-                return nullptr;
-            const Assets::AssetRecord* record = asset_database->FindByGuid(shader_guid);
-            if (record == nullptr || record->kind != Assets::AssetKind::Shader) return nullptr;
-
-            const auto normalize = [](std::filesystem::path path)
-            {
-                std::error_code error;
-                std::filesystem::path absolute = path.is_absolute()
-                    ? path : std::filesystem::absolute(path, error);
-                if (error) absolute = path;
-                error.clear();
-                const std::filesystem::path canonical =
-                    std::filesystem::weakly_canonical(absolute, error);
-                return error ? absolute.lexically_normal() : canonical.lexically_normal();
-            };
-
-            const std::filesystem::path source = normalize(record->source_path);
-            for (const Rendering::ShaderCatalog::Entry& entry : shader_catalog->All())
-            {
-                if (entry.info.domain != Rendering::ShaderDomain::PostProcess) continue;
-                if (normalize(entry.info.source_path) == source) return &entry;
-            }
-            return nullptr;
-        };
-
         const auto apply_effect_passes = [&](const UIEffectStackComponent& effects,
             UIRenderTarget*& current, UIRenderTarget* first, UIRenderTarget* second)
         {
-            if (first == nullptr || second == nullptr || current == nullptr)
-                return;
-
-            DirectX::XMFLOAT4X4 identity{};
-            DirectX::XMStoreFloat4x4(&identity, DirectX::XMMatrixIdentity());
-            const FLOAT clear[4]{ 0.0f, 0.0f, 0.0f, 0.0f };
-            for (const UI::UIEffect& effect : effects.effects)
+            Rendering::Effects::EffectChain::Context chain_context{};
+            chain_context.device_context = context;
+            chain_context.asset_database = asset_database;
+            chain_context.shader_catalog = shader_catalog;
+            chain_context.time = effect_time;
+            chain_context.depth_disabled = states.depth_disabled;
+            chain_context.rasterizer = states.rasterizer;
+            chain_context.blend_none = states.blend_none;
+            chain_context.blend_alpha = states.blend_alpha;
+            chain_context.sampler = states.sampler;
+            chain_context.resolve_texture = [&](const std::string& guid)
             {
-                if (!effect.enabled) continue;
-                const Rendering::ShaderCatalog::Entry* custom_entry =
-                    custom_effect_entry(effect.custom_shader);
-                ID3D11PixelShader* effect_shader = custom_entry != nullptr
-                    ? CustomEffectShaderFor(effect.custom_shader,
-                        asset_database, shader_catalog)
-                    : nullptr;
-                const bool using_custom_shader = effect_shader != nullptr &&
-                    custom_entry != nullptr;
-                if (effect_shader == nullptr)
-                {
-                    effect_shader = EffectShaderFor(
-                        static_cast<UI::UIEffectKind>(effect.kind));
-                }
-                if (effect_shader == nullptr) continue;
-
-                UIRenderTarget* destination = current == first ? second : first;
-                configure_effect_target(*destination);
-                context->ClearRenderTargetView(destination->rtv.Get(), clear);
-
-                const float width = (std::max)(1.0f,
-                    static_cast<float>(destination->width));
-                const float height = (std::max)(1.0f,
-                    static_cast<float>(destination->height));
-                EffectConstants effect_constants{};
-                effect_constants.effect_color = effect.color;
-                effect_constants.effect_params0 = {
-                    effect.radius, effect.intensity, effect.threshold, effect.amount };
-                effect_constants.effect_params1 = {
-                    effect.angle, effect.progress, effect.softness, effect.speed };
-                effect_constants.effect_params2 = {
-                    effect.direction.x, effect.direction.y, effect.seed,
-                    effect_time };
-                effect_constants.effect_params3 = {
-                    static_cast<float>(effect.waveform), 0.0f, 0.0f, 0.0f };
-                effect_constants.effect_color_2 = effect.color_2;
-                effect_constants.effect_color_3 = effect.color_3;
-                effect_constants.effect_color_4 = effect.color_4;
-                effect_constants.effect_color_stops = {
-                    effect.color_stop_2, effect.color_stop_3,
-                    effect.color_stop_4, 0.0f };
-                const bool is_mask_effect = static_cast<UI::UIEffectKind>(effect.kind) ==
-                    UI::UIEffectKind::Mask;
-                ID3D11ShaderResourceView* mask_texture = nullptr;
-                if (is_mask_effect && !effect.mask.empty())
-                {
-                    mask_texture = TextureFor(effect.mask, asset_database);
-                }
-                if (is_mask_effect)
-                {
-                    const float center_x = effect.direction.x > 0.0f &&
-                        effect.direction.x < 1.0f ? effect.direction.x : 0.5f;
-                    const float center_y = effect.direction.y > 0.0f &&
-                        effect.direction.y < 1.0f ? effect.direction.y : 0.5f;
-                    const float half_width = effect.seed > 0.0f &&
-                        effect.seed < 1.0f ? effect.seed : 0.5f;
-                    const float half_height = effect.speed > 0.0f &&
-                        effect.speed < 1.0f ? effect.speed : 0.5f;
-                    effect_constants.effect_params2 = {
-                        center_x, center_y, half_width, half_height };
-                    effect_constants.effect_params1.w = effect.mask.empty()
-                        ? 0.0f : 1.0f;
-                }
-                effect_constants.target_size = {
-                    width, height, 1.0f / width, 1.0f / height };
-                context->UpdateSubresource(effect_constant_buffer_.Get(), 0, nullptr,
-                    &effect_constants, 0, 0);
-                context->PSSetShaderResources(1, 1, &mask_texture);
-
-                std::vector<std::uint32_t> custom_texture_slots;
-                if (using_custom_shader && custom_entry->schema)
-                {
-                    const Rendering::ShaderPropertySchema& schema = *custom_entry->schema;
-                    std::vector<std::uint8_t> packed;
-                    Rendering::ShaderConstantPacker::Pack(schema,
-                        &LookupEffectShaderProperty,
-                        const_cast<Reflection::PropertyBag*>(&effect.custom_parameters), packed);
-                    if (!packed.empty() &&
-                        EnsureCustomEffectConstantBuffer(
-                            static_cast<std::uint32_t>(packed.size())))
-                    {
-                        context->UpdateSubresource(custom_effect_constant_buffer_.Get(),
-                            0, nullptr, packed.data(), 0, 0);
-                        ID3D11Buffer* custom_cb = custom_effect_constant_buffer_.Get();
-                        context->PSSetConstantBuffers(
-                            Rendering::ShaderConstantPacker::material_constant_register,
-                            1, &custom_cb);
-                    }
-
-                    for (const Rendering::ShaderProperty& property : schema.Properties())
-                    {
-                        if (property.kind != Rendering::ShaderPropertyKind::Texture) continue;
-                        const Reflection::PropertyValue* value =
-                            effect.custom_parameters.Find(property.SavedName());
-                        const std::string guid = value != nullptr
-                            ? value->AsAssetReference().guid : std::string{};
-                        ID3D11ShaderResourceView* custom_texture =
-                            TextureFor(guid, asset_database);
-                        context->PSSetShaderResources(property.texture_slot, 1,
-                            &custom_texture);
-                        custom_texture_slots.push_back(property.texture_slot);
-                    }
-                }
-
+                // Texture cache / white fallback は従来どおり UIRenderer が一元所有する。
+                return TextureFor(guid, asset_database);
+            };
+            chain_context.configure_target = [&](UIRenderTarget& target)
+            {
+                configure_effect_target(target);
+            };
+            chain_context.draw_plain_fullscreen = [&](float width, float height,
+                ID3D11ShaderResourceView* source, ID3D11BlendState* blend)
+            {
+                DirectX::XMFLOAT4X4 identity{};
+                DirectX::XMStoreFloat4x4(&identity, DirectX::XMMatrixIdentity());
+                configure_visual({}, 0, 0.0f, { 0.5f, 0.5f }, {}, 0,
+                    false, 0.0f, {}, {}, {});
                 append_quad({ 0.0f, 0.0f, width, height }, identity,
                     { 0.0f, 0.0f, 1.0f, 1.0f },
                     { 1.0f, 1.0f, 1.0f, 1.0f }, 1.0f);
-                Flush(context, current->srv.Get(),
-                    states.blend_none != nullptr ? states.blend_none : states.blend_alpha,
-                    states, nullptr, effect_shader, effect_constant_buffer_.Get());
+                Flush(context, source, blend, states, nullptr);
+            };
+            chain_context.draw_effect_fullscreen = [&](float width, float height,
+                ID3D11ShaderResourceView* source, ID3D11BlendState* blend,
+                ID3D11PixelShader* shader, ID3D11Buffer* effect_constants)
+            {
+                DirectX::XMFLOAT4X4 identity{};
+                DirectX::XMStoreFloat4x4(&identity, DirectX::XMMatrixIdentity());
+                append_quad({ 0.0f, 0.0f, width, height }, identity,
+                    { 0.0f, 0.0f, 1.0f, 1.0f },
+                    { 1.0f, 1.0f, 1.0f, 1.0f }, 1.0f);
+                Flush(context, source, blend, states, nullptr,
+                    shader, effect_constants);
+            };
+            current = effect_chain_.Apply(chain_context, effects.effects,
+                current, first, second);
+        };
 
-                if (using_custom_shader)
-                {
-                    ID3D11Buffer* null_custom_cb = nullptr;
-                    context->PSSetConstantBuffers(
-                        Rendering::ShaderConstantPacker::material_constant_register,
-                        1, &null_custom_cb);
-                    ID3D11ShaderResourceView* null_custom_srv = nullptr;
-                    for (const std::uint32_t slot : custom_texture_slots)
-                        context->PSSetShaderResources(slot, 1, &null_custom_srv);
-                }
+        // UI の論理座標から、現在の描画先（Scene View の offset / zoom を含む）の
+        // 実ピクセル座標へ変換する。Flush の scissor 変換と同じ値を使う。
+        const auto to_output_point = [&](const DirectX::XMFLOAT2& canvas_point,
+            float canvas_scale)
+        {
+            const DirectX::XMFLOAT2 screen_point = ToScreenPoint(canvas_point,
+                canvas_scale, screen_height);
+            const float scale_x = states.viewport_scale_x > 0.0001f
+                ? states.viewport_scale_x : 1.0f;
+            const float scale_y = states.viewport_scale_y > 0.0001f
+                ? states.viewport_scale_y : 1.0f;
+            return DirectX::XMFLOAT2{
+                states.scissor_offset_x + screen_point.x * scale_x,
+                states.scissor_offset_y + screen_point.y * scale_y };
+        };
 
-                ID3D11ShaderResourceView* null_srv = nullptr;
-                context->PSSetShaderResources(0, 1, &null_srv);
-                context->PSSetShaderResources(1, 1, &null_srv);
-                current = destination;
+        const auto capture_scale_for = [&](const RectTransformComponent& rect,
+            const DirectX::XMFLOAT4& source_rect, float canvas_scale,
+            float& out_scale)
+        {
+            if (world_space_canvas_ || source_rect.z <= 0.0001f ||
+                source_rect.w <= 0.0001f)
+            {
+                return false;
             }
 
-            ID3D11Buffer* null_cb = nullptr;
-            context->PSSetConstantBuffers(0, 1, &null_cb);
+            const DirectX::XMFLOAT4X4 matrix = rect.ResolvedMatrix();
+            const DirectX::XMFLOAT2 p0 = to_output_point(
+                TransformPoint(matrix, source_rect.x, source_rect.y), canvas_scale);
+            const DirectX::XMFLOAT2 p1 = to_output_point(
+                TransformPoint(matrix, source_rect.x + source_rect.z, source_rect.y),
+                canvas_scale);
+            const DirectX::XMFLOAT2 p2 = to_output_point(
+                TransformPoint(matrix, source_rect.x + source_rect.z,
+                    source_rect.y + source_rect.w), canvas_scale);
+            const DirectX::XMFLOAT2 p3 = to_output_point(
+                TransformPoint(matrix, source_rect.x, source_rect.y + source_rect.w),
+                canvas_scale);
+            constexpr float alignment_epsilon = 0.01f;
+            if (std::fabs(p0.y - p1.y) > alignment_epsilon ||
+                std::fabs(p1.x - p2.x) > alignment_epsilon ||
+                std::fabs(p2.y - p3.y) > alignment_epsilon ||
+                std::fabs(p3.x - p0.x) > alignment_epsilon ||
+                p1.x <= p0.x || p0.y <= p3.y)
+            {
+                return false;
+            }
+
+            const float scale_x = (p1.x - p0.x) / source_rect.z;
+            const float scale_y = (p0.y - p3.y) / source_rect.w;
+            if (scale_x <= 0.0001f || scale_y <= 0.0001f ||
+                std::fabs(scale_x - scale_y) >
+                    (std::max)(scale_x, scale_y) * 0.0001f)
+            {
+                return false;
+            }
+            out_scale = scale_x;
+            return true;
+        };
+
+        const auto make_backdrop_capture_plan = [&](const RectTransformComponent& rect,
+            const DirectX::XMFLOAT4& composite_rect, float canvas_scale,
+            const D3D11_RECT* scissor, BackdropCapturePlan& plan)
+        {
+            const DirectX::XMFLOAT4X4 matrix = rect.ResolvedMatrix();
+            const DirectX::XMFLOAT2 p0 = to_output_point(
+                TransformPoint(matrix, composite_rect.x, composite_rect.y), canvas_scale);
+            const DirectX::XMFLOAT2 p1 = to_output_point(
+                TransformPoint(matrix, composite_rect.x + composite_rect.z,
+                    composite_rect.y), canvas_scale);
+            const DirectX::XMFLOAT2 p2 = to_output_point(
+                TransformPoint(matrix, composite_rect.x + composite_rect.z,
+                    composite_rect.y + composite_rect.w), canvas_scale);
+            const DirectX::XMFLOAT2 p3 = to_output_point(
+                TransformPoint(matrix, composite_rect.x,
+                    composite_rect.y + composite_rect.w), canvas_scale);
+            const float min_x = (std::min)({ p0.x, p1.x, p2.x, p3.x });
+            const float max_x = (std::max)({ p0.x, p1.x, p2.x, p3.x });
+            const float min_y = (std::min)({ p0.y, p1.y, p2.y, p3.y });
+            const float max_y = (std::max)({ p0.y, p1.y, p2.y, p3.y });
+            D3D11_RECT full_rect{};
+            full_rect.left = static_cast<LONG>(std::floor(min_x));
+            full_rect.top = static_cast<LONG>(std::floor(min_y));
+            full_rect.right = static_cast<LONG>(std::ceil(max_x));
+            full_rect.bottom = static_cast<LONG>(std::ceil(max_y));
+            if (full_rect.right <= full_rect.left || full_rect.bottom <= full_rect.top)
+                return false;
+
+            Microsoft::WRL::ComPtr<ID3D11RenderTargetView> source_view;
+            context->OMGetRenderTargets(1, source_view.GetAddressOf(), nullptr);
+            if (!source_view) return false;
+            Microsoft::WRL::ComPtr<ID3D11Resource> source_resource;
+            source_view->GetResource(source_resource.GetAddressOf());
+            if (!source_resource ||
+                FAILED(source_resource.As(&plan.source_texture)) ||
+                !plan.source_texture)
+            {
+                return false;
+            }
+
+            D3D11_TEXTURE2D_DESC source_desc{};
+            plan.source_texture->GetDesc(&source_desc);
+            if (source_desc.Format != DXGI_FORMAT_R8G8B8A8_UNORM ||
+                source_desc.SampleDesc.Count != 1)
+            {
+                return false;
+            }
+
+            D3D11_RECT copy_rect = full_rect;
+            const D3D11_RECT source_bounds{ 0, 0,
+                static_cast<LONG>(source_desc.Width),
+                static_cast<LONG>(source_desc.Height) };
+            copy_rect = IntersectScissor(copy_rect, source_bounds);
+            if (scissor != nullptr)
+            {
+                const float scale_x = states.viewport_scale_x > 0.0001f
+                    ? states.viewport_scale_x : 1.0f;
+                const float scale_y = states.viewport_scale_y > 0.0001f
+                    ? states.viewport_scale_y : 1.0f;
+                D3D11_RECT output_scissor{};
+                output_scissor.left = static_cast<LONG>(std::floor(
+                    states.scissor_offset_x + scissor->left * scale_x));
+                output_scissor.top = static_cast<LONG>(std::floor(
+                    states.scissor_offset_y + scissor->top * scale_y));
+                output_scissor.right = static_cast<LONG>(std::ceil(
+                    states.scissor_offset_x + scissor->right * scale_x));
+                output_scissor.bottom = static_cast<LONG>(std::ceil(
+                    states.scissor_offset_y + scissor->bottom * scale_y));
+                if (states.scissor_bounds_enabled)
+                    output_scissor = IntersectScissor(output_scissor,
+                        states.scissor_bounds);
+                copy_rect = IntersectScissor(copy_rect, output_scissor);
+            }
+            if (copy_rect.right <= copy_rect.left || copy_rect.bottom <= copy_rect.top)
+                return false;
+
+            plan.output_rect = full_rect;
+            plan.width = static_cast<std::uint32_t>(full_rect.right - full_rect.left);
+            plan.height = static_cast<std::uint32_t>(full_rect.bottom - full_rect.top);
+            plan.destination_x = static_cast<std::uint32_t>(
+                copy_rect.left - full_rect.left);
+            plan.destination_y = static_cast<std::uint32_t>(
+                copy_rect.top - full_rect.top);
+            plan.source_box.left = static_cast<UINT>(copy_rect.left);
+            plan.source_box.top = static_cast<UINT>(copy_rect.top);
+            plan.source_box.right = static_cast<UINT>(copy_rect.right);
+            plan.source_box.bottom = static_cast<UINT>(copy_rect.bottom);
+            plan.source_box.front = 0;
+            plan.source_box.back = 1;
+            return plan.width > 0 && plan.height > 0;
+        };
+
+        const auto render_effect_with_backdrop = [&](const UIEffectStackComponent& effects,
+            const RectTransformComponent& rect, const DirectX::XMFLOAT4& source_rect,
+            float canvas_scale, const D3D11_RECT* scissor, const auto& draw_source)
+        {
+            if (!effects.HasActiveEffects() || states.blend_none == nullptr)
+                return false;
+
+            float capture_scale = 1.0f;
+            if (!capture_scale_for(rect, source_rect, canvas_scale, capture_scale))
+                return false;
+
+            const DirectX::XMFLOAT4 expansion = effects.ExpandBounds(
+                source_rect.z * capture_scale, source_rect.w * capture_scale);
+            const float inverse_scale = 1.0f / (std::max)(0.0001f, capture_scale);
+            const float expanded_width = (std::max)(1.0f,
+                source_rect.z + (expansion.x + expansion.z) * inverse_scale);
+            const float expanded_height = (std::max)(1.0f,
+                source_rect.w + (expansion.y + expansion.w) * inverse_scale);
+            const DirectX::XMFLOAT4 composite_rect{
+                source_rect.x - expansion.x * inverse_scale,
+                source_rect.y - expansion.y * inverse_scale,
+                expanded_width,
+                expanded_height };
+            BackdropCapturePlan plan{};
+            if (!make_backdrop_capture_plan(rect, composite_rect, canvas_scale,
+                scissor, plan))
+            {
+                return false;
+            }
+
+            UIRenderTarget* target = render_target_pool_.Acquire(plan.width, plan.height);
+            UIRenderTarget* scratch = render_target_pool_.Acquire(plan.width, plan.height);
+            if (target == nullptr || scratch == nullptr || !target->texture ||
+                !target->rtv || !target->srv || !scratch->texture ||
+                !scratch->rtv || !scratch->srv ||
+                target->texture.Get() == plan.source_texture.Get() ||
+                scratch->texture.Get() == plan.source_texture.Get())
+            {
+                return false;
+            }
+
+            ID3D11ShaderResourceView* null_srvs[2]{};
+            context->PSSetShaderResources(0, _countof(null_srvs), null_srvs);
+            const FLOAT clear[4]{ 0.0f, 0.0f, 0.0f, 0.0f };
+            context->ClearRenderTargetView(target->rtv.Get(), clear);
+            context->CopySubresourceRegion(target->texture.Get(), 0,
+                plan.destination_x, plan.destination_y, 0, plan.source_texture.Get(), 0,
+                &plan.source_box);
+
+            ID3D11RenderTargetView* previous_rtv = nullptr;
+            ID3D11DepthStencilView* previous_dsv = nullptr;
+            context->OMGetRenderTargets(1, &previous_rtv, &previous_dsv);
+            UINT viewport_count = 1;
+            D3D11_VIEWPORT previous_viewport{};
+            context->RSGetViewports(&viewport_count, &previous_viewport);
+
+            const DirectX::XMFLOAT4X4 matrix = rect.ResolvedMatrix();
+            const DirectX::XMFLOAT2 source_p0 = to_output_point(
+                TransformPoint(matrix, source_rect.x, source_rect.y), canvas_scale);
+            const DirectX::XMFLOAT2 source_p2 = to_output_point(
+                TransformPoint(matrix, source_rect.x + source_rect.z,
+                    source_rect.y + source_rect.w), canvas_scale);
+            const float source_left = (std::min)(source_p0.x, source_p2.x);
+            const float source_bottom = (std::max)(source_p0.y, source_p2.y);
+            DirectX::XMFLOAT4 draw_rect{
+                (source_left - static_cast<float>(plan.output_rect.left)) / capture_scale,
+                (static_cast<float>(plan.height) -
+                    (source_bottom - static_cast<float>(plan.output_rect.top))) /
+                    capture_scale,
+                source_rect.z,
+                source_rect.w };
+
+            configure_effect_target(*target);
+            draw_source(draw_rect, capture_scale);
+
+            ID3D11ShaderResourceView* null_srv = nullptr;
+            context->PSSetShaderResources(0, 1, &null_srv);
+            UIRenderTarget* current = target;
+            apply_effect_passes(effects, current, target, scratch);
+
+            context->OMSetRenderTargets(1, &previous_rtv, previous_dsv);
+            if (viewport_count > 0) context->RSSetViewports(1, &previous_viewport);
+            if (previous_rtv != nullptr) previous_rtv->Release();
+            if (previous_dsv != nullptr) previous_dsv->Release();
+
+            constants.screen_size = { screen_width, screen_height, 0.0f, 0.0f };
+            context->UpdateSubresource(constant_buffer_.Get(), 0, nullptr,
+                &constants, 0, 0);
+            draw_target_height = screen_height;
+            append_quad(composite_rect, rect.ResolvedMatrix(),
+                { 0.0f, 0.0f, 1.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f },
+                canvas_scale);
+            configure_visual({}, 0, 0.0f, { 0.5f, 0.5f }, {}, 0,
+                false, 0.0f, {}, {}, {});
+            Flush(context, current->srv.Get(), states.blend_none, states, scissor);
+            return true;
+        };
+
+        const auto render_image_effect_with_backdrop = [&](
+            const UIEffectStackComponent& effects, UIImageComponent& image,
+            const RectTransformComponent& rect, float scale, float opacity,
+            const D3D11_RECT* scissor)
+        {
+            if (!image.ActiveInHierarchy() || image.opacity <= 0.0f ||
+                image.fill_amount <= 0.0f)
+            {
+                return false;
+            }
+            const DirectX::XMFLOAT4 source_rect = rect.ResolvedRect();
+            return render_effect_with_backdrop(effects, rect, source_rect, scale,
+                scissor, [&](const DirectX::XMFLOAT4& draw_rect, float capture_scale)
+                {
+                    DirectX::XMFLOAT4 source = draw_rect;
+                    DirectX::XMFLOAT4 uv{ image.uv_offset.x, image.uv_offset.y,
+                        image.uv_scale.x, image.uv_scale.y };
+                    const float fill = (std::min)((std::max)(image.fill_amount, 0.0f),
+                        1.0f);
+                    if (image.fill_method == UIImageComponent::Horizontal)
+                    {
+                        source.z *= fill;
+                        uv.z *= fill;
+                    }
+                    else if (image.fill_method == UIImageComponent::Vertical)
+                    {
+                        source.w *= fill;
+                        uv.w *= fill;
+                    }
+                    DirectX::XMFLOAT4X4 identity{};
+                    DirectX::XMStoreFloat4x4(&identity, DirectX::XMMatrixIdentity());
+                    append_quad(source, identity, uv,
+                        MultiplyAlpha(image.color, image.opacity * opacity), capture_scale);
+                    configure_visual(image.fill_color_2, image.fill_mode, image.fill_angle,
+                        image.fill_center, image.stroke_color_2, image.stroke_mode,
+                        false, 0.0f, {}, {}, {});
+                    Flush(context, TextureFor(image.sprite.guid, asset_database),
+                        BlendForImage(image, states), states, nullptr);
+                });
+        };
+
+        const auto render_text_effect_with_backdrop = [&](const Core::GameObject& object,
+            const UIEffectStackComponent& effects, UITextComponent& text,
+            const RectTransformComponent& rect, float scale, float opacity,
+            const D3D11_RECT* scissor)
+        {
+            if (!text.ActiveInHierarchy() || text.opacity <= 0.0f || text.text.empty())
+                return false;
+            const DirectX::XMFLOAT4 source_rect = rect.ResolvedRect();
+            return render_effect_with_backdrop(effects, rect, source_rect, scale,
+                scissor, [&](const DirectX::XMFLOAT4& draw_rect, float capture_scale)
+                {
+                    font_atlas.BuildGlyphs(text, source_rect.z, source_rect.w,
+                        asset_database);
+                    DirectX::XMFLOAT4X4 identity{};
+                    DirectX::XMStoreFloat4x4(&identity, DirectX::XMMatrixIdentity());
+                    append_text_glyphs(object, text, draw_rect, identity,
+                        MultiplyAlpha(text.color, text.opacity * opacity), capture_scale);
+                    configure_visual({}, 0, 0.0f, { 0.5f, 0.5f }, {}, 0, true,
+                        text.outline_width, text.outline_color,
+                        text.shadow_offset, text.shadow_color);
+                    Flush(context, font_atlas.Texture(), states.blend_alpha, states, nullptr);
+                });
         };
 
         const auto render_effect_preview = [&](const UIEffectStackComponent& effects,
@@ -1415,18 +1575,26 @@ namespace ReplayEngine::UI
             const DirectX::XMFLOAT4 source_rect = rect.ResolvedRect();
             const DirectX::XMFLOAT4 expansion = effects.ExpandBounds(
                 source_rect.z * scale, source_rect.w * scale);
-            const float expanded_width = (std::max)(1.0f,
-                source_rect.z + expansion.x + expansion.z);
-            const float expanded_height = (std::max)(1.0f,
-                source_rect.w + expansion.y + expansion.w);
             // Effect の変位量は target_size.zw を使う実ピクセル単位なので、
-            // expansion へ Canvas 拡大率を掛けてはいけない。
+            // RT の確保量へ Canvas 拡大率を掛けてはいけない。
+            // 一方 composite_rect は論理単位で積まれ、描画時に scale が掛かる。
+            // したがって確保量は「論理単位へ戻して」から矩形へ足す。
+            // ここを実ピクセルのまま足すと、RT の実幅が
+            // source*scale + expansion なのに矩形の実幅が (source + expansion)*scale となり、
+            // scale != 1 のとき結果が縮んで位置もずれる。
+            const float inverse_scale = 1.0f / (std::max)(0.0001f, scale);
+            const float expand_left = expansion.x * inverse_scale;
+            const float expand_top = expansion.y * inverse_scale;
+            const float expand_right = expansion.z * inverse_scale;
+            const float expand_bottom = expansion.w * inverse_scale;
+            const float expanded_width = (std::max)(1.0f,
+                source_rect.z + expand_left + expand_right);
+            const float expanded_height = (std::max)(1.0f,
+                source_rect.w + expand_top + expand_bottom);
             const std::uint32_t rt_width = static_cast<std::uint32_t>(
-                std::ceil((std::max)(1.0f,
-                    source_rect.z * scale + expansion.x + expansion.z)));
+                std::ceil((std::max)(1.0f, expanded_width * scale)));
             const std::uint32_t rt_height = static_cast<std::uint32_t>(
-                std::ceil((std::max)(1.0f,
-                    source_rect.w * scale + expansion.y + expansion.w)));
+                std::ceil((std::max)(1.0f, expanded_height * scale)));
             UIRenderTarget* target = render_target_pool_.Acquire(rt_width, rt_height);
             UIRenderTarget* scratch = render_target_pool_.Acquire(rt_width, rt_height);
             if (target == nullptr || scratch == nullptr ||
@@ -1491,8 +1659,8 @@ namespace ReplayEngine::UI
             draw_target_height = screen_height;
 
             DirectX::XMFLOAT4 composite_rect{
-                source_rect.x - expansion.x,
-                source_rect.y - expansion.y,
+                source_rect.x - expand_left,
+                source_rect.y - expand_top,
                 expanded_width,
                 expanded_height };
             append_quad(composite_rect, rect.ResolvedMatrix(),
@@ -1519,17 +1687,21 @@ namespace ReplayEngine::UI
             const DirectX::XMFLOAT4 source_rect = rect.ResolvedRect();
             const DirectX::XMFLOAT4 expansion = effects.ExpandBounds(
                 source_rect.z * scale, source_rect.w * scale);
+            // Text も Image と同じ扱い。確保量は実ピクセルなので、
+            // 論理単位の composite_rect へ足す前に拡大率で割り戻す。
+            const float inverse_scale = 1.0f / (std::max)(0.0001f, scale);
+            const float expand_left = expansion.x * inverse_scale;
+            const float expand_top = expansion.y * inverse_scale;
+            const float expand_right = expansion.z * inverse_scale;
+            const float expand_bottom = expansion.w * inverse_scale;
             const float expanded_width = (std::max)(1.0f,
-                source_rect.z + expansion.x + expansion.z);
+                source_rect.z + expand_left + expand_right);
             const float expanded_height = (std::max)(1.0f,
-                source_rect.w + expansion.y + expansion.w);
-            // Text も Image と同じく、確保量は実ピクセルのまま RT へ足す。
+                source_rect.w + expand_top + expand_bottom);
             const std::uint32_t rt_width = static_cast<std::uint32_t>(
-                std::ceil((std::max)(1.0f,
-                    source_rect.z * scale + expansion.x + expansion.z)));
+                std::ceil((std::max)(1.0f, expanded_width * scale)));
             const std::uint32_t rt_height = static_cast<std::uint32_t>(
-                std::ceil((std::max)(1.0f,
-                    source_rect.w * scale + expansion.y + expansion.w)));
+                std::ceil((std::max)(1.0f, expanded_height * scale)));
             UIRenderTarget* target = render_target_pool_.Acquire(rt_width, rt_height);
             UIRenderTarget* scratch = render_target_pool_.Acquire(rt_width, rt_height);
             if (target == nullptr || scratch == nullptr ||
@@ -1581,8 +1753,8 @@ namespace ReplayEngine::UI
             draw_target_height = screen_height;
 
             DirectX::XMFLOAT4 composite_rect{
-                source_rect.x - expansion.x,
-                source_rect.y - expansion.y,
+                source_rect.x - expand_left,
+                source_rect.y - expand_top,
                 expanded_width,
                 expanded_height };
             append_quad(composite_rect, rect.ResolvedMatrix(),
@@ -1594,9 +1766,10 @@ namespace ReplayEngine::UI
             return true;
         };
 
-        std::function<void(Core::GameObject&, float, float, const D3D11_RECT*, int)> render_object;
+        std::function<void(Core::GameObject&, float, float, const D3D11_RECT*, int, bool)>
+            render_object;
         render_object = [&](Core::GameObject& object, float scale, float opacity,
-            const D3D11_RECT* inherited_scissor, int depth)
+            const D3D11_RECT* inherited_scissor, int depth, bool backdrop_allowed)
         {
             if (depth > maximum_ui_depth || object.PendingDestroy() || !object.ActiveInHierarchy())
                 return;
@@ -1643,18 +1816,26 @@ namespace ReplayEngine::UI
                 }
                 if (UIImageComponent* image = object.GetComponent<UIImageComponent>())
                 {
-                    if (effects == nullptr ||
+                    const bool backdrop_rendered = backdrop_allowed && effects != nullptr &&
+                        effects->capture_backdrop &&
+                        render_image_effect_with_backdrop(*effects, *image, *rect, scale,
+                            opacity, active_scissor);
+                    if (!backdrop_rendered && (effects == nullptr ||
                         !render_effect_preview(*effects, *image, *rect, scale,
-                            opacity, active_scissor))
+                            opacity, active_scissor)))
                     {
                         render_image(*image, *rect, scale, opacity, active_scissor);
                     }
                 }
                 if (UITextComponent* text = object.GetComponent<UITextComponent>())
                 {
-                    if (effects == nullptr ||
+                    const bool backdrop_rendered = backdrop_allowed && effects != nullptr &&
+                        effects->capture_backdrop &&
+                        render_text_effect_with_backdrop(object, *effects, *text, *rect,
+                            scale, opacity, active_scissor);
+                    if (!backdrop_rendered && (effects == nullptr ||
                         !render_text_effect_preview(object, *effects, *text, *rect, scale,
-                            opacity, active_scissor))
+                            opacity, active_scissor)))
                     {
                         render_text(object, *text, *rect, scale, opacity, active_scissor);
                     }
@@ -1700,7 +1881,7 @@ namespace ReplayEngine::UI
                      {
                          if (child != nullptr)
                              render_object(*child, scale, opacity,
-                                inherited_scissor, depth + 1);
+                                inherited_scissor, depth + 1, false);
                     }
 
                     UIEffectStackComponent mask_effects;
@@ -1769,7 +1950,8 @@ namespace ReplayEngine::UI
              for (Core::GameObject* child : ordered_children)
              {
                  if (child != nullptr)
-                     render_object(*child, scale, opacity, active_scissor, depth + 1);
+                     render_object(*child, scale, opacity, active_scissor, depth + 1,
+                        backdrop_allowed);
             }
         };
 
@@ -1805,7 +1987,7 @@ namespace ReplayEngine::UI
             context->UpdateSubresource(constant_buffer_.Get(), 0, nullptr,
                 &constants, 0, 0);
             render_object(*canvas_object, safe_scale,
-                (std::min)((std::max)(canvas->opacity, 0.0f), 1.0f), nullptr, 0);
+                (std::min)((std::max)(canvas->opacity, 0.0f), 1.0f), nullptr, 0, true);
         }
         world_space_canvas_ = false;
 
