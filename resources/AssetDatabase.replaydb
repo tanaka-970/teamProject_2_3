@@ -1,4 +1,4 @@
-REPLAY_ASSET_DB 2 87
+REPLAY_ASSET_DB 2 88
 "60412424bb1443240b2bf2160eee6923" 1 "ExampleStage" "resources/Stage/ExampleStage.cereal" "resources/.replay_cache/models/f9fffac39252a621_v0.replaycache"
 "1bd1358040255f5bd18f3be0d79fbe3c" 1 "AllAnimation1" "resources/AnimationModel/AllAnimation1.cereal" "resources/.replay_cache/models/6a20e727f78fb359_v0.replaycache"
 "e5c4168feb92f8fd7357f6cbc1f66e22" 1 "scene" "resources/Stage/city_3d_model_gltf/scene.gltf" "resources/.replay_cache/models/98fd72a862da8c8f_v0.replaycache"
@@ -86,3 +86,4 @@ REPLAY_ASSET_DB 2 87
 "cf3d60404fb6bf4b0824ce52ceb316e0" 5 "test10" "resources/Scenes/test10.replayscene" ""
 "c51e8518ddf19e4785521147a0cca7d0" 5 "ClaudeWaveform" "resources/Scenes/ClaudeWaveform.replayscene" ""
 "b82956797e79117cbb319345dd908891" 5 "kakuninnyou" "resources/Scenes/kakuninnyou.replayscene" ""
+"2da5dda186043f18c647b6c8566208a1" 2 "brush_masks_atlas" "resources/BrushMasks/brush_masks_atlas.png" ""

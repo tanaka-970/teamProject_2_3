@@ -1329,11 +1329,47 @@ namespace ReplayEngine::UI
                 ID3D11ShaderResourceView* mask_texture = nullptr;
                 // t1 は全 UI Effect に共通の任意 Image 入力。Mask 専用にせず、
                 // Dissolve / Noise / BrushStroke も同じ GUID 解決を使う。
-                if (!effect.mask.empty())
+                std::string mask_guid = effect.mask;
+                const bool is_brush_effect = static_cast<UI::UIEffectKind>(effect.kind) ==
+                    UI::UIEffectKind::BrushStroke;
+                if (is_brush_effect && effect.brush_atlas_enabled && mask_guid.empty() &&
+                    asset_database != nullptr)
                 {
-                    mask_texture = TextureFor(effect.mask, asset_database);
+                    // Atlas を選んだのに Asset 欄を空のままにしても、標準筆跡セットは
+                    // 1 枚で完結する。通常マスクや既存 Scene の空欄はこの分岐へ入らない。
+                    if (const Assets::AssetRecord* atlas = asset_database->FindByPath(
+                        std::filesystem::path("resources") / "BrushMasks" /
+                        "brush_masks_atlas.png"))
+                    {
+                        if (atlas->kind == Assets::AssetKind::Image) mask_guid = atlas->guid;
+                    }
+                }
+                if (!mask_guid.empty())
+                {
+                    mask_texture = TextureFor(mask_guid, asset_database);
                 }
                 effect_constants.effect_params3.y = mask_texture != nullptr ? 1.0f : 0.0f;
+                const bool brush_atlas = is_brush_effect && effect.brush_atlas_enabled &&
+                    mask_texture != nullptr;
+                if (brush_atlas)
+                {
+                    effect_constants.effect_params3.z = 1.0f;
+                    effect_constants.brush_pattern_settings = {
+                        static_cast<float>((std::max)(0, (std::min)(15,
+                            effect.brush_pattern_index))),
+                        static_cast<float>((std::max)(0, (std::min)(1,
+                            effect.brush_pattern_mode))), 0.0f, 0.0f };
+                    for (std::size_t group = 0;
+                        group < effect_constants.brush_pattern_weights.size(); ++group)
+                    {
+                        const std::size_t first = group * 4;
+                        effect_constants.brush_pattern_weights[group] = {
+                            (std::max)(0.0f, effect.brush_pattern_weights[first]),
+                            (std::max)(0.0f, effect.brush_pattern_weights[first + 1]),
+                            (std::max)(0.0f, effect.brush_pattern_weights[first + 2]),
+                            (std::max)(0.0f, effect.brush_pattern_weights[first + 3]) };
+                    }
+                }
                 if (is_mask_effect)
                 {
                     const float center_x = effect.direction.x > 0.0f &&
@@ -1387,6 +1423,142 @@ namespace ReplayEngine::UI
                         context->PSSetShaderResources(property.texture_slot, 1,
                             &custom_texture);
                         custom_texture_slots.push_back(property.texture_slot);
+                    }
+                }
+
+                // Atlas は全画面フィルターではなく、必要本数だけの独立ストロークを
+                // インスタンシングで重ねる。通常マスクと Custom Shader は従来の
+                // fullscreen 経路を維持する。
+                if (brush_atlas && effect.brush_instanced_renderer_enabled && !using_custom_shader &&
+                    brush_stroke_vertex_shader_ != nullptr &&
+                    brush_stroke_pixel_shader_ != nullptr)
+                {
+                    const float grid_x = (std::max)(effect.progress * 0.78f, 8.0f);
+                    const float grid_y = (std::max)(effect.amount * 1.35f, 6.0f);
+                    const int columns = static_cast<int>(std::ceil(width / grid_x)) + 2;
+                    const int rows = static_cast<int>(std::ceil(height / grid_y)) + 2;
+                    std::vector<BrushStrokeInstance> instances;
+                    instances.reserve(static_cast<std::size_t>(columns) *
+                        static_cast<std::size_t>(rows));
+
+                    const auto hash = [](std::uint32_t value) noexcept
+                    {
+                        value ^= value >> 16;
+                        value *= 0x7feb352du;
+                        value ^= value >> 15;
+                        value *= 0x846ca68bu;
+                        value ^= value >> 16;
+                        return value;
+                    };
+                    const auto random01 = [&hash](std::uint32_t value) noexcept
+                    {
+                        return static_cast<float>(hash(value) & 0x00ffffffu) /
+                            static_cast<float>(0x01000000u);
+                    };
+                    const auto profile_for = [](int pattern) noexcept
+                    {
+                        static const std::array<DirectX::XMFLOAT4, 16> profiles{
+                            DirectX::XMFLOAT4{ 1.10f, 1.08f, 0.55f, 0.92f },
+                            { 0.68f, 0.88f, 0.20f, 0.78f }, { 1.05f, 1.10f, 0.45f, 0.90f },
+                            { 0.95f, 1.05f, 0.35f, 0.95f }, { 1.15f, 1.10f, 0.85f, 0.90f },
+                            { 1.00f, 1.12f, 0.35f, 1.00f }, { 0.90f, 0.98f, 0.70f, 0.78f },
+                            { 1.12f, 1.15f, 0.35f, 1.00f }, { 1.00f, 1.08f, 0.55f, 0.82f },
+                            { 0.75f, 0.90f, 0.22f, 0.75f }, { 1.05f, 1.15f, 0.40f, 1.00f },
+                            { 0.82f, 0.92f, 0.80f, 0.78f }, { 0.95f, 0.98f, 0.70f, 0.75f },
+                            { 1.00f, 1.08f, 0.25f, 0.88f }, { 1.08f, 1.16f, 0.60f, 1.00f },
+                            { 1.25f, 1.20f, 0.35f, 1.00f } };
+                        return profiles[static_cast<std::size_t>((std::max)(0,
+                            (std::min)(15, pattern)))];
+                    };
+                    float total_weight = 0.0f;
+                    for (const float weight : effect.brush_pattern_weights)
+                        total_weight += (std::max)(0.0f, weight);
+
+                    for (int row = -1; row < rows - 1; ++row)
+                    {
+                        for (int column = -1; column < columns - 1; ++column)
+                        {
+                            const std::uint32_t seed = static_cast<std::uint32_t>(column * 73856093) ^
+                                static_cast<std::uint32_t>(row * 19349663) ^
+                                static_cast<std::uint32_t>(effect.seed * 65535.0f);
+                            int pattern = effect.brush_pattern_index;
+                            if (effect.brush_pattern_mode != 0 && total_weight > 0.0f)
+                            {
+                                float pick = random01(seed) * total_weight;
+                                for (int index = 0; index < 16; ++index)
+                                {
+                                    pick -= (std::max)(0.0f,
+                                        effect.brush_pattern_weights[static_cast<std::size_t>(index)]);
+                                    if (pick <= 0.0f)
+                                    {
+                                        pattern = index;
+                                        break;
+                                    }
+                                }
+                            }
+                            const DirectX::XMFLOAT4 profile = profile_for(pattern);
+                            const float variation = Clamp01(effect.softness);
+                            const float jitter_x = (random01(seed + 1u) - 0.5f) *
+                                grid_x * (0.12f + variation * 0.50f);
+                            const float jitter_y = (random01(seed + 2u) - 0.5f) *
+                                grid_y * (0.12f + variation * 0.50f);
+                            BrushStrokeInstance instance{};
+                            instance.center = { (column + 0.5f) * grid_x + jitter_x,
+                                (row + 0.5f) * grid_y + jitter_y };
+                            instance.size = { (std::max)(effect.progress * profile.x, 8.0f),
+                                (std::max)(effect.amount * 2.2f * profile.y, 5.0f) };
+                            instance.pattern = static_cast<std::uint32_t>((std::max)(0,
+                                (std::min)(15, pattern)));
+                            instances.push_back(instance);
+                        }
+                    }
+
+                    if (!instances.empty() && EnsureBrushStrokeInstanceCapacity(instances.size()))
+                    {
+                        D3D11_MAPPED_SUBRESOURCE mapped{};
+                        if (SUCCEEDED(context->Map(brush_stroke_instance_buffer_.Get(), 0,
+                            D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+                        {
+                            std::memcpy(mapped.pData, instances.data(),
+                                sizeof(BrushStrokeInstance) * instances.size());
+                            context->Unmap(brush_stroke_instance_buffer_.Get(), 0);
+
+                            // 下地を一度だけコピーし、その上へ筆だけを alpha 合成する。
+                            configure_visual({}, 0, 0.0f, { 0.5f, 0.5f }, {}, 0,
+                                false, 0.0f, {}, {}, {});
+                            append_quad({ 0.0f, 0.0f, width, height }, identity,
+                                { 0.0f, 0.0f, 1.0f, 1.0f },
+                                { 1.0f, 1.0f, 1.0f, 1.0f }, 1.0f);
+                            Flush(context, current->srv.Get(), states.blend_none != nullptr
+                                ? states.blend_none : states.blend_alpha, states, nullptr);
+
+                            ID3D11Buffer* effect_cb = effect_constant_buffer_.Get();
+                            context->VSSetConstantBuffers(0, 1, &effect_cb);
+                            context->PSSetConstantBuffers(0, 1, &effect_cb);
+                            ID3D11ShaderResourceView* vertex_srvs[]{ current->srv.Get(),
+                                brush_stroke_instance_srv_.Get() };
+                            ID3D11ShaderResourceView* pixel_srvs[]{ current->srv.Get(), mask_texture };
+                            context->VSSetShaderResources(0, 2, vertex_srvs);
+                            context->PSSetShaderResources(0, 2, pixel_srvs);
+                            ID3D11SamplerState* sampler = states.sampler;
+                            context->VSSetSamplers(0, 1, &sampler);
+                            context->PSSetSamplers(0, 1, &sampler);
+                            context->IASetInputLayout(nullptr);
+                            context->IASetVertexBuffers(0, 0, nullptr, nullptr, nullptr);
+                            context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+                            context->VSSetShader(brush_stroke_vertex_shader_.Get(), nullptr, 0);
+                            context->PSSetShader(brush_stroke_pixel_shader_.Get(), nullptr, 0);
+                            context->OMSetDepthStencilState(states.depth_disabled, 0);
+                            context->OMSetBlendState(states.blend_alpha, nullptr, 0xffffffff);
+                            context->RSSetState(states.rasterizer);
+                            context->DrawInstanced(4, static_cast<UINT>(instances.size()), 0, 0);
+
+                            ID3D11ShaderResourceView* null_srvs[2]{};
+                            context->VSSetShaderResources(0, 2, null_srvs);
+                            context->PSSetShaderResources(0, 2, null_srvs);
+                            current = destination;
+                            continue;
+                        }
                     }
                 }
 

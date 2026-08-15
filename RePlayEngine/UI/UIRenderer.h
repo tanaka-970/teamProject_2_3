@@ -136,6 +136,17 @@ namespace ReplayEngine::UI
             DirectX::XMFLOAT4 effect_color_4{ 1.0f, 1.0f, 1.0f, 1.0f };
             DirectX::XMFLOAT4 effect_color_stops{ 0.333333f, 0.666667f, 1.0f, 0.0f };
             DirectX::XMFLOAT4 effect_params3{ 0.0f, 0.0f, 0.0f, 0.0f };
+            // BrushStroke atlas 専用。末尾へ足して他の Effect の既存レジスタを動かさない。
+            DirectX::XMFLOAT4 brush_pattern_settings{ 0.0f, 0.0f, 0.0f, 0.0f };
+            std::array<DirectX::XMFLOAT4, 4> brush_pattern_weights{};
+        };
+
+        struct BrushStrokeInstance
+        {
+            DirectX::XMFLOAT2 center{ 0.0f, 0.0f };
+            DirectX::XMFLOAT2 size{ 1.0f, 1.0f };
+            std::uint32_t pattern = 0;
+            float padding = 0.0f;
         };
 
         struct VisualConstants
@@ -162,6 +173,7 @@ namespace ReplayEngine::UI
         static constexpr std::size_t effect_shader_count = 42;
 
         bool EnsureVertexCapacity(ID3D11Device* device, std::size_t vertex_count);
+        bool EnsureBrushStrokeInstanceCapacity(std::size_t instance_count);
         bool EnsureCustomEffectConstantBuffer(std::uint32_t byte_width);
         ID3D11ShaderResourceView* TextureFor(const std::string& guid,
             const Assets::AssetDatabase* asset_database);
@@ -177,13 +189,18 @@ namespace ReplayEngine::UI
 
         Microsoft::WRL::ComPtr<ID3D11Device> device_;
         Microsoft::WRL::ComPtr<ID3D11VertexShader> vertex_shader_;
+        Microsoft::WRL::ComPtr<ID3D11VertexShader> brush_stroke_vertex_shader_;
         Microsoft::WRL::ComPtr<ID3D11PixelShader> pixel_shader_;
+        Microsoft::WRL::ComPtr<ID3D11PixelShader> brush_stroke_pixel_shader_;
         std::array<Microsoft::WRL::ComPtr<ID3D11PixelShader>,
             effect_shader_count> effect_pixel_shaders_;
         Microsoft::WRL::ComPtr<ID3D11InputLayout> input_layout_;
         Microsoft::WRL::ComPtr<ID3D11Buffer> vertex_buffer_;
         Microsoft::WRL::ComPtr<ID3D11Buffer> constant_buffer_;
         Microsoft::WRL::ComPtr<ID3D11Buffer> effect_constant_buffer_;
+        Microsoft::WRL::ComPtr<ID3D11Buffer> brush_stroke_instance_buffer_;
+        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> brush_stroke_instance_srv_;
+        std::size_t brush_stroke_instance_capacity_ = 0;
         Microsoft::WRL::ComPtr<ID3D11Buffer> visual_constant_buffer_;
         // GPU へ送る前の CPU 側の値。バッチごとに組み立ててから 1 回だけ転送する。
         VisualConstants visual_constants_{};

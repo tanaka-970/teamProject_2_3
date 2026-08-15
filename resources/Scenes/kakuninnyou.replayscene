@@ -25,7 +25,7 @@ OBJECT
     PROPERTY "opacity" float 1
   END_COMPONENT
   COMPONENT "RectTransformComponent" 1
-    STABLE_ID 3
+    STABLE_ID 9
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
@@ -56,7 +56,7 @@ OBJECT
     PROPERTY_COUNT 8
     PROPERTY "anchor_min" vec2 0.22400000691413879 0.38499999046325684
     PROPERTY "anchor_max" vec2 0.86400002241134644 1.0099999904632568
-    PROPERTY "anchored_position" vec2 -74.5 -215.5
+    PROPERTY "anchored_position" vec2 -77.91558837890625 -214.9876708984375
     PROPERTY "size_delta" vec2 160 80
     PROPERTY "pivot" vec2 0.5 0.5
     PROPERTY "rotation" float 0
@@ -74,7 +74,7 @@ OBJECT
     PROPERTY "fill_color_2" color 1 1 1 1
     PROPERTY "fill_mode" enum 0
     PROPERTY "fill_angle" float 0
-    PROPERTY "fill_center" vec2 0.5 0.5
+    PROPERTY "fill_center" vec2 0.45300000905990601 0.5
     PROPERTY "stroke_mode" enum 0
     PROPERTY "stroke_color_2" color 1 1 1 1
     PROPERTY "opacity" float 1
@@ -91,27 +91,61 @@ OBJECT
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
-    PROPERTY_COUNT 46
+    PROPERTY_COUNT 129
     PROPERTY "enabled" bool 1
-    PROPERTY "effect_count" int 2
+    PROPERTY "capture_backdrop" bool 0
+    PROPERTY "effect_count" int 3
     PROPERTY "effects[0].enabled" bool 1
-    PROPERTY "effects[0].type" enum 10
-    PROPERTY "effects[0].radius" float 5
-    PROPERTY "effects[0].intensity" float 1
-    PROPERTY "effects[0].custom_shader" assetref ""
-    PROPERTY "effects[1].enabled" bool 0
-    PROPERTY "effects[1].type" enum 38
-    PROPERTY "effects[1].amount" float 6
-    PROPERTY "effects[1].radius" float 4
-    PROPERTY "effects[1].intensity" float 1
-    PROPERTY "effects[1].custom_shader" assetref ""
-    PROPERTY "effects[0].threshold" float 0.05000000074505806
-    PROPERTY "effects[0].amount" float 0.94999998807907104
-    PROPERTY "effects[0].angle" float 0.15000000596046448
-    PROPERTY "effects[0].progress" float 0.99900001287460327
-    PROPERTY "effects[0].softness" float 0.31600001454353333
-    PROPERTY "effects[0].speed" float 7.429999828338623
+    PROPERTY "effects[0].type" enum 27
+    PROPERTY "effects[0].mask" assetref ""
+    PROPERTY "effects[0].brush_atlas_enabled" bool 1
+    PROPERTY "effects[0].brush_instanced_renderer_enabled" bool 0
+    PROPERTY "effects[0].brush_pattern_mode" enum 1
+    PROPERTY "effects[0].brush_pattern_index" enum 4
+    PROPERTY "effects[0].brush_pattern_weight_0" float 49.799999237060547
+    PROPERTY "effects[0].brush_pattern_weight_1" float 41.099998474121094
+    PROPERTY "effects[0].brush_pattern_weight_2" float 15.800000190734863
+    PROPERTY "effects[0].brush_pattern_weight_3" float 13.399999618530273
+    PROPERTY "effects[0].brush_pattern_weight_4" float 9.3999996185302734
+    PROPERTY "effects[0].brush_pattern_weight_5" float 31.700000762939453
+    PROPERTY "effects[0].brush_pattern_weight_6" float 77.800003051757812
+    PROPERTY "effects[0].brush_pattern_weight_7" float 1
+    PROPERTY "effects[0].brush_pattern_weight_8" float 100
+    PROPERTY "effects[0].brush_pattern_weight_9" float 49
+    PROPERTY "effects[0].brush_pattern_weight_10" float 55.400001525878906
+    PROPERTY "effects[0].brush_pattern_weight_11" float 1
+    PROPERTY "effects[0].brush_pattern_weight_12" float 1
+    PROPERTY "effects[0].brush_pattern_weight_13" float 1
+    PROPERTY "effects[0].brush_pattern_weight_14" float 1
+    PROPERTY "effects[0].brush_pattern_weight_15" float 100
+    PROPERTY "effects[0].progress" float 14.199999809265137
+    PROPERTY "effects[0].softness" float 1
+    PROPERTY "effects[0].angle" float 1
+    PROPERTY "effects[0].radius" float 75.400001525878906
+    PROPERTY "effects[0].amount" float 26.600000381469727
+    PROPERTY "effects[0].threshold" float 0.9869999885559082
+    PROPERTY "effects[0].intensity" float 0.81000000238418579
     PROPERTY "effects[0].seed" float 1
+    PROPERTY "effects[0].custom_shader" assetref ""
+    PROPERTY "effects[1].enabled" bool 1
+    PROPERTY "effects[1].type" enum 36
+    PROPERTY "effects[1].progress" float 0
+    PROPERTY "effects[1].radius" float 4
+    PROPERTY "effects[1].intensity" float 0.20000000298023224
+    PROPERTY "effects[1].threshold" float 0.25
+    PROPERTY "effects[1].softness" float 0.34999999403953552
+    PROPERTY "effects[1].custom_shader" assetref ""
+    PROPERTY "effects[2].enabled" bool 1
+    PROPERTY "effects[2].type" enum 7
+    PROPERTY "effects[2].mask" assetref "4895d90a3b03c22cfcbbc684c56f9431"
+    PROPERTY "effects[2].radius" float 700
+    PROPERTY "effects[2].angle" float 45.099998474121094
+    PROPERTY "effects[2].progress" float 0.32699999213218689
+    PROPERTY "effects[2].threshold" float 9.9999997473787516e-05
+    PROPERTY "effects[2].seed" float 0
+    PROPERTY "effects[2].color" color 1 0.34999999403953552 0.05000000074505806 1
+    PROPERTY "effects[2].custom_shader" assetref ""
+    PROPERTY "effects[0].speed" float 7.429999828338623
     PROPERTY "effects[0].direction" vec2 0 1
     PROPERTY "effects[0].color" color 1 1 1 1
     PROPERTY "effects[0].color_2" color 0 0.26255488395690918 1 1
@@ -120,15 +154,12 @@ OBJECT
     PROPERTY "effects[0].color_stop_2" float 0.33333298563957214
     PROPERTY "effects[0].color_stop_3" float 0.66666698455810547
     PROPERTY "effects[0].color_stop_4" float 1
-    PROPERTY "effects[0].mask" assetref ""
     PROPERTY "effects[0].waveform" enum 3
-    PROPERTY "effects[1].threshold" float 0.18000000715255737
+    PROPERTY "effects[1].amount" float 4
     PROPERTY "effects[1].angle" float 0
-    PROPERTY "effects[1].progress" float 0.11999999731779099
-    PROPERTY "effects[1].softness" float 0.34999999403953552
-    PROPERTY "effects[1].speed" float 8
+    PROPERTY "effects[1].speed" float 0.5
     PROPERTY "effects[1].seed" float 0
-    PROPERTY "effects[1].direction" vec2 1 -1
+    PROPERTY "effects[1].direction" vec2 0.5 0.5
     PROPERTY "effects[1].color" color 1 1 1 1
     PROPERTY "effects[1].color_2" color 1 1 1 1
     PROPERTY "effects[1].color_3" color 1 1 1 1
@@ -137,7 +168,59 @@ OBJECT
     PROPERTY "effects[1].color_stop_3" float 0.66666698455810547
     PROPERTY "effects[1].color_stop_4" float 1
     PROPERTY "effects[1].mask" assetref ""
+    PROPERTY "effects[1].brush_atlas_enabled" bool 0
+    PROPERTY "effects[1].brush_instanced_renderer_enabled" bool 0
+    PROPERTY "effects[1].brush_pattern_mode" enum 0
+    PROPERTY "effects[1].brush_pattern_index" enum 0
+    PROPERTY "effects[1].brush_pattern_weight_0" float 0
+    PROPERTY "effects[1].brush_pattern_weight_1" float 0
+    PROPERTY "effects[1].brush_pattern_weight_2" float 0
+    PROPERTY "effects[1].brush_pattern_weight_3" float 0
+    PROPERTY "effects[1].brush_pattern_weight_4" float 0
+    PROPERTY "effects[1].brush_pattern_weight_5" float 0
+    PROPERTY "effects[1].brush_pattern_weight_6" float 0
+    PROPERTY "effects[1].brush_pattern_weight_7" float 0
+    PROPERTY "effects[1].brush_pattern_weight_8" float 0
+    PROPERTY "effects[1].brush_pattern_weight_9" float 0
+    PROPERTY "effects[1].brush_pattern_weight_10" float 0
+    PROPERTY "effects[1].brush_pattern_weight_11" float 0
+    PROPERTY "effects[1].brush_pattern_weight_12" float 0
+    PROPERTY "effects[1].brush_pattern_weight_13" float 0
+    PROPERTY "effects[1].brush_pattern_weight_14" float 0
+    PROPERTY "effects[1].brush_pattern_weight_15" float 0
     PROPERTY "effects[1].waveform" enum 0
+    PROPERTY "effects[2].intensity" float 1
+    PROPERTY "effects[2].amount" float 1
+    PROPERTY "effects[2].softness" float 0
+    PROPERTY "effects[2].speed" float 0
+    PROPERTY "effects[2].direction" vec2 1 -1
+    PROPERTY "effects[2].color_2" color 1 1 1 1
+    PROPERTY "effects[2].color_3" color 1 1 1 1
+    PROPERTY "effects[2].color_4" color 1 1 1 1
+    PROPERTY "effects[2].color_stop_2" float 0.33333298563957214
+    PROPERTY "effects[2].color_stop_3" float 0.66666698455810547
+    PROPERTY "effects[2].color_stop_4" float 1
+    PROPERTY "effects[2].brush_atlas_enabled" bool 0
+    PROPERTY "effects[2].brush_instanced_renderer_enabled" bool 0
+    PROPERTY "effects[2].brush_pattern_mode" enum 0
+    PROPERTY "effects[2].brush_pattern_index" enum 0
+    PROPERTY "effects[2].brush_pattern_weight_0" float 0
+    PROPERTY "effects[2].brush_pattern_weight_1" float 0
+    PROPERTY "effects[2].brush_pattern_weight_2" float 0
+    PROPERTY "effects[2].brush_pattern_weight_3" float 0
+    PROPERTY "effects[2].brush_pattern_weight_4" float 0
+    PROPERTY "effects[2].brush_pattern_weight_5" float 0
+    PROPERTY "effects[2].brush_pattern_weight_6" float 0
+    PROPERTY "effects[2].brush_pattern_weight_7" float 0
+    PROPERTY "effects[2].brush_pattern_weight_8" float 0
+    PROPERTY "effects[2].brush_pattern_weight_9" float 0
+    PROPERTY "effects[2].brush_pattern_weight_10" float 0
+    PROPERTY "effects[2].brush_pattern_weight_11" float 0
+    PROPERTY "effects[2].brush_pattern_weight_12" float 0
+    PROPERTY "effects[2].brush_pattern_weight_13" float 0
+    PROPERTY "effects[2].brush_pattern_weight_14" float 0
+    PROPERTY "effects[2].brush_pattern_weight_15" float 0
+    PROPERTY "effects[2].waveform" enum 0
   END_COMPONENT
 END_OBJECT
 OBJECT

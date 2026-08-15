@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <array>
 #include <filesystem>
+#include <limits>
 #include <string>
 
 namespace ReplayEngine::UI
@@ -47,6 +48,12 @@ namespace ReplayEngine::UI
 
         if (FAILED(create_ps_from_cso(device, "ui_ps.cso",
             pixel_shader_.GetAddressOf())))
+            return false;
+
+        if (FAILED(create_vs_from_cso(device, "ui_brush_stroke_instances_vs.cso",
+            brush_stroke_vertex_shader_.GetAddressOf(), nullptr, nullptr, 0)) ||
+            FAILED(create_ps_from_cso(device, "ui_brush_stroke_instances_ps.cso",
+                brush_stroke_pixel_shader_.GetAddressOf())))
             return false;
 
         const std::array<const char*, effect_shader_count> effect_cso_names{
@@ -135,6 +142,9 @@ namespace ReplayEngine::UI
         white_texture_.Reset();
         custom_effect_constant_buffer_.Reset();
         custom_effect_constant_buffer_size_ = 0;
+        brush_stroke_instance_srv_.Reset();
+        brush_stroke_instance_buffer_.Reset();
+        brush_stroke_instance_capacity_ = 0;
         effect_constant_buffer_.Reset();
         visual_constant_buffer_.Reset();
         constant_buffer_.Reset();
@@ -146,6 +156,8 @@ namespace ReplayEngine::UI
             shader.Reset();
         }
         pixel_shader_.Reset();
+        brush_stroke_pixel_shader_.Reset();
+        brush_stroke_vertex_shader_.Reset();
         vertex_shader_.Reset();
         device_.Reset();
     }
@@ -173,6 +185,52 @@ namespace ReplayEngine::UI
             return false;
         }
         vertex_capacity_ = next_capacity;
+        return true;
+    }
+
+    bool UIRenderer::EnsureBrushStrokeInstanceCapacity(std::size_t instance_count)
+    {
+        if (device_ == nullptr) return false;
+        if (instance_count <= brush_stroke_instance_capacity_ &&
+            brush_stroke_instance_buffer_ != nullptr && brush_stroke_instance_srv_ != nullptr)
+        {
+            return true;
+        }
+
+        std::size_t next_capacity = (std::max)(std::size_t{ 64 }, brush_stroke_instance_capacity_);
+        while (next_capacity < instance_count) next_capacity *= 2;
+        if (next_capacity > static_cast<std::size_t>((std::numeric_limits<UINT>::max)() /
+            sizeof(BrushStrokeInstance)))
+        {
+            return false;
+        }
+
+        brush_stroke_instance_srv_.Reset();
+        brush_stroke_instance_buffer_.Reset();
+        brush_stroke_instance_capacity_ = 0;
+
+        D3D11_BUFFER_DESC desc{};
+        desc.ByteWidth = static_cast<UINT>(sizeof(BrushStrokeInstance) * next_capacity);
+        desc.Usage = D3D11_USAGE_DYNAMIC;
+        desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+        desc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+        desc.StructureByteStride = sizeof(BrushStrokeInstance);
+        if (FAILED(device_->CreateBuffer(&desc, nullptr, brush_stroke_instance_buffer_.GetAddressOf())))
+            return false;
+
+        D3D11_SHADER_RESOURCE_VIEW_DESC view{};
+        view.Format = DXGI_FORMAT_UNKNOWN;
+        view.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+        view.Buffer.FirstElement = 0;
+        view.Buffer.NumElements = static_cast<UINT>(next_capacity);
+        if (FAILED(device_->CreateShaderResourceView(brush_stroke_instance_buffer_.Get(),
+            &view, brush_stroke_instance_srv_.GetAddressOf())))
+        {
+            brush_stroke_instance_buffer_.Reset();
+            return false;
+        }
+        brush_stroke_instance_capacity_ = next_capacity;
         return true;
     }
 
