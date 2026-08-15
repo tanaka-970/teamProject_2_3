@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -38,6 +39,8 @@
 #include "../../../RePlayEngine/Rendering/Shaders/ShaderCompileValidation.h"
 #include "../../game/Behaviours/ValidationBehaviours.h"
 #include "../../game/game_input.h"
+#include "../../mesh/skinned_mesh.h"
+#include "../../core/texture.h"
 
 namespace ReplayEngine::Runtime::Detail
 {
@@ -64,6 +67,102 @@ namespace ReplayEngine::Runtime::Detail
 
 namespace
 {
+    int RunHeadlessGltfImportValidation(const char* command_line)
+    {
+        std::istringstream arguments(command_line != nullptr ? command_line : "");
+        std::string command, root_text;
+        if (!(arguments >> command) || command != "--validate-gltf-import") return -1;
+        if (!(arguments >> std::quoted(root_text)) || root_text.empty())
+        {
+            std::fprintf(stderr, "--validate-gltf-import requires a directory\n");
+            return 1700;
+        }
+        const std::filesystem::path root = std::filesystem::u8path(root_text);
+        std::error_code error;
+        if (!std::filesystem::is_directory(root, error) || error)
+        {
+            std::fprintf(stderr, "glTF import validation directory not found\n");
+            return 1701;
+        }
+
+        Microsoft::WRL::ComPtr<ID3D11Device> device;
+        Microsoft::WRL::ComPtr<ID3D11DeviceContext> context;
+        D3D_FEATURE_LEVEL feature_level{};
+        const HRESULT device_result = D3D11CreateDevice(nullptr,
+            D3D_DRIVER_TYPE_HARDWARE, nullptr, 0, nullptr, 0, D3D11_SDK_VERSION,
+            device.GetAddressOf(), &feature_level, context.GetAddressOf());
+        if (FAILED(device_result)) return 1702;
+
+        std::vector<std::filesystem::path> files;
+        for (std::filesystem::recursive_directory_iterator current(root, error), end;
+            current != end && !error; current.increment(error))
+        {
+            if (!current->is_regular_file(error)) continue;
+            std::string extension = current->path().extension().string();
+            std::transform(extension.begin(), extension.end(), extension.begin(),
+                [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
+            if (extension == ".glb" || extension == ".gltf") files.push_back(current->path());
+        }
+        std::sort(files.begin(), files.end());
+
+        std::vector<std::string> lines;
+        int passed = 0;
+        int failed = 0;
+        std::size_t total_meshes = 0;
+        std::size_t total_materials = 0;
+        std::size_t total_animations = 0;
+        for (const auto& file : files)
+        {
+            try
+            {
+                skinned_mesh model(device.Get(), file.string().c_str());
+                const bool ok = model.IsGltf() && !model.meshes.empty() && !model.materials.empty();
+                std::ostringstream row;
+                row << (ok ? "OK " : "NG ") << file.generic_string()
+                    << " MESHES " << model.meshes.size()
+                    << " MATERIALS " << model.materials.size()
+                    << " ANIMATIONS " << model.animation_clips.size();
+                lines.push_back(row.str());
+                if (ok)
+                {
+                    ++passed;
+                    total_meshes += model.meshes.size();
+                    total_materials += model.materials.size();
+                    total_animations += model.animation_clips.size();
+                }
+                else ++failed;
+                model.release_device_resources();
+            }
+            catch (const std::exception& exception)
+            {
+                ++failed;
+                lines.push_back("NG " + file.generic_string() + " ERROR " + exception.what());
+            }
+            catch (...)
+            {
+                ++failed;
+                lines.push_back("NG " + file.generic_string() + " ERROR unknown");
+            }
+
+            // 58体の全Textureを検証中ずっと保持するとVRAMを圧迫する。
+            // 各モデルの判定後に共有Texture Cacheも明示解放する。
+            release_all_textures();
+            context->ClearState();
+            context->Flush();
+        }
+        std::ostringstream summary;
+        summary << "FILES " << files.size() << " PASSED " << passed << " FAILED " << failed
+            << " MESHES " << total_meshes << " MATERIALS " << total_materials
+            << " ANIMATIONS " << total_animations;
+        lines.insert(lines.begin(), summary.str());
+        const bool ok = !files.empty() && failed == 0;
+        ReplayEngine::Runtime::Detail::WriteValidationResultFile("GltfImport.txt",
+            "REPLAY_GLTF_IMPORT_VALIDATION", ok, lines);
+        std::fprintf(stderr, "glTF import validation: RESULT %s (%d/%zu)\n",
+            ok ? "OK" : "NG", passed, files.size());
+        return ok ? 0 : 1703;
+    }
+
     long long CountInclusive(long long first, long long last) noexcept
     {
         return last >= first ? (last - first + 1) : 0;
@@ -228,6 +327,9 @@ namespace ReplayEngine::Runtime::Detail
         std::istringstream arguments(command_line != nullptr ? command_line : "");
         std::string command;
         if (!(arguments >> command)) return -1;
+
+        if (command == "--validate-gltf-import")
+            return RunHeadlessGltfImportValidation(command_line);
 
         namespace Validation = ReplayEngine::Runtime::Validation;
         if (command == "--validate-serialization")

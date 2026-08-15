@@ -10,6 +10,7 @@ struct SHADOW_VS_OUT
 SHADOW_VS_OUT main(VS_IN vin)
 {
     SHADOW_VS_OUT vout;
+    vin.position.xyz += vin.morph_position * gltf_morph.x;
 
     // スキニング (既存 skinned_mesh_vs と同じ)
     float4 blended_position = float4(0, 0, 0, 1);
