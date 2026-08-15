@@ -13,6 +13,7 @@
 #include "../../RePlayEngine/Components/Physics/MeshColliderComponent.h"
 #include "../../RePlayEngine/Components/Rendering/MeshRendererComponent.h"
 #include "../../RePlayEngine/Components/Rendering/SkinnedMeshRendererComponent.h"
+#include "../../RePlayEngine/Components/Rendering/AnimatorComponent.h"
 #include "../../RePlayEngine/Rendering/Materials/MaterialAsset.h"
 #include "../../RePlayEngine/Editor/ShaderEditing/MaterialShaderInspector.h"
 #include "../../RePlayEngine/Editor/ShaderEditing/ShaderStackEditor.h"
@@ -182,8 +183,38 @@ bool framework::place_asset_in_object_scene(const ReplayEngine::Assets::AssetRec
         return false;
     }
 
-    auto* renderer = object->AddComponent<ReplayEngine::Components::MeshRendererComponent>();
-    if (renderer == nullptr)
+    // Unity/Unreal と同じく、ファイル拡張子ではなく内容で Renderer を選ぶ。
+    // Skin/Animation の無い GLB は軽い MeshRenderer のままにする。
+    gltf_model* gltf = resolve_object_gltf(asset.guid);
+    const bool animated_gltf = gltf != nullptr &&
+        (gltf->HasSkins() || gltf->HasAnimations());
+    bool renderer_added = false;
+    if (animated_gltf)
+    {
+        auto* renderer = object->AddComponent<
+            ReplayEngine::Components::SkinnedMeshRendererComponent>();
+        if (renderer != nullptr)
+        {
+            renderer->mesh_asset = asset.guid;
+            renderer->visual_rotation_offset = { 0.0f, 0.0f, 0.0f };
+            renderer->apply_fbx_coordinate_transform = false;
+            auto* animator = object->AddComponent<
+                ReplayEngine::Components::AnimatorComponent>();
+            if (animator != nullptr) animator->idle_clip = 0;
+            renderer_added = true;
+        }
+    }
+    else
+    {
+        auto* renderer = object->AddComponent<
+            ReplayEngine::Components::MeshRendererComponent>();
+        if (renderer != nullptr)
+        {
+            renderer->mesh_asset = asset.guid;
+            renderer_added = true;
+        }
+    }
+    if (!renderer_added)
     {
         object_scene.DestroyGameObject(object);
         object_scene.ProcessPendingOperations();
@@ -191,8 +222,6 @@ bool framework::place_asset_in_object_scene(const ReplayEngine::Assets::AssetRec
         object_editor_context.SetStatus("Mesh Rendererを追加できませんでした");
         return false;
     }
-    renderer->mesh_asset = asset.guid;
-
     DirectX::XMFLOAT3 position{};
     if (drop_world_position != nullptr)
     {

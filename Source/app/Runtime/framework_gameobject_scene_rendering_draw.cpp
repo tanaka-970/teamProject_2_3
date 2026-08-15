@@ -329,9 +329,10 @@ void framework::draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shade
             continue;
         }
 
-        // glTF/GLB は既存の gltf_model と ConcurrentResourceCache をそのまま使う。
-        // FBX/.cereal の skinned_mesh 経路には触れないため、既存 Scene は同じ経路を通る。
-        if (gltf_model* gltf = resolve_object_gltf(item.mesh_asset))
+        // Skin/Animationを持たないglTFは従来の軽い静的経路を維持する。
+        // 持つものだけ既存skinned_mesh/Animator経路へ送る。
+        gltf_model* gltf = resolve_object_gltf(item.mesh_asset);
+        if (gltf != nullptr && !gltf->HasSkins() && !gltf->HasAnimations())
         {
             if (item.double_sided)
                 immediate_context->RSSetState(
@@ -383,6 +384,10 @@ void framework::draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shade
 
         skinned_mesh* mesh = resolve_object_mesh(item.mesh_asset);
         if (mesh == nullptr) continue;
+        const bool use_embedded_gltf_materials = mesh->IsGltf() &&
+            source_item.material_asset.empty();
+        const bool draw_double_sided = item.double_sided ||
+            (use_embedded_gltf_materials && mesh->HasDoubleSidedMaterials());
 
         // Animator の current / previous clip と blend factor は RenderItem だけを
         // 介して Renderer へ渡す。Motion Runtime とは混ぜず、既存の
@@ -399,12 +404,13 @@ void framework::draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shade
             //   本描画は DepthFunc=EQUAL で走る。プリパスで深度を書いていない
             //   メッシュは深度比較に必ず失敗し、画面から丸ごと消える。
             //   GBuffer へ出すものは、例外なくここでも描くこと。
-            if (item.double_sided)
+            if (draw_double_sided)
                 immediate_context->RSSetState(
                     rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
             mesh->render(immediate_context.Get(), item.world, item.tint,
-                keyframe, nullptr, nullptr, nullptr, false, false);
-            if (item.double_sided)
+                keyframe, nullptr, nullptr, nullptr, false, false,
+                use_embedded_gltf_materials);
+            if (draw_double_sided)
                 immediate_context->RSSetState(
                     rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
             continue;
@@ -435,14 +441,15 @@ void framework::draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shade
 
         // 最後の引数がモーションベクター出力。GBuffer パスだけで真にする
         // （複数回渡すと前フレーム姿勢が壊れる）。
-        if (item.double_sided)
+        if (draw_double_sided)
             immediate_context->RSSetState(
                 rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
         mesh->render(immediate_context.Get(), item.world, item.tint,
-            keyframe, override_pixel_shader, nullptr, nullptr, true, gbuffer_pass);
+            keyframe, override_pixel_shader, nullptr, nullptr, true, gbuffer_pass,
+            use_embedded_gltf_materials);
         if (gbuffer_pass)
             material_gpu_binder.UnbindTextures(immediate_context.Get());
-        if (item.double_sided)
+        if (draw_double_sided)
             immediate_context->RSSetState(
                 rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
     }

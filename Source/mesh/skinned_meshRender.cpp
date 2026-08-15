@@ -23,7 +23,8 @@ void skinned_mesh::render(ID3D11DeviceContext* immediate_context,
     ID3D11VertexShader* alternative_vertex_shader,
     ID3D11InputLayout* alternative_input_layout,
     bool bind_pixel_shader,
-    bool write_motion_vectors)
+    bool write_motion_vectors,
+    bool use_embedded_gltf_materials)
 {
     const motion_vectors::FrameContext& motion_frame = motion_vectors::Frame();
     const bool emit_motion = write_motion_vectors && motion_object_constant_buffer &&
@@ -48,7 +49,7 @@ void skinned_mesh::render(ID3D11DeviceContext* immediate_context,
             immediate_context->PSSetShader(nullptr, nullptr, 0);
         }
 
-        constants data;
+        constants data{};
 
         if (keyframe && keyframe->nodes.size() > 0)
         {
@@ -139,14 +140,31 @@ void skinned_mesh::render(ID3D11DeviceContext* immediate_context,
         {
             const material& material{ materials.at(subset.material_unique_id) };
             XMStoreFloat4(&data.material_color, XMLoadFloat4(&material_color) * XMLoadFloat4(&material.Kd));
+            data.gltf_pbr = { 0.0f, 0.55f, 1.0f, 0.0f };
+            data.gltf_emissive = { 0.0f, 0.0f, 0.0f, 0.0f };
+            data.gltf_alpha = { 0.0f, 0.5f, 0.0f, 1.0f };
+            if (use_embedded_gltf_materials)
+            {
+                if (const gltf_material_info* info = GltfMaterial(subset.material_unique_id))
+                {
+                    data.gltf_pbr = { info->metallic, info->roughness,
+                        info->occlusion, 1.0f };
+                    data.gltf_emissive = { info->emissive.x, info->emissive.y,
+                        info->emissive.z, info->emissive_strength };
+                    data.gltf_alpha = { static_cast<float>(info->alpha_mode),
+                        info->alpha_cutoff, info->unlit ? 1.0f : 0.0f,
+                        info->normal_scale };
+                }
+            }
 
             immediate_context->UpdateSubresource(constant_buffer.Get(), 0, 0, &data, 0, 0);
             immediate_context->VSSetConstantBuffers(0, 1, constant_buffer.GetAddressOf());
             immediate_context->PSSetConstantBuffers(0, 1, constant_buffer.GetAddressOf());
 
-            // テクスチャのバインド（0:ディフューズ、1:法線マップ）
-            immediate_context->PSSetShaderResources(0, 1, material.shader_resource_views[0].GetAddressOf());
-            immediate_context->PSSetShaderResources(1, 1, material.shader_resource_views[1].GetAddressOf());
+            ID3D11ShaderResourceView* texture_views[4]{
+                material.shader_resource_views[0].Get(), material.shader_resource_views[1].Get(),
+                material.shader_resource_views[2].Get(), material.shader_resource_views[3].Get() };
+            immediate_context->PSSetShaderResources(0, 4, texture_views);
 
             ReplayEngine::Rendering::Stats().CountDrawIndexed(
                 subset.index_count, static_cast<uint32_t>(mesh.vertices.size()));

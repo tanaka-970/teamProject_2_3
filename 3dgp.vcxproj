@@ -334,6 +334,7 @@
     <ClCompile Include="Source\mesh\skinned_meshAnimation.cpp" />
     <ClCompile Include="Source\mesh\skinned_meshDevice.cpp" />
     <ClCompile Include="Source\mesh\skinned_meshRender.cpp" />
+    <ClCompile Include="Source\mesh\skinned_meshGltf.cpp" />
     <ClCompile Include="Source\mesh\sprite.cpp" />
     <ClCompile Include="Source\mesh\sprite_batch.cpp" />
     <ClCompile Include="Source\mesh\static_mesh.cpp" />

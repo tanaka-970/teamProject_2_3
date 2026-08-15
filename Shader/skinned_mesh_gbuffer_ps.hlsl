@@ -5,6 +5,8 @@
 
 Texture2D legacy_base_color_map : register(t0);
 Texture2D legacy_normal_map     : register(t1);
+Texture2D legacy_orm_map        : register(t2);
+Texture2D legacy_emissive_map   : register(t3);
 Texture2D replay_base_map       : register(t40);
 Texture2D replay_normal_map     : register(t41);
 Texture2D replay_metallic_map   : register(t42);
@@ -35,6 +37,7 @@ static const uint REPLAY_TEX_OCCLUSION = 1u << 5;
 
 GBufferOut main(VS_OUT pin)
 {
+    const bool embedded_gltf = gltf_pbr.w > 0.5f && texture_mask == 0;
     float4 base_sample = (texture_mask & REPLAY_TEX_BASE) != 0
         ? replay_base_map.Sample(sampler_lin, pin.texcoord)
         : legacy_base_color_map.Sample(sampler_lin, pin.texcoord);
@@ -48,12 +51,20 @@ GBufferOut main(VS_OUT pin)
     float3 n = ((texture_mask & REPLAY_TEX_NORMAL) != 0
         ? replay_normal_map.Sample(sampler_lin, pin.texcoord)
         : legacy_normal_map.Sample(sampler_lin, pin.texcoord)).xyz * 2.0f - 1.0f;
+    if (embedded_gltf) n.xy *= gltf_alpha.w;
     if (length(n) > 0.01f)
         N = normalize(n.x * T + n.y * B + n.z * N);
 
     float metallic = mat_params.x;
     float roughness = mat_params.y;
     float occlusion = mat_params.z;
+    if (embedded_gltf)
+    {
+        float3 orm = legacy_orm_map.Sample(sampler_lin, pin.texcoord).rgb;
+        metallic = saturate(orm.b * gltf_pbr.x);
+        roughness = max(orm.g * gltf_pbr.y, 0.045f);
+        occlusion = saturate(orm.r * gltf_pbr.z);
+    }
     if ((texture_mask & REPLAY_TEX_METALLIC) != 0)
         metallic *= replay_metallic_map.Sample(sampler_lin, pin.texcoord).r;
     if ((texture_mask & REPLAY_TEX_ROUGHNESS) != 0)
@@ -62,13 +73,16 @@ GBufferOut main(VS_OUT pin)
         occlusion *= replay_occlusion_map.Sample(sampler_lin, pin.texcoord).r;
 
     float3 emissive = emissive_factor.rgb * emissive_factor.w;
+    if (embedded_gltf)
+        emissive = legacy_emissive_map.Sample(sampler_lin, pin.texcoord).rgb *
+            gltf_emissive.rgb * gltf_emissive.w;
     if ((texture_mask & REPLAY_TEX_EMISSIVE) != 0)
         emissive = replay_emissive_map.Sample(sampler_lin, pin.texcoord).rgb *
             emissive_factor.rgb * emissive_factor.w;
 
     GBufferData d;
     d.base_color = base * pin.color.rgb;
-    d.lighting_model = lighting_model;
+    d.lighting_model = embedded_gltf && gltf_alpha.z > 0.5f ? 2u : lighting_model;
     d.emissive = emissive;
     d.world_normal = N;
     d.occlusion = max(occlusion, 0.001f);
@@ -76,6 +90,12 @@ GBufferOut main(VS_OUT pin)
     d.metalness = saturate(metallic);
     d.occlusion_strength = saturate(occlusion);
     d.velocity = compute_motion_vector(pin.current_clip, pin.previous_clip);
+
+    if (embedded_gltf && gltf_alpha.x > 0.5f)
+    {
+        const float cutoff = gltf_alpha.x < 1.5f ? gltf_alpha.y : 0.01f;
+        clip(base_sample.a * pin.color.a - cutoff);
+    }
 
     GBufferOut output = EncodeGBuffer(d);
     if (pixelate_size > 0.0f && pixelate_strength > 0.0f)
