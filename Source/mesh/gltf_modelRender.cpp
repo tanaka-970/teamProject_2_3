@@ -106,7 +106,8 @@ void gltf_model::render(ID3D11DeviceContext* context, const XMFLOAT4X4& world,
         ID3D11ShaderResourceView* textures[3]{
             material->base_color_texture ? material->base_color_texture.Get()
                                          : white_texture_.Get(),
-            material->normal_texture.Get(),
+            material->normal_texture ? material->normal_texture.Get()
+                                     : neutral_normal_texture_.Get(),
             material->occlusion_roughness_metalness_texture.Get() };
         if (!depth_only) context->PSSetShaderResources(0, 3, textures);
         Constants constants{};

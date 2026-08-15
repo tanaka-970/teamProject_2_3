@@ -46,6 +46,12 @@ namespace ReplayEngine::Assets
             const std::filesystem::path& destination = {},
             Format format = Format::Auto);
 
+        // 既にRGBA8へ展開済みの画像を再デコードせずDDSへ保存する。
+        // GLB内蔵画像など、元が独立ファイルではない資産のキャッシュ用。
+        static Result CompressRgba(const std::uint8_t* rgba, int width, int height,
+            const std::filesystem::path& destination,
+            Format format = Format::Auto);
+
         // フォルダ内の画像をまとめて変換する。既に .dds があるものは飛ばす。
         // 画像ごとに独立しているのでParallelLoaderで並列化する。
         struct BatchResult

@@ -344,7 +344,12 @@ void framework::draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shade
             }
             else if (gbuffer_pass)
             {
-                if (item.material_binding.usable_shader)
+                // Unity/Unrealと同じ優先順位: GLB内蔵Materialを既定にし、
+                // RePlay Materialが明示指定された場合だけ外部Materialで上書きする。
+                // 仮Materialのwhite BaseMap(t40)でGLBのBaseColor(t0)を隠さない。
+                const bool use_external_material = !source_item.material_asset.empty() &&
+                    item.material_binding.usable_shader;
+                if (use_external_material)
                 {
                     material_gpu_binder.BindGBufferTextures(device.Get(), immediate_context.Get(),
                         asset_database, item.material_binding);
@@ -358,7 +363,7 @@ void framework::draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shade
                     item.pixelate_strength, item.metallic, item.roughness,
                     item.ambient_occlusion, item.emissive_strength,
                     item.material_base_color, item.emissive_color,
-                    item.material_binding.usable_shader
+                    use_external_material
                         ? item.material_binding.TextureSemanticMask() : 0u);
                 gltf->render(immediate_context.Get(), item.world, item.tint,
                     static_mesh_gbuffer_ps.Get(), true, false);
