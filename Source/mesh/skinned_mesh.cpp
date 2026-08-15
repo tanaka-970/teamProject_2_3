@@ -25,9 +25,16 @@
 #include <stdexcept>
 using namespace DirectX;
 
-skinned_mesh::skinned_mesh(ID3D11Device* device, const char* fbx_filename, bool triangulate, float sampling_rate)
+skinned_mesh::skinned_mesh(ID3D11Device* device, const char* fbx_filename, bool triangulate,
+    float sampling_rate, bool create_device_resources)
+    : skinned_mesh(device, std::filesystem::path(fbx_filename ? fbx_filename : ""),
+        triangulate, sampling_rate, create_device_resources)
 {
-    std::filesystem::path source_filename(fbx_filename ? fbx_filename : "");
+}
+
+skinned_mesh::skinned_mesh(ID3D11Device* device, const std::filesystem::path& source_filename,
+    bool triangulate, float sampling_rate, bool create_device_resources)
+{
     std::string source_extension = source_filename.extension().string();
     std::transform(source_extension.begin(), source_extension.end(), source_extension.begin(),
         [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
@@ -38,9 +45,13 @@ skinned_mesh::skinned_mesh(ID3D11Device* device, const char* fbx_filename, bool 
         if (!import_gltf(device, source_filename, sampling_rate))
             throw std::runtime_error("glTFモデルをスキンメッシュへ変換できません: " +
                 source_filename.string());
-        create_com_objects(device, fbx_filename);
+        const std::string narrow_source = source_filename.string();
+        if (create_device_resources) create_com_objects(device, narrow_source.c_str());
         return;
     }
+
+    const std::string narrow_source = source_filename.string();
+    const char* fbx_filename = narrow_source.c_str();
 
     // UNIT30 手順5: シリアライズファイルのパスを作成 [cite: 316, 323]
     std::filesystem::path cereal_filename(fbx_filename);
@@ -110,5 +121,5 @@ skinned_mesh::skinned_mesh(ID3D11Device* device, const char* fbx_filename, bool 
     }
 
     // Direct3Dリソース（バッファ・シェーダー）の作成（共通処理） [cite: 350]
-    create_com_objects(device, fbx_filename);
+    if (create_device_resources) create_com_objects(device, fbx_filename);
 }

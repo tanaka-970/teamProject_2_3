@@ -354,7 +354,11 @@ private:
 
 public:
     skinned_mesh(ID3D11Device* device, const char* fbx_filename,
-       bool triangulate = false, float sampling_rate = 0);
+       bool triangulate = false, float sampling_rate = 0,
+       bool create_device_resources = true);
+    skinned_mesh(ID3D11Device* device, const std::filesystem::path& filename,
+       bool triangulate = false, float sampling_rate = 0,
+       bool create_device_resources = true);
     virtual ~skinned_mesh() = default;
 
     // UNIT24 手順4: skeleton 情報を抽出する関数 [cite: 145-146]

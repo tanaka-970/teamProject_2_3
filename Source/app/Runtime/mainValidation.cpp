@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <shellapi.h>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -77,21 +78,24 @@ namespace
             std::fprintf(stderr, "--validate-gltf-import requires a directory\n");
             return 1700;
         }
-        const std::filesystem::path root = std::filesystem::u8path(root_text);
+        // 検証対象パスだけはGetCommandLineWから取り直す。WinMainのLPSTRを経由すると
+        // 日本語を含むフォルダ名が実行環境のANSI変換に依存してしまうため。
+        int wide_argument_count = 0;
+        LPWSTR* wide_arguments = CommandLineToArgvW(GetCommandLineW(), &wide_argument_count);
+        if (wide_arguments == nullptr || wide_argument_count < 3)
+        {
+            if (wide_arguments != nullptr) LocalFree(wide_arguments);
+            std::fprintf(stderr, "glTF import validation wide path missing\n");
+            return 1701;
+        }
+        const std::filesystem::path root(wide_arguments[2]);
+        LocalFree(wide_arguments);
         std::error_code error;
         if (!std::filesystem::is_directory(root, error) || error)
         {
             std::fprintf(stderr, "glTF import validation directory not found\n");
             return 1701;
         }
-
-        Microsoft::WRL::ComPtr<ID3D11Device> device;
-        Microsoft::WRL::ComPtr<ID3D11DeviceContext> context;
-        D3D_FEATURE_LEVEL feature_level{};
-        const HRESULT device_result = D3D11CreateDevice(nullptr,
-            D3D_DRIVER_TYPE_HARDWARE, nullptr, 0, nullptr, 0, D3D11_SDK_VERSION,
-            device.GetAddressOf(), &feature_level, context.GetAddressOf());
-        if (FAILED(device_result)) return 1702;
 
         std::vector<std::filesystem::path> files;
         for (std::filesystem::recursive_directory_iterator current(root, error), end;
@@ -115,7 +119,9 @@ namespace
         {
             try
             {
-                skinned_mesh model(device.Get(), file.string().c_str());
+                // 全件調査はCPU import・DDS cache生成を対象にする。GPU生成は通常ビルドと
+                // 実機smokeで別に確認し、58体分を一度にVRAMへ積まない。
+                skinned_mesh model(nullptr, file, false, 0.0f, false);
                 const bool ok = model.IsGltf() && !model.meshes.empty() && !model.materials.empty();
                 std::ostringstream row;
                 row << (ok ? "OK " : "NG ") << file.generic_string()
@@ -131,7 +137,6 @@ namespace
                     total_animations += model.animation_clips.size();
                 }
                 else ++failed;
-                model.release_device_resources();
             }
             catch (const std::exception& exception)
             {
@@ -146,9 +151,6 @@ namespace
 
             // 58体の全Textureを検証中ずっと保持するとVRAMを圧迫する。
             // 各モデルの判定後に共有Texture Cacheも明示解放する。
-            release_all_textures();
-            context->ClearState();
-            context->Flush();
         }
         std::ostringstream summary;
         summary << "FILES " << files.size() << " PASSED " << passed << " FAILED " << failed

@@ -1,4 +1,4 @@
-REPLAY_ASSET_DB 2 88
+REPLAY_ASSET_DB 2 91
 "60412424bb1443240b2bf2160eee6923" 1 "ExampleStage" "resources/Stage/ExampleStage.cereal" "resources/.replay_cache/models/f9fffac39252a621_v0.replaycache"
 "1bd1358040255f5bd18f3be0d79fbe3c" 1 "AllAnimation1" "resources/AnimationModel/AllAnimation1.cereal" "resources/.replay_cache/models/6a20e727f78fb359_v0.replaycache"
 "e5c4168feb92f8fd7357f6cbc1f66e22" 1 "scene" "resources/Stage/city_3d_model_gltf/scene.gltf" "resources/.replay_cache/models/98fd72a862da8c8f_v0.replaycache"
@@ -87,3 +87,6 @@ REPLAY_ASSET_DB 2 88
 "c51e8518ddf19e4785521147a0cca7d0" 5 "ClaudeWaveform" "resources/Scenes/ClaudeWaveform.replayscene" ""
 "b82956797e79117cbb319345dd908891" 5 "kakuninnyou" "resources/Scenes/kakuninnyou.replayscene" ""
 "2da5dda186043f18c647b6c8566208a1" 2 "brush_masks_atlas" "resources/BrushMasks/brush_masks_atlas.png" ""
+"6436390ec343bff4a475d82204bb6ba7" 6 "NewItem" "resources/AnimationModel/NewItem.replaymaterial" ""
+"e898d2e6fda239ef90486b57b5c2483c" 2 "spaceMan_basecolor" "resources/AnimationModel/AllAnimation1.fbm/spaceMan_basecolor.PNG" ""
+"76abb1ee55c90de38180cdb98643c6ee" 1 "glb" "resources/AnimationModel/glb.glb" ""
