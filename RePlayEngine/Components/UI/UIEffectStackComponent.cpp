@@ -3,6 +3,7 @@
 #include "../../Reflection/Property/PropertyBag.h"
 #include "../../Reflection/Property/PropertyValue.h"
 #include "../../Rendering/Materials/MaterialSchema.h"
+#include "../../Rendering/Effects/EffectChain.h"
 
 #include <algorithm>
 #include <array>
@@ -722,30 +723,9 @@ namespace ReplayEngine::Components
     DirectX::XMFLOAT4 UIEffectStackComponent::ExpandBounds(float target_width,
         float target_height) const noexcept
     {
-        DirectX::XMFLOAT4 expansion{ 0.0f, 0.0f, 0.0f, 0.0f };
-        if (!enabled) return expansion;
-
-        for (const UI::UIEffect& effect : effects)
-        {
-            if (!effect.enabled) continue;
-            const float current_width = target_width + expansion.x + expansion.z;
-            const float current_height = target_height + expansion.y + expansion.w;
-            const DirectX::XMFLOAT4 current = effect.ExpandBounds(
-                current_width, current_height);
-            expansion.x += current.x;
-            expansion.y += current.y;
-            expansion.z += current.z;
-            expansion.w += current.w;
-        }
-
-        // 16 段の大半径 Effect で D3D11 のテクスチャ上限を超えないよう、
-        // 実用上の上限を片側 2048px とする。超過時も Effect 全体は無効化しない。
-        constexpr float max_expansion = 2048.0f;
-        expansion.x = (std::min)(expansion.x, max_expansion);
-        expansion.y = (std::min)(expansion.y, max_expansion);
-        expansion.z = (std::min)(expansion.z, max_expansion);
-        expansion.w = (std::min)(expansion.w, max_expansion);
-        return expansion;
+        if (!enabled) return { 0.0f, 0.0f, 0.0f, 0.0f };
+        return Rendering::Effects::EffectChain::ExpandBounds(
+            effects, target_width, target_height);
     }
 
     void UIEffectStackComponent::ResizeEffects()

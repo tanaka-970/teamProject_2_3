@@ -211,6 +211,7 @@
     <ClCompile Include="Source\render\csm_renderer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Deferred\deferred_renderer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Passes\PostProcessPass.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Effects\EffectChain.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Passes\BloomPass.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Passes\SsaoPass.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Passes\SsrPass.cpp" />
@@ -879,6 +880,7 @@
     <ClInclude Include="RePlayEngine\UI\UILayout.h" />
     <ClInclude Include="RePlayEngine\UI\FontAtlas.h" />
     <ClInclude Include="RePlayEngine\UI\UIRenderer.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Effects\EffectChain.h" />
     <ClInclude Include="RePlayEngine\UI\Effects\UIEffect.h" />
     <ClInclude Include="RePlayEngine\UI\Effects\UIRenderTargetPool.h" />
     <ClInclude Include="RePlayEngine\UI\ThirdParty\stb_truetype.h" />

@@ -17,8 +17,7 @@
 #include "../Components/UI/UITextAnimatorComponent.h"
 #include "../Object/GameObject/GameObject.h"
 #include "../Rendering/Shaders/ShaderCatalog.h"
-#include "../Rendering/Shaders/ShaderConstantPacker.h"
-#include "../Rendering/Shaders/ShaderAsset.h"
+#include "../Rendering/Effects/EffectChain.h"
 #include "../Scene/Runtime/Scene.h"
 #include "../../Source/core/shader.h"
 #include "../../Source/core/texture.h"
@@ -28,7 +27,6 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
-#include <filesystem>
 #include <functional>
 #include <string>
 #include <vector>
@@ -45,50 +43,6 @@ namespace ReplayEngine::UI
         using Components::UIShapeComponent;
         using Components::UITextComponent;
         using Components::UITextAnimatorComponent;
-
-        bool LookupEffectShaderProperty(const std::string& saved_name,
-            DirectX::XMFLOAT4& out, void* user)
-        {
-            if (user == nullptr) return false;
-            const auto* bag = static_cast<const Reflection::PropertyBag*>(user);
-            const Reflection::PropertyValue* value = bag->Find(saved_name);
-            if (value == nullptr) return false;
-
-            switch (value->Type())
-            {
-            case Reflection::PropertyType::Float:
-                out = { value->AsFloat(), 0.0f, 0.0f, 0.0f };
-                return true;
-            case Reflection::PropertyType::Double:
-                out = { static_cast<float>(value->AsDouble()), 0.0f, 0.0f, 0.0f };
-                return true;
-            case Reflection::PropertyType::Int:
-            case Reflection::PropertyType::Enum:
-                out = { static_cast<float>(value->AsInt()), 0.0f, 0.0f, 0.0f };
-                return true;
-            case Reflection::PropertyType::Bool:
-                out = { value->AsBool() ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
-                return true;
-            case Reflection::PropertyType::Vector2:
-            {
-                const DirectX::XMFLOAT2 v = value->AsVector2();
-                out = { v.x, v.y, 0.0f, 0.0f };
-                return true;
-            }
-            case Reflection::PropertyType::Vector3:
-            {
-                const DirectX::XMFLOAT3 v = value->AsVector3();
-                out = { v.x, v.y, v.z, 0.0f };
-                return true;
-            }
-            case Reflection::PropertyType::Vector4:
-            case Reflection::PropertyType::Color:
-                out = value->AsVector4();
-                return true;
-            default:
-                return false;
-            }
-        }
 
         constexpr int maximum_ui_depth = 64;
 
@@ -1243,351 +1197,54 @@ namespace ReplayEngine::UI
             draw_target_height = static_cast<float>(target.height);
         };
 
-        const auto custom_effect_entry = [&](const std::string& shader_guid)
-            -> const Rendering::ShaderCatalog::Entry*
-        {
-            if (shader_guid.empty() || asset_database == nullptr || shader_catalog == nullptr)
-                return nullptr;
-            const Assets::AssetRecord* record = asset_database->FindByGuid(shader_guid);
-            if (record == nullptr || record->kind != Assets::AssetKind::Shader) return nullptr;
-
-            const auto normalize = [](std::filesystem::path path)
-            {
-                std::error_code error;
-                std::filesystem::path absolute = path.is_absolute()
-                    ? path : std::filesystem::absolute(path, error);
-                if (error) absolute = path;
-                error.clear();
-                const std::filesystem::path canonical =
-                    std::filesystem::weakly_canonical(absolute, error);
-                return error ? absolute.lexically_normal() : canonical.lexically_normal();
-            };
-
-            const std::filesystem::path source = normalize(record->source_path);
-            for (const Rendering::ShaderCatalog::Entry& entry : shader_catalog->All())
-            {
-                if (entry.info.domain != Rendering::ShaderDomain::PostProcess) continue;
-                if (normalize(entry.info.source_path) == source) return &entry;
-            }
-            return nullptr;
-        };
-
         const auto apply_effect_passes = [&](const UIEffectStackComponent& effects,
             UIRenderTarget*& current, UIRenderTarget* first, UIRenderTarget* second)
         {
-            if (first == nullptr || second == nullptr || current == nullptr)
-                return;
-
-            DirectX::XMFLOAT4X4 identity{};
-            DirectX::XMStoreFloat4x4(&identity, DirectX::XMMatrixIdentity());
-            const FLOAT clear[4]{ 0.0f, 0.0f, 0.0f, 0.0f };
-            for (const UI::UIEffect& effect : effects.effects)
+            Rendering::Effects::EffectChain::Context chain_context{};
+            chain_context.device_context = context;
+            chain_context.asset_database = asset_database;
+            chain_context.shader_catalog = shader_catalog;
+            chain_context.time = effect_time;
+            chain_context.depth_disabled = states.depth_disabled;
+            chain_context.rasterizer = states.rasterizer;
+            chain_context.blend_none = states.blend_none;
+            chain_context.blend_alpha = states.blend_alpha;
+            chain_context.sampler = states.sampler;
+            chain_context.resolve_texture = [&](const std::string& guid)
             {
-                if (!effect.enabled) continue;
-                const Rendering::ShaderCatalog::Entry* custom_entry =
-                    custom_effect_entry(effect.custom_shader);
-                ID3D11PixelShader* effect_shader = custom_entry != nullptr
-                    ? CustomEffectShaderFor(effect.custom_shader,
-                        asset_database, shader_catalog)
-                    : nullptr;
-                const bool using_custom_shader = effect_shader != nullptr &&
-                    custom_entry != nullptr;
-                if (effect_shader == nullptr)
-                {
-                    effect_shader = EffectShaderFor(
-                        static_cast<UI::UIEffectKind>(effect.kind));
-                }
-                if (effect_shader == nullptr) continue;
-
-                UIRenderTarget* destination = current == first ? second : first;
-                configure_effect_target(*destination);
-                context->ClearRenderTargetView(destination->rtv.Get(), clear);
-
-                const float width = (std::max)(1.0f,
-                    static_cast<float>(destination->width));
-                const float height = (std::max)(1.0f,
-                    static_cast<float>(destination->height));
-                EffectConstants effect_constants{};
-                effect_constants.effect_color = effect.color;
-                effect_constants.effect_params0 = {
-                    effect.radius, effect.intensity, effect.threshold, effect.amount };
-                effect_constants.effect_params1 = {
-                    effect.angle, effect.progress, effect.softness, effect.speed };
-                effect_constants.effect_params2 = {
-                    effect.direction.x, effect.direction.y, effect.seed,
-                    effect_time };
-                effect_constants.effect_params3 = {
-                    static_cast<float>(effect.waveform), 0.0f, 0.0f, 0.0f };
-                effect_constants.effect_color_2 = effect.color_2;
-                effect_constants.effect_color_3 = effect.color_3;
-                effect_constants.effect_color_4 = effect.color_4;
-                effect_constants.effect_color_stops = {
-                    effect.color_stop_2, effect.color_stop_3,
-                    effect.color_stop_4, 0.0f };
-                const bool is_mask_effect = static_cast<UI::UIEffectKind>(effect.kind) ==
-                    UI::UIEffectKind::Mask;
-                ID3D11ShaderResourceView* mask_texture = nullptr;
-                // t1 は全 UI Effect に共通の任意 Image 入力。Mask 専用にせず、
-                // Dissolve / Noise / BrushStroke も同じ GUID 解決を使う。
-                std::string mask_guid = effect.mask;
-                const bool is_brush_effect = static_cast<UI::UIEffectKind>(effect.kind) ==
-                    UI::UIEffectKind::BrushStroke;
-                if (is_brush_effect && effect.brush_atlas_enabled && mask_guid.empty() &&
-                    asset_database != nullptr)
-                {
-                    // Atlas を選んだのに Asset 欄を空のままにしても、標準筆跡セットは
-                    // 1 枚で完結する。通常マスクや既存 Scene の空欄はこの分岐へ入らない。
-                    if (const Assets::AssetRecord* atlas = asset_database->FindByPath(
-                        std::filesystem::path("resources") / "BrushMasks" /
-                        "brush_masks_atlas.png"))
-                    {
-                        if (atlas->kind == Assets::AssetKind::Image) mask_guid = atlas->guid;
-                    }
-                }
-                if (!mask_guid.empty())
-                {
-                    mask_texture = TextureFor(mask_guid, asset_database);
-                }
-                effect_constants.effect_params3.y = mask_texture != nullptr ? 1.0f : 0.0f;
-                const bool brush_atlas = is_brush_effect && effect.brush_atlas_enabled &&
-                    mask_texture != nullptr;
-                if (brush_atlas)
-                {
-                    effect_constants.effect_params3.z = 1.0f;
-                    effect_constants.brush_pattern_settings = {
-                        static_cast<float>((std::max)(0, (std::min)(15,
-                            effect.brush_pattern_index))),
-                        static_cast<float>((std::max)(0, (std::min)(1,
-                            effect.brush_pattern_mode))), 0.0f, 0.0f };
-                    for (std::size_t group = 0;
-                        group < effect_constants.brush_pattern_weights.size(); ++group)
-                    {
-                        const std::size_t first = group * 4;
-                        effect_constants.brush_pattern_weights[group] = {
-                            (std::max)(0.0f, effect.brush_pattern_weights[first]),
-                            (std::max)(0.0f, effect.brush_pattern_weights[first + 1]),
-                            (std::max)(0.0f, effect.brush_pattern_weights[first + 2]),
-                            (std::max)(0.0f, effect.brush_pattern_weights[first + 3]) };
-                    }
-                }
-                if (is_mask_effect)
-                {
-                    const float center_x = effect.direction.x > 0.0f &&
-                        effect.direction.x < 1.0f ? effect.direction.x : 0.5f;
-                    const float center_y = effect.direction.y > 0.0f &&
-                        effect.direction.y < 1.0f ? effect.direction.y : 0.5f;
-                    const float half_width = effect.seed > 0.0f &&
-                        effect.seed < 1.0f ? effect.seed : 0.5f;
-                    const float half_height = effect.speed > 0.0f &&
-                        effect.speed < 1.0f ? effect.speed : 0.5f;
-                    effect_constants.effect_params2 = {
-                        center_x, center_y, half_width, half_height };
-                    effect_constants.effect_params1.w = mask_texture != nullptr
-                        ? 1.0f : 0.0f;
-                }
-                effect_constants.target_size = {
-                    width, height, 1.0f / width, 1.0f / height };
-                context->UpdateSubresource(effect_constant_buffer_.Get(), 0, nullptr,
-                    &effect_constants, 0, 0);
-                context->PSSetShaderResources(1, 1, &mask_texture);
-
-                std::vector<std::uint32_t> custom_texture_slots;
-                if (using_custom_shader && custom_entry->schema)
-                {
-                    const Rendering::ShaderPropertySchema& schema = *custom_entry->schema;
-                    std::vector<std::uint8_t> packed;
-                    Rendering::ShaderConstantPacker::Pack(schema,
-                        &LookupEffectShaderProperty,
-                        const_cast<Reflection::PropertyBag*>(&effect.custom_parameters), packed);
-                    if (!packed.empty() &&
-                        EnsureCustomEffectConstantBuffer(
-                            static_cast<std::uint32_t>(packed.size())))
-                    {
-                        context->UpdateSubresource(custom_effect_constant_buffer_.Get(),
-                            0, nullptr, packed.data(), 0, 0);
-                        ID3D11Buffer* custom_cb = custom_effect_constant_buffer_.Get();
-                        context->PSSetConstantBuffers(
-                            Rendering::ShaderConstantPacker::material_constant_register,
-                            1, &custom_cb);
-                    }
-
-                    for (const Rendering::ShaderProperty& property : schema.Properties())
-                    {
-                        if (property.kind != Rendering::ShaderPropertyKind::Texture) continue;
-                        const Reflection::PropertyValue* value =
-                            effect.custom_parameters.Find(property.SavedName());
-                        const std::string guid = value != nullptr
-                            ? value->AsAssetReference().guid : std::string{};
-                        ID3D11ShaderResourceView* custom_texture =
-                            TextureFor(guid, asset_database);
-                        context->PSSetShaderResources(property.texture_slot, 1,
-                            &custom_texture);
-                        custom_texture_slots.push_back(property.texture_slot);
-                    }
-                }
-
-                // Atlas は全画面フィルターではなく、必要本数だけの独立ストロークを
-                // インスタンシングで重ねる。通常マスクと Custom Shader は従来の
-                // fullscreen 経路を維持する。
-                if (brush_atlas && effect.brush_instanced_renderer_enabled && !using_custom_shader &&
-                    brush_stroke_vertex_shader_ != nullptr &&
-                    brush_stroke_pixel_shader_ != nullptr)
-                {
-                    const float grid_x = (std::max)(effect.progress * 0.78f, 8.0f);
-                    const float grid_y = (std::max)(effect.amount * 1.35f, 6.0f);
-                    const int columns = static_cast<int>(std::ceil(width / grid_x)) + 2;
-                    const int rows = static_cast<int>(std::ceil(height / grid_y)) + 2;
-                    std::vector<BrushStrokeInstance> instances;
-                    instances.reserve(static_cast<std::size_t>(columns) *
-                        static_cast<std::size_t>(rows));
-
-                    const auto hash = [](std::uint32_t value) noexcept
-                    {
-                        value ^= value >> 16;
-                        value *= 0x7feb352du;
-                        value ^= value >> 15;
-                        value *= 0x846ca68bu;
-                        value ^= value >> 16;
-                        return value;
-                    };
-                    const auto random01 = [&hash](std::uint32_t value) noexcept
-                    {
-                        return static_cast<float>(hash(value) & 0x00ffffffu) /
-                            static_cast<float>(0x01000000u);
-                    };
-                    const auto profile_for = [](int pattern) noexcept
-                    {
-                        static const std::array<DirectX::XMFLOAT4, 16> profiles{
-                            DirectX::XMFLOAT4{ 1.10f, 1.08f, 0.55f, 0.92f },
-                            { 0.68f, 0.88f, 0.20f, 0.78f }, { 1.05f, 1.10f, 0.45f, 0.90f },
-                            { 0.95f, 1.05f, 0.35f, 0.95f }, { 1.15f, 1.10f, 0.85f, 0.90f },
-                            { 1.00f, 1.12f, 0.35f, 1.00f }, { 0.90f, 0.98f, 0.70f, 0.78f },
-                            { 1.12f, 1.15f, 0.35f, 1.00f }, { 1.00f, 1.08f, 0.55f, 0.82f },
-                            { 0.75f, 0.90f, 0.22f, 0.75f }, { 1.05f, 1.15f, 0.40f, 1.00f },
-                            { 0.82f, 0.92f, 0.80f, 0.78f }, { 0.95f, 0.98f, 0.70f, 0.75f },
-                            { 1.00f, 1.08f, 0.25f, 0.88f }, { 1.08f, 1.16f, 0.60f, 1.00f },
-                            { 1.25f, 1.20f, 0.35f, 1.00f } };
-                        return profiles[static_cast<std::size_t>((std::max)(0,
-                            (std::min)(15, pattern)))];
-                    };
-                    float total_weight = 0.0f;
-                    for (const float weight : effect.brush_pattern_weights)
-                        total_weight += (std::max)(0.0f, weight);
-
-                    for (int row = -1; row < rows - 1; ++row)
-                    {
-                        for (int column = -1; column < columns - 1; ++column)
-                        {
-                            const std::uint32_t seed = static_cast<std::uint32_t>(column * 73856093) ^
-                                static_cast<std::uint32_t>(row * 19349663) ^
-                                static_cast<std::uint32_t>(effect.seed * 65535.0f);
-                            int pattern = effect.brush_pattern_index;
-                            if (effect.brush_pattern_mode != 0 && total_weight > 0.0f)
-                            {
-                                float pick = random01(seed) * total_weight;
-                                for (int index = 0; index < 16; ++index)
-                                {
-                                    pick -= (std::max)(0.0f,
-                                        effect.brush_pattern_weights[static_cast<std::size_t>(index)]);
-                                    if (pick <= 0.0f)
-                                    {
-                                        pattern = index;
-                                        break;
-                                    }
-                                }
-                            }
-                            const DirectX::XMFLOAT4 profile = profile_for(pattern);
-                            const float variation = Clamp01(effect.softness);
-                            const float jitter_x = (random01(seed + 1u) - 0.5f) *
-                                grid_x * (0.12f + variation * 0.50f);
-                            const float jitter_y = (random01(seed + 2u) - 0.5f) *
-                                grid_y * (0.12f + variation * 0.50f);
-                            BrushStrokeInstance instance{};
-                            instance.center = { (column + 0.5f) * grid_x + jitter_x,
-                                (row + 0.5f) * grid_y + jitter_y };
-                            instance.size = { (std::max)(effect.progress * profile.x, 8.0f),
-                                (std::max)(effect.amount * 2.2f * profile.y, 5.0f) };
-                            instance.pattern = static_cast<std::uint32_t>((std::max)(0,
-                                (std::min)(15, pattern)));
-                            instances.push_back(instance);
-                        }
-                    }
-
-                    if (!instances.empty() && EnsureBrushStrokeInstanceCapacity(instances.size()))
-                    {
-                        D3D11_MAPPED_SUBRESOURCE mapped{};
-                        if (SUCCEEDED(context->Map(brush_stroke_instance_buffer_.Get(), 0,
-                            D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
-                        {
-                            std::memcpy(mapped.pData, instances.data(),
-                                sizeof(BrushStrokeInstance) * instances.size());
-                            context->Unmap(brush_stroke_instance_buffer_.Get(), 0);
-
-                            // 下地を一度だけコピーし、その上へ筆だけを alpha 合成する。
-                            configure_visual({}, 0, 0.0f, { 0.5f, 0.5f }, {}, 0,
-                                false, 0.0f, {}, {}, {});
-                            append_quad({ 0.0f, 0.0f, width, height }, identity,
-                                { 0.0f, 0.0f, 1.0f, 1.0f },
-                                { 1.0f, 1.0f, 1.0f, 1.0f }, 1.0f);
-                            Flush(context, current->srv.Get(), states.blend_none != nullptr
-                                ? states.blend_none : states.blend_alpha, states, nullptr);
-
-                            ID3D11Buffer* effect_cb = effect_constant_buffer_.Get();
-                            context->VSSetConstantBuffers(0, 1, &effect_cb);
-                            context->PSSetConstantBuffers(0, 1, &effect_cb);
-                            ID3D11ShaderResourceView* vertex_srvs[]{ current->srv.Get(),
-                                brush_stroke_instance_srv_.Get() };
-                            ID3D11ShaderResourceView* pixel_srvs[]{ current->srv.Get(), mask_texture };
-                            context->VSSetShaderResources(0, 2, vertex_srvs);
-                            context->PSSetShaderResources(0, 2, pixel_srvs);
-                            ID3D11SamplerState* sampler = states.sampler;
-                            context->VSSetSamplers(0, 1, &sampler);
-                            context->PSSetSamplers(0, 1, &sampler);
-                            context->IASetInputLayout(nullptr);
-                            context->IASetVertexBuffers(0, 0, nullptr, nullptr, nullptr);
-                            context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
-                            context->VSSetShader(brush_stroke_vertex_shader_.Get(), nullptr, 0);
-                            context->PSSetShader(brush_stroke_pixel_shader_.Get(), nullptr, 0);
-                            context->OMSetDepthStencilState(states.depth_disabled, 0);
-                            context->OMSetBlendState(states.blend_alpha, nullptr, 0xffffffff);
-                            context->RSSetState(states.rasterizer);
-                            context->DrawInstanced(4, static_cast<UINT>(instances.size()), 0, 0);
-
-                            ID3D11ShaderResourceView* null_srvs[2]{};
-                            context->VSSetShaderResources(0, 2, null_srvs);
-                            context->PSSetShaderResources(0, 2, null_srvs);
-                            current = destination;
-                            continue;
-                        }
-                    }
-                }
-
+                // Texture cache / white fallback は従来どおり UIRenderer が一元所有する。
+                return TextureFor(guid, asset_database);
+            };
+            chain_context.configure_target = [&](UIRenderTarget& target)
+            {
+                configure_effect_target(target);
+            };
+            chain_context.draw_plain_fullscreen = [&](float width, float height,
+                ID3D11ShaderResourceView* source, ID3D11BlendState* blend)
+            {
+                DirectX::XMFLOAT4X4 identity{};
+                DirectX::XMStoreFloat4x4(&identity, DirectX::XMMatrixIdentity());
+                configure_visual({}, 0, 0.0f, { 0.5f, 0.5f }, {}, 0,
+                    false, 0.0f, {}, {}, {});
                 append_quad({ 0.0f, 0.0f, width, height }, identity,
                     { 0.0f, 0.0f, 1.0f, 1.0f },
                     { 1.0f, 1.0f, 1.0f, 1.0f }, 1.0f);
-                Flush(context, current->srv.Get(),
-                    states.blend_none != nullptr ? states.blend_none : states.blend_alpha,
-                    states, nullptr, effect_shader, effect_constant_buffer_.Get());
-
-                if (using_custom_shader)
-                {
-                    ID3D11Buffer* null_custom_cb = nullptr;
-                    context->PSSetConstantBuffers(
-                        Rendering::ShaderConstantPacker::material_constant_register,
-                        1, &null_custom_cb);
-                    ID3D11ShaderResourceView* null_custom_srv = nullptr;
-                    for (const std::uint32_t slot : custom_texture_slots)
-                        context->PSSetShaderResources(slot, 1, &null_custom_srv);
-                }
-
-                ID3D11ShaderResourceView* null_srv = nullptr;
-                context->PSSetShaderResources(0, 1, &null_srv);
-                context->PSSetShaderResources(1, 1, &null_srv);
-                current = destination;
-            }
-
-            ID3D11Buffer* null_cb = nullptr;
-            context->PSSetConstantBuffers(0, 1, &null_cb);
+                Flush(context, source, blend, states, nullptr);
+            };
+            chain_context.draw_effect_fullscreen = [&](float width, float height,
+                ID3D11ShaderResourceView* source, ID3D11BlendState* blend,
+                ID3D11PixelShader* shader, ID3D11Buffer* effect_constants)
+            {
+                DirectX::XMFLOAT4X4 identity{};
+                DirectX::XMStoreFloat4x4(&identity, DirectX::XMMatrixIdentity());
+                append_quad({ 0.0f, 0.0f, width, height }, identity,
+                    { 0.0f, 0.0f, 1.0f, 1.0f },
+                    { 1.0f, 1.0f, 1.0f, 1.0f }, 1.0f);
+                Flush(context, source, blend, states, nullptr,
+                    shader, effect_constants);
+            };
+            current = effect_chain_.Apply(chain_context, effects.effects,
+                current, first, second);
         };
 
         // UI の論理座標から、現在の描画先（Scene View の offset / zoom を含む）の
