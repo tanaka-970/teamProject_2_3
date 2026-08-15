@@ -22,7 +22,8 @@ using namespace DirectX;
 namespace
 {
     constexpr std::uint32_t kMeshCacheMagic = 0x48534D52u;  // 'RMSH'
-    constexpr std::uint32_t kMeshCacheVersion = 1;
+    // v2: GLB内蔵画像をDDSキャッシュへ解決したURIを保存する。
+    constexpr std::uint32_t kMeshCacheVersion = 2;
 
     // 文字列は長さ+本体で書く。
     void WriteString(std::ofstream& stream, const std::string& text)
@@ -104,6 +105,17 @@ bool gltf_model::SaveMeshCache(const std::string& filename) const
 {
     const auto path = MeshCachePath(filename);
     if (path.empty() || primitives_.empty()) return false;
+
+    // 参照中のTextureに再読込URIが無い状態をキャッシュすると、次回起動だけ
+    // 白Textureへ落ちる。DDS生成に失敗した場合はメッシュキャッシュ自体を作らず、
+    // 次回もGLB本体から読み直して復旧を試みる。
+    for (const Material& material : materials_)
+    {
+        if ((material.base_color_texture && material.base_color_uri.empty()) ||
+            (material.normal_texture && material.normal_uri.empty()) ||
+            (material.occlusion_roughness_metalness_texture && material.orm_uri.empty()))
+            return false;
+    }
 
     std::error_code error;
     std::filesystem::create_directories(path.parent_path(), error);
@@ -274,7 +286,9 @@ void gltf_model::LoadTexturesFromUris(ID3D11Device* device, const std::string& g
     const int workers = (std::min)(2, ReplayEngine::Assets::ParallelLoader::DefaultWorkerCount());
     ReplayEngine::Assets::ParallelLoader::Run(unique_uris.size(), workers, [&](std::size_t i)
     {
-        const auto full_path = (base_directory / unique_uris[i]).lexically_normal();
+        const std::filesystem::path uri_path(unique_uris[i]);
+        const auto full_path = (uri_path.is_absolute()
+            ? uri_path : base_directory / uri_path).lexically_normal();
         std::error_code error;
         if (!std::filesystem::exists(full_path, error)) return;
 

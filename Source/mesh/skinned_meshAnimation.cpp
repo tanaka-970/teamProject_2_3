@@ -124,6 +124,11 @@ void skinned_mesh::blend_animations(const animation::keyframe* keyframes[2], flo
         XMVECTOR T[2]{ XMLoadFloat3(&keyframes[0]->nodes.at(node_index).translation),
                        XMLoadFloat3(&keyframes[1]->nodes.at(node_index).translation) };
         XMStoreFloat3(&keyframe.nodes.at(node_index).translation, XMVectorLerp(T[0], T[1], factor));
+
+        keyframe.nodes.at(node_index).morph_weight =
+            keyframes[0]->nodes.at(node_index).morph_weight +
+            (keyframes[1]->nodes.at(node_index).morph_weight -
+                keyframes[0]->nodes.at(node_index).morph_weight) * factor;
     }
 }
 void skinned_mesh::update_animation(animation::keyframe& keyframe)

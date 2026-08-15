@@ -306,6 +306,102 @@ namespace ReplayEngine::Editor::Validation
             "ResetSceneState で選択と Undo 履歴が捨てられる");
 
         // -----------------------------------------------------------------
+        // GameObject Clipboard — GUI を通さず、同じ Hierarchy の経路を直接検証する。
+        // -----------------------------------------------------------------
+        Scene::Scene clipboard_source("ClipboardSource");
+        Core::GameObject* clipboard_root = clipboard_source.CreateGameObject("Clipboard Root");
+        Core::GameObject* clipboard_child = clipboard_source.CreateGameObject("Clipboard Child");
+        Core::GameObject* clipboard_external = clipboard_source.CreateGameObject("Clipboard External");
+        check.Expect(clipboard_root != nullptr && clipboard_child != nullptr &&
+            clipboard_external != nullptr, "クリップボード検証用 GameObject を作れる");
+        if (clipboard_root != nullptr && clipboard_child != nullptr && clipboard_external != nullptr)
+        {
+            clipboard_child->SetParent(clipboard_root, false);
+            clipboard_root->GetTransform().SetLocal({ 10.0f, 20.0f, 30.0f }, {}, { 2.0f, 3.0f, 4.0f });
+            clipboard_child->GetTransform().SetLocal({ 1.0f, 2.0f, 3.0f }, {}, { 1.0f, 1.0f, 1.0f });
+            clipboard_root->SetPrefabInstanceInfo("clipboard-prefab", 11, clipboard_root->ID());
+            clipboard_child->SetPrefabInstanceInfo("clipboard-prefab", 12, clipboard_root->ID());
+            auto* clipboard_probe = clipboard_root->AddComponent<EditorProbeBehaviour>();
+            check.Expect(clipboard_probe != nullptr, "コピー対象へ Behaviour を付けられる");
+            if (clipboard_probe != nullptr)
+            {
+                clipboard_probe->marker = 73;
+                clipboard_probe->target_object.object = clipboard_child->ID();
+            }
+
+            EditorContext clipboard_source_context;
+            clipboard_source_context.AttachScene(&clipboard_source);
+            clipboard_source_context.Selection().Select(clipboard_root->ID());
+            clipboard_source_context.Selection().Select(clipboard_child->ID(), true);
+            HierarchyPanel hierarchy;
+            std::string clipboard_text;
+            std::string clipboard_error;
+            const bool copied = hierarchy.CopySelection(clipboard_source_context,
+                clipboard_text, clipboard_error);
+            check.Expect(copied && clipboard_text.rfind("REPLAY_CLIPBOARD 1\n", 0) == 0,
+                "選択した部分木を既定のクリップボード形式へ書ける");
+
+            Scene::Scene clipboard_destination("ClipboardDestination");
+            Core::GameObject* paste_parent = clipboard_destination.CreateGameObject("Paste Parent");
+            EditorContext clipboard_destination_context;
+            clipboard_destination_context.AttachScene(&clipboard_destination);
+            if (paste_parent != nullptr)
+                clipboard_destination_context.Selection().Select(paste_parent->ID());
+            const std::size_t before_paste = clipboard_destination.GameObjectCount();
+            const bool pasted = copied && hierarchy.PasteSelection(clipboard_destination_context,
+                clipboard_text, clipboard_error);
+            Core::GameObject* pasted_root = clipboard_destination.FindGameObjectByName("Clipboard Root コピー");
+            Core::GameObject* pasted_child = clipboard_destination.FindGameObjectByName("Clipboard Child");
+            auto* pasted_probe = pasted_root != nullptr
+                ? pasted_root->GetComponent<EditorProbeBehaviour>() : nullptr;
+            check.Expect(pasted && pasted_root != nullptr && pasted_child != nullptr &&
+                clipboard_destination.GameObjectCount() == before_paste + 2 &&
+                pasted_root->ID() != clipboard_root->ID() && pasted_child->ID() != clipboard_child->ID(),
+                "貼り付けは新しい ObjectID の親子部分木を追加する");
+            check.Expect(pasted_root != nullptr && pasted_root->Parent() == paste_parent &&
+                pasted_child != nullptr && pasted_child->Parent() == pasted_root &&
+                pasted_root->GetTransform().LocalPosition().x == 10.0f &&
+                pasted_child->GetTransform().LocalPosition().y == 2.0f,
+                "貼り付け先の親へ Local Transform を保ったまま配置する");
+            check.Expect(pasted_probe != nullptr && pasted_probe->marker == 73 &&
+                pasted_probe->target_object.object == (pasted_child != nullptr
+                    ? pasted_child->ID() : ObjectID::Invalid()),
+                "部分木内 ObjectReference は貼り付け先へ付け替わる");
+            check.Expect(pasted_root != nullptr && pasted_child != nullptr &&
+                pasted_root->PrefabSourceGUID() == "clipboard-prefab" &&
+                pasted_child->PrefabSourceGUID() == "clipboard-prefab" &&
+                pasted_root->PrefabInstanceRoot() == pasted_root->ID() &&
+                pasted_child->PrefabInstanceRoot() == pasted_root->ID(),
+                "貼り付け後も Ctrl+D と同じく Prefab link を保つ");
+
+            clipboard_destination_context.Selection().Select(paste_parent != nullptr
+                ? paste_parent->ID() : ObjectID::Invalid());
+            const bool pasted_twice = copied && hierarchy.PasteSelection(clipboard_destination_context,
+                clipboard_text, clipboard_error);
+            check.Expect(pasted_twice && clipboard_destination.GameObjectCount() == before_paste + 4 &&
+                clipboard_destination_context.Undo() &&
+                clipboard_destination.GameObjectCount() == before_paste + 2,
+                "同じクリップボードを繰り返し貼り付けても 1 回ずつ Undo できる");
+
+            const std::size_t before_invalid_paste = clipboard_destination.GameObjectCount();
+            const bool invalid_paste = hierarchy.PasteSelection(clipboard_destination_context,
+                "other application text", clipboard_error);
+            check.Expect(!invalid_paste && clipboard_destination.GameObjectCount() == before_invalid_paste,
+                "他アプリの文字列では Scene を変更しない");
+            check.Expect(clipboard_destination_context.Undo() &&
+                clipboard_destination.GameObjectCount() == before_paste,
+                "貼り付けを Undo 1 回で戻せる");
+
+            Serialization::SceneData too_large;
+            too_large.objects.resize(100001);
+            const std::size_t before_too_large = clipboard_destination.GameObjectCount();
+            const bool too_large_paste = hierarchy.PasteSceneData(clipboard_destination_context,
+                too_large, clipboard_error);
+            check.Expect(!too_large_paste && clipboard_destination.GameObjectCount() == before_too_large,
+                "100,000 件を超える貼り付けは Scene を変更しない");
+        }
+
+        // -----------------------------------------------------------------
         // Play Mode — World の所有者は RuntimeSceneService だけ
         // -----------------------------------------------------------------
 

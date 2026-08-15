@@ -58,6 +58,8 @@ void skinned_mesh::create_com_objects(ID3D11Device* device, const char* fbx_file
 
      { "WEIGHTS", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
      { "BONES", 0, DXGI_FORMAT_R32G32B32A32_UINT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+     { "MORPHPOS", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+     { "MORPHNORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
      };
 
     create_vs_from_cso(device, "skinned_mesh_vs.cso", vertex_shader.ReleaseAndGetAddressOf(),
@@ -85,26 +87,36 @@ void skinned_mesh::create_com_objects(ID3D11Device* device, const char* fbx_file
     for (std::unordered_map<uint64_t, material>::iterator iterator = materials.begin();
         iterator != materials.end(); ++iterator)
     {
-        // 2枚のテクスチャ（0:ディフューズ, 1:法線マップ）を処理するループ 
-        for (size_t texture_index = 0; texture_index < 2; ++texture_index)
+        // 0=BaseColor / 1=Normal / 2=ORM / 3=Emissive。
+        // FBX は従来どおり先頭2枚だけを持ち、後半は中立Dummyになる。
+        for (size_t texture_index = 0; texture_index < 4; ++texture_index)
         {
             // ファイル名が格納されているかチェック [cite: 67]
             if (iterator->second.texture_filenames[texture_index].size() > 0)
             {
-                std::filesystem::path path(fbx_filename);
-                path.replace_filename(iterator->second.texture_filenames[texture_index]); // [cite: 76]
+                std::filesystem::path texture_path(iterator->second.texture_filenames[texture_index]);
+                std::filesystem::path path;
+                if (texture_path.is_absolute())
+                    path = texture_path;
+                else
+                {
+                    path = std::filesystem::path(fbx_filename).parent_path() / texture_path;
+                }
 
                 D3D11_TEXTURE2D_DESC texture2d_desc;
                 load_texture_from_file(device, path.c_str(),
-                    iterator->second.shader_resource_views[texture_index].GetAddressOf(), &texture2d_desc); // [cite: 78, 79]
+                    iterator->second.shader_resource_views[texture_index].ReleaseAndGetAddressOf(), &texture2d_desc);
             }
             else
             {
                 // ファイル名がない場合はダミーを生成 [cite: 87]
-                // 法線マップ(index 1)の場合は 0xFFFF7F7F、それ以外は 0xFFFFFFFF を使用 
+                DWORD dummy = 0xFFFFFFFF;
+                if (texture_index == 1) dummy = 0xFFFF7F7F;
+                else if (texture_index == 2) dummy = 0xFF00FFFF; // AO=1 Roughness=1 Metal=0
+                else if (texture_index == 3) dummy = 0xFF000000; // Emissive=0
                 make_dummy_texture(device,
-                    iterator->second.shader_resource_views[texture_index].GetAddressOf(),
-                    texture_index == 1 ? 0xFFFF7F7F : 0xFFFFFFFF, 16); // [cite: 90, 96]
+                    iterator->second.shader_resource_views[texture_index].ReleaseAndGetAddressOf(),
+                    dummy, 16);
             }
         }
     }

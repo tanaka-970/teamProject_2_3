@@ -1235,6 +1235,22 @@ void framework::render(float elapsed_time)
             const ReplayEngine::Rendering::RenderItem item =
                 resolve_render_item_material(scene_item);
             if (item.mesh_asset.empty()) continue;
+
+            // Deferredを使えない環境でも、同じGLB Assetを既存ローダーから描く。
+            // 通常のDeferred経路は draw_object_scene_meshes() 側で処理する。
+            if (gltf_model* gltf = resolve_object_gltf(item.mesh_asset))
+            {
+                if (item.double_sided)
+                    immediate_context->RSSetState(
+                        rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+                gltf->render(immediate_context.Get(), item.world, item.legacy_tint,
+                    static_forward_shader(item.shading_model), false, false);
+                if (item.double_sided)
+                    immediate_context->RSSetState(
+                        rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
+                continue;
+            }
+
             skinned_mesh* scene_mesh = resolve_object_mesh(item.mesh_asset);
             if (scene_mesh == nullptr) continue;
 

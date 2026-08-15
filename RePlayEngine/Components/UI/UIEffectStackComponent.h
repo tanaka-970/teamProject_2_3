@@ -34,6 +34,9 @@ namespace ReplayEngine::Components
             Rendering::ShaderPropertySchemaRef schema);
 
         bool enabled = true;
+        // Screen Space Overlay の Image / Text だけ、直前まで描かれた画素を
+        // Effect の入力へ含める。既定 false は従来の offscreen 経路を保つ。
+        bool capture_backdrop = false;
         int effect_count = 0;
         std::vector<UI::UIEffect> effects;
 

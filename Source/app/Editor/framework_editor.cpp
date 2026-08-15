@@ -255,23 +255,58 @@ void framework::draw_editor_main_menu()
     if (ImGui::BeginMenu("Edit"))
     {
         const bool motion_workspace = active_editor_workspace == editor_workspace::motion;
-        if (ImGui::MenuItem("Undo", "Ctrl+Z", false,
-            motion_workspace ? motion_edit_history.CanUndo()
-                : (object_editor_context.CanEdit() &&
-                    object_editor_context.History().CanUndo())))
+        const bool scene_edit_blocked = !motion_workspace && !object_editor_context.CanEdit();
+        const bool can_undo = motion_workspace ? motion_edit_history.CanUndo()
+            : object_editor_context.History().CanUndo();
+        if (scene_edit_blocked) ImGui::PushStyleVar(ImGuiStyleVar_Alpha,
+            ImGui::GetStyle().Alpha * 0.5f);
+        if (ImGui::MenuItem("Undo", "Ctrl+Z", false, can_undo))
         {
             if (motion_workspace) undo_motion_edit();
             else object_editor_context.Undo();
         }
-        if (ImGui::MenuItem("Redo", "Ctrl+Y", false,
-            motion_workspace ? motion_edit_history.CanRedo()
-                : (object_editor_context.CanEdit() &&
-                    object_editor_context.History().CanRedo())))
+        if (scene_edit_blocked)
+        {
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("実行中は元に戻せません。Shift+F5 で停止してください。");
+            ImGui::PopStyleVar();
+        }
+        const bool can_redo = motion_workspace ? motion_edit_history.CanRedo()
+            : object_editor_context.History().CanRedo();
+        if (scene_edit_blocked) ImGui::PushStyleVar(ImGuiStyleVar_Alpha,
+            ImGui::GetStyle().Alpha * 0.5f);
+        if (ImGui::MenuItem("Redo", "Ctrl+Y", false, can_redo))
         {
             if (motion_workspace) redo_motion_edit();
             else object_editor_context.Redo();
         }
+        if (scene_edit_blocked)
+        {
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("実行中はやり直せません。Shift+F5 で停止してください。");
+            ImGui::PopStyleVar();
+        }
         ImGui::Separator();
+        if (ImGui::MenuItem("Copy", "Ctrl+C", false,
+            !object_editor_context.Selection().Empty()))
+        {
+            std::string clipboard_text;
+            std::string error;
+            if (object_hierarchy_panel.CopySelection(object_editor_context, clipboard_text, error))
+            {
+                ImGui::SetClipboardText(clipboard_text.c_str());
+                object_editor_context.SetStatus("GameObject をコピーしました");
+            }
+            else object_editor_context.SetStatus(error);
+        }
+        if (ImGui::MenuItem("Paste", "Ctrl+V", false, object_editor_context.CanEdit()))
+        {
+            std::string error;
+            const char* clipboard_text = ImGui::GetClipboardText();
+            if (!object_hierarchy_panel.PasteSelection(object_editor_context,
+                clipboard_text != nullptr ? clipboard_text : "", error))
+            {
+                object_editor_context.SetStatus("貼り付けできません: " + error);
+            }
+        }
         if (ImGui::MenuItem("Duplicate", "Ctrl+D", false,
             object_editor_context.CanEdit() && !object_editor_context.Selection().Empty()))
             object_hierarchy_panel.DuplicateSelection(object_editor_context);

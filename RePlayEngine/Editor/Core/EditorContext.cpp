@@ -80,7 +80,7 @@ namespace ReplayEngine::Editor
         if (scene_ == nullptr) return false;
         if (play_mode_)
         {
-            SetStatus("実行中は元に戻せません（停止してから操作してください）");
+            SetStatus("実行中は元に戻せません。Shift+F5 で停止してください。");
             return false;
         }
 
@@ -106,7 +106,7 @@ namespace ReplayEngine::Editor
         if (scene_ == nullptr) return false;
         if (play_mode_)
         {
-            SetStatus("実行中はやり直せません（停止してから操作してください）");
+            SetStatus("実行中はやり直せません。Shift+F5 で停止してください。");
             return false;
         }
 

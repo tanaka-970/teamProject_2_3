@@ -211,6 +211,7 @@
     <ClCompile Include="Source\render\csm_renderer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Deferred\deferred_renderer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Passes\PostProcessPass.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Effects\EffectChain.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Passes\BloomPass.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Passes\SsaoPass.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Passes\SsrPass.cpp" />
@@ -334,6 +335,7 @@
     <ClCompile Include="Source\mesh\skinned_meshAnimation.cpp" />
     <ClCompile Include="Source\mesh\skinned_meshDevice.cpp" />
     <ClCompile Include="Source\mesh\skinned_meshRender.cpp" />
+    <ClCompile Include="Source\mesh\skinned_meshGltf.cpp" />
     <ClCompile Include="Source\mesh\sprite.cpp" />
     <ClCompile Include="Source\mesh\sprite_batch.cpp" />
     <ClCompile Include="Source\mesh\static_mesh.cpp" />
@@ -443,7 +445,9 @@
     <ClCompile Include="RePlayEngine\Runtime\API\RuntimeContextServices.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\API\RuntimeSaveGameService.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourExecutionOrderValidation.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourValidationSupport.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Validation\ComponentDependencyValidation.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourEventValidation.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourRuntimeApiValidation.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourCollisionValidation.cpp" />
@@ -876,6 +880,7 @@
     <ClInclude Include="RePlayEngine\UI\UILayout.h" />
     <ClInclude Include="RePlayEngine\UI\FontAtlas.h" />
     <ClInclude Include="RePlayEngine\UI\UIRenderer.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Effects\EffectChain.h" />
     <ClInclude Include="RePlayEngine\UI\Effects\UIEffect.h" />
     <ClInclude Include="RePlayEngine\UI\Effects\UIRenderTargetPool.h" />
     <ClInclude Include="RePlayEngine\UI\ThirdParty\stb_truetype.h" />
@@ -1253,6 +1258,18 @@
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
     </FxCompile>
     <FxCompile Include="Shader\ui_effect_brush_stroke.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_brush_stroke_instances_vs.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Vertex</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_brush_stroke_instances_ps.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>

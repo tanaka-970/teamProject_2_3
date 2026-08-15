@@ -8,6 +8,7 @@ struct GS_IN
 
 GS_IN main(VS_IN vin)
 {
+    vin.position.xyz += vin.morph_position * gltf_morph.x;
     float4 blended = (float4) 0;
     for (int i = 0; i < 4; ++i)
     {

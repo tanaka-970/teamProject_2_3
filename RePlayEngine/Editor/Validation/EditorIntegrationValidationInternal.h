@@ -3,6 +3,7 @@
 #include "EditorIntegrationValidation.h"
 
 #include "../Core/EditorContext.h"
+#include "../Hierarchy/HierarchyPanel.h"
 #include "../../Assets/AssetDatabase.h"
 #include "../../Object/Component/MissingComponent.h"
 #include "../../Object/GameObject/GameObject.h"

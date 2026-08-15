@@ -114,3 +114,28 @@ gltf_model::~gltf_model()
     // 生成スレッドがthisを触っているので必ず待つ。
     if (lod_thread_.joinable()) lod_thread_.join();
 }
+
+bool gltf_model::ComputeBounds(XMFLOAT3& minimum, XMFLOAT3& maximum) const noexcept
+{
+    bool found = false;
+    for (const Primitive& primitive : primitives_)
+    {
+        if (primitive.index_count == 0 && primitive.vertex_count == 0) continue;
+
+        if (!found)
+        {
+            minimum = primitive.bounds_minimum;
+            maximum = primitive.bounds_maximum;
+            found = true;
+            continue;
+        }
+
+        minimum.x = (std::min)(minimum.x, primitive.bounds_minimum.x);
+        minimum.y = (std::min)(minimum.y, primitive.bounds_minimum.y);
+        minimum.z = (std::min)(minimum.z, primitive.bounds_minimum.z);
+        maximum.x = (std::max)(maximum.x, primitive.bounds_maximum.x);
+        maximum.y = (std::max)(maximum.y, primitive.bounds_maximum.y);
+        maximum.z = (std::max)(maximum.z, primitive.bounds_maximum.z);
+    }
+    return found;
+}

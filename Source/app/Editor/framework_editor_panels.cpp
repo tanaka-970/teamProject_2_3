@@ -223,7 +223,7 @@ void framework::draw_console_panel()
     const char* outputs[] = { "Final", "HDR Scene", "Bloom", "Deferred Lit",
         "GBuffer Base Color", "GBuffer Normal", "GBuffer Material", "Depth" };
     ImGui::Text("出力: %s", outputs[render_graph.OutputIndex()]);
-    ImGui::TextDisabled("Ctrl+S: 保存  Ctrl+Z/Y: 元に戻す/やり直す  Ctrl+D: 複製");
+    ImGui::TextDisabled("Ctrl+S: 保存  Ctrl+Z/Y: 元に戻す/やり直す  Ctrl+C/V: コピー/貼り付け  Ctrl+D: 複製");
     ImGui::TextDisabled("F1: エディタ表示  F2: 名前変更  Ctrl+F2: 出力  F3: 入力キャプチャ  F5: 実行  F11: 全画面");
     ImGui::End();
 }

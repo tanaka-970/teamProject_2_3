@@ -133,8 +133,9 @@ namespace ReplayEngine::UI
         }
         case UIEffectKind::VHS:
         {
-            // 行揺れの半幅に、横にじみか RGB ずれの大きい側が重なる。
-            const float expansion = 0.5f * safe_radius +
+            // HLSL の行揺れは (Hash * 2 - 1) * radius なので最大 |radius|。
+            // そこへ横にじみか RGB ずれの大きい側が重なる。
+            const float expansion = safe_radius +
                 (std::max)(safe_amount, std::fabs(threshold)) + margin;
             return uniform(expansion);
         }

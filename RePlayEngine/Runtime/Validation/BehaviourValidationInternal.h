@@ -83,6 +83,17 @@ namespace ReplayEngine::Runtime::Validation::Detail::BehaviourValidation
             int late_update_count = 0;
             int destroy_count = 0;
 
+            // Scene の execution_order 検証用。通常の Lifecycle 検証では未設定のまま。
+            std::vector<std::string>* phase_trace = nullptr;
+            std::string trace_name;
+            bool add_probe_in_update = false;
+            LifecycleProbeBehaviour* destroy_target_in_update = nullptr;
+            LifecycleProbeBehaviour* added_probe = nullptr;
+            bool update_mutation_done = false;
+
+            float motion_value = 0.0f;
+            int motion_setter_count = 0;
+
             // Awake の中で自分の破棄を要求するか。
             bool destroy_in_awake = false;
 
@@ -96,13 +107,98 @@ namespace ReplayEngine::Runtime::Validation::Detail::BehaviourValidation
             void OnEnable() override { ++enable_count; calls.push_back("Enable"); }
             void OnDisable() override { ++disable_count; calls.push_back("Disable"); }
             void OnStart() override { ++start_count; calls.push_back("Start"); }
-            void OnUpdate(float) override { ++update_count; }
-            void OnFixedUpdate(float) override { ++fixed_update_count; }
-            void OnLateUpdate(float) override { ++late_update_count; }
+            void OnUpdate(float) override
+            {
+                ++update_count;
+                Trace("U:");
+                if (update_mutation_done) return;
+
+                if (add_probe_in_update && Owner() != nullptr)
+                {
+                    added_probe = Owner()->AddComponent<LifecycleProbeBehaviour>();
+                    if (added_probe != nullptr && added_probe != this)
+                    {
+                        added_probe->phase_trace = phase_trace;
+                        added_probe->trace_name = trace_name + ".added";
+                        added_probe->execution_order = -200;
+                    }
+                }
+                if (destroy_target_in_update != nullptr)
+                {
+                    destroy_target_in_update->Destroy();
+                }
+                update_mutation_done = add_probe_in_update ||
+                    destroy_target_in_update != nullptr;
+            }
+            void OnFixedUpdate(float) override
+            {
+                ++fixed_update_count;
+                Trace("F:");
+            }
+            void OnLateUpdate(float) override
+            {
+                ++late_update_count;
+                Trace("L:");
+            }
             void OnDestroy() override { ++destroy_count; calls.push_back("Destroy"); }
+
+        private:
+            void Trace(const char* phase)
+            {
+                if (phase_trace != nullptr)
+                    phase_trace->push_back(std::string(phase) + trace_name);
+            }
+        };
+
+        // ComponentDependencyRules と Scene 復元の検証専用型。
+        class DependencyBaseComponent final : public Core::Component
+        {
+            REPLAY_COMPONENT_BODY(DependencyBaseComponent)
+        };
+
+        class DependencyMiddleComponent final : public Core::Component
+        {
+            REPLAY_COMPONENT_BODY(DependencyMiddleComponent)
+        };
+
+        class DependencyLeafComponent final : public Core::Component
+        {
+            REPLAY_COMPONENT_BODY(DependencyLeafComponent)
+
+        public:
+            bool dependencies_ready_at_runtime_awake = false;
+
+            void OnRuntimeAwake() override
+            {
+                dependencies_ready_at_runtime_awake = Owner() != nullptr &&
+                    Owner()->GetComponent<DependencyBaseComponent>() != nullptr &&
+                    Owner()->GetComponent<DependencyMiddleComponent>() != nullptr;
+            }
+        };
+
+        class DependencyMissingComponent final : public Core::Component
+        {
+            REPLAY_COMPONENT_BODY(DependencyMissingComponent)
+        };
+
+        class DependencyBrokenComponent final : public Core::Component
+        {
+            REPLAY_COMPONENT_BODY(DependencyBrokenComponent)
+        };
+
+        class DependencyCycleAComponent final : public Core::Component
+        {
+            REPLAY_COMPONENT_BODY(DependencyCycleAComponent)
+        };
+
+        class DependencyCycleBComponent final : public Core::Component
+        {
+            REPLAY_COMPONENT_BODY(DependencyCycleBComponent)
         };
 
     void RegisterProbe();
+    int RunExecutionOrderValidation();
+    int RunComponentDependencyValidation();
     bool ContainsInOrder(const std::vector<std::string>& calls,
         const char* first, const char* second);
 }

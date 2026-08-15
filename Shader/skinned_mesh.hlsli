@@ -7,6 +7,8 @@
 	float2 texcoord : TEXCOORD;
 	float4 bone_weights : WEIGHTS;
 	uint4 bone_indices : BONES;
+	float3 morph_position : MORPHPOS;
+	float3 morph_normal : MORPHNORMAL;
 
 };
 struct VS_OUT
@@ -29,6 +31,11 @@ cbuffer OBJECT_CONSTANT_BUFFER : register(b0)
 	row_major float4x4 world;
 	float4 material_color;
 	row_major float4x4 bone_transforms[MAX_BONES];
+	// w=1 のときだけ GLB 内蔵 Material を使用する。
+	float4 gltf_pbr;      // x=metallic y=roughness z=occlusion w=enabled
+	float4 gltf_emissive; // rgb=factor w=strength
+	float4 gltf_alpha;    // x=mode y=cutoff z=unlit w=normal scale
+	float4 gltf_morph;    // x=target0 weight
 };
 
 cbuffer SCENE_CONSTANT_BUFFER : register(b1)
