@@ -329,6 +329,53 @@ void framework::draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shade
             continue;
         }
 
+        // glTF/GLB は既存の gltf_model と ConcurrentResourceCache をそのまま使う。
+        // FBX/.cereal の skinned_mesh 経路には触れないため、既存 Scene は同じ経路を通る。
+        if (gltf_model* gltf = resolve_object_gltf(item.mesh_asset))
+        {
+            if (item.double_sided)
+                immediate_context->RSSetState(
+                    rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+
+            if (depth_only)
+            {
+                gltf->render(immediate_context.Get(), item.world, item.tint,
+                    nullptr, false, true);
+            }
+            else if (gbuffer_pass)
+            {
+                if (item.material_binding.usable_shader)
+                {
+                    material_gpu_binder.BindGBufferTextures(device.Get(), immediate_context.Get(),
+                        asset_database, item.material_binding);
+                }
+                else
+                {
+                    material_gpu_binder.UnbindTextures(immediate_context.Get());
+                }
+                bind_gbuffer_material(item.lighting_model,
+                    false, item.pixelate_enabled, item.pixelate_size,
+                    item.pixelate_strength, item.metallic, item.roughness,
+                    item.ambient_occlusion, item.emissive_strength,
+                    item.material_base_color, item.emissive_color,
+                    item.material_binding.usable_shader
+                        ? item.material_binding.TextureSemanticMask() : 0u);
+                gltf->render(immediate_context.Get(), item.world, item.tint,
+                    static_mesh_gbuffer_ps.Get(), true, false);
+                material_gpu_binder.UnbindTextures(immediate_context.Get());
+            }
+            else
+            {
+                gltf->render(immediate_context.Get(), item.world, item.legacy_tint,
+                    static_forward_shader(item.shading_model), false, false);
+            }
+
+            if (item.double_sided)
+                immediate_context->RSSetState(
+                    rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
+            continue;
+        }
+
         skinned_mesh* mesh = resolve_object_mesh(item.mesh_asset);
         if (mesh == nullptr) continue;
 
