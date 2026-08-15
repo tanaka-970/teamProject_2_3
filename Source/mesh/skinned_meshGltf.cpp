@@ -1,4 +1,4 @@
-#include "skinned_mesh.h"
+﻿#include "skinned_mesh.h"
 
 #include "tinygltf-release/tiny_gltf.h"
 #include "../../RePlayEngine/Assets/TextureCompressor.h"
@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <limits>
 #include <map>
@@ -16,6 +17,44 @@ using namespace DirectX;
 
 namespace
 {
+    struct GltfFileContext
+    {
+        std::filesystem::path base_directory;
+    };
+
+    std::filesystem::path ResolveGltfFile(const std::string& filename, void* user_data)
+    {
+        const auto* context = static_cast<const GltfFileContext*>(user_data);
+        std::filesystem::path path = std::filesystem::u8path(filename);
+        if (path.is_absolute() || context == nullptr) return path;
+        return context->base_directory / path;
+    }
+
+    bool ReadWideFile(std::vector<unsigned char>& bytes,
+        const std::filesystem::path& filename, std::string* error)
+    {
+        std::ifstream stream(filename, std::ios::binary | std::ios::ate);
+        if (!stream)
+        {
+            if (error) *error = "file open failed";
+            return false;
+        }
+        const std::streamoff size = stream.tellg();
+        if (size < 0)
+        {
+            if (error) *error = "file size failed";
+            return false;
+        }
+        bytes.resize(static_cast<std::size_t>(size));
+        stream.seekg(0, std::ios::beg);
+        if (!bytes.empty() && !stream.read(reinterpret_cast<char*>(bytes.data()), size))
+        {
+            if (error) *error = "file read failed";
+            return false;
+        }
+        return true;
+    }
+
     struct NodePose
     {
         XMFLOAT3 scale{ 1.0f, 1.0f, 1.0f };
@@ -257,7 +296,8 @@ namespace
             XMMatrixTranslation(pose.translation.x, pose.translation.y, pose.translation.z);
     }
 
-    std::filesystem::path TextureCacheDirectory(const std::filesystem::path& source)
+    std::filesystem::path TextureCachePath(const std::vector<std::uint8_t>& rgba,
+        int width, int height, ReplayEngine::Assets::TextureCompressor::Format format)
     {
         std::uint64_t hash = 1469598103934665603ull;
         const auto mix_byte = [&hash](unsigned char value)
@@ -265,21 +305,19 @@ namespace
             hash ^= value;
             hash *= 1099511628211ull;
         };
-        const std::string key = source.lexically_normal().generic_string();
-        for (unsigned char value : key) mix_byte(value);
-        std::error_code error;
-        const auto size = std::filesystem::file_size(source, error);
-        if (!error)
-            for (int i = 0; i < 8; ++i) mix_byte(static_cast<unsigned char>(size >> (i * 8)));
-        const auto time = std::filesystem::last_write_time(source, error);
-        if (!error)
+        const auto mix_u32 = [&mix_byte](std::uint32_t value)
         {
-            const auto ticks = static_cast<std::uint64_t>(time.time_since_epoch().count());
-            for (int i = 0; i < 8; ++i) mix_byte(static_cast<unsigned char>(ticks >> (i * 8)));
-        }
+            for (int i = 0; i < 4; ++i)
+                mix_byte(static_cast<unsigned char>(value >> (i * 8)));
+        };
+        mix_u32(static_cast<std::uint32_t>(width));
+        mix_u32(static_cast<std::uint32_t>(height));
+        mix_u32(static_cast<std::uint32_t>(format));
+        for (const std::uint8_t value : rgba) mix_byte(value);
         char text[24]{};
         sprintf_s(text, "%016llx", static_cast<unsigned long long>(hash));
-        return std::filesystem::path("Saved") / "Cache" / "GltfSkinned" / text;
+        return std::filesystem::path("Saved") / "Cache" / "GltfTextures" /
+            (std::string(text) + ".dds");
     }
 
     bool ImageRgba(const tinygltf::Image& image, std::vector<std::uint8_t>& rgba)
@@ -455,14 +493,57 @@ bool skinned_mesh::import_gltf(ID3D11Device*, const std::filesystem::path& filen
     float requested_sampling_rate)
 {
     tinygltf::TinyGLTF loader;
+    GltfFileContext file_context{ filename.parent_path() };
+    tinygltf::FsCallbacks callbacks;
+    callbacks.FileExists = [](const std::string& path, void* user_data)
+    {
+        std::error_code error;
+        return std::filesystem::is_regular_file(ResolveGltfFile(path, user_data), error);
+    };
+    callbacks.ExpandFilePath = [](const std::string& path, void*) { return path; };
+    callbacks.ReadWholeFile = [](std::vector<unsigned char>* output, std::string* error,
+        const std::string& path, void* user_data)
+    {
+        return output != nullptr && ReadWideFile(*output, ResolveGltfFile(path, user_data), error);
+    };
+    callbacks.WriteWholeFile = [](std::string* error, const std::string&,
+        const std::vector<unsigned char>&, void*)
+    {
+        if (error) *error = "glTF import is read-only";
+        return false;
+    };
+    callbacks.GetFileSizeInBytes = [](std::size_t* output, std::string* error,
+        const std::string& path, void* user_data)
+    {
+        std::error_code filesystem_error;
+        const auto size = std::filesystem::file_size(
+            ResolveGltfFile(path, user_data), filesystem_error);
+        if (filesystem_error)
+        {
+            if (error) *error = "file size failed";
+            return false;
+        }
+        if (output) *output = static_cast<std::size_t>(size);
+        return output != nullptr;
+    };
+    callbacks.user_data = &file_context;
+    std::string callback_error;
+    if (!loader.SetFsCallbacks(std::move(callbacks), &callback_error))
+        return false;
+
     tinygltf::Model model;
     std::string error, warning;
     std::string extension = filename.extension().string();
     std::transform(extension.begin(), extension.end(), extension.begin(),
         [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
-    const bool loaded = extension == ".glb"
-        ? loader.LoadBinaryFromFile(&model, &error, &warning, filename.string())
-        : loader.LoadASCIIFromFile(&model, &error, &warning, filename.string());
+    std::vector<unsigned char> source_bytes;
+    const bool source_read = ReadWideFile(source_bytes, filename, &error);
+    const bool loaded = source_read && (extension == ".glb"
+        ? loader.LoadBinaryFromMemory(&model, &error, &warning, source_bytes.data(),
+            static_cast<unsigned int>(source_bytes.size()), "")
+        : loader.LoadASCIIFromString(&model, &error, &warning,
+            reinterpret_cast<const char*>(source_bytes.data()),
+            static_cast<unsigned int>(source_bytes.size()), ""));
     if (!warning.empty()) OutputDebugStringA(("[glTF Skin] " + warning + "\n").c_str());
     if (!loaded)
     {
@@ -515,9 +596,9 @@ bool skinned_mesh::import_gltf(ID3D11Device*, const std::filesystem::path& filen
         XMStoreFloat4x4(&bind_globals[ordered], Compose(reflected_bind[ordered]) * parent);
     }
 
-    const std::filesystem::path texture_cache = TextureCacheDirectory(filename);
     std::error_code filesystem_error;
-    std::filesystem::create_directories(texture_cache, filesystem_error);
+    std::filesystem::create_directories(
+        std::filesystem::path("Saved") / "Cache" / "GltfTextures", filesystem_error);
     std::map<std::pair<int, int>, std::string> cached_images;
     const auto cache_image = [&](int image_index, int usage,
         ReplayEngine::Assets::TextureCompressor::Format format) -> std::string
@@ -525,15 +606,15 @@ bool skinned_mesh::import_gltf(ID3D11Device*, const std::filesystem::path& filen
         if (image_index < 0 || image_index >= static_cast<int>(model.images.size())) return {};
         const auto key = std::make_pair(image_index, usage);
         if (const auto found = cached_images.find(key); found != cached_images.end()) return found->second;
-        const std::filesystem::path destination = texture_cache /
-            ("image_" + std::to_string(image_index) + "_" + std::to_string(usage) + ".dds");
+        std::vector<std::uint8_t> rgba;
+        const auto& image = model.images[static_cast<std::size_t>(image_index)];
+        if (!ImageRgba(image, rgba)) return {};
+        const std::filesystem::path destination = TextureCachePath(
+            rgba, image.width, image.height, format);
         if (!std::filesystem::exists(destination))
         {
-            std::vector<std::uint8_t> rgba;
-            if (!ImageRgba(model.images[static_cast<std::size_t>(image_index)], rgba)) return {};
             const auto result = ReplayEngine::Assets::TextureCompressor::CompressRgba(
-                rgba.data(), model.images[static_cast<std::size_t>(image_index)].width,
-                model.images[static_cast<std::size_t>(image_index)].height, destination, format);
+                rgba.data(), image.width, image.height, destination, format);
             if (!result.succeeded) return {};
         }
         const std::string value = std::filesystem::absolute(destination).string();
