@@ -1,14 +1,17 @@
-#include "UIRenderTargetPool.h"
+﻿#include "UIRenderTargetPool.h"
+#include "../../Rendering/RenderStats.h"
 
 #include <algorithm>
 
 namespace ReplayEngine::UI
 {
     bool UIRenderTarget::Resize(ID3D11Device* device, std::uint32_t next_width,
-        std::uint32_t next_height)
+        std::uint32_t next_height, DXGI_FORMAT next_format)
     {
         if (device == nullptr || next_width == 0 || next_height == 0) return false;
-        if (width == next_width && height == next_height && texture && rtv && srv)
+        if (next_format == DXGI_FORMAT_UNKNOWN) return false;
+        if (width == next_width && height == next_height && format == next_format &&
+            texture && rtv && srv)
         {
             return true;
         }
@@ -20,7 +23,7 @@ namespace ReplayEngine::UI
         desc.Height = next_height;
         desc.MipLevels = 1;
         desc.ArraySize = 1;
-        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        desc.Format = next_format;
         desc.SampleDesc.Count = 1;
         desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
 
@@ -46,6 +49,7 @@ namespace ReplayEngine::UI
 
         width = next_width;
         height = next_height;
+        format = next_format;
         return true;
     }
 
@@ -56,6 +60,7 @@ namespace ReplayEngine::UI
         texture.Reset();
         width = 0;
         height = 0;
+        format = DXGI_FORMAT_R8G8B8A8_UNORM;
     }
 
     void UIRenderTargetPool::Initialize(ID3D11Device* device) noexcept
@@ -70,7 +75,7 @@ namespace ReplayEngine::UI
     }
 
     UIRenderTarget* UIRenderTargetPool::Acquire(std::uint32_t width,
-        std::uint32_t height)
+        std::uint32_t height, DXGI_FORMAT format)
     {
         if (device_ == nullptr || width == 0 || height == 0) return nullptr;
         if (cursor_ >= targets_.size())
@@ -81,7 +86,12 @@ namespace ReplayEngine::UI
         UIRenderTarget* target = targets_[cursor_++].get();
         const std::uint32_t safe_width = (std::max)(std::uint32_t{ 1 }, width);
         const std::uint32_t safe_height = (std::max)(std::uint32_t{ 1 }, height);
-        return target->Resize(device_.Get(), safe_width, safe_height) ? target : nullptr;
+        const bool exact_reuse = target->width == safe_width &&
+            target->height == safe_height && target->format == format &&
+            target->texture && target->rtv && target->srv;
+        if (!target->Resize(device_.Get(), safe_width, safe_height, format)) return nullptr;
+        Rendering::Stats().CountRenderTargetAcquire(exact_reuse);
+        return target;
     }
 
     void UIRenderTargetPool::Release() noexcept

@@ -33,7 +33,13 @@ namespace ReplayEngine::Assets
         Font,
 
         // .replaymotion / .replaycomp。既存値を壊さないよう必ず末尾。
-        Motion
+        Motion,
+
+        // .replayloc。既存値を壊さないよう必ず末尾。
+        Localization,
+
+        // .replayeffect。UI / Model / Screen 共通 Effect Preset。必ず末尾。
+        EffectPreset
     };
 
     struct AssetCacheEntry

@@ -327,8 +327,11 @@
     <ClCompile Include="Source\app\Editor\framework_shader_stack.cpp" />
     <ClCompile Include="Source\app\Editor\framework_character_material.cpp" />
     <ClCompile Include="Source\app\Editor\framework_post_process.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_ui_focus_style.cpp" />
     <ClCompile Include="Source\app\Runtime\framework_update.cpp" />
     <ClCompile Include="Source\app\Rendering\framework_render.cpp" />
+    <ClCompile Include="Source\app\Rendering\framework_effect_stack.cpp" />
+    <ClCompile Include="Source\app\Rendering\framework_model_effects.cpp" />
     <ClCompile Include="Source\core\shader.cpp" />
     <ClCompile Include="Source\mesh\skinned_mesh.cpp" />
     <ClCompile Include="Source\mesh\skinned_meshImport.cpp" />
@@ -884,6 +887,35 @@
     <ClInclude Include="RePlayEngine\UI\Effects\UIEffect.h" />
     <ClInclude Include="RePlayEngine\UI\Effects\UIRenderTargetPool.h" />
     <ClInclude Include="RePlayEngine\UI\ThirdParty\stb_truetype.h" />
+    <ClInclude Include="RePlayEngine\Components\Rendering\ScreenEffectStackComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Rendering\ModelEffectStackComponent.h" />
+  
+    <ClCompile Include="RePlayEngine\Components\Rendering\ScreenEffectStackComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Rendering\ModelEffectStackComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\UISelectableComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\UILayoutGroupComponents.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\UIScrollViewComponent.cpp" />
+    <ClCompile Include="RePlayEngine\UI\UIFocusManager.cpp" />
+    <ClInclude Include="RePlayEngine\Components\UI\UISelectableComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\UI\UILayoutGroupComponents.h" />
+    <ClInclude Include="RePlayEngine\Components\UI\UIScrollViewComponent.h" />
+    <ClInclude Include="RePlayEngine\UI\UIFocusManager.h" />
+    <ClCompile Include="RePlayEngine\Components\UI\UIInputFieldComponent.cpp" />
+    <ClCompile Include="RePlayEngine\UI\UIInputFieldSystem.cpp" />
+    <ClInclude Include="RePlayEngine\Components\UI\UIInputFieldComponent.h" />
+    <ClInclude Include="RePlayEngine\UI\UIInputFieldSystem.h" />
+    <ClCompile Include="RePlayEngine\UI\RichTextParser.cpp" />
+    <ClCompile Include="RePlayEngine\Localization\LocalizationService.cpp" />
+    <ClCompile Include="RePlayEngine\Localization\LocalizationTable.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Effects\EffectPresetAsset.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\UILanguageSwitchComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\UIButtonPropertyToggleComponent.cpp" />
+    <ClInclude Include="RePlayEngine\UI\RichTextParser.h" />
+    <ClInclude Include="RePlayEngine\Localization\LocalizationService.h" />
+    <ClInclude Include="RePlayEngine\Localization\LocalizationTable.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Effects\EffectPresetAsset.h" />
+    <ClInclude Include="RePlayEngine\Components\UI\UILanguageSwitchComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\UI\UIButtonPropertyToggleComponent.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include=".editorconfig" />
@@ -943,6 +975,12 @@
     <None Include="resources\Shaders\Presets\GraphicCel.replayshader" />
     <None Include="resources\Shaders\Presets\CrystalToon.replayshader" />
     <None Include="resources\Shaders\Presets\MoonlitCrystal.replayshader" />
+    <None Include="Docs\UI_GAME_FEATURES_MANUAL.md" />
+    <None Include="resources\Project.replayproject" />
+    <None Include="resources\Scenes\UI_GAME_FEATURES_DEMO.replayscene" />
+    <None Include="resources\Effects\UI_GAME_FEATURES_DEMO_Glow.replayeffect" />
+    <None Include="resources\Localization\UI_GAME_FEATURES_DEMO.replayloc" />
+    <None Include="resources\Motions\UI_GAME_FEATURES_DEMO_ScreenPulse.replaymotion" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="resources\RePlayEngine\BootLogo\BootNote.png" />

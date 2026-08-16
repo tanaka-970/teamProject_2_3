@@ -1,6 +1,8 @@
 ﻿#include "framework.h"
 #include "texture.h"
 #include "../../RePlayEngine/Assets/AssetCache.h"
+#include "../../RePlayEngine/Localization/LocalizationTable.h"
+#include "../../RePlayEngine/Rendering/Effects/EffectPresetAsset.h"
 #include "../../RePlayEngine/Editor/Style/EditorStyle.h"
 #include "../../RePlayEngine/Motion/CompositionAsset.h"
 #include "../../RePlayEngine/Motion/MotionAsset.h"
@@ -37,6 +39,10 @@ ReplayEngine::Assets::AssetKind framework::project_kind_for(
     if (extension == ReplayEngine::Motion::MotionAsset::file_extension ||
         extension == ReplayEngine::Motion::CompositionAsset::file_extension)
         return AssetKind::Motion;
+    if (extension == ReplayEngine::Localization::LocalizationTable::file_extension)
+        return AssetKind::Localization;
+    if (extension == ReplayEngine::Rendering::Effects::EffectPresetAsset::file_extension)
+        return AssetKind::EffectPreset;
     if (extension == ".fbx" || extension == ".glb" || extension == ".gltf" ||
         extension == ".obj") return AssetKind::Model;
     if (IsImageExtension(extension)) return AssetKind::Image;
@@ -298,6 +304,81 @@ bool framework::project_create_motion(const std::string& name)
     return true;
 }
 
+
+bool framework::project_create_localization(const std::string& name)
+{
+    using ReplayEngine::Assets::AssetKind;
+    using ReplayEngine::Localization::LocalizationTable;
+    const std::string safe = SafeProjectFileName(name.empty() ? "Localization" : name);
+    if (safe.empty()) return false;
+    std::error_code error;
+    const std::filesystem::path root = std::filesystem::current_path(error);
+    if (error) return false;
+    const std::filesystem::path folder = root / project_current_folder;
+    std::filesystem::create_directories(folder, error);
+    if (error) return false;
+    std::filesystem::path path = folder / (safe + LocalizationTable::file_extension);
+    for (int suffix = 2; std::filesystem::exists(path) && suffix < 10000; ++suffix)
+        path = folder / (safe + std::to_string(suffix) + LocalizationTable::file_extension);
+    LocalizationTable table;
+    table.SetLanguages({ "ja", "en" });
+    table.Set("sample.hello", "ja", u8"こんにちは");
+    table.Set("sample.hello", "en", "Hello");
+    std::string save_error;
+    if (!table.SaveToFile(path, save_error))
+    {
+        project_browser_status = "Localization 作成失敗: " + save_error;
+        return false;
+    }
+    const auto& record = asset_database.Register(path, AssetKind::Localization);
+    if (!asset_database.Save(save_error))
+    {
+        project_browser_status = "Localization は作成しましたが DB 保存失敗: " + save_error;
+        return false;
+    }
+    selected_asset_guid = record.guid;
+    project_browser_status = "Localization を作成しました: " + path.filename().u8string();
+    return true;
+}
+
+bool framework::project_create_effect_preset(const std::string& name)
+{
+    using ReplayEngine::Assets::AssetKind;
+    using ReplayEngine::Rendering::Effects::EffectPresetAsset;
+    const std::string safe = SafeProjectFileName(name.empty() ? "NewEffectPreset" : name);
+    if (safe.empty()) return false;
+    std::error_code error;
+    const std::filesystem::path root = std::filesystem::current_path(error);
+    if (error) return false;
+    const std::filesystem::path folder = root / project_current_folder;
+    std::filesystem::create_directories(folder, error);
+    if (error) return false;
+    std::filesystem::path path = folder / (safe + EffectPresetAsset::file_extension);
+    for (int suffix = 2; std::filesystem::exists(path) && suffix < 10000; ++suffix)
+        path = folder / (safe + std::to_string(suffix) + EffectPresetAsset::file_extension);
+    EffectPresetAsset preset;
+    ReplayEngine::UI::UIEffect glow;
+    glow.kind = static_cast<int>(ReplayEngine::UI::UIEffectKind::Glow);
+    glow.enabled = true;
+    glow.radius = 8.0f;
+    glow.intensity = 1.0f;
+    preset.effects.push_back(glow);
+    std::string save_error;
+    if (!preset.SaveToFile(path, save_error))
+    {
+        project_browser_status = "Effect Preset 作成失敗: " + save_error;
+        return false;
+    }
+    const auto& record = asset_database.Register(path, AssetKind::EffectPreset);
+    if (!asset_database.Save(save_error))
+    {
+        project_browser_status = "Effect Preset は作成しましたが DB 保存失敗: " + save_error;
+        return false;
+    }
+    selected_asset_guid = record.guid;
+    project_browser_status = "Effect Preset を作成しました: " + path.filename().u8string();
+    return true;
+}
 
 bool framework::project_create_scene_flow(const std::string& name)
 {

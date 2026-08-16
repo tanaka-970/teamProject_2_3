@@ -552,10 +552,19 @@
     <ClCompile Include="Source\app\Editor\framework_post_process.cpp">
       <Filter>Source\App\Editor</Filter>
     </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_ui_focus_style.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
     <ClCompile Include="Source\app\Runtime\framework_update.cpp">
       <Filter>Source\App\Runtime</Filter>
     </ClCompile>
     <ClCompile Include="Source\app\Rendering\framework_render.cpp">
+      <Filter>Source\App\Rendering</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Rendering\framework_effect_stack.cpp">
+      <Filter>Source\App\Rendering</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Rendering\framework_model_effects.cpp">
       <Filter>Source\App\Rendering</Filter>
     </ClCompile>
     <ClCompile Include="Source\core\shader.cpp">
@@ -2090,6 +2099,12 @@
     <None Include="resources\Shaders\Presets\MoonlitCrystal.replayshader">
       <Filter>Resources\Shaders\Presets</Filter>
     </None>
+    <None Include="Docs\UI_GAME_FEATURES_MANUAL.md" />
+    <None Include="resources\Project.replayproject" />
+    <None Include="resources\Scenes\UI_GAME_FEATURES_DEMO.replayscene" />
+    <None Include="resources\Effects\UI_GAME_FEATURES_DEMO_Glow.replayeffect" />
+    <None Include="resources\Localization\UI_GAME_FEATURES_DEMO.replayloc" />
+    <None Include="resources\Motions\UI_GAME_FEATURES_DEMO_ScreenPulse.replaymotion" />
     <None Include="Shader\PostEffects\AmbientOcclusion\ssao_common.hlsli">
       <Filter>Shader\PostEffects\AmbientOcclusion</Filter>
     </None>
@@ -2374,6 +2389,9 @@
     <Filter Include="RePlayEngine\UI\ThirdParty">
       <UniqueIdentifier>{d06f461e-c4bd-4b3c-b68d-a044e4fc6f89}</UniqueIdentifier>
     </Filter>
+    <Filter Include="RePlayEngine\Localization">
+      <UniqueIdentifier>{3e8d18aa-9c21-4f6c-8ab3-93fe6a846112}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Source\app\Editor\framework_ui_workspace.cpp">
@@ -2652,5 +2670,75 @@
     <FxCompile Include="Shader\ui_vs.hlsl">
       <Filter>Shader</Filter>
     </FxCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="RePlayEngine\Components\Rendering\ScreenEffectStackComponent.cpp">
+      <Filter>ソース ファイル\RePlayEngine\Components\Rendering</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="RePlayEngine\Components\Rendering\ModelEffectStackComponent.cpp">
+      <Filter>ソース ファイル\RePlayEngine\Components\Rendering</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="RePlayEngine\Components\Rendering\ScreenEffectStackComponent.h">
+      <Filter>ヘッダー ファイル\RePlayEngine\Components\Rendering</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="RePlayEngine\Components\Rendering\ModelEffectStackComponent.h">
+      <Filter>ヘッダー ファイル\RePlayEngine\Components\Rendering</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="RePlayEngine\Components\UI\UISelectableComponent.cpp"><Filter>ソース ファイル\RePlayEngine\Components\UI</Filter></ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="RePlayEngine\Components\UI\UILayoutGroupComponents.cpp"><Filter>ソース ファイル\RePlayEngine\Components\UI</Filter></ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="RePlayEngine\Components\UI\UIScrollViewComponent.cpp"><Filter>ソース ファイル\RePlayEngine\Components\UI</Filter></ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="RePlayEngine\UI\UIFocusManager.cpp"><Filter>ソース ファイル\RePlayEngine\UI</Filter></ClCompile>
+  
+    <ClCompile Include="RePlayEngine\Components\UI\UIInputFieldComponent.cpp">
+      <Filter>Source Files\RePlayEngine\Components\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\UI\UIInputFieldSystem.cpp">
+      <Filter>Source Files\RePlayEngine\UI</Filter>
+    </ClCompile></ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="RePlayEngine\Components\UI\UISelectableComponent.h"><Filter>ヘッダー ファイル\RePlayEngine\Components\UI</Filter></ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="RePlayEngine\Components\UI\UILayoutGroupComponents.h"><Filter>ヘッダー ファイル\RePlayEngine\Components\UI</Filter></ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="RePlayEngine\Components\UI\UIScrollViewComponent.h"><Filter>ヘッダー ファイル\RePlayEngine\Components\UI</Filter></ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="RePlayEngine\UI\UIFocusManager.h"><Filter>ヘッダー ファイル\RePlayEngine\UI</Filter></ClInclude>
+  
+    <ClInclude Include="RePlayEngine\Components\UI\UIInputFieldComponent.h">
+      <Filter>Header Files\RePlayEngine\Components\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\UI\UIInputFieldSystem.h">
+      <Filter>Header Files\RePlayEngine\UI</Filter>
+    </ClInclude></ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="RePlayEngine\UI\RichTextParser.cpp"><Filter>RePlayEngine\UI</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Localization\LocalizationService.cpp"><Filter>RePlayEngine\Localization</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Localization\LocalizationTable.cpp"><Filter>RePlayEngine\Localization</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\Effects\EffectPresetAsset.cpp"><Filter>RePlayEngine\Rendering\Effects</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Components\UI\UILanguageSwitchComponent.cpp"><Filter>RePlayEngine\Components\UI</Filter></ClCompile>
+    <ClCompile Include="RePlayEngine\Components\UI\UIButtonPropertyToggleComponent.cpp"><Filter>RePlayEngine\Components\UI</Filter></ClCompile>
+    <ClInclude Include="RePlayEngine\UI\RichTextParser.h"><Filter>RePlayEngine\UI</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Localization\LocalizationService.h"><Filter>RePlayEngine\Localization</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Localization\LocalizationTable.h"><Filter>RePlayEngine\Localization</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\Effects\EffectPresetAsset.h"><Filter>RePlayEngine\Rendering\Effects</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Components\UI\UILanguageSwitchComponent.h"><Filter>RePlayEngine\Components\UI</Filter></ClInclude>
+    <ClInclude Include="RePlayEngine\Components\UI\UIButtonPropertyToggleComponent.h"><Filter>RePlayEngine\Components\UI</Filter></ClInclude>
   </ItemGroup>
 </Project>

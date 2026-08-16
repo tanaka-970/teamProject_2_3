@@ -339,7 +339,10 @@ bool framework::uninitialize()
     //    Device の Live Object Report より先に必ず解放する。
     material_gpu_binder.Clear();
 
-    // 5.4) UI Effect 用 RT pool。SRV/RTV を UI Renderer 本体より先に明示解放する。
+    // 5.4) Effect 用 RT pool。SRV/RTV を Renderer 本体より先に明示解放する。
+    scene_effect_texture_refs.clear();
+    scene_effect_targets.Release();
+    scene_effect_chain.Release();
     ui_renderer.ReleaseTransientTargets();
     line_stroke_renderer.Release();
 

@@ -1,4 +1,4 @@
-#include "ProjectSettingsSerializer.h"
+﻿#include "ProjectSettingsSerializer.h"
 
 #include <fstream>
 #include <iomanip>
@@ -46,6 +46,14 @@ namespace ReplayEngine::Project
 
         // v3 で追加。Active Scene Flow も GUID だけを保存する。
         stream << "SCENE_FLOW " << std::quoted(settings.SceneFlowGuid()) << '\n';
+        stream << "LOCALIZATION_TABLE " << std::quoted(settings.LocalizationTableGuid()) << '\n';
+        stream << "DEFAULT_LANGUAGE " << std::quoted(settings.DefaultLanguage()) << '\n';
+        stream << "UI_FOCUS_OUTLINE_ENABLED " << (settings.FocusOutlineEnabled() ? 1 : 0) << '\n';
+        const DirectX::XMFLOAT4 focus_color = settings.FocusOutlineColor();
+        stream << "UI_FOCUS_OUTLINE_COLOR " << focus_color.x << ' ' << focus_color.y << ' '
+            << focus_color.z << ' ' << focus_color.w << '\n';
+        stream << "UI_FOCUS_OUTLINE_WIDTH " << settings.FocusOutlineWidth() << '\n';
+        stream << "UI_FOCUS_CORNER_RADIUS " << settings.FocusCornerRadius() << '\n';
 
         if (!stream)
         {
@@ -122,6 +130,47 @@ namespace ReplayEngine::Project
                 {
                     settings.SetSceneFlowGuid(std::move(guid));
                 }
+            }
+            else if (keyword == "LOCALIZATION_TABLE")
+            {
+                std::istringstream value_stream(line);
+                value_stream.imbue(std::locale::classic());
+                std::string guid;
+                if (value_stream >> std::quoted(guid))
+                    settings.SetLocalizationTableGuid(std::move(guid));
+            }
+            else if (keyword == "DEFAULT_LANGUAGE")
+            {
+                std::istringstream value_stream(line);
+                value_stream.imbue(std::locale::classic());
+                std::string language;
+                if (value_stream >> std::quoted(language))
+                    settings.SetDefaultLanguage(std::move(language));
+            }
+            else if (keyword == "UI_FOCUS_OUTLINE_ENABLED")
+            {
+                std::istringstream value_stream(line);
+                int enabled = 1;
+                if (value_stream >> enabled) settings.SetFocusOutlineEnabled(enabled != 0);
+            }
+            else if (keyword == "UI_FOCUS_OUTLINE_COLOR")
+            {
+                std::istringstream value_stream(line);
+                DirectX::XMFLOAT4 color = settings.FocusOutlineColor();
+                if (value_stream >> color.x >> color.y >> color.z >> color.w)
+                    settings.SetFocusOutlineColor(color);
+            }
+            else if (keyword == "UI_FOCUS_OUTLINE_WIDTH")
+            {
+                std::istringstream value_stream(line);
+                float value = settings.FocusOutlineWidth();
+                if (value_stream >> value) settings.SetFocusOutlineWidth(value);
+            }
+            else if (keyword == "UI_FOCUS_CORNER_RADIUS")
+            {
+                std::istringstream value_stream(line);
+                float value = settings.FocusCornerRadius();
+                if (value_stream >> value) settings.SetFocusCornerRadius(value);
             }
             // 未知のキーワードはここで捨てる。
         }

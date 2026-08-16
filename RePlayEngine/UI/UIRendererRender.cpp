@@ -12,6 +12,9 @@
 #include "../Components/UI/UIImageComponent.h"
 #include "../Components/UI/UIMaskComponent.h"
 #include "../Components/UI/UIEffectStackComponent.h"
+#include "../Components/UI/UISelectableComponent.h"
+#include "../Components/UI/UIScrollViewComponent.h"
+#include "../Components/UI/UIInputFieldComponent.h"
 #include "../Components/UI/UIShapeComponent.h"
 #include "../Components/UI/UITextComponent.h"
 #include "../Components/UI/UITextAnimatorComponent.h"
@@ -40,6 +43,9 @@ namespace ReplayEngine::UI
         using Components::UIImageComponent;
         using Components::UIMaskComponent;
         using Components::UIEffectStackComponent;
+        using Components::UISelectableComponent;
+        using Components::UIScrollViewComponent;
+        using Components::UIInputFieldComponent;
         using Components::UIShapeComponent;
         using Components::UITextComponent;
         using Components::UITextAnimatorComponent;
@@ -441,7 +447,7 @@ namespace ReplayEngine::UI
                 const DirectX::XMFLOAT4X4& matrix, const DirectX::XMFLOAT4& uv,
                 const DirectX::XMFLOAT4& color, float scale,
                 const DirectX::XMFLOAT2& local_scale, float rotation_degrees,
-                const DirectX::XMFLOAT2& anchor,
+                const DirectX::XMFLOAT2& anchor, float shear_x,
                 const DirectX::XMFLOAT4& uv_bounds)
         {
             const float pivot_x = rect.x + rect.z * anchor.x;
@@ -454,6 +460,7 @@ namespace ReplayEngine::UI
             {
                 float dx = (x - pivot_x) * local_scale.x;
                 float dy = (y - pivot_y) * local_scale.y;
+                dx += dy * shear_x;
                 const float rx = dx * c - dy * s + pivot_x;
                 const float ry = dx * s + dy * c + pivot_y;
                 return ToScreenPoint(TransformPoint(matrix, rx, ry), scale,
@@ -486,17 +493,18 @@ namespace ReplayEngine::UI
             const DirectX::XMFLOAT4 uv_bounds{
                 uv.x, uv.y, uv.x + uv.z, uv.y + uv.w };
             emit_quad_local(rect, matrix, uv, color, scale, local_scale,
-                rotation_degrees, anchor, uv_bounds);
+                rotation_degrees, anchor, 0.0f, uv_bounds);
         };
 
         const auto append_quad_local_with_bounds = [&emit_quad_local](
             const DirectX::XMFLOAT4& rect, const DirectX::XMFLOAT4X4& matrix,
             const DirectX::XMFLOAT4& uv, const DirectX::XMFLOAT4& color, float scale,
             const DirectX::XMFLOAT2& local_scale, float rotation_degrees,
-            const DirectX::XMFLOAT2& anchor, const DirectX::XMFLOAT4& uv_bounds)
+            const DirectX::XMFLOAT2& anchor, float shear_x,
+            const DirectX::XMFLOAT4& uv_bounds)
         {
             emit_quad_local(rect, matrix, uv, color, scale, local_scale,
-                rotation_degrees, anchor, uv_bounds);
+                rotation_degrees, anchor, shear_x, uv_bounds);
         };
 
         const auto append_triangle_local =
@@ -1052,7 +1060,7 @@ namespace ReplayEngine::UI
             GatherTextAnimators(object, text_animators);
             const std::vector<UITextComponent::GlyphQuad>& glyphs = text.Glyphs();
             const float glyph_count = (std::max)(1.0f,
-                static_cast<float>(glyphs.size()));
+                static_cast<float>(text.DisplayCharacterCount()));
             const float outline_extent = clamp_outline_width(text.outline_width);
             const float shadow_extent_x = (std::max)(0.0f,
                 std::fabs(text.shadow_offset.x));
@@ -1069,11 +1077,18 @@ namespace ReplayEngine::UI
                     glyph.size.x,
                     glyph.size.y
                 };
-                DirectX::XMFLOAT4 color = base_color;
-                DirectX::XMFLOAT2 local_scale{ 1.0f, 1.0f };
+                DirectX::XMFLOAT4 color{
+                    base_color.x * glyph.rich_color.x,
+                    base_color.y * glyph.rich_color.y,
+                    base_color.z * glyph.rich_color.z,
+                    base_color.w * glyph.rich_color.w };
+                DirectX::XMFLOAT2 local_scale{
+                    glyph.rich_bold ? 1.035f : 1.0f,
+                    glyph.rich_bold ? 1.035f : 1.0f };
                 DirectX::XMFLOAT2 anchor{ 0.5f, 0.5f };
                 float rotation = 0.0f;
-                bool transformed = false;
+                bool transformed = glyph.rich_bold || glyph.rich_italic;
+                const float rich_italic_shear = glyph.rich_italic ? -0.18f : 0.0f;
 
                 for (const UITextAnimatorComponent* animator : text_animators)
                 {
@@ -1100,10 +1115,10 @@ namespace ReplayEngine::UI
                     local_scale.x *= Lerp(1.0f, animator->scale.x, influence);
                     local_scale.y *= Lerp(1.0f, animator->scale.y, influence);
                     color = LerpColor(color,
-                        { base_color.x * animator->color.x,
-                          base_color.y * animator->color.y,
-                          base_color.z * animator->color.z,
-                          base_color.w * animator->color.w },
+                        { base_color.x * glyph.rich_color.x * animator->color.x,
+                          base_color.y * glyph.rich_color.y * animator->color.y,
+                          base_color.z * glyph.rich_color.z * animator->color.z,
+                          base_color.w * glyph.rich_color.w * animator->color.w },
                         influence);
                     color.w *= Lerp(1.0f, animator->opacity, influence);
                     anchor = animator_anchor(animator->anchor);
@@ -1150,7 +1165,8 @@ namespace ReplayEngine::UI
                 if (transformed)
                 {
                     append_quad_local_with_bounds(draw_rect, matrix, draw_uv, color,
-                        scale, local_scale, rotation, anchor, glyph_uv_bounds);
+                        scale, local_scale, rotation, anchor, rich_italic_shear,
+                        glyph_uv_bounds);
                 }
                 else
                 {
@@ -1164,17 +1180,227 @@ namespace ReplayEngine::UI
             UITextComponent& text, const RectTransformComponent& rect, float scale,
             float opacity, const D3D11_RECT* scissor)
         {
-            if (!text.ActiveInHierarchy() || text.opacity <= 0.0f || text.text.empty())
-                return;
+            UIInputFieldComponent* input = const_cast<Core::GameObject&>(object)
+                .GetComponent<UIInputFieldComponent>();
+            if (input == nullptr)
+            {
+                // Unity InputField と同様、表示 Text を子 GameObject に置く構成も許す。
+                // text_target 参照先の UIText を描いている場合は、その InputField の
+                // selection / caret をこの Text の矩形へ重ねる。
+                Scene::Scene* scene = const_cast<Core::GameObject&>(object).GetScene();
+                if (scene != nullptr)
+                {
+                    for (std::size_t index = 0; index < scene->GameObjectCount(); ++index)
+                    {
+                        Core::GameObject* candidate_object = scene->GameObjectAt(index);
+                        UIInputFieldComponent* candidate = candidate_object != nullptr
+                            ? candidate_object->GetComponent<UIInputFieldComponent>() : nullptr;
+                        if (candidate == nullptr || !candidate->text_target.IsAssigned()) continue;
+                        if (candidate->text_target.owner == object.ID() &&
+                            candidate->text_target.component == text.StableID())
+                        {
+                            input = candidate;
+                            break;
+                        }
+                    }
+                }
+            }
+            Core::GameObject* input_owner = input != nullptr ? input->Owner() : nullptr;
+            UISelectableComponent* selectable = input_owner != nullptr
+                ? input_owner->GetComponent<UISelectableComponent>() : nullptr;
+            const bool focused_input = input != nullptr && selectable != nullptr &&
+                selectable->focused;
+            if (!text.ActiveInHierarchy() || text.opacity <= 0.0f ||
+                (text.ResolvedText().empty() && !focused_input)) return;
 
             const DirectX::XMFLOAT4 r = rect.ResolvedRect();
             font_atlas.BuildGlyphs(text, r.z, r.w, asset_database);
-            const DirectX::XMFLOAT4 color = MultiplyAlpha(text.color, text.opacity * opacity);
-            append_text_glyphs(object, text, r, rect.ResolvedMatrix(), color, scale);
-            configure_visual({}, 0, 0.0f, { 0.5f, 0.5f }, {}, 0, true,
-                text.outline_width, text.outline_color,
-                text.shadow_offset, text.shadow_color);
-            Flush(context, font_atlas.Texture(), states.blend_alpha, states, scissor);
+
+            // InputField selection is a background, so emit it before glyphs.
+            if (focused_input && input->HasSelection() && !input->password)
+            {
+                const int selection_start = input->SelectionStart();
+                const int selection_end = input->SelectionEnd();
+                const DirectX::XMFLOAT4 selection_color =
+                    MultiplyAlpha(input->selection_color, opacity);
+                for (const UITextComponent::GlyphQuad& glyph : text.Glyphs())
+                {
+                    if (glyph.character_index < selection_start ||
+                        glyph.character_index >= selection_end) continue;
+                    DirectX::XMFLOAT4 select_rect{
+                        r.x + glyph.position.x,
+                        r.y + glyph.position.y,
+                        (std::max)(glyph.advance, glyph.size.x),
+                        glyph.size.y };
+                    append_quad(select_rect, rect.ResolvedMatrix(),
+                        { 0.0f, 0.0f, 1.0f, 1.0f }, selection_color, scale);
+                }
+                configure_visual({}, 0, 0.0f, { 0.5f, 0.5f }, {}, 0,
+                    false, 0.0f, {}, {}, {});
+                Flush(context, white_texture_.Get(), states.blend_alpha, states, scissor);
+            }
+
+            if (!text.ResolvedText().empty())
+            {
+                const DirectX::XMFLOAT4 color = MultiplyAlpha(text.color,
+                    text.opacity * opacity);
+                append_text_glyphs(object, text, r, rect.ResolvedMatrix(), color, scale);
+                configure_visual({}, 0, 0.0f, { 0.5f, 0.5f }, {}, 0, true,
+                    text.outline_width, text.outline_color,
+                    text.shadow_offset, text.shadow_color);
+                Flush(context, font_atlas.Texture(), states.blend_alpha, states, scissor);
+            }
+
+            if (focused_input)
+            {
+                const float blink = (std::max)(0.05f, input->caret_blink_seconds);
+                const bool visible = std::fmod((std::max)(0.0f, effect_time), blink) < blink * 0.5f;
+                if (visible)
+                {
+                    float caret_x = r.x;
+                    float caret_y = r.y + (std::max)(0.0f, (r.w - text.font_size) * 0.5f);
+                    float caret_h = (std::max)(1.0f, text.font_size);
+                    bool position_found = false;
+                    for (const UITextComponent::GlyphQuad& glyph : text.Glyphs())
+                    {
+                        if (glyph.character_index >= input->caret_index)
+                        {
+                            caret_x = r.x + glyph.position.x;
+                            caret_y = r.y + glyph.position.y;
+                            caret_h = (std::max)(1.0f, glyph.size.y);
+                            position_found = true;
+                            break;
+                        }
+                        caret_x = r.x + glyph.position.x + glyph.advance;
+                        caret_y = r.y + glyph.position.y;
+                        caret_h = (std::max)(1.0f, glyph.size.y);
+                    }
+                    (void)position_found;
+                    const float logical_width = (std::max)(0.5f,
+                        input->caret_width / (std::max)(0.0001f, scale));
+                    append_quad({ caret_x, caret_y, logical_width, caret_h },
+                        rect.ResolvedMatrix(), { 0.0f, 0.0f, 1.0f, 1.0f },
+                        MultiplyAlpha(input->caret_color, opacity), scale);
+                    configure_visual({}, 0, 0.0f, { 0.5f, 0.5f }, {}, 0,
+                        false, 0.0f, {}, {}, {});
+                    Flush(context, white_texture_.Get(), states.blend_alpha, states, scissor);
+                }
+            }
+        };
+
+        const auto render_focus_outline = [&](const Core::GameObject& object,
+            const RectTransformComponent& rect, float scale, float opacity,
+            const D3D11_RECT* scissor)
+        {
+            const UISelectableComponent* selectable =
+                object.GetComponent<UISelectableComponent>();
+            if (selectable == nullptr || !selectable->focused ||
+                !selectable->ActiveInHierarchy()) return;
+            const bool enabled = selectable->override_focus_style
+                ? selectable->focus_outline_enabled : states.focus_outline_enabled;
+            if (!enabled) return;
+            const DirectX::XMFLOAT4 color = MultiplyAlpha(
+                selectable->override_focus_style ? selectable->focus_outline_color
+                    : states.focus_outline_color, opacity);
+            const float pixel_width = selectable->override_focus_style
+                ? selectable->focus_outline_width : states.focus_outline_width;
+            const float width = (std::max)(0.5f,
+                pixel_width / (std::max)(0.0001f, scale));
+            const DirectX::XMFLOAT4 r = rect.ResolvedRect();
+            const float half = width * 0.5f;
+            const float pixel_radius = selectable->override_focus_style
+                ? selectable->focus_corner_radius : states.focus_corner_radius;
+            const float radius = (std::max)(0.0f,
+                pixel_radius / (std::max)(0.0001f, scale));
+            const DirectX::XMFLOAT4 outline_rect{
+                r.x - half, r.y - half, r.z + width, r.w + width };
+            const DirectX::XMFLOAT4X4 matrix = rect.ResolvedMatrix();
+            UIShapeComponent outline_shape;
+            outline_shape.shape = UIShapeComponent::Rectangle;
+            outline_shape.corner_radius = radius + half;
+            bool closed = true;
+            build_shape_path(outline_shape, outline_rect, scale, closed);
+            append_stroked_path(outline_shape, matrix, color, width, scale, true);
+            configure_visual({}, UIShapeComponent::Solid, 0.0f, { 0.5f, 0.5f },
+                {}, UIShapeComponent::StrokeSolid, false, 0.0f, {}, {}, {});
+            Flush(context, white_texture_.Get(), states.blend_alpha, states, scissor);
+        };
+
+        const auto render_scrollbars = [&](const Core::GameObject& object,
+            const RectTransformComponent& rect, float scale, float opacity,
+            const D3D11_RECT* scissor)
+        {
+            const UIScrollViewComponent* scroll =
+                object.GetComponent<UIScrollViewComponent>();
+            if (scroll == nullptr || !scroll->show_scrollbars ||
+                !scroll->ActiveInHierarchy()) return;
+
+            const DirectX::XMFLOAT4 r = rect.ResolvedRect();
+            const float width = (std::max)(2.0f,
+                scroll->scrollbar_width / (std::max)(0.0001f, scale));
+            const DirectX::XMFLOAT4X4 matrix = rect.ResolvedMatrix();
+            const auto draw_rounded = [&](const DirectX::XMFLOAT4& bar,
+                const DirectX::XMFLOAT4& color, float corner_radius)
+            {
+                UIShapeComponent shape;
+                shape.shape = UIShapeComponent::Rectangle;
+                shape.corner_radius = (std::min)((std::max)(0.0f, corner_radius),
+                    (std::min)(std::fabs(bar.z), std::fabs(bar.w)) * 0.5f);
+                bool closed = true;
+                build_shape_path(shape, bar, scale, closed);
+                if (shape_path.size() < 3) return;
+
+                DirectX::XMFLOAT2 center{ 0.0f, 0.0f };
+                for (const DirectX::XMFLOAT2& point : shape_path)
+                {
+                    center.x += point.x;
+                    center.y += point.y;
+                }
+                const float inv_count = 1.0f /
+                    static_cast<float>((std::max)(std::size_t{ 1 }, shape_path.size()));
+                center.x *= inv_count;
+                center.y *= inv_count;
+                const DirectX::XMFLOAT4 fill = MultiplyAlpha(color, opacity);
+                for (std::size_t index = 0; index < shape_path.size(); ++index)
+                {
+                    append_triangle_local(center, shape_path[index],
+                        shape_path[(index + 1) % shape_path.size()],
+                        bar, matrix, fill, scale);
+                }
+            };
+
+            const float radius = (std::max)(0.0f,
+                scroll->scrollbar_corner_radius / (std::max)(0.0001f, scale));
+            if (scroll->vertical_overflow)
+            {
+                const DirectX::XMFLOAT4 track{ r.x + r.z - width, r.y, width, r.w };
+                draw_rounded(track, scroll->scrollbar_track_color,
+                    (std::min)(radius, width * 0.5f));
+                const float thumb_h = (std::max)(width,
+                    r.w * scroll->vertical_visible_ratio);
+                const float travel = (std::max)(0.0f, r.w - thumb_h);
+                const float thumb_y = r.y + travel * (1.0f - scroll->vertical_normalized);
+                draw_rounded({ r.x + r.z - width, thumb_y, width, thumb_h },
+                    scroll->scrollbar_thumb_color, radius);
+            }
+            if (scroll->horizontal_overflow)
+            {
+                const DirectX::XMFLOAT4 track{ r.x, r.y, r.z, width };
+                draw_rounded(track, scroll->scrollbar_track_color,
+                    (std::min)(radius, width * 0.5f));
+                const float thumb_w = (std::max)(width,
+                    r.z * scroll->horizontal_visible_ratio);
+                const float travel = (std::max)(0.0f, r.z - thumb_w);
+                const float thumb_x = r.x + travel * scroll->horizontal_normalized;
+                draw_rounded({ thumb_x, r.y, thumb_w, width },
+                    scroll->scrollbar_thumb_color, radius);
+            }
+            if (scroll->vertical_overflow || scroll->horizontal_overflow)
+            {
+                configure_visual({}, 0, 0.0f, { 0.5f, 0.5f }, {}, 0,
+                    false, 0.0f, {}, {}, {});
+                Flush(context, white_texture_.Get(), states.blend_alpha, states, scissor);
+            }
         };
 
         const auto configure_effect_target = [&](UIRenderTarget& target)
@@ -1243,7 +1469,7 @@ namespace ReplayEngine::UI
                 Flush(context, source, blend, states, nullptr,
                     shader, effect_constants);
             };
-            current = effect_chain_.Apply(chain_context, effects.effects,
+            current = effect_chain_.Apply(chain_context, effects.EffectiveEffects(asset_database),
                 current, first, second);
         };
 
@@ -1403,7 +1629,7 @@ namespace ReplayEngine::UI
             const RectTransformComponent& rect, const DirectX::XMFLOAT4& source_rect,
             float canvas_scale, const D3D11_RECT* scissor, const auto& draw_source)
         {
-            if (!effects.HasActiveEffects() || states.blend_none == nullptr)
+            if (!effects.HasActiveEffects(asset_database) || states.blend_none == nullptr)
                 return false;
 
             float capture_scale = 1.0f;
@@ -1411,7 +1637,7 @@ namespace ReplayEngine::UI
                 return false;
 
             const DirectX::XMFLOAT4 expansion = effects.ExpandBounds(
-                source_rect.z * capture_scale, source_rect.w * capture_scale);
+                source_rect.z * capture_scale, source_rect.w * capture_scale, asset_database);
             const float inverse_scale = 1.0f / (std::max)(0.0001f, capture_scale);
             const float expanded_width = (std::max)(1.0f,
                 source_rect.z + (expansion.x + expansion.z) * inverse_scale);
@@ -1543,7 +1769,7 @@ namespace ReplayEngine::UI
             const RectTransformComponent& rect, float scale, float opacity,
             const D3D11_RECT* scissor)
         {
-            if (!text.ActiveInHierarchy() || text.opacity <= 0.0f || text.text.empty())
+            if (!text.ActiveInHierarchy() || text.opacity <= 0.0f || text.ResolvedText().empty())
                 return false;
             const DirectX::XMFLOAT4 source_rect = rect.ResolvedRect();
             return render_effect_with_backdrop(effects, rect, source_rect, scale,
@@ -1566,7 +1792,7 @@ namespace ReplayEngine::UI
             UIImageComponent& image, const RectTransformComponent& rect, float scale,
             float opacity, const D3D11_RECT* scissor)
         {
-            if (!effects.HasActiveEffects() || !image.ActiveInHierarchy() ||
+            if (!effects.HasActiveEffects(asset_database) || !image.ActiveInHierarchy() ||
                 image.opacity <= 0.0f || image.fill_amount <= 0.0f)
             {
                 return false;
@@ -1574,7 +1800,7 @@ namespace ReplayEngine::UI
 
             const DirectX::XMFLOAT4 source_rect = rect.ResolvedRect();
             const DirectX::XMFLOAT4 expansion = effects.ExpandBounds(
-                source_rect.z * scale, source_rect.w * scale);
+                source_rect.z * scale, source_rect.w * scale, asset_database);
             // Effect の変位量は target_size.zw を使う実ピクセル単位なので、
             // RT の確保量へ Canvas 拡大率を掛けてはいけない。
             // 一方 composite_rect は論理単位で積まれ、描画時に scale が掛かる。
@@ -1678,15 +1904,15 @@ namespace ReplayEngine::UI
             const RectTransformComponent& rect, float scale, float opacity,
             const D3D11_RECT* scissor)
         {
-            if (!effects.HasActiveEffects() || !text.ActiveInHierarchy() ||
-                text.opacity <= 0.0f || text.text.empty())
+            if (!effects.HasActiveEffects(asset_database) || !text.ActiveInHierarchy() ||
+                text.opacity <= 0.0f || text.ResolvedText().empty())
             {
                 return false;
             }
 
             const DirectX::XMFLOAT4 source_rect = rect.ResolvedRect();
             const DirectX::XMFLOAT4 expansion = effects.ExpandBounds(
-                source_rect.z * scale, source_rect.w * scale);
+                source_rect.z * scale, source_rect.w * scale, asset_database);
             // Text も Image と同じ扱い。確保量は実ピクセルなので、
             // 論理単位の composite_rect へ足す前に拡大率で割り戻す。
             const float inverse_scale = 1.0f / (std::max)(0.0001f, scale);
@@ -1840,6 +2066,8 @@ namespace ReplayEngine::UI
                         render_text(object, *text, *rect, scale, opacity, active_scissor);
                     }
                 }
+                render_focus_outline(object, *rect, scale, opacity, active_scissor);
+                render_scrollbars(object, *rect, scale, opacity, active_scissor);
             }
 
             if (special_mask != nullptr)

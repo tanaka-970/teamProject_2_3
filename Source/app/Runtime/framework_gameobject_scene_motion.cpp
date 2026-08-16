@@ -11,6 +11,8 @@
 #include "../../RePlayEngine/Components/UI/UISpriteAnimatorComponent.h"
 #include "../../RePlayEngine/Components/UI/UITextComponent.h"
 #include "../../RePlayEngine/Components/Rendering/LightComponents.h"
+#include "../../RePlayEngine/Components/Rendering/ScreenEffectStackComponent.h"
+#include "../../RePlayEngine/Components/Rendering/ModelEffectStackComponent.h"
 #include "../../RePlayEngine/Components/Rendering/MeshRendererComponent.h"
 #include "../../RePlayEngine/Components/Rendering/PrimitiveMeshRendererComponent.h"
 #include "../../RePlayEngine/Components/Rendering/SkinnedMeshRendererComponent.h"
@@ -140,6 +142,8 @@ void framework::prepare_ui_effect_shader_schemas(ReplayEngine::Scene::Scene& sce
 {
     using ReplayEngine::Assets::AssetKind;
     using ReplayEngine::Components::UIEffectStackComponent;
+    using ReplayEngine::Components::ScreenEffectStackComponent;
+    using ReplayEngine::Components::ModelEffectStackComponent;
     using ReplayEngine::Rendering::ShaderCatalog;
     using ReplayEngine::Rendering::ShaderDomain;
 
@@ -155,32 +159,44 @@ void framework::prepare_ui_effect_shader_schemas(ReplayEngine::Scene::Scene& sce
         return error ? absolute.lexically_normal() : canonical.lexically_normal();
     };
 
+    const auto resolve_schema =
+        [&](const ReplayEngine::UI::UIEffect& effect)
+            -> ReplayEngine::Rendering::ShaderPropertySchemaRef
+    {
+        ReplayEngine::Rendering::ShaderPropertySchemaRef schema;
+        const ReplayEngine::Assets::AssetRecord* record =
+            asset_database.FindByGuid(effect.custom_shader);
+        if (record == nullptr || record->kind != AssetKind::Shader) return schema;
+
+        const std::filesystem::path source = normalize(content_path(record->source_path));
+        for (const ShaderCatalog::Entry& entry : shader_library.Catalog().All())
+        {
+            if (entry.info.domain != ShaderDomain::PostProcess) continue;
+            if (normalize(entry.info.source_path) != source) continue;
+            schema = entry.schema;
+            break;
+        }
+        return schema;
+    };
+
+    const auto prepare_stack = [&](auto* stack)
+    {
+        if (stack == nullptr) return;
+        for (std::size_t effect_index = 0; effect_index < stack->effects.size();
+            ++effect_index)
+        {
+            stack->SetCustomShaderSchema(effect_index,
+                resolve_schema(stack->effects[effect_index]));
+        }
+    };
+
     for (std::size_t object_index = 0; object_index < scene.GameObjectCount(); ++object_index)
     {
         ReplayEngine::Core::GameObject* object = scene.GameObjectAt(object_index);
         if (object == nullptr || object->PendingDestroy()) continue;
-        auto* stack = object->GetComponent<UIEffectStackComponent>();
-        if (stack == nullptr) continue;
-
-        for (std::size_t effect_index = 0; effect_index < stack->effects.size(); ++effect_index)
-        {
-            const ReplayEngine::UI::UIEffect& effect = stack->effects[effect_index];
-            ReplayEngine::Rendering::ShaderPropertySchemaRef schema;
-            const ReplayEngine::Assets::AssetRecord* record =
-                asset_database.FindByGuid(effect.custom_shader);
-            if (record != nullptr && record->kind == AssetKind::Shader)
-            {
-                const std::filesystem::path source = normalize(content_path(record->source_path));
-                for (const ShaderCatalog::Entry& entry : shader_library.Catalog().All())
-                {
-                    if (entry.info.domain != ShaderDomain::PostProcess) continue;
-                    if (normalize(entry.info.source_path) != source) continue;
-                    schema = entry.schema;
-                    break;
-                }
-            }
-            stack->SetCustomShaderSchema(effect_index, std::move(schema));
-        }
+        prepare_stack(object->GetComponent<UIEffectStackComponent>());
+        prepare_stack(object->GetComponent<ScreenEffectStackComponent>());
+        prepare_stack(object->GetComponent<ModelEffectStackComponent>());
     }
 }
 

@@ -3,6 +3,8 @@
 #include "framework.h"
 #include "texture.h"
 #include "../../RePlayEngine/Assets/AssetCache.h"
+#include "../../RePlayEngine/Localization/LocalizationTable.h"
+#include "../../RePlayEngine/Rendering/Effects/EffectPresetAsset.h"
 #include "../../RePlayEngine/Editor/Style/EditorStyle.h"
 #include "../../RePlayEngine/Motion/CompositionAsset.h"
 #include "../../RePlayEngine/Motion/MotionAsset.h"
@@ -171,6 +173,8 @@ namespace framework_project_browser::Detail
         case AssetKind::SceneFlow:return "FLOW";
         case AssetKind::Motion:   return "MOTION";
         case AssetKind::Font:     return "FONT";
+        case AssetKind::Localization: return "LOC";
+        case AssetKind::EffectPreset: return "FX";
         default:                  return "FILE";
         }
     }
@@ -190,6 +194,8 @@ namespace framework_project_browser::Detail
         case AssetKind::SceneFlow:return ImVec4(0.55f, 0.86f, 1.00f, 1.0f);
         case AssetKind::Motion:   return ImVec4(0.95f, 0.78f, 0.36f, 1.0f);
         case AssetKind::Font:     return ImVec4(0.80f, 0.92f, 0.98f, 1.0f);
+        case AssetKind::Localization:return ImVec4(0.62f, 0.92f, 0.82f, 1.0f);
+        case AssetKind::EffectPreset:return ImVec4(0.96f, 0.66f, 0.92f, 1.0f);
         default:                  return ImVec4(0.72f, 0.72f, 0.72f, 1.0f);
         }
     }

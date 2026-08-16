@@ -182,8 +182,9 @@ void framework::update_object_scene(float elapsed_time)
 #endif
     ReplayEngine::UI::UILayout::UpdateButtons(scene,
         ui_logical_width, ui_logical_height,
-        mouse_x, mouse_y, mouse_down, mouse_pressed, mouse_released, input_captured,
-        object_runtime_active());
+        mouse_x, mouse_y, mouse_down, mouse_pressed, mouse_released,
+        ui_mouse_wheel_delta, input_captured, object_runtime_active());
+    ui_mouse_wheel_delta = 0.0f;
     ui_pointer_down_last = mouse_down;
 
     if (object_runtime_active())

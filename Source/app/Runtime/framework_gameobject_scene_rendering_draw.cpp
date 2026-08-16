@@ -1,6 +1,7 @@
 ﻿// GameObject / Component 基盤のうち「Object / Landscape 描画」を持つ。
 // 描画パス、Material binding、Depth/GBuffer 分岐は関数本体のまま移動している。
 #include "framework.h"
+#include "../../../RePlayEngine/Components/Rendering/ModelEffectStackComponent.h"
 
 #include "gltf_model.h"
 #include "skinned_mesh.h"
@@ -267,12 +268,28 @@ ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
 }
 
 void framework::draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shader,
-    bool gbuffer_pass, bool depth_only)
+    bool gbuffer_pass, bool depth_only, ReplayEngine::Core::ObjectID only_owner,
+    bool skip_model_effect_owners)
 {
     if (object_render_items.Empty()) return;
 
     for (const ReplayEngine::Rendering::RenderItem& source_item : object_render_items.Items())
     {
+        if (only_owner.Valid() && source_item.owner != only_owner) continue;
+        if (skip_model_effect_owners && !only_owner.Valid())
+        {
+            const ReplayEngine::Core::GameObject* owner =
+                active_object_scene().FindGameObjectByID(source_item.owner);
+            const auto* model_effect = owner != nullptr
+                ? owner->GetComponent<ReplayEngine::Components::ModelEffectStackComponent>()
+                : nullptr;
+            if (model_effect != nullptr && model_effect->ActiveInHierarchy() &&
+                model_effect->enabled && model_effect->HasActiveEffects(&asset_database))
+            {
+                continue;
+            }
+        }
+
         const ReplayEngine::Rendering::RenderItem item =
             resolve_render_item_material(source_item);
         // Asset 未指定・解決不可・読み込み失敗のいずれでも nullptr が返る。

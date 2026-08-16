@@ -264,6 +264,9 @@ bool framework::initialize()
         push_editor_log("Warning", "UI FontAtlas を初期化できません。UIText は描画されません");
     if (!ui_renderer.Initialize(device.Get()))
         push_editor_log("Warning", "UIRenderer を初期化できません。Canvas UI は描画されません");
+    scene_effect_targets.Initialize(device.Get());
+    if (!scene_effect_chain.Initialize(device.Get()))
+        push_editor_log("Warning", "3D/Screen EffectChain を初期化できません。Effect Stack は描画されません");
     lights.data.light_counts = { 0, 0, 0, 0 };
 
     // 法線テクスチャを持たない材質で使うダミー法線を作る。kwjkshhakjwhhwhhsbkkwhiiwnzkkhjsowjjw

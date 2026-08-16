@@ -354,6 +354,12 @@ void framework::draw_editor_main_menu()
         draw_editor_camera_top_menu();
         ImGui::EndMenu();
     }
+    if (ImGui::BeginMenu("UI"))
+    {
+        if (ImGui::MenuItem(u8"フォーカス表示管理..."))
+            show_ui_focus_style_manager = true;
+        ImGui::EndMenu();
+    }
 
     if (ImGui::BeginMenu("Window"))
     {
@@ -364,6 +370,8 @@ void framework::draw_editor_main_menu()
         ImGui::MenuItem("Console", nullptr, &show_console_panel);
         ImGui::MenuItem("Workspace", nullptr, &show_workspace_panel);
         ImGui::MenuItem("Validation / Diagnostics", nullptr, &show_validation_panel);
+        if (ImGui::MenuItem(u8"UI フォーカス表示..."))
+            show_ui_focus_style_manager = true;
         ImGui::Separator();
         // Workspace の往復。
         //

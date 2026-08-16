@@ -104,7 +104,7 @@ void framework::draw_project_folder_contents()
             ? AssetKind::Unknown : project_kind_for(entry.path);
         if (!entry.is_directory && asset_type_filter != 0)
         {
-            int filter_type = 10;
+            int filter_type = 12;
             if (kind == AssetKind::Model) filter_type = 1;
             else if (ToLowerCopy(entry.path.extension().u8string()) == ".replayprefab")
                 filter_type = 2;
@@ -116,6 +116,8 @@ void framework::draw_project_folder_contents()
             else if (kind == AssetKind::SceneFlow) filter_type = 7;
             else if (kind == AssetKind::Motion) filter_type = 8;
             else if (kind == AssetKind::Font) filter_type = 9;
+            else if (kind == AssetKind::Localization) filter_type = 10;
+            else if (kind == AssetKind::EffectPreset) filter_type = 11;
             if (asset_type_filter != filter_type) continue;
         }
 

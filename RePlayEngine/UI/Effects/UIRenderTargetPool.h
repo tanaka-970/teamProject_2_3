@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <d3d11.h>
 #include <wrl.h>
@@ -16,9 +16,11 @@ namespace ReplayEngine::UI
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> srv;
         std::uint32_t width = 0;
         std::uint32_t height = 0;
+        DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM;
 
         bool Resize(ID3D11Device* device, std::uint32_t next_width,
-            std::uint32_t next_height);
+            std::uint32_t next_height,
+            DXGI_FORMAT next_format = DXGI_FORMAT_R8G8B8A8_UNORM);
         void Release() noexcept;
     };
 
@@ -27,7 +29,8 @@ namespace ReplayEngine::UI
     public:
         void Initialize(ID3D11Device* device) noexcept;
         void BeginFrame() noexcept;
-        UIRenderTarget* Acquire(std::uint32_t width, std::uint32_t height);
+        UIRenderTarget* Acquire(std::uint32_t width, std::uint32_t height,
+            DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM);
         void Release() noexcept;
 
     private:

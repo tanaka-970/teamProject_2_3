@@ -219,6 +219,14 @@ namespace ReplayEngine::Core::Detail
                 MakeProperty("word_wrap", &UITextComponent::word_wrap)
                     .Display("折り返し"));
             PropertyRegistry::Register<UITextComponent>(
+                MakeProperty("rich_text", &UITextComponent::rich_text)
+                    .Display("Rich Text")
+                    .Tooltip("Unity 互換: <color>, <size>, <b>, <i>。既定OFFなので既存Textの '<' は変化しません。"));
+            PropertyRegistry::Register<UITextComponent>(
+                MakeProperty("localization_key", &UITextComponent::localization_key)
+                    .Display("Localization Key")
+                    .Tooltip("空なら text をそのまま表示。キーが見つからない場合も text を fallback として表示します。"));
+            PropertyRegistry::Register<UITextComponent>(
                 MakeProperty("number_source", &UITextComponent::number_source)
                     .Display("数値の接続元"));
             PropertyRegistry::Register<UITextComponent>(
@@ -485,6 +493,86 @@ namespace ReplayEngine::Core::Detail
                     .AsEnum({ "通常", "ホバー", "押下", "無効" })
                     .ReadOnly().RuntimeOnly().NotSerializable());
 
+            ComponentRegistry::Register<UISelectableComponent>(
+                ComponentTypeInfo::Describe("Selectable", "UI")
+                    .WithTooltip("Button / InputField / ScrollView 共通のフォーカスと方向ナビゲーションです。")
+                    .Requires<RectTransformComponent>());
+            PropertyRegistry::Register<UISelectableComponent>(
+                MakeProperty("interactable", &UISelectableComponent::interactable).Display("操作可能"));
+            PropertyRegistry::Register<UISelectableComponent>(
+                MakeProperty("navigation_enabled", &UISelectableComponent::navigation_enabled).Display("ナビゲーション有効"));
+            PropertyRegistry::Register<UISelectableComponent>(
+                MakeProperty("navigation_order", &UISelectableComponent::navigation_order).Display("Tab 順").Step(1.0));
+            PropertyRegistry::Register<UISelectableComponent>(
+                MakeProperty("navigation_bias", &UISelectableComponent::navigation_bias).Display("方向探索 Bias").Range(0.0, 20.0).Step(0.1));
+            PropertyRegistry::Register<UISelectableComponent>(MakeProperty("navigate_up", &UISelectableComponent::navigate_up).Display("上へ"));
+            PropertyRegistry::Register<UISelectableComponent>(MakeProperty("navigate_down", &UISelectableComponent::navigate_down).Display("下へ"));
+            PropertyRegistry::Register<UISelectableComponent>(MakeProperty("navigate_left", &UISelectableComponent::navigate_left).Display("左へ"));
+            PropertyRegistry::Register<UISelectableComponent>(MakeProperty("navigate_right", &UISelectableComponent::navigate_right).Display("右へ"));
+            PropertyRegistry::Register<UISelectableComponent>(MakeProperty("override_focus_style", &UISelectableComponent::override_focus_style).Display("Focus Style 上書き"));
+            PropertyRegistry::Register<UISelectableComponent>(MakeProperty("focus_outline_enabled", &UISelectableComponent::focus_outline_enabled).Display("輪郭線を表示"));
+            PropertyRegistry::Register<UISelectableComponent>(MakeProperty("focus_outline_color", &UISelectableComponent::focus_outline_color).Display("輪郭線色").AsColor());
+            PropertyRegistry::Register<UISelectableComponent>(MakeProperty("focus_outline_width", &UISelectableComponent::focus_outline_width).Display("輪郭線幅").Range(0.0, 32.0).Step(0.5));
+            PropertyRegistry::Register<UISelectableComponent>(MakeProperty("focus_corner_radius", &UISelectableComponent::focus_corner_radius).Display("角丸").Range(0.0, 64.0).Step(0.5));
+            PropertyRegistry::Register<UISelectableComponent>(
+                MakeProperty("focused", &UISelectableComponent::focused).Display("選択中").ReadOnly().RuntimeOnly().NotSerializable());
+
+            ComponentRegistry::Register<UIHorizontalLayoutGroupComponent>(
+                ComponentTypeInfo::Describe("Horizontal Layout Group", "UI").Requires<RectTransformComponent>());
+            PropertyRegistry::Register<UIHorizontalLayoutGroupComponent>(MakeProperty("padding", &UIHorizontalLayoutGroupComponent::padding).Display("Padding (L,T,R,B)"));
+            PropertyRegistry::Register<UIHorizontalLayoutGroupComponent>(MakeProperty("spacing", &UIHorizontalLayoutGroupComponent::spacing).Display("間隔"));
+            PropertyRegistry::Register<UIHorizontalLayoutGroupComponent>(MakeProperty("alignment", &UIHorizontalLayoutGroupComponent::alignment).Display("整列").AsEnum({ "開始", "中央", "終端" }));
+            PropertyRegistry::Register<UIHorizontalLayoutGroupComponent>(MakeProperty("control_child_width", &UIHorizontalLayoutGroupComponent::control_child_width).Display("子の幅を伸縮"));
+            PropertyRegistry::Register<UIHorizontalLayoutGroupComponent>(MakeProperty("control_child_height", &UIHorizontalLayoutGroupComponent::control_child_height).Display("子の高さを伸縮"));
+
+            ComponentRegistry::Register<UIVerticalLayoutGroupComponent>(
+                ComponentTypeInfo::Describe("Vertical Layout Group", "UI").Requires<RectTransformComponent>());
+            PropertyRegistry::Register<UIVerticalLayoutGroupComponent>(MakeProperty("padding", &UIVerticalLayoutGroupComponent::padding).Display("Padding (L,T,R,B)"));
+            PropertyRegistry::Register<UIVerticalLayoutGroupComponent>(MakeProperty("spacing", &UIVerticalLayoutGroupComponent::spacing).Display("間隔"));
+            PropertyRegistry::Register<UIVerticalLayoutGroupComponent>(MakeProperty("alignment", &UIVerticalLayoutGroupComponent::alignment).Display("整列").AsEnum({ "開始", "中央", "終端" }));
+            PropertyRegistry::Register<UIVerticalLayoutGroupComponent>(MakeProperty("control_child_width", &UIVerticalLayoutGroupComponent::control_child_width).Display("子の幅を伸縮"));
+            PropertyRegistry::Register<UIVerticalLayoutGroupComponent>(MakeProperty("control_child_height", &UIVerticalLayoutGroupComponent::control_child_height).Display("子の高さを伸縮"));
+
+            ComponentRegistry::Register<UIGridLayoutGroupComponent>(
+                ComponentTypeInfo::Describe("Grid Layout Group", "UI").Requires<RectTransformComponent>());
+            PropertyRegistry::Register<UIGridLayoutGroupComponent>(MakeProperty("padding", &UIGridLayoutGroupComponent::padding).Display("Padding (L,T,R,B)"));
+            PropertyRegistry::Register<UIGridLayoutGroupComponent>(MakeProperty("spacing", &UIGridLayoutGroupComponent::spacing).Display("間隔"));
+            PropertyRegistry::Register<UIGridLayoutGroupComponent>(MakeProperty("cell_size", &UIGridLayoutGroupComponent::cell_size).Display("セルサイズ"));
+            PropertyRegistry::Register<UIGridLayoutGroupComponent>(MakeProperty("alignment", &UIGridLayoutGroupComponent::alignment).Display("整列").AsEnum({ "開始", "中央", "終端" }));
+            PropertyRegistry::Register<UIGridLayoutGroupComponent>(MakeProperty("constraint", &UIGridLayoutGroupComponent::constraint).Display("制約").AsEnum({ "列数固定", "行数固定", "幅から自動" }));
+            PropertyRegistry::Register<UIGridLayoutGroupComponent>(MakeProperty("constraint_count", &UIGridLayoutGroupComponent::constraint_count).Display("制約数").Range(1.0, 128.0).Step(1.0));
+
+            ComponentRegistry::Register<UIScrollViewComponent>(
+                ComponentTypeInfo::Describe("Scroll View", "UI").Requires<RectTransformComponent>());
+            PropertyRegistry::Register<UIScrollViewComponent>(MakeProperty("content", &UIScrollViewComponent::content).Display("Content"));
+            PropertyRegistry::Register<UIScrollViewComponent>(MakeProperty("horizontal", &UIScrollViewComponent::horizontal).Display("横スクロール"));
+            PropertyRegistry::Register<UIScrollViewComponent>(MakeProperty("vertical", &UIScrollViewComponent::vertical).Display("縦スクロール"));
+            PropertyRegistry::Register<UIScrollViewComponent>(MakeProperty("clamp_when_content_fits", &UIScrollViewComponent::clamp_when_content_fits).Display("内容が収まる時は固定"));
+            PropertyRegistry::Register<UIScrollViewComponent>(MakeProperty("scroll_sensitivity", &UIScrollViewComponent::scroll_sensitivity).Display("ホイール感度").Range(1.0, 512.0).Step(1.0));
+            PropertyRegistry::Register<UIScrollViewComponent>(MakeProperty("scroll_offset", &UIScrollViewComponent::scroll_offset).Display("スクロール位置"));
+            PropertyRegistry::Register<UIScrollViewComponent>(MakeProperty("show_scrollbars", &UIScrollViewComponent::show_scrollbars).Display("スクロールバー表示"));
+            PropertyRegistry::Register<UIScrollViewComponent>(MakeProperty("scrollbar_width", &UIScrollViewComponent::scrollbar_width).Display("バー幅").Range(2.0, 32.0).Step(0.5));
+            PropertyRegistry::Register<UIScrollViewComponent>(MakeProperty("scrollbar_track_color", &UIScrollViewComponent::scrollbar_track_color).Display("トラック色").AsColor());
+            PropertyRegistry::Register<UIScrollViewComponent>(MakeProperty("scrollbar_thumb_color", &UIScrollViewComponent::scrollbar_thumb_color).Display("つまみ色").AsColor());
+            PropertyRegistry::Register<UIScrollViewComponent>(MakeProperty("scrollbar_corner_radius", &UIScrollViewComponent::scrollbar_corner_radius).Display("角丸").Range(0.0, 32.0).Step(0.5));
+
+            ComponentRegistry::Register<UIInputFieldComponent>(
+                ComponentTypeInfo::Describe("Input Field", "UI")
+                    .WithTooltip("UIText を使う Runtime 文字入力。IME / 選択 / Clipboard に対応します。")
+                    .Requires<RectTransformComponent>());
+            PropertyRegistry::Register<UIInputFieldComponent>(MakeProperty("text", &UIInputFieldComponent::text).Display("Text"));
+            PropertyRegistry::Register<UIInputFieldComponent>(MakeProperty("text_target", &UIInputFieldComponent::text_target).Display("Text Target"));
+            PropertyRegistry::Register<UIInputFieldComponent>(MakeProperty("placeholder", &UIInputFieldComponent::placeholder).Display("Placeholder"));
+            PropertyRegistry::Register<UIInputFieldComponent>(MakeProperty("text_color", &UIInputFieldComponent::text_color).Display("Text Color").AsColor());
+            PropertyRegistry::Register<UIInputFieldComponent>(MakeProperty("placeholder_color", &UIInputFieldComponent::placeholder_color).Display("Placeholder Color").AsColor());
+            PropertyRegistry::Register<UIInputFieldComponent>(MakeProperty("selection_color", &UIInputFieldComponent::selection_color).Display("Selection Color").AsColor());
+            PropertyRegistry::Register<UIInputFieldComponent>(MakeProperty("caret_color", &UIInputFieldComponent::caret_color).Display("Caret Color").AsColor());
+            PropertyRegistry::Register<UIInputFieldComponent>(MakeProperty("caret_width", &UIInputFieldComponent::caret_width).Display("Caret Width").Range(0.5, 8.0).Step(0.1));
+            PropertyRegistry::Register<UIInputFieldComponent>(MakeProperty("caret_blink_seconds", &UIInputFieldComponent::caret_blink_seconds).Display("Caret Blink").Range(0.05, 2.0).Step(0.05));
+            PropertyRegistry::Register<UIInputFieldComponent>(MakeProperty("max_characters", &UIInputFieldComponent::max_characters).Display("Max Characters").Range(0.0, 65535.0).Step(1.0));
+            PropertyRegistry::Register<UIInputFieldComponent>(MakeProperty("password", &UIInputFieldComponent::password).Display("Password"));
+            PropertyRegistry::Register<UIInputFieldComponent>(MakeProperty("read_only", &UIInputFieldComponent::read_only).Display("Read Only"));
+
             ComponentRegistry::Register<UIMaskComponent>(
                 ComponentTypeInfo::Describe("Mask", "UI")
                     .WithTooltip("矩形は D3D11 scissor、画像と形状は既存 Mask Effect で子孫 UI を切り抜きます。")
@@ -508,6 +596,24 @@ namespace ReplayEngine::Core::Detail
                     .Display("境界の柔らかさ").Range(0.0, 1.0).Step(0.01)
                     .Animation(Animatable::Interpolatable));
 
+            ComponentRegistry::Register<UILanguageSwitchComponent>(
+                ComponentTypeInfo::Describe("Language Switch", "UI")
+                    .WithTooltip("同じ GameObject の Button が release されたとき、Runtime の表示言語を切り替えます。")
+                    .Recommends<UIButtonComponent>());
+            PropertyRegistry::Register<UILanguageSwitchComponent>(
+                MakeProperty("language", &UILanguageSwitchComponent::language)
+                    .Display("言語コード")
+                    .Tooltip("例: ja / en。Project Settings の Localization table にある言語を指定します。"));
+
+            ComponentRegistry::Register<UIButtonPropertyToggleComponent>(
+                ComponentTypeInfo::Describe("Button Property Toggle", "UI")
+                    .WithTooltip("同じ GameObject の Button release で、対象 Component の bool Property を反転します。")
+                    .Recommends<UIButtonComponent>());
+            PropertyRegistry::Register<UIButtonPropertyToggleComponent>(
+                MakeProperty("target", &UIButtonPropertyToggleComponent::target).Display("Target"));
+            PropertyRegistry::Register<UIButtonPropertyToggleComponent>(
+                MakeProperty("target_property", &UIButtonPropertyToggleComponent::target_property).Display("Property"));
+
             ComponentRegistry::Register<UIEffectStackComponent>(
                 ComponentTypeInfo::Describe("Effect Stack", "UI")
                     .WithTooltip("UI 要素をオフスクリーンに描いて Effect を順に適用します。")
@@ -520,6 +626,13 @@ namespace ReplayEngine::Core::Detail
                     .Display("背景を取り込む").Animation(Animatable::Step)
                     .Tooltip("この要素より前に描かれた画素を Effect の入力へ含めます。"
                         "Screen Space Overlay の軸揃え Image / Text だけで使えます。"));
+            PropertyRegistry::Register<UIEffectStackComponent>(
+                MakeProperty("use_preset", &UIEffectStackComponent::use_preset)
+                    .Display("Preset を使用").Animation(Animatable::Step));
+            PropertyRegistry::Register<UIEffectStackComponent>(
+                MakeProperty("effect_preset", &UIEffectStackComponent::effect_preset)
+                    .Display("Effect Preset").OfAssetType("EffectPreset")
+                    .Animation(Animatable::Step));
             PropertyRegistry::Register<UIEffectStackComponent>(
                 MakeProperty("effect_count", &UIEffectStackComponent::effect_count)
                     .Display("Effect 数").Range(0.0, 16.0).Step(1.0)

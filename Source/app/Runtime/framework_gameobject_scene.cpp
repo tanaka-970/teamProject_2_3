@@ -29,6 +29,7 @@
 #include "../../RePlayEngine/Components/Landscape/LandscapeRendererComponent.h"
 #include "../../RePlayEngine/Object/Registry/BuiltInComponents.h"
 #include "../../RePlayEngine/Project/ProjectSettingsSerializer.h"
+#include "../../RePlayEngine/Localization/LocalizationService.h"
 #include "../../RePlayEngine/Rendering/Adapter/SceneRenderCollector.h"
 #include "../../RePlayEngine/Motion/MotionBindingResolver.h"
 #include "../../RePlayEngine/Motion/MotionEvaluator.h"
@@ -177,12 +178,18 @@ void framework::load_project_settings()
     if (Project::ProjectSettingsSerializer::LoadFromFile(project_settings, path, error))
     {
         project_settings_status = "プロジェクト設定を読み込みました";
+        ReplayEngine::Localization::LocalizationService::Global().Configure(
+            &asset_database, project_settings.LocalizationTableGuid(),
+            project_settings.DefaultLanguage());
     }
     else
     {
         // 未作成・壊れているのどちらでも、既定値のまま続行する。
         // ここで assert も例外も出さない。
         project_settings_status = error;
+        ReplayEngine::Localization::LocalizationService::Global().Configure(
+            &asset_database, project_settings.LocalizationTableGuid(),
+            project_settings.DefaultLanguage());
     }
 }
 
@@ -198,6 +205,9 @@ bool framework::save_project_settings()
         return false;
     }
     project_settings_status = "プロジェクト設定を保存しました";
+    ReplayEngine::Localization::LocalizationService::Global().Configure(
+        &asset_database, project_settings.LocalizationTableGuid(),
+        project_settings.DefaultLanguage());
     return true;
 }
 

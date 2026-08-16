@@ -72,6 +72,10 @@ namespace ReplayEngine::UI
             float viewport_scale_y = 1.0f;
             bool scissor_bounds_enabled = false;
             D3D11_RECT scissor_bounds{};
+            bool focus_outline_enabled = true;
+            DirectX::XMFLOAT4 focus_outline_color{ 0.25f, 0.78f, 1.0f, 1.0f };
+            float focus_outline_width = 2.0f;
+            float focus_corner_radius = 4.0f;
         };
 
         bool Initialize(ID3D11Device* device);

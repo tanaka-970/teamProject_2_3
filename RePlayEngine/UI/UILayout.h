@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <DirectXMath.h>
 
@@ -24,7 +24,7 @@ namespace ReplayEngine::UI
             float screen_width, float screen_height,
             float mouse_x, float mouse_y,
             bool mouse_down, bool mouse_pressed, bool mouse_released,
-            bool input_captured, bool play_state_motions = false);
+            float mouse_wheel, bool input_captured, bool play_state_motions = false);
 
         // ---- 拡張点: Layout Component -------------------------------------
         //

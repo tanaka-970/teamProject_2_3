@@ -1,4 +1,4 @@
-#include "framework.h"
+﻿#include "framework.h"
 #include "gltf_model.h"
 
 // 描画統計のデバッグ表示。F4で開閉する。
@@ -50,6 +50,36 @@ void framework::draw_render_stats_overlay()
     {
         const float frame_time = ImGui::GetIO().DeltaTime * 1000.0f;
         ImGui::Text(u8"FPS %.1f  /  %.2f ms", ImGui::GetIO().Framerate, frame_time);
+        ImGui::Text(u8"CPU %.2f ms%s", cpu.frame_ms,
+            gpu.timing_valid ? "" : u8" / GPU 計測中");
+        if (gpu.timing_valid)
+        {
+            ImGui::SameLine();
+            ImGui::Text(u8"/ GPU %.2f ms", gpu.frame_ms);
+        }
+
+        const auto phase_index = [](ReplayEngine::Rendering::RenderStats::Phase phase)
+        {
+            return static_cast<std::size_t>(phase);
+        };
+        const std::size_t scene_phase = phase_index(
+            ReplayEngine::Rendering::RenderStats::Phase::Scene3D);
+        const std::size_t game_ui_phase = phase_index(
+            ReplayEngine::Rendering::RenderStats::Phase::GameUI);
+        const std::size_t editor_ui_phase = phase_index(
+            ReplayEngine::Rendering::RenderStats::Phase::EditorUI);
+        ImGui::Text(u8"CPU内訳 3D+Post %.2f / UI %.2f / Editor %.2f ms",
+            cpu.phase_ms[scene_phase], cpu.phase_ms[game_ui_phase],
+            cpu.phase_ms[editor_ui_phase]);
+        if (gpu.timing_valid)
+        {
+            const auto gpu_phase = [&](std::size_t phase)
+            {
+                return gpu.phase_timing_valid[phase] ? gpu.phase_ms[phase] : 0.0;
+            };
+            ImGui::Text(u8"GPU内訳 3D+Post %.2f / UI %.2f / Editor %.2f ms",
+                gpu_phase(scene_phase), gpu_phase(game_ui_phase), gpu_phase(editor_ui_phase));
+        }
         // 要点だけ常時表示する。詳細は下の折りたたみへ。
         if (gpu.valid)
         {
@@ -69,6 +99,14 @@ void framework::draw_render_stats_overlay()
         ImGui::Text(u8"  三角形    %s", separated(cpu.triangles).c_str());
         ImGui::Text(u8"  頂点      %s", separated(cpu.vertices).c_str());
         ImGui::Text(u8"  ドローコール %s", separated(cpu.draw_calls).c_str());
+        ImGui::Text(u8"  Effect Pass %s", separated(cpu.effect_passes).c_str());
+        ImGui::Text(u8"  RT Acquire %s (reuse %s / create-resize %s)",
+            separated(cpu.render_target_acquires).c_str(),
+            separated(cpu.render_target_reuses).c_str(),
+            separated(cpu.render_target_creates).c_str());
+        ImGui::Text(u8"  Effect RT Bind %s / Effect State Set %s",
+            separated(cpu.render_target_binds).c_str(),
+            separated(cpu.state_set_calls).c_str());
 
         ImGui::Separator();
         ImGui::TextUnformatted(u8"■ 実測 (GPUパイプライン統計)");

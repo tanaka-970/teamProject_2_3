@@ -1,4 +1,6 @@
-#pragma once
+﻿#pragma once
+
+#include <DirectXMath.h>
 
 #include <filesystem>
 #include <string>
@@ -138,6 +140,32 @@ namespace ReplayEngine::Project
         AssetReferenceStatus ResolveSceneFlow(
             const Assets::AssetDatabase& database) const;
 
+        // ---- Localization --------------------------------------------------
+        const std::string& LocalizationTableGuid() const noexcept
+        {
+            return localization_table_guid_;
+        }
+        void SetLocalizationTableGuid(std::string guid)
+        {
+            localization_table_guid_ = std::move(guid);
+        }
+        void ClearLocalizationTable() noexcept { localization_table_guid_.clear(); }
+        const std::string& DefaultLanguage() const noexcept { return default_language_; }
+        void SetDefaultLanguage(std::string language)
+        {
+            default_language_ = language.empty() ? std::string("ja") : std::move(language);
+        }
+
+        // ---- Runtime UI Focus Style ---------------------------------------
+        bool FocusOutlineEnabled() const noexcept { return focus_outline_enabled_; }
+        void SetFocusOutlineEnabled(bool value) noexcept { focus_outline_enabled_ = value; }
+        const DirectX::XMFLOAT4& FocusOutlineColor() const noexcept { return focus_outline_color_; }
+        void SetFocusOutlineColor(const DirectX::XMFLOAT4& value) noexcept { focus_outline_color_ = value; }
+        float FocusOutlineWidth() const noexcept { return focus_outline_width_; }
+        void SetFocusOutlineWidth(float value) noexcept { focus_outline_width_ = value; }
+        float FocusCornerRadius() const noexcept { return focus_corner_radius_; }
+        void SetFocusCornerRadius(float value) noexcept { focus_corner_radius_ = value; }
+
         // ---- 既定値へ戻す --------------------------------------------------
 
         void Reset() noexcept
@@ -145,11 +173,23 @@ namespace ReplayEngine::Project
             default_character_prefab_guid_.clear();
             startup_scene_guid_.clear();
             scene_flow_guid_.clear();
+            localization_table_guid_.clear();
+            default_language_ = "ja";
+            focus_outline_enabled_ = true;
+            focus_outline_color_ = { 0.25f, 0.78f, 1.0f, 1.0f };
+            focus_outline_width_ = 2.0f;
+            focus_corner_radius_ = 4.0f;
         }
 
     private:
         std::string default_character_prefab_guid_;
         std::string startup_scene_guid_;
         std::string scene_flow_guid_;
+        std::string localization_table_guid_;
+        std::string default_language_{ "ja" };
+        bool focus_outline_enabled_ = true;
+        DirectX::XMFLOAT4 focus_outline_color_{ 0.25f, 0.78f, 1.0f, 1.0f };
+        float focus_outline_width_ = 2.0f;
+        float focus_corner_radius_ = 4.0f;
     };
 }

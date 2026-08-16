@@ -1,10 +1,11 @@
-#pragma once
+﻿#pragma once
 
 #include <d3d11.h>
 #include <wrl.h>
 
 #include <array>
 #include <cstdint>
+#include <chrono>
 
 namespace ReplayEngine::Rendering
 {
@@ -22,11 +23,31 @@ namespace ReplayEngine::Rendering
     class RenderStats final
     {
     public:
+        // CPU / GPU の同じ区間を対にして計測する。
+        // 既存描画へ分岐を増やさず、render() の大きな境界だけを測る。
+        enum class Phase : std::size_t
+        {
+            Scene3D = 0,
+            GameUI,
+            EditorUI,
+            Count
+        };
+        static constexpr std::size_t phase_count =
+            static_cast<std::size_t>(Phase::Count);
+
         struct CpuCounters
         {
             std::uint64_t draw_calls = 0;
             std::uint64_t triangles = 0;
             std::uint64_t vertices = 0;
+            std::uint64_t effect_passes = 0;
+            std::uint64_t render_target_acquires = 0;
+            std::uint64_t render_target_reuses = 0;
+            std::uint64_t render_target_creates = 0;
+            std::uint64_t render_target_binds = 0;
+            std::uint64_t state_set_calls = 0;
+            double frame_ms = 0.0;
+            std::array<double, phase_count> phase_ms{};
         };
 
         struct GpuCounters
@@ -38,6 +59,10 @@ namespace ReplayEngine::Rendering
             std::uint64_t pixel_shader_invocations = 0;
             std::uint64_t vertex_shader_invocations = 0;
             std::uint64_t compute_shader_invocations = 0;
+            double frame_ms = 0.0;
+            std::array<double, phase_count> phase_ms{};
+            std::array<bool, phase_count> phase_timing_valid{};
+            bool timing_valid = false;
             bool valid = false;
         };
 
@@ -48,6 +73,12 @@ namespace ReplayEngine::Rendering
         // 描画の最後(Present直前)に呼ぶ。GPUクエリを閉じ、揃った結果を回収する。
         void EndFrame(ID3D11DeviceContext* context);
 
+        // render() の大区間を CPU と GPU で同時に測る。Begin/End は入れ子にせず、
+        // 同じ Phase を 1 フレームに 1 回だけ使う。GPU が追いついていない場合も
+        // CPU 計測は継続し、GPU Query のために待たない。
+        void BeginPhase(Phase phase, ID3D11DeviceContext* context);
+        void EndPhase(Phase phase, ID3D11DeviceContext* context);
+
         // メッシュ側から呼ぶ。index_countは三角形リスト前提。
         void CountDrawIndexed(std::uint32_t index_count, std::uint32_t vertex_count = 0) noexcept
         {
@@ -55,6 +86,26 @@ namespace ReplayEngine::Rendering
             current_cpu_.draw_calls += 1;
             current_cpu_.triangles += index_count / 3;
             current_cpu_.vertices += vertex_count;
+        }
+
+        void CountEffectPass() noexcept
+        {
+            if (counting_enabled_) ++current_cpu_.effect_passes;
+        }
+        void CountRenderTargetAcquire(bool reused) noexcept
+        {
+            if (!counting_enabled_) return;
+            ++current_cpu_.render_target_acquires;
+            if (reused) ++current_cpu_.render_target_reuses;
+            else ++current_cpu_.render_target_creates;
+        }
+        void CountRenderTargetBind(std::uint64_t count = 1) noexcept
+        {
+            if (counting_enabled_) current_cpu_.render_target_binds += count;
+        }
+        void CountStateSet(std::uint64_t count = 1) noexcept
+        {
+            if (counting_enabled_) current_cpu_.state_set_calls += count;
         }
 
         // 影パスなど、統計に混ぜたくない描画の前後で false にする。
@@ -80,6 +131,17 @@ namespace ReplayEngine::Rendering
         static constexpr size_t kQueryCount = 3;
 
         std::array<Microsoft::WRL::ComPtr<ID3D11Query>, kQueryCount> queries_;
+        std::array<Microsoft::WRL::ComPtr<ID3D11Query>, kQueryCount> disjoint_queries_;
+        std::array<Microsoft::WRL::ComPtr<ID3D11Query>, kQueryCount> timestamp_begin_queries_;
+        std::array<Microsoft::WRL::ComPtr<ID3D11Query>, kQueryCount> timestamp_end_queries_;
+        std::array<std::array<Microsoft::WRL::ComPtr<ID3D11Query>, phase_count>,
+            kQueryCount> phase_timestamp_begin_queries_;
+        std::array<std::array<Microsoft::WRL::ComPtr<ID3D11Query>, phase_count>,
+            kQueryCount> phase_timestamp_end_queries_;
+        std::array<std::array<bool, phase_count>, kQueryCount> phase_recorded_{};
+        std::array<bool, phase_count> cpu_phase_open_{};
+        std::array<bool, phase_count> gpu_phase_open_{};
+        std::array<std::chrono::steady_clock::time_point, phase_count> cpu_phase_begin_{};
         std::array<bool, kQueryCount> query_pending_{};
         size_t write_index_ = 0;
         CpuCounters current_cpu_{};
@@ -88,6 +150,7 @@ namespace ReplayEngine::Rendering
         bool counting_enabled_ = true;
         bool initialized_ = false;
         bool frame_open_ = false;
+        std::chrono::steady_clock::time_point cpu_frame_begin_{};
     };
 
     // フレーム統計はレンダラー全体から触るためグローバルに1つ持つ。

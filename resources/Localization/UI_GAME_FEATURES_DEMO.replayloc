@@ -1,0 +1,16 @@
+REPLAY_LOCALIZATION 1
+LANGUAGE "ja"
+LANGUAGE "en"
+ENTRY "demo.caption" "ja" "言語切り替え：日本語"
+ENTRY "demo.caption" "en" "Language switch: English"
+ENTRY "demo.start" "ja" "はじめる"
+ENTRY "demo.start" "en" "START"
+ENTRY "demo.continue" "ja" "つづきから"
+ENTRY "demo.continue" "en" "CONTINUE"
+ENTRY "demo.japanese" "ja" "日本語"
+ENTRY "demo.japanese" "en" "JAPANESE"
+ENTRY "demo.english" "ja" "英語"
+ENTRY "demo.english" "en" "ENGLISH"
+ENTRY "demo.screen_toggle" "ja" "画面エフェクト ON / OFF"
+ENTRY "demo.screen_toggle" "en" "SCREEN EFFECT ON / OFF"
+END_LOCALIZATION
