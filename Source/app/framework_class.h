@@ -96,6 +96,7 @@
 
 // Runtime World の所有と診断で使う。
 // 推移的な include に頼ると、上流のヘッダーを整理した瞬間に壊れる。
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -691,6 +692,12 @@ public:
         profile_benchmark_export_attempted = false;
         profile_benchmark_export_ok = false;
         profile_benchmark_gpu_drain_timeout = false;
+        profile_benchmark_scene_ready = false;
+        profile_benchmark_startup_failed = false;
+        profile_benchmark_max_draw_calls = 0;
+        profile_benchmark_max_objects = 0;
+        profile_benchmark_max_components = 0;
+        profile_benchmark_startup_begin = std::chrono::steady_clock::now();
 
         // ベンチ自体が測定対象へ混ざらないよう、Runtime専用経路へ固定する。
         // configure_standalone_game() は呼ばないため Saved/Profile はProject側のまま。
@@ -815,14 +822,26 @@ public:
             if (profile_benchmark_mode)
             {
                 frame_delta_time = 1.0f / 60.0f;
-                const std::uint64_t capture_begin =
-                    static_cast<std::uint64_t>(profile_benchmark_warmup_frames);
-                const std::uint64_t capture_end = capture_begin +
-                    static_cast<std::uint64_t>(profile_benchmark_frames);
-                const std::uint64_t frame_index =
-                    static_cast<std::uint64_t>(profile_benchmark_frame_index);
-                ReplayEngine::Rendering::Stats().SetPaused(
-                    frame_index < capture_begin || frame_index >= capture_end);
+
+                // Startup Scene が Runtime World へ入れ替わる前は、warmup / capture の
+                // フレーム数へ絶対に数えない。BootLogo / LoadingScene は排他 Scene なので、
+                // この間 update() は SceneFlow まで到達しない。旧実装はここから 300 frame を
+                // 消費できたため、空 World のまま benchmark が完走していた。
+                if (!profile_benchmark_scene_ready)
+                {
+                    ReplayEngine::Rendering::Stats().SetPaused(true);
+                }
+                else
+                {
+                    const std::uint64_t capture_begin =
+                        static_cast<std::uint64_t>(profile_benchmark_warmup_frames);
+                    const std::uint64_t capture_end = capture_begin +
+                        static_cast<std::uint64_t>(profile_benchmark_frames);
+                    const std::uint64_t frame_index =
+                        static_cast<std::uint64_t>(profile_benchmark_frame_index);
+                    ReplayEngine::Rendering::Stats().SetPaused(
+                        frame_index < capture_begin || frame_index >= capture_end);
+                }
             }
 
             // 描画中の未捕捉例外で静かに落ちると原因が追えないため、
@@ -834,51 +853,158 @@ public:
 
                 if (profile_benchmark_mode && !profile_benchmark_export_attempted)
                 {
-                    ++profile_benchmark_frame_index;
-                    const std::uint64_t capture_end =
-                        static_cast<std::uint64_t>(profile_benchmark_warmup_frames) +
-                        static_cast<std::uint64_t>(profile_benchmark_frames);
-                    if (static_cast<std::uint64_t>(profile_benchmark_frame_index) >=
-                        capture_end)
+                    if (!profile_benchmark_scene_ready)
                     {
-                        // paused frame でも BeginFrame/EndFrame は DONOTFLUSH の
-                        // Query 回収だけを進める。GPU を待って CPU をブロックしない。
-                        const std::size_t pending =
-                            ReplayEngine::Rendering::Stats().PendingGpuFrames();
-                        constexpr std::uint32_t max_gpu_drain_frames = 120u;
-                        if (pending == 0 ||
-                            profile_benchmark_drain_frames >= max_gpu_drain_frames)
+                        const bool startup_failed = object_runtime_blocked ||
+                            object_runtime_scenes.State() ==
+                                ReplayEngine::Runtime::SceneLoadState::Failed ||
+                            (object_scene_flow != nullptr &&
+                                object_scene_flow->StartupState() ==
+                                    ReplayEngine::Runtime::StartupSceneState::Failed);
+
+                        const bool scene_manager_ready =
+                            !scene_manager.IsExclusive() && game_scene != nullptr;
+                        const bool runtime_world_ready = object_runtime_world_active &&
+                            object_runtime_scenes.State() ==
+                                ReplayEngine::Runtime::SceneLoadState::Completed &&
+                            !object_runtime_scenes.IsBusy();
+
+                        bool loaded_scene_has_objects = false;
+                        if (runtime_world_ready)
                         {
-                            profile_benchmark_gpu_drain_timeout = pending != 0;
-                            profile_benchmark_export_attempted = true;
-                            profile_benchmark_export_ok =
-                                ReplayEngine::Rendering::Stats().ExportCsvAndTrace(
-                                    profile_benchmark_output_name);
-                            if (profile_benchmark_gpu_drain_timeout)
-                            {
-                                log_shutdown_reason(
-                                    "Profiler benchmark: GPU query drain timeout");
-                                profile_benchmark_export_ok = false;
-                            }
-                            else if (!profile_benchmark_export_ok)
-                            {
-                                log_shutdown_reason(
-                                    "Profiler benchmark: CSV/Trace export failed");
-                            }
-                            else
-                            {
-                                log_shutdown_reason(
-                                    "Profiler benchmark: CSV/Trace export completed");
-                            }
-                            // 未保存確認は応答する人がいないため、ここを通ると
-                            // ダイアログが出たまま永久に終了できない。
-                            // 自動計測は確定済みとして扱い、確認を飛ばす。
-                            object_exit_confirmed = true;
-                            PostMessage(hwnd, WM_CLOSE, 0, 0);
+                            loaded_scene_has_objects =
+                                active_object_scene().GameObjectCount() > 0;
+                        }
+
+                        if (!startup_failed && scene_manager_ready &&
+                            runtime_world_ready && loaded_scene_has_objects)
+                        {
+                            // この判定は render() の後。つまりこのフレームで既に
+                            // Runtime World + Runtime Camera の通常描画経路を 1 回通っている。
+                            // 次フレームから warmup を数え始める。
+                            profile_benchmark_scene_ready = true;
+                            profile_benchmark_frame_index = 0;
+                            profile_benchmark_drain_frames = 0;
+                            ReplayEngine::Rendering::Stats().SetPaused(true);
+                            log_shutdown_reason(
+                                "Profiler benchmark: Startup Scene ready; warmup begins next frame");
                         }
                         else
                         {
-                            ++profile_benchmark_drain_frames;
+                            const double startup_seconds =
+                                std::chrono::duration<double>(
+                                    std::chrono::steady_clock::now() -
+                                    profile_benchmark_startup_begin).count();
+                            constexpr double startup_timeout_seconds = 120.0;
+
+                            if (!startup_failed && runtime_world_ready &&
+                                !loaded_scene_has_objects)
+                            {
+                                profile_benchmark_startup_failed = true;
+                                log_shutdown_reason(
+                                    "Profiler benchmark: Startup Scene loaded but contains 0 GameObjects");
+                            }
+                            else if (startup_failed)
+                            {
+                                profile_benchmark_startup_failed = true;
+                                log_shutdown_reason(
+                                    "Profiler benchmark: Startup Scene load failed");
+                            }
+                            else if (startup_seconds >= startup_timeout_seconds)
+                            {
+                                profile_benchmark_startup_failed = true;
+                                log_shutdown_reason(
+                                    "Profiler benchmark: Startup Scene load timed out");
+                            }
+
+                            if (profile_benchmark_startup_failed)
+                            {
+                                profile_benchmark_export_attempted = true;
+                                profile_benchmark_export_ok = false;
+                                object_exit_confirmed = true;
+                                PostMessage(hwnd, WM_CLOSE, 0, 0);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        const std::uint64_t capture_begin =
+                            static_cast<std::uint64_t>(profile_benchmark_warmup_frames);
+                        const std::uint64_t capture_end = capture_begin +
+                            static_cast<std::uint64_t>(profile_benchmark_frames);
+                        const std::uint64_t frame_index =
+                            static_cast<std::uint64_t>(profile_benchmark_frame_index);
+
+                        // EndFrame 済みなので、このフレームの実測をここで検証できる。
+                        // warmup は集計せず、本計測区間だけ最大値を保持する。
+                        if (frame_index >= capture_begin && frame_index < capture_end)
+                        {
+                            const auto& sample =
+                                ReplayEngine::Rendering::Stats().LatestSample();
+                            profile_benchmark_max_draw_calls = (std::max)(
+                                profile_benchmark_max_draw_calls, sample.cpu.draw_calls);
+                            profile_benchmark_max_objects = (std::max)(
+                                profile_benchmark_max_objects, sample.scene.object_count);
+                            profile_benchmark_max_components = (std::max)(
+                                profile_benchmark_max_components, sample.scene.component_count);
+                        }
+
+                        ++profile_benchmark_frame_index;
+                        if (static_cast<std::uint64_t>(profile_benchmark_frame_index) >=
+                            capture_end)
+                        {
+                            // paused frame でも BeginFrame/EndFrame は DONOTFLUSH の
+                            // Query 回収だけを進める。GPU を待って CPU をブロックしない。
+                            const std::size_t pending =
+                                ReplayEngine::Rendering::Stats().PendingGpuFrames();
+                            constexpr std::uint32_t max_gpu_drain_frames = 120u;
+                            if (pending == 0 ||
+                                profile_benchmark_drain_frames >= max_gpu_drain_frames)
+                            {
+                                profile_benchmark_gpu_drain_timeout = pending != 0;
+                                profile_benchmark_export_attempted = true;
+                                profile_benchmark_export_ok =
+                                    ReplayEngine::Rendering::Stats().ExportCsvAndTrace(
+                                        profile_benchmark_output_name);
+
+                                // 起動 Scene を測ったつもりで空 World の CSV を成功扱いにしない。
+                                // Export 自体は残すので、失敗時も外部から中身を診断できる。
+                                const bool benchmark_scene_rendered =
+                                    profile_benchmark_max_objects > 0 &&
+                                    profile_benchmark_max_components > 0 &&
+                                    profile_benchmark_max_draw_calls > 0;
+                                if (!benchmark_scene_rendered)
+                                {
+                                    log_shutdown_reason(
+                                        "Profiler benchmark: measured Scene produced 0 objects/components/draw calls");
+                                    profile_benchmark_export_ok = false;
+                                }
+                                if (profile_benchmark_gpu_drain_timeout)
+                                {
+                                    log_shutdown_reason(
+                                        "Profiler benchmark: GPU query drain timeout");
+                                    profile_benchmark_export_ok = false;
+                                }
+                                else if (!profile_benchmark_export_ok)
+                                {
+                                    log_shutdown_reason(
+                                        "Profiler benchmark: CSV/Trace export or Scene validation failed");
+                                }
+                                else
+                                {
+                                    log_shutdown_reason(
+                                        "Profiler benchmark: CSV/Trace export completed");
+                                }
+                                // 未保存確認は応答する人がいないため、ここを通ると
+                                // ダイアログが出たまま永久に終了できない。
+                                // 自動計測は確定済みとして扱い、確認を飛ばす。
+                                object_exit_confirmed = true;
+                                PostMessage(hwnd, WM_CLOSE, 0, 0);
+                            }
+                            else
+                            {
+                                ++profile_benchmark_drain_frames;
+                            }
                         }
                     }
                 }
@@ -1626,6 +1752,12 @@ private:
     bool profile_benchmark_export_attempted{ false };
     bool profile_benchmark_export_ok{ false };
     bool profile_benchmark_gpu_drain_timeout{ false };
+    bool profile_benchmark_scene_ready{ false };
+    bool profile_benchmark_startup_failed{ false };
+    std::uint64_t profile_benchmark_max_draw_calls{ 0 };
+    std::uint64_t profile_benchmark_max_objects{ 0 };
+    std::uint64_t profile_benchmark_max_components{ 0 };
+    std::chrono::steady_clock::time_point profile_benchmark_startup_begin{};
     float shader_composer_time{ 0.0f }; // elapsed_time が 0 の Golden Capture 中は進めない
     uint32_t frames{ 0 };
     float elapsed_time{ 0.0f };

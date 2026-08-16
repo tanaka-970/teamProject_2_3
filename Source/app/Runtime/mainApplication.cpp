@@ -99,15 +99,15 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
     const ExecutableLayout executable_layout = ResolveExecutableLayout();
     if (!executable_layout.content_root.empty())
         SetCurrentDirectoryW(executable_layout.content_root.wstring().c_str());
+    std::filesystem::path resolved_profile_scene_path;
     if (profile_benchmark.requested)
     {
-        const std::filesystem::path profile_scene_path =
-            profile_benchmark.scene.is_absolute()
-            ? profile_benchmark.scene
-            : (executable_layout.content_root / profile_benchmark.scene);
+        resolved_profile_scene_path = profile_benchmark.scene.is_absolute()
+            ? profile_benchmark.scene.lexically_normal()
+            : (executable_layout.content_root / profile_benchmark.scene).lexically_normal();
         std::error_code profile_scene_error;
-        if (!std::filesystem::is_regular_file(profile_scene_path, profile_scene_error) ||
-            profile_scene_error)
+        if (!std::filesystem::is_regular_file(
+            resolved_profile_scene_path, profile_scene_error) || profile_scene_error)
         {
             std::fprintf(stderr, "Profiler benchmark scene not found: %s\n",
                 profile_benchmark.scene.u8string().c_str());
@@ -185,7 +185,9 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
         }
         if (profile_benchmark.requested)
         {
-            application.set_startup_scene_path(profile_benchmark.scene);
+            // 検証に使ったのと同じ絶対パスを Startup Scene へ渡す。
+            // CWD / AssetDatabase の相対パス表現に benchmark の正否を依存させない。
+            application.set_startup_scene_path(resolved_profile_scene_path);
             application.configure_profile_benchmark(profile_benchmark.frames,
                 profile_benchmark.warmup_frames, profile_benchmark.output_name);
         }
