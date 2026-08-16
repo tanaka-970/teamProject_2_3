@@ -121,7 +121,8 @@ namespace ReplayEngine::Core::Detail
         {
             ComponentRegistry::Register<AudioSourceComponent>(
                 ComponentTypeInfo::Describe("Audio Source", "Audio")
-                    .WithTooltip("PCM .wav を直接パス指定で再生する。"));
+                    .WithTooltip("PCM .wav を直接パス指定で再生する。")
+                    .AllowMultipleInstances());
 
             PropertyRegistry::Register<AudioSourceComponent>(
                 MakeProperty("clip_path", &AudioSourceComponent::clip_path)

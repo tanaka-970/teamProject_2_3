@@ -36,6 +36,17 @@ void framework::draw_project_settings_panel()
 {
 #ifdef USE_IMGUI
     if (!ImGui::CollapsingHeader("プロジェクト設定")) return;
+    if (!object_editor_context.CanEdit())
+    {
+        ImGui::TextDisabled("Play 中はプロジェクト設定を編集できません");
+        draw_runtime_diagnostics_panel();
+        return;
+    }
+
+    // ProjectSettings は Scene 外ファイルなので SceneEditHistory では復元できない。
+    // snapshot は「実際に save する直前」に save_project_settings() が開始する。
+    // パネルを開いているだけで毎フレーム disk read しない。
+    project_settings_file_undo_enabled = object_editor_context.CanEdit();
 
     ImGui::Indent();
 
@@ -274,6 +285,52 @@ void framework::draw_project_settings_panel()
     }
 
     ImGui::Separator();
+    ImGui::TextUnformatted("Input Action Asset");
+    const ReplayEngine::Assets::AssetRecord* input_record =
+        project_settings.InputActionAssetGuid().empty() ? nullptr :
+        asset_database.FindByGuid(project_settings.InputActionAssetGuid());
+    const bool input_missing = !project_settings.InputActionAssetGuid().empty() &&
+        (input_record == nullptr || input_record->kind != ReplayEngine::Assets::AssetKind::InputAction);
+    const std::string input_preview = input_missing
+        ? std::string("[ Missing Input Action Asset ]")
+        : (input_record != nullptr
+            ? (input_record->display_name.empty()
+                ? input_record->source_path.filename().u8string()
+                : input_record->display_name)
+            : std::string("（ハードコード既定値）"));
+    ImGui::SetNextItemWidth(-1.0f);
+    if (ImGui::BeginCombo("##InputActionAsset", input_preview.c_str()))
+    {
+        if (ImGui::Selectable("（ハードコード既定値）",
+            project_settings.InputActionAssetGuid().empty()))
+        {
+            project_settings.ClearInputActionAsset();
+            save_project_settings();
+            load_active_input_action_asset();
+        }
+        for (const auto& record : asset_database.Records())
+        {
+            if (record.kind != ReplayEngine::Assets::AssetKind::InputAction) continue;
+            const bool selected = record.guid == project_settings.InputActionAssetGuid();
+            const std::string label = record.display_name.empty()
+                ? record.source_path.filename().u8string() : record.display_name;
+            if (ImGui::Selectable(label.c_str(), selected))
+            {
+                project_settings.SetInputActionAssetGuid(record.guid);
+                save_project_settings();
+                load_active_input_action_asset();
+            }
+            if (selected) ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+    if (input_missing)
+        ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.35f, 1.0f),
+            "Input Asset が見つからないため、現在のハードコード既定値へフォールバックします。");
+    else
+        ImGui::TextDisabled("Asset が無い/壊れている場合も ResetDefaultBindings() へ安全に戻ります。");
+
+    ImGui::Separator();
     ImGui::TextUnformatted("Localization");
     const ReplayEngine::Assets::AssetRecord* localization_record =
         project_settings.LocalizationTableGuid().empty() ? nullptr :
@@ -349,6 +406,15 @@ void framework::draw_project_settings_panel()
 
     // Runtime の読み取り専用診断。Runtime 側から Editor は一切参照しない。
     draw_runtime_diagnostics_panel();
+
+    if (external_file_history.InTransaction() &&
+        !ImGui::IsAnyItemActive())
+    {
+        std::string undo_error;
+        external_file_history.Commit(undo_error);
+        if (!undo_error.empty()) project_settings_status = undo_error;
+    }
+    project_settings_file_undo_enabled = false;
 #endif
 }
 

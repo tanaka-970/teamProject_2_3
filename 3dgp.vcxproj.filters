@@ -981,6 +981,9 @@
     <ClCompile Include="RePlayEngine\Editor\Commands\SceneEditHistory.cpp">
       <Filter>RePlayEngine\Editor\Commands</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\Commands\FileEditHistory.cpp">
+      <Filter>RePlayEngine\Editor\Commands</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Editor\Commands\MotionEditHistory.cpp">
       <Filter>RePlayEngine\Editor\Commands</Filter>
     </ClCompile>
@@ -1749,6 +1752,9 @@
       <Filter>RePlayEngine\Editor\Selection</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Editor\Commands\SceneEditHistory.h">
+      <Filter>RePlayEngine\Editor\Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\Commands\FileEditHistory.h">
       <Filter>RePlayEngine\Editor\Commands</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Editor\Commands\MotionEditHistory.h">

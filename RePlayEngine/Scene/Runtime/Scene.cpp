@@ -1,4 +1,4 @@
-#include "Scene.h"
+﻿#include "Scene.h"
 
 #include "../../Object/Registry/ComponentRegistry.h"
 #include "../../Components/Core/PersistentComponent.h"
@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <iterator>
 #include <unordered_set>
 #include <windows.h>
 
@@ -393,6 +394,64 @@ namespace ReplayEngine::Scene
             if (object && object->Parent() == nullptr) roots.push_back(object.get());
         }
         return roots;
+    }
+
+    std::size_t Scene::RootSiblingIndex(const GameObject* object) const noexcept
+    {
+        if (object == nullptr || object->GetScene() != this || object->Parent() != nullptr)
+            return 0u;
+        std::size_t root_index = 0u;
+        for (const auto& candidate : objects_)
+        {
+            if (!candidate || candidate->Parent() != nullptr) continue;
+            if (candidate.get() == object) return root_index;
+            ++root_index;
+        }
+        return root_index;
+    }
+
+    bool Scene::SetRootSiblingIndex(GameObject* object, std::size_t index) noexcept
+    {
+        if (object == nullptr || object->GetScene() != this || object->Parent() != nullptr)
+            return false;
+
+        auto object_it = std::find_if(objects_.begin(), objects_.end(),
+            [object](const std::unique_ptr<GameObject>& value) { return value.get() == object; });
+        if (object_it == objects_.end()) return false;
+
+        std::vector<GameObject*> roots = RootGameObjects();
+        if (roots.empty()) return false;
+        const std::size_t old_index = RootSiblingIndex(object);
+        // index == root_count は「末尾へ」。移動元を抜くと後ろ側は 1 つ詰まる。
+        index = (std::min)(index, roots.size());
+        if (index > old_index) --index;
+        if (old_index == index) return true;
+
+        // root のみの順番を変え、非 root の所有位置は維持する。
+        // unique_ptr を move しても GameObject 実体のアドレスは変わらない。
+        std::unique_ptr<GameObject> moving = std::move(*object_it);
+        objects_.erase(object_it);
+
+        roots.erase(roots.begin() + static_cast<std::ptrdiff_t>(old_index));
+        GameObject* before = index < roots.size() ? roots[index] : nullptr;
+        if (before != nullptr)
+        {
+            auto before_it = std::find_if(objects_.begin(), objects_.end(),
+                [before](const std::unique_ptr<GameObject>& value) { return value.get() == before; });
+            objects_.insert(before_it, std::move(moving));
+        }
+        else
+        {
+            // 最後の root の直後へ置く。末尾に非 root があっても hierarchy root 順だけを変える。
+            auto insert_it = objects_.end();
+            for (auto it = objects_.begin(); it != objects_.end(); ++it)
+            {
+                if (*it && (*it)->Parent() == nullptr) insert_it = std::next(it);
+            }
+            objects_.insert(insert_it, std::move(moving));
+        }
+        BumpStructureGeneration();
+        return true;
     }
 
     void Scene::Start()

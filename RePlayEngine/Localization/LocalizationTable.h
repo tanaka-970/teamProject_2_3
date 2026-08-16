@@ -25,6 +25,8 @@ namespace ReplayEngine::Localization
 
         void SetLanguages(std::vector<std::string> languages);
         void Set(const std::string& key, const std::string& language, std::string value);
+        bool RemoveKey(const std::string& key) noexcept;
+        bool RemoveLanguage(const std::string& language) noexcept;
 
     private:
         std::vector<std::string> languages_;

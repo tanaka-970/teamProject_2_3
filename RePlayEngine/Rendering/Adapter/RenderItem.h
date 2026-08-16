@@ -80,6 +80,10 @@ namespace ReplayEngine::Rendering
         bool cast_shadow = true;
         bool receive_shadow = true;
 
+        // Screen Effect Stack の layer mask 用。0..31。
+        // 名前やObjectIDとは独立した描画選別値で、既存Sceneの既定は0。
+        int rendering_layer = 0;
+
         // Material Assetから解決され、GBuffer材質定数へ渡す値。
         DirectX::XMFLOAT4 material_base_color{ 1.0f, 1.0f, 1.0f, 1.0f };
         float metallic = 0.0f;

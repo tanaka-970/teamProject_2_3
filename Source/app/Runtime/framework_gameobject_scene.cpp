@@ -30,6 +30,7 @@
 #include "../../RePlayEngine/Object/Registry/BuiltInComponents.h"
 #include "../../RePlayEngine/Project/ProjectSettingsSerializer.h"
 #include "../../RePlayEngine/Localization/LocalizationService.h"
+#include "../../RePlayEngine/Rendering/Effects/EffectPresetAsset.h"
 #include "../../RePlayEngine/Rendering/Adapter/SceneRenderCollector.h"
 #include "../../RePlayEngine/Motion/MotionBindingResolver.h"
 #include "../../RePlayEngine/Motion/MotionEvaluator.h"
@@ -91,6 +92,22 @@ void framework::initialize_object_scene()
     // プロジェクト設定。Scene より先に読む。
     // ただしここで Prefab を配置することはない。設定を持っているだけ。
     load_project_settings();
+
+    // Input の正本も ProjectSettings にぶら下がるため、設定を読み込んだ直後に適用する。
+    // Asset 未設定だけ旧 InputBindings.ini を移行用 fallback として読む。
+    if (!project_settings.InputActionAssetGuid().empty())
+    {
+        load_active_input_action_asset();
+    }
+    else
+    {
+        std::string input_bindings_error;
+        if (!game_input.LoadBindings(saved_path(std::filesystem::path("Editor") /
+            "InputBindings.ini"), input_bindings_error) && !input_bindings_error.empty())
+        {
+            push_editor_log("Warning", "InputBindings legacy: " + input_bindings_error);
+        }
+    }
 
     object_scene.SetName(u8"新しいシーン");
     object_editor_context.AttachScene(&object_scene);
@@ -209,8 +226,21 @@ bool framework::save_project_settings()
 
     std::string error;
     const auto path = Project::ProjectSettingsSerializer::DefaultPath();
+    bool started_file_undo = false;
+    if (project_settings_file_undo_enabled && object_editor_context.CanEdit() &&
+        !external_file_history.InTransaction())
+    {
+        started_file_undo = external_file_history.Begin(path,
+            "Project Settings を変更", error);
+        if (!started_file_undo && !error.empty())
+        {
+            project_settings_status = error;
+            return false;
+        }
+    }
     if (!Project::ProjectSettingsSerializer::SaveToFile(project_settings, path, error))
     {
+        if (started_file_undo) external_file_history.Cancel();
         project_settings_status = "プロジェクト設定の保存に失敗しました: " + error;
         return false;
     }
@@ -219,6 +249,83 @@ bool framework::save_project_settings()
         &asset_database, project_settings.LocalizationTableGuid(),
         project_settings.DefaultLanguage());
     return true;
+}
+
+bool framework::undo_external_file_edit()
+{
+    std::filesystem::path restored;
+    std::string label;
+    std::string error;
+    if (!external_file_history.Undo(restored, label, error))
+    {
+        if (!error.empty()) project_browser_status = error;
+        return false;
+    }
+    reload_external_file_edit_target(restored);
+    project_browser_status = "Undo: " + label;
+    return true;
+}
+
+bool framework::redo_external_file_edit()
+{
+    std::filesystem::path restored;
+    std::string label;
+    std::string error;
+    if (!external_file_history.Redo(restored, label, error))
+    {
+        if (!error.empty()) project_browser_status = error;
+        return false;
+    }
+    reload_external_file_edit_target(restored);
+    project_browser_status = "Redo: " + label;
+    return true;
+}
+
+void framework::reload_external_file_edit_target(const std::filesystem::path& restored)
+{
+    ++external_file_reload_generation;
+    std::error_code error;
+    const auto normalize = [&](const std::filesystem::path& path)
+    {
+        auto absolute = path.is_absolute() ? path : std::filesystem::absolute(path, error);
+        if (error) { error.clear(); absolute = path; }
+        const auto canonical = std::filesystem::weakly_canonical(absolute, error);
+        if (error) { error.clear(); return absolute.lexically_normal(); }
+        return canonical.lexically_normal();
+    };
+
+    const std::filesystem::path target = normalize(restored);
+    const std::filesystem::path settings_path =
+        normalize(ReplayEngine::Project::ProjectSettingsSerializer::DefaultPath());
+    if (target == settings_path)
+    {
+        load_project_settings();
+        load_active_input_action_asset();
+        sync_runtime_scene_flow_asset();
+        return;
+    }
+
+    for (const auto& record : asset_database.Records())
+    {
+        if (normalize(content_path(record.source_path)) != target) continue;
+        if (record.kind == ReplayEngine::Assets::AssetKind::EffectPreset)
+        {
+            ReplayEngine::Rendering::Effects::EffectPresetAsset::Invalidate(record.guid);
+        }
+        else if (record.kind == ReplayEngine::Assets::AssetKind::Localization)
+        {
+            auto& localization = ReplayEngine::Localization::LocalizationService::Global();
+            const std::string guid = project_settings.LocalizationTableGuid();
+            localization.SetTableGuid("");
+            localization.Configure(&asset_database, guid, project_settings.DefaultLanguage());
+        }
+        else if (record.kind == ReplayEngine::Assets::AssetKind::InputAction &&
+            record.guid == project_settings.InputActionAssetGuid())
+        {
+            load_active_input_action_asset();
+        }
+        break;
+    }
 }
 
 ReplayEngine::Project::PrefabReferenceStatus

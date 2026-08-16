@@ -7,6 +7,7 @@
 
 #include <DirectXMath.h>
 
+#include <cstdint>
 #include <vector>
 
 namespace ReplayEngine::Assets { class AssetDatabase; }
@@ -55,6 +56,18 @@ namespace ReplayEngine::Components
 
         // 既定は PostProcess 後。UI 描画より前に適用される。
         int apply_stage = AfterPostProcess;
+
+        enum TargetMode : int
+        {
+            WholeScreen = 0,
+            BackgroundOnly = 1,
+            RenderingLayerMask = 2,
+        };
+
+        // 既定値0は従来の画面全体。既存Sceneの見た目を変えない。
+        int target_mode = WholeScreen;
+        // RenderingLayerMask 時だけ使用。bit N が Rendering Layer N。
+        int target_rendering_layer = 0;
 
     private:
         void ResizeEffects();

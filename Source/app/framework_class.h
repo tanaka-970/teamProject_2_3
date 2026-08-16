@@ -76,6 +76,7 @@
 #include "../../RePlayEngine/Runtime/Scene/SceneFlowService.h"
 #include "../../RePlayEngine/Editor/Core/EditorContext.h"
 #include "../../RePlayEngine/Editor/Commands/MotionEditHistory.h"
+#include "../../RePlayEngine/Editor/Commands/FileEditHistory.h"
 #include "../../RePlayEngine/Editor/Hierarchy/HierarchyPanel.h"
 #include "../../RePlayEngine/Editor/Inspector/InspectorPanel.h"
 #include "../../RePlayEngine/Rendering/Adapter/RenderItem.h"
@@ -1140,8 +1141,21 @@ public:
                 }
                 else
                 {
-                    if (wparam == 'Z') object_editor_context.Undo();
-                    else object_editor_context.Redo();
+                    const bool external_context =
+                        selected_editor_object == editor_selection::asset ||
+                        selected_editor_object == editor_selection::world;
+                    bool handled = false;
+                    if (external_context)
+                    {
+                        handled = (wparam == 'Z')
+                            ? undo_external_file_edit()
+                            : redo_external_file_edit();
+                    }
+                    if (!handled)
+                    {
+                        if (wparam == 'Z') object_editor_context.Undo();
+                        else object_editor_context.Redo();
+                    }
                 }
                 return 0;
             }
@@ -1176,11 +1190,19 @@ public:
                 return 0;
             }
             if (msg == WM_KEYDOWN && wparam == VK_DELETE &&
-                !ImGui::GetIO().WantTextInput && !runtime_ui_text_owner &&
-                selected_editor_object == editor_selection::game_object)
+                !ImGui::GetIO().WantTextInput && !runtime_ui_text_owner)
             {
-                object_hierarchy_panel.DestroySelection(object_editor_context);
-                return 0;
+                if (selected_editor_object == editor_selection::asset &&
+                    !project_selected_entry_path.empty())
+                {
+                    project_request_delete(project_selected_entry_path);
+                    return 0;
+                }
+                if (selected_editor_object == editor_selection::game_object)
+                {
+                    object_hierarchy_panel.DestroySelection(object_editor_context);
+                    return 0;
+                }
             }
             if (msg == WM_KEYDOWN && wparam == 'F' && !runtime_ui_text_owner &&
                 (GetKeyState(VK_CONTROL) & 0x8000))
@@ -1289,7 +1311,11 @@ public:
             const bool control_down = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
             if (editor_mode && !control_down)
             {
-                object_hierarchy_panel.BeginRenameSelection(object_editor_context);
+                if (selected_editor_object == editor_selection::asset &&
+                    !project_selected_entry_path.empty())
+                    project_begin_rename_selected();
+                else
+                    object_hierarchy_panel.BeginRenameSelection(object_editor_context);
                 return 0;
             }
 #endif
@@ -1535,7 +1561,8 @@ private:
     void draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shader,
         bool gbuffer_pass, bool depth_only = false,
         ReplayEngine::Core::ObjectID only_owner = ReplayEngine::Core::ObjectID::Invalid(),
-        bool skip_model_effect_owners = false);
+        bool skip_model_effect_owners = false,
+        std::uint32_t rendering_layer_mask = 0xFFFFFFFFu);
     ID3D11ShaderResourceView* resolve_scene_effect_texture(const std::string& asset_guid);
     ReplayEngine::UI::UIRenderTarget* apply_scene_effect_chain(
         ID3D11ShaderResourceView* source,
@@ -1580,6 +1607,9 @@ private:
     // --- プロジェクト設定 --------------------------------------------------
     void load_project_settings();
     bool save_project_settings();
+    bool undo_external_file_edit();
+    bool redo_external_file_edit();
+    void reload_external_file_edit_target(const std::filesystem::path& path);
     void draw_project_settings_panel();
 
     // 「新しいシーンを作成」ボタンと Empty / Default の選択ダイアログ。
@@ -1693,12 +1723,18 @@ private:
     bool project_create_scene_flow(const std::string& name);
     bool project_create_localization(const std::string& name);
     bool project_create_effect_preset(const std::string& name);
+    bool project_create_input_action_asset(const std::string& name);
+    bool load_active_input_action_asset();
     bool project_create_surface_shader(const std::string& name);
     bool project_create_layer_shader(const std::string& name);
     bool project_create_shader_composer(const std::string& name,
         ReplayEngine::Rendering::ShaderDomain domain);
     bool project_rename_entry(const std::filesystem::path& path,
         const std::string& new_name);
+    void project_request_delete(const std::filesystem::path& path);
+    void draw_project_delete_popup();
+    bool project_delete_confirmed();
+    void project_begin_rename_selected();
     ID3D11ShaderResourceView* project_thumbnail_for(
         const std::filesystem::path& path);
     ReplayEngine::Assets::AssetKind project_kind_for(
@@ -1801,7 +1837,9 @@ private:
         directional_light,
         point_lights,
         rendering,
-        post_process
+        post_process,
+        // Project Browser の file/folder。末尾追加で既存 enum 値を変えない。
+        asset
     };
     enum class editor_workspace
     {
@@ -1863,6 +1901,9 @@ private:
     ReplayEngine::Motion::MotionAsset motion_editor_asset;
     ReplayEngine::Motion::CompositionAsset motion_editor_composition;
     ReplayEngine::Editor::MotionEditHistory motion_edit_history;
+    ReplayEngine::Editor::FileEditHistory external_file_history;
+    std::uint64_t external_file_reload_generation{ 0 };
+    bool project_settings_file_undo_enabled{ false };
     std::filesystem::path motion_editor_path;
     std::string motion_editor_guid;
     std::string motion_editor_status{ "Motion Asset が未選択です" };
@@ -1900,6 +1941,18 @@ private:
     ReplayEngine::Core::ObjectID ui_preview_drag_object;
     ImVec2 ui_preview_drag_start_mouse{ 0.0f, 0.0f };
     DirectX::XMFLOAT2 ui_preview_drag_start_position{ 0.0f, 0.0f };
+
+    // Canvas Preview Rect Tool。ハンドルを押しただけでは履歴を作らず、
+    // 実際に drag threshold を越えた瞬間だけ BeginEdit する。
+    // これにより 1 drag = 1 Undo を維持する。
+    bool ui_preview_resize_candidate{ false };
+    bool ui_preview_resizing{ false };
+    int ui_preview_resize_handle{ -1 };
+    ReplayEngine::Core::ObjectID ui_preview_resize_object;
+    ImVec2 ui_preview_resize_start_mouse{ 0.0f, 0.0f };
+    DirectX::XMFLOAT4 ui_preview_resize_start_rect{ 0.0f, 0.0f, 0.0f, 0.0f };
+    DirectX::XMFLOAT4 ui_preview_resize_parent_rect{ 0.0f, 0.0f, 0.0f, 0.0f };
+    DirectX::XMFLOAT4X4 ui_preview_resize_start_matrix{};
     bool scene_view_hovered{ false };
     bool scene_view_focused{ false };
     ImVec2 scene_view_overlay_position{ 0.0f, 0.0f };
@@ -2048,6 +2101,11 @@ private:
     // 空文字列はルート自身を指す。
     std::filesystem::path project_current_folder;
     std::filesystem::path project_rename_target;
+    std::filesystem::path project_selected_entry_path;
+    std::filesystem::path project_delete_target;
+    std::vector<std::string> project_delete_references;
+    std::vector<std::string> project_delete_contents;
+    bool project_delete_popup_pending{ false };
     char project_rename_buffer[192]{};
     bool project_rename_focus_pending{ false };
     char project_new_item_name[128]{ "NewItem" };

@@ -156,6 +156,11 @@ namespace ReplayEngine::Project
             default_language_ = language.empty() ? std::string("ja") : std::move(language);
         }
 
+        // ---- Input Action Asset -------------------------------------------
+        const std::string& InputActionAssetGuid() const noexcept { return input_action_asset_guid_; }
+        void SetInputActionAssetGuid(std::string guid) { input_action_asset_guid_ = std::move(guid); }
+        void ClearInputActionAsset() noexcept { input_action_asset_guid_.clear(); }
+
         // ---- Runtime UI Focus Style ---------------------------------------
         bool FocusOutlineEnabled() const noexcept { return focus_outline_enabled_; }
         void SetFocusOutlineEnabled(bool value) noexcept { focus_outline_enabled_ = value; }
@@ -199,6 +204,7 @@ namespace ReplayEngine::Project
             startup_scene_guid_.clear();
             scene_flow_guid_.clear();
             localization_table_guid_.clear();
+            input_action_asset_guid_.clear();
             default_language_ = "ja";
             focus_outline_enabled_ = true;
             focus_outline_color_ = { 0.25f, 0.78f, 1.0f, 1.0f };
@@ -211,6 +217,7 @@ namespace ReplayEngine::Project
         std::string startup_scene_guid_;
         std::string scene_flow_guid_;
         std::string localization_table_guid_;
+        std::string input_action_asset_guid_;
         std::string default_language_{ "ja" };
         bool focus_outline_enabled_ = true;
         DirectX::XMFLOAT4 focus_outline_color_{ 0.25f, 0.78f, 1.0f, 1.0f };

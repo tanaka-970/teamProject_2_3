@@ -38,12 +38,8 @@ bool framework::initialize()
     if (!asset_database.Load(asset_database_error))
         object_editor_context.SetStatus("AssetDatabase: " + asset_database_error);
 
-    std::string input_bindings_error;
-    if (!game_input.LoadBindings(saved_path(std::filesystem::path("Editor") /
-        "InputBindings.ini"), input_bindings_error) && !input_bindings_error.empty())
-    {
-        push_editor_log("Warning", "InputBindings: " + input_bindings_error);
-    }
+    // Input Action Asset は ProjectSettings 読み込み後に initialize_object_scene() で適用する。
+    // ここではまだ project_settings が未読込なので参照しない。
 
     if (!object_audio_system.Initialize())
     {

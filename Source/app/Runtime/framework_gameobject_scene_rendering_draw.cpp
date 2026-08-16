@@ -269,13 +269,18 @@ ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
 
 void framework::draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shader,
     bool gbuffer_pass, bool depth_only, ReplayEngine::Core::ObjectID only_owner,
-    bool skip_model_effect_owners)
+    bool skip_model_effect_owners, std::uint32_t rendering_layer_mask)
 {
     if (object_render_items.Empty()) return;
 
     for (const ReplayEngine::Rendering::RenderItem& source_item : object_render_items.Items())
     {
         if (only_owner.Valid() && source_item.owner != only_owner) continue;
+        if (rendering_layer_mask != 0xFFFFFFFFu)
+        {
+            const int layer = (std::max)(0, (std::min)(31, source_item.rendering_layer));
+            if ((rendering_layer_mask & (1u << static_cast<unsigned int>(layer))) == 0u) continue;
+        }
         if (skip_model_effect_owners && !only_owner.Valid())
         {
             const ReplayEngine::Core::GameObject* owner =
@@ -337,7 +342,8 @@ void framework::draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shade
             else
             {
                 primitive->render(immediate_context.Get(), item.world, item.tint,
-                    static_forward_shader(item.shading_model));
+                    override_pixel_shader != nullptr ? override_pixel_shader :
+                        static_forward_shader(item.shading_model));
             }
 
             if (item.double_sided)
@@ -390,7 +396,8 @@ void framework::draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shade
             else
             {
                 gltf->render(immediate_context.Get(), item.world, item.legacy_tint,
-                    static_forward_shader(item.shading_model), false, false);
+                    override_pixel_shader != nullptr ? override_pixel_shader :
+                        static_forward_shader(item.shading_model), false, false);
             }
 
             if (item.double_sided)

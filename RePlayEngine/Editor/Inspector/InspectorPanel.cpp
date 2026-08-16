@@ -54,6 +54,24 @@ namespace ReplayEngine::Editor
             buffer[length] = '\0';
         }
 
+        bool HasSiblingNameDuplicate(const Scene::Scene& scene,
+            const GameObject& object, const std::string& name)
+        {
+            if (object.Parent() != nullptr)
+            {
+                for (const GameObject* sibling : object.Parent()->Children())
+                    if (sibling != nullptr && sibling != &object && sibling->Name() == name) return true;
+                return false;
+            }
+            for (std::size_t i = 0; i < scene.GameObjectCount(); ++i)
+            {
+                const GameObject* sibling = scene.GameObjectAt(i);
+                if (sibling != nullptr && sibling != &object && sibling->Parent() == nullptr &&
+                    sibling->Name() == name) return true;
+            }
+            return false;
+        }
+
     }
 
     void InspectorPanel::Draw(EditorContext& context)
@@ -196,6 +214,11 @@ namespace ReplayEngine::Editor
             context.BeginEdit("GameObject 名を変更");
             object.SetName(name_buffer_);
             context.CommitEdit();
+            if (Scene::Scene* scene = context.GetScene();
+                scene != nullptr && HasSiblingNameDuplicate(*scene, object, object.Name()))
+            {
+                context.SetStatus("同じ階層に同名 GameObject があります（参照は ObjectID なので維持されます）");
+            }
         }
 
         if (object.Parent() != nullptr)

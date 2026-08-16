@@ -39,7 +39,10 @@ namespace ReplayEngine::Assets
         Localization,
 
         // .replayeffect。UI / Model / Screen 共通 Effect Preset。必ず末尾。
-        EffectPreset
+        EffectPreset,
+
+        // .replayinput。Action / Binding のプロジェクト Asset。必ず末尾。
+        InputAction
     };
 
     struct AssetCacheEntry
