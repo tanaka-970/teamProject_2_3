@@ -240,7 +240,7 @@ public:
     bool enable_taa{ true };
     // 深度プリパス。G-BufferのPS実行を最前面の1回に抑える。
     // 頂点処理が2回になるため、LODと併用する前提。
-    bool enable_depth_prepass{ true };
+    bool enable_depth_prepass{ false };
     // 描画統計オーバーレイの表示。F4で切り替える。
     bool show_render_stats{ true };
     // 初回フレームだけ統計ウィンドウの位置を強制するためのフラグ。
