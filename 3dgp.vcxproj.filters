@@ -1331,6 +1331,72 @@
     <ClInclude Include="Source\app\framework_application.h">
       <Filter>Source\App</Filter>
     </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Rendering\EffectStackComponentCommonPart1.inl">
+      <Filter>ソース ファイル\RePlayEngine\Components\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Rendering\EffectStackComponentCommonPart2.inl">
+      <Filter>ソース ファイル\RePlayEngine\Components\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Rendering\EffectStackComponentCommonPart3.inl">
+      <Filter>ソース ファイル\RePlayEngine\Components\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Rendering\EffectStackComponentCommonPart4.inl">
+      <Filter>ソース ファイル\RePlayEngine\Components\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Rendering\EffectStackComponentCommon.inl">
+      <Filter>ソース ファイル\RePlayEngine\Components\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\app\framework_class_render_state.inl">
+      <Filter>Source\App</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\app\framework_class_runtime_scene.inl">
+      <Filter>Source\App</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\app\framework_class_application_loop.inl">
+      <Filter>Source\App</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\app\framework_class_editor_commands.inl">
+      <Filter>Source\App</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\app\framework_class_scene_services.inl">
+      <Filter>Source\App</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\app\framework_class_editor_state.inl">
+      <Filter>Source\App</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\UI\UIRendererRenderSetup.inl">
+      <Filter>RePlayEngine\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\UI\UIRendererRenderTextInput.inl">
+      <Filter>RePlayEngine\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\UI\UIRendererRenderBackdrop.inl">
+      <Filter>RePlayEngine\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\UI\UIRendererRenderEffects.inl">
+      <Filter>RePlayEngine\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\UI\UIRendererRenderHierarchy.inl">
+      <Filter>RePlayEngine\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\app\Rendering\framework_render_setup.inl">
+      <Filter>Source\App\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\app\Rendering\framework_render_scene_setup.inl">
+      <Filter>Source\App\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\app\Rendering\framework_render_deferred.inl">
+      <Filter>Source\App\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\app\Rendering\framework_render_forward.inl">
+      <Filter>Source\App\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\app\Rendering\framework_render_effects.inl">
+      <Filter>Source\App\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\app\Rendering\framework_render_present.inl">
+      <Filter>Source\App\Rendering</Filter>
+    </ClInclude>
     <ClInclude Include="Source\app\framework_class.h">
       <Filter>Source\App</Filter>
     </ClInclude>
