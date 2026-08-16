@@ -1,4 +1,5 @@
-#include "MaterialGpuBinder.h"
+﻿#include "MaterialGpuBinder.h"
+#include "../../../Source/core/texture.h"
 
 #include "../Shaders/ShaderConstantPacker.h"
 #include "../Shaders/ShaderCatalog.h"
@@ -263,6 +264,41 @@ namespace ReplayEngine::Rendering
         cached.bytecode_size = bytecode_size;
         shader_failures_.erase(key);
         return cached.shader.Get();
+    }
+
+    std::uint64_t MaterialGpuBinder::TrackedTextureBytes() const noexcept
+    {
+        std::uint64_t total = 0;
+        for (const auto& entry : texture_cache_)
+        {
+            if (!entry.second.image.IsLoaded()) continue;
+            total += estimate_texture2d_bytes(entry.second.image.Description());
+        }
+        // CreateSolidTexture は R8G8B8A8 1x1。4種のfallbackも所有VRAMに含める。
+        if (default_white_) total += 4u;
+        if (default_black_) total += 4u;
+        if (default_gray_) total += 4u;
+        if (default_bump_) total += 4u;
+        return total;
+    }
+
+    std::uint64_t MaterialGpuBinder::TrackedBufferBytes() const noexcept
+    {
+        return material_constant_buffer_ != nullptr
+            ? static_cast<std::uint64_t>(material_constant_buffer_size_) : 0u;
+    }
+
+    void MaterialGpuBinder::AppendResidentTextureIdentities(
+        std::vector<std::pair<std::string, const void*>>& out) const
+    {
+        for (const auto& entry : texture_cache_)
+        {
+            ID3D11ShaderResourceView* view = entry.second.image.View();
+            if (entry.first.empty() || view == nullptr) continue;
+            Microsoft::WRL::ComPtr<ID3D11Resource> resource;
+            view->GetResource(resource.GetAddressOf());
+            if (resource) out.emplace_back(entry.first, resource.Get());
+        }
     }
 
     ID3D11ShaderResourceView* MaterialGpuBinder::DefaultTexture(

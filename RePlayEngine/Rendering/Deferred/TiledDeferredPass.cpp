@@ -1,4 +1,5 @@
-#include "TiledDeferredPass.h"
+﻿#include "TiledDeferredPass.h"
+#include "../RenderStats.h"
 
 #include "../../../Source/core/shader.h"
 
@@ -141,6 +142,7 @@ namespace ReplayEngine::Rendering
 
         ID3D11UnorderedAccessView* uavs[1]{ output_uav };
         context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
+        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
         context->CSSetShader(lighting_shader_.Get(), nullptr, 0);
         context->Dispatch(tile_count_x_, tile_count_y_, 1);
 
@@ -151,6 +153,7 @@ namespace ReplayEngine::Rendering
         context->CSSetShaderResources(0, 9, null_views);
         ID3D11ShaderResourceView* null_light[1]{ nullptr };
         context->CSSetShaderResources(kLightBufferSlot, 1, null_light);
+        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
         context->CSSetShader(nullptr, nullptr, 0);
         return true;
     }

@@ -675,6 +675,38 @@ public:
         automated_smoke_test_frames = frames;
         automated_smoke_test_frames_rendered = 0;
     }
+
+    // 再現可能な Profiler ベンチマーク。
+    // Scene に保存された Runtime Camera と Motion/Script を固定 1/60 秒で進める。
+    // 入力は完全抑制し、warmup 中と GPU query drain 中は履歴へ積まない。
+    void configure_profile_benchmark(std::uint32_t frames,
+        std::uint32_t warmup_frames, std::string output_name)
+    {
+        profile_benchmark_mode = true;
+        profile_benchmark_frames = (std::max)(1u, frames);
+        profile_benchmark_warmup_frames = warmup_frames;
+        profile_benchmark_output_name = std::move(output_name);
+        profile_benchmark_frame_index = 0;
+        profile_benchmark_drain_frames = 0;
+        profile_benchmark_export_attempted = false;
+        profile_benchmark_export_ok = false;
+        profile_benchmark_gpu_drain_timeout = false;
+
+        // ベンチ自体が測定対象へ混ざらないよう、Runtime専用経路へ固定する。
+        // configure_standalone_game() は呼ばないため Saved/Profile はProject側のまま。
+        standalone_game_mode = true;
+        editor_mode = false;
+        edit_mode_active = false;
+        editor_session_active = false;
+        show_render_stats = false;
+        csharp_auto_reload = false;
+        shader_auto_recompile = false;
+        game_input.SetSuppressed(true);
+        ReplayEngine::Rendering::Stats().SetEnabled(true);
+        ReplayEngine::Rendering::Stats().SetPaused(true);
+        ReplayEngine::Rendering::Stats().SetHistoryLimit(
+            static_cast<std::size_t>(profile_benchmark_frames));
+    }
     void configure_content_root(std::filesystem::path content_root);
     void configure_standalone_game(std::filesystem::path content_root,
         std::string game_name);
@@ -778,12 +810,79 @@ public:
 
             tictoc.tick();
             calculate_frame_stats();
+
+            float frame_delta_time = tictoc.time_interval();
+            if (profile_benchmark_mode)
+            {
+                frame_delta_time = 1.0f / 60.0f;
+                const std::uint64_t capture_begin =
+                    static_cast<std::uint64_t>(profile_benchmark_warmup_frames);
+                const std::uint64_t capture_end = capture_begin +
+                    static_cast<std::uint64_t>(profile_benchmark_frames);
+                const std::uint64_t frame_index =
+                    static_cast<std::uint64_t>(profile_benchmark_frame_index);
+                ReplayEngine::Rendering::Stats().SetPaused(
+                    frame_index < capture_begin || frame_index >= capture_end);
+            }
+
             // 描画中の未捕捉例外で静かに落ちると原因が追えないため、
             // ここで捕まえて理由を残す。
             try
             {
-                update(tictoc.time_interval());
-                render(tictoc.time_interval());
+                update(frame_delta_time);
+                render(frame_delta_time);
+
+                if (profile_benchmark_mode && !profile_benchmark_export_attempted)
+                {
+                    ++profile_benchmark_frame_index;
+                    const std::uint64_t capture_end =
+                        static_cast<std::uint64_t>(profile_benchmark_warmup_frames) +
+                        static_cast<std::uint64_t>(profile_benchmark_frames);
+                    if (static_cast<std::uint64_t>(profile_benchmark_frame_index) >=
+                        capture_end)
+                    {
+                        // paused frame でも BeginFrame/EndFrame は DONOTFLUSH の
+                        // Query 回収だけを進める。GPU を待って CPU をブロックしない。
+                        const std::size_t pending =
+                            ReplayEngine::Rendering::Stats().PendingGpuFrames();
+                        constexpr std::uint32_t max_gpu_drain_frames = 120u;
+                        if (pending == 0 ||
+                            profile_benchmark_drain_frames >= max_gpu_drain_frames)
+                        {
+                            profile_benchmark_gpu_drain_timeout = pending != 0;
+                            profile_benchmark_export_attempted = true;
+                            profile_benchmark_export_ok =
+                                ReplayEngine::Rendering::Stats().ExportCsvAndTrace(
+                                    profile_benchmark_output_name);
+                            if (profile_benchmark_gpu_drain_timeout)
+                            {
+                                log_shutdown_reason(
+                                    "Profiler benchmark: GPU query drain timeout");
+                                profile_benchmark_export_ok = false;
+                            }
+                            else if (!profile_benchmark_export_ok)
+                            {
+                                log_shutdown_reason(
+                                    "Profiler benchmark: CSV/Trace export failed");
+                            }
+                            else
+                            {
+                                log_shutdown_reason(
+                                    "Profiler benchmark: CSV/Trace export completed");
+                            }
+                            // 未保存確認は応答する人がいないため、ここを通ると
+                            // ダイアログが出たまま永久に終了できない。
+                            // 自動計測は確定済みとして扱い、確認を飛ばす。
+                            object_exit_confirmed = true;
+                            PostMessage(hwnd, WM_CLOSE, 0, 0);
+                        }
+                        else
+                        {
+                            ++profile_benchmark_drain_frames;
+                        }
+                    }
+                }
+
                 if (automated_smoke_test_frames > 0)
                 {
                     const std::uint32_t rendered_frames =
@@ -856,7 +955,10 @@ public:
 
         if (is_fullscreen()) toggle_fullscreen();
 
-        return uninitialize() ? static_cast<int>(msg.wParam) : 0;
+        const bool uninitialize_ok = uninitialize();
+        if (!uninitialize_ok) return 0;
+        if (profile_benchmark_mode && !profile_benchmark_export_ok) return 74;
+        return static_cast<int>(msg.wParam);
     }
 
     LRESULT CALLBACK handle_message(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
@@ -866,9 +968,13 @@ public:
         // WM_IME_* をここから横取りせず、Editor / Runtime の入力所有者で分岐する。
         const bool keyboard_message = msg == WM_KEYDOWN || msg == WM_KEYUP ||
             msg == WM_SYSKEYDOWN || msg == WM_SYSKEYUP || msg == WM_CHAR;
-        if (editor_mode)
+        if (ImGui::GetCurrentContext() &&
+            (editor_mode || (standalone_game_mode && show_render_stats)))
         {
             ImGui_ImplWin32_WndProcHandler(hwnd, msg, wparam, lparam);
+        }
+        if (editor_mode)
+        {
             const bool control_down = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
             const bool runtime_ui_text_owner = scene_view_hovered &&
                 !ImGui::GetIO().WantTextInput &&
@@ -1019,13 +1125,20 @@ public:
         // Runtime UI の文字入力は ImGui の text owner 判定が終わった後だけ受ける。
         // Editor では Scene View が入力対象のときだけ流し、Inspector 等の編集を奪わない。
         {
-            bool runtime_ui_text_allowed = standalone_game_mode || object_scene_play_mode;
+            bool runtime_ui_text_allowed = !profile_benchmark_mode &&
+                (standalone_game_mode || object_scene_play_mode);
 #ifdef USE_IMGUI
             if (editor_mode)
             {
                 const bool imgui_text = ImGui::GetCurrentContext() != nullptr &&
                     ImGui::GetIO().WantTextInput;
                 runtime_ui_text_allowed = scene_view_hovered && !imgui_text;
+            }
+            else if (standalone_game_mode && show_render_stats &&
+                ImGui::GetCurrentContext() != nullptr &&
+                ImGui::GetIO().WantTextInput)
+            {
+                runtime_ui_text_allowed = false;
             }
 #endif
             const bool text_message = msg == WM_CHAR || msg == WM_KEYDOWN ||
@@ -1503,6 +1616,16 @@ private:
     std::uint32_t automated_smoke_test_frames{ 0 };
     std::uint32_t automated_smoke_test_frames_rendered{ 0 };
     bool automated_frame_capture_pending{ false };
+
+    bool profile_benchmark_mode{ false };
+    std::uint32_t profile_benchmark_frames{ 300 };
+    std::uint32_t profile_benchmark_warmup_frames{ 30 };
+    std::uint32_t profile_benchmark_frame_index{ 0 };
+    std::uint32_t profile_benchmark_drain_frames{ 0 };
+    std::string profile_benchmark_output_name{ "benchmark" };
+    bool profile_benchmark_export_attempted{ false };
+    bool profile_benchmark_export_ok{ false };
+    bool profile_benchmark_gpu_drain_timeout{ false };
     float shader_composer_time{ 0.0f }; // elapsed_time が 0 の Golden Capture 中は進めない
     uint32_t frames{ 0 };
     float elapsed_time{ 0.0f };

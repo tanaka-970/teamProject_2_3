@@ -31,6 +31,7 @@ namespace ReplayEngine::UI
         void BeginFrame() noexcept;
         UIRenderTarget* Acquire(std::uint32_t width, std::uint32_t height,
             DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM);
+        std::uint64_t AllocatedBytes() const noexcept;
         void Release() noexcept;
 
     private:

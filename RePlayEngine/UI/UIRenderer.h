@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace ReplayEngine::Assets { class AssetDatabase; }
@@ -81,6 +82,13 @@ namespace ReplayEngine::UI
         bool Initialize(ID3D11Device* device);
         void Release() noexcept;
         void ReleaseTransientTargets() noexcept;
+        std::uint64_t RenderTargetPoolBytes() const noexcept
+        {
+            return render_target_pool_.AllocatedBytes();
+        }
+        std::uint64_t TrackedBufferBytes() const noexcept;
+        void AppendResidentTextureIdentities(
+            std::vector<std::pair<std::string, const void*>>& out) const;
 
         void Render(ID3D11DeviceContext* context,
             Scene::Scene& scene,

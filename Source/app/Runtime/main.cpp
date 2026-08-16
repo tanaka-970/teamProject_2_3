@@ -302,4 +302,99 @@ namespace ReplayEngine::Runtime::Detail
         return static_cast<std::uint32_t>((std::clamp)(frames, 30, 3600));
     }
 
+    ProfileBenchmarkConfig ParseProfileBenchmark(const char* command_line)
+    {
+        ProfileBenchmarkConfig config{};
+        const std::string raw = command_line != nullptr ? command_line : "";
+
+        // WinMain の LPSTR は executable 名を除いた生コマンドラインなので、
+        // istringstream だけでは "path with spaces" を扱えない。
+        // この用途に必要な引用符だけを小さく解釈し、既存 CLI の挙動には触れない。
+        std::vector<std::string> tokens;
+        std::string current;
+        bool quoted = false;
+        for (std::size_t i = 0; i < raw.size(); ++i)
+        {
+            const char c = raw[i];
+            if (c == '"')
+            {
+                quoted = !quoted;
+                continue;
+            }
+            if (!quoted && std::isspace(static_cast<unsigned char>(c)) != 0)
+            {
+                if (!current.empty())
+                {
+                    tokens.push_back(current);
+                    current.clear();
+                }
+                continue;
+            }
+            current.push_back(c);
+        }
+        if (!current.empty()) tokens.push_back(current);
+        if (quoted)
+        {
+            config.valid = false;
+            config.error = "profile command line has an unclosed quote";
+        }
+
+        auto parse_u32 = [](const std::string& text, std::uint32_t fallback,
+            std::uint32_t minimum, std::uint32_t maximum) noexcept
+        {
+            try
+            {
+                std::size_t consumed = 0;
+                const unsigned long value = std::stoul(text, &consumed, 10);
+                if (consumed != text.size()) return fallback;
+                return static_cast<std::uint32_t>((std::max)(
+                    static_cast<unsigned long>(minimum),
+                    (std::min)(static_cast<unsigned long>(maximum), value)));
+            }
+            catch (...)
+            {
+                return fallback;
+            }
+        };
+
+        for (std::size_t i = 0; i < tokens.size(); ++i)
+        {
+            const std::string& token = tokens[i];
+            if (token == "--profile-scene")
+            {
+                config.requested = true;
+                if (i + 1 >= tokens.size() || tokens[i + 1].rfind("--", 0) == 0)
+                {
+                    config.valid = false;
+                    config.error = "--profile-scene requires a scene path";
+                    continue;
+                }
+                config.scene = std::filesystem::u8path(tokens[++i]);
+            }
+            else if (token == "--frames")
+            {
+                if (i + 1 < tokens.size())
+                    config.frames = parse_u32(tokens[++i], config.frames, 1u, 10000u);
+            }
+            else if (token == "--warmup")
+            {
+                if (i + 1 < tokens.size())
+                    config.warmup_frames = parse_u32(tokens[++i],
+                        config.warmup_frames, 0u, 10000u);
+            }
+            else if (token == "--out")
+            {
+                if (i + 1 < tokens.size() && tokens[i + 1].rfind("--", 0) != 0)
+                    config.output_name = tokens[++i];
+            }
+        }
+
+        if (config.requested && config.scene.empty())
+        {
+            config.valid = false;
+            if (config.error.empty()) config.error = "profile scene path is empty";
+        }
+        return config;
+    }
+
 }

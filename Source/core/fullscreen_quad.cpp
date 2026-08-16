@@ -20,8 +20,12 @@ void fullscreen_quad::blit(ID3D11DeviceContext* immediate_context,
 	// 頂点バッファは不要なので nullptr を指定
 	immediate_context->IASetVertexBuffers(0, 0, nullptr, nullptr, nullptr);
 	immediate_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+	ReplayEngine::Rendering::Stats().TrackStateSet(
+		ReplayEngine::Rendering::RenderStats::StateKind::InputLayout, nullptr);
 	immediate_context->IASetInputLayout(nullptr);
+	ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
 	immediate_context->VSSetShader(embedded_vertex_shader.Get(), 0, 0);
+	ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
 	replaced_pixel_shader ? immediate_context->PSSetShader(replaced_pixel_shader, 0, 0)
 	:	immediate_context->PSSetShader(embedded_pixel_shader.Get(), 0, 0);
 

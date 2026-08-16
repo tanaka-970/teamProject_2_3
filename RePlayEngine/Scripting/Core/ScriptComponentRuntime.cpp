@@ -4,6 +4,7 @@
 #include "ScriptServices.h"
 #include "../../Object/GameObject/GameObject.h"
 #include "../../Scene/Runtime/Scene.h"
+#include "../../Rendering/RenderStats.h"
 
 #include <utility>
 
@@ -42,17 +43,20 @@ namespace ReplayEngine::Scripting
 
     void ScriptComponent::OnFixedUpdate(float fixed_delta_time)
     {
+        REPLAY_PROFILE_SCOPE("Script/FixedUpdate");
         InvokeCallback(ScriptCallback::FixedUpdate,
             ScriptArguments::DeltaTime(fixed_delta_time));
     }
 
     void ScriptComponent::OnUpdate(float delta_time)
     {
+        REPLAY_PROFILE_SCOPE("Script/Update");
         InvokeCallback(ScriptCallback::Update, ScriptArguments::DeltaTime(delta_time));
     }
 
     void ScriptComponent::OnLateUpdate(float delta_time)
     {
+        REPLAY_PROFILE_SCOPE("Script/LateUpdate");
         InvokeCallback(ScriptCallback::LateUpdate, ScriptArguments::DeltaTime(delta_time));
     }
 

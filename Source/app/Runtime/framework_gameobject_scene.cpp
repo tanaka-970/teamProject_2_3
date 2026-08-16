@@ -369,12 +369,24 @@ void framework::update_object_fixed_step(float elapsed_time)
         steps < object_max_fixed_substeps)
     {
         object_fixed_accumulator -= object_fixed_time_step;
-        scene.FixedUpdate(object_fixed_time_step);
+        {
+            REPLAY_PROFILE_SCOPE("Components/FixedUpdate");
+            scene.FixedUpdate(object_fixed_time_step);
+        }
         // Component の FixedUpdate（入力・力の蓄積）の後に Solver を 1 回だけ進める。
         // Transform 同期は Solver の末尾で行うため、同じ刻み内の更新順が一定になる。
-        object_collision_world.Refresh();
-        object_physics_dynamics_world.Step(object_fixed_time_step);
-        object_collision_world.Refresh();
+        {
+            REPLAY_PROFILE_SCOPE("Physics/CollisionRefreshPre");
+            object_collision_world.Refresh();
+        }
+        {
+            REPLAY_PROFILE_SCOPE("Physics/Solver");
+            object_physics_dynamics_world.Step(object_fixed_time_step);
+        }
+        {
+            REPLAY_PROFILE_SCOPE("Physics/CollisionRefreshPost");
+            object_collision_world.Refresh();
+        }
         ++steps;
     }
 

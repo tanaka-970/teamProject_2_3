@@ -1,4 +1,4 @@
-#include "trail.h"
+﻿#include "trail.h"
 #include "shader.h"
 #include "misc.h"
 #include "../../RePlayEngine/Rendering/RenderStats.h"
@@ -84,7 +84,9 @@ void trail::render(ID3D11DeviceContext* ctx)
     ctx->IASetVertexBuffers(0, 1, vertex_buffer.GetAddressOf(), &stride, &offset);
     ctx->IASetInputLayout(input_layout.Get());
     ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
     ctx->VSSetShader(vs.Get(), nullptr, 0);
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
     ctx->PSSetShader(ps.Get(), nullptr, 0);
     ReplayEngine::Rendering::Stats().CountDraw(n * 2);
     ctx->Draw(n * 2, 0);
