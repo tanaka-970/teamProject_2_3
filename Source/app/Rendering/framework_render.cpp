@@ -821,8 +821,10 @@ void framework::render(float elapsed_time)
             immediate_context->OMSetDepthStencilState(
                 depth_stencil_states[(size_t)DEPTH_STATE::ZT_ON_ZW_ON].Get(), 0);
             ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::DepthStencil, false);
+            // GBuffer と同じカリングにすること。ここだけ両面で深度を書くと
+            // 本描画の EQUAL 比較と食い違い、面が消える。
             immediate_context->RSSetState(
-                rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+                rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
             ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Rasterizer, false);
 
             // 深度だけなのでピクセルシェーダーは外す(bind_pixel_shader=false)。
@@ -855,7 +857,11 @@ void framework::render(float elapsed_time)
             ? deferred.depth_equal_state.Get()
             : depth_stencil_states[(size_t)DEPTH_STATE::ZT_ON_ZW_ON].Get(), 0);
         ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::DepthStencil, false);
-        immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+        // 既定は背面カリング。両面が要るマテリアルは item.double_sided を見て
+        // 描画直前に CULL_NONE へ切り替え、終わったらここへ戻る。
+        // 既定を CULL_NONE にすると、最初の double_sided が現れるまでの
+        // メッシュだけ両面で描かれ、描画順で結果が変わってしまう。
+        immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
         ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Rasterizer, false);
 
         if (enable_static_meshes && static_meshes[0])
