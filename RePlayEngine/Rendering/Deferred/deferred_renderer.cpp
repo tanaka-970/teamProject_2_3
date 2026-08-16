@@ -1,6 +1,8 @@
 #include "deferred_renderer.h"
 #include "shader.h"
 
+#include "../RenderStats.h"
+
 #include <d3d11sdklayers.h>
 
 #include <cstring>
@@ -238,6 +240,7 @@ void deferred_renderer::lighting_pass(ID3D11DeviceContext* ctx,
     ctx->IASetInputLayout(nullptr);
     ctx->VSSetShader(fullscreen_vs.Get(), nullptr, 0);
     ctx->PSSetShader(lighting_ps.Get(), nullptr, 0);
+    ReplayEngine::Rendering::Stats().CountDraw(4);
     ctx->Draw(4, 0);
 
     ID3D11ShaderResourceView* null_srvs[_countof(srvs)]{};

@@ -2,6 +2,8 @@
 #include"shader.h"
 #include"misc.h"
 
+#include "../../RePlayEngine/Rendering/RenderStats.h"
+
 fullscreen_quad::fullscreen_quad(ID3D11Device* device)
 {
 	// 頂点シェーダーとピクセルシェーダーの生成
@@ -25,5 +27,6 @@ void fullscreen_quad::blit(ID3D11DeviceContext* immediate_context,
 
 
 	immediate_context->PSSetShaderResources(start_slot, num_views, shader_resource_view);
+	ReplayEngine::Rendering::Stats().CountDraw(4);
 	immediate_context->Draw(4, 0);
 }
