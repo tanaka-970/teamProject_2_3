@@ -55,6 +55,13 @@ namespace ReplayEngine::Project
         stream << "UI_FOCUS_OUTLINE_WIDTH " << settings.FocusOutlineWidth() << '\n';
         stream << "UI_FOCUS_CORNER_RADIUS " << settings.FocusCornerRadius() << '\n';
 
+        // 描画トグル。行が無い旧ファイルは Reset() の既定値のまま読まれる。
+        stream << "RENDER_SSAO " << (settings.SsaoEnabled() ? 1 : 0) << '\n';
+        stream << "RENDER_SSR " << (settings.SsrEnabled() ? 1 : 0) << '\n';
+        stream << "RENDER_TAA " << (settings.TaaEnabled() ? 1 : 0) << '\n';
+        stream << "RENDER_DEPTH_PREPASS "
+            << (settings.DepthPrepassEnabled() ? 1 : 0) << '\n';
+
         if (!stream)
         {
             error = "プロジェクト設定の書き込みに失敗しました。";
@@ -171,6 +178,30 @@ namespace ReplayEngine::Project
                 std::istringstream value_stream(line);
                 float value = settings.FocusCornerRadius();
                 if (value_stream >> value) settings.SetFocusCornerRadius(value);
+            }
+            else if (keyword == "RENDER_SSAO")
+            {
+                std::istringstream value_stream(line);
+                int enabled = settings.SsaoEnabled() ? 1 : 0;
+                if (value_stream >> enabled) settings.SetSsaoEnabled(enabled != 0);
+            }
+            else if (keyword == "RENDER_SSR")
+            {
+                std::istringstream value_stream(line);
+                int enabled = settings.SsrEnabled() ? 1 : 0;
+                if (value_stream >> enabled) settings.SetSsrEnabled(enabled != 0);
+            }
+            else if (keyword == "RENDER_TAA")
+            {
+                std::istringstream value_stream(line);
+                int enabled = settings.TaaEnabled() ? 1 : 0;
+                if (value_stream >> enabled) settings.SetTaaEnabled(enabled != 0);
+            }
+            else if (keyword == "RENDER_DEPTH_PREPASS")
+            {
+                std::istringstream value_stream(line);
+                int enabled = settings.DepthPrepassEnabled() ? 1 : 0;
+                if (value_stream >> enabled) settings.SetDepthPrepassEnabled(enabled != 0);
             }
             // 未知のキーワードはここで捨てる。
         }

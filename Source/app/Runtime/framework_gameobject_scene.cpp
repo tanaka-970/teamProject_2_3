@@ -191,6 +191,16 @@ void framework::load_project_settings()
             &asset_database, project_settings.LocalizationTableGuid(),
             project_settings.DefaultLanguage());
     }
+
+    // 描画トグルの起動時の値をプロジェクト設定から取る。
+    // 読み込みに失敗した場合も ProjectSettings 側の既定値がそのまま入る。
+    //
+    // SSAO / SSR / TAA は Post Process Volume が毎フレーム上書きし、
+    // フレーム末で元へ戻す。ここで入れるのはその「元の値」にあたる。
+    enable_ssao = project_settings.SsaoEnabled();
+    enable_ssr = project_settings.SsrEnabled();
+    enable_taa = project_settings.TaaEnabled();
+    enable_depth_prepass = project_settings.DepthPrepassEnabled();
 }
 
 bool framework::save_project_settings()

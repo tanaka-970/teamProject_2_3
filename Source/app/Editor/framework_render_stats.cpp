@@ -381,7 +381,14 @@ void framework::draw_render_stats_overlay()
             ImGui::Text(u8"  描画数 L0:%u L1:%u L2:%u L3:%u",
                 culling.lod_draws[0], culling.lod_draws[1], culling.lod_draws[2], culling.lod_draws[3]);
             ImGui::Separator();
-            ImGui::Checkbox(u8"深度プリパス", &enable_depth_prepass);
+            // 切り替えたらプロジェクト設定へも残す。再起動で戻ると、
+            // 測って決めた値を毎回入れ直すことになる。
+            if (ImGui::Checkbox(u8"深度プリパス", &enable_depth_prepass))
+            {
+                project_settings.SetDepthPrepassEnabled(enable_depth_prepass);
+                save_project_settings();
+            }
+            ImGui::TextDisabled(u8"  切り替えるとプロジェクト設定へ保存します");
         }
 
         if (stage_gltf_model && ImGui::CollapsingHeader(u8"ロード内訳"))
