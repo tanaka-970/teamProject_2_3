@@ -166,10 +166,35 @@ namespace ReplayEngine::Project
         float FocusCornerRadius() const noexcept { return focus_corner_radius_; }
         void SetFocusCornerRadius(float value) noexcept { focus_corner_radius_ = value; }
 
+        // ---- Rendering Toggles ---------------------------------------------
+        //
+        // 【なぜ Scene ではなく Project へ置くか】
+        //   どれも「このプロジェクトをどう描くか」の設定で、Scene の内容ではない。
+        //   Scene ごとに変えられると、シーンを切り替えるたびに描画が変わって
+        //   前後比較が成立しなくなる。
+        //
+        // 【なぜ保存するか】
+        //   最適な値は中身によって変わる。深度プリパスは実測で、
+        //   キャラ 1 体 400 万三角形のシーンでは切った方が 1.32ms 速く、
+        //   地形シーンでは差が出なかった。LOD を入れれば逆転しうる。
+        //   ハードコードのままだと、測って切り替えることができない。
+        bool SsaoEnabled() const noexcept { return ssao_enabled_; }
+        void SetSsaoEnabled(bool value) noexcept { ssao_enabled_ = value; }
+        bool SsrEnabled() const noexcept { return ssr_enabled_; }
+        void SetSsrEnabled(bool value) noexcept { ssr_enabled_ = value; }
+        bool TaaEnabled() const noexcept { return taa_enabled_; }
+        void SetTaaEnabled(bool value) noexcept { taa_enabled_ = value; }
+        bool DepthPrepassEnabled() const noexcept { return depth_prepass_enabled_; }
+        void SetDepthPrepassEnabled(bool value) noexcept { depth_prepass_enabled_ = value; }
+
         // ---- 既定値へ戻す --------------------------------------------------
 
         void Reset() noexcept
         {
+            ssao_enabled_ = true;
+            ssr_enabled_ = true;
+            taa_enabled_ = true;
+            depth_prepass_enabled_ = false;
             default_character_prefab_guid_.clear();
             startup_scene_guid_.clear();
             scene_flow_guid_.clear();
@@ -191,5 +216,10 @@ namespace ReplayEngine::Project
         DirectX::XMFLOAT4 focus_outline_color_{ 0.25f, 0.78f, 1.0f, 1.0f };
         float focus_outline_width_ = 2.0f;
         float focus_corner_radius_ = 4.0f;
+        bool ssao_enabled_ = true;
+        bool ssr_enabled_ = true;
+        bool taa_enabled_ = true;
+        // 既定 false は実測に基づく。Docs 参照。LOD 導入後は測り直すこと。
+        bool depth_prepass_enabled_ = false;
     };
 }
