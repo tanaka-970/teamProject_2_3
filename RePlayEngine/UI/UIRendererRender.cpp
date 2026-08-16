@@ -21,6 +21,7 @@
 #include "../Object/GameObject/GameObject.h"
 #include "../Rendering/Shaders/ShaderCatalog.h"
 #include "../Rendering/Effects/EffectChain.h"
+#include "../Rendering/RenderStats.h"
 #include "../Scene/Runtime/Scene.h"
 #include "../../Source/core/shader.h"
 #include "../../Source/core/texture.h"
@@ -322,6 +323,7 @@ namespace ReplayEngine::UI
             context->RSSetScissorRects(0, nullptr);
         }
 
+        Rendering::Stats().CountDraw(static_cast<std::uint32_t>(vertices_.size()));
         context->Draw(static_cast<UINT>(vertices_.size()), 0);
         vertices_.clear();
     }

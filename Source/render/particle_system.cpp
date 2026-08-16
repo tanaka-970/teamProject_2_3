@@ -1,6 +1,7 @@
 ﻿#include "particle_system.h"
 #include "shader.h"
 #include "misc.h"
+#include "../../RePlayEngine/Rendering/RenderStats.h"
 #include <d3d11sdklayers.h>
 #include <algorithm>
 #include <cstring>
@@ -142,6 +143,7 @@ void particle_system::render(ID3D11DeviceContext* ctx)
 
     ctx->VSSetShaderResources(0, 1, particle_srv.GetAddressOf());
 
+    ReplayEngine::Rendering::Stats().CountDraw(active_count);
     ctx->Draw(active_count, 0);
 
     // detach

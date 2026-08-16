@@ -10,6 +10,8 @@
 #include "misc.h"
 #include "geometric_primitive.h"
 
+#include "../../RePlayEngine/Rendering/RenderStats.h"
+
 // UNIT.11
 geometric_primitive::geometric_primitive(ID3D11Device* device)
 {
@@ -192,7 +194,10 @@ void geometric_primitive::render(ID3D11DeviceContext* immediate_context, const D
 
 	D3D11_BUFFER_DESC buffer_desc{};
 	index_buffer->GetDesc(&buffer_desc);
-	immediate_context->DrawIndexed(buffer_desc.ByteWidth / sizeof(uint32_t), 0, 0);
+	const UINT primitive_index_count =
+		static_cast<UINT>(buffer_desc.ByteWidth / sizeof(uint32_t));
+	ReplayEngine::Rendering::Stats().CountDrawIndexed(primitive_index_count);
+	immediate_context->DrawIndexed(primitive_index_count, 0, 0);
 }
 
 // UNIT.11

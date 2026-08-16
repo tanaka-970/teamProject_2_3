@@ -88,6 +88,15 @@ namespace ReplayEngine::Rendering
             current_cpu_.vertices += vertex_count;
         }
 
+        // 非インデックス描画から呼ぶ。三角形数はトポロジに依存して確定できないため
+        // 数えず、ドローコールと頂点だけを積む。三角形は GPU 実測側を見ること。
+        void CountDraw(std::uint32_t vertex_count) noexcept
+        {
+            if (!counting_enabled_) return;
+            current_cpu_.draw_calls += 1;
+            current_cpu_.vertices += vertex_count;
+        }
+
         void CountEffectPass() noexcept
         {
             if (counting_enabled_) ++current_cpu_.effect_passes;
