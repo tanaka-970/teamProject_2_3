@@ -4,6 +4,7 @@
 #include "../../Reflection/Property/PropertyValue.h"
 #include "../../Rendering/Materials/MaterialSchema.h"
 #include "../../Rendering/Effects/EffectChain.h"
+#include "../../Rendering/Effects/EffectPresetAsset.h"
 
 #include <algorithm>
 #include <array>
@@ -710,10 +711,32 @@ namespace ReplayEngine::Components
         RebuildDynamicProperties();
     }
 
+    const std::vector<UI::UIEffect>& UIEffectStackComponent::EffectiveEffects(
+        const Assets::AssetDatabase* database) const noexcept
+    {
+        if (use_preset)
+        {
+            const std::vector<UI::UIEffect>* preset =
+                Rendering::Effects::EffectPresetAsset::Resolve(database, effect_preset);
+            if (preset != nullptr) return *preset;
+        }
+        return effects;
+    }
+
     bool UIEffectStackComponent::HasActiveEffects() const noexcept
     {
         if (!enabled) return false;
         for (const UI::UIEffect& effect : effects)
+        {
+            if (effect.enabled) return true;
+        }
+        return false;
+    }
+
+    bool UIEffectStackComponent::HasActiveEffects(const Assets::AssetDatabase* database) const noexcept
+    {
+        if (!enabled) return false;
+        for (const UI::UIEffect& effect : EffectiveEffects(database))
         {
             if (effect.enabled) return true;
         }
@@ -726,6 +749,14 @@ namespace ReplayEngine::Components
         if (!enabled) return { 0.0f, 0.0f, 0.0f, 0.0f };
         return Rendering::Effects::EffectChain::ExpandBounds(
             effects, target_width, target_height);
+    }
+
+    DirectX::XMFLOAT4 UIEffectStackComponent::ExpandBounds(float target_width, float target_height,
+        const Assets::AssetDatabase* database) const noexcept
+    {
+        if (!enabled) return { 0.0f, 0.0f, 0.0f, 0.0f };
+        return Rendering::Effects::EffectChain::ExpandBounds(
+            EffectiveEffects(database), target_width, target_height);
     }
 
     void UIEffectStackComponent::ResizeEffects()

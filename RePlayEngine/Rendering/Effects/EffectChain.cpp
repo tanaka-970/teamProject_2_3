@@ -1,4 +1,5 @@
 ﻿#include "EffectChain.h"
+#include "../RenderStats.h"
 
 #include "../../Assets/AssetDatabase.h"
 #include "../Shaders/ShaderAsset.h"
@@ -379,6 +380,10 @@ namespace ReplayEngine::Rendering::Effects
             if (effect_shader == nullptr) continue;
 
             UI::UIRenderTarget* destination = current == first ? second : first;
+            Rendering::Stats().CountEffectPass();
+            Rendering::Stats().CountRenderTargetBind();
+            // draw callback は depth/rasterizer/blend/sampler を設定する。
+            Rendering::Stats().CountStateSet(4);
             context.configure_target(*destination);
             d3d->ClearRenderTargetView(destination->rtv.Get(), clear);
 

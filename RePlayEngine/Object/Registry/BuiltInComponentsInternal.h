@@ -38,6 +38,12 @@
 #include "../../Components/UI/UIImageComponent.h"
 #include "../../Components/UI/UITextComponent.h"
 #include "../../Components/UI/UIButtonComponent.h"
+#include "../../Components/UI/UISelectableComponent.h"
+#include "../../Components/UI/UILayoutGroupComponents.h"
+#include "../../Components/UI/UIScrollViewComponent.h"
+#include "../../Components/UI/UIInputFieldComponent.h"
+#include "../../Components/UI/UILanguageSwitchComponent.h"
+#include "../../Components/UI/UIButtonPropertyToggleComponent.h"
 #include "../../Components/UI/UIMaskComponent.h"
 #include "../../Components/UI/UIEffectStackComponent.h"
 #include "../../Components/UI/UIShapeComponent.h"
@@ -47,6 +53,8 @@
 #include "../../Components/Rendering/LightComponents.h"
 #include "../../Components/Rendering/LineRendererComponent.h"
 #include "../../Components/Rendering/MeshRendererComponent.h"
+#include "../../Components/Rendering/ScreenEffectStackComponent.h"
+#include "../../Components/Rendering/ModelEffectStackComponent.h"
 #include "../../Components/Rendering/ParticleEmitterComponent.h"
 #include "../../Components/Rendering/PostProcessVolumeComponent.h"
 #include "../../Components/Rendering/PrimitiveMeshRendererComponent.h"
@@ -76,6 +84,8 @@ namespace ReplayEngine::Core::Detail
         using Components::LineRendererComponent;
         using Components::MotionPlayerComponent;
         using Components::MeshRendererComponent;
+        using Components::ModelEffectStackComponent;
+        using Components::ScreenEffectStackComponent;
         using Components::ParticleEmitterComponent;
         using Components::PostProcessVolumeComponent;
         using Components::PrimitiveMeshRendererComponent;
@@ -101,6 +111,14 @@ namespace ReplayEngine::Core::Detail
         using Components::JumpPadComponent;
         using Components::DamageAreaComponent;
         using Components::UIButtonComponent;
+        using Components::UIButtonPropertyToggleComponent;
+        using Components::UIInputFieldComponent;
+        using Components::UILanguageSwitchComponent;
+        using Components::UIScrollViewComponent;
+        using Components::UIGridLayoutGroupComponent;
+        using Components::UIVerticalLayoutGroupComponent;
+        using Components::UIHorizontalLayoutGroupComponent;
+        using Components::UISelectableComponent;
         using Components::UIImageComponent;
         using Components::UIMaskComponent;
         using Components::UIEffectStackComponent;
@@ -140,6 +158,7 @@ namespace ReplayEngine::Core::Detail
     void RegisterCameraTarget();
     void RegisterCamera();
     void RegisterPostProcessVolume();
+    void RegisterEffectStacks();
     void RegisterParticleEmitter();
     void RegisterLineRenderers();
     void RegisterFollowTarget();

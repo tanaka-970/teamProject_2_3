@@ -1,4 +1,4 @@
-// プロジェクト設定と新規 Scene 作成の Editor UI。
+﻿// プロジェクト設定と新規 Scene 作成の Editor UI。
 //
 // 【この 1 ファイルに分けている理由】
 //   Scene の中身（GameObject）ではなく「プロジェクト全体の設定」を扱うため、
@@ -14,6 +14,8 @@
 #include "../../RePlayEngine/Project/ProjectSettingsSerializer.h"
 #include "../../RePlayEngine/Scene/Serialization/PrefabSerializer.h"
 
+#include <algorithm>
+#include <cstdio>
 #include <filesystem>
 #include <string>
 
@@ -269,6 +271,75 @@ void framework::draw_project_settings_panel()
             save_project_settings();
             sync_runtime_scene_flow_asset();
         }
+    }
+
+    ImGui::Separator();
+    ImGui::TextUnformatted("Localization");
+    const ReplayEngine::Assets::AssetRecord* localization_record =
+        project_settings.LocalizationTableGuid().empty() ? nullptr :
+        asset_database.FindByGuid(project_settings.LocalizationTableGuid());
+    const bool localization_missing = !project_settings.LocalizationTableGuid().empty() &&
+        (localization_record == nullptr ||
+            localization_record->kind != ReplayEngine::Assets::AssetKind::Localization);
+    const std::string localization_preview = localization_missing
+        ? std::string("[ Missing Localization Table ]")
+        : (localization_record != nullptr
+            ? (localization_record->display_name.empty()
+                ? localization_record->source_path.filename().u8string()
+                : localization_record->display_name)
+            : std::string("（未設定）"));
+    ImGui::SetNextItemWidth(-1.0f);
+    if (ImGui::BeginCombo("##LocalizationTable", localization_preview.c_str()))
+    {
+        if (ImGui::Selectable("（未設定）", project_settings.LocalizationTableGuid().empty()))
+        {
+            project_settings.ClearLocalizationTable();
+            save_project_settings();
+        }
+        for (const auto& record : asset_database.Records())
+        {
+            if (record.kind != ReplayEngine::Assets::AssetKind::Localization) continue;
+            const bool selected = record.guid == project_settings.LocalizationTableGuid();
+            const std::string label = record.display_name.empty()
+                ? record.source_path.filename().u8string() : record.display_name;
+            if (ImGui::Selectable(label.c_str(), selected))
+            {
+                project_settings.SetLocalizationTableGuid(record.guid);
+                save_project_settings();
+            }
+            if (selected) ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+    char language_buffer[64]{};
+    std::snprintf(language_buffer, sizeof(language_buffer), "%s",
+        project_settings.DefaultLanguage().c_str());
+    ImGui::SetNextItemWidth(160.0f);
+    if (ImGui::InputText("既定言語", language_buffer, sizeof(language_buffer)))
+    {
+        project_settings.SetDefaultLanguage(language_buffer);
+        save_project_settings();
+    }
+    ImGui::TextDisabled("UIText の Localization Key が空なら従来の Text をそのまま表示します。");
+
+    ImGui::Separator();
+    ImGui::TextUnformatted("UI Focus Outline");
+    bool focus_enabled = project_settings.FocusOutlineEnabled();
+    DirectX::XMFLOAT4 focus_color = project_settings.FocusOutlineColor();
+    float focus_width = project_settings.FocusOutlineWidth();
+    float focus_radius = project_settings.FocusCornerRadius();
+    bool focus_changed = false;
+    focus_changed |= ImGui::Checkbox("輪郭線を表示##UIFocus", &focus_enabled);
+    focus_changed |= ImGui::ColorEdit4("輪郭線色##UIFocus", &focus_color.x);
+    focus_changed |= ImGui::DragFloat("輪郭線幅##UIFocus", &focus_width, 0.25f, 0.0f, 32.0f);
+    focus_changed |= ImGui::DragFloat("角丸##UIFocus", &focus_radius, 0.25f, 0.0f, 64.0f);
+    if (focus_changed)
+    {
+        project_settings.SetFocusOutlineEnabled(focus_enabled);
+        project_settings.SetFocusOutlineColor(focus_color);
+        project_settings.SetFocusOutlineWidth((std::max)(0.0f, focus_width));
+        project_settings.SetFocusCornerRadius((std::max)(0.0f, focus_radius));
+        save_project_settings();
     }
 
     // 保存の結果はここへ出る。失敗した場合も同じ場所に理由が出る。

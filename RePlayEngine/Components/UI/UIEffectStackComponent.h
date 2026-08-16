@@ -9,6 +9,8 @@
 
 #include <vector>
 
+namespace ReplayEngine::Assets { class AssetDatabase; }
+
 namespace ReplayEngine::Components
 {
     class UIEffectStackComponent final : public Core::Component
@@ -25,8 +27,13 @@ namespace ReplayEngine::Components
         void OnPropertyChanged(const char* property_name) override;
 
         bool HasActiveEffects() const noexcept;
+        bool HasActiveEffects(const Assets::AssetDatabase* database) const noexcept;
         DirectX::XMFLOAT4 ExpandBounds(float target_width,
             float target_height) const noexcept;
+        DirectX::XMFLOAT4 ExpandBounds(float target_width, float target_height,
+            const Assets::AssetDatabase* database) const noexcept;
+        const std::vector<UI::UIEffect>& EffectiveEffects(
+            const Assets::AssetDatabase* database) const noexcept;
 
         // ShaderCatalog の Schema を同期し、Custom Effect の Property を
         // DynamicProperties() へ追加する。GPU や AssetDatabase は保持しない。
@@ -37,6 +44,9 @@ namespace ReplayEngine::Components
         // Screen Space Overlay の Image / Text だけ、直前まで描かれた画素を
         // Effect の入力へ含める。既定 false は従来の offscreen 経路を保つ。
         bool capture_backdrop = false;
+        // false の既存 Scene は inline 値をそのまま使う。Preset 参照は追加の選択肢。
+        bool use_preset = false;
+        Reflection::AssetReference effect_preset;
         int effect_count = 0;
         std::vector<UI::UIEffect> effects;
 

@@ -5,6 +5,7 @@
 #include "PropertyDrawer.h"
 
 #include "../../Assets/AssetDatabase.h"
+#include "../../Localization/LocalizationService.h"
 #include "../../Components/Physics/ColliderComponent.h"
 #include "../../Object/Component/Component.h"
 #include "../../Object/GameObject/GameObject.h"
@@ -102,6 +103,35 @@ namespace ReplayEngine::Editor
         case PropertyType::String:
         {
             std::string value = current.AsString();
+            if (desc.name == "localization_key" && !desc.read_only)
+            {
+                const std::vector<std::string> keys =
+                    Localization::LocalizationService::Global().Keys();
+                const std::string preview = value.empty() ? std::string("（未設定）") : value;
+                if (ImGui::BeginCombo((label + "##LocalizationKeyPicker").c_str(),
+                    preview.c_str()))
+                {
+                    if (ImGui::Selectable("（未設定）", value.empty()))
+                    {
+                        value.clear();
+                        desc.Apply(component, PropertyValue::MakeString(value));
+                        changed = true;
+                    }
+                    for (const std::string& key : keys)
+                    {
+                        const bool selected = key == value;
+                        if (ImGui::Selectable(key.c_str(), selected))
+                        {
+                            value = key;
+                            desc.Apply(component, PropertyValue::MakeString(value));
+                            changed = true;
+                        }
+                        if (selected) ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
+                ImGui::SetNextItemWidth(-1.0f);
+            }
             if (DrawTextField(label.c_str(), value, desc.read_only))
             {
                 desc.Apply(component, PropertyValue::MakeString(std::move(value)));

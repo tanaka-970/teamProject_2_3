@@ -512,4 +512,57 @@ namespace ReplayEngine::Core::Detail
                 MakeProperty("outer_angle_degrees", &SpotLightComponent::outer_angle_degrees)
                     .Display("外側角度").Range(0.1, 179.0).Step(0.5));
         }
+        void RegisterEffectStacks()
+        {
+            ComponentRegistry::Register<ScreenEffectStackComponent>(
+                ComponentTypeInfo::Describe("Screen Effect Stack", "Rendering")
+                    .WithTooltip("3D シーン全体へ Effect Chain を適用します。UI は対象外です。"));
+            PropertyRegistry::Register<ScreenEffectStackComponent>(
+                MakeProperty("enabled", &ScreenEffectStackComponent::enabled)
+                    .Display("有効").Animation(Animatable::Step));
+            PropertyRegistry::Register<ScreenEffectStackComponent>(
+                MakeProperty("use_preset", &ScreenEffectStackComponent::use_preset)
+                    .Display("Preset を使用").Animation(Animatable::Step));
+            PropertyRegistry::Register<ScreenEffectStackComponent>(
+                MakeProperty("effect_preset", &ScreenEffectStackComponent::effect_preset)
+                    .Display("Effect Preset").OfAssetType("EffectPreset")
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<ScreenEffectStackComponent>(
+                MakeProperty("effect_count", &ScreenEffectStackComponent::effect_count)
+                    .Display("Effect 数").Range(0.0, 16.0).Step(1.0)
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<ScreenEffectStackComponent>(
+                MakeProperty("apply_stage", &ScreenEffectStackComponent::apply_stage)
+                    .Display("適用位置")
+                    .AsEnum({ "PostProcess 後", "PostProcess 前" })
+                    .Animation(Animatable::Step));
+
+            ComponentRegistry::Register<ModelEffectStackComponent>(
+                ComponentTypeInfo::Describe("Model Effect Stack", "Rendering")
+                    .WithTooltip("この GameObject のモデルだけへ Effect Chain を適用します。"));
+            PropertyRegistry::Register<ModelEffectStackComponent>(
+                MakeProperty("enabled", &ModelEffectStackComponent::enabled)
+                    .Display("有効").Animation(Animatable::Step));
+            PropertyRegistry::Register<ModelEffectStackComponent>(
+                MakeProperty("use_preset", &ModelEffectStackComponent::use_preset)
+                    .Display("Preset を使用").Animation(Animatable::Step));
+            PropertyRegistry::Register<ModelEffectStackComponent>(
+                MakeProperty("effect_preset", &ModelEffectStackComponent::effect_preset)
+                    .Display("Effect Preset").OfAssetType("EffectPreset")
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<ModelEffectStackComponent>(
+                MakeProperty("effect_count", &ModelEffectStackComponent::effect_count)
+                    .Display("Effect 数").Range(0.0, 16.0).Step(1.0)
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<ModelEffectStackComponent>(
+                MakeProperty("depth_mode", &ModelEffectStackComponent::depth_mode)
+                    .Display("深度モード")
+                    .AsEnum({ "Preserve Depth", "Overlay" })
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<ModelEffectStackComponent>(
+                MakeProperty("max_bleed_pixels", &ModelEffectStackComponent::max_bleed_pixels)
+                    .Display("最大はみ出し (px)").Range(0.0, 1024.0).Step(1.0)
+                    .Animation(Animatable::Interpolatable));
+        }
+
 }

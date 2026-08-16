@@ -23,6 +23,8 @@
 #include "../game/game_input.h"
 #include "../../RePlayEngine/Scene/SceneManager.h"
 #include "../../RePlayEngine/Rendering/Passes/PostProcessPass.h"
+#include "../../RePlayEngine/Rendering/Effects/EffectChain.h"
+#include "../../RePlayEngine/UI/Effects/UIRenderTargetPool.h"
 #include "../../RePlayEngine/Rendering/Passes/BloomPass.h"
 #include "../../RePlayEngine/Rendering/Passes/SsaoPass.h"
 #include "../../RePlayEngine/Rendering/Passes/SsrPass.h"
@@ -50,6 +52,7 @@
 #include "../../RePlayEngine/Reflection/Property/PropertyBag.h"
 #include "../../RePlayEngine/UI/FontAtlas.h"
 #include "../../RePlayEngine/UI/UIRenderer.h"
+#include "../../RePlayEngine/UI/UIInputFieldSystem.h"
 #include "../../RePlayEngine/Audio/AudioSystem.h"
 #include "../../RePlayEngine/Runtime/API/RuntimeSaveGameService.h"
 #include "../../RePlayEngine/Project/ProjectSettings.h"
@@ -432,8 +435,16 @@ public:
     ReplayEngine::Rendering::RenderItemList object_render_items;
     ReplayEngine::UI::FontAtlas             ui_font_atlas;
     ReplayEngine::UI::UIRenderer            ui_renderer;
+    // UI Effect と同じ EffectChain を 3D/Screen から使うための描画ホスト。
+    // Texture の恒久キャッシュは持たず、load_texture_from_file の共有キャッシュから
+    // Apply 中だけ ComPtr を保持する。UIRenderer の texture_cache_ は移動しない。
+    ReplayEngine::Rendering::Effects::EffectChain scene_effect_chain;
+    ReplayEngine::UI::UIRenderTargetPool scene_effect_targets;
+    std::vector<Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>>
+        scene_effect_texture_refs;
     ReplayEngine::Rendering::LineStrokeRenderer line_stroke_renderer;
     bool ui_pointer_down_last{ false };
+    float ui_mouse_wheel_delta{ 0.0f };
 
     // Asset GUID -> メッシュ実体。
     // 読み込めた Asset だけを入れる。null や壊れたエントリは決して登録しない。
@@ -601,6 +612,7 @@ public:
     int              active_editor_camera_preset_index{ -1 };
     bool             editor_camera_presets_loaded{ false };
     bool             show_camera_preset_manager{ false };
+    bool             show_ui_focus_style_manager{ false };
     bool             gizmo_move_shortcut_was_down{ false };
     bool             gizmo_rotate_shortcut_was_down{ false };
     bool             gizmo_scale_shortcut_was_down{ false };
@@ -858,13 +870,18 @@ public:
         {
             ImGui_ImplWin32_WndProcHandler(hwnd, msg, wparam, lparam);
             const bool control_down = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+            const bool runtime_ui_text_owner = scene_view_hovered &&
+                !ImGui::GetIO().WantTextInput &&
+                ReplayEngine::UI::UIInputFieldSystem::HasFocusedInput(
+                    active_object_scene());
             const bool shortcut_pressed = msg == WM_KEYDOWN && control_down &&
-                (lparam & 0x40000000) == 0 && !ImGui::GetIO().WantTextInput;
+                (lparam & 0x40000000) == 0 && !ImGui::GetIO().WantTextInput &&
+                !runtime_ui_text_owner;
 
-            // Focused Tool > Scene > Global の順で shortcut を所有する。
+            // Focused Tool > Runtime UI Text > Scene > Global の順で shortcut を所有する。
             const bool focused_tool_owns_shortcut =
                 shader_composer_editor.OwnsKeyboardShortcut() && msg == WM_KEYDOWN &&
-                !ImGui::GetIO().WantTextInput &&
+                !ImGui::GetIO().WantTextInput && !runtime_ui_text_owner &&
                 (wparam == VK_DELETE || (control_down && wparam == 'S'));
             if (focused_tool_owns_shortcut) return 0;
 
@@ -882,7 +899,7 @@ public:
                 return 0;
             }
             if (msg == WM_KEYDOWN && control_down && !ImGui::GetIO().WantTextInput &&
-                (wparam == 'Z' || wparam == 'Y'))
+                !runtime_ui_text_owner && (wparam == 'Z' || wparam == 'Y'))
             {
                 if (active_editor_workspace == editor_workspace::motion)
                 {
@@ -927,13 +944,14 @@ public:
                 return 0;
             }
             if (msg == WM_KEYDOWN && wparam == VK_DELETE &&
-                !ImGui::GetIO().WantTextInput &&
+                !ImGui::GetIO().WantTextInput && !runtime_ui_text_owner &&
                 selected_editor_object == editor_selection::game_object)
             {
                 object_hierarchy_panel.DestroySelection(object_editor_context);
                 return 0;
             }
-            if (msg == WM_KEYDOWN && wparam == 'F' && (GetKeyState(VK_CONTROL) & 0x8000))
+            if (msg == WM_KEYDOWN && wparam == 'F' && !runtime_ui_text_owner &&
+                (GetKeyState(VK_CONTROL) & 0x8000))
             {
                 focus_search_requested = true;
                 set_edit_mode(true);
@@ -998,6 +1016,28 @@ public:
             return 0;
         }
 #endif
+        // Runtime UI の文字入力は ImGui の text owner 判定が終わった後だけ受ける。
+        // Editor では Scene View が入力対象のときだけ流し、Inspector 等の編集を奪わない。
+        {
+            bool runtime_ui_text_allowed = standalone_game_mode || object_scene_play_mode;
+#ifdef USE_IMGUI
+            if (editor_mode)
+            {
+                const bool imgui_text = ImGui::GetCurrentContext() != nullptr &&
+                    ImGui::GetIO().WantTextInput;
+                runtime_ui_text_allowed = scene_view_hovered && !imgui_text;
+            }
+#endif
+            const bool text_message = msg == WM_CHAR || msg == WM_KEYDOWN ||
+                msg == WM_IME_STARTCOMPOSITION || msg == WM_IME_COMPOSITION ||
+                msg == WM_IME_ENDCOMPOSITION;
+            if (runtime_ui_text_allowed && text_message &&
+                ReplayEngine::UI::UIInputFieldSystem::HandleWindowMessage(
+                    active_object_scene(), hwnd, msg, wparam, lparam))
+            {
+                return 0;
+            }
+        }
         if ((msg == WM_SYSKEYDOWN && wparam == VK_RETURN && (lparam & (1LL << 29))) ||
             (msg == WM_KEYDOWN && wparam == VK_F11))
         {
@@ -1057,6 +1097,10 @@ public:
                     suggested->right - suggested->left, suggested->bottom - suggested->top,
                     SWP_NOZORDER | SWP_NOACTIVATE);
             }
+            break;
+        case WM_MOUSEWHEEL:
+            ui_mouse_wheel_delta += static_cast<float>(GET_WHEEL_DELTA_WPARAM(wparam)) /
+                static_cast<float>(WHEEL_DELTA);
             break;
         case WM_KEYDOWN:
             if (scene_manager.OnKeyDown(wparam))
@@ -1250,7 +1294,17 @@ private:
     // 深度プリパスを使う構成では、GBuffer へ出すものを必ずここでも描くこと。
     // 描き漏らすと DepthFunc=EQUAL に落とされて画面から消える。
     void draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shader,
-        bool gbuffer_pass, bool depth_only = false);
+        bool gbuffer_pass, bool depth_only = false,
+        ReplayEngine::Core::ObjectID only_owner = ReplayEngine::Core::ObjectID::Invalid(),
+        bool skip_model_effect_owners = false);
+    ID3D11ShaderResourceView* resolve_scene_effect_texture(const std::string& asset_guid);
+    ReplayEngine::UI::UIRenderTarget* apply_scene_effect_chain(
+        ID3D11ShaderResourceView* source,
+        const std::vector<ReplayEngine::UI::UIEffect>& effects,
+        std::uint32_t width, std::uint32_t height, DXGI_FORMAT format,
+        float effect_time);
+    void begin_scene_effect_frame() noexcept;
+    void draw_model_effect_stacks(const D3D11_VIEWPORT& camera_viewport);
     // LandscapeRendererComponent 用の procedural static mesh 描画。
     // AssetGUIDを介さず、LandscapeData::Revision が変わったときだけGPU Meshを作り直す。
     void draw_landscape_scene_meshes(bool gbuffer_pass, bool depth_only = false);
@@ -1318,6 +1372,7 @@ private:
 
     void draw_editor_camera_settings();
     void draw_editor_camera_preset_manager();
+    void draw_ui_focus_style_manager();
     void draw_editor_camera_top_menu();
 
     // Camera preset lifecycle。active 選択だけは local Saved へ保存する。
@@ -1397,6 +1452,8 @@ private:
     bool project_create_material(const std::string& name);
     bool project_create_motion(const std::string& name);
     bool project_create_scene_flow(const std::string& name);
+    bool project_create_localization(const std::string& name);
+    bool project_create_effect_preset(const std::string& name);
     bool project_create_surface_shader(const std::string& name);
     bool project_create_layer_shader(const std::string& name);
     bool project_create_shader_composer(const std::string& name,

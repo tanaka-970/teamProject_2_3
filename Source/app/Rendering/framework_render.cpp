@@ -7,6 +7,8 @@
 #include "../../../RePlayEngine/Components/Camera/CameraComponent.h"
 #include "../../../RePlayEngine/Components/Rendering/ParticleEmitterComponent.h"
 #include "../../../RePlayEngine/Components/Rendering/PostProcessVolumeComponent.h"
+#include "../../../RePlayEngine/Components/Rendering/ScreenEffectStackComponent.h"
+#include "../../../RePlayEngine/Components/Rendering/ModelEffectStackComponent.h"
 #include "../../../RePlayEngine/Rendering/Shaders/BuiltInShaders.h"
 #include "../../../RePlayEngine/Rendering/ShaderStack/BuiltInShaderLayers.h"
 #include "../../../RePlayEngine/Rendering/Materials/ShaderLayerBinding.h"
@@ -25,6 +27,8 @@ namespace
 {
     using ReplayEngine::Components::ParticleEmitterComponent;
     using ReplayEngine::Components::PostProcessVolumeComponent;
+    using ReplayEngine::Components::ScreenEffectStackComponent;
+    using ReplayEngine::Components::ModelEffectStackComponent;
     using ReplayEngine::Components::TransformComponent;
 
     float clamp_finite(float value, float fallback, float low, float high) noexcept
@@ -295,6 +299,8 @@ void framework::render(float elapsed_time)
 
     // 描画統計の計測開始。CPUカウンタを0に戻し、GPUクエリを開く。
     ReplayEngine::Rendering::Stats().BeginFrame(immediate_context.Get());
+    ReplayEngine::Rendering::Stats().BeginPhase(
+        ReplayEngine::Rendering::RenderStats::Phase::Scene3D, immediate_context.Get());
 
     // 前フレームのRTV/SRV参照を先に外し、同じリソースを入出力へ同時設定する競合を防ぐ。
     ID3D11RenderTargetView* null_rtvs[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT]{};
@@ -334,8 +340,10 @@ void framework::render(float elapsed_time)
             depth_stencil_states[(size_t)DEPTH_STATE::ZT_OFF_ZW_OFF].Get(), 0);
         immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
         scene_manager.Render({ immediate_context.Get(), viewport.Width, viewport.Height });
-        // 早期returnでもクエリを閉じる。開いたままにすると次フレームで
+        // 早期returnでも Phase / Frame Query を閉じる。開いたままにすると次フレームで
         // 二重Beginになりクエリが壊れる。
+        ReplayEngine::Rendering::Stats().EndPhase(
+            ReplayEngine::Rendering::RenderStats::Phase::Scene3D, immediate_context.Get());
         ReplayEngine::Rendering::Stats().EndFrame(immediate_context.Get());
         swap_chain->Present(0, 0);
         return;
@@ -400,12 +408,28 @@ void framework::render(float elapsed_time)
     struct CameraRenderPass
     {
         const ReplayEngine::Components::CameraComponent* camera = nullptr;
+        const ScreenEffectStackComponent* screen_effect = nullptr;
         bool matrix_override = false;
         DirectX::XMFLOAT4X4 view{};
         DirectX::XMFLOAT4X4 projection{};
         DirectX::XMFLOAT3 eye{ 0.0f, 0.0f, 0.0f };
         D3D11_VIEWPORT output{};
     };
+
+    const auto screen_effect_for_object = [](const ReplayEngine::Core::GameObject* object)
+        -> const ScreenEffectStackComponent*
+    {
+        const ScreenEffectStackComponent* effect = object != nullptr
+            ? object->GetComponent<ScreenEffectStackComponent>() : nullptr;
+        return effect != nullptr && effect->ActiveInHierarchy() && effect->enabled
+            ? effect : nullptr;
+    };
+
+    const auto active_camera_selection =
+        ReplayEngine::Components::ResolveActiveCameraSelection(active_object_scene());
+    const ScreenEffectStackComponent* active_camera_screen_effect =
+        active_camera_selection.Valid()
+            ? screen_effect_for_object(active_camera_selection.object) : nullptr;
 
     auto make_output_viewport = [&](const DirectX::XMFLOAT4& rect)
     {
@@ -431,6 +455,7 @@ void framework::render(float elapsed_time)
         // 右側へ重ねるだけにし、既存 Scene View の操作基盤を変えない。
         CameraRenderPass main_pass{};
         main_pass.output = viewport;
+        main_pass.screen_effect = active_camera_screen_effect;
         camera_render_passes.push_back(main_pass);
 
         if (editor_auxiliary_views)
@@ -444,6 +469,7 @@ void framework::render(float elapsed_time)
             {
                 CameraRenderPass pass{};
                 pass.matrix_override = true;
+                pass.screen_effect = active_camera_screen_effect;
                 pass.eye = eye;
                 pass.output = make_output_viewport(rect);
                 const float aspect = pass.output.Width / pass.output.Height;
@@ -485,6 +511,7 @@ void framework::render(float elapsed_time)
 
             CameraRenderPass pass{};
             pass.camera = camera;
+            pass.screen_effect = screen_effect_for_object(object);
             pass.output = make_output_viewport(camera->viewport_rect);
             camera_render_passes.push_back(pass);
         }
@@ -499,6 +526,7 @@ void framework::render(float elapsed_time)
         {
             CameraRenderPass legacy_pass{};
             legacy_pass.output = viewport;
+            legacy_pass.screen_effect = active_camera_screen_effect;
             camera_render_passes.push_back(legacy_pass);
         }
     }
@@ -513,6 +541,8 @@ void framework::render(float elapsed_time)
         taa_pass.enabled = false;
         previous_view_projection_valid = false;
     }
+
+    begin_scene_effect_frame();
 
     for (std::size_t camera_pass_index = 0;
         camera_pass_index < camera_render_passes.size(); ++camera_pass_index)
@@ -1444,6 +1474,10 @@ void framework::render(float elapsed_time)
         }
     }
 
+    // Model Effect は通常の scene 描画後、transparent VFX より前へ合成する。
+    // これにより effect 無しモデルは従来経路のまま、line/particle は後から正しく重なる。
+    draw_model_effect_stacks(camera_output_viewport);
+
     // Component 版の 3D ライン / 軌跡は、透明 3D エフェクトと同じく
     // 深度を読むが書かない Forward 合成へ置く。
     draw_line_strokes();
@@ -1486,25 +1520,179 @@ void framework::render(float elapsed_time)
             framebuffers[0]->shader_resource_views[0].Get());
     }
 
-    immediate_context->OMSetRenderTargets(1, render_target_view.GetAddressOf(), nullptr);
-    immediate_context->RSSetViewports(1, &camera_output_viewport);
+    const ScreenEffectStackComponent* screen_effect = camera_pass.screen_effect;
+    const bool final_output =
+        output == ReplayEngine::Rendering::RenderOutput::Final && enable_final_pass_shader;
+    const bool has_screen_effect = final_output && screen_effect != nullptr &&
+        screen_effect->HasActiveEffects(&asset_database);
+    const bool before_post_effect = has_screen_effect &&
+        screen_effect->apply_stage == ScreenEffectStackComponent::BeforePostProcess;
+    const bool after_post_effect = has_screen_effect &&
+        screen_effect->apply_stage == ScreenEffectStackComponent::AfterPostProcess;
 
-    if (output == ReplayEngine::Rendering::RenderOutput::Final && enable_final_pass_shader)
+    ID3D11ShaderResourceView* post_source =
+        framebuffers[0]->shader_resource_views[0].Get();
+    ReplayEngine::UI::UIRenderTarget* before_result = nullptr;
+    const std::uint32_t effect_width = static_cast<std::uint32_t>(
+        (std::max)(1.0f, camera_output_viewport.Width));
+    const std::uint32_t effect_height = static_cast<std::uint32_t>(
+        (std::max)(1.0f, camera_output_viewport.Height));
+
+    if (before_post_effect)
     {
-        // FinalではBloom、ビネット、FXAAをまとめてバックバッファへ合成する。
-        post_process.Execute(immediate_context.Get(), *bit_block_transfer,
-            framebuffers[0]->shader_resource_views[0].Get(),
-            bloom_srv,
-            viewport.Width, viewport.Height, enable_bloom_shader,
-            enable_vignette_shader, enable_fxaa_shader);
+        // Effect は Camera viewport の画素だけへ掛ける。ただし既存 PostProcess は
+        // full framebuffer SRV を入力にする設計なので、split viewport では
+        // 1) Camera 矩形を crop -> 2) Effect -> 3) full-size HDR copy へ差し戻す。
+        // これで Bloom/FXAA/Vignette を含む既存 PostProcess の入力座標系を変えない。
+        const std::uint32_t framebuffer_width = static_cast<std::uint32_t>(
+            (std::max)(1.0f, framebuffers[0]->viewport.Width));
+        const std::uint32_t framebuffer_height = static_cast<std::uint32_t>(
+            (std::max)(1.0f, framebuffers[0]->viewport.Height));
+        const UINT left = static_cast<UINT>((std::max)(0.0f,
+            std::floor(camera_output_viewport.TopLeftX)));
+        const UINT top = static_cast<UINT>((std::max)(0.0f,
+            std::floor(camera_output_viewport.TopLeftY)));
+        const bool full_viewport = left == 0u && top == 0u &&
+            effect_width == framebuffer_width && effect_height == framebuffer_height;
+
+        ID3D11ShaderResourceView* effect_source = post_source;
+        ReplayEngine::UI::UIRenderTarget* camera_source = nullptr;
+        bool source_ready = full_viewport;
+        if (!full_viewport)
+        {
+            camera_source = scene_effect_targets.Acquire(effect_width, effect_height,
+                DXGI_FORMAT_R16G16B16A16_FLOAT);
+            if (camera_source != nullptr)
+            {
+                Microsoft::WRL::ComPtr<ID3D11Resource> source_resource;
+                framebuffers[0]->shader_resource_views[0]->GetResource(
+                    source_resource.GetAddressOf());
+                if (source_resource != nullptr)
+                {
+                    D3D11_BOX box{};
+                    box.left = left;
+                    box.top = top;
+                    box.front = 0;
+                    box.right = (std::min)(framebuffer_width, left + effect_width);
+                    box.bottom = (std::min)(framebuffer_height, top + effect_height);
+                    box.back = 1;
+                    if (box.right > box.left && box.bottom > box.top &&
+                        box.right - box.left == effect_width &&
+                        box.bottom - box.top == effect_height)
+                    {
+                        immediate_context->CopySubresourceRegion(
+                            camera_source->texture.Get(), 0, 0, 0, 0,
+                            source_resource.Get(), 0, &box);
+                        effect_source = camera_source->srv.Get();
+                        source_ready = true;
+                    }
+                }
+            }
+        }
+
+        if (source_ready)
+        {
+            before_result = apply_scene_effect_chain(effect_source, screen_effect->EffectiveEffects(&asset_database),
+                effect_width, effect_height, DXGI_FORMAT_R16G16B16A16_FLOAT,
+                shader_composer_time);
+            if (before_result != nullptr)
+            {
+                if (full_viewport)
+                {
+                    post_source = before_result->srv.Get();
+                }
+                else
+                {
+                    ReplayEngine::UI::UIRenderTarget* merged_source =
+                        scene_effect_targets.Acquire(framebuffer_width, framebuffer_height,
+                            DXGI_FORMAT_R16G16B16A16_FLOAT);
+                    Microsoft::WRL::ComPtr<ID3D11Resource> original_resource;
+                    framebuffers[0]->shader_resource_views[0]->GetResource(
+                        original_resource.GetAddressOf());
+                    if (merged_source != nullptr && original_resource != nullptr)
+                    {
+                        immediate_context->CopyResource(merged_source->texture.Get(),
+                            original_resource.Get());
+                        immediate_context->CopySubresourceRegion(
+                            merged_source->texture.Get(), 0, left, top, 0,
+                            before_result->texture.Get(), 0, nullptr);
+                        post_source = merged_source->srv.Get();
+                    }
+                    // merge RT を確保できなければ、元の full framebuffer を使い
+                    // Effect だけ安全に諦める。座標系を壊した入力は PostProcess へ渡さない。
+                }
+            }
+        }
+    }
+
+    if (after_post_effect)
+    {
+        // Tone map 済みの結果を一度 LDR RT へ受け、その Camera の Effect を掛けてから
+        // backbuffer へ戻す。UI はこの camera loop の後なので巻き込まれない。
+        ReplayEngine::UI::UIRenderTarget* post_target =
+            scene_effect_targets.Acquire(effect_width, effect_height,
+                DXGI_FORMAT_R8G8B8A8_UNORM);
+        if (post_target != nullptr)
+        {
+            ID3D11ShaderResourceView* null_srvs[2]{};
+            immediate_context->PSSetShaderResources(0, 2, null_srvs);
+            immediate_context->OMSetRenderTargets(1, post_target->rtv.GetAddressOf(), nullptr);
+            D3D11_VIEWPORT post_viewport{};
+            post_viewport.Width = static_cast<float>(effect_width);
+            post_viewport.Height = static_cast<float>(effect_height);
+            post_viewport.MinDepth = 0.0f;
+            post_viewport.MaxDepth = 1.0f;
+            immediate_context->RSSetViewports(1, &post_viewport);
+            const FLOAT clear_post[4]{ 0.0f, 0.0f, 0.0f, 0.0f };
+            immediate_context->ClearRenderTargetView(post_target->rtv.Get(), clear_post);
+
+            post_process.Execute(immediate_context.Get(), *bit_block_transfer,
+                post_source, bloom_srv, viewport.Width, viewport.Height,
+                enable_bloom_shader, enable_vignette_shader, enable_fxaa_shader);
+
+            ID3D11ShaderResourceView* null_post_source = nullptr;
+            immediate_context->PSSetShaderResources(0, 1, &null_post_source);
+            ReplayEngine::UI::UIRenderTarget* effected = apply_scene_effect_chain(
+                post_target->srv.Get(), screen_effect->EffectiveEffects(&asset_database),
+                effect_width, effect_height, DXGI_FORMAT_R8G8B8A8_UNORM,
+                shader_composer_time);
+
+            immediate_context->OMSetRenderTargets(1, render_target_view.GetAddressOf(), nullptr);
+            immediate_context->RSSetViewports(1, &camera_output_viewport);
+            ID3D11ShaderResourceView* selected =
+                effected != nullptr ? effected->srv.Get() : post_target->srv.Get();
+            bit_block_transfer->blit(immediate_context.Get(), &selected, 0, 1);
+        }
+        else
+        {
+            // RT 枯渇時も描画を失わない。Effect だけ諦めて既存 PostProcess を通す。
+            immediate_context->OMSetRenderTargets(1, render_target_view.GetAddressOf(), nullptr);
+            immediate_context->RSSetViewports(1, &camera_output_viewport);
+            post_process.Execute(immediate_context.Get(), *bit_block_transfer,
+                post_source, bloom_srv, viewport.Width, viewport.Height,
+                enable_bloom_shader, enable_vignette_shader, enable_fxaa_shader);
+        }
     }
     else
     {
-        ID3D11ShaderResourceView* selected =
-            output == ReplayEngine::Rendering::RenderOutput::Bloom && bloom_srv
-            ? bloom_srv
-            : framebuffers[0]->shader_resource_views[0].Get();
-        bit_block_transfer->blit(immediate_context.Get(), &selected, 0, 1);
+        immediate_context->OMSetRenderTargets(1, render_target_view.GetAddressOf(), nullptr);
+        immediate_context->RSSetViewports(1, &camera_output_viewport);
+
+        if (final_output)
+        {
+            // Effect が空/無効ならこの従来分岐をそのまま通る。
+            post_process.Execute(immediate_context.Get(), *bit_block_transfer,
+                post_source, bloom_srv, viewport.Width, viewport.Height,
+                enable_bloom_shader, enable_vignette_shader, enable_fxaa_shader);
+        }
+        else
+        {
+            ID3D11ShaderResourceView* selected =
+                output == ReplayEngine::Rendering::RenderOutput::Bloom && bloom_srv
+                ? bloom_srv
+                : framebuffers[0]->shader_resource_views[0].Get();
+            bit_block_transfer->blit(immediate_context.Get(), &selected, 0, 1);
+        }
     }
 
     // 次フレームで描画先に戻すフレームバッファはSRVから外しておく。
@@ -1513,9 +1701,14 @@ void framework::render(float elapsed_time)
     immediate_context->PSSetShaderResources(0, _countof(null_post_srvs), null_post_srvs);
     }
 
+    ReplayEngine::Rendering::Stats().EndPhase(
+        ReplayEngine::Rendering::RenderStats::Phase::Scene3D, immediate_context.Get());
+
     render_camera_override = nullptr;
     render_matrix_override_active = false;
     render_camera_aspect = 0.0f;
+    ReplayEngine::Rendering::Stats().BeginPhase(
+        ReplayEngine::Rendering::RenderStats::Phase::GameUI, immediate_context.Get());
     const object_ui_viewport ui_target = object_ui_viewport_target();
     D3D11_VIEWPORT ui_viewport = viewport;
     ui_viewport.TopLeftX = ui_target.left;
@@ -1554,6 +1747,10 @@ void framework::render(float elapsed_time)
         blend_states[(size_t)BLEND_STATE::PREMULTIPLIED].Get();
     ui_states.sampler =
         sampler_states[(size_t)SAMPLER_STATE::LINEAR].Get();
+    ui_states.focus_outline_enabled = project_settings.FocusOutlineEnabled();
+    ui_states.focus_outline_color = project_settings.FocusOutlineColor();
+    ui_states.focus_outline_width = project_settings.FocusOutlineWidth();
+    ui_states.focus_corner_radius = project_settings.FocusCornerRadius();
     ui_states.scissor_offset_x = ui_target.left;
     ui_states.scissor_offset_y = ui_target.top;
     ui_states.viewport_scale_x = ui_target.width / ui_logical_width;
@@ -1570,7 +1767,11 @@ void framework::render(float elapsed_time)
         ui_logical_width, ui_logical_height, shader_composer_time, ui_states);
     // UI 用の viewport override は UIRenderer の間だけ。ImGui と次フレームは client 全体へ戻す。
     immediate_context->RSSetViewports(1, &viewport);
+    ReplayEngine::Rendering::Stats().EndPhase(
+        ReplayEngine::Rendering::RenderStats::Phase::GameUI, immediate_context.Get());
 
+    ReplayEngine::Rendering::Stats().BeginPhase(
+        ReplayEngine::Rendering::RenderStats::Phase::EditorUI, immediate_context.Get());
 #ifdef USE_IMGUI
     // update()でNewFrameを通したフレームだけ描く。ロード完了フレームのように
     // 途中でeditor_modeが立った場合は次フレームからUIを出す。
@@ -1589,6 +1790,8 @@ void framework::render(float elapsed_time)
         }
     }
 #endif
+    ReplayEngine::Rendering::Stats().EndPhase(
+        ReplayEngine::Rendering::RenderStats::Phase::EditorUI, immediate_context.Get());
 
     // GPUクエリを閉じて、揃った計測結果を回収する。
     post_process.GetSettings() = original_post_settings;
