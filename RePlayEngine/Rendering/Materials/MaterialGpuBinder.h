@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "MaterialBinding.h"
 #include "../../Assets/AssetDatabase.h"
@@ -13,6 +13,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace ReplayEngine::Rendering
@@ -63,6 +64,10 @@ namespace ReplayEngine::Rendering
 
         std::size_t CachedShaderCount() const noexcept { return shader_cache_.size(); }
         std::size_t CachedTextureCount() const noexcept { return texture_cache_.size(); }
+        std::uint64_t TrackedTextureBytes() const noexcept;
+        std::uint64_t TrackedBufferBytes() const noexcept;
+        void AppendResidentTextureIdentities(
+            std::vector<std::pair<std::string, const void*>>& out) const;
         bool DefaultTexturesReady() const noexcept
         {
             return default_white_ && default_black_ && default_gray_ && default_bump_;

@@ -54,14 +54,23 @@ void framework::update_object_scene(float elapsed_time)
     // Update / Trigger の最中に入れ替えると、走査中の配列と実体が同時に消える。
     // SceneTransitionBehaviour が OnTriggerEnter で出した要求も、
     // 次のフレームのこの位置で初めて実際の切り替えになる。
-    tick_runtime_scene_flow();
-    poll_csharp_script_changes(elapsed_time);
+    {
+        REPLAY_PROFILE_SCOPE("SceneFlow");
+        tick_runtime_scene_flow();
+    }
+    {
+        REPLAY_PROFILE_SCOPE("HotReload/CSharp");
+        poll_csharp_script_changes(elapsed_time);
+    }
 
     // .hlsl の保存もここで拾う。
     //
     // C# と同じ位置に置く理由は同じ。描画の最中に
     // バイトコードを差し替えないための同期点がここだから。
-    poll_shader_source_changes(elapsed_time);
+    {
+        REPLAY_PROFILE_SCOPE("HotReload/Shader");
+        poll_shader_source_changes(elapsed_time);
+    }
 
     // スクリプトの同期点。
     //
@@ -77,7 +86,10 @@ void framework::update_object_scene(float elapsed_time)
     //   1 本しか存在しない。
     if (object_script_runtime)
     {
-        object_script_runtime->ApplyPendingSchemaSwaps(elapsed_time);
+        {
+            REPLAY_PROFILE_SCOPE("Script/SchemaSwap");
+            object_script_runtime->ApplyPendingSchemaSwaps(elapsed_time);
+        }
 
         // 抑制済みのぶんだけがここへ来る。同じエラーが毎フレーム出ても
         // ログは埋まらない（最初の 5 回 -> 以降 1 秒ごとの集約）。
@@ -112,8 +124,14 @@ void framework::update_object_scene(float elapsed_time)
 
     // Motion Editor は Play 中でなくても Property 一覧を使う。
     // Material / Custom Effect の動的 Schema は毎フレームここで同期する。
-    prepare_material_motion_bindings(scene);
-    prepare_ui_effect_shader_schemas(scene);
+    {
+        REPLAY_PROFILE_SCOPE("Motion/PrepareBindings");
+        prepare_material_motion_bindings(scene);
+    }
+    {
+        REPLAY_PROFILE_SCOPE("UI/EffectSchemas");
+        prepare_ui_effect_shader_schemas(scene);
+    }
 
     // Editor では F5 Play Session 以外 Component を更新しない。
     // Editor で置いた GameObject が編集中に勝手に動くのを防ぐ。
@@ -121,17 +139,32 @@ void framework::update_object_scene(float elapsed_time)
     {
         // 順序: Update（入力・意思決定）→ FixedUpdate（物理）→ LateUpdate → カメラ
         // 入力は Update で読み、FixedUpdate がその値を消費する。
-        scene.Update(scaled_delta_time);
-        update_object_fixed_step(scaled_delta_time);
-        scene.LateUpdate(scaled_delta_time);
+        {
+            REPLAY_PROFILE_SCOPE("Components/Update");
+            scene.Update(scaled_delta_time);
+        }
+        {
+            REPLAY_PROFILE_SCOPE("Physics/FixedStep");
+            update_object_fixed_step(scaled_delta_time);
+        }
+        {
+            REPLAY_PROFILE_SCOPE("Components/LateUpdate");
+            scene.LateUpdate(scaled_delta_time);
+        }
 
         // 位置が確定してから Trigger を判定する。
         // FixedUpdate の途中で判定すると、まだ押し戻されていない位置で
         // Enter が出てしまい、次のフレームですぐ Exit になる。
-        dispatch_collision_triggers();
+        {
+            REPLAY_PROFILE_SCOPE("Physics/Triggers");
+            dispatch_collision_triggers();
+        }
 
         // Behaviour への Collision 配送。Trigger とは経路が完全に分かれている。
-        object_collision_events.Dispatch(scene, object_runtime_frame_index);
+        {
+            REPLAY_PROFILE_SCOPE("Physics/CollisionEvents");
+            object_collision_events.Dispatch(scene, object_runtime_frame_index);
+        }
 
         // Behaviour が積んだイベントと遅延生成を、この同期点で流し切る。
         if (object_runtime_context)
@@ -141,8 +174,14 @@ void framework::update_object_scene(float elapsed_time)
         }
 
         // Transform が確定してからカメラを動かす。
-        update_object_camera_follow(scaled_delta_time);
-        object_audio_system.UpdateFromScene(scene);
+        {
+            REPLAY_PROFILE_SCOPE("CameraFollow");
+            update_object_camera_follow(scaled_delta_time);
+        }
+        {
+            REPLAY_PROFILE_SCOPE("Audio");
+            object_audio_system.UpdateFromScene(scene);
+        }
     }
     else
     {
@@ -161,8 +200,11 @@ void framework::update_object_scene(float elapsed_time)
     const object_ui_viewport ui_viewport = object_ui_viewport_target();
     const float ui_logical_width = (std::max)(1.0f, ui_viewport.logical_width);
     const float ui_logical_height = (std::max)(1.0f, ui_viewport.logical_height);
-    ReplayEngine::UI::UILayout::Resolve(scene,
-        ui_logical_width, ui_logical_height);
+    {
+        REPLAY_PROFILE_SCOPE("UI/LayoutHitTest");
+        ReplayEngine::UI::UILayout::Resolve(scene,
+            ui_logical_width, ui_logical_height);
+    }
     POINT mouse{ game_input.PointerScreenX(), game_input.PointerScreenY() };
     ScreenToClient(hwnd, &mouse);
     const float viewport_width = (std::max)(1.0f, ui_viewport.width);
@@ -180,10 +222,13 @@ void framework::update_object_scene(float elapsed_time)
     if (editor_mode && ImGui::GetCurrentContext())
         input_captured = ImGui::GetIO().WantCaptureMouse && !scene_view_hovered;
 #endif
-    ReplayEngine::UI::UILayout::UpdateButtons(scene,
-        ui_logical_width, ui_logical_height,
-        mouse_x, mouse_y, mouse_down, mouse_pressed, mouse_released,
-        ui_mouse_wheel_delta, input_captured, object_runtime_active());
+    {
+        REPLAY_PROFILE_SCOPE("UI/InputNavigation");
+        ReplayEngine::UI::UILayout::UpdateButtons(scene,
+            ui_logical_width, ui_logical_height,
+            mouse_x, mouse_y, mouse_down, mouse_pressed, mouse_released,
+            ui_mouse_wheel_delta, input_captured, object_runtime_active());
+    }
     ui_mouse_wheel_delta = 0.0f;
     ui_pointer_down_last = mouse_down;
 
@@ -198,12 +243,24 @@ void framework::update_object_scene(float elapsed_time)
         // 順序: Scene::Update -> UI状態／トリガー -> Motion Mixer -> UI Layout -> Render。
         // Motion は Component::OnUpdate からは評価しない。全 Player の寄与を先に集め、
         // 同じ property へ setter を 1 フレーム 1 回だけ呼ぶため、この外部フェーズで扱う。
-        evaluate_motion_players(scene, scaled_delta_time, unscaled_delta_time);
-        ReplayEngine::Components::PropertyLinkComponent::EvaluateAll(
-            scene, unscaled_delta_time);
-        update_ui_number_displays(scene);
+        {
+            REPLAY_PROFILE_SCOPE("Motion/Evaluate");
+            evaluate_motion_players(scene, scaled_delta_time, unscaled_delta_time);
+        }
+        {
+            REPLAY_PROFILE_SCOPE("PropertyLink");
+            ReplayEngine::Components::PropertyLinkComponent::EvaluateAll(
+                scene, unscaled_delta_time);
+        }
+        {
+            REPLAY_PROFILE_SCOPE("UI/NumberDisplay");
+            update_ui_number_displays(scene);
+        }
         // UI sprite animation は Pause Menu / Loading 表示を止めないため実時間。
-        update_ui_sprite_animators(scene, unscaled_delta_time);
+        {
+            REPLAY_PROFILE_SCOPE("UI/SpriteAnimation");
+            update_ui_sprite_animators(scene, unscaled_delta_time);
+        }
         if (object_runtime_context)
         {
             object_runtime_context->Events().Dispatch(
@@ -214,9 +271,15 @@ void framework::update_object_scene(float elapsed_time)
 
     // Motion が RectTransform を書いた後に最終レイアウトを確定する。
     // 先頭の Resolve は hit test 用、こちらが描画用の正本になる。
-    ReplayEngine::UI::UILayout::Resolve(scene,
-        ui_logical_width, ui_logical_height);
-    sync_object_lights();
+    {
+        REPLAY_PROFILE_SCOPE("UI/LayoutFinal");
+        ReplayEngine::UI::UILayout::Resolve(scene,
+            ui_logical_width, ui_logical_height);
+    }
+    {
+        REPLAY_PROFILE_SCOPE("LightSync");
+        sync_object_lights();
+    }
 
     // 削除済み Landscape の GPU メッシュをフレーム更新時に 1 回だけ解放する。
     // 非表示なだけの Landscape は再表示時の再生成を避けるためキャッシュへ残す。

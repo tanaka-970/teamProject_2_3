@@ -93,6 +93,7 @@ void framework::configure_content_root(std::filesystem::path content_root)
     gltf_model::SetCacheRoot(
         content_path(std::filesystem::path("resources") / ".replay_cache"));
     set_shutdown_log_folder(saved_root_path_);
+    ReplayEngine::Rendering::Stats().SetOutputDirectory(saved_root_path_ / "Profile");
 }
 
 void framework::configure_standalone_game(std::filesystem::path content_root,
@@ -106,6 +107,8 @@ void framework::configure_standalone_game(std::filesystem::path content_root,
     editor_mode = false;
     edit_mode_active = false;
     editor_session_active = false;
+    // 出荷ゲームではProfilerを既定非表示にし、F4で必要なときだけ開く。
+    show_render_stats = false;
     csharp_auto_reload = false;
     shader_auto_recompile = false;
 
@@ -113,6 +116,7 @@ void framework::configure_standalone_game(std::filesystem::path content_root,
         saved_path(std::filesystem::path("Cache") / "collisions"));
     gltf_model::SetCacheRoot(saved_path(std::filesystem::path("Cache") / "gltf"));
     set_shutdown_log_folder(saved_root_path_);
+    ReplayEngine::Rendering::Stats().SetOutputDirectory(saved_root_path_ / "Profile");
 }
 
 void framework::set_startup_scene_path(std::filesystem::path scene_path)

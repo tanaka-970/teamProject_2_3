@@ -114,6 +114,29 @@ namespace ReplayEngine::UI
         return true;
     }
 
+    std::uint64_t UIRenderer::TrackedBufferBytes() const noexcept
+    {
+        std::uint64_t total = 0;
+        if (vertex_buffer_)
+            total += static_cast<std::uint64_t>(vertex_capacity_) * sizeof(Vertex);
+        if (constant_buffer_) total += sizeof(Constants);
+        if (visual_constant_buffer_) total += sizeof(VisualConstants);
+        total += effect_chain_.AllocatedBufferBytes();
+        return total;
+    }
+
+    void UIRenderer::AppendResidentTextureIdentities(
+        std::vector<std::pair<std::string, const void*>>& out) const
+    {
+        for (const auto& entry : texture_cache_)
+        {
+            if (entry.first.empty() || !entry.second) continue;
+            Microsoft::WRL::ComPtr<ID3D11Resource> resource;
+            entry.second->GetResource(resource.GetAddressOf());
+            if (resource) out.emplace_back(entry.first, resource.Get());
+        }
+    }
+
     ID3D11ShaderResourceView* UIRenderer::TextureFor(const std::string& guid,
         const Assets::AssetDatabase* asset_database)
     {

@@ -94,6 +94,67 @@ namespace ReplayEngine::UI
         return target;
     }
 
+    std::uint64_t UIRenderTargetPool::AllocatedBytes() const noexcept
+    {
+        auto bytes_per_pixel = [](DXGI_FORMAT format) noexcept -> std::uint64_t
+        {
+            switch (format)
+            {
+            case DXGI_FORMAT_R32G32B32A32_FLOAT:
+            case DXGI_FORMAT_R32G32B32A32_UINT:
+            case DXGI_FORMAT_R32G32B32A32_SINT:
+                return 16u;
+            case DXGI_FORMAT_R16G16B16A16_FLOAT:
+            case DXGI_FORMAT_R16G16B16A16_UNORM:
+            case DXGI_FORMAT_R16G16B16A16_UINT:
+            case DXGI_FORMAT_R16G16B16A16_SNORM:
+            case DXGI_FORMAT_R16G16B16A16_SINT:
+                return 8u;
+            case DXGI_FORMAT_R32G32_FLOAT:
+            case DXGI_FORMAT_R32G32_UINT:
+            case DXGI_FORMAT_R32G32_SINT:
+                return 8u;
+            case DXGI_FORMAT_R16G16_FLOAT:
+            case DXGI_FORMAT_R16G16_UNORM:
+            case DXGI_FORMAT_R16G16_UINT:
+            case DXGI_FORMAT_R16G16_SNORM:
+            case DXGI_FORMAT_R16G16_SINT:
+            case DXGI_FORMAT_R32_FLOAT:
+            case DXGI_FORMAT_R32_UINT:
+            case DXGI_FORMAT_R32_SINT:
+            case DXGI_FORMAT_R11G11B10_FLOAT:
+            case DXGI_FORMAT_R8G8B8A8_UNORM:
+            case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
+            case DXGI_FORMAT_B8G8R8A8_UNORM:
+                return 4u;
+            case DXGI_FORMAT_R16_FLOAT:
+            case DXGI_FORMAT_R16_UNORM:
+            case DXGI_FORMAT_R16_UINT:
+            case DXGI_FORMAT_R16_SNORM:
+            case DXGI_FORMAT_R16_SINT:
+            case DXGI_FORMAT_R8G8_UNORM:
+                return 2u;
+            case DXGI_FORMAT_R8_UNORM:
+            case DXGI_FORMAT_R8_UINT:
+                return 1u;
+            default:
+                // Pool が現在使う形式は上で網羅する。未知形式は過小評価せず
+                // RGBA8 相当として扱い、Profiler に 0 を出さない。
+                return 4u;
+            }
+        };
+
+        std::uint64_t total = 0;
+        for (const std::unique_ptr<UIRenderTarget>& target : targets_)
+        {
+            if (!target || !target->texture) continue;
+            total += static_cast<std::uint64_t>(target->width) *
+                static_cast<std::uint64_t>(target->height) *
+                bytes_per_pixel(target->format);
+        }
+        return total;
+    }
+
     void UIRenderTargetPool::Release() noexcept
     {
         for (std::unique_ptr<UIRenderTarget>& target : targets_)

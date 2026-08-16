@@ -267,9 +267,13 @@ namespace ReplayEngine::UI
         const UINT offset = 0;
         ID3D11Buffer* vb = vertex_buffer_.Get();
         context->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
+        Rendering::Stats().TrackStateSet(
+            Rendering::RenderStats::StateKind::InputLayout, input_layout_.Get());
         context->IASetInputLayout(input_layout_.Get());
         context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
         context->VSSetShader(vertex_shader_.Get(), nullptr, 0);
+        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
         context->PSSetShader(pixel_shader_override != nullptr
             ? pixel_shader_override : pixel_shader_.Get(), nullptr, 0);
         ID3D11Buffer* cb = constant_buffer_.Get();
@@ -289,15 +293,26 @@ namespace ReplayEngine::UI
         context->PSSetShaderResources(0, 1, &srv);
         ID3D11SamplerState* sampler = states.sampler;
         context->PSSetSamplers(0, 1, &sampler);
-        context->OMSetDepthStencilState(world_space_canvas_ &&
-            states.depth_enabled != nullptr ? states.depth_enabled : states.depth_disabled, 0);
-        context->OMSetBlendState(blend_state != nullptr ? blend_state : states.blend_alpha,
-            nullptr, 0xFFFFFFFF);
+        ID3D11DepthStencilState* selected_depth = world_space_canvas_ &&
+            states.depth_enabled != nullptr ? states.depth_enabled : states.depth_disabled;
+        Rendering::Stats().TrackStateSet(
+            Rendering::RenderStats::StateKind::DepthStencil, selected_depth);
+        context->OMSetDepthStencilState(selected_depth, 0);
+        ID3D11BlendState* selected_blend =
+            blend_state != nullptr ? blend_state : states.blend_alpha;
+        Rendering::Stats().TrackStateSet(
+            Rendering::RenderStats::StateKind::Blend, selected_blend);
+        context->OMSetBlendState(selected_blend, nullptr, 0xFFFFFFFF);
 
         if (scissor != nullptr)
         {
-            context->RSSetState(states.rasterizer_scissor != nullptr
-                ? states.rasterizer_scissor : states.rasterizer);
+            ID3D11RasterizerState* selected_rasterizer =
+                states.rasterizer_scissor != nullptr
+                    ? states.rasterizer_scissor : states.rasterizer;
+            Rendering::Stats().TrackStateSet(
+                Rendering::RenderStats::StateKind::Rasterizer,
+                selected_rasterizer);
+            context->RSSetState(selected_rasterizer);
             const float scale_x = states.viewport_scale_x > 0.0001f
                 ? states.viewport_scale_x : 1.0f;
             const float scale_y = states.viewport_scale_y > 0.0001f
@@ -319,6 +334,9 @@ namespace ReplayEngine::UI
         }
         else
         {
+            Rendering::Stats().TrackStateSet(
+                Rendering::RenderStats::StateKind::Rasterizer,
+                states.rasterizer);
             context->RSSetState(states.rasterizer);
             context->RSSetScissorRects(0, nullptr);
         }

@@ -364,6 +364,7 @@ namespace ReplayEngine::Rendering::Effects
         }
 
         ID3D11DeviceContext* d3d = context.device_context;
+        REPLAY_PROFILE_GPU_SCOPE(d3d, "EffectChain");
         const FLOAT clear[4]{ 0.0f, 0.0f, 0.0f, 0.0f };
         for (const UI::UIEffect& effect : effects)
         {
@@ -379,11 +380,16 @@ namespace ReplayEngine::Rendering::Effects
                 effect_shader = EffectShaderFor(static_cast<UI::UIEffectKind>(effect.kind));
             if (effect_shader == nullptr) continue;
 
+            const std::string profile_effect_name = "EffectPass/" + std::to_string(effect.kind);
+            RenderStats::ScopedGpu profile_effect_scope(d3d, profile_effect_name.c_str());
             UI::UIRenderTarget* destination = current == first ? second : first;
             Rendering::Stats().CountEffectPass();
             Rendering::Stats().CountRenderTargetBind();
             // draw callback は depth/rasterizer/blend/sampler を設定する。
-            Rendering::Stats().CountStateSet(4);
+            Rendering::Stats().CountStateSet(Rendering::RenderStats::StateKind::DepthStencil, false);
+            Rendering::Stats().CountStateSet(Rendering::RenderStats::StateKind::Rasterizer, false);
+            Rendering::Stats().CountStateSet(Rendering::RenderStats::StateKind::Blend, false);
+            Rendering::Stats().CountStateSet(Rendering::RenderStats::StateKind::ShaderResource, false);
             context.configure_target(*destination);
             d3d->ClearRenderTargetView(destination->rtv.Get(), clear);
 
@@ -608,7 +614,9 @@ namespace ReplayEngine::Rendering::Effects
                         d3d->IASetInputLayout(nullptr);
                         d3d->IASetVertexBuffers(0, 0, nullptr, nullptr, nullptr);
                         d3d->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+                        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
                         d3d->VSSetShader(brush_stroke_vertex_shader_.Get(), nullptr, 0);
+                        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
                         d3d->PSSetShader(brush_stroke_pixel_shader_.Get(), nullptr, 0);
                         d3d->OMSetDepthStencilState(context.depth_disabled, 0);
                         d3d->OMSetBlendState(context.blend_alpha, nullptr, 0xffffffff);
@@ -673,4 +681,19 @@ namespace ReplayEngine::Rendering::Effects
         expansion.w = (std::min)(expansion.w, max_expansion);
         return expansion;
     }
+
+    std::uint64_t EffectChain::AllocatedBufferBytes() const noexcept
+    {
+        std::uint64_t total = 0;
+        if (effect_constant_buffer_) total += sizeof(EffectConstants);
+        if (brush_stroke_instance_buffer_)
+        {
+            total += static_cast<std::uint64_t>(brush_stroke_instance_capacity_) *
+                sizeof(BrushStrokeInstance);
+        }
+        if (custom_effect_constant_buffer_)
+            total += custom_effect_constant_buffer_size_;
+        return total;
+    }
+
 }

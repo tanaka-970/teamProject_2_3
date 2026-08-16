@@ -1,4 +1,4 @@
-#include "LineRendererComponent.h"
+﻿#include "LineRendererComponent.h"
 
 #include "../../Assets/AssetDatabase.h"
 #include "../../Rendering/RenderStats.h"
@@ -523,7 +523,9 @@ namespace ReplayEngine::Rendering
             &stride, &offset);
         context->IASetInputLayout(input_layout_.Get());
         context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
         context->VSSetShader(vertex_shader_.Get(), nullptr, 0);
+        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
         context->PSSetShader(pixel_shader_.Get(), nullptr, 0);
         context->PSSetShaderResources(0, 1, &texture);
         context->PSSetSamplers(0, 1, &sampler);

@@ -185,7 +185,9 @@ void geometric_primitive::render(ID3D11DeviceContext* immediate_context, const D
 	immediate_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	immediate_context->IASetInputLayout(input_layout.Get());
 
+	ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
 	immediate_context->VSSetShader(vertex_shader.Get(), nullptr, 0);
+	ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
 	immediate_context->PSSetShader(pixel_shader.Get(), nullptr, 0);
 
 	constants data{ world, material_color };

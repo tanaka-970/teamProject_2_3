@@ -119,6 +119,25 @@ namespace GameInput
 
     void InputState::BeginFrame(bool keyboard_captured, bool mouse_captured) noexcept
     {
+        if (suppressed_)
+        {
+            keyboard_previous_.fill(0);
+            keyboard_current_.fill(0);
+            previous_keyboard_captured_ = true;
+            previous_mouse_captured_ = true;
+            keyboard_captured_ = true;
+            mouse_captured_ = true;
+            mouse_delta_x_ = 0.0f;
+            mouse_delta_y_ = 0.0f;
+            for (PadSnapshot& pad : pads_)
+            {
+                pad.current = {};
+                pad.previous = {};
+                pad.connected = false;
+                pad.previous_connected = false;
+            }
+            return;
+        }
         keyboard_previous_ = keyboard_current_;
         keyboard_current_.fill(0);
         previous_keyboard_captured_ = keyboard_captured_;

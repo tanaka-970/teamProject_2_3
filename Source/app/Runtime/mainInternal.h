@@ -44,6 +44,18 @@ namespace ReplayEngine::Runtime::Detail
     GameLaunchConfig LoadGameLaunchConfig(const std::filesystem::path& executable_directory);
     std::uint32_t ParseAutomatedSmokeTestFrames(const char* command_line);
 
+    struct ProfileBenchmarkConfig
+    {
+        bool requested = false;
+        bool valid = true;
+        std::filesystem::path scene;
+        std::uint32_t frames = 300;
+        std::uint32_t warmup_frames = 30;
+        std::string output_name{ "benchmark" };
+        std::string error;
+    };
+    ProfileBenchmarkConfig ParseProfileBenchmark(const char* command_line);
+
     struct D3D11LiveObjectFileSummary
     {
         std::uint64_t stored_messages = 0;

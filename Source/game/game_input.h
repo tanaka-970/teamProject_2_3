@@ -54,6 +54,8 @@ namespace GameInput
         // keyboard_captured=true の間も実デバイス状態は更新し続けるが、Action/Axis へは
         // キーボード入力を公開しない。ImGui の文字入力から Gameplay へ漏らさないため。
         void BeginFrame(bool keyboard_captured, bool mouse_captured) noexcept;
+        void SetSuppressed(bool suppressed) noexcept { suppressed_ = suppressed; }
+        bool Suppressed() const noexcept { return suppressed_; }
 
         bool Held(std::string_view action, int player_slot = 0) const noexcept override;
         bool Pressed(std::string_view action, int player_slot = 0) const noexcept override;
@@ -116,6 +118,7 @@ namespace GameInput
         bool mouse_captured_ = false;
         bool previous_mouse_captured_ = false;
         bool mouse_initialized_ = false;
+        bool suppressed_ = false;
         long mouse_x_ = 0;
         long mouse_y_ = 0;
         float mouse_delta_x_ = 0.0f;

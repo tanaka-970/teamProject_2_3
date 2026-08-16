@@ -29,6 +29,8 @@ using ReplayEngine::Runtime::Detail::ExecutableLayout;
 using ReplayEngine::Runtime::Detail::LoadGameLaunchConfig;
 using ReplayEngine::Runtime::Detail::GameLaunchConfig;
 using ReplayEngine::Runtime::Detail::ParseAutomatedSmokeTestFrames;
+using ReplayEngine::Runtime::Detail::ParseProfileBenchmark;
+using ReplayEngine::Runtime::Detail::ProfileBenchmarkConfig;
 using ReplayEngine::Runtime::Detail::D3D11LiveObjectFileSummary;
 using ReplayEngine::Runtime::Detail::WriteD3D11LiveObjectReportFile;
 using ReplayEngine::Runtime::Detail::ValidationFolder;
@@ -76,6 +78,14 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
     if (serialization_validation_result >= 0) return serialization_validation_result;
     const std::uint32_t automated_smoke_test_frames =
         ParseAutomatedSmokeTestFrames(cmd_line);
+    const ProfileBenchmarkConfig profile_benchmark =
+        ParseProfileBenchmark(cmd_line);
+    if (profile_benchmark.requested && !profile_benchmark.valid)
+    {
+        std::fprintf(stderr, "Profiler benchmark command error: %s\n",
+            profile_benchmark.error.c_str());
+        return 75;
+    }
     const bool shutdown_regression_requested = ParseShutdownRegression(cmd_line);
     std::string capture_frame_name;
     const bool capture_frame_requested =
@@ -89,6 +99,22 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
     const ExecutableLayout executable_layout = ResolveExecutableLayout();
     if (!executable_layout.content_root.empty())
         SetCurrentDirectoryW(executable_layout.content_root.wstring().c_str());
+    if (profile_benchmark.requested)
+    {
+        const std::filesystem::path profile_scene_path =
+            profile_benchmark.scene.is_absolute()
+            ? profile_benchmark.scene
+            : (executable_layout.content_root / profile_benchmark.scene);
+        std::error_code profile_scene_error;
+        if (!std::filesystem::is_regular_file(profile_scene_path, profile_scene_error) ||
+            profile_scene_error)
+        {
+            std::fprintf(stderr, "Profiler benchmark scene not found: %s\n",
+                profile_benchmark.scene.u8string().c_str());
+            if (SUCCEEDED(com_result)) CoUninitialize();
+            return 76;
+        }
+    }
     const GameLaunchConfig game_launch =
         LoadGameLaunchConfig(executable_layout.executable_directory);
     for (const std::string& warning : game_launch.warnings)
@@ -98,7 +124,10 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
         std::fprintf(stderr, "%s", message.c_str());
     }
 
-	srand(static_cast<unsigned int>(time(nullptr)));
+    if (profile_benchmark.requested)
+        srand(0x5245504Cu); // "REPL": benchmark は毎回同じ C RNG 列を使う。
+    else
+        srand(static_cast<unsigned int>(time(nullptr)));
 
 #if defined(DEBUG) | defined(_DEBUG)
 	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
@@ -147,19 +176,28 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
     {
 	    framework application(hwnd);
         application.configure_content_root(executable_layout.content_root);
-        if (game_launch.file_found)
+        if (game_launch.file_found && !profile_benchmark.requested)
         {
             application.configure_standalone_game(
                 executable_layout.content_root, game_launch.name);
             if (!game_launch.startup_scene.empty())
                 application.set_startup_scene_path(game_launch.startup_scene);
         }
+        if (profile_benchmark.requested)
+        {
+            application.set_startup_scene_path(profile_benchmark.scene);
+            application.configure_profile_benchmark(profile_benchmark.frames,
+                profile_benchmark.warmup_frames, profile_benchmark.output_name);
+        }
         application.set_startup_window_size(
             game_launch.window_width, game_launch.window_height);
         if (game_launch.fullscreen) application.request_startup_fullscreen();
         application.set_automated_smoke_test_frames(automated_smoke_test_frames);
-        if (ParseStartupSceneBoot(cmd_line) || game_launch.file_found)
+        if (ParseStartupSceneBoot(cmd_line) || game_launch.file_found ||
+            profile_benchmark.requested)
+        {
             application.request_startup_scene_boot();
+        }
         if (shutdown_regression_requested)
         {
             // 数フレーム描画してから終了させる。
@@ -179,7 +217,8 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
 
 	    // 通常の自動検証は従来どおり隠すが、撮影は実際に人が見る表示経路を通す。
         const bool hide_automated_window = !capture_frame_requested &&
-            (automated_smoke_test_frames > 0 || shutdown_regression_requested);
+            (automated_smoke_test_frames > 0 || shutdown_regression_requested ||
+                profile_benchmark.requested);
 	    exit_code = application.run(
             hide_automated_window ? SW_HIDE : cmd_show);
         if (capture_frame_requested)

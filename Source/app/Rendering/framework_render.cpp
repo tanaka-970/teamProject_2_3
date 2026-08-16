@@ -13,10 +13,13 @@
 #include "../../../RePlayEngine/Rendering/ShaderStack/BuiltInShaderLayers.h"
 #include "../../../RePlayEngine/Rendering/Materials/ShaderLayerBinding.h"
 #include "../../../RePlayEngine/UI/UILayout.h"
+#include "../../../RePlayEngine/Components/UI/UIEffectStackComponent.h"
 
 #include <algorithm>
 #include <cmath>
 #include <vector>
+#include <unordered_map>
+#include <unordered_set>
 
 // 分割一覧（framework_render.cpp）:
 //   分割なし。framework::render() が初期化・Scene View／Game View・各描画パス・後処理・UI・Present
@@ -35,6 +38,14 @@ namespace
     {
         if (!std::isfinite(value)) return fallback;
         return (std::min)((std::max)(value, low), high);
+    }
+
+    std::uint64_t buffer_byte_width(ID3D11Buffer* buffer) noexcept
+    {
+        if (buffer == nullptr) return 0;
+        D3D11_BUFFER_DESC desc{};
+        buffer->GetDesc(&desc);
+        return desc.ByteWidth;
     }
 
     DirectX::XMFLOAT4 clamp_color(const DirectX::XMFLOAT4& value) noexcept
@@ -295,19 +306,24 @@ void framework::bind_gbuffer_material(
 void framework::render(float elapsed_time)
 {
     apply_pending_resize();
-    if (!render_target_view || !depth_stencil_view || !framebuffers[0]) return;
+    if (!render_target_view || !depth_stencil_view || !framebuffers[0])
+    {
+        ReplayEngine::Rendering::Stats().EndFrame(immediate_context.Get());
+        return;
+    }
 
-    // 描画統計の計測開始。CPUカウンタを0に戻し、GPUクエリを開く。
-    ReplayEngine::Rendering::Stats().BeginFrame(immediate_context.Get());
     ReplayEngine::Rendering::Stats().BeginPhase(
         ReplayEngine::Rendering::RenderStats::Phase::Scene3D, immediate_context.Get());
 
     // 前フレームのRTV/SRV参照を先に外し、同じリソースを入出力へ同時設定する競合を防ぐ。
     ID3D11RenderTargetView* null_rtvs[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT]{};
     immediate_context->OMSetRenderTargets(_countof(null_rtvs), null_rtvs, 0);
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::RenderTarget, false);
     ID3D11ShaderResourceView* null_srvs[D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT]{};
     immediate_context->VSSetShaderResources(0, _countof(null_srvs), null_srvs);
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::ShaderResource, false);
     immediate_context->PSSetShaderResources(0, _countof(null_srvs), null_srvs);
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::ShaderResource, false);
 
     FLOAT clear_color[]{ background_color.x, background_color.y, background_color.z, background_color.w };
     immediate_context->ClearRenderTargetView(render_target_view.Get(), clear_color);
@@ -334,11 +350,15 @@ void framework::render(float elapsed_time)
 #endif
         // 起動ロゴやロード画面はゲーム側の描画パイプラインを通さず、画面全体へ直接描く。
         immediate_context->OMSetRenderTargets(1, render_target_view.GetAddressOf(), nullptr);
+        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::RenderTarget, false);
         immediate_context->OMSetBlendState(
             blend_states[(size_t)BLEND_STATE::ALPHA].Get(), nullptr, 0xFFFFFFFF);
+        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Blend, false);
         immediate_context->OMSetDepthStencilState(
             depth_stencil_states[(size_t)DEPTH_STATE::ZT_OFF_ZW_OFF].Get(), 0);
+        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::DepthStencil, false);
         immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Rasterizer, false);
         scene_manager.Render({ immediate_context.Get(), viewport.Width, viewport.Height });
         // 早期returnでも Phase / Frame Query を閉じる。開いたままにすると次フレームで
         // 二重Beginになりクエリが壊れる。
@@ -681,6 +701,7 @@ void framework::render(float elapsed_time)
 
     if (csm.constants.params.w > 0.5f && enable_static_meshes && static_meshes[0])
     {
+        REPLAY_PROFILE_GPU_SCOPE(immediate_context.Get(), "CSM Shadow");
         // カスケードシャドウ用深度を先に作る。終了時に元のRTVとViewportを復元する。
         D3D11_VIEWPORT main_vp = viewport;
         csm.shadow_begin(immediate_context.Get());
@@ -699,6 +720,7 @@ void framework::render(float elapsed_time)
 
     if (pbr_shadow_enabled && enable_static_meshes && static_meshes[0])
     {
+        REPLAY_PROFILE_GPU_SCOPE(immediate_context.Get(), "PBR Shadow");
         // PBR固有のシャドウマップはCSMと別リソースなので、必要な場合だけ生成する。
         D3D11_VIEWPORT main_vp = viewport;
         pbr.shadow_begin(immediate_context.Get());
@@ -721,8 +743,12 @@ void framework::render(float elapsed_time)
     framebuffers[0]->activate(immediate_context.Get());
 
     immediate_context->OMSetBlendState(blend_states[(size_t)BLEND_STATE::ALPHA].Get(), nullptr, 0xFFFFFFFF);
+
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Blend, false);
     immediate_context->OMSetDepthStencilState(depth_stencil_states[(size_t)DEPTH_STATE::ZT_ON_ZW_ON].Get(), 0);
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::DepthStencil, false);
     immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Rasterizer, false);
 
     // 背景画像は任意アセット。読み込めていない場合は sprite_batches[0] が空になる。
     if (draw_background_image && sprite_batches[0])
@@ -736,10 +762,13 @@ void framework::render(float elapsed_time)
 
     immediate_context->OMSetBlendState(blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
 
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Blend, false);
+
     pbr.bind_pbr_resources(immediate_context.Get());
     csm.bind_resources(immediate_context.Get());
     toon.bind_resources(immediate_context.Get());
     immediate_context->PSSetShaderResources(1, 1, dummy_normal_srv.GetAddressOf());
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::ShaderResource, false);
 
     const auto make_base_pixelate_layer = [](float grid, float strength)
     {
@@ -784,13 +813,17 @@ void framework::render(float elapsed_time)
         const bool use_depth_prepass = enable_depth_prepass && deferred.depth_equal_state;
         if (use_depth_prepass)
         {
+            REPLAY_PROFILE_GPU_SCOPE(immediate_context.Get(), "DepthPrepass");
             deferred.depth_prepass_begin(immediate_context.Get());
             immediate_context->OMSetBlendState(
                 blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
+            ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Blend, false);
             immediate_context->OMSetDepthStencilState(
                 depth_stencil_states[(size_t)DEPTH_STATE::ZT_ON_ZW_ON].Get(), 0);
+            ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::DepthStencil, false);
             immediate_context->RSSetState(
                 rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+            ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Rasterizer, false);
 
             // 深度だけなのでピクセルシェーダーは外す(bind_pixel_shader=false)。
             // モーションベクターもここでは書かない。
@@ -811,14 +844,19 @@ void framework::render(float elapsed_time)
         }
 
         // Deferred経路は材質情報をGBufferへ集約し、照明パスで一括して色を決定する。
+        {
+        REPLAY_PROFILE_GPU_SCOPE(immediate_context.Get(), "GBuffer");
         FLOAT deferred_clear[]{ background_color.x, background_color.y, background_color.z, background_color.w };
         deferred.gbuffer_begin(immediate_context.Get(), deferred_clear, !use_depth_prepass);
         immediate_context->OMSetBlendState(blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
+        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Blend, false);
         // プリパス済みなら EQUAL 比較で最前面だけを通す。
         immediate_context->OMSetDepthStencilState(use_depth_prepass
             ? deferred.depth_equal_state.Get()
             : depth_stencil_states[(size_t)DEPTH_STATE::ZT_ON_ZW_ON].Get(), 0);
+        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::DepthStencil, false);
         immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Rasterizer, false);
 
         if (enable_static_meshes && static_meshes[0])
         {
@@ -840,11 +878,13 @@ void framework::render(float elapsed_time)
         draw_object_scene_meshes(skinned_mesh_gbuffer_ps.Get(), true);
 
         deferred.gbuffer_end(immediate_context.Get());
+        }
 
         // 照明の前にSSAOを解く。G-Bufferの深度と法線だけで完結するパス。
         ID3D11ShaderResourceView* ambient_occlusion = nullptr;
         if (enable_ssao && ssao_pass.Initialized())
         {
+            REPLAY_PROFILE_GPU_SCOPE(immediate_context.Get(), "SSAO");
             ssao_pass.enabled = true;
             ambient_occlusion = ssao_pass.Execute(immediate_context.Get(),
                 *bit_block_transfer, deferred.depth_srv.Get(),
@@ -856,6 +896,7 @@ void framework::render(float elapsed_time)
         ID3D11ShaderResourceView* screen_reflection = nullptr;
         if (enable_ssr && ssr_pass.Initialized())
         {
+            REPLAY_PROFILE_GPU_SCOPE(immediate_context.Get(), "SSR");
             ssr_pass.enabled = true;
             screen_reflection = ssr_pass.Execute(immediate_context.Get(),
                 *bit_block_transfer, deferred.depth_srv.Get(),
@@ -873,11 +914,16 @@ void framework::render(float elapsed_time)
         // mesh cull state can reject the entire lighting pass and leave only clear.
         immediate_context->OMSetBlendState(
             blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
+        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Blend, false);
         immediate_context->OMSetDepthStencilState(
             depth_stencil_states[(size_t)DEPTH_STATE::ZT_OFF_ZW_OFF].Get(), 0);
+        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::DepthStencil, false);
         immediate_context->RSSetState(
             rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Rasterizer, false);
 
+        {
+        REPLAY_PROFILE_GPU_SCOPE(immediate_context.Get(), "DeferredLighting");
         const bool use_tiled = tiled_deferred.enabled && tiled_deferred.Initialized() &&
             render_graph.DeferredDebugMode() == 0;
         if (use_tiled)
@@ -932,6 +978,7 @@ void framework::render(float elapsed_time)
                                    background_color, render_graph.DeferredDebugMode(),
                                    ambient_occlusion, screen_reflection);
         }
+        }
 
         // 次フレームのSSR用に、照明直後のHDRカラーを履歴として確保する。
         if (enable_ssr && ssr_pass.Initialized() && render_graph.DeferredDebugMode() == 0)
@@ -958,8 +1005,10 @@ void framework::render(float elapsed_time)
         {
             // Surfaceとは別の材質パスをDeferred照明結果へ順番どおりに合成する。
             immediate_context->OMSetRenderTargets(1, deferred.lit_rtv.GetAddressOf(), deferred.depth_dsv.Get());
+            ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::RenderTarget, false);
             immediate_context->OMSetDepthStencilState(
                 depth_stencil_states[(size_t)DEPTH_STATE::ZT_ON_ZW_OFF].Get(), 0);
+            ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::DepthStencil, false);
 
             const auto prepare_layer = [this](const ReplayEngine::Rendering::ShaderLayer& layer,
                 const ReplayEngine::Rendering::CharacterMaterialProfile& profile)
@@ -970,9 +1019,11 @@ void framework::render(float elapsed_time)
                 else if (layer.blend == ReplayEngine::Rendering::ShaderLayerBlend::Multiply)
                     blend = BLEND_STATE::MULTIPLY;
                 immediate_context->OMSetBlendState(blend_states[(size_t)blend].Get(), nullptr, 0xFFFFFFFF);
+                ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Blend, false);
                 const bool wireframe = layer.type == ReplayEngine::Rendering::ShaderLayerType::Wireframe;
                 immediate_context->RSSetState(rasterizer_states[(size_t)(wireframe
                     ? RASTER_STATE::WIREFRAME_CULL_NONE : RASTER_STATE::CULL_NONE)].Get());
+                ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Rasterizer, false);
                 if (layer.type == ReplayEngine::Rendering::ShaderLayerType::StylizedCharacter)
                 {
                     const auto constants =
@@ -1018,6 +1069,7 @@ void framework::render(float elapsed_time)
                         toon.update_constants(immediate_context.Get());
                         immediate_context->OMSetBlendState(
                             blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
+                        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Blend, false);
                         toon.bind_outline_pass(immediate_context.Get(), false);
                         static_meshes[0]->render(immediate_context.Get(), world, material_color,
                             toon.outline_ps(), toon.static_outline_vs_.Get(),
@@ -1026,6 +1078,7 @@ void framework::render(float elapsed_time)
                         toon.update_constants(immediate_context.Get());
                         immediate_context->RSSetState(
                             rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
+                        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Rasterizer, false);
                         continue;
                     }
                     prepare_layer(layer, character_profiles_static[0]);
@@ -1062,6 +1115,7 @@ void framework::render(float elapsed_time)
                             toon.update_constants(immediate_context.Get());
                             immediate_context->OMSetBlendState(
                                 blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
+                            ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Blend, false);
                             toon.bind_outline_pass(immediate_context.Get(), true);
                             mesh->render(immediate_context.Get(), item.world, layer.tint,
                                 keyframe, toon.outline_ps(), toon.skinned_outline_vs_.Get(),
@@ -1122,6 +1176,7 @@ void framework::render(float elapsed_time)
                                             }
                                             immediate_context->OMSetBlendState(
                                                 blend_states[(size_t)pass_blend].Get(), nullptr, 0xFFFFFFFF);
+                                            ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Blend, false);
                                             if (ID3D11PixelShader* pass_ps =
                                                 material_gpu_binder.ResolvePassPixelShader(
                                                     device.Get(), shader_library.Catalog(),
@@ -1158,6 +1213,7 @@ void framework::render(float elapsed_time)
                 {
                     immediate_context->OMSetBlendState(
                         blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
+                    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Blend, false);
                     toon.bind_outline_pass(immediate_context.Get(), true);
                     mesh->render(immediate_context.Get(), item.world, item.tint,
                         keyframe, toon.outline_ps(), toon.skinned_outline_vs_.Get(),
@@ -1166,7 +1222,10 @@ void framework::render(float elapsed_time)
             }
 
             immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
+
+            ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Rasterizer, false);
             immediate_context->OMSetBlendState(blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
+            ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Blend, false);
         }
 
         // 輪郭線の追加パス。旧 Player 用の分岐は無い。
@@ -1179,9 +1238,12 @@ void framework::render(float elapsed_time)
         {
             // Deferred照明結果へ、同じDepthを使って追加パスを重ねる。
             immediate_context->OMSetRenderTargets(1, deferred.lit_rtv.GetAddressOf(), deferred.depth_dsv.Get());
+            ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::RenderTarget, false);
             immediate_context->OMSetDepthStencilState(
                 depth_stencil_states[(size_t)DEPTH_STATE::ZT_ON_ZW_OFF].Get(), 0);
+            ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::DepthStencil, false);
             immediate_context->OMSetBlendState(blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
+            ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Blend, false);
             if (enable_static_meshes && static_meshes[0] && outline_per_static[0] &&
                 !shader_layers_static[0].Contains(ReplayEngine::Rendering::ShaderLayerType::Outline))
             {
@@ -1191,6 +1253,7 @@ void framework::render(float elapsed_time)
                     toon.static_outline_il_.Get(), true);
             }
             immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
+            ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Rasterizer, false);
         }
 
         // シェーダーレイヤー(追加パス)はブレンドをALPHA/ADD/MULTIPLYへ変えるため、
@@ -1199,16 +1262,20 @@ void framework::render(float elapsed_time)
         // シーンビューが固まったように見える。
         immediate_context->OMSetBlendState(
             blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
+        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Blend, false);
         immediate_context->OMSetDepthStencilState(
             depth_stencil_states[(size_t)DEPTH_STATE::ZT_OFF_ZW_OFF].Get(), 0);
+        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::DepthStencil, false);
         immediate_context->RSSetState(
             rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Rasterizer, false);
 
         // TAAはトーンマップ前のHDRで解く。明部のエイリアスも正しく平均化され、
         // かつジッター済みの複数フレームが実質的なスーパーサンプリングになる。
         ID3D11ShaderResourceView* lit_srv = deferred.lit_srv.Get();
         if (enable_taa && taa_pass.Initialized() && render_graph.DeferredDebugMode() == 0)
         {
+            REPLAY_PROFILE_GPU_SCOPE(immediate_context.Get(), "TAA");
             taa_pass.enabled = true;
             ID3D11ShaderResourceView* resolved = taa_pass.Execute(
                 immediate_context.Get(), *bit_block_transfer, lit_srv,
@@ -1224,9 +1291,13 @@ void framework::render(float elapsed_time)
         immediate_context->OMSetRenderTargets(1,
             framebuffers[0]->render_target_view.GetAddressOf(),
             framebuffers[0]->depth_stencil_view.Get());
+
+        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::RenderTarget, false);
         immediate_context->RSSetViewports(1, &framebuffers[0]->viewport);
         immediate_context->OMSetDepthStencilState(depth_stencil_states[(size_t)DEPTH_STATE::ZT_OFF_ZW_OFF].Get(), 0);
+        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::DepthStencil, false);
         immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Rasterizer, false);
         // 後段のエフェクトを共通化するため、照明結果を通常の中間バッファへ戻す。
         bit_block_transfer->blit(immediate_context.Get(), &lit_srv, 0, 1);
     }
@@ -1234,6 +1305,7 @@ void framework::render(float elapsed_time)
     {
         // Forward経路はオブジェクトごとにシェーダーを選び、その場で最終色まで計算する。
         immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Rasterizer, false);
 
         const auto bind_pixelate_settings = [this](const ReplayEngine::Rendering::ShaderLayer& layer)
         {
@@ -1273,11 +1345,13 @@ void framework::render(float elapsed_time)
                 if (item.double_sided)
                     immediate_context->RSSetState(
                         rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+                    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Rasterizer, false);
                 gltf->render(immediate_context.Get(), item.world, item.legacy_tint,
                     static_forward_shader(item.shading_model), false, false);
                 if (item.double_sided)
                     immediate_context->RSSetState(
                         rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
+                    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Rasterizer, false);
                 continue;
             }
 
@@ -1314,6 +1388,7 @@ void framework::render(float elapsed_time)
             if (item.double_sided)
                 immediate_context->RSSetState(
                     rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+                ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Rasterizer, false);
 
             // Catalog shader を作れた場合だけ新経路へ切り替える。
             // Bind に一部失敗しても既定Textureへ落として描画は続ける。
@@ -1341,6 +1416,7 @@ void framework::render(float elapsed_time)
                         toon.update_constants(immediate_context.Get());
                         immediate_context->OMSetBlendState(
                             blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
+                        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Blend, false);
                         toon.bind_outline_pass(immediate_context.Get(), true);
                         scene_mesh->render(immediate_context.Get(), item.world, layer.tint,
                             item_keyframe, toon.outline_ps(), toon.skinned_outline_vs_.Get(),
@@ -1361,8 +1437,10 @@ void framework::render(float elapsed_time)
                             custom_blend = BLEND_STATE::MULTIPLY;
                         immediate_context->OMSetBlendState(
                             blend_states[(size_t)custom_blend].Get(), nullptr, 0xFFFFFFFF);
+                        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Blend, false);
                         immediate_context->RSSetState(
                             rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+                        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Rasterizer, false);
 
                         ReplayEngine::Rendering::ResolvedMaterialBinding layer_binding;
                         if (ReplayEngine::Rendering::ShaderLayerBindingResolver::Resolve(
@@ -1397,6 +1475,7 @@ void framework::render(float elapsed_time)
                                             pass_blend = BLEND_STATE::MULTIPLY;
                                         immediate_context->OMSetBlendState(
                                             blend_states[(size_t)pass_blend].Get(), nullptr, 0xFFFFFFFF);
+                                        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Blend, false);
                                         if (ID3D11PixelShader* pass_ps =
                                             material_gpu_binder.ResolvePassPixelShader(
                                                 device.Get(), shader_library.Catalog(),
@@ -1420,9 +1499,11 @@ void framework::render(float elapsed_time)
                         blend = BLEND_STATE::MULTIPLY;
                     immediate_context->OMSetBlendState(
                         blend_states[(size_t)blend].Get(), nullptr, 0xFFFFFFFF);
+                    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Blend, false);
                     immediate_context->RSSetState(rasterizer_states[(size_t)(
                         layer.type == ReplayEngine::Rendering::ShaderLayerType::Wireframe
                             ? RASTER_STATE::WIREFRAME_CULL_NONE : RASTER_STATE::CULL_NONE)].Get());
+                    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Rasterizer, false);
 
                     ID3D11PixelShader* layer_ps = skinned_mesh_unlit_ps.Get();
                     using ReplayEngine::Rendering::ShaderLayerType;
@@ -1446,6 +1527,7 @@ void framework::render(float elapsed_time)
             {
                 immediate_context->OMSetBlendState(
                     blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
+                ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Blend, false);
                 toon.bind_outline_pass(immediate_context.Get(), true);
                 scene_mesh->render(immediate_context.Get(), item.world, item.tint,
                     item_keyframe, toon.outline_ps(), toon.skinned_outline_vs_.Get(),
@@ -1454,9 +1536,12 @@ void framework::render(float elapsed_time)
 
             immediate_context->OMSetBlendState(
                 blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
+
+            ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Blend, false);
             if (item.double_sided || item.material_binding.layers != nullptr || item.outline)
                 immediate_context->RSSetState(
                     rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
+                ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Rasterizer, false);
         }
 
         // アウトラインは表面描画後に背面を膨らませて重ねる。
@@ -1471,6 +1556,7 @@ void framework::render(float elapsed_time)
                                      toon.static_outline_il_.Get(),
                                      true);
             immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
+            ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Rasterizer, false);
         }
     }
 
@@ -1484,19 +1570,25 @@ void framework::render(float elapsed_time)
 
     if (particles_this_frame)
     {
+        REPLAY_PROFILE_GPU_SCOPE(immediate_context.Get(), "Particles");
         // 半透明エフェクトは深度テストを行うが、後続を遮らないよう深度を書き込まない。
         immediate_context->OMSetBlendState(
             blend_states[(size_t)particle_blend_state].Get(), nullptr, 0xFFFFFFFF);
+        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Blend, false);
         immediate_context->OMSetDepthStencilState(
             depth_stencil_states[(size_t)DEPTH_STATE::ZT_ON_ZW_OFF].Get(), 0);
+        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::DepthStencil, false);
         particles.render(immediate_context.Get());
     }
 
     if (enable_trail)
     {
+        REPLAY_PROFILE_GPU_SCOPE(immediate_context.Get(), "Trails");
         immediate_context->OMSetBlendState(blend_states[(size_t)BLEND_STATE::ALPHA].Get(), nullptr, 0xFFFFFFFF);
+        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Blend, false);
         immediate_context->OMSetDepthStencilState(
             depth_stencil_states[(size_t)DEPTH_STATE::ZT_ON_ZW_OFF].Get(), 0);
+        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::DepthStencil, false);
         test_trail.render(immediate_context.Get());
     }
 
@@ -1506,8 +1598,12 @@ void framework::render(float elapsed_time)
     framebuffers[0]->deactivate(immediate_context.Get());
 
     immediate_context->OMSetDepthStencilState(depth_stencil_states[(size_t)DEPTH_STATE::ZT_OFF_ZW_OFF].Get(), 0);
+
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::DepthStencil, false);
     immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Rasterizer, false);
     immediate_context->OMSetBlendState(blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Blend, false);
 
     // RenderGraphの表示先に応じて、Bloom中間結果または最終合成結果を選ぶ。
     const auto output = render_graph.Output();
@@ -1515,6 +1611,7 @@ void framework::render(float elapsed_time)
     if (enable_luminance_shader &&
         (enable_bloom_shader || output == ReplayEngine::Rendering::RenderOutput::Bloom))
     {
+        REPLAY_PROFILE_GPU_SCOPE(immediate_context.Get(), "Bloom");
         bloom_pass.threshold = luminance_threshold;
         bloom_srv = bloom_pass.Execute(immediate_context.Get(), *bit_block_transfer,
             framebuffers[0]->shader_resource_views[0].Get());
@@ -1636,7 +1733,9 @@ void framework::render(float elapsed_time)
         {
             ID3D11ShaderResourceView* null_srvs[2]{};
             immediate_context->PSSetShaderResources(0, 2, null_srvs);
+            ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::ShaderResource, false);
             immediate_context->OMSetRenderTargets(1, post_target->rtv.GetAddressOf(), nullptr);
+            ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::RenderTarget, false);
             D3D11_VIEWPORT post_viewport{};
             post_viewport.Width = static_cast<float>(effect_width);
             post_viewport.Height = static_cast<float>(effect_height);
@@ -1646,18 +1745,24 @@ void framework::render(float elapsed_time)
             const FLOAT clear_post[4]{ 0.0f, 0.0f, 0.0f, 0.0f };
             immediate_context->ClearRenderTargetView(post_target->rtv.Get(), clear_post);
 
-            post_process.Execute(immediate_context.Get(), *bit_block_transfer,
+            {
+                REPLAY_PROFILE_GPU_SCOPE(immediate_context.Get(), "PostProcess");
+post_process.Execute(immediate_context.Get(), *bit_block_transfer,
                 post_source, bloom_srv, viewport.Width, viewport.Height,
                 enable_bloom_shader, enable_vignette_shader, enable_fxaa_shader);
+            }
 
             ID3D11ShaderResourceView* null_post_source = nullptr;
             immediate_context->PSSetShaderResources(0, 1, &null_post_source);
+            ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::ShaderResource, false);
             ReplayEngine::UI::UIRenderTarget* effected = apply_scene_effect_chain(
                 post_target->srv.Get(), screen_effect->EffectiveEffects(&asset_database),
                 effect_width, effect_height, DXGI_FORMAT_R8G8B8A8_UNORM,
                 shader_composer_time);
 
             immediate_context->OMSetRenderTargets(1, render_target_view.GetAddressOf(), nullptr);
+
+            ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::RenderTarget, false);
             immediate_context->RSSetViewports(1, &camera_output_viewport);
             ID3D11ShaderResourceView* selected =
                 effected != nullptr ? effected->srv.Get() : post_target->srv.Get();
@@ -1667,23 +1772,31 @@ void framework::render(float elapsed_time)
         {
             // RT 枯渇時も描画を失わない。Effect だけ諦めて既存 PostProcess を通す。
             immediate_context->OMSetRenderTargets(1, render_target_view.GetAddressOf(), nullptr);
+            ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::RenderTarget, false);
             immediate_context->RSSetViewports(1, &camera_output_viewport);
-            post_process.Execute(immediate_context.Get(), *bit_block_transfer,
+            {
+                REPLAY_PROFILE_GPU_SCOPE(immediate_context.Get(), "PostProcess");
+post_process.Execute(immediate_context.Get(), *bit_block_transfer,
                 post_source, bloom_srv, viewport.Width, viewport.Height,
                 enable_bloom_shader, enable_vignette_shader, enable_fxaa_shader);
+            }
         }
     }
     else
     {
         immediate_context->OMSetRenderTargets(1, render_target_view.GetAddressOf(), nullptr);
+        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::RenderTarget, false);
         immediate_context->RSSetViewports(1, &camera_output_viewport);
 
         if (final_output)
         {
             // Effect が空/無効ならこの従来分岐をそのまま通る。
-            post_process.Execute(immediate_context.Get(), *bit_block_transfer,
+            {
+                REPLAY_PROFILE_GPU_SCOPE(immediate_context.Get(), "PostProcess");
+post_process.Execute(immediate_context.Get(), *bit_block_transfer,
                 post_source, bloom_srv, viewport.Width, viewport.Height,
                 enable_bloom_shader, enable_vignette_shader, enable_fxaa_shader);
+            }
         }
         else
         {
@@ -1699,6 +1812,7 @@ void framework::render(float elapsed_time)
     // ドライバー任せの競合解消を避けるために明示的に解除する。
     ID3D11ShaderResourceView* null_post_srvs[2]{};
     immediate_context->PSSetShaderResources(0, _countof(null_post_srvs), null_post_srvs);
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::ShaderResource, false);
     }
 
     ReplayEngine::Rendering::Stats().EndPhase(
@@ -1762,9 +1876,12 @@ void framework::render(float elapsed_time)
         1.0f, static_cast<float>(client_width)));
     ui_states.scissor_bounds.bottom = static_cast<LONG>((std::max)(
         1.0f, static_cast<float>(client_height)));
+    {
+        REPLAY_PROFILE_GPU_SCOPE(immediate_context.Get(), "UIRenderer");
     ui_renderer.Render(immediate_context.Get(), active_object_scene(),
         &asset_database, &shader_library.Catalog(), ui_font_atlas,
         ui_logical_width, ui_logical_height, shader_composer_time, ui_states);
+    }
     // UI 用の viewport override は UIRenderer の間だけ。ImGui と次フレームは client 全体へ戻す。
     immediate_context->RSSetViewports(1, &viewport);
     ReplayEngine::Rendering::Stats().EndPhase(
@@ -1780,7 +1897,10 @@ void framework::render(float elapsed_time)
         imgui_frame_active = false;
         // エディタUIはポスト処理後に描き、ゲーム画面の色補正から除外する。
         ImGui::Render();
-        ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+        {
+            REPLAY_PROFILE_GPU_SCOPE(immediate_context.Get(), "ImGuiRender");
+            ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+        }
         if (editor_hide_requested)
         {
             editor_hide_requested = false;
@@ -1807,6 +1927,112 @@ void framework::render(float elapsed_time)
     ssr_pass.intensity = original_ssr_intensity;
     ssr_pass.enabled = original_ssr_pass_enabled;
     taa_pass.enabled = original_taa_pass_enabled;
+
+    if (ReplayEngine::Rendering::Stats().Enabled() && !ReplayEngine::Rendering::Stats().Paused())
+    {
+        // Object/Component/asset resident の全走査を毎フレーム行うと、
+        // 「計測のための計測」が CPU を食う。カリング値だけは毎フレーム、
+        // 重いメタデータとメモリ内訳は約30フレームごとに更新する。
+        static std::uint32_t profile_metadata_countdown = 0;
+        static std::uint64_t profile_objects = 0;
+        static std::uint64_t profile_components = 0;
+        static std::uint64_t profile_effect_stacks = 0;
+
+        const ReplayEngine::Scene::Scene& profile_scene = active_object_scene();
+        if (profile_metadata_countdown == 0)
+        {
+            profile_metadata_countdown = 30u;
+            profile_objects = profile_scene.GameObjectCount();
+            profile_components = 0;
+            profile_effect_stacks = 0;
+            for (std::size_t profile_index = 0;
+                profile_index < profile_scene.GameObjectCount(); ++profile_index)
+            {
+                const ReplayEngine::Core::GameObject* profile_object =
+                    profile_scene.GameObjectAt(profile_index);
+                if (profile_object == nullptr) continue;
+                profile_components += profile_object->ComponentCount();
+                for (std::size_t component_index = 0;
+                    component_index < profile_object->ComponentCount(); ++component_index)
+                {
+                    const ReplayEngine::Core::Component* component =
+                        profile_object->ComponentAt(component_index);
+                    if (component == nullptr) continue;
+                    if (component->TypeID() ==
+                            ReplayEngine::Components::UIEffectStackComponent::StaticTypeID() ||
+                        component->TypeID() ==
+                            ReplayEngine::Components::ModelEffectStackComponent::StaticTypeID() ||
+                        component->TypeID() ==
+                            ReplayEngine::Components::ScreenEffectStackComponent::StaticTypeID())
+                    {
+                        ++profile_effect_stacks;
+                    }
+                }
+            }
+
+            std::uint32_t duplicate_assets = 0;
+            std::unordered_set<std::string> profile_guids;
+            for (const auto& record : asset_database.Records())
+            {
+                if (!record.guid.empty() &&
+                    !profile_guids.insert(record.guid).second)
+                {
+                    ++duplicate_assets;
+                }
+            }
+            ReplayEngine::Rendering::Stats().SetDuplicateAssetGuids(
+                duplicate_assets,
+                static_cast<std::uint32_t>(
+                    shader_library.Catalog().DuplicateIdCount()));
+
+            // 同じ Asset GUID が複数のGPU Texture実体として常駐していないかを
+            // major texture owner 間で直接比較する。単なる参照数ではなく、
+            // GUIDが同じなのに ID3D11Resource* が異なる場合だけ重複と数える。
+            std::vector<std::pair<std::string, const void*>> resident_textures;
+            ui_renderer.AppendResidentTextureIdentities(resident_textures);
+            material_gpu_binder.AppendResidentTextureIdentities(resident_textures);
+            std::unordered_map<std::string, const void*> first_texture_resource;
+            std::unordered_set<std::string> duplicate_texture_guids;
+            for (const auto& resident : resident_textures)
+            {
+                const auto inserted = first_texture_resource.emplace(
+                    resident.first, resident.second);
+                if (!inserted.second && inserted.first->second != resident.second)
+                    duplicate_texture_guids.insert(resident.first);
+            }
+            ReplayEngine::Rendering::Stats().SetResidentTextureDuplicates(
+                static_cast<std::uint32_t>(resident_textures.size()),
+                static_cast<std::uint32_t>(duplicate_texture_guids.size()));
+
+            std::uint64_t tracked_buffers = ui_renderer.TrackedBufferBytes() +
+                scene_effect_chain.AllocatedBufferBytes() +
+                material_gpu_binder.TrackedBufferBytes();
+            for (const auto& buffer : constant_buffers)
+                tracked_buffers += buffer_byte_width(buffer.Get());
+            tracked_buffers += buffer_byte_width(material_override_cb.Get());
+            tracked_buffers += buffer_byte_width(shader_layer_cb.Get());
+            tracked_buffers += buffer_byte_width(character_material_cb.Get());
+            tracked_buffers += buffer_byte_width(frame_constants_cb.Get());
+
+            const std::uint64_t render_target_bytes =
+                ui_renderer.RenderTargetPoolBytes() +
+                scene_effect_targets.AllocatedBytes();
+            ReplayEngine::Rendering::Stats().SetEngineMemoryBytes(
+                texture_cache_resident_bytes() + material_gpu_binder.TrackedTextureBytes(),
+                tracked_buffers, render_target_bytes);
+        }
+        else
+        {
+            --profile_metadata_countdown;
+        }
+
+        const auto& profile_culling = ReplayEngine::Rendering::Culling();
+        ReplayEngine::Rendering::Stats().SetSceneCounters(
+            profile_objects, profile_components, profile_culling.tested,
+            profile_culling.tested >= profile_culling.culled
+                ? profile_culling.tested - profile_culling.culled : 0u,
+            profile_effect_stacks);
+    }
 
     ReplayEngine::Rendering::Stats().EndFrame(immediate_context.Get());
 

@@ -1,4 +1,5 @@
 ﻿#include "toon_renderer.h"
+#include "../../RePlayEngine/Rendering/RenderStats.h"
 #include "shader.h"
 #include "misc.h"
 
@@ -128,6 +129,7 @@ void toon_renderer::unbind_resources(ID3D11DeviceContext* ctx)
 void toon_renderer::bind_outline_pass(ID3D11DeviceContext* ctx, bool /*skinned*/)
 {
     ctx->RSSetState(outline_rs.Get());
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
     ctx->PSSetShader(outline_ps_.Get(), nullptr, 0);
     ctx->VSSetConstantBuffers(7, 1, outline_cb.GetAddressOf());
 }
