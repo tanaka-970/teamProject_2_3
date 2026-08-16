@@ -217,4 +217,18 @@ namespace ReplayEngine::Localization
         if (!HasLanguage(language)) languages_.push_back(language);
         entries_[key][language] = std::move(value);
     }
+
+    bool LocalizationTable::RemoveKey(const std::string& key) noexcept
+    {
+        return entries_.erase(key) != 0;
+    }
+
+    bool LocalizationTable::RemoveLanguage(const std::string& language) noexcept
+    {
+        const auto it = std::find(languages_.begin(), languages_.end(), language);
+        if (it == languages_.end()) return false;
+        languages_.erase(it);
+        for (auto& entry : entries_) entry.second.erase(language);
+        return true;
+    }
 }

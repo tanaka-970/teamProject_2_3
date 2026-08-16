@@ -1,4 +1,4 @@
-#include "framework.h"
+﻿#include "framework.h"
 #include "gltf_model.h"
 #include "skinned_mesh.h"
 #include "../../RePlayEngine/Assets/AssetCache.h"
@@ -42,8 +42,8 @@ bool framework::create_material_asset()
     std::filesystem::path folder = std::filesystem::path("resources") / "Materials";
     const std::string base = SafeAssetFileName(new_material_name);
     std::filesystem::path path = folder / (base + MaterialAsset::file_extension);
-    for (int suffix = 2; std::filesystem::exists(path) && suffix < 10000; ++suffix)
-        path = folder / (base + "_" + std::to_string(suffix) + MaterialAsset::file_extension);
+    for (int suffix = 1; std::filesystem::exists(path) && suffix < 10000; ++suffix)
+        path = folder / (base + " (" + std::to_string(suffix) + ")" + MaterialAsset::file_extension);
 
     MaterialAsset material;
     std::string error;

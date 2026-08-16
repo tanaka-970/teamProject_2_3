@@ -760,6 +760,46 @@ void framework::render(float elapsed_time)
         sprite_batches[0]->end(immediate_context.Get());
     }
 
+    // BackgroundOnly は geometry を描く前の framebuffer にだけ EffectChain を掛ける。
+    // 既存 WholeScreen (target_mode=0) はこの分岐へ入らず従来経路を維持する。
+    if (camera_pass.screen_effect != nullptr &&
+        camera_pass.screen_effect->target_mode == ScreenEffectStackComponent::BackgroundOnly &&
+        camera_pass.screen_effect->HasActiveEffects(&asset_database))
+    {
+        const std::uint32_t background_width = static_cast<std::uint32_t>(
+            (std::max)(1.0f, framebuffers[0]->viewport.Width));
+        const std::uint32_t background_height = static_cast<std::uint32_t>(
+            (std::max)(1.0f, framebuffers[0]->viewport.Height));
+        // framebuffer::deactivate() は activate() 時の backbuffer cache を解放するため、
+        // mid-frame では使わない。OM だけ外して最後の通常 deactivate() を温存する。
+        immediate_context->OMSetRenderTargets(0, nullptr, nullptr);
+        ReplayEngine::UI::UIRenderTarget* effected_background = apply_scene_effect_chain(
+            framebuffers[0]->shader_resource_views[0].Get(),
+            camera_pass.screen_effect->EffectiveEffects(&asset_database),
+            background_width, background_height, DXGI_FORMAT_R16G16B16A16_FLOAT,
+            shader_composer_time);
+        immediate_context->OMSetRenderTargets(1,
+            framebuffers[0]->render_target_view.GetAddressOf(),
+            framebuffers[0]->depth_stencil_view.Get());
+        immediate_context->RSSetViewports(1, &camera_output_viewport);
+        if (effected_background != nullptr)
+        {
+            immediate_context->OMSetBlendState(
+                blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
+            immediate_context->OMSetDepthStencilState(
+                depth_stencil_states[(size_t)DEPTH_STATE::ZT_OFF_ZW_OFF].Get(), 0);
+            D3D11_VIEWPORT background_viewport = framebuffers[0]->viewport;
+            immediate_context->RSSetViewports(1, &background_viewport);
+            ID3D11ShaderResourceView* source = effected_background->srv.Get();
+            bit_block_transfer->blit(immediate_context.Get(), &source, 0, 1);
+            ID3D11ShaderResourceView* null_source = nullptr;
+            immediate_context->PSSetShaderResources(0, 1, &null_source);
+            immediate_context->RSSetViewports(1, &camera_output_viewport);
+            immediate_context->OMSetDepthStencilState(
+                depth_stencil_states[(size_t)DEPTH_STATE::ZT_ON_ZW_ON].Get(), 0);
+        }
+    }
+
     immediate_context->OMSetBlendState(blend_states[(size_t)BLEND_STATE::NONE].Get(), nullptr, 0xFFFFFFFF);
 
     ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Blend, false);
@@ -1566,6 +1606,64 @@ void framework::render(float elapsed_time)
         }
     }
 
+    // RenderingLayerMask は選択 layer の Renderer だけを透明な一時RTへ再描画し、
+    // 同じ EffectChain を通して元Sceneへ alpha 合成する。通常Sceneの描画を消さないため
+    // target未指定(WholeScreen)の既存Sceneには一切コストを足さない。
+    if (camera_pass.screen_effect != nullptr &&
+        camera_pass.screen_effect->target_mode == ScreenEffectStackComponent::RenderingLayerMask &&
+        camera_pass.screen_effect->HasActiveEffects(&asset_database))
+    {
+        const std::uint32_t layer_width = static_cast<std::uint32_t>(
+            (std::max)(1.0f, framebuffers[0]->viewport.Width));
+        const std::uint32_t layer_height = static_cast<std::uint32_t>(
+            (std::max)(1.0f, framebuffers[0]->viewport.Height));
+        ReplayEngine::UI::UIRenderTarget* layer_source = scene_effect_targets.Acquire(
+            layer_width, layer_height, DXGI_FORMAT_R16G16B16A16_FLOAT);
+        if (layer_source != nullptr)
+        {
+            ID3D11ShaderResourceView* null_srvs[8]{};
+            immediate_context->PSSetShaderResources(0, 8, null_srvs);
+            immediate_context->OMSetRenderTargets(1, layer_source->rtv.GetAddressOf(),
+                framebuffers[0]->depth_stencil_view.Get());
+            const FLOAT transparent[4]{ 0.0f, 0.0f, 0.0f, 0.0f };
+            immediate_context->ClearRenderTargetView(layer_source->rtv.Get(), transparent);
+            immediate_context->RSSetViewports(1, &camera_output_viewport);
+            immediate_context->OMSetBlendState(
+                blend_states[(size_t)BLEND_STATE::ALPHA].Get(), nullptr, 0xFFFFFFFF);
+            immediate_context->OMSetDepthStencilState(
+                depth_stencil_states[(size_t)DEPTH_STATE::ZT_ON_ZW_OFF].Get(), 0);
+            const int target_layer = (std::max)(0, (std::min)(31,
+                camera_pass.screen_effect->target_rendering_layer));
+            const std::uint32_t target_layer_mask =
+                1u << static_cast<unsigned int>(target_layer);
+            draw_object_scene_meshes(nullptr, false, false,
+                ReplayEngine::Core::ObjectID::Invalid(), false, target_layer_mask);
+            immediate_context->OMSetRenderTargets(0, nullptr, nullptr);
+
+            ReplayEngine::UI::UIRenderTarget* layer_effected = apply_scene_effect_chain(
+                layer_source->srv.Get(),
+                camera_pass.screen_effect->EffectiveEffects(&asset_database),
+                layer_width, layer_height, DXGI_FORMAT_R16G16B16A16_FLOAT,
+                shader_composer_time);
+
+            immediate_context->OMSetRenderTargets(1,
+                framebuffers[0]->render_target_view.GetAddressOf(),
+                framebuffers[0]->depth_stencil_view.Get());
+            D3D11_VIEWPORT full_layer_viewport = framebuffers[0]->viewport;
+            immediate_context->RSSetViewports(1, &full_layer_viewport);
+            immediate_context->OMSetDepthStencilState(
+                depth_stencil_states[(size_t)DEPTH_STATE::ZT_OFF_ZW_OFF].Get(), 0);
+            immediate_context->OMSetBlendState(
+                blend_states[(size_t)BLEND_STATE::ALPHA].Get(), nullptr, 0xFFFFFFFF);
+            ID3D11ShaderResourceView* selected_layer = layer_effected != nullptr
+                ? layer_effected->srv.Get() : layer_source->srv.Get();
+            bit_block_transfer->blit(immediate_context.Get(), &selected_layer, 0, 1);
+            ID3D11ShaderResourceView* null_layer = nullptr;
+            immediate_context->PSSetShaderResources(0, 1, &null_layer);
+            immediate_context->RSSetViewports(1, &camera_output_viewport);
+        }
+    }
+
     // Model Effect は通常の scene 描画後、transparent VFX より前へ合成する。
     // これにより effect 無しモデルは従来経路のまま、line/particle は後から正しく重なる。
     draw_model_effect_stacks(camera_output_viewport);
@@ -1627,6 +1725,7 @@ void framework::render(float elapsed_time)
     const bool final_output =
         output == ReplayEngine::Rendering::RenderOutput::Final && enable_final_pass_shader;
     const bool has_screen_effect = final_output && screen_effect != nullptr &&
+        screen_effect->target_mode == ScreenEffectStackComponent::WholeScreen &&
         screen_effect->HasActiveEffects(&asset_database);
     const bool before_post_effect = has_screen_effect &&
         screen_effect->apply_stage == ScreenEffectStackComponent::BeforePostProcess;

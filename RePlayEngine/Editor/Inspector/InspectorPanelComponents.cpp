@@ -24,6 +24,9 @@
 #include "../../Components/Landscape/LandscapeColliderComponent.h"
 #include "../../Components/Rendering/PrimitiveMeshRendererComponent.h"
 #include "../../Components/Rendering/LightComponents.h"
+#include "../../Components/UI/UIEffectStackComponent.h"
+#include "../../Components/Rendering/ModelEffectStackComponent.h"
+#include "../../Components/Rendering/ScreenEffectStackComponent.h"
 
 #include "imgui/imgui.h"
 #include "imgui/imgui_internal.h"
@@ -435,6 +438,47 @@ namespace ReplayEngine::Editor
         {
             ImGui::TextDisabled("編集できる設定はありません");
         }
+
+        // Effect Stack は Property の編集だけでなく「並び順」自体が意味を持つ。
+        // reorder も Scene snapshot の 1 操作として Undo/Redo へ載せる。
+        const auto draw_effect_reorder = [&](auto* stack)
+        {
+            if (stack == nullptr || stack->effects.size() < 2) return;
+            ImGui::Separator();
+            ImGui::TextDisabled("Effect 順序");
+            for (std::size_t effect_index = 0; effect_index < stack->effects.size(); ++effect_index)
+            {
+                ImGui::PushID(static_cast<int>(effect_index) + 41000);
+                ImGui::Text("%zu", effect_index + 1);
+                ImGui::SameLine();
+                bool moved = false;
+                if (editable && effect_index > 0 && ImGui::SmallButton("↑"))
+                {
+                    context.BeginEdit(title + " の Effect を並び替え");
+                    std::swap(stack->effects[effect_index - 1], stack->effects[effect_index]);
+                    stack->effect_count = static_cast<int>(stack->effects.size());
+                    stack->OnPropertyChanged("effect_count");
+                    context.CommitEdit();
+                    moved = true;
+                }
+                ImGui::SameLine();
+                if (!moved && editable && effect_index + 1 < stack->effects.size() &&
+                    ImGui::SmallButton("↓"))
+                {
+                    context.BeginEdit(title + " の Effect を並び替え");
+                    std::swap(stack->effects[effect_index], stack->effects[effect_index + 1]);
+                    stack->effect_count = static_cast<int>(stack->effects.size());
+                    stack->OnPropertyChanged("effect_count");
+                    context.CommitEdit();
+                    moved = true;
+                }
+                ImGui::PopID();
+                if (moved) break;
+            }
+        };
+        draw_effect_reorder(dynamic_cast<Components::UIEffectStackComponent*>(&component));
+        draw_effect_reorder(dynamic_cast<Components::ModelEffectStackComponent*>(&component));
+        draw_effect_reorder(dynamic_cast<Components::ScreenEffectStackComponent*>(&component));
 
         ImGui::Spacing();
         std::vector<Core::Component*> dependents;

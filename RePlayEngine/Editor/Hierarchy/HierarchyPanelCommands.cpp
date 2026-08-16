@@ -34,6 +34,43 @@ namespace ReplayEngine::Editor
         constexpr const char* clipboard_header = "REPLAY_CLIPBOARD 1\n";
         constexpr std::size_t maximum_clipboard_objects = 100000;
 
+        std::string UniqueObjectName(const Scene::Scene& scene, const GameObject* parent,
+            const std::string& desired, const GameObject* exclude = nullptr)
+        {
+            const auto exists = [&](const std::string& candidate)
+            {
+                for (std::size_t i = 0; i < scene.GameObjectCount(); ++i)
+                {
+                    const GameObject* object = scene.GameObjectAt(i);
+                    if (object == nullptr || object == exclude || object->PendingDestroy()) continue;
+                    if (object->Parent() == parent && object->Name() == candidate) return true;
+                }
+                return false;
+            };
+            if (!exists(desired)) return desired;
+
+            // 既に "Button (1)" のような連番名を複製しても
+            // "Button (1) (1)" にせず、同じ base の次番号を探す。
+            std::string base = desired;
+            const std::size_t open = desired.rfind(" (");
+            if (open != std::string::npos && desired.back() == ')')
+            {
+                const std::string digits = desired.substr(open + 2,
+                    desired.size() - open - 3);
+                if (!digits.empty() && std::all_of(digits.begin(), digits.end(),
+                    [](unsigned char c) { return std::isdigit(c) != 0; }))
+                {
+                    base = desired.substr(0, open);
+                }
+            }
+            for (int suffix = 1; suffix < 10000; ++suffix)
+            {
+                const std::string candidate = base + " (" + std::to_string(suffix) + ")";
+                if (!exists(candidate)) return candidate;
+            }
+            return desired;
+        }
+
         bool ValidateClipboardData(const Scene::Serialization::SceneData& data,
             std::string& error)
         {
@@ -202,7 +239,7 @@ namespace ReplayEngine::Editor
             if (root == nullptr || root->PendingDestroy() ||
                 existing_ids.find(root->ID()) != existing_ids.end()) continue;
             if (destination_parent != nullptr) root->SetParent(destination_parent, false);
-            root->SetName(root->Name() + " コピー");
+            root->SetName(UniqueObjectName(*scene, destination_parent, root->Name(), root));
             created_roots.push_back(root->ID());
         }
         if (created_roots.empty())
@@ -269,7 +306,7 @@ namespace ReplayEngine::Editor
             return;
 
         context.BeginEdit(std::string(display_name) + " を作成");
-        GameObject* created = scene->CreateGameObject(display_name);
+        GameObject* created = scene->CreateGameObject(UniqueObjectName(*scene, parent, display_name));
         if (created == nullptr)
         {
             context.CancelEdit();
@@ -301,7 +338,7 @@ namespace ReplayEngine::Editor
         if (scene == nullptr || !context.CanEdit()) return;
 
         context.BeginEdit("Landscape Ground を作成");
-        GameObject* ground = scene->CreateGameObject("Ground");
+        GameObject* ground = scene->CreateGameObject(UniqueObjectName(*scene, parent, "Ground"));
         if (ground == nullptr)
         {
             context.CancelEdit();
@@ -336,7 +373,7 @@ namespace ReplayEngine::Editor
         if (scene == nullptr || !context.CanEdit()) return;
 
         context.BeginEdit("GameObject を作成");
-        GameObject* created = scene->CreateGameObject("GameObject");
+        GameObject* created = scene->CreateGameObject(UniqueObjectName(*scene, parent, "GameObject"));
         if (created == nullptr)
         {
             context.CancelEdit();
@@ -366,7 +403,11 @@ namespace ReplayEngine::Editor
             if (source == nullptr) continue;
 
             GameObject* clone = Scene::Serialization::DuplicateGameObject(*scene, *source, true);
-            if (clone != nullptr) created_ids.push_back(clone->ID());
+            if (clone != nullptr)
+            {
+                clone->SetName(UniqueObjectName(*scene, clone->Parent(), source->Name(), clone));
+                created_ids.push_back(clone->ID());
+            }
         }
 
         if (created_ids.empty())

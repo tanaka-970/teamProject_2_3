@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../Component/Component.h"
 #include "../../Core/Math/Transform.h"
@@ -91,6 +91,11 @@ namespace ReplayEngine::Core
         //  - keep_world_transform が true なら見た目のワールド姿勢を維持する。
         //    false ならローカル値をそのまま保ち、見た目は親に追従して動く。
         bool SetParent(GameObject* parent, bool keep_world_transform = true);
+
+        // 現在の親の children_（Scene 直下なら Scene の root 順）における添字。
+        // Editor の Hierarchy 並び替えに使う。ObjectID/参照の意味は変えない。
+        std::size_t SiblingIndex() const noexcept;
+        bool SetSiblingIndex(std::size_t index) noexcept;
 
         bool IsDescendantOf(const GameObject* candidate_ancestor) const noexcept;
 

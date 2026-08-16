@@ -73,6 +73,23 @@ namespace framework_project_browser::Detail
         return name;
     }
 
+    // 新規作成時だけ Unity/Explorer 風の "Name (1)" 連番を付ける。
+    // 既存ファイルや手動 rename は勝手に変えない。
+    inline std::filesystem::path UniqueProjectPath(const std::filesystem::path& folder,
+        const std::string& stem, const std::string& extension = {})
+    {
+        std::filesystem::path candidate = folder / (stem + extension);
+        std::error_code error;
+        if (!std::filesystem::exists(candidate, error) || error) return candidate;
+        for (int suffix = 1; suffix < 10000; ++suffix)
+        {
+            candidate = folder / (stem + " (" + std::to_string(suffix) + ")" + extension);
+            error.clear();
+            if (!std::filesystem::exists(candidate, error) || error) return candidate;
+        }
+        return candidate;
+    }
+
     struct ProjectEntry final
     {
         std::filesystem::path path;
@@ -196,6 +213,7 @@ namespace framework_project_browser::Detail
         case AssetKind::Font:     return ImVec4(0.80f, 0.92f, 0.98f, 1.0f);
         case AssetKind::Localization:return ImVec4(0.62f, 0.92f, 0.82f, 1.0f);
         case AssetKind::EffectPreset:return ImVec4(0.96f, 0.66f, 0.92f, 1.0f);
+        case AssetKind::InputAction:return ImVec4(0.55f, 0.90f, 1.0f, 1.0f);
         default:                  return ImVec4(0.72f, 0.72f, 0.72f, 1.0f);
         }
     }

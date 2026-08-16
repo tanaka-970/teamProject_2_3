@@ -43,6 +43,8 @@ ReplayEngine::Assets::AssetKind framework::project_kind_for(
         return AssetKind::Localization;
     if (extension == ReplayEngine::Rendering::Effects::EffectPresetAsset::file_extension)
         return AssetKind::EffectPreset;
+    if (extension == GameInput::InputState::action_asset_extension)
+        return AssetKind::InputAction;
     if (extension == ".fbx" || extension == ".glb" || extension == ".gltf" ||
         extension == ".obj") return AssetKind::Model;
     if (IsImageExtension(extension)) return AssetKind::Image;
@@ -121,11 +123,7 @@ bool framework::project_create_folder(const std::string& name)
     const std::filesystem::path root = std::filesystem::current_path(error);
     if (error) return false;
 
-    std::filesystem::path path = root / project_current_folder / safe;
-    for (int suffix = 2; std::filesystem::exists(path) && suffix < 10000; ++suffix)
-    {
-        path = root / project_current_folder / (safe + std::to_string(suffix));
-    }
+    std::filesystem::path path = UniqueProjectPath(root / project_current_folder, safe);
 
     std::filesystem::create_directories(path, error);
     if (error)
@@ -216,11 +214,7 @@ bool framework::project_create_material(const std::string& name)
     if (error) return false;
 
     const std::filesystem::path folder = root / project_current_folder;
-    std::filesystem::path path = folder / (safe + MaterialAsset::file_extension);
-    for (int suffix = 2; std::filesystem::exists(path) && suffix < 10000; ++suffix)
-    {
-        path = folder / (safe + std::to_string(suffix) + MaterialAsset::file_extension);
-    }
+    std::filesystem::path path = UniqueProjectPath(folder, safe, MaterialAsset::file_extension);
 
     MaterialAsset material;
     std::string save_error;
@@ -267,9 +261,7 @@ bool framework::project_create_motion(const std::string& name)
         return false;
     }
 
-    std::filesystem::path path = folder / (safe + MotionAsset::file_extension);
-    for (int suffix = 2; std::filesystem::exists(path) && suffix < 10000; ++suffix)
-        path = folder / (safe + std::to_string(suffix) + MotionAsset::file_extension);
+    std::filesystem::path path = UniqueProjectPath(folder, safe, MotionAsset::file_extension);
 
     MotionAsset motion;
     motion.name = safe;
@@ -317,9 +309,7 @@ bool framework::project_create_localization(const std::string& name)
     const std::filesystem::path folder = root / project_current_folder;
     std::filesystem::create_directories(folder, error);
     if (error) return false;
-    std::filesystem::path path = folder / (safe + LocalizationTable::file_extension);
-    for (int suffix = 2; std::filesystem::exists(path) && suffix < 10000; ++suffix)
-        path = folder / (safe + std::to_string(suffix) + LocalizationTable::file_extension);
+    std::filesystem::path path = UniqueProjectPath(folder, safe, LocalizationTable::file_extension);
     LocalizationTable table;
     table.SetLanguages({ "ja", "en" });
     table.Set("sample.hello", "ja", u8"こんにちは");
@@ -353,9 +343,7 @@ bool framework::project_create_effect_preset(const std::string& name)
     const std::filesystem::path folder = root / project_current_folder;
     std::filesystem::create_directories(folder, error);
     if (error) return false;
-    std::filesystem::path path = folder / (safe + EffectPresetAsset::file_extension);
-    for (int suffix = 2; std::filesystem::exists(path) && suffix < 10000; ++suffix)
-        path = folder / (safe + std::to_string(suffix) + EffectPresetAsset::file_extension);
+    std::filesystem::path path = UniqueProjectPath(folder, safe, EffectPresetAsset::file_extension);
     EffectPresetAsset preset;
     ReplayEngine::UI::UIEffect glow;
     glow.kind = static_cast<int>(ReplayEngine::UI::UIEffectKind::Glow);
@@ -397,9 +385,7 @@ bool framework::project_create_scene_flow(const std::string& name)
     const std::filesystem::path root = std::filesystem::current_path(error);
     if (error) return false;
     const std::filesystem::path folder = root / project_current_folder;
-    std::filesystem::path path = folder / (safe + SceneFlowAsset::file_extension);
-    for (int suffix = 2; std::filesystem::exists(path) && suffix < 10000; ++suffix)
-        path = folder / (safe + std::to_string(suffix) + SceneFlowAsset::file_extension);
+    std::filesystem::path path = UniqueProjectPath(folder, safe, SceneFlowAsset::file_extension);
 
     SceneFlowAsset flow;
     flow.name = safe;
@@ -462,9 +448,7 @@ bool framework::project_create_surface_shader(const std::string& name)
         return false;
     }
 
-    std::filesystem::path path = folder / (safe + ".hlsl");
-    for (int suffix = 2; std::filesystem::exists(path) && suffix < 10000; ++suffix)
-        path = folder / (safe + std::to_string(suffix) + ".hlsl");
+    std::filesystem::path path = UniqueProjectPath(folder, safe, ".hlsl");
 
     // Picker のカテゴリもフォルダ構造から自動で作る。
     // Shader/Materials/Characters/Skin.hlsl -> Project/Characters/Skin
@@ -511,5 +495,68 @@ bool framework::project_create_surface_shader(const std::string& name)
     if (report.compile_failed != 0)
         project_browser_status += " (compile error は Shader Catalog で確認)";
     push_editor_log("Info", project_browser_status, path, 1);
+    return true;
+}
+
+
+bool framework::project_create_input_action_asset(const std::string& name)
+{
+    using ReplayEngine::Assets::AssetKind;
+    const std::string safe = SafeProjectFileName(name.empty() ? "DefaultInput" : name);
+    if (safe.empty()) return false;
+
+    std::error_code error;
+    const std::filesystem::path root = std::filesystem::current_path(error);
+    if (error) return false;
+    const std::filesystem::path folder = root / project_current_folder;
+    std::filesystem::create_directories(folder, error);
+    if (error) return false;
+
+    const std::filesystem::path path = UniqueProjectPath(folder, safe,
+        GameInput::InputState::action_asset_extension);
+    GameInput::InputState defaults;
+    std::string save_error;
+    if (!defaults.SaveActionAsset(path, save_error))
+    {
+        project_browser_status = "Input Action Asset 作成失敗: " + save_error;
+        return false;
+    }
+
+    const auto& record = asset_database.Register(path, AssetKind::InputAction);
+    if (!asset_database.Save(save_error))
+    {
+        project_browser_status = "Input Asset は作成しましたが DB 保存失敗: " + save_error;
+        return false;
+    }
+
+    selected_asset_guid = record.guid;
+    project_selected_entry_path = path;
+    project_settings.SetInputActionAssetGuid(record.guid);
+    save_project_settings();
+    load_active_input_action_asset();
+    project_browser_status = "Input Action Asset を作成しました: " + path.filename().u8string();
+    return true;
+}
+
+bool framework::load_active_input_action_asset()
+{
+    game_input.ResetDefaultBindings();
+    const std::string guid = project_settings.InputActionAssetGuid();
+    if (guid.empty()) return true;
+
+    const auto* record = asset_database.FindByGuid(guid);
+    if (record == nullptr || record->kind != ReplayEngine::Assets::AssetKind::InputAction)
+    {
+        push_editor_log("Warning",
+            "Input Action Asset が見つからないため hard-coded default を使用します");
+        return false;
+    }
+
+    std::string error;
+    if (!game_input.LoadActionAsset(content_path(record->source_path), error))
+    {
+        push_editor_log("Warning", "Input Action Asset: " + error, record->source_path);
+        return false;
+    }
     return true;
 }

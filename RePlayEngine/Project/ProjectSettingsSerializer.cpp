@@ -48,6 +48,7 @@ namespace ReplayEngine::Project
         stream << "SCENE_FLOW " << std::quoted(settings.SceneFlowGuid()) << '\n';
         stream << "LOCALIZATION_TABLE " << std::quoted(settings.LocalizationTableGuid()) << '\n';
         stream << "DEFAULT_LANGUAGE " << std::quoted(settings.DefaultLanguage()) << '\n';
+        stream << "INPUT_ACTION_ASSET " << std::quoted(settings.InputActionAssetGuid()) << '\n';
         stream << "UI_FOCUS_OUTLINE_ENABLED " << (settings.FocusOutlineEnabled() ? 1 : 0) << '\n';
         const DirectX::XMFLOAT4 focus_color = settings.FocusOutlineColor();
         stream << "UI_FOCUS_OUTLINE_COLOR " << focus_color.x << ' ' << focus_color.y << ' '
@@ -153,6 +154,14 @@ namespace ReplayEngine::Project
                 std::string language;
                 if (value_stream >> std::quoted(language))
                     settings.SetDefaultLanguage(std::move(language));
+            }
+            else if (keyword == "INPUT_ACTION_ASSET")
+            {
+                std::istringstream value_stream(line);
+                value_stream.imbue(std::locale::classic());
+                std::string guid;
+                if (value_stream >> std::quoted(guid))
+                    settings.SetInputActionAssetGuid(std::move(guid));
             }
             else if (keyword == "UI_FOCUS_OUTLINE_ENABLED")
             {

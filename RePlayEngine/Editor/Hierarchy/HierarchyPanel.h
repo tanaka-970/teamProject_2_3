@@ -56,10 +56,11 @@ namespace ReplayEngine::Editor
         void DestroySelected(EditorContext& context);
 
         // ツリー走査中に確定させると添字や再帰が壊れるため、
-        // 実際の親子変更は走査後にまとめて処理する。
+        // 実際の親子・兄弟順変更は走査後にまとめて処理する。
+        enum class DropPlacement : int { Child = 0, Before = 1, After = 2, Root = 3 };
         Core::ObjectID pending_reparent_child_;
         Core::ObjectID pending_reparent_parent_;
-        bool pending_reparent_to_root_ = false;
+        DropPlacement pending_drop_placement_ = DropPlacement::Child;
 
         // 名前変更中の対象。
         Core::ObjectID renaming_;

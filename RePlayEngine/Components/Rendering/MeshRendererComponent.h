@@ -82,6 +82,8 @@ namespace ReplayEngine::Components
         bool outline = false;
         bool cast_shadow = true;
         bool receive_shadow = true;
+        // Screen Effect Stack の Rendering Layer mask。0..31。
+        int rendering_layer = 0;
         bool visible = true;
 
         DirectX::XMFLOAT3 local_position_offset{ 0.0f, 0.0f, 0.0f };

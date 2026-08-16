@@ -115,6 +115,7 @@ namespace ReplayEngine::Components
         out.outline = outline;
         out.cast_shadow = cast_shadow;
         out.receive_shadow = receive_shadow;
+        out.rendering_layer = (std::max)(0, (std::min)(31, rendering_layer));
         out.skinned = true;
 
         // Animator があればクリップと時刻を運ぶ。無ければ Renderer 側の現在値を維持する。

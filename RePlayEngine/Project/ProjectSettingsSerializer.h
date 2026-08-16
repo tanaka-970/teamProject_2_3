@@ -27,13 +27,14 @@ namespace ReplayEngine::Project
         // v3 … Active Scene Flow (AssetGUID) を追加
         // v4 … Runtime UI Focus Style を追加
         // v5 … Localization table / default language を追加
+        // v6 … Input Action Asset GUID を追加
         //
         // Scene のファイル形式とは別のバージョン番号。
         // 片方を上げたらもう片方も上げる、という関係にはしない。
         // 保存する内容が別なので、揃えると意味の無い版番号が増える。
-        static constexpr int current_version = 5;
+        static constexpr int current_version = 6;
 
-        // v1〜v3 のファイルもそのまま読める。読み込み後に保存すると v5 になる。
+        // v1〜v5 のファイルもそのまま読める。読み込み後に保存すると v6 になる。
         static constexpr int minimum_supported_version = 1;
 
         // 読み込みに失敗したときに使う安全な既定値へ戻す。
