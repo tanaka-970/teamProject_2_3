@@ -88,6 +88,12 @@ namespace ReplayEngine::Core::Detail
                     .Display("地形が無い時の床の高さ").Step(0.05));
 
             PropertyRegistry::Register<CharacterMotorComponent>(
+                MakeProperty("max_step_height", &CharacterMotorComponent::max_step_height)
+                    .Display("登れる段差の高さ").Range(0.0, 2.0).Step(0.01)
+                    .Tooltip("接地判定はこの高さだけ上から床を探す。"
+                        "大きくすると壁の上へ乗ってしまい、0 にすると段差を登れない。"));
+
+            PropertyRegistry::Register<CharacterMotorComponent>(
                 MakeProperty("vertical_physics", &CharacterMotorComponent::vertical_physics)
                     .Display("重力とジャンプを有効化")
                     .Tooltip("旧 Player は既定で無効だったため、初期値も無効にしてある。"));
