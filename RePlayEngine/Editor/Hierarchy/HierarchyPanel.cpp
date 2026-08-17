@@ -411,9 +411,19 @@ namespace ReplayEngine::Editor
         {
             const float height = (std::max)(1.0f, item_max.y - item_min.y);
             const float local_y = ImGui::GetIO().MousePos.y - item_min.y;
+
+            // 並べ替えの帯を広く、子にする帯を狭く取る。
+            //
+            // 以前は上 25% / 中央 50% / 下 25% だった。行の高さは 20px 前後なので
+            // 上下の帯が 5px しかなく、並べ替えたいだけでもほぼ中央に当たって
+            // 子にされていた。並べ替えの方が日常的な操作なのでそちらを広くする。
+            //
+            // 中央（子にする）は 30% 残す。ここを 0 にすると親子付けができない。
+            constexpr float reorder_band = 0.35f;
             DropPlacement placement = DropPlacement::Child;
-            if (local_y < height * 0.25f) placement = DropPlacement::Before;
-            else if (local_y > height * 0.75f) placement = DropPlacement::After;
+            if (local_y < height * reorder_band) placement = DropPlacement::Before;
+            else if (local_y > height * (1.0f - reorder_band))
+                placement = DropPlacement::After;
 
             // before / after は挿入位置を線で明示する。中央は通常の child drop。
             if (placement != DropPlacement::Child)

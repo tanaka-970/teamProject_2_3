@@ -274,8 +274,14 @@
                 const float height = (std::max)(1.0f, item_max.y - item_min.y);
                 const float local_y = ImGui::GetIO().MousePos.y - item_min.y;
                 UIHierarchyDropPlacement placement = UIHierarchyDropPlacement::Child;
-                if (local_y < height * 0.25f) placement = UIHierarchyDropPlacement::Before;
-                else if (local_y > height * 0.75f) placement = UIHierarchyDropPlacement::After;
+                // 並べ替えの帯を広く取る。理由は HierarchyPanel.cpp と同じで、
+                // 行の高さが 20px 前後だと 25% では 5px しかなく、
+                // 並べ替えたいだけでも中央に当たって子にされてしまう。
+                constexpr float reorder_band = 0.35f;
+                if (local_y < height * reorder_band)
+                    placement = UIHierarchyDropPlacement::Before;
+                else if (local_y > height * (1.0f - reorder_band))
+                    placement = UIHierarchyDropPlacement::After;
                 if (placement != UIHierarchyDropPlacement::Child)
                 {
                     const float y = placement == UIHierarchyDropPlacement::Before
