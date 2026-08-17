@@ -192,6 +192,16 @@ namespace ReplayEngine::Project
         bool DepthPrepassEnabled() const noexcept { return depth_prepass_enabled_; }
         void SetDepthPrepassEnabled(bool value) noexcept { depth_prepass_enabled_ = value; }
 
+        // ---- Editor Component Visibility ----------------------------------
+        bool ShowGameTemplateComponents() const noexcept
+        {
+            return show_game_template_components_;
+        }
+        void SetShowGameTemplateComponents(bool value) noexcept
+        {
+            show_game_template_components_ = value;
+        }
+
         // ---- 既定値へ戻す --------------------------------------------------
 
         void Reset() noexcept
@@ -210,6 +220,7 @@ namespace ReplayEngine::Project
             focus_outline_color_ = { 0.25f, 0.78f, 1.0f, 1.0f };
             focus_outline_width_ = 2.0f;
             focus_corner_radius_ = 4.0f;
+            show_game_template_components_ = false;
         }
 
     private:
@@ -228,5 +239,7 @@ namespace ReplayEngine::Project
         bool taa_enabled_ = true;
         // 既定 false は実測に基づく。Docs 参照。LOD 導入後は測り直すこと。
         bool depth_prepass_enabled_ = false;
+        // Game Template は汎用プロジェクトでは既定非表示。Registry からは消さない。
+        bool show_game_template_components_ = false;
     };
 }

@@ -56,6 +56,10 @@ namespace ReplayEngine::Project
         stream << "UI_FOCUS_OUTLINE_WIDTH " << settings.FocusOutlineWidth() << '\n';
         stream << "UI_FOCUS_CORNER_RADIUS " << settings.FocusCornerRadius() << '\n';
 
+        // v7: Editor の Template Component 表示方針。旧ファイルは Reset() の false のまま。
+        stream << "EDITOR_SHOW_GAME_TEMPLATE_COMPONENTS "
+            << (settings.ShowGameTemplateComponents() ? 1 : 0) << '\n';
+
         // 描画トグル。行が無い旧ファイルは Reset() の既定値のまま読まれる。
         stream << "RENDER_SSAO " << (settings.SsaoEnabled() ? 1 : 0) << '\n';
         stream << "RENDER_SSR " << (settings.SsrEnabled() ? 1 : 0) << '\n';
@@ -187,6 +191,13 @@ namespace ReplayEngine::Project
                 std::istringstream value_stream(line);
                 float value = settings.FocusCornerRadius();
                 if (value_stream >> value) settings.SetFocusCornerRadius(value);
+            }
+            else if (keyword == "EDITOR_SHOW_GAME_TEMPLATE_COMPONENTS")
+            {
+                std::istringstream value_stream(line);
+                int enabled = settings.ShowGameTemplateComponents() ? 1 : 0;
+                if (value_stream >> enabled)
+                    settings.SetShowGameTemplateComponents(enabled != 0);
             }
             else if (keyword == "RENDER_SSAO")
             {
