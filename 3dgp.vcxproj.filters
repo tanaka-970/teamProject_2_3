@@ -244,6 +244,9 @@
     <Filter Include="RePlayEngine\Components\Gameplay">
       <UniqueIdentifier>{4fca5de2-8fda-49bd-8ea7-9e2a383b7323}</UniqueIdentifier>
     </Filter>
+    <Filter Include="RePlayEngine\Components\Navigation">
+      <UniqueIdentifier>{8d297a52-15d2-4fb5-986a-d2d2f04d0e51}</UniqueIdentifier>
+    </Filter>
     <Filter Include="RePlayEngine\Scene\Serialization">
       <UniqueIdentifier>{35ca2ab8-28d1-4203-8c32-b298098da48c}</UniqueIdentifier>
     </Filter>
@@ -933,6 +936,9 @@
     <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponentsGameplay.cpp">
       <Filter>RePlayEngine\Object\Registry</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponentsNavigation.cpp">
+      <Filter>RePlayEngine\Object\Registry</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponentsScripting.cpp">
       <Filter>RePlayEngine\Object\Registry</Filter>
     </ClCompile>
@@ -1065,6 +1071,12 @@
     <ClCompile Include="RePlayEngine\Components\Gameplay\CharacterMotorComponent.cpp">
       <Filter>RePlayEngine\Components\Gameplay</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\Gameplay\EnemyBehaviourComponent.cpp">
+      <Filter>RePlayEngine\Components\Gameplay</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\Navigation\NavAgentComponent.cpp">
+      <Filter>RePlayEngine\Components\Navigation</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Components\Gameplay\PlayerInputComponent.cpp">
       <Filter>RePlayEngine\Components\Gameplay</Filter>
     </ClCompile>
@@ -1165,6 +1177,9 @@
       <Filter>RePlayEngine\Scene\Services</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Editor\Debug\ColliderDebugDraw.cpp">
+      <Filter>RePlayEngine\Editor\Debug</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\Debug\AINavigationDebugDraw.cpp">
       <Filter>RePlayEngine\Editor\Debug</Filter>
     </ClCompile>
     <ClCompile Include="Source\app\Runtime\framework_collision_world.cpp">
@@ -1877,6 +1892,12 @@
     <ClInclude Include="RePlayEngine\Components\Gameplay\CharacterMotorComponent.h">
       <Filter>RePlayEngine\Components\Gameplay</Filter>
     </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Gameplay\EnemyBehaviourComponent.h">
+      <Filter>RePlayEngine\Components\Gameplay</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Navigation\NavAgentComponent.h">
+      <Filter>RePlayEngine\Components\Navigation</Filter>
+    </ClInclude>
     <ClInclude Include="RePlayEngine\Components\Gameplay\PlayerInputComponent.h">
       <Filter>RePlayEngine\Components\Gameplay</Filter>
     </ClInclude>
@@ -1971,6 +1992,9 @@
       <Filter>RePlayEngine\Physics</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Editor\Debug\ColliderDebugDraw.h">
+      <Filter>RePlayEngine\Editor\Debug</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\Debug\AINavigationDebugDraw.h">
       <Filter>RePlayEngine\Editor\Debug</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Object\Component\TriggerContact.h">

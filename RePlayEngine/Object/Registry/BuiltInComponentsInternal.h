@@ -19,6 +19,7 @@
 #include "../../Components/Core/TransformComponent.h"
 #include "../../Components/Core/PivotComponent.h"
 #include "../../Components/Gameplay/CharacterMotorComponent.h"
+#include "../../Components/Gameplay/EnemyBehaviourComponent.h"
 #include "../../Components/Gameplay/HealthComponent.h"
 #include "../../Components/Gameplay/PlayerControllerComponent.h"
 #include "../../Components/Gameplay/PlayerInputComponent.h"
@@ -30,6 +31,7 @@
 #include "../../Components/Physics/RigidbodyComponent.h"
 #include "../../Components/Physics/SphereColliderComponent.h"
 #include "../../Components/Landscape/LandscapeComponent.h"
+#include "../../Components/Navigation/NavAgentComponent.h"
 #include "../../Components/Landscape/LandscapeRendererComponent.h"
 #include "../../Components/Landscape/LandscapeColliderComponent.h"
 #include "../../Components/Motion/MotionPlayerComponent.h"
@@ -74,9 +76,11 @@ namespace ReplayEngine::Core::Detail
         using Components::CanvasComponent;
         using Components::CapsuleColliderComponent;
         using Components::CharacterMotorComponent;
+        using Components::EnemyBehaviourComponent;
         using Components::FollowTargetComponent;
         using Components::HealthComponent;
         using Components::MeshColliderComponent;
+        using Components::NavAgentComponent;
         using Components::RigidbodyComponent;
         using Components::LandscapeComponent;
         using Components::LandscapeRendererComponent;
@@ -172,4 +176,5 @@ namespace ReplayEngine::Core::Detail
     void RegisterMotion();
     void RegisterEditorNote();
     void RegisterStageGameplay();
+    void RegisterAINavigation();
 }

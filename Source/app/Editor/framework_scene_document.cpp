@@ -68,6 +68,12 @@ void framework::handle_viewport_selection()
     // Landscape Tool は左ドラッグを Sculpt / Face 選択へ使う。
     // Stroke の mouse-up は Viewport 外でも拾う必要があるため Hover 判定より先。
     if (handle_landscape_viewport_edit()) return;
+    // AI range handles consume only the selected handle drag; normal selection/Gizmo remains unchanged.
+    if (handle_ai_navigation_debug_edit())
+    {
+        viewport_drag_selecting = false;
+        return;
+    }
     if (!scene_view_hovered) return;
 
     const bool suppress_drag_selection =
