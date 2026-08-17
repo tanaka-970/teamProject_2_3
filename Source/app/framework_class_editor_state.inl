@@ -346,4 +346,8 @@ private:
     std::vector<editor_log_entry> editor_log_entries;
     int selected_editor_log_index{ -1 };
     bool viewport_drag_selecting{ false };
+
+    // 直前フレームで実際にカメラへ渡した入力。
+    // 診断表示が同じ条件を書き写すとズレるため、本物をそのまま保持して読ませる。
+    ReplayEngine::Editor::EditorCameraInput last_editor_camera_input{};
     POINT viewport_drag_start{};

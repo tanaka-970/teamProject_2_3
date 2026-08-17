@@ -8,30 +8,47 @@ OBJECT
   NAME "Player"
   ENABLED 1
   PARENT 0
-  TRANSFORM 0 0.9 6 0 0 0 1 1 1
+  TRANSFORM 0 0.89999997615814209 6 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 6
   COMPONENT "PrimitiveMeshRendererComponent" 1
-    STABLE_ID 1
+    STABLE_ID 7
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
-    PROPERTY_COUNT 2
+    PROPERTY_COUNT 17
     PROPERTY "primitive_type" enum 3
-    PROPERTY "tint" color 0.25 0.55 1 1
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_override" bool 0
+    PROPERTY "tint" color 0.25 0.55000001192092896 1 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0
+    PROPERTY "material.roughness" float 0.55000001192092896
+    PROPERTY "material.ambient_occlusion" float 1
+    PROPERTY "material.emissive_color" vec3 0 0 0
+    PROPERTY "material.emissive_strength" float 0
+    PROPERTY "material.double_sided" bool 0
   END_COMPONENT
   COMPONENT "CapsuleColliderComponent" 1
     STABLE_ID 2
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
-    PROPERTY_COUNT 7
+    PROPERTY_COUNT 9
     PROPERTY "collider_key" int 1
+    PROPERTY "center_offset" vec3 0 0 0
     PROPERTY "collision_layer" layer 0
     PROPERTY "collision_mask" layermask -1
     PROPERTY "is_trigger" bool 0
-    PROPERTY "radius" float 0.4
-    PROPERTY "height" float 1.8
+    PROPERTY "debug_draw" bool 1
+    PROPERTY "radius" float 0.40000000596046448
+    PROPERTY "height" float 1.7999999523162842
     PROPERTY "axis" enum 1
   END_COMPONENT
   COMPONENT "CharacterMotorComponent" 1
@@ -39,9 +56,17 @@ OBJECT
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE "RePlayEngine.Template.ActionPlatformer"
     TYPE_VERSION 1
-    PROPERTY_COUNT 3
+    PROPERTY_COUNT 11
     PROPERTY "primary_collider_key" colliderref 1
     PROPERTY "move_speed" float 6
+    PROPERTY "acceleration" float 30
+    PROPERTY "deceleration" float 20
+    PROPERTY "air_control" float 0.34999999403953552
+    PROPERTY "gravity" float 18
+    PROPERTY "jump_power" float 8
+    PROPERTY "maximum_fall_speed" float 55
+    PROPERTY "fallback_ground_y" float 0
+    PROPERTY "max_step_height" float 0.40000000596046448
     PROPERTY "vertical_physics" bool 1
   END_COMPONENT
   COMPONENT "PlayerInputComponent" 1
@@ -49,14 +74,20 @@ OBJECT
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE "RePlayEngine.Template.ActionPlatformer"
     TYPE_VERSION 1
-    PROPERTY_COUNT 0
+    PROPERTY_COUNT 2
+    PROPERTY "input_enabled" bool 1
+    PROPERTY "local_player_slot" int 0
   END_COMPONENT
   COMPONENT "PlayerControllerComponent" 1
     STABLE_ID 5
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE "RePlayEngine.Template.ActionPlatformer"
     TYPE_VERSION 1
-    PROPERTY_COUNT 0
+    PROPERTY_COUNT 4
+    PROPERTY "turn_speed_degrees" float 720
+    PROPERTY "dash_multiplier" float 1
+    PROPERTY "camera_relative" bool 1
+    PROPERTY "rotate_towards_movement" bool 1
   END_COMPONENT
   COMPONENT "HealthComponent" 1
     STABLE_ID 6
@@ -74,7 +105,7 @@ OBJECT
   NAME "Patrol_A"
   ENABLED 1
   PARENT 0
-  TRANSFORM -6 0.9 -6 0 0 0 1 1 1
+  TRANSFORM -6 0.89999997615814209 -6 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 0
 END_OBJECT
@@ -83,7 +114,7 @@ OBJECT
   NAME "Patrol_B"
   ENABLED 1
   PARENT 0
-  TRANSFORM 0 0.9 -8 0 0 0 1 1 1
+  TRANSFORM 0 0.89999997615814209 -8 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 0
 END_OBJECT
@@ -92,7 +123,7 @@ OBJECT
   NAME "Patrol_C"
   ENABLED 1
   PARENT 0
-  TRANSFORM 6 0.9 -6 0 0 0 1 1 1
+  TRANSFORM 6 0.89999997615814209 -6 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 0
 END_OBJECT
@@ -101,30 +132,47 @@ OBJECT
   NAME "Enemy_ContactDamage"
   ENABLED 1
   PARENT 0
-  TRANSFORM -4 0.9 -5 0 0 0 1 1 1
+  TRANSFORM -4 0.89999997615814209 -5 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 7
   COMPONENT "PrimitiveMeshRendererComponent" 1
-    STABLE_ID 1
+    STABLE_ID 8
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
-    PROPERTY_COUNT 2
+    PROPERTY_COUNT 17
     PROPERTY "primitive_type" enum 3
-    PROPERTY "tint" color 1 0.3 0.2 1
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_override" bool 0
+    PROPERTY "tint" color 1 0.30000001192092896 0.20000000298023224 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0
+    PROPERTY "material.roughness" float 0.55000001192092896
+    PROPERTY "material.ambient_occlusion" float 1
+    PROPERTY "material.emissive_color" vec3 0 0 0
+    PROPERTY "material.emissive_strength" float 0
+    PROPERTY "material.double_sided" bool 0
   END_COMPONENT
   COMPONENT "CapsuleColliderComponent" 1
     STABLE_ID 2
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
-    PROPERTY_COUNT 7
+    PROPERTY_COUNT 9
     PROPERTY "collider_key" int 1
+    PROPERTY "center_offset" vec3 0 0 0
     PROPERTY "collision_layer" layer 0
     PROPERTY "collision_mask" layermask -1
     PROPERTY "is_trigger" bool 0
-    PROPERTY "radius" float 0.4
-    PROPERTY "height" float 1.8
+    PROPERTY "debug_draw" bool 1
+    PROPERTY "radius" float 1
+    PROPERTY "height" float 1
     PROPERTY "axis" enum 1
   END_COMPONENT
   COMPONENT "CharacterMotorComponent" 1
@@ -132,9 +180,17 @@ OBJECT
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE "RePlayEngine.Template.ActionPlatformer"
     TYPE_VERSION 1
-    PROPERTY_COUNT 3
+    PROPERTY_COUNT 11
     PROPERTY "primary_collider_key" colliderref 1
     PROPERTY "move_speed" float 6
+    PROPERTY "acceleration" float 30
+    PROPERTY "deceleration" float 20
+    PROPERTY "air_control" float 0.34999999403953552
+    PROPERTY "gravity" float 18
+    PROPERTY "jump_power" float 8
+    PROPERTY "maximum_fall_speed" float 55
+    PROPERTY "fallback_ground_y" float 0
+    PROPERTY "max_step_height" float 0.40000000596046448
     PROPERTY "vertical_physics" bool 1
   END_COMPONENT
   COMPONENT "NavAgentComponent" 1
@@ -145,19 +201,23 @@ OBJECT
     PROPERTY_COUNT 3
     PROPERTY "move_speed" float 2.5
     PROPERTY "turn_speed_degrees" float 360
-    PROPERTY "stopping_distance" float 0.35
+    PROPERTY "stopping_distance" float 0.34999999403953552
   END_COMPONENT
   COMPONENT "SphereColliderComponent" 1
     STABLE_ID 5
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
-    PROPERTY_COUNT 5
+    PROPERTY_COUNT 9
     PROPERTY "collider_key" int 2
+    PROPERTY "center_offset" vec3 0 0 0
     PROPERTY "collision_layer" layer 0
     PROPERTY "collision_mask" layermask -1
     PROPERTY "is_trigger" bool 1
-    PROPERTY "radius" float 1.6
+    PROPERTY "debug_draw" bool 1
+    PROPERTY "radius" float 1.6000000238418579
+    PROPERTY "skin_width" float 0.014999999664723873
+    PROPERTY "walkable_normal_y" float 0.25
   END_COMPONENT
   COMPONENT "DamageAreaComponent" 1
     STABLE_ID 6
@@ -180,16 +240,16 @@ OBJECT
     PROPERTY "patrol_waypoints" array objref 3 4 5 6
     PROPERTY "detection_range" float 14
     PROPERTY "field_of_view_degrees" float 120
-    PROPERTY "attack_range" float 1.6
+    PROPERTY "attack_range" float 1.6000000238418579
     PROPERTY "lose_sight_delay" float 1.5
-    PROPERTY "eye_height" float 1.2
-    PROPERTY "target_height" float 1.0
+    PROPERTY "eye_height" float 1.2000000476837158
+    PROPERTY "target_height" float 1
     PROPERTY "visibility_layer" layer 0
     PROPERTY "visibility_mask" layermask -1
     PROPERTY "attack_controls_damage_area" bool 0
-    PROPERTY "attack_windup_seconds" float 0.45
+    PROPERTY "attack_windup_seconds" float 0.44999998807907104
     PROPERTY "attack_active_seconds" float 0.25
-    PROPERTY "attack_recovery_seconds" float 0.65
+    PROPERTY "attack_recovery_seconds" float 0.64999997615814209
     PROPERTY "debug_draw" bool 1
   END_COMPONENT
 END_OBJECT
@@ -198,30 +258,47 @@ OBJECT
   NAME "Enemy_AttackMotion"
   ENABLED 1
   PARENT 0
-  TRANSFORM 4 0.9 -5 0 0 0 1 1 1
+  TRANSFORM 4 0.89999997615814209 -5 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 7
   COMPONENT "PrimitiveMeshRendererComponent" 1
-    STABLE_ID 1
+    STABLE_ID 8
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
-    PROPERTY_COUNT 2
+    PROPERTY_COUNT 17
     PROPERTY "primitive_type" enum 3
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_override" bool 0
     PROPERTY "tint" color 0.75 0.25 1 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0
+    PROPERTY "material.roughness" float 0.55000001192092896
+    PROPERTY "material.ambient_occlusion" float 1
+    PROPERTY "material.emissive_color" vec3 0 0 0
+    PROPERTY "material.emissive_strength" float 0
+    PROPERTY "material.double_sided" bool 0
   END_COMPONENT
   COMPONENT "CapsuleColliderComponent" 1
     STABLE_ID 2
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
-    PROPERTY_COUNT 7
+    PROPERTY_COUNT 9
     PROPERTY "collider_key" int 1
+    PROPERTY "center_offset" vec3 0 0 0
     PROPERTY "collision_layer" layer 0
     PROPERTY "collision_mask" layermask -1
     PROPERTY "is_trigger" bool 0
-    PROPERTY "radius" float 0.4
-    PROPERTY "height" float 1.8
+    PROPERTY "debug_draw" bool 1
+    PROPERTY "radius" float 0.40000000596046448
+    PROPERTY "height" float 1.7999999523162842
     PROPERTY "axis" enum 1
   END_COMPONENT
   COMPONENT "CharacterMotorComponent" 1
@@ -229,9 +306,17 @@ OBJECT
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE "RePlayEngine.Template.ActionPlatformer"
     TYPE_VERSION 1
-    PROPERTY_COUNT 3
+    PROPERTY_COUNT 11
     PROPERTY "primary_collider_key" colliderref 1
     PROPERTY "move_speed" float 6
+    PROPERTY "acceleration" float 30
+    PROPERTY "deceleration" float 20
+    PROPERTY "air_control" float 0.34999999403953552
+    PROPERTY "gravity" float 18
+    PROPERTY "jump_power" float 8
+    PROPERTY "maximum_fall_speed" float 55
+    PROPERTY "fallback_ground_y" float 0
+    PROPERTY "max_step_height" float 0.40000000596046448
     PROPERTY "vertical_physics" bool 1
   END_COMPONENT
   COMPONENT "NavAgentComponent" 1
@@ -242,21 +327,25 @@ OBJECT
     PROPERTY_COUNT 3
     PROPERTY "move_speed" float 2.5
     PROPERTY "turn_speed_degrees" float 360
-    PROPERTY "stopping_distance" float 0.35
+    PROPERTY "stopping_distance" float 0.34999999403953552
   END_COMPONENT
   COMPONENT "SphereColliderComponent" 1
     STABLE_ID 5
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
-    PROPERTY_COUNT 5
+    PROPERTY_COUNT 9
     PROPERTY "collider_key" int 2
+    PROPERTY "center_offset" vec3 0 0 0
     PROPERTY "collision_layer" layer 0
     PROPERTY "collision_mask" layermask -1
     PROPERTY "is_trigger" bool 1
-    PROPERTY "radius" float 1.6
+    PROPERTY "debug_draw" bool 1
+    PROPERTY "radius" float 1.6000000238418579
+    PROPERTY "skin_width" float 0.014999999664723873
+    PROPERTY "walkable_normal_y" float 0.25
   END_COMPONENT
-  COMPONENT "DamageAreaComponent" 1
+  COMPONENT "DamageAreaComponent" 0
     STABLE_ID 6
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE "RePlayEngine.Template.ActionPlatformer"
@@ -277,16 +366,16 @@ OBJECT
     PROPERTY "patrol_waypoints" array objref 3 4 5 6
     PROPERTY "detection_range" float 14
     PROPERTY "field_of_view_degrees" float 120
-    PROPERTY "attack_range" float 1.6
+    PROPERTY "attack_range" float 1.6000000238418579
     PROPERTY "lose_sight_delay" float 1.5
-    PROPERTY "eye_height" float 1.2
-    PROPERTY "target_height" float 1.0
+    PROPERTY "eye_height" float 1.2000000476837158
+    PROPERTY "target_height" float 1
     PROPERTY "visibility_layer" layer 0
     PROPERTY "visibility_mask" layermask -1
     PROPERTY "attack_controls_damage_area" bool 1
-    PROPERTY "attack_windup_seconds" float 0.45
+    PROPERTY "attack_windup_seconds" float 0.44999998807907104
     PROPERTY "attack_active_seconds" float 0.25
-    PROPERTY "attack_recovery_seconds" float 0.65
+    PROPERTY "attack_recovery_seconds" float 0.64999997615814209
     PROPERTY "debug_draw" bool 1
   END_COMPONENT
 END_OBJECT
@@ -295,28 +384,45 @@ OBJECT
   NAME "LOS_Blocker"
   ENABLED 1
   PARENT 0
-  TRANSFORM 0 1.25 0 0 0 0 6 2.5 0.6
+  TRANSFORM 0 3.0753297805786133 0 0 0 0 6 2.5 0.60000002384185791
   PREFAB "" 0 0
   COMPONENT_COUNT 2
   COMPONENT "PrimitiveMeshRendererComponent" 1
-    STABLE_ID 1
+    STABLE_ID 3
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
-    PROPERTY_COUNT 2
+    PROPERTY_COUNT 17
     PROPERTY "primitive_type" enum 1
-    PROPERTY "tint" color 0.25 0.25 0.3 1
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_override" bool 0
+    PROPERTY "tint" color 0.25 0.25 0.30000001192092896 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0
+    PROPERTY "material.roughness" float 0.55000001192092896
+    PROPERTY "material.ambient_occlusion" float 1
+    PROPERTY "material.emissive_color" vec3 0 0 0
+    PROPERTY "material.emissive_strength" float 0
+    PROPERTY "material.double_sided" bool 0
   END_COMPONENT
   COMPONENT "BoxColliderComponent" 1
     STABLE_ID 2
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
-    PROPERTY_COUNT 5
+    PROPERTY_COUNT 7
     PROPERTY "collider_key" int 1
+    PROPERTY "center_offset" vec3 0 0 0
     PROPERTY "collision_layer" layer 0
     PROPERTY "collision_mask" layermask -1
     PROPERTY "is_trigger" bool 0
+    PROPERTY "debug_draw" bool 1
     PROPERTY "size" vec3 1 1 1
   END_COMPONENT
 END_OBJECT
@@ -329,24 +435,41 @@ OBJECT
   PREFAB "" 0 0
   COMPONENT_COUNT 2
   COMPONENT "PrimitiveMeshRendererComponent" 1
-    STABLE_ID 1
+    STABLE_ID 3
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
-    PROPERTY_COUNT 2
+    PROPERTY_COUNT 17
     PROPERTY "primitive_type" enum 1
-    PROPERTY "tint" color 0.18 0.2 0.18 1
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_override" bool 0
+    PROPERTY "tint" color 0.18000000715255737 0.20000000298023224 0.18000000715255737 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0
+    PROPERTY "material.roughness" float 0.55000001192092896
+    PROPERTY "material.ambient_occlusion" float 1
+    PROPERTY "material.emissive_color" vec3 0 0 0
+    PROPERTY "material.emissive_strength" float 0
+    PROPERTY "material.double_sided" bool 0
   END_COMPONENT
   COMPONENT "BoxColliderComponent" 1
     STABLE_ID 2
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
-    PROPERTY_COUNT 5
+    PROPERTY_COUNT 7
     PROPERTY "collider_key" int 1
+    PROPERTY "center_offset" vec3 0 0 0
     PROPERTY "collision_layer" layer 0
     PROPERTY "collision_mask" layermask -1
     PROPERTY "is_trigger" bool 0
+    PROPERTY "debug_draw" bool 1
     PROPERTY "size" vec3 1 1 1
   END_COMPONENT
 END_OBJECT

@@ -373,6 +373,8 @@ private:
 
     // 操作対象 GameObject の実行時診断。旧 Player の項目は持たない。
     void draw_controlled_character_diagnostics();
+    // Scene View のカメラ操作が死んだときに、7 条件のどれが原因か見せる。
+    void draw_editor_camera_gate_diagnostics();
     void draw_search_results();
     void draw_scene_hierarchy();
     void draw_inspector();

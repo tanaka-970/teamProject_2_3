@@ -99,6 +99,7 @@ void framework::draw_inspector()
         ImGui::Separator();
         draw_project_settings_panel();
         ImGui::Separator();
+        draw_editor_camera_gate_diagnostics();
         draw_controlled_character_diagnostics();
         break;
 
