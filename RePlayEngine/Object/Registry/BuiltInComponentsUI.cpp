@@ -617,7 +617,8 @@ namespace ReplayEngine::Core::Detail
             ComponentRegistry::Register<UIEffectStackComponent>(
                 ComponentTypeInfo::Describe("Effect Stack", "UI")
                     .WithTooltip("UI 要素をオフスクリーンに描いて Effect を順に適用します。")
-                    .Requires<RectTransformComponent>());
+                    .Requires<RectTransformComponent>()
+                    .InModule("RePlayEngine.Optional.Effects"));
             PropertyRegistry::Register<UIEffectStackComponent>(
                 MakeProperty("enabled", &UIEffectStackComponent::enabled)
                     .Display("有効").Animation(Animatable::Step));

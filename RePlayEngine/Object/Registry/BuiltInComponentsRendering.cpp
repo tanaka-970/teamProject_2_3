@@ -249,7 +249,8 @@ namespace ReplayEngine::Core::Detail
         {
             ComponentRegistry::Register<PostProcessVolumeComponent>(
                 ComponentTypeInfo::Describe("Post Process Volume", "Rendering")
-                    .WithTooltip("Scene 上の優先度が最も高い Volume から PostEffect の値を反映する。"));
+                    .WithTooltip("Scene 上の優先度が最も高い Volume から PostEffect の値を反映する。")
+                    .InModule("RePlayEngine.Optional.Effects"));
 
             PropertyRegistry::Register<PostProcessVolumeComponent>(
                 MakeProperty("priority", &PostProcessVolumeComponent::priority)
@@ -301,7 +302,8 @@ namespace ReplayEngine::Core::Detail
             ComponentRegistry::Register<ParticleEmitterComponent>(
                 ComponentTypeInfo::Describe("Particle Emitter", "Rendering")
                     .WithTooltip("粒子単体ではなく、発生量や寿命などの Emitter Parameter を Motion から動かす。")
-                    .AllowMultipleInstances());
+                    .AllowMultipleInstances()
+                    .InModule("RePlayEngine.Optional.Effects"));
 
             PropertyRegistry::Register<ParticleEmitterComponent>(
                 MakeProperty("emitting", &ParticleEmitterComponent::emitting)
@@ -443,7 +445,8 @@ namespace ReplayEngine::Core::Detail
             ComponentRegistry::Register<TrailComponent>(
                 ComponentTypeInfo::Describe("軌跡", "Rendering")
                     .WithTooltip("Transform 確定後の移動履歴から、自動で同じ 3D リボンを生成する。")
-                    .AllowMultipleInstances());
+                    .AllowMultipleInstances()
+                    .InModule("RePlayEngine.Optional.Effects"));
             PropertyRegistry::Register<TrailComponent>(
                 MakeProperty("emitting", &TrailComponent::emitting)
                     .Display("発生中").Animation(Animatable::Step)
@@ -527,7 +530,8 @@ namespace ReplayEngine::Core::Detail
         {
             ComponentRegistry::Register<ScreenEffectStackComponent>(
                 ComponentTypeInfo::Describe("Screen Effect Stack", "Rendering")
-                    .WithTooltip("3D シーン全体へ Effect Chain を適用します。UI は対象外です。"));
+                    .WithTooltip("3D シーン全体へ Effect Chain を適用します。UI は対象外です。")
+                    .InModule("RePlayEngine.Optional.Effects"));
             PropertyRegistry::Register<ScreenEffectStackComponent>(
                 MakeProperty("enabled", &ScreenEffectStackComponent::enabled)
                     .Display("有効").Animation(Animatable::Step));
@@ -560,7 +564,8 @@ namespace ReplayEngine::Core::Detail
 
             ComponentRegistry::Register<ModelEffectStackComponent>(
                 ComponentTypeInfo::Describe("Model Effect Stack", "Rendering")
-                    .WithTooltip("この GameObject のモデルだけへ Effect Chain を適用します。"));
+                    .WithTooltip("この GameObject のモデルだけへ Effect Chain を適用します。")
+                    .InModule("RePlayEngine.Optional.Effects"));
             PropertyRegistry::Register<ModelEffectStackComponent>(
                 MakeProperty("enabled", &ModelEffectStackComponent::enabled)
                     .Display("有効").Animation(Animatable::Step));

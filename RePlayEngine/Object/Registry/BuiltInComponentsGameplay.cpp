@@ -6,7 +6,8 @@ namespace ReplayEngine::Core::Detail
         {
             ComponentRegistry::Register<RotatorComponent>(
                 ComponentTypeInfo::Describe("Rotator", "Gameplay")
-                    .WithTooltip("GameObject を一定速度で回し続ける。動作確認用。"));
+                    .WithTooltip("GameObject を一定速度で回し続ける。動作確認用。")
+                    .InModule("RePlayEngine.Template.Samples"));
 
             PropertyRegistry::Register<RotatorComponent>(
                 MakeProperty("axis", &RotatorComponent::axis)
@@ -22,7 +23,8 @@ namespace ReplayEngine::Core::Detail
         {
             ComponentRegistry::Register<HealthComponent>(
                 ComponentTypeInfo::Describe("Health", "Gameplay")
-                    .WithTooltip("体力。将来はプレイヤーと敵で共有する。"));
+                    .WithTooltip("体力。将来はプレイヤーと敵で共有する。")
+                    .InModule("RePlayEngine.Template.ActionPlatformer"));
 
             PropertyRegistry::Register<HealthComponent>(
                 MakeProperty("max_health", &HealthComponent::max_health)
@@ -41,7 +43,8 @@ namespace ReplayEngine::Core::Detail
         {
             ComponentRegistry::Register<CharacterMotorComponent>(
                 ComponentTypeInfo::Describe("Character Motor", "Gameplay")
-                    .WithTooltip("移動・重力・ジャンプ・接地。プレイヤーと敵の双方から使える。"));
+                    .WithTooltip("移動・重力・ジャンプ・接地。プレイヤーと敵の双方から使える。")
+                    .InModule("RePlayEngine.Template.ActionPlatformer"));
 
             // 移動用 Collider は明示的に選ぶ。暗黙の自動選択はしない。
             // 一覧には Sphere / Capsule / Box だけが出る（Mesh と Trigger は除外）。
@@ -94,7 +97,8 @@ namespace ReplayEngine::Core::Detail
         {
             ComponentRegistry::Register<PlayerInputComponent>(
                 ComponentTypeInfo::Describe("Player Input", "Gameplay")
-                    .WithTooltip("入力の取得だけを担当する。Transform も速度も触らない。"));
+                    .WithTooltip("入力の取得だけを担当する。Transform も速度も触らない。")
+                    .InModule("RePlayEngine.Template.ActionPlatformer"));
 
             PropertyRegistry::Register<PlayerInputComponent>(
                 MakeProperty("input_enabled", &PlayerInputComponent::input_enabled)
@@ -109,7 +113,8 @@ namespace ReplayEngine::Core::Detail
         {
             ComponentRegistry::Register<PlayerControllerComponent>(
                 ComponentTypeInfo::Describe("Player Controller", "Gameplay")
-                    .WithTooltip("Player Input と Character Motor をつなぐ。両方が必要。"));
+                    .WithTooltip("Player Input と Character Motor をつなぐ。両方が必要。")
+                    .InModule("RePlayEngine.Template.ActionPlatformer"));
 
             PropertyRegistry::Register<PlayerControllerComponent>(
                 MakeProperty("turn_speed_degrees", &PlayerControllerComponent::turn_speed_degrees)
@@ -133,7 +138,8 @@ namespace ReplayEngine::Core::Detail
         {
             ComponentRegistry::Register<SpawnPointComponent>(
                 ComponentTypeInfo::Describe("Spawn Point", "Gameplay")
-                    .WithTooltip("開始地点またはチェックポイント未通過時の復帰地点。"));
+                    .WithTooltip("開始地点またはチェックポイント未通過時の復帰地点。")
+                    .InModule("RePlayEngine.Template.ActionPlatformer"));
             PropertyRegistry::Register<SpawnPointComponent>(
                 MakeProperty("spawn_id", &SpawnPointComponent::spawn_id)
                     .Display("スポーンID").Step(1.0));
@@ -149,7 +155,8 @@ namespace ReplayEngine::Core::Detail
 
             ComponentRegistry::Register<CheckpointComponent>(
                 ComponentTypeInfo::Describe("Checkpoint", "Gameplay")
-                    .WithTooltip("Triggerへ入った対象の復帰地点を更新する。"));
+                    .WithTooltip("Triggerへ入った対象の復帰地点を更新する。")
+                    .InModule("RePlayEngine.Template.ActionPlatformer"));
             PropertyRegistry::Register<CheckpointComponent>(
                 MakeProperty("checkpoint_id", &CheckpointComponent::checkpoint_id)
                     .Display("チェックポイントID").Step(1.0));
@@ -169,7 +176,8 @@ namespace ReplayEngine::Core::Detail
 
             ComponentRegistry::Register<GoalComponent>(
                 ComponentTypeInfo::Describe("Goal", "Gameplay")
-                    .WithTooltip("到達イベントを発行する。Scene遷移は行わない。"));
+                    .WithTooltip("到達イベントを発行する。Scene遷移は行わない。")
+                    .InModule("RePlayEngine.Template.ActionPlatformer"));
             PropertyRegistry::Register<GoalComponent>(
                 MakeProperty("goal_id", &GoalComponent::goal_id)
                     .Display("ゴールID").Step(1.0));
@@ -184,7 +192,8 @@ namespace ReplayEngine::Core::Detail
 
             ComponentRegistry::Register<KillVolumeComponent>(
                 ComponentTypeInfo::Describe("Kill Volume", "Gameplay")
-                    .WithTooltip("対象へダメージを与え、設定時は復帰地点へ戻す。"));
+                    .WithTooltip("対象へダメージを与え、設定時は復帰地点へ戻す。")
+                    .InModule("RePlayEngine.Template.ActionPlatformer"));
             PropertyRegistry::Register<KillVolumeComponent>(
                 MakeProperty("target_mask", &KillVolumeComponent::target_mask)
                     .Display("反応する対象").AsCollisionMask());
@@ -198,7 +207,8 @@ namespace ReplayEngine::Core::Detail
 
             ComponentRegistry::Register<JumpPadComponent>(
                 ComponentTypeInfo::Describe("Jump Pad", "Gameplay")
-                    .WithTooltip("Character Motorへ指定方向の速度を加えるTrigger。"));
+                    .WithTooltip("Character Motorへ指定方向の速度を加えるTrigger。")
+                    .InModule("RePlayEngine.Template.ActionPlatformer"));
             PropertyRegistry::Register<JumpPadComponent>(
                 MakeProperty("direction", &JumpPadComponent::direction)
                     .Display("射出方向").Step(0.01));
@@ -219,7 +229,8 @@ namespace ReplayEngine::Core::Detail
 
             ComponentRegistry::Register<DamageAreaComponent>(
                 ComponentTypeInfo::Describe("Damage Area", "Gameplay")
-                    .WithTooltip("Trigger内のHealthへ一定間隔でダメージを与える。"));
+                    .WithTooltip("Trigger内のHealthへ一定間隔でダメージを与える。")
+                    .InModule("RePlayEngine.Template.ActionPlatformer"));
             PropertyRegistry::Register<DamageAreaComponent>(
                 MakeProperty("damage", &DamageAreaComponent::damage)
                     .Display("ダメージ").Range(0.0, 1000000.0).Step(1.0));

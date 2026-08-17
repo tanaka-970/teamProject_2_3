@@ -497,7 +497,15 @@ void framework::draw_ui_inspector()
         ImGui::Separator();
     }
 
-    object_inspector_panel.DrawContents(object_editor_context);
+    bool show_game_template_components =
+        project_settings.ShowGameTemplateComponents();
+    if (object_inspector_panel.DrawContents(object_editor_context,
+        show_game_template_components))
+    {
+        project_settings.SetShowGameTemplateComponents(
+            show_game_template_components);
+        save_project_settings();
+    }
     ImGui::Separator();
     // Motion Workspace への導線。UI 側の編集状態は変えず、
     // Motion Asset の作成と Workspace 切り替えだけを担当する。

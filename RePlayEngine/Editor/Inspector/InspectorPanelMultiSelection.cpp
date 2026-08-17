@@ -394,19 +394,36 @@ namespace ReplayEngine::Editor
         ImGui::Unindent();
     }
 
-    void InspectorPanel::DrawPlayerComposition(EditorContext& context, GameObject& object)
+    void InspectorPanel::DrawPlayerComposition(EditorContext& context, GameObject& object,
+        bool show_game_template_components)
     {
         Scene::Scene* scene = context.GetScene();
         if (scene == nullptr) return;
 
         const auto result = PlayerCompositionValidator::Validate(*scene, object);
 
-        // 操作対象でもなく、操作系 Component も 1 つも無い GameObject には出さない。
-        // 通常の床や小物の Inspector が診断で埋まらないようにする。
-        const bool relevant = result.is_controlled ||
-            result.missing_required < static_cast<int>(
-                std::count_if(result.requirements.begin(), result.requirements.end(),
-                    [](const PlayerCompositionValidator::Requirement& r) { return r.required; }));
+        // Template を隠しているときは、既に Player 系 Component を使っている
+        // GameObject の作業導線だけを残す。Health 単体も既存 Template 利用として扱う。
+        const bool has_existing_player_template_component =
+            std::any_of(result.requirements.begin(), result.requirements.end(),
+                [](const PlayerCompositionValidator::Requirement& requirement)
+                {
+                    if (!requirement.present) return false;
+                    return requirement.type_name == "PlayerInputComponent" ||
+                        requirement.type_name == "PlayerControllerComponent" ||
+                        requirement.type_name == "CharacterMotorComponent" ||
+                        requirement.type_name == "HealthComponent";
+                });
+
+        // Template 表示 ON は従来条件を維持。OFF は既存 Template Component の存在を
+        // 条件にして、汎用 controlled object へ Player 専用診断を出さない。
+        const bool relevant = show_game_template_components
+            ? result.is_controlled ||
+                result.missing_required < static_cast<int>(
+                    std::count_if(result.requirements.begin(), result.requirements.end(),
+                        [](const PlayerCompositionValidator::Requirement& r)
+                        { return r.required; }))
+            : has_existing_player_template_component;
         if (!relevant) return;
 
         if (!ImGui::CollapsingHeader("操作構成の診断")) return;

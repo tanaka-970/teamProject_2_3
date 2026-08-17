@@ -34,6 +34,10 @@ namespace ReplayEngine::Editor
         // 既存ウィンドウの中へ埋め込みたい場合に使う（Begin/End を呼ばない）。
         void DrawContents(EditorContext& context);
 
+        // ProjectSettings の Template 表示値を plain bool で受け取る。
+        // Checkbox で値が変わったときだけ true を返す。永続化は呼び出し側の責務。
+        bool DrawContents(EditorContext& context, bool& show_game_template_components);
+
     private:
         void DrawGameObjectHeader(EditorContext& context, Core::GameObject& object);
         void DrawPrefabHeader(EditorContext& context, Core::GameObject& object);
@@ -45,7 +49,8 @@ namespace ReplayEngine::Editor
 
         // 操作対象としての構成診断。
         // 型ごとの専用 Editor ではなく、PlayerCompositionValidator の表を描くだけ。
-        void DrawPlayerComposition(EditorContext& context, Core::GameObject& object);
+        void DrawPlayerComposition(EditorContext& context, Core::GameObject& object,
+            bool show_game_template_components);
         void DrawComponent(EditorContext& context, Core::Component& component);
 
         // 読み込めなかった Component の預かり内容を読み取り専用で表示する。
