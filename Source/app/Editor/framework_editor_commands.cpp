@@ -2,6 +2,9 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cerrno>
+#include <cmath>
+#include <cstdlib>
 #include <sstream>
 
 namespace
@@ -42,8 +45,8 @@ void framework::execute_editor_command(const std::string& command)
     if (name == "help" || name == "ヘルプ")
     {
         editor_command_result =
-            "deferred | bloom [on/off/toggle] | save | undo | redo | duplicate | objects | "
-            "workspace [general/placement/modeling/animation/rendering] | fullscreen";
+            "deferred | bloom [on/off/toggle] | save | undo | redo | copy | paste | duplicate | objects | "
+            "workspace [general/placement/modeling/animation/rendering] | timescale [0..100] | fullscreen";
         return;
     }
     if (name == "deferred")
@@ -85,6 +88,39 @@ void framework::execute_editor_command(const std::string& command)
         editor_command_result = object_editor_context.Status();
         return;
     }
+    if (name == "copy" || name == "コピー")
+    {
+#ifdef USE_IMGUI
+        std::string clipboard_text;
+        std::string error;
+        if (object_hierarchy_panel.CopySelection(object_editor_context, clipboard_text, error))
+        {
+            ImGui::SetClipboardText(clipboard_text.c_str());
+            object_editor_context.SetStatus("GameObject をコピーしました");
+        }
+        else object_editor_context.SetStatus(error);
+#else
+        object_editor_context.SetStatus("クリップボードは ImGui 有効時のみ使えます");
+#endif
+        editor_command_result = object_editor_context.Status();
+        return;
+    }
+    if (name == "paste" || name == "貼り付け")
+    {
+#ifdef USE_IMGUI
+        std::string error;
+        const char* clipboard_text = ImGui::GetClipboardText();
+        if (!object_hierarchy_panel.PasteSelection(object_editor_context,
+            clipboard_text != nullptr ? clipboard_text : "", error))
+        {
+            object_editor_context.SetStatus("貼り付けできません: " + error);
+        }
+#else
+        object_editor_context.SetStatus("クリップボードは ImGui 有効時のみ使えます");
+#endif
+        editor_command_result = object_editor_context.Status();
+        return;
+    }
     if (name == "objects" || name == "一覧")
     {
         std::ostringstream result;
@@ -103,12 +139,34 @@ void framework::execute_editor_command(const std::string& command)
         else if (argument == "animation") set_editor_workspace(editor_workspace::animation);
         else if (argument == "rendering") set_editor_workspace(editor_workspace::rendering);
         else if (argument == "shader") set_editor_workspace(editor_workspace::shader_adjustment);
+        else if (argument == "motion") set_editor_workspace(editor_workspace::motion);
         else
         {
-            editor_command_result = "使い方: workspace [general/placement/modeling/animation/rendering/shader]";
+            editor_command_result = "使い方: workspace [general/placement/modeling/animation/rendering/shader/motion]";
             return;
         }
         editor_command_result = "ワークスペースを切り替えました";
+        return;
+    }
+    if (name == "timescale" || name == "時間倍率")
+    {
+        if (argument.empty())
+        {
+            editor_command_result = "Time Scale: " + std::to_string(object_time_scale);
+            return;
+        }
+        errno = 0;
+        char* parse_end = nullptr;
+        const float parsed = std::strtof(argument.c_str(), &parse_end);
+        if (parse_end == argument.c_str() || parse_end == nullptr || *parse_end != '\0' ||
+            errno == ERANGE || !std::isfinite(parsed))
+        {
+            editor_command_result = "使い方: timescale [0..100]";
+            return;
+        }
+
+        object_time_scale = (std::max)(0.0f, (std::min)(100.0f, parsed));
+        editor_command_result = "Time Scale: " + std::to_string(object_time_scale);
         return;
     }
     if (name == "fullscreen")

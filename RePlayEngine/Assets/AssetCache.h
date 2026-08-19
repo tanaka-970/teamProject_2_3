@@ -24,7 +24,25 @@ namespace ReplayEngine::Assets
         Script,
 
         // .replaysceneflow。既存値を壊さないよう必ず末尾。
-        SceneFlow
+        SceneFlow,
+
+        // .ttf / .otf。UIText のフォント欄が「フォントだけ」を候補に出せるようにする。
+        // まだ取り込み経路は用意していないので候補は空になるが、
+        // 種類を分けておかないとフォント欄にモデルやマテリアルまで並んでしまう。
+        // 既存値を壊さないよう必ず末尾。
+        Font,
+
+        // .replaymotion / .replaycomp。既存値を壊さないよう必ず末尾。
+        Motion,
+
+        // .replayloc。既存値を壊さないよう必ず末尾。
+        Localization,
+
+        // .replayeffect。UI / Model / Screen 共通 Effect Preset。必ず末尾。
+        EffectPreset,
+
+        // .replayinput。Action / Binding のプロジェクト Asset。必ず末尾。
+        InputAction
     };
 
     struct AssetCacheEntry

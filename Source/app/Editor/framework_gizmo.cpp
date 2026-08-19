@@ -1,9 +1,19 @@
+﻿// Editor Gizmo のうち、Scene Grid と Transform Gizmo の描画・操作だけを持つ。
+//
+//   framework_gizmo.cpp        ... Grid と Transform Gizmo（このファイル）
+//   framework_gizmo_pivot.cpp  ... Pivot 解決と Mesh Surface Snap
+
 #include "framework.h"
 
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
+#include "../../RePlayEngine/Components/Core/PivotComponent.h"
+#include "../../RePlayEngine/Components/Physics/MeshColliderComponent.h"
+#include "../../RePlayEngine/Components/Landscape/LandscapeColliderComponent.h"
+#include "../../RePlayEngine/Physics/CookedMeshCollision.h"
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace
 {
@@ -43,6 +53,7 @@ namespace
         if (!enabled || step <= 0.0f) return value;
         return std::round(value / step) * step;
     }
+
 }
 
 void framework::draw_scene_grid_overlay()
@@ -101,7 +112,10 @@ bool framework::draw_object_transform_gizmo()
     ClientToScreen(hwnd, &client_origin);
     const DirectX::XMMATRIX view = viewport_view_matrix();
     const DirectX::XMMATRIX projection = viewport_projection_matrix();
-    const DirectX::XMFLOAT3 center_world = primary->GetTransform().WorldPosition();
+    const ReplayEngine::Editor::GizmoOperation operation = transform_gizmo.Operation();
+    // Pivot は移動そのものには使わない。回転・拡縮の中心だけを差し替える。
+    const DirectX::XMFLOAT3 center_world = operation == ReplayEngine::Editor::GizmoOperation::Translate
+        ? primary->GetTransform().WorldPosition() : resolve_object_pivot_world(*primary, scene);
     ImVec2 center_screen;
     if (!ProjectPoint(center_world, view, projection, static_cast<float>(client_width),
         static_cast<float>(client_height), client_origin, center_screen)) return object_gizmo_dragging;
@@ -160,7 +174,6 @@ bool framework::draw_object_transform_gizmo()
     //
     // 掴める場所は必ず描いた形と一致させる。回転は円を折れ線に落とし、
     // その折れ線をそのまま当たり判定に使うので、見えている線の上でだけ掴める。
-    const ReplayEngine::Editor::GizmoOperation operation = transform_gizmo.Operation();
     const bool rotate_mode = operation == ReplayEngine::Editor::GizmoOperation::Rotate;
 
     constexpr int ring_sample_count = 48;
@@ -307,6 +320,7 @@ bool framework::draw_object_transform_gizmo()
             state.world_position = object->GetTransform().WorldPosition();
             state.local_rotation = object->GetTransform().LocalRotationEuler();
             state.local_scale = object->GetTransform().LocalScale();
+            state.pivot_world = resolve_object_pivot_world(*object, scene);
             object_gizmo_states.push_back(state);
         }
         const char* label = transform_gizmo.Operation() == ReplayEngine::Editor::GizmoOperation::Translate
@@ -362,15 +376,44 @@ bool framework::draw_object_transform_gizmo()
             if (object_gizmo_axis == 1) rotation.y += radians;
             if (object_gizmo_axis == 2) rotation.z += radians;
             object->GetTransform().SetLocalRotationEuler(rotation);
+
+            // Orientation だけ変えると Custom/Target Pivot が見かけ上ずれる。
+            // 開始時の原点を同じワールド軸で Pivot の周囲へ回して、Pivot 自体を固定する。
+            const DirectX::XMVECTOR pivot = DirectX::XMLoadFloat3(&state.pivot_world);
+            const DirectX::XMVECTOR origin = DirectX::XMLoadFloat3(&state.world_position);
+            const DirectX::XMMATRIX rotation_matrix = DirectX::XMMatrixRotationAxis(
+                DirectX::XMLoadFloat3(&object_gizmo_world_axis), radians);
+            DirectX::XMFLOAT3 new_position;
+            DirectX::XMStoreFloat3(&new_position, DirectX::XMVectorAdd(pivot,
+                DirectX::XMVector3TransformNormal(DirectX::XMVectorSubtract(origin, pivot),
+                    rotation_matrix)));
+            object->GetTransform().SetWorldPosition(new_position);
         }
         else
         {
             DirectX::XMFLOAT3 scale = state.local_scale;
             float* component = object_gizmo_axis == 0 ? &scale.x :
                 object_gizmo_axis == 1 ? &scale.y : &scale.z;
+            const float original_component = *component;
             *component += delta;
             if (std::abs(*component) < 0.001f) *component = *component < 0.0f ? -0.001f : 0.001f;
             object->GetTransform().SetLocalScale(scale);
+
+            // 1 軸拡縮の原点も Pivot を中心に同じ比率だけ動かす。
+            // SelfOrigin なら relative=0 なので従来と同じ位置のままになる。
+            const float safe_original = std::abs(original_component) < 0.001f
+                ? (original_component < 0.0f ? -0.001f : 0.001f) : original_component;
+            const float ratio = *component / safe_original;
+            const DirectX::XMVECTOR axis = DirectX::XMLoadFloat3(&object_gizmo_world_axis);
+            const DirectX::XMVECTOR pivot = DirectX::XMLoadFloat3(&state.pivot_world);
+            const DirectX::XMVECTOR relative = DirectX::XMVectorSubtract(
+                DirectX::XMLoadFloat3(&state.world_position), pivot);
+            const float parallel_length = DirectX::XMVectorGetX(DirectX::XMVector3Dot(relative, axis));
+            const DirectX::XMVECTOR moved = DirectX::XMVectorAdd(relative, DirectX::XMVectorScale(
+                axis, parallel_length * (ratio - 1.0f)));
+            DirectX::XMFLOAT3 new_position;
+            DirectX::XMStoreFloat3(&new_position, DirectX::XMVectorAdd(pivot, moved));
+            object->GetTransform().SetWorldPosition(new_position);
         }
     }
 

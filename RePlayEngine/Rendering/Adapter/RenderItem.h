@@ -1,12 +1,14 @@
-#pragma once
+﻿#pragma once
 
 #include "../../Core/ObjectID/ObjectID.h"
+#include "../../Reflection/Property/PropertyBag.h"
 #include "../Shaders/ShaderAsset.h"
 #include "../Materials/MaterialBinding.h"
 
 #include <DirectXMath.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -36,6 +38,19 @@ namespace ReplayEngine::Rendering
         // MaterialAsset から解決し、この値は追加 tint の有無だけに使う。
         bool material_override = false;
 
+        // Motion がこのフレームだけ Material に重ねる値。
+        // Material Asset 本体を書き換えないため、描画提出にだけ運ぶ。
+        std::uint32_t material_motion_fixed_mask = 0;
+        Reflection::PropertyBag material_motion_properties;
+
+        DirectX::XMFLOAT4 override_material_base_color{ 1.0f, 1.0f, 1.0f, 1.0f };
+        float override_material_metallic = 0.0f;
+        float override_material_roughness = 0.55f;
+        float override_material_ambient_occlusion = 1.0f;
+        DirectX::XMFLOAT3 override_material_emissive_color{ 0.0f, 0.0f, 0.0f };
+        float override_material_emissive_strength = 0.0f;
+        bool override_material_double_sided = false;
+
         // ワールド行列。親子階層を合成済みの最終値。
         DirectX::XMFLOAT4X4 world{
             1.0f, 0.0f, 0.0f, 0.0f,
@@ -64,6 +79,10 @@ namespace ReplayEngine::Rendering
         bool outline = false;
         bool cast_shadow = true;
         bool receive_shadow = true;
+
+        // Screen Effect Stack の layer mask 用。0..31。
+        // 名前やObjectIDとは独立した描画選別値で、既存Sceneの既定は0。
+        int rendering_layer = 0;
 
         // Material Assetから解決され、GBuffer材質定数へ渡す値。
         DirectX::XMFLOAT4 material_base_color{ 1.0f, 1.0f, 1.0f, 1.0f };
@@ -96,6 +115,13 @@ namespace ReplayEngine::Rendering
 
         // false なら時間を進めず、その姿勢で止める。
         bool animation_playing = true;
+
+        // data-driven Animator の遷移元。-1 ならブレンドしない。
+        int previous_clip_index = -1;
+        float previous_animation_time = 0.0f;
+        float animation_blend_factor = 1.0f;
+        bool animation_loop = true;
+        bool previous_animation_loop = true;
     };
 
     // 1 フレーム分の描画提出リスト。

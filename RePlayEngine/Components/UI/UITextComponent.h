@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../../Object/Component/Component.h"
 #include "../../Reflection/Property/References.h"
@@ -8,8 +8,11 @@
 #include <string>
 #include <vector>
 
+namespace ReplayEngine::Scene { class Scene; }
+
 namespace ReplayEngine::Components
 {
+
     class UITextComponent final : public Core::Component
     {
         REPLAY_COMPONENT_BODY(UITextComponent)
@@ -34,8 +37,11 @@ namespace ReplayEngine::Components
             DirectX::XMFLOAT2 position{ 0.0f, 0.0f };
             DirectX::XMFLOAT2 size{ 0.0f, 0.0f };
             DirectX::XMFLOAT4 uv{ 0.0f, 0.0f, 0.0f, 0.0f };
+            DirectX::XMFLOAT4 rich_color{ 1.0f, 1.0f, 1.0f, 1.0f };
             int character_index = 0;
             float advance = 0.0f;
+            bool rich_bold = false;
+            bool rich_italic = false;
         };
 
         UITextComponent() = default;
@@ -52,8 +58,27 @@ namespace ReplayEngine::Components
         int horizontal_align = Center;
         int vertical_align = Middle;
         bool word_wrap = true;
+        // 既存 Scene の見た目を変えないため既定は false。Unity 互換タグを有効化する。
+        bool rich_text = false;
+        // 空なら従来どおり text をそのまま表示する。
+        std::string localization_key;
+
+        Reflection::ComponentReference number_source;
+        std::string number_source_property;
+        std::string number_format;
+        int number_digits = 0;
+        float outline_width = 0.0f;
+        DirectX::XMFLOAT4 outline_color{ 0.0f, 0.0f, 0.0f, 1.0f };
+        DirectX::XMFLOAT2 shadow_offset{ 0.0f, 0.0f };
+        DirectX::XMFLOAT4 shadow_color{ 0.0f, 0.0f, 0.0f, 0.0f };
+
+        // PropertyLink の評価後に、指定された数値を Text へ反映する。
+        void UpdateNumberDisplay(const ReplayEngine::Scene::Scene& scene);
+        std::string ResolvedText() const;
 
         const std::vector<GlyphQuad>& Glyphs() const noexcept { return glyphs_; }
+        int DisplayCharacterCount() const noexcept { return display_character_count_; }
+        void SetDisplayCharacterCount(int value) noexcept { display_character_count_ = value; }
         std::vector<GlyphQuad>& MutableGlyphs() noexcept { return glyphs_; }
 
         // ---- 拡張点: Text Animator ----------------------------------------
@@ -73,5 +98,6 @@ namespace ReplayEngine::Components
 
     private:
         std::vector<GlyphQuad> glyphs_;
+        int display_character_count_ = 0;
     };
 }

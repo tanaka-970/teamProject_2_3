@@ -1,4 +1,4 @@
-#include "EditorViewportCamera.h"
+﻿#include "EditorViewportCamera.h"
 
 #include <algorithm>
 #include <cmath>
@@ -12,6 +12,10 @@ namespace ReplayEngine::Editor
     namespace
     {
         constexpr float two_pi = 6.2831853071795864f;
+        constexpr float wheel_zoom_base = 0.8f;
+        constexpr float fly_speed_distance_scale = 2.0f;
+        constexpr float minimum_fly_speed_cap = 1.0f;
+        constexpr float projection_far_distance_scale = 1.5f;
 
         XMFLOAT3 Add(const XMFLOAT3& a, const XMFLOAT3& b) noexcept
         {
@@ -108,7 +112,10 @@ namespace ReplayEngine::Editor
     {
         if (delta_time <= 0.0f) return;
 
-        const float speed = move_speed * speed_multiplier * delta_time;
+        const float requested_speed = move_speed * speed_multiplier;
+        const float distance_speed_cap = (std::max)(
+            orbit_distance_ * fly_speed_distance_scale, minimum_fly_speed_cap);
+        const float speed = (std::min)(requested_speed, distance_speed_cap) * delta_time;
 
         // ローカル軸を使う。Up はワールドの上ではなくカメラの Up。
         XMFLOAT3 movement{ 0.0f, 0.0f, 0.0f };
@@ -147,8 +154,9 @@ namespace ReplayEngine::Editor
     void EditorViewportCamera::Pan(float mouse_delta_x, float mouse_delta_y) noexcept
     {
         // 距離に比例させる。近くを見ているときは細かく、
-        // 遠くを見ているときは大きく動く。極端に速くなりすぎないよう上限も掛ける。
-        const float distance = std::clamp(orbit_distance_, 0.5f, 500.0f);
+        // 遠くを見ているときは大きく動く。大きいシーンでも距離感が潰れないよう、
+        // 上限は Orbit 自体の上限に合わせる。
+        const float distance = std::clamp(orbit_distance_, 0.5f, maximum_orbit_distance);
         constexpr float world_per_pixel = 0.0015f;
         const float scale = distance * pan_sensitivity * world_per_pixel;
 
@@ -183,7 +191,7 @@ namespace ReplayEngine::Editor
 
         // 距離に比例した倍率で寄る。遠いときは大きく、近いときは細かく。
         // 減算ではなく乗算にすることで、距離が 0 や負になることが構造的に起きない。
-        const float factor = std::pow(0.9f, wheel_delta * zoom_sensitivity);
+        const float factor = std::pow(wheel_zoom_base, wheel_delta * zoom_sensitivity);
         orbit_distance_ = std::clamp(orbit_distance_ * factor,
             minimum_orbit_distance, maximum_orbit_distance);
 
@@ -235,9 +243,9 @@ namespace ReplayEngine::Editor
         //   大きすぎる → 遠くへ飛びすぎて何も見えない
         distance = std::clamp(distance, minimum_focus_distance, maximum_focus_distance);
 
-        // near / far の内側に収める。far を越えると対象ごと消える。
-        distance = std::min(distance, far_clip * 0.5f);
-        distance = std::max(distance, near_clip * 4.0f);
+        // near の内側へ入り込まないようにする。far 側は ProjectionMatrix が
+        // 現在の Orbit 距離に合わせて必要分だけ広げる。
+        distance = (std::max)(distance, near_clip * 4.0f);
 
         orbit_pivot_ = center;
         orbit_distance_ = std::clamp(distance,
@@ -304,8 +312,11 @@ namespace ReplayEngine::Editor
         const float safe_aspect = (aspect > 1.0e-4f) ? aspect : (16.0f / 9.0f);
         const float fov = DirectX::XMConvertToRadians(
             std::clamp(field_of_view_degrees, 1.0f, 179.0f));
-        const float near_plane = std::max(near_clip, 1.0e-3f);
-        const float far_plane = std::max(far_clip, near_plane * 10.0f);
+        const float near_plane = (std::max)(near_clip, 1.0e-3f);
+        const float distance_far = orbit_distance_ > 0.0f
+            ? orbit_distance_ * projection_far_distance_scale : 0.0f;
+        const float far_plane = (std::max)(
+            (std::max)(far_clip, distance_far), near_plane * 10.0f);
         return DirectX::XMMatrixPerspectiveFovLH(fov, safe_aspect, near_plane, far_plane);
     }
 

@@ -1,7 +1,8 @@
-#include "AddComponentPanel.h"
+﻿#include "AddComponentPanel.h"
 
 #include "../Core/EditorContext.h"
 #include "../../Object/GameObject/GameObject.h"
+#include "../../Object/Registry/ComponentDependencyRules.h"
 #include "../../Object/Registry/ComponentRegistry.h"
 #include "../../Runtime/Behaviour/BehaviourRegistry.h"
 #include "../../Scene/Runtime/Scene.h"
@@ -14,9 +15,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstring>
-#include <functional>
 #include <string>
-#include <unordered_set>
 #include <vector>
 
 namespace ReplayEngine::Editor
@@ -28,6 +27,7 @@ namespace ReplayEngine::Editor
     namespace
     {
         constexpr const char* popup_id = "RePlayAddComponentPopup";
+        constexpr const char* template_module_prefix = "RePlayEngine.Template.";
 
         std::string ToLower(const std::string& text)
         {
@@ -58,6 +58,23 @@ namespace ReplayEngine::Editor
                 ToLower(script.asset_guid).find(lowered_query) != std::string::npos;
         }
 
+        bool IsGameTemplateComponent(const ComponentTypeInfo& info)
+        {
+            return info.module_id.rfind(template_module_prefix, 0) == 0;
+        }
+
+        // 件数確認と実描画で必ず同じ判定を使う。
+        // 検索中は Template 非表示設定より検索を優先し、名前を知っている人の導線を残す。
+        bool IsComponentVisible(const ComponentTypeInfo& info, const std::string& category,
+            const std::string& lowered_query, bool show_game_template_components)
+        {
+            if (!info.editor_visible) return false;
+            if (info.category != category) return false;
+            if (!Matches(info, lowered_query)) return false;
+            if (!lowered_query.empty()) return true;
+            return show_game_template_components || !IsGameTemplateComponent(info);
+        }
+
         std::string RelationshipNames(const std::vector<Core::ComponentTypeID>& ids)
         {
             std::string result;
@@ -67,34 +84,6 @@ namespace ReplayEngine::Editor
                 result += ComponentRegistry::DisplayNameOf(id);
             }
             return result;
-        }
-
-        bool AddWithRequiredComponents(Core::GameObject& target,
-            const ComponentTypeInfo& requested, int& dependency_count)
-        {
-            dependency_count = 0;
-            std::unordered_set<Core::ComponentTypeID> visiting;
-            std::function<bool(const ComponentTypeInfo&, bool)> add_recursive;
-            add_recursive = [&](const ComponentTypeInfo& info, bool dependency) -> bool
-            {
-                if (!visiting.insert(info.type_id).second) return false;
-                for (Core::ComponentTypeID required_id : info.required_components)
-                {
-                    if (target.FindComponent(required_id) != nullptr) continue;
-                    const ComponentTypeInfo* required = ComponentRegistry::Find(required_id);
-                    if (required == nullptr || !add_recursive(*required, true))
-                    {
-                        visiting.erase(info.type_id);
-                        return false;
-                    }
-                }
-                visiting.erase(info.type_id);
-                if (target.FindComponent(info.type_id) != nullptr && !info.allow_multiple) return true;
-                if (target.AddComponent(info.type_id) == nullptr) return false;
-                if (dependency) ++dependency_count;
-                return true;
-            };
-            return add_recursive(requested, false);
         }
 
         std::vector<std::string> ScriptCategories(
@@ -120,8 +109,12 @@ namespace ReplayEngine::Editor
         search_text_[0] = '\0';
     }
 
-    bool AddComponentPanel::Draw(EditorContext& context, Core::GameObject& target)
+    bool AddComponentPanel::Draw(EditorContext& context, Core::GameObject& target,
+        bool& show_game_template_components,
+        bool& show_game_template_components_changed)
     {
+        show_game_template_components_changed = false;
+
         if (open_requested_)
         {
             open_requested_ = false;
@@ -144,6 +137,11 @@ namespace ReplayEngine::Editor
         ImGui::InputTextWithHint("##AddComponentSearch", "Search Components...",
             search_text_, search_buffer_size);
 
+        if (ImGui::Checkbox("テンプレート部品も表示する", &show_game_template_components))
+        {
+            show_game_template_components_changed = true;
+        }
+
         const std::string query = ToLower(std::string(search_text_));
 
         bool added = false;
@@ -155,9 +153,8 @@ namespace ReplayEngine::Editor
             int visible_in_category = 0;
             for (const ComponentTypeInfo& info : ComponentRegistry::All())
             {
-                if (!info.editor_visible) continue;
-                if (info.category != category) continue;
-                if (!Matches(info, query)) continue;
+                if (!IsComponentVisible(info, category, query,
+                    show_game_template_components)) continue;
                 ++visible_in_category;
             }
             if (visible_in_category == 0) continue;
@@ -168,9 +165,8 @@ namespace ReplayEngine::Editor
 
             for (const ComponentTypeInfo& info : ComponentRegistry::All())
             {
-                if (!info.editor_visible) continue;
-                if (info.category != category) continue;
-                if (!Matches(info, query)) continue;
+                if (!IsComponentVisible(info, category, query,
+                    show_game_template_components)) continue;
 
                 // 重複禁止の型が既に付いている場合は追加させない。
                 // 押せてしまってから失敗するのではなく、押せないことを見た目で示す。
@@ -185,20 +181,28 @@ namespace ReplayEngine::Editor
                 else if (ImGui::Selectable(("  " + info.DisplayName()).c_str()))
                 {
                     context.BeginEdit(info.DisplayName() + " を追加");
-                    int dependency_count = 0;
-                    if (AddWithRequiredComponents(target, info, dependency_count))
+                    const Core::ComponentDependencyPlan plan =
+                        Core::ComponentDependencyRules::PlanRequiredAdd(target,
+                            info.type_id, Core::ComponentAvailabilityPolicy::Editor);
+                    const Core::ComponentDependencyApplyResult result =
+                        Core::ComponentDependencyRules::ApplyRequiredAddPlan(target, plan);
+                    if (result.Succeeded())
                     {
                         context.CommitEdit();
                         std::string status = info.DisplayName() + " を追加しました";
-                        if (dependency_count > 0)
-                            status += "（必須 Component " + std::to_string(dependency_count) + " 個を自動追加）";
+                        if (result.automatically_added > 0)
+                            status += "（必須 Component " +
+                                std::to_string(result.automatically_added) + " 個を自動追加）";
                         context.SetStatus(status);
                         added = true;
                     }
                     else
                     {
                         context.CancelEdit();
-                        context.SetStatus(info.DisplayName() + " を追加できませんでした（必須 Component を確認してください）");
+                        const Core::ComponentDependencyIssue& issue = result.issue.Any()
+                            ? result.issue : plan.issue;
+                        context.SetStatus(info.DisplayName() + " を追加できませんでした: " +
+                            Core::ComponentDependencyRules::DescribeIssue(issue));
                     }
                     ImGui::CloseCurrentPopup();
                 }

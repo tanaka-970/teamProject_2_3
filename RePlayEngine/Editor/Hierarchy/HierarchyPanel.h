@@ -2,7 +2,10 @@
 
 #include "../../Core/ObjectID/ObjectID.h"
 
+#include <string>
+
 namespace ReplayEngine::Core { class GameObject; }
+namespace ReplayEngine::Scene::Serialization { struct SceneData; }
 
 namespace ReplayEngine::Editor
 {
@@ -29,6 +32,15 @@ namespace ReplayEngine::Editor
         void DestroySelection(EditorContext& context) { DestroySelected(context); }
         void BeginRenameSelection(EditorContext& context);
 
+        // Clipboard I/O itself belongs to framework (ImGui).  This panel owns the
+        // scene-safe part so keyboard, menu, command and validation share one path.
+        bool CopySelection(EditorContext& context, std::string& clipboard_text,
+            std::string& error) const;
+        bool PasteSelection(EditorContext& context, const std::string& clipboard_text,
+            std::string& error);
+        bool PasteSceneData(EditorContext& context,
+            const Scene::Serialization::SceneData& data, std::string& error);
+
     private:
         void DrawNode(EditorContext& context, Core::GameObject& object, int depth);
         bool NodeMatchesFilter(const Core::GameObject& object) const;
@@ -44,10 +56,11 @@ namespace ReplayEngine::Editor
         void DestroySelected(EditorContext& context);
 
         // ツリー走査中に確定させると添字や再帰が壊れるため、
-        // 実際の親子変更は走査後にまとめて処理する。
+        // 実際の親子・兄弟順変更は走査後にまとめて処理する。
+        enum class DropPlacement : int { Child = 0, Before = 1, After = 2, Root = 3 };
         Core::ObjectID pending_reparent_child_;
         Core::ObjectID pending_reparent_parent_;
-        bool pending_reparent_to_root_ = false;
+        DropPlacement pending_drop_placement_ = DropPlacement::Child;
 
         // 名前変更中の対象。
         Core::ObjectID renaming_;

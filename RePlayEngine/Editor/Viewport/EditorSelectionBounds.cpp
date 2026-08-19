@@ -16,7 +16,8 @@ namespace ReplayEngine::Editor
         // 階層が壊れていても無限再帰しないための上限。
         constexpr int maximum_depth = 64;
 
-        void Accumulate(const Core::GameObject& object, WorldBounds& bounds, int depth)
+        void Accumulate(const Core::GameObject& object, WorldBounds& bounds, int depth,
+            const RenderBoundsProvider* render_bounds_provider)
         {
             if (depth > maximum_depth) return;
             if (object.PendingDestroy()) return;
@@ -41,9 +42,21 @@ namespace ReplayEngine::Editor
                 found_collider_bounds = true;
             }
 
-            // 2) Collider が無い（または形が確定していない）場合は位置だけを使う。
+            // 2) Collider が無い場合は、呼び出し側から Renderer の実Boundsを得る。
+            bool found_render_bounds = false;
+            if (!found_collider_bounds && render_bounds_provider != nullptr)
+            {
+                WorldBounds render_bounds;
+                if ((*render_bounds_provider)(object, render_bounds) && render_bounds.valid)
+                {
+                    bounds.Encapsulate(render_bounds);
+                    found_render_bounds = true;
+                }
+            }
+
+            // 3) Collider も Renderer Bounds も無い場合は位置だけを使う。
             //    これで「Bounds がまったく無い GameObject」でもフォーカスが成立する。
-            if (!found_collider_bounds)
+            if (!found_collider_bounds && !found_render_bounds)
             {
                 // Pivot 1点だけだと矩形選択が「見えている物体」ではなく原点判定に
                 // なってしまう。Renderer の実メッシュ Bounds は依存方向上ここから取れないため、
@@ -57,11 +70,11 @@ namespace ReplayEngine::Editor
                     { center.x + ex, center.y + ey, center.z + ez });
             }
 
-            // 3) 子孫も含める。
+            // 4) 子孫も含める。
             for (const Core::GameObject* child : object.Children())
             {
                 if (child == nullptr) continue;
-                Accumulate(*child, bounds, depth + 1);
+                Accumulate(*child, bounds, depth + 1, render_bounds_provider);
             }
         }
     }
@@ -107,7 +120,7 @@ namespace ReplayEngine::Editor
     WorldBounds EditorSelectionBounds::Compute(const Core::GameObject& object)
     {
         WorldBounds bounds;
-        Accumulate(object, bounds, 0);
+        Accumulate(object, bounds, 0, nullptr);
         return bounds;
     }
 
@@ -119,7 +132,21 @@ namespace ReplayEngine::Editor
         {
             const Core::GameObject* object = scene.FindGameObjectByID(id);
             if (object == nullptr) continue;
-            Accumulate(*object, bounds, 0);
+            Accumulate(*object, bounds, 0, nullptr);
+        }
+        return bounds;
+    }
+
+    WorldBounds EditorSelectionBounds::Compute(const Scene::Scene& scene,
+        const std::vector<Core::ObjectID>& selection,
+        const RenderBoundsProvider& render_bounds_provider)
+    {
+        WorldBounds bounds;
+        for (const Core::ObjectID id : selection)
+        {
+            const Core::GameObject* object = scene.FindGameObjectByID(id);
+            if (object == nullptr) continue;
+            Accumulate(*object, bounds, 0, &render_bounds_provider);
         }
         return bounds;
     }

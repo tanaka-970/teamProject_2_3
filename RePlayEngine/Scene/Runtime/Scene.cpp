@@ -1,13 +1,103 @@
-#include "Scene.h"
+﻿#include "Scene.h"
 
 #include "../../Object/Registry/ComponentRegistry.h"
+#include "../../Components/Core/PersistentComponent.h"
+#include "../Serialization/SceneData.h"
 
 #include <algorithm>
+#include <functional>
+#include <iterator>
+#include <unordered_set>
+#include <windows.h>
 
 namespace ReplayEngine::Scene
 {
     using Core::GameObject;
     using Core::ObjectID;
+
+    namespace
+    {
+        struct OrderedComponentCandidate
+        {
+            Core::Component* component = nullptr;
+            std::int32_t execution_order = 0;
+            std::size_t discovery_index = 0;
+        };
+
+        bool HasNonZeroExecutionOrder(const Scene& scene)
+        {
+            const std::size_t object_count = scene.GameObjectCount();
+            for (std::size_t i = 0; i < object_count &&
+                i < scene.GameObjectCount(); ++i)
+            {
+                GameObject* object = scene.GameObjectAt(i);
+                if (object == nullptr) continue;
+                const std::size_t component_count = object->ComponentCount();
+                for (std::size_t j = 0; j < component_count &&
+                    j < object->ComponentCount(); ++j)
+                {
+                    Core::Component* component = object->ComponentAt(j);
+                    if (component == nullptr) continue;
+                    if (component->ExecutionOrder() != 0) return true;
+                }
+            }
+            return false;
+        }
+
+        std::vector<OrderedComponentCandidate> CollectOrderedCandidates(const Scene& scene)
+        {
+            std::vector<OrderedComponentCandidate> candidates;
+            std::size_t discovery_index = 0;
+            const std::size_t object_count = scene.GameObjectCount();
+            for (std::size_t i = 0; i < object_count &&
+                i < scene.GameObjectCount(); ++i)
+            {
+                GameObject* object = scene.GameObjectAt(i);
+                if (object == nullptr) continue;
+                const std::size_t component_count = object->ComponentCount();
+                for (std::size_t j = 0; j < component_count &&
+                    j < object->ComponentCount(); ++j)
+                {
+                    Core::Component* component = object->ComponentAt(j);
+                    // フェーズ開始時に存在する実体を snapshot する。
+                    // Active 判定は呼び出し直前に再確認するため、ここでは絞らない。
+                    if (component != nullptr)
+                    {
+                        candidates.push_back({ component, component->ExecutionOrder(),
+                            discovery_index });
+                    }
+                    ++discovery_index;
+                }
+            }
+
+            std::sort(candidates.begin(), candidates.end(),
+                [](const OrderedComponentCandidate& lhs,
+                    const OrderedComponentCandidate& rhs)
+                {
+                    if (lhs.execution_order != rhs.execution_order)
+                        return lhs.execution_order < rhs.execution_order;
+                    return lhs.discovery_index < rhs.discovery_index;
+                });
+            return candidates;
+        }
+
+        template<class Callback>
+        void RunOrderedCandidates(const Scene& scene, Callback callback)
+        {
+            const std::vector<OrderedComponentCandidate> candidates =
+                CollectOrderedCandidates(scene);
+            for (const OrderedComponentCandidate& candidate : candidates)
+            {
+                Core::Component* component = candidate.component;
+                if (component == nullptr || component->PendingDestroy() ||
+                    !component->ActiveInHierarchy())
+                {
+                    continue;
+                }
+                callback(*component);
+            }
+        }
+    }
 
     Scene::Scene() = default;
 
@@ -71,6 +161,167 @@ namespace ReplayEngine::Scene
     void Scene::DestroyGameObject(ObjectID id) noexcept
     {
         DestroyGameObject(FindGameObjectByID(id));
+    }
+
+    void Scene::Destroy(GameObject* object) noexcept
+    {
+        DestroyGameObject(object);
+    }
+
+    std::vector<std::unique_ptr<GameObject>> Scene::DetachPersistentRoots()
+    {
+        std::vector<GameObject*> roots;
+        std::unordered_set<GameObject*> transfer_set;
+        std::unordered_set<std::string> persistent_names;
+
+        // 子に付いた印は独立した移行単位にしない。親が Persistent なら
+        // 親の階層に含まれて移行し、親が無ければ警告だけでその Scene に残る。
+        for (const auto& object : objects_)
+        {
+            if (!object || object->PendingDestroy()) continue;
+            if (object->GetComponent<Components::PersistentComponent>() == nullptr) continue;
+            if (object->Parent() != nullptr)
+            {
+                OutputDebugStringA("[RePlayEngine] 子 GameObject の PersistentComponent は無視します。\n");
+                continue;
+            }
+            if (!persistent_names.insert(object->Name()).second)
+            {
+                OutputDebugStringA("[RePlayEngine] 同名の Persistent GameObject は先着を残して破棄します。\n");
+                DestroyGameObject(object.get());
+                continue;
+            }
+            roots.push_back(object.get());
+        }
+
+        ProcessPendingOperations();
+
+        const std::function<void(GameObject*)> collect =
+            [&collect, &transfer_set](GameObject* object)
+        {
+            if (object == nullptr || !transfer_set.insert(object).second) return;
+            for (GameObject* child : object->Children()) collect(child);
+        };
+        for (GameObject* root : roots) collect(root);
+
+        std::vector<std::unique_ptr<GameObject>> detached;
+        detached.reserve(transfer_set.size());
+        for (auto iterator = objects_.begin(); iterator != objects_.end();)
+        {
+            GameObject* object = iterator->get();
+            if (transfer_set.find(object) == transfer_set.end())
+            {
+                ++iterator;
+                continue;
+            }
+
+            RemoveFromLookup(object);
+            object->scene_ = nullptr;
+            detached.push_back(std::move(*iterator));
+            iterator = objects_.erase(iterator);
+        }
+
+        if (!detached.empty()) BumpStructureGeneration();
+        return detached;
+    }
+
+    void Scene::AdoptPersistentRoots(std::vector<std::unique_ptr<GameObject>> roots)
+    {
+        if (roots.empty()) return;
+
+        std::vector<GameObject*> root_objects;
+        std::unordered_set<GameObject*> adopted_objects;
+        const std::function<void(GameObject*)> collect =
+            [&collect, &adopted_objects](GameObject* object)
+        {
+            if (object == nullptr || !adopted_objects.insert(object).second) return;
+            for (GameObject* child : object->Children()) collect(child);
+        };
+
+        for (const auto& root : roots)
+        {
+            if (!root) continue;
+            root_objects.push_back(root.get());
+            collect(root.get());
+        }
+
+        // 新 Scene 側に同名の Persistent ルートがある場合は、読み込んだ新しい
+        // 実体を残さず、旧 World から移した実体を正本にする。
+        std::unordered_set<GameObject*> duplicate_objects;
+        for (GameObject* old_root : root_objects)
+        {
+            for (const auto& object : objects_)
+            {
+                if (!object || object->PendingDestroy() ||
+                    object->GetComponent<Components::PersistentComponent>() == nullptr ||
+                    object->Parent() != nullptr || object->Name() != old_root->Name())
+                {
+                    continue;
+                }
+                duplicate_objects.insert(object.get());
+            }
+        }
+        for (GameObject* duplicate : duplicate_objects) DestroyGameObject(duplicate);
+        ProcessPendingOperations();
+
+        // 新 Scene と Persistent 階層の両方より上へ進めておく。
+        // 先に上限を確定しないと、衝突した ID の振り直し先が別の ID と重なる。
+        for (const auto& object : objects_)
+        {
+            if (object != nullptr) id_generator_.EnsureAbove(object->ID());
+        }
+        for (GameObject* adopted : adopted_objects)
+        {
+            if (adopted != nullptr) id_generator_.EnsureAbove(adopted->ID());
+        }
+
+        Serialization::ObjectRemap object_remap;
+        for (GameObject* adopted : adopted_objects)
+        {
+            if (adopted == nullptr) continue;
+            if (FindGameObjectByID(adopted->ID()) == nullptr) continue;
+
+            const ObjectID previous_id = adopted->ID();
+            object_remap.emplace(previous_id, adopted);
+            // 保存ファイルの ID はファイル内の参照が指しているため変えられない。
+            // メモリ上の Persistent 階層は参照をその場で直せるので、こちらを振り直す。
+            adopted->id_ = id_generator_.Next();
+        }
+
+        const std::vector<GameObject*> adopted_list(
+            adopted_objects.begin(), adopted_objects.end());
+        Serialization::RemapLiveObjectReferences(adopted_list, object_remap);
+
+        // ---- 拡張点: Persistent 階層の外部参照 -------------------------------
+        //
+        // 【今は入れていない理由】
+        //   旧 Scene 側への参照は今回の ID 衝突とは別の問題で、
+        //   「切る」か「保持する」かの方針決定が必要なため。
+        // 【入れるときにここへ足す】
+        //   持ち越し階層の外を指す参照を検出する処理を、上の付け替えの直後へ足す。
+        // 【壊してはいけない前提】
+        //   MissingComponent の思想に合わせ、値を黙って捨てない。
+        // -----------------------------------------------------------------------------
+
+        for (auto& root : roots)
+        {
+            if (!root) continue;
+            const std::function<void(GameObject*)> rebind =
+                [&rebind, this](GameObject* object)
+            {
+                if (object == nullptr) return;
+                object->scene_ = this;
+                generation_by_id_[object->ID()] =
+                    (std::max)(generation_by_id_[object->ID()], object->generation_);
+                id_generator_.EnsureAbove(object->ID());
+                id_lookup_[object->ID()] = object;
+                for (GameObject* child : object->Children()) rebind(child);
+            };
+            rebind(root.get());
+            objects_.push_back(std::move(root));
+        }
+
+        BumpStructureGeneration();
     }
 
     void Scene::Clear()
@@ -145,6 +396,64 @@ namespace ReplayEngine::Scene
         return roots;
     }
 
+    std::size_t Scene::RootSiblingIndex(const GameObject* object) const noexcept
+    {
+        if (object == nullptr || object->GetScene() != this || object->Parent() != nullptr)
+            return 0u;
+        std::size_t root_index = 0u;
+        for (const auto& candidate : objects_)
+        {
+            if (!candidate || candidate->Parent() != nullptr) continue;
+            if (candidate.get() == object) return root_index;
+            ++root_index;
+        }
+        return root_index;
+    }
+
+    bool Scene::SetRootSiblingIndex(GameObject* object, std::size_t index) noexcept
+    {
+        if (object == nullptr || object->GetScene() != this || object->Parent() != nullptr)
+            return false;
+
+        auto object_it = std::find_if(objects_.begin(), objects_.end(),
+            [object](const std::unique_ptr<GameObject>& value) { return value.get() == object; });
+        if (object_it == objects_.end()) return false;
+
+        std::vector<GameObject*> roots = RootGameObjects();
+        if (roots.empty()) return false;
+        const std::size_t old_index = RootSiblingIndex(object);
+        // index == root_count は「末尾へ」。移動元を抜くと後ろ側は 1 つ詰まる。
+        index = (std::min)(index, roots.size());
+        if (index > old_index) --index;
+        if (old_index == index) return true;
+
+        // root のみの順番を変え、非 root の所有位置は維持する。
+        // unique_ptr を move しても GameObject 実体のアドレスは変わらない。
+        std::unique_ptr<GameObject> moving = std::move(*object_it);
+        objects_.erase(object_it);
+
+        roots.erase(roots.begin() + static_cast<std::ptrdiff_t>(old_index));
+        GameObject* before = index < roots.size() ? roots[index] : nullptr;
+        if (before != nullptr)
+        {
+            auto before_it = std::find_if(objects_.begin(), objects_.end(),
+                [before](const std::unique_ptr<GameObject>& value) { return value.get() == before; });
+            objects_.insert(before_it, std::move(moving));
+        }
+        else
+        {
+            // 最後の root の直後へ置く。末尾に非 root があっても hierarchy root 順だけを変える。
+            auto insert_it = objects_.end();
+            for (auto it = objects_.begin(); it != objects_.end(); ++it)
+            {
+                if (*it && (*it)->Parent() == nullptr) insert_it = std::next(it);
+            }
+            objects_.insert(insert_it, std::move(moving));
+        }
+        BumpStructureGeneration();
+        return true;
+    }
+
     void Scene::Start()
     {
         started_ = true;
@@ -175,19 +484,29 @@ namespace ReplayEngine::Scene
         SynchronizeStates();
 
         updating_ = true;
-        const std::size_t object_count = objects_.size();
-        for (std::size_t i = 0; i < object_count && i < objects_.size(); ++i)
+        if (!HasNonZeroExecutionOrder(*this))
         {
-            GameObject* object = objects_[i].get();
-            if (object == nullptr || !object->ActiveInHierarchy()) continue;
-
-            const std::size_t component_count = object->ComponentCount();
-            for (std::size_t j = 0; j < component_count && j < object->ComponentCount(); ++j)
+            const std::size_t object_count = objects_.size();
+            for (std::size_t i = 0; i < object_count && i < objects_.size(); ++i)
             {
-                Core::Component* component = object->ComponentAt(j);
-                if (component == nullptr || !component->ActiveInHierarchy()) continue;
-                component->OnUpdate(delta_time);
+                GameObject* object = objects_[i].get();
+                if (object == nullptr || !object->ActiveInHierarchy()) continue;
+
+                const std::size_t component_count = object->ComponentCount();
+                for (std::size_t j = 0; j < component_count && j < object->ComponentCount(); ++j)
+                {
+                    Core::Component* component = object->ComponentAt(j);
+                    if (component == nullptr || !component->ActiveInHierarchy()) continue;
+                    component->OnUpdate(delta_time);
+                }
             }
+        }
+        else
+        {
+            RunOrderedCandidates(*this, [delta_time](Core::Component& component)
+                {
+                    component.OnUpdate(delta_time);
+                });
         }
         updating_ = false;
 
@@ -199,19 +518,30 @@ namespace ReplayEngine::Scene
         if (!started_ || loading_) return;
 
         updating_ = true;
-        const std::size_t object_count = objects_.size();
-        for (std::size_t i = 0; i < object_count && i < objects_.size(); ++i)
+        if (!HasNonZeroExecutionOrder(*this))
         {
-            GameObject* object = objects_[i].get();
-            if (object == nullptr || !object->ActiveInHierarchy()) continue;
-
-            const std::size_t component_count = object->ComponentCount();
-            for (std::size_t j = 0; j < component_count && j < object->ComponentCount(); ++j)
+            const std::size_t object_count = objects_.size();
+            for (std::size_t i = 0; i < object_count && i < objects_.size(); ++i)
             {
-                Core::Component* component = object->ComponentAt(j);
-                if (component == nullptr || !component->ActiveInHierarchy()) continue;
-                component->OnFixedUpdate(fixed_delta_time);
+                GameObject* object = objects_[i].get();
+                if (object == nullptr || !object->ActiveInHierarchy()) continue;
+
+                const std::size_t component_count = object->ComponentCount();
+                for (std::size_t j = 0; j < component_count && j < object->ComponentCount(); ++j)
+                {
+                    Core::Component* component = object->ComponentAt(j);
+                    if (component == nullptr || !component->ActiveInHierarchy()) continue;
+                    component->OnFixedUpdate(fixed_delta_time);
+                }
             }
+        }
+        else
+        {
+            RunOrderedCandidates(*this,
+                [fixed_delta_time](Core::Component& component)
+                {
+                    component.OnFixedUpdate(fixed_delta_time);
+                });
         }
         updating_ = false;
 
@@ -223,19 +553,29 @@ namespace ReplayEngine::Scene
         if (!started_ || loading_) return;
 
         updating_ = true;
-        const std::size_t object_count = objects_.size();
-        for (std::size_t i = 0; i < object_count && i < objects_.size(); ++i)
+        if (!HasNonZeroExecutionOrder(*this))
         {
-            GameObject* object = objects_[i].get();
-            if (object == nullptr || !object->ActiveInHierarchy()) continue;
-
-            const std::size_t component_count = object->ComponentCount();
-            for (std::size_t j = 0; j < component_count && j < object->ComponentCount(); ++j)
+            const std::size_t object_count = objects_.size();
+            for (std::size_t i = 0; i < object_count && i < objects_.size(); ++i)
             {
-                Core::Component* component = object->ComponentAt(j);
-                if (component == nullptr || !component->ActiveInHierarchy()) continue;
-                component->OnLateUpdate(delta_time);
+                GameObject* object = objects_[i].get();
+                if (object == nullptr || !object->ActiveInHierarchy()) continue;
+
+                const std::size_t component_count = object->ComponentCount();
+                for (std::size_t j = 0; j < component_count && j < object->ComponentCount(); ++j)
+                {
+                    Core::Component* component = object->ComponentAt(j);
+                    if (component == nullptr || !component->ActiveInHierarchy()) continue;
+                    component->OnLateUpdate(delta_time);
+                }
             }
+        }
+        else
+        {
+            RunOrderedCandidates(*this, [delta_time](Core::Component& component)
+                {
+                    component.OnLateUpdate(delta_time);
+                });
         }
         updating_ = false;
 

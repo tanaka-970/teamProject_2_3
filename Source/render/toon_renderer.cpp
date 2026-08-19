@@ -1,4 +1,5 @@
 ﻿#include "toon_renderer.h"
+#include "../../RePlayEngine/Rendering/RenderStats.h"
 #include "shader.h"
 #include "misc.h"
 
@@ -83,6 +84,8 @@ bool toon_renderer::initialize(ID3D11Device* device)
         { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,        0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
         { "WEIGHTS",  0, DXGI_FORMAT_R32G32B32A32_FLOAT,  0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
         { "BONES",    0, DXGI_FORMAT_R32G32B32A32_UINT,   0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+        { "MORPHPOS", 0, DXGI_FORMAT_R32G32B32_FLOAT,     0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+        { "MORPHNORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT,  0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
     };
     create_vs_from_cso(device, "skinned_mesh_outline_vs.cso",
         skinned_outline_vs_.GetAddressOf(), skinned_outline_il_.GetAddressOf(),
@@ -126,6 +129,7 @@ void toon_renderer::unbind_resources(ID3D11DeviceContext* ctx)
 void toon_renderer::bind_outline_pass(ID3D11DeviceContext* ctx, bool /*skinned*/)
 {
     ctx->RSSetState(outline_rs.Get());
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
     ctx->PSSetShader(outline_ps_.Get(), nullptr, 0);
     ctx->VSSetConstantBuffers(7, 1, outline_cb.GetAddressOf());
 }

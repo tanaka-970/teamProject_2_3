@@ -14,6 +14,13 @@ namespace ReplayEngine::Components
 {
     namespace
     {
+        // 足元から下へ床を探す距離。落下中の着地検出に使うので長めに取る。
+        //
+        // 以前は接地判定が「80 上から 300 下」という 2 つの無名定数で、
+        // 下端は origin.y - 220 だった。上側は max_step_height へ切り出したが、
+        // 下側の到達距離は変えないよう 220 をそのまま名前付きで残す。
+        constexpr float ground_search_depth = 220.0f;
+
         float Length2D(const DirectX::XMFLOAT3& value) noexcept
         {
             return std::sqrt(value.x * value.x + value.z * value.z);
@@ -168,7 +175,7 @@ namespace ReplayEngine::Components
             // 接地は「一番下の半球」で見る。
             // 中心で見ると、カプセルの下半分ぶん床へめり込んだ位置で接地判定になる。
             const float half_cylinder =
-                std::max(0.0f, capsule.EffectiveHeight() * 0.5f - capsule.EffectiveRadius());
+                (std::max)(0.0f, capsule.EffectiveHeight() * 0.5f - capsule.EffectiveRadius());
             shape.ground_offset.y -= half_cylinder;
             shape.valid = shape.radius > 0.0f;
             break;
@@ -180,8 +187,8 @@ namespace ReplayEngine::Components
 
             // 内接球。角は拾えないが、本来より小さい球なので
             // 「本当は当たらない場所で止まる」ことはない。
-            shape.radius = std::min({ half.x, half.y, half.z });
-            shape.ground_offset.y -= std::max(0.0f, half.y - shape.radius);
+            shape.radius = (std::min)({ half.x, half.y, half.z });
+            shape.ground_offset.y -= (std::max)(0.0f, half.y - shape.radius);
             shape.valid = shape.radius > 0.0f;
             break;
         }
@@ -366,9 +373,15 @@ namespace ReplayEngine::Components
                 local.y + shape.ground_offset.y,
                 local.z + shape.ground_offset.z };
 
+            // 探索を始める高さは「登れる段差の高さ」そのもの。
+            // ここを大きくすると頭上の面まで床として拾い、壁の横に立っただけで
+            // その上へ瞬間移動する。以前は 80.0f という無名の定数だった。
+            const float step_height = (std::max)(0.0f, max_step_height);
+
             Scene::GroundHit hit{};
-            if (physics->QueryGroundFiltered(origin, shape.radius, 80.0f, 300.0f,
-                shape.walkable_normal_y, shape.filter, hit))
+            if (physics->QueryGroundFiltered(origin, shape.radius, step_height,
+                step_height + ground_search_depth, shape.walkable_normal_y,
+                shape.filter, hit))
             {
                 has_ground_ = true;
 

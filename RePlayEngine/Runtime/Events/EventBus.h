@@ -125,6 +125,16 @@ namespace ReplayEngine::Runtime
             Reflection::MakeTypeGUID("a1000000000000000000000000000006");
         inline constexpr Reflection::TypeGUID ApplicationQuitRequested =
             Reflection::MakeTypeGUID("a1000000000000000000000000000007");
+        inline constexpr Reflection::TypeGUID MotionEvent =
+            Reflection::MakeTypeGUID("a1000000000000000000000000000008");
+        inline constexpr Reflection::TypeGUID ButtonStateChanged =
+            Reflection::MakeTypeGUID("a1000000000000000000000000000009");
+        inline constexpr Reflection::TypeGUID StateChanged =
+            Reflection::MakeTypeGUID("a1000000000000000000000000000010");
+        inline constexpr Reflection::TypeGUID InputFieldSubmitted =
+            Reflection::MakeTypeGUID("a1000000000000000000000000000011");
+        inline constexpr Reflection::TypeGUID InputFieldCanceled =
+            Reflection::MakeTypeGUID("a1000000000000000000000000000012");
     }
 
     // イベントの発行と購読。

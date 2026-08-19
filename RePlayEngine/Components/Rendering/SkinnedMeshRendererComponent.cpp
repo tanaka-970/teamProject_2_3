@@ -1,6 +1,7 @@
 ﻿#include "SkinnedMeshRendererComponent.h"
 
 #include "AnimatorComponent.h"
+#include "MaterialOverrideDynamicProperties.h"
 #include "../../Object/GameObject/GameObject.h"
 
 namespace ReplayEngine::Components
@@ -20,6 +21,24 @@ namespace ReplayEngine::Components
             };
             return DirectX::XMLoadFloat4x4(&matrix);
         }
+    }
+
+    const std::vector<Reflection::PropertyDesc>*
+        SkinnedMeshRendererComponent::DynamicProperties() const noexcept
+    {
+        return MaterialOverrideDynamicProperties(*this);
+    }
+
+    void SkinnedMeshRendererComponent::PrepareMaterialMotion(
+        const Rendering::MaterialAsset* material,
+        const Rendering::ShaderPropertySchema* schema)
+    {
+        PrepareMaterialMotionProperties(*this, material, schema);
+    }
+
+    void SkinnedMeshRendererComponent::OnMotionPropertyApplied(const char* property_name)
+    {
+        MarkMaterialMotionProperty(*this, property_name);
     }
 
     bool SkinnedMeshRendererComponent::BuildRenderItem(const Core::GameObject& owner,
@@ -68,11 +87,35 @@ namespace ReplayEngine::Components
         out.mesh_asset = mesh_asset;
         out.material_asset = material_asset;
         out.material_override = material_override;
+        out.material_motion_fixed_mask = material_motion_state.fixed_active_mask;
+        out.material_motion_properties = material_motion_state.active_values;
         out.tint = tint;
+        out.override_material_base_color =
+            (material_motion_state.fixed_active_mask & MaterialMotionBaseColor) != 0
+            ? material_motion_state.driven_base_color : material_base_color;
+        out.override_material_metallic =
+            (material_motion_state.fixed_active_mask & MaterialMotionMetallic) != 0
+            ? material_motion_state.driven_metallic : material_metallic;
+        out.override_material_roughness =
+            (material_motion_state.fixed_active_mask & MaterialMotionRoughness) != 0
+            ? material_motion_state.driven_roughness : material_roughness;
+        out.override_material_ambient_occlusion =
+            (material_motion_state.fixed_active_mask & MaterialMotionAmbientOcclusion) != 0
+            ? material_motion_state.driven_ambient_occlusion : material_ambient_occlusion;
+        out.override_material_emissive_color =
+            (material_motion_state.fixed_active_mask & MaterialMotionEmissiveColor) != 0
+            ? material_motion_state.driven_emissive_color : material_emissive_color;
+        out.override_material_emissive_strength =
+            (material_motion_state.fixed_active_mask & MaterialMotionEmissiveStrength) != 0
+            ? material_motion_state.driven_emissive_strength : material_emissive_strength;
+        out.override_material_double_sided =
+            (material_motion_state.fixed_active_mask & MaterialMotionDoubleSided) != 0
+            ? material_motion_state.driven_double_sided : material_double_sided;
         out.shading_model = shading_model;
         out.outline = outline;
         out.cast_shadow = cast_shadow;
         out.receive_shadow = receive_shadow;
+        out.rendering_layer = (std::max)(0, (std::min)(31, rendering_layer));
         out.skinned = true;
 
         // Animator があればクリップと時刻を運ぶ。無ければ Renderer 側の現在値を維持する。
@@ -83,6 +126,11 @@ namespace ReplayEngine::Components
                 out.clip_index = animator->CurrentClip();
                 out.animation_time = animator->AnimationTime();
                 out.animation_playing = true;
+                out.animation_loop = animator->CurrentLoop();
+                out.previous_clip_index = animator->PreviousClip();
+                out.previous_animation_time = animator->PreviousAnimationTime();
+                out.previous_animation_loop = animator->PreviousLoop();
+                out.animation_blend_factor = animator->BlendFactor();
             }
             else
             {
@@ -90,6 +138,11 @@ namespace ReplayEngine::Components
                 out.clip_index = animator->CurrentClip();
                 out.animation_time = animator->AnimationTime();
                 out.animation_playing = false;
+                out.animation_loop = animator->CurrentLoop();
+                out.previous_clip_index = animator->PreviousClip();
+                out.previous_animation_time = animator->PreviousAnimationTime();
+                out.previous_animation_loop = animator->PreviousLoop();
+                out.animation_blend_factor = animator->BlendFactor();
             }
         }
         else

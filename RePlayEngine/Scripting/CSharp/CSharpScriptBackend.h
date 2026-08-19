@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CSharpProject.h"
 #include "../Core/ScriptBackend.h"
@@ -13,7 +13,8 @@ namespace ReplayEngine::Scripting::CSharp
     class CSharpScriptBackend final : public IScriptBackend
     {
     public:
-        explicit CSharpScriptBackend(std::filesystem::path project_root);
+        explicit CSharpScriptBackend(std::filesystem::path project_root,
+            bool packaged_mode = false);
         ~CSharpScriptBackend() override;
 
         CSharpScriptBackend(const CSharpScriptBackend&) = delete;
@@ -105,5 +106,6 @@ namespace ReplayEngine::Scripting::CSharp
 
         bool initialized_ = false;
         bool assembly_loaded_ = false;
+        bool packaged_mode_ = false;
     };
 }

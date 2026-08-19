@@ -419,50 +419,69 @@ namespace ReplayEngine::Assets
             return result;
         }
 
-        Surface surface;
-        surface.width = width;
-        surface.height = height;
-        surface.pixels.assign(decoded,
-            decoded + static_cast<size_t>(width) * height * 4);
-        stbi_image_free(decoded);
-
-        // 形式の自動判定。
-        if (format == Format::Auto)
-        {
-            if (LooksLikeNormalMap(source)) format = Format::BC5;
-            else
-            {
-                // アルファが実際に使われているかを見る。
-                bool has_alpha = false;
-                for (size_t i = 3; i < surface.pixels.size(); i += 4)
-                {
-                    if (surface.pixels[i] < 250) { has_alpha = true; break; }
-                }
-                format = has_alpha ? Format::BC3 : Format::BC1;
-            }
-        }
-        result.format = format;
-        result.width = width;
-        result.height = height;
-
-        const char* four_cc_text =
-            format == Format::BC1 ? "DXT1" : (format == Format::BC3 ? "DXT5" : "ATI2");
-        const int block_bytes = format == Format::BC1 ? 8 : 16;
-
-        // ミップチェーンを1x1まで作る。
-        std::vector<Surface> chain;
-        chain.push_back(std::move(surface));
-        while ((std::max)(chain.back().width, chain.back().height) > 1)
-            chain.push_back(Downsample(chain.back()));
-        result.mip_count = static_cast<int>(chain.size());
-
         auto destination = destination_hint;
         if (destination.empty())
         {
             destination = source;
             destination.replace_extension(".dds");
         }
+
+        // ファイル名から法線用途と判断できる既存挙動を維持する。
+        if (format == Format::Auto && LooksLikeNormalMap(source)) format = Format::BC5;
+        result = CompressRgba(decoded, width, height, destination, format);
+        result.source_bytes = std::filesystem::file_size(source, error);
+        stbi_image_free(decoded);
+        return result;
+    }
+
+    TextureCompressor::Result TextureCompressor::CompressRgba(
+        const std::uint8_t* rgba, int width, int height,
+        const std::filesystem::path& destination, Format format)
+    {
+        Result result{};
+        if (!rgba || width <= 0 || height <= 0 || destination.empty())
+        {
+            result.error = "RGBA画像または出力先が不正です";
+            return result;
+        }
+
+        Surface surface;
+        surface.width = width;
+        surface.height = height;
+        surface.pixels.assign(rgba,
+            rgba + static_cast<size_t>(width) * height * 4);
+
+        if (format == Format::Auto)
+        {
+            bool has_alpha = false;
+            for (size_t i = 3; i < surface.pixels.size(); i += 4)
+            {
+                if (surface.pixels[i] < 250) { has_alpha = true; break; }
+            }
+            format = has_alpha ? Format::BC3 : Format::BC1;
+        }
+        result.format = format;
+        result.width = width;
+        result.height = height;
+        result.source_bytes = static_cast<std::uint64_t>(surface.pixels.size());
+
+        const char* four_cc_text =
+            format == Format::BC1 ? "DXT1" : (format == Format::BC3 ? "DXT5" : "ATI2");
+        const int block_bytes = format == Format::BC1 ? 8 : 16;
+
+        std::vector<Surface> chain;
+        chain.push_back(std::move(surface));
+        while ((std::max)(chain.back().width, chain.back().height) > 1)
+            chain.push_back(Downsample(chain.back()));
+        result.mip_count = static_cast<int>(chain.size());
+
+        std::error_code error;
         std::filesystem::create_directories(destination.parent_path(), error);
+        if (error)
+        {
+            result.error = "出力フォルダを作成できません";
+            return result;
+        }
 
         std::ofstream stream(destination, std::ios::binary | std::ios::trunc);
         if (!stream)
@@ -480,9 +499,15 @@ namespace ReplayEngine::Assets
                 static_cast<std::streamsize>(encoded.size()));
         }
         stream.close();
+        if (!stream)
+        {
+            result.error = "DDSの書き込みに失敗しました";
+            return result;
+        }
 
         result.output_bytes = std::filesystem::file_size(destination, error);
-        result.succeeded = true;
+        result.succeeded = !error;
+        if (error) result.error = "DDSサイズを取得できません";
         return result;
     }
 

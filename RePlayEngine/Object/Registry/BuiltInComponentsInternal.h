@@ -1,0 +1,180 @@
+﻿#pragma once
+
+#include "BuiltInComponents.h"
+
+#include "ComponentRegistry.h"
+#include "../Component/MissingComponent.h"
+#include "../../Reflection/Registry/PropertyRegistry.h"
+
+#include "../../Components/Audio/AudioListenerComponent.h"
+#include "../../Components/Audio/AudioSourceComponent.h"
+#include "../../Components/Camera/CameraComponent.h"
+#include "../../Components/Camera/CameraTargetComponent.h"
+#include "../../Components/Camera/FollowTargetComponent.h"
+#include "../../Components/Editor/EditorNoteComponent.h"
+#include "../../Components/Core/PropertyLinkComponent.h"
+#include "../../Components/Core/PersistentComponent.h"
+#include "../../Components/Core/SceneLoaderComponent.h"
+#include "../../Components/Core/StateComponent.h"
+#include "../../Components/Core/TransformComponent.h"
+#include "../../Components/Core/PivotComponent.h"
+#include "../../Components/Gameplay/CharacterMotorComponent.h"
+#include "../../Components/Gameplay/EnemyBehaviourComponent.h"
+#include "../../Components/Gameplay/HealthComponent.h"
+#include "../../Components/Gameplay/PlayerControllerComponent.h"
+#include "../../Components/Gameplay/PlayerInputComponent.h"
+#include "../../Components/Gameplay/RotatorComponent.h"
+#include "../../Components/Gameplay/StageGameplayComponents.h"
+#include "../../Components/Physics/BoxColliderComponent.h"
+#include "../../Components/Physics/CapsuleColliderComponent.h"
+#include "../../Components/Physics/MeshColliderComponent.h"
+#include "../../Components/Physics/RigidbodyComponent.h"
+#include "../../Components/Physics/SphereColliderComponent.h"
+#include "../../Components/Landscape/LandscapeComponent.h"
+#include "../../Components/Navigation/NavAgentComponent.h"
+#include "../../Components/Landscape/LandscapeRendererComponent.h"
+#include "../../Components/Landscape/LandscapeColliderComponent.h"
+#include "../../Components/Motion/MotionPlayerComponent.h"
+#include "../../Components/UI/CanvasComponent.h"
+#include "../../Components/UI/RectTransformComponent.h"
+#include "../../Components/UI/UIImageComponent.h"
+#include "../../Components/UI/UITextComponent.h"
+#include "../../Components/UI/UIButtonComponent.h"
+#include "../../Components/UI/UISelectableComponent.h"
+#include "../../Components/UI/UILayoutGroupComponents.h"
+#include "../../Components/UI/UIScrollViewComponent.h"
+#include "../../Components/UI/UIInputFieldComponent.h"
+#include "../../Components/UI/UILanguageSwitchComponent.h"
+#include "../../Components/UI/UIButtonPropertyToggleComponent.h"
+#include "../../Components/UI/UIMaskComponent.h"
+#include "../../Components/UI/UIEffectStackComponent.h"
+#include "../../Components/UI/UIShapeComponent.h"
+#include "../../Components/UI/UISpriteAnimatorComponent.h"
+#include "../../Components/UI/UITextAnimatorComponent.h"
+#include "../../Components/Rendering/AnimatorComponent.h"
+#include "../../Components/Rendering/LightComponents.h"
+#include "../../Components/Rendering/LineRendererComponent.h"
+#include "../../Components/Rendering/MeshRendererComponent.h"
+#include "../../Components/Rendering/ScreenEffectStackComponent.h"
+#include "../../Components/Rendering/ModelEffectStackComponent.h"
+#include "../../Components/Rendering/ParticleEmitterComponent.h"
+#include "../../Components/Rendering/PostProcessVolumeComponent.h"
+#include "../../Components/Rendering/PrimitiveMeshRendererComponent.h"
+#include "../../Components/Rendering/SkinnedMeshRendererComponent.h"
+#include "../../Components/Rendering/TrailComponent.h"
+#include "../../Scripting/Core/ScriptComponent.h"
+
+// BuiltInComponents の分割内部で登録実装だけが共有する宣言であり、外部から使うものではない。
+namespace ReplayEngine::Core::Detail
+{
+        using Components::AnimatorComponent;
+        using Components::AudioListenerComponent;
+        using Components::AudioSourceComponent;
+        using Components::BoxColliderComponent;
+        using Components::CameraComponent;
+        using Components::CameraTargetComponent;
+        using Components::CanvasComponent;
+        using Components::CapsuleColliderComponent;
+        using Components::CharacterMotorComponent;
+        using Components::EnemyBehaviourComponent;
+        using Components::FollowTargetComponent;
+        using Components::HealthComponent;
+        using Components::MeshColliderComponent;
+        using Components::NavAgentComponent;
+        using Components::RigidbodyComponent;
+        using Components::LandscapeComponent;
+        using Components::LandscapeRendererComponent;
+        using Components::LandscapeColliderComponent;
+        using Components::LineRendererComponent;
+        using Components::MotionPlayerComponent;
+        using Components::MeshRendererComponent;
+        using Components::ModelEffectStackComponent;
+        using Components::ScreenEffectStackComponent;
+        using Components::ParticleEmitterComponent;
+        using Components::PostProcessVolumeComponent;
+        using Components::PrimitiveMeshRendererComponent;
+        using Components::DirectionalLightComponent;
+        using Components::EditorNoteComponent;
+        using Components::PointLightComponent;
+        using Components::SpotLightComponent;
+        using Components::PlayerControllerComponent;
+        using Components::PlayerInputComponent;
+        using Components::PivotComponent;
+        using Components::PropertyLinkComponent;
+        using Components::PersistentComponent;
+        using Components::SceneLoaderComponent;
+        using Components::StateComponent;
+        using Components::RotatorComponent;
+        using Components::RectTransformComponent;
+        using Components::SkinnedMeshRendererComponent;
+        using Components::SphereColliderComponent;
+        using Components::SpawnPointComponent;
+        using Components::CheckpointComponent;
+        using Components::GoalComponent;
+        using Components::KillVolumeComponent;
+        using Components::JumpPadComponent;
+        using Components::DamageAreaComponent;
+        using Components::UIButtonComponent;
+        using Components::UIButtonPropertyToggleComponent;
+        using Components::UIInputFieldComponent;
+        using Components::UILanguageSwitchComponent;
+        using Components::UIScrollViewComponent;
+        using Components::UIGridLayoutGroupComponent;
+        using Components::UIVerticalLayoutGroupComponent;
+        using Components::UIHorizontalLayoutGroupComponent;
+        using Components::UISelectableComponent;
+        using Components::UIImageComponent;
+        using Components::UIMaskComponent;
+        using Components::UIEffectStackComponent;
+        using Components::UIShapeComponent;
+        using Components::UISpriteAnimatorComponent;
+        using Components::UITextComponent;
+        using Components::UITextAnimatorComponent;
+        using Components::TransformComponent;
+        using Components::TrailComponent;
+
+        using Reflection::Animatable;
+        using Reflection::MakeAccessorProperty;
+        using Reflection::MakeProperty;
+        using Reflection::PropertyRegistry;
+        using Reflection::PropertyType;
+        using Reflection::PropertyValue;
+
+    void RegisterMissingComponent();
+    void RegisterTransform();
+    void RegisterPivot();
+    void RegisterMeshRenderer();
+    void RegisterPrimitiveMeshRenderer();
+    void RegisterRotator();
+    void RegisterScript();
+    void RegisterHealth();
+    void RegisterSkinnedMeshRenderer();
+    void RegisterAnimator();
+    void RegisterRigidbody();
+    void RegisterSphereCollider();
+    void RegisterBoxCollider();
+    void RegisterCapsuleCollider();
+    void RegisterMeshCollider();
+    void RegisterLandscape();
+    void RegisterCharacterMotor();
+    void RegisterPlayerInput();
+    void RegisterPlayerController();
+    void RegisterCameraTarget();
+    void RegisterCamera();
+    void RegisterPostProcessVolume();
+    void RegisterEffectStacks();
+    void RegisterParticleEmitter();
+    void RegisterLineRenderers();
+    void RegisterFollowTarget();
+    void RegisterAudioListener();
+    void RegisterAudioSource();
+    void RegisterLights();
+    void RegisterPropertyLink();
+    void RegisterScenePersistence();
+    void RegisterState();
+    void RegisterUI();
+    void RegisterMotion();
+    void RegisterEditorNote();
+    void RegisterStageGameplay();
+    void RegisterAINavigation();
+}

@@ -1,15 +1,16 @@
-#pragma once
+﻿#pragma once
 
 #include <DirectXMath.h>
 
 class Camera;
+namespace GameInput { class InputState; }
 
 class FreeCameraController
 {
 public:
     void SyncCameraToController(const Camera& camera);
     void SyncControllerToCamera(Camera& camera);
-    void Update(float elapsed_time);
+    void Update(float elapsed_time, const GameInput::InputState& input);
 
 private:
     DirectX::XMFLOAT3 eye  { 0, 5, -10 };

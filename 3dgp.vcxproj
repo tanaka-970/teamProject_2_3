@@ -85,6 +85,8 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <ProcessorNumber>8</ProcessorNumber>
       <PrecompiledHeader>
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
@@ -101,7 +103,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;xaudio2.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;dxguid.lib;xaudio2.lib;xinput.lib;shell32.lib;comdlg32.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <IgnoreSpecificDefaultLibraries>
       </IgnoreSpecificDefaultLibraries>
       <IgnoreAllDefaultLibraries>
@@ -116,13 +118,20 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <PrecompiledHeader>
-      </PrecompiledHeader>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <ProcessorNumber>8</ProcessorNumber>
+      <!-- プリコンパイル済みヘッダ。ビルド時間の短縮だけが目的。
+           ForcedIncludeFiles で全 .cpp の先頭へ自動挿入するため、
+           各ソースへ #include "pch.h" を書き足していない。
+           Source\pch.cpp だけが Create 側で、それは下の ClCompile 項目で指定する。 -->
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <ForcedIncludeFiles>pch.h;%(ForcedIncludeFiles)</ForcedIncludeFiles>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>_DEBUG;_WINDOWS;USE_IMGUI;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>.;.\Source\app;.\Source\core;.\Source\mesh;.\Source\render;.\cereal-master\include;.\DirectXTK-main\Inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;.\Source;.\Source\app;.\Source\core;.\Source\mesh;.\Source\render;.\cereal-master\include;.\DirectXTK-main\Inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <EnableASAN Condition="'$(ReplayEnableASAN)'=='true'">true</EnableASAN>
       <DebugInformationFormat Condition="'$(ReplayEnableASAN)'=='true'">ProgramDatabase</DebugInformationFormat>
@@ -135,7 +144,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;xaudio2.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;dxguid.lib;xaudio2.lib;xinput.lib;shell32.lib;comdlg32.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <FxCompile>
       <ShaderModel>5.0</ShaderModel>
@@ -145,6 +154,8 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <ProcessorNumber>8</ProcessorNumber>
       <WarningLevel>Level3</WarningLevel>
       <PrecompiledHeader>
       </PrecompiledHeader>
@@ -167,7 +178,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>
       </AdditionalLibraryDirectories>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;xaudio2.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;xaudio2.lib;xinput.lib;shell32.lib;comdlg32.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <FxCompile>
       <ShaderModel>5.0</ShaderModel>
@@ -177,9 +188,14 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <ProcessorNumber>8</ProcessorNumber>
       <WarningLevel>Level3</WarningLevel>
-      <PrecompiledHeader>
-      </PrecompiledHeader>
+      <!-- Debug|x64 と同じプリコンパイル済みヘッダ設定。
+           これが無いと pch.cpp が既定名 stdafx.h を作りにいって C2857 で落ちる。 -->
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <ForcedIncludeFiles>pch.h;%(ForcedIncludeFiles)</ForcedIncludeFiles>
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -198,7 +214,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;xaudio2.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;xaudio2.lib;xinput.lib;shell32.lib;comdlg32.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <FxCompile>
       <ShaderModel>5.0</ShaderModel>
@@ -207,10 +223,18 @@
     </FxCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <!-- PCH を作る唯一のソース。ForcedIncludeFiles の対象外にしないと自分自身を
+         強制インクルードして循環するため、ここだけ空にしている。 -->
+    <ClCompile Include="Source\pch.cpp">
+      <PrecompiledHeader>Create</PrecompiledHeader>
+      <ForcedIncludeFiles>
+      </ForcedIncludeFiles>
+    </ClCompile>
     <ClCompile Include="Source\mesh\UI.cpp" />
     <ClCompile Include="Source\render\csm_renderer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Deferred\deferred_renderer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Passes\PostProcessPass.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Effects\EffectChain.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Passes\BloomPass.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Passes\SsaoPass.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Passes\SsrPass.cpp" />
@@ -234,6 +258,8 @@
     <ClCompile Include="RePlayEngine\Editor\ShaderEditing\ShaderComposerEditor.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerAsset.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerGenerator.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerGeneratorFile.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerGeneratorNodes.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerValidation.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Materials\ShaderLayerBinding.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\ShaderStack\BuiltInShaderLayers.cpp" />
@@ -243,10 +269,14 @@
     <ClCompile Include="RePlayEngine\Editor\ShaderEditing\ShaderPresetEditor.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Rendering\PostProcessEditor.cpp" />
     <ClCompile Include="RePlayEngine\Physics\MeshCollisionCooker.cpp" />
+    <ClCompile Include="RePlayEngine\Physics\PhysicsDynamicsWorld.cpp" />
+    <ClCompile Include="RePlayEngine\Physics\PhysicsDynamicsWorldSolver.cpp" />
+    <ClInclude Include="RePlayEngine\Physics\PhysicsDynamicsWorldInternal.h" />
     <ClCompile Include="RePlayEngine\Rendering\ShaderPresets\ShaderPresetSerializer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\ShaderPresets\BuiltInShaderPresets.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Materials\CharacterMaterialGpuData.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Materials\MaterialAsset.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Materials\MaterialAssetLoad.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Materials\MaterialSchema.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Materials\MaterialBinding.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Materials\MaterialGpuBinder.cpp" />
@@ -255,7 +285,14 @@
     <ClCompile Include="Source\core\framebuffer.cpp" />
     <ClCompile Include="Source\core\fullscreen_quad.cpp" />
     <ClCompile Include="Source\mesh\geometric_primitive.cpp" />
+    <ClCompile Include="Source\mesh\geometric_primitive_capsule.cpp" />
+    <ClCompile Include="Source\mesh\geometric_primitive_cylinder.cpp" />
+    <ClCompile Include="Source\mesh\geometric_primitive_sphere.cpp" />
     <ClCompile Include="Source\mesh\gltf_model.cpp" />
+    <ClCompile Include="Source\mesh\gltf_modelLoad.cpp" />
+    <ClCompile Include="Source\mesh\gltf_modelTexture.cpp" />
+    <ClCompile Include="Source\mesh\gltf_modelLod.cpp" />
+    <ClCompile Include="Source\mesh\gltf_modelRender.cpp" />
     <ClCompile Include="Source\mesh\gltf_model_cache.cpp" />
     <ClCompile Include="Source\render\lights_manager.cpp" />
     <ClCompile Include="Source\render\pbr_renderer.cpp" />
@@ -269,30 +306,69 @@
     <ClCompile Include="imgui\imgui_ja_gryph_ranges.cpp" />
     <ClCompile Include="imgui\imgui_widgets.cpp" />
     <ClCompile Include="Source\app\Runtime\main.cpp" />
+    <ClCompile Include="Source\app\Runtime\mainValidation.cpp" />
+    <ClCompile Include="Source\app\Runtime\mainValidationScene.cpp" />
+    <ClCompile Include="Source\app\Runtime\mainValidationRuntime.cpp" />
+    <ClCompile Include="Source\app\Runtime\mainApplication.cpp" />
+    <ClCompile Include="Source\app\Runtime\mainDiagnostics.cpp" />
+    <ClCompile Include="Source\app\Runtime\mainValidationLandscape.cpp" />
+    <ClCompile Include="Source\app\Runtime\mainValidationSceneWorld.cpp" />
+    <ClCompile Include="Source\app\Runtime\mainValidationPhysics.cpp" />
+    <ClCompile Include="Source\app\Runtime\mainValidationMotion.cpp" />
+    <ClCompile Include="Source\app\Runtime\framework_gameobject_scene_motion.cpp" />
+    <ClCompile Include="Source\app\Runtime\framework_gameobject_scene_runtime.cpp" />
+    <ClCompile Include="Source\app\Runtime\framework_gameobject_scene_play.cpp" />
+    <ClCompile Include="Source\app\Runtime\framework_gameobject_scene_rendering_draw.cpp" />
+    <ClCompile Include="Source\app\Runtime\framework_gameobject_scene_rendering_line.cpp" />
+    <ClCompile Include="Source\app\Runtime\framework_gameobject_scene_rendering_animation.cpp" />
+    <ClCompile Include="Source\app\Runtime\framework_gameobject_scene_serialization_creation.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_editor_docking.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_editor_scene_view.cpp" />
     <ClCompile Include="Source\app\Runtime\framework.cpp" />
     <ClCompile Include="Source\app\Editor\framework_asset_browser.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_asset_browser_material.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_asset_browser_model.cpp" />
     <ClCompile Include="Source\app\Editor\framework_editor_commands.cpp" />
     <ClCompile Include="Source\app\Runtime\framework_initialize.cpp" />
     <ClCompile Include="Source\app\Editor\framework_editor.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_editor_scene.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_editor_scripting.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_editor_panels.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_editor_diagnostics.cpp" />
     <ClCompile Include="Source\app\Editor\framework_inspector.cpp" />
     <ClCompile Include="Source\app\Editor\framework_project_settings.cpp" />
     <ClCompile Include="Source\app\Editor\framework_editor_camera.cpp" />
     <ClCompile Include="Source\app\Editor\framework_editor_camera_presets.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_editor_camera_preset_ui.cpp" />
     <ClCompile Include="Source\app\Editor\framework_gizmo.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_gizmo_pivot.cpp" />
     <ClCompile Include="Source\app\Editor\framework_scene_document.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_standalone_export.cpp" />
     <ClCompile Include="Source\app\Editor\framework_landscape_editor.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_landscape_editor_viewport.cpp" />
+    <ClInclude Include="Source\app\Editor\framework_landscape_editorInternal.h" />
     <ClCompile Include="Source\app\Editor\framework_shader_stack.cpp" />
     <ClCompile Include="Source\app\Editor\framework_character_material.cpp" />
     <ClCompile Include="Source\app\Editor\framework_post_process.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_ui_focus_style.cpp" />
     <ClCompile Include="Source\app\Runtime\framework_update.cpp" />
     <ClCompile Include="Source\app\Rendering\framework_render.cpp" />
+    <ClCompile Include="Source\app\Rendering\framework_effect_stack.cpp" />
+    <ClCompile Include="Source\app\Rendering\framework_model_effects.cpp" />
     <ClCompile Include="Source\core\shader.cpp" />
     <ClCompile Include="Source\mesh\skinned_mesh.cpp" />
+    <ClCompile Include="Source\mesh\skinned_meshImport.cpp" />
+    <ClCompile Include="Source\mesh\skinned_meshAnimation.cpp" />
+    <ClCompile Include="Source\mesh\skinned_meshDevice.cpp" />
+    <ClCompile Include="Source\mesh\skinned_meshRender.cpp" />
+    <ClCompile Include="Source\mesh\skinned_meshGltf.cpp" />
     <ClCompile Include="Source\mesh\sprite.cpp" />
     <ClCompile Include="Source\mesh\sprite_batch.cpp" />
     <ClCompile Include="Source\mesh\static_mesh.cpp" />
+    <ClCompile Include="Source\mesh\static_mesh_runtime.cpp" />
     <ClCompile Include="Source\core\texture.cpp" />
     <ClCompile Include="Source\game\camera.cpp" />
+    <ClCompile Include="Source\game\game_input.cpp" />
     <ClCompile Include="Source\game\free_camera_controller.cpp" />
     <ClCompile Include="RePlayEngine\Physics\SphereCast.cpp" />
     <ClCompile Include="Source\game\scene_game.cpp" />
@@ -304,7 +380,12 @@
     <ClCompile Include="RePlayEngine\Object\Component\MissingComponent.cpp" />
     <ClCompile Include="RePlayEngine\Object\GameObject\GameObject.cpp" />
     <ClCompile Include="RePlayEngine\Object\Registry\ComponentRegistry.cpp" />
+    <ClCompile Include="RePlayEngine\Object\Registry\ComponentDependencyRules.cpp" />
     <ClCompile Include="RePlayEngine\Reflection\Property\PropertyValue.cpp" />
+    <ClCompile Include="RePlayEngine\Reflection\Property\PropertyValueAccessors.cpp" />
+    <ClCompile Include="RePlayEngine\Reflection\Property\PropertyValueComparison.cpp" />
+    <ClCompile Include="RePlayEngine\Reflection\Property\PropertyValueConversion.cpp" />
+    <ClCompile Include="RePlayEngine\Reflection\Property\PropertyValueInterpolation.cpp" />
     <ClCompile Include="RePlayEngine\Reflection\Property\PropertyBag.cpp" />
     <ClCompile Include="RePlayEngine\Reflection\Registry\PropertyRegistry.cpp" />
     <ClCompile Include="RePlayEngine\Reflection\Registry\TypeGUID.cpp" />
@@ -313,6 +394,9 @@
     <ClCompile Include="RePlayEngine\Runtime\Handles\HandleResolver.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\HandleValidation.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\SerializationValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Validation\SerializationValidationSupport.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Validation\SerializationValidationMissingComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Validation\SerializationValidationSceneVersion.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Behaviour\BehaviourComponent.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Behaviour\BehaviourRegistry.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Events\EventBus.cpp" />
@@ -320,6 +404,7 @@
     <ClCompile Include="RePlayEngine\Runtime\Scene\RuntimeSceneService.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\Core\MockScriptBackend.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\Core\ScriptComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\Core\ScriptComponentRuntime.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\Core\ScriptError.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\Core\ScriptFieldSchema.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\Core\ScriptLanguage.cpp" />
@@ -329,7 +414,14 @@
     <ClCompile Include="RePlayEngine\Scripting\Core\ScriptValue.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\Core\ScriptWorld.cpp" />
     <ClCompile Include="Source\app\Editor\framework_project_browser.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_project_browser_assets.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_project_browser_shader_creation.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_project_browser_rename.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_project_browser_view.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_project_browser_entry.cpp" />
     <ClCompile Include="Source\app\Editor\framework_convenience_tools.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_convenience_tools_play.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_convenience_tools_scene_flow.cpp" />
     <ClCompile Include="Source\app\Editor\framework_shader_catalog.cpp" />
     <ClCompile Include="Source\app\Editor\framework_golden.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Capture\GoldenImage.cpp" />
@@ -351,14 +443,45 @@
     <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderCompileValidation.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderLibrary.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderSource.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderSourceFile.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpProject.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpProjectInternal.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpProjectGeneration.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpProjectDiscovery.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpProjectBuild.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpProjectVisualStudio.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackend.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendHost.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendAssembly.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendInstances.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendErrors.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendNative.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendNativeScene.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendNativeMotion.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendNativeEvents.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendNativeServices.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\Validation\CSharpScriptValidation.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\Validation\ScriptCoreValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\Validation\ScriptCoreValidationSupport.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\Validation\ScriptCoreLifecycleValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\Validation\ScriptCoreSerializationValidation.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\API\RuntimeContext.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\API\RuntimeContextMotion.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\API\RuntimeContextScene.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\API\RuntimeContextServices.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\API\RuntimeSaveGameService.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourExecutionOrderValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourValidationSupport.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Validation\ComponentDependencyValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourEventValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourRuntimeApiValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourCollisionValidation.cpp" />
     <ClCompile Include="Source\game\Behaviours\ValidationBehaviours.cpp" />
     <ClCompile Include="RePlayEngine\Scene\Runtime\Scene.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Core\PropertyLinkComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Core\SceneLoaderComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Core\StateComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Core\TransformComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Gameplay\RotatorComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Gameplay\HealthComponent.cpp" />
@@ -366,21 +489,56 @@
     <ClCompile Include="RePlayEngine\Components\Gameplay\StageGameplayComponents.cpp" />
     <ClCompile Include="RePlayEngine\Audio\AudioSystem.cpp" />
     <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponents.cpp" />
+    <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponentsCore.cpp" />
+    <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponentsRendering.cpp" />
+    <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponentsGameplay.cpp" />
+    <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponentsNavigation.cpp" />
+    <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponentsScripting.cpp" />
+    <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponentsPhysics.cpp" />
+    <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponentsCameraAudio.cpp" />
+    <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponentsUI.cpp" />
+    <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponentsMotionEditor.cpp" />
     <ClCompile Include="RePlayEngine\Scene\Serialization\SceneData.cpp" />
+    <ClCompile Include="RePlayEngine\Scene\Serialization\SceneDataApply.cpp" />
+    <ClCompile Include="RePlayEngine\Scene\Serialization\SceneDataDuplicate.cpp" />
+    <ClCompile Include="RePlayEngine\Scene\Serialization\SceneDataPrefab.cpp" />
     <ClCompile Include="RePlayEngine\Scene\Serialization\SceneSerializer.cpp" />
+    <ClCompile Include="RePlayEngine\Scene\Serialization\SceneSerializerInternal.cpp" />
+    <ClCompile Include="RePlayEngine\Scene\Serialization\SceneSerializerWrite.cpp" />
+    <ClCompile Include="RePlayEngine\Scene\Serialization\SceneSerializerRead.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Core\EditorContext.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Selection\EditorSelection.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Commands\SceneEditHistory.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Commands\FileEditHistory.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Commands\MotionEditHistory.cpp" />
+    <ClCompile Include="RePlayEngine\Motion\MotionEasing.cpp" />
+    <ClCompile Include="RePlayEngine\Motion\MotionAsset.cpp" />
+    <ClCompile Include="RePlayEngine\Motion\MotionAssetLoad.cpp" />
+    <ClCompile Include="RePlayEngine\Motion\CompositionAsset.cpp" />
+    <ClCompile Include="RePlayEngine\Motion\MotionEvaluator.cpp" />
+    <ClCompile Include="RePlayEngine\Motion\MotionBindingResolver.cpp" />
+    <ClCompile Include="RePlayEngine\Motion\MotionMixer.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Motion\MotionPlayerComponent.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Hierarchy\HierarchyPanel.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Hierarchy\HierarchyPanelCommands.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Inspector\InspectorPanel.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Inspector\InspectorPanelMultiSelection.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Inspector\InspectorPanelComponents.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Inspector\PropertyDrawer.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Inspector\PropertyDrawerDraw.cpp" />
+    <ClInclude Include="RePlayEngine\Editor\Inspector\PropertyDrawerInternal.h" />
     <ClCompile Include="RePlayEngine\Editor\ComponentBrowser\AddComponentPanel.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Adapter\SceneRenderCollector.cpp" />
     <ClCompile Include="Source\app\Runtime\framework_gameobject_scene.cpp" />
+    <ClCompile Include="Source\app\Runtime\framework_gameobject_scene_serialization.cpp" />
+    <ClCompile Include="Source\app\Runtime\framework_gameobject_scene_rendering.cpp" />
     <ClCompile Include="RePlayEngine\Scene\Serialization\PrefabSerializer.cpp" />
     <ClCompile Include="RePlayEngine\Scene\Services\PlayerControlSystem.cpp" />
     <ClCompile Include="RePlayEngine\Components\Physics\SphereColliderComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Physics\RigidbodyComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Gameplay\CharacterMotorComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Gameplay\EnemyBehaviourComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Navigation\NavAgentComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Gameplay\PlayerInputComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Gameplay\PlayerControllerComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Audio\AudioSourceComponent.cpp" />
@@ -390,6 +548,8 @@
     <ClCompile Include="RePlayEngine\Components\Rendering\SkinnedMeshRendererComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Rendering\MeshRendererComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Rendering\PrimitiveMeshRendererComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Rendering\LineRendererComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Rendering\TrailComponent.cpp" />
     <ClCompile Include="Source\game\camera_basis_provider.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Inspector\PlayerCompositionValidator.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorViewportCamera.cpp" />
@@ -398,6 +558,7 @@
     <ClCompile Include="RePlayEngine\Editor\Validation\ValidationPanel.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorCameraController.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorCameraPreset.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Viewport\EditorCameraPresetPersistence.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorCameraStateStore.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorSelectionBounds.cpp" />
     <ClCompile Include="RePlayEngine\Project\ProjectSettings.cpp" />
@@ -412,10 +573,13 @@
     <ClCompile Include="RePlayEngine\Scene\Services\SceneCollisionWorldQuery.cpp" />
     <ClCompile Include="RePlayEngine\Scene\Services\SceneCollisionWorldTrigger.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Debug\ColliderDebugDraw.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Debug\AINavigationDebugDraw.cpp" />
     <ClCompile Include="Source\app\Runtime\framework_collision_world.cpp" />
     <ClCompile Include="Source\app\Runtime\framework_collision_mesh_source.cpp" />
     <ClCompile Include="Source\app\Editor\framework_collider_debug.cpp" />
     <ClCompile Include="RePlayEngine\Landscape\LandscapeData.cpp" />
+    <ClCompile Include="RePlayEngine\Landscape\LandscapeDataSerialization.cpp" />
+    <ClCompile Include="RePlayEngine\Landscape\LandscapeDataTopology.cpp" />
     <ClCompile Include="RePlayEngine\Landscape\LandscapeMeshGenerator.cpp" />
     <ClCompile Include="RePlayEngine\Landscape\LandscapeRenderer.cpp" />
     <ClCompile Include="RePlayEngine\Landscape\LandscapeCollision.cpp" />
@@ -436,6 +600,7 @@
     <ClCompile Include="Source\app\Runtime\framework_shutdown_regression.cpp" />
 </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Source\pch.h" />
     <ClInclude Include="Source\mesh\UI.h" />
     <ClInclude Include="Source\render\csm_renderer.h" />
     <ClInclude Include="Source\render\deferred_renderer.h" />
@@ -460,6 +625,7 @@
     <ClInclude Include="RePlayEngine\Rendering\Materials\CharacterMaterialProfile.h" />
     <ClInclude Include="RePlayEngine\Rendering\Materials\CharacterMaterialGpuData.h" />
     <ClInclude Include="RePlayEngine\Rendering\Materials\MaterialAsset.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Materials\MaterialAssetInternal.h" />
     <ClInclude Include="RePlayEngine\Rendering\Materials\MaterialSchema.h" />
     <ClInclude Include="RePlayEngine\Rendering\Materials\MaterialBinding.h" />
     <ClInclude Include="RePlayEngine\Rendering\Materials\MaterialGpuBinder.h" />
@@ -479,6 +645,7 @@
     <ClInclude Include="RePlayEngine\Editor\ShaderEditing\ShaderComposerEditor.h" />
     <ClInclude Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerAsset.h" />
     <ClInclude Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerGenerator.h" />
+    <ClInclude Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerGeneratorInternal.h" />
     <ClInclude Include="RePlayEngine\Rendering\ShaderComposer\ShaderComposerValidation.h" />
     <ClInclude Include="RePlayEngine\Rendering\Materials\ShaderLayerBinding.h" />
     <ClInclude Include="RePlayEngine\Rendering\ShaderStack\BuiltInShaderLayers.h" />
@@ -491,15 +658,46 @@
     <ClInclude Include="RePlayEngine\Core\Components\IComponent.h" />
     <ClInclude Include="RePlayEngine\Physics\SphereCast.h" />
     <ClInclude Include="RePlayEngine\Physics\MeshCollisionCooker.h" />
+    <ClInclude Include="RePlayEngine\Physics\PhysicsDynamicsWorld.h" />
     <ClInclude Include="RePlayEngine\Scene\IScene.h" />
     <ClInclude Include="RePlayEngine\Scene\SceneManager.h" />
     <ClInclude Include="RePlayEngine\Scene\BootLogoScene.h" />
     <ClInclude Include="RePlayEngine\Scene\LoadingScene.h" />
     <ClInclude Include="Source\core\framebuffer.h" />
     <ClInclude Include="Source\app\framework.h" />
+    <ClInclude Include="Source\app\framework_application.h" />
+    <ClInclude Include="RePlayEngine\Components\Rendering\EffectStackComponentCommonPart1.inl" />
+    <ClInclude Include="RePlayEngine\Components\Rendering\EffectStackComponentCommonPart2.inl" />
+    <ClInclude Include="RePlayEngine\Components\Rendering\EffectStackComponentCommonPart3.inl" />
+    <ClInclude Include="RePlayEngine\Components\Rendering\EffectStackComponentCommonPart4.inl" />
+    <ClInclude Include="RePlayEngine\Components\Rendering\EffectStackComponentCommon.inl" />
+    <ClInclude Include="Source\app\framework_class_render_state.inl" />
+    <ClInclude Include="Source\app\framework_class_runtime_scene.inl" />
+    <ClInclude Include="Source\app\framework_class_application_loop.inl" />
+    <ClInclude Include="Source\app\framework_class_editor_commands.inl" />
+    <ClInclude Include="Source\app\framework_class_scene_services.inl" />
+    <ClInclude Include="Source\app\framework_class_editor_state.inl" />
+    <ClInclude Include="RePlayEngine\UI\UIRendererRenderSetup.inl" />
+    <ClInclude Include="RePlayEngine\UI\UIRendererRenderTextInput.inl" />
+    <ClInclude Include="RePlayEngine\UI\UIRendererRenderBackdrop.inl" />
+    <ClInclude Include="RePlayEngine\UI\UIRendererRenderEffects.inl" />
+    <ClInclude Include="RePlayEngine\UI\UIRendererRenderHierarchy.inl" />
+    <ClInclude Include="Source\app\Rendering\framework_render_setup.inl" />
+    <ClInclude Include="Source\app\Rendering\framework_render_scene_setup.inl" />
+    <ClInclude Include="Source\app\Rendering\framework_render_deferred.inl" />
+    <ClInclude Include="Source\app\Rendering\framework_render_forward.inl" />
+    <ClInclude Include="Source\app\Rendering\framework_render_effects.inl" />
+    <ClInclude Include="Source\app\Rendering\framework_render_present.inl" />
+    <ClInclude Include="Source\app\framework_class.h" />
+    <ClInclude Include="Source\app\Editor\GoldenImageState.h" />
+    <ClInclude Include="Source\app\Editor\framework_motion_workspaceInternal.h" />
+    <ClInclude Include="Source\app\Editor\framework_project_browserInternal.h" />
+    <ClInclude Include="Source\app\Editor\framework_asset_browserInternal.h" />
+    <ClInclude Include="Source\app\Runtime\mainInternal.h" />
     <ClInclude Include="Source\core\fullscreen_quad.h" />
     <ClInclude Include="Source\mesh\geometric_primitive.h" />
     <ClInclude Include="Source\mesh\gltf_model.h" />
+    <ClInclude Include="Source\mesh\gltf_modelInternal.h" />
     <ClInclude Include="Source\core\high_resolution_timer.h" />
     <ClInclude Include="imgui\imconfig.h" />
     <ClInclude Include="imgui\imgui.h" />
@@ -516,6 +714,7 @@
     <ClInclude Include="Source\render\shading_model.h" />
     <ClInclude Include="Source\core\shader.h" />
     <ClInclude Include="Source\mesh\skinned_mesh.h" />
+    <ClInclude Include="Source\mesh\skinned_meshInternal.h" />
     <ClInclude Include="Source\mesh\sprite.h" />
     <ClInclude Include="Source\mesh\sprite_batch.h" />
     <ClInclude Include="Source\mesh\static_mesh.h" />
@@ -537,16 +736,25 @@
     <ClInclude Include="RePlayEngine\Object\GameObject\GameObject.h" />
     <ClInclude Include="RePlayEngine\Object\Registry\ComponentTypeInfo.h" />
     <ClInclude Include="RePlayEngine\Object\Registry\ComponentRegistry.h" />
+    <ClInclude Include="RePlayEngine\Object\Registry\ComponentDependencyRules.h" />
     <ClInclude Include="RePlayEngine\Reflection\Property\PropertyValue.h" />
     <ClInclude Include="RePlayEngine\Reflection\Property\PropertyDesc.h" />
     <ClInclude Include="RePlayEngine\Reflection\Property\PropertyBag.h" />
     <ClInclude Include="RePlayEngine\Reflection\Property\References.h" />
     <ClInclude Include="RePlayEngine\Reflection\Registry\TypeGUID.h" />
+    <ClInclude Include="RePlayEngine\Motion\MotionEasing.h" />
+    <ClInclude Include="RePlayEngine\Motion\MotionAsset.h" />
+    <ClInclude Include="RePlayEngine\Motion\CompositionAsset.h" />
+    <ClInclude Include="RePlayEngine\Motion\MotionEvaluator.h" />
+    <ClInclude Include="RePlayEngine\Motion\MotionBindingResolver.h" />
+    <ClInclude Include="RePlayEngine\Motion\MotionMixer.h" />
+    <ClInclude Include="RePlayEngine\Components\Motion\MotionPlayerComponent.h" />
     <ClInclude Include="RePlayEngine\Runtime\Core\RuntimeResult.h" />
     <ClInclude Include="RePlayEngine\Runtime\Handles\RuntimeHandles.h" />
     <ClInclude Include="RePlayEngine\Runtime\Handles\HandleResolver.h" />
     <ClInclude Include="RePlayEngine\Runtime\Validation\HandleValidation.h" />
     <ClInclude Include="RePlayEngine\Runtime\Validation\SerializationValidation.h" />
+    <ClInclude Include="RePlayEngine\Runtime\Validation\SerializationValidationInternal.h" />
     <ClInclude Include="RePlayEngine\Runtime\Behaviour\BehaviourEvents.h" />
     <ClInclude Include="RePlayEngine\Runtime\Behaviour\BehaviourComponent.h" />
     <ClInclude Include="RePlayEngine\Runtime\Behaviour\BehaviourRegistry.h" />
@@ -566,18 +774,32 @@
     <ClInclude Include="RePlayEngine\Scripting\Core\ScriptValue.h" />
     <ClInclude Include="RePlayEngine\Scripting\Core\ScriptWorld.h" />
     <ClInclude Include="RePlayEngine\Scripting\CSharp\CSharpProject.h" />
+    <ClInclude Include="RePlayEngine\Scripting\CSharp\CSharpProjectInternal.h" />
     <ClInclude Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackend.h" />
+    <ClInclude Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendHostInternal.h" />
+    <ClInclude Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendNativeInternal.h" />
+    <ClInclude Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendInternal.h" />
     <ClInclude Include="RePlayEngine\Scripting\Validation\CSharpScriptValidation.h" />
     <ClInclude Include="RePlayEngine\Scripting\Validation\ScriptCoreValidation.h" />
+    <ClInclude Include="RePlayEngine\Scripting\Validation\ScriptCoreValidationInternal.h" />
     <ClInclude Include="RePlayEngine\Runtime\Scene\WorldLifecycleListener.h" />
     <ClInclude Include="RePlayEngine\Runtime\API\RuntimeContext.h" />
+    <ClInclude Include="RePlayEngine\Runtime\API\RuntimeSaveGameService.h" />
     <ClInclude Include="RePlayEngine\Runtime\Validation\BehaviourValidation.h" />
+    <ClInclude Include="RePlayEngine\Runtime\Validation\BehaviourValidationInternal.h" />
     <ClInclude Include="Source\game\Behaviours\ValidationBehaviours.h" />
     <ClInclude Include="RePlayEngine\Reflection\Registry\PropertyRegistry.h" />
     <ClInclude Include="RePlayEngine\Scene\Runtime\Scene.h" />
+    <ClInclude Include="RePlayEngine\Components\Core\PropertyLinkComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Core\PersistentComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Core\SceneLoaderComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Core\StateComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Core\TransformComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Core\PivotComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Rendering\MeshRendererComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Rendering\PrimitiveMeshRendererComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Rendering\LineRendererComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Rendering\TrailComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Rendering\LightComponents.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\RotatorComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\HealthComponent.h" />
@@ -587,11 +809,16 @@
     <ClInclude Include="RePlayEngine\Audio\AudioService.h" />
     <ClInclude Include="RePlayEngine\Audio\AudioSystem.h" />
     <ClInclude Include="RePlayEngine\Object\Registry\BuiltInComponents.h" />
+    <ClInclude Include="RePlayEngine\Object\Registry\BuiltInComponentsInternal.h" />
     <ClInclude Include="RePlayEngine\Scene\Serialization\SceneData.h" />
+    <ClInclude Include="RePlayEngine\Scene\Serialization\SceneDataInternal.h" />
     <ClInclude Include="RePlayEngine\Scene\Serialization\SceneSerializer.h" />
+    <ClInclude Include="RePlayEngine\Scene\Serialization\SceneSerializerInternal.h" />
     <ClInclude Include="RePlayEngine\Editor\Core\EditorContext.h" />
     <ClInclude Include="RePlayEngine\Editor\Selection\EditorSelection.h" />
     <ClInclude Include="RePlayEngine\Editor\Commands\SceneEditHistory.h" />
+    <ClInclude Include="RePlayEngine\Editor\Commands\FileEditHistory.h" />
+    <ClInclude Include="RePlayEngine\Editor\Commands\MotionEditHistory.h" />
     <ClInclude Include="RePlayEngine\Editor\Hierarchy\HierarchyPanel.h" />
     <ClInclude Include="RePlayEngine\Editor\Inspector\InspectorPanel.h" />
     <ClInclude Include="RePlayEngine\Editor\Inspector\PropertyDrawer.h" />
@@ -601,12 +828,16 @@
     <ClInclude Include="RePlayEngine\Scene\Serialization\PrefabSerializer.h" />
     <ClInclude Include="RePlayEngine\Scene\Services\ICameraBasisProvider.h" />
     <ClInclude Include="RePlayEngine\Scene\Services\IPhysicsQueryService.h" />
+    <ClInclude Include="RePlayEngine\Scene\Services\IInputService.h" />
     <ClInclude Include="RePlayEngine\Scene\Services\SceneServices.h" />
     <ClInclude Include="RePlayEngine\Scene\Services\PlayerControlSystem.h" />
     <ClInclude Include="RePlayEngine\Scene\Services\RespawnService.h" />
     <ClInclude Include="RePlayEngine\Rendering\Adapter\IRenderSubmitter.h" />
     <ClInclude Include="RePlayEngine\Components\Physics\SphereColliderComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Physics\RigidbodyComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\CharacterMotorComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Gameplay\EnemyBehaviourComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Navigation\NavAgentComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\PlayerInputComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\PlayerControllerComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Audio\AudioListenerComponent.h" />
@@ -632,17 +863,20 @@
     <ClInclude Include="RePlayEngine\Physics\CookedMeshCollision.h" />
     <ClInclude Include="RePlayEngine\Components\Physics\MeshColliderComponent.h" />
     <ClInclude Include="RePlayEngine\Scene\Services\SceneCollisionWorld.h" />
+    <ClInclude Include="RePlayEngine\Scene\Services\IPhysicsDynamicsService.h" />
     <ClInclude Include="RePlayEngine\Components\Physics\ColliderComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Physics\BoxColliderComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Physics\CapsuleColliderComponent.h" />
     <ClInclude Include="RePlayEngine\Physics\CollisionLayers.h" />
     <ClInclude Include="RePlayEngine\Physics\ShapeSweep.h" />
     <ClInclude Include="RePlayEngine\Editor\Debug\ColliderDebugDraw.h" />
+    <ClInclude Include="RePlayEngine\Editor\Debug\AINavigationDebugDraw.h" />
     <ClInclude Include="RePlayEngine\Object\Component\TriggerContact.h" />
     <ClInclude Include="RePlayEngine\Landscape\LandscapeChunk.h" />
     <ClInclude Include="RePlayEngine\Landscape\LandscapeMaterial.h" />
     <ClInclude Include="RePlayEngine\Landscape\LandscapeBrush.h" />
     <ClInclude Include="RePlayEngine\Landscape\LandscapeData.h" />
+    <ClInclude Include="RePlayEngine\Landscape\LandscapeDataInternal.h" />
     <ClInclude Include="RePlayEngine\Landscape\LandscapeMeshGenerator.h" />
     <ClInclude Include="RePlayEngine\Landscape\LandscapeRenderer.h" />
     <ClInclude Include="RePlayEngine\Landscape\LandscapeCollision.h" />
@@ -652,11 +886,13 @@
     <ClInclude Include="RePlayEngine\Components\Landscape\LandscapeRendererComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Landscape\LandscapeColliderComponent.h" />
     <ClInclude Include="RePlayEngine\Runtime\Validation\RuntimeSceneValidation.h" />
+    <ClInclude Include="RePlayEngine\Runtime\Validation\RuntimeSceneValidationInternal.h" />
     <ClInclude Include="RePlayEngine\Runtime\Scene\SceneFlowService.h" />
     <ClInclude Include="RePlayEngine\Runtime\Scene\SceneFlowAsset.h" />
     <ClInclude Include="Source\game\Behaviours\SceneTransitionBehaviour.h" />
     <ClInclude Include="RePlayEngine\Runtime\Validation\SceneFlowValidation.h" />
     <ClInclude Include="RePlayEngine\Editor\Validation\EditorIntegrationValidation.h" />
+    <ClInclude Include="RePlayEngine\Editor\Validation\EditorIntegrationValidationInternal.h" />
     <ClInclude Include="RePlayEngine\Editor\Validation\AnimationUndoValidation.h" />
     <ClInclude Include="RePlayEngine\Runtime\Validation\StressValidation.h" />
     <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderMaterialValidation.h" />
@@ -668,25 +904,74 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Source\app\Editor\framework_ui_workspace.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_ui_workspace_preview.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_ui_workspace_overlay.cpp" />
+    <ClInclude Include="Source\app\Editor\framework_ui_workspaceInternal.h" />
+    <ClCompile Include="Source\app\Editor\framework_motion_workspace.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_motion_workspace_edit.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_motion_workspace_layers.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_motion_workspace_preview.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_motion_workspace_inspector.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_motion_workspace_timeline.cpp" />
     <ClCompile Include="RePlayEngine\Components\UI\CanvasComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\UI\RectTransformComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\UI\UIImageComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\UI\UITextComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\UI\UIButtonComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\UI\UIMaskComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\UISpriteAnimatorComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\UIEffectStackComponent.cpp" />
     <ClCompile Include="RePlayEngine\UI\UILayout.cpp" />
     <ClCompile Include="RePlayEngine\UI\FontAtlas.cpp" />
+    <ClCompile Include="RePlayEngine\UI\FontAtlasSdf.cpp" />
     <ClCompile Include="RePlayEngine\UI\UIRenderer.cpp" />
+    <ClCompile Include="RePlayEngine\UI\UIRendererRender.cpp" />
+    <ClCompile Include="RePlayEngine\UI\Effects\UIEffect.cpp" />
+    <ClCompile Include="RePlayEngine\UI\Effects\UIRenderTargetPool.cpp" />
     <ClInclude Include="RePlayEngine\Components\UI\CanvasComponent.h" />
     <ClInclude Include="RePlayEngine\Components\UI\RectTransformComponent.h" />
     <ClInclude Include="RePlayEngine\Components\UI\UIImageComponent.h" />
     <ClInclude Include="RePlayEngine\Components\UI\UITextComponent.h" />
     <ClInclude Include="RePlayEngine\Components\UI\UIButtonComponent.h" />
     <ClInclude Include="RePlayEngine\Components\UI\UIMaskComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\UI\UISpriteAnimatorComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\UI\UIEffectStackComponent.h" />
     <ClInclude Include="RePlayEngine\UI\UILayout.h" />
     <ClInclude Include="RePlayEngine\UI\FontAtlas.h" />
     <ClInclude Include="RePlayEngine\UI\UIRenderer.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Effects\EffectChain.h" />
+    <ClInclude Include="RePlayEngine\UI\Effects\UIEffect.h" />
+    <ClInclude Include="RePlayEngine\UI\Effects\UIRenderTargetPool.h" />
     <ClInclude Include="RePlayEngine\UI\ThirdParty\stb_truetype.h" />
+    <ClInclude Include="RePlayEngine\Components\Rendering\ScreenEffectStackComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Rendering\ModelEffectStackComponent.h" />
+  
+    <ClCompile Include="RePlayEngine\Components\Rendering\ScreenEffectStackComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Rendering\ModelEffectStackComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\UISelectableComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\UILayoutGroupComponents.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\UIScrollViewComponent.cpp" />
+    <ClCompile Include="RePlayEngine\UI\UIFocusManager.cpp" />
+    <ClInclude Include="RePlayEngine\Components\UI\UISelectableComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\UI\UILayoutGroupComponents.h" />
+    <ClInclude Include="RePlayEngine\Components\UI\UIScrollViewComponent.h" />
+    <ClInclude Include="RePlayEngine\UI\UIFocusManager.h" />
+    <ClCompile Include="RePlayEngine\Components\UI\UIInputFieldComponent.cpp" />
+    <ClCompile Include="RePlayEngine\UI\UIInputFieldSystem.cpp" />
+    <ClInclude Include="RePlayEngine\Components\UI\UIInputFieldComponent.h" />
+    <ClInclude Include="RePlayEngine\UI\UIInputFieldSystem.h" />
+    <ClCompile Include="RePlayEngine\UI\RichTextParser.cpp" />
+    <ClCompile Include="RePlayEngine\Localization\LocalizationService.cpp" />
+    <ClCompile Include="RePlayEngine\Localization\LocalizationTable.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Effects\EffectPresetAsset.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\UILanguageSwitchComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\UIButtonPropertyToggleComponent.cpp" />
+    <ClInclude Include="RePlayEngine\UI\RichTextParser.h" />
+    <ClInclude Include="RePlayEngine\Localization\LocalizationService.h" />
+    <ClInclude Include="RePlayEngine\Localization\LocalizationTable.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Effects\EffectPresetAsset.h" />
+    <ClInclude Include="RePlayEngine\Components\UI\UILanguageSwitchComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\UI\UIButtonPropertyToggleComponent.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include=".editorconfig" />
@@ -746,6 +1031,12 @@
     <None Include="resources\Shaders\Presets\GraphicCel.replayshader" />
     <None Include="resources\Shaders\Presets\CrystalToon.replayshader" />
     <None Include="resources\Shaders\Presets\MoonlitCrystal.replayshader" />
+    <None Include="Docs\UI_GAME_FEATURES_MANUAL.md" />
+    <None Include="resources\Project.replayproject" />
+    <None Include="resources\Scenes\UI_GAME_FEATURES_DEMO.replayscene" />
+    <None Include="resources\Effects\UI_GAME_FEATURES_DEMO_Glow.replayeffect" />
+    <None Include="resources\Localization\UI_GAME_FEATURES_DEMO.replayloc" />
+    <None Include="resources\Motions\UI_GAME_FEATURES_DEMO_ScreenPulse.replaymotion" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="resources\RePlayEngine\BootLogo\BootNote.png" />
@@ -893,6 +1184,282 @@
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Vertex</ShaderType>
     </FxCompile>
     <FxCompile Include="Shader\ui_ps.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_blur.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_glow.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_color_adjust.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_noise.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_shake.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_mask.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_wipe.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_dissolve.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_distortion.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_chromatic_aberration.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_kuwahara.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_halftone.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_directional_blur.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_radial_blur.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_rotational_blur.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_vignette.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_light_streaks.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_lens_distortion.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_posterize.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_threshold.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_color_ramp.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_levels.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_temperature.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_edge_detect.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_outline.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_long_shadow.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_cross_hatch.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_brush_stroke.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_brush_stroke_instances_vs.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Vertex</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_brush_stroke_instances_ps.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_mosaic.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_crystallize.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_stained_glass.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_twirl.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_spherize.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_ripple.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_polar_coordinates.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_scanlines.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_crt.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_glitch.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_dither.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_vhs.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_letterbox.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_waveform.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\line_stroke_vs.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Vertex</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\line_stroke_ps.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>

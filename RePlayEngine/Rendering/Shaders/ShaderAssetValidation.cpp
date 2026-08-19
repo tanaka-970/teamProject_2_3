@@ -1,4 +1,4 @@
-#include "ShaderAssetValidation.h"
+﻿#include "ShaderAssetValidation.h"
 
 #include "ShaderCatalog.h"
 #include "ShaderConstantPacker.h"
@@ -693,13 +693,12 @@ namespace ReplayEngine::Rendering::Validation
             // 握らずにアドレスだけ覚えると、解放されたあと同じ番地が
             // 再利用されて「別物なのに同じ」に見えることがある。
             // 検査がたまに通ってしまう作りにしない。
-            Microsoft::WRL::ComPtr<ID3DBlob> previous_blob;
+            std::shared_ptr<const std::vector<std::uint8_t>> previous_blob;
             if (entry != nullptr)
             {
                 previous_blob = entry->At(ShaderVariant::Static).bytecode;
             }
-            const void* previous = previous_blob
-                ? previous_blob->GetBufferPointer() : nullptr;
+            const void* previous = previous_blob.get();
 
             check.Expect(WriteText(good,
                 "#pragma replay_guid     \"00000000000000000000000000009001\"\n"
@@ -724,7 +723,7 @@ namespace ReplayEngine::Rendering::Validation
                 check.Expect(still.bytecode != nullptr,
                     "失敗してもバイトコードを捨てない");
                 check.Expect(still.bytecode &&
-                    still.bytecode->GetBufferPointer() == previous,
+                    still.bytecode.get() == previous,
                     "失敗時のバイトコードは直前に成功したものと同一");
                 check.Expect(after->schema != nullptr,
                     "失敗しても Schema を捨てない");
@@ -794,7 +793,7 @@ namespace ReplayEngine::Rendering::Validation
                 const ShaderCatalog::VariantResult& renewed =
                     fixed->At(ShaderVariant::Static);
                 check.Expect(renewed.bytecode != nullptr &&
-                    renewed.bytecode->GetBufferPointer() != previous,
+                    renewed.bytecode.get() != previous,
                     "直したら新しいバイトコードに差し替わる");
             }
 

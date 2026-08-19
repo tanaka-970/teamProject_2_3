@@ -1,11 +1,9 @@
-#pragma once
+﻿#pragma once
 
 #include "ShaderAsset.h"
 #include "ShaderDiagnostic.h"
 
-#include <d3d11.h>
-#include <wrl.h>
-
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -43,7 +41,7 @@ namespace ReplayEngine::Rendering
             bool ever_compiled = false;
 
             // 成功したバイトコード。失敗時は前回のものを保持する。
-            Microsoft::WRL::ComPtr<ID3DBlob> bytecode;
+            std::shared_ptr<const std::vector<std::uint8_t>> bytecode;
 
             // 直近のコンパイルで出た診断。成功時も警告が入る。
             std::vector<ShaderDiagnostic> diagnostics;

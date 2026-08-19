@@ -1,11 +1,14 @@
 ﻿#pragma once
 
+#include "MaterialOverrideDynamicProperties.h"
 #include "../../Object/Component/Component.h"
+#include "../../Reflection/Property/PropertyDesc.h"
 #include "../../Rendering/Adapter/IRenderSubmitter.h"
 
 #include <DirectXMath.h>
 
 #include <string>
+#include <vector>
 
 namespace ReplayEngine::Components
 {
@@ -40,6 +43,11 @@ namespace ReplayEngine::Components
         // （それが必要なら SkinnedMeshRendererComponent を使う）。
         bool BuildRenderItem(const Core::GameObject& owner,
             Rendering::RenderItem& out) const override;
+        const std::vector<Reflection::PropertyDesc>* DynamicProperties()
+            const noexcept override;
+        void OnMotionPropertyApplied(const char* property_name) override;
+        void PrepareMaterialMotion(const Rendering::MaterialAsset* material,
+            const Rendering::ShaderPropertySchema* schema);
 
         // 実際に描くべきか。Component の有効状態と visible の両方を見る。
         bool ShouldRender() const noexcept
@@ -55,7 +63,18 @@ namespace ReplayEngine::Components
         // trueならRenderer側の色・描画方式をMaterial Assetより優先する。
         bool material_override = false;
 
+        // Motion の Material Track 用一時値。Scene/Prefab の正本にはしない。
+        mutable MaterialMotionOverrideState material_motion_state;
+        mutable std::vector<Reflection::PropertyDesc> material_dynamic_properties_cache;
+
         DirectX::XMFLOAT4 tint{ 1.0f, 1.0f, 1.0f, 1.0f };
+        DirectX::XMFLOAT4 material_base_color{ 1.0f, 1.0f, 1.0f, 1.0f };
+        float material_metallic = 0.0f;
+        float material_roughness = 0.55f;
+        float material_ambient_occlusion = 1.0f;
+        DirectX::XMFLOAT3 material_emissive_color{ 0.0f, 0.0f, 0.0f };
+        float material_emissive_strength = 0.0f;
+        bool material_double_sided = false;
 
         // 既存の描画方式の番号に合わせる。0=FBX標準 / 1=PBR / 2=トゥーン / 3=アンリット
         int shading_model = 1;
@@ -63,6 +82,8 @@ namespace ReplayEngine::Components
         bool outline = false;
         bool cast_shadow = true;
         bool receive_shadow = true;
+        // Screen Effect Stack の Rendering Layer mask。0..31。
+        int rendering_layer = 0;
         bool visible = true;
 
         DirectX::XMFLOAT3 local_position_offset{ 0.0f, 0.0f, 0.0f };

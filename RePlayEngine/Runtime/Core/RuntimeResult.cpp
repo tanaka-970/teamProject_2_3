@@ -22,6 +22,13 @@ namespace ReplayEngine::Runtime
         case RuntimeStatus::ServiceUnavailable:        return "ServiceUnavailable";
         case RuntimeStatus::InvalidArgument:           return "InvalidArgument";
         case RuntimeStatus::DeferredOperationRejected: return "DeferredOperationRejected";
+        case RuntimeStatus::SaveSlotNotFound:          return "SaveSlotNotFound";
+        case RuntimeStatus::SaveKeyNotFound:           return "SaveKeyNotFound";
+        case RuntimeStatus::SaveTypeMismatch:          return "SaveTypeMismatch";
+        case RuntimeStatus::SaveCorrupt:               return "SaveCorrupt";
+        case RuntimeStatus::SaveIOFailure:             return "SaveIOFailure";
+        case RuntimeStatus::ComponentDependencyMissing:return "ComponentDependencyMissing";
+        case RuntimeStatus::ComponentHasDependents:    return "ComponentHasDependents";
         }
         return "UnknownStatus";
     }
@@ -62,6 +69,20 @@ namespace ReplayEngine::Runtime
             return u8"引数が不正です。";
         case RuntimeStatus::DeferredOperationRejected:
             return u8"遅延実行の要求が受け付けられませんでした。";
+        case RuntimeStatus::SaveSlotNotFound:
+            return u8"指定したセーブスロットが見つかりません。";
+        case RuntimeStatus::SaveKeyNotFound:
+            return u8"指定したセーブキーが見つかりません。";
+        case RuntimeStatus::SaveTypeMismatch:
+            return u8"セーブ値の型が要求と一致しません。";
+        case RuntimeStatus::SaveCorrupt:
+            return u8"セーブデータが壊れています。";
+        case RuntimeStatus::SaveIOFailure:
+            return u8"セーブデータの読み書きに失敗しました。";
+        case RuntimeStatus::ComponentDependencyMissing:
+            return u8"必須Componentの解決に失敗しました。";
+        case RuntimeStatus::ComponentHasDependents:
+            return u8"他のComponentが必須依存しているため削除できません。";
         }
         return u8"未知の状態です。";
     }

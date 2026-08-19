@@ -1,3 +1,10 @@
+﻿// UI workspace の責務を 4 つのファイルへ分けている:
+//   framework_ui_workspace.cpp          … UI 階層・UI Inspector と共通の作成導線（このファイル）
+//   framework_ui_workspace_preview.cpp  … Canvas プレビューの描画・選択
+//   framework_ui_workspace_overlay.cpp  … Scene View の UI overlay・選択・ドラッグ
+//   framework_ui_workspaceInternal.h    … 分割後の UI helper 共通部
+//
+// BeginDisabledCompat / EndDisabledCompat は従来どおりこのファイルに残す。
 #include "framework.h"
 
 #include "../../RePlayEngine/Components/UI/CanvasComponent.h"
@@ -18,15 +25,16 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <string>
 #include <vector>
 
-namespace
-{
-    // 同梱の ImGui (1.80 WIP) には BeginDisabled / EndDisabled がまだ無い。
-    // 操作を実際に止める必要がある場所はこちらを使う。
-    // 見た目だけ淡くしたい場合は PushStyleVar(Alpha) だけで足りる。
+#include "framework_ui_workspaceInternal.h"
+
+    namespace
+    {
+        using namespace framework_ui_workspace_detail;
     void BeginDisabledCompat()
     {
         ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
@@ -45,6 +53,7 @@ namespace
     using ReplayEngine::Components::UITextComponent;
     using ReplayEngine::Components::UIButtonComponent;
     using ReplayEngine::Components::UIMaskComponent;
+    namespace Assets = ReplayEngine::Assets;
     namespace Core = ReplayEngine::Core;
     namespace Scene = ReplayEngine::Scene;
 
@@ -57,24 +66,37 @@ namespace
         Mask,
     };
 
-    bool HasUIComponent(const Core::GameObject& object)
+    constexpr const char* ui_hierarchy_drag_type = "REPLAY_GAMEOBJECT";
+    enum class UIHierarchyDropPlacement : int { Child = 0, Before = 1, After = 2, Root = 3 };
+    struct UIHierarchyDropRequest final
     {
-        return object.GetComponent<CanvasComponent>() != nullptr ||
-            object.GetComponent<RectTransformComponent>() != nullptr ||
-            object.GetComponent<UIImageComponent>() != nullptr ||
-            object.GetComponent<UITextComponent>() != nullptr ||
-            object.GetComponent<UIButtonComponent>() != nullptr ||
-            object.GetComponent<UIMaskComponent>() != nullptr;
-    }
+        Core::ObjectID child;
+        Core::ObjectID target;
+        UIHierarchyDropPlacement placement = UIHierarchyDropPlacement::Child;
+    };
+    UIHierarchyDropRequest ui_hierarchy_drop_request;
 
-    bool ContainsUI(const Core::GameObject& object)
+
+    std::string UniqueUIObjectName(const Scene::Scene& scene, const Core::GameObject* parent,
+        const std::string& desired)
     {
-        if (HasUIComponent(object)) return true;
-        for (const Core::GameObject* child : object.Children())
+        const auto exists = [&](const std::string& candidate)
         {
-            if (child != nullptr && ContainsUI(*child)) return true;
+            for (std::size_t i = 0; i < scene.GameObjectCount(); ++i)
+            {
+                const Core::GameObject* object = scene.GameObjectAt(i);
+                if (object != nullptr && !object->PendingDestroy() &&
+                    object->Parent() == parent && object->Name() == candidate) return true;
+            }
+            return false;
+        };
+        if (!exists(desired)) return desired;
+        for (int suffix = 1; suffix < 10000; ++suffix)
+        {
+            const std::string candidate = desired + " (" + std::to_string(suffix) + ")";
+            if (!exists(candidate)) return candidate;
         }
-        return false;
+        return desired;
     }
 
     Core::GameObject* FindFirstCanvas(Scene::Scene& scene)
@@ -89,28 +111,6 @@ namespace
         return nullptr;
     }
 
-    std::vector<Core::GameObject*> SortedCanvases(Scene::Scene& scene)
-    {
-        std::vector<Core::GameObject*> canvases;
-        for (std::size_t index = 0; index < scene.GameObjectCount(); ++index)
-        {
-            Core::GameObject* object = scene.GameObjectAt(index);
-            if (object != nullptr && !object->PendingDestroy() &&
-                object->GetComponent<CanvasComponent>() != nullptr)
-                canvases.push_back(object);
-        }
-        std::stable_sort(canvases.begin(), canvases.end(),
-            [](const Core::GameObject* lhs, const Core::GameObject* rhs)
-            {
-                const CanvasComponent* a = lhs != nullptr
-                    ? lhs->GetComponent<CanvasComponent>() : nullptr;
-                const CanvasComponent* b = rhs != nullptr
-                    ? rhs->GetComponent<CanvasComponent>() : nullptr;
-                return (a != nullptr ? a->sort_order : 0) <
-                    (b != nullptr ? b->sort_order : 0);
-            });
-        return canvases;
-    }
 
     Core::GameObject* SelectedUIParent(ReplayEngine::Editor::EditorContext& context)
     {
@@ -124,7 +124,7 @@ namespace
 
     Core::GameObject* CreateCanvasObject(Scene::Scene& scene)
     {
-        Core::GameObject* canvas = scene.CreateGameObject("Canvas");
+        Core::GameObject* canvas = scene.CreateGameObject(UniqueUIObjectName(scene, nullptr, "Canvas"));
         if (canvas == nullptr) return nullptr;
         canvas->AddComponent<CanvasComponent>();
         RectTransformComponent* rect = canvas->GetComponent<RectTransformComponent>();
@@ -160,7 +160,7 @@ namespace
             const char* name = kind == UIElementKind::Text ? "Text" :
                 kind == UIElementKind::Button ? "Button" :
                 kind == UIElementKind::Mask ? "Mask" : "Image";
-            created = scene->CreateGameObject(name);
+            created = scene->CreateGameObject(UniqueUIObjectName(*scene, parent, name));
             if (created != nullptr)
             {
                 created->SetParent(parent, false);
@@ -186,7 +186,7 @@ namespace
                     created->AddComponent<UIImageComponent>();
                     created->AddComponent<UIButtonComponent>();
 
-                    Core::GameObject* label = scene->CreateGameObject("Button Text");
+                    Core::GameObject* label = scene->CreateGameObject(UniqueUIObjectName(*scene, created, "Button Text"));
                     if (label != nullptr)
                     {
                         label->SetParent(created, false);
@@ -222,113 +222,15 @@ namespace
         return created;
     }
 
-    DirectX::XMFLOAT2 TransformPoint(const DirectX::XMFLOAT4X4& matrix,
-        float x, float y)
-    {
-        const DirectX::XMMATRIX m = DirectX::XMLoadFloat4x4(&matrix);
-        const DirectX::XMVECTOR p = DirectX::XMVector3TransformCoord(
-            DirectX::XMVectorSet(x, y, 0.0f, 1.0f), m);
-        return { DirectX::XMVectorGetX(p), DirectX::XMVectorGetY(p) };
-    }
 
-    ImVec2 ToPreviewPoint(const DirectX::XMFLOAT2& canvas_point,
-        const ImVec2& origin, float canvas_height, float zoom)
-    {
-        return ImVec2(origin.x + canvas_point.x * zoom,
-            origin.y + (canvas_height - canvas_point.y) * zoom);
-    }
-
-    ImU32 ColorToU32(const DirectX::XMFLOAT4& color, float fallback_alpha = 1.0f)
-    {
-        return ImGui::ColorConvertFloat4ToU32(ImVec4(
-            color.x, color.y, color.z, color.w * fallback_alpha));
-    }
-
-    void PreviewQuad(const RectTransformComponent& rect, const ImVec2& origin,
-        float canvas_height, float zoom, ImVec2 out[4])
-    {
-        const DirectX::XMFLOAT4 r = rect.ResolvedRect();
-        const DirectX::XMFLOAT4X4 m = rect.ResolvedMatrix();
-        out[0] = ToPreviewPoint(TransformPoint(m, r.x, r.y), origin, canvas_height, zoom);
-        out[1] = ToPreviewPoint(TransformPoint(m, r.x + r.z, r.y), origin, canvas_height, zoom);
-        out[2] = ToPreviewPoint(TransformPoint(m, r.x + r.z, r.y + r.w), origin, canvas_height, zoom);
-        out[3] = ToPreviewPoint(TransformPoint(m, r.x, r.y + r.w), origin, canvas_height, zoom);
-    }
-
-    bool RectHit(const RectTransformComponent& rect, float x, float y)
-    {
-        const DirectX::XMFLOAT4 r = rect.ResolvedRect();
-        const DirectX::XMMATRIX m = DirectX::XMLoadFloat4x4(&rect.ResolvedMatrix());
-        DirectX::XMVECTOR determinant{};
-        const DirectX::XMMATRIX inverse = DirectX::XMMatrixInverse(&determinant, m);
-        const DirectX::XMVECTOR p = DirectX::XMVector3TransformCoord(
-            DirectX::XMVectorSet(x, y, 0.0f, 1.0f), inverse);
-        const float lx = DirectX::XMVectorGetX(p);
-        const float ly = DirectX::XMVectorGetY(p);
-        return lx >= r.x && lx <= r.x + r.z && ly >= r.y && ly <= r.y + r.w;
-    }
-
-    Core::GameObject* PickUIObject(Core::GameObject& object, float x, float y)
-    {
-        std::vector<Core::GameObject*> children = object.Children();
-        for (auto it = children.rbegin(); it != children.rend(); ++it)
-        {
-            if (*it == nullptr) continue;
-            if (Core::GameObject* picked = PickUIObject(**it, x, y))
-                return picked;
-        }
-
-        const RectTransformComponent* rect = object.GetComponent<RectTransformComponent>();
-        if (rect != nullptr && HasUIComponent(object) && RectHit(*rect, x, y))
-            return &object;
-        return nullptr;
-    }
-
-    void DrawPreviewObject(ImDrawList* draw_list, Core::GameObject& object,
-        const ImVec2& origin, float canvas_height, float zoom,
-        Core::ObjectID selected)
-    {
-        RectTransformComponent* rect = object.GetComponent<RectTransformComponent>();
-        if (rect != nullptr && HasUIComponent(object))
-        {
-            ImVec2 p[4]{};
-            PreviewQuad(*rect, origin, canvas_height, zoom, p);
-
-            if (const UIImageComponent* image = object.GetComponent<UIImageComponent>())
-                draw_list->AddQuadFilled(p[0], p[1], p[2], p[3], ColorToU32(image->color, image->opacity));
-            else if (object.GetComponent<CanvasComponent>() == nullptr)
-                draw_list->AddQuadFilled(p[0], p[1], p[2], p[3],
-                    ImGui::ColorConvertFloat4ToU32(ImVec4(0.18f, 0.20f, 0.22f, 0.18f)));
-
-            const bool selected_object = object.ID() == selected;
-            const bool mask_object = object.GetComponent<UIMaskComponent>() != nullptr;
-            const bool button_object = object.GetComponent<UIButtonComponent>() != nullptr;
-            const ImU32 outline = selected_object
-                ? IM_COL32(255, 210, 80, 255)
-                : (mask_object ? IM_COL32(90, 170, 255, 220)
-                    : (button_object ? IM_COL32(120, 210, 170, 200)
-                        : IM_COL32(190, 195, 205, 125)));
-            draw_list->AddQuad(p[0], p[1], p[2], p[3], outline, selected_object ? 2.0f : 1.0f);
-
-            if (const UITextComponent* text = object.GetComponent<UITextComponent>())
-            {
-                const DirectX::XMFLOAT4 r = rect->ResolvedRect();
-                const ImVec2 top_left = ToPreviewPoint(
-                    { r.x, r.y + r.w }, origin, canvas_height, zoom);
-                draw_list->AddText(top_left, ColorToU32(text->color, text->opacity),
-                    text->text.c_str());
-            }
-        }
-
-        for (Core::GameObject* child : object.Children())
-        {
-            if (child != nullptr) DrawPreviewObject(draw_list, *child,
-                origin, canvas_height, zoom, selected);
-        }
-    }
-
+    // selection_changed は「この呼び出しの中で GameObject が選ばれたか」を返す。
+    //
+    // editor_selection は framework の入れ子 enum で、selected_editor_object も
+    // framework のメンバ。この関数はフリー関数なのでどちらにも触れない。
+    // ここで直接代入するとコンパイルが通らないため、結果だけを呼び出し元へ返し、
+    // framework 側で選択種別を切り替える。
     void DrawUINode(ReplayEngine::Editor::EditorContext& context,
-        Core::GameObject& object)
+        Core::GameObject& object, bool& selection_changed)
     {
         if (!ContainsUI(object)) return;
 
@@ -351,25 +253,88 @@ namespace
         std::string label = object.Name() + "##UI" + object.ID().ToString();
         const bool open = ImGui::TreeNodeEx(label.c_str(), flags);
         if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
+        {
             context.Selection().Select(object.ID(), false);
+            selection_changed = true;
+        }
+
+        if (context.CanEdit() && ImGui::BeginDragDropSource(ImGuiDragDropFlags_None))
+        {
+            const Core::ObjectID::ValueType raw = object.ID().Value();
+            ImGui::SetDragDropPayload(ui_hierarchy_drag_type, &raw, sizeof(raw));
+            ImGui::TextUnformatted(object.Name().c_str());
+            ImGui::EndDragDropSource();
+        }
+        if (context.CanEdit())
+        {
+            const ImVec2 item_min = ImGui::GetItemRectMin();
+            const ImVec2 item_max = ImGui::GetItemRectMax();
+            if (ImGui::BeginDragDropTarget())
+            {
+                const float height = (std::max)(1.0f, item_max.y - item_min.y);
+                const float local_y = ImGui::GetIO().MousePos.y - item_min.y;
+                UIHierarchyDropPlacement placement = UIHierarchyDropPlacement::Child;
+                // 並べ替えの帯を広く取る。理由は HierarchyPanel.cpp と同じで、
+                // 行の高さが 20px 前後だと 25% では 5px しかなく、
+                // 並べ替えたいだけでも中央に当たって子にされてしまう。
+                constexpr float reorder_band = 0.35f;
+                if (local_y < height * reorder_band)
+                    placement = UIHierarchyDropPlacement::Before;
+                else if (local_y > height * (1.0f - reorder_band))
+                    placement = UIHierarchyDropPlacement::After;
+                if (placement != UIHierarchyDropPlacement::Child)
+                {
+                    const float y = placement == UIHierarchyDropPlacement::Before
+                        ? item_min.y : item_max.y;
+                    ImGui::GetWindowDrawList()->AddLine(ImVec2(item_min.x, y),
+                        ImVec2(item_max.x, y), IM_COL32(255, 205, 70, 255), 2.0f);
+                }
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(ui_hierarchy_drag_type))
+                {
+                    if (payload->DataSize == sizeof(Core::ObjectID::ValueType))
+                    {
+                        Core::ObjectID::ValueType raw = 0;
+                        std::memcpy(&raw, payload->Data, sizeof(raw));
+                        ui_hierarchy_drop_request.child = Core::ObjectID(raw);
+                        ui_hierarchy_drop_request.target = object.ID();
+                        ui_hierarchy_drop_request.placement = placement;
+                    }
+                }
+                ImGui::EndDragDropTarget();
+            }
+        }
+
         if (ImGui::BeginPopupContextItem())
         {
+            if (!context.Selection().IsSelected(object.ID()))
+                context.Selection().Select(object.ID(), false);
+            selection_changed = true;
             if (ImGui::MenuItem("Image を追加")) CreateUIElement(context, UIElementKind::Image);
             if (ImGui::MenuItem("Text を追加")) CreateUIElement(context, UIElementKind::Text);
             if (ImGui::MenuItem("Button を追加")) CreateUIElement(context, UIElementKind::Button);
             if (ImGui::MenuItem("Mask を追加")) CreateUIElement(context, UIElementKind::Mask);
+            ImGui::Separator();
+            if (ImGui::MenuItem("シーン直下へ移動", nullptr, false,
+                context.CanEdit() && object.Parent() != nullptr))
+            {
+                ui_hierarchy_drop_request.child = object.ID();
+                ui_hierarchy_drop_request.target = Core::ObjectID::Invalid();
+                ui_hierarchy_drop_request.placement = UIHierarchyDropPlacement::Root;
+            }
             ImGui::EndPopup();
         }
 
         if (open)
         {
-            for (Core::GameObject* child : object.Children())
+            const std::vector<Core::GameObject*> children = object.Children();
+            for (Core::GameObject* child : children)
             {
-                if (child != nullptr) DrawUINode(context, *child);
+                if (child != nullptr) DrawUINode(context, *child, selection_changed);
             }
             ImGui::TreePop();
         }
     }
+
 }
 
 void framework::draw_ui_hierarchy()
@@ -404,183 +369,94 @@ void framework::draw_ui_hierarchy()
     }
 
     bool any_canvas = false;
+    bool ui_selection_changed = false;
     for (Core::GameObject* root : scene->RootGameObjects())
     {
         if (root == nullptr || !ContainsUI(*root)) continue;
         any_canvas = true;
-        DrawUINode(object_editor_context, *root);
+        DrawUINode(object_editor_context, *root, ui_selection_changed);
     }
+    // UI 階層で選んだものも Delete の対象にする。
+    // framework_class.h の Delete 処理が selected_editor_object を見ているため。
+    if (ui_selection_changed) selected_editor_object = editor_selection::game_object;
     if (!any_canvas)
         ImGui::TextDisabled("Canvas はまだありません");
 
-    ImGui::End();
-}
-
-void framework::draw_ui_preview()
-{
-    if (!show_ui_preview_panel) return;
-    if (!ImGui::Begin("Canvas プレビュー", &show_ui_preview_panel))
+    ImGui::Separator();
+    ImGui::TextDisabled("ここへドロップ: シーン直下へ移動");
+    if (can_edit && ImGui::BeginDragDropTarget())
     {
-        ImGui::End();
-        return;
-    }
-
-    Scene::Scene* scene = object_editor_context.GetScene();
-    if (scene == nullptr)
-    {
-        ImGui::TextDisabled("Scene がありません");
-        ImGui::End();
-        return;
-    }
-
-    const char* resolutions[] = { "1920 x 1080", "1280 x 720", "1080 x 1920", "Custom" };
-    ImGui::SetNextItemWidth(140.0f);
-    ImGui::Combo("##UIResolution", &ui_preview_resolution_index,
-        resolutions, IM_ARRAYSIZE(resolutions));
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(100.0f);
-    ImGui::SliderFloat("Zoom", &ui_preview_zoom, 0.10f, 2.0f, "%.2f");
-    ImGui::SameLine();
-    ImGui::Checkbox("Grid", &ui_preview_grid);
-
-    int preview_width = 1920;
-    int preview_height = 1080;
-    if (ui_preview_resolution_index == 1) { preview_width = 1280; preview_height = 720; }
-    else if (ui_preview_resolution_index == 2) { preview_width = 1080; preview_height = 1920; }
-    else if (ui_preview_resolution_index == 3)
-    {
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(70.0f);
-        ImGui::InputInt("W", &ui_preview_custom_width, 0, 0);
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(70.0f);
-        ImGui::InputInt("H", &ui_preview_custom_height, 0, 0);
-        preview_width = (std::max)(1, ui_preview_custom_width);
-        preview_height = (std::max)(1, ui_preview_custom_height);
-    }
-
-    ReplayEngine::UI::UILayout::Resolve(*scene,
-        static_cast<float>(preview_width), static_cast<float>(preview_height));
-
-    ImVec2 avail = ImGui::GetContentRegionAvail();
-    avail.x = (std::max)(avail.x, 64.0f);
-    avail.y = (std::max)(avail.y, 64.0f);
-    const ImVec2 cursor = ImGui::GetCursorScreenPos();
-    ImGui::InvisibleButton("##CanvasPreviewSurface", avail);
-    const bool active = ImGui::IsItemActive();
-    const bool hovered = ImGui::IsItemHovered();
-    if (hovered && ImGui::GetIO().MouseWheel != 0.0f)
-    {
-        ui_preview_zoom = (std::min)(2.0f, (std::max)(0.1f,
-            ui_preview_zoom + ImGui::GetIO().MouseWheel * 0.05f));
-    }
-
-    const ImVec2 canvas_size(
-        static_cast<float>(preview_width) * ui_preview_zoom,
-        static_cast<float>(preview_height) * ui_preview_zoom);
-    ImVec2 origin(
-        cursor.x + (avail.x - canvas_size.x) * 0.5f + ui_preview_pan.x,
-        cursor.y + (avail.y - canvas_size.y) * 0.5f + ui_preview_pan.y);
-
-    if (hovered && ImGui::IsMouseDragging(ImGuiMouseButton_Right))
-    {
-        const ImVec2 delta = ImGui::GetIO().MouseDelta;
-        ui_preview_pan.x += delta.x;
-        ui_preview_pan.y += delta.y;
-        origin.x += delta.x;
-        origin.y += delta.y;
-    }
-
-    const ImVec2 mouse = ImGui::GetIO().MousePos;
-    const float canvas_mouse_x = (mouse.x - origin.x) / ui_preview_zoom;
-    const float canvas_mouse_y = static_cast<float>(preview_height) -
-        (mouse.y - origin.y) / ui_preview_zoom;
-
-    if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
-    {
-        Core::GameObject* picked = nullptr;
-        std::vector<Core::GameObject*> canvases = SortedCanvases(*scene);
-        for (auto it = canvases.rbegin(); it != canvases.rend() && picked == nullptr; ++it)
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(ui_hierarchy_drag_type))
         {
-            if (*it != nullptr) picked = PickUIObject(**it, canvas_mouse_x, canvas_mouse_y);
-        }
-        if (picked != nullptr)
-        {
-            object_editor_context.Selection().Select(picked->ID(), false);
-            selected_editor_object = editor_selection::game_object;
-            if (RectTransformComponent* rect = picked->GetComponent<RectTransformComponent>())
+            if (payload->DataSize == sizeof(Core::ObjectID::ValueType))
             {
-                ui_preview_drag_object = picked->ID();
-                ui_preview_drag_start_mouse = mouse;
-                ui_preview_drag_start_position = rect->anchored_position;
+                Core::ObjectID::ValueType raw = 0;
+                std::memcpy(&raw, payload->Data, sizeof(raw));
+                ui_hierarchy_drop_request.child = Core::ObjectID(raw);
+                ui_hierarchy_drop_request.target = Core::ObjectID::Invalid();
+                ui_hierarchy_drop_request.placement = UIHierarchyDropPlacement::Root;
             }
         }
+        ImGui::EndDragDropTarget();
     }
 
-    Core::GameObject* selected =
-        object_editor_context.Selection().ResolvePrimary(*scene);
-    RectTransformComponent* selected_rect = selected != nullptr
-        ? selected->GetComponent<RectTransformComponent>() : nullptr;
-    if (active && selected_rect != nullptr &&
-        ui_preview_drag_object == selected->ID() &&
-        ImGui::IsMouseDragging(ImGuiMouseButton_Left, 2.0f))
+    // UI tree の走査中には構造を変えず、描画完了後に 1 transaction で反映する。
+    if (can_edit && ui_hierarchy_drop_request.child.Valid())
     {
-        if (!ui_preview_dragging && object_editor_context.CanEdit())
+        Core::GameObject* child = scene->FindGameObjectByID(ui_hierarchy_drop_request.child);
+        Core::GameObject* target = scene->FindGameObjectByID(ui_hierarchy_drop_request.target);
+        if (child != nullptr)
         {
-            object_editor_context.BeginEdit("UI 要素を移動");
-            ui_preview_dragging = true;
+            object_editor_context.BeginEdit("UI Hierarchy の並びを変更");
+            bool changed = false;
+            if (ui_hierarchy_drop_request.placement == UIHierarchyDropPlacement::Root)
+                changed = child->SetParent(nullptr, true);
+            else if (target != nullptr && target != child)
+            {
+                if (ui_hierarchy_drop_request.placement == UIHierarchyDropPlacement::Child)
+                    changed = child->SetParent(target, true);
+                else
+                {
+                    if (child->SetParent(target->Parent(), true))
+                    {
+                        const std::size_t target_index = target->SiblingIndex();
+                        const std::size_t desired = target_index +
+                            (ui_hierarchy_drop_request.placement == UIHierarchyDropPlacement::After ? 1u : 0u);
+                        changed = child->SetSiblingIndex(desired);
+                    }
+                }
+            }
+            if (changed) object_editor_context.CommitEdit();
+            else object_editor_context.CancelEdit();
         }
-        if (ui_preview_dragging)
-        {
-            const ImVec2 delta(mouse.x - ui_preview_drag_start_mouse.x,
-                mouse.y - ui_preview_drag_start_mouse.y);
-            selected_rect->anchored_position = {
-                ui_preview_drag_start_position.x + delta.x / ui_preview_zoom,
-                ui_preview_drag_start_position.y - delta.y / ui_preview_zoom
-            };
-            ReplayEngine::UI::UILayout::Resolve(*scene,
-                static_cast<float>(preview_width), static_cast<float>(preview_height));
-        }
+        ui_hierarchy_drop_request = {};
     }
-    if (ui_preview_dragging && !ImGui::IsMouseDown(ImGuiMouseButton_Left))
-    {
-        object_editor_context.CommitEdit();
-        ui_preview_dragging = false;
-        ui_preview_drag_object = Core::ObjectID::Invalid();
-    }
-
-    ImDrawList* draw_list = ImGui::GetWindowDrawList();
-    const ImVec2 clip_min = cursor;
-    const ImVec2 clip_max(cursor.x + avail.x, cursor.y + avail.y);
-    draw_list->PushClipRect(clip_min, clip_max, true);
-    draw_list->AddRectFilled(clip_min, clip_max, IM_COL32(23, 26, 30, 255));
-    draw_list->AddRectFilled(origin, ImVec2(origin.x + canvas_size.x, origin.y + canvas_size.y),
-        IM_COL32(36, 38, 42, 255));
-
-    if (ui_preview_grid && ui_preview_grid_size > 1.0f)
-    {
-        const float step = ui_preview_grid_size * ui_preview_zoom;
-        for (float x = origin.x; x <= origin.x + canvas_size.x; x += step)
-            draw_list->AddLine(ImVec2(x, origin.y), ImVec2(x, origin.y + canvas_size.y),
-                IM_COL32(255, 255, 255, 24));
-        for (float y = origin.y; y <= origin.y + canvas_size.y; y += step)
-            draw_list->AddLine(ImVec2(origin.x, y), ImVec2(origin.x + canvas_size.x, y),
-                IM_COL32(255, 255, 255, 24));
-    }
-
-    for (Core::GameObject* canvas : SortedCanvases(*scene))
-    {
-        if (canvas != nullptr)
-            DrawPreviewObject(draw_list, *canvas, origin,
-                static_cast<float>(preview_height), ui_preview_zoom,
-                object_editor_context.Selection().Primary());
-    }
-    draw_list->AddRect(origin, ImVec2(origin.x + canvas_size.x, origin.y + canvas_size.y),
-        IM_COL32(230, 230, 235, 180), 0.0f, 0, 1.5f);
-    draw_list->PopClipRect();
 
     ImGui::End();
 }
+
+
+void framework::ui_preview_resolution_size(int& width, int& height) const noexcept
+{
+    width = 1920;
+    height = 1080;
+    if (ui_preview_resolution_index == 1)
+    {
+        width = 1280;
+        height = 720;
+    }
+    else if (ui_preview_resolution_index == 2)
+    {
+        width = 1080;
+        height = 1920;
+    }
+    else if (ui_preview_resolution_index == 3)
+    {
+        width = (std::max)(1, ui_preview_custom_width);
+        height = (std::max)(1, ui_preview_custom_height);
+    }
+}
+
 
 void framework::draw_ui_inspector()
 {
@@ -627,18 +503,26 @@ void framework::draw_ui_inspector()
         ImGui::Separator();
     }
 
-    object_inspector_panel.DrawContents(object_editor_context);
+    bool show_game_template_components =
+        project_settings.ShowGameTemplateComponents();
+    if (object_inspector_panel.DrawContents(object_editor_context,
+        show_game_template_components))
+    {
+        project_settings.SetShowGameTemplateComponents(
+            show_game_template_components);
+        save_project_settings();
+    }
     ImGui::Separator();
-    // Motion Workspace への導線。今は押しても何も起きないが、
-    // 先に置いておくことで、後から機能を足したときに導線を探さずに済む。
-    //
-    // ImGuiItemFlags_Disabled を使うと IsItemHovered が false になり
-    // ツールチップを出せないため、ここは見た目だけ淡くして押下を無視する。
-    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
-    ImGui::Button("Motion を作成");
-    ImGui::PopStyleVar();
+    // Motion Workspace への導線。UI 側の編集状態は変えず、
+    // Motion Asset の作成と Workspace 切り替えだけを担当する。
+    if (ImGui::Button("Motion を作成"))
+    {
+        if (!motion_editor_loaded)
+            project_create_motion("UIMotion");
+        set_editor_workspace(editor_workspace::motion);
+    }
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Phase 4 の Motion Workspace で接続します。");
+        ImGui::SetTooltip("選択中の UI 要素を Motion Workspace で編集します。");
 
     ImGui::End();
 }

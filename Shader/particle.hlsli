@@ -2,7 +2,7 @@
 #ifndef __PARTICLE_HLSLI__
 #define __PARTICLE_HLSLI__
 
-#define PARTICLE_MAX_COUNT 4096
+#define PARTICLE_MAX_COUNT 10000
 #define PARTICLE_THREADS   64
 
 struct particle
@@ -19,6 +19,8 @@ struct particle
 
 cbuffer PARTICLE_CONSTANTS : register(b6)
 {
+    float4 end_color;          // 終了色
+    float4 end_scalar;         // x=end_size
     float4 spawn_origin;       // xyz=位置, w=spawn_rate(/sec)
     float4 spawn_direction;    // xyz=平均方向, w=cone角(rad)
     float4 spawn_params;       // x=min_speed, y=max_speed, z=min_life, w=max_life

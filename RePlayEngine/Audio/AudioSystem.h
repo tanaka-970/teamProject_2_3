@@ -28,6 +28,8 @@ namespace ReplayEngine::Audio
         bool Initialize();
         void Shutdown() noexcept;
 
+        bool Available() const noexcept override { return !silent_mode_; }
+
         AudioVoiceHandle Play(const AudioPlaybackParams& params) override;
         void Stop(AudioVoiceHandle handle) noexcept override;
         void UpdateVoice(AudioVoiceHandle handle,
