@@ -1,4 +1,4 @@
-#include "MaterialBinding.h"
+﻿#include "MaterialBinding.h"
 
 #include "../Shaders/BuiltInShaders.h"
 #include "../Shaders/ShaderCatalog.h"
@@ -115,7 +115,7 @@ namespace ReplayEngine::Rendering
             const ShaderCatalog::VariantResult& result = entry.At(variant);
             // 直近のコンパイルが失敗していても、bytecode は最後に成功したものを
             // 保持する契約。compiled ではなく bytecode の有無で描画可否を決める。
-            return result.bytecode.Get() != nullptr;
+            return result.bytecode != nullptr;
         }
     }
 

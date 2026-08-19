@@ -239,7 +239,7 @@ namespace ReplayEngine::Editor
             if (root == nullptr || root->PendingDestroy() ||
                 existing_ids.find(root->ID()) != existing_ids.end()) continue;
             if (destination_parent != nullptr) root->SetParent(destination_parent, false);
-            root->SetName(UniqueObjectName(*scene, destination_parent, root->Name(), root));
+            root->SetName(UniqueObjectName(*scene, destination_parent, root->Name() + " コピー", root));
             created_roots.push_back(root->ID());
         }
         if (created_roots.empty())
@@ -405,7 +405,7 @@ namespace ReplayEngine::Editor
             GameObject* clone = Scene::Serialization::DuplicateGameObject(*scene, *source, true);
             if (clone != nullptr)
             {
-                clone->SetName(UniqueObjectName(*scene, clone->Parent(), source->Name(), clone));
+                clone->SetName(UniqueObjectName(*scene, clone->Parent(), clone->Name(), clone));
                 created_ids.push_back(clone->ID());
             }
         }

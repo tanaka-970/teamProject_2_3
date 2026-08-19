@@ -76,7 +76,7 @@ namespace ReplayEngine::Rendering
     private:
         struct CachedPixelShader final
         {
-            const ID3DBlob* bytecode_identity = nullptr; // Catalog が所有。比較だけに使う
+            const void* bytecode_identity = nullptr; // Catalog が所有。比較だけに使う
             std::size_t bytecode_size = 0;
             Microsoft::WRL::ComPtr<ID3D11PixelShader> shader;
         };
