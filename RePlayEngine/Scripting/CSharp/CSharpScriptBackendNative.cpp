@@ -146,6 +146,7 @@ namespace ReplayEngine::Scripting::CSharp::Detail
 
             table.poll_event_with_payload = &NativePollEventWithPayload;
             table.publish_event_with_payload = &NativePublishEventWithPayload;
+            table.find_game_object_by_name = &NativeFindGameObjectByName;
             return table;
         }
 

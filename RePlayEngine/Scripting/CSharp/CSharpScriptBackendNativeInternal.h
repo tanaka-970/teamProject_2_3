@@ -160,6 +160,9 @@ namespace ReplayEngine::Scripting::CSharp::Detail
             // v8 additions. Event payload snapshot / publish. Mirrored at C# tail.
             poll_event_payload_callback poll_event_with_payload = nullptr;
             publish_event_payload_callback publish_event_with_payload = nullptr;
+
+            // v9 addition. Name lookup. Mirrored at C# tail.
+            find_by_name_callback find_game_object_by_name = nullptr;
         };
     inline int StatusCode(RuntimeStatus status) noexcept
     {
@@ -199,6 +202,8 @@ namespace ReplayEngine::Scripting::CSharp::Detail
     extern std::uint64_t g_next_event_subscription;
 
     int NativeFindGameObject(std::uint64_t object_id,
+        Runtime::ObjectHandle* out) noexcept;
+    int NativeFindGameObjectByName(const char* name,
         Runtime::ObjectHandle* out) noexcept;
     int NativeIsGameObjectValid(Runtime::ObjectHandle handle) noexcept;
     int NativeGetLocalPosition(Runtime::ObjectHandle handle,

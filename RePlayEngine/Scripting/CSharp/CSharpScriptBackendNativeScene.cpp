@@ -41,6 +41,21 @@ namespace ReplayEngine::Scripting::CSharp::Detail
                 : RuntimeStatus::Ok);
         }
 
+        // 名前で探す。見つからなければ空 Handle と InvalidHandle を返す。
+        // 例外にしないのは FindGameObject(ID) と同じ流儀。
+        int NativeFindGameObjectByName(const char* name,
+            Runtime::ObjectHandle* out) noexcept
+        {
+            if (out == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+            *out = Runtime::ObjectHandle::None();
+            if (name == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+            if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+
+            *out = g_runtime_context->FindByName(CString(name));
+            return StatusCode(out->IsEmpty() ? RuntimeStatus::InvalidHandle
+                : RuntimeStatus::Ok);
+        }
+
         int NativeIsGameObjectValid(Runtime::ObjectHandle handle) noexcept
         {
             if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());

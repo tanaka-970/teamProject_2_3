@@ -108,6 +108,11 @@ namespace ReplayEngine::Runtime
         return resolver_.FindByObjectID(id);
     }
 
+    ObjectHandle RuntimeContext::FindByName(const std::string& name) const noexcept
+    {
+        return resolver_.FindByName(name);
+    }
+
     ObjectHandle RuntimeContext::ControlledObject() const noexcept
     {
         return resolver_.GetControlledObjectHandle();

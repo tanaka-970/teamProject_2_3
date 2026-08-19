@@ -162,6 +162,9 @@ public static unsafe class NativeBridge
         // v8 Event payload API. Keep in exact C++ tail order.
         public delegate* unmanaged[Cdecl]<ulong, byte*, int, int*, int> PollEventWithPayload;
         public delegate* unmanaged[Cdecl]<ulong, ulong, byte*, ObjectHandle, ObjectHandle, byte*, int> PublishEventWithPayload;
+
+        // v9 追加。名前で GameObject を探す。C++ 側の表も同じ位置（末尾）。
+        public delegate* unmanaged[Cdecl]<byte*, ObjectHandle*, int> FindGameObjectByName;
     }
 
     private sealed class ManagedInstance
@@ -425,6 +428,17 @@ public static unsafe class NativeBridge
         if (api.FindGameObject == null) return new(RuntimeStatus.ServiceUnavailable);
         ObjectHandle result = default;
         var status = (RuntimeStatus)api.FindGameObject(objectId, &result);
+        return new RuntimeResult<ObjectHandle>(status, result);
+    }
+
+    internal static RuntimeResult<ObjectHandle> FindGameObjectByName(string name)
+    {
+        if (api.FindGameObjectByName == null) return new(RuntimeStatus.ServiceUnavailable);
+        if (name == null) return new(RuntimeStatus.InvalidArgument);
+        ObjectHandle result = default;
+        RuntimeStatus status;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            status = (RuntimeStatus)api.FindGameObjectByName(text, &result);
         return new RuntimeResult<ObjectHandle>(status, result);
     }
 
