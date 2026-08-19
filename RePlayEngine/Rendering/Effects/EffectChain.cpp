@@ -330,22 +330,22 @@ namespace ReplayEngine::Rendering::Effects
         if (!variant.bytecode) return nullptr;
 
         CachedCustomEffectShader& cached = custom_effect_shader_cache_[shader_guid];
-        const std::size_t bytecode_size = variant.bytecode->GetBufferSize();
-        if (cached.shader && cached.bytecode_identity == variant.bytecode.Get() &&
+        const std::size_t bytecode_size = variant.bytecode->size();
+        if (cached.shader && cached.bytecode_identity == variant.bytecode.get() &&
             cached.bytecode_size == bytecode_size)
         {
             return cached.shader.Get();
         }
 
         Microsoft::WRL::ComPtr<ID3D11PixelShader> replacement;
-        if (FAILED(device_->CreatePixelShader(variant.bytecode->GetBufferPointer(),
+        if (FAILED(device_->CreatePixelShader(variant.bytecode->data(),
             bytecode_size, nullptr, replacement.GetAddressOf())) || !replacement)
         {
             return cached.shader.Get();
         }
 
         cached.shader = replacement;
-        cached.bytecode_identity = variant.bytecode.Get();
+        cached.bytecode_identity = variant.bytecode.get();
         cached.bytecode_size = bytecode_size;
         return cached.shader.Get();
     }
