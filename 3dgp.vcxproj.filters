@@ -1415,6 +1415,9 @@
     <ClInclude Include="Source\app\framework_class.h">
       <Filter>Source\App</Filter>
     </ClInclude>
+    <ClInclude Include="Source\app\Editor\GoldenImageState.h">
+      <Filter>Source\App\Editor</Filter>
+    </ClInclude>
     <ClInclude Include="Source\app\Editor\framework_motion_workspaceInternal.h">
       <Filter>Source\App\Editor</Filter>
     </ClInclude>
