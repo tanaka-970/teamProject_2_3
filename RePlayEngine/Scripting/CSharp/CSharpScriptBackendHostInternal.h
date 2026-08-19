@@ -139,5 +139,66 @@ namespace ReplayEngine::Scripting::CSharp::Detail
             Runtime::ComponentHandle*, int, int*);
         using set_component_enabled_callback = int(__cdecl*)(Runtime::ComponentHandle, int);
         using get_component_enabled_callback = int(__cdecl*)(Runtime::ComponentHandle, int*);
+
+        // v5 Script field / UI focus / Event publish callbacks.
+        using get_script_bool_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, int*);
+        using set_script_bool_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, int);
+        using get_script_int_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, int*);
+        using set_script_int_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, int);
+        using get_script_double_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, double*);
+        using set_script_double_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, double);
+        using get_script_string_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, char*, int);
+        using set_script_string_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, const char*);
+        using ui_get_focus_callback = int(__cdecl*)(Runtime::ObjectHandle*);
+        using ui_set_focus_callback = int(__cdecl*)(Runtime::ObjectHandle);
+        using ui_find_focus_callback = int(__cdecl*)(Runtime::ObjectHandle, int, Runtime::ObjectHandle*);
+        using publish_event_callback = int(__cdecl*)(std::uint64_t, std::uint64_t, const char*,
+            Runtime::ObjectHandle, Runtime::ObjectHandle);
+
+        // v6 Object / hierarchy / log callbacks. Tail-only ABI additions.
+        using log_callback = int(__cdecl*)(const char*, Runtime::ObjectHandle);
+        using create_game_object_callback = int(__cdecl*)(const char*, Runtime::ObjectHandle*);
+        using set_parent_callback = int(__cdecl*)(Runtime::ObjectHandle, Runtime::ObjectHandle, int);
+        using get_parent_callback = int(__cdecl*)(Runtime::ObjectHandle, Runtime::ObjectHandle*);
+        using get_children_callback = int(__cdecl*)(Runtime::ObjectHandle,
+            Runtime::ObjectHandle*, int, int*);
+        using get_name_callback = int(__cdecl*)(Runtime::ObjectHandle, char*, int);
+        using set_name_callback = int(__cdecl*)(Runtime::ObjectHandle, const char*);
+        using set_object_enabled_callback = int(__cdecl*)(Runtime::ObjectHandle, int);
+        using get_object_enabled_callback = int(__cdecl*)(Runtime::ObjectHandle, int*);
+
+        // v7 Physics / deferred / runtime-state callbacks. Tail-only ABI additions.
+        struct NativeGroundHit final
+        {
+            DirectX::XMFLOAT3 position{};
+            DirectX::XMFLOAT3 normal{ 0.0f, 1.0f, 0.0f };
+            Runtime::ObjectHandle object{};
+            std::uint32_t collider_id = 0;
+            std::int32_t valid = 0;
+        };
+        struct NativeSphereSweepHit final
+        {
+            DirectX::XMFLOAT3 center{};
+            DirectX::XMFLOAT3 normal{ 0.0f, 1.0f, 0.0f };
+            float fraction = 1.0f;
+            Runtime::ObjectHandle object{};
+            std::uint32_t collider_id = 0;
+            std::int32_t valid = 0;
+        };
+        using query_ground_callback = int(__cdecl*)(DirectX::XMFLOAT3, float, float,
+            float, float, Runtime::ObjectHandle, NativeGroundHit*);
+        using sweep_sphere_callback = int(__cdecl*)(DirectX::XMFLOAT3, DirectX::XMFLOAT3,
+            float, float, Runtime::ObjectHandle, NativeSphereSweepHit*);
+        using instantiate_deferred_callback = int(__cdecl*)(const char*, DirectX::XMFLOAT3,
+            DirectX::XMFLOAT3, DirectX::XMFLOAT3, Runtime::ObjectHandle);
+        using pending_deferred_count_callback = int(__cdecl*)(std::uint64_t*);
+        using has_component_callback = int(__cdecl*)(Runtime::ObjectHandle, std::uint32_t, int*);
+        using get_float_value_callback = int(__cdecl*)(float*);
+        using get_bool_value_callback = int(__cdecl*)(int*);
+
+        // v8 Event payload callbacks. Poll v8 keeps the old poll ABI as fallback.
+        using poll_event_payload_callback = int(__cdecl*)(std::uint64_t, char*, int, int*);
+        using publish_event_payload_callback = int(__cdecl*)(std::uint64_t, std::uint64_t,
+            const char*, Runtime::ObjectHandle, Runtime::ObjectHandle, const char*);
 #endif
 }

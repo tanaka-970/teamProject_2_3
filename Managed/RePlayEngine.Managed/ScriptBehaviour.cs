@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 
 namespace ReplayEngine;
 // ビヘイビアスクリプトの基底クラス。ゲームオブジェクトにアタッチされるスクリプトは、このクラスを継承する必要があるよ。
@@ -38,6 +38,12 @@ public abstract class ScriptBehaviour
     protected RuntimeResult<RuntimeEvent> PollEvent(EventSubscription subscription)
     {
         return Runtime.PollEvent(subscription);
+    }
+
+    protected RuntimeStatus PublishEvent(string eventTypeGuid, string typeName = "",
+        ObjectHandle target = default)
+    {
+        return Runtime.PublishEvent(eventTypeGuid, typeName, GameObject, target);
     }
 
     internal void ReleaseManagedSubscriptions()

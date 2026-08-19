@@ -116,6 +116,50 @@ namespace ReplayEngine::Scripting::CSharp::Detail
             get_components_callback get_components = nullptr;
             set_component_enabled_callback set_component_enabled = nullptr;
             get_component_enabled_callback get_component_enabled = nullptr;
+
+            // v5 additions. Must remain mirrored at the tail of NativeBridge.NativeApi.
+            get_script_bool_callback get_script_bool = nullptr;
+            set_script_bool_callback set_script_bool = nullptr;
+            get_script_int_callback get_script_int = nullptr;
+            set_script_int_callback set_script_int = nullptr;
+            get_script_double_callback get_script_double = nullptr;
+            set_script_double_callback set_script_double = nullptr;
+            get_script_string_callback get_script_string = nullptr;
+            set_script_string_callback set_script_string = nullptr;
+            ui_get_focus_callback ui_get_focus = nullptr;
+            ui_set_focus_callback ui_set_focus = nullptr;
+            ui_find_focus_callback ui_find_focus = nullptr;
+            publish_event_callback publish_event = nullptr;
+
+            // v6 additions. Object / hierarchy / log API. Tail-only and mirrored in C#.
+            log_callback log_info = nullptr;
+            log_callback log_warning = nullptr;
+            log_callback log_error = nullptr;
+            create_game_object_callback create_game_object = nullptr;
+            get_vec3_callback get_world_position = nullptr;
+            set_parent_callback set_parent = nullptr;
+            get_parent_callback get_parent = nullptr;
+            get_children_callback get_children = nullptr;
+            get_name_callback get_name = nullptr;
+            set_name_callback set_name = nullptr;
+            get_object_enabled_callback get_game_object_enabled = nullptr;
+            set_object_enabled_callback set_game_object_enabled = nullptr;
+
+            // v7 additions. Physics / deferred / runtime state. Mirrored at C# tail.
+            query_ground_callback query_ground = nullptr;
+            sweep_sphere_callback sweep_sphere = nullptr;
+            instantiate_deferred_callback instantiate_prefab_deferred = nullptr;
+            noarg_scene_callback flush_deferred_operations = nullptr;
+            pending_deferred_count_callback pending_deferred_operation_count = nullptr;
+            has_component_callback has_component = nullptr;
+            get_float_value_callback get_time_scale = nullptr;
+            get_bool_value_callback get_scene_transition_in_progress = nullptr;
+            available_callback physics_available = nullptr;
+            available_callback scene_flow_available = nullptr;
+
+            // v8 additions. Event payload snapshot / publish. Mirrored at C# tail.
+            poll_event_payload_callback poll_event_with_payload = nullptr;
+            publish_event_payload_callback publish_event_with_payload = nullptr;
         };
     inline int StatusCode(RuntimeStatus status) noexcept
     {
@@ -254,6 +298,62 @@ namespace ReplayEngine::Scripting::CSharp::Detail
         Runtime::ComponentHandle* output, int capacity, int* count) noexcept;
     int NativeSetComponentEnabled(Runtime::ComponentHandle component, int enabled) noexcept;
     int NativeGetComponentEnabled(Runtime::ComponentHandle component, int* out) noexcept;
+
+    int NativeGetScriptBool(Runtime::ComponentHandle component, const char* field, int* out) noexcept;
+    int NativeSetScriptBool(Runtime::ComponentHandle component, const char* field, int value) noexcept;
+    int NativeGetScriptInt(Runtime::ComponentHandle component, const char* field, int* out) noexcept;
+    int NativeSetScriptInt(Runtime::ComponentHandle component, const char* field, int value) noexcept;
+    int NativeGetScriptDouble(Runtime::ComponentHandle component, const char* field, double* out) noexcept;
+    int NativeSetScriptDouble(Runtime::ComponentHandle component, const char* field, double value) noexcept;
+    int NativeGetScriptString(Runtime::ComponentHandle component, const char* field, char* output,
+        int output_capacity) noexcept;
+    int NativeSetScriptString(Runtime::ComponentHandle component, const char* field, const char* value) noexcept;
+    int NativeGetUIFocus(Runtime::ObjectHandle* out) noexcept;
+    int NativeSetUIFocus(Runtime::ObjectHandle object) noexcept;
+    int NativeFindUIFocus(Runtime::ObjectHandle from, int direction, Runtime::ObjectHandle* out) noexcept;
+    int NativePublishEvent(std::uint64_t high, std::uint64_t low, const char* type_name,
+        Runtime::ObjectHandle source, Runtime::ObjectHandle target) noexcept;
+
+
+    int NativeLogInfo(const char* message, Runtime::ObjectHandle source) noexcept;
+    int NativeLogWarning(const char* message, Runtime::ObjectHandle source) noexcept;
+    int NativeLogError(const char* message, Runtime::ObjectHandle source) noexcept;
+    int NativeCreateGameObject(const char* name, Runtime::ObjectHandle* out) noexcept;
+    int NativeGetWorldPosition(Runtime::ObjectHandle handle, DirectX::XMFLOAT3* out) noexcept;
+    int NativeSetParent(Runtime::ObjectHandle child, Runtime::ObjectHandle parent,
+        int preserve_world_transform) noexcept;
+    int NativeGetParent(Runtime::ObjectHandle handle, Runtime::ObjectHandle* out) noexcept;
+    int NativeGetChildren(Runtime::ObjectHandle handle, Runtime::ObjectHandle* output,
+        int capacity, int* count) noexcept;
+    int NativeGetName(Runtime::ObjectHandle handle, char* output, int output_capacity) noexcept;
+    int NativeSetName(Runtime::ObjectHandle handle, const char* name) noexcept;
+    int NativeGetGameObjectEnabled(Runtime::ObjectHandle handle, int* out) noexcept;
+    int NativeSetGameObjectEnabled(Runtime::ObjectHandle handle, int enabled) noexcept;
+
+
+    int NativeQueryGround(DirectX::XMFLOAT3 origin, float radius, float up_offset,
+        float down_distance, float walkable_normal_y, Runtime::ObjectHandle ignore,
+        NativeGroundHit* out) noexcept;
+    int NativeSweepSphere(DirectX::XMFLOAT3 start, DirectX::XMFLOAT3 end, float radius,
+        float maximum_normal_y, Runtime::ObjectHandle ignore,
+        NativeSphereSweepHit* out) noexcept;
+    int NativeInstantiatePrefabDeferred(const char* asset_guid, DirectX::XMFLOAT3 position,
+        DirectX::XMFLOAT3 rotation_euler, DirectX::XMFLOAT3 scale,
+        Runtime::ObjectHandle parent) noexcept;
+    int NativeFlushDeferredOperations() noexcept;
+    int NativePendingDeferredOperationCount(std::uint64_t* out) noexcept;
+    int NativeHasComponent(Runtime::ObjectHandle object, std::uint32_t type_id, int* out) noexcept;
+    int NativeGetTimeScale(float* out) noexcept;
+    int NativeGetSceneTransitionInProgress(int* out) noexcept;
+    int NativePhysicsAvailable() noexcept;
+    int NativeSceneFlowAvailable() noexcept;
+
+
+    int NativePollEventWithPayload(std::uint64_t subscription, char* output,
+        int output_capacity, int* required_capacity) noexcept;
+    int NativePublishEventWithPayload(std::uint64_t high, std::uint64_t low,
+        const char* type_name, Runtime::ObjectHandle source, Runtime::ObjectHandle target,
+        const char* payload_text) noexcept;
 
     NativeApiTable MakeNativeApiTable() noexcept;
 }
