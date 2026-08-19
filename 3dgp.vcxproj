@@ -191,8 +191,11 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <ProcessorNumber>8</ProcessorNumber>
       <WarningLevel>Level3</WarningLevel>
-      <PrecompiledHeader>
-      </PrecompiledHeader>
+      <!-- Debug|x64 と同じプリコンパイル済みヘッダ設定。
+           これが無いと pch.cpp が既定名 stdafx.h を作りにいって C2857 で落ちる。 -->
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <ForcedIncludeFiles>pch.h;%(ForcedIncludeFiles)</ForcedIncludeFiles>
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
