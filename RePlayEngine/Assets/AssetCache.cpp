@@ -35,6 +35,8 @@ namespace ReplayEngine::Assets
             case AssetKind::Material: return "materials";
             case AssetKind::SceneFlow: return "scene_flows";
             case AssetKind::Motion: return "motions";
+            case AssetKind::Localization: return "localization";
+            case AssetKind::EffectPreset: return "effects";
             default: return "unknown";
             }
         }

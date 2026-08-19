@@ -65,6 +65,7 @@ namespace ReplayEngine::Rendering::Effects
 
         static DirectX::XMFLOAT4 ExpandBounds(const std::vector<UI::UIEffect>& effects,
             float target_width, float target_height) noexcept;
+        std::uint64_t AllocatedBufferBytes() const noexcept;
 
     private:
         struct CachedCustomEffectShader

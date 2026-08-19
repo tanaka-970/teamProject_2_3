@@ -20,10 +20,15 @@ void gltf_model::render(ID3D11DeviceContext* context, const XMFLOAT4X4& world,
         emit_motion && motion_frame_id_ != motion_frame.frame_id;
     if (emit_motion) previous_primitive_worlds_.resize(primitives_.size());
     size_t motion_primitive_index = 0;
+    ReplayEngine::Rendering::Stats().TrackStateSet(
+        ReplayEngine::Rendering::RenderStats::StateKind::InputLayout,
+        input_layout_.Get());
     context->IASetInputLayout(input_layout_.Get());
     context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
     context->VSSetShader(vertex_shader_.Get(), nullptr, 0);
     // 深度プリパスではピクセルシェーダーを外す。これがオーバードロー削減の要。
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
     context->PSSetShader(depth_only ? nullptr
         : (alternative_pixel_shader ? alternative_pixel_shader : pixel_shader_.Get()), nullptr, 0);
     auto& culling = ReplayEngine::Rendering::Culling();

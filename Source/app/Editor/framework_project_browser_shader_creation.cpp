@@ -53,9 +53,7 @@ bool framework::project_create_layer_shader(const std::string& name)
         return false;
     }
 
-    std::filesystem::path path = folder / (safe + ".hlsl");
-    for (int suffix = 2; std::filesystem::exists(path) && suffix < 10000; ++suffix)
-        path = folder / (safe + std::to_string(suffix) + ".hlsl");
+    std::filesystem::path path = UniqueProjectPath(folder, safe, ".hlsl");
 
     std::string picker_category = "Project";
     const std::filesystem::path layers_root = root / "Shader" / "Layers";

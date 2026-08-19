@@ -37,6 +37,7 @@ namespace ReplayEngine::Core
         RegisterMeshRenderer();
         RegisterPrimitiveMeshRenderer();
         RegisterPostProcessVolume();
+        RegisterEffectStacks();
         RegisterParticleEmitter();
         RegisterLineRenderers();
         RegisterLights();
@@ -66,5 +67,6 @@ namespace ReplayEngine::Core
         RegisterStageGameplay();
         RegisterEditorNote();
         RegisterScript();
+        RegisterAINavigation();
     }
 }

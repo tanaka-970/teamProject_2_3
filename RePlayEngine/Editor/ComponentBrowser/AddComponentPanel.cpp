@@ -1,4 +1,4 @@
-#include "AddComponentPanel.h"
+﻿#include "AddComponentPanel.h"
 
 #include "../Core/EditorContext.h"
 #include "../../Object/GameObject/GameObject.h"
@@ -27,6 +27,7 @@ namespace ReplayEngine::Editor
     namespace
     {
         constexpr const char* popup_id = "RePlayAddComponentPopup";
+        constexpr const char* template_module_prefix = "RePlayEngine.Template.";
 
         std::string ToLower(const std::string& text)
         {
@@ -55,6 +56,23 @@ namespace ReplayEngine::Editor
                 ToLower(script.DisplayName()).find(lowered_query) != std::string::npos ||
                 ToLower(script.class_name).find(lowered_query) != std::string::npos ||
                 ToLower(script.asset_guid).find(lowered_query) != std::string::npos;
+        }
+
+        bool IsGameTemplateComponent(const ComponentTypeInfo& info)
+        {
+            return info.module_id.rfind(template_module_prefix, 0) == 0;
+        }
+
+        // 件数確認と実描画で必ず同じ判定を使う。
+        // 検索中は Template 非表示設定より検索を優先し、名前を知っている人の導線を残す。
+        bool IsComponentVisible(const ComponentTypeInfo& info, const std::string& category,
+            const std::string& lowered_query, bool show_game_template_components)
+        {
+            if (!info.editor_visible) return false;
+            if (info.category != category) return false;
+            if (!Matches(info, lowered_query)) return false;
+            if (!lowered_query.empty()) return true;
+            return show_game_template_components || !IsGameTemplateComponent(info);
         }
 
         std::string RelationshipNames(const std::vector<Core::ComponentTypeID>& ids)
@@ -91,8 +109,12 @@ namespace ReplayEngine::Editor
         search_text_[0] = '\0';
     }
 
-    bool AddComponentPanel::Draw(EditorContext& context, Core::GameObject& target)
+    bool AddComponentPanel::Draw(EditorContext& context, Core::GameObject& target,
+        bool& show_game_template_components,
+        bool& show_game_template_components_changed)
     {
+        show_game_template_components_changed = false;
+
         if (open_requested_)
         {
             open_requested_ = false;
@@ -115,6 +137,11 @@ namespace ReplayEngine::Editor
         ImGui::InputTextWithHint("##AddComponentSearch", "Search Components...",
             search_text_, search_buffer_size);
 
+        if (ImGui::Checkbox("テンプレート部品も表示する", &show_game_template_components))
+        {
+            show_game_template_components_changed = true;
+        }
+
         const std::string query = ToLower(std::string(search_text_));
 
         bool added = false;
@@ -126,9 +153,8 @@ namespace ReplayEngine::Editor
             int visible_in_category = 0;
             for (const ComponentTypeInfo& info : ComponentRegistry::All())
             {
-                if (!info.editor_visible) continue;
-                if (info.category != category) continue;
-                if (!Matches(info, query)) continue;
+                if (!IsComponentVisible(info, category, query,
+                    show_game_template_components)) continue;
                 ++visible_in_category;
             }
             if (visible_in_category == 0) continue;
@@ -139,9 +165,8 @@ namespace ReplayEngine::Editor
 
             for (const ComponentTypeInfo& info : ComponentRegistry::All())
             {
-                if (!info.editor_visible) continue;
-                if (info.category != category) continue;
-                if (!Matches(info, query)) continue;
+                if (!IsComponentVisible(info, category, query,
+                    show_game_template_components)) continue;
 
                 // 重複禁止の型が既に付いている場合は追加させない。
                 // 押せてしまってから失敗するのではなく、押せないことを見た目で示す。

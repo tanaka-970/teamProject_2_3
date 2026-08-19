@@ -85,6 +85,8 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <ProcessorNumber>8</ProcessorNumber>
       <PrecompiledHeader>
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
@@ -116,13 +118,20 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <PrecompiledHeader>
-      </PrecompiledHeader>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <ProcessorNumber>8</ProcessorNumber>
+      <!-- プリコンパイル済みヘッダ。ビルド時間の短縮だけが目的。
+           ForcedIncludeFiles で全 .cpp の先頭へ自動挿入するため、
+           各ソースへ #include "pch.h" を書き足していない。
+           Source\pch.cpp だけが Create 側で、それは下の ClCompile 項目で指定する。 -->
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <ForcedIncludeFiles>pch.h;%(ForcedIncludeFiles)</ForcedIncludeFiles>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>_DEBUG;_WINDOWS;USE_IMGUI;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>.;.\Source\app;.\Source\core;.\Source\mesh;.\Source\render;.\cereal-master\include;.\DirectXTK-main\Inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;.\Source;.\Source\app;.\Source\core;.\Source\mesh;.\Source\render;.\cereal-master\include;.\DirectXTK-main\Inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <EnableASAN Condition="'$(ReplayEnableASAN)'=='true'">true</EnableASAN>
       <DebugInformationFormat Condition="'$(ReplayEnableASAN)'=='true'">ProgramDatabase</DebugInformationFormat>
@@ -145,6 +154,8 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <ProcessorNumber>8</ProcessorNumber>
       <WarningLevel>Level3</WarningLevel>
       <PrecompiledHeader>
       </PrecompiledHeader>
@@ -177,9 +188,14 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <ProcessorNumber>8</ProcessorNumber>
       <WarningLevel>Level3</WarningLevel>
-      <PrecompiledHeader>
-      </PrecompiledHeader>
+      <!-- Debug|x64 と同じプリコンパイル済みヘッダ設定。
+           これが無いと pch.cpp が既定名 stdafx.h を作りにいって C2857 で落ちる。 -->
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <ForcedIncludeFiles>pch.h;%(ForcedIncludeFiles)</ForcedIncludeFiles>
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -207,6 +223,13 @@
     </FxCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <!-- PCH を作る唯一のソース。ForcedIncludeFiles の対象外にしないと自分自身を
+         強制インクルードして循環するため、ここだけ空にしている。 -->
+    <ClCompile Include="Source\pch.cpp">
+      <PrecompiledHeader>Create</PrecompiledHeader>
+      <ForcedIncludeFiles>
+      </ForcedIncludeFiles>
+    </ClCompile>
     <ClCompile Include="Source\mesh\UI.cpp" />
     <ClCompile Include="Source\render\csm_renderer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Deferred\deferred_renderer.cpp" />
@@ -327,8 +350,11 @@
     <ClCompile Include="Source\app\Editor\framework_shader_stack.cpp" />
     <ClCompile Include="Source\app\Editor\framework_character_material.cpp" />
     <ClCompile Include="Source\app\Editor\framework_post_process.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_ui_focus_style.cpp" />
     <ClCompile Include="Source\app\Runtime\framework_update.cpp" />
     <ClCompile Include="Source\app\Rendering\framework_render.cpp" />
+    <ClCompile Include="Source\app\Rendering\framework_effect_stack.cpp" />
+    <ClCompile Include="Source\app\Rendering\framework_model_effects.cpp" />
     <ClCompile Include="Source\core\shader.cpp" />
     <ClCompile Include="Source\mesh\skinned_mesh.cpp" />
     <ClCompile Include="Source\mesh\skinned_meshImport.cpp" />
@@ -466,6 +492,7 @@
     <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponentsCore.cpp" />
     <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponentsRendering.cpp" />
     <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponentsGameplay.cpp" />
+    <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponentsNavigation.cpp" />
     <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponentsScripting.cpp" />
     <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponentsPhysics.cpp" />
     <ClCompile Include="RePlayEngine\Object\Registry\BuiltInComponentsCameraAudio.cpp" />
@@ -482,6 +509,7 @@
     <ClCompile Include="RePlayEngine\Editor\Core\EditorContext.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Selection\EditorSelection.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Commands\SceneEditHistory.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Commands\FileEditHistory.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Commands\MotionEditHistory.cpp" />
     <ClCompile Include="RePlayEngine\Motion\MotionEasing.cpp" />
     <ClCompile Include="RePlayEngine\Motion\MotionAsset.cpp" />
@@ -509,6 +537,8 @@
     <ClCompile Include="RePlayEngine\Components\Physics\SphereColliderComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Physics\RigidbodyComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Gameplay\CharacterMotorComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Gameplay\EnemyBehaviourComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Navigation\NavAgentComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Gameplay\PlayerInputComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Gameplay\PlayerControllerComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Audio\AudioSourceComponent.cpp" />
@@ -543,6 +573,7 @@
     <ClCompile Include="RePlayEngine\Scene\Services\SceneCollisionWorldQuery.cpp" />
     <ClCompile Include="RePlayEngine\Scene\Services\SceneCollisionWorldTrigger.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Debug\ColliderDebugDraw.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Debug\AINavigationDebugDraw.cpp" />
     <ClCompile Include="Source\app\Runtime\framework_collision_world.cpp" />
     <ClCompile Include="Source\app\Runtime\framework_collision_mesh_source.cpp" />
     <ClCompile Include="Source\app\Editor\framework_collider_debug.cpp" />
@@ -569,6 +600,7 @@
     <ClCompile Include="Source\app\Runtime\framework_shutdown_regression.cpp" />
 </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Source\pch.h" />
     <ClInclude Include="Source\mesh\UI.h" />
     <ClInclude Include="Source\render\csm_renderer.h" />
     <ClInclude Include="Source\render\deferred_renderer.h" />
@@ -634,7 +666,30 @@
     <ClInclude Include="Source\core\framebuffer.h" />
     <ClInclude Include="Source\app\framework.h" />
     <ClInclude Include="Source\app\framework_application.h" />
+    <ClInclude Include="RePlayEngine\Components\Rendering\EffectStackComponentCommonPart1.inl" />
+    <ClInclude Include="RePlayEngine\Components\Rendering\EffectStackComponentCommonPart2.inl" />
+    <ClInclude Include="RePlayEngine\Components\Rendering\EffectStackComponentCommonPart3.inl" />
+    <ClInclude Include="RePlayEngine\Components\Rendering\EffectStackComponentCommonPart4.inl" />
+    <ClInclude Include="RePlayEngine\Components\Rendering\EffectStackComponentCommon.inl" />
+    <ClInclude Include="Source\app\framework_class_render_state.inl" />
+    <ClInclude Include="Source\app\framework_class_runtime_scene.inl" />
+    <ClInclude Include="Source\app\framework_class_application_loop.inl" />
+    <ClInclude Include="Source\app\framework_class_editor_commands.inl" />
+    <ClInclude Include="Source\app\framework_class_scene_services.inl" />
+    <ClInclude Include="Source\app\framework_class_editor_state.inl" />
+    <ClInclude Include="RePlayEngine\UI\UIRendererRenderSetup.inl" />
+    <ClInclude Include="RePlayEngine\UI\UIRendererRenderTextInput.inl" />
+    <ClInclude Include="RePlayEngine\UI\UIRendererRenderBackdrop.inl" />
+    <ClInclude Include="RePlayEngine\UI\UIRendererRenderEffects.inl" />
+    <ClInclude Include="RePlayEngine\UI\UIRendererRenderHierarchy.inl" />
+    <ClInclude Include="Source\app\Rendering\framework_render_setup.inl" />
+    <ClInclude Include="Source\app\Rendering\framework_render_scene_setup.inl" />
+    <ClInclude Include="Source\app\Rendering\framework_render_deferred.inl" />
+    <ClInclude Include="Source\app\Rendering\framework_render_forward.inl" />
+    <ClInclude Include="Source\app\Rendering\framework_render_effects.inl" />
+    <ClInclude Include="Source\app\Rendering\framework_render_present.inl" />
     <ClInclude Include="Source\app\framework_class.h" />
+    <ClInclude Include="Source\app\Editor\GoldenImageState.h" />
     <ClInclude Include="Source\app\Editor\framework_motion_workspaceInternal.h" />
     <ClInclude Include="Source\app\Editor\framework_project_browserInternal.h" />
     <ClInclude Include="Source\app\Editor\framework_asset_browserInternal.h" />
@@ -762,6 +817,7 @@
     <ClInclude Include="RePlayEngine\Editor\Core\EditorContext.h" />
     <ClInclude Include="RePlayEngine\Editor\Selection\EditorSelection.h" />
     <ClInclude Include="RePlayEngine\Editor\Commands\SceneEditHistory.h" />
+    <ClInclude Include="RePlayEngine\Editor\Commands\FileEditHistory.h" />
     <ClInclude Include="RePlayEngine\Editor\Commands\MotionEditHistory.h" />
     <ClInclude Include="RePlayEngine\Editor\Hierarchy\HierarchyPanel.h" />
     <ClInclude Include="RePlayEngine\Editor\Inspector\InspectorPanel.h" />
@@ -780,6 +836,8 @@
     <ClInclude Include="RePlayEngine\Components\Physics\SphereColliderComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Physics\RigidbodyComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\CharacterMotorComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Gameplay\EnemyBehaviourComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Navigation\NavAgentComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\PlayerInputComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\PlayerControllerComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Audio\AudioListenerComponent.h" />
@@ -812,6 +870,7 @@
     <ClInclude Include="RePlayEngine\Physics\CollisionLayers.h" />
     <ClInclude Include="RePlayEngine\Physics\ShapeSweep.h" />
     <ClInclude Include="RePlayEngine\Editor\Debug\ColliderDebugDraw.h" />
+    <ClInclude Include="RePlayEngine\Editor\Debug\AINavigationDebugDraw.h" />
     <ClInclude Include="RePlayEngine\Object\Component\TriggerContact.h" />
     <ClInclude Include="RePlayEngine\Landscape\LandscapeChunk.h" />
     <ClInclude Include="RePlayEngine\Landscape\LandscapeMaterial.h" />
@@ -884,6 +943,35 @@
     <ClInclude Include="RePlayEngine\UI\Effects\UIEffect.h" />
     <ClInclude Include="RePlayEngine\UI\Effects\UIRenderTargetPool.h" />
     <ClInclude Include="RePlayEngine\UI\ThirdParty\stb_truetype.h" />
+    <ClInclude Include="RePlayEngine\Components\Rendering\ScreenEffectStackComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Rendering\ModelEffectStackComponent.h" />
+  
+    <ClCompile Include="RePlayEngine\Components\Rendering\ScreenEffectStackComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Rendering\ModelEffectStackComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\UISelectableComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\UILayoutGroupComponents.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\UIScrollViewComponent.cpp" />
+    <ClCompile Include="RePlayEngine\UI\UIFocusManager.cpp" />
+    <ClInclude Include="RePlayEngine\Components\UI\UISelectableComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\UI\UILayoutGroupComponents.h" />
+    <ClInclude Include="RePlayEngine\Components\UI\UIScrollViewComponent.h" />
+    <ClInclude Include="RePlayEngine\UI\UIFocusManager.h" />
+    <ClCompile Include="RePlayEngine\Components\UI\UIInputFieldComponent.cpp" />
+    <ClCompile Include="RePlayEngine\UI\UIInputFieldSystem.cpp" />
+    <ClInclude Include="RePlayEngine\Components\UI\UIInputFieldComponent.h" />
+    <ClInclude Include="RePlayEngine\UI\UIInputFieldSystem.h" />
+    <ClCompile Include="RePlayEngine\UI\RichTextParser.cpp" />
+    <ClCompile Include="RePlayEngine\Localization\LocalizationService.cpp" />
+    <ClCompile Include="RePlayEngine\Localization\LocalizationTable.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Effects\EffectPresetAsset.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\UILanguageSwitchComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\UIButtonPropertyToggleComponent.cpp" />
+    <ClInclude Include="RePlayEngine\UI\RichTextParser.h" />
+    <ClInclude Include="RePlayEngine\Localization\LocalizationService.h" />
+    <ClInclude Include="RePlayEngine\Localization\LocalizationTable.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Effects\EffectPresetAsset.h" />
+    <ClInclude Include="RePlayEngine\Components\UI\UILanguageSwitchComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\UI\UIButtonPropertyToggleComponent.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include=".editorconfig" />
@@ -943,6 +1031,12 @@
     <None Include="resources\Shaders\Presets\GraphicCel.replayshader" />
     <None Include="resources\Shaders\Presets\CrystalToon.replayshader" />
     <None Include="resources\Shaders\Presets\MoonlitCrystal.replayshader" />
+    <None Include="Docs\UI_GAME_FEATURES_MANUAL.md" />
+    <None Include="resources\Project.replayproject" />
+    <None Include="resources\Scenes\UI_GAME_FEATURES_DEMO.replayscene" />
+    <None Include="resources\Effects\UI_GAME_FEATURES_DEMO_Glow.replayeffect" />
+    <None Include="resources\Localization\UI_GAME_FEATURES_DEMO.replayloc" />
+    <None Include="resources\Motions\UI_GAME_FEATURES_DEMO_ScreenPulse.replaymotion" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="resources\RePlayEngine\BootLogo\BootNote.png" />

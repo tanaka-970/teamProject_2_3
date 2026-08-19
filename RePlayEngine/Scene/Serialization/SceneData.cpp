@@ -1,4 +1,4 @@
-// SceneData のうち「参照の付け替え」と「Scene の取り込み」だけを持つ。
+﻿// SceneData のうち「参照の付け替え」と「Scene の取り込み」だけを持つ。
 //
 //   SceneData.cpp           … 参照の付け替えと Scene の取り込み（このファイル）
 //   SceneDataInternal.h     … 分割内部で共有する適用ヘルパの宣言
@@ -157,11 +157,25 @@ namespace ReplayEngine::Scene::Serialization
 
         output.objects.reserve(scene.GameObjectCount());
 
-        for (std::size_t index = 0; index < scene.GameObjectCount(); ++index)
+        // Hierarchy の兄弟順をファイル形式を変えずに保存する。Apply 側は親を
+        // SceneData の順に SetParent して children_ の末尾へ足すため、preorder で
+        // 書けば既存 v7 形式のまま root/child の順序が往復する。
+        std::vector<const GameObject*> ordered;
+        ordered.reserve(scene.GameObjectCount());
+        std::unordered_set<ObjectID> visited;
+        const auto append_preorder = [&](const GameObject* root, const auto& self) -> void
         {
-            const GameObject* object = scene.GameObjectAt(index);
-            if (object == nullptr || object->PendingDestroy()) continue;
+            if (root == nullptr || root->PendingDestroy() || !visited.insert(root->ID()).second) return;
+            ordered.push_back(root);
+            for (const GameObject* child : root->Children()) self(child, self);
+        };
+        for (const GameObject* root : scene.RootGameObjects()) append_preorder(root, append_preorder);
+        // 壊れた階層などで root から到達できない Object も失わない。
+        for (std::size_t index = 0; index < scene.GameObjectCount(); ++index)
+            append_preorder(scene.GameObjectAt(index), append_preorder);
 
+        for (const GameObject* object : ordered)
+        {
             GameObjectData data;
             data.id = object->ID();
             data.name = object->Name();

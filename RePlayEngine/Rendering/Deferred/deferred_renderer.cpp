@@ -1,5 +1,7 @@
-#include "deferred_renderer.h"
+﻿#include "deferred_renderer.h"
 #include "shader.h"
+
+#include "../RenderStats.h"
 
 #include <d3d11sdklayers.h>
 
@@ -236,8 +238,11 @@ void deferred_renderer::lighting_pass(ID3D11DeviceContext* ctx,
     ctx->IASetVertexBuffers(0, 0, nullptr, nullptr, nullptr);
     ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
     ctx->IASetInputLayout(nullptr);
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
     ctx->VSSetShader(fullscreen_vs.Get(), nullptr, 0);
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
     ctx->PSSetShader(lighting_ps.Get(), nullptr, 0);
+    ReplayEngine::Rendering::Stats().CountDraw(4);
     ctx->Draw(4, 0);
 
     ID3D11ShaderResourceView* null_srvs[_countof(srvs)]{};

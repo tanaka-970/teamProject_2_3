@@ -1,4 +1,4 @@
-#include "framework.h"
+﻿#include "framework.h"
 
 // SSAO / SSR / TAA / CSM の調整UI。
 // 効果が見えているかを確認できるように、各機能のON/OFFと
@@ -14,7 +14,11 @@ void framework::draw_screen_space_settings()
         // ---------------- SSAO ----------------
         if (ImGui::TreeNodeEx("SSAO (GTAO)", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            ImGui::Checkbox("有効##ssao", &enable_ssao);
+            if (ImGui::Checkbox("有効##ssao", &enable_ssao))
+            {
+                project_settings.SetSsaoEnabled(enable_ssao);
+                save_project_settings();
+            }
             if (!ssao_pass.Initialized())
                 ImGui::TextColored(ImVec4(1, 0.4f, 0.4f, 1), "初期化に失敗しています");
 
@@ -35,7 +39,11 @@ void framework::draw_screen_space_settings()
         // ---------------- SSR ----------------
         if (ImGui::TreeNodeEx("SSR (スクリーンスペース反射)", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            ImGui::Checkbox("有効##ssr", &enable_ssr);
+            if (ImGui::Checkbox("有効##ssr", &enable_ssr))
+            {
+                project_settings.SetSsrEnabled(enable_ssr);
+                save_project_settings();
+            }
             if (!ssr_pass.Initialized())
                 ImGui::TextColored(ImVec4(1, 0.4f, 0.4f, 1), "初期化に失敗しています");
             ImGui::TextDisabled("反射源は前フレームの照明結果です。金属/低ラフネス面で効きます。");
@@ -61,6 +69,8 @@ void framework::draw_screen_space_settings()
             {
                 // 切り替え直後の残像を出さないため履歴を破棄する。
                 taa_pass.InvalidateHistory();
+                project_settings.SetTaaEnabled(enable_taa);
+                save_project_settings();
             }
             if (!taa_pass.Initialized())
                 ImGui::TextColored(ImVec4(1, 0.4f, 0.4f, 1), "初期化に失敗しています");
@@ -122,6 +132,10 @@ void framework::draw_screen_space_settings()
         {
             // GPUリソースは触らず、調整値だけ初期状態へ戻す。
             enable_ssao = enable_ssr = enable_taa = true;
+            project_settings.SetSsaoEnabled(true);
+            project_settings.SetSsrEnabled(true);
+            project_settings.SetTaaEnabled(true);
+            save_project_settings();
 
             ssao_pass.radius = 0.75f;
             ssao_pass.intensity = 1.0f;

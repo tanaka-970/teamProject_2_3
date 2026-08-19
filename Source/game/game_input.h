@@ -20,6 +20,7 @@ namespace GameInput
         int keyboard_primary = 0;
         int keyboard_secondary = 0;
         WORD gamepad_button = 0;
+        std::string action_map{ "Gameplay" };
     };
 
     enum class GamepadAxis : int
@@ -41,6 +42,7 @@ namespace GameInput
         int positive_secondary = 0;
         GamepadAxis gamepad_axis = GamepadAxis::None;
         float dead_zone = 0.18f;
+        std::string action_map{ "Gameplay" };
     };
 
     class InputState final : public ReplayEngine::Scene::IInputService
@@ -54,6 +56,8 @@ namespace GameInput
         // keyboard_captured=true の間も実デバイス状態は更新し続けるが、Action/Axis へは
         // キーボード入力を公開しない。ImGui の文字入力から Gameplay へ漏らさないため。
         void BeginFrame(bool keyboard_captured, bool mouse_captured) noexcept;
+        void SetSuppressed(bool suppressed) noexcept { suppressed_ = suppressed; }
+        bool Suppressed() const noexcept { return suppressed_; }
 
         bool Held(std::string_view action, int player_slot = 0) const noexcept override;
         bool Pressed(std::string_view action, int player_slot = 0) const noexcept override;
@@ -76,6 +80,16 @@ namespace GameInput
         bool LoadBindings(const std::filesystem::path& path, std::string& error);
         bool SaveBindings(const std::filesystem::path& path, std::string& error) const;
         void ResetDefaultBindings();
+
+        // Project Asset (.replayinput)。missing / broken は false を返し、
+        // ResetDefaultBindings() 済みの安全な既定値を維持する。
+        static constexpr const char* action_asset_extension = ".replayinput";
+        bool LoadActionAsset(const std::filesystem::path& path, std::string& error);
+        bool SaveActionAsset(const std::filesystem::path& path, std::string& error) const;
+        const std::unordered_map<std::string, ActionBinding>& Actions() const noexcept { return actions_; }
+        const std::unordered_map<std::string, AxisBinding>& Axes() const noexcept { return axes_; }
+        void SetActionBinding(std::string name, ActionBinding binding) { actions_[std::move(name)] = std::move(binding); }
+        void SetAxisBinding(std::string name, AxisBinding binding) { axes_[std::move(name)] = std::move(binding); }
 
     private:
         struct PadSnapshot final
@@ -116,6 +130,7 @@ namespace GameInput
         bool mouse_captured_ = false;
         bool previous_mouse_captured_ = false;
         bool mouse_initialized_ = false;
+        bool suppressed_ = false;
         long mouse_x_ = 0;
         long mouse_y_ = 0;
         float mouse_delta_x_ = 0.0f;

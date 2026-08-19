@@ -141,40 +141,80 @@ namespace ReplayEngine::Editor
                     ObjectID::ValueType raw = 0;
                     std::memcpy(&raw, payload->Data, sizeof(raw));
                     pending_reparent_child_ = ObjectID(raw);
-                    pending_reparent_to_root_ = true;
+                    pending_reparent_parent_ = ObjectID::Invalid();
+                    pending_drop_placement_ = DropPlacement::Root;
                 }
             }
             ImGui::EndDragDropTarget();
         }
 
-        // ツリー走査が終わってから親子関係を変更する。
+        // ツリー走査が終わってから親子/兄弟順を変更する。
         if (pending_reparent_child_.Valid() && editable)
         {
             GameObject* child = scene->FindGameObjectByID(pending_reparent_child_);
-            GameObject* parent = pending_reparent_to_root_
-                ? nullptr : scene->FindGameObjectByID(pending_reparent_parent_);
-
+            GameObject* target = scene->FindGameObjectByID(pending_reparent_parent_);
             if (child != nullptr)
             {
-                context.BeginEdit("親子関係を変更");
-                // SetParent は自分自身や子孫を親にしようとすると false を返す。
-                // 循環階層はここで確実に弾かれる。
-                if (child->SetParent(parent, true))
+                context.BeginEdit("Hierarchy の並びを変更");
+                bool changed = false;
+                if (pending_drop_placement_ == DropPlacement::Root)
+                {
+                    changed = child->SetParent(nullptr, true);
+                }
+                else if (target != nullptr && target != child)
+                {
+                    if (pending_drop_placement_ == DropPlacement::Child)
+                    {
+                        changed = child->SetParent(target, true);
+                    }
+                    else
+                    {
+                        GameObject* target_parent = target->Parent();
+                        if (child->SetParent(target_parent, true))
+                        {
+                            const std::size_t target_index = target->SiblingIndex();
+                            const std::size_t desired = target_index +
+                                (pending_drop_placement_ == DropPlacement::After ? 1u : 0u);
+                            changed = child->SetSiblingIndex(desired);
+                        }
+                    }
+                }
+
+                if (changed)
                 {
                     context.CommitEdit();
-                    context.SetStatus(parent != nullptr
-                        ? child->Name() + " を " + parent->Name() + " の子にしました"
-                        : child->Name() + " をシーン直下へ移しました");
+                    context.SetStatus("Hierarchy の親子/兄弟順を変更しました");
                 }
                 else
                 {
                     context.CancelEdit();
-                    context.SetStatus("自分自身または子孫を親にはできません");
+                    context.SetStatus("その位置へは移動できません（循環階層を含む）");
                 }
             }
             pending_reparent_child_ = ObjectID::Invalid();
             pending_reparent_parent_ = ObjectID::Invalid();
-            pending_reparent_to_root_ = false;
+            pending_drop_placement_ = DropPlacement::Child;
+        }
+    }
+
+    namespace
+    {
+        bool HierarchyHasSiblingNameDuplicate(const Scene::Scene& scene,
+            const GameObject& object, const std::string& name)
+        {
+            if (object.Parent() != nullptr)
+            {
+                for (const GameObject* sibling : object.Parent()->Children())
+                    if (sibling != nullptr && sibling != &object && sibling->Name() == name) return true;
+                return false;
+            }
+            for (std::size_t i = 0; i < scene.GameObjectCount(); ++i)
+            {
+                const GameObject* sibling = scene.GameObjectAt(i);
+                if (sibling != nullptr && sibling != &object && sibling->Parent() == nullptr &&
+                    sibling->Name() == name) return true;
+            }
+            return false;
         }
     }
 
@@ -212,6 +252,11 @@ namespace ReplayEngine::Editor
                     context.BeginEdit("GameObject 名を変更");
                     object.SetName(rename_buffer_);
                     context.CommitEdit();
+                    if (Scene::Scene* scene = context.GetScene();
+                        scene != nullptr && HierarchyHasSiblingNameDuplicate(*scene, object, object.Name()))
+                    {
+                        context.SetStatus("同じ階層に同名 GameObject があります（参照は ObjectID で維持）");
+                    }
                 }
                 renaming_ = ObjectID::Invalid();
             }
@@ -360,18 +405,44 @@ namespace ReplayEngine::Editor
             ImGui::EndDragDropSource();
         }
 
+        const ImVec2 item_min = ImGui::GetItemRectMin();
+        const ImVec2 item_max = ImGui::GetItemRectMax();
         if (ImGui::BeginDragDropTarget())
         {
+            const float height = (std::max)(1.0f, item_max.y - item_min.y);
+            const float local_y = ImGui::GetIO().MousePos.y - item_min.y;
+
+            // 並べ替えの帯を広く、子にする帯を狭く取る。
+            //
+            // 以前は上 25% / 中央 50% / 下 25% だった。行の高さは 20px 前後なので
+            // 上下の帯が 5px しかなく、並べ替えたいだけでもほぼ中央に当たって
+            // 子にされていた。並べ替えの方が日常的な操作なのでそちらを広くする。
+            //
+            // 中央（子にする）は 30% 残す。ここを 0 にすると親子付けができない。
+            constexpr float reorder_band = 0.35f;
+            DropPlacement placement = DropPlacement::Child;
+            if (local_y < height * reorder_band) placement = DropPlacement::Before;
+            else if (local_y > height * (1.0f - reorder_band))
+                placement = DropPlacement::After;
+
+            // before / after は挿入位置を線で明示する。中央は通常の child drop。
+            if (placement != DropPlacement::Child)
+            {
+                const float y = placement == DropPlacement::Before ? item_min.y : item_max.y;
+                ImGui::GetWindowDrawList()->AddLine(
+                    ImVec2(item_min.x, y), ImVec2(item_max.x, y),
+                    IM_COL32(255, 205, 70, 255), 2.0f);
+            }
+
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(drag_drop_type))
             {
                 if (payload->DataSize == sizeof(ObjectID::ValueType))
                 {
                     ObjectID::ValueType raw = 0;
                     std::memcpy(&raw, payload->Data, sizeof(raw));
-                    // 実際の付け替えは走査後。ここでは要求だけ控える。
                     pending_reparent_child_ = ObjectID(raw);
                     pending_reparent_parent_ = object.ID();
-                    pending_reparent_to_root_ = false;
+                    pending_drop_placement_ = placement;
                 }
             }
             ImGui::EndDragDropTarget();
@@ -408,7 +479,8 @@ namespace ReplayEngine::Editor
             editable && object->Parent() != nullptr))
         {
             pending_reparent_child_ = object->ID();
-            pending_reparent_to_root_ = true;
+            pending_reparent_parent_ = ObjectID::Invalid();
+            pending_drop_placement_ = DropPlacement::Root;
         }
         ImGui::Separator();
         if (ImGui::MenuItem("削除", "Del", false, editable)) DestroySelected(context);

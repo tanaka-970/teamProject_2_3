@@ -306,6 +306,9 @@ void framework::update_editor_camera(float elapsed_time)
     suppress_chord_key(camera_preset.gizmo_rotate, rotate_shortcut_down);
     suppress_chord_key(camera_preset.gizmo_scale, scale_shortcut_down);
 
+    // 診断表示が読む。条件を書き写すと本物とズレるので実物を保持する。
+    last_editor_camera_input = input;
+
     const float move_speed_before_input = editor_camera.move_speed;
     editor_camera_consumed_input = editor_camera_controller.Update(
         editor_camera, input, camera_preset);

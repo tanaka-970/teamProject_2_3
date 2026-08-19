@@ -1,4 +1,4 @@
-#include "framework.h"
+﻿#include "framework.h"
 
 #include "../../RePlayEngine/Components/Physics/ColliderComponent.h"
 #include "../../RePlayEngine/Components/Gameplay/StageGameplayComponents.h"
@@ -141,7 +141,21 @@ void framework::draw_play_from_here_context_menu()
     if (ImGui::MenuItem("Play From Camera"))
         request_play_from_here(editor_camera.Position(), true, "Play From Camera");
 
-    if (ImGui::BeginMenu("Play From Checkpoint"))
+    bool scene_has_checkpoint = false;
+    for (std::size_t i = 0; i < object_scene.GameObjectCount(); ++i)
+    {
+        ReplayEngine::Core::GameObject* object = object_scene.GameObjectAt(i);
+        if (object == nullptr || object->PendingDestroy()) continue;
+        if (object->GetComponent<ReplayEngine::Components::CheckpointComponent>() != nullptr)
+        {
+            scene_has_checkpoint = true;
+            break;
+        }
+    }
+
+    const bool show_checkpoint_menu = project_settings.ShowGameTemplateComponents() ||
+        scene_has_checkpoint;
+    if (show_checkpoint_menu && ImGui::BeginMenu("Play From Checkpoint"))
     {
         bool any = false;
         for (std::size_t i = 0; i < object_scene.GameObjectCount(); ++i)

@@ -1,4 +1,5 @@
-#include "pbr_renderer.h"
+﻿#include "pbr_renderer.h"
+#include "../../RePlayEngine/Rendering/RenderStats.h"
 #include "shader.h"
 #include "misc.h"
 #include "DirectXTK-main/Inc/DDSTextureLoader.h"
@@ -170,6 +171,7 @@ void pbr_renderer::shadow_begin(ID3D11DeviceContext* ctx)
     ctx->OMSetRenderTargets(0, nullptr, shadow_dsv.Get());
     ctx->ClearDepthStencilView(shadow_dsv.Get(), D3D11_CLEAR_DEPTH, 1.0f, 0);
     ctx->RSSetViewports(1, &shadow_viewport);
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
     ctx->PSSetShader(nullptr, nullptr, 0);
 }
 

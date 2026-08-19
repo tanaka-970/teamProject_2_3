@@ -1,4 +1,4 @@
-#include "GameObject.h"
+﻿#include "GameObject.h"
 
 #include "../Registry/ComponentRegistry.h"
 #include "../../Scene/Runtime/Scene.h"
@@ -114,6 +114,43 @@ namespace ReplayEngine::Core
         {
             transform_.SetFromWorldMatrix(world);
         }
+        return true;
+    }
+
+
+    std::size_t GameObject::SiblingIndex() const noexcept
+    {
+        if (parent_ != nullptr)
+        {
+            const auto found = std::find(parent_->children_.begin(), parent_->children_.end(), this);
+            return found == parent_->children_.end() ? parent_->children_.size() :
+                static_cast<std::size_t>(std::distance(parent_->children_.begin(), found));
+        }
+        return scene_ != nullptr ? scene_->RootSiblingIndex(this) : 0u;
+    }
+
+    bool GameObject::SetSiblingIndex(std::size_t index) noexcept
+    {
+        if (pending_destroy_) return false;
+        if (parent_ == nullptr)
+            return scene_ != nullptr && scene_->SetRootSiblingIndex(this, index);
+
+        auto found = std::find(parent_->children_.begin(), parent_->children_.end(), this);
+        if (found == parent_->children_.end()) return false;
+        const std::size_t old_index = static_cast<std::size_t>(
+            std::distance(parent_->children_.begin(), found));
+        // index == child_count は「末尾へ」を意味する。erase 前の index なので、
+        // 自分より後ろへ移動するときは 1 つ詰まる分を補正する。
+        index = (std::min)(index, parent_->children_.size());
+        if (index > old_index) --index;
+        if (old_index == index) return true;
+
+        GameObject* value = *found;
+        parent_->children_.erase(found);
+        index = (std::min)(index, parent_->children_.size());
+        parent_->children_.insert(parent_->children_.begin() +
+            static_cast<std::ptrdiff_t>(index), value);
+        if (scene_ != nullptr) scene_->BumpStructureGeneration();
         return true;
     }
 

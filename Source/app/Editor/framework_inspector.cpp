@@ -99,6 +99,7 @@ void framework::draw_inspector()
         ImGui::Separator();
         draw_project_settings_panel();
         ImGui::Separator();
+        draw_editor_camera_gate_diagnostics();
         draw_controlled_character_diagnostics();
         break;
 
@@ -127,11 +128,21 @@ void framework::draw_inspector()
         break;
 
     case editor_selection::game_object:
+    {
         // GameObject / Component の編集は専用パネルへ委譲する。
         // ここに Component 型ごとの分岐は書かない。
         // 表示内容は ComponentRegistry と PropertyRegistry から自動生成される。
-        object_inspector_panel.DrawContents(object_editor_context);
+        bool show_game_template_components =
+            project_settings.ShowGameTemplateComponents();
+        if (object_inspector_panel.DrawContents(object_editor_context,
+            show_game_template_components))
+        {
+            project_settings.SetShowGameTemplateComponents(
+                show_game_template_components);
+            save_project_settings();
+        }
         break;
+    }
 
     case editor_selection::directional_light:
         ImGui::TextUnformatted("平行光源 / PBR");

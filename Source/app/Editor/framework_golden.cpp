@@ -1,4 +1,5 @@
 ﻿#include "framework.h"
+#include "GoldenImageState.h"
 
 
 namespace Capture = ReplayEngine::Rendering::Capture;
@@ -7,63 +8,63 @@ void framework::request_automated_frame_capture(const std::string& name)
 {
     // Startup Scene の読み込みは非同期なので、ここでは要求を覚えるだけにする。
     // 実際の撮影要求は、描画済みフレームを数える終了処理から十分待って積む。
-    golden_name = name;
+    golden_state_->golden_name = name;
     automated_frame_capture_pending = true;
 }
 
 bool framework::golden_last_capture_ok() const noexcept
 {
-    return golden_last_ok;
+    return golden_state_->golden_last_ok;
 }
 
 const std::string& framework::golden_last_capture_summary() const noexcept
 {
-    return golden_last_summary;
+    return golden_state_->golden_last_summary;
 }
 
 void framework::request_golden(golden_request_kind kind)
 {
-    golden_request = kind;
-    golden_countdown = golden_settle_frames;
-    golden_self_check_has_first = false;
-    golden_self_check_first = Capture::Image{};
+    golden_state_->golden_request = kind;
+    golden_state_->golden_countdown = golden_state_->golden_settle_frames;
+    golden_state_->golden_self_check_has_first = false;
+    golden_state_->golden_self_check_first = Capture::Image{};
 
     const char* label =
         kind == golden_request_kind::capture ? u8"基準画像を撮ります" :
         kind == golden_request_kind::compare ? u8"基準画像と比べます" :
         u8"2 回撮って一致するか調べます";
 
-    golden_last_summary = std::string(label) + u8"（" +
-        std::to_string(golden_settle_frames) + u8" フレーム止めています）";
-    golden_last_ok = false;
+    golden_state_->golden_last_summary = std::string(label) + u8"（" +
+        std::to_string(golden_state_->golden_settle_frames) + u8" フレーム止めています）";
+    golden_state_->golden_last_ok = false;
 }
 
 void framework::tick_golden_capture()
 {
-    if (golden_request == golden_request_kind::none) return;
+    if (golden_state_->golden_request == golden_request_kind::none) return;
 
     // まだ落ち着いていない。
-    if (golden_countdown > 0)
+    if (golden_state_->golden_countdown > 0)
     {
-        --golden_countdown;
+        --golden_state_->golden_countdown;
         return;
     }
 
-    const golden_request_kind kind = golden_request;
-    const std::string name = golden_name;
+    const golden_request_kind kind = golden_state_->golden_request;
+    const std::string name = golden_state_->golden_name;
 
     // 何があってもここで要求を下ろす。
     // 下ろさないと、失敗したときに毎フレーム撮り続けることになる。
-    golden_request = golden_request_kind::none;
+    golden_state_->golden_request = golden_request_kind::none;
 
     Capture::Image current;
     std::string error;
     if (!Capture::GoldenImage::CaptureBackBuffer(device.Get(),
         immediate_context.Get(), swap_chain.Get(), current, error))
     {
-        golden_last_ok = false;
-        golden_last_summary = u8"撮影に失敗しました: " + error;
-        push_editor_log("Error", golden_last_summary);
+        golden_state_->golden_last_ok = false;
+        golden_state_->golden_last_summary = u8"撮影に失敗しました: " + error;
+        push_editor_log("Error", golden_state_->golden_last_summary);
         return;
     }
 
@@ -73,55 +74,55 @@ void framework::tick_golden_capture()
             Capture::GoldenImage::GoldenPath(name);
         if (!Capture::GoldenImage::SavePng(path, current, error))
         {
-            golden_last_ok = false;
-            golden_last_summary = u8"保存に失敗しました: " + error;
-            push_editor_log("Error", golden_last_summary, path);
+            golden_state_->golden_last_ok = false;
+            golden_state_->golden_last_summary = u8"保存に失敗しました: " + error;
+            push_editor_log("Error", golden_state_->golden_last_summary, path);
             return;
         }
-        golden_last_ok = true;
-        golden_last_summary = u8"基準画像を保存しました: " +
+        golden_state_->golden_last_ok = true;
+        golden_state_->golden_last_summary = u8"基準画像を保存しました: " +
             path.generic_u8string();
-        push_editor_log("Info", golden_last_summary, path);
+        push_editor_log("Info", golden_state_->golden_last_summary, path);
         return;
     }
 
     if (kind == golden_request_kind::self_check)
     {
-        if (!golden_self_check_has_first)
+        if (!golden_state_->golden_self_check_has_first)
         {
             // 1 枚目。もう一度同じ手順で撮る。
-            golden_self_check_first = current;
-            golden_self_check_has_first = true;
-            golden_request = golden_request_kind::self_check;
-            golden_countdown = golden_settle_frames;
-            golden_last_summary = u8"1 枚目を撮りました。2 枚目を撮ります";
+            golden_state_->golden_self_check_first = current;
+            golden_state_->golden_self_check_has_first = true;
+            golden_state_->golden_request = golden_request_kind::self_check;
+            golden_state_->golden_countdown = golden_state_->golden_settle_frames;
+            golden_state_->golden_last_summary = u8"1 枚目を撮りました。2 枚目を撮ります";
             return;
         }
 
         Capture::CompareResult result;
-        Capture::GoldenImage::Compare(golden_self_check_first, current,
-            golden_tolerance, result, nullptr);
+        Capture::GoldenImage::Compare(golden_state_->golden_self_check_first, current,
+            golden_state_->golden_tolerance, result, nullptr);
 
-        golden_self_check_has_first = false;
-        golden_self_check_first = Capture::Image{};
+        golden_state_->golden_self_check_has_first = false;
+        golden_state_->golden_self_check_first = Capture::Image{};
 
-        golden_last_ok = result.Identical();
-        if (golden_last_ok)
+        golden_state_->golden_last_ok = result.Identical();
+        if (golden_state_->golden_last_ok)
         {
-            golden_last_summary =
+            golden_state_->golden_last_summary =
                 std::string(u8"自己診断 OK: 2 回撮って一致しました。") +
                 u8"この設定で比較を信用してよい / " + result.Summary();
-            push_editor_log("Info", golden_last_summary);
+            push_editor_log("Info", golden_state_->golden_last_summary);
         }
         else
         {
             // ここが肝心。
             // 一致しないなら「まだ使えない」とはっきり言う。
-            golden_last_summary =
+            golden_state_->golden_last_summary =
                 std::string(u8"自己診断 NG: 同じ画面を 2 回撮ったのに一致しません。") +
                 u8"決定論が足りていないので、比較結果はまだ信用できません / " +
                 result.Summary();
-            push_editor_log("Warning", golden_last_summary);
+            push_editor_log("Warning", golden_state_->golden_last_summary);
         }
         return;
     }
@@ -134,16 +135,16 @@ void framework::tick_golden_capture()
     if (!Capture::GoldenImage::LoadPng(golden_path, golden, error))
     {
         // 「基準が無い」を「差分 0」と混同させない。
-        golden_last_ok = false;
-        golden_last_summary = u8"基準画像がありません。先に「基準を撮る」を押してください: " +
+        golden_state_->golden_last_ok = false;
+        golden_state_->golden_last_summary = u8"基準画像がありません。先に「基準を撮る」を押してください: " +
             error;
-        push_editor_log("Warning", golden_last_summary, golden_path);
+        push_editor_log("Warning", golden_state_->golden_last_summary, golden_path);
         return;
     }
 
     Capture::Image diff;
     Capture::CompareResult result;
-    Capture::GoldenImage::Compare(golden, current, golden_tolerance, result, &diff);
+    Capture::GoldenImage::Compare(golden, current, golden_state_->golden_tolerance, result, &diff);
 
     // 今回撮ったものは必ず残す。
     // 差分が出たとき、実際に何が写っていたかを見られないと直せない。
@@ -158,36 +159,41 @@ void framework::tick_golden_capture()
 
     if (result.size_mismatch)
     {
-        golden_last_ok = false;
-        golden_last_summary = u8"大きさが違います。ウィンドウサイズを基準と合わせてください / " +
+        golden_state_->golden_last_ok = false;
+        golden_state_->golden_last_summary = u8"大きさが違います。ウィンドウサイズを基準と合わせてください / " +
             result.Summary();
-        push_editor_log("Warning", golden_last_summary, golden_path);
+        push_editor_log("Warning", golden_state_->golden_last_summary, golden_path);
         return;
     }
 
     if (!result.compared)
     {
-        golden_last_ok = false;
-        golden_last_summary = u8"比較できませんでした（画像が壊れている可能性があります）";
-        push_editor_log("Error", golden_last_summary, golden_path);
+        golden_state_->golden_last_ok = false;
+        golden_state_->golden_last_summary = u8"比較できませんでした（画像が壊れている可能性があります）";
+        push_editor_log("Error", golden_state_->golden_last_summary, golden_path);
         return;
     }
 
-    golden_last_ok = result.Identical();
-    golden_last_summary = result.Summary();
+    golden_state_->golden_last_ok = result.Identical();
+    golden_state_->golden_last_summary = result.Summary();
 
-    if (golden_last_ok)
+    if (golden_state_->golden_last_ok)
     {
-        push_editor_log("Info", u8"回帰なし: " + golden_last_summary, golden_path);
+        push_editor_log("Info", u8"回帰なし: " + golden_state_->golden_last_summary, golden_path);
         return;
     }
 
     const std::filesystem::path diff_path = Capture::GoldenImage::DiffPath(name);
     if (Capture::GoldenImage::SavePng(diff_path, diff, save_error))
     {
-        golden_last_summary += u8" / 差分画像: " + diff_path.generic_u8string();
+        golden_state_->golden_last_summary += u8" / 差分画像: " + diff_path.generic_u8string();
     }
-    push_editor_log("Warning", u8"回帰あり: " + golden_last_summary, diff_path);
+    push_editor_log("Warning", u8"回帰あり: " + golden_state_->golden_last_summary, diff_path);
+}
+
+bool framework::golden_capture_pending() const noexcept
+{
+    return golden_state_->golden_request != golden_request_kind::none;
 }
 
 void framework::draw_golden_panel()
@@ -209,18 +215,18 @@ void framework::draw_golden_panel()
     if (ImGui::InputText(u8"名前", golden_name_buffer,
         IM_ARRAYSIZE(golden_name_buffer)))
     {
-        golden_name = golden_name_buffer;
+        golden_state_->golden_name = golden_name_buffer;
     }
     ImGui::SameLine();
-    ImGui::TextDisabled("Saved/Golden/%s.png", golden_name.c_str());
+    ImGui::TextDisabled("Saved/Golden/%s.png", golden_state_->golden_name.c_str());
 
     ImGui::SetNextItemWidth(220.0f);
-    ImGui::SliderInt(u8"止めるフレーム数", &golden_settle_frames, 1, 60);
+    ImGui::SliderInt(u8"止めるフレーム数", &golden_state_->golden_settle_frames, 1, 60);
     ImGui::SameLine();
     ImGui::TextDisabled(u8"TAA が収束するまで待つ");
 
     ImGui::SetNextItemWidth(220.0f);
-    ImGui::SliderInt(u8"許容差", &golden_tolerance, 0, 8);
+    ImGui::SliderInt(u8"許容差", &golden_state_->golden_tolerance, 0, 8);
     ImGui::SameLine();
     ImGui::TextDisabled(u8"0 なら完全一致");
 
@@ -233,7 +239,7 @@ void framework::draw_golden_panel()
     // 押せるのに効かないボタンは「壊れている」と受け取られる。
     if (golden_capture_pending())
     {
-        ImGui::TextDisabled(u8"撮影中... 残り %d フレーム", golden_countdown);
+        ImGui::TextDisabled(u8"撮影中... 残り %d フレーム", golden_state_->golden_countdown);
     }
     else
     {
@@ -258,13 +264,13 @@ void framework::draw_golden_panel()
 
     ImGui::Separator();
 
-    if (!golden_last_summary.empty())
+    if (!golden_state_->golden_last_summary.empty())
     {
-        const ImVec4 color = golden_last_ok
+        const ImVec4 color = golden_state_->golden_last_ok
             ? ImVec4(0.45f, 0.85f, 0.50f, 1.0f)
             : ImVec4(1.0f, 0.78f, 0.35f, 1.0f);
         ImGui::PushStyleColor(ImGuiCol_Text, color);
-        ImGui::TextWrapped("%s", golden_last_summary.c_str());
+        ImGui::TextWrapped("%s", golden_state_->golden_last_summary.c_str());
         ImGui::PopStyleColor();
     }
 

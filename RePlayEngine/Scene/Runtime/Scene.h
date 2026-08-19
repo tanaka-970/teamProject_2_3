@@ -101,6 +101,10 @@ namespace ReplayEngine::Scene
         // 親を持たない GameObject。Hierarchy の描画開始点として使う。
         std::vector<Core::GameObject*> RootGameObjects() const;
 
+        // Scene 直下の兄弟順。objects_ 内の非 root の相対順には依存しない。
+        std::size_t RootSiblingIndex(const Core::GameObject* object) const noexcept;
+        bool SetRootSiblingIndex(Core::GameObject* object, std::size_t index) noexcept;
+
         // ---- 更新 ----------------------------------------------------------
 
         // Scene を開始する。以降 OnStart が呼ばれるようになる。

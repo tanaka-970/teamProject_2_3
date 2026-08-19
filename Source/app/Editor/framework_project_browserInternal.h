@@ -3,6 +3,8 @@
 #include "framework.h"
 #include "texture.h"
 #include "../../RePlayEngine/Assets/AssetCache.h"
+#include "../../RePlayEngine/Localization/LocalizationTable.h"
+#include "../../RePlayEngine/Rendering/Effects/EffectPresetAsset.h"
 #include "../../RePlayEngine/Editor/Style/EditorStyle.h"
 #include "../../RePlayEngine/Motion/CompositionAsset.h"
 #include "../../RePlayEngine/Motion/MotionAsset.h"
@@ -69,6 +71,23 @@ namespace framework_project_browser::Detail
         }
         while (!name.empty() && (name.back() == ' ' || name.back() == '.')) name.pop_back();
         return name;
+    }
+
+    // 新規作成時だけ Unity/Explorer 風の "Name (1)" 連番を付ける。
+    // 既存ファイルや手動 rename は勝手に変えない。
+    inline std::filesystem::path UniqueProjectPath(const std::filesystem::path& folder,
+        const std::string& stem, const std::string& extension = {})
+    {
+        std::filesystem::path candidate = folder / (stem + extension);
+        std::error_code error;
+        if (!std::filesystem::exists(candidate, error) || error) return candidate;
+        for (int suffix = 1; suffix < 10000; ++suffix)
+        {
+            candidate = folder / (stem + " (" + std::to_string(suffix) + ")" + extension);
+            error.clear();
+            if (!std::filesystem::exists(candidate, error) || error) return candidate;
+        }
+        return candidate;
     }
 
     struct ProjectEntry final
@@ -171,6 +190,8 @@ namespace framework_project_browser::Detail
         case AssetKind::SceneFlow:return "FLOW";
         case AssetKind::Motion:   return "MOTION";
         case AssetKind::Font:     return "FONT";
+        case AssetKind::Localization: return "LOC";
+        case AssetKind::EffectPreset: return "FX";
         default:                  return "FILE";
         }
     }
@@ -190,6 +211,9 @@ namespace framework_project_browser::Detail
         case AssetKind::SceneFlow:return ImVec4(0.55f, 0.86f, 1.00f, 1.0f);
         case AssetKind::Motion:   return ImVec4(0.95f, 0.78f, 0.36f, 1.0f);
         case AssetKind::Font:     return ImVec4(0.80f, 0.92f, 0.98f, 1.0f);
+        case AssetKind::Localization:return ImVec4(0.62f, 0.92f, 0.82f, 1.0f);
+        case AssetKind::EffectPreset:return ImVec4(0.96f, 0.66f, 0.92f, 1.0f);
+        case AssetKind::InputAction:return ImVec4(0.55f, 0.90f, 1.0f, 1.0f);
         default:                  return ImVec4(0.72f, 0.72f, 0.72f, 1.0f);
         }
     }

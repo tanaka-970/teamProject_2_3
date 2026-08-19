@@ -115,10 +115,36 @@ namespace GameInput
             GamepadAxis::LeftX, 0.18f };
         axes_["MoveY"] = { 'S', VK_DOWN, 'W', VK_UP,
             GamepadAxis::LeftY, 0.18f };
+
+        for (const char* name : { "UISubmit", "UICancel", "NavigateUp",
+            "NavigateDown", "NavigateLeft", "NavigateRight" })
+        {
+            auto found = actions_.find(name);
+            if (found != actions_.end()) found->second.action_map = "UI";
+        }
     }
 
     void InputState::BeginFrame(bool keyboard_captured, bool mouse_captured) noexcept
     {
+        if (suppressed_)
+        {
+            keyboard_previous_.fill(0);
+            keyboard_current_.fill(0);
+            previous_keyboard_captured_ = true;
+            previous_mouse_captured_ = true;
+            keyboard_captured_ = true;
+            mouse_captured_ = true;
+            mouse_delta_x_ = 0.0f;
+            mouse_delta_y_ = 0.0f;
+            for (PadSnapshot& pad : pads_)
+            {
+                pad.current = {};
+                pad.previous = {};
+                pad.connected = false;
+                pad.previous_connected = false;
+            }
+            return;
+        }
         keyboard_previous_ = keyboard_current_;
         keyboard_current_.fill(0);
         previous_keyboard_captured_ = keyboard_captured_;
@@ -335,6 +361,186 @@ namespace GameInput
         const AxisBinding* binding = FindAxis(axis);
         if (binding == nullptr) return 0.0f;
         return AxisValue(*binding, keyboard_current_, Pad(player_slot), !keyboard_captured_);
+    }
+
+    bool InputState::LoadActionAsset(const std::filesystem::path& path, std::string& error)
+    {
+        error.clear();
+        ResetDefaultBindings();
+
+        std::ifstream stream(path, std::ios::binary);
+        if (!stream)
+        {
+            error = "Input Action Asset が見つかりません: " + path.generic_string();
+            return false;
+        }
+
+        // UTF-8 BOM は許容する。先頭 token に混ざると magic が一致しないため除去する。
+        char bom[3]{};
+        stream.read(bom, 3);
+        if (!(stream.gcount() == 3 && static_cast<unsigned char>(bom[0]) == 0xEF &&
+            static_cast<unsigned char>(bom[1]) == 0xBB &&
+            static_cast<unsigned char>(bom[2]) == 0xBF))
+        {
+            stream.clear();
+            stream.seekg(0, std::ios::beg);
+        }
+
+        std::string magic;
+        int version = 0;
+        if (!(stream >> magic >> version) || magic != "REPLAY_INPUT" || version != 1)
+        {
+            error = "Input Action Asset の形式が不正です。hard-coded default を使用します。";
+            ResetDefaultBindings();
+            return false;
+        }
+
+        // 先に hard-coded defaults を退避し、Asset が既存 Action/Axis を欠落させないことを検証する。
+        const auto default_actions = actions_;
+        const auto default_axes = axes_;
+        std::unordered_map<std::string, ActionBinding> loaded_actions;
+        std::unordered_map<std::string, AxisBinding> loaded_axes;
+
+        std::string line;
+        std::getline(stream, line);
+        while (std::getline(stream, line))
+        {
+            if (line.empty() || line[0] == '#') continue;
+            std::istringstream row(line);
+            std::string kind;
+            if (!(row >> kind)) continue;
+            if (kind == "scheme" || kind == "map") continue;
+
+            std::string name;
+            std::string map;
+            if (!(row >> std::quoted(name) >> std::quoted(map))) continue;
+            if (kind == "action")
+            {
+                ActionBinding binding{};
+                unsigned int button = 0;
+                if (row >> binding.keyboard_primary >> binding.keyboard_secondary >> button)
+                {
+                    binding.gamepad_button = static_cast<WORD>(button);
+                    binding.action_map = map.empty() ? "Gameplay" : map;
+                    loaded_actions[name] = binding;
+                }
+            }
+            else if (kind == "axis")
+            {
+                AxisBinding binding{};
+                int axis = 0;
+                if (row >> binding.negative_primary >> binding.negative_secondary >>
+                    binding.positive_primary >> binding.positive_secondary >> axis >> binding.dead_zone &&
+                    axis >= static_cast<int>(GamepadAxis::None) &&
+                    axis <= static_cast<int>(GamepadAxis::RightTrigger))
+                {
+                    binding.gamepad_axis = static_cast<GamepadAxis>(axis);
+                    binding.dead_zone = Clamp(binding.dead_zone, 0.0f, 0.95f);
+                    binding.action_map = map.empty() ? "Gameplay" : map;
+                    loaded_axes[name] = binding;
+                }
+            }
+        }
+
+        if (!stream.eof() && stream.fail())
+        {
+            error = "Input Action Asset の読み取り中に I/O error が発生しました。";
+            ResetDefaultBindings();
+            return false;
+        }
+
+        for (const auto& entry : default_actions)
+        {
+            if (loaded_actions.find(entry.first) == loaded_actions.end())
+            {
+                error = "既存 Action が不足しています: " + entry.first +
+                    "。hard-coded default を使用します。";
+                ResetDefaultBindings();
+                return false;
+            }
+        }
+        for (const auto& entry : default_axes)
+        {
+            if (loaded_axes.find(entry.first) == loaded_axes.end())
+            {
+                error = "既存 Axis が不足しています: " + entry.first +
+                    "。hard-coded default を使用します。";
+                ResetDefaultBindings();
+                return false;
+            }
+        }
+
+        actions_ = std::move(loaded_actions);
+        axes_ = std::move(loaded_axes);
+        return true;
+    }
+
+    bool InputState::SaveActionAsset(const std::filesystem::path& path, std::string& error) const
+    {
+        error.clear();
+        std::error_code ec;
+        if (!path.parent_path().empty()) std::filesystem::create_directories(path.parent_path(), ec);
+        if (ec)
+        {
+            error = "Input Asset folder を作成できません: " + ec.message();
+            return false;
+        }
+
+        std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+        if (!stream)
+        {
+            error = "Input Action Asset を開けません。";
+            return false;
+        }
+
+        stream << "REPLAY_INPUT 1\n";
+        stream << "scheme " << std::quoted("Keyboard&Mouse") << '\n';
+        stream << "scheme " << std::quoted("Gamepad") << '\n';
+
+        std::vector<std::string> maps;
+        const auto add_map = [&maps](const std::string& map)
+        {
+            const std::string value = map.empty() ? "Gameplay" : map;
+            if (std::find(maps.begin(), maps.end(), value) == maps.end()) maps.push_back(value);
+        };
+        for (const auto& entry : actions_) add_map(entry.second.action_map);
+        for (const auto& entry : axes_) add_map(entry.second.action_map);
+        std::sort(maps.begin(), maps.end());
+        for (const std::string& map : maps) stream << "map " << std::quoted(map) << '\n';
+
+        std::vector<std::string> names;
+        names.reserve(actions_.size());
+        for (const auto& pair : actions_) names.push_back(pair.first);
+        std::sort(names.begin(), names.end());
+        for (const std::string& name : names)
+        {
+            const ActionBinding& a = actions_.at(name);
+            stream << "action " << std::quoted(name) << ' ' <<
+                std::quoted(a.action_map.empty() ? "Gameplay" : a.action_map) << ' ' <<
+                a.keyboard_primary << ' ' << a.keyboard_secondary << ' ' <<
+                static_cast<unsigned int>(a.gamepad_button) << '\n';
+        }
+
+        names.clear();
+        names.reserve(axes_.size());
+        for (const auto& pair : axes_) names.push_back(pair.first);
+        std::sort(names.begin(), names.end());
+        for (const std::string& name : names)
+        {
+            const AxisBinding& a = axes_.at(name);
+            stream << "axis " << std::quoted(name) << ' ' <<
+                std::quoted(a.action_map.empty() ? "Gameplay" : a.action_map) << ' ' <<
+                a.negative_primary << ' ' << a.negative_secondary << ' ' <<
+                a.positive_primary << ' ' << a.positive_secondary << ' ' <<
+                static_cast<int>(a.gamepad_axis) << ' ' << a.dead_zone << '\n';
+        }
+
+        if (!stream)
+        {
+            error = "Input Action Asset の書き込みに失敗しました。";
+            return false;
+        }
+        return true;
     }
 
     bool InputState::LoadBindings(const std::filesystem::path& path, std::string& error)

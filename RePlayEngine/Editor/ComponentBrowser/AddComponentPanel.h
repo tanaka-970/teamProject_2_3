@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 namespace ReplayEngine::Core { class GameObject; }
 
@@ -20,7 +20,10 @@ namespace ReplayEngine::Editor
 
         // 毎フレーム呼ぶ。ポップアップが開いていれば描画する。
         // Component を追加したら true を返す。
-        bool Draw(EditorContext& context, Core::GameObject& target);
+        // Template 表示設定は値だけ受け取り、永続化は呼び出し側へ返す。
+        bool Draw(EditorContext& context, Core::GameObject& target,
+            bool& show_game_template_components,
+            bool& show_game_template_components_changed);
 
         void Close() noexcept;
 

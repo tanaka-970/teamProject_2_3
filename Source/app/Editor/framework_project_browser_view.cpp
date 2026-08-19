@@ -104,7 +104,7 @@ void framework::draw_project_folder_contents()
             ? AssetKind::Unknown : project_kind_for(entry.path);
         if (!entry.is_directory && asset_type_filter != 0)
         {
-            int filter_type = 10;
+            int filter_type = 12;
             if (kind == AssetKind::Model) filter_type = 1;
             else if (ToLowerCopy(entry.path.extension().u8string()) == ".replayprefab")
                 filter_type = 2;
@@ -116,6 +116,10 @@ void framework::draw_project_folder_contents()
             else if (kind == AssetKind::SceneFlow) filter_type = 7;
             else if (kind == AssetKind::Motion) filter_type = 8;
             else if (kind == AssetKind::Font) filter_type = 9;
+            else if (kind == AssetKind::Localization) filter_type = 10;
+            else if (kind == AssetKind::EffectPreset) filter_type = 11;
+            else if (kind == AssetKind::InputAction) filter_type = 12;
+            else filter_type = 13;
             if (asset_type_filter != filter_type) continue;
         }
 
@@ -130,8 +134,10 @@ void framework::draw_project_folder_contents()
             record = &asset_database.Register(entry.path, kind);
             registered_any = true;
         }
-        const bool selected = record != nullptr &&
-            !selected_asset_guid.empty() && record->guid == selected_asset_guid;
+        const bool selected = (!project_selected_entry_path.empty() &&
+            project_selected_entry_path == entry.path) ||
+            (record != nullptr && !selected_asset_guid.empty() &&
+                record->guid == selected_asset_guid);
 
         if (project_grid_view && drawn % columns != 0) ImGui::SameLine();
         ++drawn;
@@ -151,6 +157,8 @@ void framework::draw_project_folder_contents()
             if (ImGui::ImageButton(reinterpret_cast<ImTextureID>(thumbnail),
                 icon_size, ImVec2(0, 0), ImVec2(1, 1), 2))
             {
+                project_selected_entry_path = entry.path;
+                selected_editor_object = editor_selection::asset;
                 if (record != nullptr) selected_asset_guid = record->guid;
             }
         }
@@ -159,6 +167,8 @@ void framework::draw_project_folder_contents()
             ImGui::PushStyleColor(ImGuiCol_Text, KindColor(kind, entry.is_directory));
             if (ImGui::Button(KindBadge(kind, entry.is_directory), icon_size))
             {
+                project_selected_entry_path = entry.path;
+                selected_editor_object = editor_selection::asset;
                 if (record != nullptr) selected_asset_guid = record->guid;
             }
             ImGui::PopStyleColor();
@@ -191,6 +201,9 @@ void framework::draw_project_folder_contents()
         // アイコンボタン直後に置く。
         if (ImGui::BeginPopupContextItem("##ProjectItemMenu"))
         {
+            project_selected_entry_path = entry.path;
+            selected_editor_object = editor_selection::asset;
+            if (record != nullptr) selected_asset_guid = record->guid;
             if (ImGui::MenuItem("名前を変更"))
             {
                 project_rename_target = entry.path;
@@ -251,6 +264,9 @@ void framework::draw_project_folder_contents()
             {
                 set_project_folder(entry.path);
             }
+            ImGui::Separator();
+            if (ImGui::MenuItem("削除", "Del", false, object_editor_context.CanEdit()))
+                project_request_delete(entry.path);
             ImGui::Separator();
             ImGui::TextDisabled("%s", entry.name.c_str());
             ImGui::EndPopup();

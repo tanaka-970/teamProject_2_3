@@ -1,6 +1,8 @@
 ﻿#include "framework.h"
 #include "texture.h"
 #include "../../RePlayEngine/Assets/AssetCache.h"
+#include "../../RePlayEngine/Localization/LocalizationTable.h"
+#include "../../RePlayEngine/Rendering/Effects/EffectPresetAsset.h"
 #include "../../RePlayEngine/Editor/Style/EditorStyle.h"
 #include "../../RePlayEngine/Motion/CompositionAsset.h"
 #include "../../RePlayEngine/Motion/MotionAsset.h"
@@ -60,7 +62,7 @@ void framework::draw_project_browser()
         ImGui::SetTooltip("Project 全体を再帰検索します");
     ImGui::SameLine();
     const char* filters[] =
-        { "All", "Model", "Prefab", "Scene", "Material", "Script", "Shader", "Flow", "Motion", "Font", "Other" };
+        { "All", "Model", "Prefab", "Scene", "Material", "Script", "Shader", "Flow", "Motion", "Font", "Localization", "EffectPreset", "Input", "Other" };
     ImGui::SetNextItemWidth(120.0f);
     ImGui::Combo("##ProjectFilter", &asset_type_filter, filters, IM_ARRAYSIZE(filters));
     ImGui::SameLine();
@@ -132,6 +134,18 @@ void framework::draw_project_browser()
             {
                 project_create_motion(project_new_item_name);
             }
+            if (ImGui::MenuItem("Localization Table"))
+            {
+                project_create_localization(project_new_item_name);
+            }
+            if (ImGui::MenuItem("Effect Preset"))
+            {
+                project_create_effect_preset(project_new_item_name);
+            }
+            if (ImGui::MenuItem("Input Action Asset"))
+            {
+                project_create_input_action_asset(project_new_item_name);
+            }
             if (ImGui::MenuItem("Surface Shader"))
             {
                 project_create_surface_shader(project_new_item_name);
@@ -161,6 +175,8 @@ void framework::draw_project_browser()
         }
     }
     ImGui::EndChild();
+
+    draw_project_delete_popup();
 
     if (!project_browser_status.empty())
     {

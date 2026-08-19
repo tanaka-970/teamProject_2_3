@@ -4,6 +4,7 @@
 //   FontAtlasSdf.cpp  ... SDF 生成と Atlas texture の再構築
 
 #include "FontAtlas.h"
+#include "RichTextParser.h"
 
 #include "../Assets/AssetDatabase.h"
 #include "../Components/UI/UITextComponent.h"
@@ -242,58 +243,74 @@ namespace ReplayEngine::UI
     void FontAtlas::BuildGlyphs(Components::UITextComponent& text_component,
         float width, float height, const Assets::AssetDatabase* asset_database)
     {
+        const std::string resolved_text = text_component.ResolvedText();
+        const float base_font_size = (std::max)(1.0f, text_component.font_size);
+        const RichTextResult parsed = RichTextParser::Parse(resolved_text,
+            text_component.rich_text, base_font_size);
+        text_component.SetDisplayCharacterCount(parsed.display_character_count);
+
         SelectFace(text_component.font.guid, asset_database);
         FaceAtlas* face = ActiveFace();
-        if (face != nullptr && !EnsureCodepoints(*face, text_component.text))
+        if (face != nullptr && !EnsureCodepoints(*face, parsed.plain_text))
         {
-            // カスタムフォントが収まりきらない場合も、文字列の描画自体は
-            // 止めず、既定フォントへ切り替える。参照値は UIText 側に残す。
             active_face_key_ = fallback_face_key;
             EnsureFallbackFace();
             face = ActiveFace();
-            if (face != nullptr) EnsureCodepoints(*face, text_component.text);
+            if (face != nullptr) EnsureCodepoints(*face, parsed.plain_text);
         }
 
         std::vector<Components::UITextComponent::GlyphQuad>& glyphs = text_component.MutableGlyphs();
         glyphs.clear();
-        const float font_size = (std::max)(1.0f, text_component.font_size);
-        const float line_height = font_size * (std::max)(0.1f, text_component.line_spacing);
+        const float base_line_height = base_font_size * (std::max)(0.1f, text_component.line_spacing);
         const float wrap_width = text_component.word_wrap ? (std::max)(1.0f, width) : 1.0e9f;
         std::vector<std::size_t> line_starts{ 0 };
         std::vector<float> line_widths;
-        float x = 0.0f, y = 0.0f;
-        int character_index = 0;
-        std::size_t offset = 0;
-        while (offset < text_component.text.size())
+        float x = 0.0f;
+        float y = 0.0f;
+        float line_height = base_line_height;
+
+        const auto finish_line = [&]()
         {
-            const std::uint32_t codepoint = DecodeUtf8(text_component.text, offset);
-            if (codepoint == '\r') continue;
-            if (codepoint == '\n')
-            {
-                line_widths.push_back(x); x = 0.0f; y += line_height;
-                line_starts.push_back(glyphs.size()); ++character_index; continue;
-            }
-            const GlyphInfo& glyph = Glyph(codepoint, font_size);
+            line_widths.push_back(x);
+                y += line_height;
+            x = 0.0f;
+            line_height = base_line_height;
+            line_starts.push_back(glyphs.size());
+        };
+
+        for (const RichTextCharacter& styled : parsed.characters)
+        {
+            if (styled.codepoint == '\r') continue;
+            if (styled.codepoint == '\n') { finish_line(); continue; }
+            const float styled_size = (std::max)(1.0f, styled.style.font_size);
+            const GlyphInfo& glyph = Glyph(styled.codepoint, styled_size);
             const float advance = glyph.advance + text_component.character_spacing;
+            const float required_line_height = styled_size *
+                (std::max)(0.1f, text_component.line_spacing);
             if (text_component.word_wrap && x > 0.0f && x + advance > wrap_width)
-            {
-                line_widths.push_back(x); x = 0.0f; y += line_height;
-                line_starts.push_back(glyphs.size());
-            }
+                finish_line();
+            line_height = (std::max)(line_height, required_line_height);
+
             Components::UITextComponent::GlyphQuad quad{};
             quad.position = { x + glyph.bearing.x, y + glyph.bearing.y };
-            quad.size = glyph.size; quad.uv = glyph.uv;
-            quad.character_index = character_index; quad.advance = glyph.advance;
+            quad.size = glyph.size;
+            quad.uv = glyph.uv;
+            quad.rich_color = styled.style.color;
+            quad.character_index = styled.character_index;
+            quad.advance = glyph.advance;
+            quad.rich_bold = styled.style.bold;
+            quad.rich_italic = styled.style.italic;
             glyphs.push_back(quad);
-            x += advance; ++character_index;
+            x += advance * (styled.style.bold ? 1.02f : 1.0f);
         }
         line_widths.push_back(x);
-        const float total_height = line_height * static_cast<float>((std::max)(std::size_t{1}, line_widths.size()));
+        const float total_height = y + line_height;
         float vertical_offset = 0.0f;
         if (text_component.vertical_align == Components::UITextComponent::Middle)
             vertical_offset = (height - total_height) * 0.5f;
         else if (text_component.vertical_align == Components::UITextComponent::Bottom)
             vertical_offset = height - total_height;
+
         for (std::size_t line = 0; line < line_widths.size(); ++line)
         {
             const std::size_t start = line_starts[(std::min)(line, line_starts.size() - 1)];
