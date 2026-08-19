@@ -597,6 +597,7 @@
     <ClCompile Include="Source\app\Runtime\framework_runtime_scene.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Validation\EditorIntegrationValidation.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Validation\AnimationUndoValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Validation\EditorCameraValidation.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\StressValidation.cpp" />
     <ClCompile Include="Source\app\Runtime\framework_shutdown_regression.cpp" />
 </ItemGroup>
@@ -896,6 +897,7 @@
     <ClInclude Include="RePlayEngine\Editor\Validation\EditorIntegrationValidation.h" />
     <ClInclude Include="RePlayEngine\Editor\Validation\EditorIntegrationValidationInternal.h" />
     <ClInclude Include="RePlayEngine\Editor\Validation\AnimationUndoValidation.h" />
+    <ClInclude Include="RePlayEngine\Editor\Validation\EditorCameraValidation.h" />
     <ClInclude Include="RePlayEngine\Runtime\Validation\StressValidation.h" />
     <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderMaterialValidation.h" />
     <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderLightingValidation.h" />
