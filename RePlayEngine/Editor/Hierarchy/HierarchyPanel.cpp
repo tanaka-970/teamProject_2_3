@@ -1,4 +1,9 @@
-﻿#include "HierarchyPanel.h"
+﻿// Hierarchy Panel のうち、検索・選択・Drag & Drop を含むツリー描画だけを持つ。
+//
+//   HierarchyPanel.cpp          ... Hierarchy tree の描画と操作（このファイル）
+//   HierarchyPanelCommands.cpp  ... 作成・複製・削除 command
+
+#include "HierarchyPanel.h"
 
 #include "../Core/EditorContext.h"
 #include "../../Assets/AssetDatabase.h"
@@ -136,40 +141,80 @@ namespace ReplayEngine::Editor
                     ObjectID::ValueType raw = 0;
                     std::memcpy(&raw, payload->Data, sizeof(raw));
                     pending_reparent_child_ = ObjectID(raw);
-                    pending_reparent_to_root_ = true;
+                    pending_reparent_parent_ = ObjectID::Invalid();
+                    pending_drop_placement_ = DropPlacement::Root;
                 }
             }
             ImGui::EndDragDropTarget();
         }
 
-        // ツリー走査が終わってから親子関係を変更する。
+        // ツリー走査が終わってから親子/兄弟順を変更する。
         if (pending_reparent_child_.Valid() && editable)
         {
             GameObject* child = scene->FindGameObjectByID(pending_reparent_child_);
-            GameObject* parent = pending_reparent_to_root_
-                ? nullptr : scene->FindGameObjectByID(pending_reparent_parent_);
-
+            GameObject* target = scene->FindGameObjectByID(pending_reparent_parent_);
             if (child != nullptr)
             {
-                context.BeginEdit("親子関係を変更");
-                // SetParent は自分自身や子孫を親にしようとすると false を返す。
-                // 循環階層はここで確実に弾かれる。
-                if (child->SetParent(parent, true))
+                context.BeginEdit("Hierarchy の並びを変更");
+                bool changed = false;
+                if (pending_drop_placement_ == DropPlacement::Root)
+                {
+                    changed = child->SetParent(nullptr, true);
+                }
+                else if (target != nullptr && target != child)
+                {
+                    if (pending_drop_placement_ == DropPlacement::Child)
+                    {
+                        changed = child->SetParent(target, true);
+                    }
+                    else
+                    {
+                        GameObject* target_parent = target->Parent();
+                        if (child->SetParent(target_parent, true))
+                        {
+                            const std::size_t target_index = target->SiblingIndex();
+                            const std::size_t desired = target_index +
+                                (pending_drop_placement_ == DropPlacement::After ? 1u : 0u);
+                            changed = child->SetSiblingIndex(desired);
+                        }
+                    }
+                }
+
+                if (changed)
                 {
                     context.CommitEdit();
-                    context.SetStatus(parent != nullptr
-                        ? child->Name() + " を " + parent->Name() + " の子にしました"
-                        : child->Name() + " をシーン直下へ移しました");
+                    context.SetStatus("Hierarchy の親子/兄弟順を変更しました");
                 }
                 else
                 {
                     context.CancelEdit();
-                    context.SetStatus("自分自身または子孫を親にはできません");
+                    context.SetStatus("その位置へは移動できません（循環階層を含む）");
                 }
             }
             pending_reparent_child_ = ObjectID::Invalid();
             pending_reparent_parent_ = ObjectID::Invalid();
-            pending_reparent_to_root_ = false;
+            pending_drop_placement_ = DropPlacement::Child;
+        }
+    }
+
+    namespace
+    {
+        bool HierarchyHasSiblingNameDuplicate(const Scene::Scene& scene,
+            const GameObject& object, const std::string& name)
+        {
+            if (object.Parent() != nullptr)
+            {
+                for (const GameObject* sibling : object.Parent()->Children())
+                    if (sibling != nullptr && sibling != &object && sibling->Name() == name) return true;
+                return false;
+            }
+            for (std::size_t i = 0; i < scene.GameObjectCount(); ++i)
+            {
+                const GameObject* sibling = scene.GameObjectAt(i);
+                if (sibling != nullptr && sibling != &object && sibling->Parent() == nullptr &&
+                    sibling->Name() == name) return true;
+            }
+            return false;
         }
     }
 
@@ -207,6 +252,11 @@ namespace ReplayEngine::Editor
                     context.BeginEdit("GameObject 名を変更");
                     object.SetName(rename_buffer_);
                     context.CommitEdit();
+                    if (Scene::Scene* scene = context.GetScene();
+                        scene != nullptr && HierarchyHasSiblingNameDuplicate(*scene, object, object.Name()))
+                    {
+                        context.SetStatus("同じ階層に同名 GameObject があります（参照は ObjectID で維持）");
+                    }
                 }
                 renaming_ = ObjectID::Invalid();
             }
@@ -355,18 +405,44 @@ namespace ReplayEngine::Editor
             ImGui::EndDragDropSource();
         }
 
+        const ImVec2 item_min = ImGui::GetItemRectMin();
+        const ImVec2 item_max = ImGui::GetItemRectMax();
         if (ImGui::BeginDragDropTarget())
         {
+            const float height = (std::max)(1.0f, item_max.y - item_min.y);
+            const float local_y = ImGui::GetIO().MousePos.y - item_min.y;
+
+            // 並べ替えの帯を広く、子にする帯を狭く取る。
+            //
+            // 以前は上 25% / 中央 50% / 下 25% だった。行の高さは 20px 前後なので
+            // 上下の帯が 5px しかなく、並べ替えたいだけでもほぼ中央に当たって
+            // 子にされていた。並べ替えの方が日常的な操作なのでそちらを広くする。
+            //
+            // 中央（子にする）は 30% 残す。ここを 0 にすると親子付けができない。
+            constexpr float reorder_band = 0.35f;
+            DropPlacement placement = DropPlacement::Child;
+            if (local_y < height * reorder_band) placement = DropPlacement::Before;
+            else if (local_y > height * (1.0f - reorder_band))
+                placement = DropPlacement::After;
+
+            // before / after は挿入位置を線で明示する。中央は通常の child drop。
+            if (placement != DropPlacement::Child)
+            {
+                const float y = placement == DropPlacement::Before ? item_min.y : item_max.y;
+                ImGui::GetWindowDrawList()->AddLine(
+                    ImVec2(item_min.x, y), ImVec2(item_max.x, y),
+                    IM_COL32(255, 205, 70, 255), 2.0f);
+            }
+
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(drag_drop_type))
             {
                 if (payload->DataSize == sizeof(ObjectID::ValueType))
                 {
                     ObjectID::ValueType raw = 0;
                     std::memcpy(&raw, payload->Data, sizeof(raw));
-                    // 実際の付け替えは走査後。ここでは要求だけ控える。
                     pending_reparent_child_ = ObjectID(raw);
                     pending_reparent_parent_ = object.ID();
-                    pending_reparent_to_root_ = false;
+                    pending_drop_placement_ = placement;
                 }
             }
             ImGui::EndDragDropTarget();
@@ -403,111 +479,11 @@ namespace ReplayEngine::Editor
             editable && object->Parent() != nullptr))
         {
             pending_reparent_child_ = object->ID();
-            pending_reparent_to_root_ = true;
+            pending_reparent_parent_ = ObjectID::Invalid();
+            pending_drop_placement_ = DropPlacement::Root;
         }
         ImGui::Separator();
         if (ImGui::MenuItem("削除", "Del", false, editable)) DestroySelected(context);
-    }
-
-    void HierarchyPanel::DrawCreateMenu(EditorContext& context, GameObject* parent)
-    {
-        if (!context.CanEdit()) return;
-
-        if (ImGui::MenuItem("空の GameObject"))
-        {
-            CreateEmptyGameObject(context, parent);
-        }
-
-        if (ImGui::BeginMenu("3D Object"))
-        {
-            if (ImGui::MenuItem("Plane"))
-                CreateBuiltInPrimitive(context, parent, "Plane", Components::PrimitiveMeshRendererComponent::Plane);
-            if (ImGui::MenuItem("Cube"))
-                CreateBuiltInPrimitive(context, parent, "Cube", Components::PrimitiveMeshRendererComponent::Cube);
-            if (ImGui::MenuItem("Sphere"))
-                CreateBuiltInPrimitive(context, parent, "Sphere", Components::PrimitiveMeshRendererComponent::Sphere);
-            if (ImGui::MenuItem("Capsule"))
-                CreateBuiltInPrimitive(context, parent, "Capsule", Components::PrimitiveMeshRendererComponent::Capsule);
-            if (ImGui::MenuItem("Cylinder"))
-                CreateBuiltInPrimitive(context, parent, "Cylinder", Components::PrimitiveMeshRendererComponent::Cylinder);
-            if (ImGui::MenuItem("Quad"))
-                CreateBuiltInPrimitive(context, parent, "Quad", Components::PrimitiveMeshRendererComponent::Quad);
-            ImGui::EndMenu();
-        }
-
-        if (ImGui::MenuItem("Landscape Ground"))
-        {
-            CreateLandscapeGround(context, parent);
-        }
-    }
-
-    void HierarchyPanel::CreateBuiltInPrimitive(EditorContext& context, GameObject* parent,
-        const char* display_name, int primitive_type)
-    {
-        Scene::Scene* scene = context.GetScene();
-        if (scene == nullptr || !context.CanEdit() || display_name == nullptr)
-            return;
-
-        context.BeginEdit(std::string(display_name) + " を作成");
-        GameObject* created = scene->CreateGameObject(display_name);
-        if (created == nullptr)
-        {
-            context.CancelEdit();
-            return;
-        }
-        if (parent != nullptr) created->SetParent(parent, false);
-
-        auto* renderer = created->AddComponent<Components::PrimitiveMeshRendererComponent>();
-        if (renderer == nullptr)
-        {
-            scene->DestroyGameObject(created->ID());
-            context.CancelEdit();
-            return;
-        }
-        // Plane / Cube 等は特別な GameObject ではなく、
-        // 普通の GameObject に Primitive Mesh Renderer を付けて表現する。
-        renderer->primitive_type = primitive_type;
-        renderer->shading_model = 1;
-        renderer->visible = true;
-
-        context.CommitEdit();
-        context.Selection().Select(created->ID(), false);
-        context.SetStatus(std::string(display_name) + " を作成しました");
-    }
-
-    void HierarchyPanel::CreateLandscapeGround(EditorContext& context, GameObject* parent)
-    {
-        Scene::Scene* scene = context.GetScene();
-        if (scene == nullptr || !context.CanEdit()) return;
-
-        context.BeginEdit("Landscape Ground を作成");
-        GameObject* ground = scene->CreateGameObject("Ground");
-        if (ground == nullptr)
-        {
-            context.CancelEdit();
-            return;
-        }
-        if (parent != nullptr) ground->SetParent(parent, false);
-
-        auto* landscape = ground->AddComponent<Components::LandscapeComponent>();
-        auto* renderer = ground->AddComponent<Components::LandscapeRendererComponent>();
-        auto* collider = ground->AddComponent<Components::LandscapeColliderComponent>();
-        if (landscape == nullptr || renderer == nullptr || collider == nullptr ||
-            !landscape->GenerateFlat(33, 33, 2.0f, 0.0f))
-        {
-            scene->DestroyGameObject(ground->ID());
-            context.CancelEdit();
-            return;
-        }
-
-        // GenerateFlat が geometry 自体を Pivot 中心へ生成するため、
-        // 作成経路によって Transform 補正を変えない。
-        renderer->tint = { 0.36f, 0.48f, 0.31f, 1.0f };
-        collider->double_sided = true;
-
-        context.CommitEdit();
-        context.Selection().Select(ground->ID(), false);
-        context.SetStatus("Landscape Ground を作成しました");
     }
 
     void HierarchyPanel::BeginRenameSelection(EditorContext& context)
@@ -521,74 +497,4 @@ namespace ReplayEngine::Editor
         context.SetStatus("F2: GameObject 名を変更");
     }
 
-    void HierarchyPanel::CreateEmptyGameObject(EditorContext& context, GameObject* parent)
-    {
-        Scene::Scene* scene = context.GetScene();
-        if (scene == nullptr || !context.CanEdit()) return;
-
-        context.BeginEdit("GameObject を作成");
-        GameObject* created = scene->CreateGameObject("GameObject");
-        if (created == nullptr)
-        {
-            context.CancelEdit();
-            return;
-        }
-        if (parent != nullptr) created->SetParent(parent, false);
-
-        context.CommitEdit();
-        context.Selection().Select(created->ID(), false);
-        context.SetStatus("GameObject を作成しました");
-    }
-
-    void HierarchyPanel::DuplicateSelected(EditorContext& context)
-    {
-        Scene::Scene* scene = context.GetScene();
-        if (scene == nullptr || !context.CanEdit()) return;
-        if (context.Selection().Empty()) return;
-
-        // 走査中に Scene が伸びるので、対象 ID を先に控える。
-        const std::vector<ObjectID> targets = context.Selection().All();
-
-        context.BeginEdit("GameObject を複製");
-        std::vector<ObjectID> created_ids;
-        for (const ObjectID id : targets)
-        {
-            GameObject* source = scene->FindGameObjectByID(id);
-            if (source == nullptr) continue;
-
-            GameObject* clone = Scene::Serialization::DuplicateGameObject(*scene, *source, true);
-            if (clone != nullptr) created_ids.push_back(clone->ID());
-        }
-
-        if (created_ids.empty())
-        {
-            context.CancelEdit();
-            return;
-        }
-        context.CommitEdit();
-
-        context.Selection().Clear();
-        for (const ObjectID id : created_ids) context.Selection().Select(id, true);
-        context.SetStatus(std::to_string(created_ids.size()) + " 個を複製しました");
-    }
-
-    void HierarchyPanel::DestroySelected(EditorContext& context)
-    {
-        Scene::Scene* scene = context.GetScene();
-        if (scene == nullptr || !context.CanEdit()) return;
-        if (context.Selection().Empty()) return;
-
-        const std::vector<ObjectID> targets = context.Selection().All();
-
-        context.BeginEdit("GameObject を削除");
-        for (const ObjectID id : targets)
-        {
-            // 削除予約が立つだけ。実体は CommitEdit の中で破棄される。
-            scene->DestroyGameObject(id);
-        }
-        context.CommitEdit();
-
-        context.Selection().Clear();
-        context.SetStatus(std::to_string(targets.size()) + " 個を削除しました");
-    }
 }

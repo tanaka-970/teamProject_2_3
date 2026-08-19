@@ -1,4 +1,5 @@
-#include "pbr_renderer.h"
+﻿#include "pbr_renderer.h"
+#include "../../RePlayEngine/Rendering/RenderStats.h"
 #include "shader.h"
 #include "misc.h"
 #include "DirectXTK-main/Inc/DDSTextureLoader.h"
@@ -93,6 +94,8 @@ bool pbr_renderer::initialize(ID3D11Device* device)
         { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
         { "WEIGHTS", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
         { "BONES", 0, DXGI_FORMAT_R32G32B32A32_UINT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+        { "MORPHPOS", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+        { "MORPHNORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
     };
     create_vs_from_cso(device, "shadow_caster_skinned_mesh_vs.cso",
         shadow_caster_skinned_vs.GetAddressOf(), shadow_caster_skinned_il.GetAddressOf(),
@@ -168,6 +171,7 @@ void pbr_renderer::shadow_begin(ID3D11DeviceContext* ctx)
     ctx->OMSetRenderTargets(0, nullptr, shadow_dsv.Get());
     ctx->ClearDepthStencilView(shadow_dsv.Get(), D3D11_CLEAR_DEPTH, 1.0f, 0);
     ctx->RSSetViewports(1, &shadow_viewport);
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
     ctx->PSSetShader(nullptr, nullptr, 0);
 }
 

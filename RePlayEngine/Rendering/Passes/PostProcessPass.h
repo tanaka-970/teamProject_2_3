@@ -2,6 +2,7 @@
 
 #include <d3d11.h>
 #include <wrl.h>
+#include <DirectXMath.h>
 
 class fullscreen_quad;
 
@@ -16,6 +17,7 @@ namespace ReplayEngine::Rendering
             float bloom_intensity = 0.25f;
             float vignette_strength = 0.138f;
             float fxaa_enable = 1.0f;
+            DirectX::XMFLOAT4 color_filter{ 1.0f, 1.0f, 1.0f, 1.0f };
         };
 
         bool Initialize(ID3D11Device* device);
@@ -36,6 +38,7 @@ namespace ReplayEngine::Rendering
             float fxaa_enable;
             float screen_size[2];
             float padding[2];
+            DirectX::XMFLOAT4 color_filter;
         };
 
         Microsoft::WRL::ComPtr<ID3D11PixelShader> pixel_shader_;

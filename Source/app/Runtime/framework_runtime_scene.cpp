@@ -1,4 +1,4 @@
-// RuntimeSceneService / SceneFlowService と framework の接続部。
+﻿// RuntimeSceneService / SceneFlowService と framework の接続部。
 //
 // ここが唯一の「Runtime World を結線する場所」。
 //
@@ -37,6 +37,7 @@
 #include "../../RePlayEngine/Scripting/CSharp/CSharpScriptBackend.h"
 #include "../../RePlayEngine/Scene/Serialization/PrefabSerializer.h"
 #include "../../RePlayEngine/Scene/Serialization/SceneData.h"
+#include "../../RePlayEngine/Scene/Serialization/SceneSerializer.h"
 
 #include <filesystem>
 #include <string>
@@ -67,14 +68,15 @@ ReplayEngine::Runtime::RuntimeStatus framework::scene_asset_resolver::ResolveSce
         return RRuntime::RuntimeStatus::InvalidAssetType;
     }
 
+    const std::filesystem::path source_path = owner_->content_path(record->source_path);
     std::error_code filesystem_error;
-    if (!std::filesystem::exists(record->source_path, filesystem_error) || filesystem_error)
+    if (!std::filesystem::exists(source_path, filesystem_error) || filesystem_error)
     {
         // 登録はあるが実ファイルが無い。パスを組み立て直して探すことはしない。
         return RRuntime::RuntimeStatus::AssetMissing;
     }
 
-    out_path = record->source_path.string();
+    out_path = source_path.string();
     return RRuntime::RuntimeStatus::Ok;
 }
 
@@ -100,8 +102,18 @@ framework::runtime_prefab_instantiator::InstantiatePrefab(
     ReplayEngine::Scene::Serialization::SceneLoadReport report;
     const ReplayEngine::Core::ObjectID root =
         ReplayEngine::Scene::Serialization::PrefabSerializer::Instantiate(
-            world, record->source_path, error, &report, asset_guid);
+            world, owner_->content_path(record->source_path), error, &report, asset_guid);
     if (!root.Valid()) return RRuntime::RuntimeStatus::SceneLoadFailed;
+
+    // Prefab は不完全でも配置を継続するが、依存欠落を成功の陰へ隠さない。
+    if (report.unresolved_component_dependencies > 0 &&
+        owner_->object_runtime_context != nullptr)
+    {
+        owner_->object_runtime_context->LogWarning(
+            "Prefab 配置時に未解決の Component 依存が " +
+            std::to_string(report.unresolved_component_dependencies) +
+            " 件あります (GUID " + asset_guid + ")");
+    }
 
     ReplayEngine::Core::GameObject* object = world.FindGameObjectByID(root);
     if (object == nullptr) return RRuntime::RuntimeStatus::SceneLoadFailed;
@@ -147,10 +159,11 @@ void framework::initialize_runtime_services()
     object_script_runtime = std::make_unique<ReplayEngine::Scripting::ScriptRuntime>();
     object_script_runtime->InstallBackend(
         std::make_unique<ReplayEngine::Scripting::CSharp::CSharpScriptBackend>(
-            std::filesystem::current_path()));
+            content_root_path(), standalone_game_mode));
     object_script_runtime->Initialize();
 
     object_runtime_scenes.SetRuntimeContext(object_runtime_context.get());
+    object_runtime_scenes.SetSceneFlowService(object_scene_flow.get());
     object_runtime_scenes.SetAssetResolver(&object_scene_resolver);
     object_runtime_scenes.SetCollisionDispatcher(&object_collision_events);
 
@@ -163,27 +176,35 @@ void framework::initialize_runtime_services()
 
     object_runtime_context->SetPrefabInstantiator(&object_prefab_instantiator);
     object_runtime_context->SetSceneFlow(object_scene_flow.get());
+    object_runtime_context->SetInputService(&game_input);
+    object_runtime_context->SetAudioService(&object_audio_system);
+    object_save_game.SetRoot(saved_path(std::filesystem::path("Runtime") / "SaveGame"));
+    object_runtime_context->SetSaveGameService(&object_save_game);
 
     // ProjectSettings の Active Scene Flow を Runtime へ接続する。
     // 未設定/欠損なら空のままにし、直接 LoadScene の既存経路は壊さない。
     sync_runtime_scene_flow_asset();
 
     object_runtime_scenes.ActiveWorld().Services().SetRuntime(object_runtime_context.get());
+    object_runtime_scenes.ActiveWorld().Services().SetRuntimeScene(&object_runtime_scenes);
+    object_runtime_scenes.ActiveWorld().Services().SetSceneFlow(object_scene_flow.get());
     object_runtime_scenes.ActiveWorld().Services().SetAudio(&object_audio_system);
 
     // 編集 Scene からも Schema を引けるようにする。
     // Play セッションはまだ無いので、Inspector の表示だけが動く。
     // インスタンスの生成は PlaySessionActive() が false のあいだ起きない。
     object_scene.Services().SetScripts(object_script_runtime.get());
+    object_scene.Services().SetRuntimeScene(nullptr);
+    object_scene.Services().SetSceneFlow(nullptr);
     object_scene.Services().SetAudio(&object_audio_system);
 
-    refresh_csharp_scripts();
+    if (!standalone_game_mode) refresh_csharp_scripts();
 
     // シェーダ資産の走査。
     //
     // ここへ置くのは、Console のログ経路が既に使える状態だから。
     // まだ描画には使わないので、失敗しても他へ影響しない。
-    scan_shader_library();
+    if (!standalone_game_mode) scan_shader_library();
 
     object_bound_world_instance = object_runtime_scenes.ActiveWorldID();
 }
@@ -223,6 +244,72 @@ void framework::begin_startup_scene()
     // 失敗したときは空の World のまま止め、理由を診断へ残す。
     object_runtime_world_active = true;
     object_bound_world_instance = object_runtime_scenes.ActiveWorldID();
+
+    if (!standalone_startup_scene_path.empty())
+    {
+        const std::filesystem::path startup_path =
+            standalone_startup_scene_path.is_absolute()
+            ? standalone_startup_scene_path.lexically_normal()
+            : content_path(standalone_startup_scene_path);
+        std::error_code filesystem_error;
+        if (!std::filesystem::exists(startup_path, filesystem_error) || filesystem_error)
+        {
+            set_runtime_blocked("Startup Scene ファイルが見つかりません: " +
+                startup_path.generic_u8string());
+            return;
+        }
+
+        const ReplayEngine::Assets::AssetRecord* record =
+            asset_database.FindByPath(standalone_startup_scene_path);
+        if (record == nullptr) record = asset_database.FindByPath(startup_path);
+        if (record != nullptr && record->kind == ReplayEngine::Assets::AssetKind::Scene)
+        {
+            const RRuntime::RuntimeStatus request =
+                object_scene_flow->BeginStartupScene(record->guid);
+            if (RRuntime::Failed(request))
+            {
+                set_runtime_blocked("Startup Scene の読み込み要求が受理されませんでした: " +
+                    std::string(RRuntime::DescribeJapanese(request)));
+            }
+            return;
+        }
+
+        ReplayEngine::Scene::Serialization::SceneData data;
+        std::string load_error;
+        if (!ReplayEngine::Scene::Serialization::SceneSerializer::LoadFromFile(
+            data, startup_path, load_error))
+        {
+            set_runtime_blocked("Startup Scene ファイルを読み込めません: " + load_error);
+            return;
+        }
+
+        const RRuntime::SceneRequestResult request =
+            object_runtime_scenes.RequestAdopt(data, startup_path.generic_u8string());
+        if (request != RRuntime::SceneRequestResult::Accepted)
+        {
+            set_runtime_blocked("Startup Scene の読み込み要求を受理できませんでした");
+            return;
+        }
+
+        // .replaygame だけで指定された Scene は GUID が無いことがある。
+        // その場合も配布フォルダ内のファイルを正本として直接 Runtime World へ渡す。
+        for (int step = 0; step < 4 && object_runtime_scenes.IsBusy(); ++step)
+            object_runtime_scenes.Tick();
+        rebind_runtime_world_if_changed();
+
+        if (object_runtime_scenes.State() == RRuntime::SceneLoadState::Failed)
+        {
+            set_runtime_blocked("Startup Scene の構築に失敗しました: " +
+                object_runtime_scenes.LastError());
+            return;
+        }
+        if (object_runtime_scenes.State() != RRuntime::SceneLoadState::Completed)
+        {
+            set_runtime_blocked("Startup Scene の読み込みが完了しませんでした");
+            return;
+        }
+        return;
+    }
 
     const std::string& startup_guid = project_settings.StartupSceneGuid();
 
@@ -401,6 +488,9 @@ void framework::draw_runtime_diagnostics_panel()
         object_runtime_scenes.LastLoadReport();
     ImGui::Text(u8"直近の読み込み: Missing %d / 未知プロパティ %d / 復元失敗 %d",
         report.missing_components, report.unknown_properties, report.skipped_components);
+    ImGui::Text(u8"Component 依存: 自動補完 %d / 未解決 %d",
+        report.automatically_added_components,
+        report.unresolved_component_dependencies);
 
     ImGui::Text(u8"Load %llu / Swap %llu / 失敗 %llu",
         static_cast<unsigned long long>(object_runtime_scenes.LoadCount()),

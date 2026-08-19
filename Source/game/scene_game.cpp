@@ -1,6 +1,6 @@
-#include "scene_game.h"
+﻿#include "scene_game.h"
+#include "game_input.h"
 
-#include <windows.h>
 #include <algorithm>
 #include <cmath>
 
@@ -44,9 +44,6 @@ void SceneGame::ResetGameplay()
 {
     camera_yaw_offset = 0.0f;
     camera_pitch_offset = 0.0f;
-    camera_rotation_cursor_initialized_ = false;
-    previous_camera_rotation_cursor_x_ = 0;
-    previous_camera_rotation_cursor_y_ = 0;
     ApplyDefaultCameraSettings();
 
     camera.SetLookAt({ 0.0f, 2.25f, -6.5f }, { 0.0f, 1.0f, 0.0f }, { 0, 1, 0 });
@@ -85,13 +82,13 @@ void SceneGame::FollowCameraTarget(const DirectX::XMFLOAT3& target_position,
     const DirectX::XMFLOAT3& look_at_offset,
     float distance, float height, float lag,
     float field_of_view_degrees, float near_clip, float far_clip,
-    float delta_time)
+    float delta_time, const GameInput::InputState& input)
 {
     ApplyCameraSettings(field_of_view_degrees, near_clip, far_clip);
 
     // カメラの回転入力はここで受ける。
     // 追従対象の位置と設定値だけを外から受け取り、対象の具象型には触れない。
-    UpdateCameraRotationInput(delta_time);
+    UpdateCameraRotationInput(delta_time, input);
 
     const DirectX::XMFLOAT3 focus{
         target_position.x + look_at_offset.x,
@@ -122,47 +119,32 @@ void SceneGame::FollowCameraTarget(const DirectX::XMFLOAT3& target_position,
     controller.SyncCameraToController(camera);
 }
 
-void SceneGame::UpdateFreeCamera(float delta_time)
+void SceneGame::UpdateFreeCamera(float delta_time, const GameInput::InputState& input)
 {
     // 追従対象が居ない場合のカメラ。
     // 「対象が居ないから何かを追う」という代替経路は持たない。
     ApplyDefaultCameraSettings();
-    controller.Update(delta_time);
+    controller.Update(delta_time, input);
     controller.SyncControllerToCamera(camera);
 }
 
-void SceneGame::UpdateCameraRotationInput(float dt)
+void SceneGame::UpdateCameraRotationInput(float dt, const GameInput::InputState& input)
 {
-    // Mouse right-drag rotates the camera ONLY.
+    if (input.Held("CameraRotate"))
     {
-        POINT cur{};
-        if (!GetCursorPos(&cur)) return;
-        if (!camera_rotation_cursor_initialized_)
-        {
-            previous_camera_rotation_cursor_x_ = cur.x;
-            previous_camera_rotation_cursor_y_ = cur.y;
-            camera_rotation_cursor_initialized_ = true;
-        }
-        POINT delta{
-            cur.x - previous_camera_rotation_cursor_x_,
-            cur.y - previous_camera_rotation_cursor_y_ };
-        previous_camera_rotation_cursor_x_ = cur.x;
-        previous_camera_rotation_cursor_y_ = cur.y;
-        if (GetAsyncKeyState(VK_RBUTTON) & 0x8000)
-        {
-            const float k = 0.006f;
-            camera_yaw_offset   += delta.x * k;
-            camera_pitch_offset += -delta.y * k;
-        }
+        const float k = 0.006f;
+        camera_yaw_offset += input.PointerDeltaX() * k;
+        camera_pitch_offset += -input.PointerDeltaY() * k;
     }
 
     const float key_rotate_speed = 1.8f * dt;
-    if (GetAsyncKeyState('J') & 0x8000) camera_yaw_offset -= key_rotate_speed;
-    if (GetAsyncKeyState('L') & 0x8000) camera_yaw_offset += key_rotate_speed;
-    if (GetAsyncKeyState('I') & 0x8000) camera_pitch_offset += key_rotate_speed;
-    if (GetAsyncKeyState('K') & 0x8000) camera_pitch_offset -= key_rotate_speed;
+    if (input.Held("CameraYawLeft")) camera_yaw_offset -= key_rotate_speed;
+    if (input.Held("CameraYawRight")) camera_yaw_offset += key_rotate_speed;
+    if (input.Held("CameraPitchUp")) camera_pitch_offset += key_rotate_speed;
+    if (input.Held("CameraPitchDown")) camera_pitch_offset -= key_rotate_speed;
+
     const float lim = 1.40f;
-    if (camera_pitch_offset >  lim) camera_pitch_offset =  lim;
+    if (camera_pitch_offset > lim) camera_pitch_offset = lim;
     if (camera_pitch_offset < -lim) camera_pitch_offset = -lim;
 }
 

@@ -1,4 +1,4 @@
-// SceneCollisionWorld のうち「接続」と「登録表の管理」だけを持つ。
+﻿// SceneCollisionWorld のうち「接続」と「登録表の管理」だけを持つ。
 //
 // 実装を 3 つのファイルへ分けている:
 //   SceneCollisionWorld.cpp         … 接続・登録表・毎フレームの更新（このファイル）
@@ -104,7 +104,7 @@ namespace ReplayEngine::Scene
                 const auto* collider = dynamic_cast<const Components::ColliderComponent*>(
                     object->ComponentAt(slot));
                 if (collider == nullptr || collider->PendingDestroy()) continue;
-                highest_key = std::max(highest_key, collider->collider_key);
+                highest_key = (std::max)(highest_key, collider->collider_key);
             }
 
             for (std::size_t slot = 0; slot < object->ComponentCount(); ++slot)

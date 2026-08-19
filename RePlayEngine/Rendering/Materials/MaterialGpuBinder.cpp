@@ -1,4 +1,5 @@
-#include "MaterialGpuBinder.h"
+﻿#include "MaterialGpuBinder.h"
+#include "../../../Source/core/texture.h"
 
 #include "../Shaders/ShaderConstantPacker.h"
 #include "../Shaders/ShaderCatalog.h"
@@ -191,9 +192,9 @@ namespace ReplayEngine::Rendering
 
         const std::string key = ShaderCacheKey(binding.shader, binding.variant);
         CachedPixelShader& cached = shader_cache_[key];
-        const std::size_t bytecode_size = result.bytecode->GetBufferSize();
+        const std::size_t bytecode_size = result.bytecode->size();
 
-        if (cached.shader && cached.bytecode_identity == result.bytecode.Get() &&
+        if (cached.shader && cached.bytecode_identity == result.bytecode.get() &&
             cached.bytecode_size == bytecode_size)
         {
             return cached.shader.Get();
@@ -201,7 +202,7 @@ namespace ReplayEngine::Rendering
 
         Microsoft::WRL::ComPtr<ID3D11PixelShader> replacement;
         const HRESULT created = device->CreatePixelShader(
-            result.bytecode->GetBufferPointer(), bytecode_size, nullptr,
+            result.bytecode->data(), bytecode_size, nullptr,
             replacement.GetAddressOf());
         if (FAILED(created))
         {
@@ -214,7 +215,7 @@ namespace ReplayEngine::Rendering
         const std::string debug_name = "ReplayMaterial.PS:" + key;
         SetDebugName(replacement.Get(), debug_name.c_str());
         cached.shader = replacement;
-        cached.bytecode_identity = result.bytecode.Get();
+        cached.bytecode_identity = result.bytecode.get();
         cached.bytecode_size = bytecode_size;
         shader_failures_.erase(key);
         return cached.shader.Get();
@@ -240,14 +241,14 @@ namespace ReplayEngine::Rendering
         const std::string key = ShaderCacheKey(binding.shader, binding.variant) +
             ":Pass:" + pass.info.entry_point;
         CachedPixelShader& cached = shader_cache_[key];
-        const std::size_t bytecode_size = result.bytecode->GetBufferSize();
-        if (cached.shader && cached.bytecode_identity == result.bytecode.Get() &&
+        const std::size_t bytecode_size = result.bytecode->size();
+        if (cached.shader && cached.bytecode_identity == result.bytecode.get() &&
             cached.bytecode_size == bytecode_size)
             return cached.shader.Get();
 
         Microsoft::WRL::ComPtr<ID3D11PixelShader> replacement;
         const HRESULT created = device->CreatePixelShader(
-            result.bytecode->GetBufferPointer(), bytecode_size, nullptr,
+            result.bytecode->data(), bytecode_size, nullptr,
             replacement.GetAddressOf());
         if (FAILED(created))
         {
@@ -259,10 +260,45 @@ namespace ReplayEngine::Rendering
         const std::string debug_name = "ReplayMaterial.PS:" + key;
         SetDebugName(replacement.Get(), debug_name.c_str());
         cached.shader = replacement;
-        cached.bytecode_identity = result.bytecode.Get();
+        cached.bytecode_identity = result.bytecode.get();
         cached.bytecode_size = bytecode_size;
         shader_failures_.erase(key);
         return cached.shader.Get();
+    }
+
+    std::uint64_t MaterialGpuBinder::TrackedTextureBytes() const noexcept
+    {
+        std::uint64_t total = 0;
+        for (const auto& entry : texture_cache_)
+        {
+            if (!entry.second.image.IsLoaded()) continue;
+            total += estimate_texture2d_bytes(entry.second.image.Description());
+        }
+        // CreateSolidTexture は R8G8B8A8 1x1。4種のfallbackも所有VRAMに含める。
+        if (default_white_) total += 4u;
+        if (default_black_) total += 4u;
+        if (default_gray_) total += 4u;
+        if (default_bump_) total += 4u;
+        return total;
+    }
+
+    std::uint64_t MaterialGpuBinder::TrackedBufferBytes() const noexcept
+    {
+        return material_constant_buffer_ != nullptr
+            ? static_cast<std::uint64_t>(material_constant_buffer_size_) : 0u;
+    }
+
+    void MaterialGpuBinder::AppendResidentTextureIdentities(
+        std::vector<std::pair<std::string, const void*>>& out) const
+    {
+        for (const auto& entry : texture_cache_)
+        {
+            ID3D11ShaderResourceView* view = entry.second.image.View();
+            if (entry.first.empty() || view == nullptr) continue;
+            Microsoft::WRL::ComPtr<ID3D11Resource> resource;
+            view->GetResource(resource.GetAddressOf());
+            if (resource) out.emplace_back(entry.first, resource.Get());
+        }
     }
 
     ID3D11ShaderResourceView* MaterialGpuBinder::DefaultTexture(

@@ -1,4 +1,5 @@
 ﻿#include "sprite.h"
+#include "../../RePlayEngine/Rendering/RenderStats.h"
 #include "misc.h"
 #include <sstream>
 #include <memory> // unique_ptr のために追加
@@ -295,7 +296,9 @@ void sprite::render(ID3D11DeviceContext* immediate_context,
     immediate_context->IASetVertexBuffers(0, 1, vertex_buffer.GetAddressOf(), &stride, &offset);
     immediate_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
     immediate_context->IASetInputLayout(input_layout.Get());
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
     immediate_context->VSSetShader(vertex_shader.Get(), nullptr, 0);
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
     immediate_context->PSSetShader(pixel_shader.Get(), nullptr, 0);
     immediate_context->PSSetShaderResources(0, 1, shader_resource_view.GetAddressOf());
     immediate_context->Draw(4, 0);

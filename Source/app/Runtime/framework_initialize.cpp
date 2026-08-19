@@ -38,6 +38,9 @@ bool framework::initialize()
     if (!asset_database.Load(asset_database_error))
         object_editor_context.SetStatus("AssetDatabase: " + asset_database_error);
 
+    // Input Action Asset は ProjectSettings 読み込み後に initialize_object_scene() で適用する。
+    // ここではまだ project_settings が未読込なので参照しない。
+
     if (!object_audio_system.Initialize())
     {
         push_editor_log("Warning", "Audio は silent mode で起動します");
@@ -51,8 +54,8 @@ bool framework::initialize()
 
     DXGI_SWAP_CHAIN_DESC swap_chain_desc{};
     swap_chain_desc.BufferCount = 2;
-    swap_chain_desc.BufferDesc.Width  = SCREEN_WIDTH;
-    swap_chain_desc.BufferDesc.Height = SCREEN_HEIGHT;
+    swap_chain_desc.BufferDesc.Width  = client_width;
+    swap_chain_desc.BufferDesc.Height = client_height;
     swap_chain_desc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
     swap_chain_desc.BufferDesc.RefreshRate.Numerator   = 60;
     swap_chain_desc.BufferDesc.RefreshRate.Denominator = 1;
@@ -91,8 +94,8 @@ bool framework::initialize()
 
     Microsoft::WRL::ComPtr<ID3D11Texture2D> depth_stencil_buffer{};
     D3D11_TEXTURE2D_DESC td{};
-    td.Width      = SCREEN_WIDTH;
-    td.Height     = SCREEN_HEIGHT;
+    td.Width      = client_width;
+    td.Height     = client_height;
     td.MipLevels  = 1;
     td.ArraySize  = 1;
     td.Format     = DXGI_FORMAT_D24_UNORM_S8_UINT;
@@ -110,8 +113,8 @@ bool framework::initialize()
 
     D3D11_VIEWPORT viewport{};
     viewport.TopLeftX = 0; viewport.TopLeftY = 0;
-    viewport.Width  = (float)SCREEN_WIDTH;
-    viewport.Height = (float)SCREEN_HEIGHT;
+    viewport.Width  = static_cast<float>(client_width);
+    viewport.Height = static_cast<float>(client_height);
     viewport.MinDepth = 0.0f; viewport.MaxDepth = 1.0f;
     immediate_context->RSSetViewports(1, &viewport);
 
@@ -175,6 +178,10 @@ bool framework::initialize()
     bd.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE; bd.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
     device->CreateBlendState(&bd, blend_states[(size_t)BLEND_STATE::SCREEN].GetAddressOf());
 
+    bd.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE; bd.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+    bd.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE; bd.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
+    device->CreateBlendState(&bd, blend_states[(size_t)BLEND_STATE::PREMULTIPLIED].GetAddressOf());
+
     D3D11_RASTERIZER_DESC rd{};
     rd.FillMode = D3D11_FILL_SOLID; rd.CullMode = D3D11_CULL_BACK;
     rd.FrontCounterClockwise = TRUE; rd.DepthClipEnable = TRUE;
@@ -195,7 +202,7 @@ bool framework::initialize()
     cbd.Usage = D3D11_USAGE_DEFAULT; cbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
     device->CreateBuffer(&cbd, nullptr, constant_buffers[0].GetAddressOf());
 
-    framebuffers[0] = std::make_unique<framebuffer>(device.Get(), SCREEN_WIDTH,     SCREEN_HEIGHT);
+    framebuffers[0] = std::make_unique<framebuffer>(device.Get(), client_width, client_height);
     bit_block_transfer = std::make_unique<fullscreen_quad>(device.Get());
 
     pbr.initialize(device.Get());
@@ -235,16 +242,16 @@ bool framework::initialize()
     test_trail.initialize(device.Get());
     particles.initialize(device.Get());
     post_process.Initialize(device.Get());
-    bloom_pass.Initialize(device.Get(), SCREEN_WIDTH, SCREEN_HEIGHT);
-    enable_deferred = deferred.initialize(device.Get(), SCREEN_WIDTH, SCREEN_HEIGHT);
+    bloom_pass.Initialize(device.Get(), client_width, client_height);
+    enable_deferred = deferred.initialize(device.Get(), client_width, client_height);
 
     // SSAO/SSR/TAAが共有するフレーム定数バッファ(b9)。
     cbd.ByteWidth = sizeof(ReplayEngine::Rendering::FrameConstants);
     device->CreateBuffer(&cbd, nullptr, frame_constants_cb.GetAddressOf());
-    ssao_pass.Initialize(device.Get(), SCREEN_WIDTH, SCREEN_HEIGHT);
-    ssr_pass.Initialize(device.Get(), SCREEN_WIDTH, SCREEN_HEIGHT);
-    taa_pass.Initialize(device.Get(), SCREEN_WIDTH, SCREEN_HEIGHT);
-    tiled_deferred.Initialize(device.Get(), SCREEN_WIDTH, SCREEN_HEIGHT);
+    ssao_pass.Initialize(device.Get(), client_width, client_height);
+    ssr_pass.Initialize(device.Get(), client_width, client_height);
+    taa_pass.Initialize(device.Get(), client_width, client_height);
+    tiled_deferred.Initialize(device.Get(), client_width, client_height);
     // ポリゴン数計測用のパイプライン統計クエリ。
     ReplayEngine::Rendering::Stats().Initialize(device.Get());
     lights.initialize(device.Get());
@@ -253,6 +260,9 @@ bool framework::initialize()
         push_editor_log("Warning", "UI FontAtlas を初期化できません。UIText は描画されません");
     if (!ui_renderer.Initialize(device.Get()))
         push_editor_log("Warning", "UIRenderer を初期化できません。Canvas UI は描画されません");
+    scene_effect_targets.Initialize(device.Get());
+    if (!scene_effect_chain.Initialize(device.Get()))
+        push_editor_log("Warning", "3D/Screen EffectChain を初期化できません。Effect Stack は描画されません");
     lights.data.light_counts = { 0, 0, 0, 0 };
 
     // 法線テクスチャを持たない材質で使うダミー法線を作る。kwjkshhakjwhhwhhsbkkwhiiwnzkkhjsowjjw
@@ -281,9 +291,11 @@ bool framework::initialize()
     // 失敗は OutputDebugString へ理由付きで出す（Visual Studio の出力ウィンドウで読める）。
     loading_scene->AddTask("UI image", [this]
     {
-        const wchar_t* ui_image = L".\\resources\\screenshot.jpg";
+        const std::filesystem::path ui_image_path =
+            content_path(std::filesystem::path("resources") / "screenshot.jpg");
+        const std::wstring ui_image = ui_image_path.wstring();
         std::error_code filesystem_error;
-        if (!std::filesystem::exists(ui_image, filesystem_error) || filesystem_error)
+        if (!std::filesystem::exists(ui_image_path, filesystem_error) || filesystem_error)
         {
             OutputDebugStringW(L"[Assets] 背景画像が見つかりません: "
                 L".\\resources\\screenshot.jpg （背景表示は無効のまま続行します）\n");
@@ -291,7 +303,8 @@ bool framework::initialize()
             draw_background_image = false;
             return true;
         }
-        sprite_batches[0] = std::make_unique<sprite_batch>(device.Get(), ui_image, 1);
+        sprite_batches[0] = std::make_unique<sprite_batch>(
+            device.Get(), ui_image.c_str(), 1);
         return true;
     });
     // キャラクターモデルは SkinnedMeshRendererComponent の
@@ -300,9 +313,11 @@ bool framework::initialize()
     {
         // static_mesh は .obj 専用。構築前に can_load で検証し、
         // 失敗を assert ではなくログとして上へ返す。
-        const wchar_t* debug_mesh = L".\\resources\\cube.obj";
+        const std::filesystem::path debug_mesh_path =
+            content_path(std::filesystem::path("resources") / "cube.obj");
+        const std::wstring debug_mesh = debug_mesh_path.wstring();
         std::wstring reason;
-        if (!static_mesh::can_load(debug_mesh, &reason))
+        if (!static_mesh::can_load(debug_mesh.c_str(), &reason))
         {
             OutputDebugStringW((L"[Assets] デバッグ用メッシュを読み込めません: " +
                 reason + L" （静的メッシュ表示は無効のまま続行します）\n").c_str());
@@ -311,7 +326,8 @@ bool framework::initialize()
             return true;
         }
 
-        auto candidate = std::make_unique<static_mesh>(device.Get(), debug_mesh, true);
+        auto candidate = std::make_unique<static_mesh>(
+            device.Get(), debug_mesh.c_str(), true);
         if (!candidate->is_loaded())
         {
             OutputDebugStringW((L"[Assets] デバッグ用メッシュの解析に失敗しました: " +
@@ -325,9 +341,13 @@ bool framework::initialize()
     });
     loading_scene->AddTask("IBL images", [this]
     {
-        pbr.load_ibl(device.Get(), L".\\resources\\ibl\\diffuse_iem.dds",
-            L".\\resources\\ibl\\specular_pmrem.dds",
-            L".\\resources\\ibl\\lut_ggx.dds");
+        const std::wstring diffuse = content_path(
+            std::filesystem::path("resources") / "ibl" / "diffuse_iem.dds").wstring();
+        const std::wstring specular = content_path(
+            std::filesystem::path("resources") / "ibl" / "specular_pmrem.dds").wstring();
+        const std::wstring lut = content_path(
+            std::filesystem::path("resources") / "ibl" / "lut_ggx.dds").wstring();
+        pbr.load_ibl(device.Get(), diffuse.c_str(), specular.c_str(), lut.c_str());
         return true;
     });
     // AssetDatabaseのモデルは1件ずつ独立したタスクにして、ロード画面の
@@ -336,7 +356,7 @@ bool framework::initialize()
     for (const auto& record : asset_database.Records())
     {
         if (record.kind != ReplayEngine::Assets::AssetKind::Model) continue;
-        const std::filesystem::path source = record.source_path;
+        const std::filesystem::path source = content_path(record.source_path);
         loading_scene->AddTask("Prewarm " + record.display_name, [this, source]
         {
             prewarm_model_asset(source);
@@ -363,9 +383,10 @@ bool framework::initialize()
         // 操作キャラクターのモデルもアニメーションクリップも渡さない。
         // それらは Scene 内の GameObject が Component として持っている。
         auto next_scene = std::make_unique<GameScene>(
-            static_cast<float>(SCREEN_WIDTH) / static_cast<float>(SCREEN_HEIGHT));
+            static_cast<float>(client_width) / static_cast<float>(client_height));
         game_scene = next_scene.get();
-        restore_editor_session();
+        if (!standalone_game_mode && !object_boot_from_startup_scene)
+            restore_editor_session();
         return next_scene;
     });
 

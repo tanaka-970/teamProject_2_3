@@ -20,6 +20,13 @@ public enum RuntimeStatus : int
     ServiceUnavailable = 13,
     InvalidArgument = 14,
     DeferredOperationRejected = 15,
+    SaveSlotNotFound = 16,
+    SaveKeyNotFound = 17,
+    SaveTypeMismatch = 18,
+    SaveCorrupt = 19,
+    SaveIOFailure = 20,
+    ComponentDependencyMissing = 21,
+    ComponentHasDependents = 22,
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -40,6 +47,43 @@ public struct ComponentHandle
     public uint TypeId;
 
     public bool IsEmpty => Owner.IsEmpty || Instance == 0;
+}
+
+public readonly struct AudioVoice
+{
+    internal AudioVoice(ulong id)
+    {
+        Id = id;
+    }
+
+    internal ulong Id { get; }
+    public bool IsValid => Id != 0;
+
+    public RuntimeStatus Stop() => NativeBridge.StopAudio(this);
+}
+
+public readonly struct MotionPlayer
+{
+    internal MotionPlayer(ComponentHandle handle)
+    {
+        Handle = handle;
+    }
+
+    internal ComponentHandle Handle { get; }
+    public bool IsValid => !Handle.IsEmpty;
+
+    public RuntimeStatus Play() => NativeBridge.MotionPlay(Handle);
+    public RuntimeStatus PlayFrom(float seconds) => NativeBridge.MotionPlayFrom(Handle, seconds);
+    public RuntimeStatus Pause() => NativeBridge.MotionPause(Handle);
+    public RuntimeStatus Resume() => NativeBridge.MotionResume(Handle);
+    public RuntimeStatus Stop() => NativeBridge.MotionStop(Handle);
+    public RuntimeStatus Reverse() => NativeBridge.MotionReverse(Handle);
+    public RuntimeStatus SetTime(float seconds) => NativeBridge.MotionSetTime(Handle, seconds);
+    public RuntimeStatus SetSpeed(float speed) => NativeBridge.MotionSetSpeed(Handle, speed);
+    public RuntimeStatus SetWeight(float weight) => NativeBridge.MotionSetWeight(Handle, weight);
+    public RuntimeResult<bool> IsPlaying() => NativeBridge.MotionIsPlaying(Handle);
+    public RuntimeResult<float> GetTime() => NativeBridge.MotionGetTime(Handle);
+    public RuntimeResult<float> GetDuration() => NativeBridge.MotionGetDuration(Handle);
 }
 
 [StructLayout(LayoutKind.Sequential)]

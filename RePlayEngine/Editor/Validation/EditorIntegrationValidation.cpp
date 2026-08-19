@@ -1,235 +1,14 @@
-﻿#include "EditorIntegrationValidation.h"
-
-#include "../Core/EditorContext.h"
-#include "../../Assets/AssetDatabase.h"
-#include "../../Object/Component/MissingComponent.h"
-#include "../../Object/GameObject/GameObject.h"
-#include "../../Object/Registry/BuiltInComponents.h"
-#include "../../Object/Registry/ComponentRegistry.h"
-#include "../../Project/ProjectSettings.h"
-#include "../../Project/ProjectSettingsSerializer.h"
-#include "../../Reflection/Property/References.h"
-#include "../../Reflection/Registry/PropertyRegistry.h"
-#include "../../Runtime/API/RuntimeContext.h"
-#include "../../Runtime/Behaviour/BehaviourComponent.h"
-#include "../../Runtime/Behaviour/BehaviourRegistry.h"
-#include "../../Runtime/Scene/RuntimeSceneService.h"
-#include "../../Runtime/Scene/SceneFlowService.h"
-#include "../../Scene/Runtime/Scene.h"
-#include "../../Scene/Serialization/SceneData.h"
-#include "../../Scene/Serialization/SceneSerializer.h"
-
-#include <cstdio>
-#include <filesystem>
-#include <fstream>
-#include <sstream>
-#include <string>
-#include <utility>
-#include <vector>
+﻿// Editor 統合検証のうち、API を跨ぐ一連の判定を持つ。
+//
+//   EditorIntegrationValidation.cpp       … 統合判定（このファイル）
+//   EditorIntegrationValidationInternal.h … Probe・Resolver・往復 Fixture
+//
+// 判定は同じ Editor / Runtime 状態を引き継ぐため、公開検証関数は分断しない。
+#include "EditorIntegrationValidationInternal.h"
 
 namespace ReplayEngine::Editor::Validation
 {
-    namespace
-    {
-        namespace Serialization = Scene::Serialization;
-        namespace RRuntime = ReplayEngine::Runtime;
-
-        using Core::ObjectID;
-        using Reflection::PropertyValue;
-
-        // 定数は名前空間スコープへ置く（関数ローカルの constexpr を
-        // キャプチャ無しラムダから参照すると MSVC が C3493 で落ちるため）。
-        constexpr const char* guid_startup = "ed17000000000000000000000000a001";
-        constexpr const char* guid_second = "ed17000000000000000000000000a002";
-        constexpr const char* guid_missing_asset = "ed17000000000000000000000000dead";
-        constexpr const char* ghost_type_name = "EditorValidationGhostComponent";
-
-        class Checker final
-        {
-        public:
-            explicit Checker(int first_code) : next_code_(first_code) {}
-
-            void Expect(bool condition, const char* what)
-            {
-                const int code = next_code_++;
-                ++total_;
-                if (condition) return;
-                ++failures_;
-                if (first_failure_ == 0) first_failure_ = code;
-                std::fprintf(stderr, "  [FAIL %d] %s\n", code, what);
-            }
-
-            int Report(const char* title) const
-            {
-                if (first_failure_ == 0)
-                {
-                    std::fprintf(stderr, "%s OK: %d checks passed\n", title, total_);
-                    return 0;
-                }
-                std::fprintf(stderr, "%s FAILED: %d/%d checks failed (first=%d)\n",
-                    title, failures_, total_, first_failure_);
-                return first_failure_;
-            }
-
-        private:
-            int next_code_ = 0;
-            int first_failure_ = 0;
-            int total_ = 0;
-            int failures_ = 0;
-        };
-
-        // Editor 統合の検証専用 Behaviour。
-        //
-        // Game Module の SceneTransitionBehaviour を使わない理由:
-        //   Engine 側の Validation から Game の型を参照すると、
-        //   Engine が特定のゲームを知っている依存ができる。
-        //   Behaviour として扱われる仕組みそのものは型に依らないので、
-        //   ここで登録した型で確かめれば十分。
-        class EditorProbeBehaviour final : public RRuntime::BehaviourComponent
-        {
-            REPLAY_COMPONENT_BODY(EditorProbeBehaviour)
-
-        public:
-            static constexpr Reflection::TypeGUID StaticTypeGUID() noexcept
-            {
-                return Reflection::MakeTypeGUID("e0000000000000000000000000000001");
-            }
-
-            int marker = 0;
-            float speed = 1.0f;
-            std::string label;
-            Reflection::ObjectReference target_object;
-            Reflection::ComponentReference target_component;
-            Reflection::SceneReference destination_scene;
-            std::vector<float> weights;
-        };
-
-        class SecondProbeBehaviour final : public RRuntime::BehaviourComponent
-        {
-            REPLAY_COMPONENT_BODY(SecondProbeBehaviour)
-
-        public:
-            static constexpr Reflection::TypeGUID StaticTypeGUID() noexcept
-            {
-                return Reflection::MakeTypeGUID("e0000000000000000000000000000002");
-            }
-
-            int value = 0;
-        };
-
-        void RegisterProbes()
-        {
-            Core::RegisterBuiltInComponents();
-
-            Core::ComponentRegistry::Register<EditorProbeBehaviour>(
-                Core::ComponentTypeInfo::Describe("Editor Probe", "Internal")
-                    .WithTooltip("Editor 統合の検証用。")
-                    .HiddenInEditor()
-                    .WithTypeGUID(EditorProbeBehaviour::StaticTypeGUID())
-                    .InModule("RePlayEngine.Validation"));
-
-            Reflection::PropertyRegistry::Register<EditorProbeBehaviour>(
-                Reflection::MakeProperty("marker", &EditorProbeBehaviour::marker));
-            Reflection::PropertyRegistry::Register<EditorProbeBehaviour>(
-                Reflection::MakeProperty("speed", &EditorProbeBehaviour::speed));
-            Reflection::PropertyRegistry::Register<EditorProbeBehaviour>(
-                Reflection::MakeProperty("label", &EditorProbeBehaviour::label));
-            Reflection::PropertyRegistry::Register<EditorProbeBehaviour>(
-                Reflection::MakeProperty("target_object",
-                    &EditorProbeBehaviour::target_object));
-            Reflection::PropertyRegistry::Register<EditorProbeBehaviour>(
-                Reflection::MakeProperty("target_component",
-                    &EditorProbeBehaviour::target_component));
-            Reflection::PropertyRegistry::Register<EditorProbeBehaviour>(
-                Reflection::MakeProperty("destination_scene",
-                    &EditorProbeBehaviour::destination_scene));
-            Reflection::PropertyRegistry::Register<EditorProbeBehaviour>(
-                Reflection::MakeProperty("weights", &EditorProbeBehaviour::weights));
-
-            RRuntime::BehaviourRegistry::Register(EditorProbeBehaviour::StaticTypeGUID(),
-                RRuntime::BehaviourRegistry::Native());
-
-            Core::ComponentRegistry::Register<SecondProbeBehaviour>(
-                Core::ComponentTypeInfo::Describe("Second Probe", "Internal")
-                    .HiddenInEditor()
-                    .WithTypeGUID(SecondProbeBehaviour::StaticTypeGUID())
-                    .InModule("RePlayEngine.Validation"));
-            Reflection::PropertyRegistry::Register<SecondProbeBehaviour>(
-                Reflection::MakeProperty("value", &SecondProbeBehaviour::value));
-            RRuntime::BehaviourRegistry::Register(SecondProbeBehaviour::StaticTypeGUID(),
-                RRuntime::BehaviourRegistry::Native());
-        }
-
-        // GUID からパスを引くだけのテスト実装。
-        class TestSceneAssetResolver final : public RRuntime::ISceneAssetResolver
-        {
-        public:
-            void Map(std::string guid, const std::filesystem::path& path)
-            {
-                Entry entry;
-                entry.guid = std::move(guid);
-                entry.path = path.string();
-                entries_.push_back(std::move(entry));
-            }
-
-            RRuntime::RuntimeStatus ResolveScenePath(const std::string& asset_guid,
-                std::string& out_path) const override
-            {
-                for (const Entry& entry : entries_)
-                {
-                    if (entry.guid != asset_guid) continue;
-                    out_path = entry.path;
-                    return RRuntime::RuntimeStatus::Ok;
-                }
-                return RRuntime::RuntimeStatus::AssetMissing;
-            }
-
-        private:
-            struct Entry
-            {
-                std::string guid;
-                std::string path;
-            };
-            std::vector<Entry> entries_;
-        };
-
-        bool SettingsRoundTrip(const Project::ProjectSettings& source,
-            Project::ProjectSettings& restored, std::string& error)
-        {
-            std::ostringstream out;
-            if (!Project::ProjectSettingsSerializer::WriteText(source, out, error))
-            {
-                return false;
-            }
-            std::istringstream in(out.str());
-            return Project::ProjectSettingsSerializer::ReadText(restored, in, error);
-        }
-
-        bool SceneRoundTrip(const Serialization::SceneData& source,
-            Serialization::SceneData& restored, std::string& error)
-        {
-            std::ostringstream out;
-            if (!Serialization::SceneSerializer::WriteText(source, out, error)) return false;
-            std::istringstream in(out.str());
-            return Serialization::SceneSerializer::ReadText(restored, in, error);
-        }
-
-        const Serialization::ComponentData* FindComponentData(
-            const Serialization::SceneData& data, ObjectID::ValueType object_id,
-            const std::string& type_name)
-        {
-            for (const Serialization::GameObjectData& object : data.objects)
-            {
-                if (object.id.Value() != object_id) continue;
-                for (const Serialization::ComponentData& component : object.components)
-                {
-                    if (component.type_name == type_name) return &component;
-                }
-            }
-            return nullptr;
-        }
-    }
-
+    using namespace Detail;
     // =====================================================================
     // Editor 統合
     // =====================================================================
@@ -525,6 +304,102 @@ namespace ReplayEngine::Editor::Validation
         context.ResetSceneState();
         check.Expect(context.Selection().Empty() && !context.History().CanUndo(),
             "ResetSceneState で選択と Undo 履歴が捨てられる");
+
+        // -----------------------------------------------------------------
+        // GameObject Clipboard — GUI を通さず、同じ Hierarchy の経路を直接検証する。
+        // -----------------------------------------------------------------
+        Scene::Scene clipboard_source("ClipboardSource");
+        Core::GameObject* clipboard_root = clipboard_source.CreateGameObject("Clipboard Root");
+        Core::GameObject* clipboard_child = clipboard_source.CreateGameObject("Clipboard Child");
+        Core::GameObject* clipboard_external = clipboard_source.CreateGameObject("Clipboard External");
+        check.Expect(clipboard_root != nullptr && clipboard_child != nullptr &&
+            clipboard_external != nullptr, "クリップボード検証用 GameObject を作れる");
+        if (clipboard_root != nullptr && clipboard_child != nullptr && clipboard_external != nullptr)
+        {
+            clipboard_child->SetParent(clipboard_root, false);
+            clipboard_root->GetTransform().SetLocal({ 10.0f, 20.0f, 30.0f }, {}, { 2.0f, 3.0f, 4.0f });
+            clipboard_child->GetTransform().SetLocal({ 1.0f, 2.0f, 3.0f }, {}, { 1.0f, 1.0f, 1.0f });
+            clipboard_root->SetPrefabInstanceInfo("clipboard-prefab", 11, clipboard_root->ID());
+            clipboard_child->SetPrefabInstanceInfo("clipboard-prefab", 12, clipboard_root->ID());
+            auto* clipboard_probe = clipboard_root->AddComponent<EditorProbeBehaviour>();
+            check.Expect(clipboard_probe != nullptr, "コピー対象へ Behaviour を付けられる");
+            if (clipboard_probe != nullptr)
+            {
+                clipboard_probe->marker = 73;
+                clipboard_probe->target_object.object = clipboard_child->ID();
+            }
+
+            EditorContext clipboard_source_context;
+            clipboard_source_context.AttachScene(&clipboard_source);
+            clipboard_source_context.Selection().Select(clipboard_root->ID());
+            clipboard_source_context.Selection().Select(clipboard_child->ID(), true);
+            HierarchyPanel hierarchy;
+            std::string clipboard_text;
+            std::string clipboard_error;
+            const bool copied = hierarchy.CopySelection(clipboard_source_context,
+                clipboard_text, clipboard_error);
+            check.Expect(copied && clipboard_text.rfind("REPLAY_CLIPBOARD 1\n", 0) == 0,
+                "選択した部分木を既定のクリップボード形式へ書ける");
+
+            Scene::Scene clipboard_destination("ClipboardDestination");
+            Core::GameObject* paste_parent = clipboard_destination.CreateGameObject("Paste Parent");
+            EditorContext clipboard_destination_context;
+            clipboard_destination_context.AttachScene(&clipboard_destination);
+            if (paste_parent != nullptr)
+                clipboard_destination_context.Selection().Select(paste_parent->ID());
+            const std::size_t before_paste = clipboard_destination.GameObjectCount();
+            const bool pasted = copied && hierarchy.PasteSelection(clipboard_destination_context,
+                clipboard_text, clipboard_error);
+            Core::GameObject* pasted_root = clipboard_destination.FindGameObjectByName("Clipboard Root コピー");
+            Core::GameObject* pasted_child = clipboard_destination.FindGameObjectByName("Clipboard Child");
+            auto* pasted_probe = pasted_root != nullptr
+                ? pasted_root->GetComponent<EditorProbeBehaviour>() : nullptr;
+            check.Expect(pasted && pasted_root != nullptr && pasted_child != nullptr &&
+                clipboard_destination.GameObjectCount() == before_paste + 2 &&
+                pasted_root->ID() != clipboard_root->ID() && pasted_child->ID() != clipboard_child->ID(),
+                "貼り付けは新しい ObjectID の親子部分木を追加する");
+            check.Expect(pasted_root != nullptr && pasted_root->Parent() == paste_parent &&
+                pasted_child != nullptr && pasted_child->Parent() == pasted_root &&
+                pasted_root->GetTransform().LocalPosition().x == 10.0f &&
+                pasted_child->GetTransform().LocalPosition().y == 2.0f,
+                "貼り付け先の親へ Local Transform を保ったまま配置する");
+            check.Expect(pasted_probe != nullptr && pasted_probe->marker == 73 &&
+                pasted_probe->target_object.object == (pasted_child != nullptr
+                    ? pasted_child->ID() : ObjectID::Invalid()),
+                "部分木内 ObjectReference は貼り付け先へ付け替わる");
+            check.Expect(pasted_root != nullptr && pasted_child != nullptr &&
+                pasted_root->PrefabSourceGUID() == "clipboard-prefab" &&
+                pasted_child->PrefabSourceGUID() == "clipboard-prefab" &&
+                pasted_root->PrefabInstanceRoot() == pasted_root->ID() &&
+                pasted_child->PrefabInstanceRoot() == pasted_root->ID(),
+                "貼り付け後も Ctrl+D と同じく Prefab link を保つ");
+
+            clipboard_destination_context.Selection().Select(paste_parent != nullptr
+                ? paste_parent->ID() : ObjectID::Invalid());
+            const bool pasted_twice = copied && hierarchy.PasteSelection(clipboard_destination_context,
+                clipboard_text, clipboard_error);
+            check.Expect(pasted_twice && clipboard_destination.GameObjectCount() == before_paste + 4 &&
+                clipboard_destination_context.Undo() &&
+                clipboard_destination.GameObjectCount() == before_paste + 2,
+                "同じクリップボードを繰り返し貼り付けても 1 回ずつ Undo できる");
+
+            const std::size_t before_invalid_paste = clipboard_destination.GameObjectCount();
+            const bool invalid_paste = hierarchy.PasteSelection(clipboard_destination_context,
+                "other application text", clipboard_error);
+            check.Expect(!invalid_paste && clipboard_destination.GameObjectCount() == before_invalid_paste,
+                "他アプリの文字列では Scene を変更しない");
+            check.Expect(clipboard_destination_context.Undo() &&
+                clipboard_destination.GameObjectCount() == before_paste,
+                "貼り付けを Undo 1 回で戻せる");
+
+            Serialization::SceneData too_large;
+            too_large.objects.resize(100001);
+            const std::size_t before_too_large = clipboard_destination.GameObjectCount();
+            const bool too_large_paste = hierarchy.PasteSceneData(clipboard_destination_context,
+                too_large, clipboard_error);
+            check.Expect(!too_large_paste && clipboard_destination.GameObjectCount() == before_too_large,
+                "100,000 件を超える貼り付けは Scene を変更しない");
+        }
 
         // -----------------------------------------------------------------
         // Play Mode — World の所有者は RuntimeSceneService だけ

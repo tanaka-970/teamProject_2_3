@@ -1,4 +1,4 @@
-#include "ProjectSettingsSerializer.h"
+﻿#include "ProjectSettingsSerializer.h"
 
 #include <fstream>
 #include <iomanip>
@@ -46,6 +46,26 @@ namespace ReplayEngine::Project
 
         // v3 で追加。Active Scene Flow も GUID だけを保存する。
         stream << "SCENE_FLOW " << std::quoted(settings.SceneFlowGuid()) << '\n';
+        stream << "LOCALIZATION_TABLE " << std::quoted(settings.LocalizationTableGuid()) << '\n';
+        stream << "DEFAULT_LANGUAGE " << std::quoted(settings.DefaultLanguage()) << '\n';
+        stream << "INPUT_ACTION_ASSET " << std::quoted(settings.InputActionAssetGuid()) << '\n';
+        stream << "UI_FOCUS_OUTLINE_ENABLED " << (settings.FocusOutlineEnabled() ? 1 : 0) << '\n';
+        const DirectX::XMFLOAT4 focus_color = settings.FocusOutlineColor();
+        stream << "UI_FOCUS_OUTLINE_COLOR " << focus_color.x << ' ' << focus_color.y << ' '
+            << focus_color.z << ' ' << focus_color.w << '\n';
+        stream << "UI_FOCUS_OUTLINE_WIDTH " << settings.FocusOutlineWidth() << '\n';
+        stream << "UI_FOCUS_CORNER_RADIUS " << settings.FocusCornerRadius() << '\n';
+
+        // v7: Editor の Template Component 表示方針。旧ファイルは Reset() の false のまま。
+        stream << "EDITOR_SHOW_GAME_TEMPLATE_COMPONENTS "
+            << (settings.ShowGameTemplateComponents() ? 1 : 0) << '\n';
+
+        // 描画トグル。行が無い旧ファイルは Reset() の既定値のまま読まれる。
+        stream << "RENDER_SSAO " << (settings.SsaoEnabled() ? 1 : 0) << '\n';
+        stream << "RENDER_SSR " << (settings.SsrEnabled() ? 1 : 0) << '\n';
+        stream << "RENDER_TAA " << (settings.TaaEnabled() ? 1 : 0) << '\n';
+        stream << "RENDER_DEPTH_PREPASS "
+            << (settings.DepthPrepassEnabled() ? 1 : 0) << '\n';
 
         if (!stream)
         {
@@ -122,6 +142,86 @@ namespace ReplayEngine::Project
                 {
                     settings.SetSceneFlowGuid(std::move(guid));
                 }
+            }
+            else if (keyword == "LOCALIZATION_TABLE")
+            {
+                std::istringstream value_stream(line);
+                value_stream.imbue(std::locale::classic());
+                std::string guid;
+                if (value_stream >> std::quoted(guid))
+                    settings.SetLocalizationTableGuid(std::move(guid));
+            }
+            else if (keyword == "DEFAULT_LANGUAGE")
+            {
+                std::istringstream value_stream(line);
+                value_stream.imbue(std::locale::classic());
+                std::string language;
+                if (value_stream >> std::quoted(language))
+                    settings.SetDefaultLanguage(std::move(language));
+            }
+            else if (keyword == "INPUT_ACTION_ASSET")
+            {
+                std::istringstream value_stream(line);
+                value_stream.imbue(std::locale::classic());
+                std::string guid;
+                if (value_stream >> std::quoted(guid))
+                    settings.SetInputActionAssetGuid(std::move(guid));
+            }
+            else if (keyword == "UI_FOCUS_OUTLINE_ENABLED")
+            {
+                std::istringstream value_stream(line);
+                int enabled = 1;
+                if (value_stream >> enabled) settings.SetFocusOutlineEnabled(enabled != 0);
+            }
+            else if (keyword == "UI_FOCUS_OUTLINE_COLOR")
+            {
+                std::istringstream value_stream(line);
+                DirectX::XMFLOAT4 color = settings.FocusOutlineColor();
+                if (value_stream >> color.x >> color.y >> color.z >> color.w)
+                    settings.SetFocusOutlineColor(color);
+            }
+            else if (keyword == "UI_FOCUS_OUTLINE_WIDTH")
+            {
+                std::istringstream value_stream(line);
+                float value = settings.FocusOutlineWidth();
+                if (value_stream >> value) settings.SetFocusOutlineWidth(value);
+            }
+            else if (keyword == "UI_FOCUS_CORNER_RADIUS")
+            {
+                std::istringstream value_stream(line);
+                float value = settings.FocusCornerRadius();
+                if (value_stream >> value) settings.SetFocusCornerRadius(value);
+            }
+            else if (keyword == "EDITOR_SHOW_GAME_TEMPLATE_COMPONENTS")
+            {
+                std::istringstream value_stream(line);
+                int enabled = settings.ShowGameTemplateComponents() ? 1 : 0;
+                if (value_stream >> enabled)
+                    settings.SetShowGameTemplateComponents(enabled != 0);
+            }
+            else if (keyword == "RENDER_SSAO")
+            {
+                std::istringstream value_stream(line);
+                int enabled = settings.SsaoEnabled() ? 1 : 0;
+                if (value_stream >> enabled) settings.SetSsaoEnabled(enabled != 0);
+            }
+            else if (keyword == "RENDER_SSR")
+            {
+                std::istringstream value_stream(line);
+                int enabled = settings.SsrEnabled() ? 1 : 0;
+                if (value_stream >> enabled) settings.SetSsrEnabled(enabled != 0);
+            }
+            else if (keyword == "RENDER_TAA")
+            {
+                std::istringstream value_stream(line);
+                int enabled = settings.TaaEnabled() ? 1 : 0;
+                if (value_stream >> enabled) settings.SetTaaEnabled(enabled != 0);
+            }
+            else if (keyword == "RENDER_DEPTH_PREPASS")
+            {
+                std::istringstream value_stream(line);
+                int enabled = settings.DepthPrepassEnabled() ? 1 : 0;
+                if (value_stream >> enabled) settings.SetDepthPrepassEnabled(enabled != 0);
             }
             // 未知のキーワードはここで捨てる。
         }

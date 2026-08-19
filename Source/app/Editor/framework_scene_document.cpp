@@ -59,10 +59,21 @@ namespace
 void framework::handle_viewport_selection()
 {
     if (!edit_mode_active || !game_scene) return;
+    if (ui_scene_view_input_consumed)
+    {
+        viewport_drag_selecting = false;
+        return;
+    }
 
     // Landscape Tool は左ドラッグを Sculpt / Face 選択へ使う。
     // Stroke の mouse-up は Viewport 外でも拾う必要があるため Hover 判定より先。
     if (handle_landscape_viewport_edit()) return;
+    // AI range handles consume only the selected handle drag; normal selection/Gizmo remains unchanged.
+    if (handle_ai_navigation_debug_edit())
+    {
+        viewport_drag_selecting = false;
+        return;
+    }
     if (!scene_view_hovered) return;
 
     const bool suppress_drag_selection =
@@ -191,7 +202,9 @@ void framework::handle_viewport_selection()
 
 void framework::save_editor_session()
 {
+    if (standalone_game_mode) return;
     if (!editor_session_active) return;
+    remember_active_editor_view();
 
     std::error_code directory_error;
     std::filesystem::create_directories(EditorSessionFolder(), directory_error);
@@ -200,31 +213,67 @@ void framework::save_editor_session()
     std::ofstream state(EditorSessionStatePath(), std::ios::trunc);
     if (!state) return;
     state << "REPLAY_EDITOR_SESSION " << EditorSessionVersion << '\n';
+    state << "LAYOUT_VERSION " << editor_layout_saved_version << '\n';
     state << "OBJECT_SCENE_PATH " << std::quoted(object_scene_path.generic_string()) << '\n';
     for (const std::filesystem::path& path : recent_scene_paths)
         state << "RECENT_SCENE " << std::quoted(path.generic_u8string()) << '\n';
     state << "WORKSPACE " << static_cast<int>(active_editor_workspace) << '\n';
     state << "VIEW " << static_cast<int>(active_editor_view) << '\n';
+    for (std::size_t index = 0; index < editor_view_by_workspace.size(); ++index)
+        state << "WORKSPACE_VIEW " << index << ' ' <<
+            static_cast<int>(editor_view_by_workspace[index]) << '\n';
 }
 
 void framework::restore_editor_session()
 {
+    if (standalone_game_mode || object_boot_from_startup_scene) return;
+
+    editor_layout_checked = false;
+    editor_layout_dirty = true;
+    editor_layout_saved_version = 0;
+
     std::ifstream state(EditorSessionStatePath());
     if (!state) return;
 
     std::string signature;
     int version = 0;
     if (!(state >> signature >> version) || signature != "REPLAY_EDITOR_SESSION" ||
-        version < 2 || version > EditorSessionVersion) return;
+        version < 2 || version > EditorSessionVersion)
+    {
+        push_editor_log("Warning",
+            "Editor session を読み取れません。既定値で起動します",
+            EditorSessionStatePath());
+        return;
+    }
 
     std::string scene_path;
     int workspace = static_cast<int>(editor_workspace::general);
     int view = static_cast<int>(editor_view::scene);
+    int restored_layout_version = 0;
+    bool layout_version_read = false;
+    bool layout_version_invalid = false;
     std::vector<std::filesystem::path> restored_recent_scenes;
     std::string key;
     while (state >> key)
     {
-        if (key == "OBJECT_SCENE_PATH") state >> std::quoted(scene_path);
+        if (key == "LAYOUT_VERSION")
+        {
+            std::string value_line;
+            std::getline(state, value_line);
+            std::istringstream parser(value_line);
+            int parsed_version = 0;
+            char trailing = '\0';
+            if ((parser >> parsed_version) && !(parser >> trailing))
+            {
+                restored_layout_version = parsed_version;
+                layout_version_read = true;
+            }
+            else
+            {
+                layout_version_invalid = true;
+            }
+        }
+        else if (key == "OBJECT_SCENE_PATH") state >> std::quoted(scene_path);
         else if (key == "RECENT_SCENE")
         {
             std::string recent_path;
@@ -234,6 +283,21 @@ void framework::restore_editor_session()
         }
         else if (key == "WORKSPACE") state >> workspace;
         else if (key == "VIEW") state >> view;
+        else if (key == "WORKSPACE_VIEW")
+        {
+            int saved_workspace = -1;
+            int saved_view = static_cast<int>(editor_view::scene);
+            state >> saved_workspace >> saved_view;
+            if (saved_workspace >= 0 &&
+                saved_workspace < static_cast<int>(editor_view_by_workspace.size()))
+            {
+                saved_view = std::clamp(saved_view, 0,
+                    static_cast<int>(editor_view::game));
+                editor_view_by_workspace[
+                    static_cast<std::size_t>(saved_workspace)] =
+                    static_cast<editor_view>(saved_view);
+            }
+        }
         else
         {
             std::string ignored;
@@ -260,17 +324,27 @@ void framework::restore_editor_session()
     }
     add_recent_object_scene(object_scene_path);
 
-    const int last_workspace = static_cast<int>(editor_workspace::shader_adjustment);
+    const int last_workspace = static_cast<int>(editor_workspace::motion);
     workspace = std::clamp(workspace, 0, last_workspace);
     view = std::clamp(view, 0, static_cast<int>(editor_view::game));
     active_editor_workspace = static_cast<editor_workspace>(workspace);
     active_editor_view = static_cast<editor_view>(view);
+    remember_active_editor_view();
+    editor_view_tab_sync_pending = true;
     selected_editor_object = editor_selection::world;
     edit_mode_active = true;
     editor_mode = true;
     editor_session_active = true;
-    editor_layout_checked = false;
-    editor_layout_dirty = false;
+    editor_layout_saved_version =
+        (!layout_version_invalid && layout_version_read) ? restored_layout_version : 0;
+    editor_layout_dirty = layout_version_invalid || !layout_version_read ||
+        editor_layout_saved_version != editor_layout_version;
+    if (layout_version_invalid)
+    {
+        push_editor_log("Warning",
+            "Editor layout version を読み取れません。既定レイアウトを再構築します",
+            EditorSessionStatePath());
+    }
     object_editor_context.SetStatus("前回の編集セッションを復元しました");
 }
 

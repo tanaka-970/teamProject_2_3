@@ -1,4 +1,4 @@
-#include "ShapeSweep.h"
+﻿#include "ShapeSweep.h"
 
 #include <algorithm>
 #include <cmath>
@@ -51,7 +51,7 @@ namespace ReplayEngine::Physics
         {
             if (segment_length_squared <= 1.0e-12f) return 0.0f;
             const float raw = Dot(Subtract(point, a), segment) / segment_length_squared;
-            return std::max(0.0f, std::min(1.0f, raw));
+            return (std::max)(0.0f, (std::min)(1.0f, raw));
         }
 
         // a t^2 + b t + c = 0 の、[0, 1] に入る最小の解。無ければ false。
@@ -75,8 +75,8 @@ namespace ReplayEngine::Physics
             const float first = (-b - root_of_discriminant) * inverse;
             const float second = (-b + root_of_discriminant) * inverse;
 
-            const float low = std::min(first, second);
-            const float high = std::max(first, second);
+            const float low = (std::min)(first, second);
+            const float high = (std::max)(first, second);
 
             if (low >= 0.0f && low <= 1.0f) { out = low; return true; }
             if (high >= 0.0f && high <= 1.0f) { out = high; return true; }

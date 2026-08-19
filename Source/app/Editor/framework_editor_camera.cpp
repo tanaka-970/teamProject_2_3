@@ -1,4 +1,4 @@
-// Scene View の編集カメラと framework の接続部。
+﻿// Scene View の編集カメラと framework の接続部。
 //
 // 【この 1 ファイルにまとめている理由】
 //   ImGui / Win32 から入力を読むのはここだけ。
@@ -15,9 +15,14 @@
 
 #include "framework.h"
 
+#include "gltf_model.h"
+
 #include "../../RePlayEngine/Components/Camera/CameraComponent.h"
+#include "../../RePlayEngine/Components/Rendering/MeshRendererComponent.h"
+#include "../../RePlayEngine/Components/Rendering/SkinnedMeshRendererComponent.h"
 #include "../../RePlayEngine/Editor/Viewport/EditorSelectionBounds.h"
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
+#include "../../RePlayEngine/Rendering/Adapter/RenderItem.h"
 
 #include <algorithm>
 #include <cmath>
@@ -42,6 +47,9 @@ bool framework::using_editor_camera() const noexcept
 
 DirectX::XMMATRIX framework::viewport_view_matrix() const
 {                                                                                                                                                  //
+    if (render_matrix_override_active)
+        return DirectX::XMLoadFloat4x4(&render_view_override);
+    if (render_camera_override != nullptr) return render_camera_override->ViewMatrix();
     if (using_editor_camera()) return editor_camera.ViewMatrix();                                                                                  //
                                                                                                                                                    //
     const ReplayEngine::Components::CameraSelection camera_selection =
@@ -64,10 +72,16 @@ DirectX::XMMATRIX framework::viewport_projection_matrix() const                 
     // Therefore projection, picking and editor overlays must all use the client aspect.
     // Using the Scene View content rect here makes the error grow toward the viewport edges
     // (Landscape brush/edit point, gizmo and selection no longer line up with the image).
-    const float aspect = (client_width > 0 && client_height > 0)
-        ? static_cast<float>(client_width) / static_cast<float>(client_height)
-        : (16.0f / 9.0f);                                                                                                                          //
+    const float aspect = render_camera_aspect > 0.0f
+        ? render_camera_aspect
+        : ((client_width > 0 && client_height > 0)
+            ? static_cast<float>(client_width) / static_cast<float>(client_height)
+            : (16.0f / 9.0f));                                                                                                                     //
                                                                                                                                                    //
+    if (render_matrix_override_active)
+        return DirectX::XMLoadFloat4x4(&render_projection_override);
+    if (render_camera_override != nullptr)
+        return render_camera_override->ProjectionMatrix(aspect);
     if (using_editor_camera()) return editor_camera.ProjectionMatrix(aspect);                                                                      //
                                                                                                                                                    //
     const ReplayEngine::Components::CameraSelection camera_selection =
@@ -84,6 +98,8 @@ DirectX::XMMATRIX framework::viewport_projection_matrix() const                 
                                                                                                                                                    //
 DirectX::XMFLOAT3 framework::viewport_eye_position() const
 {
+    if (render_matrix_override_active) return render_eye_override;
+    if (render_camera_override != nullptr) return render_camera_override->EyePosition();
     if (using_editor_camera()) return editor_camera.Position();
 
     const ReplayEngine::Components::CameraSelection camera_selection =
@@ -216,7 +232,10 @@ void framework::update_editor_camera(float elapsed_time)
     // Preset 側は Win32 を知らない。ここで physical key を enum へ変換する。
     const auto key_down = [](int virtual_key)
     {
-        return (::GetAsyncKeyState(virtual_key) & 0x8000) != 0;
+        // 上位bitは現在押されている状態、下位bitは前回の問い合わせ以降に
+        // 押された履歴。両方を見ることで、1 frame より短い F などのタップも
+        // EditorCameraController の edge 判定へ確実に渡す。
+        return (::GetAsyncKeyState(virtual_key) & 0x8001) != 0;
     };
     const auto set_key = [&](ReplayEngine::Editor::EditorCameraKey key, int virtual_key)
     {
@@ -287,6 +306,9 @@ void framework::update_editor_camera(float elapsed_time)
     suppress_chord_key(camera_preset.gizmo_rotate, rotate_shortcut_down);
     suppress_chord_key(camera_preset.gizmo_scale, scale_shortcut_down);
 
+    // 診断表示が読む。条件を書き写すと本物とズレるので実物を保持する。
+    last_editor_camera_input = input;
+
     const float move_speed_before_input = editor_camera.move_speed;
     editor_camera_consumed_input = editor_camera_controller.Update(
         editor_camera, input, camera_preset);
@@ -331,8 +353,64 @@ void framework::focus_editor_camera_on_selection()
     // 選択が無くてもクラッシュさせない。何もしないで戻る。
     if (selection.empty()) return;
 
-    const EditorNS::WorldBounds bounds =
-        EditorNS::EditorSelectionBounds::Compute(scene, selection);
+    // Collider を持たない描画Objectでも、Transform原点の仮箱ではなく
+    // 実際に描くGLBのBoundsを使う。RenderItemのworldを使うことで、姿勢補正・
+    // ローカル倍率・親Transformも描画結果と完全に同じになる。
+    const auto render_bounds_provider = [this](
+        const ReplayEngine::Core::GameObject& object,
+        EditorNS::WorldBounds& output) -> bool
+    {
+        using ReplayEngine::Components::MeshRendererComponent;
+        using ReplayEngine::Components::SkinnedMeshRendererComponent;
+        using ReplayEngine::Rendering::RenderItem;
+
+        const auto accumulate = [this, &output](const RenderItem& item) -> bool
+        {
+            gltf_model* model = resolve_object_gltf(item.mesh_asset);
+            if (model == nullptr || !model->IsLoaded()) return false;
+
+            DirectX::XMFLOAT3 local_minimum{};
+            DirectX::XMFLOAT3 local_maximum{};
+            if (!model->ComputeBounds(local_minimum, local_maximum)) return false;
+
+            const DirectX::XMMATRIX world = DirectX::XMLoadFloat4x4(&item.world);
+            for (int x = 0; x < 2; ++x)
+            {
+                for (int y = 0; y < 2; ++y)
+                {
+                    for (int z = 0; z < 2; ++z)
+                    {
+                        const DirectX::XMFLOAT3 corner{
+                            x == 0 ? local_minimum.x : local_maximum.x,
+                            y == 0 ? local_minimum.y : local_maximum.y,
+                            z == 0 ? local_minimum.z : local_maximum.z };
+                        DirectX::XMFLOAT3 transformed{};
+                        DirectX::XMStoreFloat3(&transformed,
+                            DirectX::XMVector3TransformCoord(
+                                DirectX::XMLoadFloat3(&corner), world));
+                        output.Encapsulate(transformed);
+                    }
+                }
+            }
+            return true;
+        };
+
+        bool found = false;
+        if (const auto* renderer = object.GetComponent<SkinnedMeshRendererComponent>())
+        {
+            RenderItem item{};
+            if (renderer->BuildRenderItem(object, item)) found |= accumulate(item);
+        }
+        if (const auto* renderer = object.GetComponent<MeshRendererComponent>())
+        {
+            RenderItem item{};
+            if (renderer->BuildRenderItem(object, item)) found |= accumulate(item);
+        }
+        return found;
+    };
+
+    const EditorNS::WorldBounds bounds = EditorNS::EditorSelectionBounds::Compute(
+        scene, selection, render_bounds_provider);
 
     // Bounds が取れない場合も落ちない。Compute は最低でも Transform 位置を含めるが、
     // 対象がすべて消えていた場合は valid = false のまま返る。
@@ -423,6 +501,8 @@ std::string framework::make_editor_camera_state_key() const
 
 void framework::load_editor_camera_state()
 {
+    if (standalone_game_mode) return;
+
     namespace EditorNS = ReplayEngine::Editor;
 
     editor_camera_state_key = make_editor_camera_state_key();
@@ -449,6 +529,8 @@ void framework::load_editor_camera_state()
 
 void framework::save_editor_camera_state()
 {
+    if (standalone_game_mode) return;
+
     namespace EditorNS = ReplayEngine::Editor;
 
     if (editor_camera_state_key.empty())

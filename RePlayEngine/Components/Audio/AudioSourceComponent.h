@@ -2,6 +2,7 @@
 
 #include "../../Audio/AudioService.h"
 #include "../../Object/Component/Component.h"
+#include "../../Runtime/Events/EventBus.h"
 
 #include <string>
 
@@ -32,10 +33,14 @@ namespace ReplayEngine::Components
         void OnRuntimeDestroy() override;
 
     private:
+        void EnsureMotionEventSubscription();
+        void HandleMotionEvent(const Runtime::EventRecord& record);
+
         Audio::IAudioPlaybackService* AudioService() const noexcept;
         Audio::AudioPlaybackParams BuildParams() const;
 
         Audio::AudioVoiceHandle voice_;
+        Runtime::ScopedSubscription motion_event_subscription_;
         bool play_on_start_consumed_ = false;
     };
 }

@@ -10,6 +10,8 @@ cbuffer OUTLINE_CONSTANT_BUFFER : register(b7)
 VS_OUT main(VS_IN vin)
 {
     VS_OUT vout;
+    vin.position.xyz += vin.morph_position * gltf_morph.x;
+    vin.normal.xyz += vin.morph_normal * gltf_morph.x;
 
     float4 blended_pos    = (float4) 0;
     float4 blended_normal = (float4) 0;

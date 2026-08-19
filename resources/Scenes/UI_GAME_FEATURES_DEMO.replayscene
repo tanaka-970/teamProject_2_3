@@ -1,0 +1,4239 @@
+REPLAY_SCENE 11
+SCENE "UI GAME FEATURES DEMO"
+SCENE_STATE 0
+COLLISION_STATE 2 0
+OBJECT_COUNT 63
+OBJECT
+  ID 1
+  NAME "Demo Camera"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 -8 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "CameraComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "projection_mode" enum 0
+    PROPERTY "field_of_view_degrees" float 50
+    PROPERTY "near_clip" float 0.1
+    PROPERTY "far_clip" float 1000
+    PROPERTY "priority" int 100
+  END_COMPONENT
+  COMPONENT "ScreenEffectStackComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 11
+    PROPERTY "enabled" bool 1
+    PROPERTY "use_preset" bool 0
+    PROPERTY "effect_preset" assetref ""
+    PROPERTY "effect_count" int 1
+    PROPERTY "apply_stage" enum 0
+    PROPERTY "effects[0].enabled" bool 1
+    PROPERTY "effects[0].type" enum 39
+    PROPERTY "effects[0].intensity" float 0.18
+    PROPERTY "effects[0].amount" float 0.22
+    PROPERTY "effects[0].speed" float 1.1
+    PROPERTY "effects[0].seed" float 17
+  END_COMPONENT
+  COMPONENT "MotionPlayerComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "motion" assetref "42a67879aa5a167635eefa30dd48d6c1"
+    PROPERTY "play_on_start" bool 1
+    PROPERTY "trigger" enum 0
+    PROPERTY "loop" bool 1
+    PROPERTY "wrap_mode" enum 1
+    PROPERTY "speed" float 1
+    PROPERTY "weight" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 2
+  NAME "Model Effect ON"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -1.5 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.22 0.62 1 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+  COMPONENT "ModelEffectStackComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 6
+    PROPERTY "enabled" bool 1
+    PROPERTY "use_preset" bool 1
+    PROPERTY "effect_preset" assetref "bfbbbe9fbcb425644e3d6238cb4d1c35"
+    PROPERTY "effect_count" int 0
+    PROPERTY "depth_mode" enum 0
+    PROPERTY "max_bleed_pixels" float 128
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 3
+  NAME "Model Effect OFF"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 1.5 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 1 0.38 0.18 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 100
+  NAME "UI Demo Canvas"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0 0
+    PROPERTY "anchor_max" vec2 0 0
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 0 0
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "CanvasComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 6
+    PROPERTY "reference_resolution" vec2 1920 1080
+    PROPERTY "render_mode" enum 0
+    PROPERTY "scale_mode" enum 1
+    PROPERTY "match_width_or_height" float 0.5
+    PROPERTY "sort_order" int 100
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 101
+  NAME "Title"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 490
+    PROPERTY "size_delta" vec2 1800 56
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "RePlayEngine UI GAME FEATURES DEMO"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 34
+    PROPERTY "color" color 0.85 0.95 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 102
+  NAME "Rich Text Sample"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 430
+    PROPERTY "size_delta" vec2 1700 54
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "<color=#ff5a5a>警告</color>：<size=34><b>HP</b></size> が <i>危険域</i>です / Rich Text"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 27
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 1
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 103
+  NAME "Localized Caption"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 382
+    PROPERTY "size_delta" vec2 1600 45
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Localization fallback text"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 24
+    PROPERTY "color" color 0.8 1 0.84 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string "demo.caption"
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 110
+  NAME "Start Button"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -700 285
+    PROPERTY "size_delta" vec2 235 58
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.12 0.15 0.19 0.94
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 0
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 110 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "はじめる"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 22
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string "demo.start"
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 111
+  NAME "Continue Button"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -430 285
+    PROPERTY "size_delta" vec2 235 58
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.12 0.15 0.19 0.94
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 1
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 111 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 1
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "つづきから"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 22
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string "demo.continue"
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 112
+  NAME "Japanese Button"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 6
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -700 205
+    PROPERTY "size_delta" vec2 235 58
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.12 0.15 0.19 0.94
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 2
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 112 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 2
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "日本語"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 22
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string "demo.japanese"
+  END_COMPONENT
+  COMPONENT "UILanguageSwitchComponent" 1
+    STABLE_ID 6
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 1
+    PROPERTY "language" string "ja"
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 113
+  NAME "English Button"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 6
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -430 205
+    PROPERTY "size_delta" vec2 235 58
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.12 0.15 0.19 0.94
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 3
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 113 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 3
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "English"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 22
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string "demo.english"
+  END_COMPONENT
+  COMPONENT "UILanguageSwitchComponent" 1
+    STABLE_ID 6
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 1
+    PROPERTY "language" string "en"
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 114
+  NAME "Screen Effect Toggle"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 6
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -565 115
+    PROPERTY "size_delta" vec2 505 58
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.15 0.22 0.3 0.96
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 4
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 114 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 4
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Screen Effect ON / OFF"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 21
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string "demo.screen_toggle"
+  END_COMPONENT
+  COMPONENT "UIButtonPropertyToggleComponent" 1
+    STABLE_ID 6
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "target" compref 1 2
+    PROPERTY "target_property" string "enabled"
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 120
+  NAME "Input Field"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -565 30
+    PROPERTY "size_delta" vec2 505 58
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.08 0.1 0.13 0.96
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 5
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "名前を入力してください"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 22
+    PROPERTY "color" color 0.65 0.65 0.68 0.8
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+  COMPONENT "UIInputFieldComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "text" string ""
+    PROPERTY "text_target" compref 120 4
+    PROPERTY "placeholder" string "名前を入力してください / Type your name"
+    PROPERTY "caret_blink_seconds" float 0.5
+    PROPERTY "max_characters" int 24
+    PROPERTY "password" bool 0
+    PROPERTY "read_only" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 130
+  NAME "Horizontal Layout"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -565 -75
+    PROPERTY "size_delta" vec2 505 60
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIHorizontalLayoutGroupComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "padding" vec4 8 8 8 8
+    PROPERTY "spacing" float 10
+    PROPERTY "alignment" enum 1
+    PROPERTY "control_child_width" bool 0
+    PROPERTY "control_child_height" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 131
+  NAME "Horizontal A"
+  ENABLED 1
+  PARENT 130
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 145 42
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.12 0.28 0.34 0.9
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "A"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 132
+  NAME "Horizontal B"
+  ENABLED 1
+  PARENT 130
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 145 42
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.12 0.35000000000000003 0.34 0.9
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "B"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 133
+  NAME "Horizontal C"
+  ENABLED 1
+  PARENT 130
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 145 42
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.12 0.42000000000000004 0.34 0.9
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "C"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 140
+  NAME "Vertical Layout"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -720 -230
+    PROPERTY "size_delta" vec2 200 240
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIVerticalLayoutGroupComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "padding" vec4 8 8 8 8
+    PROPERTY "spacing" float 8
+    PROPERTY "alignment" enum 1
+    PROPERTY "control_child_width" bool 1
+    PROPERTY "control_child_height" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 141
+  NAME "Vertical 1"
+  ENABLED 1
+  PARENT 140
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 150 52
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.2 0.18 0.35 0.9
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Vertical 1"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 17
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 142
+  NAME "Vertical 2"
+  ENABLED 1
+  PARENT 140
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 150 52
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.2 0.24 0.35 0.9
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Vertical 2"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 17
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 143
+  NAME "Vertical 3"
+  ENABLED 1
+  PARENT 140
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 150 52
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.2 0.3 0.35 0.9
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Vertical 3"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 17
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 150
+  NAME "Grid Layout"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -420 -230
+    PROPERTY "size_delta" vec2 330 240
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIGridLayoutGroupComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 6
+    PROPERTY "padding" vec4 8 8 8 8
+    PROPERTY "spacing" vec2 8 8
+    PROPERTY "cell_size" vec2 92 54
+    PROPERTY "alignment" enum 1
+    PROPERTY "constraint" enum 0
+    PROPERTY "constraint_count" int 3
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 151
+  NAME "Grid 1"
+  ENABLED 1
+  PARENT 150
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 92 54
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.16 0.23 0.34 0.9
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "1"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 152
+  NAME "Grid 2"
+  ENABLED 1
+  PARENT 150
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 92 54
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.185 0.23 0.34 0.9
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "2"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 153
+  NAME "Grid 3"
+  ENABLED 1
+  PARENT 150
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 92 54
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.21000000000000002 0.23 0.34 0.9
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "3"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 154
+  NAME "Grid 4"
+  ENABLED 1
+  PARENT 150
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 92 54
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.23500000000000001 0.23 0.34 0.9
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "4"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 155
+  NAME "Grid 5"
+  ENABLED 1
+  PARENT 150
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 92 54
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.26 0.23 0.34 0.9
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "5"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 156
+  NAME "Grid 6"
+  ENABLED 1
+  PARENT 150
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 92 54
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.28500000000000003 0.23 0.34 0.9
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "6"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 200
+  NAME "ScrollView 32 Items"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 570 -50
+    PROPERTY "size_delta" vec2 590 650
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIMaskComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "enabled_mask" bool 1
+    PROPERTY "mask_mode" enum 0
+    PROPERTY "show_mask_graphic" bool 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 10
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIScrollViewComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 11
+    PROPERTY "content" compref 201 1
+    PROPERTY "horizontal" bool 0
+    PROPERTY "vertical" bool 1
+    PROPERTY "clamp_when_content_fits" bool 1
+    PROPERTY "scroll_sensitivity" float 52
+    PROPERTY "scroll_offset" vec2 0 0
+    PROPERTY "show_scrollbars" bool 1
+    PROPERTY "scrollbar_width" float 8
+    PROPERTY "scrollbar_track_color" color 0.08 0.09 0.1 0.55
+    PROPERTY "scrollbar_thumb_color" color 0.75 0.88 1 0.95
+    PROPERTY "scrollbar_corner_radius" float 4
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.045 0.055 0.07 0.93
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 201
+  NAME "Scroll Content"
+  ENABLED 1
+  PARENT 200
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 1
+    PROPERTY "anchor_max" vec2 0.5 1
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 550 1424
+    PROPERTY "pivot" vec2 0.5 1
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIVerticalLayoutGroupComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "padding" vec4 10 10 20 10
+    PROPERTY "spacing" float 6
+    PROPERTY "alignment" enum 0
+    PROPERTY "control_child_width" bool 1
+    PROPERTY "control_child_height" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 210
+  NAME "Scroll Item 01"
+  ENABLED 1
+  PARENT 201
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 510 38
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.09 0.12 0.16 0.95
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 20
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 210 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 20
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Item 01"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 0.92 0.95 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 211
+  NAME "Scroll Item 02"
+  ENABLED 1
+  PARENT 201
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 510 38
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.11499999999999999 0.12 0.16 0.95
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 21
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 211 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 21
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Item 02"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 0.92 0.95 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 212
+  NAME "Scroll Item 03"
+  ENABLED 1
+  PARENT 201
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 510 38
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.09 0.12 0.16 0.95
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 22
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 212 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 22
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Item 03"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 0.92 0.95 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 213
+  NAME "Scroll Item 04"
+  ENABLED 1
+  PARENT 201
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 510 38
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.11499999999999999 0.12 0.16 0.95
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 23
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 213 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 23
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Item 04"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 0.92 0.95 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 214
+  NAME "Scroll Item 05"
+  ENABLED 1
+  PARENT 201
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 510 38
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.09 0.12 0.16 0.95
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 24
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 214 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 24
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Item 05"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 0.92 0.95 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 215
+  NAME "Scroll Item 06"
+  ENABLED 1
+  PARENT 201
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 510 38
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.11499999999999999 0.12 0.16 0.95
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 25
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 215 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 25
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Item 06"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 0.92 0.95 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 216
+  NAME "Scroll Item 07"
+  ENABLED 1
+  PARENT 201
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 510 38
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.09 0.12 0.16 0.95
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 26
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 216 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 26
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Item 07"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 0.92 0.95 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 217
+  NAME "Scroll Item 08"
+  ENABLED 1
+  PARENT 201
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 510 38
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.11499999999999999 0.12 0.16 0.95
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 27
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 217 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 27
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Item 08"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 0.92 0.95 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 218
+  NAME "Scroll Item 09"
+  ENABLED 1
+  PARENT 201
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 510 38
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.09 0.12 0.16 0.95
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 28
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 218 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 28
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Item 09"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 0.92 0.95 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 219
+  NAME "Scroll Item 10"
+  ENABLED 1
+  PARENT 201
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 510 38
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.11499999999999999 0.12 0.16 0.95
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 29
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 219 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 29
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Item 10"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 0.92 0.95 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 220
+  NAME "Scroll Item 11"
+  ENABLED 1
+  PARENT 201
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 510 38
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.09 0.12 0.16 0.95
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 30
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 220 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 30
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Item 11"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 0.92 0.95 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 221
+  NAME "Scroll Item 12"
+  ENABLED 1
+  PARENT 201
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 510 38
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.11499999999999999 0.12 0.16 0.95
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 31
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 221 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 31
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Item 12"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 0.92 0.95 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 222
+  NAME "Scroll Item 13"
+  ENABLED 1
+  PARENT 201
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 510 38
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.09 0.12 0.16 0.95
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 32
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 222 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 32
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Item 13"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 0.92 0.95 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 223
+  NAME "Scroll Item 14"
+  ENABLED 1
+  PARENT 201
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 510 38
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.11499999999999999 0.12 0.16 0.95
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 33
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 223 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 33
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Item 14"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 0.92 0.95 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 224
+  NAME "Scroll Item 15"
+  ENABLED 1
+  PARENT 201
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 510 38
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.09 0.12 0.16 0.95
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 34
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 224 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 34
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Item 15"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 0.92 0.95 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 225
+  NAME "Scroll Item 16"
+  ENABLED 1
+  PARENT 201
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 510 38
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.11499999999999999 0.12 0.16 0.95
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 35
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 225 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 35
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Item 16"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 0.92 0.95 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 226
+  NAME "Scroll Item 17"
+  ENABLED 1
+  PARENT 201
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 510 38
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.09 0.12 0.16 0.95
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 36
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 226 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 36
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Item 17"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 0.92 0.95 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 227
+  NAME "Scroll Item 18"
+  ENABLED 1
+  PARENT 201
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 510 38
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.11499999999999999 0.12 0.16 0.95
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 37
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 227 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 37
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Item 18"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 0.92 0.95 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 228
+  NAME "Scroll Item 19"
+  ENABLED 1
+  PARENT 201
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 510 38
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.09 0.12 0.16 0.95
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 38
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 228 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 38
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Item 19"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 0.92 0.95 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 229
+  NAME "Scroll Item 20"
+  ENABLED 1
+  PARENT 201
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 510 38
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.11499999999999999 0.12 0.16 0.95
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 39
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 229 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 39
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Item 20"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 0.92 0.95 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 230
+  NAME "Scroll Item 21"
+  ENABLED 1
+  PARENT 201
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 510 38
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.09 0.12 0.16 0.95
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 40
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 230 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 40
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Item 21"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 0.92 0.95 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 231
+  NAME "Scroll Item 22"
+  ENABLED 1
+  PARENT 201
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 510 38
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.11499999999999999 0.12 0.16 0.95
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 41
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 231 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 41
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Item 22"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 0.92 0.95 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 232
+  NAME "Scroll Item 23"
+  ENABLED 1
+  PARENT 201
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 510 38
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.09 0.12 0.16 0.95
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 42
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 232 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 42
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Item 23"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 0.92 0.95 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 233
+  NAME "Scroll Item 24"
+  ENABLED 1
+  PARENT 201
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 510 38
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.11499999999999999 0.12 0.16 0.95
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 43
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 233 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 43
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Item 24"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 0.92 0.95 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 234
+  NAME "Scroll Item 25"
+  ENABLED 1
+  PARENT 201
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 510 38
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.09 0.12 0.16 0.95
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 44
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 234 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 44
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Item 25"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 0.92 0.95 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 235
+  NAME "Scroll Item 26"
+  ENABLED 1
+  PARENT 201
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 510 38
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.11499999999999999 0.12 0.16 0.95
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 45
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 235 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 45
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Item 26"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 0.92 0.95 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 236
+  NAME "Scroll Item 27"
+  ENABLED 1
+  PARENT 201
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 510 38
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.09 0.12 0.16 0.95
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 46
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 236 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 46
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Item 27"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 0.92 0.95 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 237
+  NAME "Scroll Item 28"
+  ENABLED 1
+  PARENT 201
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 510 38
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.11499999999999999 0.12 0.16 0.95
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 47
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 237 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 47
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Item 28"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 0.92 0.95 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 238
+  NAME "Scroll Item 29"
+  ENABLED 1
+  PARENT 201
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 510 38
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.09 0.12 0.16 0.95
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 48
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 238 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 48
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Item 29"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 0.92 0.95 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 239
+  NAME "Scroll Item 30"
+  ENABLED 1
+  PARENT 201
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 510 38
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.11499999999999999 0.12 0.16 0.95
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 49
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 239 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 49
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Item 30"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 0.92 0.95 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 240
+  NAME "Scroll Item 31"
+  ENABLED 1
+  PARENT 201
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 510 38
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.09 0.12 0.16 0.95
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 50
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 240 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 50
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Item 31"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 0.92 0.95 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 241
+  NAME "Scroll Item 32"
+  ENABLED 1
+  PARENT 201
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 510 38
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.11499999999999999 0.12 0.16 0.95
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 51
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 241 2
+    PROPERTY "normal_color" color 0.18 0.22 0.28 0.96
+    PROPERTY "hover_color" color 0.28 0.40 0.55 1
+    PROPERTY "pressed_color" color 0.10 0.65 0.86 1
+    PROPERTY "disabled_color" color 0.18 0.18 0.18 0.7
+    PROPERTY "state_blend_seconds" float 0.08
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 51
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "Item 32"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 18
+    PROPERTY "color" color 0.92 0.95 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 260
+  NAME "Model Labels"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 -475
+    PROPERTY "size_delta" vec2 800 42
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "3D: Glow Preset ON        /        Preset OFF"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 20
+    PROPERTY "color" color 0.8 0.9 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT

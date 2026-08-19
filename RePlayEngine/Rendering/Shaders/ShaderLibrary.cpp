@@ -1,4 +1,4 @@
-#include "ShaderLibrary.h"
+﻿#include "ShaderLibrary.h"
 
 #include "ShaderConstantPacker.h"
 #include "ShaderSource.h"
@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstring>
 #include <fstream>
 #include <iterator>
 #include <memory>
@@ -334,7 +335,7 @@ namespace ReplayEngine::Rendering
             variant == ShaderVariant::Skinned ? "1" : "0");
 
         const DomainEntryPoint domain_entry = EntryPointFor(entry.info.domain);
-        Microsoft::WRL::ComPtr<ID3DBlob> bytecode = result.bytecode;
+        Microsoft::WRL::ComPtr<ID3DBlob> bytecode;
         const ShaderCompileResult compiled = ShaderCompiler::CompileSource(
             combined.str(), entry.info.source_path,
             entry_point != nullptr && *entry_point != '\0' ? entry_point : domain_entry.entry,
@@ -350,7 +351,14 @@ namespace ReplayEngine::Rendering
 
         if (compiled.succeeded)
         {
-            result.bytecode = bytecode;
+            auto copied_bytecode = std::make_shared<std::vector<std::uint8_t>>(
+                bytecode->GetBufferSize());
+            if (!copied_bytecode->empty())
+            {
+                std::memcpy(copied_bytecode->data(), bytecode->GetBufferPointer(),
+                    copied_bytecode->size());
+            }
+            result.bytecode = std::move(copied_bytecode);
             result.compiled = true;
             result.ever_compiled = true;
             return true;

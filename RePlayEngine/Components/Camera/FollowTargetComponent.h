@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../../Object/Component/Component.h"
 
@@ -17,6 +17,7 @@ namespace ReplayEngine::Components
         float follow_height = 2.25f;
         float follow_lag = 12.0f;
         bool rotation_input_enabled = true;
+        bool yield_to_motion = true;
 
         float yaw_offset = 0.0f;
         float pitch_offset = 0.0f;
@@ -26,10 +27,5 @@ namespace ReplayEngine::Components
 
     private:
         void UpdateRotationInput(float delta_time);
-        void ResetCursorTracking() noexcept;
-
-        bool cursor_initialized_ = false;
-        long previous_cursor_x_ = 0;
-        long previous_cursor_y_ = 0;
     };
 }

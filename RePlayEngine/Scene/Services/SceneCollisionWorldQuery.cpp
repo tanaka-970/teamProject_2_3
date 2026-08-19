@@ -103,13 +103,13 @@ namespace ReplayEngine::Scene
 
             const float local_radius = radius * landscape.LocalRadiusScale();
             const XMFLOAT3 local_min{
-                std::min(local_start.x, local_end.x) - local_radius,
-                std::min(local_start.y, local_end.y) - local_radius,
-                std::min(local_start.z, local_end.z) - local_radius };
+                (std::min)(local_start.x, local_end.x) - local_radius,
+                (std::min)(local_start.y, local_end.y) - local_radius,
+                (std::min)(local_start.z, local_end.z) - local_radius };
             const XMFLOAT3 local_max{
-                std::max(local_start.x, local_end.x) + local_radius,
-                std::max(local_start.y, local_end.y) + local_radius,
-                std::max(local_start.z, local_end.z) + local_radius };
+                (std::max)(local_start.x, local_end.x) + local_radius,
+                (std::max)(local_start.y, local_end.y) + local_radius,
+                (std::max)(local_start.z, local_end.z) + local_radius };
 
             cooked->CollectTriangles(local_min, local_max, scratch_indices_);
             if (scratch_indices_.empty()) return false;
@@ -141,13 +141,13 @@ namespace ReplayEngine::Scene
 
             const float local_radius = radius * mesh.LocalRadiusScale();
             const XMFLOAT3 local_min{
-                std::min(local_start.x, local_end.x) - local_radius,
-                std::min(local_start.y, local_end.y) - local_radius,
-                std::min(local_start.z, local_end.z) - local_radius };
+                (std::min)(local_start.x, local_end.x) - local_radius,
+                (std::min)(local_start.y, local_end.y) - local_radius,
+                (std::min)(local_start.z, local_end.z) - local_radius };
             const XMFLOAT3 local_max{
-                std::max(local_start.x, local_end.x) + local_radius,
-                std::max(local_start.y, local_end.y) + local_radius,
-                std::max(local_start.z, local_end.z) + local_radius };
+                (std::max)(local_start.x, local_end.x) + local_radius,
+                (std::max)(local_start.y, local_end.y) + local_radius,
+                (std::max)(local_start.z, local_end.z) + local_radius };
 
             cooked->CollectTriangles(local_min, local_max, scratch_indices_);
             if (scratch_indices_.empty()) return false;
@@ -232,13 +232,13 @@ namespace ReplayEngine::Scene
 
         // クエリのワールド AABB。Broad Phase の粗い絞り込みに使う。
         const XMFLOAT3 query_min{
-            std::min(start.x, end.x) - radius,
-            std::min(start.y, end.y) - radius,
-            std::min(start.z, end.z) - radius };
+            (std::min)(start.x, end.x) - radius,
+            (std::min)(start.y, end.y) - radius,
+            (std::min)(start.z, end.z) - radius };
         const XMFLOAT3 query_max{
-            std::max(start.x, end.x) + radius,
-            std::max(start.y, end.y) + radius,
-            std::max(start.z, end.z) + radius };
+            (std::max)(start.x, end.x) + radius,
+            (std::max)(start.y, end.y) + radius,
+            (std::max)(start.z, end.z) + radius };
 
         bool found = false;
         float best_fraction = 2.0f;

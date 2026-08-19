@@ -150,6 +150,86 @@ static void set_dummy_texture_debug_name(ID3D11ShaderResourceView* view, const w
 #endif
 }
 
+std::uint64_t estimate_texture2d_bytes(const D3D11_TEXTURE2D_DESC& desc)
+{
+	auto surface_bytes = [](DXGI_FORMAT format, std::uint32_t width,
+		std::uint32_t height) noexcept -> std::uint64_t
+	{
+		const std::uint64_t w = (std::max)(std::uint64_t{ 1 },
+			static_cast<std::uint64_t>(width));
+		const std::uint64_t h = (std::max)(std::uint64_t{ 1 },
+			static_cast<std::uint64_t>(height));
+		switch (format)
+		{
+		case DXGI_FORMAT_BC1_UNORM:
+		case DXGI_FORMAT_BC1_UNORM_SRGB:
+		case DXGI_FORMAT_BC4_UNORM:
+		case DXGI_FORMAT_BC4_SNORM:
+			return ((w + 3u) / 4u) * ((h + 3u) / 4u) * 8u;
+		case DXGI_FORMAT_BC2_UNORM:
+		case DXGI_FORMAT_BC2_UNORM_SRGB:
+		case DXGI_FORMAT_BC3_UNORM:
+		case DXGI_FORMAT_BC3_UNORM_SRGB:
+		case DXGI_FORMAT_BC5_UNORM:
+		case DXGI_FORMAT_BC5_SNORM:
+		case DXGI_FORMAT_BC6H_UF16:
+		case DXGI_FORMAT_BC6H_SF16:
+		case DXGI_FORMAT_BC7_UNORM:
+		case DXGI_FORMAT_BC7_UNORM_SRGB:
+			return ((w + 3u) / 4u) * ((h + 3u) / 4u) * 16u;
+		case DXGI_FORMAT_R32G32B32A32_FLOAT:
+			return w * h * 16u;
+		case DXGI_FORMAT_R16G16B16A16_FLOAT:
+		case DXGI_FORMAT_R16G16B16A16_UNORM:
+			return w * h * 8u;
+		case DXGI_FORMAT_R8_UNORM:
+			return w * h;
+		case DXGI_FORMAT_R8G8_UNORM:
+		case DXGI_FORMAT_R16_FLOAT:
+			return w * h * 2u;
+		default:
+			return w * h * 4u;
+		}
+	};
+
+	const std::uint32_t mip_count = (std::max)(1u, desc.MipLevels);
+	std::uint64_t total = 0;
+	std::uint32_t width = desc.Width;
+	std::uint32_t height = desc.Height;
+	for (std::uint32_t mip = 0; mip < mip_count; ++mip)
+	{
+		total += surface_bytes(desc.Format, width, height) *
+			static_cast<std::uint64_t>((std::max)(1u, desc.ArraySize));
+		width = (std::max)(1u, width / 2u);
+		height = (std::max)(1u, height / 2u);
+	}
+	return total;
+}
+
+std::uint64_t texture_cache_resident_bytes()
+{
+	lock_guard<mutex> lock(resources_mutex);
+	std::uint64_t total = 0;
+	for (const auto& entry : resources)
+	{
+		if (!entry.second) continue;
+		ComPtr<ID3D11Resource> resource;
+		entry.second->GetResource(resource.GetAddressOf());
+		ComPtr<ID3D11Texture2D> texture;
+		if (!resource || FAILED(resource.As(&texture)) || !texture) continue;
+		D3D11_TEXTURE2D_DESC desc{};
+		texture->GetDesc(&desc);
+		total += estimate_texture2d_bytes(desc);
+	}
+	return total;
+}
+
+std::size_t texture_cache_resident_count()
+{
+	lock_guard<mutex> lock(resources_mutex);
+	return resources.size();
+}
+
 void release_all_textures()
 {
 	// このキャッシュはファイルスコープの static なので、

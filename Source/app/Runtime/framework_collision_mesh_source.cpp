@@ -1,4 +1,4 @@
-// 衝突用の三角形をどこから取ってくるかを決める場所。
+﻿// 衝突用の三角形をどこから取ってくるかを決める場所。
 //
 // Cook キャッシュ（CookedMeshCollisionCache）は「三角形をどう速く引くか」だけを担当し、
 // 「三角形をどこから読むか」は知らない。その接続をここで行う。
@@ -83,9 +83,7 @@ bool framework::load_collision_triangles(const ReplayEngine::Physics::CookKey& k
     {
         ReplayEngine::Physics::CollisionCookResult result{};
         std::string error;
-        const std::filesystem::path cache_path =
-            std::filesystem::path("resources") / ".replay_cache" / "collisions" /
-            (identity + "_v1.replaycollision");
+        const std::filesystem::path cache_path = collision_cache_path(identity);
 
         std::error_code filesystem_error;
         if (std::filesystem::exists(cache_path, filesystem_error) && !filesystem_error &&
