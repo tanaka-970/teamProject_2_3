@@ -244,6 +244,9 @@
     <Filter Include="RePlayEngine\Components\Gameplay">
       <UniqueIdentifier>{4fca5de2-8fda-49bd-8ea7-9e2a383b7323}</UniqueIdentifier>
     </Filter>
+    <Filter Include="RePlayEngine\Navigation">
+      <UniqueIdentifier>{3C0743D7-0DE1-4AA2-B50B-3936CDD79C98}</UniqueIdentifier>
+    </Filter>
     <Filter Include="RePlayEngine\Components\Navigation">
       <UniqueIdentifier>{8d297a52-15d2-4fb5-986a-d2d2f04d0e51}</UniqueIdentifier>
     </Filter>
@@ -1077,6 +1080,9 @@
     <ClCompile Include="RePlayEngine\Components\Navigation\NavAgentComponent.cpp">
       <Filter>RePlayEngine\Components\Navigation</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Navigation\GridPathfinder.cpp">
+      <Filter>RePlayEngine\Navigation</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Components\Gameplay\PlayerInputComponent.cpp">
       <Filter>RePlayEngine\Components\Gameplay</Filter>
     </ClCompile>
@@ -1900,6 +1906,9 @@
     </ClInclude>
     <ClInclude Include="RePlayEngine\Components\Navigation\NavAgentComponent.h">
       <Filter>RePlayEngine\Components\Navigation</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Navigation\GridPathfinder.h">
+      <Filter>RePlayEngine\Navigation</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Components\Gameplay\PlayerInputComponent.h">
       <Filter>RePlayEngine\Components\Gameplay</Filter>

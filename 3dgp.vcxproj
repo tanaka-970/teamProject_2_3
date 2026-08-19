@@ -539,6 +539,7 @@
     <ClCompile Include="RePlayEngine\Components\Gameplay\CharacterMotorComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Gameplay\EnemyBehaviourComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Navigation\NavAgentComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Navigation\GridPathfinder.cpp" />
     <ClCompile Include="RePlayEngine\Components\Gameplay\PlayerInputComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Gameplay\PlayerControllerComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Audio\AudioSourceComponent.cpp" />
@@ -838,6 +839,7 @@
     <ClInclude Include="RePlayEngine\Components\Gameplay\CharacterMotorComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\EnemyBehaviourComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Navigation\NavAgentComponent.h" />
+    <ClInclude Include="RePlayEngine\Navigation\GridPathfinder.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\PlayerInputComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\PlayerControllerComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Audio\AudioListenerComponent.h" />
