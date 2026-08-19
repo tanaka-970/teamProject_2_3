@@ -200,5 +200,8 @@ namespace ReplayEngine::Scripting::CSharp::Detail
         using poll_event_payload_callback = int(__cdecl*)(std::uint64_t, char*, int, int*);
         using publish_event_payload_callback = int(__cdecl*)(std::uint64_t, std::uint64_t,
             const char*, Runtime::ObjectHandle, Runtime::ObjectHandle, const char*);
+
+        // v9 Name lookup.
+        using find_by_name_callback = int(__cdecl*)(const char*, Runtime::ObjectHandle*);
 #endif
 }

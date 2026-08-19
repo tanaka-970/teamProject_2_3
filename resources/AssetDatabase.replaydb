@@ -1,4 +1,4 @@
-REPLAY_ASSET_DB 2 96
+REPLAY_ASSET_DB 2 97
 "60412424bb1443240b2bf2160eee6923" 1 "ExampleStage" "resources/Stage/ExampleStage.cereal" "resources/.replay_cache/models/f9fffac39252a621_v0.replaycache"
 "1bd1358040255f5bd18f3be0d79fbe3c" 1 "AllAnimation1" "resources/AnimationModel/AllAnimation1.cereal" "resources/.replay_cache/models/6a20e727f78fb359_v0.replaycache"
 "e5c4168feb92f8fd7357f6cbc1f66e22" 1 "scene" "resources/Stage/city_3d_model_gltf/scene.gltf" "resources/.replay_cache/models/98fd72a862da8c8f_v0.replaycache"
@@ -95,3 +95,4 @@ REPLAY_ASSET_DB 2 96
 "bfbbbe9fbcb425644e3d6238cb4d1c35" 12 "UI GAME FEATURES DEMO Glow" "resources/Effects/UI_GAME_FEATURES_DEMO_Glow.replayeffect" ""
 "42a67879aa5a167635eefa30dd48d6c1" 10 "UI GAME FEATURES DEMO Screen Pulse" "resources/Motions/UI_GAME_FEATURES_DEMO_ScreenPulse.replaymotion" ""
 "9eca0e64337760e2ee4f8324336a6753" 5 "AI_Navigation_Phase1_Demo" "resources/Scenes/AI_Navigation_Phase1_Demo.replayscene" ""
+"a7e1042cdc2f7d0a5388595238230d51" 7 "PersonaCombatant" "Scripts/Persona/PersonaCombatant.cs" ""

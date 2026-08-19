@@ -215,6 +215,15 @@ namespace ReplayEngine::Runtime
 
         bool IsValid(const ObjectHandle& handle) const noexcept;
         ObjectHandle FindByObjectID(Core::ObjectID id) const noexcept;
+
+        // 名前で探す。見つからなければ空 Handle。
+        //
+        // 同じ名前が複数あるときは Scene の並び順で最初のものを返す
+        // （Scene::FindGameObjectByName の挙動をそのまま使う）。
+        // 破棄予定のものは飛ばす。
+        // 名前を一意にするのは呼び出し側の責任。
+        ObjectHandle FindByName(const std::string& name) const noexcept;
+
         ObjectHandle ControlledObject() const noexcept;
 
         RuntimeStatus GetName(const ObjectHandle& handle, std::string& out) const;

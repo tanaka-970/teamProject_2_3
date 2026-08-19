@@ -17,6 +17,15 @@ public sealed class ScriptRuntimeContext
         return NativeBridge.FindGameObject(objectId);
     }
 
+    // 名前で探す。見つからなければ Status が Ok 以外になり、Handle は無効。
+    //
+    // 同じ名前が複数あるときは Scene の並び順で最初のものが返る。
+    // 破棄予定のものは飛ばす。名前を一意にするのは呼び出し側の責任。
+    public RuntimeResult<ObjectHandle> FindGameObject(string name)
+    {
+        return NativeBridge.FindGameObjectByName(name);
+    }
+
     public RuntimeStatus IsValid(ObjectHandle handle)
     {
         return NativeBridge.IsGameObjectValid(handle);
