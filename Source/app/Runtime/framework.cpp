@@ -3,6 +3,7 @@
 #include "texture.h"
 #include "skinned_mesh.h"
 #include "gltf_model.h"
+#include "../Editor/GoldenImageState.h"
 
 #include <shlobj.h>
 
@@ -77,6 +78,7 @@ namespace
 
 framework::framework(HWND hwnd) : hwnd(hwnd)
 {
+    golden_state_ = std::make_unique<ReplayEngine::Editor::GoldenImageState>();
     std::error_code error;
     configure_content_root(std::filesystem::current_path(error));
 }

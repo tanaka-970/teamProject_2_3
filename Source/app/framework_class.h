@@ -103,8 +103,11 @@
 #include <string>
 
 
+namespace ReplayEngine::Editor { struct GoldenImageState; }
+
 class framework
 {
+    friend struct ReplayEngine::Editor::GoldenImageState;
 
     // framework_class.h 分割一覧:
     //   framework_class_render_state.inl     … D3D11/描画状態と基礎状態

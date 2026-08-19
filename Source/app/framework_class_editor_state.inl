@@ -204,27 +204,9 @@
         self_check,  // 2 回撮って一致するか（＝決定論が足りているか）
     };
 
-    golden_request_kind golden_request{ golden_request_kind::none };
-    std::string golden_name{ "default" };
+    std::unique_ptr<ReplayEngine::Editor::GoldenImageState> golden_state_;
     char golden_name_buffer[64]{ "default" };
-
-    // 撮る前に何フレーム「止めた状態」で回すか。
-    //
-    // TAA の履歴が収束するまで待つ必要がある。
-    // 止めずに撮ると毎回違う絵になり、差分が出続けて誰も見なくなる。
-    int golden_settle_frames{ 8 };
-    int golden_countdown{ 0 };
-
-    // チャンネルごとの許容差。0 なら完全一致。
-    int golden_tolerance{ 0 };
-
-    std::string golden_last_summary;
-    bool golden_last_ok{ false };
     bool show_golden_panel{ false };
-
-    // self_check の 1 回目を覚えておく場所。
-    ReplayEngine::Rendering::Capture::Image golden_self_check_first;
-    bool golden_self_check_has_first{ false };
 
 public:
     void request_automated_frame_capture(const std::string& name);
@@ -233,10 +215,7 @@ public:
 
 private:
     // 撮影待ちの間はワールドを止める。update / render から見る。
-    bool golden_capture_pending() const noexcept
-    {
-        return golden_request != golden_request_kind::none;
-    }
+    bool golden_capture_pending() const noexcept;
 
     void request_golden(golden_request_kind kind);
 
