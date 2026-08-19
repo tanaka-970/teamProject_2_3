@@ -1,6 +1,7 @@
 ﻿#include "particle_system.h"
 #include "shader.h"
 #include "misc.h"
+#include "../../RePlayEngine/Rendering/RenderStats.h"
 #include <d3d11sdklayers.h>
 #include <algorithm>
 #include <cstring>
@@ -113,17 +114,20 @@ void particle_system::simulate(ID3D11DeviceContext* ctx, float delta_time)
 
     if (first_run)
     {
+        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
         ctx->CSSetShader(initialize_cs.Get(), nullptr, 0);
         ctx->Dispatch((MAX_COUNT + THREADS - 1) / THREADS, 1, 1);
         first_run = false;
     }
 
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
     ctx->CSSetShader(integrate_cs.Get(), nullptr, 0);
     ctx->Dispatch((active_count + THREADS - 1) / THREADS, 1, 1);
 
     // UAV detach
     ID3D11UnorderedAccessView* null_uav[1] = { nullptr };
     ctx->CSSetUnorderedAccessViews(0, 1, null_uav, nullptr);
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
     ctx->CSSetShader(nullptr, nullptr, 0);
 }
 
@@ -136,16 +140,21 @@ void particle_system::render(ID3D11DeviceContext* ctx)
     ctx->IASetIndexBuffer(nullptr, DXGI_FORMAT_UNKNOWN, 0);
     ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_POINTLIST);
 
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
     ctx->VSSetShader(particle_vs.Get(), nullptr, 0);
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
     ctx->GSSetShader(particle_gs.Get(), nullptr, 0);
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
     ctx->PSSetShader(particle_ps.Get(), nullptr, 0);
 
     ctx->VSSetShaderResources(0, 1, particle_srv.GetAddressOf());
 
+    ReplayEngine::Rendering::Stats().CountDraw(active_count);
     ctx->Draw(active_count, 0);
 
     // detach
     ID3D11ShaderResourceView* null_srv[1] = { nullptr };
     ctx->VSSetShaderResources(0, 1, null_srv);
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
     ctx->GSSetShader(nullptr, nullptr, 0);
 }

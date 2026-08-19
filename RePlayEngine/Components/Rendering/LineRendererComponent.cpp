@@ -1,6 +1,7 @@
-#include "LineRendererComponent.h"
+﻿#include "LineRendererComponent.h"
 
 #include "../../Assets/AssetDatabase.h"
+#include "../../Rendering/RenderStats.h"
 #include "../../Reflection/Property/PropertyBag.h"
 #include "../../Reflection/Property/PropertyValue.h"
 #include "../../../Source/core/shader.h"
@@ -522,10 +523,14 @@ namespace ReplayEngine::Rendering
             &stride, &offset);
         context->IASetInputLayout(input_layout_.Get());
         context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
         context->VSSetShader(vertex_shader_.Get(), nullptr, 0);
+        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
         context->PSSetShader(pixel_shader_.Get(), nullptr, 0);
         context->PSSetShaderResources(0, 1, &texture);
         context->PSSetSamplers(0, 1, &sampler);
+        ReplayEngine::Rendering::Stats().CountDraw(
+            static_cast<std::uint32_t>(vertices_.size()));
         context->Draw(static_cast<UINT>(vertices_.size()), 0);
         ID3D11ShaderResourceView* null_texture = nullptr;
         context->PSSetShaderResources(0, 1, &null_texture);

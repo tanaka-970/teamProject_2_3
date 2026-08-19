@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace ReplayEngine::Assets { class AssetDatabase; }
@@ -72,11 +73,22 @@ namespace ReplayEngine::UI
             float viewport_scale_y = 1.0f;
             bool scissor_bounds_enabled = false;
             D3D11_RECT scissor_bounds{};
+            bool focus_outline_enabled = true;
+            DirectX::XMFLOAT4 focus_outline_color{ 0.25f, 0.78f, 1.0f, 1.0f };
+            float focus_outline_width = 2.0f;
+            float focus_corner_radius = 4.0f;
         };
 
         bool Initialize(ID3D11Device* device);
         void Release() noexcept;
         void ReleaseTransientTargets() noexcept;
+        std::uint64_t RenderTargetPoolBytes() const noexcept
+        {
+            return render_target_pool_.AllocatedBytes();
+        }
+        std::uint64_t TrackedBufferBytes() const noexcept;
+        void AppendResidentTextureIdentities(
+            std::vector<std::pair<std::string, const void*>>& out) const;
 
         void Render(ID3D11DeviceContext* context,
             Scene::Scene& scene,

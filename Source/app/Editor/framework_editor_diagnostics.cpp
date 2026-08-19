@@ -58,6 +58,69 @@ void framework::draw_runtime_mode_banner()
     }
 #endif
 }
+void framework::draw_editor_camera_gate_diagnostics()
+{
+    // Scene View のカメラ操作が全部死ぬときの切り分け用。
+    //
+    // 【なぜ要るか】
+    //   ズーム・Pan・Orbit・Fly はすべて EditorCameraController の
+    //   CanBeginInteraction() という 1 つの関門を通る。ここが false になると
+    //   カメラが一切動かなくなるが、7 つの条件のどれが原因か外から見えない。
+    //   2026-08-17 に実際にカメラが死に、推測で候補を潰すしかなくなった。
+    //
+    //   立っている条件を出しておけば、次は 5 秒で切り分けられる。
+    if (!ImGui::CollapsingHeader(u8"カメラ操作の関門")) return;
+
+    const ReplayEngine::Editor::EditorCameraInput& input = last_editor_camera_input;
+
+    struct Gate final { const char* name; bool blocking; };
+    const Gate gates[]{
+        { u8"ウィンドウが非アクティブ",            !input.window_focused },
+        { u8"Scene View に hover / focus が無い",
+          !input.viewport_hovered && !input.viewport_focused },
+        { u8"UI がマウスを要求 (ui_wants_mouse)",   input.ui_wants_mouse },
+        { u8"UI がキーボードを要求",                input.ui_wants_keyboard },
+        { u8"テキスト入力中 (ui_text_input_active)", input.ui_text_input_active },
+        { u8"ポップアップが開いている",             input.ui_popup_open },
+        { u8"Gizmo / 範囲選択のドラッグ中",         input.gizmo_dragging },
+    };
+
+    bool any = false;
+    for (const Gate& gate : gates)
+    {
+        if (gate.blocking)
+        {
+            any = true;
+            ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.35f, 1.0f),
+                u8"✕ %s", gate.name);
+        }
+        else
+        {
+            ImGui::TextDisabled(u8"○ %s", gate.name);
+        }
+    }
+
+    if (any)
+    {
+        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f),
+            u8"→ 上の ✕ が原因でカメラ操作が止まっています");
+    }
+    else
+    {
+        ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.5f, 1.0f),
+            u8"→ 関門は開いています（カメラは操作できる状態）");
+    }
+
+    ImGui::Separator();
+    ImGui::TextDisabled(u8"内訳: WantTextInput=%s / search_input_active=%s",
+        ImGui::GetIO().WantTextInput ? "true" : "false",
+        search_input_active ? "true" : "false");
+    ImGui::TextDisabled(u8"内訳: IsAnyItemActive=%s / viewport_drag_selecting=%s",
+        ImGui::IsAnyItemActive() ? "true" : "false",
+        viewport_drag_selecting ? "true" : "false");
+    ImGui::TextDisabled(u8"wheel=%.2f", input.wheel);
+}
+
 void framework::draw_controlled_character_diagnostics()
 {
 #ifdef _DEBUG

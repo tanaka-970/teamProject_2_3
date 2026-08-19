@@ -23,6 +23,7 @@ namespace ReplayEngine::Components
         UIButtonComponent() = default;
 
         void OnAttach() override;
+        void OnPropertyChanged(const char* property_name) override;
 
         bool interactable = true;
         Reflection::ComponentReference target_image;

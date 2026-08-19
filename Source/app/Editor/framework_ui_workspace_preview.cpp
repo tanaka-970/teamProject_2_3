@@ -88,6 +88,223 @@
         }
     }
 
+    enum UIResizeHandle : int
+    {
+        ResizeBottomLeft = 0,
+        ResizeBottom = 1,
+        ResizeBottomRight = 2,
+        ResizeRight = 3,
+        ResizeTopRight = 4,
+        ResizeTop = 5,
+        ResizeTopLeft = 6,
+        ResizeLeft = 7,
+    };
+
+    ImVec2 Midpoint(const ImVec2& a, const ImVec2& b) noexcept
+    {
+        return ImVec2((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
+    }
+
+    void ResizeHandlePoints(const RectTransformComponent& rect,
+        const ImVec2& origin, float canvas_height, float zoom, ImVec2 out[8])
+    {
+        ImVec2 corners[4]{};
+        PreviewQuad(rect, origin, canvas_height, zoom, corners);
+        out[ResizeBottomLeft] = corners[0];
+        out[ResizeBottom] = Midpoint(corners[0], corners[1]);
+        out[ResizeBottomRight] = corners[1];
+        out[ResizeRight] = Midpoint(corners[1], corners[2]);
+        out[ResizeTopRight] = corners[2];
+        out[ResizeTop] = Midpoint(corners[2], corners[3]);
+        out[ResizeTopLeft] = corners[3];
+        out[ResizeLeft] = Midpoint(corners[3], corners[0]);
+    }
+
+    int HitResizeHandle(const ImVec2 points[8], const ImVec2& mouse,
+        float radius = 7.0f) noexcept
+    {
+        const float radius_squared = radius * radius;
+        for (int index = 0; index < 8; ++index)
+        {
+            const float dx = mouse.x - points[index].x;
+            const float dy = mouse.y - points[index].y;
+            if (dx * dx + dy * dy <= radius_squared) return index;
+        }
+        return -1;
+    }
+
+    DirectX::XMFLOAT2 CanvasPointFromScreen(const ImVec2& mouse,
+        const ImVec2& origin, float canvas_height, float zoom) noexcept
+    {
+        return {
+            (mouse.x - origin.x) / zoom,
+            canvas_height - (mouse.y - origin.y) / zoom
+        };
+    }
+
+    bool InverseTransformPoint(const DirectX::XMFLOAT4X4& matrix,
+        const DirectX::XMFLOAT2& point, DirectX::XMFLOAT2& output) noexcept
+    {
+        const DirectX::XMMATRIX source = DirectX::XMLoadFloat4x4(&matrix);
+        DirectX::XMVECTOR determinant{};
+        const DirectX::XMMATRIX inverse = DirectX::XMMatrixInverse(&determinant, source);
+        const float determinant_value = DirectX::XMVectorGetX(determinant);
+        if (!std::isfinite(determinant_value) || std::fabs(determinant_value) < 1.0e-8f)
+            return false;
+        const DirectX::XMVECTOR p = DirectX::XMVector3TransformCoord(
+            DirectX::XMVectorSet(point.x, point.y, 0.0f, 1.0f), inverse);
+        const float x = DirectX::XMVectorGetX(p);
+        const float y = DirectX::XMVectorGetY(p);
+        if (!std::isfinite(x) || !std::isfinite(y)) return false;
+        output = { x, y };
+        return true;
+    }
+
+    DirectX::XMFLOAT4 ParentResolvedRect(const Core::GameObject& object,
+        float canvas_width, float canvas_height) noexcept
+    {
+        const Core::GameObject* parent = object.Parent();
+        const RectTransformComponent* parent_rect = parent != nullptr
+            ? parent->GetComponent<RectTransformComponent>() : nullptr;
+        if (parent_rect != nullptr) return parent_rect->ResolvedRect();
+        return { 0.0f, 0.0f, canvas_width, canvas_height };
+    }
+
+    void ApplyResolvedRect(RectTransformComponent& rect,
+        const DirectX::XMFLOAT4& parent, const DirectX::XMFLOAT4& desired) noexcept
+    {
+        const float width = (std::max)(1.0f, desired.z);
+        const float height = (std::max)(1.0f, desired.w);
+        const float anchor_span_x = parent.z * (rect.anchor_max.x - rect.anchor_min.x);
+        const float anchor_span_y = parent.w * (rect.anchor_max.y - rect.anchor_min.y);
+        const float anchor_min_x = parent.x + parent.z * rect.anchor_min.x;
+        const float anchor_min_y = parent.y + parent.w * rect.anchor_min.y;
+
+        rect.size_delta.x = width - anchor_span_x;
+        rect.size_delta.y = height - anchor_span_y;
+        rect.anchored_position.x = desired.x - anchor_min_x +
+            rect.size_delta.x * rect.pivot.x;
+        rect.anchored_position.y = desired.y - anchor_min_y +
+            rect.size_delta.y * rect.pivot.y;
+    }
+
+    void ResizeDirections(int handle, int& horizontal, int& vertical) noexcept
+    {
+        horizontal = 0;
+        vertical = 0;
+        if (handle == ResizeBottomLeft || handle == ResizeLeft || handle == ResizeTopLeft)
+            horizontal = -1;
+        else if (handle == ResizeBottomRight || handle == ResizeRight || handle == ResizeTopRight)
+            horizontal = 1;
+        if (handle == ResizeBottomLeft || handle == ResizeBottom || handle == ResizeBottomRight)
+            vertical = -1;
+        else if (handle == ResizeTopLeft || handle == ResizeTop || handle == ResizeTopRight)
+            vertical = 1;
+    }
+
+    DirectX::XMFLOAT4 ResizedRectFromHandle(const DirectX::XMFLOAT4& start,
+        int handle, const DirectX::XMFLOAT2& local_mouse, bool keep_aspect,
+        bool from_center) noexcept
+    {
+        float left = start.x;
+        float bottom = start.y;
+        float right = start.x + start.z;
+        float top = start.y + start.w;
+        int horizontal = 0;
+        int vertical = 0;
+        ResizeDirections(handle, horizontal, vertical);
+
+        if (horizontal < 0)
+        {
+            if (from_center)
+            {
+                const float delta = local_mouse.x - start.x;
+                left = local_mouse.x;
+                right = start.x + start.z - delta;
+            }
+            else left = local_mouse.x;
+        }
+        else if (horizontal > 0)
+        {
+            if (from_center)
+            {
+                const float delta = local_mouse.x - (start.x + start.z);
+                right = local_mouse.x;
+                left = start.x - delta;
+            }
+            else right = local_mouse.x;
+        }
+
+        if (vertical < 0)
+        {
+            if (from_center)
+            {
+                const float delta = local_mouse.y - start.y;
+                bottom = local_mouse.y;
+                top = start.y + start.w - delta;
+            }
+            else bottom = local_mouse.y;
+        }
+        else if (vertical > 0)
+        {
+            if (from_center)
+            {
+                const float delta = local_mouse.y - (start.y + start.w);
+                top = local_mouse.y;
+                bottom = start.y - delta;
+            }
+            else top = local_mouse.y;
+        }
+
+        constexpr float minimum_size = 1.0f;
+        if (right - left < minimum_size)
+        {
+            if (horizontal < 0) left = right - minimum_size;
+            else if (horizontal > 0) right = left + minimum_size;
+        }
+        if (top - bottom < minimum_size)
+        {
+            if (vertical < 0) bottom = top - minimum_size;
+            else if (vertical > 0) top = bottom + minimum_size;
+        }
+
+        if (keep_aspect && horizontal != 0 && vertical != 0 &&
+            start.z > minimum_size && start.w > minimum_size)
+        {
+            const float aspect = start.z / start.w;
+            float width = right - left;
+            float height = top - bottom;
+            const float width_change = std::fabs(width - start.z) / start.z;
+            const float height_change = std::fabs(height - start.w) / start.w;
+            if (width_change >= height_change)
+            {
+                height = (std::max)(minimum_size, width / aspect);
+                if (from_center)
+                {
+                    const float center = start.y + start.w * 0.5f;
+                    bottom = center - height * 0.5f;
+                    top = center + height * 0.5f;
+                }
+                else if (vertical < 0) bottom = top - height;
+                else top = bottom + height;
+            }
+            else
+            {
+                width = (std::max)(minimum_size, height * aspect);
+                if (from_center)
+                {
+                    const float center = start.x + start.z * 0.5f;
+                    left = center - width * 0.5f;
+                    right = center + width * 0.5f;
+                }
+                else if (horizontal < 0) left = right - width;
+                else right = left + width;
+            }
+        }
+
+        return { left, bottom, right - left, top - bottom };
+    }
+
     Core::GameObject* PickUIObject(Core::GameObject& object, float x, float y)
     {
         std::vector<Core::GameObject*> children = object.Children();
@@ -267,32 +484,113 @@ void framework::draw_ui_preview()
     const float canvas_mouse_y = static_cast<float>(preview_height) -
         (mouse.y - origin.y) / ui_preview_zoom;
 
-    if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
-    {
-        Core::GameObject* picked = nullptr;
-        std::vector<Core::GameObject*> canvases = SortedCanvases(*scene);
-        for (auto it = canvases.rbegin(); it != canvases.rend() && picked == nullptr; ++it)
-        {
-            if (*it != nullptr) picked = PickUIObject(**it, canvas_mouse_x, canvas_mouse_y);
-        }
-        if (picked != nullptr)
-        {
-            object_editor_context.Selection().Select(picked->ID(), false);
-            selected_editor_object = editor_selection::game_object;
-            if (RectTransformComponent* rect = picked->GetComponent<RectTransformComponent>())
-            {
-                ui_preview_drag_object = picked->ID();
-                ui_preview_drag_start_mouse = mouse;
-                ui_preview_drag_start_position = rect->anchored_position;
-            }
-        }
-    }
-
     Core::GameObject* selected =
         object_editor_context.Selection().ResolvePrimary(*scene);
     RectTransformComponent* selected_rect = selected != nullptr
         ? selected->GetComponent<RectTransformComponent>() : nullptr;
-    if (active && selected_rect != nullptr &&
+
+    int hovered_resize_handle = -1;
+    ImVec2 resize_handle_points[8]{};
+    if (selected_rect != nullptr && HasUIComponent(*selected))
+    {
+        ResizeHandlePoints(*selected_rect, origin,
+            static_cast<float>(preview_height), ui_preview_zoom,
+            resize_handle_points);
+        hovered_resize_handle = HitResizeHandle(resize_handle_points, mouse);
+    }
+
+    if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+    {
+        // Rect handle は Object pick より優先する。小さい UI の corner を掴んだ時に
+        // 背後の UI へ選択が飛ぶのを防ぐ。
+        if (selected != nullptr && selected_rect != nullptr &&
+            hovered_resize_handle >= 0 && object_editor_context.CanEdit())
+        {
+            ui_preview_resize_candidate = true;
+            ui_preview_resizing = false;
+            ui_preview_resize_handle = hovered_resize_handle;
+            ui_preview_resize_object = selected->ID();
+            ui_preview_resize_start_mouse = mouse;
+            ui_preview_resize_start_rect = selected_rect->ResolvedRect();
+            ui_preview_resize_parent_rect = ParentResolvedRect(*selected,
+                static_cast<float>(preview_width), static_cast<float>(preview_height));
+            ui_preview_resize_start_matrix = selected_rect->ResolvedMatrix();
+
+            // Move candidate が残っていると同じ drag で resize と move が競合する。
+            ui_preview_drag_object = Core::ObjectID::Invalid();
+            ui_preview_dragging = false;
+        }
+        else
+        {
+            Core::GameObject* picked = nullptr;
+            std::vector<Core::GameObject*> canvases = SortedCanvases(*scene);
+            for (auto it = canvases.rbegin(); it != canvases.rend() && picked == nullptr; ++it)
+            {
+                if (*it != nullptr) picked = PickUIObject(**it, canvas_mouse_x, canvas_mouse_y);
+            }
+            if (picked != nullptr)
+            {
+                object_editor_context.Selection().Select(picked->ID(), false);
+                selected_editor_object = editor_selection::game_object;
+                if (RectTransformComponent* rect = picked->GetComponent<RectTransformComponent>())
+                {
+                    ui_preview_drag_object = picked->ID();
+                    ui_preview_drag_start_mouse = mouse;
+                    ui_preview_drag_start_position = rect->anchored_position;
+                }
+            }
+        }
+    }
+
+    // Selection は click で変わることがあるので取り直す。
+    selected = object_editor_context.Selection().ResolvePrimary(*scene);
+    selected_rect = selected != nullptr
+        ? selected->GetComponent<RectTransformComponent>() : nullptr;
+
+    if (active && selected_rect != nullptr && ui_preview_resize_candidate &&
+        ui_preview_resize_object == selected->ID() &&
+        ImGui::IsMouseDragging(ImGuiMouseButton_Left, 2.0f))
+    {
+        if (!ui_preview_resizing && object_editor_context.CanEdit())
+        {
+            object_editor_context.BeginEdit("UI 要素をリサイズ");
+            ui_preview_resizing = true;
+        }
+        if (ui_preview_resizing)
+        {
+            const DirectX::XMFLOAT2 canvas_mouse = CanvasPointFromScreen(mouse, origin,
+                static_cast<float>(preview_height), ui_preview_zoom);
+            DirectX::XMFLOAT2 local_mouse{};
+            if (!InverseTransformPoint(ui_preview_resize_start_matrix, canvas_mouse, local_mouse))
+            {
+                object_editor_context.CancelEdit();
+                ui_preview_resizing = false;
+                ui_preview_resize_candidate = false;
+                ui_preview_resize_handle = -1;
+            }
+            const ImGuiIO& io = ImGui::GetIO();
+            if (ui_preview_resizing)
+            {
+                const DirectX::XMFLOAT4 desired = ResizedRectFromHandle(
+                    ui_preview_resize_start_rect, ui_preview_resize_handle,
+                    local_mouse, io.KeyShift, io.KeyAlt);
+                ApplyResolvedRect(*selected_rect, ui_preview_resize_parent_rect, desired);
+                ReplayEngine::UI::UILayout::Resolve(*scene,
+                    static_cast<float>(preview_width), static_cast<float>(preview_height));
+            }
+        }
+    }
+
+    if (ui_preview_resize_candidate && !ImGui::IsMouseDown(ImGuiMouseButton_Left))
+    {
+        if (ui_preview_resizing) object_editor_context.CommitEdit();
+        ui_preview_resize_candidate = false;
+        ui_preview_resizing = false;
+        ui_preview_resize_handle = -1;
+        ui_preview_resize_object = Core::ObjectID::Invalid();
+    }
+
+    if (active && selected_rect != nullptr && !ui_preview_resize_candidate &&
         ui_preview_drag_object == selected->ID() &&
         ImGui::IsMouseDragging(ImGuiMouseButton_Left, 2.0f))
     {
@@ -362,6 +660,41 @@ void framework::draw_ui_preview()
                 object_editor_context.Selection().Primary(),
                 preview_texture_for_image);
     }
+    // Photoshop / Unity Rect Tool と同じく 4 corner + 4 edge handle。
+    // DrawPreviewObject の selection outline より後に描くため、常に掴める位置が見える。
+    selected = object_editor_context.Selection().ResolvePrimary(*scene);
+    selected_rect = selected != nullptr
+        ? selected->GetComponent<RectTransformComponent>() : nullptr;
+    if (selected_rect != nullptr && HasUIComponent(*selected))
+    {
+        ImVec2 handles[8]{};
+        ResizeHandlePoints(*selected_rect, origin,
+            static_cast<float>(preview_height), ui_preview_zoom, handles);
+        const int hot = HitResizeHandle(handles, mouse);
+        for (int index = 0; index < 8; ++index)
+        {
+            const bool active_handle = ui_preview_resize_candidate &&
+                ui_preview_resize_object == selected->ID() &&
+                ui_preview_resize_handle == index;
+            const bool hot_handle = hot == index;
+            const ImU32 fill = active_handle
+                ? IM_COL32(255, 190, 55, 255)
+                : (hot_handle ? IM_COL32(255, 230, 130, 255)
+                    : IM_COL32(245, 245, 250, 255));
+            draw_list->AddCircleFilled(handles[index], 5.0f, fill, 12);
+            draw_list->AddCircle(handles[index], 5.0f,
+                IM_COL32(35, 38, 44, 255), 12, 1.0f);
+        }
+        if (hot >= 0 && hovered)
+        {
+            ImGui::SetMouseCursor((hot == ResizeLeft || hot == ResizeRight)
+                ? ImGuiMouseCursor_ResizeEW
+                : ((hot == ResizeTop || hot == ResizeBottom)
+                    ? ImGuiMouseCursor_ResizeNS
+                    : ImGuiMouseCursor_ResizeAll));
+        }
+    }
+
     draw_list->AddRect(origin, ImVec2(origin.x + canvas_size.x, origin.y + canvas_size.y),
         IM_COL32(230, 230, 235, 180), 0.0f, 0, 1.5f);
     draw_list->PopClipRect();

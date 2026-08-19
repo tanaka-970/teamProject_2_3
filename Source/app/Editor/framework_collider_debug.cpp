@@ -1,43 +1,35 @@
-// Collider の可視化と、衝突まわりの診断表示。
+﻿// Collider と AI / Navigation の Scene View 可視化。
 //
-// 【描画方法について】
-//   このプロジェクトには線を引く仕組みが無く、TransformGizmo も数値入力だけで
-//   3D のギズモを描いていない。そこへ線描画のパイプラインを新設すると
-//   影響範囲が広くなりすぎるため、ImGui のオーバーレイへ投影して描いている。
-//
-//   「どんな線を引くか」は ColliderDebugDraw が決め、
-//   ここは投影と ImGui への受け渡しだけを行う。役割を分けてあるので、
-//   将来ちゃんとした線描画を入れるときは、このファイルだけ差し替えればよい。
+// 新しい描画パイプラインは作らず、既存の DebugLine -> ImGui overlay 経路へ
+// AI の塗り・文字・編集ハンドルを同居させる。Runtime Component は ImGui に依存しない。
 
 #include "framework.h"
 
 #include "../../RePlayEngine/Components/Gameplay/CharacterMotorComponent.h"
+#include "../../RePlayEngine/Components/Gameplay/EnemyBehaviourComponent.h"
+#include "../../RePlayEngine/Components/Navigation/NavAgentComponent.h"
 #include "../../RePlayEngine/Components/Physics/ColliderComponent.h"
+#include "../../RePlayEngine/Editor/Debug/AINavigationDebugDraw.h"
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
 #include "../../RePlayEngine/Physics/CollisionLayers.h"
+
+#include <cmath>
 
 #ifdef USE_IMGUI
 
 namespace
 {
-    // ワールド座標を画面座標へ落とす。
-    // カメラの後ろにある点は false を返し、線ごと捨てる
-    // （投影すると画面の反対側へ跳ねて、無関係な位置に線が出るため）。
     bool ProjectToScreen(const DirectX::XMMATRIX& view_projection,
         const DirectX::XMFLOAT3& world, const ImVec2& origin, const ImVec2& size,
         ImVec2& out)
     {
         using namespace DirectX;
-
         const XMVECTOR position = XMVectorSet(world.x, world.y, world.z, 1.0f);
         const XMVECTOR clip = XMVector4Transform(position, view_projection);
-
         const float w = XMVectorGetW(clip);
         if (w <= 1.0e-4f) return false;
-
         const float x = XMVectorGetX(clip) / w;
         const float y = XMVectorGetY(clip) / w;
-
         out.x = origin.x + (x * 0.5f + 0.5f) * size.x;
         out.y = origin.y + (0.5f - y * 0.5f) * size.y;
         return true;
@@ -47,40 +39,286 @@ namespace
     {
         return ReplayEngine::Scene::ToString(source.backend);
     }
+
+    enum class AINavigationHandleKind
+    {
+        None,
+        DetectionRange,
+        AttackRange,
+    };
+
+    struct AINavigationHandleState
+    {
+        ReplayEngine::Core::ObjectID object;
+        AINavigationHandleKind kind = AINavigationHandleKind::None;
+        bool dragging = false;
+    };
+
+    AINavigationHandleState ai_navigation_handle_state;
+
+    void ClearAINavigationHandleState()
+    {
+        ai_navigation_handle_state = {};
+    }
+
+    float DistanceSquared(const ImVec2& a, const ImVec2& b) noexcept
+    {
+        const float dx = a.x - b.x;
+        const float dy = a.y - b.y;
+        return dx * dx + dy * dy;
+    }
 }
 
 void framework::draw_collider_debug_overlay()
 {
-    if (!show_collider_debug_draw) return;
     if (game_scene == nullptr) return;
 
-    ReplayEngine::Editor::ColliderDebugDraw::Options options;
-    options.draw_bounds = show_collider_debug_bounds;
-    options.draw_shapes = true;
-    options.draw_mesh_wireframe = show_collider_debug_wireframe;
+    if (show_collider_debug_draw)
+    {
+        ReplayEngine::Editor::ColliderDebugDraw::Options options;
+        options.draw_bounds = show_collider_debug_bounds;
+        options.draw_shapes = true;
+        options.draw_mesh_wireframe = show_collider_debug_wireframe;
+        ReplayEngine::Editor::ColliderDebugDraw::Build(
+            object_collision_world, options, object_collider_debug_lines);
+    }
+    else
+    {
+        object_collider_debug_lines.clear();
+    }
 
-    ReplayEngine::Editor::ColliderDebugDraw::Build(
-        object_collision_world, options, object_collider_debug_lines);
-    if (object_collider_debug_lines.empty()) return;
+    ReplayEngine::Editor::AINavigationDebugFrame ai_frame;
+    if (active_editor_view == editor_view::scene)
+    {
+        const ReplayEngine::Core::ObjectID selected = object_editor_context.Selection().Primary();
+        ReplayEngine::Editor::AINavigationDebugDraw::Build(active_object_scene(), selected, ai_frame);
+    }
 
-    // 描画・Picking・Gizmo と同じ窓口から行列を取る。
-    // ここで Runtime Camera を直接読むと、編集カメラで見ている画面に対して
-    // 線だけが別の位置へ出てしまう。
+    if (object_collider_debug_lines.empty() && ai_frame.lines.empty() &&
+        ai_frame.fills.empty() && ai_frame.labels.empty()) return;
+
     const DirectX::XMMATRIX view_projection =
         viewport_view_matrix() * viewport_projection_matrix();
-
     ImDrawList* draw_list = ImGui::GetBackgroundDrawList();
-    const ImVec2 origin = ImGui::GetMainViewport()->Pos;
-    const ImVec2 size = ImGui::GetMainViewport()->Size;
 
+    // Collider は既存の投影規約を維持する。
+    const ImVec2 main_origin = ImGui::GetMainViewport()->Pos;
+    const ImVec2 main_size = ImGui::GetMainViewport()->Size;
     for (const ReplayEngine::Editor::DebugLine& line : object_collider_debug_lines)
     {
         ImVec2 start{};
         ImVec2 end{};
-        if (!ProjectToScreen(view_projection, line.start, origin, size, start)) continue;
-        if (!ProjectToScreen(view_projection, line.end, origin, size, end)) continue;
+        if (!ProjectToScreen(view_projection, line.start, main_origin, main_size, start)) continue;
+        if (!ProjectToScreen(view_projection, line.end, main_origin, main_size, end)) continue;
         draw_list->AddLine(start, end, line.color, 1.0f);
     }
+
+    // AI は Scene View の実際の矩形へ投影する。Picking/ハンドルも同じ矩形を使う。
+    const ImVec2 scene_origin{ scene_view_min_x, scene_view_min_y };
+    const ImVec2 scene_size{
+        (std::max)(1.0f, scene_view_max_x - scene_view_min_x),
+        (std::max)(1.0f, scene_view_max_y - scene_view_min_y) };
+    draw_list->PushClipRect(scene_origin,
+        { scene_origin.x + scene_size.x, scene_origin.y + scene_size.y }, true);
+
+    for (const ReplayEngine::Editor::DebugFilledPolygon& polygon : ai_frame.fills)
+    {
+        if (polygon.points.size() < 3) continue;
+        ImVec2 projected[8]{};
+        if (polygon.points.size() > (sizeof(projected) / sizeof(projected[0]))) continue;
+        bool valid = true;
+        for (std::size_t index = 0; index < polygon.points.size(); ++index)
+        {
+            if (!ProjectToScreen(view_projection, polygon.points[index], scene_origin,
+                scene_size, projected[index]))
+            {
+                valid = false;
+                break;
+            }
+        }
+        if (valid) draw_list->AddConvexPolyFilled(projected,
+            static_cast<int>(polygon.points.size()), polygon.color);
+    }
+
+    for (const ReplayEngine::Editor::DebugLine& line : ai_frame.lines)
+    {
+        ImVec2 start{};
+        ImVec2 end{};
+        if (!ProjectToScreen(view_projection, line.start, scene_origin, scene_size, start)) continue;
+        if (!ProjectToScreen(view_projection, line.end, scene_origin, scene_size, end)) continue;
+        draw_list->AddLine(start, end, line.color, 1.5f);
+    }
+
+    for (const ReplayEngine::Editor::DebugWorldLabel& label : ai_frame.labels)
+    {
+        ImVec2 position{};
+        if (!ProjectToScreen(view_projection, label.position, scene_origin, scene_size, position))
+            continue;
+        draw_list->AddText(position, label.color, label.text.c_str());
+    }
+
+    // 選択中 Enemy の編集ハンドル。Phase 1 では価値が高く衝突しにくい
+    // detection_range / attack_range の 2 つだけを直接編集する。
+    if (active_editor_view == editor_view::scene && !object_scene_play_mode &&
+        object_editor_context.CanEdit())
+    {
+        ReplayEngine::Core::GameObject* selected_object =
+            object_editor_context.Selection().ResolvePrimary(active_object_scene());
+        if (selected_object != nullptr)
+        {
+            if (auto* enemy = selected_object->GetComponent<ReplayEngine::Components::EnemyBehaviourComponent>();
+                enemy != nullptr && enemy->debug_draw)
+            {
+                const DirectX::XMFLOAT3 center = selected_object->GetTransform().WorldPosition();
+                const DirectX::XMFLOAT3 detection_world{
+                    center.x + (std::max)(0.05f, enemy->detection_range), center.y, center.z };
+                const DirectX::XMFLOAT3 attack_world{
+                    center.x - (std::max)(0.05f, enemy->attack_range), center.y, center.z };
+                ImVec2 detection_screen{};
+                ImVec2 attack_screen{};
+                if (ProjectToScreen(view_projection, detection_world, scene_origin, scene_size,
+                    detection_screen))
+                {
+                    draw_list->AddCircleFilled(detection_screen, 6.0f,
+                        ReplayEngine::Editor::AINavigationDebugColors::detection);
+                    draw_list->AddCircle(detection_screen, 8.0f, IM_COL32(255, 255, 255, 220));
+                }
+                if (ProjectToScreen(view_projection, attack_world, scene_origin, scene_size,
+                    attack_screen))
+                {
+                    draw_list->AddCircleFilled(attack_screen, 6.0f,
+                        ReplayEngine::Editor::AINavigationDebugColors::attack);
+                    draw_list->AddCircle(attack_screen, 8.0f, IM_COL32(255, 255, 255, 220));
+                }
+            }
+        }
+    }
+
+    draw_list->PopClipRect();
+}
+
+bool framework::handle_ai_navigation_debug_edit()
+{
+    if (game_scene == nullptr || object_scene_play_mode || !object_editor_context.CanEdit())
+    {
+        if (ai_navigation_handle_state.dragging) object_editor_context.CancelEdit();
+        ClearAINavigationHandleState();
+        return false;
+    }
+
+    ReplayEngine::Scene::Scene& scene = active_object_scene();
+    ReplayEngine::Core::GameObject* selected_object =
+        object_editor_context.Selection().ResolvePrimary(scene);
+    auto* enemy = selected_object != nullptr
+        ? selected_object->GetComponent<ReplayEngine::Components::EnemyBehaviourComponent>()
+        : nullptr;
+    if (selected_object == nullptr || enemy == nullptr || !enemy->debug_draw)
+    {
+        if (ai_navigation_handle_state.dragging) object_editor_context.CancelEdit();
+        ClearAINavigationHandleState();
+        return false;
+    }
+
+    if (ai_navigation_handle_state.kind != AINavigationHandleKind::None &&
+        ai_navigation_handle_state.object != selected_object->ID())
+    {
+        if (ai_navigation_handle_state.dragging) object_editor_context.CancelEdit();
+        ClearAINavigationHandleState();
+    }
+
+    const DirectX::XMMATRIX view_projection =
+        viewport_view_matrix() * viewport_projection_matrix();
+    const ImVec2 scene_origin{ scene_view_min_x, scene_view_min_y };
+    const ImVec2 scene_size{
+        (std::max)(1.0f, scene_view_max_x - scene_view_min_x),
+        (std::max)(1.0f, scene_view_max_y - scene_view_min_y) };
+    const DirectX::XMFLOAT3 center = selected_object->GetTransform().WorldPosition();
+    const DirectX::XMFLOAT3 detection_world{
+        center.x + (std::max)(0.05f, enemy->detection_range), center.y, center.z };
+    const DirectX::XMFLOAT3 attack_world{
+        center.x - (std::max)(0.05f, enemy->attack_range), center.y, center.z };
+    ImVec2 detection_screen{};
+    ImVec2 attack_screen{};
+    const bool detection_visible = ProjectToScreen(view_projection, detection_world,
+        scene_origin, scene_size, detection_screen);
+    const bool attack_visible = ProjectToScreen(view_projection, attack_world,
+        scene_origin, scene_size, attack_screen);
+
+    const ImVec2 mouse = ImGui::GetMousePos();
+    const bool inside_scene = mouse.x >= scene_view_min_x && mouse.x <= scene_view_max_x &&
+        mouse.y >= scene_view_min_y && mouse.y <= scene_view_max_y;
+
+    if (ai_navigation_handle_state.kind == AINavigationHandleKind::None &&
+        inside_scene && scene_view_hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+    {
+        constexpr float PickRadiusSquared = 12.0f * 12.0f;
+        const float detection_distance = detection_visible
+            ? DistanceSquared(mouse, detection_screen) : PickRadiusSquared + 1.0f;
+        const float attack_distance = attack_visible
+            ? DistanceSquared(mouse, attack_screen) : PickRadiusSquared + 1.0f;
+        if (detection_distance <= PickRadiusSquared || attack_distance <= PickRadiusSquared)
+        {
+            ai_navigation_handle_state.object = selected_object->ID();
+            ai_navigation_handle_state.kind = detection_distance <= attack_distance
+                ? AINavigationHandleKind::DetectionRange : AINavigationHandleKind::AttackRange;
+            ai_navigation_handle_state.dragging = false;
+            viewport_drag_selecting = false;
+            return true;
+        }
+    }
+
+    if (ai_navigation_handle_state.kind == AINavigationHandleKind::None) return false;
+
+    if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
+    {
+        if (!ai_navigation_handle_state.dragging &&
+            ImGui::IsMouseDragging(ImGuiMouseButton_Left, 2.0f))
+        {
+            object_editor_context.BeginEdit(ai_navigation_handle_state.kind ==
+                AINavigationHandleKind::DetectionRange
+                ? "AI 索敵範囲を変更" : "AI 攻撃範囲を変更");
+            ai_navigation_handle_state.dragging = true;
+        }
+
+        if (ai_navigation_handle_state.dragging)
+        {
+            const float local_x = mouse.x - scene_view_min_x;
+            const float local_y = mouse.y - scene_view_min_y;
+            const auto ray = viewport_picking_ray(local_x, local_y);
+
+            // 水平面そのものとの交差だとカメラ角度によって不安定になるため、
+            // XZ 平面上で中心に最も近い Ray 上の点から半径を求める。
+            const float denominator = ray.direction.x * ray.direction.x +
+                ray.direction.z * ray.direction.z;
+            if (denominator > 1.0e-6f)
+            {
+                const float ox = ray.origin.x - center.x;
+                const float oz = ray.origin.z - center.z;
+                float t = -(ox * ray.direction.x + oz * ray.direction.z) / denominator;
+                t = (std::max)(0.0f, t);
+                const float px = ray.origin.x + ray.direction.x * t;
+                const float pz = ray.origin.z + ray.direction.z * t;
+                const float dx = px - center.x;
+                const float dz = pz - center.z;
+                const float radius = (std::max)(0.05f, std::sqrt(dx * dx + dz * dz));
+                if (ai_navigation_handle_state.kind == AINavigationHandleKind::DetectionRange)
+                {
+                    enemy->detection_range = radius;
+                    enemy->OnPropertyChanged("detection_range");
+                }
+                else
+                {
+                    enemy->attack_range = radius;
+                    enemy->OnPropertyChanged("attack_range");
+                }
+            }
+        }
+        return true;
+    }
+
+    if (ai_navigation_handle_state.dragging) object_editor_context.CommitEdit();
+    ClearAINavigationHandleState();
+    return true;
 }
 
 void framework::draw_collision_diagnostics_panel()
@@ -179,5 +417,6 @@ void framework::draw_collision_diagnostics_panel()
 
 void framework::draw_collider_debug_overlay() {}
 void framework::draw_collision_diagnostics_panel() {}
+bool framework::handle_ai_navigation_debug_edit() { return false; }
 
 #endif

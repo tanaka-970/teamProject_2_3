@@ -1,0 +1,10 @@
+REPLAY_EFFECT_PRESET 1
+PROPERTY_COUNT 7
+PROPERTY "effect_count" int 1
+PROPERTY "effects[0].enabled" bool 1
+PROPERTY "effects[0].type" enum 1
+PROPERTY "effects[0].radius" float 18
+PROPERTY "effects[0].intensity" float 1.35
+PROPERTY "effects[0].threshold" float 0.15
+PROPERTY "effects[0].color" color 0.25 0.8 1 1
+END_EFFECT_PRESET

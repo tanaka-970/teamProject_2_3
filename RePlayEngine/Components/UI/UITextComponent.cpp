@@ -1,10 +1,11 @@
-#include "UITextComponent.h"
+﻿#include "UITextComponent.h"
 
 #include "RectTransformComponent.h"
 #include "../../Object/GameObject/GameObject.h"
 #include "../../Reflection/Property/PropertyDesc.h"
 #include "../../Reflection/Registry/PropertyRegistry.h"
 #include "../../Scene/Runtime/Scene.h"
+#include "../../Localization/LocalizationService.h"
 
 #include <algorithm>
 #include <iomanip>
@@ -18,6 +19,12 @@ namespace ReplayEngine::Components
         {
             owner->AddComponent<RectTransformComponent>();
         }
+    }
+
+    std::string UITextComponent::ResolvedText() const
+    {
+        if (localization_key.empty()) return text;
+        return Localization::LocalizationService::Global().Resolve(localization_key, text);
     }
 
     void UITextComponent::UpdateNumberDisplay(const ReplayEngine::Scene::Scene& scene)

@@ -42,6 +42,9 @@ namespace ReplayEngine::Core::Detail
             PropertyRegistry::Register<MeshRendererComponent>(
                 MakeProperty("receive_shadow", &MeshRendererComponent::receive_shadow)
                     .Display("影を受ける"));
+            PropertyRegistry::Register<MeshRendererComponent>(
+                MakeProperty("rendering_layer", &MeshRendererComponent::rendering_layer)
+                    .Display("Rendering Layer").Range(0.0, 31.0).Step(1.0));
 
             PropertyRegistry::Register<MeshRendererComponent>(
                 MakeProperty("visible", &MeshRendererComponent::visible).Display("表示"));
@@ -94,6 +97,9 @@ namespace ReplayEngine::Core::Detail
             PropertyRegistry::Register<PrimitiveMeshRendererComponent>(
                 MakeProperty("receive_shadow", &PrimitiveMeshRendererComponent::receive_shadow).Display("影を受ける"));
             PropertyRegistry::Register<PrimitiveMeshRendererComponent>(
+                MakeProperty("rendering_layer", &PrimitiveMeshRendererComponent::rendering_layer)
+                    .Display("Rendering Layer").Range(0.0, 31.0).Step(1.0));
+            PropertyRegistry::Register<PrimitiveMeshRendererComponent>(
                 MakeProperty("visible", &PrimitiveMeshRendererComponent::visible).Display("表示"));
         }
 
@@ -136,6 +142,9 @@ namespace ReplayEngine::Core::Detail
             PropertyRegistry::Register<SkinnedMeshRendererComponent>(
                 MakeProperty("receive_shadow", &SkinnedMeshRendererComponent::receive_shadow)
                     .Display("影を受ける"));
+            PropertyRegistry::Register<SkinnedMeshRendererComponent>(
+                MakeProperty("rendering_layer", &SkinnedMeshRendererComponent::rendering_layer)
+                    .Display("Rendering Layer").Range(0.0, 31.0).Step(1.0));
 
             PropertyRegistry::Register<SkinnedMeshRendererComponent>(
                 MakeProperty("visible", &SkinnedMeshRendererComponent::visible).Display("表示"));
@@ -240,7 +249,8 @@ namespace ReplayEngine::Core::Detail
         {
             ComponentRegistry::Register<PostProcessVolumeComponent>(
                 ComponentTypeInfo::Describe("Post Process Volume", "Rendering")
-                    .WithTooltip("Scene 上の優先度が最も高い Volume から PostEffect の値を反映する。"));
+                    .WithTooltip("Scene 上の優先度が最も高い Volume から PostEffect の値を反映する。")
+                    .InModule("RePlayEngine.Optional.Effects"));
 
             PropertyRegistry::Register<PostProcessVolumeComponent>(
                 MakeProperty("priority", &PostProcessVolumeComponent::priority)
@@ -292,7 +302,8 @@ namespace ReplayEngine::Core::Detail
             ComponentRegistry::Register<ParticleEmitterComponent>(
                 ComponentTypeInfo::Describe("Particle Emitter", "Rendering")
                     .WithTooltip("粒子単体ではなく、発生量や寿命などの Emitter Parameter を Motion から動かす。")
-                    .AllowMultipleInstances());
+                    .AllowMultipleInstances()
+                    .InModule("RePlayEngine.Optional.Effects"));
 
             PropertyRegistry::Register<ParticleEmitterComponent>(
                 MakeProperty("emitting", &ParticleEmitterComponent::emitting)
@@ -413,7 +424,8 @@ namespace ReplayEngine::Core::Detail
         {
             ComponentRegistry::Register<LineRendererComponent>(
                 ComponentTypeInfo::Describe("3D ライン", "Rendering")
-                    .WithTooltip("ローカル座標の点を自由に置き、Motion で各点を動かせる 3D リボン。"));
+                    .WithTooltip("ローカル座標の点を自由に置き、Motion で各点を動かせる 3D リボン。")
+                    .AllowMultipleInstances());
             PropertyRegistry::Register<LineRendererComponent>(
                 MakeProperty("point_count", &LineRendererComponent::point_count)
                     .Display("点の数").Range(0.0, 2147483647.0).Step(1.0)
@@ -432,7 +444,9 @@ namespace ReplayEngine::Core::Detail
 
             ComponentRegistry::Register<TrailComponent>(
                 ComponentTypeInfo::Describe("軌跡", "Rendering")
-                    .WithTooltip("Transform 確定後の移動履歴から、自動で同じ 3D リボンを生成する。"));
+                    .WithTooltip("Transform 確定後の移動履歴から、自動で同じ 3D リボンを生成する。")
+                    .AllowMultipleInstances()
+                    .InModule("RePlayEngine.Optional.Effects"));
             PropertyRegistry::Register<TrailComponent>(
                 MakeProperty("emitting", &TrailComponent::emitting)
                     .Display("発生中").Animation(Animatable::Step)
@@ -512,4 +526,69 @@ namespace ReplayEngine::Core::Detail
                 MakeProperty("outer_angle_degrees", &SpotLightComponent::outer_angle_degrees)
                     .Display("外側角度").Range(0.1, 179.0).Step(0.5));
         }
+        void RegisterEffectStacks()
+        {
+            ComponentRegistry::Register<ScreenEffectStackComponent>(
+                ComponentTypeInfo::Describe("Screen Effect Stack", "Rendering")
+                    .WithTooltip("3D シーン全体へ Effect Chain を適用します。UI は対象外です。")
+                    .InModule("RePlayEngine.Optional.Effects"));
+            PropertyRegistry::Register<ScreenEffectStackComponent>(
+                MakeProperty("enabled", &ScreenEffectStackComponent::enabled)
+                    .Display("有効").Animation(Animatable::Step));
+            PropertyRegistry::Register<ScreenEffectStackComponent>(
+                MakeProperty("use_preset", &ScreenEffectStackComponent::use_preset)
+                    .Display("Preset を使用").Animation(Animatable::Step));
+            PropertyRegistry::Register<ScreenEffectStackComponent>(
+                MakeProperty("effect_preset", &ScreenEffectStackComponent::effect_preset)
+                    .Display("Effect Preset").OfAssetType("EffectPreset")
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<ScreenEffectStackComponent>(
+                MakeProperty("effect_count", &ScreenEffectStackComponent::effect_count)
+                    .Display("Effect 数").Range(0.0, 16.0).Step(1.0)
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<ScreenEffectStackComponent>(
+                MakeProperty("apply_stage", &ScreenEffectStackComponent::apply_stage)
+                    .Display("適用位置")
+                    .AsEnum({ "PostProcess 後", "PostProcess 前" })
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<ScreenEffectStackComponent>(
+                MakeProperty("target_mode", &ScreenEffectStackComponent::target_mode)
+                    .Display("適用対象")
+                    .AsEnum({ "画面全体", "背景だけ", "Rendering Layer" })
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<ScreenEffectStackComponent>(
+                MakeProperty("target_rendering_layer", &ScreenEffectStackComponent::target_rendering_layer)
+                    .Display("Rendering Layer").Range(0.0, 31.0).Step(1.0)
+                    .Tooltip("Rendering Layer 対象時に Effect を掛ける layer 番号。")
+                    .Animation(Animatable::Step));
+
+            ComponentRegistry::Register<ModelEffectStackComponent>(
+                ComponentTypeInfo::Describe("Model Effect Stack", "Rendering")
+                    .WithTooltip("この GameObject のモデルだけへ Effect Chain を適用します。")
+                    .InModule("RePlayEngine.Optional.Effects"));
+            PropertyRegistry::Register<ModelEffectStackComponent>(
+                MakeProperty("enabled", &ModelEffectStackComponent::enabled)
+                    .Display("有効").Animation(Animatable::Step));
+            PropertyRegistry::Register<ModelEffectStackComponent>(
+                MakeProperty("use_preset", &ModelEffectStackComponent::use_preset)
+                    .Display("Preset を使用").Animation(Animatable::Step));
+            PropertyRegistry::Register<ModelEffectStackComponent>(
+                MakeProperty("effect_preset", &ModelEffectStackComponent::effect_preset)
+                    .Display("Effect Preset").OfAssetType("EffectPreset")
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<ModelEffectStackComponent>(
+                MakeProperty("effect_count", &ModelEffectStackComponent::effect_count)
+                    .Display("Effect 数").Range(0.0, 16.0).Step(1.0)
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<ModelEffectStackComponent>(
+                MakeProperty("depth_mode", &ModelEffectStackComponent::depth_mode)
+                    .Display("深度モード")
+                    .AsEnum({ "Preserve Depth", "Overlay" })
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<ModelEffectStackComponent>(
+                MakeProperty("max_bleed_pixels", &ModelEffectStackComponent::max_bleed_pixels)
+                    .Display("最大はみ出し (px)").Range(0.0, 1024.0).Step(1.0)
+                    .Animation(Animatable::Interpolatable));
+        }
+
 }

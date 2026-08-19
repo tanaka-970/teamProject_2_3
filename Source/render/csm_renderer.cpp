@@ -1,4 +1,5 @@
-#include "csm_renderer.h"
+﻿#include "csm_renderer.h"
+#include "../../RePlayEngine/Rendering/RenderStats.h"
 #include "shader.h"
 #include "misc.h"
 #include <algorithm>
@@ -236,7 +237,9 @@ void csm_renderer::shadow_begin(ID3D11DeviceContext* ctx)
     ctx->OMSetRenderTargets(0, nullptr, shadow_dsv.Get());
     ctx->ClearDepthStencilView(shadow_dsv.Get(), D3D11_CLEAR_DEPTH, 1.0f, 0);
     ctx->RSSetViewports(1, &viewport);
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
     ctx->GSSetShader(caster_gs.Get(), nullptr, 0);
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
     ctx->PSSetShader(nullptr, nullptr, 0);
 }
 
@@ -248,6 +251,7 @@ void csm_renderer::shadow_end(ID3D11DeviceContext* ctx,
     ID3D11RenderTargetView* rtv[1] = { restore_rtv };
     ctx->OMSetRenderTargets(1, rtv, restore_dsv);
     ctx->RSSetViewports(1, &restore_vp);
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
     ctx->GSSetShader(nullptr, nullptr, 0);
 }
 

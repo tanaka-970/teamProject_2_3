@@ -54,6 +54,24 @@ namespace ReplayEngine::Editor
             buffer[length] = '\0';
         }
 
+        bool HasSiblingNameDuplicate(const Scene::Scene& scene,
+            const GameObject& object, const std::string& name)
+        {
+            if (object.Parent() != nullptr)
+            {
+                for (const GameObject* sibling : object.Parent()->Children())
+                    if (sibling != nullptr && sibling != &object && sibling->Name() == name) return true;
+                return false;
+            }
+            for (std::size_t i = 0; i < scene.GameObjectCount(); ++i)
+            {
+                const GameObject* sibling = scene.GameObjectAt(i);
+                if (sibling != nullptr && sibling != &object && sibling->Parent() == nullptr &&
+                    sibling->Name() == name) return true;
+            }
+            return false;
+        }
+
     }
 
     void InspectorPanel::Draw(EditorContext& context)
@@ -65,18 +83,25 @@ namespace ReplayEngine::Editor
 
     void InspectorPanel::DrawContents(EditorContext& context)
     {
+        bool show_game_template_components = false;
+        (void)DrawContents(context, show_game_template_components);
+    }
+
+    bool InspectorPanel::DrawContents(EditorContext& context,
+        bool& show_game_template_components)
+    {
         Scene::Scene* scene = context.GetScene();
         if (scene == nullptr)
         {
             ImGui::TextDisabled("シーンが読み込まれていません");
-            return;
+            return false;
         }
 
         GameObject* object = context.Selection().ResolvePrimary(*scene);
         if (object == nullptr)
         {
             ImGui::TextDisabled("GameObject が選択されていません");
-            return;
+            return false;
         }
 
         if (context.PlayMode())
@@ -98,12 +123,12 @@ namespace ReplayEngine::Editor
             if (objects.size() > 1)
             {
                 DrawMultiSelection(context, objects);
-                return;
+                return false;
             }
         }
 
         DrawGameObjectHeader(context, *object);
-        DrawPlayerComposition(context, *object);
+        DrawPlayerComposition(context, *object, show_game_template_components);
         ImGui::Separator();
 
         // 添字で回す。描画中に Component が追加されても、この回の走査は
@@ -159,13 +184,17 @@ namespace ReplayEngine::Editor
         {
             add_component_panel_.RequestOpen();
         }
-        add_component_panel_.Draw(context, *object);
+        bool show_game_template_components_changed = false;
+        add_component_panel_.Draw(context, *object, show_game_template_components,
+            show_game_template_components_changed);
 
         if (!context.Status().empty())
         {
             ImGui::Spacing();
             ImGui::TextWrapped("%s", context.Status().c_str());
         }
+
+        return show_game_template_components_changed;
     }
 
     void InspectorPanel::DrawGameObjectHeader(EditorContext& context, GameObject& object)
@@ -196,6 +225,11 @@ namespace ReplayEngine::Editor
             context.BeginEdit("GameObject 名を変更");
             object.SetName(name_buffer_);
             context.CommitEdit();
+            if (Scene::Scene* scene = context.GetScene();
+                scene != nullptr && HasSiblingNameDuplicate(*scene, object, object.Name()))
+            {
+                context.SetStatus("同じ階層に同名 GameObject があります（参照は ObjectID なので維持されます）");
+            }
         }
 
         if (object.Parent() != nullptr)

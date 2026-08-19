@@ -37,15 +37,23 @@ void skinned_mesh::render(ID3D11DeviceContext* immediate_context,
         immediate_context->IASetVertexBuffers(0, 1, mesh.vertex_buffer.GetAddressOf(), &stride, &offset);
         immediate_context->IASetIndexBuffer(mesh.index_buffer.Get(), DXGI_FORMAT_R32_UINT, 0);
         immediate_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-        immediate_context->IASetInputLayout(alternative_input_layout ? alternative_input_layout : input_layout.Get());
+        ID3D11InputLayout* selected_input_layout =
+            alternative_input_layout ? alternative_input_layout : input_layout.Get();
+        ReplayEngine::Rendering::Stats().TrackStateSet(
+            ReplayEngine::Rendering::RenderStats::StateKind::InputLayout,
+            selected_input_layout);
+        immediate_context->IASetInputLayout(selected_input_layout);
 
+        ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
         immediate_context->VSSetShader(alternative_vertex_shader ? alternative_vertex_shader : vertex_shader.Get(), nullptr, 0);
         if (bind_pixel_shader)
         {
+            ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
             immediate_context->PSSetShader(alternative_pixel_shader ? alternative_pixel_shader : pixel_shader.Get(), nullptr, 0);
         }
         else
         {
+            ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
             immediate_context->PSSetShader(nullptr, nullptr, 0);
         }
 

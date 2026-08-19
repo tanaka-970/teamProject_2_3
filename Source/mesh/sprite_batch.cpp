@@ -1,4 +1,5 @@
 ﻿#include "sprite_batch.h"
+#include "../../RePlayEngine/Rendering/RenderStats.h"
 #include "misc.h"
 #include <sstream>
 #include <memory> // unique_ptr のために追加
@@ -107,7 +108,9 @@ void sprite_batch::begin(ID3D11DeviceContext* immediate_context)
     // 描画用頂点情報をクリア
     vertices.clear();
     // 引数として渡す際は .Get() を使用（省略可能な場合も多いですが明示的に）
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
     immediate_context->VSSetShader(vertex_shader.Get(), nullptr, 0);
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
     immediate_context->PSSetShader(pixel_shader.Get(), nullptr, 0);
     immediate_context->PSSetShaderResources(0, 1, shader_resource_view.GetAddressOf());
 }
@@ -236,7 +239,9 @@ void  sprite_batch::end(ID3D11DeviceContext* immediate_context)
 
     // 手順 22：レイアウトとシェーダーのセット
     immediate_context->IASetInputLayout(input_layout.Get());
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
     immediate_context->VSSetShader(vertex_shader.Get(), nullptr, 0);
+    ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
     immediate_context->PSSetShader(pixel_shader.Get(), nullptr, 0);
     immediate_context->PSSetShaderResources(0, 1, shader_resource_view.GetAddressOf());
     
