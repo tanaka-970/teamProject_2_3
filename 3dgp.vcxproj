@@ -85,6 +85,7 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <PrecompiledHeader>
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
@@ -116,6 +117,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <!-- プリコンパイル済みヘッダ。ビルド時間の短縮だけが目的。
            ForcedIncludeFiles で全 .cpp の先頭へ自動挿入するため、
            各ソースへ #include "pch.h" を書き足していない。
@@ -150,6 +152,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <WarningLevel>Level3</WarningLevel>
       <PrecompiledHeader>
       </PrecompiledHeader>
@@ -182,6 +185,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <WarningLevel>Level3</WarningLevel>
       <PrecompiledHeader>
       </PrecompiledHeader>
@@ -678,6 +682,7 @@
     <ClInclude Include="Source\app\Rendering\framework_render_effects.inl" />
     <ClInclude Include="Source\app\Rendering\framework_render_present.inl" />
     <ClInclude Include="Source\app\framework_class.h" />
+    <ClInclude Include="Source\app\Editor\GoldenImageState.h" />
     <ClInclude Include="Source\app\Editor\framework_motion_workspaceInternal.h" />
     <ClInclude Include="Source\app\Editor\framework_project_browserInternal.h" />
     <ClInclude Include="Source\app\Editor\framework_asset_browserInternal.h" />
