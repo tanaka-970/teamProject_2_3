@@ -12,6 +12,17 @@
 void framework::draw_editor()
 {
     editor_session_active = true;
+
+    // 検索欄の状態はここで毎フレーム倒し、実際に描かれたときだけ立て直す。
+    //
+    // 立てたまま欄が描かれなくなると二度と更新されず、
+    // EditorCameraController の ui_text_input_active が立ちっぱなしになって
+    // ズーム / Pan / Orbit / Fly がすべて効かなくなる。
+    // 欄が消える経路は 2 つあり、どちらも実際に起きる:
+    //   ・ツールバーの幅が足りず検索欄自体を描かない
+    //   ・メニューバーが出ずツールバーごと呼ばれない
+    // draw_scene_view_panel() が scene_view_hovered でやっているのと同じ作法。
+    search_input_active = false;
     ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->Pos);
     ImGui::SetNextWindowSize(viewport->Size);

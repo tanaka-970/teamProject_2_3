@@ -362,17 +362,8 @@ void framework::draw_editor_toolbar()
         }
         ImGui::InputTextWithHint("##FeatureSearch", "Search...", editor_search_text,
             IM_ARRAYSIZE(editor_search_text));
+        // 倒すのは draw_editor() の先頭でやっている。
+        // ここは描かれたフレームで立て直すだけ。
         search_input_active = ImGui::IsItemActive();
-    }
-    else
-    {
-        // 検索欄を描かないフレームでは必ず倒す。
-        //
-        // ここを書かないと、フォーカスしたまま幅が狭くなって欄が消えた瞬間に
-        // search_input_active が true のまま二度と更新されなくなる。
-        // その状態は EditorCameraController の ui_text_input_active を立て続け、
-        // ズーム / Pan / Orbit / Fly がすべて効かなくなる。
-        // 原因のウィジェットが画面から消えているので、見て気づけない。
-        search_input_active = false;
     }
 }
