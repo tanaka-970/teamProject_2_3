@@ -212,6 +212,9 @@
     void draw_project_browser();
     void draw_project_folder_tree(const std::filesystem::path& folder, int depth);
     void draw_project_folder_contents();
+    void draw_project_create_submenu(const std::filesystem::path& target_folder);
+    void draw_project_entry_context_items(const std::filesystem::path& path);
+    bool project_open_entry(const std::filesystem::path& path);
     void set_project_folder(const std::filesystem::path& folder);
     bool project_create_folder(const std::string& name);
     bool project_create_csharp_behaviour(const std::string& class_name);

@@ -56,15 +56,20 @@
                 }
                 else
                 {
-                    const bool external_context = project_browser_focused ||
-                        selected_editor_object == editor_selection::asset ||
-                        selected_editor_object == editor_selection::world;
+                    const bool external_context = project_browser_focused;
                     if (external_context)
+                    {
                         handled = (wparam == 'Z') ? undo_external_file_edit() : redo_external_file_edit();
-                    if (!handled)
+                        if (!handled)
+                            project_browser_status = wparam == 'Z'
+                                ? "Projectで取り消せるファイル操作はありません"
+                                : "Projectでやり直せるファイル操作はありません";
+                    }
+                    else
                     {
                         if (wparam == 'Z') object_editor_context.Undo();
                         else object_editor_context.Redo();
+                        handled = true;
                     }
                 }
                 return 0;
@@ -77,8 +82,17 @@
                     object_hierarchy_panel.DuplicateSelection(object_editor_context);
                 return 0;
             }
+            if (shortcut_pressed && wparam == 'N' &&
+                (GetKeyState(VK_SHIFT) & 0x8000) != 0 && project_browser_focused)
+            {
+                if (project_create_folder("New Folder")) project_begin_rename_selected();
+                return 0;
+            }
             if (shortcut_pressed && (wparam == 'C' || wparam == 'V'))
             {
+                // Project WindowにFocusがある時、SceneのGameObject Copy/Pasteへ
+                // 誤爆させない。Project AssetはCtrl+D/Drag Moveを使う。
+                if (project_browser_focused) return 0;
                 std::string clipboard_error;
                 if (wparam == 'C')
                 {
@@ -102,10 +116,10 @@
                 }
                 return 0;
             }
-            if (msg == WM_KEYDOWN && wparam == VK_DELETE &&
+            if (msg == WM_KEYDOWN && (wparam == VK_DELETE || wparam == VK_BACK) &&
                 !ImGui::GetIO().WantTextInput && !runtime_ui_text_owner)
             {
-                // Atlas Editor 内の Delete は Region 削除へ渡す。
+                // Atlas Editor 内の Delete/Backspace は Region 削除へ渡す。
                 if (sprite_atlas_editor_loaded && sprite_atlas_editor_keyboard_focus) return 0;
                 if (project_browser_focused &&
                     selected_editor_object == editor_selection::asset &&
@@ -119,6 +133,13 @@
                     object_hierarchy_panel.DestroySelection(object_editor_context);
                     return 0;
                 }
+            }
+            if (msg == WM_KEYDOWN && wparam == VK_RETURN && project_browser_focused &&
+                !ImGui::GetIO().WantTextInput && !runtime_ui_text_owner &&
+                !project_selected_entry_path.empty())
+            {
+                project_open_entry(project_selected_entry_path);
+                return 0;
             }
             if (msg == WM_KEYDOWN && wparam == 'F' && !runtime_ui_text_owner &&
                 (GetKeyState(VK_CONTROL) & 0x8000))

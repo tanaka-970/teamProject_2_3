@@ -649,6 +649,13 @@ bool framework::project_duplicate_entry(const std::filesystem::path& path)
         return false;
     }
     std::error_code error;
+    const std::filesystem::path project_root_guard = std::filesystem::current_path(error);
+    if (!error && AbsoluteProjectPath(path) == AbsoluteProjectPath(project_root_guard))
+    {
+        project_browser_status = "Project root 自体は複製できません";
+        return false;
+    }
+    error.clear();
     if (!std::filesystem::exists(path, error) || error)
     {
         project_browser_status = "複製元が見つかりません";
@@ -790,6 +797,13 @@ void framework::project_begin_rename_selected()
     }
     if (project_selected_entry_path.empty()) return;
     std::error_code error;
+    const std::filesystem::path project_root = std::filesystem::current_path(error);
+    if (!error && AbsoluteProjectPath(project_selected_entry_path) == AbsoluteProjectPath(project_root))
+    {
+        project_browser_status = "Project root 自体は改名できません";
+        return;
+    }
+    error.clear();
     if (!std::filesystem::exists(project_selected_entry_path, error) || error) return;
     project_rename_target = project_selected_entry_path;
     project_rename_focus_pending = true;
@@ -806,6 +820,14 @@ void framework::project_request_delete(const std::filesystem::path& path)
         project_browser_status = "Play 中は Project Asset を削除できません";
         return;
     }
+    std::error_code delete_root_guard_error;
+    const std::filesystem::path delete_root_guard = std::filesystem::current_path(delete_root_guard_error);
+    if (!delete_root_guard_error && AbsoluteProjectPath(path) == AbsoluteProjectPath(delete_root_guard))
+    {
+        project_browser_status = "Project root 自体は削除できません";
+        return;
+    }
+
     project_delete_target = path;
     project_delete_references.clear();
     project_delete_contents.clear();

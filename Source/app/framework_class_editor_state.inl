@@ -325,6 +325,12 @@ private:
     std::vector<std::string> project_delete_contents;
     bool project_delete_popup_pending{ false };
     bool project_browser_focused{ false };
+    // 左の Project Tree はフォルダだけでなくファイルも表示する。右ペインで
+    // 選択したAssetを左ツリーへ自動Revealするための一時要求と、
+    // Drag中に閉じたフォルダへ一定時間Hoverしたときの自動展開状態。
+    bool project_tree_reveal_selection_pending{ false };
+    std::filesystem::path project_tree_drag_hover_folder;
+    double project_tree_drag_hover_started{ 0.0 };
     char project_rename_buffer[192]{};
     bool project_rename_focus_pending{ false };
     char project_new_item_name[128]{ "NewItem" };
