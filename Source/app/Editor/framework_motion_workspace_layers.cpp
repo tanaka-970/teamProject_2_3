@@ -255,10 +255,175 @@ void framework::draw_motion_layers()
     }
     else if (motion_composition_loaded)
     {
-        ImGui::Text("Composition: %s", motion_editor_composition.name.c_str());
-        for (const auto& layer : motion_editor_composition.layers)
-            ImGui::TextDisabled("Layer %s %.2f", layer.motion_guid.c_str(),
-                layer.start_offset);
+        using ReplayEngine::Assets::AssetKind;
+        using ReplayEngine::Motion::CompositionMarker;
+        using ReplayEngine::Motion::CompositionMotionLayer;
+
+        ImGui::Text("Composition: %s%s", motion_editor_composition.name.c_str(),
+            motion_editor_dirty ? " *" : "");
+        float duration = motion_editor_composition.duration;
+        ImGui::SetNextItemWidth(120.0f);
+        if (ImGui::DragFloat("Duration", &duration, 0.033333f, 0.0f, 3600.0f, "%.3fs"))
+        {
+            motion_editor_composition.duration = (std::max)(0.0f, duration);
+            motion_preview_time = (std::min)(motion_preview_time,
+                motion_editor_composition.duration);
+            motion_editor_dirty = true;
+        }
+
+        if (ImGui::Button("+ Motion Layer"))
+        {
+            CompositionMotionLayer layer;
+            layer.name = "Motion Layer " + std::to_string(motion_editor_composition.layers.size() + 1);
+            layer.in_time = 0.0f;
+            layer.out_time = motion_editor_composition.duration;
+            motion_editor_composition.layers.push_back(std::move(layer));
+            motion_editor_dirty = true;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("+ Precomp Layer"))
+        {
+            CompositionMotionLayer layer;
+            layer.name = "Precomp " + std::to_string(motion_editor_composition.layers.size() + 1);
+            layer.in_time = 0.0f;
+            layer.out_time = motion_editor_composition.duration;
+            motion_editor_composition.layers.push_back(std::move(layer));
+            motion_editor_dirty = true;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("+ Marker"))
+        {
+            CompositionMarker marker;
+            marker.name = "Marker " + std::to_string(motion_editor_composition.markers.size() + 1);
+            marker.time = motion_preview_time;
+            motion_editor_composition.markers.push_back(std::move(marker));
+            motion_editor_dirty = true;
+        }
+
+        ImGui::Separator();
+        ImGui::TextUnformatted("Layers");
+        for (int i = 0; i < static_cast<int>(motion_editor_composition.layers.size()); ++i)
+        {
+            CompositionMotionLayer& layer = motion_editor_composition.layers[i];
+            ImGui::PushID(i);
+            ImGui::Checkbox("##enabled", &layer.enabled);
+            ImGui::SameLine();
+            char name_buffer[128]{};
+            strncpy_s(name_buffer, sizeof(name_buffer), layer.name.c_str(), _TRUNCATE);
+            ImGui::SetNextItemWidth(180.0f);
+            if (ImGui::InputText("##name", name_buffer, IM_ARRAYSIZE(name_buffer)))
+            {
+                layer.name = name_buffer;
+                motion_editor_dirty = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Delete"))
+            {
+                motion_editor_composition.layers.erase(motion_editor_composition.layers.begin() + i);
+                motion_editor_dirty = true;
+                ImGui::PopID();
+                --i;
+                continue;
+            }
+
+            const std::string guid = !layer.motion_guid.empty()
+                ? layer.motion_guid : layer.composition_guid;
+            const ReplayEngine::Assets::AssetRecord* record = guid.empty()
+                ? nullptr : asset_database.FindByGuid(guid);
+            const char* source_label = record != nullptr
+                ? record->display_name.c_str() : (guid.empty() ? "Drop Motion / Composition here" : "Missing Asset");
+            ImGui::SetNextItemWidth(360.0f);
+            ImGui::Button(source_label, ImVec2(360.0f, 0.0f));
+            if (ImGui::BeginDragDropTarget())
+            {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("REPLAY_ASSET_GUID"))
+                {
+                    const char* dropped_guid = static_cast<const char*>(payload->Data);
+                    const ReplayEngine::Assets::AssetRecord* dropped =
+                        asset_database.FindByGuid(dropped_guid != nullptr ? dropped_guid : "");
+                    if (dropped != nullptr && dropped->kind == AssetKind::Motion)
+                    {
+                        layer.motion_guid = dropped->guid;
+                        layer.composition_guid.clear();
+                        motion_editor_dirty = true;
+                    }
+                    else if (dropped != nullptr && dropped->kind == AssetKind::Composition)
+                    {
+                        // 自分自身をPrecompへ入れると循環するのでEditor側でも防ぐ。
+                        if (dropped->guid != motion_editor_guid)
+                        {
+                            layer.composition_guid = dropped->guid;
+                            layer.motion_guid.clear();
+                            motion_editor_dirty = true;
+                        }
+                    }
+                }
+                ImGui::EndDragDropTarget();
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Clear"))
+            {
+                layer.motion_guid.clear();
+                layer.composition_guid.clear();
+                motion_editor_dirty = true;
+            }
+
+            float timing[3]{ layer.start_offset, layer.in_time, layer.out_time };
+            ImGui::SetNextItemWidth(360.0f);
+            if (ImGui::DragFloat3("Start / In / Out", timing, 0.01f, -3600.0f, 3600.0f, "%.3f"))
+            {
+                layer.start_offset = timing[0];
+                layer.in_time = (std::max)(0.0f, timing[1]);
+                layer.out_time = timing[2] < 0.0f ? -1.0f : (std::max)(layer.in_time, timing[2]);
+                motion_editor_dirty = true;
+            }
+            float playback[2]{ layer.time_scale, layer.weight };
+            ImGui::SetNextItemWidth(260.0f);
+            if (ImGui::DragFloat2("Time Scale / Weight", playback, 0.01f, -16.0f, 16.0f, "%.3f"))
+            {
+                layer.time_scale = playback[0] == 0.0f ? 0.0001f : playback[0];
+                layer.weight = (std::max)(0.0f, playback[1]);
+                motion_editor_dirty = true;
+            }
+            ImGui::Separator();
+            ImGui::PopID();
+        }
+
+        ImGui::Separator();
+        ImGui::TextUnformatted("Markers");
+        for (int i = 0; i < static_cast<int>(motion_editor_composition.markers.size()); ++i)
+        {
+            CompositionMarker& marker = motion_editor_composition.markers[i];
+            ImGui::PushID(100000 + i);
+            char marker_name[96]{};
+            strncpy_s(marker_name, sizeof(marker_name), marker.name.c_str(), _TRUNCATE);
+            ImGui::SetNextItemWidth(180.0f);
+            if (ImGui::InputText("##markerName", marker_name, IM_ARRAYSIZE(marker_name)))
+            {
+                marker.name = marker_name;
+                motion_editor_dirty = true;
+            }
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(110.0f);
+            if (ImGui::DragFloat("##markerTime", &marker.time, 0.01f, 0.0f,
+                motion_editor_composition.duration, "%.3fs"))
+            {
+                marker.time = (std::max)(0.0f,
+                    (std::min)(motion_editor_composition.duration, marker.time));
+                motion_editor_dirty = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("X"))
+            {
+                motion_editor_composition.markers.erase(
+                    motion_editor_composition.markers.begin() + i);
+                motion_editor_dirty = true;
+                ImGui::PopID();
+                --i;
+                continue;
+            }
+            ImGui::PopID();
+        }
     }
     else
     {

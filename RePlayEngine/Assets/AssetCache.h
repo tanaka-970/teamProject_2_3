@@ -42,7 +42,13 @@ namespace ReplayEngine::Assets
         EffectPreset,
 
         // .replayinput。Action / Binding のプロジェクト Asset。必ず末尾。
-        InputAction
+        InputAction,
+
+        // .replayatlas。名前付き Sprite Region / Pivot を持つ。既存値を壊さないよう必ず末尾。
+        SpriteAtlas,
+
+        // .replaycomp。Motion と分けて Inspector の候補を正確にする。必ず末尾。
+        Composition
     };
 
     struct AssetCacheEntry

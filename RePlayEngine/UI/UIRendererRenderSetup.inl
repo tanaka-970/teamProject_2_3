@@ -9,6 +9,8 @@
         constants.world_view_projection = states.world_view_projection;
         context->UpdateSubresource(constant_buffer_.Get(), 0, nullptr, &constants, 0, 0);
         render_target_pool_.BeginFrame();
+        ++render_serial_;
+        if ((render_serial_ & 63ull) == 0ull) PruneTemporalHistory();
 
         std::vector<Core::GameObject*> canvases;
         for (std::size_t index = 0; index < scene.GameObjectCount(); ++index)
@@ -106,6 +108,75 @@
             float scale, const DirectX::XMFLOAT4& uv_bounds)
         {
             emit_quad(rect, matrix, uv, color, scale, uv_bounds);
+        };
+
+
+        const auto resolve_image_source = [&](const UIImageComponent& image)
+        {
+            ResolvedImageSource source;
+            ResolveImageSource(image, asset_database, source);
+            return source;
+        };
+
+        const auto append_image_geometry = [this, &draw_target_height](
+            const DirectX::XMFLOAT4& rect, const DirectX::XMFLOAT4X4& matrix,
+            const DirectX::XMFLOAT4& uv, const DirectX::XMFLOAT4& color,
+            float scale, const UIPuppetDeformComponent* puppet, bool rotated)
+        {
+            const DirectX::XMFLOAT4 uv_bounds{
+                uv.x, uv.y, uv.x + uv.z, uv.y + uv.w };
+            const int columns = puppet != nullptr && puppet->enabled_deform
+                ? (std::max)(1, (std::min)(32, puppet->grid_columns)) : 1;
+            const int rows = puppet != nullptr && puppet->enabled_deform
+                ? (std::max)(1, (std::min)(32, puppet->grid_rows)) : 1;
+
+            const auto make_vertex = [&](float nx, float ny)
+            {
+                DirectX::XMFLOAT2 normalized{ nx, ny };
+                if (puppet != nullptr && puppet->enabled_deform)
+                    normalized = puppet->DeformNormalizedPoint(normalized);
+                const float local_x = rect.x + normalized.x * rect.z;
+                const float local_y = rect.y + normalized.y * rect.w;
+                const DirectX::XMFLOAT2 position = ToScreenPoint(
+                    TransformPoint(matrix, local_x, local_y), scale, draw_target_height);
+
+                DirectX::XMFLOAT2 texcoord{};
+                if (!rotated)
+                {
+                    texcoord = {
+                        uv.x + nx * uv.z,
+                        uv.y + (1.0f - ny) * uv.w };
+                }
+                else
+                {
+                    // Atlas packer が 90 度時計回りで格納した Region を元向きへ戻す。
+                    texcoord = {
+                        uv.x + ny * uv.z,
+                        uv.y + nx * uv.w };
+                }
+                return Vertex{ position, texcoord, { nx, 1.0f - ny }, color, uv_bounds };
+            };
+
+            for (int row = 0; row < rows; ++row)
+            {
+                const float y0 = static_cast<float>(row) / static_cast<float>(rows);
+                const float y1 = static_cast<float>(row + 1) / static_cast<float>(rows);
+                for (int column = 0; column < columns; ++column)
+                {
+                    const float x0 = static_cast<float>(column) / static_cast<float>(columns);
+                    const float x1 = static_cast<float>(column + 1) / static_cast<float>(columns);
+                    const Vertex p0 = make_vertex(x0, y0);
+                    const Vertex p1 = make_vertex(x1, y0);
+                    const Vertex p2 = make_vertex(x1, y1);
+                    const Vertex p3 = make_vertex(x0, y1);
+                    vertices_.push_back(p0);
+                    vertices_.push_back(p3);
+                    vertices_.push_back(p2);
+                    vertices_.push_back(p0);
+                    vertices_.push_back(p2);
+                    vertices_.push_back(p1);
+                }
+            }
         };
 
         const auto emit_quad_local =
@@ -399,6 +470,64 @@
                             3.0f * p2.y * u * tt + p3.y * ttt
                     });
                 }
+                break;
+            }
+            case UIShapeComponent::CustomBezierPath:
+            {
+                const std::size_t count = shape.path_points.size();
+                if (count < 2)
+                {
+                    closed = false;
+                    break;
+                }
+                closed = shape.path_closed && count >= 3;
+                const std::size_t segment_count = closed ? count : count - 1;
+                const auto to_rect = [&rect](const DirectX::XMFLOAT2& p)
+                {
+                    return DirectX::XMFLOAT2{
+                        rect.x + p.x * rect.z,
+                        rect.y + p.y * rect.w };
+                };
+                const auto handle_at = [](const std::vector<DirectX::XMFLOAT2>& values,
+                    std::size_t index)
+                {
+                    return index < values.size() ? values[index] : DirectX::XMFLOAT2{ 0.0f, 0.0f };
+                };
+                for (std::size_t segment = 0; segment < segment_count; ++segment)
+                {
+                    const std::size_t next = (segment + 1) % count;
+                    const DirectX::XMFLOAT2 a = shape.path_points[segment];
+                    const DirectX::XMFLOAT2 b = shape.path_points[next];
+                    const DirectX::XMFLOAT2 out_handle = handle_at(shape.path_out_handles, segment);
+                    const DirectX::XMFLOAT2 in_handle = handle_at(shape.path_in_handles, next);
+                    const DirectX::XMFLOAT2 p0 = to_rect(a);
+                    const DirectX::XMFLOAT2 p1 = to_rect({ a.x + out_handle.x, a.y + out_handle.y });
+                    const DirectX::XMFLOAT2 p2 = to_rect({ b.x + in_handle.x, b.y + in_handle.y });
+                    const DirectX::XMFLOAT2 p3 = to_rect(b);
+                    const float chord_pixels = local_distance(p0, p3) *
+                        (std::max)(0.0001f, std::fabs(scale));
+                    const int subdivisions = (std::max)(8, (std::min)(96,
+                        static_cast<int>(std::ceil(chord_pixels / 10.0f))));
+                    for (int step = segment == 0 ? 0 : 1; step <= subdivisions; ++step)
+                    {
+                        const float t = static_cast<float>(step) /
+                            static_cast<float>(subdivisions);
+                        const float u = 1.0f - t;
+                        const float uu = u * u;
+                        const float tt = t * t;
+                        const float uuu = uu * u;
+                        const float ttt = tt * t;
+                        shape_path.push_back({
+                            p0.x * uuu + 3.0f * p1.x * uu * t +
+                                3.0f * p2.x * u * tt + p3.x * ttt,
+                            p0.y * uuu + 3.0f * p1.y * uu * t +
+                                3.0f * p2.y * u * tt + p3.y * ttt });
+                    }
+                }
+                // Closed Path の最後と先頭が同一点なら stroke 側で二重線にならないよう除く。
+                if (closed && shape_path.size() > 1 &&
+                    local_distance(shape_path.front(), shape_path.back()) < 0.0001f)
+                    shape_path.pop_back();
                 break;
             }
             case UIShapeComponent::Superellipse:

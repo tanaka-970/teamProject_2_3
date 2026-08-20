@@ -1020,6 +1020,9 @@
     <ClCompile Include="RePlayEngine\Components\Motion\MotionPlayerComponent.cpp">
       <Filter>RePlayEngine\Components\Motion</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\Motion\CompositionPlayerComponent.cpp">
+      <Filter>RePlayEngine\Components\Motion</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Editor\Hierarchy\HierarchyPanel.cpp">
       <Filter>RePlayEngine\Editor\Hierarchy</Filter>
     </ClCompile>
@@ -1722,6 +1725,9 @@
       <Filter>RePlayEngine\Motion</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Components\Motion\MotionPlayerComponent.h">
+      <Filter>RePlayEngine\Components\Motion</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Motion\CompositionPlayerComponent.h">
       <Filter>RePlayEngine\Components\Motion</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Object\Component\MissingComponent.h">
@@ -2541,6 +2547,9 @@
     <ClCompile Include="Source\app\Editor\framework_project_browser_assets.cpp">
       <Filter>Source\App\Editor</Filter>
     </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_sprite_atlas_editor.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
     <ClCompile Include="Source\app\Editor\framework_project_browser_shader_creation.cpp">
       <Filter>Source\App\Editor</Filter>
     </ClCompile>
@@ -2561,6 +2570,15 @@
     </ClCompile>
     <ClCompile Include="RePlayEngine\Components\UI\UIImageComponent.cpp">
       <Filter>RePlayEngine\Components\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\UI\UIPuppetDeformComponent.cpp">
+      <Filter>RePlayEngine\Components\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\UI\UIShapeComponent.cpp">
+      <Filter>RePlayEngine\Components\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Assets\SpriteAtlasAsset.cpp">
+      <Filter>RePlayEngine\Assets</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Components\UI\UITextComponent.cpp">
       <Filter>RePlayEngine\Components\UI</Filter>
@@ -2609,6 +2627,15 @@
     </ClInclude>
     <ClInclude Include="RePlayEngine\Components\UI\UIImageComponent.h">
       <Filter>RePlayEngine\Components\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\UI\UIPuppetDeformComponent.h">
+      <Filter>RePlayEngine\Components\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\UI\UIShapeComponent.h">
+      <Filter>RePlayEngine\Components\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Assets\SpriteAtlasAsset.h">
+      <Filter>RePlayEngine\Assets</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Components\UI\UITextComponent.h">
       <Filter>RePlayEngine\Components\UI</Filter>
@@ -2773,6 +2800,36 @@
       <Filter>Shader</Filter>
     </FxCompile>
     <FxCompile Include="Shader\ui_effect_waveform.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_displacement_map.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_turbulent_displace.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_fractal_noise.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_motion_blur.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_echo.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_drop_shadow.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_inner_shadow.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_lut.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_tone_curve.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_matte_composite.hlsl">
       <Filter>Shader</Filter>
     </FxCompile>
     <FxCompile Include="Shader\line_stroke_vs.hlsl">

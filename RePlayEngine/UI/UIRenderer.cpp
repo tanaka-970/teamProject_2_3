@@ -7,6 +7,7 @@
 #include "UIRenderer.h"
 
 #include "../Assets/AssetDatabase.h"
+#include "../Components/UI/UIImageComponent.h"
 #include "../Rendering/Shaders/ShaderCatalog.h"
 #include "../../Source/core/shader.h"
 #include "../../Source/core/texture.h"
@@ -75,6 +76,10 @@ namespace ReplayEngine::UI
         render_target_pool_.Release();
         effect_chain_.Release();
         texture_cache_.clear();
+        sprite_atlas_cache_.clear();
+        for (auto& entry : temporal_history_cache_) entry.second.target.Release();
+        temporal_history_cache_.clear();
+        render_serial_ = 0;
         vertices_.clear();
         vertex_capacity_ = 0;
         white_texture_.Reset();
@@ -91,6 +96,42 @@ namespace ReplayEngine::UI
     void UIRenderer::ReleaseTransientTargets() noexcept
     {
         render_target_pool_.Release();
+    }
+
+    UIRenderer::TemporalHistoryEntry* UIRenderer::TemporalHistoryFor(
+        std::uint64_t owner_key, std::uint32_t width, std::uint32_t height)
+    {
+        if (device_ == nullptr || owner_key == 0 || width == 0 || height == 0) return nullptr;
+        // Preview と Game View が同一Objectを別解像度で描く場合でも履歴を混ぜない。
+        std::uint64_t key = owner_key;
+        key ^= static_cast<std::uint64_t>(width) * 0x9E3779B185EBCA87ull;
+        key ^= static_cast<std::uint64_t>(height) * 0xC2B2AE3D27D4EB4Full;
+        TemporalHistoryEntry& entry = temporal_history_cache_[key];
+        const bool size_changed = entry.target.width != width ||
+            entry.target.height != height || entry.target.format != DXGI_FORMAT_R8G8B8A8_UNORM;
+        if (!entry.target.Resize(device_.Get(), width, height, DXGI_FORMAT_R8G8B8A8_UNORM))
+        {
+            temporal_history_cache_.erase(key);
+            return nullptr;
+        }
+        if (size_changed) entry.valid = false;
+        entry.last_used_serial = render_serial_;
+        return &entry;
+    }
+
+    void UIRenderer::PruneTemporalHistory() noexcept
+    {
+        constexpr std::uint64_t keep_render_calls = 240;
+        for (auto it = temporal_history_cache_.begin(); it != temporal_history_cache_.end();)
+        {
+            const bool stale = render_serial_ > it->second.last_used_serial + keep_render_calls;
+            if (stale)
+            {
+                it->second.target.Release();
+                it = temporal_history_cache_.erase(it);
+            }
+            else ++it;
+        }
     }
 
     bool UIRenderer::EnsureVertexCapacity(ID3D11Device* device, std::size_t vertex_count)
@@ -122,6 +163,12 @@ namespace ReplayEngine::UI
         if (constant_buffer_) total += sizeof(Constants);
         if (visual_constant_buffer_) total += sizeof(VisualConstants);
         total += effect_chain_.AllocatedBufferBytes();
+        for (const auto& entry : temporal_history_cache_)
+        {
+            if (!entry.second.target.texture) continue;
+            total += static_cast<std::uint64_t>(entry.second.target.width) *
+                static_cast<std::uint64_t>(entry.second.target.height) * 4u;
+        }
         return total;
     }
 
@@ -135,6 +182,58 @@ namespace ReplayEngine::UI
             entry.second->GetResource(resource.GetAddressOf());
             if (resource) out.emplace_back(entry.first, resource.Get());
         }
+    }
+
+    bool UIRenderer::ResolveImageSource(const Components::UIImageComponent& image,
+        const Assets::AssetDatabase* asset_database, ResolvedImageSource& out)
+    {
+        out = ResolvedImageSource{};
+        out.texture_guid = image.sprite.guid;
+        out.uv = { image.uv_offset.x, image.uv_offset.y,
+            image.uv_scale.x, image.uv_scale.y };
+
+        if (image.atlas.guid.empty() || image.atlas_region.empty() ||
+            asset_database == nullptr)
+        {
+            return !out.texture_guid.empty();
+        }
+
+        const Assets::AssetRecord* record = asset_database->FindByGuid(image.atlas.guid);
+        if (record == nullptr || record->kind != Assets::AssetKind::SpriteAtlas)
+            return !out.texture_guid.empty();
+
+        const std::filesystem::path path =
+            record->cache_path.empty() ? record->source_path : record->cache_path;
+        std::error_code ec;
+        const std::filesystem::file_time_type timestamp =
+            std::filesystem::last_write_time(path, ec);
+        CachedSpriteAtlas& cached = sprite_atlas_cache_[image.atlas.guid];
+        if (!cached.loaded || cached.path != path || (!ec && cached.timestamp != timestamp))
+        {
+            Assets::SpriteAtlasAsset loaded;
+            std::string error;
+            if (!Assets::SpriteAtlasAsset::LoadFromFile(path, loaded, error))
+                return !out.texture_guid.empty();
+            cached.asset = std::move(loaded);
+            cached.path = path;
+            cached.timestamp = ec ? std::filesystem::file_time_type{} : timestamp;
+            cached.loaded = true;
+        }
+
+        const Assets::SpriteAtlasRegion* region = cached.asset.FindRegion(image.atlas_region);
+        if (region == nullptr || cached.asset.image_guid.empty())
+            return !out.texture_guid.empty();
+
+        out.texture_guid = cached.asset.image_guid;
+        out.uv = {
+            region->uv_rect.x + region->uv_rect.z * image.uv_offset.x,
+            region->uv_rect.y + region->uv_rect.w * image.uv_offset.y,
+            region->uv_rect.z * image.uv_scale.x,
+            region->uv_rect.w * image.uv_scale.y };
+        out.atlas_pivot = region->pivot;
+        out.rotated = region->rotated;
+        out.from_atlas = true;
+        return true;
     }
 
     ID3D11ShaderResourceView* UIRenderer::TextureFor(const std::string& guid,

@@ -5,6 +5,7 @@
 #include <wrl.h>
 
 #include "Effects/UIRenderTargetPool.h"
+#include "../Assets/SpriteAtlasAsset.h"
 #include "../Rendering/Effects/EffectChain.h"
 
 #include <array>
@@ -15,6 +16,7 @@
 #include <vector>
 
 namespace ReplayEngine::Assets { class AssetDatabase; }
+namespace ReplayEngine::Components { class UIImageComponent; }
 namespace ReplayEngine::Rendering { class ShaderCatalog; }
 namespace ReplayEngine::Scene { class Scene; }
 
@@ -151,7 +153,36 @@ namespace ReplayEngine::UI
             DirectX::XMFLOAT4 fill_stops{ 1.0f, -1.0f, -1.0f, 0.0f };
         };
 
+        struct ResolvedImageSource
+        {
+            std::string texture_guid;
+            DirectX::XMFLOAT4 uv{ 0.0f, 0.0f, 1.0f, 1.0f };
+            DirectX::XMFLOAT2 atlas_pivot{ 0.5f, 0.5f };
+            bool rotated = false;
+            bool from_atlas = false;
+        };
+
+        struct CachedSpriteAtlas
+        {
+            Assets::SpriteAtlasAsset asset;
+            std::filesystem::path path;
+            std::filesystem::file_time_type timestamp{};
+            bool loaded = false;
+        };
+
+        struct TemporalHistoryEntry
+        {
+            UIRenderTarget target;
+            std::uint64_t last_used_serial = 0;
+            bool valid = false;
+        };
+
         bool EnsureVertexCapacity(ID3D11Device* device, std::size_t vertex_count);
+        TemporalHistoryEntry* TemporalHistoryFor(std::uint64_t owner_key,
+            std::uint32_t width, std::uint32_t height);
+        void PruneTemporalHistory() noexcept;
+        bool ResolveImageSource(const Components::UIImageComponent& image,
+            const Assets::AssetDatabase* asset_database, ResolvedImageSource& out);
         ID3D11ShaderResourceView* TextureFor(const std::string& guid,
             const Assets::AssetDatabase* asset_database);
         void Flush(ID3D11DeviceContext* context, ID3D11ShaderResourceView* texture,
@@ -171,6 +202,9 @@ namespace ReplayEngine::UI
         VisualConstants visual_constants_{};
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> white_texture_;
         std::unordered_map<std::string, Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>> texture_cache_;
+        std::unordered_map<std::string, CachedSpriteAtlas> sprite_atlas_cache_;
+        std::unordered_map<std::uint64_t, TemporalHistoryEntry> temporal_history_cache_;
+        std::uint64_t render_serial_ = 0;
         std::vector<Vertex> vertices_;
         std::size_t vertex_capacity_ = 0;
         bool world_space_canvas_ = false;

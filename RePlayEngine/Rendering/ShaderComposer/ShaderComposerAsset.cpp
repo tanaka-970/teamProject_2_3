@@ -1,4 +1,4 @@
-#include "ShaderComposerAsset.h"
+﻿#include "ShaderComposerAsset.h"
 
 #include "../Shaders/ShaderSource.h"
 
@@ -43,6 +43,25 @@ namespace ReplayEngine::Rendering
         case ShaderComposerNodeKind::Dissolve: return "dissolve";
         case ShaderComposerNodeKind::SurfaceOutput: return "surface_output";
         case ShaderComposerNodeKind::LayerOutput: return "layer_output";
+        case ShaderComposerNodeKind::PixelSize: return "pixel_size";
+        case ShaderComposerNodeKind::AspectRatio: return "aspect_ratio";
+        case ShaderComposerNodeKind::Sin: return "sin";
+        case ShaderComposerNodeKind::Cos: return "cos";
+        case ShaderComposerNodeKind::Abs: return "abs";
+        case ShaderComposerNodeKind::Step: return "step";
+        case ShaderComposerNodeKind::Smoothstep: return "smoothstep";
+        case ShaderComposerNodeKind::Minimum: return "minimum";
+        case ShaderComposerNodeKind::Maximum: return "maximum";
+        case ShaderComposerNodeKind::Clamp: return "clamp";
+        case ShaderComposerNodeKind::Dot: return "dot";
+        case ShaderComposerNodeKind::Length: return "length";
+        case ShaderComposerNodeKind::OneMinus: return "one_minus";
+        case ShaderComposerNodeKind::Remap: return "remap";
+        case ShaderComposerNodeKind::RotateUV: return "rotate_uv";
+        case ShaderComposerNodeKind::PolarUV: return "polar_uv";
+        case ShaderComposerNodeKind::Component: return "component";
+        case ShaderComposerNodeKind::Combine4: return "combine4";
+        case ShaderComposerNodeKind::Gradient: return "gradient";
         default: return "float";
         }
     }
@@ -73,6 +92,25 @@ namespace ReplayEngine::Rendering
         REPLAY_NODE_PARSE(Dissolve, "dissolve")
         REPLAY_NODE_PARSE(SurfaceOutput, "surface_output")
         REPLAY_NODE_PARSE(LayerOutput, "layer_output")
+        REPLAY_NODE_PARSE(PixelSize, "pixel_size")
+        REPLAY_NODE_PARSE(AspectRatio, "aspect_ratio")
+        REPLAY_NODE_PARSE(Sin, "sin")
+        REPLAY_NODE_PARSE(Cos, "cos")
+        REPLAY_NODE_PARSE(Abs, "abs")
+        REPLAY_NODE_PARSE(Step, "step")
+        REPLAY_NODE_PARSE(Smoothstep, "smoothstep")
+        REPLAY_NODE_PARSE(Minimum, "minimum")
+        REPLAY_NODE_PARSE(Maximum, "maximum")
+        REPLAY_NODE_PARSE(Clamp, "clamp")
+        REPLAY_NODE_PARSE(Dot, "dot")
+        REPLAY_NODE_PARSE(Length, "length")
+        REPLAY_NODE_PARSE(OneMinus, "one_minus")
+        REPLAY_NODE_PARSE(Remap, "remap")
+        REPLAY_NODE_PARSE(RotateUV, "rotate_uv")
+        REPLAY_NODE_PARSE(PolarUV, "polar_uv")
+        REPLAY_NODE_PARSE(Component, "component")
+        REPLAY_NODE_PARSE(Combine4, "combine4")
+        REPLAY_NODE_PARSE(Gradient, "gradient")
 #undef REPLAY_NODE_PARSE
         return false;
     }
@@ -114,7 +152,8 @@ namespace ReplayEngine::Rendering
             case ShaderComposerNodeKind::Subtract:
             case ShaderComposerNodeKind::Multiply:
             case ShaderComposerNodeKind::Divide: return 2;
-            case ShaderComposerNodeKind::Lerp: return 3;
+            case ShaderComposerNodeKind::Lerp:
+            case ShaderComposerNodeKind::Gradient: return 3;
             case ShaderComposerNodeKind::Saturate: return 1;
             case ShaderComposerNodeKind::Power: return 2;
             case ShaderComposerNodeKind::Fresnel: return 3;
@@ -123,6 +162,27 @@ namespace ReplayEngine::Rendering
             case ShaderComposerNodeKind::Dissolve: return 3;
             case ShaderComposerNodeKind::SurfaceOutput: return 3;
             case ShaderComposerNodeKind::LayerOutput: return 1;
+            case ShaderComposerNodeKind::Sin:
+            case ShaderComposerNodeKind::Cos:
+            case ShaderComposerNodeKind::Abs:
+            case ShaderComposerNodeKind::Length:
+            case ShaderComposerNodeKind::OneMinus:
+            case ShaderComposerNodeKind::PolarUV:
+            case ShaderComposerNodeKind::Component:
+                return 1;
+            case ShaderComposerNodeKind::Step:
+            case ShaderComposerNodeKind::Minimum:
+            case ShaderComposerNodeKind::Maximum:
+            case ShaderComposerNodeKind::Dot:
+                return 2;
+            case ShaderComposerNodeKind::Smoothstep:
+            case ShaderComposerNodeKind::Clamp:
+            case ShaderComposerNodeKind::RotateUV:
+                return 3;
+            case ShaderComposerNodeKind::Remap:
+                return 5;
+            case ShaderComposerNodeKind::Combine4:
+                return 4;
             default: return 0;
             }
         }
@@ -159,6 +219,10 @@ namespace ReplayEngine::Rendering
             node.value = 4.0f; break;
         case ShaderComposerNodeKind::Dissolve:
             node.value = 0.5f; node.minimum = 0.02f; break;
+        case ShaderComposerNodeKind::Component:
+            node.value = 0.0f; break;
+        case ShaderComposerNodeKind::RotateUV:
+            node.vector2 = { 0.5f, 0.5f }; break;
         default: break;
         }
         nodes.push_back(std::move(node));
@@ -273,7 +337,7 @@ namespace ReplayEngine::Rendering
             asset.domain != ShaderDomain::Layer &&
             asset.domain != ShaderDomain::PostProcess)
         {
-            error = "Shader Composer v1 は surface / layer のみ対応です";
+            error = "Shader Composer domain が不正です";
             return false;
         }
         if (asset.nodes.empty() || asset.nodes.size() > 512 || asset.connections.size() > 2048)

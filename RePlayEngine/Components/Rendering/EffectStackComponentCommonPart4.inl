@@ -107,6 +107,72 @@
                     0.0, 0.5, 0.001);
                 add_seed();
                 break;
+            case UI::UIEffectKind::DisplacementMap:
+                push(MakeEffectProperty(i, "mask", Reflection::PropertyType::AssetReference,
+                    Reflection::Animatable::Step).Display("変位マップ").OfAssetType("Image"));
+                add_float("amount", "変位量", "マップのRGをXY変位として使う最大ピクセル量。", -512.0, 512.0, 0.1);
+                add_float("intensity", "適用量", "元画像から変位画像へ混ぜる割合。", 0.0, 1.0, 0.01);
+                push(MakeEffectProperty(i, "direction", Reflection::PropertyType::Vector2,
+                    Reflection::Animatable::Interpolatable).Display("XY 強度").Step(0.01));
+                break;
+            case UI::UIEffectKind::TurbulentDisplace:
+                add_float("amount", "変位量", "乱流で輪郭を動かす最大ピクセル量。", 0.0, 512.0, 0.1);
+                add_float("radius", "スケール", "乱流の大きさ。", 4.0, 2048.0, 0.1);
+                add_float("speed", "流れる速度", "乱流が時間方向へ流れる速度。", -32.0, 32.0, 0.01);
+                add_float("intensity", "適用量", "元画像との混合量。", 0.0, 1.0, 0.01);
+                add_seed();
+                break;
+            case UI::UIEffectKind::FractalNoise:
+                add_float("radius", "スケール", "ノイズの基本スケール。", 0.25, 64.0, 0.01);
+                add_float("amount", "オクターブ", "重ねるノイズ層数。", 1.0, 8.0, 1.0);
+                add_float("speed", "時間速度", "ノイズが変化する速度。", -16.0, 16.0, 0.01);
+                add_float("intensity", "適用量", "元画像とノイズ色の混合量。", 0.0, 1.0, 0.01);
+                add_color("暗部色", "ノイズ0側の色。");
+                add_named_color("color_2", "明部色", "ノイズ1側の色。");
+                add_seed();
+                break;
+            case UI::UIEffectKind::MotionBlur:
+                add_float("radius", "ブラー距離", "移動方向へ引く長さ（ピクセル）。", 0.0, 512.0, 0.1);
+                add_float("angle", "方向", "ブラー方向（度）。", -360.0, 360.0, 0.1);
+                add_float("intensity", "適用量", "元画像との混合量。", 0.0, 1.0, 0.01);
+                break;
+            case UI::UIEffectKind::Echo:
+                add_float("amount", "間隔", "残像1枚ごとの距離（ピクセル）。", -256.0, 256.0, 0.1);
+                add_float("angle", "方向", "残像が伸びる方向（度）。", -360.0, 360.0, 0.1);
+                add_float("radius", "枚数", "重ねる残像数。", 1.0, 16.0, 1.0);
+                add_float("intensity", "減衰", "後ろの残像ほど薄くなる強さ。", 0.0, 1.0, 0.01);
+                break;
+            case UI::UIEffectKind::DropShadow:
+                add_float("amount", "距離", "影をずらす距離（ピクセル）。", 0.0, 512.0, 0.1);
+                add_float("angle", "方向", "影の方向（度）。", -360.0, 360.0, 0.1);
+                add_float("radius", "ぼかし", "影のぼかし半径。", 0.0, 128.0, 0.1);
+                add_float("intensity", "濃さ", "影の不透明度。", 0.0, 2.0, 0.01);
+                add_color("影色", "影へ使う色。");
+                break;
+            case UI::UIEffectKind::InnerShadow:
+                add_float("amount", "距離", "内側影のずれ（ピクセル）。", 0.0, 256.0, 0.1);
+                add_float("angle", "方向", "内側影の方向（度）。", -360.0, 360.0, 0.1);
+                add_float("radius", "ぼかし", "内側影のぼかし半径。", 0.0, 128.0, 0.1);
+                add_float("intensity", "濃さ", "内側影の不透明度。", 0.0, 2.0, 0.01);
+                add_color("影色", "内側影へ使う色。");
+                break;
+            case UI::UIEffectKind::LUT:
+                push(MakeEffectProperty(i, "mask", Reflection::PropertyType::AssetReference,
+                    Reflection::Animatable::Step).Display("LUT Texture").OfAssetType("Image"));
+                add_float("radius", "LUT サイズ", "2D strip LUT の1辺。通常16/32/64。", 2.0, 64.0, 1.0);
+                add_float("intensity", "適用量", "元色からLUT色へ混ぜる割合。", 0.0, 1.0, 0.01);
+                break;
+            case UI::UIEffectKind::ToneCurve:
+                add_float("radius", "Lift", "暗部の持ち上げ/押し下げ。", -1.0, 1.0, 0.001);
+                add_float("intensity", "Gamma", "中間調のガンマ。1が無変更。", 0.05, 8.0, 0.001);
+                add_float("threshold", "Gain", "明部のゲイン。1が無変更。", 0.0, 4.0, 0.001);
+                add_float("amount", "適用量", "補正前後の混合量。", 0.0, 1.0, 0.01);
+                break;
+            case UI::UIEffectKind::MatteComposite:
+                push(MakeEffectProperty(i, "mask", Reflection::PropertyType::AssetReference,
+                    Reflection::Animatable::Step).Display("Matte B").OfAssetType("Image"));
+                add_float("amount", "演算", "0=Add / 1=Subtract / 2=Intersect。", 0.0, 2.0, 1.0);
+                break;
             default:
                 break;
             }

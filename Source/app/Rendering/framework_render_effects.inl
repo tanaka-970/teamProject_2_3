@@ -38,7 +38,8 @@
                 layer_source->srv.Get(),
                 camera_pass.screen_effect->EffectiveEffects(&asset_database),
                 layer_width, layer_height, DXGI_FORMAT_R16G16B16A16_FLOAT,
-                shader_composer_time);
+                shader_composer_time, static_cast<std::uint64_t>(
+                    reinterpret_cast<std::uintptr_t>(camera_pass.screen_effect)));
 
             immediate_context->OMSetRenderTargets(1,
                 framebuffers[0]->render_target_view.GetAddressOf(),
@@ -190,7 +191,8 @@
         {
             before_result = apply_scene_effect_chain(effect_source, screen_effect->EffectiveEffects(&asset_database),
                 effect_width, effect_height, DXGI_FORMAT_R16G16B16A16_FLOAT,
-                shader_composer_time);
+                shader_composer_time, static_cast<std::uint64_t>(
+                    reinterpret_cast<std::uintptr_t>(screen_effect)));
             if (before_result != nullptr)
             {
                 if (full_viewport)
@@ -257,7 +259,8 @@ post_process.Execute(immediate_context.Get(), *bit_block_transfer,
             ReplayEngine::UI::UIRenderTarget* effected = apply_scene_effect_chain(
                 post_target->srv.Get(), screen_effect->EffectiveEffects(&asset_database),
                 effect_width, effect_height, DXGI_FORMAT_R8G8B8A8_UNORM,
-                shader_composer_time);
+                shader_composer_time, static_cast<std::uint64_t>(
+                    reinterpret_cast<std::uintptr_t>(screen_effect)));
 
             immediate_context->OMSetRenderTargets(1, render_target_view.GetAddressOf(), nullptr);
 

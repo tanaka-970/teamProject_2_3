@@ -360,7 +360,8 @@ void framework::draw_model_effect_stacks(const D3D11_VIEWPORT& camera_viewport)
 
         ReplayEngine::UI::UIRenderTarget* effected = apply_scene_effect_chain(
             cropped_target->srv.Get(), effect->EffectiveEffects(&asset_database), rect.Width(), rect.Height(),
-            DXGI_FORMAT_R16G16B16A16_FLOAT, shader_composer_time);
+            DXGI_FORMAT_R16G16B16A16_FLOAT, shader_composer_time,
+            static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(effect)));
         ID3D11ShaderResourceView* result =
             effected != nullptr ? effected->srv.Get() : cropped_target->srv.Get();
 

@@ -247,8 +247,29 @@
         };
 
         const auto apply_effect_passes = [&](const UIEffectStackComponent& effects,
-            UIRenderTarget*& current, UIRenderTarget* first, UIRenderTarget* second)
+            UIRenderTarget*& current, UIRenderTarget* first, UIRenderTarget* second,
+            ID3D11ShaderResourceView* runtime_mask_texture = nullptr,
+            bool runtime_mask_luma = false, bool runtime_mask_invert = false)
         {
+            const std::vector<UIEffect>& effective_effects =
+                effects.EffectiveEffects(asset_database);
+            bool needs_temporal_history = false;
+            for (const UIEffect& effect : effective_effects)
+            {
+                if (!effect.enabled) continue;
+                const UIEffectKind kind = static_cast<UIEffectKind>(effect.kind);
+                if (kind == UIEffectKind::MotionBlur || kind == UIEffectKind::Echo)
+                {
+                    needs_temporal_history = true;
+                    break;
+                }
+            }
+            const std::uint64_t temporal_owner_key = static_cast<std::uint64_t>(
+                reinterpret_cast<std::uintptr_t>(&effects));
+            TemporalHistoryEntry* history = needs_temporal_history && current != nullptr
+                ? TemporalHistoryFor(temporal_owner_key, current->width, current->height)
+                : nullptr;
+
             Rendering::Effects::EffectChain::Context chain_context{};
             chain_context.device_context = context;
             chain_context.asset_database = asset_database;
@@ -264,6 +285,11 @@
                 // Texture cache / white fallback は従来どおり UIRenderer が一元所有する。
                 return TextureFor(guid, asset_database);
             };
+            chain_context.runtime_mask_texture = runtime_mask_texture;
+            chain_context.runtime_mask_luma = runtime_mask_luma;
+            chain_context.runtime_mask_invert = runtime_mask_invert;
+            chain_context.runtime_history_texture = history != nullptr && history->valid
+                ? history->target.srv.Get() : nullptr;
             chain_context.configure_target = [&](UIRenderTarget& target)
             {
                 configure_effect_target(target);
@@ -292,8 +318,17 @@
                 Flush(context, source, blend, states, nullptr,
                     shader, effect_constants);
             };
-            current = effect_chain_.Apply(chain_context, effects.EffectiveEffects(asset_database),
+            current = effect_chain_.Apply(chain_context, effective_effects,
                 current, first, second);
+            if (history != nullptr && current != nullptr && current->texture &&
+                history->target.texture)
+            {
+                // CopyResource 前に EffectChain が t0/t1 を解除している。前回の最終結果を
+                // 保存するため Echo は再帰的な時間残像になり、MotionBlur は前後フレームを混ぜられる。
+                context->CopyResource(history->target.texture.Get(), current->texture.Get());
+                history->valid = true;
+                history->last_used_serial = render_serial_;
+            }
         };
 
         // UI の論理座標から、現在の描画先（Scene View の offset / zoom を含む）の

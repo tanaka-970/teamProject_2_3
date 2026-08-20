@@ -78,7 +78,17 @@ namespace ReplayEngine::Core::Detail
                 MakeProperty("sprite", &UIImageComponent::sprite)
                     .Display("画像").OfAssetType("Image")
                     .Animation(Animatable::Step)
-                    .Tooltip("AssetDatabase の Image GUID です。未指定なら白矩形で描きます。"));
+                    .Tooltip("AssetDatabase の Image GUID です。Atlas 未指定時に使います。"));
+            PropertyRegistry::Register<UIImageComponent>(
+                MakeProperty("atlas", &UIImageComponent::atlas)
+                    .Display("Sprite Atlas").OfAssetType("SpriteAtlas")
+                    .Animation(Animatable::Step)
+                    .Tooltip("不均一 Sprite Atlas。指定時は Region の Image/UV/Pivot を使います。"));
+            PropertyRegistry::Register<UIImageComponent>(
+                MakeProperty("atlas_region", &UIImageComponent::atlas_region)
+                    .Display("Atlas Region")
+                    .Animation(Animatable::Step)
+                    .Tooltip("Sprite Atlas 内の名前付き Region。Motion の Step Key で差し替えできます。"));
             PropertyRegistry::Register<UIImageComponent>(
                 MakeProperty("color", &UIImageComponent::color)
                     .Display("色").AsColor());
@@ -321,7 +331,7 @@ namespace ReplayEngine::Core::Detail
                 MakeProperty("shape", &UIShapeComponent::shape)
                     .Display("形")
                     .AsEnum({ "矩形", "円", "線", "多角形", "ベジェ",
-                        "スーパー楕円", "極座標式" })
+                        "スーパー楕円", "極座標式", "自由ベジェ Path" })
                     .Animation(Animatable::Step));
             PropertyRegistry::Register<UIShapeComponent>(
                 MakeProperty("fill_color", &UIShapeComponent::fill_color)
@@ -437,6 +447,52 @@ namespace ReplayEngine::Core::Detail
             PropertyRegistry::Register<UIShapeComponent>(
                 MakeProperty("dash_offset", &UIShapeComponent::dash_offset)
                     .Display("破線オフセット").Step(0.5));
+            PropertyRegistry::Register<UIShapeComponent>(
+                MakeProperty("path_closed", &UIShapeComponent::path_closed)
+                    .Display("Path を閉じる")
+                    .Tooltip("自由ベジェ Path の末尾と先頭を接続します。"));
+            PropertyRegistry::Register<UIShapeComponent>(
+                MakeProperty("path_points", &UIShapeComponent::path_points)
+                    .Display("Path Anchor")
+                    .Tooltip("正規化 0..1 の Anchor 配列。配列追加/削除は既存 Inspector を使います。"));
+            PropertyRegistry::Register<UIShapeComponent>(
+                MakeProperty("path_in_handles", &UIShapeComponent::path_in_handles)
+                    .Display("Path 入力 Handle")
+                    .Advanced());
+            PropertyRegistry::Register<UIShapeComponent>(
+                MakeProperty("path_out_handles", &UIShapeComponent::path_out_handles)
+                    .Display("Path 出力 Handle")
+                    .Advanced());
+
+            ComponentRegistry::Register<UIPuppetDeformComponent>(
+                ComponentTypeInfo::Describe("Puppet Deform", "UI")
+                    .WithTooltip("Image を格子 Mesh に細分化し、Pin を Motion から動かして髪・腕・服を局所変形します。")
+                    .Requires<RectTransformComponent>()
+                    .Recommends<UIImageComponent>()
+                    .InModule("RePlayEngine.BuiltIn"));
+            PropertyRegistry::Register<UIPuppetDeformComponent>(
+                MakeProperty("enabled_deform", &UIPuppetDeformComponent::enabled_deform)
+                    .Display("変形を有効"));
+            PropertyRegistry::Register<UIPuppetDeformComponent>(
+                MakeProperty("grid_columns", &UIPuppetDeformComponent::grid_columns)
+                    .Display("Mesh 列数").Range(1.0, 32.0).Step(1.0));
+            PropertyRegistry::Register<UIPuppetDeformComponent>(
+                MakeProperty("grid_rows", &UIPuppetDeformComponent::grid_rows)
+                    .Display("Mesh 行数").Range(1.0, 32.0).Step(1.0));
+            PropertyRegistry::Register<UIPuppetDeformComponent>(
+                MakeProperty("global_strength", &UIPuppetDeformComponent::global_strength)
+                    .Display("全体強度").Range(-4.0, 4.0).Step(0.001)
+                    .Animation(Animatable::Interpolatable));
+            PropertyRegistry::Register<UIPuppetDeformComponent>(
+                MakeProperty("pin_bind_positions", &UIPuppetDeformComponent::pin_bind_positions)
+                    .Display("Pin 基準位置").Advanced());
+            PropertyRegistry::Register<UIPuppetDeformComponent>(
+                MakeProperty("pin_positions", &UIPuppetDeformComponent::pin_positions)
+                    .Display("Pin 位置")
+                    .Tooltip("配列要素を増やすと Pin が増えます。各 Pin は Dynamic Property として Motion に露出します。"));
+            PropertyRegistry::Register<UIPuppetDeformComponent>(
+                MakeProperty("pin_radii", &UIPuppetDeformComponent::pin_radii)
+                    .Display("Pin 影響半径").Advanced());
 
             ComponentRegistry::Register<UIButtonComponent>(
                 ComponentTypeInfo::Describe("Button", "UI")
@@ -586,11 +642,27 @@ namespace ReplayEngine::Core::Detail
             PropertyRegistry::Register<UIMaskComponent>(
                 MakeProperty("mask_mode", &UIMaskComponent::mask_mode)
                     .Display("マスク方式")
-                    .AsEnum({ "矩形", "画像", "形状" })
+                    .AsEnum({ "矩形", "画像", "形状", "Object Alpha", "Object Luma" })
                     .Animation(Animatable::Step));
             PropertyRegistry::Register<UIMaskComponent>(
                 MakeProperty("mask_image", &UIMaskComponent::mask_image)
                     .Display("マスク画像").OfAssetType("Image"));
+            PropertyRegistry::Register<UIMaskComponent>(
+                MakeProperty("mask_object", &UIMaskComponent::mask_object)
+                    .Display("Track Matte Object")
+                    .Tooltip("Object Alpha/Luma で最初の Matte に使う GameObject。"));
+            PropertyRegistry::Register<UIMaskComponent>(
+                MakeProperty("matte_objects", &UIMaskComponent::matte_objects)
+                    .Display("追加 Track Matte")
+                    .Tooltip("2個目以降の Matte。matte_operations と同じ順番で使います。"));
+            PropertyRegistry::Register<UIMaskComponent>(
+                MakeProperty("matte_operations", &UIMaskComponent::matte_operations)
+                    .Display("Matte 演算")
+                    .HiddenInEditor()
+                    .Tooltip("保存用配列。Inspectorでは各 Track Matte の Add/Subtract/Intersect として表示します。"));
+            PropertyRegistry::Register<UIMaskComponent>(
+                MakeProperty("invert", &UIMaskComponent::invert)
+                    .Display("反転").Animation(Animatable::Step));
             PropertyRegistry::Register<UIMaskComponent>(
                 MakeProperty("softness", &UIMaskComponent::softness)
                     .Display("境界の柔らかさ").Range(0.0, 1.0).Step(0.01)
@@ -622,6 +694,12 @@ namespace ReplayEngine::Core::Detail
             PropertyRegistry::Register<UIEffectStackComponent>(
                 MakeProperty("enabled", &UIEffectStackComponent::enabled)
                     .Display("有効").Animation(Animatable::Step));
+            PropertyRegistry::Register<UIEffectStackComponent>(
+                MakeProperty("target_scope", &UIEffectStackComponent::target_scope)
+                    .Display("適用対象")
+                    .AsEnum({ "自分だけ", "子階層をまとめる (Precompose)" })
+                    .Animation(Animatable::Step)
+                    .Tooltip("Subtree は親以下を一度 RT に合成して Effect を 1 回だけ適用します。"));
             PropertyRegistry::Register<UIEffectStackComponent>(
                 MakeProperty("capture_backdrop", &UIEffectStackComponent::capture_backdrop)
                     .Display("背景を取り込む").Animation(Animatable::Step)

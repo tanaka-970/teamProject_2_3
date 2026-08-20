@@ -13,6 +13,8 @@
 #include "../../RePlayEngine/Components/UI/UITextComponent.h"
 #include "../../RePlayEngine/Components/UI/UIButtonComponent.h"
 #include "../../RePlayEngine/Components/UI/UIMaskComponent.h"
+#include "../../RePlayEngine/Components/UI/UIPuppetDeformComponent.h"
+#include "../../RePlayEngine/Components/UI/UIShapeComponent.h"
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
 #include "../../RePlayEngine/Scene/Runtime/Scene.h"
 #include "../../RePlayEngine/UI/UILayout.h"
@@ -25,6 +27,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstddef>
 #include <filesystem>
 #include <functional>
 #include <string>
@@ -53,6 +56,8 @@
     using ReplayEngine::Components::UITextComponent;
     using ReplayEngine::Components::UIButtonComponent;
     using ReplayEngine::Components::UIMaskComponent;
+    using ReplayEngine::Components::UIPuppetDeformComponent;
+    using ReplayEngine::Components::UIShapeComponent;
     namespace Assets = ReplayEngine::Assets;
     namespace Core = ReplayEngine::Core;
     namespace Scene = ReplayEngine::Scene;
@@ -479,6 +484,50 @@ void framework::draw_ui_inspector()
         return;
     }
 
+    // Backspace/Delete は「いま直接編集している細部」を最優先する。
+    // テキスト入力中は文字編集へ渡し、その次に Puppet Pin、Bezier Point の順。
+    const bool ui_delete_pressed = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
+        !ImGui::GetIO().WantTextInput && object_editor_context.CanEdit() &&
+        ImGui::IsKeyPressed(VK_BACK);
+    if (ui_delete_pressed)
+    {
+        if (UIPuppetDeformComponent* puppet = selected->GetComponent<UIPuppetDeformComponent>();
+            puppet != nullptr && ui_puppet_selected_pin >= 0 &&
+            ui_puppet_selected_pin < puppet->PinCount())
+        {
+            const int index = ui_puppet_selected_pin;
+            const std::size_t i = static_cast<std::size_t>(index);
+            object_editor_context.BeginEdit("Puppet Pinを削除");
+            puppet->pin_positions.erase(puppet->pin_positions.begin() + static_cast<std::ptrdiff_t>(i));
+            if (i < puppet->pin_bind_positions.size())
+                puppet->pin_bind_positions.erase(puppet->pin_bind_positions.begin() + static_cast<std::ptrdiff_t>(i));
+            if (i < puppet->pin_radii.size())
+                puppet->pin_radii.erase(puppet->pin_radii.begin() + static_cast<std::ptrdiff_t>(i));
+            puppet->OnPropertyChanged("pin_positions");
+            ui_puppet_selected_pin = puppet->PinCount() > 0
+                ? (std::min)(index, puppet->PinCount() - 1) : -1;
+            object_editor_context.CommitEdit();
+        }
+        else if (UIShapeComponent* shape = selected->GetComponent<UIShapeComponent>();
+            shape != nullptr && shape->shape == UIShapeComponent::CustomBezierPath &&
+            ui_shape_selected_point >= 0 &&
+            ui_shape_selected_point < static_cast<int>(shape->path_points.size()))
+        {
+            const int index = ui_shape_selected_point;
+            const std::size_t i = static_cast<std::size_t>(index);
+            object_editor_context.BeginEdit("Bezier Pointを削除");
+            shape->path_points.erase(shape->path_points.begin() + static_cast<std::ptrdiff_t>(i));
+            if (i < shape->path_in_handles.size())
+                shape->path_in_handles.erase(shape->path_in_handles.begin() + static_cast<std::ptrdiff_t>(i));
+            if (i < shape->path_out_handles.size())
+                shape->path_out_handles.erase(shape->path_out_handles.begin() + static_cast<std::ptrdiff_t>(i));
+            shape->OnPropertyChanged("path_points");
+            ui_shape_selected_point = shape->path_points.empty() ? -1 :
+                (std::min)(index, static_cast<int>(shape->path_points.size()) - 1);
+            object_editor_context.CommitEdit();
+        }
+    }
+
     if (RectTransformComponent* rect = selected->GetComponent<RectTransformComponent>())
     {
         ImGui::TextDisabled("アンカー");
@@ -500,6 +549,234 @@ void framework::draw_ui_inspector()
         preset("中央", { 0.5f, 0.5f }, { 0.5f, 0.5f }, { 0.5f, 0.5f });
         ImGui::SameLine();
         preset("全体", { 0.0f, 0.0f }, { 1.0f, 1.0f }, { 0.5f, 0.5f });
+        ImGui::Separator();
+    }
+
+    if (UIPuppetDeformComponent* puppet = selected->GetComponent<UIPuppetDeformComponent>())
+    {
+        ImGui::TextDisabled("Puppet Deform 編集");
+        ImGui::Text("Pins: %d", puppet->PinCount());
+        if (ImGui::Button("Pin を追加") && object_editor_context.CanEdit())
+        {
+            object_editor_context.BeginEdit("Puppet Pinを追加");
+            const int old_count = puppet->PinCount();
+            puppet->SetPinCount(old_count + 1);
+            if (puppet->PinCount() > old_count)
+            {
+                const float offset = static_cast<float>(old_count % 5) * 0.035f;
+                const DirectX::XMFLOAT2 position{ 0.5f + offset, 0.5f + offset };
+                puppet->pin_positions[static_cast<std::size_t>(old_count)] = position;
+                puppet->pin_bind_positions[static_cast<std::size_t>(old_count)] = position;
+                ui_puppet_selected_pin = old_count;
+            }
+            object_editor_context.CommitEdit();
+        }
+        ImGui::SameLine();
+        const bool can_remove_pin = puppet->PinCount() > 0 && object_editor_context.CanEdit();
+        if (!can_remove_pin) BeginDisabledCompat();
+        if (ImGui::Button("選択 Pin を削除") && can_remove_pin)
+        {
+            int index = ui_puppet_selected_pin;
+            if (index < 0 || index >= puppet->PinCount()) index = puppet->PinCount() - 1;
+            object_editor_context.BeginEdit("Puppet Pinを削除");
+            const std::size_t i = static_cast<std::size_t>(index);
+            puppet->pin_positions.erase(puppet->pin_positions.begin() + static_cast<std::ptrdiff_t>(i));
+            if (i < puppet->pin_bind_positions.size())
+                puppet->pin_bind_positions.erase(puppet->pin_bind_positions.begin() + static_cast<std::ptrdiff_t>(i));
+            if (i < puppet->pin_radii.size())
+                puppet->pin_radii.erase(puppet->pin_radii.begin() + static_cast<std::ptrdiff_t>(i));
+            puppet->OnPropertyChanged("pin_positions");
+            ui_puppet_selected_pin = puppet->PinCount() > 0
+                ? (std::min)(index, puppet->PinCount() - 1) : -1;
+            object_editor_context.CommitEdit();
+        }
+        if (!can_remove_pin) EndDisabledCompat();
+
+        if (puppet->PinCount() > 0)
+        {
+            int selected_pin = ui_puppet_selected_pin;
+            if (selected_pin < 0 || selected_pin >= puppet->PinCount()) selected_pin = 0;
+            if (ImGui::SliderInt("選択 Pin", &selected_pin, 0, puppet->PinCount() - 1))
+                ui_puppet_selected_pin = selected_pin;
+        }
+        if (puppet->PinCount() > 0)
+        {
+            int selected_pin = ui_puppet_selected_pin;
+            if (selected_pin < 0 || selected_pin >= puppet->PinCount()) selected_pin = 0;
+            const std::size_t pin_index = static_cast<std::size_t>(selected_pin);
+            if (pin_index < puppet->pin_radii.size())
+            {
+                float radius = puppet->pin_radii[pin_index];
+                const bool radius_changed = ImGui::DragFloat(
+                    "選択 Pin 半径", &radius, 0.005f, 0.001f, 4.0f, "%.3f");
+                if (radius_changed && object_editor_context.CanEdit())
+                {
+                    if (!ui_puppet_radius_editing)
+                    {
+                        object_editor_context.BeginEdit("Puppet Pin半径を変更");
+                        ui_puppet_radius_editing = true;
+                    }
+                    puppet->pin_radii[pin_index] = (std::max)(0.001f, radius);
+                }
+                if (ImGui::IsItemDeactivated() && ui_puppet_radius_editing)
+                {
+                    object_editor_context.CommitEdit();
+                    ui_puppet_radius_editing = false;
+                }
+            }
+        }
+        if (ImGui::Button("現在形状を Bind Pose にする") && object_editor_context.CanEdit())
+        {
+            object_editor_context.BeginEdit("Puppet Bind Poseを更新");
+            puppet->pin_bind_positions = puppet->pin_positions;
+            puppet->OnPropertyChanged("pin_bind_positions");
+            object_editor_context.CommitEdit();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Bind Pose に戻す") && object_editor_context.CanEdit())
+        {
+            object_editor_context.BeginEdit("PuppetをBind Poseへ戻す");
+            puppet->pin_positions = puppet->pin_bind_positions;
+            puppet->OnPropertyChanged("pin_positions");
+            object_editor_context.CommitEdit();
+        }
+        ImGui::Separator();
+    }
+
+    if (UIShapeComponent* shape = selected->GetComponent<UIShapeComponent>();
+        shape != nullptr && shape->shape == UIShapeComponent::CustomBezierPath)
+    {
+        ImGui::TextDisabled("Custom Bezier Path 編集");
+        ImGui::Text("Points: %d", static_cast<int>(shape->path_points.size()));
+        if (ImGui::Button("Point を追加") && object_editor_context.CanEdit())
+        {
+            object_editor_context.BeginEdit("Bezier Pointを追加");
+            const int old_count = static_cast<int>(shape->path_points.size());
+            shape->SetPathPointCount(old_count + 1);
+            if (static_cast<int>(shape->path_points.size()) > old_count)
+            {
+                DirectX::XMFLOAT2 position{ 0.5f, 0.5f };
+                if (old_count > 0)
+                {
+                    const DirectX::XMFLOAT2 previous = shape->path_points[static_cast<std::size_t>(old_count - 1)];
+                    position = { (std::min)(1.0f, previous.x + 0.1f), previous.y };
+                }
+                shape->path_points[static_cast<std::size_t>(old_count)] = position;
+                ui_shape_selected_point = old_count;
+                shape->OnPropertyChanged("path_points");
+            }
+            object_editor_context.CommitEdit();
+        }
+        ImGui::SameLine();
+        const bool can_insert_point = !shape->path_points.empty() && object_editor_context.CanEdit();
+        if (!can_insert_point) BeginDisabledCompat();
+        if (ImGui::Button("選択の後へ挿入") && can_insert_point)
+        {
+            int index = ui_shape_selected_point;
+            if (index < 0 || index >= static_cast<int>(shape->path_points.size()))
+                index = static_cast<int>(shape->path_points.size()) - 1;
+            const std::size_t insert_at = static_cast<std::size_t>(index + 1);
+            const std::size_t next_index = shape->path_closed
+                ? insert_at % shape->path_points.size()
+                : (std::min)(insert_at, shape->path_points.size() - 1);
+            const DirectX::XMFLOAT2 a = shape->path_points[static_cast<std::size_t>(index)];
+            const DirectX::XMFLOAT2 b = shape->path_points[next_index];
+            const DirectX::XMFLOAT2 midpoint{ (a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f };
+            object_editor_context.BeginEdit("Bezier Pointを挿入");
+            shape->path_points.insert(shape->path_points.begin() +
+                static_cast<std::ptrdiff_t>(insert_at), midpoint);
+            const std::size_t in_at = (std::min)(insert_at, shape->path_in_handles.size());
+            const std::size_t out_at = (std::min)(insert_at, shape->path_out_handles.size());
+            shape->path_in_handles.insert(shape->path_in_handles.begin() +
+                static_cast<std::ptrdiff_t>(in_at), DirectX::XMFLOAT2{});
+            shape->path_out_handles.insert(shape->path_out_handles.begin() +
+                static_cast<std::ptrdiff_t>(out_at), DirectX::XMFLOAT2{});
+            shape->OnPropertyChanged("path_points");
+            ui_shape_selected_point = static_cast<int>(insert_at);
+            object_editor_context.CommitEdit();
+        }
+        if (!can_insert_point) EndDisabledCompat();
+        ImGui::SameLine();
+        const bool can_remove_point = !shape->path_points.empty() && object_editor_context.CanEdit();
+        if (!can_remove_point) BeginDisabledCompat();
+        if (ImGui::Button("選択 Point を削除") && can_remove_point)
+        {
+            int index = ui_shape_selected_point;
+            if (index < 0 || index >= static_cast<int>(shape->path_points.size()))
+                index = static_cast<int>(shape->path_points.size()) - 1;
+            object_editor_context.BeginEdit("Bezier Pointを削除");
+            const std::size_t i = static_cast<std::size_t>(index);
+            shape->path_points.erase(shape->path_points.begin() + static_cast<std::ptrdiff_t>(i));
+            if (i < shape->path_in_handles.size())
+                shape->path_in_handles.erase(shape->path_in_handles.begin() + static_cast<std::ptrdiff_t>(i));
+            if (i < shape->path_out_handles.size())
+                shape->path_out_handles.erase(shape->path_out_handles.begin() + static_cast<std::ptrdiff_t>(i));
+            shape->OnPropertyChanged("path_points");
+            ui_shape_selected_point = shape->path_points.empty() ? -1 :
+                (std::min)(index, static_cast<int>(shape->path_points.size()) - 1);
+            object_editor_context.CommitEdit();
+        }
+        if (!can_remove_point) EndDisabledCompat();
+        if (!shape->path_points.empty())
+        {
+            int selected_point = ui_shape_selected_point;
+            if (selected_point < 0 || selected_point >= static_cast<int>(shape->path_points.size()))
+                selected_point = 0;
+            if (ImGui::SliderInt("選択 Point", &selected_point, 0,
+                static_cast<int>(shape->path_points.size()) - 1))
+                ui_shape_selected_point = selected_point;
+        }
+        ImGui::Separator();
+    }
+
+    if (UIMaskComponent* mask = selected->GetComponent<UIMaskComponent>();
+        mask != nullptr && (mask->mask_mode == UIMaskComponent::ObjectAlpha ||
+            mask->mask_mode == UIMaskComponent::ObjectLuma))
+    {
+        ImGui::TextDisabled("Track Matte 編集");
+        ImGui::Text("Primary + Extra: %d",
+            1 + static_cast<int>(mask->matte_objects.size()));
+        if (ImGui::Button("Matte を追加") && object_editor_context.CanEdit())
+        {
+            object_editor_context.BeginEdit("Track Matteを追加");
+            mask->matte_objects.push_back({});
+            mask->matte_operations.push_back(UIMaskComponent::MatteAdd);
+            mask->OnPropertyChanged("matte_objects");
+            ui_mask_selected_matte = static_cast<int>(mask->matte_objects.size()) - 1;
+            object_editor_context.CommitEdit();
+        }
+        ImGui::SameLine();
+        const bool can_remove_matte = !mask->matte_objects.empty() &&
+            object_editor_context.CanEdit();
+        if (!can_remove_matte) BeginDisabledCompat();
+        if (ImGui::Button("選択 Extra Matte を削除") && can_remove_matte)
+        {
+            int index = ui_mask_selected_matte;
+            if (index < 0 || index >= static_cast<int>(mask->matte_objects.size()))
+                index = static_cast<int>(mask->matte_objects.size()) - 1;
+            const std::size_t i = static_cast<std::size_t>(index);
+            object_editor_context.BeginEdit("Track Matteを削除");
+            mask->matte_objects.erase(mask->matte_objects.begin() +
+                static_cast<std::ptrdiff_t>(i));
+            if (i < mask->matte_operations.size())
+                mask->matte_operations.erase(mask->matte_operations.begin() +
+                    static_cast<std::ptrdiff_t>(i));
+            mask->OnPropertyChanged("matte_objects");
+            ui_mask_selected_matte = mask->matte_objects.empty() ? -1 :
+                (std::min)(index, static_cast<int>(mask->matte_objects.size()) - 1);
+            object_editor_context.CommitEdit();
+        }
+        if (!can_remove_matte) EndDisabledCompat();
+        if (!mask->matte_objects.empty())
+        {
+            int selected_matte = ui_mask_selected_matte;
+            if (selected_matte < 0 ||
+                selected_matte >= static_cast<int>(mask->matte_objects.size()))
+                selected_matte = 0;
+            if (ImGui::SliderInt("選択 Extra Matte", &selected_matte, 0,
+                static_cast<int>(mask->matte_objects.size()) - 1))
+                ui_mask_selected_matte = selected_matte;
+        }
         ImGui::Separator();
     }
 

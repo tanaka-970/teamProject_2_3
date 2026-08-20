@@ -149,7 +149,7 @@
         const auto render_image_effect_with_backdrop = [&](
             const UIEffectStackComponent& effects, UIImageComponent& image,
             const RectTransformComponent& rect, float scale, float opacity,
-            const D3D11_RECT* scissor)
+            const D3D11_RECT* scissor, const UIPuppetDeformComponent* puppet)
         {
             if (!image.ActiveInHierarchy() || image.opacity <= 0.0f ||
                 image.fill_amount <= 0.0f)
@@ -161,8 +161,8 @@
                 scissor, [&](const DirectX::XMFLOAT4& draw_rect, float capture_scale)
                 {
                     DirectX::XMFLOAT4 source = draw_rect;
-                    DirectX::XMFLOAT4 uv{ image.uv_offset.x, image.uv_offset.y,
-                        image.uv_scale.x, image.uv_scale.y };
+                    const ResolvedImageSource resolved = resolve_image_source(image);
+                    DirectX::XMFLOAT4 uv = resolved.uv;
                     const float fill = (std::min)((std::max)(image.fill_amount, 0.0f),
                         1.0f);
                     if (image.fill_method == UIImageComponent::Horizontal)
@@ -177,13 +177,31 @@
                     }
                     DirectX::XMFLOAT4X4 identity{};
                     DirectX::XMStoreFloat4x4(&identity, DirectX::XMMatrixIdentity());
-                    append_quad(source, identity, uv,
-                        MultiplyAlpha(image.color, image.opacity * opacity), capture_scale);
+                    append_image_geometry(source, identity, uv,
+                        MultiplyAlpha(image.color, image.opacity * opacity), capture_scale,
+                        puppet, resolved.rotated);
                     configure_visual(image.fill_color_2, image.fill_mode, image.fill_angle,
                         image.fill_center, image.stroke_color_2, image.stroke_mode,
                         false, 0.0f, {}, {}, {});
-                    Flush(context, TextureFor(image.sprite.guid, asset_database),
+                    Flush(context, TextureFor(resolved.texture_guid, asset_database),
                         BlendForImage(image, states), states, nullptr);
+                });
+        };
+
+        const auto render_shape_effect_with_backdrop = [&] (
+            const UIEffectStackComponent& effects, UIShapeComponent& shape,
+            const RectTransformComponent& rect, float scale, float opacity,
+            const D3D11_RECT* scissor)
+        {
+            if (!shape.ActiveInHierarchy() || opacity <= 0.0f) return false;
+            const DirectX::XMFLOAT4 source_rect = rect.ResolvedRect();
+            return render_effect_with_backdrop(effects, rect, source_rect, scale,
+                scissor, [&](const DirectX::XMFLOAT4& draw_rect, float capture_scale)
+                {
+                    DirectX::XMFLOAT4X4 identity{};
+                    DirectX::XMStoreFloat4x4(&identity, DirectX::XMMatrixIdentity());
+                    render_shape_geometry(shape, draw_rect, identity, capture_scale,
+                        opacity, nullptr);
                 });
         };
 
@@ -213,7 +231,8 @@
 
         const auto render_effect_preview = [&](const UIEffectStackComponent& effects,
             UIImageComponent& image, const RectTransformComponent& rect, float scale,
-            float opacity, const D3D11_RECT* scissor)
+            float opacity, const D3D11_RECT* scissor,
+            const UIPuppetDeformComponent* puppet)
         {
             if (!effects.HasActiveEffects(asset_database) || !image.ActiveInHierarchy() ||
                 image.opacity <= 0.0f || image.fill_amount <= 0.0f)
@@ -268,8 +287,8 @@
                 expansion.y,
                 source_rect.z,
                 source_rect.w };
-            DirectX::XMFLOAT4 uv{ image.uv_offset.x, image.uv_offset.y,
-                image.uv_scale.x, image.uv_scale.y };
+            const ResolvedImageSource resolved = resolve_image_source(image);
+            DirectX::XMFLOAT4 uv = resolved.uv;
             const float fill = (std::min)((std::max)(image.fill_amount, 0.0f), 1.0f);
             if (image.fill_method == UIImageComponent::Horizontal)
             {
@@ -284,12 +303,13 @@
 
             DirectX::XMFLOAT4X4 identity{};
             DirectX::XMStoreFloat4x4(&identity, DirectX::XMMatrixIdentity());
-            append_quad(draw_rect, identity, uv,
-                MultiplyAlpha(image.color, image.opacity * opacity), scale);
+            append_image_geometry(draw_rect, identity, uv,
+                MultiplyAlpha(image.color, image.opacity * opacity), scale,
+                puppet, resolved.rotated);
             configure_visual(image.fill_color_2, image.fill_mode, image.fill_angle,
                 image.fill_center, image.stroke_color_2, image.stroke_mode,
                 false, 0.0f, {}, {}, {});
-            Flush(context, TextureFor(image.sprite.guid, asset_database),
+            Flush(context, TextureFor(resolved.texture_guid, asset_database),
                 states.blend_alpha, states, nullptr);
 
             ID3D11ShaderResourceView* null_srv = nullptr;
@@ -319,6 +339,77 @@
                 false, 0.0f, {}, {}, {});
             Flush(context, current->srv.Get(), BlendForImage(image, states),
                 states, scissor);
+            return true;
+        };
+
+        const auto render_shape_effect_preview = [&] (
+            const UIEffectStackComponent& effects, UIShapeComponent& shape,
+            const RectTransformComponent& rect, float scale, float opacity,
+            const D3D11_RECT* scissor)
+        {
+            if (!effects.HasActiveEffects(asset_database) ||
+                !shape.ActiveInHierarchy() || opacity <= 0.0f)
+                return false;
+
+            const DirectX::XMFLOAT4 source_rect = rect.ResolvedRect();
+            const DirectX::XMFLOAT4 expansion = effects.ExpandBounds(
+                source_rect.z * scale, source_rect.w * scale, asset_database);
+            const float inverse_scale = 1.0f / (std::max)(0.0001f, scale);
+            const float expand_left = expansion.x * inverse_scale;
+            const float expand_top = expansion.y * inverse_scale;
+            const float expand_right = expansion.z * inverse_scale;
+            const float expand_bottom = expansion.w * inverse_scale;
+            const float expanded_width = (std::max)(1.0f,
+                source_rect.z + expand_left + expand_right);
+            const float expanded_height = (std::max)(1.0f,
+                source_rect.w + expand_top + expand_bottom);
+            const std::uint32_t rt_width = static_cast<std::uint32_t>(
+                std::ceil((std::max)(1.0f, expanded_width * scale)));
+            const std::uint32_t rt_height = static_cast<std::uint32_t>(
+                std::ceil((std::max)(1.0f, expanded_height * scale)));
+            UIRenderTarget* target = render_target_pool_.Acquire(rt_width, rt_height);
+            UIRenderTarget* scratch = render_target_pool_.Acquire(rt_width, rt_height);
+            if (target == nullptr || scratch == nullptr || !target->rtv || !target->srv ||
+                !scratch->rtv || !scratch->srv)
+                return false;
+
+            ID3D11RenderTargetView* previous_rtv = nullptr;
+            ID3D11DepthStencilView* previous_dsv = nullptr;
+            context->OMGetRenderTargets(1, &previous_rtv, &previous_dsv);
+            UINT viewport_count = 1;
+            D3D11_VIEWPORT previous_viewport{};
+            context->RSGetViewports(&viewport_count, &previous_viewport);
+            const FLOAT clear[4]{ 0.0f, 0.0f, 0.0f, 0.0f };
+            configure_effect_target(*target);
+            context->ClearRenderTargetView(target->rtv.Get(), clear);
+
+            DirectX::XMFLOAT4 draw_rect{
+                expansion.x, expansion.y, source_rect.z, source_rect.w };
+            DirectX::XMFLOAT4X4 identity{};
+            DirectX::XMStoreFloat4x4(&identity, DirectX::XMMatrixIdentity());
+            render_shape_geometry(shape, draw_rect, identity, scale, opacity, nullptr);
+
+            ID3D11ShaderResourceView* null_srv = nullptr;
+            context->PSSetShaderResources(0, 1, &null_srv);
+            UIRenderTarget* current = target;
+            apply_effect_passes(effects, current, target, scratch);
+
+            context->OMSetRenderTargets(1, &previous_rtv, previous_dsv);
+            if (viewport_count > 0) context->RSSetViewports(1, &previous_viewport);
+            if (previous_rtv != nullptr) previous_rtv->Release();
+            if (previous_dsv != nullptr) previous_dsv->Release();
+            constants.screen_size = { screen_width, screen_height, 0.0f, 0.0f };
+            context->UpdateSubresource(constant_buffer_.Get(), 0, nullptr, &constants, 0, 0);
+            draw_target_height = screen_height;
+
+            DirectX::XMFLOAT4 composite_rect{
+                source_rect.x - expand_left, source_rect.y - expand_top,
+                expanded_width, expanded_height };
+            append_quad(composite_rect, rect.ResolvedMatrix(),
+                { 0.0f, 0.0f, 1.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, scale);
+            configure_visual({}, 0, 0.0f, { 0.5f, 0.5f }, {}, 0,
+                false, 0.0f, {}, {}, {});
+            Flush(context, current->srv.Get(), states.blend_alpha, states, scissor);
             return true;
         };
 

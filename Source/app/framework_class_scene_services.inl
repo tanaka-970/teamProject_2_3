@@ -61,7 +61,7 @@
         ID3D11ShaderResourceView* source,
         const std::vector<ReplayEngine::UI::UIEffect>& effects,
         std::uint32_t width, std::uint32_t height, DXGI_FORMAT format,
-        float effect_time);
+        float effect_time, std::uint64_t temporal_owner_key = 0);
     void begin_scene_effect_frame() noexcept;
     void draw_model_effect_stacks(const D3D11_VIEWPORT& camera_viewport);
     // LandscapeRendererComponent 用の procedural static mesh 描画。
@@ -76,6 +76,8 @@
     void update_object_camera_follow(float elapsed_time);
     void refresh_object_scene_services();
     const ReplayEngine::Motion::MotionAsset* resolve_motion_asset(
+        const std::string& asset_guid);
+    const ReplayEngine::Motion::CompositionAsset* resolve_composition_asset(
         const std::string& asset_guid);
     void prepare_material_motion_bindings(ReplayEngine::Scene::Scene& scene);
     void prepare_ui_effect_shader_schemas(ReplayEngine::Scene::Scene& scene);
@@ -201,6 +203,8 @@
         skinned_mesh& mesh, const ReplayEngine::Rendering::RenderItem& item,
         skinned_mesh::animation::keyframe& blended_keyframe) const;
     void draw_project_panel();
+    bool ensure_ui_preview_render_target(int width, int height);
+    void render_ui_preview_target();
 
     // --- Project ブラウザ (Unity 型 2 ペイン) ------------------------------
     // 左にフォルダツリー、右にそのフォルダの中身。
@@ -213,6 +217,16 @@
     bool project_create_csharp_behaviour(const std::string& class_name);
     bool project_create_material(const std::string& name);
     bool project_create_motion(const std::string& name);
+    bool project_create_composition(const std::string& name);
+    bool project_create_sprite_atlas(const std::string& name);
+    bool open_sprite_atlas_asset(const ReplayEngine::Assets::AssetRecord& asset);
+    bool save_current_sprite_atlas();
+    void draw_sprite_atlas_editor();
+    void begin_sprite_atlas_edit(const std::string& label);
+    void commit_sprite_atlas_edit();
+    void cancel_sprite_atlas_edit();
+    bool undo_sprite_atlas_edit();
+    bool redo_sprite_atlas_edit();
     bool project_create_scene_flow(const std::string& name);
     bool project_create_localization(const std::string& name);
     bool project_create_effect_preset(const std::string& name);
@@ -224,6 +238,16 @@
         ReplayEngine::Rendering::ShaderDomain domain);
     bool project_rename_entry(const std::filesystem::path& path,
         const std::string& new_name);
+    bool project_move_entry(const std::filesystem::path& path,
+        const std::filesystem::path& destination_folder);
+    bool project_duplicate_entry(const std::filesystem::path& path);
+    void project_show_in_explorer(const std::filesystem::path& path);
+    void project_copy_path(const std::filesystem::path& path, bool absolute);
+    void project_record_created_path(const std::filesystem::path& path,
+        const std::string& label);
+    void project_apply_external_history_change();
+    void project_notify_path_relocated(const std::filesystem::path& from,
+        const std::filesystem::path& to);
     void project_request_delete(const std::filesystem::path& path);
     void draw_project_delete_popup();
     bool project_delete_confirmed();

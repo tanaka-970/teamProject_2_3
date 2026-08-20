@@ -14,7 +14,9 @@
 #include <cctype>
 #include <cstring>
 #include <filesystem>
+#include <functional>
 #include <string>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -26,7 +28,7 @@ using namespace framework_motion_workspace::Detail;
 bool framework::open_motion_asset(const ReplayEngine::Assets::AssetRecord& asset)
 {
     using ReplayEngine::Assets::AssetKind;
-    if (asset.kind != AssetKind::Motion) return false;
+    if (asset.kind != AssetKind::Motion && asset.kind != AssetKind::Composition) return false;
 
     stop_motion_preview();
     const std::string extension = Lower(asset.source_path.extension().u8string());
@@ -49,6 +51,8 @@ bool framework::open_motion_asset(const ReplayEngine::Assets::AssetRecord& asset
         motion_editor_path = asset.source_path;
         motion_editor_dirty = false;
         motion_edit_history.Clear();
+        composition_asset_cache[motion_editor_guid] = motion_editor_composition;
+        composition_asset_load_failures.erase(motion_editor_guid);
         set_editor_workspace(editor_workspace::motion);
         motion_editor_status = "Compositionを開きました: " + asset.display_name;
         return true;
@@ -70,6 +74,7 @@ bool framework::open_motion_asset(const ReplayEngine::Assets::AssetRecord& asset
     motion_editor_dirty = false;
     motion_selected_track = motion_editor_asset.tracks.empty() ? -1 : 0;
     motion_selected_key = -1;
+    motion_selected_keys.clear();
     motion_selected_event_track = -1;
     motion_selected_event = -1;
     motion_preview_time = 0.0f;
@@ -83,6 +88,39 @@ bool framework::open_motion_asset(const ReplayEngine::Assets::AssetRecord& asset
 
 bool framework::save_current_motion_asset()
 {
+    if (motion_composition_loaded)
+    {
+        if (motion_editor_path.empty())
+        {
+            motion_editor_status = "保存する Composition のパスがありません。";
+            return false;
+        }
+        std::string error;
+        if (!ReplayEngine::Motion::CompositionAsset::SaveToFile(
+            motion_editor_path, motion_editor_composition, error))
+        {
+            motion_editor_status = error;
+            push_editor_log("Warning", error, motion_editor_path);
+            return false;
+        }
+        const ReplayEngine::Assets::AssetRecord& record = asset_database.Register(
+            motion_editor_path, ReplayEngine::Assets::AssetKind::Composition);
+        motion_editor_guid = record.guid;
+        composition_asset_cache[motion_editor_guid] = motion_editor_composition;
+        composition_asset_load_failures.erase(motion_editor_guid);
+        std::string save_error;
+        if (!asset_database.Save(save_error))
+        {
+            motion_editor_status = "Composition は保存しましたが AssetDatabase 保存に失敗: " + save_error;
+            push_editor_log("Warning", motion_editor_status, motion_editor_path);
+            return false;
+        }
+        selected_asset_guid = motion_editor_guid;
+        motion_editor_dirty = false;
+        motion_editor_status = "Compositionを保存しました: " + motion_editor_path.filename().u8string();
+        return true;
+    }
+
     if (!motion_editor_loaded)
     {
         motion_editor_status = "保存する Motion Asset がありません。";
@@ -133,6 +171,7 @@ bool framework::undo_motion_edit()
         ? -1 : (std::min)(motion_selected_track,
             static_cast<int>(motion_editor_asset.tracks.size()) - 1);
     motion_selected_key = -1;
+    motion_selected_keys.clear();
     motion_selected_event_track = -1;
     motion_selected_event = -1;
     motion_editor_dirty = true;
@@ -152,6 +191,7 @@ bool framework::redo_motion_edit()
         ? -1 : (std::min)(motion_selected_track,
             static_cast<int>(motion_editor_asset.tracks.size()) - 1);
     motion_selected_key = -1;
+    motion_selected_keys.clear();
     motion_selected_event_track = -1;
     motion_selected_event = -1;
     motion_editor_dirty = true;
@@ -187,11 +227,10 @@ void framework::capture_motion_preview_targets()
     ReplayEngine::Scene::Scene* scene = object_editor_context.GetScene();
     if (scene == nullptr) return;
 
-    for (const MotionTrack& track : motion_editor_asset.tracks)
+    auto capture_track = [&](const MotionTrack& track)
     {
         Component* component = ResolveBindingComponent(*scene, track.binding);
-        if (component == nullptr || component->Owner() == nullptr) continue;
-
+        if (component == nullptr || component->Owner() == nullptr) return;
         const auto exists = std::find_if(motion_preview_captures.begin(),
             motion_preview_captures.end(),
             [component](const MotionPreviewCapture& capture)
@@ -199,30 +238,107 @@ void framework::capture_motion_preview_targets()
                 return capture.object == component->Owner()->ID() &&
                     capture.component == component->StableID();
             });
-        if (exists != motion_preview_captures.end()) continue;
-
+        if (exists != motion_preview_captures.end()) return;
         MotionPreviewCapture capture;
         capture.object = component->Owner()->ID();
         capture.component = component->StableID();
         PropertyRegistry::Capture(*component, capture.properties);
         motion_preview_captures.push_back(std::move(capture));
+    };
+
+    if (motion_editor_loaded)
+    {
+        for (const MotionTrack& track : motion_editor_asset.tracks) capture_track(track);
+        return;
     }
+
+    if (!motion_composition_loaded) return;
+    std::unordered_set<std::string> recursion;
+    std::function<void(const ReplayEngine::Motion::CompositionAsset&, int)> collect;
+    collect = [&](const ReplayEngine::Motion::CompositionAsset& composition, int depth)
+    {
+        if (depth > 16) return;
+        for (const auto& layer : composition.layers)
+        {
+            if (!layer.motion_guid.empty())
+            {
+                const auto* motion = resolve_motion_asset(layer.motion_guid);
+                if (motion != nullptr)
+                    for (const MotionTrack& track : motion->tracks) capture_track(track);
+            }
+            else if (!layer.composition_guid.empty() &&
+                recursion.insert(layer.composition_guid).second)
+            {
+                const auto* nested = resolve_composition_asset(layer.composition_guid);
+                if (nested != nullptr) collect(*nested, depth + 1);
+                recursion.erase(layer.composition_guid);
+            }
+        }
+    };
+    collect(motion_editor_composition, 0);
 }
 
 void framework::apply_motion_preview_time()
 {
     ReplayEngine::Scene::Scene* scene = object_editor_context.GetScene();
-    if (scene == nullptr || !motion_editor_loaded) return;
+    if (scene == nullptr || (!motion_editor_loaded && !motion_composition_loaded)) return;
     if (motion_preview_captures.empty()) capture_motion_preview_targets();
 
     motion_mixer.BeginFrame();
-    for (const MotionTrack& track : motion_editor_asset.tracks)
+    if (motion_editor_loaded)
     {
-        PropertyValue value;
-        if (!MotionEvaluator::EvaluateTrack(track, motion_preview_time, value)) continue;
-        const ReplayEngine::Motion::ResolvedMotionBinding binding =
-            ReplayEngine::Motion::MotionBindingResolver::Resolve(*scene, track.binding);
-        motion_mixer.Contribute(binding, value, 1.0f, track.blend_mode);
+        for (const MotionTrack& track : motion_editor_asset.tracks)
+        {
+            PropertyValue value;
+            if (!MotionEvaluator::EvaluateTrack(track, motion_preview_time, value)) continue;
+            const ReplayEngine::Motion::ResolvedMotionBinding binding =
+                ReplayEngine::Motion::MotionBindingResolver::Resolve(*scene, track.binding);
+            motion_mixer.Contribute(binding, value, 1.0f, track.blend_mode);
+        }
+        motion_mixer.Apply();
+        return;
     }
+
+    std::unordered_set<std::string> recursion;
+    std::function<void(const ReplayEngine::Motion::CompositionAsset&, float, float, int)> apply;
+    apply = [&](const ReplayEngine::Motion::CompositionAsset& composition,
+        float composition_time, float parent_weight, int depth)
+    {
+        if (depth > 16 || parent_weight <= 0.0f) return;
+        for (const auto& layer : composition.layers)
+        {
+            if (!layer.enabled || layer.weight <= 0.0f || composition_time < layer.in_time ||
+                (layer.out_time >= 0.0f && composition_time > layer.out_time)) continue;
+            const float source_time = (composition_time - layer.start_offset) * layer.time_scale;
+            const float weight = parent_weight * layer.weight;
+            if (!layer.motion_guid.empty())
+            {
+                const auto* motion = resolve_motion_asset(layer.motion_guid);
+                if (motion == nullptr) continue;
+                const float t = (std::max)(0.0f, (std::min)(motion->duration, source_time));
+                for (const MotionTrack& track : motion->tracks)
+                {
+                    PropertyValue value;
+                    if (!MotionEvaluator::EvaluateTrack(track, t, value)) continue;
+                    const auto binding = ReplayEngine::Motion::MotionBindingResolver::Resolve(
+                        *scene, track.binding);
+                    motion_mixer.Contribute(binding, value, weight, track.blend_mode);
+                }
+            }
+            else if (!layer.composition_guid.empty() &&
+                recursion.insert(layer.composition_guid).second)
+            {
+                const auto* nested = resolve_composition_asset(layer.composition_guid);
+                if (nested != nullptr)
+                {
+                    const float t = (std::max)(0.0f,
+                        (std::min)(nested->duration, source_time));
+                    apply(*nested, t, weight, depth + 1);
+                }
+                recursion.erase(layer.composition_guid);
+            }
+        }
+    };
+    apply(motion_editor_composition, motion_preview_time, 1.0f, 0);
     motion_mixer.Apply();
 }
