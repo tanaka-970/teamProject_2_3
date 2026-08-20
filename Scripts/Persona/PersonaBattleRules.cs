@@ -1,4 +1,6 @@
-﻿namespace Game;
+﻿using ReplayEngine;
+
+namespace Game;
 
 public enum PersonaBattleState
 {
