@@ -171,6 +171,8 @@ public:
     ReplayEngine::Motion::MotionMixer motion_mixer;
     std::unordered_map<std::string, ReplayEngine::Motion::MotionAsset> motion_asset_cache;
     std::unordered_set<std::string> motion_asset_load_failures;
+    std::unordered_map<std::string, ReplayEngine::Motion::CompositionAsset> composition_asset_cache;
+    std::unordered_set<std::string> composition_asset_load_failures;
     ReplayEngine::Assets::AsyncAssetManager async_asset_manager;
 
     // プロジェクト設定。Default Controlled Character Prefab を持つ。

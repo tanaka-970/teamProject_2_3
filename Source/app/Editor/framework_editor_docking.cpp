@@ -152,6 +152,7 @@ void framework::draw_editor()
     draw_object_scene_recovery_prompt();
     draw_unsaved_object_scene_prompt();
     draw_export_game_dialog();
+    draw_sprite_atlas_editor();
 
     if (active_editor_workspace == editor_workspace::ui)
     {

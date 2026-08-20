@@ -53,7 +53,7 @@ bool framework::project_create_layer_shader(const std::string& name)
         return false;
     }
 
-    std::filesystem::path path = UniqueProjectPath(folder, safe, ".hlsl");
+    std::filesystem::path path = UniqueProjectPath(folder, safe, ".hlsl", &asset_database);
 
     std::string picker_category = "Project";
     const std::filesystem::path layers_root = root / "Shader" / "Layers";
@@ -93,6 +93,7 @@ bool framework::project_create_layer_shader(const std::string& name)
     if (report.compile_failed != 0)
         project_browser_status += " (compile error は Shader Catalog で確認)";
     push_editor_log("Info", project_browser_status, path, 1);
+    project_record_created_path(path, "Layer Shader を作成");
     return true;
 }
 
@@ -105,15 +106,19 @@ bool framework::project_create_shader_composer(const std::string& name,
     using ReplayEngine::Rendering::ShaderComposerGenerator;
     using ReplayEngine::Rendering::ShaderDomain;
 
-    if (domain != ShaderDomain::Surface && domain != ShaderDomain::Layer)
+    if (domain != ShaderDomain::Surface && domain != ShaderDomain::Layer &&
+        domain != ShaderDomain::PostProcess)
     {
-        project_browser_status = "Shader Composer v1 は Surface / Layer のみ対応です";
+        project_browser_status = "Shader Composer domain が不正です";
         return false;
     }
 
     const std::string safe = SafeProjectFileName(
-        name.empty() ? (domain == ShaderDomain::Layer ? std::string("NewLayerGraph")
-                                                   : std::string("NewShaderGraph")) : name);
+        name.empty()
+            ? (domain == ShaderDomain::Layer ? std::string("NewLayerGraph")
+                : domain == ShaderDomain::PostProcess ? std::string("NewPostProcessGraph")
+                : std::string("NewShaderGraph"))
+            : name);
     std::error_code ec;
     const std::filesystem::path root = std::filesystem::current_path(ec);
     if (ec)
@@ -136,8 +141,12 @@ bool framework::project_create_shader_composer(const std::string& name,
     std::filesystem::path graph_path = graph_folder /
         (safe + ShaderComposerAsset::file_extension);
     int suffix = 2;
-    while (std::filesystem::exists(graph_path) && suffix < 10000)
-        graph_path = graph_folder / (safe + std::to_string(suffix++) + ShaderComposerAsset::file_extension);
+    while ((std::filesystem::exists(graph_path) || asset_database.FindByPath(graph_path) != nullptr) &&
+        suffix < 10000)
+    {
+        graph_path = graph_folder /
+            (safe + std::to_string(suffix++) + ShaderComposerAsset::file_extension);
+    }
 
     const std::string generated_stem = graph_path.stem().u8string();
     ShaderComposerAsset graph = ShaderComposerAsset::CreateDefault(
@@ -147,7 +156,9 @@ bool framework::project_create_shader_composer(const std::string& name,
     const std::filesystem::path generated_relative =
         (domain == ShaderDomain::Layer
             ? std::filesystem::path("Shader") / "Layers" / "Generated"
-            : std::filesystem::path("Shader") / "Materials" / "Generated") /
+            : domain == ShaderDomain::PostProcess
+                ? std::filesystem::path("Shader") / "PostProcess" / "Generated"
+                : std::filesystem::path("Shader") / "Materials" / "Generated") /
         (generated_stem + "_" + short_id + ".hlsl");
     graph.generated_hlsl = generated_relative;
     std::string error;
@@ -179,6 +190,7 @@ bool framework::project_create_shader_composer(const std::string& name,
     if (report.compile_failed != 0)
         project_browser_status += " (compile error は Shader Catalog で確認)";
     push_editor_log("Info", project_browser_status, graph_path, 1);
+    project_record_created_path(graph_path, "Shader Composer を作成");
     return true;
 }
 

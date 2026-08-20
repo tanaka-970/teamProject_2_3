@@ -146,7 +146,7 @@ namespace ReplayEngine::Rendering
                 if (asset.domain != ShaderDomain::Surface &&
                     asset.domain != ShaderDomain::Layer &&
                     asset.domain != ShaderDomain::PostProcess)
-                    AddError(0, "Composer v1 は Surface / Layer のみ対応です");
+                    AddError(0, "Composer domain は Surface / Layer / PostProcess に対応します");
                 if (asset.lighting_model != ShaderLightingModel::Unlit)
                     AddError(0, "Composer v1 の custom output は Unlit のみ対応です。PBR/Toon graph output は次世代で追加します");
 

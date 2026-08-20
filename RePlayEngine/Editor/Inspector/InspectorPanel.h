@@ -68,6 +68,11 @@ namespace ReplayEngine::Editor
         Core::Component* pending_removal_ = nullptr;
         std::string pending_removal_label_;
 
+        // Component header を選択して Backspace で削除するための安定参照。
+        // 生ポインタは Undo/Redo や Component コンテナ再配置で無効化され得るので保持しない。
+        unsigned long long selected_component_owner_ = 0;
+        Core::ComponentStableID selected_component_stable_ = Core::invalid_component_stable_id;
+
         // 名前入力欄の一時バッファ。編集中の GameObject が変わったら作り直す。
         static constexpr int name_buffer_size = 256;
         char name_buffer_[name_buffer_size]{};

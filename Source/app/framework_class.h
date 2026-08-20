@@ -43,6 +43,7 @@
 #include "../../RePlayEngine/Rendering/Shaders/ShaderLibrary.h"
 #include "../../RePlayEngine/Rendering/Capture/GoldenImage.h"
 #include "../../RePlayEngine/Assets/AssetDatabase.h"
+#include "../../RePlayEngine/Assets/SpriteAtlasAsset.h"
 #include "../../RePlayEngine/Assets/AsyncAssetManager.h"
 #include "../../RePlayEngine/Assets/ConcurrentResourceCache.h"
 #include "../../RePlayEngine/Core/ObjectID/RuntimeIdentity.h"

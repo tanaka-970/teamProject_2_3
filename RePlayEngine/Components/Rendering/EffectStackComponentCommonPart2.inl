@@ -91,6 +91,65 @@
                 effect.threshold = 0.15f;
                 effect.waveform = 0;
                 break;
+            case UI::UIEffectKind::DisplacementMap:
+                effect.amount = 24.0f;
+                effect.intensity = 1.0f;
+                effect.direction = { 1.0f, 1.0f };
+                break;
+            case UI::UIEffectKind::TurbulentDisplace:
+                effect.amount = 18.0f;
+                effect.radius = 180.0f;
+                effect.speed = 0.8f;
+                effect.intensity = 1.0f;
+                effect.seed = 1.0f;
+                break;
+            case UI::UIEffectKind::FractalNoise:
+                effect.radius = 5.0f;
+                effect.amount = 4.0f;
+                effect.speed = 0.25f;
+                effect.intensity = 1.0f;
+                effect.seed = 1.0f;
+                effect.color = { 0.0f, 0.0f, 0.0f, 1.0f };
+                effect.color_2 = { 1.0f, 1.0f, 1.0f, 1.0f };
+                break;
+            case UI::UIEffectKind::MotionBlur:
+                effect.radius = 24.0f;
+                effect.angle = 0.0f;
+                effect.intensity = 1.0f;
+                break;
+            case UI::UIEffectKind::Echo:
+                effect.amount = 18.0f;
+                effect.angle = 0.0f;
+                effect.radius = 6.0f;
+                effect.intensity = 0.65f;
+                break;
+            case UI::UIEffectKind::DropShadow:
+                effect.amount = 12.0f;
+                effect.angle = 45.0f;
+                effect.radius = 8.0f;
+                effect.intensity = 0.75f;
+                effect.color = { 0.0f, 0.0f, 0.0f, 1.0f };
+                break;
+            case UI::UIEffectKind::InnerShadow:
+                effect.amount = 8.0f;
+                effect.angle = 45.0f;
+                effect.radius = 6.0f;
+                effect.intensity = 0.6f;
+                effect.color = { 0.0f, 0.0f, 0.0f, 1.0f };
+                break;
+            case UI::UIEffectKind::LUT:
+                effect.intensity = 1.0f;
+                effect.radius = 16.0f;
+                break;
+            case UI::UIEffectKind::ToneCurve:
+                effect.radius = 0.0f;
+                effect.intensity = 1.0f;
+                effect.threshold = 1.0f;
+                effect.amount = 0.0f;
+                break;
+            case UI::UIEffectKind::MatteComposite:
+                effect.amount = 0.0f;
+                break;
             default:
                 break;
             }
@@ -380,7 +439,10 @@
                     "クロスハッチング", "ブラシストローク", "モザイク", "結晶化",
                     "ステンドグラス", "渦巻き", "球面化", "波紋",
                     "極座標", "走査線", "CRT", "グリッチ",
-                    "ディザ", "VHS", "レターボックス", "波形" }));
+                    "ディザ", "VHS", "レターボックス", "波形",
+                    "ディスプレイスメントマップ", "タービュレント変形", "フラクタルノイズ",
+                    "モーションブラー", "エコー / 残像", "ドロップシャドウ", "インナーシャドウ",
+                    "LUT", "トーンカーブ", "Matte Composite" }));
 
             const auto add_float = [&](const char* name, const char* display,
                 const char* tooltip, double minimum, double maximum, double step)

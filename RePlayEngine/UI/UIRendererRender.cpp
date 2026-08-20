@@ -16,6 +16,7 @@
 #include "../Components/UI/UIScrollViewComponent.h"
 #include "../Components/UI/UIInputFieldComponent.h"
 #include "../Components/UI/UIShapeComponent.h"
+#include "../Components/UI/UIPuppetDeformComponent.h"
 #include "../Components/UI/UITextComponent.h"
 #include "../Components/UI/UITextAnimatorComponent.h"
 #include "../Object/GameObject/GameObject.h"
@@ -33,6 +34,7 @@
 #include <cstring>
 #include <functional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace ReplayEngine::UI
@@ -48,6 +50,7 @@ namespace ReplayEngine::UI
         using Components::UIScrollViewComponent;
         using Components::UIInputFieldComponent;
         using Components::UIShapeComponent;
+        using Components::UIPuppetDeformComponent;
         using Components::UITextComponent;
         using Components::UITextAnimatorComponent;
 

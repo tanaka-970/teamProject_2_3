@@ -1,7 +1,9 @@
 ﻿#include "FileEditHistory.h"
 
+#include <chrono>
 #include <fstream>
 #include <iterator>
+#include <sstream>
 #include <utility>
 
 namespace ReplayEngine::Editor
@@ -100,6 +102,63 @@ namespace ReplayEngine::Editor
         return true;
     }
 
+    bool FileEditHistory::MovePath(const std::filesystem::path& from,
+        const std::filesystem::path& to, std::string& error)
+    {
+        std::error_code filesystem_error;
+        if (!std::filesystem::exists(from, filesystem_error) || filesystem_error)
+        {
+            error = "移動元が見つかりません: " + from.generic_u8string();
+            return false;
+        }
+        filesystem_error.clear();
+        if (std::filesystem::exists(to, filesystem_error) && !filesystem_error)
+        {
+            error = "移動先が既に存在します: " + to.generic_u8string();
+            return false;
+        }
+        if (!to.parent_path().empty())
+        {
+            filesystem_error.clear();
+            std::filesystem::create_directories(to.parent_path(), filesystem_error);
+            if (filesystem_error)
+            {
+                error = "移動先フォルダを作成できません: " + to.parent_path().generic_u8string();
+                return false;
+            }
+        }
+        filesystem_error.clear();
+        std::filesystem::rename(from, to, filesystem_error);
+        if (filesystem_error)
+        {
+            error = "ファイル/フォルダを移動できません: " + filesystem_error.message();
+            return false;
+        }
+        error.clear();
+        return true;
+    }
+
+    std::filesystem::path FileEditHistory::UniqueStashPath(
+        const std::filesystem::path& root, const std::filesystem::path& original)
+    {
+        const auto ticks = static_cast<unsigned long long>(
+            std::chrono::high_resolution_clock::now().time_since_epoch().count());
+        std::filesystem::path folder = Normalize(root);
+        std::error_code error;
+        std::filesystem::create_directories(folder, error);
+        const std::string stem = original.filename().u8string().empty()
+            ? "entry" : original.filename().u8string();
+        for (unsigned int suffix = 0; suffix < 10000; ++suffix)
+        {
+            std::ostringstream name;
+            name << ticks << "_" << suffix << "_" << stem;
+            const std::filesystem::path candidate = folder / std::filesystem::u8path(name.str());
+            error.clear();
+            if (!std::filesystem::exists(candidate, error) || error) return candidate;
+        }
+        return folder / ("fallback_" + stem);
+    }
+
     bool FileEditHistory::Begin(const std::filesystem::path& path, std::string label,
         std::string& error)
     {
@@ -121,7 +180,7 @@ namespace ReplayEngine::Editor
 
     bool FileEditHistory::Push(Entry entry)
     {
-        if (entry.before == entry.after) return false;
+        if (entry.kind == EntryKind::FileContent && entry.before == entry.after) return false;
         if (cursor_ < entries_.size()) entries_.erase(entries_.begin() +
             static_cast<std::ptrdiff_t>(cursor_), entries_.end());
         entries_.push_back(std::move(entry));
@@ -142,6 +201,7 @@ namespace ReplayEngine::Editor
         std::vector<std::uint8_t> after;
         if (!ReadFile(transaction_.path, after, error)) return false;
         Entry entry;
+        entry.kind = EntryKind::FileContent;
         entry.path = transaction_.path;
         entry.label = transaction_.label;
         entry.before = std::move(transaction_.before);
@@ -160,10 +220,47 @@ namespace ReplayEngine::Editor
         std::string label, const std::vector<std::uint8_t>& before, std::string& error)
     {
         Entry entry;
+        entry.kind = EntryKind::FileContent;
         entry.path = Normalize(path);
         entry.label = std::move(label);
         entry.before = before;
         if (!ReadFile(entry.path, entry.after, error)) return false;
+        error.clear();
+        return Push(std::move(entry));
+    }
+
+    bool FileEditHistory::RecordPathMove(const std::filesystem::path& from,
+        const std::filesystem::path& to, std::string label, std::string& error)
+    {
+        Entry entry;
+        entry.kind = EntryKind::PathMove;
+        entry.path = Normalize(from);
+        entry.secondary_path = Normalize(to);
+        entry.label = std::move(label);
+        std::error_code filesystem_error;
+        if (!std::filesystem::exists(entry.secondary_path, filesystem_error) || filesystem_error)
+        {
+            error = "履歴へ記録する移動先が見つかりません: " + entry.secondary_path.generic_u8string();
+            return false;
+        }
+        error.clear();
+        return Push(std::move(entry));
+    }
+
+    bool FileEditHistory::RecordPathCreated(const std::filesystem::path& path,
+        const std::filesystem::path& stash_root, std::string label, std::string& error)
+    {
+        Entry entry;
+        entry.kind = EntryKind::PathCreate;
+        entry.path = Normalize(path);
+        entry.secondary_path = UniqueStashPath(stash_root, entry.path);
+        entry.label = std::move(label);
+        std::error_code filesystem_error;
+        if (!std::filesystem::exists(entry.path, filesystem_error) || filesystem_error)
+        {
+            error = "履歴へ記録する作成物が見つかりません: " + entry.path.generic_u8string();
+            return false;
+        }
         error.clear();
         return Push(std::move(entry));
     }
@@ -178,9 +275,26 @@ namespace ReplayEngine::Editor
         }
         if (!CanUndo()) return false;
         Entry& entry = entries_[cursor_ - 1];
-        if (!WriteFileAtomic(entry.path, entry.before, error)) return false;
+        last_applied_ = {};
+        if (entry.kind == EntryKind::FileContent)
+        {
+            if (!WriteFileAtomic(entry.path, entry.before, error)) return false;
+            restored_path = entry.path;
+            last_applied_ = { AppliedKind::FileContent, entry.path, entry.path, entry.label };
+        }
+        else if (entry.kind == EntryKind::PathMove)
+        {
+            if (!MovePath(entry.secondary_path, entry.path, error)) return false;
+            restored_path = entry.path;
+            last_applied_ = { AppliedKind::PathMove, entry.secondary_path, entry.path, entry.label };
+        }
+        else
+        {
+            if (!MovePath(entry.path, entry.secondary_path, error)) return false;
+            restored_path = entry.secondary_path;
+            last_applied_ = { AppliedKind::PathCreate, entry.path, entry.secondary_path, entry.label };
+        }
         --cursor_;
-        restored_path = entry.path;
         label = entry.label;
         return true;
     }
@@ -195,9 +309,26 @@ namespace ReplayEngine::Editor
         }
         if (!CanRedo()) return false;
         Entry& entry = entries_[cursor_];
-        if (!WriteFileAtomic(entry.path, entry.after, error)) return false;
+        last_applied_ = {};
+        if (entry.kind == EntryKind::FileContent)
+        {
+            if (!WriteFileAtomic(entry.path, entry.after, error)) return false;
+            restored_path = entry.path;
+            last_applied_ = { AppliedKind::FileContent, entry.path, entry.path, entry.label };
+        }
+        else if (entry.kind == EntryKind::PathMove)
+        {
+            if (!MovePath(entry.path, entry.secondary_path, error)) return false;
+            restored_path = entry.secondary_path;
+            last_applied_ = { AppliedKind::PathMove, entry.path, entry.secondary_path, entry.label };
+        }
+        else
+        {
+            if (!MovePath(entry.secondary_path, entry.path, error)) return false;
+            restored_path = entry.path;
+            last_applied_ = { AppliedKind::PathCreate, entry.secondary_path, entry.path, entry.label };
+        }
         ++cursor_;
-        restored_path = entry.path;
         label = entry.label;
         return true;
     }
@@ -207,5 +338,6 @@ namespace ReplayEngine::Editor
         entries_.clear();
         cursor_ = 0;
         transaction_ = {};
+        last_applied_ = {};
     }
 }

@@ -65,12 +65,52 @@
     bool show_scene_flow_panel{ false };
     bool show_ui_hierarchy_panel{ true };
     bool show_ui_preview_panel{ false };
+    // Canvas Preview は ImGui の近似描画ではなく Runtime UIRenderer の出力を表示する。
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> ui_preview_runtime_texture;
+    Microsoft::WRL::ComPtr<ID3D11RenderTargetView> ui_preview_runtime_rtv;
+    Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> ui_preview_runtime_srv;
+    int ui_preview_runtime_width{ 0 };
+    int ui_preview_runtime_height{ 0 };
+    bool ui_preview_runtime_requested{ false };
     bool show_ui_inspector_panel{ true };
     bool show_motion_layers_panel{ true };
     bool show_motion_preview_panel{ true };
     bool show_motion_inspector_panel{ true };
     bool show_motion_timeline_panel{ true };
     bool show_motion_graph_panel{ true };
+    bool show_sprite_atlas_editor_panel{ false };
+    ReplayEngine::Assets::SpriteAtlasAsset sprite_atlas_editor_asset;
+    std::filesystem::path sprite_atlas_editor_path;
+    std::string sprite_atlas_editor_guid;
+    std::string sprite_atlas_editor_status;
+    bool sprite_atlas_editor_loaded{ false };
+    bool sprite_atlas_editor_dirty{ false };
+    int sprite_atlas_selected_region{ -1 };
+    float sprite_atlas_zoom{ 0.8f };
+    bool sprite_atlas_draw_region_mode{ false };
+    bool sprite_atlas_region_dragging{ false };
+    ImVec2 sprite_atlas_drag_start{ 0.0f, 0.0f };
+    // Atlas の視覚編集: -1=なし, 0..7=resize handle, 8=移動。
+    int sprite_atlas_active_handle{ -1 };
+    bool sprite_atlas_region_transform_dragging{ false };
+    DirectX::XMFLOAT4 sprite_atlas_transform_start_uv{ 0.0f, 0.0f, 0.0f, 0.0f };
+    ImVec2 sprite_atlas_transform_start_mouse{ 0.0f, 0.0f };
+    bool sprite_atlas_pixel_snap{ true };
+    bool sprite_atlas_editor_keyboard_focus{ false };
+    bool sprite_atlas_pan_dragging{ false };
+
+    struct SpriteAtlasHistoryEntry
+    {
+        ReplayEngine::Assets::SpriteAtlasAsset before;
+        ReplayEngine::Assets::SpriteAtlasAsset after;
+        std::string label;
+    };
+    std::vector<SpriteAtlasHistoryEntry> sprite_atlas_history;
+    std::size_t sprite_atlas_history_cursor{ 0 };
+    bool sprite_atlas_history_transaction{ false };
+    ReplayEngine::Assets::SpriteAtlasAsset sprite_atlas_history_before;
+    std::string sprite_atlas_history_label;
+
     ReplayEngine::Motion::MotionAsset motion_editor_asset;
     ReplayEngine::Motion::CompositionAsset motion_editor_composition;
     ReplayEngine::Editor::MotionEditHistory motion_edit_history;
@@ -90,6 +130,22 @@
     int motion_selected_key{ -1 };
     int motion_selected_event_track{ -1 };
     int motion_selected_event{ -1 };
+    // After Effects 的なフレーム編集。MotionAsset の保存時間は従来どおり秒のままにし、
+    // Editor 表示/スナップだけ FPS を使うので旧 Asset と互換。
+    int motion_editor_fps{ 30 };
+    bool motion_editor_display_frames{ true };
+    bool motion_editor_frame_snap{ true };
+    float motion_timeline_zoom{ 1.0f };
+    bool motion_graph_speed_mode{ false };
+    bool motion_graph_overlay_tracks{ false };
+    int motion_graph_channel{ 0 };
+    std::vector<int> motion_selected_keys;
+    std::vector<ReplayEngine::Motion::MotionKeyframe> motion_key_clipboard;
+    bool motion_box_select_mode{ false };
+    bool motion_box_selecting{ false };
+    int motion_box_select_track{ -1 };
+    float motion_box_select_start_x{ 0.0f };
+    float motion_box_select_current_x{ 0.0f };
     bool motion_preview_active{ false };
     bool motion_preview_loop{ false };
     float motion_preview_time{ 0.0f };
@@ -110,6 +166,16 @@
     float ui_preview_grid_size{ 100.0f };
     ImVec2 ui_preview_pan{ 0.0f, 0.0f };
     bool ui_preview_dragging{ false };
+    // UI Scene View の直接編集 sub-control。Rect移動とは別トランザクション。
+    int ui_puppet_active_pin{ -1 };
+    int ui_puppet_active_radius{ -1 };
+    int ui_puppet_selected_pin{ -1 };
+    bool ui_puppet_radius_editing{ false };
+    int ui_shape_active_point{ -1 };
+    int ui_shape_selected_point{ -1 };
+    int ui_mask_selected_matte{ -1 };
+    int ui_shape_active_handle{ 0 }; // 0 anchor, 1 in, 2 out
+    bool ui_subcontrol_dragging{ false };
     bool ui_scene_view_input_consumed{ false };
     ReplayEngine::Core::ObjectID ui_preview_drag_object;
     ImVec2 ui_preview_drag_start_mouse{ 0.0f, 0.0f };
@@ -258,6 +324,7 @@ private:
     std::vector<std::string> project_delete_references;
     std::vector<std::string> project_delete_contents;
     bool project_delete_popup_pending{ false };
+    bool project_browser_focused{ false };
     char project_rename_buffer[192]{};
     bool project_rename_focus_pending{ false };
     char project_new_item_name[128]{ "NewItem" };

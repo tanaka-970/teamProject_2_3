@@ -28,6 +28,15 @@ namespace ReplayEngine::Assets
         const AssetRecord& Register(const std::filesystem::path& source,
             AssetKind kind, const std::filesystem::path& cache = {});
         bool Remove(const std::string& guid);
+
+        // Project Browser の rename / move は Asset の同一性を変えない。
+        // source_path だけを差し替え、既存 GUID をそのまま維持する。
+        // directory move では old_root 以下の全 record を相対位置ごと new_root へ移す。
+        bool RelocatePath(const std::filesystem::path& old_source,
+            const std::filesystem::path& new_source, bool update_display_name = true);
+        std::size_t RelocateTree(const std::filesystem::path& old_root,
+            const std::filesystem::path& new_root);
+
         const AssetRecord* FindByGuid(const std::string& guid) const noexcept;
         const AssetRecord* FindByPath(const std::filesystem::path& path) const noexcept;
         const std::vector<AssetRecord>& Records() const noexcept { return records_; }

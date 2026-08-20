@@ -42,6 +42,16 @@ namespace ReplayEngine::Rendering::Effects
             // EffectChain は独自の Texture cache を持たない。
             std::function<ID3D11ShaderResourceView*(const std::string&)> resolve_texture;
 
+            // UI Track Matte のように「Assetではなく実行時RT」を t1 へ渡すための入口。
+            // EffectChain は所有しない。通常Effectでは nullptr のまま。
+            ID3D11ShaderResourceView* runtime_mask_texture = nullptr;
+            bool runtime_mask_luma = false;
+            bool runtime_mask_invert = false;
+
+            // MotionBlur / Echo は前回の合成結果を t1 として受け取れる。
+            // History の所有は Renderer 側。EffectChain は参照するだけ。
+            ID3D11ShaderResourceView* runtime_history_texture = nullptr;
+
             // 描画先切替と fullscreen quad は既存 renderer の経路をそのまま使う。
             // これにより抽出前後で頂点生成・通常 UI shader・state 設定を変えない。
             std::function<void(UI::UIRenderTarget&)> configure_target;
@@ -100,7 +110,7 @@ namespace ReplayEngine::Rendering::Effects
             float padding = 0.0f;
         };
 
-        static constexpr std::size_t effect_shader_count = 42;
+        static constexpr std::size_t effect_shader_count = 52;
 
         bool EnsureBrushStrokeInstanceCapacity(std::size_t instance_count);
         bool EnsureCustomEffectConstantBuffer(std::uint32_t byte_width);

@@ -36,13 +36,25 @@ void framework::begin_scene_effect_frame() noexcept
 {
     scene_effect_targets.BeginFrame();
     scene_effect_texture_refs.clear();
+    ++scene_effect_frame_serial;
+    if ((scene_effect_frame_serial & 63ull) == 0ull)
+    {
+        for (auto it = scene_effect_temporal_history.begin();
+            it != scene_effect_temporal_history.end();)
+        {
+            if (scene_effect_frame_serial - it->second.last_used_serial > 240ull)
+                it = scene_effect_temporal_history.erase(it);
+            else
+                ++it;
+        }
+    }
 }
 
 ReplayEngine::UI::UIRenderTarget* framework::apply_scene_effect_chain(
     ID3D11ShaderResourceView* source,
     const std::vector<ReplayEngine::UI::UIEffect>& effects,
     std::uint32_t width, std::uint32_t height, DXGI_FORMAT format,
-    float effect_time)
+    float effect_time, std::uint64_t temporal_owner_key)
 {
     if (source == nullptr || immediate_context == nullptr || bit_block_transfer == nullptr ||
         width == 0 || height == 0)
@@ -60,6 +72,40 @@ ReplayEngine::UI::UIRenderTarget* framework::apply_scene_effect_chain(
         }
     }
     if (!has_active) return nullptr;
+
+    bool needs_temporal_history = false;
+    for (const ReplayEngine::UI::UIEffect& effect : effects)
+    {
+        if (!effect.enabled) continue;
+        const ReplayEngine::UI::UIEffectKind kind =
+            static_cast<ReplayEngine::UI::UIEffectKind>(effect.kind);
+        if (kind == ReplayEngine::UI::UIEffectKind::MotionBlur ||
+            kind == ReplayEngine::UI::UIEffectKind::Echo)
+        {
+            needs_temporal_history = true;
+            break;
+        }
+    }
+
+    scene_effect_temporal_history_entry* temporal_history = nullptr;
+    if (needs_temporal_history && temporal_owner_key != 0 && device != nullptr)
+    {
+        scene_effect_temporal_history_entry& entry =
+            scene_effect_temporal_history[temporal_owner_key];
+        const bool size_changed = entry.target.width != width ||
+            entry.target.height != height || entry.target.format != format;
+        if (!entry.target.Resize(device.Get(), width, height, format))
+        {
+            entry.target.Release();
+            entry.valid = false;
+        }
+        else
+        {
+            if (size_changed) entry.valid = false;
+            temporal_history = &entry;
+            entry.last_used_serial = scene_effect_frame_serial;
+        }
+    }
 
     ReplayEngine::UI::UIRenderTarget* first =
         scene_effect_targets.Acquire(width, height, format);
@@ -116,6 +162,8 @@ ReplayEngine::UI::UIRenderTarget* framework::apply_scene_effect_chain(
     {
         return resolve_scene_effect_texture(guid);
     };
+    context.runtime_history_texture = temporal_history != nullptr &&
+        temporal_history->valid ? temporal_history->target.srv.Get() : nullptr;
     context.configure_target = configure_target;
     context.draw_plain_fullscreen = [this](float, float,
         ID3D11ShaderResourceView* input, ID3D11BlendState* blend)
@@ -151,6 +199,16 @@ ReplayEngine::UI::UIRenderTarget* framework::apply_scene_effect_chain(
 
     ReplayEngine::UI::UIRenderTarget* result = scene_effect_chain.Apply(
         context, effects, first, first, second);
+    if (temporal_history != nullptr && result != nullptr && result->texture &&
+        temporal_history->target.texture)
+    {
+        ID3D11ShaderResourceView* null_history_srvs[2]{};
+        immediate_context->PSSetShaderResources(0, 2, null_history_srvs);
+        immediate_context->CopyResource(temporal_history->target.texture.Get(),
+            result->texture.Get());
+        temporal_history->valid = true;
+        temporal_history->last_used_serial = scene_effect_frame_serial;
+    }
 
     ID3D11ShaderResourceView* null_srvs[2]{};
     immediate_context->PSSetShaderResources(0, 2, null_srvs);

@@ -158,8 +158,18 @@ namespace ReplayEngine::Rendering::Effects
             "ui_effect_vhs.cso",
             "ui_effect_letterbox.cso",
             "ui_effect_waveform.cso",
+            "ui_effect_displacement_map.cso",
+            "ui_effect_turbulent_displace.cso",
+            "ui_effect_fractal_noise.cso",
+            "ui_effect_motion_blur.cso",
+            "ui_effect_echo.cso",
+            "ui_effect_drop_shadow.cso",
+            "ui_effect_inner_shadow.cso",
+            "ui_effect_lut.cso",
+            "ui_effect_tone_curve.cso",
+            "ui_effect_matte_composite.cso",
         };
-        static_assert(static_cast<std::size_t>(UI::UIEffectKind::Waveform) + 1 ==
+        static_assert(static_cast<std::size_t>(UI::UIEffectKind::MatteComposite) + 1 ==
             effect_shader_count, "UIEffectKind and EffectChain shader table must stay aligned");
         for (std::size_t index = 0; index < effect_cso_names.size(); ++index)
         {
@@ -411,8 +421,11 @@ namespace ReplayEngine::Rendering::Effects
             effect_constants.effect_color_stops = {
                 effect.color_stop_2, effect.color_stop_3, effect.color_stop_4, 0.0f };
 
-            const bool is_mask_effect = static_cast<UI::UIEffectKind>(effect.kind) ==
-                UI::UIEffectKind::Mask;
+            const UI::UIEffectKind effect_kind =
+                static_cast<UI::UIEffectKind>(effect.kind);
+            const bool is_mask_effect = effect_kind == UI::UIEffectKind::Mask;
+            const bool is_temporal_effect = effect_kind == UI::UIEffectKind::MotionBlur ||
+                effect_kind == UI::UIEffectKind::Echo;
             ID3D11ShaderResourceView* mask_texture = nullptr;
             std::string mask_guid = effect.mask;
             const bool is_brush_effect = static_cast<UI::UIEffectKind>(effect.kind) ==
@@ -427,10 +440,24 @@ namespace ReplayEngine::Rendering::Effects
                     if (atlas->kind == Assets::AssetKind::Image) mask_guid = atlas->guid;
                 }
             }
-            if (!mask_guid.empty() && context.resolve_texture)
+            if (is_temporal_effect && context.runtime_history_texture != nullptr)
+            {
+                // t1 を前フレームの結果として使う。MotionBlur / Echo は
+                // これで同一フレーム内の擬似残像ではなく時間方向に蓄積できる。
+                mask_texture = context.runtime_history_texture;
+            }
+            else if (mask_guid == "__runtime_ui_matte")
+            {
+                mask_texture = context.runtime_mask_texture;
+            }
+            else if (!mask_guid.empty() && context.resolve_texture)
+            {
                 mask_texture = context.resolve_texture(mask_guid);
+            }
 
             effect_constants.effect_params3.y = mask_texture != nullptr ? 1.0f : 0.0f;
+            effect_constants.effect_params3.z = context.runtime_mask_luma ? 1.0f : 0.0f;
+            effect_constants.effect_params3.w = context.runtime_mask_invert ? 1.0f : 0.0f;
             const bool brush_atlas = is_brush_effect && effect.brush_atlas_enabled &&
                 mask_texture != nullptr;
             if (brush_atlas)

@@ -9,6 +9,13 @@ cbuffer UIEffectConstants : register(b0)
     float4 effect_params1; // angle, progress, softness, speed
     float4 effect_params2; // direction.xy, seed, time
     float4 target_size;    // width, height, 1 / width, 1 / height
+    float4 effect_color_2;
+    float4 effect_color_3;
+    float4 effect_color_4;
+    float4 effect_color_stops;
+    float4 effect_params3; // x waveform, y mask exists, z luma matte, w invert matte
+    float4 brush_pattern_settings;
+    float4 brush_pattern_weights[4];
 };
 
 struct VSOutput
@@ -33,8 +40,13 @@ float4 main(VSOutput input) : SV_TARGET
     color.a *= edge;
     if (effect_params1.w > 0.5f)
     {
-        const float mask_alpha = mask_texture.Sample(source_sampler, input.uv).a;
-        color.a *= smoothstep(0.0f, max(effect_params1.z, 0.0001f), mask_alpha);
+        const float4 mask_sample = mask_texture.Sample(source_sampler, input.uv);
+        float mask_value = mask_sample.a;
+        if (effect_params3.z > 0.5f)
+            mask_value = dot(mask_sample.rgb, float3(0.2126f, 0.7152f, 0.0722f));
+        if (effect_params3.w > 0.5f)
+            mask_value = 1.0f - mask_value;
+        color.a *= smoothstep(0.0f, max(effect_params1.z, 0.0001f), mask_value);
     }
     return color;
 }

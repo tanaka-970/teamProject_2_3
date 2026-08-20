@@ -50,14 +50,82 @@ void framework::draw_project_folder_tree(const std::filesystem::path& folder, in
         }
 
         ImGui::PushID(child.path.generic_u8string().c_str());
-        ImGui::PushStyleColor(ImGuiCol_Text, KindColor(
-            ReplayEngine::Assets::AssetKind::Unknown, true));
-        const bool opened = ImGui::TreeNodeEx(child.name.c_str(), flags);
-        ImGui::PopStyleColor();
+        const bool tree_renaming = !project_rename_target.empty() &&
+            project_rename_target == child.path;
+        bool opened = false;
+        if (tree_renaming)
+        {
+            if (project_rename_focus_pending)
+            {
+                ImGui::SetKeyboardFocusHere();
+                project_rename_focus_pending = false;
+            }
+            ImGui::SetNextItemWidth((std::max)(100.0f, ImGui::GetContentRegionAvail().x));
+            const bool committed = ImGui::InputText("##ProjectTreeRename",
+                project_rename_buffer, IM_ARRAYSIZE(project_rename_buffer),
+                ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
+            if (committed)
+            {
+                project_rename_entry(child.path, project_rename_buffer);
+                project_rename_target.clear();
+            }
+            else if (ImGui::IsKeyPressed(VK_ESCAPE)) project_rename_target.clear();
+        }
+        else
+        {
+            ImGui::PushStyleColor(ImGuiCol_Text, KindColor(
+                ReplayEngine::Assets::AssetKind::Unknown, true));
+            opened = ImGui::TreeNodeEx(child.name.c_str(), flags);
+            ImGui::PopStyleColor();
+        }
 
-        if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
+        if (!tree_renaming && ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
         {
             set_project_folder(child.path);
+            project_selected_entry_path = child.path;
+            selected_editor_object = editor_selection::asset;
+            selected_asset_guid.clear();
+        }
+        if (!tree_renaming && ImGui::BeginPopupContextItem("##ProjectTreeFolderMenu"))
+        {
+            project_selected_entry_path = child.path;
+            selected_editor_object = editor_selection::asset;
+            selected_asset_guid.clear();
+            if (ImGui::MenuItem("名前を変更", "F2")) project_begin_rename_selected();
+            if (ImGui::MenuItem("複製", "Ctrl+D", false, object_editor_context.CanEdit()))
+                project_duplicate_entry(child.path);
+            ImGui::Separator();
+            if (ImGui::MenuItem("エクスプローラーで表示")) project_show_in_explorer(child.path);
+            if (ImGui::MenuItem("Project相対パスをコピー")) project_copy_path(child.path, false);
+            if (ImGui::MenuItem("絶対パスをコピー")) project_copy_path(child.path, true);
+            ImGui::Separator();
+            if (ImGui::MenuItem("削除", "Del", false, object_editor_context.CanEdit()))
+                project_request_delete(child.path);
+            ImGui::EndPopup();
+        }
+        if (!tree_renaming && ImGui::IsItemActive() &&
+            ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
+        {
+            const std::string source = child.path.generic_u8string();
+            ImGui::SetDragDropPayload("REPLAY_PROJECT_PATH", source.c_str(), source.size() + 1);
+            ImGui::TextUnformatted(child.name.c_str());
+            ImGui::EndDragDropSource();
+        }
+        if (!tree_renaming && ImGui::BeginDragDropTarget())
+        {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("REPLAY_PROJECT_PATH"))
+            {
+                const char* source = static_cast<const char*>(payload->Data);
+                if (source != nullptr) project_move_entry(std::filesystem::u8path(source), child.path);
+            }
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("REPLAY_ASSET_GUID"))
+            {
+                const char* guid = static_cast<const char*>(payload->Data);
+                if (guid != nullptr)
+                    if (const auto* dragged = asset_database.FindByGuid(guid))
+                        project_move_entry(dragged->source_path, child.path);
+            }
+            ImGui::EndDragDropTarget();
         }
         if (opened)
         {
@@ -114,7 +182,7 @@ void framework::draw_project_folder_contents()
             else if (kind == AssetKind::Script) filter_type = 5;
             else if (kind == AssetKind::Shader) filter_type = 6;
             else if (kind == AssetKind::SceneFlow) filter_type = 7;
-            else if (kind == AssetKind::Motion) filter_type = 8;
+            else if (kind == AssetKind::Motion || kind == AssetKind::Composition) filter_type = 8;
             else if (kind == AssetKind::Font) filter_type = 9;
             else if (kind == AssetKind::Localization) filter_type = 10;
             else if (kind == AssetKind::EffectPreset) filter_type = 11;
@@ -160,6 +228,7 @@ void framework::draw_project_folder_contents()
                 project_selected_entry_path = entry.path;
                 selected_editor_object = editor_selection::asset;
                 if (record != nullptr) selected_asset_guid = record->guid;
+                else selected_asset_guid.clear();
             }
         }
         else
@@ -170,6 +239,7 @@ void framework::draw_project_folder_contents()
                 project_selected_entry_path = entry.path;
                 selected_editor_object = editor_selection::asset;
                 if (record != nullptr) selected_asset_guid = record->guid;
+                else selected_asset_guid.clear();
             }
             ImGui::PopStyleColor();
         }
@@ -195,6 +265,30 @@ void framework::draw_project_folder_contents()
             ImGui::TextUnformatted(entry.name.c_str());
             ImGui::EndDragDropSource();
         }
+        if (entry.is_directory && ImGui::IsItemActive() &&
+            ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
+        {
+            const std::string source = entry.path.generic_u8string();
+            ImGui::SetDragDropPayload("REPLAY_PROJECT_PATH", source.c_str(), source.size() + 1);
+            ImGui::TextUnformatted(entry.name.c_str());
+            ImGui::EndDragDropSource();
+        }
+        if (entry.is_directory && ImGui::BeginDragDropTarget())
+        {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("REPLAY_PROJECT_PATH"))
+            {
+                const char* source = static_cast<const char*>(payload->Data);
+                if (source != nullptr) project_move_entry(std::filesystem::u8path(source), entry.path);
+            }
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("REPLAY_ASSET_GUID"))
+            {
+                const char* guid = static_cast<const char*>(payload->Data);
+                if (guid != nullptr)
+                    if (const auto* dragged = asset_database.FindByGuid(guid))
+                        project_move_entry(dragged->source_path, entry.path);
+            }
+            ImGui::EndDragDropTarget();
+        }
 
         // 項目ごとの右クリックメニュー。
         // EndGroup 後だと LastItemId が保証されないので、
@@ -204,7 +298,8 @@ void framework::draw_project_folder_contents()
             project_selected_entry_path = entry.path;
             selected_editor_object = editor_selection::asset;
             if (record != nullptr) selected_asset_guid = record->guid;
-            if (ImGui::MenuItem("名前を変更"))
+            else selected_asset_guid.clear();
+            if (ImGui::MenuItem("名前を変更", "F2"))
             {
                 project_rename_target = entry.path;
                 project_rename_focus_pending = true;
@@ -213,6 +308,15 @@ void framework::draw_project_folder_contents()
                 strncpy_s(project_rename_buffer, sizeof(project_rename_buffer),
                     stem.c_str(), _TRUNCATE);
             }
+            if (ImGui::MenuItem("複製", "Ctrl+D", false, object_editor_context.CanEdit()))
+                project_duplicate_entry(entry.path);
+            ImGui::Separator();
+            if (ImGui::MenuItem("エクスプローラーで表示"))
+                project_show_in_explorer(entry.path);
+            if (ImGui::MenuItem("Project相対パスをコピー"))
+                project_copy_path(entry.path, false);
+            if (ImGui::MenuItem("絶対パスをコピー"))
+                project_copy_path(entry.path, true);
             if (!entry.is_directory && kind == AssetKind::Script &&
                 ImGui::MenuItem("Visual Studio で開く"))
             {
@@ -228,13 +332,22 @@ void framework::draw_project_folder_contents()
                     load_scene_flow_editor(*record);
                 }
             }
-            if (!entry.is_directory && kind == AssetKind::Motion &&
+            if (!entry.is_directory && (kind == AssetKind::Motion || kind == AssetKind::Composition) &&
                 ImGui::MenuItem("Motion Workspace で開く"))
             {
                 if (record != nullptr)
                 {
                     selected_asset_guid = record->guid;
                     open_motion_asset(*record);
+                }
+            }
+            if (!entry.is_directory && kind == AssetKind::SpriteAtlas &&
+                ImGui::MenuItem("Sprite Atlas Editor で開く"))
+            {
+                if (record != nullptr)
+                {
+                    selected_asset_guid = record->guid;
+                    open_sprite_atlas_asset(*record);
                 }
             }
             if (!entry.is_directory && kind == AssetKind::Shader)
@@ -291,12 +404,20 @@ void framework::draw_project_folder_contents()
                     load_scene_flow_editor(*record);
                 }
             }
-            else if (kind == AssetKind::Motion)
+            else if (kind == AssetKind::Motion || kind == AssetKind::Composition)
             {
                 if (record != nullptr)
                 {
                     selected_asset_guid = record->guid;
                     open_motion_asset(*record);
+                }
+            }
+            else if (kind == AssetKind::SpriteAtlas)
+            {
+                if (record != nullptr)
+                {
+                    selected_asset_guid = record->guid;
+                    open_sprite_atlas_asset(*record);
                 }
             }
             else if (kind == AssetKind::Shader)

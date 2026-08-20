@@ -53,10 +53,18 @@ namespace ReplayEngine::UI
         VHS = 39,
         Letterbox = 40,
         Waveform = 41,
+        DisplacementMap = 42,
+        TurbulentDisplace = 43,
+        FractalNoise = 44,
+        MotionBlur = 45,
+        Echo = 46,
+        DropShadow = 47,
+        InnerShadow = 48,
+        LUT = 49,
+        ToneCurve = 50,
+        MatteComposite = 51,
 
-        // 拡張点: 残像は履歴 RT、LUT は入力テクスチャの設計が先に必要。
-        // トーンカーブは Motion と共有する曲線型、レンズフレアは光源位置が必要。
-        // クロマキーは UI Effect ではなく 3D 合成側で扱う。
+        // 新規 kind は必ず末尾へ追加する。既存 Scene の enum 値を変えない。
     };
 
     class UIEffect final

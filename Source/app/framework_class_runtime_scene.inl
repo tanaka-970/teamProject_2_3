@@ -126,6 +126,15 @@
     // Apply 中だけ ComPtr を保持する。UIRenderer の texture_cache_ は移動しない。
     ReplayEngine::Rendering::Effects::EffectChain scene_effect_chain;
     ReplayEngine::UI::UIRenderTargetPool scene_effect_targets;
+    struct scene_effect_temporal_history_entry
+    {
+        ReplayEngine::UI::UIRenderTarget target;
+        bool valid = false;
+        std::uint64_t last_used_serial = 0;
+    };
+    std::unordered_map<std::uint64_t, scene_effect_temporal_history_entry>
+        scene_effect_temporal_history;
+    std::uint64_t scene_effect_frame_serial = 0;
     std::vector<Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>>
         scene_effect_texture_refs;
     ReplayEngine::Rendering::LineStrokeRenderer line_stroke_renderer;

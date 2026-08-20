@@ -45,23 +45,22 @@
             if (msg == WM_KEYDOWN && control_down && !ImGui::GetIO().WantTextInput &&
                 !runtime_ui_text_owner && (wparam == 'Z' || wparam == 'Y'))
             {
-                if (active_editor_workspace == editor_workspace::motion)
+                bool handled = false;
+                if (sprite_atlas_editor_loaded && sprite_atlas_editor_keyboard_focus)
+                    handled = (wparam == 'Z') ? undo_sprite_atlas_edit() : redo_sprite_atlas_edit();
+                else if (active_editor_workspace == editor_workspace::motion)
                 {
                     if (wparam == 'Z') undo_motion_edit();
                     else redo_motion_edit();
+                    handled = true;
                 }
                 else
                 {
-                    const bool external_context =
+                    const bool external_context = project_browser_focused ||
                         selected_editor_object == editor_selection::asset ||
                         selected_editor_object == editor_selection::world;
-                    bool handled = false;
                     if (external_context)
-                    {
-                        handled = (wparam == 'Z')
-                            ? undo_external_file_edit()
-                            : redo_external_file_edit();
-                    }
+                        handled = (wparam == 'Z') ? undo_external_file_edit() : redo_external_file_edit();
                     if (!handled)
                     {
                         if (wparam == 'Z') object_editor_context.Undo();
@@ -72,7 +71,10 @@
             }
             if (shortcut_pressed && wparam == 'D')
             {
-                object_hierarchy_panel.DuplicateSelection(object_editor_context);
+                if (project_browser_focused && !project_selected_entry_path.empty())
+                    project_duplicate_entry(project_selected_entry_path);
+                else
+                    object_hierarchy_panel.DuplicateSelection(object_editor_context);
                 return 0;
             }
             if (shortcut_pressed && (wparam == 'C' || wparam == 'V'))
@@ -103,7 +105,10 @@
             if (msg == WM_KEYDOWN && wparam == VK_DELETE &&
                 !ImGui::GetIO().WantTextInput && !runtime_ui_text_owner)
             {
-                if (selected_editor_object == editor_selection::asset &&
+                // Atlas Editor 内の Delete は Region 削除へ渡す。
+                if (sprite_atlas_editor_loaded && sprite_atlas_editor_keyboard_focus) return 0;
+                if (project_browser_focused &&
+                    selected_editor_object == editor_selection::asset &&
                     !project_selected_entry_path.empty())
                 {
                     project_request_delete(project_selected_entry_path);
@@ -222,10 +227,11 @@
             const bool control_down = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
             if (editor_mode && !control_down)
             {
-                if (selected_editor_object == editor_selection::asset &&
+                if (project_browser_focused &&
+                    selected_editor_object == editor_selection::asset &&
                     !project_selected_entry_path.empty())
                     project_begin_rename_selected();
-                else
+                else if (selected_editor_object == editor_selection::game_object)
                     object_hierarchy_panel.BeginRenameSelection(object_editor_context);
                 return 0;
             }

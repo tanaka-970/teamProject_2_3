@@ -26,6 +26,7 @@ using namespace framework_project_browser::Detail;
 
 void framework::draw_project_browser()
 {
+    project_browser_focused = false;
     std::error_code error;
     const std::filesystem::path root = std::filesystem::current_path(error);
     if (error)
@@ -81,6 +82,8 @@ void framework::draw_project_browser()
     // EndChild は戻り値に関わらず必ず呼ぶ。
     if (ImGui::BeginChild("##ProjectTree", ImVec2(project_tree_width, 320.0f), true))
     {
+        if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
+            project_browser_focused = true;
         ImGuiTreeNodeFlags root_flags = ImGuiTreeNodeFlags_OpenOnArrow |
             ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_DefaultOpen;
         if (project_current_folder.empty()) root_flags |= ImGuiTreeNodeFlags_Selected;
@@ -91,6 +94,22 @@ void framework::draw_project_browser()
         if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
         {
             project_current_folder.clear();
+        }
+        if (ImGui::BeginDragDropTarget())
+        {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("REPLAY_PROJECT_PATH"))
+            {
+                const char* source = static_cast<const char*>(payload->Data);
+                if (source != nullptr) project_move_entry(std::filesystem::u8path(source), root);
+            }
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("REPLAY_ASSET_GUID"))
+            {
+                const char* guid = static_cast<const char*>(payload->Data);
+                if (guid != nullptr)
+                    if (const auto* dragged = asset_database.FindByGuid(guid))
+                        project_move_entry(dragged->source_path, root);
+            }
+            ImGui::EndDragDropTarget();
         }
         if (root_open)
         {
@@ -105,6 +124,8 @@ void framework::draw_project_browser()
     // --- 右: フォルダの中身 ---
     if (ImGui::BeginChild("##ProjectContents", ImVec2(0.0f, 320.0f), true))
     {
+        if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
+            project_browser_focused = true;
         draw_project_folder_contents();
 
         // 空白部分の右クリック = このフォルダに作る。
@@ -133,6 +154,14 @@ void framework::draw_project_browser()
             if (ImGui::MenuItem("Motion Asset"))
             {
                 project_create_motion(project_new_item_name);
+            }
+            if (ImGui::MenuItem("Motion Composition"))
+            {
+                project_create_composition(project_new_item_name);
+            }
+            if (ImGui::MenuItem("Sprite Atlas"))
+            {
+                project_create_sprite_atlas(project_new_item_name);
             }
             if (ImGui::MenuItem("Localization Table"))
             {
@@ -164,6 +193,11 @@ void framework::draw_project_browser()
             {
                 project_create_shader_composer(project_new_item_name,
                     ReplayEngine::Rendering::ShaderDomain::Layer);
+            }
+            if (ImGui::MenuItem("Shader Composer (PostProcess)"))
+            {
+                project_create_shader_composer(project_new_item_name,
+                    ReplayEngine::Rendering::ShaderDomain::PostProcess);
             }
             if (ImGui::MenuItem("Folder"))
             {

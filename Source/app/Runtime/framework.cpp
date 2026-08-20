@@ -347,12 +347,20 @@ bool framework::uninitialize()
 
     // 5.4) Effect 用 RT pool。SRV/RTV を Renderer 本体より先に明示解放する。
     scene_effect_texture_refs.clear();
+    scene_effect_temporal_history.clear();
+    scene_effect_frame_serial = 0;
     scene_effect_targets.Release();
     scene_effect_chain.Release();
     ui_renderer.ReleaseTransientTargets();
     line_stroke_renderer.Release();
 
     // 5.5) UI Renderer / FontAtlas。内部の SRV を texture cache より先に手放す。
+    // Editor Canvas Preview のRT/SRVもDevice Live Object Reportより先に落とす。
+    ui_preview_runtime_srv.Reset();
+    ui_preview_runtime_rtv.Reset();
+    ui_preview_runtime_texture.Reset();
+    ui_preview_runtime_width = 0;
+    ui_preview_runtime_height = 0;
     ui_renderer.Release();
     ui_font_atlas.Release();
 
