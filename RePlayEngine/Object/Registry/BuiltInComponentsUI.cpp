@@ -136,10 +136,14 @@ namespace ReplayEngine::Core::Detail
                     .Animation(Animatable::Step));
             PropertyRegistry::Register<UIImageComponent>(
                 MakeProperty("uv_offset", &UIImageComponent::uv_offset)
-                    .Display("UV オフセット").Step(0.001).Advanced());
+                    .Display("UV オフセット").Step(0.001).Advanced()
+                    .Animation(Animatable::Interpolatable)
+                    .Tooltip("Sprite Sheet のフレーム移動を Motion から駆動できます。Step Key なら1フレーム切替になります。"));
             PropertyRegistry::Register<UIImageComponent>(
                 MakeProperty("uv_scale", &UIImageComponent::uv_scale)
-                    .Display("UV スケール").Step(0.001).Advanced());
+                    .Display("UV スケール").Step(0.001).Advanced()
+                    .Animation(Animatable::Interpolatable)
+                    .Tooltip("Sprite Sheet の1フレーム範囲を Motion から変更できます。"));
             PropertyRegistry::Register<UIImageComponent>(
                 MakeProperty("nine_slice", &UIImageComponent::nine_slice)
                     .Display("9 スライス").Step(1.0).Advanced()
