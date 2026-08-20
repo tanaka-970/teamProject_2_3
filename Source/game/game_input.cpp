@@ -117,7 +117,7 @@ namespace GameInput
         axes_["MoveY"] = { 'S', VK_DOWN, 'W', VK_UP,
             GamepadAxis::LeftY, 0.18f };
 
-        for (const char* name : { "UISubmit", "UICancel", "NavigateUp",
+        for (const char* name : { "Menu", "UISubmit", "UICancel", "NavigateUp",
             "NavigateDown", "NavigateLeft", "NavigateRight" })
         {
             auto found = actions_.find(name);
