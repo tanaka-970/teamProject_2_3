@@ -1,4 +1,6 @@
-﻿namespace Game;
+﻿using ReplayEngine;
+
+namespace Game;
 
 // C++ Component の TypeId とエンジンイベント GUID を 1 か所に集約する。
 public readonly struct PersonaEngineIds

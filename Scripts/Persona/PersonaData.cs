@@ -68,13 +68,13 @@ public readonly struct PersonaCombatantPreset
 public readonly struct PersonaData
 {
     public static readonly PersonaSkillData Attack =
-        new("たたかう", PersonaElement.Physical, 0, 8);
+        new("たたかう", PersonaElement.Physical, 0, 5);
 
     public static readonly PersonaSkillData Agi =
-        new("アギ", PersonaElement.Fire, 4, 12);
+        new("アギ", PersonaElement.Fire, 4, 7);
 
     public static readonly PersonaSkillData Bufu =
-        new("ブフ", PersonaElement.Ice, 4, 12);
+        new("ブフ", PersonaElement.Ice, 4, 7);
 
     public static readonly PersonaCombatantPreset Player = new(
         "Player", false, 180, 32, 8,
@@ -83,13 +83,13 @@ public readonly struct PersonaData
 
     // Enemy 1 は炎弱点。
     public static readonly PersonaCombatantPreset EnemyFireWeak = new(
-        "Enemy Fire Weak", true, 95, 12, 6,
+        "Enemy Fire Weak", true, 95, 12, 3,
         PersonaAffinity.Normal, PersonaAffinity.Weak, PersonaAffinity.Resist,
         true, false);
 
     // Enemy 2 は氷弱点。
     public static readonly PersonaCombatantPreset EnemyIceWeak = new(
-        "Enemy Ice Weak", true, 95, 12, 6,
+        "Enemy Ice Weak", true, 95, 12, 3,
         PersonaAffinity.Normal, PersonaAffinity.Resist, PersonaAffinity.Weak,
         false, true);
 
