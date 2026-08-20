@@ -59,6 +59,28 @@ namespace framework_project_browser::Detail
             lower_extension == ".gif";
     }
 
+    inline std::filesystem::path NormalizeProjectPath(const std::filesystem::path& value)
+    {
+        std::error_code error;
+        std::filesystem::path absolute = std::filesystem::absolute(value, error);
+        if (error) absolute = value;
+        return absolute.lexically_normal();
+    }
+
+    inline bool IsProjectPathInsideOrEqual(const std::filesystem::path& value,
+        const std::filesystem::path& parent)
+    {
+        const std::filesystem::path absolute_value = NormalizeProjectPath(value);
+        const std::filesystem::path absolute_parent = NormalizeProjectPath(parent);
+        std::error_code error;
+        const std::filesystem::path relative =
+            std::filesystem::relative(absolute_value, absolute_parent, error);
+        if (error) return absolute_value == absolute_parent;
+        if (relative.empty() || relative == ".") return true;
+        const auto first = relative.begin();
+        return first != relative.end() && first->generic_u8string() != "..";
+    }
+
     inline bool ValidateProjectEntryName(const std::string& name, std::string& error)
     {
         error.clear();

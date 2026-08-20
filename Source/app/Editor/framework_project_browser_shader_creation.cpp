@@ -87,6 +87,9 @@ bool framework::project_create_layer_shader(const std::string& name)
 
     const auto report = shader_library.ScanAll(root);
     selected_asset_guid = record.guid;
+    project_selected_entry_path = path;
+    selected_editor_object = editor_selection::asset;
+    project_tree_reveal_selection_pending = true;
     set_project_folder(path.parent_path());
     project_browser_status = "Layer Shader を作成しました: " +
         path.filename().u8string() + " / ShaderGUID=" + shader_id.ToString();
@@ -179,6 +182,9 @@ bool framework::project_create_shader_composer(const std::string& name,
 
     const auto report = shader_library.ScanAll(root);
     selected_asset_guid = graph_record.guid;
+    project_selected_entry_path = graph_path;
+    selected_editor_object = editor_selection::asset;
+    project_tree_reveal_selection_pending = true;
     set_project_folder(graph_path.parent_path());
     if (!shader_composer_editor.Open(graph_path, error))
     {

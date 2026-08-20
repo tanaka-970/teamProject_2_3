@@ -135,6 +135,10 @@ bool framework::project_create_folder(const std::string& name)
         project_browser_status = "フォルダ作成失敗: " + path.generic_u8string();
         return false;
     }
+    project_selected_entry_path = path;
+    selected_editor_object = editor_selection::asset;
+    selected_asset_guid.clear();
+    project_tree_reveal_selection_pending = true;
     project_record_created_path(path, "フォルダを作成");
     project_browser_status = "フォルダを作成しました: " + path.filename().u8string();
     return true;
@@ -177,6 +181,9 @@ bool framework::project_create_csharp_behaviour(const std::string& class_name)
     const ReplayEngine::Assets::AssetRecord& record =
         asset_database.Register(info.source_path, ReplayEngine::Assets::AssetKind::Script);
     selected_asset_guid = record.guid;
+    project_selected_entry_path = info.source_path;
+    selected_editor_object = editor_selection::asset;
+    project_tree_reveal_selection_pending = true;
 
     std::string save_error;
     if (!asset_database.Save(save_error))
@@ -238,6 +245,9 @@ bool framework::project_create_material(const std::string& name)
         return false;
     }
     selected_asset_guid = record.guid;
+    project_selected_entry_path = path;
+    selected_editor_object = editor_selection::asset;
+    project_tree_reveal_selection_pending = true;
     project_record_created_path(path, "Material を作成");
     project_browser_status = "Material を作成しました: " + path.filename().u8string();
     return true;
@@ -290,6 +300,9 @@ bool framework::project_create_motion(const std::string& name)
     }
 
     selected_asset_guid = record.guid;
+    project_selected_entry_path = path;
+    selected_editor_object = editor_selection::asset;
+    project_tree_reveal_selection_pending = true;
     set_project_folder(path.parent_path());
     if (!open_motion_asset(record))
     {
@@ -348,6 +361,9 @@ bool framework::project_create_composition(const std::string& name)
         return false;
     }
     selected_asset_guid = record.guid;
+    project_selected_entry_path = path;
+    selected_editor_object = editor_selection::asset;
+    project_tree_reveal_selection_pending = true;
     set_project_folder(path.parent_path());
     if (!open_motion_asset(record))
     {
@@ -392,6 +408,9 @@ bool framework::project_create_sprite_atlas(const std::string& name)
         return false;
     }
     selected_asset_guid = record.guid;
+    project_selected_entry_path = path;
+    selected_editor_object = editor_selection::asset;
+    project_tree_reveal_selection_pending = true;
     set_project_folder(path.parent_path());
     open_sprite_atlas_asset(record);
     project_record_created_path(path, "Sprite Atlas を作成");
@@ -507,6 +526,9 @@ bool framework::project_create_localization(const std::string& name)
         return false;
     }
     selected_asset_guid = record.guid;
+    project_selected_entry_path = path;
+    selected_editor_object = editor_selection::asset;
+    project_tree_reveal_selection_pending = true;
     project_record_created_path(path, "Localization を作成");
     project_browser_status = "Localization を作成しました: " + path.filename().u8string();
     return true;
@@ -545,6 +567,9 @@ bool framework::project_create_effect_preset(const std::string& name)
         return false;
     }
     selected_asset_guid = record.guid;
+    project_selected_entry_path = path;
+    selected_editor_object = editor_selection::asset;
+    project_tree_reveal_selection_pending = true;
     project_record_created_path(path, "Effect Preset を作成");
     project_browser_status = "Effect Preset を作成しました: " + path.filename().u8string();
     return true;
@@ -589,6 +614,9 @@ bool framework::project_create_scene_flow(const std::string& name)
         return false;
     }
     selected_asset_guid = record.guid;
+    project_selected_entry_path = path;
+    selected_editor_object = editor_selection::asset;
+    project_tree_reveal_selection_pending = true;
     load_scene_flow_editor(record);
     project_record_created_path(path, "Scene Flow を作成");
     project_browser_status = "Scene Flow を作成しました: " + path.filename().u8string();
@@ -671,6 +699,9 @@ bool framework::project_create_surface_shader(const std::string& name)
     // 作った瞬間に Picker へ出す。次回起動待ちにしない。
     const auto report = shader_library.ScanAll(root);
     selected_asset_guid = record.guid;
+    project_selected_entry_path = path;
+    selected_editor_object = editor_selection::asset;
+    project_tree_reveal_selection_pending = true;
     set_project_folder(path.parent_path());
 
     project_browser_status = "Surface Shader を作成しました: " +
@@ -715,6 +746,8 @@ bool framework::project_create_input_action_asset(const std::string& name)
 
     selected_asset_guid = record.guid;
     project_selected_entry_path = path;
+    selected_editor_object = editor_selection::asset;
+    project_tree_reveal_selection_pending = true;
     project_settings.SetInputActionAssetGuid(record.guid);
     save_project_settings();
     load_active_input_action_asset();
