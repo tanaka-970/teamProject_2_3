@@ -55,6 +55,19 @@
             if (!effects.HasActiveEffects(asset_database) || states.blend_none == nullptr)
                 return false;
 
+            const std::vector<UIEffect> backdrop_effects =
+                effects.EffectiveEffects(asset_database);
+            bool needs_liquid_glass_matte = false;
+            for (const UIEffect& effect : backdrop_effects)
+            {
+                if (effect.enabled && static_cast<UIEffectKind>(effect.kind) ==
+                    UIEffectKind::LiquidGlass)
+                {
+                    needs_liquid_glass_matte = true;
+                    break;
+                }
+            }
+
             float capture_scale = 1.0f;
             if (!capture_scale_for(rect, source_rect, canvas_scale, capture_scale))
                 return false;
@@ -80,11 +93,16 @@
 
             UIRenderTarget* target = render_target_pool_.Acquire(plan.width, plan.height);
             UIRenderTarget* scratch = render_target_pool_.Acquire(plan.width, plan.height);
+            UIRenderTarget* matte = needs_liquid_glass_matte
+                ? render_target_pool_.Acquire(plan.width, plan.height) : nullptr;
             if (target == nullptr || scratch == nullptr || !target->texture ||
                 !target->rtv || !target->srv || !scratch->texture ||
                 !scratch->rtv || !scratch->srv ||
+                (needs_liquid_glass_matte && (matte == nullptr || !matte->texture ||
+                    !matte->rtv || !matte->srv)) ||
                 target->texture.Get() == plan.source_texture.Get() ||
-                scratch->texture.Get() == plan.source_texture.Get())
+                scratch->texture.Get() == plan.source_texture.Get() ||
+                (matte != nullptr && matte->texture.Get() == plan.source_texture.Get()))
             {
                 return false;
             }
@@ -120,13 +138,24 @@
                 source_rect.z,
                 source_rect.w };
 
+            // Preserve the UI visual's alpha separately. The backdrop capture
+            // itself is normally opaque, so Liquid Glass cannot derive its
+            // shape normal from that combined image.
+            if (matte != nullptr)
+            {
+                configure_effect_target(*matte);
+                context->ClearRenderTargetView(matte->rtv.Get(), clear);
+                draw_source(draw_rect, capture_scale);
+            }
+
             configure_effect_target(*target);
             draw_source(draw_rect, capture_scale);
 
             ID3D11ShaderResourceView* null_srv = nullptr;
             context->PSSetShaderResources(0, 1, &null_srv);
             UIRenderTarget* current = target;
-            apply_effect_passes(effects, current, target, scratch);
+            apply_effect_passes(effects, current, target, scratch,
+                matte != nullptr ? matte->srv.Get() : nullptr, false, false);
 
             context->OMSetRenderTargets(1, &previous_rtv, previous_dsv);
             if (viewport_count > 0) context->RSSetViewports(1, &previous_viewport);

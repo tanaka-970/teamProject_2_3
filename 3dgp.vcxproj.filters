@@ -2838,6 +2838,36 @@
     <FxCompile Include="Shader\ui_effect_matte_composite.hlsl">
       <Filter>Shader</Filter>
     </FxCompile>
+    <FxCompile Include="Shader\ui_effect_matte_morphology.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_bevel_emboss.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_kaleidoscope.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_page_curl.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_ascii_led_matrix.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_feedback_zoom.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_liquid_glass.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_light_sweep.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_shockwave.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_pixel_sort.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
     <FxCompile Include="Shader\line_stroke_vs.hlsl">
       <Filter>Shader</Filter>
     </FxCompile>

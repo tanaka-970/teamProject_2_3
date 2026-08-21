@@ -6,11 +6,53 @@
 #include "../../RePlayEngine/Scene/LoadingScene.h"
 
 #include <filesystem>
+#include <cctype>
 #include <cstring>
 #include <string>
 
 namespace
 {
+    bool IsFontFile(const std::filesystem::path& path)
+    {
+        std::string extension = path.extension().u8string();
+        for (char& character : extension)
+        {
+            character = static_cast<char>(std::tolower(
+                static_cast<unsigned char>(character)));
+        }
+        return extension == ".ttf" || extension == ".otf" || extension == ".ttc";
+    }
+
+    std::size_t RegisterProjectFonts(const std::filesystem::path& fonts_root,
+        ReplayEngine::Assets::AssetDatabase& asset_database)
+    {
+        std::error_code error;
+        if (!std::filesystem::is_directory(fonts_root, error) || error)
+            return 0;
+
+        std::size_t registered_count = 0;
+        std::filesystem::recursive_directory_iterator iterator(fonts_root, error);
+        const std::filesystem::recursive_directory_iterator end;
+        while (iterator != end && !error)
+        {
+            const std::filesystem::directory_entry entry = *iterator;
+            std::error_code entry_error;
+            if (entry.is_regular_file(entry_error) && !entry_error &&
+                IsFontFile(entry.path()))
+            {
+                const auto* record = asset_database.FindByPath(entry.path());
+                if (record == nullptr || record->kind != ReplayEngine::Assets::AssetKind::Font)
+                {
+                    asset_database.Register(entry.path(),
+                        ReplayEngine::Assets::AssetKind::Font);
+                    ++registered_count;
+                }
+            }
+            iterator.increment(error);
+        }
+        return registered_count;
+    }
+
     void SetDebugName(ID3D11DeviceChild* object, const char* name)
     {
 #if defined(_DEBUG) || defined(DEBUG)
@@ -37,6 +79,29 @@ bool framework::initialize()
     std::string asset_database_error;
     if (!asset_database.Load(asset_database_error))
         object_editor_context.SetStatus("AssetDatabase: " + asset_database_error);
+
+    // resources/fonts へ TTF/OTF/TTC を置くだけで、Project Browser を開かなくても
+    // UIText の Font picker へ出せるように起動時登録する。
+    if (!standalone_game_mode)
+    {
+        const std::size_t registered_fonts = RegisterProjectFonts(
+            content_path(std::filesystem::path("resources") / "fonts"), asset_database);
+        if (registered_fonts > 0)
+        {
+            std::string save_error;
+            if (!asset_database.Save(save_error))
+            {
+                object_editor_context.SetStatus(
+                    "フォントAssetDatabase保存失敗: " + save_error);
+            }
+            else
+            {
+                push_editor_log("Info",
+                    "resources/fonts からフォントを自動登録しました: " +
+                    std::to_string(registered_fonts) + "件");
+            }
+        }
+    }
 
     // Input Action Asset は ProjectSettings 読み込み後に initialize_object_scene() で適用する。
     // ここではまだ project_settings が未読込なので参照しない。

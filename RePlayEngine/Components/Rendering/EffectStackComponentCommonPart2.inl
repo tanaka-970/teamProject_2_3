@@ -150,6 +150,100 @@
             case UI::UIEffectKind::MatteComposite:
                 effect.amount = 0.0f;
                 break;
+            case UI::UIEffectKind::MatteMorphology:
+                effect.radius = 4.0f;
+                effect.intensity = 1.0f;
+                effect.waveform = 0;
+                break;
+            case UI::UIEffectKind::BevelEmboss:
+                effect.radius = 2.0f;
+                effect.amount = 1.0f;
+                effect.angle = 45.0f;
+                effect.intensity = 0.8f;
+                effect.color = { 1.0f, 1.0f, 1.0f, 1.0f };
+                effect.color_2 = { 0.0f, 0.0f, 0.0f, 1.0f };
+                break;
+            case UI::UIEffectKind::Kaleidoscope:
+                effect.radius = 8.0f;
+                effect.amount = 1.0f;
+                effect.intensity = 1.0f;
+                effect.angle = 0.0f;
+                effect.direction = { 0.5f, 0.5f };
+                effect.waveform = 0;
+                break;
+            case UI::UIEffectKind::PageCurl:
+                effect.radius = 48.0f;
+                effect.amount = 0.85f;
+                effect.intensity = 1.0f;
+                effect.progress = 0.0f;
+                effect.softness = 0.35f;
+                effect.angle = 0.0f;
+                effect.direction = { 1.0f, 1.0f };
+                effect.waveform = 0;
+                effect.color = { 0.78f, 0.82f, 0.9f, 1.0f };
+                break;
+            case UI::UIEffectKind::AsciiLedMatrix:
+                effect.radius = 8.0f;
+                effect.amount = 0.85f;
+                effect.threshold = 0.0f;
+                effect.intensity = 1.0f;
+                effect.softness = 0.15f;
+                effect.color = { 0.2f, 1.0f, 0.65f, 1.0f };
+                effect.waveform = 0;
+                break;
+            case UI::UIEffectKind::FeedbackZoom:
+                effect.radius = 2.0f;
+                effect.amount = 0.08f;
+                effect.intensity = 0.65f;
+                effect.angle = 0.0f;
+                effect.softness = 0.5f;
+                effect.direction = { 0.5f, 0.5f };
+                break;
+            case UI::UIEffectKind::LiquidGlass:
+                effect.radius = 3.0f;
+                effect.amount = 10.0f;
+                effect.progress = 0.35f;
+                effect.softness = 0.65f;
+                effect.intensity = 0.85f;
+                effect.angle = 35.0f;
+                effect.color = { 0.82f, 0.92f, 1.0f, 0.22f };
+                effect.color_2 = { 0.78f, 0.94f, 1.0f, 0.85f };
+                break;
+            case UI::UIEffectKind::LightSweep:
+                effect.radius = 42.0f;
+                effect.amount = 1.15f;
+                effect.threshold = 0.0f;
+                effect.progress = 0.0f;
+                effect.softness = 0.35f;
+                effect.speed = 0.0f;
+                effect.intensity = 1.0f;
+                effect.angle = 0.0f;
+                effect.color = { 1.0f, 0.96f, 0.82f, 0.9f };
+                effect.color_2 = { 0.55f, 0.82f, 1.0f, 0.35f };
+                break;
+            case UI::UIEffectKind::Shockwave:
+                effect.radius = 18.0f;
+                effect.amount = 20.0f;
+                effect.threshold = 2.0f;
+                effect.progress = 0.0f;
+                effect.softness = 0.35f;
+                effect.speed = 0.0f;
+                effect.intensity = 1.0f;
+                effect.direction = { 0.5f, 0.5f };
+                effect.color = { 0.55f, 0.85f, 1.0f, 0.9f };
+                break;
+            case UI::UIEffectKind::PixelSort:
+                effect.radius = 48.0f;
+                effect.amount = 1.0f;
+                effect.threshold = 0.15f;
+                effect.progress = 0.0f;
+                effect.softness = 0.08f;
+                effect.speed = 0.0f;
+                effect.intensity = 1.0f;
+                effect.angle = 0.0f;
+                effect.color_stop_2 = 0.85f;
+                effect.waveform = 0;
+                break;
             default:
                 break;
             }
@@ -442,7 +536,11 @@
                     "ディザ", "VHS", "レターボックス", "波形",
                     "ディスプレイスメントマップ", "タービュレント変形", "フラクタルノイズ",
                     "モーションブラー", "エコー / 残像", "ドロップシャドウ", "インナーシャドウ",
-                    "LUT", "トーンカーブ", "Matte Composite" }));
+                    "LUT", "トーンカーブ", "Matte Composite",
+                    "マット形態学", "ベベル / エンボス", "万華鏡 / ミラータイル",
+                    "ページカール / フォールド", "ASCII / LED マトリクス",
+                    "フィードバックズーム", "Liquid Glass", "ライトスイープ",
+                    "ショックウェーブ", "ピクセルソート" }));
 
             const auto add_float = [&](const char* name, const char* display,
                 const char* tooltip, double minimum, double maximum, double step)

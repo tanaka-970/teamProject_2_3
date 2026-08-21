@@ -173,6 +173,124 @@
                     Reflection::Animatable::Step).Display("Matte B").OfAssetType("Image"));
                 add_float("amount", "演算", "0=Add / 1=Subtract / 2=Intersect。", 0.0, 2.0, 1.0);
                 break;
+            case UI::UIEffectKind::MatteMorphology:
+                push(MakeEffectProperty(i, "waveform", Reflection::PropertyType::Enum,
+                    Reflection::Animatable::Step).Display("モード")
+                    .Tooltip("アルファの膨張・収縮・3x3局所ホールフィル・エッジ。")
+                    .AsEnum({ "膨張", "収縮", "ホールフィル", "エッジ" }));
+                add_float("radius", "半径", "近傍を読む半径（ピクセル）。", 0.0, 128.0, 0.1);
+                add_float("intensity", "適用量", "元アルファから形態学結果へ混ぜる割合。", 0.0, 1.0, 0.01);
+                break;
+            case UI::UIEffectKind::BevelEmboss:
+                add_float("radius", "幅", "アルファ勾配を読む幅（ピクセル）。", 0.5, 64.0, 0.1);
+                add_float("amount", "深さ", "ハイライト / シャドウの深さ。", 0.0, 4.0, 0.01);
+                add_float("angle", "光の方向", "光が当たる方向（度）。", -360.0, 360.0, 0.1);
+                add_float("intensity", "適用量", "ベベル色を元色へ混ぜる割合。", 0.0, 2.0, 0.01);
+                add_color("ハイライト色", "明るい側の色。濃さはアルファ勾配で決まる。");
+                add_named_color("color_2", "シャドウ色", "暗い側の色。");
+                break;
+            case UI::UIEffectKind::Kaleidoscope:
+                push(MakeEffectProperty(i, "direction", Reflection::PropertyType::Vector2,
+                    Reflection::Animatable::Interpolatable).Display("中心")
+                    .Tooltip("万華鏡の中心。0.5, 0.5 が中央。").Range(0.0, 1.0).Step(0.01));
+                add_float("radius", "セグメント数", "扇形の分割数。", 2.0, 64.0, 1.0);
+                add_float("amount", "スケール", "取り込む画像の倍率。1が等倍。", 0.1, 4.0, 0.01);
+                add_float("angle", "回転", "扇形パターンの回転（度）。", -360.0, 360.0, 0.1);
+                add_float("intensity", "適用量", "元画像から万華鏡画像へ混ぜる割合。", 0.0, 1.0, 0.01);
+                push(MakeEffectProperty(i, "waveform", Reflection::PropertyType::Enum,
+                    Reflection::Animatable::Step).Display("タイル方式")
+                    .AsEnum({ "ミラー", "リピート" }));
+                break;
+            case UI::UIEffectKind::PageCurl:
+                push(MakeEffectProperty(i, "waveform", Reflection::PropertyType::Enum,
+                    Reflection::Animatable::Step).Display("めくりパターン")
+                    .Tooltip("直線・コーナー・中央折り・アコーディオンから選ぶ。")
+                    .AsEnum({ "直線めくり", "コーナーめくり", "中央折り", "アコーディオン" }));
+                push(MakeEffectProperty(i, "direction", Reflection::PropertyType::Vector2,
+                    Reflection::Animatable::Interpolatable).Display("起点 / コーナー")
+                    .Tooltip("コーナーめくりの起点。0,0 が左上、1,1 が右下。直線・中央折りでは無視する。")
+                    .Range(0.0, 1.0).Step(0.01));
+                add_float("progress", "進行", "ページをめくる進行度。0で未変形、1で全体を折る。", 0.0, 1.0, 0.001);
+                add_float("radius", "曲率半径", "折り目の円筒半径（ピクセル）。", 4.0, 512.0, 0.1);
+                add_float("angle", "方向", "めくる方向（度）。", -360.0, 360.0, 0.1);
+                add_float("amount", "裏面の不透明度", "折り返された裏面の不透明度。", 0.0, 1.0, 0.01);
+                add_float("softness", "影の柔らかさ", "折り目付近の陰影。", 0.0, 1.0, 0.01);
+                add_float("intensity", "適用量", "元画像からカール画像へ混ぜる割合。", 0.0, 1.0, 0.01);
+                add_color("裏面色", "折り返しの裏面へ掛ける色。");
+                break;
+            case UI::UIEffectKind::AsciiLedMatrix:
+                push(MakeEffectProperty(i, "waveform", Reflection::PropertyType::Enum,
+                    Reflection::Animatable::Step).Display("表示方式")
+                    .Tooltip("実際の5x7 ASCIIグリフ、丸LED、角LEDから選ぶ。")
+                    .AsEnum({ "ASCII文字", "丸LED", "角LED" }));
+                add_float("radius", "セルサイズ", "LEDセルの大きさ（ピクセル）。", 2.0, 128.0, 0.1);
+                add_float("amount", "字形 / ドットサイズ", "セル内の文字画素またはLEDドットの大きさ。", 0.05, 1.0, 0.01);
+                add_float("threshold", "黒レベル", "これ以下の輝度を消す。", 0.0, 1.0, 0.01);
+                add_float("softness", "アンチエイリアス", "ドット端の柔らかさ。", 0.0, 1.0, 0.01);
+                add_float("intensity", "適用量", "元画像からLED表現へ混ぜる割合。", 0.0, 1.0, 0.01);
+                add_color("LED色", "点灯するドットの色。");
+                break;
+            case UI::UIEffectKind::FeedbackZoom:
+                push(MakeEffectProperty(i, "direction", Reflection::PropertyType::Vector2,
+                    Reflection::Animatable::Interpolatable).Display("ズーム中心")
+                    .Tooltip("前フレームを拡大する中心。0.5, 0.5 が中央。").Range(0.0, 1.0).Step(0.01));
+                add_float("amount", "ズーム量", "前フレームを読む倍率。正でズームイン、負でズームアウト。",
+                    -0.5, 0.5, 0.001);
+                add_float("angle", "回転", "前フレームを読むときの回転（度）。", -360.0, 360.0, 0.1);
+                add_float("radius", "拡散", "履歴サンプルをぼかす半径（ピクセル）。", 0.0, 64.0, 0.1);
+                add_float("softness", "減衰", "中心から離れるほど履歴を弱める量。", 0.0, 1.0, 0.01);
+                add_float("intensity", "適用量", "現在フレームから履歴へ混ぜる割合。", 0.0, 1.0, 0.01);
+                break;
+            case UI::UIEffectKind::LiquidGlass:
+                add_float("radius", "リム幅", "アルファ輪郭から法線を求める幅（ピクセル）。", 0.5, 64.0, 0.1);
+                add_float("amount", "屈折量", "輪郭で背景サンプルをずらす距離（ピクセル）。", 0.0, 128.0, 0.1);
+                add_float("progress", "色分散", "RGBサンプルを分離する割合。", 0.0, 1.0, 0.01);
+                add_float("softness", "フレネル", "輪郭ハイライトの広がり。", 0.0, 1.0, 0.01);
+                add_float("angle", "光の方向", "リムハイライトの方向（度）。", -360.0, 360.0, 0.1);
+                add_float("intensity", "適用量", "ガラス表現の混合量。", 0.0, 1.0, 0.01);
+                add_color("ガラス色", "屈折色へ掛ける色。アルファは着色量。");
+                add_named_color("color_2", "リム色", "輪郭の反射ハイライト色。アルファは反射強度。");
+                break;
+            case UI::UIEffectKind::LightSweep:
+                add_float("radius", "帯幅", "走査する光帯の幅（ピクセル）。", 1.0, 512.0, 0.1);
+                add_float("amount", "光量", "光帯の強さ。", 0.0, 8.0, 0.01);
+                add_float("threshold", "輝度しきい値", "この輝度以上を強く照らす。0でアルファ全体。", 0.0, 1.0, 0.01);
+                add_float("progress", "位置", "光帯の位置。0から1で画面を横切る。", 0.0, 1.0, 0.001);
+                add_float("softness", "境界の柔らかさ", "光帯の端をぼかす量。", 0.0, 1.0, 0.01);
+                add_float("speed", "自動速度", "時間で位置を進める速度。", -4.0, 4.0, 0.001);
+                add_float("angle", "方向", "光帯の走査方向（度）。", -360.0, 360.0, 0.1);
+                add_float("intensity", "適用量", "光沢結果を元画像へ混ぜる割合。", 0.0, 1.0, 0.01);
+                add_color("主光色", "光帯の主色。");
+                add_named_color("color_2", "副光色", "光帯の縁へ混ぜる色。");
+                break;
+            case UI::UIEffectKind::Shockwave:
+                push(MakeEffectProperty(i, "direction", Reflection::PropertyType::Vector2,
+                    Reflection::Animatable::Interpolatable).Display("中心")
+                    .Tooltip("波の中心。0.5, 0.5 が中央。").Range(0.0, 1.0).Step(0.01));
+                add_float("radius", "波幅", "波のリング幅（ピクセル）。", 1.0, 256.0, 0.1);
+                add_float("amount", "歪み量", "波面が画像をずらす最大距離（ピクセル）。", 0.0, 256.0, 0.1);
+                add_float("threshold", "波数", "リング内の振動回数。", 0.0, 16.0, 0.1);
+                add_float("progress", "進行", "波の位置。0で中心、1で外周。", 0.0, 1.0, 0.001);
+                add_float("softness", "境界の柔らかさ", "リングの端をぼかす量。", 0.0, 1.0, 0.01);
+                add_float("speed", "自動速度", "時間で波を進める速度。", -4.0, 4.0, 0.001);
+                add_float("intensity", "適用量", "歪みと発光の混合量。", 0.0, 2.0, 0.01);
+                add_color("波の色", "リングの発光色。");
+                break;
+            case UI::UIEffectKind::PixelSort:
+                add_float("radius", "ソート範囲", "1方向へ調べる半径（ピクセル）。", 4.0, 128.0, 1.0);
+                add_float("amount", "適用量", "元画像からソート結果へ混ぜる割合。", 0.0, 1.0, 0.01);
+                add_float("threshold", "下限", "ソート対象にする輝度の下限。", 0.0, 1.0, 0.01);
+                add_float("softness", "しきい値の柔らかさ", "ソート対象の境界を滑らかにする。", 0.0, 0.5, 0.001);
+                add_float("progress", "オフセット", "ソート窓の位相をずらす。", 0.0, 1.0, 0.001);
+                add_float("speed", "自動速度", "ソート窓を動かす速度。", -4.0, 4.0, 0.001);
+                add_float("angle", "方向", "ソートする軸（度）。", -360.0, 360.0, 0.1);
+                push(MakeEffectProperty(i, "waveform", Reflection::PropertyType::Enum,
+                    Reflection::Animatable::Step).Display("ソート方式")
+                    .AsEnum({ "輝度昇順", "輝度降順", "彩度昇順", "色相昇順" }));
+                push(MakeEffectProperty(i, "color_stop_2", Reflection::PropertyType::Float,
+                    Reflection::Animatable::Interpolatable).Display("上限")
+                    .Tooltip("ソート対象にする輝度の上限。").Range(0.0, 1.0).Step(0.01));
+                break;
             default:
                 break;
             }

@@ -63,6 +63,16 @@ namespace ReplayEngine::UI
         LUT = 49,
         ToneCurve = 50,
         MatteComposite = 51,
+        MatteMorphology = 52,
+        BevelEmboss = 53,
+        Kaleidoscope = 54,
+        PageCurl = 55,
+        AsciiLedMatrix = 56,
+        FeedbackZoom = 57,
+        LiquidGlass = 58,
+        LightSweep = 59,
+        Shockwave = 60,
+        PixelSort = 61,
 
         // 新規 kind は必ず末尾へ追加する。既存 Scene の enum 値を変えない。
     };

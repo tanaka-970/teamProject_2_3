@@ -110,7 +110,7 @@ namespace ReplayEngine::Rendering::Effects
             float padding = 0.0f;
         };
 
-        static constexpr std::size_t effect_shader_count = 52;
+        static constexpr std::size_t effect_shader_count = 62;
 
         bool EnsureBrushStrokeInstanceCapacity(std::size_t instance_count);
         bool EnsureCustomEffectConstantBuffer(std::uint32_t byte_width);
