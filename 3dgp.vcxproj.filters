@@ -2577,6 +2577,9 @@
     <ClCompile Include="RePlayEngine\Components\UI\UIShapeComponent.cpp">
       <Filter>RePlayEngine\Components\UI</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Components\UI\UIShapeImageComponent.cpp">
+      <Filter>RePlayEngine\Components\UI</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Assets\SpriteAtlasAsset.cpp">
       <Filter>RePlayEngine\Assets</Filter>
     </ClCompile>
@@ -2632,6 +2635,9 @@
       <Filter>RePlayEngine\Components\UI</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Components\UI\UIShapeComponent.h">
+      <Filter>RePlayEngine\Components\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\UI\UIShapeImageComponent.h">
       <Filter>RePlayEngine\Components\UI</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Assets\SpriteAtlasAsset.h">

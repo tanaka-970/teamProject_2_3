@@ -342,6 +342,113 @@
             return true;
         };
 
+        const auto render_shape_image = [&](const UIEffectStackComponent* effects,
+            UIImageComponent& image, UIShapeImageComponent& shape_image,
+            const RectTransformComponent& rect, float scale, float opacity,
+            const D3D11_RECT* scissor, const UIPuppetDeformComponent* puppet)
+        {
+            if (!image.ActiveInHierarchy() || !shape_image.ActiveInHierarchy() ||
+                image.opacity <= 0.0f || image.fill_amount <= 0.0f ||
+                !shape_image.path_closed || shape_image.path_points.size() < 3)
+                return false;
+
+            const std::uint32_t target_width = static_cast<std::uint32_t>(
+                (std::max)(1.0f, std::ceil(screen_width * scale)));
+            const std::uint32_t target_height = static_cast<std::uint32_t>(
+                (std::max)(1.0f, std::ceil(screen_height * scale)));
+            UIRenderTarget* target = render_target_pool_.Acquire(target_width, target_height);
+            UIRenderTarget* scratch = render_target_pool_.Acquire(target_width, target_height);
+            UIRenderTarget* mask_target = render_target_pool_.Acquire(target_width, target_height);
+            if (target == nullptr || scratch == nullptr || mask_target == nullptr ||
+                !target->rtv || !target->srv || !scratch->rtv || !scratch->srv ||
+                !mask_target->rtv || !mask_target->srv)
+                return false;
+
+            ID3D11RenderTargetView* previous_rtv = nullptr;
+            ID3D11DepthStencilView* previous_dsv = nullptr;
+            context->OMGetRenderTargets(1, &previous_rtv, &previous_dsv);
+            UINT viewport_count = 1;
+            D3D11_VIEWPORT previous_viewport{};
+            context->RSGetViewports(&viewport_count, &previous_viewport);
+            const FLOAT clear[4]{ 0.0f, 0.0f, 0.0f, 0.0f };
+
+            const DirectX::XMFLOAT4 source_rect = rect.ResolvedRect();
+            const ResolvedImageSource resolved = resolve_image_source(image);
+            DirectX::XMFLOAT4 draw_rect = source_rect;
+            DirectX::XMFLOAT4 uv = resolved.uv;
+            const float fill = (std::min)((std::max)(image.fill_amount, 0.0f), 1.0f);
+            if (image.fill_method == UIImageComponent::Horizontal)
+            {
+                draw_rect.z *= fill;
+                uv.z *= fill;
+            }
+            else if (image.fill_method == UIImageComponent::Vertical)
+            {
+                draw_rect.w *= fill;
+                uv.w *= fill;
+            }
+
+            configure_effect_target(*target);
+            context->ClearRenderTargetView(target->rtv.Get(), clear);
+            append_image_geometry(draw_rect, rect.ResolvedMatrix(), uv,
+                MultiplyAlpha(image.color, image.opacity * opacity), scale,
+                puppet, resolved.rotated);
+            configure_visual(image.fill_color_2, image.fill_mode, image.fill_angle,
+                image.fill_center, image.stroke_color_2, image.stroke_mode,
+                false, 0.0f, {}, {}, {});
+            Flush(context, TextureFor(resolved.texture_guid, asset_database),
+                states.blend_alpha, states, nullptr);
+
+            configure_effect_target(*mask_target);
+            context->ClearRenderTargetView(mask_target->rtv.Get(), clear);
+            UIShapeComponent mask_shape;
+            mask_shape.shape = UIShapeComponent::CustomBezierPath;
+            mask_shape.path_closed = true;
+            mask_shape.path_points = shape_image.path_points;
+            mask_shape.path_in_handles = shape_image.path_in_handles;
+            mask_shape.path_out_handles = shape_image.path_out_handles;
+            mask_shape.fill_color = { 1.0f, 1.0f, 1.0f, 1.0f };
+            mask_shape.fill_mode = UIShapeComponent::Solid;
+            mask_shape.stroke_width = 0.0f;
+            render_shape_geometry(mask_shape, source_rect, rect.ResolvedMatrix(),
+                scale, 1.0f, nullptr);
+
+            ID3D11ShaderResourceView* null_srvs[2]{};
+            context->PSSetShaderResources(0, 2, null_srvs);
+            UIRenderTarget* current = target;
+            if (effects != nullptr && effects->HasActiveEffects(asset_database))
+                apply_effect_passes(*effects, current, target, scratch);
+
+            UIEffectStackComponent clip_effects;
+            UI::UIEffect clip_effect;
+            clip_effect.kind = static_cast<int>(UI::UIEffectKind::Mask);
+            clip_effect.waveform = -1;
+            clip_effect.mask = "__runtime_ui_matte";
+            clip_effect.amount = 1.0f;
+            clip_effects.effects.push_back(clip_effect);
+            apply_effect_passes(clip_effects, current, target, scratch,
+                mask_target->srv.Get(), false, false);
+
+            context->OMSetRenderTargets(1, &previous_rtv, previous_dsv);
+            if (viewport_count > 0) context->RSSetViewports(1, &previous_viewport);
+            if (previous_rtv != nullptr) previous_rtv->Release();
+            if (previous_dsv != nullptr) previous_dsv->Release();
+            constants.screen_size = { screen_width, screen_height, 0.0f, 0.0f };
+            context->UpdateSubresource(constant_buffer_.Get(), 0, nullptr,
+                &constants, 0, 0);
+            draw_target_height = screen_height;
+
+            DirectX::XMFLOAT4X4 identity{};
+            DirectX::XMStoreFloat4x4(&identity, DirectX::XMMatrixIdentity());
+            append_quad({ 0.0f, 0.0f, screen_width, screen_height }, identity,
+                { 0.0f, 0.0f, 1.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, scale);
+            configure_visual({}, 0, 0.0f, { 0.5f, 0.5f }, {}, 0,
+                false, 0.0f, {}, {}, {});
+            Flush(context, current->srv.Get(), BlendForImage(image, states),
+                states, scissor);
+            return true;
+        };
+
         const auto render_shape_effect_preview = [&] (
             const UIEffectStackComponent& effects, UIShapeComponent& shape,
             const RectTransformComponent& rect, float scale, float opacity,

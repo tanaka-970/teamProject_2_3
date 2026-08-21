@@ -926,6 +926,7 @@
     <ClCompile Include="RePlayEngine\Assets\SpriteAtlasAsset.cpp" />
     <ClCompile Include="RePlayEngine\Components\UI\UIPuppetDeformComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\UI\UIShapeComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\UIShapeImageComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\UI\UITextComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\UI\UIButtonComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\UI\UIMaskComponent.cpp" />
@@ -943,6 +944,7 @@
     <ClInclude Include="RePlayEngine\Components\UI\UIImageComponent.h" />
     <ClInclude Include="RePlayEngine\Components\UI\UIPuppetDeformComponent.h" />
     <ClInclude Include="RePlayEngine\Components\UI\UIShapeComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\UI\UIShapeImageComponent.h" />
     <ClInclude Include="RePlayEngine\Assets\SpriteAtlasAsset.h" />
     <ClInclude Include="RePlayEngine\Components\UI\UITextComponent.h" />
     <ClInclude Include="RePlayEngine\Components\UI\UIButtonComponent.h" />

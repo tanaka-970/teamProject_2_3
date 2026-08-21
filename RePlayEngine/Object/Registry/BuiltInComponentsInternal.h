@@ -50,6 +50,7 @@
 #include "../../Components/UI/UIMaskComponent.h"
 #include "../../Components/UI/UIEffectStackComponent.h"
 #include "../../Components/UI/UIShapeComponent.h"
+#include "../../Components/UI/UIShapeImageComponent.h"
 #include "../../Components/UI/UIPuppetDeformComponent.h"
 #include "../../Components/UI/UISpriteAnimatorComponent.h"
 #include "../../Components/UI/UITextAnimatorComponent.h"
@@ -130,6 +131,7 @@ namespace ReplayEngine::Core::Detail
         using Components::UIMaskComponent;
         using Components::UIEffectStackComponent;
         using Components::UIShapeComponent;
+        using Components::UIShapeImageComponent;
         using Components::UIPuppetDeformComponent;
         using Components::UISpriteAnimatorComponent;
         using Components::UITextComponent;

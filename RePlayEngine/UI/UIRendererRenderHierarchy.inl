@@ -130,15 +130,25 @@
                 {
                     const UIPuppetDeformComponent* puppet =
                         object.GetComponent<UIPuppetDeformComponent>();
-                    const bool backdrop_rendered = backdrop_allowed && self_effects != nullptr &&
-                        self_effects->capture_backdrop &&
-                        render_image_effect_with_backdrop(*self_effects, *image, *rect, scale,
-                            opacity, active_scissor, puppet);
-                    if (!backdrop_rendered && (self_effects == nullptr ||
-                        !render_effect_preview(*self_effects, *image, *rect, scale,
-                            opacity, active_scissor, puppet)))
+                    UIShapeImageComponent* shape_image =
+                        object.GetComponent<UIShapeImageComponent>();
+                    if (shape_image != nullptr && render_shape_image(self_effects,
+                        *image, *shape_image, *rect, scale, opacity, active_scissor, puppet))
                     {
-                        render_image(*image, *rect, scale, opacity, active_scissor, puppet);
+                        // 自由形状Imageの専用描画経路で完了。
+                    }
+                    else
+                    {
+                        const bool backdrop_rendered = backdrop_allowed &&
+                            self_effects != nullptr && self_effects->capture_backdrop &&
+                            render_image_effect_with_backdrop(*self_effects, *image, *rect,
+                                scale, opacity, active_scissor, puppet);
+                        if (!backdrop_rendered && (self_effects == nullptr ||
+                            !render_effect_preview(*self_effects, *image, *rect, scale,
+                                opacity, active_scissor, puppet)))
+                        {
+                            render_image(*image, *rect, scale, opacity, active_scissor, puppet);
+                        }
                     }
                 }
                 if (UITextComponent* text = object.GetComponent<UITextComponent>())
