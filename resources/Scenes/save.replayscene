@@ -2,7 +2,7 @@ REPLAY_SCENE 11
 SCENE "新しいシーン"
 SCENE_STATE 0
 COLLISION_STATE 2 0
-OBJECT_COUNT 8
+OBJECT_COUNT 9
 OBJECT
   ID 612
   NAME "Canvas"
@@ -25,7 +25,7 @@ OBJECT
     PROPERTY "opacity" float 1
   END_COMPONENT
   COMPONENT "RectTransformComponent" 1
-    STABLE_ID 15
+    STABLE_ID 16
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
@@ -389,5 +389,111 @@ OBJECT
     PROPERTY "path_points" array vec2 4 -0.57408803701400757 -1.9686554670333862 0.86055451631546021 -1.143424391746521 0.035970240831375122 2.9827308654785156 -2.2567763328552246 0.27322220802307129
     PROPERTY "path_in_handles" array vec2 4 0 0 0 0 0 0 0 0
     PROPERTY "path_out_handles" array vec2 4 0 0 0 0 0 0 0 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 628
+  NAME "Text"
+  ENABLED 1
+  PARENT 612
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 383.5 354
+    PROPERTY "size_delta" vec2 839 166
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 20
+    PROPERTY "text" string "Text"
+    PROPERTY "font" assetref "8d49f84fe9df766763f71a26d79ca356"
+    PROPERTY "font_size" float 335
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float -19.5
+    PROPERTY "line_spacing" float 0.36000001430511475
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+    PROPERTY "number_source" compref 0 0
+    PROPERTY "number_source_property" string ""
+    PROPERTY "number_format" string ""
+    PROPERTY "number_digits" int 0
+    PROPERTY "outline_width" float 0
+    PROPERTY "outline_color" color 0 0 0 1
+    PROPERTY "shadow_offset" vec2 21.5 0
+    PROPERTY "shadow_color" color 0.18218624591827393 0.03983018547296524 0.03983018547296524 0
+  END_COMPONENT
+  COMPONENT "UIEffectStackComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE "RePlayEngine.Optional.Effects"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 48
+    PROPERTY "enabled" bool 1
+    PROPERTY "target_scope" enum 0
+    PROPERTY "capture_backdrop" bool 0
+    PROPERTY "use_preset" bool 0
+    PROPERTY "effect_preset" assetref ""
+    PROPERTY "effect_count" int 1
+    PROPERTY "effects[0].enabled" bool 1
+    PROPERTY "effects[0].type" enum 43
+    PROPERTY "effects[0].amount" float 18
+    PROPERTY "effects[0].radius" float 180
+    PROPERTY "effects[0].speed" float 0.80000001192092896
+    PROPERTY "effects[0].intensity" float 1
+    PROPERTY "effects[0].seed" float 1
+    PROPERTY "effects[0].custom_shader" assetref ""
+    PROPERTY "effects[0].threshold" float 0.57300001382827759
+    PROPERTY "effects[0].angle" float 6.8000001907348633
+    PROPERTY "effects[0].progress" float 0.11999999731779099
+    PROPERTY "effects[0].softness" float 0.34999999403953552
+    PROPERTY "effects[0].direction" vec2 1 1
+    PROPERTY "effects[0].color" color 0 0 0 1
+    PROPERTY "effects[0].color_2" color 1 1 1 1
+    PROPERTY "effects[0].color_3" color 1 1 1 1
+    PROPERTY "effects[0].color_4" color 1 1 1 1
+    PROPERTY "effects[0].color_stop_2" float 0.33333298563957214
+    PROPERTY "effects[0].color_stop_3" float 0.66666698455810547
+    PROPERTY "effects[0].color_stop_4" float 1
+    PROPERTY "effects[0].mask" assetref ""
+    PROPERTY "effects[0].brush_atlas_enabled" bool 0
+    PROPERTY "effects[0].brush_instanced_renderer_enabled" bool 0
+    PROPERTY "effects[0].brush_pattern_mode" enum 0
+    PROPERTY "effects[0].brush_pattern_index" enum 0
+    PROPERTY "effects[0].brush_pattern_weight_0" float 0
+    PROPERTY "effects[0].brush_pattern_weight_1" float 0
+    PROPERTY "effects[0].brush_pattern_weight_2" float 0
+    PROPERTY "effects[0].brush_pattern_weight_3" float 0
+    PROPERTY "effects[0].brush_pattern_weight_4" float 0
+    PROPERTY "effects[0].brush_pattern_weight_5" float 0
+    PROPERTY "effects[0].brush_pattern_weight_6" float 0
+    PROPERTY "effects[0].brush_pattern_weight_7" float 0
+    PROPERTY "effects[0].brush_pattern_weight_8" float 0
+    PROPERTY "effects[0].brush_pattern_weight_9" float 0
+    PROPERTY "effects[0].brush_pattern_weight_10" float 0
+    PROPERTY "effects[0].brush_pattern_weight_11" float 0
+    PROPERTY "effects[0].brush_pattern_weight_12" float 0
+    PROPERTY "effects[0].brush_pattern_weight_13" float 0
+    PROPERTY "effects[0].brush_pattern_weight_14" float 0
+    PROPERTY "effects[0].brush_pattern_weight_15" float 0
+    PROPERTY "effects[0].waveform" enum 0
   END_COMPONENT
 END_OBJECT
