@@ -1,4 +1,4 @@
-REPLAY_ASSET_DB 2 167
+REPLAY_ASSET_DB 2 176
 "60412424bb1443240b2bf2160eee6923" 1 "DemoAsset" "resources/DemoAsset" "resources/.replay_cache/models/f9fffac39252a621_v0.replaycache"
 "1bd1358040255f5bd18f3be0d79fbe3c" 1 "DemoAsset" "resources/DemoAsset" "resources/.replay_cache/models/6a20e727f78fb359_v0.replaycache"
 "e5c4168feb92f8fd7357f6cbc1f66e22" 1 "DemoAsset" "resources/DemoAsset" "resources/.replay_cache/models/98fd72a862da8c8f_v0.replaycache"
@@ -166,3 +166,12 @@ REPLAY_ASSET_DB 2 167
 "2d656686fd6b64c725b76a58ea005184" 5 "save" "resources/Scenes/save.replayscene" ""
 "e40b46f1fe79833a95b84de562a4a505" 2 "鳴上悠" "resources/DemoAsset/鳴上悠.png" ""
 "75051fcd391be0ead908e411240f6955" 14 "narukami" "resources/DemoAsset/narukami.replayatlas" ""
+"117765d59c1b8de54bf4cc84501e8e00" 9 "Commissioner-Regular" "resources/fonts/Commissioner-Regular.ttf" ""
+"64baae89cc7a7af1390ddfb76b4b4cce" 9 "DelaGothicOne-Regular" "resources/fonts/DelaGothicOne-Regular.ttf" ""
+"7e25a5c1021588d1a7ba49f295c700a4" 9 "MPLUS1-Regular" "resources/fonts/MPLUS1-Regular.ttf" ""
+"79cdd1d0b5055a42c9d6e2ac3f837429" 9 "Murecho-Regular" "resources/fonts/Murecho-Regular.ttf" ""
+"78cae37fc4933dc2229d7dc48645241b" 9 "NewTegomin-Regular" "resources/fonts/NewTegomin-Regular.ttf" ""
+"8d49f84fe9df766763f71a26d79ca356" 9 "PottaOne-Regular" "resources/fonts/PottaOne-Regular.ttf" ""
+"2252f15d98c656f80611247d6a21e239" 9 "RampartOne-Regular" "resources/fonts/RampartOne-Regular.ttf" ""
+"c7167058de2b5568e6c9ccb7c61ce13b" 9 "ReggaeOne-Regular" "resources/fonts/ReggaeOne-Regular.ttf" ""
+"89d5bc58929ed41e5554e87ea8e3dd65" 9 "VarelaRound-Regular" "resources/fonts/VarelaRound-Regular.ttf" ""
