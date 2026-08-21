@@ -291,13 +291,18 @@ void framework::draw_ui_scene_overlay()
         logical_mouse_x / (std::max)(0.0001f, control_canvas_scale),
         logical_mouse_y / (std::max)(0.0001f, control_canvas_scale) };
     bool subcontrol_click = false;
+    const auto scene_point_for_normalized = [&](const DirectX::XMFLOAT2& normalized)
+    {
+        if (control_rect == nullptr) return ImVec2{};
+        const DirectX::XMFLOAT2 canvas = NormalizedToCanvas(*control_rect, normalized);
+        return ToSceneUIPoint(canvas, control_canvas_scale,
+            target.left, target.top, target_width, target_height,
+            logical_width, logical_height);
+    };
     const auto scene_distance_sq = [&](const DirectX::XMFLOAT2& normalized)
     {
         if (control_rect == nullptr) return (std::numeric_limits<float>::max)();
-        const DirectX::XMFLOAT2 canvas = NormalizedToCanvas(*control_rect, normalized);
-        const ImVec2 point = ToSceneUIPoint(canvas, control_canvas_scale,
-            target.left, target.top, target_width, target_height,
-            logical_width, logical_height);
+        const ImVec2 point = scene_point_for_normalized(normalized);
         const float dx = point.x - mouse.x;
         const float dy = point.y - mouse.y;
         return dx * dx + dy * dy;
@@ -409,6 +414,166 @@ void framework::draw_ui_scene_overlay()
                 if (ui_subcontrol_dragging) object_editor_context.BeginEdit("自由図形の頂点を移動");
                 subcontrol_click = true;
                 ui_scene_view_input_consumed = true;
+            }
+            if (!subcontrol_click)
+            {
+                const auto lerp_point = [](const DirectX::XMFLOAT2& a,
+                    const DirectX::XMFLOAT2& b, float t)
+                {
+                    return DirectX::XMFLOAT2{
+                        a.x + (b.x - a.x) * t,
+                        a.y + (b.y - a.y) * t };
+                };
+                const auto evaluate_curve = [&](const DirectX::XMFLOAT2& p0,
+                    const DirectX::XMFLOAT2& p1, const DirectX::XMFLOAT2& p2,
+                    const DirectX::XMFLOAT2& p3, float t)
+                {
+                    const float u = 1.0f - t;
+                    return DirectX::XMFLOAT2{
+                        u * u * u * p0.x + 3.0f * u * u * t * p1.x +
+                            3.0f * u * t * t * p2.x + t * t * t * p3.x,
+                        u * u * u * p0.y + 3.0f * u * u * t * p1.y +
+                            3.0f * u * t * t * p2.y + t * t * t * p3.y };
+                };
+                const auto handle_at = [](const auto& handles, std::size_t index)
+                {
+                    return index < handles.size()
+                        ? handles[index] : DirectX::XMFLOAT2{};
+                };
+                const auto find_nearest_shape_segment = [&](const auto* shape,
+                    int& out_segment, float& out_t)
+                {
+                    out_segment = -1;
+                    out_t = 0.0f;
+                    if (shape == nullptr || shape->path_points.size() < 2)
+                        return false;
+                    const std::size_t count = shape->path_points.size();
+                    const std::size_t segment_count = shape->path_closed
+                        ? count : count - 1;
+                    float nearest_segment_d2 = 100.0f;
+                    constexpr int samples = 48;
+                    for (std::size_t segment = 0; segment < segment_count; ++segment)
+                    {
+                        const std::size_t next = (segment + 1) % count;
+                        const DirectX::XMFLOAT2 p0 = shape->path_points[segment];
+                        const DirectX::XMFLOAT2 p3 = shape->path_points[next];
+                        const DirectX::XMFLOAT2 p1 = {
+                            p0.x + handle_at(shape->path_out_handles, segment).x,
+                            p0.y + handle_at(shape->path_out_handles, segment).y };
+                        const DirectX::XMFLOAT2 p2 = {
+                            p3.x + handle_at(shape->path_in_handles, next).x,
+                            p3.y + handle_at(shape->path_in_handles, next).y };
+                        DirectX::XMFLOAT2 previous = p0;
+                        ImVec2 previous_scene = scene_point_for_normalized(previous);
+                        for (int sample = 1; sample <= samples; ++sample)
+                        {
+                            const float t1 = static_cast<float>(sample) /
+                                static_cast<float>(samples);
+                            const DirectX::XMFLOAT2 current = evaluate_curve(
+                                p0, p1, p2, p3, t1);
+                            const ImVec2 current_scene =
+                                scene_point_for_normalized(current);
+                            const float vx = current_scene.x - previous_scene.x;
+                            const float vy = current_scene.y - previous_scene.y;
+                            const float length_sq = vx * vx + vy * vy;
+                            const float wx = mouse.x - previous_scene.x;
+                            const float wy = mouse.y - previous_scene.y;
+                            const float local_t = length_sq > 0.0001f
+                                ? (std::max)(0.0f, (std::min)(1.0f,
+                                    (wx * vx + wy * vy) / length_sq)) : 0.0f;
+                            const DirectX::XMFLOAT2 candidate = lerp_point(
+                                previous, current, local_t);
+                            const ImVec2 candidate_scene =
+                                scene_point_for_normalized(candidate);
+                            const float dx = candidate_scene.x - mouse.x;
+                            const float dy = candidate_scene.y - mouse.y;
+                            const float distance_sq = dx * dx + dy * dy;
+                            if (distance_sq < nearest_segment_d2)
+                            {
+                                nearest_segment_d2 = distance_sq;
+                                out_segment = static_cast<int>(segment);
+                                out_t = (static_cast<float>(sample - 1) + local_t) /
+                                    static_cast<float>(samples);
+                            }
+                            previous = current;
+                            previous_scene = current_scene;
+                        }
+                    }
+                    return out_segment >= 0;
+                };
+                const auto insert_shape_point = [&](auto* shape, int segment, float t)
+                {
+                    if (shape == nullptr || !object_editor_context.CanEdit() ||
+                        shape->path_points.size() >= 64 || segment < 0)
+                        return false;
+                    const std::size_t count = shape->path_points.size();
+                    if (count < 2 || static_cast<std::size_t>(segment) >= count)
+                        return false;
+                    const std::size_t segment_index = static_cast<std::size_t>(segment);
+                    const std::size_t next_index = (segment_index + 1) % count;
+                    const DirectX::XMFLOAT2 p0 = shape->path_points[segment_index];
+                    const DirectX::XMFLOAT2 p3 = shape->path_points[next_index];
+                    shape->path_in_handles.resize(count, DirectX::XMFLOAT2{});
+                    shape->path_out_handles.resize(count, DirectX::XMFLOAT2{});
+                    const DirectX::XMFLOAT2 p1{
+                        p0.x + shape->path_out_handles[segment_index].x,
+                        p0.y + shape->path_out_handles[segment_index].y };
+                    const DirectX::XMFLOAT2 p2{
+                        p3.x + shape->path_in_handles[next_index].x,
+                        p3.y + shape->path_in_handles[next_index].y };
+                    t = (std::max)(0.01f, (std::min)(0.99f, t));
+                    const DirectX::XMFLOAT2 q0 = lerp_point(p0, p1, t);
+                    const DirectX::XMFLOAT2 q1 = lerp_point(p1, p2, t);
+                    const DirectX::XMFLOAT2 q2 = lerp_point(p2, p3, t);
+                    const DirectX::XMFLOAT2 r0 = lerp_point(q0, q1, t);
+                    const DirectX::XMFLOAT2 r1 = lerp_point(q1, q2, t);
+                    const DirectX::XMFLOAT2 inserted = lerp_point(r0, r1, t);
+
+                    object_editor_context.BeginEdit("自由図形の線上に頂点を追加");
+                    shape->path_out_handles[segment_index] = {
+                        q0.x - p0.x, q0.y - p0.y };
+                    shape->path_in_handles[next_index] = {
+                        q2.x - p3.x, q2.y - p3.y };
+                    const std::size_t insert_at = segment_index + 1;
+                    shape->path_points.insert(shape->path_points.begin() +
+                        static_cast<std::ptrdiff_t>(insert_at), inserted);
+                    shape->path_in_handles.insert(shape->path_in_handles.begin() +
+                        static_cast<std::ptrdiff_t>(insert_at),
+                        DirectX::XMFLOAT2{ r0.x - inserted.x, r0.y - inserted.y });
+                    shape->path_out_handles.insert(shape->path_out_handles.begin() +
+                        static_cast<std::ptrdiff_t>(insert_at),
+                        DirectX::XMFLOAT2{ r1.x - inserted.x, r1.y - inserted.y });
+                    shape->OnPropertyChanged("path_points");
+                    ui_shape_active_point = static_cast<int>(insert_at);
+                    ui_shape_selected_point = static_cast<int>(insert_at);
+                    ui_shape_active_handle = 0;
+                    ui_puppet_active_pin = -1;
+                    ui_subcontrol_dragging = true;
+                    return true;
+                };
+
+                int nearest_segment = -1;
+                float nearest_segment_t = 0.0f;
+                bool inserted = false;
+                if (UIShapeComponent* shape =
+                    control_selected->GetComponent<UIShapeComponent>();
+                    shape != nullptr && shape->shape == UIShapeComponent::CustomBezierPath &&
+                    find_nearest_shape_segment(shape, nearest_segment, nearest_segment_t))
+                {
+                    inserted = insert_shape_point(shape, nearest_segment, nearest_segment_t);
+                }
+                else if (UIShapeImageComponent* shape =
+                    control_selected->GetComponent<UIShapeImageComponent>();
+                    shape != nullptr &&
+                    find_nearest_shape_segment(shape, nearest_segment, nearest_segment_t))
+                {
+                    inserted = insert_shape_point(shape, nearest_segment, nearest_segment_t);
+                }
+                if (inserted)
+                {
+                    subcontrol_click = true;
+                    ui_scene_view_input_consumed = true;
+                }
             }
         }
     }

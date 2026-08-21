@@ -373,8 +373,41 @@
             const FLOAT clear[4]{ 0.0f, 0.0f, 0.0f, 0.0f };
 
             const DirectX::XMFLOAT4 source_rect = rect.ResolvedRect();
+            float path_min_x = shape_image.path_points.front().x;
+            float path_min_y = shape_image.path_points.front().y;
+            float path_max_x = path_min_x;
+            float path_max_y = path_min_y;
+            const auto include_path_point = [&](const DirectX::XMFLOAT2& point)
+            {
+                path_min_x = (std::min)(path_min_x, point.x);
+                path_min_y = (std::min)(path_min_y, point.y);
+                path_max_x = (std::max)(path_max_x, point.x);
+                path_max_y = (std::max)(path_max_y, point.y);
+            };
+            for (std::size_t index = 0; index < shape_image.path_points.size(); ++index)
+            {
+                const DirectX::XMFLOAT2 anchor = shape_image.path_points[index];
+                include_path_point(anchor);
+                if (index < shape_image.path_in_handles.size())
+                    include_path_point({ anchor.x + shape_image.path_in_handles[index].x,
+                        anchor.y + shape_image.path_in_handles[index].y });
+                if (index < shape_image.path_out_handles.size())
+                    include_path_point({ anchor.x + shape_image.path_out_handles[index].x,
+                        anchor.y + shape_image.path_out_handles[index].y });
+            }
+            const float path_x0 = source_rect.x + path_min_x * source_rect.z;
+            const float path_x1 = source_rect.x + path_max_x * source_rect.z;
+            const float path_y0 = source_rect.y + path_min_y * source_rect.w;
+            const float path_y1 = source_rect.y + path_max_y * source_rect.w;
+            const DirectX::XMFLOAT4 path_bounds{
+                (std::min)(path_x0, path_x1),
+                (std::min)(path_y0, path_y1),
+                (std::max)(0.0001f, std::fabs(path_x1 - path_x0)),
+                (std::max)(0.0001f, std::fabs(path_y1 - path_y0)) };
             const ResolvedImageSource resolved = resolve_image_source(image);
-            DirectX::XMFLOAT4 draw_rect = source_rect;
+            // RectTransform の枠外へ出た頂点にも Image の画素を供給する。
+            // Path の外接矩形へ Image を伸ばし、最後に専用マスクで輪郭へ切り抜く。
+            DirectX::XMFLOAT4 draw_rect = path_bounds;
             DirectX::XMFLOAT4 uv = resolved.uv;
             const float fill = (std::min)((std::max)(image.fill_amount, 0.0f), 1.0f);
             if (image.fill_method == UIImageComponent::Horizontal)
