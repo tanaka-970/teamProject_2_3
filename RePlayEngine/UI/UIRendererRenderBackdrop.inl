@@ -258,7 +258,8 @@
             {
                 if (!effect.enabled) continue;
                 const UIEffectKind kind = static_cast<UIEffectKind>(effect.kind);
-                if (kind == UIEffectKind::MotionBlur || kind == UIEffectKind::Echo)
+                if (kind == UIEffectKind::MotionBlur || kind == UIEffectKind::Echo ||
+                    kind == UIEffectKind::FeedbackZoom)
                 {
                     needs_temporal_history = true;
                     break;

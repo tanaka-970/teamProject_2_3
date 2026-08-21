@@ -168,8 +168,20 @@ namespace ReplayEngine::Rendering::Effects
             "ui_effect_lut.cso",
             "ui_effect_tone_curve.cso",
             "ui_effect_matte_composite.cso",
+            "ui_effect_matte_morphology.cso",
+            "ui_effect_bevel_emboss.cso",
+            "ui_effect_kaleidoscope.cso",
+            "ui_effect_page_curl.cso",
+            "ui_effect_ascii_led_matrix.cso",
+            "ui_effect_feedback_zoom.cso",
+            "ui_effect_liquid_glass.cso",
+            "ui_effect_light_sweep.cso",
+            "ui_effect_shockwave.cso",
+            "ui_effect_pixel_sort.cso",
         };
-        static_assert(static_cast<std::size_t>(UI::UIEffectKind::MatteComposite) + 1 ==
+        static_assert(static_cast<std::size_t>(UI::UIEffectKind::FeedbackZoom) + 1 ==
+            58, "Existing UIEffectKind values must stay aligned");
+        static_assert(static_cast<std::size_t>(UI::UIEffectKind::PixelSort) + 1 ==
             effect_shader_count, "UIEffectKind and EffectChain shader table must stay aligned");
         for (std::size_t index = 0; index < effect_cso_names.size(); ++index)
         {
@@ -424,8 +436,10 @@ namespace ReplayEngine::Rendering::Effects
             const UI::UIEffectKind effect_kind =
                 static_cast<UI::UIEffectKind>(effect.kind);
             const bool is_mask_effect = effect_kind == UI::UIEffectKind::Mask;
+            const bool is_liquid_glass = effect_kind == UI::UIEffectKind::LiquidGlass;
             const bool is_temporal_effect = effect_kind == UI::UIEffectKind::MotionBlur ||
-                effect_kind == UI::UIEffectKind::Echo;
+                effect_kind == UI::UIEffectKind::Echo ||
+                effect_kind == UI::UIEffectKind::FeedbackZoom;
             ID3D11ShaderResourceView* mask_texture = nullptr;
             std::string mask_guid = effect.mask;
             const bool is_brush_effect = static_cast<UI::UIEffectKind>(effect.kind) ==
@@ -446,6 +460,16 @@ namespace ReplayEngine::Rendering::Effects
                 // これで同一フレーム内の擬似残像ではなく時間方向に蓄積できる。
                 mask_texture = context.runtime_history_texture;
             }
+            else if (is_liquid_glass && context.runtime_mask_texture != nullptr)
+            {
+                mask_texture = context.runtime_mask_texture;
+            }
+            else if (is_liquid_glass)
+            {
+                // Keep t1 valid on Model/Screen paths as well. The shader uses
+                // t0-derived alpha/luminance when no dedicated UI matte exists.
+                mask_texture = current->srv.Get();
+            }
             else if (mask_guid == "__runtime_ui_matte")
             {
                 mask_texture = context.runtime_mask_texture;
@@ -455,7 +479,9 @@ namespace ReplayEngine::Rendering::Effects
                 mask_texture = context.resolve_texture(mask_guid);
             }
 
-            effect_constants.effect_params3.y = mask_texture != nullptr ? 1.0f : 0.0f;
+            effect_constants.effect_params3.y = is_liquid_glass
+                ? (context.runtime_mask_texture != nullptr ? 1.0f : 0.0f)
+                : (mask_texture != nullptr ? 1.0f : 0.0f);
             effect_constants.effect_params3.z = context.runtime_mask_luma ? 1.0f : 0.0f;
             effect_constants.effect_params3.w = context.runtime_mask_invert ? 1.0f : 0.0f;
             const bool brush_atlas = is_brush_effect && effect.brush_atlas_enabled &&

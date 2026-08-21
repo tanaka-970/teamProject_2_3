@@ -80,7 +80,8 @@ ReplayEngine::UI::UIRenderTarget* framework::apply_scene_effect_chain(
         const ReplayEngine::UI::UIEffectKind kind =
             static_cast<ReplayEngine::UI::UIEffectKind>(effect.kind);
         if (kind == ReplayEngine::UI::UIEffectKind::MotionBlur ||
-            kind == ReplayEngine::UI::UIEffectKind::Echo)
+            kind == ReplayEngine::UI::UIEffectKind::Echo ||
+            kind == ReplayEngine::UI::UIEffectKind::FeedbackZoom)
         {
             needs_temporal_history = true;
             break;

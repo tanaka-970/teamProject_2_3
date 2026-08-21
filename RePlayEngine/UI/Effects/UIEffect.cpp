@@ -175,8 +175,27 @@ namespace ReplayEngine::UI
         case UIEffectKind::LUT:
         case UIEffectKind::ToneCurve:
         case UIEffectKind::MatteComposite:
+        case UIEffectKind::BevelEmboss:
+        case UIEffectKind::Kaleidoscope:
+        case UIEffectKind::PageCurl:
+        case UIEffectKind::AsciiLedMatrix:
+        case UIEffectKind::FeedbackZoom:
+        case UIEffectKind::LiquidGlass:
+        case UIEffectKind::LightSweep:
+        case UIEffectKind::PixelSort:
             // 現在の出力ピクセルの色・アルファだけを変え、矩形外へ輪郭を生成しない。
             return uniform(0.0f);
+        case UIEffectKind::Shockwave:
+        {
+            // 波面は中心から外へ amount * intensity だけサンプルをずらせる。
+            return uniform(std::fabs(amount * intensity) + margin);
+        }
+        case UIEffectKind::MatteMorphology:
+        {
+            // 膨張・局所ホールフィル・エッジは半径ぶんだけ外側へ輪郭を作れる。
+            // 収縮は入力矩形内だけで完結するが、余白を確保して全モードの切替を安全にする。
+            return uniform(safe_radius + margin);
+        }
         default:
             // 未知 kind は Shader を適用しないため、確保領域も増やさない。
             return uniform(0.0f);
