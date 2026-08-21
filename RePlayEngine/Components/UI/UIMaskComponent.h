@@ -4,6 +4,8 @@
 #include "../../Reflection/Property/References.h"
 #include "../../Reflection/Property/PropertyDesc.h"
 
+#include <DirectXMath.h>
+
 #include <vector>
 
 namespace ReplayEngine::Components
@@ -22,6 +24,15 @@ namespace ReplayEngine::Components
             ObjectLuma = 4,
         };
 
+        enum ShapeMaskKind : int
+        {
+            ShapeRectangle = 0,
+            ShapeCircle = 1,
+            ShapePolygon = 2,
+            ShapeStar = 3,
+            ShapeRoundedRectangle = 4,
+        };
+
         UIMaskComponent() = default;
 
         void OnAttach() override;
@@ -32,6 +43,12 @@ namespace ReplayEngine::Components
         bool enabled_mask = true;
         bool show_mask_graphic = true;
         int mask_mode = Rectangle;
+        int shape_kind = ShapeRectangle;
+        int shape_sides = 5;
+        float shape_inner_radius = 0.5f;
+        float shape_corner_radius = 0.0f;
+        float shape_rotation = 0.0f;
+        DirectX::XMFLOAT2 group_scale{ 1.0f, 1.0f };
         Reflection::AssetReference mask_image;
         // ObjectAlpha / ObjectLuma では、この Scene 内 GameObject の描画結果を Track Matte に使う。
         // 生ポインタは保持せず ObjectReference のまま保存する。

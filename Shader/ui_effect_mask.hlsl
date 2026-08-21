@@ -27,16 +27,71 @@ struct VSOutput
 float4 main(VSOutput input) : SV_TARGET
 {
     float4 color = source_texture.Sample(source_sampler, input.uv);
-    const float2 centered = input.uv - effect_params2.xy;
-    const float angle = radians(effect_params1.x);
-    const float2 axis_x = float2(cos(angle), sin(angle));
-    const float2 axis_y = float2(-axis_x.y, axis_x.x);
-    const float2 local = float2(dot(centered, axis_x), dot(centered, axis_y)) /
-        max(effect_params2.zw, float2(0.0001f, 0.0001f));
-    const float rectangle = max(abs(local.x), abs(local.y));
-    const float circle = length(local);
-    const float shape = lerp(rectangle, circle, saturate(effect_params0.w));
-    const float edge = saturate((1.0 - shape) / max(effect_params1.z, 0.0001));
+    const int shape_kind = (int)round(effect_params3.x) - 1;
+    float edge = 1.0;
+    if (shape_kind >= 0)
+    {
+        const float2 centered = input.uv - effect_params2.xy;
+        const float angle = radians(effect_params1.x);
+        const float2 axis_x = float2(cos(angle), sin(angle));
+        const float2 axis_y = float2(-axis_x.y, axis_x.x);
+        const float2 local = float2(dot(centered, axis_x), dot(centered, axis_y)) /
+            max(effect_params2.zw, float2(0.0001f, 0.0001f));
+        const float radius = length(local);
+        const float sides = max(round(effect_params0.z), 3.0);
+        const float pi = 3.14159265359;
+        float signed_distance = 0.0;
+
+        if (shape_kind == 0)
+        {
+            signed_distance = 1.0 - max(abs(local.x), abs(local.y));
+        }
+        else if (shape_kind == 1)
+        {
+            signed_distance = 1.0 - radius;
+        }
+        else if (shape_kind == 2)
+        {
+            const float sector = 2.0 * pi / sides;
+            const float local_angle =
+                fmod(abs(atan2(local.y, local.x)) + pi / sides, sector) - pi / sides;
+            const float boundary = cos(pi / sides) / max(cos(local_angle), 0.0001);
+            signed_distance = boundary - radius;
+        }
+        else if (shape_kind == 3)
+        {
+            const float lobe_sector = pi / sides;
+            const float local_angle = fmod(abs(atan2(local.y, local.x)),
+                2.0 * lobe_sector);
+            const float lobe = 1.0 - abs(local_angle - lobe_sector) / lobe_sector;
+            const float inner_radius = saturate(effect_params0.x);
+            const float boundary = lerp(inner_radius, 1.0, lobe);
+            signed_distance = boundary - radius;
+        }
+        else
+        {
+            const float corner = saturate(effect_params0.y);
+            const float2 q = abs(local) - float2(1.0 - corner, 1.0 - corner);
+            signed_distance = corner - length(max(q, 0.0)) - min(max(q.x, q.y), 0.0);
+        }
+
+        const float softness = max(effect_params1.z, 0.0001);
+        edge = smoothstep(-softness, softness, signed_distance);
+    }
+    else
+    {
+        // 既存の通常 Mask 用。矩形と円を amount で混ぜる挙動を維持する。
+        const float2 centered = input.uv - effect_params2.xy;
+        const float angle = radians(effect_params1.x);
+        const float2 axis_x = float2(cos(angle), sin(angle));
+        const float2 axis_y = float2(-axis_x.y, axis_x.x);
+        const float2 local = float2(dot(centered, axis_x), dot(centered, axis_y)) /
+            max(effect_params2.zw, float2(0.0001f, 0.0001f));
+        const float rectangle = max(abs(local.x), abs(local.y));
+        const float circle = length(local);
+        const float shape = lerp(rectangle, circle, saturate(effect_params0.w));
+        edge = saturate((1.0 - shape) / max(effect_params1.z, 0.0001));
+    }
     color.a *= edge;
     if (effect_params1.w > 0.5f)
     {

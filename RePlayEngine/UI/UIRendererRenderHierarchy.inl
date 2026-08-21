@@ -299,17 +299,76 @@
                     mask_effect.softness = Clamp01(special_mask->softness);
                     const DirectX::XMFLOAT4 mask_rect = rect != nullptr
                         ? rect->ResolvedRect() : DirectX::XMFLOAT4{};
+                    DirectX::XMFLOAT2 mask_center{
+                        mask_rect.x + mask_rect.z * 0.5f,
+                        mask_rect.y + mask_rect.w * 0.5f };
+                    float mask_half_width = mask_rect.z * 0.5f;
+                    float mask_half_height = mask_rect.w * 0.5f;
+                    float mask_rotation = 0.0f;
+                    if (rect != nullptr)
+                    {
+                        // 選択枠と同じ変換後の矩形を、マスクの基準にする。
+                        const DirectX::XMMATRIX transform =
+                            DirectX::XMLoadFloat4x4(&rect->ResolvedMatrix());
+                        const auto transform_point =
+                            [&transform](float x, float y)
+                        {
+                            const DirectX::XMVECTOR point =
+                                DirectX::XMVector3TransformCoord(
+                                    DirectX::XMVectorSet(x, y, 0.0f, 1.0f),
+                                    transform);
+                            DirectX::XMFLOAT2 result;
+                            DirectX::XMStoreFloat2(&result, point);
+                            return result;
+                        };
+                        const DirectX::XMFLOAT2 transformed_center =
+                            transform_point(
+                                mask_rect.x + mask_rect.z * 0.5f,
+                                mask_rect.y + mask_rect.w * 0.5f);
+                        const DirectX::XMFLOAT2 transformed_right =
+                            transform_point(
+                                mask_rect.x + mask_rect.z,
+                                mask_rect.y + mask_rect.w * 0.5f);
+                        const DirectX::XMFLOAT2 transformed_top =
+                            transform_point(
+                                mask_rect.x + mask_rect.z * 0.5f,
+                                mask_rect.y + mask_rect.w);
+                        const float right_x = transformed_right.x -
+                            transformed_center.x;
+                        const float right_y = transformed_right.y -
+                            transformed_center.y;
+                        const float top_x = transformed_top.x -
+                            transformed_center.x;
+                        const float top_y = transformed_top.y -
+                            transformed_center.y;
+                        mask_center = transformed_center;
+                        mask_half_width = std::sqrt(
+                            right_x * right_x + right_y * right_y);
+                        mask_half_height = std::sqrt(
+                            top_x * top_x + top_y * top_y);
+                        mask_rotation = std::atan2(right_y, right_x) *
+                            (180.0f / 3.14159265358979323846f);
+                    }
                     mask_effect.direction = {
-                        (mask_rect.x + mask_rect.z * 0.5f) /
+                        mask_center.x /
                             (std::max)(1.0f, screen_width),
-                        (mask_rect.y + mask_rect.w * 0.5f) /
+                        mask_center.y /
                             (std::max)(1.0f, screen_height) };
-                    mask_effect.seed = mask_rect.z /
-                        (std::max)(1.0f, screen_width) * 0.5f;
-                    mask_effect.speed = mask_rect.w /
-                        (std::max)(1.0f, screen_height) * 0.5f;
+                    // seed / speed は EffectChain 側でそのまま半幅・半高として使う。
+                    mask_effect.seed = mask_half_width /
+                        (std::max)(1.0f, screen_width);
+                    mask_effect.speed = mask_half_height /
+                        (std::max)(1.0f, screen_height);
+                    mask_effect.angle = mask_rotation;
                     if (special_mask->mask_mode == UIMaskComponent::Shape)
                     {
+                        mask_effect.radius = special_mask->shape_inner_radius;
+                        mask_effect.intensity = special_mask->shape_corner_radius;
+                        mask_effect.threshold = static_cast<float>(special_mask->shape_sides);
+                        mask_effect.angle += special_mask->shape_rotation;
+                        // 0 は従来の矩形と円を混ぜるマスク用に残し、
+                        // 形状マスクは 1 から始めてシェーダーで区別する。
+                        mask_effect.waveform = special_mask->shape_kind + 1;
                         mask_effect.amount = 1.0f;
                     }
                     else if (object_matte && matte_target != nullptr && matte_target->srv)
