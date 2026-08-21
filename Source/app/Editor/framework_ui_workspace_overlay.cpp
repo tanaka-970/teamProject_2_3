@@ -89,6 +89,16 @@
         return scale > 0.0001f ? scale : 1.0f;
     }
 
+    float CanvasScaleForObject(Core::GameObject* object,
+        float logical_width, float logical_height) noexcept
+    {
+        Core::GameObject* canvas_object = CanvasForObject(object);
+        const CanvasComponent* canvas = canvas_object != nullptr
+            ? canvas_object->GetComponent<CanvasComponent>() : nullptr;
+        return canvas != nullptr
+            ? SafeCanvasScale(*canvas, logical_width, logical_height) : 1.0f;
+    }
+
     ImVec2 ToSceneUIPoint(const DirectX::XMFLOAT2& canvas_point,
         float canvas_scale, float left, float top, float width, float height,
         float logical_width, float logical_height)
@@ -114,6 +124,16 @@
             canvas_scale, left, top, width, height, logical_width, logical_height);
         out[3] = ToSceneUIPoint(TransformPoint(m, r.x, r.y + r.w), canvas_scale,
             left, top, width, height, logical_width, logical_height);
+    }
+
+    void SceneResizeHandlePoints(const RectTransformComponent& rect,
+        float canvas_scale, float left, float top, float width, float height,
+        float logical_width, float logical_height, ImVec2 out[8])
+    {
+        ImVec2 corners[4]{};
+        SceneUIQuad(rect, canvas_scale, left, top, width, height,
+            logical_width, logical_height, corners);
+        ResizeHandlePoints(corners, out);
     }
 
     DirectX::XMFLOAT2 InverseTransformPoint2D(const DirectX::XMFLOAT4X4& matrix,
@@ -185,19 +205,74 @@ void framework::draw_ui_scene_overlay()
         ui_scene_view_input_consumed = true;
     }
 
+    Core::GameObject* selected =
+        object_editor_context.Selection().ResolvePrimary(*scene);
+    Core::GameObject* selected_transform_target = UITransformEditTarget(selected);
+    RectTransformComponent* selected_rect = selected_transform_target != nullptr
+        ? selected_transform_target->GetComponent<RectTransformComponent>() : nullptr;
+    float selected_canvas_scale = CanvasScaleForObject(selected_transform_target,
+        logical_width, logical_height);
+    ImVec2 resize_handle_points[8]{};
+    int hovered_resize_handle = -1;
+    int pressed_resize_handle = -1;
+    const ImGuiIO& input = ImGui::GetIO();
+    const ImVec2 press_position = input.MouseClickedPos[ImGuiMouseButton_Left];
+    const bool press_inside_target =
+        press_position.x >= target.left && press_position.y >= target.top &&
+        press_position.x < target.left + target_width &&
+        press_position.y < target.top + target_height;
+    if (selected_transform_target != nullptr &&
+        selected_rect != nullptr && HasUIComponent(*selected_transform_target))
+    {
+        SceneResizeHandlePoints(*selected_rect, selected_canvas_scale,
+            target.left, target.top, target_width, target_height,
+            logical_width, logical_height, resize_handle_points);
+        const ImVec2 resize_corners[4]{
+            resize_handle_points[ResizeBottomLeft],
+            resize_handle_points[ResizeBottomRight],
+            resize_handle_points[ResizeTopRight],
+            resize_handle_points[ResizeTopLeft] };
+        if (target_hovered)
+            hovered_resize_handle = HitResizeBorder(resize_corners, mouse);
+        if (input.MouseDown[ImGuiMouseButton_Left] && press_inside_target)
+            pressed_resize_handle = HitResizeBorder(resize_corners, press_position);
+    }
+
+    // Rect Tool は UI 内部の部位操作や Object 選択より先に拾う。
+    // 同じドラッグを 3D の矩形選択へ渡さないことが最重要。
+    bool resize_handle_click = false;
+    if (!ui_preview_resize_candidate && pressed_resize_handle >= 0 &&
+        input.MouseDown[ImGuiMouseButton_Left])
+    {
+        resize_handle_click = true;
+        ui_scene_view_input_consumed = true;
+        viewport_drag_selecting = false;
+        if (object_editor_context.CanEdit() && selected_transform_target != nullptr &&
+            selected_rect != nullptr)
+        {
+            ui_preview_resize_candidate = true;
+            ui_preview_resizing = false;
+            ui_preview_resize_handle = pressed_resize_handle;
+            ui_preview_resize_object = selected_transform_target->ID();
+            ui_preview_resize_start_mouse = press_position;
+            ui_preview_resize_start_rect = selected_rect->ResolvedRect();
+            ui_preview_resize_parent_rect = ParentResolvedRect(
+                *selected_transform_target, logical_width / selected_canvas_scale,
+                logical_height / selected_canvas_scale);
+            ui_preview_resize_start_matrix = selected_rect->ResolvedMatrix();
+
+            ui_preview_drag_object = Core::ObjectID::Invalid();
+            ui_preview_dragging = false;
+        }
+    }
+
     // Puppet Pin / Custom Bezier anchor・handle は RectTransform の移動より先に拾う。
     // これにより小さい部位編集で親Objectまで動いてしまわない。
-    Core::GameObject* control_selected =
-        object_editor_context.Selection().ResolvePrimary(*scene);
+    Core::GameObject* control_selected = selected;
     RectTransformComponent* control_rect = control_selected != nullptr
         ? control_selected->GetComponent<RectTransformComponent>() : nullptr;
-    float control_canvas_scale = 1.0f;
-    if (control_selected != nullptr)
-    {
-        if (Core::GameObject* canvas_object = CanvasForObject(control_selected))
-            if (const CanvasComponent* canvas = canvas_object->GetComponent<CanvasComponent>())
-                control_canvas_scale = SafeCanvasScale(*canvas, logical_width, logical_height);
-    }
+    const float control_canvas_scale = CanvasScaleForObject(control_selected,
+        logical_width, logical_height);
     const DirectX::XMFLOAT2 mouse_canvas{
         logical_mouse_x / (std::max)(0.0001f, control_canvas_scale),
         logical_mouse_y / (std::max)(0.0001f, control_canvas_scale) };
@@ -214,7 +289,8 @@ void framework::draw_ui_scene_overlay()
         return dx * dx + dy * dy;
     };
 
-    if (target_hovered && control_selected != nullptr && control_rect != nullptr &&
+    if (!resize_handle_click && target_hovered &&
+        control_selected != nullptr && control_rect != nullptr &&
         ImGui::IsMouseClicked(ImGuiMouseButton_Left))
     {
         if (UIPuppetDeformComponent* puppet =
@@ -371,7 +447,8 @@ void framework::draw_ui_scene_overlay()
         ui_shape_active_handle = 0;
     }
 
-    if (!subcontrol_click && target_hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+    if (!resize_handle_click && !subcontrol_click && target_hovered &&
+        ImGui::IsMouseClicked(ImGuiMouseButton_Left))
     {
         Core::GameObject* picked = nullptr;
         std::vector<Core::GameObject*> canvases = SortedCanvases(*scene);
@@ -393,10 +470,11 @@ void framework::draw_ui_scene_overlay()
         {
             object_editor_context.Selection().Select(picked->ID(), false);
             selected_editor_object = editor_selection::game_object;
-            if (RectTransformComponent* rect =
-                picked->GetComponent<RectTransformComponent>())
+            Core::GameObject* transform_target = UITransformEditTarget(picked);
+            if (RectTransformComponent* rect = transform_target != nullptr
+                ? transform_target->GetComponent<RectTransformComponent>() : nullptr)
             {
-                ui_preview_drag_object = picked->ID();
+                ui_preview_drag_object = transform_target->ID();
                 ui_preview_drag_start_mouse = mouse;
                 ui_preview_drag_start_position = rect->anchored_position;
             }
@@ -404,12 +482,82 @@ void framework::draw_ui_scene_overlay()
         }
     }
 
-    Core::GameObject* selected =
-        object_editor_context.Selection().ResolvePrimary(*scene);
-    RectTransformComponent* selected_rect = selected != nullptr
-        ? selected->GetComponent<RectTransformComponent>() : nullptr;
+    // Object 選択で対象が変わる可能性があるため、操作開始前に取り直す。
+    selected = object_editor_context.Selection().ResolvePrimary(*scene);
+    selected_transform_target = UITransformEditTarget(selected);
+    selected_rect = selected_transform_target != nullptr
+        ? selected_transform_target->GetComponent<RectTransformComponent>() : nullptr;
+    selected_canvas_scale = CanvasScaleForObject(selected_transform_target,
+        logical_width, logical_height);
+
+    const bool resizing_candidate = selected_rect != nullptr &&
+        selected_transform_target != nullptr && ui_preview_resize_candidate &&
+        ui_preview_resize_object == selected_transform_target->ID();
+    if (resizing_candidate && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 2.0f))
+    {
+        ui_scene_view_input_consumed = true;
+        viewport_drag_selecting = false;
+        if (!ui_preview_resizing && object_editor_context.CanEdit())
+        {
+            object_editor_context.BeginEdit("UI 要素をリサイズ");
+            ui_preview_resizing = true;
+        }
+        if (ui_preview_resizing)
+        {
+            const DirectX::XMFLOAT2 canvas_mouse{
+                logical_mouse_x / (std::max)(0.0001f, selected_canvas_scale),
+                logical_mouse_y / (std::max)(0.0001f, selected_canvas_scale) };
+            DirectX::XMFLOAT2 local_mouse{};
+            if (!InverseTransformPoint(ui_preview_resize_start_matrix,
+                canvas_mouse, local_mouse))
+            {
+                object_editor_context.CancelEdit();
+                ui_preview_resizing = false;
+                ui_preview_resize_candidate = false;
+                ui_preview_resize_handle = -1;
+                ui_preview_resize_object = Core::ObjectID::Invalid();
+            }
+            else
+            {
+                const ImGuiIO& io = ImGui::GetIO();
+                const DirectX::XMFLOAT4 desired = ResizedRectFromHandle(
+                    ui_preview_resize_start_rect, ui_preview_resize_handle,
+                    local_mouse, io.KeyShift, io.KeyAlt);
+                const DirectX::XMFLOAT4 before = selected_rect->ResolvedRect();
+                ApplyResolvedRect(*selected_rect, ui_preview_resize_parent_rect, desired);
+                if (IsUIShapeMaskObject(selected_transform_target))
+                {
+                    // Scene上の枠操作は図形イメージ全体のリサイズとして扱う。
+                    // その後、子Imageを選べば表示位置・サイズを個別に調整できる。
+                    const DirectX::XMFLOAT2 ratio{
+                        before.z > 0.01f ? desired.z / before.z : 1.0f,
+                        before.w > 0.01f ? desired.w / before.w : 1.0f };
+                    ScaleUIShapeImageDescendants(*selected_transform_target, ratio);
+                }
+                ReplayEngine::UI::UILayout::Resolve(*scene,
+                    logical_width, logical_height);
+            }
+        }
+    }
+
+    if (ui_preview_resize_candidate)
+    {
+        ui_scene_view_input_consumed = true;
+        viewport_drag_selecting = false;
+        if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))
+        {
+            if (ui_preview_resizing) object_editor_context.CommitEdit();
+            ui_preview_resize_candidate = false;
+            ui_preview_resizing = false;
+            ui_preview_resize_handle = -1;
+            ui_preview_resize_object = Core::ObjectID::Invalid();
+        }
+    }
+
     const bool dragging_candidate = selected_rect != nullptr &&
-        selected != nullptr && ui_preview_drag_object == selected->ID();
+        selected_transform_target != nullptr &&
+        !ui_preview_resize_candidate &&
+        ui_preview_drag_object == selected_transform_target->ID();
 
     if (dragging_candidate && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 2.0f))
     {
@@ -421,23 +569,12 @@ void framework::draw_ui_scene_overlay()
         }
         if (ui_preview_dragging)
         {
-            float canvas_scale = 1.0f;
-            if (Core::GameObject* canvas_object = CanvasForObject(selected))
-            {
-                if (const CanvasComponent* canvas =
-                    canvas_object->GetComponent<CanvasComponent>())
-                {
-                    canvas_scale = SafeCanvasScale(
-                        *canvas, logical_width, logical_height);
-                }
-            }
-
             const ImVec2 delta(mouse.x - ui_preview_drag_start_mouse.x,
                 mouse.y - ui_preview_drag_start_mouse.y);
             const float logical_delta_x =
-                delta.x * (logical_width / target_width) / canvas_scale;
+                delta.x * (logical_width / target_width) / selected_canvas_scale;
             const float logical_delta_y =
-                delta.y * (logical_height / target_height) / canvas_scale;
+                delta.y * (logical_height / target_height) / selected_canvas_scale;
             selected_rect->anchored_position = {
                 ui_preview_drag_start_position.x + logical_delta_x,
                 ui_preview_drag_start_position.y - logical_delta_y
@@ -490,17 +627,10 @@ void framework::draw_ui_scene_overlay()
         ImVec2(target.left + target_width, target.top + target_height),
         IM_COL32(230, 230, 235, 190), 0.0f, 0, 1.5f);
 
-    if (selected != nullptr && selected_rect != nullptr && HasUIComponent(*selected))
+    if (selected != nullptr && selected_transform_target != nullptr &&
+        selected_rect != nullptr && HasUIComponent(*selected_transform_target))
     {
-        float canvas_scale = 1.0f;
-        if (Core::GameObject* canvas_object = CanvasForObject(selected))
-        {
-            if (const CanvasComponent* canvas =
-                canvas_object->GetComponent<CanvasComponent>())
-            {
-                canvas_scale = SafeCanvasScale(*canvas, logical_width, logical_height);
-            }
-        }
+        const float canvas_scale = selected_canvas_scale;
 
         ImVec2 p[4]{};
         SceneUIQuad(*selected_rect, canvas_scale,
@@ -683,6 +813,34 @@ void framework::draw_ui_scene_overlay()
                     ? mask->matte_operations[index] : UIMaskComponent::MatteAdd;
                 draw_matte_link(mask->matte_objects[index], operation, false);
             }
+        }
+
+        // 枠線より前面へ 4 corner + 4 edge handle を描く。
+        // Shift は縦横比固定、Alt は中心基準のリサイズに使う。
+        ImVec2 handles[8]{};
+        ResizeHandlePoints(p, handles);
+        const int hot = target_hovered ? HitResizeBorder(p, mouse) : -1;
+        for (int index = 0; index < 8; ++index)
+        {
+            const bool active_handle = ui_preview_resize_candidate &&
+                ui_preview_resize_object == selected_transform_target->ID() &&
+                ui_preview_resize_handle == index;
+            const bool hot_handle = hot == index;
+            const ImU32 fill = active_handle
+                ? IM_COL32(255, 190, 55, 255)
+                : (hot_handle ? IM_COL32(255, 230, 130, 255)
+                    : IM_COL32(245, 245, 250, 255));
+            draw_list->AddCircleFilled(handles[index], 5.0f, fill, 12);
+            draw_list->AddCircle(handles[index], 5.0f,
+                IM_COL32(35, 38, 44, 255), 12, 1.0f);
+        }
+        if (hot >= 0)
+        {
+            ImGui::SetMouseCursor((hot == ResizeLeft || hot == ResizeRight)
+                ? ImGuiMouseCursor_ResizeEW
+                : ((hot == ResizeTop || hot == ResizeBottom)
+                    ? ImGuiMouseCursor_ResizeNS
+                    : ImGuiMouseCursor_ResizeAll));
         }
     }
 

@@ -25,11 +25,14 @@
 #include "imgui/imgui_internal.h"
 
 #include <algorithm>
+#include <array>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <cstddef>
 #include <filesystem>
 #include <functional>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -71,6 +74,47 @@
         Mask,
     };
 
+    enum class UIHierarchyMoveDirection : int
+    {
+        Up = -1,
+        Down = 1,
+    };
+
+    struct UIPrimitivePreset final
+    {
+        const char* menu_name;
+        const char* object_name;
+        UIShapeComponent::Shape shape;
+        DirectX::XMFLOAT2 size_delta;
+        int sides = 5;
+        float corner_radius = 0.0f;
+        float polar_base_radius = 1.0f;
+        float polar_amplitude = 0.0f;
+        float polar_lobes = 5.0f;
+        float stroke_width = 0.0f;
+    };
+
+    const std::array<UIPrimitivePreset, 7>& UIPrimitivePresets()
+    {
+        static const std::array<UIPrimitivePreset, 7> presets{{
+            { "矩形", "Rectangle", UIShapeComponent::Rectangle,
+                { 160.0f, 80.0f } },
+            { "角丸矩形", "Rounded Rectangle", UIShapeComponent::Rectangle,
+                { 160.0f, 80.0f }, 5, 18.0f },
+            { "円", "Circle", UIShapeComponent::Circle,
+                { 128.0f, 128.0f } },
+            { "三角形", "Triangle", UIShapeComponent::Polygon,
+                { 128.0f, 128.0f }, 3 },
+            { "六角形", "Hexagon", UIShapeComponent::Polygon,
+                { 128.0f, 128.0f }, 6 },
+            { "星形", "Star", UIShapeComponent::PolarFormula,
+                { 128.0f, 128.0f }, 5, 0.0f, 0.62f, 0.38f, 5.0f },
+            { "線", "Line", UIShapeComponent::Line,
+                { 220.0f, 16.0f }, 5, 0.0f, 1.0f, 0.0f, 5.0f, 4.0f },
+        }};
+        return presets;
+    }
+
     constexpr const char* ui_hierarchy_drag_type = "REPLAY_GAMEOBJECT";
     enum class UIHierarchyDropPlacement : int { Child = 0, Before = 1, After = 2, Root = 3 };
     struct UIHierarchyDropRequest final
@@ -80,6 +124,692 @@
         UIHierarchyDropPlacement placement = UIHierarchyDropPlacement::Child;
     };
     UIHierarchyDropRequest ui_hierarchy_drop_request;
+
+    enum class UIOrderAction : int
+    {
+        Backward,
+        Forward,
+        Backmost,
+        Frontmost,
+    };
+
+    struct UIOrderActionLabel final
+    {
+        const char* menu_name;
+        const char* button_name;
+        UIOrderAction action;
+    };
+
+    const std::array<UIOrderActionLabel, 4>& UIOrderActions()
+    {
+        static const std::array<UIOrderActionLabel, 4> actions{{
+            { "最背面へ", "最背面", UIOrderAction::Backmost },
+            { "背面へ", "背面", UIOrderAction::Backward },
+            { "前面へ", "前面", UIOrderAction::Forward },
+            { "最前面へ", "最前面", UIOrderAction::Frontmost },
+        }};
+        return actions;
+    }
+
+    // UI 階層の並び（children_）と描画順（sort_order）は別の軸として扱う。
+    // Canvas だけは Scene 全体、Canvas 配下の UI は同じ親の兄弟だけが並び替え対象。
+    int* UIOrderValue(Core::GameObject& object)
+    {
+        if (CanvasComponent* canvas = object.GetComponent<CanvasComponent>())
+            return &canvas->sort_order;
+        if (RectTransformComponent* rect = object.GetComponent<RectTransformComponent>())
+            return &rect->sort_order;
+        return nullptr;
+    }
+
+    std::string UIHierarchyLabel(Core::GameObject& object)
+    {
+        const int* order = UIOrderValue(object);
+        const std::string order_text = order != nullptr
+            ? std::to_string(*order) : "-";
+        return "[" + order_text + "] " + object.Name() +
+            "##UI" + object.ID().ToString();
+    }
+
+    enum class UIHierarchyFilterKind
+    {
+        All,
+        Canvas,
+        Image,
+        Text,
+        Button,
+        Shape,
+        Mask,
+    };
+
+    struct UIHierarchyFilterOption final
+    {
+        const char* label;
+        UIHierarchyFilterKind kind;
+    };
+
+    struct UIHierarchyFilterState final
+    {
+        std::string search;
+        UIHierarchyFilterKind kind = UIHierarchyFilterKind::All;
+    };
+
+    std::array<char, 96> ui_hierarchy_search_buffer{};
+    UIHierarchyFilterKind ui_hierarchy_filter_kind = UIHierarchyFilterKind::All;
+
+    const std::array<UIHierarchyFilterOption, 7>& UIHierarchyFilterOptions()
+    {
+        static const std::array<UIHierarchyFilterOption, 7> options{{
+            { "全て", UIHierarchyFilterKind::All },
+            { "Canvas", UIHierarchyFilterKind::Canvas },
+            { "Image", UIHierarchyFilterKind::Image },
+            { "Text", UIHierarchyFilterKind::Text },
+            { "Button", UIHierarchyFilterKind::Button },
+            { "図形", UIHierarchyFilterKind::Shape },
+            { "Mask", UIHierarchyFilterKind::Mask },
+        }};
+        return options;
+    }
+
+    const char* UIHierarchyFilterLabel(UIHierarchyFilterKind kind)
+    {
+        for (const UIHierarchyFilterOption& option : UIHierarchyFilterOptions())
+        {
+            if (option.kind == kind) return option.label;
+        }
+        return "全て";
+    }
+
+    std::string LowerAscii(std::string text)
+    {
+        std::transform(text.begin(), text.end(), text.begin(), [](unsigned char value)
+        {
+            return static_cast<char>(std::tolower(value));
+        });
+        return text;
+    }
+
+    bool UIHierarchyMatchesKind(const Core::GameObject& object,
+        UIHierarchyFilterKind kind)
+    {
+        switch (kind)
+        {
+        case UIHierarchyFilterKind::All: return true;
+        case UIHierarchyFilterKind::Canvas:
+            return object.GetComponent<CanvasComponent>() != nullptr;
+        case UIHierarchyFilterKind::Image:
+            return object.GetComponent<UIImageComponent>() != nullptr;
+        case UIHierarchyFilterKind::Text:
+            return object.GetComponent<UITextComponent>() != nullptr;
+        case UIHierarchyFilterKind::Button:
+            return object.GetComponent<UIButtonComponent>() != nullptr;
+        case UIHierarchyFilterKind::Shape:
+            return object.GetComponent<UIShapeComponent>() != nullptr;
+        case UIHierarchyFilterKind::Mask:
+            return object.GetComponent<UIMaskComponent>() != nullptr;
+        }
+        return false;
+    }
+
+    bool UIHierarchyObjectMatchesFilter(const Core::GameObject& object,
+        const UIHierarchyFilterState& filter)
+    {
+        const bool name_matches = filter.search.empty() ||
+            LowerAscii(object.Name()).find(filter.search) != std::string::npos;
+        return name_matches && UIHierarchyMatchesKind(object, filter.kind);
+    }
+
+    bool UIHierarchyNodeMatchesFilter(const Core::GameObject& object,
+        const UIHierarchyFilterState& filter)
+    {
+        if (!ContainsUI(object)) return false;
+        if (UIHierarchyObjectMatchesFilter(object, filter)) return true;
+
+        for (const Core::GameObject* child : object.Children())
+        {
+            if (child != nullptr && UIHierarchyNodeMatchesFilter(*child, filter))
+                return true;
+        }
+        return false;
+    }
+
+    bool UIHierarchyFilterActive(const UIHierarchyFilterState& filter)
+    {
+        return !filter.search.empty() || filter.kind != UIHierarchyFilterKind::All;
+    }
+
+    void DrawUIHierarchyFilterControls()
+    {
+        const bool has_search = ui_hierarchy_search_buffer[0] != '\0';
+        ImGui::TextDisabled("フォルダ / フィルター");
+        ImGui::SetNextItemWidth(has_search ? -30.0f : -1.0f);
+        ImGui::InputTextWithHint("##UIHierarchySearch", "名前で検索...",
+            ui_hierarchy_search_buffer.data(), ui_hierarchy_search_buffer.size());
+        if (has_search)
+        {
+            ImGui::SameLine();
+            if (ImGui::Button("×##ClearUIHierarchySearch"))
+                ui_hierarchy_search_buffer[0] = '\0';
+        }
+
+        ImGui::SetNextItemWidth(-1.0f);
+        if (ImGui::BeginCombo("##UIHierarchyFilter",
+            UIHierarchyFilterLabel(ui_hierarchy_filter_kind)))
+        {
+            for (const UIHierarchyFilterOption& option : UIHierarchyFilterOptions())
+            {
+                const bool selected = option.kind == ui_hierarchy_filter_kind;
+                if (ImGui::Selectable(option.label, selected))
+                    ui_hierarchy_filter_kind = option.kind;
+                if (selected) ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+    }
+
+    std::vector<Core::GameObject*> UIOrderPeers(Scene::Scene& scene,
+        Core::GameObject& object)
+    {
+        std::vector<Core::GameObject*> peers;
+        if (object.GetComponent<CanvasComponent>() != nullptr)
+        {
+            for (std::size_t index = 0; index < scene.GameObjectCount(); ++index)
+            {
+                Core::GameObject* candidate = scene.GameObjectAt(index);
+                if (candidate != nullptr && !candidate->PendingDestroy() &&
+                    candidate->GetComponent<CanvasComponent>() != nullptr)
+                    peers.push_back(candidate);
+            }
+            return peers;
+        }
+
+        const std::vector<Core::GameObject*> siblings = object.Parent() != nullptr
+            ? object.Parent()->Children() : scene.RootGameObjects();
+        for (Core::GameObject* candidate : siblings)
+        {
+            if (candidate != nullptr && !candidate->PendingDestroy() &&
+                candidate->GetComponent<RectTransformComponent>() != nullptr)
+                peers.push_back(candidate);
+        }
+        return peers;
+    }
+
+    bool FindUIOrderExtreme(const std::vector<Core::GameObject*>& peers,
+        Core::GameObject& object, bool find_higher, int& value)
+    {
+        bool found = false;
+        for (Core::GameObject* peer : peers)
+        {
+            if (peer == nullptr || peer == &object) continue;
+            const int* peer_order = UIOrderValue(*peer);
+            if (peer_order == nullptr) continue;
+
+            if (!found || (find_higher ? *peer_order > value : *peer_order < value))
+            {
+                value = *peer_order;
+                found = true;
+            }
+        }
+        return found;
+    }
+
+    bool FindUIOrderNeighbor(const std::vector<Core::GameObject*>& peers,
+        Core::GameObject& object, bool find_higher, int current, int& value)
+    {
+        bool found = false;
+        for (Core::GameObject* peer : peers)
+        {
+            if (peer == nullptr || peer == &object) continue;
+            const int* peer_order = UIOrderValue(*peer);
+            if (peer_order == nullptr ||
+                (find_higher ? *peer_order <= current : *peer_order >= current))
+                continue;
+
+            if (!found || (find_higher ? *peer_order < value : *peer_order > value))
+            {
+                value = *peer_order;
+                found = true;
+            }
+        }
+        return found;
+    }
+
+    bool ApplyUIOrder(ReplayEngine::Editor::EditorContext& context,
+        Core::GameObject& object, UIOrderAction action)
+    {
+        if (!context.CanEdit()) return false;
+        Scene::Scene* scene = context.GetScene();
+        int* order = UIOrderValue(object);
+        if (scene == nullptr || order == nullptr) return false;
+
+        const std::vector<Core::GameObject*> peers = UIOrderPeers(*scene, object);
+        if (peers.size() < 2) return false;
+
+        const int current = *order;
+        int target = current;
+        const auto increment = [](int value) noexcept
+        {
+            return value == (std::numeric_limits<int>::max)() ? value : value + 1;
+        };
+        const auto decrement = [](int value) noexcept
+        {
+            return value == (std::numeric_limits<int>::min)() ? value : value - 1;
+        };
+
+        int peer_value = current;
+        switch (action)
+        {
+        case UIOrderAction::Frontmost:
+            if (FindUIOrderExtreme(peers, object, true, peer_value))
+                target = increment((std::max)(current, peer_value));
+            break;
+        case UIOrderAction::Backmost:
+            if (FindUIOrderExtreme(peers, object, false, peer_value))
+                target = decrement((std::min)(current, peer_value));
+            break;
+        case UIOrderAction::Forward:
+            target = FindUIOrderNeighbor(peers, object, true, current, peer_value)
+                ? increment(peer_value) : increment(current);
+            break;
+        case UIOrderAction::Backward:
+            target = FindUIOrderNeighbor(peers, object, false, current, peer_value)
+                ? decrement(peer_value) : decrement(current);
+            break;
+        }
+
+        if (target == current) return false;
+        context.BeginEdit("UI の描画順を変更");
+        *order = target;
+        context.CommitEdit();
+        return true;
+    }
+
+    bool MoveUIHierarchySibling(ReplayEngine::Editor::EditorContext& context,
+        Core::GameObject& object, UIHierarchyMoveDirection direction)
+    {
+        if (!context.CanEdit()) return false;
+        Scene::Scene* scene = context.GetScene();
+        if (scene == nullptr) return false;
+
+        const std::size_t current = object.SiblingIndex();
+        const std::vector<Core::GameObject*> siblings = object.Parent() != nullptr
+            ? object.Parent()->Children() : scene->RootGameObjects();
+        if (direction == UIHierarchyMoveDirection::Up)
+        {
+            if (current == 0u) return false;
+        }
+        else if (current + 1u >= siblings.size())
+        {
+            return false;
+        }
+
+        const std::size_t desired = direction == UIHierarchyMoveDirection::Up
+            ? current - 1u : current + 1u;
+        context.BeginEdit("UI 階層の順番を変更");
+        const bool changed = object.SetSiblingIndex(desired);
+        if (changed)
+        {
+            context.CommitEdit();
+            context.SetStatus("UI 階層の順番を変更しました");
+        }
+        else
+        {
+            context.CancelEdit();
+        }
+        return changed;
+    }
+
+    void DrawUIOrderMenu(ReplayEngine::Editor::EditorContext& context,
+        Core::GameObject& object)
+    {
+        if (UIOrderValue(object) == nullptr) return;
+
+        ImGui::Separator();
+        ImGui::TextDisabled("描画順（UI階層とは独立）");
+        const bool editable = context.CanEdit();
+        for (const UIOrderActionLabel& action : UIOrderActions())
+        {
+            if (ImGui::MenuItem(action.menu_name, nullptr, false, editable))
+                ApplyUIOrder(context, object, action.action);
+        }
+    }
+
+    void DrawUIOrderControls(ReplayEngine::Editor::EditorContext& context,
+        Core::GameObject* selected)
+    {
+        if (selected == nullptr) return;
+
+        int* order = UIOrderValue(*selected);
+        if (order == nullptr) return;
+
+        ImGui::TextDisabled("選択中の順番");
+        if (ImGui::Button("↑ 階層"))
+            MoveUIHierarchySibling(context, *selected, UIHierarchyMoveDirection::Up);
+        ImGui::SameLine();
+        if (ImGui::Button("↓ 階層"))
+            MoveUIHierarchySibling(context, *selected, UIHierarchyMoveDirection::Down);
+        ImGui::SameLine();
+        ImGui::TextDisabled("描画順");
+        ImGui::SetNextItemWidth(80.0f);
+        int edited_order = *order;
+        if (ImGui::InputInt("##UIRenderOrder", &edited_order) && context.CanEdit())
+        {
+            context.BeginEdit("UI の描画順を変更");
+            *order = edited_order;
+            context.CommitEdit();
+        }
+        for (const UIOrderActionLabel& action : UIOrderActions())
+        {
+            ImGui::SameLine();
+            if (ImGui::Button(action.button_name))
+                ApplyUIOrder(context, *selected, action.action);
+        }
+        ImGui::TextDisabled("階層の順番と描画順は別々に保存されます。描画順は値が大きいほど手前です。");
+        ImGui::Separator();
+    }
+
+    DirectX::XMFLOAT2 UIResolvedSize(const RectTransformComponent& rect) noexcept
+    {
+        const DirectX::XMFLOAT4 resolved = rect.ResolvedRect();
+        return { (std::max)(0.1f, resolved.z), (std::max)(0.1f, resolved.w) };
+    }
+
+    void SetUIResolvedSize(Core::GameObject& object,
+        const DirectX::XMFLOAT2& desired_size)
+    {
+        RectTransformComponent* rect = object.GetComponent<RectTransformComponent>();
+        if (rect == nullptr) return;
+
+        DirectX::XMFLOAT2 anchor_size{};
+        if (Core::GameObject* parent = object.Parent())
+        {
+            if (RectTransformComponent* parent_rect =
+                parent->GetComponent<RectTransformComponent>())
+            {
+                const DirectX::XMFLOAT4 parent_resolved = parent_rect->ResolvedRect();
+                anchor_size = {
+                    parent_resolved.z * (rect->anchor_max.x - rect->anchor_min.x),
+                    parent_resolved.w * (rect->anchor_max.y - rect->anchor_min.y) };
+            }
+        }
+        // size_delta ではなく、アンカー込みで画面に出ているサイズを指定する。
+        // 伸縮アンカーのImageでも、UI編集欄から見た目のサイズを直接変えられる。
+        rect->size_delta = {
+            desired_size.x - anchor_size.x,
+            desired_size.y - anchor_size.y };
+    }
+
+    void ApplyUIShapeImageScale(UIMaskComponent& mask,
+        Core::GameObject& mask_object, const DirectX::XMFLOAT2& desired_scale)
+    {
+        const float old_x = (std::max)(0.01f, mask.group_scale.x);
+        const float old_y = (std::max)(0.01f, mask.group_scale.y);
+        const DirectX::XMFLOAT2 next{
+            (std::max)(0.01f, (std::min)(desired_scale.x, 100.0f)),
+            (std::max)(0.01f, (std::min)(desired_scale.y, 100.0f)) };
+        const DirectX::XMFLOAT2 ratio{ next.x / old_x, next.y / old_y };
+        if (RectTransformComponent* rect = mask_object.GetComponent<RectTransformComponent>())
+        {
+            const DirectX::XMFLOAT2 current_size = UIResolvedSize(*rect);
+            SetUIResolvedSize(mask_object, {
+                current_size.x * ratio.x, current_size.y * ratio.y });
+        }
+        ScaleUIShapeImageDescendants(mask_object, ratio);
+        mask.group_scale = next;
+    }
+
+    // 図形マスクと、その中で表示する Image の範囲は UI 階層ウィンドウだけで編集する。
+    // Inspector 側には shape_* を出さず、選択対象に応じて必要な操作だけをここへ出す。
+    void DrawUIEditingControls(ReplayEngine::Editor::EditorContext& context,
+        Core::GameObject* selected)
+    {
+        if (selected == nullptr) return;
+
+        UIMaskComponent* selected_mask = selected->GetComponent<UIMaskComponent>();
+        const bool has_shape_mask = selected_mask != nullptr &&
+            selected_mask->mask_mode == UIMaskComponent::Shape;
+
+        UIImageComponent* image = selected->GetComponent<UIImageComponent>();
+        RectTransformComponent* image_rect = selected->GetComponent<RectTransformComponent>();
+        UIMaskComponent* parent_mask = nullptr;
+        Core::GameObject* parent_mask_object = nullptr;
+        for (Core::GameObject* parent = selected->Parent(); parent != nullptr;
+            parent = parent->Parent())
+        {
+            UIMaskComponent* candidate = parent->GetComponent<UIMaskComponent>();
+            if (candidate == nullptr) continue;
+            parent_mask = candidate;
+            parent_mask_object = parent;
+            break;
+        }
+        const bool has_masked_image = image != nullptr && image_rect != nullptr &&
+            parent_mask != nullptr && parent_mask->mask_mode == UIMaskComponent::Shape;
+        if (!has_shape_mask && !has_masked_image) return;
+
+        // 選択中の対象にだけ現れる独立枠。UI 階層パネルの外へ編集欄を増やさない。
+        ImGui::BeginChild("UIShapeImageEditorFrame", ImVec2(0.0f, 230.0f), true);
+        ImGui::TextDisabled("UI図形イメージ");
+        ImGui::TextDisabled("選択中の図形マスク / 子Imageを編集");
+        ImGui::Separator();
+
+        const bool editable = context.CanEdit();
+        const bool had_transaction = context.History().InTransaction();
+        if (editable && !had_transaction)
+            context.BeginEdit("UI マスクを編集");
+        if (!editable) BeginDisabledCompat();
+
+        bool mask_changed = false;
+        bool image_changed = false;
+        UIMaskComponent* edit_mask = has_shape_mask ? selected_mask : parent_mask;
+        Core::GameObject* edit_mask_object = has_shape_mask ? selected : parent_mask_object;
+        RectTransformComponent* mask_rect = edit_mask_object != nullptr
+            ? edit_mask_object->GetComponent<RectTransformComponent>() : nullptr;
+        const std::string selected_id = selected->ID().ToString();
+        ImGui::PushID(selected_id.c_str());
+
+        if (edit_mask != nullptr && mask_rect != nullptr)
+        {
+            ImGui::TextDisabled("マスク枠の配置");
+
+            DirectX::XMFLOAT2 mask_position = mask_rect->anchored_position;
+            ImGui::SetNextItemWidth(-1.0f);
+            if (ImGui::DragFloat2("マスク枠の位置", &mask_position.x, 0.5f,
+                -100000.0f, 100000.0f, "%.1f"))
+            {
+                mask_rect->anchored_position = mask_position;
+                mask_changed = true;
+            }
+
+            DirectX::XMFLOAT2 mask_size = UIResolvedSize(*mask_rect);
+            ImGui::SetNextItemWidth(-1.0f);
+            if (ImGui::DragFloat2("マスク枠のサイズ", &mask_size.x, 0.5f,
+                0.1f, 100000.0f, "%.1f"))
+            {
+                SetUIResolvedSize(*edit_mask_object, mask_size);
+                mask_changed = true;
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("切り抜く枠だけを変更します。中の画像サイズは変わりません。");
+
+            DirectX::XMFLOAT2 mask_scale = edit_mask->group_scale;
+            ImGui::SetNextItemWidth(-1.0f);
+            if (ImGui::DragFloat2("全体の拡大率", &mask_scale.x, 0.01f,
+                0.01f, 100.0f, "%.2f"))
+            {
+                ApplyUIShapeImageScale(*edit_mask, *edit_mask_object, mask_scale);
+                mask_changed = true;
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("マスク枠と中の画像をまとめて拡大・縮小します。");
+
+            if (ImGui::Button("子Imageをマスク枠に合わせる", ImVec2(-1.0f, 0.0f)))
+            {
+                const DirectX::XMFLOAT2 resolved_size = UIResolvedSize(*mask_rect);
+                for (Core::GameObject* child : edit_mask_object->Children())
+                {
+                    if (child == nullptr ||
+                        child->GetComponent<UIImageComponent>() == nullptr) continue;
+                    RectTransformComponent* child_rect =
+                        child->GetComponent<RectTransformComponent>();
+                    if (child_rect == nullptr) continue;
+
+                    child_rect->anchor_min = { 0.5f, 0.5f };
+                    child_rect->anchor_max = { 0.5f, 0.5f };
+                    child_rect->anchored_position = { 0.0f, 0.0f };
+                    child_rect->size_delta = resolved_size;
+                    child_rect->pivot = { 0.5f, 0.5f };
+                    child_rect->scale = { 1.0f, 1.0f };
+                    mask_changed = true;
+                }
+                if (mask_changed)
+                    context.SetStatus("子Imageをマスク枠の中央・同サイズへ合わせました");
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("白い図形が枠より小さい時に、中央・同サイズへ揃えます。");
+        }
+
+        if (has_shape_mask)
+        {
+            ImGui::TextDisabled("図形マスク（UI編集）");
+            ImGui::TextDisabled("親の形で、子の描画を切り抜きます。");
+
+            int shape_kind = (std::max)(0, (std::min)(
+                selected_mask->shape_kind, 4));
+            static const char shape_items[] =
+                "矩形\0円\0多角形\0星形\0角丸矩形\0";
+            ImGui::SetNextItemWidth(-1.0f);
+            if (ImGui::Combo("形状", &shape_kind, shape_items))
+            {
+                selected_mask->shape_kind = shape_kind;
+                mask_changed = true;
+            }
+
+            if (shape_kind == UIMaskComponent::ShapePolygon ||
+                shape_kind == UIMaskComponent::ShapeStar)
+            {
+                int sides = (std::max)(3, (std::min)(selected_mask->shape_sides, 64));
+                ImGui::SetNextItemWidth(-1.0f);
+                if (ImGui::DragInt("頂点数", &sides, 1.0f, 3, 64))
+                {
+                    selected_mask->shape_sides = sides;
+                    mask_changed = true;
+                }
+            }
+            if (shape_kind == UIMaskComponent::ShapeStar)
+            {
+                float inner_radius = (std::max)(0.05f,
+                    (std::min)(selected_mask->shape_inner_radius, 0.95f));
+                ImGui::SetNextItemWidth(-1.0f);
+                if (ImGui::DragFloat("星形の内側", &inner_radius,
+                    0.01f, 0.05f, 0.95f, "%.2f"))
+                {
+                    selected_mask->shape_inner_radius = inner_radius;
+                    mask_changed = true;
+                }
+            }
+            if (shape_kind == UIMaskComponent::ShapeRoundedRectangle)
+            {
+                float corner_radius = (std::max)(0.0f,
+                    (std::min)(selected_mask->shape_corner_radius, 1.0f));
+                ImGui::SetNextItemWidth(-1.0f);
+                if (ImGui::DragFloat("角丸量", &corner_radius,
+                    0.01f, 0.0f, 1.0f, "%.2f"))
+                {
+                    selected_mask->shape_corner_radius = corner_radius;
+                    mask_changed = true;
+                }
+            }
+
+            float rotation = (std::max)(-180.0f,
+                (std::min)(selected_mask->shape_rotation, 180.0f));
+            ImGui::SetNextItemWidth(-1.0f);
+            if (ImGui::DragFloat("形状の回転", &rotation, 1.0f,
+                -180.0f, 180.0f, "%.0f 度"))
+            {
+                selected_mask->shape_rotation = rotation;
+                mask_changed = true;
+            }
+
+            float softness = (std::max)(0.0f,
+                (std::min)(selected_mask->softness, 1.0f));
+            ImGui::SetNextItemWidth(-1.0f);
+            if (ImGui::DragFloat("境界の柔らかさ", &softness,
+                0.01f, 0.0f, 1.0f, "%.2f"))
+            {
+                selected_mask->softness = softness;
+                mask_changed = true;
+            }
+            if (ImGui::Checkbox("切り抜きを反転", &selected_mask->invert))
+                mask_changed = true;
+        }
+
+        if (has_masked_image)
+        {
+            ImGui::Separator();
+            ImGui::TextDisabled("切り抜き Image（UI編集）");
+            ImGui::TextDisabled("位置・サイズで表示枠を、UVで元画像の範囲を決めます。");
+
+            DirectX::XMFLOAT2 position = image_rect->anchored_position;
+            ImGui::SetNextItemWidth(-1.0f);
+            if (ImGui::DragFloat2("映す位置", &position.x, 0.5f,
+                -100000.0f, 100000.0f, "%.1f"))
+            {
+                image_rect->anchored_position = position;
+                image_changed = true;
+            }
+
+            DirectX::XMFLOAT2 size = UIResolvedSize(*image_rect);
+            ImGui::SetNextItemWidth(-1.0f);
+            if (ImGui::DragFloat2("映すサイズ", &size.x, 0.5f,
+                0.0f, 100000.0f, "%.1f"))
+            {
+                SetUIResolvedSize(*selected, size);
+                image_changed = true;
+            }
+
+            DirectX::XMFLOAT2 uv_offset = image->uv_offset;
+            ImGui::SetNextItemWidth(-1.0f);
+            if (ImGui::DragFloat2("画像のUV位置", &uv_offset.x, 0.001f,
+                -100.0f, 100.0f, "%.3f"))
+            {
+                image->uv_offset = uv_offset;
+                image_changed = true;
+            }
+
+            DirectX::XMFLOAT2 uv_scale = image->uv_scale;
+            ImGui::SetNextItemWidth(-1.0f);
+            if (ImGui::DragFloat2("画像のUV範囲", &uv_scale.x, 0.001f,
+                0.001f, 100.0f, "%.3f"))
+            {
+                image->uv_scale = uv_scale;
+                image_changed = true;
+            }
+        }
+
+        ImGui::PopID();
+        if (!editable) EndDisabledCompat();
+        ImGui::EndChild();
+
+        if (mask_changed || image_changed)
+        {
+            context.MarkDirty();
+            if (mask_changed)
+            {
+                if (selected_mask != nullptr) selected_mask->OnPropertyChanged(nullptr);
+                if (parent_mask != nullptr && parent_mask != selected_mask)
+                    parent_mask->OnPropertyChanged(nullptr);
+            }
+        }
+
+        // ドラッグ中はトランザクションを保持し、指を離した時点で Undo を 1 件にまとめる。
+        if (editable && context.History().InTransaction() && !ImGui::IsAnyItemActive())
+        {
+            if (mask_changed || image_changed || had_transaction)
+                context.CommitEdit();
+            else
+                context.CancelEdit();
+        }
+    }
 
 
     std::string UniqueUIObjectName(const Scene::Scene& scene, const Core::GameObject* parent,
@@ -116,6 +846,28 @@
         return nullptr;
     }
 
+    // 選択中の Image だけを対象にする。図形マスク済みの Image には再適用しない。
+    Core::GameObject* SelectedUIImageForShapeMask(
+        ReplayEngine::Editor::EditorContext& context)
+    {
+        Scene::Scene* scene = context.GetScene();
+        if (scene == nullptr) return nullptr;
+        Core::GameObject* selected = context.Selection().ResolvePrimary(*scene);
+        if (selected == nullptr || !ContainsUI(*selected) ||
+            selected->GetComponent<UIImageComponent>() == nullptr ||
+            selected->GetComponent<RectTransformComponent>() == nullptr)
+            return nullptr;
+
+        for (Core::GameObject* parent = selected->Parent(); parent != nullptr;
+            parent = parent->Parent())
+        {
+            UIMaskComponent* mask = parent->GetComponent<UIMaskComponent>();
+            if (mask != nullptr && mask->mask_mode == UIMaskComponent::Shape)
+                return nullptr;
+        }
+        return selected;
+    }
+
 
     Core::GameObject* SelectedUIParent(ReplayEngine::Editor::EditorContext& context)
     {
@@ -144,6 +896,87 @@
         return canvas;
     }
 
+    const char* UIElementName(UIElementKind kind) noexcept
+    {
+        switch (kind)
+        {
+        case UIElementKind::Image: return "Image";
+        case UIElementKind::Text: return "Text";
+        case UIElementKind::Button: return "Button";
+        case UIElementKind::Mask: return "Mask";
+        case UIElementKind::Canvas: return "Canvas";
+        }
+        return "UI Element";
+    }
+
+    DirectX::XMFLOAT2 UIElementSize(UIElementKind kind) noexcept
+    {
+        return kind == UIElementKind::Button
+            ? DirectX::XMFLOAT2{ 180.0f, 52.0f }
+            : DirectX::XMFLOAT2{ 160.0f, 80.0f };
+    }
+
+    Core::GameObject* CreateUIChildObject(Scene::Scene& scene,
+        Core::GameObject* parent, const char* desired_name,
+        const DirectX::XMFLOAT2& size)
+    {
+        if (parent == nullptr || desired_name == nullptr) return nullptr;
+
+        Core::GameObject* object = scene.CreateGameObject(
+            UniqueUIObjectName(scene, parent, desired_name));
+        if (object == nullptr) return nullptr;
+        if (!object->SetParent(parent, false))
+        {
+            scene.DestroyGameObject(object);
+            return nullptr;
+        }
+
+        RectTransformComponent* rect = object->AddComponent<RectTransformComponent>();
+        if (rect != nullptr) rect->size_delta = size;
+        return object;
+    }
+
+    void AddButtonLabel(Scene::Scene& scene, Core::GameObject& button)
+    {
+        Core::GameObject* label = scene.CreateGameObject(
+            UniqueUIObjectName(scene, &button, "Button Text"));
+        if (label == nullptr) return;
+        if (!label->SetParent(&button, false))
+        {
+            scene.DestroyGameObject(label);
+            return;
+        }
+
+        RectTransformComponent* rect = label->AddComponent<RectTransformComponent>();
+        if (rect != nullptr)
+        {
+            rect->anchor_min = { 0.0f, 0.0f };
+            rect->anchor_max = { 1.0f, 1.0f };
+            rect->size_delta = { 0.0f, 0.0f };
+        }
+
+        UITextComponent* text = label->AddComponent<UITextComponent>();
+        if (text != nullptr)
+        {
+            text->text = "Button";
+            text->font_size = 24.0f;
+        }
+    }
+
+    void ConfigureUIPrimitive(UIShapeComponent& shape,
+        const UIPrimitivePreset& preset)
+    {
+        shape.shape = preset.shape;
+        shape.sides = preset.sides;
+        shape.corner_radius = preset.corner_radius;
+        shape.polar_base_radius = preset.polar_base_radius;
+        shape.polar_amplitude = preset.polar_amplitude;
+        shape.polar_lobes = preset.polar_lobes;
+        shape.fill_color = { 0.25f, 0.65f, 1.0f, 1.0f };
+        shape.stroke_color = { 0.08f, 0.18f, 0.32f, 1.0f };
+        shape.stroke_width = preset.stroke_width;
+    }
+
     Core::GameObject* CreateUIElement(ReplayEngine::Editor::EditorContext& context,
         UIElementKind kind)
     {
@@ -151,32 +984,19 @@
         if (scene == nullptr || !context.CanEdit()) return nullptr;
 
         context.BeginEdit("UI 要素を作成");
-        Core::GameObject* parent = nullptr;
         Core::GameObject* created = nullptr;
-
         if (kind == UIElementKind::Canvas)
         {
             created = CreateCanvasObject(*scene);
         }
         else
         {
-            parent = SelectedUIParent(context);
+            Core::GameObject* parent = SelectedUIParent(context);
             if (parent == nullptr) parent = CreateCanvasObject(*scene);
-            const char* name = kind == UIElementKind::Text ? "Text" :
-                kind == UIElementKind::Button ? "Button" :
-                kind == UIElementKind::Mask ? "Mask" : "Image";
-            created = scene->CreateGameObject(UniqueUIObjectName(*scene, parent, name));
+            created = CreateUIChildObject(*scene, parent, UIElementName(kind),
+                UIElementSize(kind));
             if (created != nullptr)
             {
-                created->SetParent(parent, false);
-                RectTransformComponent* rect = created->AddComponent<RectTransformComponent>();
-                if (rect != nullptr)
-                {
-                    rect->size_delta = kind == UIElementKind::Button
-                        ? DirectX::XMFLOAT2{ 180.0f, 52.0f }
-                        : DirectX::XMFLOAT2{ 160.0f, 80.0f };
-                }
-
                 if (kind == UIElementKind::Image)
                 {
                     created->AddComponent<UIImageComponent>();
@@ -190,32 +1010,12 @@
                 {
                     created->AddComponent<UIImageComponent>();
                     created->AddComponent<UIButtonComponent>();
-
-                    Core::GameObject* label = scene->CreateGameObject(UniqueUIObjectName(*scene, created, "Button Text"));
-                    if (label != nullptr)
-                    {
-                        label->SetParent(created, false);
-                        RectTransformComponent* label_rect =
-                            label->AddComponent<RectTransformComponent>();
-                        if (label_rect != nullptr)
-                        {
-                            label_rect->anchor_min = { 0.0f, 0.0f };
-                            label_rect->anchor_max = { 1.0f, 1.0f };
-                            label_rect->size_delta = { 0.0f, 0.0f };
-                        }
-                        UITextComponent* text = label->AddComponent<UITextComponent>();
-                        if (text != nullptr)
-                        {
-                            text->text = "Button";
-                            text->font_size = 24.0f;
-                        }
-                    }
+                    AddButtonLabel(*scene, *created);
                 }
                 else if (kind == UIElementKind::Mask)
                 {
                     UIImageComponent* image = created->AddComponent<UIImageComponent>();
-                    if (image != nullptr)
-                        image->color = { 0.2f, 0.45f, 0.8f, 0.18f };
+                    if (image != nullptr) image->color = { 0.2f, 0.45f, 0.8f, 0.18f };
                     created->AddComponent<UIMaskComponent>();
                 }
             }
@@ -227,6 +1027,405 @@
         return created;
     }
 
+    Core::GameObject* CreateUIPrimitive(
+        ReplayEngine::Editor::EditorContext& context,
+        const UIPrimitivePreset& preset)
+    {
+        Scene::Scene* scene = context.GetScene();
+        if (scene == nullptr || !context.CanEdit()) return nullptr;
+
+        context.BeginEdit("UI 図形を作成");
+        Core::GameObject* parent = SelectedUIParent(context);
+        if (parent == nullptr) parent = CreateCanvasObject(*scene);
+        Core::GameObject* created = CreateUIChildObject(*scene, parent,
+            preset.object_name, preset.size_delta);
+        if (created != nullptr)
+        {
+            UIShapeComponent* shape = created->AddComponent<UIShapeComponent>();
+            if (shape != nullptr) ConfigureUIPrimitive(*shape, preset);
+            context.Selection().Select(created->ID(), false);
+        }
+        context.CommitEdit();
+        return created;
+    }
+
+    void DrawUIPrimitiveMenu(ReplayEngine::Editor::EditorContext& context,
+        bool close_popup)
+    {
+        for (const UIPrimitivePreset& preset : UIPrimitivePresets())
+        {
+            if (!ImGui::MenuItem(preset.menu_name)) continue;
+            CreateUIPrimitive(context, preset);
+            if (close_popup) ImGui::CloseCurrentPopup();
+        }
+    }
+
+    int MaskShapeKindForPreset(const UIPrimitivePreset& preset) noexcept
+    {
+        if (preset.shape == UIShapeComponent::Circle)
+            return UIMaskComponent::ShapeCircle;
+        if (preset.shape == UIShapeComponent::Polygon)
+            return UIMaskComponent::ShapePolygon;
+        if (preset.shape == UIShapeComponent::PolarFormula)
+            return UIMaskComponent::ShapeStar;
+        if (preset.shape == UIShapeComponent::Rectangle &&
+            preset.corner_radius > 0.0f)
+            return UIMaskComponent::ShapeRoundedRectangle;
+        if (preset.shape == UIShapeComponent::Rectangle)
+            return UIMaskComponent::ShapeRectangle;
+        return -1;
+    }
+
+    void ConfigureUIShapeMask(UIMaskComponent& mask,
+        const UIPrimitivePreset& preset)
+    {
+        mask.enabled_mask = true;
+        mask.show_mask_graphic = false;
+        mask.mask_mode = UIMaskComponent::Shape;
+        mask.shape_kind = MaskShapeKindForPreset(preset);
+        mask.shape_sides = (std::max)(3, preset.sides);
+        mask.shape_inner_radius = (std::max)(0.05f,
+            (std::min)(0.95f, preset.polar_base_radius));
+        const float minimum_size = (std::min)(preset.size_delta.x,
+            preset.size_delta.y);
+        mask.shape_corner_radius = minimum_size > 0.0f
+            ? (std::max)(0.0f, (std::min)(1.0f,
+                preset.corner_radius * 2.0f / minimum_size)) : 0.0f;
+        mask.shape_rotation = 0.0f;
+        mask.softness = 0.0f;
+    }
+
+    Core::GameObject* CreateUIShapeMaskedImage(
+        ReplayEngine::Editor::EditorContext& context,
+        const UIPrimitivePreset& preset)
+    {
+        Scene::Scene* scene = context.GetScene();
+        if (scene == nullptr || !context.CanEdit() ||
+            MaskShapeKindForPreset(preset) < 0)
+            return nullptr;
+
+        context.BeginEdit("図形マスク付き Image を作成");
+        Core::GameObject* parent = SelectedUIParent(context);
+        // Image を選択中に追加しても、Image の中へマスクを入れ子にしない。
+        // 既存 Image を図形化する操作とは別に、新規追加は同じ親へ並べる。
+        if (parent != nullptr && parent->GetComponent<UIImageComponent>() != nullptr)
+            parent = parent->Parent();
+        if (parent == nullptr) parent = CreateCanvasObject(*scene);
+
+        const std::string mask_name = std::string(preset.object_name) + " Image Mask";
+        Core::GameObject* mask_object = CreateUIChildObject(*scene, parent,
+            mask_name.c_str(), preset.size_delta);
+        Core::GameObject* image_object = nullptr;
+        if (mask_object != nullptr)
+        {
+            UIMaskComponent* mask = mask_object->AddComponent<UIMaskComponent>();
+            if (mask != nullptr) ConfigureUIShapeMask(*mask, preset);
+
+            image_object = CreateUIChildObject(*scene, mask_object,
+                "Masked Image", preset.size_delta);
+            if (image_object != nullptr)
+                image_object->AddComponent<UIImageComponent>();
+        }
+
+        if (mask_object != nullptr && image_object != nullptr)
+        {
+            // 最初は親マスクを選び、図形そのものを移動・拡縮できる状態にする。
+            // 子の Image を選べば、UI図形イメージ枠から表示範囲だけを調整できる。
+            context.Selection().Select(mask_object->ID(), false);
+            context.SetStatus("図形イメージを作成しました。子Imageを選ぶと映す範囲を調整できます");
+        }
+        else if (mask_object != nullptr)
+        {
+            scene->DestroyGameObject(mask_object);
+            mask_object = nullptr;
+        }
+        context.CommitEdit();
+        return image_object;
+    }
+
+    // 選択中の Image をその場で図形マスクの子へ移す。
+    // 新しい Image を増やさないので、すでに設定した Sprite / UV / 色をそのまま使える。
+    Core::GameObject* CreateUIShapeMaskForSelectedImage(
+        ReplayEngine::Editor::EditorContext& context,
+        const UIPrimitivePreset& preset)
+    {
+        Scene::Scene* scene = context.GetScene();
+        Core::GameObject* image_object = SelectedUIImageForShapeMask(context);
+        if (scene == nullptr || image_object == nullptr || !context.CanEdit() ||
+            MaskShapeKindForPreset(preset) < 0)
+            return nullptr;
+
+        RectTransformComponent* image_rect =
+            image_object->GetComponent<RectTransformComponent>();
+        if (image_rect == nullptr) return nullptr;
+
+        const DirectX::XMFLOAT2 old_size = image_rect->size_delta;
+        const DirectX::XMFLOAT4 old_resolved_rect = image_rect->ResolvedRect();
+        const float old_rotation = image_rect->rotation;
+        const DirectX::XMFLOAT2 old_scale = image_rect->scale;
+        Core::GameObject* old_parent = image_object->Parent();
+        const std::size_t old_sibling_index = image_object->SiblingIndex();
+
+        context.BeginEdit("選択中の Image を UI図形イメージ化");
+        Core::GameObject* mask_parent = old_parent;
+        if (mask_parent == nullptr)
+        {
+            // Scene 直下の Image は、最初の Canvas を親にして UI として扱えるようにする。
+            mask_parent = FindFirstCanvas(*scene);
+            if (mask_parent == nullptr) mask_parent = CreateCanvasObject(*scene);
+        }
+
+        Core::GameObject* mask_object = CreateUIChildObject(*scene, mask_parent,
+            "UI図形イメージ", old_size);
+        Core::GameObject* result = nullptr;
+        if (mask_object != nullptr)
+        {
+            UIMaskComponent* mask = mask_object->AddComponent<UIMaskComponent>();
+            RectTransformComponent* mask_rect =
+                mask_object->GetComponent<RectTransformComponent>();
+            if (mask != nullptr) ConfigureUIShapeMask(*mask, preset);
+            if (mask_rect != nullptr)
+            {
+                // 元Imageのアンカー値をそのまま親Maskへ移すと、伸縮アンカーの
+                // 差分でマスク枠だけが別サイズになる。解決済みの表示範囲を
+                // 親座標へ変換し、固定アンカーの枠として作り直す。
+                DirectX::XMFLOAT4 parent_rect{};
+                if (RectTransformComponent* parent_transform =
+                    mask_parent->GetComponent<RectTransformComponent>())
+                    parent_rect = parent_transform->ResolvedRect();
+                const float old_center_x = old_resolved_rect.x +
+                    old_resolved_rect.z * 0.5f;
+                const float old_center_y = old_resolved_rect.y +
+                    old_resolved_rect.w * 0.5f;
+                const float parent_center_x = parent_rect.x + parent_rect.z * 0.5f;
+                const float parent_center_y = parent_rect.y + parent_rect.w * 0.5f;
+                const DirectX::XMFLOAT2 resolved_size{
+                    (std::max)(0.1f, old_resolved_rect.z > 0.1f
+                        ? old_resolved_rect.z : old_size.x) *
+                        (std::max)(0.01f, std::fabs(old_scale.x)),
+                    (std::max)(0.1f, old_resolved_rect.w > 0.1f
+                        ? old_resolved_rect.w : old_size.y) *
+                        (std::max)(0.01f, std::fabs(old_scale.y)) };
+                mask_rect->anchor_min = { 0.5f, 0.5f };
+                mask_rect->anchor_max = { 0.5f, 0.5f };
+                mask_rect->anchored_position = {
+                    old_center_x - parent_center_x,
+                    old_center_y - parent_center_y };
+                mask_rect->size_delta = resolved_size;
+                mask_rect->pivot = { 0.5f, 0.5f };
+                mask_rect->rotation = old_rotation;
+                // 親Maskの拡大率は1に固定し、子Imageへ元の倍率を残す。
+                // このUIレイアウトは親のRectTransform拡大率を子へ継承しないため、
+                // 親だけを拡大すると枠と中身がずれる。
+                mask_rect->scale = { 1.0f, 1.0f };
+            }
+
+            if (mask != nullptr && image_object->SetParent(mask_object, false))
+            {
+                // Image はマスクの中央へ置き、元の Image のサイズと表示設定を引き継ぐ。
+                image_rect->anchor_min = { 0.5f, 0.5f };
+                image_rect->anchor_max = { 0.5f, 0.5f };
+                image_rect->anchored_position = { 0.0f, 0.0f };
+                image_rect->size_delta = {
+                    (std::max)(0.1f, old_resolved_rect.z > 0.1f
+                        ? old_resolved_rect.z : old_size.x),
+                    (std::max)(0.1f, old_resolved_rect.w > 0.1f
+                        ? old_resolved_rect.w : old_size.y) };
+                image_rect->pivot = { 0.5f, 0.5f };
+                image_rect->rotation = 0.0f;
+                image_rect->scale = old_scale;
+                if (old_parent != nullptr)
+                    mask_object->SetSiblingIndex(old_sibling_index);
+                result = image_object;
+            }
+        }
+
+        if (result != nullptr)
+        {
+            // 作成直後は親を選択し、図形と枠を一緒に動かせるようにする。
+            context.Selection().Select(mask_object->ID(), false);
+            context.SetStatus("選択中のImageを図形マスク化しました。子Imageを選ぶと映す範囲を調整できます");
+            context.CommitEdit();
+        }
+        else
+        {
+            if (mask_object != nullptr) scene->DestroyGameObject(mask_object);
+            context.CancelEdit();
+        }
+        return result;
+    }
+
+    void DrawUISelectedShapeImageMenu(
+        ReplayEngine::Editor::EditorContext& context, bool close_popup)
+    {
+        for (const UIPrimitivePreset& preset : UIPrimitivePresets())
+        {
+            if (MaskShapeKindForPreset(preset) < 0) continue;
+            const std::string label = std::string(preset.menu_name) + "で切り抜く";
+            if (!ImGui::MenuItem(label.c_str())) continue;
+            CreateUIShapeMaskForSelectedImage(context, preset);
+            if (close_popup) ImGui::CloseCurrentPopup();
+        }
+    }
+
+    void DrawUIShapeMaskMenu(ReplayEngine::Editor::EditorContext& context,
+        bool close_popup)
+    {
+        for (const UIPrimitivePreset& preset : UIPrimitivePresets())
+        {
+            if (MaskShapeKindForPreset(preset) < 0) continue;
+            const std::string label = std::string(preset.menu_name) +
+                "で切り抜く";
+            if (!ImGui::MenuItem(label.c_str())) continue;
+            CreateUIShapeMaskedImage(context, preset);
+            if (close_popup) ImGui::CloseCurrentPopup();
+        }
+    }
+
+    void DrawUIImageCreationMenu(
+        ReplayEngine::Editor::EditorContext& context, bool close_popup)
+    {
+        if (ImGui::MenuItem("通常のImageを追加"))
+        {
+            CreateUIElement(context, UIElementKind::Image);
+            if (close_popup) ImGui::CloseCurrentPopup();
+        }
+        if (ImGui::BeginMenu("図形で切り抜いたImageを追加"))
+        {
+            DrawUIShapeMaskMenu(context, close_popup);
+            ImGui::EndMenu();
+        }
+    }
+
+    void DrawUIHierarchyCreateMenu(
+        ReplayEngine::Editor::EditorContext& context)
+    {
+        if (ImGui::MenuItem("Canvasを追加"))
+            CreateUIElement(context, UIElementKind::Canvas);
+        DrawUIImageCreationMenu(context, false);
+        if (ImGui::MenuItem("Textを追加"))
+            CreateUIElement(context, UIElementKind::Text);
+        if (ImGui::MenuItem("Buttonを追加"))
+            CreateUIElement(context, UIElementKind::Button);
+        if (ImGui::MenuItem("Maskを追加"))
+            CreateUIElement(context, UIElementKind::Mask);
+        if (ImGui::BeginMenu("図形を追加"))
+        {
+            DrawUIPrimitiveMenu(context, false);
+            ImGui::EndMenu();
+        }
+        if (SelectedUIImageForShapeMask(context) != nullptr &&
+            ImGui::BeginMenu("図形イメージを追加"))
+        {
+            DrawUISelectedShapeImageMenu(context, false);
+            ImGui::EndMenu();
+        }
+    }
+
+    void DrawUIHierarchyCreateToolbar(
+        ReplayEngine::Editor::EditorContext& context)
+    {
+        const bool show_selected_shape_image =
+            SelectedUIImageForShapeMask(context) != nullptr;
+        const float available_width = ImGui::GetContentRegionAvail().x;
+        if (available_width < 250.0f)
+        {
+            // 極端に狭いときはボタンを隠さず、全機能を一つのメニューへまとめる。
+            if (ImGui::Button("＋ UIを追加", ImVec2(-1.0f, 0.0f)))
+                ImGui::OpenPopup("UIHierarchyCreatePopup");
+            if (ImGui::BeginPopup("UIHierarchyCreatePopup"))
+            {
+                DrawUIHierarchyCreateMenu(context);
+                ImGui::EndPopup();
+            }
+            // 狭い幅でも、通常の図形とは別の専用ボタンを常に見せる。
+            if (!show_selected_shape_image) BeginDisabledCompat();
+            if (ImGui::Button("図形イメージ", ImVec2(-1.0f, 0.0f)))
+                ImGui::OpenPopup("UIShapeImageCreatePopup");
+            if (!show_selected_shape_image) EndDisabledCompat();
+            if (show_selected_shape_image && ImGui::BeginPopup("UIShapeImageCreatePopup"))
+            {
+                DrawUISelectedShapeImageMenu(context, true);
+                ImGui::EndPopup();
+            }
+            return;
+        }
+
+        bool first_button_on_line = true;
+        const auto draw_button = [&first_button_on_line](const char* label,
+            const std::function<void()>& on_click)
+        {
+            const float width = ImGui::CalcTextSize(label).x +
+                ImGui::GetStyle().FramePadding.x * 2.0f;
+            if (first_button_on_line)
+            {
+                first_button_on_line = false;
+            }
+            else if (ImGui::GetContentRegionAvail().x < width)
+            {
+                ImGui::NewLine();
+            }
+            else
+            {
+                ImGui::SameLine();
+            }
+
+            if (ImGui::Button(label, ImVec2(width, 0.0f))) on_click();
+        };
+
+        draw_button("Canvas", [&context]
+        {
+            CreateUIElement(context, UIElementKind::Canvas);
+        });
+
+        draw_button("Image", []
+        {
+            ImGui::OpenPopup("UIImageCreatePopup");
+        });
+        if (ImGui::BeginPopup("UIImageCreatePopup"))
+        {
+            DrawUIImageCreationMenu(context, true);
+            ImGui::EndPopup();
+        }
+
+        draw_button("Text", [&context]
+        {
+            CreateUIElement(context, UIElementKind::Text);
+        });
+
+        draw_button("Button", [&context]
+        {
+            CreateUIElement(context, UIElementKind::Button);
+        });
+
+        draw_button("Mask", [&context]
+        {
+            CreateUIElement(context, UIElementKind::Mask);
+        });
+
+        draw_button("図形", []
+        {
+            ImGui::OpenPopup("UIShapeCreatePopup");
+        });
+        if (ImGui::BeginPopup("UIShapeCreatePopup"))
+        {
+            DrawUIPrimitiveMenu(context, true);
+            ImGui::EndPopup();
+        }
+
+        if (!show_selected_shape_image) BeginDisabledCompat();
+        draw_button("図形イメージ", []
+        {
+            ImGui::OpenPopup("UIShapeImageCreatePopup");
+        });
+        if (!show_selected_shape_image) EndDisabledCompat();
+        if (show_selected_shape_image && ImGui::BeginPopup("UIShapeImageCreatePopup"))
+        {
+            DrawUISelectedShapeImageMenu(context, true);
+            ImGui::EndPopup();
+        }
+    }
+
 
     // selection_changed は「この呼び出しの中で GameObject が選ばれたか」を返す。
     //
@@ -235,15 +1434,16 @@
     // ここで直接代入するとコンパイルが通らないため、結果だけを呼び出し元へ返し、
     // framework 側で選択種別を切り替える。
     void DrawUINode(ReplayEngine::Editor::EditorContext& context,
-        Core::GameObject& object, bool& selection_changed)
+        Core::GameObject& object, const UIHierarchyFilterState& filter,
+        bool& selection_changed)
     {
-        if (!ContainsUI(object)) return;
+        if (!UIHierarchyNodeMatchesFilter(object, filter)) return;
 
         const bool selected = context.Selection().IsSelected(object.ID());
         bool has_ui_child = false;
         for (const Core::GameObject* child : object.Children())
         {
-            if (child != nullptr && ContainsUI(*child))
+            if (child != nullptr && UIHierarchyNodeMatchesFilter(*child, filter))
             {
                 has_ui_child = true;
                 break;
@@ -255,7 +1455,10 @@
         if (selected) flags |= ImGuiTreeNodeFlags_Selected;
         if (!has_ui_child) flags |= ImGuiTreeNodeFlags_Leaf;
 
-        std::string label = object.Name() + "##UI" + object.ID().ToString();
+        if (UIHierarchyFilterActive(filter) && has_ui_child)
+            ImGui::SetNextItemOpen(true, ImGuiCond_Always);
+
+        const std::string label = UIHierarchyLabel(object);
         const bool open = ImGui::TreeNodeEx(label.c_str(), flags);
         if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
         {
@@ -278,15 +1481,14 @@
             {
                 const float height = (std::max)(1.0f, item_max.y - item_min.y);
                 const float local_y = ImGui::GetIO().MousePos.y - item_min.y;
-                UIHierarchyDropPlacement placement = UIHierarchyDropPlacement::Child;
-                // 並べ替えの帯を広く取る。理由は HierarchyPanel.cpp と同じで、
-                // 行の高さが 20px 前後だと 25% では 5px しかなく、
-                // 並べ替えたいだけでも中央に当たって子にされてしまう。
-                constexpr float reorder_band = 0.35f;
-                if (local_y < height * reorder_band)
-                    placement = UIHierarchyDropPlacement::Before;
-                else if (local_y > height * (1.0f - reorder_band))
-                    placement = UIHierarchyDropPlacement::After;
+                // 通常のドラッグは必ず兄弟順の入れ替えにする。
+                // 行の中央へ落としただけで意図せず子になると、UI配置の並べ替えが
+                // できないように見えてしまうため。親子付けは Ctrl + ドロップで行う。
+                UIHierarchyDropPlacement placement = ImGui::GetIO().KeyCtrl
+                    ? UIHierarchyDropPlacement::Child
+                    : (local_y < height * 0.5f
+                        ? UIHierarchyDropPlacement::Before
+                        : UIHierarchyDropPlacement::After);
                 if (placement != UIHierarchyDropPlacement::Child)
                 {
                     const float y = placement == UIHierarchyDropPlacement::Before
@@ -314,10 +1516,20 @@
             if (!context.Selection().IsSelected(object.ID()))
                 context.Selection().Select(object.ID(), false);
             selection_changed = true;
-            if (ImGui::MenuItem("Image を追加")) CreateUIElement(context, UIElementKind::Image);
+            if (ImGui::BeginMenu("Image を追加"))
+            {
+                DrawUIImageCreationMenu(context, false);
+                ImGui::EndMenu();
+            }
             if (ImGui::MenuItem("Text を追加")) CreateUIElement(context, UIElementKind::Text);
             if (ImGui::MenuItem("Button を追加")) CreateUIElement(context, UIElementKind::Button);
             if (ImGui::MenuItem("Mask を追加")) CreateUIElement(context, UIElementKind::Mask);
+            if (ImGui::BeginMenu("図形を追加"))
+            {
+                DrawUIPrimitiveMenu(context, false);
+                ImGui::EndMenu();
+            }
+            DrawUIOrderMenu(context, object);
             ImGui::Separator();
             if (ImGui::MenuItem("シーン直下へ移動", nullptr, false,
                 context.CanEdit() && object.Parent() != nullptr))
@@ -334,7 +1546,8 @@
             const std::vector<Core::GameObject*> children = object.Children();
             for (Core::GameObject* child : children)
             {
-                if (child != nullptr) DrawUINode(context, *child, selection_changed);
+                if (child != nullptr)
+                    DrawUINode(context, *child, filter, selection_changed);
             }
             ImGui::TreePop();
         }
@@ -354,18 +1567,12 @@ void framework::draw_ui_hierarchy()
     Scene::Scene* scene = object_editor_context.GetScene();
     const bool can_edit = object_editor_context.CanEdit();
     if (!can_edit) BeginDisabledCompat();
-    if (ImGui::Button("Canvas")) CreateUIElement(object_editor_context, UIElementKind::Canvas);
-    ImGui::SameLine();
-    if (ImGui::Button("Image")) CreateUIElement(object_editor_context, UIElementKind::Image);
-    ImGui::SameLine();
-    if (ImGui::Button("Text")) CreateUIElement(object_editor_context, UIElementKind::Text);
-    ImGui::SameLine();
-    if (ImGui::Button("Button")) CreateUIElement(object_editor_context, UIElementKind::Button);
-    ImGui::SameLine();
-    if (ImGui::Button("Mask")) CreateUIElement(object_editor_context, UIElementKind::Mask);
+    DrawUIHierarchyCreateToolbar(object_editor_context);
     if (!can_edit) EndDisabledCompat();
 
     ImGui::Separator();
+    ImGui::TextDisabled("ドラッグで上下に入れ替え / Ctrl + ドロップで子にする");
+    DrawUIHierarchyFilterControls();
     if (scene == nullptr)
     {
         ImGui::TextDisabled("Scene がありません");
@@ -373,19 +1580,33 @@ void framework::draw_ui_hierarchy()
         return;
     }
 
-    bool any_canvas = false;
+    Core::GameObject* selected_ui = object_editor_context.Selection().ResolvePrimary(*scene);
+    if (selected_ui != nullptr && ContainsUI(*selected_ui))
+    {
+        DrawUIOrderControls(object_editor_context, selected_ui);
+        DrawUIEditingControls(object_editor_context, selected_ui);
+    }
+
+    const UIHierarchyFilterState filter{
+        LowerAscii(ui_hierarchy_search_buffer.data()), ui_hierarchy_filter_kind };
+    bool any_ui_root = false;
+    bool any_visible_root = false;
     bool ui_selection_changed = false;
     for (Core::GameObject* root : scene->RootGameObjects())
     {
         if (root == nullptr || !ContainsUI(*root)) continue;
-        any_canvas = true;
-        DrawUINode(object_editor_context, *root, ui_selection_changed);
+        any_ui_root = true;
+        if (!UIHierarchyNodeMatchesFilter(*root, filter)) continue;
+        any_visible_root = true;
+        DrawUINode(object_editor_context, *root, filter, ui_selection_changed);
     }
     // UI 階層で選んだものも Delete の対象にする。
     // framework_class.h の Delete 処理が selected_editor_object を見ているため。
     if (ui_selection_changed) selected_editor_object = editor_selection::game_object;
-    if (!any_canvas)
+    if (!any_ui_root)
         ImGui::TextDisabled("Canvas はまだありません");
+    else if (!any_visible_root)
+        ImGui::TextDisabled("フィルターに一致するUIはありません");
 
     ImGui::Separator();
     ImGui::TextDisabled("ここへドロップ: シーン直下へ移動");
@@ -405,7 +1626,7 @@ void framework::draw_ui_hierarchy()
         ImGui::EndDragDropTarget();
     }
 
-    // UI tree の走査中には構造を変えず、描画完了後に 1 transaction で反映する。
+    // UI ツリーの走査中には構造を変えず、描画完了後に 1 回の編集として反映する。
     if (can_edit && ui_hierarchy_drop_request.child.Valid())
     {
         Core::GameObject* child = scene->FindGameObjectByID(ui_hierarchy_drop_request.child);

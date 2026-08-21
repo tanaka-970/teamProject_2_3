@@ -649,6 +649,37 @@ namespace ReplayEngine::Core::Detail
                     .AsEnum({ "矩形", "画像", "形状", "Object Alpha", "Object Luma" })
                     .Animation(Animatable::Step));
             PropertyRegistry::Register<UIMaskComponent>(
+                MakeProperty("shape_kind", &UIMaskComponent::shape_kind)
+                    .Display("形状")
+                    .AsEnum({ "矩形", "円", "多角形", "星形", "角丸矩形" })
+                    .HiddenInEditor()
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<UIMaskComponent>(
+                MakeProperty("shape_sides", &UIMaskComponent::shape_sides)
+                    .Display("頂点数").Range(3.0, 64.0).Step(1.0)
+                    .HiddenInEditor()
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<UIMaskComponent>(
+                MakeProperty("shape_inner_radius", &UIMaskComponent::shape_inner_radius)
+                    .Display("星形の内側").Range(0.05, 0.95).Step(0.01)
+                    .HiddenInEditor()
+                    .Animation(Animatable::Interpolatable));
+            PropertyRegistry::Register<UIMaskComponent>(
+                MakeProperty("shape_corner_radius", &UIMaskComponent::shape_corner_radius)
+                    .Display("角丸量").Range(0.0, 1.0).Step(0.01)
+                    .HiddenInEditor()
+                    .Animation(Animatable::Interpolatable));
+            PropertyRegistry::Register<UIMaskComponent>(
+                MakeProperty("shape_rotation", &UIMaskComponent::shape_rotation)
+                    .Display("形状の回転").Range(-180.0, 180.0).Step(1.0)
+                    .HiddenInEditor()
+                    .Animation(Animatable::Interpolatable));
+            PropertyRegistry::Register<UIMaskComponent>(
+                MakeProperty("group_scale", &UIMaskComponent::group_scale)
+                    .Display("図形イメージの拡大率").Step(0.01)
+                    .HiddenInEditor()
+                    .Animation(Animatable::Interpolatable));
+            PropertyRegistry::Register<UIMaskComponent>(
                 MakeProperty("mask_image", &UIMaskComponent::mask_image)
                     .Display("マスク画像").OfAssetType("Image"));
             PropertyRegistry::Register<UIMaskComponent>(
