@@ -12,6 +12,7 @@
 #include "../../RePlayEngine/Components/UI/UIMaskComponent.h"
 #include "../../RePlayEngine/Components/UI/UIPuppetDeformComponent.h"
 #include "../../RePlayEngine/Components/UI/UIShapeComponent.h"
+#include "../../RePlayEngine/Components/UI/UIShapeImageComponent.h"
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
 #include "../../RePlayEngine/Scene/Runtime/Scene.h"
 #include "../../RePlayEngine/UI/UILayout.h"
@@ -42,6 +43,7 @@
     using ReplayEngine::Components::UIMaskComponent;
     using ReplayEngine::Components::UIPuppetDeformComponent;
     using ReplayEngine::Components::UIShapeComponent;
+    using ReplayEngine::Components::UIShapeImageComponent;
     namespace Assets = ReplayEngine::Assets;
     namespace Core = ReplayEngine::Core;
     namespace Scene = ReplayEngine::Scene;
@@ -210,6 +212,15 @@ void framework::draw_ui_scene_overlay()
     Core::GameObject* selected_transform_target = UITransformEditTarget(selected);
     RectTransformComponent* selected_rect = selected_transform_target != nullptr
         ? selected_transform_target->GetComponent<RectTransformComponent>() : nullptr;
+    const bool selected_custom_shape = selected_transform_target != nullptr &&
+        [&]()
+        {
+            const UIShapeComponent* shape =
+                selected_transform_target->GetComponent<UIShapeComponent>();
+            if (shape != nullptr && shape->shape == UIShapeComponent::CustomBezierPath)
+                return true;
+            return selected_transform_target->GetComponent<UIShapeImageComponent>() != nullptr;
+        }();
     float selected_canvas_scale = CanvasScaleForObject(selected_transform_target,
         logical_width, logical_height);
     ImVec2 resize_handle_points[8]{};
@@ -221,7 +232,7 @@ void framework::draw_ui_scene_overlay()
         press_position.x >= target.left && press_position.y >= target.top &&
         press_position.x < target.left + target_width &&
         press_position.y < target.top + target_height;
-    if (selected_transform_target != nullptr &&
+    if (!selected_custom_shape && selected_transform_target != nullptr &&
         selected_rect != nullptr && HasUIComponent(*selected_transform_target))
     {
         SceneResizeHandlePoints(*selected_rect, selected_canvas_scale,
@@ -268,7 +279,10 @@ void framework::draw_ui_scene_overlay()
 
     // Puppet Pin / Custom Bezier anchor・handle は RectTransform の移動より先に拾う。
     // これにより小さい部位編集で親Objectまで動いてしまわない。
-    Core::GameObject* control_selected = selected;
+    // 自由図形の子Imageを選択している場合も、輪郭コントローラーは
+    // 親の自由図形マスクへ向ける。RectTransform のリサイズ操作とは独立した専用部位。
+    Core::GameObject* control_selected = selected_custom_shape
+        ? selected_transform_target : selected;
     RectTransformComponent* control_rect = control_selected != nullptr
         ? control_selected->GetComponent<RectTransformComponent>() : nullptr;
     const float control_canvas_scale = CanvasScaleForObject(control_selected,
@@ -349,12 +363,11 @@ void framework::draw_ui_scene_overlay()
         }
         if (!subcontrol_click)
         {
-            if (UIShapeComponent* shape = control_selected->GetComponent<UIShapeComponent>();
-                shape != nullptr && shape->shape == UIShapeComponent::CustomBezierPath)
+            int nearest_point = -1;
+            int nearest_handle = 0;
+            float nearest_d2 = 100.0f;
+            const auto find_nearest_shape_control = [&](const auto& shape)
             {
-                int nearest_point = -1;
-                int nearest_handle = 0;
-                float nearest_d2 = 100.0f;
                 for (int index = 0; index < static_cast<int>(shape->path_points.size()); ++index)
                 {
                     const DirectX::XMFLOAT2 anchor_point = shape->path_points[index];
@@ -378,17 +391,24 @@ void framework::draw_ui_scene_overlay()
                         { nearest_d2 = d2; nearest_point = index; nearest_handle = 2; }
                     }
                 }
-                if (nearest_point >= 0)
-                {
-                    ui_shape_active_point = nearest_point;
-                    ui_shape_selected_point = nearest_point;
-                    ui_shape_active_handle = nearest_handle;
-                    ui_puppet_active_pin = -1;
-                    ui_subcontrol_dragging = object_editor_context.CanEdit();
-                    if (ui_subcontrol_dragging) object_editor_context.BeginEdit("Bezier Pointを移動");
-                    subcontrol_click = true;
-                    ui_scene_view_input_consumed = true;
-                }
+            };
+            if (UIShapeComponent* shape = control_selected->GetComponent<UIShapeComponent>();
+                shape != nullptr && shape->shape == UIShapeComponent::CustomBezierPath)
+                find_nearest_shape_control(shape);
+            else if (UIShapeImageComponent* shape =
+                control_selected->GetComponent<UIShapeImageComponent>())
+                find_nearest_shape_control(shape);
+
+            if (nearest_point >= 0)
+            {
+                ui_shape_active_point = nearest_point;
+                ui_shape_selected_point = nearest_point;
+                ui_shape_active_handle = nearest_handle;
+                ui_puppet_active_pin = -1;
+                ui_subcontrol_dragging = object_editor_context.CanEdit();
+                if (ui_subcontrol_dragging) object_editor_context.BeginEdit("自由図形の頂点を移動");
+                subcontrol_click = true;
+                ui_scene_view_input_consumed = true;
             }
         }
     }
@@ -418,22 +438,29 @@ void framework::draw_ui_scene_overlay()
         {
             puppet->pin_positions[static_cast<std::size_t>(ui_puppet_active_pin)] = normalized;
         }
-        else if (UIShapeComponent* shape = control_selected->GetComponent<UIShapeComponent>();
-            ui_shape_active_point >= 0 && shape != nullptr &&
-            ui_shape_active_point < static_cast<int>(shape->path_points.size()))
+        else
         {
-            const std::size_t index = static_cast<std::size_t>(ui_shape_active_point);
-            if (ui_shape_active_handle == 0) shape->path_points[index] = normalized;
-            else
+            const auto drag_shape_control = [&](auto* shape)
             {
-                const auto anchor_point = shape->path_points[index];
-                const DirectX::XMFLOAT2 relative{ normalized.x - anchor_point.x,
-                    normalized.y - anchor_point.y };
-                if (ui_shape_active_handle == 1 && index < shape->path_in_handles.size())
-                    shape->path_in_handles[index] = relative;
-                if (ui_shape_active_handle == 2 && index < shape->path_out_handles.size())
-                    shape->path_out_handles[index] = relative;
-            }
+                if (shape == nullptr || ui_shape_active_point < 0 ||
+                    ui_shape_active_point >= static_cast<int>(shape->path_points.size()))
+                    return false;
+                const std::size_t index = static_cast<std::size_t>(ui_shape_active_point);
+                if (ui_shape_active_handle == 0) shape->path_points[index] = normalized;
+                else
+                {
+                    const auto anchor_point = shape->path_points[index];
+                    const DirectX::XMFLOAT2 relative{ normalized.x - anchor_point.x,
+                        normalized.y - anchor_point.y };
+                    if (ui_shape_active_handle == 1 && index < shape->path_in_handles.size())
+                        shape->path_in_handles[index] = relative;
+                    if (ui_shape_active_handle == 2 && index < shape->path_out_handles.size())
+                        shape->path_out_handles[index] = relative;
+                }
+                return true;
+            };
+            if (!drag_shape_control(control_selected->GetComponent<UIShapeComponent>()))
+                drag_shape_control(control_selected->GetComponent<UIShapeImageComponent>());
         }
         ui_scene_view_input_consumed = true;
     }
@@ -716,9 +743,10 @@ void framework::draw_ui_scene_overlay()
                 draw_list->AddCircle(bind, 4.0f, IM_COL32(180,180,190,200), 0, 1.0f);
             }
         }
-        if (const UIShapeComponent* shape = selected->GetComponent<UIShapeComponent>();
-            shape != nullptr && shape->shape == UIShapeComponent::CustomBezierPath)
+        Core::GameObject* shape_overlay_object = selected_transform_target;
+        const auto draw_shape_image_controls = [&](const auto* shape)
         {
+            if (shape == nullptr) return;
             if (shape->path_points.size() >= 2)
             {
                 const std::size_t segment_count = shape->path_closed
@@ -768,7 +796,14 @@ void framework::draw_ui_scene_overlay()
                 draw_list->AddCircleFilled(pi, 3.5f, IM_COL32(120,200,255,255));
                 draw_list->AddCircleFilled(po, 3.5f, IM_COL32(255,120,210,255));
             }
-        }
+        };
+        if (const UIShapeComponent* shape = shape_overlay_object != nullptr
+            ? shape_overlay_object->GetComponent<UIShapeComponent>() : nullptr;
+            shape != nullptr && shape->shape == UIShapeComponent::CustomBezierPath)
+            draw_shape_image_controls(shape);
+        else if (const UIShapeImageComponent* shape = shape_overlay_object != nullptr
+            ? shape_overlay_object->GetComponent<UIShapeImageComponent>() : nullptr)
+            draw_shape_image_controls(shape);
         if (const UIMaskComponent* mask = selected->GetComponent<UIMaskComponent>();
             mask != nullptr && (mask->mask_mode == UIMaskComponent::ObjectAlpha ||
                 mask->mask_mode == UIMaskComponent::ObjectLuma))
@@ -815,24 +850,30 @@ void framework::draw_ui_scene_overlay()
             }
         }
 
-        // 枠線より前面へ 4 corner + 4 edge handle を描く。
-        // Shift は縦横比固定、Alt は中心基準のリサイズに使う。
-        ImVec2 handles[8]{};
-        ResizeHandlePoints(p, handles);
-        const int hot = target_hovered ? HitResizeBorder(p, mouse) : -1;
-        for (int index = 0; index < 8; ++index)
+        // 自由図形は通常の拡大縮小ハンドルを表示せず、頂点・Bezierハンドルだけを
+        // 専用コントローラーとして表示する。通常UIのRect Toolと混同しない。
+        const int hot = !selected_custom_shape && target_hovered
+            ? HitResizeBorder(p, mouse) : -1;
+        if (!selected_custom_shape)
         {
-            const bool active_handle = ui_preview_resize_candidate &&
-                ui_preview_resize_object == selected_transform_target->ID() &&
-                ui_preview_resize_handle == index;
-            const bool hot_handle = hot == index;
-            const ImU32 fill = active_handle
-                ? IM_COL32(255, 190, 55, 255)
-                : (hot_handle ? IM_COL32(255, 230, 130, 255)
-                    : IM_COL32(245, 245, 250, 255));
-            draw_list->AddCircleFilled(handles[index], 5.0f, fill, 12);
-            draw_list->AddCircle(handles[index], 5.0f,
-                IM_COL32(35, 38, 44, 255), 12, 1.0f);
+            // 枠線より前面へ 4 corner + 4 edge handle を描く。
+            // Shift は縦横比固定、Alt は中心基準のリサイズに使う。
+            ImVec2 handles[8]{};
+            ResizeHandlePoints(p, handles);
+            for (int index = 0; index < 8; ++index)
+            {
+                const bool active_handle = ui_preview_resize_candidate &&
+                    ui_preview_resize_object == selected_transform_target->ID() &&
+                    ui_preview_resize_handle == index;
+                const bool hot_handle = hot == index;
+                const ImU32 fill = active_handle
+                    ? IM_COL32(255, 190, 55, 255)
+                    : (hot_handle ? IM_COL32(255, 230, 130, 255)
+                        : IM_COL32(245, 245, 250, 255));
+                draw_list->AddCircleFilled(handles[index], 5.0f, fill, 12);
+                draw_list->AddCircle(handles[index], 5.0f,
+                    IM_COL32(35, 38, 44, 255), 12, 1.0f);
+            }
         }
         if (hot >= 0)
         {

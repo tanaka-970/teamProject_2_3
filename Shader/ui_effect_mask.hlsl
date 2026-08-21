@@ -29,7 +29,13 @@ float4 main(VSOutput input) : SV_TARGET
     float4 color = source_texture.Sample(source_sampler, input.uv);
     const int shape_kind = (int)round(effect_params3.x) - 1;
     float edge = 1.0;
-    if (shape_kind >= 0)
+    if (shape_kind == -2)
+    {
+        // Runtime の自由図形マスク。輪郭は別RTの alpha に描かれているため、
+        // ここでは矩形／円などの手続き形状を重ねず、mask_texture だけを使う。
+        edge = 1.0;
+    }
+    else if (shape_kind >= 0)
     {
         const float2 centered = input.uv - effect_params2.xy;
         const float angle = radians(effect_params1.x);

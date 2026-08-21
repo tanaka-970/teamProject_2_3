@@ -11,6 +11,7 @@
 #include "../../RePlayEngine/Components/UI/UIButtonComponent.h"
 #include "../../RePlayEngine/Components/UI/UIMaskComponent.h"
 #include "../../RePlayEngine/Components/UI/UIShapeComponent.h"
+#include "../../RePlayEngine/Components/UI/UIShapeImageComponent.h"
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
 #include "../../RePlayEngine/Scene/Runtime/Scene.h"
 
@@ -27,6 +28,7 @@ namespace framework_ui_workspace_detail
     using ReplayEngine::Components::UIButtonComponent;
     using ReplayEngine::Components::UIMaskComponent;
     using ReplayEngine::Components::UIShapeComponent;
+    using ReplayEngine::Components::UIShapeImageComponent;
     namespace Core = ReplayEngine::Core;
     namespace Scene = ReplayEngine::Scene;
 
@@ -38,7 +40,8 @@ namespace framework_ui_workspace_detail
             object.GetComponent<UITextComponent>() != nullptr ||
             object.GetComponent<UIButtonComponent>() != nullptr ||
             object.GetComponent<UIMaskComponent>() != nullptr ||
-            object.GetComponent<UIShapeComponent>() != nullptr;
+            object.GetComponent<UIShapeComponent>() != nullptr ||
+            object.GetComponent<UIShapeImageComponent>() != nullptr;
     }
 
     inline bool ContainsUI(const Core::GameObject& object)

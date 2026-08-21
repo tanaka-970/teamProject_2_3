@@ -15,6 +15,7 @@
 #include "../../RePlayEngine/Components/UI/UIMaskComponent.h"
 #include "../../RePlayEngine/Components/UI/UIPuppetDeformComponent.h"
 #include "../../RePlayEngine/Components/UI/UIShapeComponent.h"
+#include "../../RePlayEngine/Components/UI/UIShapeImageComponent.h"
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
 #include "../../RePlayEngine/Scene/Runtime/Scene.h"
 #include "../../RePlayEngine/UI/UILayout.h"
@@ -61,6 +62,7 @@
     using ReplayEngine::Components::UIMaskComponent;
     using ReplayEngine::Components::UIPuppetDeformComponent;
     using ReplayEngine::Components::UIShapeComponent;
+    using ReplayEngine::Components::UIShapeImageComponent;
     namespace Assets = ReplayEngine::Assets;
     namespace Core = ReplayEngine::Core;
     namespace Scene = ReplayEngine::Scene;
@@ -113,6 +115,14 @@
                 { 220.0f, 16.0f }, 5, 0.0f, 1.0f, 0.0f, 5.0f, 4.0f },
         }};
         return presets;
+    }
+
+    const UIPrimitivePreset& CustomShapePreset()
+    {
+        static const UIPrimitivePreset preset{
+            "自由図形", "Custom Shape", UIShapeComponent::CustomBezierPath,
+            { 160.0f, 100.0f } };
+        return preset;
     }
 
     constexpr const char* ui_hierarchy_drag_type = "REPLAY_GAMEOBJECT";
@@ -244,7 +254,8 @@
         case UIHierarchyFilterKind::Button:
             return object.GetComponent<UIButtonComponent>() != nullptr;
         case UIHierarchyFilterKind::Shape:
-            return object.GetComponent<UIShapeComponent>() != nullptr;
+            return object.GetComponent<UIShapeComponent>() != nullptr ||
+                object.GetComponent<UIShapeImageComponent>() != nullptr;
         case UIHierarchyFilterKind::Mask:
             return object.GetComponent<UIMaskComponent>() != nullptr;
         }
@@ -975,6 +986,29 @@
         shape.fill_color = { 0.25f, 0.65f, 1.0f, 1.0f };
         shape.stroke_color = { 0.08f, 0.18f, 0.32f, 1.0f };
         shape.stroke_width = preset.stroke_width;
+        if (preset.shape == UIShapeComponent::CustomBezierPath)
+        {
+            // 自由図形は最初から輪郭を編集できるよう、四隅のアンカーを持たせる。
+            // 通常の RectTransform のリサイズハンドルとは別の頂点コントローラーで編集する。
+            shape.SetPathPointCount(4);
+            shape.path_closed = true;
+            shape.path_points[0] = { 0.12f, 0.12f };
+            shape.path_points[1] = { 0.88f, 0.12f };
+            shape.path_points[2] = { 0.88f, 0.88f };
+            shape.path_points[3] = { 0.12f, 0.88f };
+            shape.OnPropertyChanged("path_points");
+        }
+    }
+
+    void ConfigureUIShapeImage(UIShapeImageComponent& shape)
+    {
+        shape.SetPathPointCount(4);
+        shape.path_closed = true;
+        shape.path_points[0] = { 0.12f, 0.12f };
+        shape.path_points[1] = { 0.88f, 0.12f };
+        shape.path_points[2] = { 0.88f, 0.88f };
+        shape.path_points[3] = { 0.12f, 0.88f };
+        shape.OnPropertyChanged("path_points");
     }
 
     Core::GameObject* CreateUIElement(ReplayEngine::Editor::EditorContext& context,
@@ -1060,6 +1094,36 @@
         }
     }
 
+    Core::GameObject* CreateUICustomShape(
+        ReplayEngine::Editor::EditorContext& context)
+    {
+        return CreateUIPrimitive(context, CustomShapePreset());
+    }
+
+    Core::GameObject* CreateUICustomShapeImage(
+        ReplayEngine::Editor::EditorContext& context)
+    {
+        Scene::Scene* scene = context.GetScene();
+        if (scene == nullptr || !context.CanEdit()) return nullptr;
+
+        context.BeginEdit("自由図形 Image を作成");
+        Core::GameObject* parent = SelectedUIParent(context);
+        if (parent == nullptr) parent = CreateCanvasObject(*scene);
+        Core::GameObject* created = CreateUIChildObject(*scene, parent,
+            "自由図形 Image", { 160.0f, 100.0f });
+        if (created != nullptr)
+        {
+            created->AddComponent<UIImageComponent>();
+            UIShapeImageComponent* shape =
+                created->AddComponent<UIShapeImageComponent>();
+            if (shape != nullptr) ConfigureUIShapeImage(*shape);
+            context.Selection().Select(created->ID(), false);
+            context.SetStatus("自由図形 Image を作成しました。頂点コントローラーで輪郭を編集できます");
+        }
+        context.CommitEdit();
+        return created;
+    }
+
     int MaskShapeKindForPreset(const UIPrimitivePreset& preset) noexcept
     {
         if (preset.shape == UIShapeComponent::Circle)
@@ -1141,6 +1205,14 @@
         }
         context.CommitEdit();
         return image_object;
+    }
+
+    Core::GameObject* CreateUICustomShapeMaskedImage(
+        ReplayEngine::Editor::EditorContext& context)
+    {
+        // 自由形状 Image は親Mask＋子Imageではなく、専用コンポーネントを
+        // 同じ GameObject に付ける。UIImageComponent の矩形責務を汚さない。
+        return CreateUICustomShapeImage(context);
     }
 
     // 選択中の Image をその場で図形マスクの子へ移す。
@@ -1255,6 +1327,30 @@
         return result;
     }
 
+    Core::GameObject* CreateUICustomShapeMaskForSelectedImage(
+        ReplayEngine::Editor::EditorContext& context)
+    {
+        Scene::Scene* scene = context.GetScene();
+        Core::GameObject* image_object = SelectedUIImageForShapeMask(context);
+        if (scene == nullptr || image_object == nullptr || !context.CanEdit())
+            return nullptr;
+
+        context.BeginEdit("選択中の Image を自由図形 Image 化");
+        UIShapeImageComponent* shape =
+            image_object->GetComponent<UIShapeImageComponent>();
+        if (shape == nullptr) shape = image_object->AddComponent<UIShapeImageComponent>();
+        if (shape != nullptr)
+        {
+            ConfigureUIShapeImage(*shape);
+            context.Selection().Select(image_object->ID(), false);
+            context.SetStatus("選択中のImageを自由図形Image化しました。頂点コントローラーで輪郭を編集できます");
+            context.CommitEdit();
+            return image_object;
+        }
+        context.CancelEdit();
+        return nullptr;
+    }
+
     void DrawUISelectedShapeImageMenu(
         ReplayEngine::Editor::EditorContext& context, bool close_popup)
     {
@@ -1264,6 +1360,11 @@
             const std::string label = std::string(preset.menu_name) + "で切り抜く";
             if (!ImGui::MenuItem(label.c_str())) continue;
             CreateUIShapeMaskForSelectedImage(context, preset);
+            if (close_popup) ImGui::CloseCurrentPopup();
+        }
+        if (ImGui::MenuItem("自由図形で切り抜く"))
+        {
+            CreateUICustomShapeMaskForSelectedImage(context);
             if (close_popup) ImGui::CloseCurrentPopup();
         }
     }
@@ -1280,6 +1381,11 @@
             CreateUIShapeMaskedImage(context, preset);
             if (close_popup) ImGui::CloseCurrentPopup();
         }
+        if (ImGui::MenuItem("自由図形で切り抜く"))
+        {
+            CreateUICustomShapeMaskedImage(context);
+            if (close_popup) ImGui::CloseCurrentPopup();
+        }
     }
 
     void DrawUIImageCreationMenu(
@@ -1294,6 +1400,11 @@
         {
             DrawUIShapeMaskMenu(context, close_popup);
             ImGui::EndMenu();
+        }
+        if (ImGui::MenuItem("自由図形Imageを追加"))
+        {
+            CreateUICustomShapeImage(context);
+            if (close_popup) ImGui::CloseCurrentPopup();
         }
     }
 
@@ -1314,6 +1425,8 @@
             DrawUIPrimitiveMenu(context, false);
             ImGui::EndMenu();
         }
+        if (ImGui::MenuItem("自由図形を追加"))
+            CreateUICustomShape(context);
         if (SelectedUIImageForShapeMask(context) != nullptr &&
             ImGui::BeginMenu("図形イメージを追加"))
         {
@@ -1348,6 +1461,8 @@
                 DrawUISelectedShapeImageMenu(context, true);
                 ImGui::EndPopup();
             }
+            if (ImGui::Button("自由図形イメージ", ImVec2(-1.0f, 0.0f)))
+                CreateUICustomShapeImage(context);
             return;
         }
 
@@ -1424,6 +1539,16 @@
             DrawUISelectedShapeImageMenu(context, true);
             ImGui::EndPopup();
         }
+
+        draw_button("自由図形", [&context]
+        {
+            CreateUICustomShape(context);
+        });
+
+        draw_button("自由図形イメージ", [&context]
+        {
+            CreateUICustomShapeImage(context);
+        });
     }
 
 
@@ -1864,14 +1989,14 @@ void framework::draw_ui_inspector()
         ImGui::Separator();
     }
 
-    if (UIShapeComponent* shape = selected->GetComponent<UIShapeComponent>();
-        shape != nullptr && shape->shape == UIShapeComponent::CustomBezierPath)
+    const auto draw_custom_path_editor = [&](auto* shape, const char* title)
     {
-        ImGui::TextDisabled("Custom Bezier Path 編集");
+        if (shape == nullptr) return;
+        ImGui::TextDisabled(title);
         ImGui::Text("Points: %d", static_cast<int>(shape->path_points.size()));
         if (ImGui::Button("Point を追加") && object_editor_context.CanEdit())
         {
-            object_editor_context.BeginEdit("Bezier Pointを追加");
+            object_editor_context.BeginEdit("自由図形の頂点を追加");
             const int old_count = static_cast<int>(shape->path_points.size());
             shape->SetPathPointCount(old_count + 1);
             if (static_cast<int>(shape->path_points.size()) > old_count)
@@ -1903,7 +2028,7 @@ void framework::draw_ui_inspector()
             const DirectX::XMFLOAT2 a = shape->path_points[static_cast<std::size_t>(index)];
             const DirectX::XMFLOAT2 b = shape->path_points[next_index];
             const DirectX::XMFLOAT2 midpoint{ (a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f };
-            object_editor_context.BeginEdit("Bezier Pointを挿入");
+            object_editor_context.BeginEdit("自由図形の頂点を挿入");
             shape->path_points.insert(shape->path_points.begin() +
                 static_cast<std::ptrdiff_t>(insert_at), midpoint);
             const std::size_t in_at = (std::min)(insert_at, shape->path_in_handles.size());
@@ -1925,7 +2050,7 @@ void framework::draw_ui_inspector()
             int index = ui_shape_selected_point;
             if (index < 0 || index >= static_cast<int>(shape->path_points.size()))
                 index = static_cast<int>(shape->path_points.size()) - 1;
-            object_editor_context.BeginEdit("Bezier Pointを削除");
+            object_editor_context.BeginEdit("自由図形の頂点を削除");
             const std::size_t i = static_cast<std::size_t>(index);
             shape->path_points.erase(shape->path_points.begin() + static_cast<std::ptrdiff_t>(i));
             if (i < shape->path_in_handles.size())
@@ -1948,6 +2073,17 @@ void framework::draw_ui_inspector()
                 ui_shape_selected_point = selected_point;
         }
         ImGui::Separator();
+    };
+
+    if (UIShapeComponent* shape = selected->GetComponent<UIShapeComponent>();
+        shape != nullptr && shape->shape == UIShapeComponent::CustomBezierPath)
+    {
+        draw_custom_path_editor(shape, "自由図形コントローラー");
+    }
+    else if (UIShapeImageComponent* shape =
+        selected->GetComponent<UIShapeImageComponent>())
+    {
+        draw_custom_path_editor(shape, "自由図形Image コントローラー");
     }
 
     if (UIMaskComponent* mask = selected->GetComponent<UIMaskComponent>();

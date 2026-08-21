@@ -152,6 +152,28 @@ namespace ReplayEngine::Core::Detail
                 MakeProperty("preserve_aspect", &UIImageComponent::preserve_aspect)
                     .Display("比率を維持"));
 
+            ComponentRegistry::Register<UIShapeImageComponent>(
+                ComponentTypeInfo::Describe("Shape Image", "UI")
+                    .WithTooltip("Image を自由な Bezier 輪郭でクリップします。通常の Image とは別の専用コンポーネントです。")
+                    .Requires<RectTransformComponent>()
+                    .Recommends<UIImageComponent>());
+            PropertyRegistry::Register<UIShapeImageComponent>(
+                MakeProperty("path_closed", &UIShapeImageComponent::path_closed)
+                    .Display("Path を閉じる")
+                    .Tooltip("自由形状の末尾と先頭を接続します。Image のクリップには閉じた Path が必要です。"));
+            PropertyRegistry::Register<UIShapeImageComponent>(
+                MakeProperty("path_points", &UIShapeImageComponent::path_points)
+                    .Display("Path Anchor")
+                    .Tooltip("正規化 0..1 の頂点配列。UI Scene View の専用コントローラーで編集できます。"));
+            PropertyRegistry::Register<UIShapeImageComponent>(
+                MakeProperty("path_in_handles", &UIShapeImageComponent::path_in_handles)
+                    .Display("Path 入力 Handle")
+                    .Advanced());
+            PropertyRegistry::Register<UIShapeImageComponent>(
+                MakeProperty("path_out_handles", &UIShapeImageComponent::path_out_handles)
+                    .Display("Path 出力 Handle")
+                    .Advanced());
+
             ComponentRegistry::Register<UISpriteAnimatorComponent>(
                 ComponentTypeInfo::Describe("Sprite Animator", "UI")
                     .WithTooltip("Sprite Sheet の行列と frame から Image の UV を更新します。")
