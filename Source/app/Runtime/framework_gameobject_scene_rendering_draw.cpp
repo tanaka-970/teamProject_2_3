@@ -567,12 +567,17 @@ bool framework::resolve_render_item_shadow_double_sided(
 //   - Pixel Shader を貼らない（深度だけを書く）。
 //   - Material / Texture / GBuffer 定数を一切触らない。
 //   - メインカメラの視錐台カリングは使わない。代わりに影ボリューム
-//     （全カスケードを包む球）で選別する。画面外でも影は落ちるが、
-//     影ボリュームの外へ出た物体は影マップに一切写らないため捨ててよい。
+//     （その影マップに写り得る範囲を包む球）で選別する。画面外でも影は
+//     落ちるが、影ボリュームの外の物体は影マップに一切写らない。
 //   - RenderItem::cast_shadow == false は捨てる。
+//
+// Directional (CSM) と Point / Spot で共通の提出処理にしてある。
+// ライト種別ごとに提出処理を分けると、片方だけ対応漏れが起きる。
 void framework::draw_shadow_caster_meshes(
     ID3D11VertexShader* static_caster_vs, ID3D11InputLayout* static_caster_il,
-    ID3D11VertexShader* skinned_caster_vs, ID3D11InputLayout* skinned_caster_il)
+    ID3D11VertexShader* skinned_caster_vs, ID3D11InputLayout* skinned_caster_il,
+    const DirectX::XMFLOAT3& volume_center, float volume_radius,
+    float volume_extrusion)
 {
     // 影マップは深度テスト・深度書き込みの両方が要る。直前のパスが
     // 何を残していても影響を受けないよう、ここで明示的に決める。
@@ -590,9 +595,7 @@ void framework::draw_shadow_caster_meshes(
     const bool culling_was_enabled = culling.enabled;
     culling.enabled = false;
 
-    const DirectX::XMFLOAT3 volume_center = csm.shadow_volume_center;
-    const float volume_radius = csm.shadow_volume_radius;
-    const float extrusion = csm.caster_extrusion;
+    const float extrusion = volume_extrusion;
 
     for (const ReplayEngine::Rendering::RenderItem& item : object_render_items.Items())
     {

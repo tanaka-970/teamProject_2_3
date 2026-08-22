@@ -152,8 +152,10 @@ float4 main(VS_OUT pin) : SV_TARGET
         // トゥーンでも影とAOは共通のものを使い、PBRと陰の位置がずれないようにする。
         color *= lerp(1.0f, shadow_visibility, 0.85f);
         color += g.base_color * ambient_strength * 0.5f * screen.ambient_occlusion;
-        color += evaluate_point_lights(wp, N, V, g.base_color, g.roughness, g.metalness);
-        color += evaluate_spot_lights(wp, N, V, g.base_color);
+        color += evaluate_point_lights(wp, N, V, g.base_color,
+            g.roughness, g.metalness, g.receive_shadow ? 1.0f : 0.0f);
+        color += evaluate_spot_lights(wp, N, V, g.base_color,
+            g.receive_shadow ? 1.0f : 0.0f);
         color += g.emissive;
     }
     else // PBR (デフォルト)
@@ -161,7 +163,8 @@ float4 main(VS_OUT pin) : SV_TARGET
         // マルチスキャッタIBL + SSAO/SSR + CSMを合わせたフルPBR評価。
         color = evaluate_pbr_ex(g.base_color, g.emissive,
             g.metalness, g.roughness, g.occlusion,
-            N, V, wp, shadow_visibility, screen);
+            N, V, wp, shadow_visibility, screen,
+            g.receive_shadow ? 1.0f : 0.0f);
     }
     return float4(color, 1.0f);
 }

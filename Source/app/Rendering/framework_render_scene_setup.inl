@@ -85,7 +85,9 @@
         // 移動・回転・拡縮・アニメーションはこのフレームの姿勢がそのまま入る。
         draw_shadow_caster_meshes(
             csm.caster_static_vs.Get(), csm.caster_static_il.Get(),
-            csm.caster_skinned_vs.Get(), csm.caster_skinned_il.Get());
+            csm.caster_skinned_vs.Get(), csm.caster_skinned_il.Get(),
+            csm.shadow_volume_center, csm.shadow_volume_radius,
+            csm.caster_extrusion);
 
         // エディタのデバッグ用静的メッシュ。互換のために残しているだけで、
         // これを消しても GameObject だけで影のテストは成立する。
@@ -116,7 +118,9 @@
 
         draw_shadow_caster_meshes(
             pbr.shadow_caster_static_vs.Get(), pbr.shadow_caster_static_il.Get(),
-            pbr.shadow_caster_skinned_vs.Get(), pbr.shadow_caster_skinned_il.Get());
+            pbr.shadow_caster_skinned_vs.Get(), pbr.shadow_caster_skinned_il.Get(),
+            csm.shadow_volume_center, csm.shadow_volume_radius,
+            csm.caster_extrusion);
 
         if (enable_static_meshes && static_meshes[0])
         {
@@ -130,6 +134,38 @@
         }
 
         pbr.shadow_end(immediate_context.Get(),
+            render_target_view.Get(), depth_stencil_view.Get(), main_vp);
+    }
+
+    // Point / Spot Light の影マップ。
+    //
+    // カメラに依存しないので、複数カメラパスがあっても 1 回だけ作る。
+    // Directional の CSM はカメラ視錐台からカスケードを作るためパスごとに
+    // 更新が要るが、こちらはライトの位置と向きだけで決まる。
+    if (camera_pass_index == 0 && enable_dynamic_shadows &&
+        local_shadows.enabled && local_shadows.AtlasReady() &&
+        !local_shadow_requests.empty())
+    {
+        REPLAY_PROFILE_GPU_SCOPE(immediate_context.Get(), "Local Shadow");
+        const D3D11_VIEWPORT main_vp = viewport;
+        local_shadows.UploadSlices(immediate_context.Get());
+
+        for (const local_shadow_request& request : local_shadow_requests)
+        {
+            local_shadows.BeginLight(immediate_context.Get(),
+                request.base_slice, request.slice_count);
+            // 影ボリュームはライトの到達距離そのもの。範囲外の物体は
+            // このライトの影マップへ書き込めないので描かない。
+            draw_shadow_caster_meshes(
+                csm.caster_static_vs.Get(), csm.caster_static_il.Get(),
+                csm.caster_skinned_vs.Get(), csm.caster_skinned_il.Get(),
+                request.position, request.range, 0.0f);
+
+            if (request.point) ++shadow_stats.point_shadow_lights;
+            else ++shadow_stats.spot_shadow_lights;
+        }
+
+        local_shadows.End(immediate_context.Get(),
             render_target_view.Get(), depth_stencil_view.Get(), main_vp);
     }
 
@@ -204,6 +240,9 @@
 
     pbr.bind_pbr_resources(immediate_context.Get());
     csm.bind_resources(immediate_context.Get());
+    // Point / Spot の影マップ。前方描画の Toon / PBR も
+    // evaluate_point_lights() 経由でこれを読むため、Deferred 専用にしない。
+    local_shadows.BindResources(immediate_context.Get());
     toon.bind_resources(immediate_context.Get());
     immediate_context->PSSetShaderResources(1, 1, dummy_normal_srv.GetAddressOf());
     ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::ShaderResource, false);

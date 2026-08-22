@@ -29,7 +29,10 @@
                 tiled_deferred.AddPointLight(
                     { point.position.x, point.position.y, point.position.z },
                     point.position.w,
-                    { point.color.x, point.color.y, point.color.z }, point.color.w);
+                    { point.color.x, point.color.y, point.color.z }, point.color.w,
+                    // 影マップのスロットは PS 版と同じものを渡す。
+                    // ここで落とすと、タイルドON/OFFで影の有無が変わる。
+                    static_cast<int>(point.shadow.x), point.shadow.y);
             }
             for (int i = 0; i < lights.data.light_counts.y && i < lights_manager::SPOT_LIGHT_MAX; ++i)
             {
@@ -39,7 +42,8 @@
                     spot.position.w,
                     { spot.direction.x, spot.direction.y, spot.direction.z },
                     spot.direction.w, spot.color.w,
-                    { spot.color.x, spot.color.y, spot.color.z }, spot.params.x);
+                    { spot.color.x, spot.color.y, spot.color.z }, spot.params.x,
+                    static_cast<int>(spot.params.y), spot.params.z);
             }
 
             // CSはPSとスロットが独立しているので、必要なものを貼り直す。
@@ -53,6 +57,7 @@
                 sampler_states[(size_t)SAMPLER_STATE::ANISOTROPIC].GetAddressOf());
             pbr.bind_compute_resources(immediate_context.Get());
             csm.bind_compute_resources(immediate_context.Get());
+            local_shadows.BindComputeResources(immediate_context.Get());
 
             ID3D11ShaderResourceView* gbuffer_views[4]{
                 deferred.gbuffer_srv[0].Get(), deferred.gbuffer_srv[1].Get(),
@@ -63,6 +68,7 @@
 
             pbr.unbind_compute_resources(immediate_context.Get());
             csm.unbind_compute_resources(immediate_context.Get());
+            local_shadows.UnbindComputeResources(immediate_context.Get());
         }
         else
         {

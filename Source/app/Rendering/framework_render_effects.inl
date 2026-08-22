@@ -94,6 +94,7 @@
 
     pbr.unbind_pbr_resources(immediate_context.Get());
     csm.unbind_resources(immediate_context.Get());
+    local_shadows.UnbindResources(immediate_context.Get());
     toon.unbind_resources(immediate_context.Get());
     framebuffers[0]->deactivate(immediate_context.Get());
 

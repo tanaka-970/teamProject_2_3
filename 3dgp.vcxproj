@@ -233,6 +233,7 @@
     <ClCompile Include="Source\mesh\UI.cpp" />
     <ClCompile Include="Source\render\csm_renderer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Deferred\deferred_renderer.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shadows\LocalShadowAtlas.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Passes\PostProcessPass.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Effects\EffectChain.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Passes\BloomPass.cpp" />
@@ -610,6 +611,7 @@
     <ClInclude Include="Source\render\deferred_renderer.h" />
     <ClInclude Include="Source\render\motion_vector_context.h" />
     <ClInclude Include="RePlayEngine\Rendering\Deferred\deferred_renderer.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Shadows\LocalShadowAtlas.h" />
     <ClInclude Include="RePlayEngine\Rendering\Passes\PostProcessPass.h" />
     <ClInclude Include="RePlayEngine\Rendering\FrameConstants.h" />
     <ClInclude Include="RePlayEngine\Rendering\RenderStats.h" />
@@ -1013,6 +1015,7 @@
     <None Include="RePlayEngine\Shaders\TeamDeferred\Skinning.hlsli" />
     <None Include="RePlayEngine\Shaders\TeamDeferred\TerrainCarve.hlsli" />
     <None Include="Shader\csm_common.hlsli" />
+    <None Include="Shader\local_shadow_common.hlsli" />
     <None Include="Shader\frame_common.hlsli" />
     <None Include="Shader\PostEffects\AmbientOcclusion\ssao_common.hlsli" />
     <None Include="Shader\PostEffects\Reflection\ssr_common.hlsli" />
@@ -1720,6 +1723,12 @@
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\local_shadow_caster_gs.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Geometry</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Geometry</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Geometry</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Geometry</ShaderType>
     </FxCompile>
     <FxCompile Include="Shader\csm_caster_gs.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Geometry</ShaderType>

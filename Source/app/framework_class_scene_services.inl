@@ -85,13 +85,21 @@
     //   - RenderItem::cast_shadow が false のものは必ず捨てる。
     //   - receive_shadow はここでは見ない（照明側の責務）。
     //   - メインカメラの視錐台カリングは使わない。画面外のキャスターも
-    //     影は画面内へ落ちるため、捨てると影が欠ける。
+    //     影は画面内へ落ちるため、捨てる基準はカメラではなく影ボリューム。
     // Geometry Shader / RenderTarget / Viewport は呼び出し側が設定済みの前提。
+    //
+    // volume_center / volume_radius は「この影マップに写り得る範囲」を
+    // 包む球。Directional は全カスケードを包む球、Point / Spot は
+    // ライト位置と到達距離を渡す。ここへ届かない物体は影マップに
+    // 1 ピクセルも書き込めないので、描く前に捨てる。
     void draw_shadow_caster_meshes(
         ID3D11VertexShader* static_caster_vs,
         ID3D11InputLayout* static_caster_il,
         ID3D11VertexShader* skinned_caster_vs,
-        ID3D11InputLayout* skinned_caster_il);
+        ID3D11InputLayout* skinned_caster_il,
+        const DirectX::XMFLOAT3& volume_center,
+        float volume_radius,
+        float volume_extrusion);
     // 影パス専用の軽い両面判定。
     // resolve_render_item_material() は Shader Catalog と PropertyBag まで
     // 解決するため、深度しか書かない影パスで毎フレーム呼ぶには重すぎる。
