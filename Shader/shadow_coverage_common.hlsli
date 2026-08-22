@@ -92,40 +92,47 @@ float2 shadow_coverage_pattern_uv(float2 uv, float2 target, float radius, float 
 float shadow_coverage_single_region(float2 uv, float4 params, float4 settings)
 {
     const float shape_flags = settings.w;
-    if (shape_flags < -0.5f) return 1.0f;
+    float weight = 1.0f;
+    if (shape_flags >= -0.5f)
+    {
+        const bool invert = shape_flags >= 4.0f;
+        const int shape = (int) floor(shape_flags - (invert ? 4.0f : 0.0f) + 0.5f);
+        const float2 center = params.xy;
+        const float2 size = max(params.zw, float2(0.0001f, 0.0001f));
+        const float angle = settings.x * 0.0174532925199433f;
+        const float s = sin(angle);
+        const float c = cos(angle);
+        const float2 delta = uv - center;
+        const float2 local = float2(delta.x * c + delta.y * s, -delta.x * s + delta.y * c);
+        const float feather = saturate(settings.y);
 
-    const bool invert = shape_flags >= 4.0f;
-    const int shape = (int) floor(shape_flags - (invert ? 4.0f : 0.0f) + 0.5f);
-    const float2 center = params.xy;
-    const float2 size = max(params.zw, float2(0.0001f, 0.0001f));
-    const float angle = settings.x * 0.0174532925199433f;
-    const float s = sin(angle);
-    const float c = cos(angle);
-    const float2 delta = uv - center;
-    const float2 local = float2(delta.x * c + delta.y * s, -delta.x * s + delta.y * c);
-    const float feather = saturate(settings.y);
-
-    const float distance_to_edge = shape == 1
-        ? length(local / size)
-        : max(abs(local.x / size.x), abs(local.y / size.y));
-    float mask = feather <= 0.00001f
-        ? step(distance_to_edge, 1.0f)
-        : 1.0f - smoothstep(1.0f - feather, 1.0f + feather, distance_to_edge);
-    if (invert) mask = 1.0f - mask;
-    return saturate(mask * settings.z);
+        const float distance_to_edge = shape == 1
+            ? length(local / size)
+            : max(abs(local.x / size.x), abs(local.y / size.y));
+        float mask = feather <= 0.00001f
+            ? step(distance_to_edge, 1.0f)
+            : 1.0f - smoothstep(1.0f - feather, 1.0f + feather, distance_to_edge);
+        if (invert) mask = 1.0f - mask;
+        weight = saturate(mask * settings.z);
+    }
+    return weight;
 }
 
 float shadow_coverage_region_weight(float2 uv)
 {
     const int count = (int) floor(shadow_coverage_control.z + 0.5f);
-    if (count <= 0) return 1.0f;
-    float mask = shadow_coverage_single_region(uv,
-        shadow_coverage_region_params[0], shadow_coverage_region_settings[0]);
-    [unroll] for (int index = 1; index < SHADOW_COVERAGE_MAX_REGIONS; ++index)
+    float mask = 1.0f;
+    if (count > 0)
     {
-        if (index >= count) break;
-        mask = max(mask, shadow_coverage_single_region(uv,
-            shadow_coverage_region_params[index], shadow_coverage_region_settings[index]));
+        mask = shadow_coverage_single_region(uv,
+            shadow_coverage_region_params[0], shadow_coverage_region_settings[0]);
+        [unroll] for (int index = 1; index < SHADOW_COVERAGE_MAX_REGIONS; ++index)
+        {
+            if (index >= count) break;
+            mask = max(mask, shadow_coverage_single_region(uv,
+                shadow_coverage_region_params[index],
+                shadow_coverage_region_settings[index]));
+        }
     }
     return saturate(mask);
 }
@@ -146,17 +153,22 @@ float shadow_coverage_dissolve(float2 uv, float2 target, int index, bool mask_bo
 {
     const float progress = saturate(shadow_coverage_params1[index].y);
     const float edge = max(shadow_coverage_params0[index].z, 0.0001f);
+    float keep;
     if (shadow_coverage_params3[index].y > 0.5f && mask_bound)
     {
         const float2 pattern_uv = shadow_coverage_pattern_uv(uv, target,
             shadow_coverage_params0[index].x, shadow_coverage_params1[index].x);
         const float pattern = dot(shadow_coverage_mask_map.Sample(
             shadow_coverage_sampler, pattern_uv).rgb, float3(0.2126f, 0.7152f, 0.0722f));
-        return 1.0f - smoothstep(1.0f - progress - edge, 1.0f - progress + edge, pattern);
+        keep = 1.0f - smoothstep(1.0f - progress - edge, 1.0f - progress + edge, pattern);
     }
-    const float noise = shadow_coverage_hash(
-        floor(uv * target * 0.25f) + shadow_coverage_params2[index].z);
-    return smoothstep(progress - edge, progress + edge, noise);
+    else
+    {
+        const float noise = shadow_coverage_hash(
+            floor(uv * target * 0.25f) + shadow_coverage_params2[index].z);
+        keep = smoothstep(progress - edge, progress + edge, noise);
+    }
+    return keep;
 }
 
 // ui_effect_burn_reveal.hlsl の alpha 減衰と同じ式。
@@ -252,17 +264,21 @@ float shadow_coverage_mask(float2 uv, int index, bool mask_bound)
     return edge;
 }
 
-// ワールド座標を Effect の crop 内 UV へ落とす。カメラの後ろなら評価しない。
-bool shadow_coverage_uv(float3 world_position, out float2 uv)
+// ワールド座標を Effect の crop 内 UV へ落とす。z=0 ならカメラの後ろで評価できない。
+float3 shadow_coverage_uv(float3 world_position)
 {
-    uv = float2(0.0f, 0.0f);
     const float4 clip = mul(float4(world_position, 1.0f), shadow_coverage_view_projection);
-    if (clip.w <= 1.0e-5f) return false;
-    const float2 ndc = clip.xy / clip.w;
-    const float2 screen = shadow_coverage_viewport.xy +
-        float2(ndc.x * 0.5f + 0.5f, -ndc.y * 0.5f + 0.5f) * shadow_coverage_viewport.zw;
-    uv = (screen - shadow_coverage_rect.xy) / max(shadow_coverage_rect.zw, float2(1.0f, 1.0f));
-    return true;
+    float3 result = float3(0.0f, 0.0f, 0.0f);
+    if (clip.w > 1.0e-5f)
+    {
+        const float2 ndc = clip.xy / clip.w;
+        const float2 screen = shadow_coverage_viewport.xy +
+            float2(ndc.x * 0.5f + 0.5f, -ndc.y * 0.5f + 0.5f) * shadow_coverage_viewport.zw;
+        result.xy = (screen - shadow_coverage_rect.xy) /
+            max(shadow_coverage_rect.zw, float2(1.0f, 1.0f));
+        result.z = 1.0f;
+    }
+    return result;
 }
 
 // Effect Stack が面を消しているぶんだけ影も消す。
@@ -271,8 +287,9 @@ void shadow_coverage_clip(float3 world_position)
     const int count = (int) floor(shadow_coverage_control.x + 0.5f);
     if (count <= 0) return;
 
-    float2 uv;
-    if (!shadow_coverage_uv(world_position, uv)) return;
+    const float3 projected = shadow_coverage_uv(world_position);
+    if (projected.z < 0.5f) return;
+    const float2 uv = projected.xy;
 
     const int mask_index = (int) floor(shadow_coverage_control.y + 0.5f);
     const float2 target = max(shadow_coverage_rect.zw, float2(1.0f, 1.0f));

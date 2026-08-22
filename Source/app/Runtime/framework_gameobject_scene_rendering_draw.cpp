@@ -622,6 +622,9 @@ void framework::draw_shadow_caster_meshes(
     ReplayEngine::Rendering::Stats().CountStateSet(
         ReplayEngine::Rendering::RenderStats::StateKind::Rasterizer, false);
 
+    // b8 は他のパスにも使われるので、影パスごとに必ず 1 回は積み直す。
+    shadow_coverage_cb_is_empty = false;
+
     // gltf_model の視錐台カリングはカメラ基準なので影パスの間だけ止める。
     auto& culling = ReplayEngine::Rendering::Culling();
     const bool culling_was_enabled = culling.enabled;
@@ -759,12 +762,14 @@ void framework::draw_shadow_caster_meshes(
             skinned_alpha.alpha_mode = 2;
             skinned_alpha.uses_replay_base_map = false;
         }
-        const bool alpha_clip = skinned_alpha.alpha_mode != 0 &&
+        const bool coverage = bind_shadow_coverage_constants(item.owner);
+        const bool alpha_clip = skinned_alpha.alpha_mode != 0;
+        const bool use_shadow_ps = (alpha_clip || coverage) &&
             shadow_caster_alpha_skinned_ps != nullptr;
-        if (alpha_clip)
+        if (use_shadow_ps)
         {
             bind_shadow_alpha_constants(skinned_alpha);
-            if (skinned_alpha.uses_replay_base_map)
+            if (alpha_clip && skinned_alpha.uses_replay_base_map)
             {
                 const ReplayEngine::Rendering::RenderItem resolved =
                     resolve_render_item_material(item);
@@ -776,10 +781,10 @@ void framework::draw_shadow_caster_meshes(
         set_shadow_cull_state(draw_double_sided, item.world);
         // write_motion_vectors は必ず false。影パスで進めると TAA が尾を引く。
         mesh->render(immediate_context.Get(), item.world, item.tint,
-            keyframe, alpha_clip ? shadow_caster_alpha_skinned_ps.Get() : nullptr,
+            keyframe, use_shadow_ps ? shadow_caster_alpha_skinned_ps.Get() : nullptr,
             skinned_caster_vs, skinned_caster_il,
-            alpha_clip, false, use_embedded_gltf_materials);
-        if (alpha_clip && skinned_alpha.uses_replay_base_map)
+            use_shadow_ps, false, use_embedded_gltf_materials);
+        if (use_shadow_ps && alpha_clip && skinned_alpha.uses_replay_base_map)
             material_gpu_binder.UnbindTextures(immediate_context.Get());
         immediate_context->RSSetState(
             rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
@@ -812,6 +817,8 @@ void framework::draw_shadow_caster_meshes(
             if (landscape_mesh == nullptr) continue;
 
             const DirectX::XMFLOAT4X4 world = object->GetTransform().WorldMatrixFloat4x4();
+            if (landscape_mesh->bounding_box[0].x > landscape_mesh->bounding_box[1].x)
+                ++shadow_stats.missing_bounds_landscape;
             if (!shadow_volume_intersects(landscape_mesh->bounding_box[0],
                 landscape_mesh->bounding_box[1], world,
                 volume_center, volume_radius, extrusion))
@@ -833,6 +840,8 @@ void framework::draw_shadow_caster_meshes(
 
     // 影パスで貼った Pixel Shader / 材質定数を次のパスへ持ち越さない。
     immediate_context->PSSetShader(nullptr, nullptr, 0);
+    ID3D11ShaderResourceView* null_coverage_mask = nullptr;
+    immediate_context->PSSetShaderResources(46, 1, &null_coverage_mask);
     culling.enabled = culling_was_enabled;
 }
 

@@ -32,16 +32,20 @@ namespace ReplayEngine::Assets
         bool PathInsideOrEqual(const std::filesystem::path& value,
             const std::filesystem::path& root, std::filesystem::path& relative)
         {
+            relative.clear();
+            // 同一パスは relative を空のまま「root 自身」として返す。
+            if (PathKey(value) == PathKey(root)) return true;
+
             std::error_code error;
-            relative = std::filesystem::relative(value, root, error);
-            if (error) return PathKey(value) == PathKey(root);
-            if (relative.empty() || relative == ".")
-            {
-                relative.clear();
-                return true;
-            }
-            const auto first = relative.begin();
-            return first != relative.end() && first->generic_u8string() != "..";
+            const std::filesystem::path computed =
+                std::filesystem::relative(value, root, error);
+            // 差分を出せないときは配下と見なさない。空の relative で畳むと
+            // root 配下の record が全部 root 自身へ潰れる。
+            if (error || computed.empty() || computed == ".") return false;
+            const auto first = computed.begin();
+            if (first == computed.end() || first->generic_u8string() == "..") return false;
+            relative = computed;
+            return true;
         }
     }
 
@@ -231,18 +235,54 @@ namespace ReplayEngine::Assets
     {
         const std::filesystem::path old_normalized = NormalizeProjectPath(old_root);
         const std::filesystem::path new_normalized = NormalizeProjectPath(new_root);
+        if (PathKey(old_normalized) == PathKey(new_normalized)) return 0;
+
+        // 移動先が既に埋まっている record は書き換えない。2 件が同じ source_path
+        // へ着地すると、どちらのファイル名だったかを後から復元できなくなる。
+        std::vector<std::string> destination_keys;
+        destination_keys.reserve(records_.size());
+        for (const AssetRecord& record : records_)
+        {
+            std::filesystem::path relative;
+            if (PathInsideOrEqual(record.source_path, old_normalized, relative)) continue;
+            destination_keys.push_back(PathKey(record.source_path));
+        }
+
         std::size_t changed = 0;
         for (AssetRecord& record : records_)
         {
             std::filesystem::path relative;
             if (!PathInsideOrEqual(record.source_path, old_normalized, relative)) continue;
-            record.source_path = relative.empty()
+
+            const std::filesystem::path destination = relative.empty()
                 ? new_normalized
                 : (new_normalized / relative).lexically_normal();
+            const std::string destination_key = PathKey(destination);
+            if (std::find(destination_keys.begin(), destination_keys.end(),
+                destination_key) != destination_keys.end())
+            {
+                continue;
+            }
+
+            record.source_path = destination;
             record.display_name = record.source_path.stem().u8string();
+            destination_keys.push_back(destination_key);
             ++changed;
         }
         return changed;
+    }
+
+    std::vector<const AssetRecord*> AssetDatabase::FindFolderSourcePaths() const
+    {
+        // source_path が拡張子を持たない record。フォルダへ潰れた壊れ方の目印。
+        std::vector<const AssetRecord*> broken;
+        for (const AssetRecord& record : records_)
+        {
+            if (record.source_path.empty()) continue;
+            if (!record.source_path.extension().empty()) continue;
+            broken.push_back(&record);
+        }
+        return broken;
     }
 
     const AssetRecord* AssetDatabase::FindByGuid(const std::string& guid) const noexcept

@@ -83,6 +83,24 @@ void framework::tick_golden_capture()
         golden_state_->golden_last_summary = u8"基準画像を保存しました: " +
             path.generic_u8string();
         push_editor_log("Info", golden_state_->golden_last_summary, path);
+        // 影の内訳は Editor のパネルからしか見えないので、撮影時は stderr へも出す。
+        std::fprintf(stderr,
+            "shadow stats: directional=%d preview=%d rendered=%d "
+            "casters(prim=%d static=%d skinned=%d landscape=%d) "
+            "skipped=%d culled=%d unresolved=%d draws=%d spot=%d point=%d "
+            "coverage=%d coverage_unsupported=%d "
+            "missing_bounds(prim=%d static=%d landscape=%d)\n",
+            shadow_stats.directional_light_present ? 1 : 0,
+            shadow_stats.directional_preview_light ? 1 : 0,
+            shadow_stats.directional_shadow_rendered ? 1 : 0,
+            shadow_stats.primitive_casters, shadow_stats.static_casters,
+            shadow_stats.skinned_casters, shadow_stats.landscape_casters,
+            shadow_stats.skipped_cast_shadow, shadow_stats.culled_casters,
+            shadow_stats.skinned_unresolved, shadow_stats.shadow_draw_calls,
+            shadow_stats.spot_shadow_lights, shadow_stats.point_shadow_lights,
+            shadow_stats.coverage_casters, shadow_stats.coverage_unsupported,
+            shadow_stats.missing_bounds_primitive, shadow_stats.missing_bounds_static,
+            shadow_stats.missing_bounds_landscape);
         return;
     }
 

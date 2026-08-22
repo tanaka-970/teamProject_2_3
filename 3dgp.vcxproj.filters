@@ -2161,6 +2161,9 @@
     <None Include="Shader\csm_common.hlsli">
       <Filter>Shader\Includes</Filter>
     </None>
+    <None Include="Shader\shadow_coverage_common.hlsli">
+      <Filter>Shader\Includes</Filter>
+    </None>
     <None Include="Shader\fullscreen_quad.hlsli">
       <Filter>Shader\Includes</Filter>
     </None>

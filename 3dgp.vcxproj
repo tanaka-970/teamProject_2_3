@@ -1017,6 +1017,7 @@
     <None Include="Shader\csm_common.hlsli" />
     <None Include="Shader\local_shadow_common.hlsli" />
     <None Include="Shader\shadow_alpha_common.hlsli" />
+    <None Include="Shader\shadow_coverage_common.hlsli" />
     <None Include="Shader\frame_common.hlsli" />
     <None Include="Shader\PostEffects\AmbientOcclusion\ssao_common.hlsli" />
     <None Include="Shader\PostEffects\Reflection\ssr_common.hlsli" />
