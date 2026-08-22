@@ -183,8 +183,29 @@ namespace ReplayEngine::UI
         case UIEffectKind::LiquidGlass:
         case UIEffectKind::LightSweep:
         case UIEffectKind::PixelSort:
+        case UIEffectKind::Hologram:
+        case UIEffectKind::IridescentFoil:
+        case UIEffectKind::RadarSweep:
+        case UIEffectKind::EnergyPulse:
+        case UIEffectKind::CircuitFlow:
+        case UIEffectKind::HeatHaze:
+        case UIEffectKind::WaterCaustics:
+        case UIEffectKind::BurnReveal:
+        case UIEffectKind::FrostCrack:
             // 現在の出力ピクセルの色・アルファだけを変え、矩形外へ輪郭を生成しない。
             return uniform(0.0f);
+        case UIEffectKind::VoronoiShatter:
+            // 破片は amount ピクセルまで元の輪郭外へ飛ぶ。
+            return uniform(safe_amount + margin);
+        case UIEffectKind::InkBleed:
+            // HLSL は amount * 14px の近傍からアルファを引き延ばす。
+            return uniform(safe_amount * 14.0f + margin);
+        case UIEffectKind::PortalVortex:
+        {
+            // 渦のサンプル位置は局所 RT 内で完結するが、強い設定では端の
+            // 近傍を読むため、半径相当の余白を確保しておく。
+            return uniform(std::fabs(amount * intensity) + margin);
+        }
         case UIEffectKind::Shockwave:
         {
             // 波面は中心から外へ amount * intensity だけサンプルをずらせる。

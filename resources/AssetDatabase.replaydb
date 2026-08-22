@@ -1,4 +1,4 @@
-REPLAY_ASSET_DB 2 176
+REPLAY_ASSET_DB 2 180
 "60412424bb1443240b2bf2160eee6923" 1 "DemoAsset" "resources/DemoAsset" "resources/.replay_cache/models/f9fffac39252a621_v0.replaycache"
 "1bd1358040255f5bd18f3be0d79fbe3c" 1 "DemoAsset" "resources/DemoAsset" "resources/.replay_cache/models/6a20e727f78fb359_v0.replaycache"
 "e5c4168feb92f8fd7357f6cbc1f66e22" 1 "DemoAsset" "resources/DemoAsset" "resources/.replay_cache/models/98fd72a862da8c8f_v0.replaycache"
@@ -175,3 +175,7 @@ REPLAY_ASSET_DB 2 176
 "2252f15d98c656f80611247d6a21e239" 9 "RampartOne-Regular" "resources/fonts/RampartOne-Regular.ttf" ""
 "c7167058de2b5568e6c9ccb7c61ce13b" 9 "ReggaeOne-Regular" "resources/fonts/ReggaeOne-Regular.ttf" ""
 "89d5bc58929ed41e5554e87ea8e3dd65" 9 "VarelaRound-Regular" "resources/fonts/VarelaRound-Regular.ttf" ""
+"8b51bae2a1c80a7f0f495a1716dce07a" 1 "EffectChain.cpp" "build_cpp_check_20260821/EffectChain.cpp.obj" ""
+"a88f442476464578b6e066607b85dd8b" 1 "UIEffect.cpp" "build_cpp_check_20260821/UIEffect.cpp.obj" ""
+"e212a7d895d6cdfb407fa94b84c1d014" 1 "UIEffectStackComponent.cpp" "build_cpp_check_20260821/UIEffectStackComponent.cpp.obj" ""
+"41a5a4d7173aefa61933ea13eac329ef" 1 "UIEffectStackComponent_pagecurl" "build_cpp_check_20260821/UIEffectStackComponent_pagecurl.obj" ""

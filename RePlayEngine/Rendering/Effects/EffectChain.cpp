@@ -178,11 +178,30 @@ namespace ReplayEngine::Rendering::Effects
             "ui_effect_light_sweep.cso",
             "ui_effect_shockwave.cso",
             "ui_effect_pixel_sort.cso",
+            "ui_effect_hologram.cso",
+            "ui_effect_iridescent_foil.cso",
+            "ui_effect_radar_sweep.cso",
+            "ui_effect_energy_pulse.cso",
+            "ui_effect_circuit_flow.cso",
+            "ui_effect_heat_haze.cso",
+            "ui_effect_water_caustics.cso",
+            "ui_effect_voronoi_shatter.cso",
+            "ui_effect_ink_bleed.cso",
+            "ui_effect_burn_reveal.cso",
+            "ui_effect_portal_vortex.cso",
+            "ui_effect_frost_crack.cso",
         };
         static_assert(static_cast<std::size_t>(UI::UIEffectKind::FeedbackZoom) + 1 ==
             58, "Existing UIEffectKind values must stay aligned");
         static_assert(static_cast<std::size_t>(UI::UIEffectKind::PixelSort) + 1 ==
+            62, "Existing UIEffectKind values must stay aligned");
+        static_assert(static_cast<std::size_t>(UI::UIEffectKind::FrostCrack) + 1 ==
             effect_shader_count, "UIEffectKind and EffectChain shader table must stay aligned");
+        if (FAILED(create_ps_from_cso(device, "ui_effect_region_blend.cso",
+            effect_region_pixel_shader_.GetAddressOf())))
+        {
+            return false;
+        }
         for (std::size_t index = 0; index < effect_cso_names.size(); ++index)
         {
             effect_pixel_shaders_[index].Reset();
@@ -218,6 +237,7 @@ namespace ReplayEngine::Rendering::Effects
         for (Microsoft::WRL::ComPtr<ID3D11PixelShader>& shader : effect_pixel_shaders_)
             shader.Reset();
         brush_stroke_pixel_shader_.Reset();
+        effect_region_pixel_shader_.Reset();
         brush_stroke_vertex_shader_.Reset();
         device_.Reset();
     }
@@ -376,9 +396,12 @@ namespace ReplayEngine::Rendering::Effects
         const std::vector<UI::UIEffect>& effects,
         UI::UIRenderTarget* current,
         UI::UIRenderTarget* first,
-        UI::UIRenderTarget* second)
+        UI::UIRenderTarget* second,
+        UI::UIRenderTarget* third)
     {
         if (context.device_context == nullptr || first == nullptr || second == nullptr ||
+            (third == nullptr && context.effect_region != nullptr &&
+                context.effect_region->enabled) ||
             current == nullptr || !context.configure_target ||
             !context.draw_plain_fullscreen || !context.draw_effect_fullscreen)
         {
@@ -404,7 +427,8 @@ namespace ReplayEngine::Rendering::Effects
 
             const std::string profile_effect_name = "EffectPass/" + std::to_string(effect.kind);
             RenderStats::ScopedGpu profile_effect_scope(d3d, profile_effect_name.c_str());
-            UI::UIRenderTarget* destination = current == first ? second : first;
+            UI::UIRenderTarget* destination = current == first ? second :
+                (current == second ? first : first);
             Rendering::Stats().CountEffectPass();
             Rendering::Stats().CountRenderTargetBind();
             // draw callback は depth/rasterizer/blend/sampler を設定する。
@@ -432,6 +456,51 @@ namespace ReplayEngine::Rendering::Effects
             effect_constants.effect_color_4 = effect.color_4;
             effect_constants.effect_color_stops = {
                 effect.color_stop_2, effect.color_stop_3, effect.color_stop_4, 0.0f };
+
+            const UI::UIEffectRegion* region = context.effect_region;
+            const bool region_enabled = region != nullptr && region->enabled &&
+                (region->scope == static_cast<int>(UI::UIEffectRegionScope::AllEffects) ||
+                    effect.region_enabled);
+            const int region_shape = region != nullptr
+                ? (std::max)(0, (std::min)(2, region->shape)) : 0;
+            if (region_enabled)
+            {
+                const auto fill_region = [](const UI::UIEffectRegionData& source,
+                    DirectX::XMFLOAT4& params, DirectX::XMFLOAT4& settings)
+                {
+                    const int shape = (std::max)(0, (std::min)(2, source.shape));
+                    params = {
+                        source.center.x, source.center.y,
+                        (std::max)(source.size.x, 0.0001f),
+                        (std::max)(source.size.y, 0.0001f) };
+                    settings = {
+                        source.rotation, (std::max)(source.feather, 0.0f),
+                        (std::max)(0.0f, (std::min)(1.0f, source.strength)),
+                        static_cast<float>(shape) + (source.invert ? 4.0f : 0.0f) };
+                };
+                fill_region(*region, effect_constants.effect_region_params,
+                    effect_constants.effect_region_settings);
+                std::size_t region_count = 1;
+                for (const UI::UIEffectRegionData& additional : region->additional)
+                {
+                    if (region_count > EffectConstants::MaxAdditionalEffectRegions ||
+                        !additional.enabled ||
+                        (additional.scope == static_cast<int>(UI::UIEffectRegionScope::SelectedEffects) &&
+                            !effect.region_enabled))
+                        continue;
+                    const std::size_t slot = region_count - 1;
+                    fill_region(additional, effect_constants.effect_region_extra_params[slot],
+                        effect_constants.effect_region_extra_settings[slot]);
+                    ++region_count;
+                }
+                effect_constants.effect_region_count.x =
+                    static_cast<float>(region_count);
+            }
+            else
+            {
+                effect_constants.effect_region_settings.w = -1.0f;
+                effect_constants.effect_region_count.x = 0.0f;
+            }
 
             const UI::UIEffectKind effect_kind =
                 static_cast<UI::UIEffectKind>(effect.kind);
@@ -703,7 +772,31 @@ namespace ReplayEngine::Rendering::Effects
             ID3D11ShaderResourceView* null_srv = nullptr;
             d3d->PSSetShaderResources(0, 1, &null_srv);
             d3d->PSSetShaderResources(1, 1, &null_srv);
-            current = destination;
+            if (region_enabled && context.draw_region_fullscreen != nullptr &&
+                effect_region_pixel_shader_ != nullptr)
+            {
+                UI::UIRenderTarget* region_destination =
+                    current == first ? (destination == second ? third : second) :
+                    (current == second ? (destination == first ? third : first) :
+                        (destination == first ? second : first));
+                context.configure_target(*region_destination);
+                d3d->ClearRenderTargetView(region_destination->rtv.Get(), clear);
+                ID3D11ShaderResourceView* region_mask = nullptr;
+                if (region_shape == static_cast<int>(UI::UIEffectRegionShape::TextureMask) &&
+                    !region->mask.empty() && context.resolve_texture)
+                {
+                    region_mask = context.resolve_texture(region->mask);
+                }
+                context.draw_region_fullscreen(width, height, destination->srv.Get(),
+                    current->srv.Get(), region_mask,
+                    context.blend_none != nullptr ? context.blend_none : context.blend_alpha,
+                    effect_region_pixel_shader_.Get(), effect_constant_buffer_.Get());
+                current = region_destination;
+            }
+            else
+            {
+                current = destination;
+            }
         }
 
         ID3D11Buffer* null_cb = nullptr;

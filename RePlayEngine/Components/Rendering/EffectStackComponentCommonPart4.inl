@@ -291,6 +291,124 @@
                     Reflection::Animatable::Interpolatable).Display("上限")
                     .Tooltip("ソート対象にする輝度の上限。").Range(0.0, 1.0).Step(0.01));
                 break;
+            case UI::UIEffectKind::Hologram:
+                add_float("radius", "走査線間隔", "ホログラムの水平走査線の間隔（ピクセル）。", 2.0, 128.0, 0.1);
+                add_float("amount", "干渉量", "走査線・RGBずれ・ちらつきの強さ。", 0.0, 2.0, 0.01);
+                add_float("threshold", "ノイズ量", "信号ノイズの量。", 0.0, 1.0, 0.01);
+                add_float("softness", "ちらつき", "時間ちらつきの強さ。", 0.0, 1.0, 0.01);
+                add_float("speed", "更新速度", "ホログラムの時間変化速度。", -8.0, 8.0, 0.01);
+                add_float("intensity", "適用量", "元画像からホログラム表現へ混ぜる割合。", 0.0, 1.0, 0.01);
+                add_color("ホログラム色", "走査線と信号の基準色。");
+                break;
+            case UI::UIEffectKind::IridescentFoil:
+                add_float("radius", "虹彩スケール", "オイルスリック状の虹彩模様の大きさ。", 0.25, 8.0, 0.01);
+                add_float("amount", "虹彩量", "虹色の反射強度。", 0.0, 2.0, 0.01);
+                add_float("progress", "位相", "虹彩グラデーションの開始位相。", -1.0, 1.0, 0.001);
+                add_float("speed", "流れる速度", "虹彩が時間で移動する速度。", -4.0, 4.0, 0.01);
+                add_float("intensity", "適用量", "元画像から虹彩表現へ混ぜる割合。", 0.0, 1.0, 0.01);
+                add_color("虹彩色1", "虹彩グラデーションの色1。");
+                add_named_color("color_2", "虹彩色2", "虹彩グラデーションの色2。");
+                add_named_color("color_3", "虹彩色3", "虹彩グラデーションの色3。");
+                add_named_color("color_4", "虹彩色4", "虹彩グラデーションの色4。");
+                break;
+            case UI::UIEffectKind::RadarSweep:
+                push(MakeEffectProperty(i, "direction", Reflection::PropertyType::Vector2,
+                    Reflection::Animatable::Interpolatable).Display("中心").Range(0.0, 1.0).Step(0.01));
+                add_float("radius", "ビーム幅", "レーダー走査ビームの角度幅。", 0.01, 1.0, 0.001);
+                add_float("amount", "光量", "走査ビームと残光の強さ。", 0.0, 4.0, 0.01);
+                add_float("progress", "位相", "走査角度の開始位相。", 0.0, 1.0, 0.001);
+                add_float("speed", "回転速度", "レーダービームの自動回転速度。", -8.0, 8.0, 0.01);
+                add_float("intensity", "適用量", "元画像からレーダー表現へ混ぜる割合。", 0.0, 1.0, 0.01);
+                add_color("ビーム色", "レーダー走査の発光色。");
+                break;
+            case UI::UIEffectKind::EnergyPulse:
+                push(MakeEffectProperty(i, "direction", Reflection::PropertyType::Vector2,
+                    Reflection::Animatable::Interpolatable).Display("中心").Range(0.0, 1.0).Step(0.01));
+                add_float("radius", "パルス幅", "走るエネルギーリングの幅。", 0.01, 1.0, 0.001);
+                add_float("amount", "発光量", "パルスの発光強度。", 0.0, 4.0, 0.01);
+                add_float("progress", "進行", "リングの位置。", 0.0, 1.0, 0.001);
+                add_float("softness", "境界の柔らかさ", "リング境界をぼかす量。", 0.0, 1.0, 0.01);
+                add_float("speed", "自動速度", "パルスを自動で進める速度。", -8.0, 8.0, 0.01);
+                add_float("intensity", "適用量", "元画像からパルス表現へ混ぜる割合。", 0.0, 1.0, 0.01);
+                add_color("パルス色", "パルスの発光色。");
+                break;
+            case UI::UIEffectKind::CircuitFlow:
+                add_float("radius", "回路間隔", "回路グリッドの間隔（ピクセル）。", 4.0, 256.0, 0.1);
+                add_float("amount", "発光量", "回路線と流れる信号の強さ。", 0.0, 4.0, 0.01);
+                add_float("threshold", "線の細さ", "回路線の太さ。", 0.01, 0.49, 0.001);
+                add_float("speed", "流速", "回路上を流れる信号の速度。", -8.0, 8.0, 0.01);
+                add_float("intensity", "適用量", "元画像から回路表現へ混ぜる割合。", 0.0, 1.0, 0.01);
+                add_color("回路色", "回路と信号の発光色。");
+                break;
+            case UI::UIEffectKind::HeatHaze:
+                add_float("radius", "ノイズスケール", "熱揺らぎの模様のスケール（ピクセル）。", 2.0, 256.0, 0.1);
+                add_float("amount", "歪み量", "熱気で画面をずらす距離（ピクセル）。", 0.0, 128.0, 0.1);
+                add_float("threshold", "上昇量", "熱気が上へ流れる量。", 0.0, 2.0, 0.01);
+                add_float("speed", "流速", "熱気の時間変化速度。", -8.0, 8.0, 0.01);
+                add_float("intensity", "適用量", "歪み結果を元画像へ混ぜる割合。", 0.0, 1.0, 0.01);
+                add_seed();
+                break;
+            case UI::UIEffectKind::WaterCaustics:
+                add_float("radius", "波紋スケール", "水面模様のスケール（ピクセル）。", 4.0, 256.0, 0.1);
+                add_float("amount", "模様の濃さ", "コースティクスの明暗差。", 0.0, 2.0, 0.01);
+                add_float("speed", "流速", "水面模様の移動速度。", -8.0, 8.0, 0.01);
+                add_float("intensity", "適用量", "水面色を元画像へ混ぜる割合。", 0.0, 1.0, 0.01);
+                add_color("水面色", "コースティクスへ掛ける色。");
+                add_seed();
+                break;
+            case UI::UIEffectKind::VoronoiShatter:
+                add_float("radius", "セルサイズ", "破片セルの大きさ（ピクセル）。", 4.0, 256.0, 0.1);
+                add_float("amount", "飛散距離", "破片が動く最大距離（ピクセル）。", 0.0, 256.0, 0.1);
+                add_float("progress", "進行", "破片の飛散進行度。", 0.0, 1.0, 0.001);
+                add_float("softness", "境界の柔らかさ", "破片境界のブレンド幅。", 0.0, 0.5, 0.001);
+                add_float("speed", "自動速度", "破片を自動で動かす速度。", -4.0, 4.0, 0.01);
+                add_float("intensity", "適用量", "破片化結果を元画像へ混ぜる割合。", 0.0, 1.0, 0.01);
+                add_seed();
+                break;
+            case UI::UIEffectKind::InkBleed:
+                add_float("radius", "にじみスケール", "インクの広がり模様のスケール。", 2.0, 256.0, 0.1);
+                add_float("amount", "にじみ量", "インクがにじむ強さ。", 0.0, 2.0, 0.01);
+                add_float("progress", "進行", "にじみの進行度。", 0.0, 1.0, 0.001);
+                add_float("softness", "境界の柔らかさ", "にじみ境界をぼかす量。", 0.0, 0.5, 0.001);
+                add_float("speed", "広がる速度", "インクが時間で広がる速度。", -4.0, 4.0, 0.01);
+                add_float("intensity", "適用量", "インク表現を元画像へ混ぜる割合。", 0.0, 1.0, 0.01);
+                add_color("インク色", "にじみへ使う色。");
+                add_seed();
+                break;
+            case UI::UIEffectKind::BurnReveal:
+                add_float("radius", "ノイズスケール", "焼き付き境界の模様のスケール。", 2.0, 256.0, 0.1);
+                add_float("amount", "焼け幅", "境界の発光幅と焼け色の強さ。", 0.0, 2.0, 0.01);
+                add_float("progress", "表示進行", "0 で非表示、1 で全表示。", 0.0, 1.0, 0.001);
+                add_float("softness", "境界の柔らかさ", "表示境界をぼかす量。", 0.0, 0.5, 0.001);
+                add_float("speed", "揺らぎ速度", "焼け境界の時間変化速度。", -4.0, 4.0, 0.01);
+                add_float("intensity", "適用量", "焼け表現の混合量。", 0.0, 1.0, 0.01);
+                add_color("焼け色", "焼け境界の主色。");
+                add_named_color("color_2", "芯の色", "焼け境界の明るい芯。");
+                add_seed();
+                break;
+            case UI::UIEffectKind::PortalVortex:
+                push(MakeEffectProperty(i, "direction", Reflection::PropertyType::Vector2,
+                    Reflection::Animatable::Interpolatable).Display("中心").Range(0.0, 1.0).Step(0.01));
+                add_float("radius", "作用半径", "渦が作用する正規化半径。", 0.05, 1.5, 0.001);
+                add_float("amount", "渦の強さ", "サンプルを回転/収束させる量。", -1.0, 1.0, 0.001);
+                add_float("threshold", "収束量", "中心へ吸い込む強さ。", 0.0, 1.0, 0.01);
+                add_float("angle", "回転角", "渦の回転角度（度）。", -720.0, 720.0, 0.1);
+                add_float("softness", "境界の柔らかさ", "渦の外周をぼかす量。", 0.0, 1.0, 0.01);
+                add_float("speed", "回転速度", "時間で渦を回す速度。", -8.0, 8.0, 0.01);
+                add_float("intensity", "適用量", "渦結果を元画像へ混ぜる割合。", 0.0, 1.0, 0.01);
+                add_color("ポータル色", "渦の発光色。");
+                break;
+            case UI::UIEffectKind::FrostCrack:
+                add_float("radius", "ひびスケール", "霜のひび模様のスケール。", 4.0, 256.0, 0.1);
+                add_float("amount", "ひびの濃さ", "ひびと霜の強さ。", 0.0, 2.0, 0.01);
+                add_float("threshold", "ひび密度", "ひびを出すしきい値。", 0.0, 1.0, 0.01);
+                add_float("progress", "広がり", "霜が広がる進行度。", 0.0, 1.0, 0.001);
+                add_float("softness", "境界の柔らかさ", "ひびの境界をぼかす量。", 0.0, 0.5, 0.001);
+                add_float("speed", "成長速度", "ひびが時間で成長する速度。", -4.0, 4.0, 0.01);
+                add_float("intensity", "適用量", "霜表現を元画像へ混ぜる割合。", 0.0, 1.0, 0.01);
+                add_color("霜色", "霜とひびへ使う色。");
+                add_seed();
+                break;
             default:
                 break;
             }

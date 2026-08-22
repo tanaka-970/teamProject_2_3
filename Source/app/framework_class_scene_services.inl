@@ -61,7 +61,8 @@
         ID3D11ShaderResourceView* source,
         const std::vector<ReplayEngine::UI::UIEffect>& effects,
         std::uint32_t width, std::uint32_t height, DXGI_FORMAT format,
-        float effect_time, std::uint64_t temporal_owner_key = 0);
+        float effect_time, std::uint64_t temporal_owner_key = 0,
+        const ReplayEngine::UI::UIEffectRegion* effect_region = nullptr);
     void begin_scene_effect_frame() noexcept;
     void draw_model_effect_stacks(const D3D11_VIEWPORT& camera_viewport);
     // LandscapeRendererComponent 用の procedural static mesh 描画。

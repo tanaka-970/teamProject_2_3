@@ -54,7 +54,8 @@ ReplayEngine::UI::UIRenderTarget* framework::apply_scene_effect_chain(
     ID3D11ShaderResourceView* source,
     const std::vector<ReplayEngine::UI::UIEffect>& effects,
     std::uint32_t width, std::uint32_t height, DXGI_FORMAT format,
-    float effect_time, std::uint64_t temporal_owner_key)
+    float effect_time, std::uint64_t temporal_owner_key,
+    const ReplayEngine::UI::UIEffectRegion* effect_region)
 {
     if (source == nullptr || immediate_context == nullptr || bit_block_transfer == nullptr ||
         width == 0 || height == 0)
@@ -112,7 +113,9 @@ ReplayEngine::UI::UIRenderTarget* framework::apply_scene_effect_chain(
         scene_effect_targets.Acquire(width, height, format);
     ReplayEngine::UI::UIRenderTarget* second =
         scene_effect_targets.Acquire(width, height, format);
-    if (first == nullptr || second == nullptr) return nullptr;
+    ReplayEngine::UI::UIRenderTarget* third =
+        scene_effect_targets.Acquire(width, height, format);
+    if (first == nullptr || second == nullptr || third == nullptr) return nullptr;
 
     const auto configure_target = [this](ReplayEngine::UI::UIRenderTarget& target)
     {
@@ -165,6 +168,7 @@ ReplayEngine::UI::UIRenderTarget* framework::apply_scene_effect_chain(
     };
     context.runtime_history_texture = temporal_history != nullptr &&
         temporal_history->valid ? temporal_history->target.srv.Get() : nullptr;
+    context.effect_region = effect_region;
     context.configure_target = configure_target;
     context.draw_plain_fullscreen = [this](float, float,
         ID3D11ShaderResourceView* input, ID3D11BlendState* blend)
@@ -197,9 +201,29 @@ ReplayEngine::UI::UIRenderTarget* framework::apply_scene_effect_chain(
         bit_block_transfer->blit(immediate_context.Get(), &input_srv, 0, 1,
             pixel_shader);
     };
+    context.draw_region_fullscreen = [this](float, float,
+        ID3D11ShaderResourceView* effected, ID3D11ShaderResourceView* original,
+        ID3D11ShaderResourceView* region_mask, ID3D11BlendState* blend,
+        ID3D11PixelShader* pixel_shader, ID3D11Buffer* constants)
+    {
+        immediate_context->OMSetDepthStencilState(
+            depth_stencil_states[(size_t)DEPTH_STATE::ZT_OFF_ZW_OFF].Get(), 0);
+        immediate_context->RSSetState(
+            rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+        immediate_context->OMSetBlendState(blend, nullptr, 0xffffffff);
+        ID3D11SamplerState* local_sampler =
+            sampler_states[(size_t)SAMPLER_STATE::LINEAR].Get();
+        immediate_context->PSSetSamplers(0, 1, &local_sampler);
+        immediate_context->PSSetConstantBuffers(0, 1, &constants);
+        ID3D11ShaderResourceView* inputs[3]{ effected, region_mask, original };
+        bit_block_transfer->blit(immediate_context.Get(), inputs, 0, 3,
+            pixel_shader);
+        ID3D11ShaderResourceView* null_inputs[3]{};
+        immediate_context->PSSetShaderResources(0, 3, null_inputs);
+    };
 
     ReplayEngine::UI::UIRenderTarget* result = scene_effect_chain.Apply(
-        context, effects, first, first, second);
+        context, effects, first, first, second, third);
     if (temporal_history != nullptr && result != nullptr && result->texture &&
         temporal_history->target.texture)
     {

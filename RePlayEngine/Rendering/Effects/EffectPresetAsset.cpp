@@ -41,6 +41,19 @@ namespace ReplayEngine::Rendering::Effects
         // capture_backdrop は UI 要素固有で、Model / Screen と共有する Preset の
         // 構成値ではない。共通 Asset へ UI 専用設定を混ぜない。
         properties.Remove("capture_backdrop");
+        // 範囲制限は Stack 側の選択状態（全体/個別/反転）として保持する。
+        // Preset は Effect の並びとパラメータだけを共有する。
+        properties.Remove("effect_region_enabled");
+        properties.Remove("effect_region_shape");
+        properties.Remove("effect_region_scope");
+        properties.Remove("effect_region_invert");
+        properties.Remove("effect_region_center");
+        properties.Remove("effect_region_size");
+        properties.Remove("effect_region_rotation");
+        properties.Remove("effect_region_feather");
+        properties.Remove("effect_region_strength");
+        properties.Remove("effect_region_mask");
+        properties.Remove("effect_region_additional_count");
 
         std::error_code filesystem_error;
         if (!path.parent_path().empty())
