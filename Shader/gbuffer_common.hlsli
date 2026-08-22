@@ -25,6 +25,8 @@ struct GBufferData
     float  metalness;
     float  occlusion_strength;
     float2 velocity;
+    // Mesh Renderer の Receive Shadow。false なら照明側で影を掛けない。
+    bool   receive_shadow;
 };
 
 GBufferOut EncodeGBuffer(GBufferData d)
@@ -33,7 +35,13 @@ GBufferOut EncodeGBuffer(GBufferData d)
     // alpha には「シェーダの種類」ではなく照明式だけを 8bit で保存する。
     o.base_color = float4(d.base_color, (float) d.lighting_model / 255.0f);
     o.emissive   = float4(d.emissive, 1.0f);
-    o.normal     = float4(d.world_normal * 0.5f + 0.5f, 1.0f);
+    // normal.a は 2 つの意味を兼ねる。
+    //   符号   … Receive Shadow (正=受ける / 負=受けない)
+    //   絶対値 … Pixelate 強度 (EncodePixelateSettings が上書きする)
+    // GBuffer2 は R16G16B16A16_FLOAT なので符号をそのまま保持できる。
+    // parameter(RT3) は R8G8B8A8_UNORM で 4 成分とも埋まっており、
+    // 新しい RT を足すより既存 alpha の符号を使うほうが帯域を増やさない。
+    o.normal     = float4(d.world_normal * 0.5f + 0.5f, d.receive_shadow ? 1.0f : -1.0f);
     o.parameter  = float4(d.occlusion, d.roughness, d.metalness, d.occlusion_strength);
     o.velocity   = d.velocity;
     return o;
@@ -50,6 +58,7 @@ GBufferData DecodeGBuffer(float4 base, float4 emi, float4 nor, float4 par)
     d.roughness      = par.g;
     d.metalness      = par.b;
     d.occlusion_strength = par.a;
+    d.receive_shadow = nor.a >= 0.0f;
     return d;
 }
 
@@ -60,7 +69,11 @@ void EncodePixelateSettings(inout GBufferOut output,
     float pixel_size, float pixel_strength)
 {
     output.emissive.a = -max(pixel_size, 1.0f);
-    output.normal.a = saturate(pixel_strength);
+    // Receive Shadow の符号を保ったまま強度を載せる。
+    // 強度 0 だと符号が消えてしまうため下限を入れる。
+    // (0 は Pixelate 無効と同じ意味なので、見た目には影響しない)
+    const float strength = max(saturate(pixel_strength), 0.001f);
+    output.normal.a = output.normal.a < 0.0f ? -strength : strength;
 }
 
 bool HasPixelateSettings(float4 emissive_value)
@@ -75,7 +88,8 @@ float DecodePixelateSize(float4 emissive_value)
 
 float DecodePixelateStrength(float4 normal_value)
 {
-    return saturate(normal_value.a);
+    // 符号は Receive Shadow が使っているので絶対値を取る。
+    return saturate(abs(normal_value.a));
 }
 
 #endif

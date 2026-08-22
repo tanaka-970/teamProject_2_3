@@ -335,7 +335,8 @@ void framework::draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shade
                     item.ambient_occlusion, item.emissive_strength,
                     item.material_base_color, item.emissive_color,
                     item.material_binding.usable_shader
-                        ? item.material_binding.TextureSemanticMask() : 0u);
+                        ? item.material_binding.TextureSemanticMask() : 0u,
+                    item.receive_shadow);
                 primitive->render(immediate_context.Get(), item.world, item.tint,
                     static_mesh_gbuffer_ps.Get(), nullptr, nullptr, true, true);
                 material_gpu_binder.UnbindTextures(immediate_context.Get());
@@ -389,7 +390,8 @@ void framework::draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shade
                     item.ambient_occlusion, item.emissive_strength,
                     item.material_base_color, item.emissive_color,
                     use_external_material
-                        ? item.material_binding.TextureSemanticMask() : 0u);
+                        ? item.material_binding.TextureSemanticMask() : 0u,
+                    item.receive_shadow);
                 gltf->render(immediate_context.Get(), item.world, item.tint,
                     static_mesh_gbuffer_ps.Get(), true, false);
                 material_gpu_binder.UnbindTextures(immediate_context.Get());
@@ -461,7 +463,8 @@ void framework::draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shade
                 item.material_base_color,
                 item.emissive_color,
                 item.material_binding.usable_shader
-                    ? item.material_binding.TextureSemanticMask() : 0u);
+                    ? item.material_binding.TextureSemanticMask() : 0u,
+                item.receive_shadow);
         }
 
         // 最後の引数がモーションベクター出力。GBuffer パスだけで真にする
@@ -822,7 +825,8 @@ void framework::draw_landscape_scene_meshes(bool gbuffer_pass, bool depth_only)
                 ReplayEngine::Rendering::ShaderLightingModel::Pbr,
                 false, false, 1.0f, 0.0f,
                 0.0f, 0.75f, 1.0f, 0.0f,
-                renderer->tint, { 0.0f, 0.0f, 0.0f }, 0u);
+                renderer->tint, { 0.0f, 0.0f, 0.0f }, 0u,
+                renderer->receive_shadow);
             landscape_mesh->render(immediate_context.Get(), world, renderer->tint,
                 static_mesh_gbuffer_ps.Get(), nullptr, nullptr, true, true);
         }
