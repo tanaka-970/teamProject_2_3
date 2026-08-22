@@ -326,6 +326,9 @@ void framework::sync_object_lights()
     const ReplayEngine::Scene::Scene& scene = active_object_scene();
     lights.data.light_counts = { 0, 0, 0, 0 };
     bool directional_found = false;
+    directional_light_present = false;
+    directional_light_is_preview = false;
+    directional_shadow_enabled = false;
 
     for (std::size_t index = 0; index < scene.GameObjectCount(); ++index)
     {
@@ -346,7 +349,12 @@ void framework::sync_object_lights()
                 pbr.light.directional_color = {
                     light->color.x, light->color.y, light->color.z,
                     (std::max)(0.0f, light->intensity) };
+                // 影を出すかはこの Light の設定が正本。
+                // 全体設定 (enable_dynamic_shadows / csm_enabled_setting) は
+                // 上限としてだけ効き、Light 側の意思をここで上書きしない。
+                directional_shadow_enabled = light->cast_shadows;
                 pbr.light.shadow_params.w = light->cast_shadows ? 1.0f : 0.0f;
+                directional_light_present = true;
                 directional_found = true;
             }
         }
@@ -405,11 +413,19 @@ void framework::sync_object_lights()
         {
             light_direction = { 0.35f, -1.0f, 0.25f, 0.0f };
             pbr.light.directional_color = { 1.0f, 0.98f, 0.94f, 1.25f };
+            directional_light_is_preview = true;
+            // Light をまだ置いていない Scene でも、物を動かせば影が付いてくる。
+            // 編集中の手応えのための表示専用の光で、Scene には保存されない。
+            // Play / Standalone はこの分岐へ来ないので、実行時の見た目は
+            // 従来どおり Scene の照明設定だけで決まる。
+            directional_shadow_enabled = editor_preview_light_casts_shadows;
         }
         else
         {
             pbr.light.directional_color = { 0.0f, 0.0f, 0.0f, 0.0f };
         }
+        // 旧 PBR 単一シャドウマップはプレビュー光では使わない。
+        // プレビュー光の影は CSM 側だけで出す。
         pbr.light.shadow_params.w = 0.0f;
     }
 }

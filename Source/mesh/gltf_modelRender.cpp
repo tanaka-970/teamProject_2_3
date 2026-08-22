@@ -167,3 +167,46 @@ void gltf_model::render(ID3D11DeviceContext* context, const XMFLOAT4X4& world,
         motion_history_valid_ = true;
     }
 }
+
+void gltf_model::render_shadow(ID3D11DeviceContext* context, const XMFLOAT4X4& world,
+    ID3D11VertexShader* caster_vertex_shader, ID3D11InputLayout* caster_input_layout)
+{
+    if (!loaded_ || !context || !caster_vertex_shader) return;
+
+    ID3D11InputLayout* selected_layout =
+        caster_input_layout ? caster_input_layout : input_layout_.Get();
+    ReplayEngine::Rendering::Stats().TrackStateSet(
+        ReplayEngine::Rendering::RenderStats::StateKind::InputLayout, selected_layout);
+    context->IASetInputLayout(selected_layout);
+    context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    ReplayEngine::Rendering::Stats().CountStateSet(
+        ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
+    context->VSSetShader(caster_vertex_shader, nullptr, 0);
+    // 影深度パスは色を書かない。呼び出し側でも外しているが、
+    // 直前のメッシュが貼った Pixel Shader が残らないようここでも落とす。
+    ReplayEngine::Rendering::Stats().CountStateSet(
+        ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
+    context->PSSetShader(nullptr, nullptr, 0);
+
+    for (const auto& primitive : primitives_)
+    {
+        ID3D11Buffer* vertex_buffer = primitive.vertex_buffer.Get();
+        ID3D11Buffer* index_buffer = primitive.index_buffer.Get();
+        if (vertex_buffer == nullptr || index_buffer == nullptr) continue;
+
+        // LOD は使わない。影だけ粗いメッシュになると輪郭が本体からずれる。
+        UINT stride = sizeof(Vertex), offset = 0;
+        context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
+        context->IASetIndexBuffer(index_buffer, DXGI_FORMAT_R32_UINT, 0);
+
+        Constants constants{};
+        XMStoreFloat4x4(&constants.world,
+            XMLoadFloat4x4(&primitive.node_transform) * XMLoadFloat4x4(&world));
+        constants.material_color = { 1.0f, 1.0f, 1.0f, 1.0f };
+        context->UpdateSubresource(constant_buffer_.Get(), 0, nullptr, &constants, 0, 0);
+        context->VSSetConstantBuffers(0, 1, constant_buffer_.GetAddressOf());
+
+        // 影の描画は画面に見えるジオメトリの統計へ混ぜない。
+        context->DrawIndexed(primitive.index_count, 0, 0);
+    }
+}

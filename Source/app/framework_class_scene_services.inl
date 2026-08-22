@@ -68,6 +68,36 @@
     // LandscapeRendererComponent 用の procedural static mesh 描画。
     // AssetGUIDを介さず、LandscapeData::Revision が変わったときだけGPU Meshを作り直す。
     void draw_landscape_scene_meshes(bool gbuffer_pass, bool depth_only = false);
+    // Landscape の GPU Mesh キャッシュを引く共通入口。
+    // 通常描画と影深度パスで同じキャッシュを使うために切り出してある。
+    // 影パスは通常描画より先に走るので、ここで初回生成されることがある。
+    static_mesh* resolve_landscape_gpu_mesh(
+        const ReplayEngine::Core::GameObject& object);
+
+    // ライト視点の影深度パス専用の提出処理。
+    //
+    // draw_object_scene_meshes(depth_only=true) とは別関数にしてある。
+    // カメラの深度プリパスとライト視点の影深度パスは、使う行列も
+    // 描く対象も違うため、同じ depth_only フラグで兼ねてはいけない。
+    //
+    // ここでの規則:
+    //   - 入力は object_render_items（毎フレーム作り直される正本）。
+    //   - RenderItem::cast_shadow が false のものは必ず捨てる。
+    //   - receive_shadow はここでは見ない（照明側の責務）。
+    //   - メインカメラの視錐台カリングは使わない。画面外のキャスターも
+    //     影は画面内へ落ちるため、捨てると影が欠ける。
+    // Geometry Shader / RenderTarget / Viewport は呼び出し側が設定済みの前提。
+    void draw_shadow_caster_meshes(
+        ID3D11VertexShader* static_caster_vs,
+        ID3D11InputLayout* static_caster_il,
+        ID3D11VertexShader* skinned_caster_vs,
+        ID3D11InputLayout* skinned_caster_il);
+    // 影パス専用の軽い両面判定。
+    // resolve_render_item_material() は Shader Catalog と PropertyBag まで
+    // 解決するため、深度しか書かない影パスで毎フレーム呼ぶには重すぎる。
+    // 影に必要なのは表裏カリングの向きだけなので、それだけを引く。
+    bool resolve_render_item_shadow_double_sided(
+        const ReplayEngine::Rendering::RenderItem& source);
     void update_line_trails(float elapsed_time);
     void draw_line_strokes();
     void clear_object_mesh_cache() noexcept;

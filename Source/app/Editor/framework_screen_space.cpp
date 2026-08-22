@@ -87,9 +87,12 @@ void framework::draw_screen_space_settings()
         // ---------------- CSM ----------------
         if (ImGui::TreeNodeEx("CSM (カスケードシャドウ)"))
         {
-            bool csm_enabled = csm.constants.params.w >= 0.5f;
-            if (ImGui::Checkbox("有効##csm", &csm_enabled))
-                csm.constants.params.w = csm_enabled ? 1.0f : 0.0f;
+            // csm.constants.params.w は
+            //   enable_dynamic_shadows && csm_enabled_setting && directional_shadow_enabled
+            // から毎フレーム作り直される。UI はユーザー設定側だけを触ること。
+            ImGui::Checkbox("有効##csm", &csm_enabled_setting);
+            ImGui::SameLine();
+            ImGui::TextDisabled(csm.constants.params.w >= 0.5f ? "(稼働中)" : "(停止中)");
 
             bool pcss_enabled = csm.constants.params2.w >= 0.5f;
             if (ImGui::Checkbox("PCSS (可変半影)", &pcss_enabled))

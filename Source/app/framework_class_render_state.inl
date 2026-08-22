@@ -109,6 +109,53 @@ public:
 
     toon_renderer    toon;
     csm_renderer     csm;
+
+    // 影の全体設定。個々の Light Component の設定ではなく、
+    // 「このプロジェクトで影機能をどこまで使うか」の上限を持つ。
+    bool enable_dynamic_shadows{ true };
+    // CSM を使うかどうかのユーザー設定。
+    // シェーダーへ渡る csm.constants.params.w は
+    //   enable_dynamic_shadows && csm_enabled_setting && directional_shadow_enabled
+    // から毎フレーム作り直すので、UI はこちらを触ること。
+    // params.w を直接書くと、Light 側の Cast Shadows と二重管理になる。
+    bool csm_enabled_setting{ true };
+    // Directional Light が 1 つも無い Scene View で、非保存のプレビュー光から
+    // 影を出すかどうか。編集中に物を動かした手応えを出すために既定で有効。
+    // Play / Standalone では Scene の照明設定を尊重するのでここは効かない。
+    bool editor_preview_light_casts_shadows{ true };
+
+    // Directional Light の解決結果。sync_object_lights() が毎フレーム更新する。
+    // 影を出す/出さないの判断はこの 3 つに集約し、描画側で条件を再発明しない。
+    bool directional_light_present{ false };     // Scene に有効な Directional がある
+    bool directional_light_is_preview{ false };  // Scene View 用の非保存プレビュー光
+    bool directional_shadow_enabled{ false };    // その光が影を落とすか
+
+    // 影の診断表示用。毎フレーム影パスの直前に 0 へ戻す。
+    // 「影が出ない」ときに、Light が無いのか、Cast Shadow が切れているのか、
+    // 提出が 0 件なのかを Editor 上で切り分けるために使う。
+    struct shadow_frame_stats
+    {
+        int primitive_casters = 0;
+        int static_casters = 0;
+        int skinned_casters = 0;
+        int landscape_casters = 0;
+        int skipped_cast_shadow = 0;
+        int culled_casters = 0;
+        int shadow_draw_calls = 0;
+        int spot_shadow_lights = 0;
+        int point_shadow_lights = 0;
+        bool directional_light_present = false;
+        bool directional_preview_light = false;
+        bool directional_shadow_rendered = false;
+
+        void Reset() noexcept { *this = shadow_frame_stats{}; }
+        int TotalCasters() const noexcept
+        {
+            return primitive_casters + static_casters +
+                skinned_casters + landscape_casters;
+        }
+    };
+    shadow_frame_stats shadow_stats{};
     trail            test_trail;
     particle_system  particles;
     deferred_renderer deferred;
