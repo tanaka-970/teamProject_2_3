@@ -376,6 +376,26 @@ namespace ReplayEngine::Runtime
 
         // Update / Trigger の最中に呼んでも安全なように、
         // 生成要求だけ積んで次の同期点で実行する。
+        // 遅延生成の 1 件を識別する番号。0 は無効。
+        using SpawnRequestID = std::uint64_t;
+
+        // 遅延生成を積み、その要求番号を返す。
+        // Flush 後に TryTakeSpawnResult() で出来た GameObject を引き取れる。
+        RuntimeStatus InstantiatePrefabDeferredTracked(const std::string& asset_guid,
+            const DirectX::XMFLOAT3& position, const DirectX::XMFLOAT3& rotation_euler,
+            const DirectX::XMFLOAT3& scale, const ObjectHandle& parent,
+            SpawnRequestID& out_request);
+
+        // 完了した遅延生成の結果を 1 件引き取る。引き取ると表から消える。
+        // まだ Flush されていなければ TransitionInProgress を返す。
+        RuntimeStatus TryTakeSpawnResult(SpawnRequestID request, ObjectHandle& out);
+
+        // 引き取られないまま溜まった結果の件数。診断用。
+        std::size_t PendingSpawnResultCount() const noexcept
+        {
+            return spawn_results_.size();
+        }
+
         RuntimeStatus InstantiatePrefabDeferred(const std::string& asset_guid,
             const DirectX::XMFLOAT3& position, const DirectX::XMFLOAT3& rotation_euler,
             const DirectX::XMFLOAT3& scale, const ObjectHandle& parent);
@@ -453,6 +473,26 @@ namespace ReplayEngine::Runtime
         RuntimeStatus InputPointerDeltaX(float& out) const;
         RuntimeStatus InputPointerDeltaY(float& out) const;
 
+        // ---- 生デバイス入力 -------------------------------------------------
+        //
+        // Action / Axis で足りるならそちらを使う。ここはキーコンフィグ画面や
+        // 一時的な入力のための窓口。key は仮想キーコード。
+
+        RuntimeStatus InputKeyHeld(int key, bool& out) const;
+        RuntimeStatus InputKeyPressed(int key, bool& out) const;
+        RuntimeStatus InputKeyReleased(int key, bool& out) const;
+        RuntimeStatus InputMouseButtonHeld(int button, bool& out) const;
+        RuntimeStatus InputMouseButtonPressed(int button, bool& out) const;
+        RuntimeStatus InputMouseButtonReleased(int button, bool& out) const;
+        RuntimeStatus InputPointerPosition(float& out_x, float& out_y) const;
+        RuntimeStatus InputWheelDelta(float& out) const;
+        RuntimeStatus InputGamepadConnected(int player_slot, bool& out) const;
+        RuntimeStatus InputGamepadButtonHeld(int player_slot, int button, bool& out) const;
+        RuntimeStatus InputGamepadButtonPressed(int player_slot, int button, bool& out) const;
+        RuntimeStatus InputGamepadButtonReleased(int player_slot, int button, bool& out) const;
+        RuntimeStatus InputGamepadAxis(int player_slot, int axis, float& out) const;
+        RuntimeStatus InputSetGamepadVibration(int player_slot, float low, float high);
+
         // ---- Audio --------------------------------------------------------------
 
         bool AudioAvailable() const noexcept;
@@ -520,7 +560,21 @@ namespace ReplayEngine::Runtime
             DirectX::XMFLOAT3 rotation{ 0.0f, 0.0f, 0.0f };
             DirectX::XMFLOAT3 scale{ 1.0f, 1.0f, 1.0f };
             Core::ObjectID parent;
+            SpawnRequestID request = 0;
         };
+
+        struct SpawnResult
+        {
+            SpawnRequestID request = 0;
+            Core::ObjectID created;
+            RuntimeStatus status = RuntimeStatus::Ok;
+        };
+
+        // 引き取られない結果が無限に溜まらないよう上限を設ける。
+        // 超えたら古いものから捨てる。捨てた件数はログへ残す。
+        static constexpr std::size_t maximum_spawn_results = 256;
+        std::vector<SpawnResult> spawn_results_;
+        SpawnRequestID next_spawn_request_ = 1;
 
         Core::GameObject* ResolveObject(const ObjectHandle& handle,
             RuntimeStatus& status) const;

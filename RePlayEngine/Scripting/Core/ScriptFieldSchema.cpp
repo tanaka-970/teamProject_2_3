@@ -163,6 +163,8 @@ namespace ReplayEngine::Scripting
             desc.editor_visible = definition.visible_in_inspector;
             desc.read_only = definition.read_only;
             desc.asset_type = definition.asset_type;
+            desc.category = definition.category;
+            desc.enum_labels = definition.enum_labels;
 
             desc.getter = [saved_name](const Core::Component& component) -> ScriptValue
             {

@@ -1,6 +1,8 @@
 ﻿#include "CollisionEventDispatcher.h"
 
+#include "../API/RuntimeContext.h"
 #include "../Behaviour/BehaviourComponent.h"
+#include "../Events/EventBus.h"
 #include "../Handles/HandleResolver.h"
 #include "../../Components/Gameplay/CharacterMotorComponent.h"
 #include "../../Object/GameObject/GameObject.h"
@@ -18,6 +20,56 @@ namespace ReplayEngine::Runtime
     {
         contacts_.clear();
         world_instance_ = Core::invalid_world_instance_id;
+    }
+
+    namespace
+    {
+        // 接触を EventBus へも流す。C++ の OnCollisionXxx と同じ瞬間に出すので、
+        // C# / Lua など Behaviour を継承できない購読者も同じ情報を受け取れる。
+        void PublishContactEvent(Scene::Scene& world, const CollisionEvent& event)
+        {
+            RuntimeContext* runtime = world.Services().Runtime();
+            if (runtime == nullptr) return;
+
+            EventRecord record;
+            switch (event.phase)
+            {
+            case ContactPhase::Enter:
+                record.type = EngineEvents::CollisionEnter;
+                record.type_name = "CollisionEnter";
+                break;
+            case ContactPhase::Stay:
+                record.type = EngineEvents::CollisionStay;
+                record.type_name = "CollisionStay";
+                break;
+            default:
+                record.type = EngineEvents::CollisionExit;
+                record.type_name = "CollisionExit";
+                break;
+            }
+            record.source = event.self;
+            record.target = event.other;
+            record.payload.Set("point_x",
+                Reflection::PropertyValue::MakeFloat(event.contact_point.x));
+            record.payload.Set("point_y",
+                Reflection::PropertyValue::MakeFloat(event.contact_point.y));
+            record.payload.Set("point_z",
+                Reflection::PropertyValue::MakeFloat(event.contact_point.z));
+            record.payload.Set("normal_x",
+                Reflection::PropertyValue::MakeFloat(event.contact_normal.x));
+            record.payload.Set("normal_y",
+                Reflection::PropertyValue::MakeFloat(event.contact_normal.y));
+            record.payload.Set("normal_z",
+                Reflection::PropertyValue::MakeFloat(event.contact_normal.z));
+            record.payload.Set("hit_kind",
+                Reflection::PropertyValue::MakeInt(static_cast<int>(event.hit_kind)));
+            record.payload.Set("other_collider",
+                Reflection::PropertyValue::MakeInt(
+                    static_cast<int>(event.other_collider)));
+            record.payload.Set("other_valid",
+                Reflection::PropertyValue::MakeBool(event.other_valid));
+            runtime->Events().Publish(std::move(record));
+        }
     }
 
     void CollisionEventDispatcher::Deliver(Scene::Scene& world, const Contact& contact,
@@ -55,6 +107,8 @@ namespace ReplayEngine::Runtime
             event.other = ObjectHandle::None();
             event.other_valid = false;
         }
+
+        PublishContactEvent(world, event);
 
         // 添字で回す。コールバックの中から Component が追加されても
         // 参照が壊れないようにするため。

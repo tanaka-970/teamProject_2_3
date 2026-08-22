@@ -119,6 +119,8 @@ namespace ReplayEngine::Scripting::Validation
                 "\n"
                 "namespace ") + validation_namespace + ";\n"
                 "\n"
+                "public enum ValidationMode { First = 0, Second = 1, Third = 2 }\n"
+                "\n"
                 "[ReplayGuid(\"" + validation_guid_text + "\")]\n"
                 "public sealed class " + class_name + " : ScriptBehaviour\n"
                 "{\n"
@@ -128,6 +130,12 @@ namespace ReplayEngine::Scripting::Validation
                 "    public ComponentReference TargetComponent;\n"
                 "    public string LastEventType = string.Empty;\n"
                 "    public int ApiChecks = 0;\n"
+                "    public int RuntimeChecks = 0;\n"
+                "    [Range(0.0, 10.0)] public float RangedValue = 1.0f;\n"
+                "    [Tooltip(\"説明文\")] [Header(\"見出し\")] public int Described = 3;\n"
+                "    [HideInInspector] public int Hidden = 5;\n"
+                "    [AssetType(\"Image\")] public AssetReference Picture;\n"
+                "    public ValidationMode Mode = ValidationMode.Second;\n"
                 "    private EventSubscription subscription;\n"
                 "\n"
                 "    public override void Awake()\n"
@@ -140,6 +148,35 @@ namespace ReplayEngine::Scripting::Validation
                 "        if (Runtime.RuntimeUIUnavailable() != RuntimeStatus.ServiceUnavailable) Counter = -102;\n"
                 "        if (Runtime.SaveGameUnavailable() != RuntimeStatus.ServiceUnavailable) Counter = -103;\n"
                 "        ApiChecks = RunComponentApiChecks();\n"
+                "        StartCoroutine(CountUp());\n"
+                "        After(0.0f, () => { RuntimeChecks += 1; });\n"
+                "        TweenValue(0.0f, 10.0f, 0.0f, v => { if (v >= 10.0f) RuntimeChecks += 1; });\n"
+                "        RuntimeChecks += RunRuntimeApiChecks();\n"
+                "    }\n"
+                "\n"
+                "    private System.Collections.IEnumerator CountUp()\n"
+                "    {\n"
+                "        RuntimeChecks += 1;\n"
+                "        yield return null;\n"
+                "    }\n"
+                "\n"
+                "    // v11 で足した入力 / Scene / イベント定数を確かめる。\n"
+                "    private int RunRuntimeApiChecks()\n"
+                "    {\n"
+                "        var passed = 0;\n"
+                "        // Input Service 未接続でも例外にならず false を返す。\n"
+                "        if (!Input.GetKey(Key.A)) ++passed;\n"
+                "        if (!Input.GamepadConnected()) ++passed;\n"
+                "        if (Input.MouseScrollDelta == 0.0f) ++passed;\n"
+                "        if (EngineEventIds.CollisionEnter.Length == 32) ++passed;\n"
+                "        if (Runtime.CurrentSceneGuid().Status != RuntimeStatus.Ok ||\n"
+                "            Runtime.CurrentSceneGuid().Value != null) ++passed;\n"
+                "        var spawn = Runtime.InstantiateDeferred(\"missing\",\n"
+                "            new Vector3(0.0f, 0.0f, 0.0f), new Vector3(0.0f, 0.0f, 0.0f),\n"
+                "            new Vector3(1.0f, 1.0f, 1.0f));\n"
+                "        if (!spawn.Succeeded) ++passed;\n"
+                "        if (!Runtime.TakeSpawnResult(0).Succeeded) ++passed;\n"
+                "        return passed;\n"
                 "    }\n"
                 "\n"
                 "    // v10 で足した型付き Component API を実行時に確かめる。\n"
@@ -354,6 +391,47 @@ namespace ReplayEngine::Scripting::Validation
             "ObjectReference field appears in Inspector schema");
         check.Expect(schema && schema->FindBySavedName("field.TargetComponent") != nullptr,
             "ComponentReference field appears in Inspector schema");
+
+        // ---- Inspector 属性と追加した Field 型 -------------------------------
+        {
+            const ScriptFieldDefinition* ranged =
+                schema ? schema->FindBySavedName("field.RangedValue") : nullptr;
+            check.Expect(ranged != nullptr && ranged->has_range &&
+                ranged->minimum == 0.0 && ranged->maximum == 10.0,
+                "[Range] が編集範囲として schema へ載る");
+
+            const ScriptFieldDefinition* described =
+                schema ? schema->FindBySavedName("field.Described") : nullptr;
+            check.Expect(described != nullptr && !described->tooltip.empty(),
+                "[Tooltip] が schema へ載る");
+            check.Expect(described != nullptr && !described->category.empty(),
+                "[Header] が折り畳み見出しとして schema へ載る");
+
+            const ScriptFieldDefinition* hidden =
+                schema ? schema->FindBySavedName("field.Hidden") : nullptr;
+            check.Expect(hidden != nullptr && !hidden->visible_in_inspector,
+                "[HideInInspector] が Inspector 非表示として載る");
+            check.Expect(hidden != nullptr && hidden->serializable,
+                "[HideInInspector] でも保存対象は維持する");
+
+            const ScriptFieldDefinition* picture =
+                schema ? schema->FindBySavedName("field.Picture") : nullptr;
+            check.Expect(picture != nullptr &&
+                picture->type == Reflection::PropertyType::AssetReference,
+                "AssetReference フィールドが Asset 型として載る");
+            check.Expect(picture != nullptr && picture->asset_type == "Image",
+                "[AssetType] が Picker の絞り込みとして載る");
+
+            const ScriptFieldDefinition* mode =
+                schema ? schema->FindBySavedName("field.Mode") : nullptr;
+            check.Expect(mode != nullptr && mode->type == Reflection::PropertyType::Enum,
+                "enum フィールドが Enum 型として載る");
+            check.Expect(mode != nullptr && mode->enum_labels.size() == 3 &&
+                mode->enum_labels[1] == "Second",
+                "enum のラベルが並び順どおりに載る");
+            check.Expect(mode != nullptr && mode->default_value.AsInt() == 1,
+                "enum の既定値が数値として載る");
+        }
 
         if (backend != nullptr && schema)
         {
@@ -572,6 +650,12 @@ namespace ReplayEngine::Scripting::Validation
                 script->ReadField(ScriptNames::MakeFieldSavedName("ApiChecks"));
             check.Expect(api_checks.AsInt() == 10,
                 "typed Component API works from a running C# behaviour");
+
+            // Coroutine 1 + Timer 1 + Tween 1 + 生入力/Scene 7 = 10。
+            const ScriptValue runtime_checks =
+                script->ReadField(ScriptNames::MakeFieldSavedName("RuntimeChecks"));
+            check.Expect(runtime_checks.AsInt() == 10,
+                "coroutine / timer / tween / input / scene API run from C#");
         }
         else
         {

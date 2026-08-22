@@ -232,5 +232,19 @@ namespace ReplayEngine::Scripting::CSharp::Detail
         using rigidbody_void_callback = int(__cdecl*)(Runtime::ComponentHandle);
         using rigidbody_teleport_callback = int(__cdecl*)(Runtime::ComponentHandle,
             DirectX::XMFLOAT3, DirectX::XMFLOAT3);
+
+        // v11 生デバイス入力 / Scene / 診断。
+        using input_key_callback = int(__cdecl*)(int, int*);
+        using input_pad_button_callback = int(__cdecl*)(int, int, int*);
+        using input_pad_axis_callback = int(__cdecl*)(int, int, float*);
+        using input_pad_connected_callback = int(__cdecl*)(int, int*);
+        using input_vibration_callback = int(__cdecl*)(int, float, float);
+        using input_pointer_position_callback = int(__cdecl*)(float*, float*);
+        using spawn_tracked_callback = int(__cdecl*)(const char*, DirectX::XMFLOAT3,
+            DirectX::XMFLOAT3, DirectX::XMFLOAT3, Runtime::ObjectHandle, std::uint64_t*);
+        using spawn_take_callback = int(__cdecl*)(std::uint64_t, Runtime::ObjectHandle*);
+        using get_text_callback = int(__cdecl*)(char*, int);
+        using quit_callback = int(__cdecl*)(const char*);
+        using event_dropped_callback = int(__cdecl*)(std::uint64_t, std::uint64_t*);
 #endif
 }

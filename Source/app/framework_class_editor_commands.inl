@@ -311,9 +311,15 @@
             }
             break;
         case WM_MOUSEWHEEL:
-            ui_mouse_wheel_delta += static_cast<float>(GET_WHEEL_DELTA_WPARAM(wparam)) /
+        {
+            const float wheel_notches =
+                static_cast<float>(GET_WHEEL_DELTA_WPARAM(wparam)) /
                 static_cast<float>(WHEEL_DELTA);
+            ui_mouse_wheel_delta += wheel_notches;
+            // Script から読めるよう InputState 側にも積む。次の BeginFrame で確定する。
+            game_input.AccumulateWheel(wheel_notches);
             break;
+        }
         case WM_KEYDOWN:
             if (scene_manager.OnKeyDown(wparam))
             {

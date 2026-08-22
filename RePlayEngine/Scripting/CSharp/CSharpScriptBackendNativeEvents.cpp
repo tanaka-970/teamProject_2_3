@@ -232,6 +232,13 @@ namespace ReplayEngine::Scripting::CSharp::Detail
                 {
                     auto it = g_event_subscriptions.find(id);
                     if (it == g_event_subscriptions.end()) return;
+                    // Poll されない購読が溜まり続けないよう上限で古いものから捨てる。
+                    // 捨てた件数は Poll 側が読めるよう数えておく。
+                    if (it->second.pending.size() >= kMaxPendingEventsPerSubscription)
+                    {
+                        it->second.pending.pop_front();
+                        ++it->second.dropped;
+                    }
                     it->second.pending.push_back(EncodeEventRecord(record));
                 },
                 owner);

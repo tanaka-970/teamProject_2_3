@@ -43,7 +43,7 @@ public static unsafe class NativeBridge
     }
 
     // 関数ポインタ表の互換番号。C++ の Detail::kNativeApiAbiVersion と必ず一致させる。
-    public const uint NativeApiAbiVersion = 10;
+    public const uint NativeApiAbiVersion = 11;
 
     // 表の先頭に必ず置く自己記述ヘッダー。C++ の Detail::NativeApiHeader と同じ並び。
     [StructLayout(LayoutKind.Sequential)]
@@ -213,6 +213,27 @@ public static unsafe class NativeBridge
         public delegate* unmanaged[Cdecl]<ComponentHandle, Vector3, int> RigidbodySetLinearVelocity;
         public delegate* unmanaged[Cdecl]<ComponentHandle, Vector3*, int> RigidbodyGetAngularVelocity;
         public delegate* unmanaged[Cdecl]<ComponentHandle, Vector3, int> RigidbodySetAngularVelocity;
+
+        // v11 追加。生デバイス入力 / Scene / 診断。
+        public delegate* unmanaged[Cdecl]<int, int*, int> InputKeyHeld;
+        public delegate* unmanaged[Cdecl]<int, int*, int> InputKeyPressed;
+        public delegate* unmanaged[Cdecl]<int, int*, int> InputKeyReleased;
+        public delegate* unmanaged[Cdecl]<int, int*, int> InputMouseHeld;
+        public delegate* unmanaged[Cdecl]<int, int*, int> InputMousePressed;
+        public delegate* unmanaged[Cdecl]<int, int*, int> InputMouseReleased;
+        public delegate* unmanaged[Cdecl]<float*, float*, int> InputPointerPosition;
+        public delegate* unmanaged[Cdecl]<float*, int> InputWheelDelta;
+        public delegate* unmanaged[Cdecl]<int, int*, int> InputPadConnected;
+        public delegate* unmanaged[Cdecl]<int, int, int*, int> InputPadButtonHeld;
+        public delegate* unmanaged[Cdecl]<int, int, int*, int> InputPadButtonPressed;
+        public delegate* unmanaged[Cdecl]<int, int, int*, int> InputPadButtonReleased;
+        public delegate* unmanaged[Cdecl]<int, int, float*, int> InputPadAxis;
+        public delegate* unmanaged[Cdecl]<int, float, float, int> InputSetVibration;
+        public delegate* unmanaged[Cdecl]<byte*, Vector3, Vector3, Vector3, ObjectHandle, ulong*, int> InstantiatePrefabTracked;
+        public delegate* unmanaged[Cdecl]<ulong, ObjectHandle*, int> TakeSpawnResult;
+        public delegate* unmanaged[Cdecl]<byte*, int, int> GetCurrentSceneGuid;
+        public delegate* unmanaged[Cdecl]<byte*, int> QuitApplication;
+        public delegate* unmanaged[Cdecl]<ulong, ulong*, int> EventDroppedCount;
     }
 
     private sealed class ManagedInstance
@@ -410,7 +431,11 @@ public static unsafe class NativeBridge
                 case 1: state.Behaviour.OnEnable(); break;
                 case 2: state.Behaviour.Start(); break;
                 case 3: state.Behaviour.FixedUpdate(deltaTime); break;
-                case 4: state.Behaviour.Update(deltaTime); break;
+                case 4:
+                    // 接触イベントと Coroutine / Timer / Tween を Update の直前に進める。
+                    state.Behaviour.PumpFrame(deltaTime);
+                    state.Behaviour.Update(deltaTime);
+                    break;
                 case 5: state.Behaviour.LateUpdate(deltaTime); break;
                 case 6: state.Behaviour.OnDisable(); break;
                 case 7: state.Behaviour.OnDestroy(); break;
@@ -1420,20 +1445,61 @@ public static unsafe class NativeBridge
             if (mapped == null) continue;
 
             var defaultValue = DefaultValue(type, field);
+            var range = field.GetCustomAttribute<RangeAttribute>();
+            var tooltip = field.GetCustomAttribute<TooltipAttribute>();
+            var header = field.GetCustomAttribute<HeaderAttribute>();
+            var display = field.GetCustomAttribute<DisplayNameAttribute>();
+            var assetType = field.GetCustomAttribute<AssetTypeAttribute>();
+            var hidden = field.IsDefined(typeof(HideInInspectorAttribute), true);
+            var readOnly = field.IsDefined(typeof(ReadOnlyAttribute), true);
+
+            // 6 列目までは v1 と同じ並び。7 列目以降は読めない側が無視できる追加分。
             builder.Append("FIELD\t");
             builder.Append(Escape(field.Name));
             builder.Append('\t');
             builder.Append(mapped);
             builder.Append('\t');
-            builder.Append(Escape(Humanize(field.Name)));
+            builder.Append(Escape(display != null ? display.Text : Humanize(field.Name)));
             builder.Append('\t');
-            builder.Append(Escape(string.Empty));
+            builder.Append(Escape(tooltip != null ? tooltip.Text : string.Empty));
             builder.Append('\t');
             builder.Append(Escape(FormatValue(defaultValue, field.FieldType)));
+            builder.Append('\t');
+            // flags: h=Inspector非表示 r=読み取り専用
+            builder.Append(Escape((hidden ? "h" : string.Empty) + (readOnly ? "r" : string.Empty)));
+            builder.Append('\t');
+            builder.Append(range != null
+                ? range.Minimum.ToString(CultureInfo.InvariantCulture) : string.Empty);
+            builder.Append('\t');
+            builder.Append(range != null
+                ? range.Maximum.ToString(CultureInfo.InvariantCulture) : string.Empty);
+            builder.Append('\t');
+            builder.Append(Escape(assetType != null ? assetType.Kind : string.Empty));
+            builder.Append('\t');
+            builder.Append(Escape(header != null ? header.Text : string.Empty));
+            builder.Append('\t');
+            builder.Append(Escape(EnumLabels(field.FieldType)));
             builder.Append('\n');
         }
 
         return builder.ToString();
+    }
+
+    // enum のラベルを "," 区切りで並べる。値が 0..n-1 の連番でないときは空にする。
+    // Inspector は添字でラベルを引くので、飛び番だと別の名前が出てしまう。
+    private static string EnumLabels(Type type)
+    {
+        if (!type.IsEnum) return string.Empty;
+        var names = Enum.GetNames(type);
+        var values = Enum.GetValues(type);
+        var labels = new string[names.Length];
+        for (var index = 0; index < names.Length; ++index)
+        {
+            if (Convert.ToInt64(values.GetValue(index), CultureInfo.InvariantCulture) != index)
+                return string.Empty;
+            labels[index] = names[index].Replace(",", " ");
+        }
+        return string.Join(",", labels);
     }
 
     private static IEnumerable<FieldInfo> SerializableFields(Type type)
@@ -1482,6 +1548,9 @@ public static unsafe class NativeBridge
         if (type == typeof(Color)) return "color";
         if (type == typeof(ObjectReference)) return "object";
         if (type == typeof(ComponentReference)) return "component";
+        if (type == typeof(AssetReference)) return "asset";
+        // enum は内部 int。ラベルは EnumLabels が別列で渡す。
+        if (type.IsEnum && Enum.GetUnderlyingType(type) == typeof(int)) return "enum";
         return null;
     }
 
@@ -1502,6 +1571,8 @@ public static unsafe class NativeBridge
         if (type == typeof(Color)) return new Color(ParseFloat(parts, 0), ParseFloat(parts, 1), ParseFloat(parts, 2), ParseFloat(parts, 3));
         if (type == typeof(ObjectReference)) return new ObjectReference { ObjectId = ParseULong(parts, 0) };
         if (type == typeof(ComponentReference)) return new ComponentReference { OwnerObjectId = ParseULong(parts, 0), ComponentStableId = (uint)ParseULong(parts, 1) };
+        if (type == typeof(AssetReference)) return new AssetReference(text);
+        if (type.IsEnum) return Enum.ToObject(type, int.Parse(text, CultureInfo.InvariantCulture));
         return type.IsValueType ? Activator.CreateInstance(type) : null;
     }
 
@@ -1546,6 +1617,10 @@ public static unsafe class NativeBridge
             var reference = (ComponentReference)value;
             return $"{reference.OwnerObjectId.ToString(CultureInfo.InvariantCulture)},{reference.ComponentStableId.ToString(CultureInfo.InvariantCulture)}";
         }
+        if (type == typeof(AssetReference)) return ((AssetReference)value).Guid ?? string.Empty;
+        if (type.IsEnum)
+            return Convert.ToInt32(value, CultureInfo.InvariantCulture)
+                .ToString(CultureInfo.InvariantCulture);
 
         return string.Empty;
     }
@@ -2118,5 +2193,111 @@ public static unsafe class NativeBridge
     {
         if (api.RigidbodySetAngularVelocity == null) return RuntimeStatus.ServiceUnavailable;
         return (RuntimeStatus)api.RigidbodySetAngularVelocity(handle, value);
+    }
+
+    // ---- v11 生デバイス入力 / Scene / 診断 ------------------------------------
+
+    private static RuntimeResult<bool> IntFlag(
+        delegate* unmanaged[Cdecl]<int, int*, int> call, int argument)
+    {
+        if (call == null) return new(RuntimeStatus.ServiceUnavailable);
+        int value = 0;
+        return new RuntimeResult<bool>((RuntimeStatus)call(argument, &value), value != 0);
+    }
+
+    private static RuntimeResult<bool> IntFlag2(
+        delegate* unmanaged[Cdecl]<int, int, int*, int> call, int a, int b)
+    {
+        if (call == null) return new(RuntimeStatus.ServiceUnavailable);
+        int value = 0;
+        return new RuntimeResult<bool>((RuntimeStatus)call(a, b, &value), value != 0);
+    }
+
+    internal static RuntimeResult<bool> InputKeyHeld(int key) => IntFlag(api.InputKeyHeld, key);
+    internal static RuntimeResult<bool> InputKeyPressed(int key) => IntFlag(api.InputKeyPressed, key);
+    internal static RuntimeResult<bool> InputKeyReleased(int key) => IntFlag(api.InputKeyReleased, key);
+    internal static RuntimeResult<bool> InputMouseHeld(int button) => IntFlag(api.InputMouseHeld, button);
+    internal static RuntimeResult<bool> InputMousePressed(int button) => IntFlag(api.InputMousePressed, button);
+    internal static RuntimeResult<bool> InputMouseReleased(int button) => IntFlag(api.InputMouseReleased, button);
+
+    internal static RuntimeResult<Vector2> InputPointerPosition()
+    {
+        if (api.InputPointerPosition == null) return new(RuntimeStatus.ServiceUnavailable);
+        float x = 0.0f, y = 0.0f;
+        var status = (RuntimeStatus)api.InputPointerPosition(&x, &y);
+        return new RuntimeResult<Vector2>(status, new Vector2(x, y));
+    }
+
+    internal static RuntimeResult<float> InputWheelDelta()
+    {
+        if (api.InputWheelDelta == null) return new(RuntimeStatus.ServiceUnavailable);
+        float value = 0.0f;
+        return new RuntimeResult<float>((RuntimeStatus)api.InputWheelDelta(&value), value);
+    }
+
+    internal static RuntimeResult<bool> InputPadConnected(int slot)
+        => IntFlag(api.InputPadConnected, slot);
+    internal static RuntimeResult<bool> InputPadButtonHeld(int slot, int button)
+        => IntFlag2(api.InputPadButtonHeld, slot, button);
+    internal static RuntimeResult<bool> InputPadButtonPressed(int slot, int button)
+        => IntFlag2(api.InputPadButtonPressed, slot, button);
+    internal static RuntimeResult<bool> InputPadButtonReleased(int slot, int button)
+        => IntFlag2(api.InputPadButtonReleased, slot, button);
+
+    internal static RuntimeResult<float> InputPadAxis(int slot, int axis)
+    {
+        if (api.InputPadAxis == null) return new(RuntimeStatus.ServiceUnavailable);
+        float value = 0.0f;
+        return new RuntimeResult<float>((RuntimeStatus)api.InputPadAxis(slot, axis, &value), value);
+    }
+
+    internal static RuntimeStatus InputSetVibration(int slot, float low, float high)
+    {
+        if (api.InputSetVibration == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.InputSetVibration(slot, low, high);
+    }
+
+    internal static RuntimeResult<ulong> InstantiatePrefabTracked(string prefabAssetGuid,
+        Vector3 position, Vector3 rotationEuler, Vector3 scale, ObjectHandle parent)
+    {
+        if (api.InstantiatePrefabTracked == null) return new(RuntimeStatus.ServiceUnavailable);
+        ulong request = 0;
+        fixed (byte* guid = Encoding.UTF8.GetBytes(prefabAssetGuid + "\0"))
+            return new RuntimeResult<ulong>((RuntimeStatus)api.InstantiatePrefabTracked(
+                guid, position, rotationEuler, scale, parent, &request), request);
+    }
+
+    internal static RuntimeResult<ObjectHandle> TakeSpawnResult(ulong request)
+    {
+        if (api.TakeSpawnResult == null) return new(RuntimeStatus.ServiceUnavailable);
+        ObjectHandle value = default;
+        return new RuntimeResult<ObjectHandle>(
+            (RuntimeStatus)api.TakeSpawnResult(request, &value), value);
+    }
+
+    internal static RuntimeResult<string> GetCurrentSceneGuid()
+    {
+        if (api.GetCurrentSceneGuid == null) return new(RuntimeStatus.ServiceUnavailable);
+        const int capacity = 256;
+        byte* output = stackalloc byte[capacity];
+        var status = (RuntimeStatus)api.GetCurrentSceneGuid(output, capacity);
+        return status == RuntimeStatus.Ok
+            ? new RuntimeResult<string>(status, FromUtf8(output))
+            : new RuntimeResult<string>(status);
+    }
+
+    internal static RuntimeStatus QuitApplication(string reason)
+    {
+        if (api.QuitApplication == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(reason + "\0"))
+            return (RuntimeStatus)api.QuitApplication(text);
+    }
+
+    internal static RuntimeResult<ulong> EventDroppedCount(EventSubscription subscription)
+    {
+        if (api.EventDroppedCount == null) return new(RuntimeStatus.ServiceUnavailable);
+        ulong value = 0;
+        return new RuntimeResult<ulong>(
+            (RuntimeStatus)api.EventDroppedCount(subscription.Id, &value), value);
     }
 }

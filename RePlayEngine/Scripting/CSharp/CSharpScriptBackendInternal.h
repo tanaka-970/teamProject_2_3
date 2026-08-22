@@ -162,6 +162,8 @@ namespace ReplayEngine::Scripting::CSharp::Detail
             if (text == "color") { out = PropertyType::Color; return true; }
             if (text == "object") { out = PropertyType::ObjectReference; return true; }
             if (text == "component") { out = PropertyType::ComponentReference; return true; }
+            if (text == "asset") { out = PropertyType::AssetReference; return true; }
+            if (text == "enum") { out = PropertyType::Enum; return true; }
             return false;
         }
 
@@ -234,6 +236,10 @@ namespace ReplayEngine::Scripting::CSharp::Detail
                 return ScriptValue::MakeQuaternion({ f(0), f(1), f(2), f(3) });
             case PropertyType::Color:
                 return ScriptValue::MakeColor({ f(0), f(1), f(2), f(3) });
+            case PropertyType::Enum:
+                return ScriptValue::MakeEnum(static_cast<int>(ParseInt64(text)));
+            case PropertyType::AssetReference:
+                return ScriptValue::MakeAssetReference(text);
             case PropertyType::ObjectReference:
                 return ScriptValue::MakeObjectReference(Core::ObjectID(ParseUInt64(text)));
             case PropertyType::ComponentReference:
@@ -343,6 +349,29 @@ namespace ReplayEngine::Scripting::CSharp::Detail
                 definition.display_name = Unescape(parts[3]);
                 definition.tooltip = Unescape(parts[4]);
                 definition.default_value = ParseValue(type, Unescape(parts[5]));
+
+                // 7 列目以降は後から足した追加情報。無い古い形式でもそのまま読める。
+                if (parts.size() > 6)
+                {
+                    const std::string flags = Unescape(parts[6]);
+                    if (flags.find('h') != std::string::npos)
+                        definition.visible_in_inspector = false;
+                    if (flags.find('r') != std::string::npos)
+                        definition.read_only = true;
+                }
+                if (parts.size() > 8 && !parts[7].empty() && !parts[8].empty())
+                {
+                    definition.has_range = true;
+                    definition.minimum = ParseDouble(parts[7]);
+                    definition.maximum = ParseDouble(parts[8]);
+                }
+                if (parts.size() > 9) definition.asset_type = Unescape(parts[9]);
+                if (parts.size() > 10) definition.category = Unescape(parts[10]);
+                if (parts.size() > 11)
+                {
+                    const std::string labels = Unescape(parts[11]);
+                    if (!labels.empty()) definition.enum_labels = Split(labels, ',');
+                }
 
                 out_field_types[definition.SavedName()] = type;
                 fields.push_back(std::move(definition));

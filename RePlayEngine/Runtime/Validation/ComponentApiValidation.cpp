@@ -25,6 +25,37 @@ namespace ReplayEngine::Runtime::Validation
         {
             return std::fabs(value - expected) <= tolerance;
         }
+
+        // 生デバイス入力の検証用。決まった値だけを返す。
+        class StubInputService final : public Scene::IInputService
+        {
+        public:
+            bool Held(std::string_view, int) const noexcept override { return false; }
+            bool Pressed(std::string_view, int) const noexcept override { return false; }
+            bool Released(std::string_view, int) const noexcept override { return false; }
+            float Axis(std::string_view, int) const noexcept override { return 0.0f; }
+            float PointerDeltaX() const noexcept override { return 0.0f; }
+            float PointerDeltaY() const noexcept override { return 0.0f; }
+
+            bool KeyHeld(int key) const noexcept override { return key == 'A'; }
+            bool MouseButtonHeld(int button) const noexcept override { return button == 0; }
+            float PointerX() const noexcept override { return 320.0f; }
+            float PointerY() const noexcept override { return 240.0f; }
+            float WheelDelta() const noexcept override { return 2.0f; }
+            bool GamepadConnected(int slot) const noexcept override { return slot == 0; }
+            bool GamepadButtonHeld(int slot, int button) const noexcept override
+            {
+                return slot == 0 && button == 0x1000;
+            }
+            float GamepadAxisValue(int slot, int axis) const noexcept override
+            {
+                return slot == 0 && axis == 0 ? 0.5f : 0.0f;
+            }
+            bool SetGamepadVibration(int slot, float, float) noexcept override
+            {
+                return slot == 0;
+            }
+        };
     }
 
     int RunComponentApiValidation()
@@ -247,6 +278,111 @@ namespace ReplayEngine::Runtime::Validation
             Near(read.AsVector3().x, 3.0f),
             "読み取り専用でも読むことはできる");
 
+
+        // ---- v11 生デバイス入力 ---------------------------------------------
+        //
+        // 実体のサービスは Editor 側にしかないので、ここでは
+        // 「未接続なら ServiceUnavailable を返す」ことと引数検証を確かめる。
+        {
+            bool flag = false;
+            float value = 0.0f;
+            check.Expect(runtime.InputKeyHeld(static_cast<int>('A'), flag) ==
+                RuntimeStatus::ServiceUnavailable,
+                "Input Service 未接続なら生キーは ServiceUnavailable");
+            check.Expect(runtime.InputWheelDelta(value) ==
+                RuntimeStatus::ServiceUnavailable,
+                "Input Service 未接続ならホイールは ServiceUnavailable");
+
+            StubInputService input;
+            runtime.SetInputService(&input);
+
+            check.Expect(Succeeded(runtime.InputKeyHeld(static_cast<int>('A'), flag)) && flag,
+                "押されているキーを読める");
+            check.Expect(Succeeded(runtime.InputKeyHeld(static_cast<int>('B'), flag)) && !flag,
+                "押されていないキーは false");
+            check.Expect(Failed(runtime.InputKeyHeld(0, flag)),
+                "範囲外のキーコードは弾く");
+            check.Expect(Failed(runtime.InputKeyHeld(999, flag)),
+                "255 を超えるキーコードは弾く");
+
+            check.Expect(Succeeded(runtime.InputMouseButtonHeld(0, flag)) && flag,
+                "左ボタンを読める");
+            check.Expect(Failed(runtime.InputMouseButtonHeld(9, flag)),
+                "存在しないマウスボタンは弾く");
+
+            float x = 0.0f, y = 0.0f;
+            check.Expect(Succeeded(runtime.InputPointerPosition(x, y)) &&
+                Near(x, 320.0f) && Near(y, 240.0f),
+                "ポインタ座標を読める");
+            check.Expect(Succeeded(runtime.InputWheelDelta(value)) && Near(value, 2.0f),
+                "ホイール量を読める");
+
+            check.Expect(Succeeded(runtime.InputGamepadConnected(0, flag)) && flag,
+                "ゲームパッドの接続を読める");
+            check.Expect(Succeeded(runtime.InputGamepadButtonHeld(0, 0x1000, flag)) && flag,
+                "ゲームパッドのボタンを読める");
+            check.Expect(Failed(runtime.InputGamepadButtonHeld(0, 0, flag)),
+                "ボタン 0 は弾く");
+            check.Expect(Succeeded(runtime.InputGamepadAxis(0, 0, value)) &&
+                Near(value, 0.5f),
+                "スティックの値を読める");
+            check.Expect(Failed(runtime.InputGamepadAxis(0, 9, value)),
+                "存在しない軸は弾く");
+            check.Expect(Failed(runtime.InputGamepadAxis(-1, 0, value)),
+                "負のプレイヤー番号は弾く");
+            check.Expect(Succeeded(runtime.InputSetGamepadVibration(0, 0.5f, 0.5f)),
+                "振動を設定できる");
+            check.Expect(Failed(runtime.InputSetGamepadVibration(0,
+                std::nanf(""), 0.0f)),
+                "NaN の振動量は弾く");
+
+            runtime.SetInputService(nullptr);
+        }
+
+        // ---- v11 遅延生成の結果引き取り --------------------------------------
+        {
+            RuntimeContext::SpawnRequestID request = 0;
+            // Instantiator 未接続なので要求自体が通らない。
+            check.Expect(Failed(runtime.InstantiatePrefabDeferredTracked("guid",
+                {}, {}, { 1.0f, 1.0f, 1.0f }, ObjectHandle::None(), request)),
+                "Prefab Instantiator 未接続なら遅延生成は失敗する");
+            check.Expect(request == 0, "失敗した要求には番号が振られない");
+
+            ObjectHandle taken;
+            check.Expect(Failed(runtime.TryTakeSpawnResult(0, taken)),
+                "番号 0 の引き取りは弾く");
+            check.Expect(Failed(runtime.TryTakeSpawnResult(12345, taken)),
+                "知らない番号の引き取りは弾く");
+            check.Expect(runtime.PendingSpawnResultCount() == 0,
+                "引き取り待ちの結果は残っていない");
+        }
+
+        // ---- 接触が EventBus へ流れる -----------------------------------------
+        {
+            int collision_events = 0;
+            int trigger_events = 0;
+            Runtime::ScopedSubscription collision_token = runtime.Events().Subscribe(
+                Runtime::EngineEvents::CollisionEnter,
+                [&collision_events](const Runtime::EventRecord&) { ++collision_events; });
+            Runtime::ScopedSubscription trigger_token = runtime.Events().Subscribe(
+                Runtime::EngineEvents::TriggerEnter,
+                [&trigger_events](const Runtime::EventRecord&) { ++trigger_events; });
+            check.Expect(collision_token.Valid() && trigger_token.Valid(),
+                "接触イベントを購読できる");
+
+            Runtime::EventRecord probe;
+            probe.type = Runtime::EngineEvents::CollisionEnter;
+            probe.type_name = "CollisionEnter";
+            probe.source = actor;
+            probe.payload.Set("normal_y", Reflection::PropertyValue::MakeFloat(1.0f));
+            runtime.Events().Publish(std::move(probe));
+            runtime.Events().Dispatch(&runtime.Resolver());
+            check.Expect(collision_events == 1,
+                "CollisionEnter が購読者へ届く");
+            check.Expect(trigger_events == 0,
+                "別種のイベントは届かない");
+        }
+
         return check.Report("component-api validation");
     }
 }
