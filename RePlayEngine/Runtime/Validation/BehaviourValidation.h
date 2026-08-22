@@ -21,4 +21,10 @@ namespace ReplayEngine::Runtime::Validation
     //
     //   3dgp.exe --validate-collision
     int RunCollisionValidation();
+
+    // v10 で足した C# 向け API（型引き・汎用プロパティ・World Transform・Rigidbody）。
+    // 終了コード帯: 900-949
+    //
+    //   3dgp.exe --validate-component-api
+    int RunComponentApiValidation();
 }

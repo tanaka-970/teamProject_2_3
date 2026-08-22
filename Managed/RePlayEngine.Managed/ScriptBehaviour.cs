@@ -12,12 +12,44 @@ public abstract class ScriptBehaviour
         Runtime = context;
         GameObject = gameObject;
         Component = component;
+        Transform = new TransformAccess(gameObject);
     }
 
     protected ScriptRuntimeContext Runtime { get; private set; } = ScriptRuntimeContext.Unavailable;
 
     public ObjectHandle GameObject { get; private set; }
     public ComponentHandle Component { get; private set; }
+
+    // 自分が付いている GameObject の Transform。
+    // プロパティにすると Transform.Position = v が CS1612 で弾かれる。
+    // 代入先が「値のコピー」になるため。フィールドなら変数なので代入できる。
+    public TransformAccess Transform;
+
+    // 自分と同じ GameObject から型で Component を引く。
+    protected RuntimeResult<T> GetComponent<T>() where T : IComponentBinding<T>
+        => Runtime.GetComponent<T>(GameObject);
+
+    protected bool TryGetComponent<T>(out T component) where T : IComponentBinding<T>
+        => Runtime.TryGetComponent(GameObject, out component);
+
+    protected RuntimeResult<T> GetComponent<T>(ObjectHandle target)
+        where T : IComponentBinding<T>
+        => Runtime.GetComponent<T>(target);
+
+    protected RuntimeResult<T> AddComponent<T>() where T : IComponentBinding<T>
+        => Runtime.AddComponent<T>(GameObject);
+
+    protected bool HasComponent<T>() where T : IComponentBinding<T>
+        => Runtime.HasComponent<T>(GameObject);
+
+    // 値をそのまま返す入口。戻り値を変数へ受ければプロパティへ代入できる。
+    //   var camera = GetComponentOrDefault<CameraComponent>();
+    //   camera.FieldOfView = 42.0f;
+    protected T GetComponentOrDefault<T>() where T : IComponentBinding<T>
+        => Runtime.GetComponent<T>(GameObject).Value;
+
+    protected T GetComponentOrDefault<T>(ObjectHandle target) where T : IComponentBinding<T>
+        => Runtime.GetComponent<T>(target).Value;
 	// イベントの購読を行うメソッド。指定されたイベントタイプの購読を開始し、成功した場合は購読情報を保持
 	protected RuntimeResult<EventSubscription> SubscribeEvent(string eventTypeGuid)
     {

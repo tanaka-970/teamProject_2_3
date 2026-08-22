@@ -397,6 +397,11 @@ namespace ReplayEngine::Runtime::Detail
             Game::RegisterGameBehaviours();
             return Validation::RunCollisionValidation();
         }
+        if (command == "--validate-component-api")
+        {
+            ReplayEngine::Core::RegisterBuiltInComponents();
+            return Validation::RunComponentApiValidation();
+        }
 
         // Phase 6。Runtime Scene の読み込みと入れ替え。
         // 検証用の Scene ファイルは Saved/Validation/RuntimeScene/ へ

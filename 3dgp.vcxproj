@@ -458,6 +458,7 @@
     <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendInstances.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendErrors.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendNative.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendNativeComponents.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendNativeScene.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendNativeMotion.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendNativeEvents.cpp" />
@@ -471,6 +472,7 @@
     <ClCompile Include="RePlayEngine\Runtime\API\RuntimeContextMotion.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\API\RuntimeContextScene.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\API\RuntimeContextServices.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\API\RuntimeContextComponentApi.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\API\RuntimeSaveGameService.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourValidation.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourExecutionOrderValidation.cpp" />
@@ -478,6 +480,7 @@
     <ClCompile Include="RePlayEngine\Runtime\Validation\ComponentDependencyValidation.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourEventValidation.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourRuntimeApiValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Runtime\Validation\ComponentApiValidation.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourCollisionValidation.cpp" />
     <ClCompile Include="Source\game\Behaviours\ValidationBehaviours.cpp" />
     <ClCompile Include="RePlayEngine\Scene\Runtime\Scene.cpp" />
