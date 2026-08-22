@@ -82,7 +82,9 @@ public:
         float pixelate_size{ 0.0f };
         float pixelate_strength{ 0.0f };
         unsigned int texture_mask{ 0 };
-        DirectX::XMFLOAT3 padding{ 0.0f, 0.0f, 0.0f };
+        // Mesh Renderer の Receive Shadow。0 で影を受けない。
+        float receive_shadow{ 1.0f };
+        DirectX::XMFLOAT2 padding{ 0.0f, 0.0f };
     };
     static_assert(sizeof(material_override_constants) == 80,
         "GBUFFER_MATERIAL_CONSTANTS must stay byte-identical to HLSL");

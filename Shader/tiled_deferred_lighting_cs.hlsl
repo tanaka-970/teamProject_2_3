@@ -211,10 +211,16 @@ void main(uint3 group_id : SV_GroupID,
     // 影はCSMを優先し、無効時のみ従来の単一シャドウマップへ落とす。
     const float shadow_rotation_seed =
         interleaved_gradient_noise(float2(pixel), frame_params.x);
-    const float shadow_visibility = csm_params.w >= 0.5f
-        ? csm_sample_shadow_hq(world_position, N, view_z,
-            saturate(dot(N, L)), shadow_rotation_seed)
-        : sample_shadow(world_position);
+    // PS 版と同じ判定にする。片方だけ Receive Shadow を見ると、
+    // タイルドON/OFFで影の有無が変わってしまう。
+    float shadow_visibility = 1.0f;
+    if (g.receive_shadow)
+    {
+        shadow_visibility = csm_params.w >= 0.5f
+            ? csm_sample_shadow_hq(world_position, N, view_z,
+                saturate(dot(N, L)), shadow_rotation_seed)
+            : sample_shadow(world_position);
+    }
 
     // 平行光源 + IBL + SSAO/SSR は共通のPBR評価を使う。
     // (evaluate_pbr_ex内の点光源/スポットはCB配列版なので、ここでは使わない)

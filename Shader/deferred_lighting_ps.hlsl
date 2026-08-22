@@ -119,9 +119,16 @@ float4 main(VS_OUT pin) : SV_TARGET
     const float view_z = mul(float4(wp, 1.0f), frame_view).z;
     const float shadow_rotation_seed =
         interleaved_gradient_noise(pin.position.xy, frame_params.x);
-    const float shadow_visibility = csm_params.w >= 0.5f
-        ? csm_sample_shadow_hq(wp, N, view_z, saturate(dot(N, L)), shadow_rotation_seed)
-        : sample_shadow(wp);
+    // Receive Shadow が切られている面には影を掛けない。
+    // 影を落とす側 (Cast Shadow) とは独立した設定で、
+    // この面が他へ落とす影は影マップ側で作られるため消えない。
+    float shadow_visibility = 1.0f;
+    if (g.receive_shadow)
+    {
+        shadow_visibility = csm_params.w >= 0.5f
+            ? csm_sample_shadow_hq(wp, N, view_z, saturate(dot(N, L)), shadow_rotation_seed)
+            : sample_shadow(wp);
+    }
     if (debug_mode == 7) return float4(shadow_visibility.xxx, 1);
 
     float3 color = 0;
