@@ -1,4 +1,4 @@
-REPLAY_ASSET_DB 2 181
+REPLAY_ASSET_DB 2 184
 "60412424bb1443240b2bf2160eee6923" 1 "DemoAsset" "resources/DemoAsset" "resources/.replay_cache/models/f9fffac39252a621_v0.replaycache"
 "1bd1358040255f5bd18f3be0d79fbe3c" 1 "DemoAsset" "resources/DemoAsset" "resources/.replay_cache/models/6a20e727f78fb359_v0.replaycache"
 "e5c4168feb92f8fd7357f6cbc1f66e22" 1 "DemoAsset" "resources/DemoAsset" "resources/.replay_cache/models/98fd72a862da8c8f_v0.replaycache"
@@ -180,3 +180,6 @@ REPLAY_ASSET_DB 2 181
 "e212a7d895d6cdfb407fa94b84c1d014" 1 "UIEffectStackComponent.cpp" "build_cpp_check_20260821/UIEffectStackComponent.cpp.obj" ""
 "41a5a4d7173aefa61933ea13eac329ef" 1 "UIEffectStackComponent_pagecurl" "build_cpp_check_20260821/UIEffectStackComponent_pagecurl.obj" ""
 "a1d714f4d4813db678c1056731007d7b" 2 "narukami.replayatlas" "resources/DemoAsset/narukami.replayatlas.dds" ""
+"9d632f2eae90351e1a06f00fe20311b9" 5 "ShadowTest" "resources/Scenes/ShadowTest.replayscene" ""
+"e1c8c0730320f6a7e5cefe14c0848736" 5 "LocalShadowTest" "resources/Scenes/LocalShadowTest.replayscene" ""
+"cb64e77a4b55af60ba80217c0e88a871" 5 "SkinnedShadowTest" "resources/Scenes/SkinnedShadowTest.replayscene" ""
