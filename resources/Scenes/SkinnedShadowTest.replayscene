@@ -2,7 +2,7 @@ REPLAY_SCENE 11
 SCENE "SkinnedShadowTest"
 SCENE_STATE 0
 COLLISION_STATE 2 0
-OBJECT_COUNT 5
+OBJECT_COUNT 6
 OBJECT
   ID 3
   NAME "Ground"
@@ -20,7 +20,7 @@ OBJECT
     PROPERTY "primitive_type" enum 0
     PROPERTY "material_asset" asset ""
     PROPERTY "material_override" bool 1
-    PROPERTY "tint" color 0.4 0.42 0.46 1
+    PROPERTY "tint" color 0.16 0.17 0.20 1
     PROPERTY "shading_model" enum 1
     PROPERTY "outline" bool 0
     PROPERTY "cast_shadow" bool 1
@@ -34,7 +34,7 @@ OBJECT
   NAME "SkinnedCaster"
   ENABLED 1
   PARENT 0
-  TRANSFORM -1.5 0.06 0 0 0 0 1 -1.57 1
+  TRANSFORM -3.5 1.2 0 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 1
   COMPONENT "SkinnedMeshRendererComponent" 1
@@ -43,7 +43,7 @@ OBJECT
     TYPE_MODULE ""
     TYPE_VERSION 1
     PROPERTY_COUNT 13
-    PROPERTY "mesh_asset" asset "76abb1ee55c90de38180cdb98643c6ee"
+    PROPERTY "mesh_asset" asset "ec24e9cfab50d6a6324f279c4d0064a5"
     PROPERTY "material_asset" asset ""
     PROPERTY "material_override" bool 0
     PROPERTY "tint" color 1 1 1 1
@@ -52,9 +52,9 @@ OBJECT
     PROPERTY "cast_shadow" bool 1
     PROPERTY "receive_shadow" bool 1
     PROPERTY "visible" bool 1
-    PROPERTY "visual_rotation_offset" vec3 90 188.5 180
+    PROPERTY "visual_rotation_offset" vec3 0 0 0
     PROPERTY "local_position_offset" vec3 0 0 0
-    PROPERTY "local_scale_multiplier" vec3 1 1 1
+    PROPERTY "local_scale_multiplier" vec3 0.018 0.018 0.018
     PROPERTY "apply_fbx_coordinate_transform" bool 1
   END_COMPONENT
 END_OBJECT
@@ -63,7 +63,7 @@ OBJECT
   NAME "SkinnedNoCast"
   ENABLED 1
   PARENT 0
-  TRANSFORM 2.5 0.06 0 0 0 0 1 -1.57 1
+  TRANSFORM 1.5 1.2 0 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 1
   COMPONENT "SkinnedMeshRendererComponent" 1
@@ -72,7 +72,7 @@ OBJECT
     TYPE_MODULE ""
     TYPE_VERSION 1
     PROPERTY_COUNT 13
-    PROPERTY "mesh_asset" asset "76abb1ee55c90de38180cdb98643c6ee"
+    PROPERTY "mesh_asset" asset "ec24e9cfab50d6a6324f279c4d0064a5"
     PROPERTY "material_asset" asset ""
     PROPERTY "material_override" bool 0
     PROPERTY "tint" color 1 1 1 1
@@ -81,18 +81,44 @@ OBJECT
     PROPERTY "cast_shadow" bool 0
     PROPERTY "receive_shadow" bool 1
     PROPERTY "visible" bool 1
-    PROPERTY "visual_rotation_offset" vec3 90 188.5 180
+    PROPERTY "visual_rotation_offset" vec3 0 0 0
     PROPERTY "local_position_offset" vec3 0 0 0
-    PROPERTY "local_scale_multiplier" vec3 1 1 1
+    PROPERTY "local_scale_multiplier" vec3 0.018 0.018 0.018
     PROPERTY "apply_fbx_coordinate_transform" bool 1
   END_COMPONENT
 END_OBJECT
 OBJECT
   ID 6
+  NAME "RefCube"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -1 1.2 2.5 0 0.4 0 1.2 1.2 1.2
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.8 0.8 0.85 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 7
   NAME "Directional Light"
   ENABLED 1
   PARENT 0
-  TRANSFORM 0 8 0 -0.6 0.7 0 1 1 1
+  TRANSFORM 0 8 0 -1 1.5708 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 1
   COMPONENT "DirectionalLightComponent" 1
@@ -102,7 +128,7 @@ OBJECT
     TYPE_VERSION 1
     PROPERTY_COUNT 7
     PROPERTY "color" color 1 0.97 0.93 1
-    PROPERTY "intensity" float 1.2
+    PROPERTY "intensity" float 0.5
     PROPERTY "cast_shadows" bool 1
     PROPERTY "shadow_strength" float 1
     PROPERTY "shadow_depth_bias" float 0.0016
@@ -111,11 +137,11 @@ OBJECT
   END_COMPONENT
 END_OBJECT
 OBJECT
-  ID 7
+  ID 8
   NAME "Main Camera"
   ENABLED 1
   PARENT 0
-  TRANSFORM 0 5 -8 0.5 0 0 1 1 1
+  TRANSFORM 0 9 -8 0.8 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 1
   COMPONENT "CameraComponent" 1
