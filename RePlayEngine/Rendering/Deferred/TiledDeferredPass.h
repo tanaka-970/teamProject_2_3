@@ -49,8 +49,7 @@ namespace ReplayEngine::Rendering
 
         // 1フレーム分のライトを積む。Dispatch前に呼ぶ。
         void ClearLights() noexcept { lights_.clear(); }
-        // shadow_slice が負のライトは影マップを持たない。
-        // PS 版 (lights_common.hlsli) と同じ意味になるよう値をそのまま運ぶ。
+        // shadow_slice が負なら影マップ無し。PS 版と同じ値をそのまま運ぶ。
         void AddPointLight(const DirectX::XMFLOAT3& position, float radius,
             const DirectX::XMFLOAT3& color, float intensity,
             int shadow_slice = -1, float shadow_strength = 1.0f);

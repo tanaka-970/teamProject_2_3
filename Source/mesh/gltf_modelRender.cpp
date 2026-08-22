@@ -182,8 +182,7 @@ void gltf_model::render_shadow(ID3D11DeviceContext* context, const XMFLOAT4X4& w
     ReplayEngine::Rendering::Stats().CountStateSet(
         ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
     context->VSSetShader(caster_vertex_shader, nullptr, 0);
-    // 影深度パスは色を書かない。呼び出し側でも外しているが、
-    // 直前のメッシュが貼った Pixel Shader が残らないようここでも落とす。
+    // 影深度パスは色を書かない。直前の Pixel Shader が残らないよう落とす。
     ReplayEngine::Rendering::Stats().CountStateSet(
         ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
     context->PSSetShader(nullptr, nullptr, 0);

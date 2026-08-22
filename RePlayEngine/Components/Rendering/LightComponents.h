@@ -8,14 +8,7 @@ namespace ReplayEngine::Components
 {
     // Light data lives on ordinary GameObjects. Transform supplies position and
     // orientation; these serializable properties supply photometric settings.
-    //
-    // 【影の設定はライト側に置く】
-    //   Unity の Light Inspector / Unreal の Light Details と同じ考え方で、
-    //   「この光が影を落とすか」「どのくらい濃いか」は光源の設定にする。
-    //   Mesh 側にあるのは Cast Shadow / Receive Shadow の 2 つだけで、
-    //   これは「この形状を影計算に含めるか」という別の話。
-    //   全体の描画設定にあるのは品質と枚数の上限だけで、
-    //   個々のライトの意思をそこから上書きしない。
+    // 影を落とすかと濃さは光源側の設定にする。Mesh 側は Cast / Receive Shadow だけ。
     class DirectionalLightComponent final : public Core::Component
     {
         REPLAY_COMPONENT_BODY(DirectionalLightComponent)
@@ -31,8 +24,7 @@ namespace ReplayEngine::Components
         float shadow_depth_bias = 0.0016f;
         // 法線方向へずらす量 (影マップのテクセル単位)。
         float shadow_normal_bias = 1.4f;
-        // この距離より遠くには影を出さない。カスケードの総距離。
-        // 伸ばすほど影マップ 1 テクセルが覆う範囲が広がり、輪郭が粗くなる。
+        // 影を出す最遠距離。伸ばすほど影マップのテクセルが粗くなる。
         float shadow_distance = 120.0f;
     };
 
@@ -44,9 +36,7 @@ namespace ReplayEngine::Components
         float intensity = 2.0f;
         float range = 10.0f;
 
-        // ---- 影 ---------------------------------------------------------
-        // 全方向を覆うため 1 灯で 6 面ぶんの影マップを使う。
-        // 影付きにできる Point の数には上限があり、超えた分は影なしになる。
+        // ---- 影 ---- 1 灯で 6 面使うため影付きにできる数に上限がある。
         bool cast_shadows = false;
         float shadow_strength = 1.0f;
         float shadow_depth_bias = 0.0025f;
@@ -64,8 +54,7 @@ namespace ReplayEngine::Components
         float inner_angle_degrees = 25.0f;
         float outer_angle_degrees = 40.0f;
 
-        // ---- 影 ---------------------------------------------------------
-        // 円錐 1 つぶんなので影マップは 1 枚で足りる。Point より軽い。
+        // ---- 影 ---- 円錐 1 つぶんなので影マップは 1 枚で足りる。
         bool cast_shadows = false;
         float shadow_strength = 1.0f;
         float shadow_depth_bias = 0.0018f;

@@ -113,11 +113,7 @@ void csm_renderer::update_cascades(const XMFLOAT4& light_direction,
 
     // 射影行列から実際のニア/ファーを取り出す。LH透視射影は
     // _33 = far/(far-near)、_43 = -near*far/(far-near)。
-    //   near = -_43 / _33
-    //   far  = -_43 / (_33 - 1)
-    // far の符号を落とすと負の far になり、この後の分割計算で
-    // pow(負の比, 小数) が NaN を返す。NaN はカスケード行列と
-    // 影ボリュームまで伝播し、影が 1 枚も出ないという形で表面化する。
+    // far の符号を落とすと負になり、分割計算の pow() が NaN を返して影が出なくなる。
     const float m33 = projection._33;
     const float m43 = projection._43;
     const float near_plane = (m33 != 0.0f) ? -m43 / m33 : 0.1f;

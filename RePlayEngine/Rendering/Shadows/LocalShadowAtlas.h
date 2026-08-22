@@ -9,27 +9,7 @@
 
 namespace ReplayEngine::Rendering
 {
-    // Point / Spot Light の動的シャドウマップ。
-    //
-    // 【CSM と分けている理由】
-    //   Directional は平行光なので正射影のカスケードで足りるが、
-    //   Point / Spot は位置を持つため透視射影が要る。さらに Point は
-    //   全方向を覆うので 1 ライトあたり 6 面必要になる。
-    //   投影方法が違うものを 1 つのリソースへ無理に混ぜると、
-    //   バイアスもフィルタも両方に合わない値になる。
-    //
-    // 【格納方法】
-    //   1 枚の Texture2DArray を「スライスの列」として使う。
-    //     スライス 0..(MAX_SPOT-1)                 … Spot 1 ライト 1 枚
-    //     それ以降を 6 枚ずつ                       … Point 1 ライト 6 面
-    //   TextureCube ではなく 2D Array にしてあるのは、Spot と Point で
-    //   同じサンプリング経路・同じ比較サンプラーを使えるようにするため。
-    //   Point の面選択はシェーダー側で方向から決める。
-    //
-    // 【更新頻度】
-    //   Unreal の Movable と同じで、毎フレーム作り直す前提。
-    //   静的キャスターだけのキャッシュは、動的影が正しく出ることを
-    //   確認したあとの最適化として上へ足す。
+    // Point / Spot の動的シャドウマップ。Texture2DArray へ Spot を 1 枚、Point を 6 枚ずつ並べる。
     class LocalShadowAtlas final
     {
     public:
@@ -52,9 +32,7 @@ namespace ReplayEngine::Rendering
             DirectX::XMINT4 range{ 0, 1, 0, 0 };
         };
 
-        // 影付き Spot / Point の上限。
-        // 全ライトを無条件に影付きにすると、影マップの枚数だけ
-        // Scene 全体を描き直すことになりGPU時間が跳ね上がる。
+        // 影付き Spot / Point の上限。増やすほど Scene 全体を描き直す回数が増える。
         static constexpr std::uint32_t kMaxSpotShadows = 4;
         static constexpr std::uint32_t kMaxPointShadows = 2;
         static constexpr std::uint32_t kPointFaceCount = 6;
@@ -70,8 +48,7 @@ namespace ReplayEngine::Rendering
 
         bool Initialize(ID3D11Device* device);
 
-        // 影付きライトが 1 つも無い Scene では GPU メモリを一切使わない。
-        // 影マップ本体はここで初めて作られる。
+        // 影付きライトが現れたフレームで初めて影マップを確保する。
         bool EnsureAtlas(ID3D11Device* device, std::uint32_t resolution);
         bool AtlasReady() const noexcept { return atlas_srv_ != nullptr; }
         std::uint32_t Resolution() const noexcept { return resolution_; }
@@ -98,9 +75,7 @@ namespace ReplayEngine::Rendering
             const DirectX::XMFLOAT3& position, int face,
             float near_plane, float far_plane) noexcept;
 
-        // ---- 描画 -------------------------------------------------------------
-        // 1 ライトぶんのスライスへ描き始める。GS と Viewport を設定する。
-        // draw_casters は「今の設定のまま Scene のキャスターを描く」処理。
+        // ---- 描画 ---- 1 ライトぶんのスライスへ描き始める。GS と Viewport を設定する。
         void BeginLight(ID3D11DeviceContext* context, int base_slice, int slice_count);
         // 影パスを終え、元の RenderTarget と Viewport へ戻す。
         void End(ID3D11DeviceContext* context,
@@ -137,9 +112,7 @@ namespace ReplayEngine::Rendering
         Microsoft::WRL::ComPtr<ID3D11GeometryShader> caster_gs_;
 
         Slice slices_[kSliceCount]{};
-        // Spot と Point で確保カウンタを分ける。1 本の連番で管理すると、
-        // 先に現れた Point が Spot 用の先頭領域を飛び越えて確保を進めてしまい、
-        // 後から来た Spot が枠なしになる。
+        // Spot と Point で確保カウンタを分ける。1 本の連番だと Point が Spot の枠を食う。
         std::uint32_t next_spot_slice_ = 0;
         std::uint32_t next_point_base_ = kMaxSpotShadows;
         std::uint32_t resolution_ = 0;

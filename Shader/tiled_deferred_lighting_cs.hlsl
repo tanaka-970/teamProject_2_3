@@ -211,8 +211,7 @@ void main(uint3 group_id : SV_GroupID,
     // 影はCSMを優先し、無効時のみ従来の単一シャドウマップへ落とす。
     const float shadow_rotation_seed =
         interleaved_gradient_noise(float2(pixel), frame_params.x);
-    // PS 版と同じ判定にする。片方だけ Receive Shadow を見ると、
-    // タイルドON/OFFで影の有無が変わってしまう。
+    // PS 版と同じ判定。片方だけ見るとタイルド ON/OFF で影が変わる。
     float shadow_visibility = 1.0f;
     if (g.receive_shadow)
     {
@@ -224,8 +223,7 @@ void main(uint3 group_id : SV_GroupID,
 
     // 平行光源 + IBL + SSAO/SSR は共通のPBR評価を使う。
     // (evaluate_pbr_ex内の点光源/スポットはCB配列版なので、ここでは使わない)
-    // ここで渡す点光源/スポットは 0 灯 (CB 版の b10 は CS へ貼らない)。
-    // タイル内のライトは下のループで別に評価する。
+    // ここでの点光源/スポットは 0 灯。タイル内のライトは下のループで評価する。
     float3 color = evaluate_pbr_ex(g.base_color, g.emissive,
         g.metalness, g.roughness, g.occlusion,
         N, V, world_position, shadow_visibility, screen,
@@ -263,7 +261,6 @@ void main(uint3 group_id : SV_GroupID,
         if (attenuation <= 0.0f) continue;
 
         // 影は PS 版 (lights_common.hlsli) と同じ関数を使う。
-        // 片方だけ実装すると、タイルドDeferredのON/OFFで影の有無が変わる。
         const int shadow_slice = (int) light.params.z;
         float local_shadow = 1.0f;
         if (shadow_slice >= 0 && g.receive_shadow)

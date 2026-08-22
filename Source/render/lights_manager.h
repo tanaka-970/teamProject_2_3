@@ -15,8 +15,7 @@ public:
     {
         DirectX::XMFLOAT4 position{ 0, 0, 0, 5.0f };  // xyz pos, w radius
         DirectX::XMFLOAT4 color   { 1, 1, 1, 1.0f };  // rgb, w intensity
-        // x = 影マップの先頭スライス (負なら影を持たない)
-        // y = 影の濃さ, z/w = 予約
+        // x=影マップの先頭スライス(負なら影なし) y=影の濃さ z/w=予約
         DirectX::XMFLOAT4 shadow  { -1.0f, 1.0f, 0, 0 };
     };
     struct spot_light

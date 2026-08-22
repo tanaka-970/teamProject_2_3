@@ -30,8 +30,7 @@ cbuffer LIGHTS_CONSTANT_BUFFER : register(b10)
     int4       light_counts; // x=point, y=spot, z/w=unused
 };
 
-// receive_shadow: 1=影を受ける / 0=受けない。Mesh Renderer の設定を
-// そのまま渡す。0 のときは影マップのサンプル自体を飛ばす。
+// receive_shadow: 1=影を受ける / 0=受けない。0 なら影マップを読まない。
 float3 evaluate_point_lights(float3 wp, float3 N, float3 V, float3 base_color,
                              float roughness, float metallic, float receive_shadow)
 {
@@ -48,8 +47,7 @@ float3 evaluate_point_lights(float3 wp, float3 N, float3 V, float3 base_color,
         falloff *= falloff;
         float NoL = saturate(dot(N, L));
         if (NoL <= 0.0f) continue;
-        // 影マップを持つライトだけ遮蔽を引く。持たないライトは
-        // shadow.x が負なので、サンプルそのものが走らない。
+        // shadow.x が負のライトは影マップを持たないのでサンプルしない。
         float shadow = receive_shadow > 0.5f
             ? local_shadow_point((int) pl.shadow.x, pl.shadow.y,
                 pl.position.xyz, wp, N, NoL)

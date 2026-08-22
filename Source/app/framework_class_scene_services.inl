@@ -68,30 +68,11 @@
     // LandscapeRendererComponent 用の procedural static mesh 描画。
     // AssetGUIDを介さず、LandscapeData::Revision が変わったときだけGPU Meshを作り直す。
     void draw_landscape_scene_meshes(bool gbuffer_pass, bool depth_only = false);
-    // Landscape の GPU Mesh キャッシュを引く共通入口。
-    // 通常描画と影深度パスで同じキャッシュを使うために切り出してある。
-    // 影パスは通常描画より先に走るので、ここで初回生成されることがある。
+    // Landscape の GPU Mesh キャッシュを引く共通入口。影パスと通常描画で共有する。
     static_mesh* resolve_landscape_gpu_mesh(
         const ReplayEngine::Core::GameObject& object);
 
-    // ライト視点の影深度パス専用の提出処理。
-    //
-    // draw_object_scene_meshes(depth_only=true) とは別関数にしてある。
-    // カメラの深度プリパスとライト視点の影深度パスは、使う行列も
-    // 描く対象も違うため、同じ depth_only フラグで兼ねてはいけない。
-    //
-    // ここでの規則:
-    //   - 入力は object_render_items（毎フレーム作り直される正本）。
-    //   - RenderItem::cast_shadow が false のものは必ず捨てる。
-    //   - receive_shadow はここでは見ない（照明側の責務）。
-    //   - メインカメラの視錐台カリングは使わない。画面外のキャスターも
-    //     影は画面内へ落ちるため、捨てる基準はカメラではなく影ボリューム。
-    // Geometry Shader / RenderTarget / Viewport は呼び出し側が設定済みの前提。
-    //
-    // volume_center / volume_radius は「この影マップに写り得る範囲」を
-    // 包む球。Directional は全カスケードを包む球、Point / Spot は
-    // ライト位置と到達距離を渡す。ここへ届かない物体は影マップに
-    // 1 ピクセルも書き込めないので、描く前に捨てる。
+    // ライト視点の影深度パス専用の提出処理。volume_* は影マップに写り得る範囲を包む球。
     void draw_shadow_caster_meshes(
         ID3D11VertexShader* static_caster_vs,
         ID3D11InputLayout* static_caster_il,
@@ -100,10 +81,7 @@
         const DirectX::XMFLOAT3& volume_center,
         float volume_radius,
         float volume_extrusion);
-    // 影パス専用の軽い両面判定。
-    // resolve_render_item_material() は Shader Catalog と PropertyBag まで
-    // 解決するため、深度しか書かない影パスで毎フレーム呼ぶには重すぎる。
-    // 影に必要なのは表裏カリングの向きだけなので、それだけを引く。
+    // 影パス専用の軽い両面判定。resolve_render_item_material() は影パスには重すぎる。
     bool resolve_render_item_shadow_double_sided(
         const ReplayEngine::Rendering::RenderItem& source);
     void update_line_trails(float elapsed_time);
