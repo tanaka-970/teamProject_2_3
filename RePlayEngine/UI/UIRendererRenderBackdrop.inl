@@ -251,6 +251,10 @@
             ID3D11ShaderResourceView* runtime_mask_texture = nullptr,
             bool runtime_mask_luma = false, bool runtime_mask_invert = false)
         {
+            UIRenderTarget* third = effects.effect_region.enabled
+                ? render_target_pool_.Acquire(current != nullptr ? current->width : 1,
+                    current != nullptr ? current->height : 1)
+                : second;
             const std::vector<UIEffect>& effective_effects =
                 effects.EffectiveEffects(asset_database);
             bool needs_temporal_history = false;
@@ -291,6 +295,8 @@
             chain_context.runtime_mask_invert = runtime_mask_invert;
             chain_context.runtime_history_texture = history != nullptr && history->valid
                 ? history->target.srv.Get() : nullptr;
+            chain_context.effect_region = third != nullptr && third != second
+                ? &effects.effect_region : nullptr;
             chain_context.configure_target = [&](UIRenderTarget& target)
             {
                 configure_effect_target(target);
@@ -319,8 +325,27 @@
                 Flush(context, source, blend, states, nullptr,
                     shader, effect_constants);
             };
+            chain_context.draw_region_fullscreen = [&](float width, float height,
+                ID3D11ShaderResourceView* effected, ID3D11ShaderResourceView* original,
+                ID3D11ShaderResourceView* region_mask, ID3D11BlendState* blend,
+                ID3D11PixelShader* shader, ID3D11Buffer* effect_constants)
+            {
+                ID3D11ShaderResourceView* mask = region_mask;
+                ID3D11ShaderResourceView* source = original;
+                context->PSSetShaderResources(1, 1, &mask);
+                context->PSSetShaderResources(2, 1, &source);
+                DirectX::XMFLOAT4X4 identity{};
+                DirectX::XMStoreFloat4x4(&identity, DirectX::XMMatrixIdentity());
+                append_quad({ 0.0f, 0.0f, width, height }, identity,
+                    { 0.0f, 0.0f, 1.0f, 1.0f },
+                    { 1.0f, 1.0f, 1.0f, 1.0f }, 1.0f);
+                Flush(context, effected, blend, states, nullptr,
+                    shader, effect_constants);
+                ID3D11ShaderResourceView* null_views[2]{};
+                context->PSSetShaderResources(1, 2, null_views);
+            };
             current = effect_chain_.Apply(chain_context, effective_effects,
-                current, first, second);
+                current, first, second, third);
             if (history != nullptr && current != nullptr && current->texture &&
                 history->target.texture)
             {

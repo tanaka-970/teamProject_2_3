@@ -244,6 +244,119 @@
                 effect.color_stop_2 = 0.85f;
                 effect.waveform = 0;
                 break;
+            case UI::UIEffectKind::Hologram:
+                effect.radius = 10.0f;
+                effect.amount = 0.35f;
+                effect.threshold = 0.20f;
+                effect.softness = 0.35f;
+                effect.speed = 1.8f;
+                effect.intensity = 1.0f;
+                effect.color = { 0.20f, 0.90f, 1.0f, 1.0f };
+                break;
+            case UI::UIEffectKind::IridescentFoil:
+                effect.radius = 1.5f;
+                effect.amount = 0.65f;
+                effect.progress = 0.0f;
+                effect.speed = 0.35f;
+                effect.intensity = 1.0f;
+                effect.color = { 1.0f, 0.25f, 0.85f, 1.0f };
+                effect.color_2 = { 0.15f, 0.85f, 1.0f, 1.0f };
+                effect.color_3 = { 1.0f, 0.90f, 0.15f, 1.0f };
+                effect.color_4 = { 0.35f, 0.18f, 1.0f, 1.0f };
+                break;
+            case UI::UIEffectKind::RadarSweep:
+                effect.radius = 0.22f;
+                effect.amount = 1.15f;
+                effect.progress = 0.0f;
+                effect.speed = 0.65f;
+                effect.intensity = 1.0f;
+                effect.direction = { 0.5f, 0.5f };
+                effect.color = { 0.15f, 1.0f, 0.35f, 1.0f };
+                break;
+            case UI::UIEffectKind::EnergyPulse:
+                effect.radius = 0.18f;
+                effect.amount = 0.75f;
+                effect.progress = 0.0f;
+                effect.speed = 0.8f;
+                effect.softness = 0.16f;
+                effect.intensity = 1.0f;
+                effect.direction = { 0.5f, 0.5f };
+                effect.color = { 0.25f, 0.70f, 1.0f, 1.0f };
+                break;
+            case UI::UIEffectKind::CircuitFlow:
+                effect.radius = 34.0f;
+                effect.amount = 0.85f;
+                effect.threshold = 0.12f;
+                effect.speed = 1.25f;
+                effect.intensity = 1.0f;
+                effect.color = { 0.10f, 0.75f, 1.0f, 1.0f };
+                break;
+            case UI::UIEffectKind::HeatHaze:
+                effect.radius = 22.0f;
+                effect.amount = 8.0f;
+                effect.threshold = 0.5f;
+                effect.speed = 0.7f;
+                effect.intensity = 0.65f;
+                effect.seed = 0.37f;
+                break;
+            case UI::UIEffectKind::WaterCaustics:
+                effect.radius = 44.0f;
+                effect.amount = 0.65f;
+                effect.speed = 0.8f;
+                effect.intensity = 0.85f;
+                effect.seed = 0.41f;
+                effect.color = { 0.15f, 0.65f, 1.0f, 1.0f };
+                break;
+            case UI::UIEffectKind::VoronoiShatter:
+                effect.radius = 36.0f;
+                effect.amount = 20.0f;
+                effect.progress = 0.0f;
+                effect.speed = 0.35f;
+                effect.softness = 0.12f;
+                effect.intensity = 1.0f;
+                effect.seed = 0.13f;
+                break;
+            case UI::UIEffectKind::InkBleed:
+                effect.radius = 18.0f;
+                effect.amount = 0.75f;
+                effect.progress = 0.0f;
+                effect.speed = 0.15f;
+                effect.softness = 0.22f;
+                effect.intensity = 1.0f;
+                effect.color = { 0.03f, 0.02f, 0.06f, 1.0f };
+                break;
+            case UI::UIEffectKind::BurnReveal:
+                effect.radius = 20.0f;
+                effect.amount = 0.8f;
+                effect.progress = 1.0f;
+                effect.speed = 0.0f;
+                effect.softness = 0.08f;
+                effect.intensity = 1.0f;
+                effect.color = { 1.0f, 0.18f, 0.015f, 1.0f };
+                effect.color_2 = { 1.0f, 0.85f, 0.18f, 1.0f };
+                break;
+            case UI::UIEffectKind::PortalVortex:
+                effect.radius = 0.48f;
+                effect.amount = 0.24f;
+                effect.threshold = 0.35f;
+                effect.progress = 0.0f;
+                effect.angle = 24.0f;
+                effect.speed = 0.55f;
+                effect.softness = 0.22f;
+                effect.intensity = 1.0f;
+                effect.direction = { 0.5f, 0.5f };
+                effect.color = { 0.25f, 0.15f, 1.0f, 1.0f };
+                break;
+            case UI::UIEffectKind::FrostCrack:
+                effect.radius = 24.0f;
+                effect.amount = 0.8f;
+                effect.progress = 1.0f;
+                effect.threshold = 0.45f;
+                effect.speed = 0.0f;
+                effect.softness = 0.08f;
+                effect.intensity = 1.0f;
+                effect.color = { 0.70f, 0.92f, 1.0f, 1.0f };
+                break;
             default:
                 break;
             }
@@ -268,6 +381,44 @@
         output.Set("capture_backdrop",
             Reflection::PropertyValue::MakeBool(capture_backdrop));
 #endif
+        output.Set("effect_region_enabled",
+            Reflection::PropertyValue::MakeBool(effect_region.enabled));
+        output.Set("effect_region_shape",
+            Reflection::PropertyValue::MakeEnum(effect_region.shape));
+        output.Set("effect_region_scope",
+            Reflection::PropertyValue::MakeEnum(effect_region.scope));
+        output.Set("effect_region_invert",
+            Reflection::PropertyValue::MakeBool(effect_region.invert));
+        output.Set("effect_region_center",
+            Reflection::PropertyValue::MakeVector2(effect_region.center));
+        output.Set("effect_region_size",
+            Reflection::PropertyValue::MakeVector2(effect_region.size));
+        output.Set("effect_region_rotation",
+            Reflection::PropertyValue::MakeFloat(effect_region.rotation));
+        output.Set("effect_region_feather",
+            Reflection::PropertyValue::MakeFloat(effect_region.feather));
+        output.Set("effect_region_strength",
+            Reflection::PropertyValue::MakeFloat(effect_region.strength));
+        output.Set("effect_region_mask",
+            Reflection::PropertyValue::MakeAssetReference(effect_region.mask));
+        output.Set("effect_region_additional_count",
+            Reflection::PropertyValue::MakeInt(static_cast<int>(effect_region.additional.size())));
+        for (std::size_t index = 0; index < effect_region.additional.size(); ++index)
+        {
+            const int i = static_cast<int>(index) + 1;
+            const UI::UIEffectRegionData& region = effect_region.additional[index];
+            const std::string prefix = "effect_region_" + std::to_string(i) + "_";
+            output.Set(prefix + "enabled", Reflection::PropertyValue::MakeBool(region.enabled));
+            output.Set(prefix + "shape", Reflection::PropertyValue::MakeEnum(region.shape));
+            output.Set(prefix + "scope", Reflection::PropertyValue::MakeEnum(region.scope));
+            output.Set(prefix + "invert", Reflection::PropertyValue::MakeBool(region.invert));
+            output.Set(prefix + "center", Reflection::PropertyValue::MakeVector2(region.center));
+            output.Set(prefix + "size", Reflection::PropertyValue::MakeVector2(region.size));
+            output.Set(prefix + "rotation", Reflection::PropertyValue::MakeFloat(region.rotation));
+            output.Set(prefix + "feather", Reflection::PropertyValue::MakeFloat(region.feather));
+            output.Set(prefix + "strength", Reflection::PropertyValue::MakeFloat(region.strength));
+            output.Set(prefix + "mask", Reflection::PropertyValue::MakeAssetReference(region.mask));
+        }
         output.Set("effect_count",
             Reflection::PropertyValue::MakeInt(static_cast<int>(effects.size())));
         for (std::size_t index = 0; index < effects.size(); ++index)
@@ -276,6 +427,8 @@
             const UI::UIEffect& effect = effects[index];
             output.Set(EffectPropertyName(i, "enabled"),
                 Reflection::PropertyValue::MakeBool(effect.enabled));
+            output.Set(EffectPropertyName(i, "region_enabled"),
+                Reflection::PropertyValue::MakeBool(effect.region_enabled));
             output.Set(EffectPropertyName(i, "type"),
                 Reflection::PropertyValue::MakeEnum(effect.kind));
             output.Set(EffectPropertyName(i, "radius"),
@@ -352,6 +505,59 @@
             capture_backdrop = backdrop->AsBool(false);
         }
 #endif
+        if (const Reflection::PropertyValue* value = input.Find("effect_region_enabled"))
+            effect_region.enabled = value->AsBool(effect_region.enabled);
+        if (const Reflection::PropertyValue* value = input.Find("effect_region_shape"))
+            effect_region.shape = value->AsInt(effect_region.shape);
+        if (const Reflection::PropertyValue* value = input.Find("effect_region_scope"))
+            effect_region.scope = value->AsInt(effect_region.scope);
+        if (const Reflection::PropertyValue* value = input.Find("effect_region_invert"))
+            effect_region.invert = value->AsBool(effect_region.invert);
+        if (const Reflection::PropertyValue* value = input.Find("effect_region_center"))
+            effect_region.center = value->AsVector2();
+        if (const Reflection::PropertyValue* value = input.Find("effect_region_size"))
+            effect_region.size = value->AsVector2();
+        if (const Reflection::PropertyValue* value = input.Find("effect_region_rotation"))
+            effect_region.rotation = value->AsFloat(effect_region.rotation);
+        if (const Reflection::PropertyValue* value = input.Find("effect_region_feather"))
+            effect_region.feather = value->AsFloat(effect_region.feather);
+        if (const Reflection::PropertyValue* value = input.Find("effect_region_strength"))
+            effect_region.strength = value->AsFloat(effect_region.strength);
+        if (const Reflection::PropertyValue* value = input.Find("effect_region_mask"))
+            effect_region.mask = value->AsAssetReference().guid;
+        int additional_count = 0;
+        if (const Reflection::PropertyValue* value = input.Find("effect_region_additional_count"))
+            additional_count = value->AsInt(0);
+        additional_count = (std::max)(0, (std::min)(
+            UI::UIEffectRegion::MaxAdditionalCount,
+            additional_count));
+        effect_region.additional.resize(static_cast<std::size_t>(additional_count));
+        for (int index = 0; index < additional_count; ++index)
+        {
+            UI::UIEffectRegionData& region = effect_region.additional[
+                static_cast<std::size_t>(index)];
+            const std::string prefix = "effect_region_" + std::to_string(index + 1) + "_";
+            if (const Reflection::PropertyValue* value = input.Find(prefix + "enabled"))
+                region.enabled = value->AsBool(region.enabled);
+            if (const Reflection::PropertyValue* value = input.Find(prefix + "shape"))
+                region.shape = value->AsInt(region.shape);
+            if (const Reflection::PropertyValue* value = input.Find(prefix + "scope"))
+                region.scope = value->AsInt(region.scope);
+            if (const Reflection::PropertyValue* value = input.Find(prefix + "invert"))
+                region.invert = value->AsBool(region.invert);
+            if (const Reflection::PropertyValue* value = input.Find(prefix + "center"))
+                region.center = value->AsVector2();
+            if (const Reflection::PropertyValue* value = input.Find(prefix + "size"))
+                region.size = value->AsVector2();
+            if (const Reflection::PropertyValue* value = input.Find(prefix + "rotation"))
+                region.rotation = value->AsFloat(region.rotation);
+            if (const Reflection::PropertyValue* value = input.Find(prefix + "feather"))
+                region.feather = value->AsFloat(region.feather);
+            if (const Reflection::PropertyValue* value = input.Find(prefix + "strength"))
+                region.strength = value->AsFloat(region.strength);
+            if (const Reflection::PropertyValue* value = input.Find(prefix + "mask"))
+                region.mask = value->AsAssetReference().guid;
+        }
         int inferred_count = effect_count;
         if (const Reflection::PropertyValue* stored_count = input.Find("effect_count"))
         {
@@ -508,7 +714,142 @@
     void REPLAY_EFFECT_STACK_COMPONENT_TYPE::RebuildDynamicProperties()
     {
         dynamic_properties_.clear();
-        dynamic_properties_.reserve(effects.size() * 24);
+        dynamic_properties_.reserve(effects.size() * 24 + 10);
+
+        const auto add_region_property = [&](const char* name,
+            Reflection::PropertyType type, Reflection::Animatable animatable,
+            const char* display, const char* tooltip)
+        {
+            Reflection::PropertyDesc desc;
+            desc.name = name;
+            desc.type = type;
+            desc.animatable = animatable;
+            desc.serializable = true;
+            desc.display_name = display;
+            desc.tooltip = tooltip;
+            if (std::string(name) == "effect_region_shape")
+            {
+                desc.enum_labels = { "矩形", "円 / 楕円", "画像マスク（投げ縄）" };
+            }
+            if (std::string(name) == "effect_region_scope")
+            {
+                desc.enum_labels = { "全 Effect へ適用", "個別に選択" };
+            }
+            if (std::string(name) == "effect_region_mask") desc.asset_type = "Image";
+            if (std::string(name) == "effect_region_center")
+                desc.Range(0.0, 1.0).Step(0.01);
+            if (std::string(name) == "effect_region_size")
+                desc.Range(0.001, 1.0).Step(0.01);
+            if (std::string(name) == "effect_region_rotation")
+                desc.Range(-360.0, 360.0).Step(0.1);
+            if (std::string(name) == "effect_region_feather" ||
+                std::string(name) == "effect_region_strength")
+                desc.Range(0.0, 1.0).Step(0.01);
+            if (std::string(name) == "effect_region_additional_count")
+                desc.Range(0.0, UI::UIEffectRegion::MaxAdditionalCount).Step(1.0);
+            desc.getter = [name](const Core::Component& component)
+            {
+                if (component.TypeID() != REPLAY_EFFECT_STACK_COMPONENT_TYPE::StaticTypeID())
+                    return Reflection::PropertyValue{};
+                const auto& stack = static_cast<const REPLAY_EFFECT_STACK_COMPONENT_TYPE&>(component);
+                const std::string property(name);
+                if (property == "effect_region_enabled")
+                    return Reflection::PropertyValue::MakeBool(stack.effect_region.enabled);
+                if (property == "effect_region_shape")
+                    return Reflection::PropertyValue::MakeEnum(stack.effect_region.shape);
+                if (property == "effect_region_scope")
+                    return Reflection::PropertyValue::MakeEnum(stack.effect_region.scope);
+                if (property == "effect_region_invert")
+                    return Reflection::PropertyValue::MakeBool(stack.effect_region.invert);
+                if (property == "effect_region_center")
+                    return Reflection::PropertyValue::MakeVector2(stack.effect_region.center);
+                if (property == "effect_region_size")
+                    return Reflection::PropertyValue::MakeVector2(stack.effect_region.size);
+                if (property == "effect_region_rotation")
+                    return Reflection::PropertyValue::MakeFloat(stack.effect_region.rotation);
+                if (property == "effect_region_feather")
+                    return Reflection::PropertyValue::MakeFloat(stack.effect_region.feather);
+                if (property == "effect_region_strength")
+                    return Reflection::PropertyValue::MakeFloat(stack.effect_region.strength);
+                if (property == "effect_region_mask")
+                    return Reflection::PropertyValue::MakeAssetReference(stack.effect_region.mask);
+                if (property == "effect_region_additional_count")
+                    return Reflection::PropertyValue::MakeInt(
+                        static_cast<int>(stack.effect_region.additional.size()));
+                return Reflection::PropertyValue{};
+            };
+            desc.setter = [name](Core::Component& component,
+                const Reflection::PropertyValue& value)
+            {
+                if (component.TypeID() != REPLAY_EFFECT_STACK_COMPONENT_TYPE::StaticTypeID())
+                    return;
+                auto& stack = static_cast<REPLAY_EFFECT_STACK_COMPONENT_TYPE&>(component);
+                const std::string property(name);
+                if (property == "effect_region_enabled")
+                    stack.effect_region.enabled = value.AsBool(stack.effect_region.enabled);
+                else if (property == "effect_region_shape")
+                    stack.effect_region.shape = value.AsInt(stack.effect_region.shape);
+                else if (property == "effect_region_scope")
+                    stack.effect_region.scope = value.AsInt(stack.effect_region.scope);
+                else if (property == "effect_region_invert")
+                    stack.effect_region.invert = value.AsBool(stack.effect_region.invert);
+                else if (property == "effect_region_center")
+                    stack.effect_region.center = value.AsVector2();
+                else if (property == "effect_region_size")
+                    stack.effect_region.size = value.AsVector2();
+                else if (property == "effect_region_rotation")
+                    stack.effect_region.rotation = value.AsFloat(stack.effect_region.rotation);
+                else if (property == "effect_region_feather")
+                    stack.effect_region.feather = value.AsFloat(stack.effect_region.feather);
+                else if (property == "effect_region_strength")
+                    stack.effect_region.strength = value.AsFloat(stack.effect_region.strength);
+                else if (property == "effect_region_mask")
+                    stack.effect_region.mask = value.AsAssetReference().guid;
+                else if (property == "effect_region_additional_count")
+                {
+                    const int requested = (std::max)(0, (std::min)(
+                        UI::UIEffectRegion::MaxAdditionalCount,
+                        value.AsInt(static_cast<int>(stack.effect_region.additional.size()))));
+                    const std::size_t previous = stack.effect_region.additional.size();
+                    stack.effect_region.additional.resize(static_cast<std::size_t>(requested));
+                    for (std::size_t index = previous;
+                        index < stack.effect_region.additional.size(); ++index)
+                    {
+                        UI::UIEffectRegionData& region = stack.effect_region.additional[index];
+                        region.enabled = true;
+                        region.center = {
+                            (std::min)(0.9f, 0.35f + 0.12f * static_cast<float>(index)),
+                            (std::min)(0.8f, 0.35f + 0.10f * static_cast<float>(index)) };
+                        region.size = { 0.18f, 0.18f };
+                    }
+                }
+            };
+            dynamic_properties_.push_back(std::move(desc));
+        };
+
+        add_region_property("effect_region_enabled", Reflection::PropertyType::Bool,
+            Reflection::Animatable::Step, "範囲制限", "Effect Stack 全体を指定範囲だけへ適用する。");
+        add_region_property("effect_region_shape", Reflection::PropertyType::Enum,
+            Reflection::Animatable::Step, "範囲形状", "矩形・円/楕円・白黒画像マスク（投げ縄）から選ぶ。");
+        add_region_property("effect_region_scope", Reflection::PropertyType::Enum,
+            Reflection::Animatable::Step, "適用対象", "全 Effect へ強制適用するか、各 Effect の範囲適用スイッチで個別に選ぶ。");
+        add_region_property("effect_region_invert", Reflection::PropertyType::Bool,
+            Reflection::Animatable::Step, "範囲外へ適用", "ON にすると指定範囲の外側へだけ Effect を適用する。");
+        add_region_property("effect_region_center", Reflection::PropertyType::Vector2,
+            Reflection::Animatable::Interpolatable, "範囲中心", "正規化座標。0,0 が左上、1,1 が右下。");
+        add_region_property("effect_region_size", Reflection::PropertyType::Vector2,
+            Reflection::Animatable::Interpolatable, "範囲サイズ / 半径", "矩形の半サイズ、または楕円の半径を正規化座標で指定する。");
+        add_region_property("effect_region_rotation", Reflection::PropertyType::Float,
+            Reflection::Animatable::Interpolatable, "範囲回転", "矩形/楕円を回転する角度（度）。");
+        add_region_property("effect_region_feather", Reflection::PropertyType::Float,
+            Reflection::Animatable::Interpolatable, "境界ぼかし", "0 は範囲をきっぱり切り替え、値を上げるとグラデーションになる。");
+        add_region_property("effect_region_strength", Reflection::PropertyType::Float,
+            Reflection::Animatable::Interpolatable, "範囲強度", "範囲内での Effect 混合率。0 で無効、1 で全適用。");
+        add_region_property("effect_region_mask", Reflection::PropertyType::AssetReference,
+            Reflection::Animatable::Step, "投げ縄マスク", "白が適用、黒が非適用の Image。画像マスク形状のときに使う。");
+        add_region_property("effect_region_additional_count", Reflection::PropertyType::Int,
+            Reflection::Animatable::Step, "追加範囲数", "同じEffect Stackへ重ねる追加の適用範囲数。範囲内のどれかに入れば適用する。");
+
         for (std::size_t index = 0; index < effects.size(); ++index)
         {
             const int i = static_cast<int>(index);
@@ -519,28 +860,50 @@
 
             push(MakeEffectProperty(i, "enabled", Reflection::PropertyType::Bool,
                 Reflection::Animatable::Step).Display("有効"));
+            push(MakeEffectProperty(i, "region_enabled", Reflection::PropertyType::Bool,
+                Reflection::Animatable::Step).Display("範囲へ適用")
+                .Tooltip("範囲制限を個別選択モードでこの Effect に掛けるか。全 Effect モードでは無視される。"));
+            const UI::UIEffectKind current_kind =
+                static_cast<UI::UIEffectKind>(effects[index].kind);
+            std::vector<std::string> effect_kind_labels{
+                "ぼかし", "発光", "色調補正", "ノイズ",
+                "揺れ", "マスク", "ワイプ", "ディゾルブ", "歪み",
+                "色収差", "クワハラ", "網点",
+                "方向ブラー", "放射ブラー", "回転ブラー",
+                "ビネット", "光条", "レンズ歪み",
+                "ポスタライズ", "二値化", "カラーランプ", "レベル補正",
+                "色温度", "エッジ検出", "輪郭線", "ロングシャドウ",
+                "クロスハッチング", "ブラシストローク", "モザイク", "結晶化",
+                "ステンドグラス", "渦巻き", "球面化", "波紋",
+                "極座標", "走査線", "CRT", "グリッチ",
+                "ディザ", "VHS", "レターボックス", "波形",
+                "ディスプレイスメントマップ", "タービュレント変形", "フラクタルノイズ",
+                "モーションブラー", "エコー / 残像", "ドロップシャドウ", "インナーシャドウ",
+                "LUT", "トーンカーブ", "Matte Composite",
+                "マット形態学", "ベベル / エンボス", "万華鏡 / ミラータイル",
+                "ページカール / フォールド", "ASCII / LED マトリクス",
+                "フィードバックズーム", "Liquid Glass", "ライトスイープ",
+                "ショックウェーブ", "ピクセルソート",
+                "ホログラム", "イリデッセントフォイル", "レーダースイープ",
+                "エネルギーパルス", "サーキットフロー", "ヒートヘイズ",
+                "ウォーターコースティクス", "ボロノイシャッター",
+                "インクブリード", "バーンリビール", "ポータルヴォルテックス",
+                "フロストクラック"
+            };
+            for (std::size_t kind_index = 0;
+                kind_index < effect_kind_labels.size(); ++kind_index)
+            {
+                if (UI::IsTimeDrivenEffect(
+                    static_cast<UI::UIEffectKind>(kind_index)))
+                {
+                    effect_kind_labels[kind_index] += "  [M]";
+                }
+            }
             push(MakeEffectProperty(i, "type", Reflection::PropertyType::Enum,
                 Reflection::Animatable::Step)
-                .Display("種類")
+                .Display(UI::IsTimeDrivenEffect(current_kind) ? "種類  [M]" : "種類")
                 .Tooltip("適用する Effect の種類。変更すると、その種類が使う項目だけを表示する。")
-                .AsEnum({ "ぼかし", "発光", "色調補正", "ノイズ",
-                    "揺れ", "マスク", "ワイプ", "ディゾルブ", "歪み",
-                    "色収差", "クワハラ", "網点",
-                    "方向ブラー", "放射ブラー", "回転ブラー",
-                    "ビネット", "光条", "レンズ歪み",
-                    "ポスタライズ", "二値化", "カラーランプ", "レベル補正",
-                    "色温度", "エッジ検出", "輪郭線", "ロングシャドウ",
-                    "クロスハッチング", "ブラシストローク", "モザイク", "結晶化",
-                    "ステンドグラス", "渦巻き", "球面化", "波紋",
-                    "極座標", "走査線", "CRT", "グリッチ",
-                    "ディザ", "VHS", "レターボックス", "波形",
-                    "ディスプレイスメントマップ", "タービュレント変形", "フラクタルノイズ",
-                    "モーションブラー", "エコー / 残像", "ドロップシャドウ", "インナーシャドウ",
-                    "LUT", "トーンカーブ", "Matte Composite",
-                    "マット形態学", "ベベル / エンボス", "万華鏡 / ミラータイル",
-                    "ページカール / フォールド", "ASCII / LED マトリクス",
-                    "フィードバックズーム", "Liquid Glass", "ライトスイープ",
-                    "ショックウェーブ", "ピクセルソート" }));
+                .AsEnum(std::move(effect_kind_labels)));
 
             const auto add_float = [&](const char* name, const char* display,
                 const char* tooltip, double minimum, double maximum, double step)

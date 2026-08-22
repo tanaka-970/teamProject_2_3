@@ -479,6 +479,19 @@ namespace ReplayEngine::Editor
                 ImGui::PushID(static_cast<int>(effect_index) + 41000);
                 ImGui::Text("%zu", effect_index + 1);
                 ImGui::SameLine();
+                const bool time_driven = UI::IsTimeDrivenEffect(
+                    static_cast<UI::UIEffectKind>(stack->effects[effect_index].kind));
+                if (time_driven)
+                {
+                    ImGui::TextColored(ImVec4(0.30f, 0.85f, 1.0f, 1.0f), "M");
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::BeginTooltip();
+                        ImGui::TextUnformatted("時間で自律的に動く Effect");
+                        ImGui::EndTooltip();
+                    }
+                    ImGui::SameLine();
+                }
                 bool moved = false;
                 if (editable && effect_index > 0 && ImGui::SmallButton("↑"))
                 {

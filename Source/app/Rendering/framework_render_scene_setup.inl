@@ -145,7 +145,8 @@
             camera_pass.screen_effect->EffectiveEffects(&asset_database),
             background_width, background_height, DXGI_FORMAT_R16G16B16A16_FLOAT,
             shader_composer_time, static_cast<std::uint64_t>(
-                reinterpret_cast<std::uintptr_t>(camera_pass.screen_effect)));
+                reinterpret_cast<std::uintptr_t>(camera_pass.screen_effect)),
+            &camera_pass.screen_effect->effect_region);
         immediate_context->OMSetRenderTargets(1,
             framebuffers[0]->render_target_view.GetAddressOf(),
             framebuffers[0]->depth_stencil_view.Get());

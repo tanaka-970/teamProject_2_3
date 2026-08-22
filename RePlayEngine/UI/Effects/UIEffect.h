@@ -6,6 +6,7 @@
 
 #include <array>
 #include <string>
+#include <vector>
 
 namespace ReplayEngine::UI
 {
@@ -74,13 +75,109 @@ namespace ReplayEngine::UI
         Shockwave = 60,
         PixelSort = 61,
 
+        // 動的な演出系。既存 Scene の値を変えないため、必ず末尾へ追加する。
+        Hologram = 62,
+        IridescentFoil = 63,
+        RadarSweep = 64,
+        EnergyPulse = 65,
+        CircuitFlow = 66,
+        HeatHaze = 67,
+        WaterCaustics = 68,
+        VoronoiShatter = 69,
+        InkBleed = 70,
+        BurnReveal = 71,
+        PortalVortex = 72,
+        FrostCrack = 73,
+
         // 新規 kind は必ず末尾へ追加する。既存 Scene の enum 値を変えない。
     };
+
+    // Effect Stack 全体へ掛ける共通の適用範囲。
+    // TextureMask は白黒画像を指定することで、矩形/円形では表せない
+    // 投げ縄・ロゴ形状・手描き領域にも対応する。
+    enum class UIEffectRegionShape : int
+    {
+        Rectangle = 0,
+        Ellipse = 1,
+        TextureMask = 2,
+    };
+
+    enum class UIEffectRegionScope : int
+    {
+        AllEffects = 0,
+        SelectedEffects = 1,
+    };
+
+    struct UIEffectRegionData
+    {
+        bool enabled = false;
+        int shape = static_cast<int>(UIEffectRegionShape::Rectangle);
+        int scope = static_cast<int>(UIEffectRegionScope::AllEffects);
+        bool invert = false;
+        DirectX::XMFLOAT2 center{ 0.5f, 0.5f };
+        DirectX::XMFLOAT2 size{ 0.5f, 0.5f };
+        float rotation = 0.0f;
+        float feather = 0.0f;
+        float strength = 1.0f;
+        std::string mask;
+    };
+
+    struct UIEffectRegion final : UIEffectRegionData
+    {
+        static constexpr int MaxAdditionalCount = 7;
+        // 先頭の範囲は既存 Scene の effect_region として保持し、ここへ
+        // 追加範囲を積む。描画時は全範囲の union として合成する。
+        std::vector<UIEffectRegionData> additional;
+    };
+
+    // Inspector で M マークを出す対象。値をキーフレームで動かせるだけの
+    // Effect ではなく、現在時刻を参照して自律的に変化するものを示す。
+    inline bool IsTimeDrivenEffect(UIEffectKind kind) noexcept
+    {
+        switch (kind)
+        {
+        case UIEffectKind::Noise:
+        case UIEffectKind::Shake:
+        case UIEffectKind::Distortion:
+        case UIEffectKind::Ripple:
+        case UIEffectKind::Scanlines:
+        case UIEffectKind::CRT:
+        case UIEffectKind::Glitch:
+        case UIEffectKind::VHS:
+        case UIEffectKind::Waveform:
+        case UIEffectKind::TurbulentDisplace:
+        case UIEffectKind::FractalNoise:
+        case UIEffectKind::MotionBlur:
+        case UIEffectKind::Echo:
+        case UIEffectKind::FeedbackZoom:
+        case UIEffectKind::LightSweep:
+        case UIEffectKind::Shockwave:
+        case UIEffectKind::PixelSort:
+        case UIEffectKind::Hologram:
+        case UIEffectKind::IridescentFoil:
+        case UIEffectKind::RadarSweep:
+        case UIEffectKind::EnergyPulse:
+        case UIEffectKind::CircuitFlow:
+        case UIEffectKind::HeatHaze:
+        case UIEffectKind::WaterCaustics:
+        case UIEffectKind::VoronoiShatter:
+        case UIEffectKind::InkBleed:
+        case UIEffectKind::BurnReveal:
+        case UIEffectKind::PortalVortex:
+        case UIEffectKind::FrostCrack:
+            return true;
+        default:
+            return false;
+        }
+    }
 
     class UIEffect final
     {
     public:
         bool enabled = true;
+        // 範囲制限が SelectedEffects のとき、この Effect を対象にするか。
+        // AllEffects では無視されるため、既存 Scene の挙動は変わらない。
+        bool region_enabled = true;
         int kind = static_cast<int>(UIEffectKind::Blur);
         float radius = 8.0f;
         float intensity = 1.0f;

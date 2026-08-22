@@ -13,6 +13,7 @@
 #include "../../RePlayEngine/Components/UI/UIPuppetDeformComponent.h"
 #include "../../RePlayEngine/Components/UI/UIShapeComponent.h"
 #include "../../RePlayEngine/Components/UI/UIShapeImageComponent.h"
+#include "../../RePlayEngine/Components/UI/UIEffectStackComponent.h"
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
 #include "../../RePlayEngine/Scene/Runtime/Scene.h"
 #include "../../RePlayEngine/UI/UILayout.h"
@@ -44,6 +45,7 @@
     using ReplayEngine::Components::UIPuppetDeformComponent;
     using ReplayEngine::Components::UIShapeComponent;
     using ReplayEngine::Components::UIShapeImageComponent;
+    using ReplayEngine::Components::UIEffectStackComponent;
     namespace Assets = ReplayEngine::Assets;
     namespace Core = ReplayEngine::Core;
     namespace Scene = ReplayEngine::Scene;
@@ -223,15 +225,161 @@ void framework::draw_ui_scene_overlay()
         }();
     float selected_canvas_scale = CanvasScaleForObject(selected_transform_target,
         logical_width, logical_height);
+    UIEffectStackComponent* selected_effect_stack = selected_transform_target != nullptr
+        ? selected_transform_target->GetComponent<UIEffectStackComponent>() : nullptr;
+    constexpr int max_effect_region_count =
+        ReplayEngine::UI::UIEffectRegion::MaxAdditionalCount + 1;
+    ImVec2 effect_region_outline[max_effect_region_count][4]{};
+    ImVec2 effect_region_handle_points[max_effect_region_count][9]{};
+    const auto effect_region_count = [&]()
+    {
+        if (selected_effect_stack == nullptr) return 0;
+        return (std::min)(max_effect_region_count, 1 + static_cast<int>(
+            selected_effect_stack->effect_region.additional.size()));
+    };
+    const auto effect_region_at = [&](int index)
+        -> ReplayEngine::UI::UIEffectRegionData*
+    {
+        if (selected_effect_stack == nullptr || index < 0 ||
+            index >= effect_region_count()) return nullptr;
+        if (index == 0) return &selected_effect_stack->effect_region;
+        return &selected_effect_stack->effect_region.additional[
+            static_cast<std::size_t>(index - 1)];
+    };
+    const auto effect_region_is_visible = [&](int index)
+    {
+        const ReplayEngine::UI::UIEffectRegionData* region = effect_region_at(index);
+        return region != nullptr && selected_rect != nullptr &&
+            selected_effect_stack->enabled && region->enabled;
+    };
+    const auto rebuild_effect_region_handles = [&]()
+    {
+        for (int region_index = 0; region_index < max_effect_region_count; ++region_index)
+        {
+            for (ImVec2& point : effect_region_outline[region_index]) point = ImVec2{};
+            for (ImVec2& point : effect_region_handle_points[region_index]) point = ImVec2{};
+            if (!effect_region_is_visible(region_index)) continue;
+
+            const ReplayEngine::UI::UIEffectRegionData& region =
+                *effect_region_at(region_index);
+            const float half_x = (std::max)(0.001f, region.size.x);
+            const float half_y = (std::max)(0.001f, region.size.y);
+            const float angle = region.rotation * DirectX::XM_PI / 180.0f;
+            const float s = std::sin(angle);
+            const float c = std::cos(angle);
+            const DirectX::XMFLOAT2 local_corners[4]{
+                { -half_x, -half_y }, { half_x, -half_y },
+                { half_x, half_y }, { -half_x, half_y } };
+            const DirectX::XMFLOAT2 local_handles[8]{
+                { -half_x, -half_y }, { half_x, -half_y },
+                { half_x, half_y }, { -half_x, half_y },
+                { -half_x, 0.0f }, { half_x, 0.0f },
+                { 0.0f, half_y }, { 0.0f, -half_y } };
+            const auto scene_point_from_region_uv = [&](const DirectX::XMFLOAT2& uv)
+            {
+                // Effect shader のUVは左上原点、UIのnormalized座標は左下原点。
+                const DirectX::XMFLOAT2 normalized{ uv.x, 1.0f - uv.y };
+                const DirectX::XMFLOAT2 canvas = NormalizedToCanvas(*selected_rect,
+                    normalized);
+                return ToSceneUIPoint(canvas, selected_canvas_scale,
+                    target.left, target.top, target_width, target_height,
+                    logical_width, logical_height);
+            };
+            const auto to_region_uv = [&](const DirectX::XMFLOAT2& local)
+            {
+                return DirectX::XMFLOAT2{
+                    region.center.x + local.x * c - local.y * s,
+                    region.center.y + local.x * s + local.y * c };
+            };
+            for (int index = 0; index < 4; ++index)
+                effect_region_outline[region_index][index] = scene_point_from_region_uv(
+                    to_region_uv(local_corners[index]));
+            for (int index = 0; index < 8; ++index)
+                effect_region_handle_points[region_index][index] = scene_point_from_region_uv(
+                    to_region_uv(local_handles[index]));
+            effect_region_handle_points[region_index][8] = scene_point_from_region_uv(
+                to_region_uv({ 0.0f, -half_y - 0.08f }));
+        }
+    };
+    rebuild_effect_region_handles();
     ImVec2 resize_handle_points[8]{};
     int hovered_resize_handle = -1;
     int pressed_resize_handle = -1;
+    int hovered_effect_region_index = -1;
+    int hovered_effect_region_handle = -1;
+    int pressed_effect_region_index = -1;
+    int pressed_effect_region_handle = -1;
     const ImGuiIO& input = ImGui::GetIO();
     const ImVec2 press_position = input.MouseClickedPos[ImGuiMouseButton_Left];
     const bool press_inside_target =
         press_position.x >= target.left && press_position.y >= target.top &&
         press_position.x < target.left + target_width &&
         press_position.y < target.top + target_height;
+    if (effect_region_count() > 0)
+    {
+        const auto hit_effect_region_handle = [&](const ImVec2& position,
+            int& out_region_index)
+        {
+            int hit = -1;
+            float nearest = 12.0f * 12.0f;
+            out_region_index = -1;
+            for (int region_index = 0; region_index < effect_region_count(); ++region_index)
+            {
+                if (!effect_region_is_visible(region_index)) continue;
+                for (int index = 0; index < 9; ++index)
+                {
+                    const float dx = effect_region_handle_points[region_index][index].x -
+                        position.x;
+                    const float dy = effect_region_handle_points[region_index][index].y -
+                        position.y;
+                    const float distance_sq = dx * dx + dy * dy;
+                    if (distance_sq <= nearest)
+                    {
+                        nearest = distance_sq;
+                        hit = index;
+                        out_region_index = region_index;
+                    }
+                }
+            }
+            return hit;
+        };
+        if (scene_view_hovered)
+            hovered_effect_region_handle = hit_effect_region_handle(mouse,
+                hovered_effect_region_index);
+        if (input.MouseDown[ImGuiMouseButton_Left])
+            pressed_effect_region_handle = hit_effect_region_handle(press_position,
+                pressed_effect_region_index);
+    }
+
+    // Effect範囲は通常のUI枠より先に拾う。範囲の回転ハンドルが対象外の
+    // Object選択やRectTransform操作へ流れないようにする。
+    bool effect_region_click = ui_effect_region_candidate;
+    if (!ui_effect_region_candidate && pressed_effect_region_handle >= 0 &&
+        input.MouseDown[ImGuiMouseButton_Left])
+    {
+        effect_region_click = true;
+        ui_scene_view_input_consumed = true;
+        viewport_drag_selecting = false;
+        if (object_editor_context.CanEdit() && selected_transform_target != nullptr &&
+            selected_effect_stack != nullptr)
+        {
+            ui_effect_region_candidate = true;
+            ui_effect_region_editing = false;
+            ui_effect_region_index = pressed_effect_region_index;
+            ui_effect_region_handle = pressed_effect_region_handle;
+            ui_effect_region_object = selected_transform_target->ID();
+            ui_effect_region_start_mouse = press_position;
+            if (ReplayEngine::UI::UIEffectRegionData* region = effect_region_at(
+                pressed_effect_region_index))
+            {
+                ui_effect_region_start_center = region->center;
+                ui_effect_region_start_size = region->size;
+                ui_effect_region_start_rotation = region->rotation;
+            }
+            ui_preview_drag_object = Core::ObjectID::Invalid();
+            ui_preview_dragging = false;
+        }
+    }
     if (!selected_custom_shape && selected_transform_target != nullptr &&
         selected_rect != nullptr && HasUIComponent(*selected_transform_target))
     {
@@ -251,8 +399,8 @@ void framework::draw_ui_scene_overlay()
 
     // Rect Tool は UI 内部の部位操作や Object 選択より先に拾う。
     // 同じドラッグを 3D の矩形選択へ渡さないことが最重要。
-    bool resize_handle_click = false;
-    if (!ui_preview_resize_candidate && pressed_resize_handle >= 0 &&
+    bool resize_handle_click = effect_region_click;
+    if (!effect_region_click && !ui_preview_resize_candidate && pressed_resize_handle >= 0 &&
         input.MouseDown[ImGuiMouseButton_Left])
     {
         resize_handle_click = true;
@@ -308,7 +456,7 @@ void framework::draw_ui_scene_overlay()
         return dx * dx + dy * dy;
     };
 
-    if (!resize_handle_click && target_hovered &&
+    if (!effect_region_click && !resize_handle_click && target_hovered &&
         control_selected != nullptr && control_rect != nullptr &&
         ImGui::IsMouseClicked(ImGuiMouseButton_Left))
     {
@@ -681,6 +829,117 @@ void framework::draw_ui_scene_overlay()
         ? selected_transform_target->GetComponent<RectTransformComponent>() : nullptr;
     selected_canvas_scale = CanvasScaleForObject(selected_transform_target,
         logical_width, logical_height);
+    selected_effect_stack = selected_transform_target != nullptr
+        ? selected_transform_target->GetComponent<UIEffectStackComponent>() : nullptr;
+    rebuild_effect_region_handles();
+
+    const bool effect_region_candidate = selected_transform_target != nullptr &&
+        selected_effect_stack != nullptr && ui_effect_region_candidate &&
+        effect_region_at(ui_effect_region_index) != nullptr &&
+        ui_effect_region_object == selected_transform_target->ID();
+    if (effect_region_candidate && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 2.0f))
+    {
+        ui_scene_view_input_consumed = true;
+        viewport_drag_selecting = false;
+        if (!ui_effect_region_editing && object_editor_context.CanEdit())
+        {
+            object_editor_context.BeginEdit("Effect適用範囲を編集");
+            ui_effect_region_editing = true;
+        }
+        if (ui_effect_region_editing && selected_rect != nullptr)
+        {
+            const DirectX::XMFLOAT2 canvas_mouse{
+                logical_mouse_x / (std::max)(0.0001f, selected_canvas_scale),
+                logical_mouse_y / (std::max)(0.0001f, selected_canvas_scale) };
+            const DirectX::XMFLOAT2 normalized = CanvasToNormalized(
+                *selected_rect, canvas_mouse);
+            const DirectX::XMFLOAT2 current_uv{
+                normalized.x, 1.0f - normalized.y };
+            const DirectX::XMFLOAT2 start_canvas_mouse{
+                (ui_effect_region_start_mouse.x - target.left) *
+                    (logical_width / target_width) / (std::max)(0.0001f,
+                        selected_canvas_scale),
+                (logical_height - (ui_effect_region_start_mouse.y - target.top) *
+                    (logical_height / target_height)) /
+                    (std::max)(0.0001f, selected_canvas_scale) };
+            const DirectX::XMFLOAT2 start_normalized = CanvasToNormalized(
+                *selected_rect, start_canvas_mouse);
+            const DirectX::XMFLOAT2 start_uv{
+                start_normalized.x, 1.0f - start_normalized.y };
+            ReplayEngine::UI::UIEffectRegionData* active_region = effect_region_at(
+                ui_effect_region_index);
+            if (active_region == nullptr) return;
+            ReplayEngine::UI::UIEffectRegionData& region = *active_region;
+            if (ui_effect_region_handle == 8)
+            {
+                const float start_dx = start_uv.x - ui_effect_region_start_center.x;
+                const float start_dy = start_uv.y - ui_effect_region_start_center.y;
+                const float current_dx = current_uv.x - ui_effect_region_start_center.x;
+                const float current_dy = current_uv.y - ui_effect_region_start_center.y;
+                if (std::abs(start_dx) + std::abs(start_dy) > 0.001f &&
+                    std::abs(current_dx) + std::abs(current_dy) > 0.001f)
+                {
+                    const float start_angle = std::atan2(start_dy, start_dx);
+                    const float current_angle = std::atan2(current_dy, current_dx);
+                    region.rotation = ui_effect_region_start_rotation +
+                        (current_angle - start_angle) * 180.0f / DirectX::XM_PI;
+                }
+            }
+            else if (ui_effect_region_handle >= 0 && ui_effect_region_handle < 8)
+            {
+                const float angle = ui_effect_region_start_rotation *
+                    DirectX::XM_PI / 180.0f;
+                const float s = std::sin(angle);
+                const float c = std::cos(angle);
+                const DirectX::XMFLOAT2 delta{
+                    current_uv.x - ui_effect_region_start_center.x,
+                    current_uv.y - ui_effect_region_start_center.y };
+                const DirectX::XMFLOAT2 local{
+                    delta.x * c + delta.y * s,
+                    -delta.x * s + delta.y * c };
+                const int sign_x[8]{ -1, 1, 1, -1, -1, 1, 0, 0 };
+                const int sign_y[8]{ -1, -1, 1, 1, 0, 0, 1, -1 };
+                const int sx = sign_x[ui_effect_region_handle];
+                const int sy = sign_y[ui_effect_region_handle];
+                DirectX::XMFLOAT2 center_local{ 0.0f, 0.0f };
+                DirectX::XMFLOAT2 size = ui_effect_region_start_size;
+                if (sx != 0)
+                {
+                    const float anchor = -static_cast<float>(sx) *
+                        ui_effect_region_start_size.x;
+                    center_local.x = (local.x + anchor) * 0.5f;
+                    size.x = (std::max)(0.001f, std::abs(local.x - anchor) * 0.5f);
+                }
+                if (sy != 0)
+                {
+                    const float anchor = -static_cast<float>(sy) *
+                        ui_effect_region_start_size.y;
+                    center_local.y = (local.y + anchor) * 0.5f;
+                    size.y = (std::max)(0.001f, std::abs(local.y - anchor) * 0.5f);
+                }
+                region.center = {
+                    ui_effect_region_start_center.x + center_local.x * c -
+                        center_local.y * s,
+                    ui_effect_region_start_center.y + center_local.x * s +
+                        center_local.y * c };
+                region.size = size;
+            }
+        }
+    }
+    if (ui_effect_region_candidate)
+    {
+        ui_scene_view_input_consumed = true;
+        viewport_drag_selecting = false;
+        if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))
+        {
+            if (ui_effect_region_editing) object_editor_context.CommitEdit();
+            ui_effect_region_candidate = false;
+            ui_effect_region_editing = false;
+            ui_effect_region_index = 0;
+            ui_effect_region_handle = -1;
+            ui_effect_region_object = Core::ObjectID::Invalid();
+        }
+    }
 
     const bool resizing_candidate = selected_rect != nullptr &&
         selected_transform_target != nullptr && ui_preview_resize_candidate &&
@@ -749,6 +1008,7 @@ void framework::draw_ui_scene_overlay()
     const bool dragging_candidate = selected_rect != nullptr &&
         selected_transform_target != nullptr &&
         !ui_preview_resize_candidate &&
+        !ui_effect_region_candidate &&
         ui_preview_drag_object == selected_transform_target->ID();
 
     if (dragging_candidate && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 2.0f))
@@ -830,6 +1090,81 @@ void framework::draw_ui_scene_overlay()
             logical_width, logical_height, p);
         draw_list->AddQuad(p[0], p[1], p[2], p[3],
             IM_COL32(255, 210, 80, 255), 2.0f);
+
+        // Effect Stack の適用範囲。黄色の選択枠とは別色にして、
+        // 「UI要素の変形」と「エフェクトの適用範囲」を見間違えないようにする。
+        for (int region_index = 0; region_index < effect_region_count(); ++region_index)
+        {
+            if (!effect_region_is_visible(region_index)) continue;
+            rebuild_effect_region_handles();
+            const ReplayEngine::UI::UIEffectRegionData& region =
+                *effect_region_at(region_index);
+            const ImU32 range_color = region.shape == 2
+                ? IM_COL32(120, 220, 255, 235) : IM_COL32(255, 120, 220, 235);
+            if (region.shape == 1)
+            {
+                const float half_x = (std::max)(0.001f, region.size.x);
+                const float half_y = (std::max)(0.001f, region.size.y);
+                const float angle = region.rotation * DirectX::XM_PI / 180.0f;
+                const float s = std::sin(angle);
+                const float c = std::cos(angle);
+                const auto point_from_local = [&](float x, float y)
+                {
+                    const DirectX::XMFLOAT2 uv{
+                        region.center.x + x * c - y * s,
+                        region.center.y + x * s + y * c };
+                    const DirectX::XMFLOAT2 normalized{ uv.x, 1.0f - uv.y };
+                    return ToSceneUIPoint(NormalizedToCanvas(*selected_rect, normalized),
+                        canvas_scale, target.left, target.top, target_width,
+                        target_height, logical_width, logical_height);
+                };
+                constexpr int segments = 64;
+                ImVec2 previous = point_from_local(half_x, 0.0f);
+                for (int segment = 1; segment <= segments; ++segment)
+                {
+                    const float t = DirectX::XM_2PI * segment /
+                        static_cast<float>(segments);
+                    const ImVec2 current = point_from_local(
+                        std::cos(t) * half_x, std::sin(t) * half_y);
+                    draw_list->AddLine(previous, current, range_color, 2.0f);
+                    previous = current;
+                }
+            }
+            else
+            {
+                draw_list->AddQuad(effect_region_outline[region_index][0],
+                    effect_region_outline[region_index][1],
+                    effect_region_outline[region_index][2],
+                    effect_region_outline[region_index][3], range_color, 2.0f);
+            }
+            draw_list->AddLine(effect_region_handle_points[region_index][7],
+                effect_region_handle_points[region_index][8], range_color, 1.5f);
+            for (int index = 0; index < 9; ++index)
+            {
+                const bool active = ui_effect_region_candidate &&
+                    ui_effect_region_object == selected_transform_target->ID() &&
+                    ui_effect_region_index == region_index &&
+                    ui_effect_region_handle == index;
+                const bool hot = hovered_effect_region_index == region_index &&
+                    hovered_effect_region_handle == index;
+                const ImU32 fill = active
+                    ? IM_COL32(255, 245, 120, 255)
+                    : (hot ? IM_COL32(240, 255, 190, 255) : range_color);
+                if (index == 8)
+                    draw_list->AddCircleFilled(effect_region_handle_points[region_index][index],
+                        6.0f, fill, 12);
+                else
+                    draw_list->AddCircleFilled(effect_region_handle_points[region_index][index],
+                        5.0f, fill, 12);
+                draw_list->AddCircle(effect_region_handle_points[region_index][index],
+                    index == 8 ? 6.0f : 5.0f, IM_COL32(35, 38, 44, 255), 12, 1.0f);
+            }
+            const char* range_label = region.shape == 1 ? "EFFECT / ELLIPSE" :
+                (region.shape == 2 ? "EFFECT / MASK" : "EFFECT / RECT");
+            draw_list->AddText(ImVec2(effect_region_outline[region_index][0].x + 7.0f,
+                effect_region_outline[region_index][0].y + 7.0f), range_color,
+                range_label);
+        }
 
         const auto norm_to_scene = [&](const DirectX::XMFLOAT2& normalized)
         {
@@ -1047,6 +1382,13 @@ void framework::draw_ui_scene_overlay()
                 : ((hot == ResizeTop || hot == ResizeBottom)
                     ? ImGuiMouseCursor_ResizeNS
                     : ImGuiMouseCursor_ResizeAll));
+        }
+        if (hovered_effect_region_index >= 0 &&
+            effect_region_is_visible(hovered_effect_region_index) &&
+            hovered_effect_region_handle >= 0)
+        {
+            ImGui::SetMouseCursor(hovered_effect_region_handle == 8
+                ? ImGuiMouseCursor_Hand : ImGuiMouseCursor_ResizeAll);
         }
     }
 

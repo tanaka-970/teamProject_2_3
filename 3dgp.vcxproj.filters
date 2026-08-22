@@ -2191,6 +2191,9 @@
     <None Include="Shader\toon_common.hlsli">
       <Filter>Shader\Includes</Filter>
     </None>
+    <None Include="Shader\ui_effect_dynamic_common.hlsli">
+      <Filter>Shader\Includes</Filter>
+    </None>
     <None Include="Shader\Materials\StylizedCharacter\stylized_character_common.hlsli">
       <Filter>Shader\Materials\StylizedCharacter</Filter>
     </None>
@@ -2866,6 +2869,45 @@
       <Filter>Shader</Filter>
     </FxCompile>
     <FxCompile Include="Shader\ui_effect_pixel_sort.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_hologram.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_iridescent_foil.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_radar_sweep.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_energy_pulse.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_circuit_flow.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_heat_haze.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_water_caustics.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_voronoi_shatter.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_ink_bleed.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_burn_reveal.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_portal_vortex.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_frost_crack.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_region_blend.hlsl">
       <Filter>Shader</Filter>
     </FxCompile>
     <FxCompile Include="Shader\line_stroke_vs.hlsl">

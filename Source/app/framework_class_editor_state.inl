@@ -192,6 +192,19 @@
     DirectX::XMFLOAT4 ui_preview_resize_start_rect{ 0.0f, 0.0f, 0.0f, 0.0f };
     DirectX::XMFLOAT4 ui_preview_resize_parent_rect{ 0.0f, 0.0f, 0.0f, 0.0f };
     DirectX::XMFLOAT4X4 ui_preview_resize_start_matrix{};
+
+    // Effect Stack の適用範囲は RectTransform のリサイズとは別操作にする。
+    // 8方向ハンドルと回転ハンドルを持つ Scene View 専用の一時状態。
+    bool ui_effect_region_candidate{ false };
+    bool ui_effect_region_editing{ false };
+    int ui_effect_region_index{ 0 };
+    int ui_effect_region_handle{ -1 }; // 0..7 resize, 8 rotation
+    ReplayEngine::Core::ObjectID ui_effect_region_object;
+    ImVec2 ui_effect_region_start_mouse{ 0.0f, 0.0f };
+    DirectX::XMFLOAT2 ui_effect_region_start_center{ 0.5f, 0.5f };
+    DirectX::XMFLOAT2 ui_effect_region_start_size{ 0.5f, 0.5f };
+    float ui_effect_region_start_rotation{ 0.0f };
+
     bool scene_view_hovered{ false };
     bool scene_view_focused{ false };
     ImVec2 scene_view_overlay_position{ 0.0f, 0.0f };

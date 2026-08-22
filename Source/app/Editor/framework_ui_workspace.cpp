@@ -16,6 +16,7 @@
 #include "../../RePlayEngine/Components/UI/UIPuppetDeformComponent.h"
 #include "../../RePlayEngine/Components/UI/UIShapeComponent.h"
 #include "../../RePlayEngine/Components/UI/UIShapeImageComponent.h"
+#include "../../RePlayEngine/Components/UI/UIEffectStackComponent.h"
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
 #include "../../RePlayEngine/Scene/Runtime/Scene.h"
 #include "../../RePlayEngine/UI/UILayout.h"
@@ -63,6 +64,7 @@
     using ReplayEngine::Components::UIPuppetDeformComponent;
     using ReplayEngine::Components::UIShapeComponent;
     using ReplayEngine::Components::UIShapeImageComponent;
+    using ReplayEngine::Components::UIEffectStackComponent;
     namespace Assets = ReplayEngine::Assets;
     namespace Core = ReplayEngine::Core;
     namespace Scene = ReplayEngine::Scene;
@@ -579,6 +581,9 @@
         UIMaskComponent* selected_mask = selected->GetComponent<UIMaskComponent>();
         const bool has_shape_mask = selected_mask != nullptr &&
             selected_mask->mask_mode == UIMaskComponent::Shape;
+        UIEffectStackComponent* effect_stack =
+            selected->GetComponent<UIEffectStackComponent>();
+        const bool has_effect_region = effect_stack != nullptr;
 
         UIImageComponent* image = selected->GetComponent<UIImageComponent>();
         RectTransformComponent* image_rect = selected->GetComponent<RectTransformComponent>();
@@ -595,7 +600,7 @@
         }
         const bool has_masked_image = image != nullptr && image_rect != nullptr &&
             parent_mask != nullptr && parent_mask->mask_mode == UIMaskComponent::Shape;
-        if (!has_shape_mask && !has_masked_image) return;
+        if (!has_shape_mask && !has_masked_image && !has_effect_region) return;
 
         // 選択中の対象にだけ現れる独立枠。UI 階層パネルの外へ編集欄を増やさない。
         ImGui::BeginChild("UIShapeImageEditorFrame", ImVec2(0.0f, 230.0f), true);
@@ -611,12 +616,92 @@
 
         bool mask_changed = false;
         bool image_changed = false;
+        bool effect_changed = false;
         UIMaskComponent* edit_mask = has_shape_mask ? selected_mask : parent_mask;
         Core::GameObject* edit_mask_object = has_shape_mask ? selected : parent_mask_object;
         RectTransformComponent* mask_rect = edit_mask_object != nullptr
             ? edit_mask_object->GetComponent<RectTransformComponent>() : nullptr;
         const std::string selected_id = selected->ID().ToString();
         ImGui::PushID(selected_id.c_str());
+
+        if (effect_stack != nullptr)
+        {
+            ImGui::TextDisabled("Effect適用範囲（複数可）");
+            ImGui::TextDisabled("Scene Viewの枠をドラッグして個別に調整できます。");
+            if (ImGui::Checkbox("範囲制限を有効", &effect_stack->effect_region.enabled))
+                effect_changed = true;
+
+            int additional_count = static_cast<int>(effect_stack->effect_region.additional.size());
+            ImGui::SetNextItemWidth(-1.0f);
+            if (ImGui::DragInt("追加範囲数", &additional_count, 1.0f, 0,
+                ReplayEngine::UI::UIEffectRegion::MaxAdditionalCount))
+            {
+                additional_count = (std::max)(0, (std::min)(
+                    ReplayEngine::UI::UIEffectRegion::MaxAdditionalCount,
+                    additional_count));
+                const std::size_t previous = effect_stack->effect_region.additional.size();
+                effect_stack->effect_region.additional.resize(
+                    static_cast<std::size_t>(additional_count));
+                for (std::size_t index = previous;
+                    index < effect_stack->effect_region.additional.size(); ++index)
+                {
+                    ReplayEngine::UI::UIEffectRegionData& region =
+                        effect_stack->effect_region.additional[index];
+                    region.enabled = true;
+                    region.center = {
+                        (std::min)(0.9f, 0.35f + 0.12f * static_cast<float>(index)),
+                        (std::min)(0.8f, 0.35f + 0.10f * static_cast<float>(index)) };
+                    region.size = { 0.18f, 0.18f };
+                }
+                effect_stack->OnPropertyChanged(nullptr);
+                effect_changed = true;
+            }
+
+            static const char additional_shape_items[] =
+                "矩形\0円 / 楕円\0画像マスク（投げ縄）\0";
+            for (std::size_t index = 0;
+                index < effect_stack->effect_region.additional.size(); ++index)
+            {
+                ReplayEngine::UI::UIEffectRegionData& region =
+                    effect_stack->effect_region.additional[index];
+                ImGui::PushID(static_cast<int>(index));
+                ImGui::Separator();
+                ImGui::Text("追加範囲 %d", static_cast<int>(index) + 1);
+                if (ImGui::Checkbox("有効", &region.enabled)) effect_changed = true;
+                int shape = (std::max)(0, (std::min)(2, region.shape));
+                ImGui::SetNextItemWidth(-1.0f);
+                if (ImGui::Combo("形状", &shape, additional_shape_items))
+                {
+                    region.shape = shape;
+                    effect_changed = true;
+                }
+                DirectX::XMFLOAT2 center = region.center;
+                ImGui::SetNextItemWidth(-1.0f);
+                if (ImGui::DragFloat2("中心", &center.x, 0.01f,
+                    -1.0f, 2.0f, "%.2f"))
+                {
+                    region.center = center;
+                    effect_changed = true;
+                }
+                DirectX::XMFLOAT2 size = region.size;
+                ImGui::SetNextItemWidth(-1.0f);
+                if (ImGui::DragFloat2("サイズ / 半径", &size.x, 0.01f,
+                    0.001f, 1.0f, "%.2f"))
+                {
+                    region.size = size;
+                    effect_changed = true;
+                }
+                float rotation = region.rotation;
+                ImGui::SetNextItemWidth(-1.0f);
+                if (ImGui::DragFloat("回転", &rotation, 1.0f,
+                    -360.0f, 360.0f, "%.0f 度"))
+                {
+                    region.rotation = rotation;
+                    effect_changed = true;
+                }
+                ImGui::PopID();
+            }
+        }
 
         if (edit_mask != nullptr && mask_rect != nullptr)
         {
@@ -801,7 +886,7 @@
         if (!editable) EndDisabledCompat();
         ImGui::EndChild();
 
-        if (mask_changed || image_changed)
+        if (mask_changed || image_changed || effect_changed)
         {
             context.MarkDirty();
             if (mask_changed)
@@ -815,7 +900,7 @@
         // ドラッグ中はトランザクションを保持し、指を離した時点で Undo を 1 件にまとめる。
         if (editable && context.History().InTransaction() && !ImGui::IsAnyItemActive())
         {
-            if (mask_changed || image_changed || had_transaction)
+            if (mask_changed || image_changed || effect_changed || had_transaction)
                 context.CommitEdit();
             else
                 context.CancelEdit();
