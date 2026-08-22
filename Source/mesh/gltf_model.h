@@ -78,7 +78,9 @@ public:
         ID3D11Buffer* alpha_constants = nullptr,
         int override_alpha_mode = -1,
         float override_alpha_cutoff = 0.5f,
-        bool override_uses_replay_base_map = false);
+        bool override_uses_replay_base_map = false,
+        // 面消し Effect のように、抜きが無い primitive でも PS を貼りたいとき true。
+        bool force_pixel_shader = false);
     // アルファ抜きを宣言した Material が 1 つでもあるか。
     bool HasAlphaMaskMaterials() const noexcept;
 

@@ -42,6 +42,13 @@ namespace ReplayEngine::Core::Detail
             PropertyRegistry::Register<MeshRendererComponent>(
                 MakeProperty("receive_shadow", &MeshRendererComponent::receive_shadow)
                     .Display("影を受ける"));
+
+            PropertyRegistry::Register<MeshRendererComponent>(
+                MakeProperty("shadow_alpha_clip", &MeshRendererComponent::shadow_alpha_clip)
+                    .Display("影をアルファで抜く"));
+            PropertyRegistry::Register<MeshRendererComponent>(
+                MakeProperty("shadow_alpha_cutoff", &MeshRendererComponent::shadow_alpha_cutoff)
+                    .Display("影の抜きしきい値").Range(0.0, 1.0).Step(0.01));
             PropertyRegistry::Register<MeshRendererComponent>(
                 MakeProperty("rendering_layer", &MeshRendererComponent::rendering_layer)
                     .Display("Rendering Layer").Range(0.0, 31.0).Step(1.0));
@@ -96,6 +103,13 @@ namespace ReplayEngine::Core::Detail
                 MakeProperty("cast_shadow", &PrimitiveMeshRendererComponent::cast_shadow).Display("影を落とす"));
             PropertyRegistry::Register<PrimitiveMeshRendererComponent>(
                 MakeProperty("receive_shadow", &PrimitiveMeshRendererComponent::receive_shadow).Display("影を受ける"));
+
+            PropertyRegistry::Register<PrimitiveMeshRendererComponent>(
+                MakeProperty("shadow_alpha_clip", &PrimitiveMeshRendererComponent::shadow_alpha_clip)
+                    .Display("影をアルファで抜く"));
+            PropertyRegistry::Register<PrimitiveMeshRendererComponent>(
+                MakeProperty("shadow_alpha_cutoff", &PrimitiveMeshRendererComponent::shadow_alpha_cutoff)
+                    .Display("影の抜きしきい値").Range(0.0, 1.0).Step(0.01));
             PropertyRegistry::Register<PrimitiveMeshRendererComponent>(
                 MakeProperty("rendering_layer", &PrimitiveMeshRendererComponent::rendering_layer)
                     .Display("Rendering Layer").Range(0.0, 31.0).Step(1.0));
@@ -142,6 +156,13 @@ namespace ReplayEngine::Core::Detail
             PropertyRegistry::Register<SkinnedMeshRendererComponent>(
                 MakeProperty("receive_shadow", &SkinnedMeshRendererComponent::receive_shadow)
                     .Display("影を受ける"));
+
+            PropertyRegistry::Register<SkinnedMeshRendererComponent>(
+                MakeProperty("shadow_alpha_clip", &SkinnedMeshRendererComponent::shadow_alpha_clip)
+                    .Display("影をアルファで抜く"));
+            PropertyRegistry::Register<SkinnedMeshRendererComponent>(
+                MakeProperty("shadow_alpha_cutoff", &SkinnedMeshRendererComponent::shadow_alpha_cutoff)
+                    .Display("影の抜きしきい値").Range(0.0, 1.0).Step(0.01));
             PropertyRegistry::Register<SkinnedMeshRendererComponent>(
                 MakeProperty("rendering_layer", &SkinnedMeshRendererComponent::rendering_layer)
                     .Display("Rendering Layer").Range(0.0, 31.0).Step(1.0));

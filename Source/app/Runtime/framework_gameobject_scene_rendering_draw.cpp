@@ -559,6 +559,15 @@ framework::shadow_material_state framework::resolve_shadow_material_state(
         state.alpha_cutoff = material->alpha_mode == MaterialAlphaMode::Mask
             ? material->alpha_cutoff : 0.01f;
         state.uses_replay_base_map = !material->base_color_texture.empty();
+        return state;
+    }
+
+    // FBX/cereal のように内蔵材質が抜きを宣言できない形式のための明示指定。BaseMap は t0。
+    if (source.shadow_alpha_clip)
+    {
+        state.alpha_mode = 1;
+        state.alpha_cutoff = (std::max)(0.0f, (std::min)(1.0f, source.shadow_alpha_cutoff));
+        state.uses_replay_base_map = false;
     }
     return state;
 }
@@ -637,6 +646,8 @@ void framework::draw_shadow_caster_meshes(
             if (static_caster_vs == nullptr) continue;
             static_mesh* primitive = resolve_builtin_primitive_mesh(item.mesh_asset);
             if (primitive == nullptr) continue;
+            if (primitive->bounding_box[0].x > primitive->bounding_box[1].x)
+                ++shadow_stats.missing_bounds_primitive;
             if (!shadow_volume_intersects(primitive->bounding_box[0],
                 primitive->bounding_box[1], item.world,
                 volume_center, volume_radius, extrusion))
@@ -645,12 +656,14 @@ void framework::draw_shadow_caster_meshes(
                 continue;
             }
 
-            const bool alpha_clip = material_state.alpha_mode != 0 &&
+            const bool coverage = bind_shadow_coverage_constants(item.owner);
+            const bool alpha_clip = material_state.alpha_mode != 0;
+            const bool use_shadow_ps = (alpha_clip || coverage) &&
                 shadow_caster_alpha_ps != nullptr;
-            if (alpha_clip)
+            if (use_shadow_ps)
             {
                 bind_shadow_alpha_constants(material_state);
-                if (material_state.uses_replay_base_map)
+                if (alpha_clip && material_state.uses_replay_base_map)
                 {
                     // material_binding は材質解決後の RenderItem にしか入らない。
                     // アルファ抜きのときだけ解決する。
@@ -662,9 +675,9 @@ void framework::draw_shadow_caster_meshes(
             }
             set_shadow_cull_state(material_state.double_sided, item.world);
             primitive->render(immediate_context.Get(), item.world, item.tint,
-                alpha_clip ? shadow_caster_alpha_ps.Get() : nullptr,
-                static_caster_vs, static_caster_il, alpha_clip, false);
-            if (alpha_clip && material_state.uses_replay_base_map)
+                use_shadow_ps ? shadow_caster_alpha_ps.Get() : nullptr,
+                static_caster_vs, static_caster_il, use_shadow_ps, false);
+            if (use_shadow_ps && alpha_clip && material_state.uses_replay_base_map)
                 material_gpu_binder.UnbindTextures(immediate_context.Get());
             immediate_context->RSSetState(
                 rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
@@ -681,17 +694,23 @@ void framework::draw_shadow_caster_meshes(
             if (static_caster_vs == nullptr) continue;
 
             DirectX::XMFLOAT3 local_minimum{}, local_maximum{};
-            if (gltf->ComputeBounds(local_minimum, local_maximum) &&
-                !shadow_volume_intersects(local_minimum, local_maximum, item.world,
-                    volume_center, volume_radius, extrusion))
+            if (!gltf->ComputeBounds(local_minimum, local_maximum))
+            {
+                ++shadow_stats.missing_bounds_static;
+            }
+            else if (!shadow_volume_intersects(local_minimum, local_maximum, item.world,
+                volume_center, volume_radius, extrusion))
             {
                 ++shadow_stats.culled_casters;
                 continue;
             }
 
+            const bool coverage = bind_shadow_coverage_constants(item.owner);
             // Material Asset の指定が無ければ glTF 内蔵の alphaMode をそのまま使う。
             const bool alpha_clip = shadow_caster_alpha_ps != nullptr &&
                 (material_state.alpha_mode != 0 || gltf->HasAlphaMaskMaterials());
+            const bool use_shadow_ps = (alpha_clip || coverage) &&
+                shadow_caster_alpha_ps != nullptr;
             if (alpha_clip && material_state.uses_replay_base_map)
             {
                 const ReplayEngine::Rendering::RenderItem resolved =
@@ -702,11 +721,12 @@ void framework::draw_shadow_caster_meshes(
             set_shadow_cull_state(material_state.double_sided, item.world);
             gltf->render_shadow(immediate_context.Get(), item.world,
                 static_caster_vs, static_caster_il,
-                alpha_clip ? shadow_caster_alpha_ps.Get() : nullptr,
-                alpha_clip ? shadow_alpha_cb.Get() : nullptr,
+                use_shadow_ps ? shadow_caster_alpha_ps.Get() : nullptr,
+                use_shadow_ps ? shadow_alpha_cb.Get() : nullptr,
                 material_state.alpha_mode != 0 ? material_state.alpha_mode : -1,
                 material_state.alpha_cutoff,
-                material_state.uses_replay_base_map);
+                material_state.uses_replay_base_map,
+                coverage);
             if (alpha_clip && material_state.uses_replay_base_map)
                 material_gpu_binder.UnbindTextures(immediate_context.Get());
             immediate_context->RSSetState(

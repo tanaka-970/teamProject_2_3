@@ -17,6 +17,8 @@ struct GS_OUT
 {
     float4 position : SV_POSITION;
     float2 texcoord : TEXCOORD;
+    // Model Effect Stack の面消しを影でも評価するためワールド座標を運ぶ。
+    float3 world_position : TEXCOORD1;
     uint   slice    : SV_RenderTargetArrayIndex;
 };
 
@@ -52,6 +54,7 @@ void main(triangle GS_IN input[3], inout TriangleStream<GS_OUT> stream)
             GS_OUT output;
             output.position = clip[i];
             output.texcoord = input[i].texcoord;
+            output.world_position = input[i].world_position.xyz;
             output.slice = (uint) slice;
             stream.Append(output);
         }

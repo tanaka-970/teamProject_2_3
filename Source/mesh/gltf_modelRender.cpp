@@ -181,7 +181,7 @@ void gltf_model::render_shadow(ID3D11DeviceContext* context, const XMFLOAT4X4& w
     ID3D11VertexShader* caster_vertex_shader, ID3D11InputLayout* caster_input_layout,
     ID3D11PixelShader* alpha_clip_pixel_shader, ID3D11Buffer* alpha_constants,
     int override_alpha_mode, float override_alpha_cutoff,
-    bool override_uses_replay_base_map)
+    bool override_uses_replay_base_map, bool force_pixel_shader)
 {
     if (!loaded_ || !context || !caster_vertex_shader) return;
 
@@ -216,8 +216,10 @@ void gltf_model::render_shadow(ID3D11DeviceContext* context, const XMFLOAT4X4& w
         const float alpha_cutoff = override_alpha_mode >= 0
             ? override_alpha_cutoff : material->alpha_cutoff;
         const bool needs_alpha_clip = can_alpha_clip && alpha_mode != 0;
+        const bool needs_pixel_shader = needs_alpha_clip ||
+            (force_pixel_shader && alpha_clip_pixel_shader != nullptr);
 
-        ID3D11PixelShader* wanted = needs_alpha_clip ? alpha_clip_pixel_shader : nullptr;
+        ID3D11PixelShader* wanted = needs_pixel_shader ? alpha_clip_pixel_shader : nullptr;
         if (wanted != bound_pixel_shader)
         {
             ReplayEngine::Rendering::Stats().CountStateSet(
@@ -226,9 +228,10 @@ void gltf_model::render_shadow(ID3D11DeviceContext* context, const XMFLOAT4X4& w
             bound_pixel_shader = wanted;
         }
 
-        if (needs_alpha_clip)
+        // 抜かない primitive でも PS を貼るときは、抜き方 0 の定数で上書きする。
+        if (needs_pixel_shader && alpha_constants != nullptr)
         {
-            const float constants[4] = { 1.0f,
+            const float constants[4] = { needs_alpha_clip ? 1.0f : 0.0f,
                 alpha_mode == 1 ? alpha_cutoff : 0.01f,
                 override_uses_replay_base_map ? 1.0f : 0.0f, 0.0f };
             context->UpdateSubresource(alpha_constants, 0, nullptr, constants, 0, 0);

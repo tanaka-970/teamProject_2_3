@@ -71,6 +71,9 @@
     shadow_stats.directional_light_present = directional_light_present;
     shadow_stats.directional_preview_light = directional_light_is_preview;
 
+    // Model Effect Stack の面消しを影へ渡す。Effect 本体と同じ矩形をここで作る。
+    collect_shadow_coverage(camera_output_viewport);
+
     if (csm.constants.params.w > 0.5f)
     {
         REPLAY_PROFILE_GPU_SCOPE(immediate_context.Get(), "CSM Shadow");
