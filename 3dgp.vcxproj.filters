@@ -139,6 +139,9 @@
     <Filter Include="RePlayEngine\Rendering\Deferred">
       <UniqueIdentifier>{b4444444-4444-4444-8444-444444444444}</UniqueIdentifier>
     </Filter>
+    <Filter Include="RePlayEngine\Rendering\Shadows">
+      <UniqueIdentifier>{5adc0000-0000-4000-8000-5ad000000001}</UniqueIdentifier>
+    </Filter>
     <Filter Include="RePlayEngine\Rendering\Passes">
       <UniqueIdentifier>{c1111111-1111-4111-8111-111111111111}</UniqueIdentifier>
     </Filter>
@@ -1206,6 +1209,9 @@
     <ClCompile Include="RePlayEngine\Rendering\Deferred\TiledDeferredPass.cpp">
       <Filter>RePlayEngine\Rendering\Deferred</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\Shadows\LocalShadowAtlas.cpp">
+      <Filter>RePlayEngine\Rendering\Shadows</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Rendering\MeshSimplifier.cpp">
       <Filter>RePlayEngine\Rendering</Filter>
     </ClCompile>
@@ -2027,6 +2033,9 @@
     <ClInclude Include="RePlayEngine\Rendering\Deferred\TiledDeferredPass.h">
       <Filter>RePlayEngine\Rendering\Deferred</Filter>
     </ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\Shadows\LocalShadowAtlas.h">
+      <Filter>RePlayEngine\Rendering\Shadows</Filter>
+    </ClInclude>
     <ClInclude Include="RePlayEngine\Rendering\Frustum.h">
       <Filter>RePlayEngine\Rendering</Filter>
     </ClInclude>
@@ -2332,6 +2341,9 @@
       <Filter>Shader</Filter>
     </FxCompile>
     <FxCompile Include="Shader\csm_caster_gs.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\local_shadow_caster_gs.hlsl">
       <Filter>Shader</Filter>
     </FxCompile>
     <FxCompile Include="Shader\csm_caster_skinned_vs.hlsl">

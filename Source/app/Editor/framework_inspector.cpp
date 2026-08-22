@@ -173,6 +173,8 @@ void framework::draw_inspector()
             {
                 ImGui::TextDisabled("影を落とす Directional Light が無いため停止中");
             }
+            ImGui::TextDisabled("バイアス・濃さ・最遠距離は Directional Light の");
+            ImGui::TextDisabled("Inspector が正本です (Light がある間は上書きされます)");
         }
         break;
 
