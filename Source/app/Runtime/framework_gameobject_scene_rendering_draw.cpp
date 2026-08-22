@@ -673,7 +673,7 @@ void framework::draw_shadow_caster_meshes(
         // 広がりを含まない。誤って捨てるとキャラクターの影だけが消えるという
         // 最も分かりにくい壊れ方をするため、安全側に倒して常に描く。
         skinned_mesh* mesh = resolve_object_mesh(item.mesh_asset);
-        if (mesh == nullptr) continue;
+        if (mesh == nullptr) { ++shadow_stats.skinned_unresolved; continue; }
         if (skinned_caster_vs == nullptr) continue;
 
         skinned_mesh::animation::keyframe blended_keyframe;
