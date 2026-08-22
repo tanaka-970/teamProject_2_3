@@ -15,11 +15,14 @@ struct VS_IN
 struct GS_IN
 {
     float4 world_position : POSITION;
+    // アルファ抜き材質の影のために UV を影パスへも運ぶ。
+    float2 texcoord : TEXCOORD;
 };
 
 GS_IN main(VS_IN vin)
 {
     GS_IN o;
     o.world_position = mul(float4(vin.position, 1.0f), world);
+    o.texcoord = vin.texcoord;
     return o;
 }

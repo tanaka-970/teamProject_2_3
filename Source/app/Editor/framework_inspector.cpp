@@ -164,7 +164,7 @@ void framework::draw_inspector()
         if (ImGui::CollapsingHeader("Cascaded Shadow Map"))
         {
             ImGui::DragFloat4("Splits", &csm.constants.split_distances.x, 0.5f, 1, 500);
-            ImGui::DragFloat("CSM Bias", &csm.constants.params.x, 0.0005f, 0, 0.05f, "%.5f");
+            ImGui::DragFloat("CSM Bias (m)", &csm.constants.params.x, 0.002f, 0, 0.5f, "%.3f");
             ImGui::DragFloat("Normal Bias", &csm.constants.params.y, 0.005f, 0, 1);
             ImGui::DragFloat("Filter", &csm.constants.params.z, 0.05f, 0, 8);
             // params.w は毎フレーム作り直されるので、UI はユーザー設定側を触る。

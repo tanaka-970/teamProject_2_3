@@ -10,11 +10,13 @@ cbuffer LOCAL_SHADOW_PASS : register(b11)
 struct GS_IN
 {
     float4 world_position : POSITION;
+    float2 texcoord : TEXCOORD;
 };
 
 struct GS_OUT
 {
     float4 position : SV_POSITION;
+    float2 texcoord : TEXCOORD;
     uint   slice    : SV_RenderTargetArrayIndex;
 };
 
@@ -49,6 +51,7 @@ void main(triangle GS_IN input[3], inout TriangleStream<GS_OUT> stream)
         {
             GS_OUT output;
             output.position = clip[i];
+            output.texcoord = input[i].texcoord;
             output.slice = (uint) slice;
             stream.Append(output);
         }

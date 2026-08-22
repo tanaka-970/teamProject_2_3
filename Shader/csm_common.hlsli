@@ -56,6 +56,14 @@ float2 csm_shadow_texel_size()
     return 1.0f / max(csm_params2.x, 1.0f);
 }
 
+// カスケード行列の第3列がライトの進行方向になる。正射影でも透視でも同じ。
+float3 csm_light_forward(int cascade)
+{
+    return normalize(float3(csm_view_projection[cascade][0][2],
+                            csm_view_projection[cascade][1][2],
+                            csm_view_projection[cascade][2][2]));
+}
+
 // ワールド位置をカスケードのシャドウUVと参照深度へ変換する。
 // 戻り値: xy=UV, z=参照深度, w=範囲内なら1
 float4 csm_project(float3 world_position, float3 world_normal, int cascade, float NoL)
@@ -66,7 +74,16 @@ float4 csm_project(float3 world_position, float3 world_normal, int cascade, floa
     float slope_scale = saturate(1.0f - NoL);
     float normal_offset = csm_params.y * texel_world * (1.0f + slope_scale * 2.0f);
 
-    float4 light_position = mul(float4(world_position + world_normal * normal_offset, 1.0f),
+    // 深度バイアスはワールドメートル。NDC のまま引くと、カスケードの深度レンジ
+    // (radius*2 + caster_extrusion*2) の広さでバイアスの実効量が変わってしまい、
+    // 小さい物体の影が丸ごと消える。ライト方向へ押し戻してから射影する。
+    float depth_bias_world = csm_params.x * (1.0f + slope_scale * csm_params3.x);
+    depth_bias_world = min(depth_bias_world, max(csm_params3.y, csm_params.x));
+
+    float3 biased_position = world_position + world_normal * normal_offset
+        - csm_light_forward(cascade) * depth_bias_world;
+
+    float4 light_position = mul(float4(biased_position, 1.0f),
         csm_view_projection[cascade]);
     float safe_w = max(abs(light_position.w), 1.0e-6f) * (light_position.w < 0.0f ? -1.0f : 1.0f);
     light_position.xyz /= safe_w;
@@ -75,12 +92,7 @@ float4 csm_project(float3 world_position, float3 world_normal, int cascade, floa
     bool inside = !any(uv < 0.0f) && !any(uv > 1.0f) &&
         light_position.z > 0.0f && light_position.z < 1.0f;
 
-    // 傾斜に応じてバイアスを増やし、斜面のアクネを消す。上限を設けて
-    // 影が浮く(ピーターパニング)のを防ぐ。
-    float slope_bias = csm_params.x * (1.0f + slope_scale * csm_params3.x);
-    slope_bias = min(slope_bias, max(csm_params3.y, csm_params.x));
-
-    return float4(uv, light_position.z - slope_bias, inside ? 1.0f : 0.0f);
+    return float4(uv, light_position.z, inside ? 1.0f : 0.0f);
 }
 
 // 遮蔽物の平均深度を探し、半影幅を推定する(PCSSのブロッカー探索)。

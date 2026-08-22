@@ -20,8 +20,8 @@ namespace ReplayEngine::Components
         bool cast_shadows = true;
         // 影の濃さ。1 で真っ黒、0 で影なしと同じ見た目になる。
         float shadow_strength = 1.0f;
-        // シャドウアクネ対策。大きくしすぎると影が浮く (ピーターパニング)。
-        float shadow_depth_bias = 0.0016f;
+        // シャドウアクネ対策。単位はワールドメートル。大きすぎると影が浮く。
+        float shadow_depth_bias = 0.02f;
         // 法線方向へずらす量 (影マップのテクセル単位)。
         float shadow_normal_bias = 1.4f;
         // 影を出す最遠距離。伸ばすほど影マップのテクセルが粗くなる。
@@ -39,7 +39,7 @@ namespace ReplayEngine::Components
         // ---- 影 ---- 1 灯で 6 面使うため影付きにできる数に上限がある。
         bool cast_shadows = false;
         float shadow_strength = 1.0f;
-        float shadow_depth_bias = 0.0025f;
+        float shadow_depth_bias = 0.02f; // ワールドメートル
         // 近すぎる面を切る距離。小さすぎると深度の精度が落ちてアクネが出る。
         float shadow_near_plane = 0.15f;
     };
@@ -57,7 +57,7 @@ namespace ReplayEngine::Components
         // ---- 影 ---- 円錐 1 つぶんなので影マップは 1 枚で足りる。
         bool cast_shadows = false;
         float shadow_strength = 1.0f;
-        float shadow_depth_bias = 0.0018f;
+        float shadow_depth_bias = 0.02f; // ワールドメートル
         float shadow_near_plane = 0.15f;
     };
 }

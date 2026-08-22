@@ -42,6 +42,12 @@
     // Editor の Runtime 診断パネル。読み取り専用。
     void draw_runtime_diagnostics_panel();
     gltf_model* resolve_object_gltf(const std::string& asset_guid);
+    // Model Asset の実ファイルを引く共通処理。形式ごとの分岐をここへ集約する。
+    enum class model_source_format { unsupported, fbx_cereal, gltf };
+    model_source_format resolve_model_source(
+        const std::string& asset_guid,
+        std::filesystem::path& out_source,
+        std::string& out_reason) const;
     skinned_mesh* resolve_object_mesh(const std::string& asset_guid);
     static_mesh* resolve_builtin_primitive_mesh(const std::string& builtin_id);
     const ReplayEngine::Rendering::MaterialAsset* resolve_object_material(
@@ -81,9 +87,22 @@
         const DirectX::XMFLOAT3& volume_center,
         float volume_radius,
         float volume_extrusion);
-    // 影パス専用の軽い両面判定。resolve_render_item_material() は影パスには重すぎる。
-    bool resolve_render_item_shadow_double_sided(
+    // 影パスが材質から必要とする値だけをまとめて引く。
+    struct shadow_material_state
+    {
+        bool double_sided = false;
+        // 0=抜かない 1=cutoffで抜く 2=Mesh内蔵材質のalpha_modeを見る
+        int alpha_mode = 0;
+        float alpha_cutoff = 0.5f;
+        // true なら BaseMap を t40 (Material Asset) から読む。false は t0。
+        bool uses_replay_base_map = false;
+    };
+    shadow_material_state resolve_shadow_material_state(
         const ReplayEngine::Rendering::RenderItem& source);
+    // 影用のアルファ抜き定数 (b7) を積む。alpha_mode が 0 なら PS は貼らない。
+    void bind_shadow_alpha_constants(const shadow_material_state& state);
+    // world 行列が鏡像なら巻き順が反転するので、裏面ではなく表面を落とす。
+    void set_shadow_cull_state(bool double_sided, const DirectX::XMFLOAT4X4& world);
     void update_line_trails(float elapsed_time);
     void draw_line_strokes();
     void clear_object_mesh_cache() noexcept;

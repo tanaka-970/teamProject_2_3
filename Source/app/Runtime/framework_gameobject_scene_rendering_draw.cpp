@@ -539,14 +539,61 @@ namespace
 }
 
 
-bool framework::resolve_render_item_shadow_double_sided(
+framework::shadow_material_state framework::resolve_shadow_material_state(
     const ReplayEngine::Rendering::RenderItem& source)
 {
+    using ReplayEngine::Rendering::MaterialAlphaMode;
+    shadow_material_state state{};
+
     const ReplayEngine::Rendering::MaterialAsset* material =
         resolve_object_material(source.material_asset);
-    const bool material_double_sided = material != nullptr && material->double_sided;
-    return source.double_sided || material_double_sided ||
+
+    state.double_sided = source.double_sided ||
+        (material != nullptr && material->double_sided) ||
         (source.material_override && source.override_material_double_sided);
+
+    if (material != nullptr && material->alpha_mode != MaterialAlphaMode::Opaque)
+    {
+        // Material Asset がアルファ抜きを宣言している。BaseMap は t40 側。
+        state.alpha_mode = 1;
+        state.alpha_cutoff = material->alpha_mode == MaterialAlphaMode::Mask
+            ? material->alpha_cutoff : 0.01f;
+        state.uses_replay_base_map = !material->base_color_texture.empty();
+    }
+    return state;
+}
+
+void framework::bind_shadow_alpha_constants(const shadow_material_state& state)
+{
+    if (shadow_alpha_cb == nullptr) return;
+    shadow_alpha_constants constants{};
+    constants.params = {
+        static_cast<float>(state.alpha_mode),
+        state.alpha_cutoff,
+        state.uses_replay_base_map ? 1.0f : 0.0f,
+        0.0f };
+    immediate_context->UpdateSubresource(shadow_alpha_cb.Get(), 0, nullptr, &constants, 0, 0);
+    immediate_context->PSSetConstantBuffers(7, 1, shadow_alpha_cb.GetAddressOf());
+}
+
+void framework::set_shadow_cull_state(bool double_sided, const DirectX::XMFLOAT4X4& world)
+{
+    if (double_sided)
+    {
+        immediate_context->RSSetState(
+            rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+        return;
+    }
+
+    // 3x3 の行列式が負なら鏡像。FBX 座標変換のように反転が入ると巻き順も
+    // 裏返るため、そのまま裏面カリングすると影の深度が反対側の面になる。
+    const float determinant =
+        world._11 * (world._22 * world._33 - world._23 * world._32) -
+        world._12 * (world._21 * world._33 - world._23 * world._31) +
+        world._13 * (world._21 * world._32 - world._22 * world._31);
+    immediate_context->RSSetState(determinant < 0.0f
+        ? rasterizer_states[(size_t)RASTER_STATE::CULL_FRONT].Get()
+        : rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
 }
 
 
@@ -582,6 +629,8 @@ void framework::draw_shadow_caster_meshes(
         }
         if (item.mesh_asset.empty()) continue;
 
+        const shadow_material_state material_state = resolve_shadow_material_state(item);
+
         // Engine 内蔵 Primitive。Cube / Sphere などもここを通って影を落とす。
         if (item.mesh_asset.rfind("builtin:", 0) == 0)
         {
@@ -596,15 +645,29 @@ void framework::draw_shadow_caster_meshes(
                 continue;
             }
 
-            const bool double_sided = resolve_render_item_shadow_double_sided(item);
-            if (double_sided)
-                immediate_context->RSSetState(
-                    rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+            const bool alpha_clip = material_state.alpha_mode != 0 &&
+                shadow_caster_alpha_ps != nullptr;
+            if (alpha_clip)
+            {
+                bind_shadow_alpha_constants(material_state);
+                if (material_state.uses_replay_base_map)
+                {
+                    // material_binding は材質解決後の RenderItem にしか入らない。
+                    // アルファ抜きのときだけ解決する。
+                    const ReplayEngine::Rendering::RenderItem resolved =
+                        resolve_render_item_material(item);
+                    material_gpu_binder.BindGBufferTextures(device.Get(),
+                        immediate_context.Get(), asset_database, resolved.material_binding);
+                }
+            }
+            set_shadow_cull_state(material_state.double_sided, item.world);
             primitive->render(immediate_context.Get(), item.world, item.tint,
-                nullptr, static_caster_vs, static_caster_il, false, false);
-            if (double_sided)
-                immediate_context->RSSetState(
-                    rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
+                alpha_clip ? shadow_caster_alpha_ps.Get() : nullptr,
+                static_caster_vs, static_caster_il, alpha_clip, false);
+            if (alpha_clip && material_state.uses_replay_base_map)
+                material_gpu_binder.UnbindTextures(immediate_context.Get());
+            immediate_context->RSSetState(
+                rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
 
             ++shadow_stats.primitive_casters;
             ++shadow_stats.shadow_draw_calls;
@@ -626,15 +689,28 @@ void framework::draw_shadow_caster_meshes(
                 continue;
             }
 
-            const bool double_sided = resolve_render_item_shadow_double_sided(item);
-            if (double_sided)
-                immediate_context->RSSetState(
-                    rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+            // Material Asset の指定が無ければ glTF 内蔵の alphaMode をそのまま使う。
+            const bool alpha_clip = shadow_caster_alpha_ps != nullptr &&
+                (material_state.alpha_mode != 0 || gltf->HasAlphaMaskMaterials());
+            if (alpha_clip && material_state.uses_replay_base_map)
+            {
+                const ReplayEngine::Rendering::RenderItem resolved =
+                    resolve_render_item_material(item);
+                material_gpu_binder.BindGBufferTextures(device.Get(),
+                    immediate_context.Get(), asset_database, resolved.material_binding);
+            }
+            set_shadow_cull_state(material_state.double_sided, item.world);
             gltf->render_shadow(immediate_context.Get(), item.world,
-                static_caster_vs, static_caster_il);
-            if (double_sided)
-                immediate_context->RSSetState(
-                    rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
+                static_caster_vs, static_caster_il,
+                alpha_clip ? shadow_caster_alpha_ps.Get() : nullptr,
+                alpha_clip ? shadow_alpha_cb.Get() : nullptr,
+                material_state.alpha_mode != 0 ? material_state.alpha_mode : -1,
+                material_state.alpha_cutoff,
+                material_state.uses_replay_base_map);
+            if (alpha_clip && material_state.uses_replay_base_map)
+                material_gpu_binder.UnbindTextures(immediate_context.Get());
+            immediate_context->RSSetState(
+                rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
 
             ++shadow_stats.static_casters;
             ++shadow_stats.shadow_draw_calls;
@@ -650,19 +726,43 @@ void framework::draw_shadow_caster_meshes(
         const skinned_mesh::animation::keyframe* keyframe =
             resolve_render_item_keyframe(*mesh, item, blended_keyframe);
 
-        const bool draw_double_sided = resolve_render_item_shadow_double_sided(item) ||
-            (mesh->IsGltf() && item.material_asset.empty() &&
-                mesh->HasDoubleSidedMaterials());
-        if (draw_double_sided)
-            immediate_context->RSSetState(
-                rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+        const bool use_embedded_gltf_materials = mesh->IsGltf() &&
+            item.material_asset.empty();
+        const bool draw_double_sided = material_state.double_sided ||
+            (use_embedded_gltf_materials && mesh->HasDoubleSidedMaterials());
+
+        // 内蔵材質側の alpha_mode は subset ごとに b0 へ載るので、PS 内で見る。
+        shadow_material_state skinned_alpha = material_state;
+        if (skinned_alpha.alpha_mode == 0 && use_embedded_gltf_materials &&
+            mesh->HasAlphaMaskMaterials())
+        {
+            skinned_alpha.alpha_mode = 2;
+            skinned_alpha.uses_replay_base_map = false;
+        }
+        const bool alpha_clip = skinned_alpha.alpha_mode != 0 &&
+            shadow_caster_alpha_skinned_ps != nullptr;
+        if (alpha_clip)
+        {
+            bind_shadow_alpha_constants(skinned_alpha);
+            if (skinned_alpha.uses_replay_base_map)
+            {
+                const ReplayEngine::Rendering::RenderItem resolved =
+                    resolve_render_item_material(item);
+                material_gpu_binder.BindGBufferTextures(device.Get(),
+                    immediate_context.Get(), asset_database, resolved.material_binding);
+            }
+        }
+
+        set_shadow_cull_state(draw_double_sided, item.world);
         // write_motion_vectors は必ず false。影パスで進めると TAA が尾を引く。
         mesh->render(immediate_context.Get(), item.world, item.tint,
-            keyframe, nullptr, skinned_caster_vs, skinned_caster_il,
-            false, false, false);
-        if (draw_double_sided)
-            immediate_context->RSSetState(
-                rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
+            keyframe, alpha_clip ? shadow_caster_alpha_skinned_ps.Get() : nullptr,
+            skinned_caster_vs, skinned_caster_il,
+            alpha_clip, false, use_embedded_gltf_materials);
+        if (alpha_clip && skinned_alpha.uses_replay_base_map)
+            material_gpu_binder.UnbindTextures(immediate_context.Get());
+        immediate_context->RSSetState(
+            rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
 
         ++shadow_stats.skinned_casters;
         ++shadow_stats.shadow_draw_calls;
@@ -700,20 +800,19 @@ void framework::draw_shadow_caster_meshes(
                 continue;
             }
 
-            if (renderer->double_sided)
-                immediate_context->RSSetState(
-                    rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+            set_shadow_cull_state(renderer->double_sided, world);
             landscape_mesh->render(immediate_context.Get(), world, renderer->tint,
                 nullptr, static_caster_vs, static_caster_il, false, false);
-            if (renderer->double_sided)
-                immediate_context->RSSetState(
-                    rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
+            immediate_context->RSSetState(
+                rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
 
             ++shadow_stats.landscape_casters;
             ++shadow_stats.shadow_draw_calls;
         }
     }
 
+    // 影パスで貼った Pixel Shader / 材質定数を次のパスへ持ち越さない。
+    immediate_context->PSSetShader(nullptr, nullptr, 0);
     culling.enabled = culling_was_enabled;
 }
 
