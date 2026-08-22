@@ -1,4 +1,4 @@
-REPLAY_ASSET_DB 2 185
+REPLAY_ASSET_DB 2 188
 "60412424bb1443240b2bf2160eee6923" 1 "DemoAsset" "resources/DemoAsset" "resources/.replay_cache/models/f9fffac39252a621_v0.replaycache"
 "1bd1358040255f5bd18f3be0d79fbe3c" 1 "DemoAsset" "resources/DemoAsset" "resources/.replay_cache/models/6a20e727f78fb359_v0.replaycache"
 "e5c4168feb92f8fd7357f6cbc1f66e22" 1 "DemoAsset" "resources/DemoAsset" "resources/.replay_cache/models/98fd72a862da8c8f_v0.replaycache"
@@ -184,3 +184,6 @@ REPLAY_ASSET_DB 2 185
 "e1c8c0730320f6a7e5cefe14c0848736" 5 "LocalShadowTest" "resources/Scenes/LocalShadowTest.replayscene" ""
 "cb64e77a4b55af60ba80217c0e88a871" 5 "SkinnedShadowTest" "resources/Scenes/SkinnedShadowTest.replayscene" ""
 "ec24e9cfab50d6a6324f279c4d0064a5" 1 "AllAnimation1" "resources/AnimationModel/AllAnimation1.cereal" ""
+"8e4a78f8f70a2435fb69a97850c856fa" 1 "glb" "resources/AnimationModel/glb.glb" ""
+"e8d87d3b54628df5b57d23f02b07b992" 1 "ExampleStage" "resources/Stage/ExampleStage.cereal" ""
+"5cc3e6c26224f0948c34fe91aaadca0d" 5 "AllFormatShadowTest" "resources/Scenes/AllFormatShadowTest.replayscene" ""

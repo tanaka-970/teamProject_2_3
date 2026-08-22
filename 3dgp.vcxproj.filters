@@ -2346,6 +2346,12 @@
     <FxCompile Include="Shader\local_shadow_caster_gs.hlsl">
       <Filter>Shader</Filter>
     </FxCompile>
+    <FxCompile Include="Shader\shadow_caster_alpha_ps.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Shader\shadow_caster_alpha_skinned_ps.hlsl">
+      <Filter>Shader</Filter>
+    </FxCompile>
     <FxCompile Include="Shader\csm_caster_skinned_vs.hlsl">
       <Filter>Shader</Filter>
     </FxCompile>

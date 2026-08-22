@@ -23,8 +23,9 @@ public:
     enum class BLEND_STATE { NONE, ALPHA, ADD, MULTIPLY, SCREEN, PREMULTIPLIED };
     Microsoft::WRL::ComPtr<ID3D11BlendState> blend_states[6];
 
-    enum class RASTER_STATE { SOLID, WIREFRAME, CULL_NONE, WIREFRAME_CULL_NONE, SCISSOR };
-    Microsoft::WRL::ComPtr<ID3D11RasterizerState> rasterizer_states[5];
+    // CULL_FRONT は world 行列の行列式が負（鏡像）のときに使う。
+    enum class RASTER_STATE { SOLID, WIREFRAME, CULL_NONE, WIREFRAME_CULL_NONE, SCISSOR, CULL_FRONT };
+    Microsoft::WRL::ComPtr<ID3D11RasterizerState> rasterizer_states[6];
 
     struct scene_constants
     {
@@ -111,6 +112,16 @@ public:
 
     toon_renderer    toon;
     csm_renderer     csm;
+
+    // Shader\shadow_alpha_common.hlsli の SHADOW_ALPHA_CONSTANTS(b7) と一致させる。
+    struct shadow_alpha_constants
+    {
+        // x=抜き方(0/1/2) y=cutoff z=BaseMapの出所(0:t0 1:t40) w=予約
+        DirectX::XMFLOAT4 params{ 0.0f, 0.5f, 0.0f, 0.0f };
+    };
+    Microsoft::WRL::ComPtr<ID3D11Buffer> shadow_alpha_cb;
+    Microsoft::WRL::ComPtr<ID3D11PixelShader> shadow_caster_alpha_ps;
+    Microsoft::WRL::ComPtr<ID3D11PixelShader> shadow_caster_alpha_skinned_ps;
     // Point / Spot の動的シャドウマップ。CSM とは投影方法が違うので別リソース。
     ReplayEngine::Rendering::LocalShadowAtlas local_shadows;
 

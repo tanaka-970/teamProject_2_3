@@ -168,8 +168,20 @@ void gltf_model::render(ID3D11DeviceContext* context, const XMFLOAT4X4& world,
     }
 }
 
+bool gltf_model::HasAlphaMaskMaterials() const noexcept
+{
+    for (const Material& material : materials_)
+    {
+        if (material.alpha_mode != 0) return true;
+    }
+    return false;
+}
+
 void gltf_model::render_shadow(ID3D11DeviceContext* context, const XMFLOAT4X4& world,
-    ID3D11VertexShader* caster_vertex_shader, ID3D11InputLayout* caster_input_layout)
+    ID3D11VertexShader* caster_vertex_shader, ID3D11InputLayout* caster_input_layout,
+    ID3D11PixelShader* alpha_clip_pixel_shader, ID3D11Buffer* alpha_constants,
+    int override_alpha_mode, float override_alpha_cutoff,
+    bool override_uses_replay_base_map)
 {
     if (!loaded_ || !context || !caster_vertex_shader) return;
 
@@ -182,9 +194,10 @@ void gltf_model::render_shadow(ID3D11DeviceContext* context, const XMFLOAT4X4& w
     ReplayEngine::Rendering::Stats().CountStateSet(
         ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
     context->VSSetShader(caster_vertex_shader, nullptr, 0);
-    // 影深度パスは色を書かない。直前の Pixel Shader が残らないよう落とす。
-    ReplayEngine::Rendering::Stats().CountStateSet(
-        ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
+
+    const bool can_alpha_clip =
+        alpha_clip_pixel_shader != nullptr && alpha_constants != nullptr;
+    ID3D11PixelShader* bound_pixel_shader = nullptr;
     context->PSSetShader(nullptr, nullptr, 0);
 
     for (const auto& primitive : primitives_)
@@ -192,6 +205,39 @@ void gltf_model::render_shadow(ID3D11DeviceContext* context, const XMFLOAT4X4& w
         ID3D11Buffer* vertex_buffer = primitive.vertex_buffer.Get();
         ID3D11Buffer* index_buffer = primitive.index_buffer.Get();
         if (vertex_buffer == nullptr || index_buffer == nullptr) continue;
+
+        const Material* material = primitive.material >= 0 &&
+            primitive.material < static_cast<int>(materials_.size())
+            ? &materials_[primitive.material] : &materials_[0];
+
+        // Material Asset の指定があればそれを、無ければ glTF 内蔵の alphaMode を使う。
+        const int alpha_mode = override_alpha_mode >= 0
+            ? override_alpha_mode : material->alpha_mode;
+        const float alpha_cutoff = override_alpha_mode >= 0
+            ? override_alpha_cutoff : material->alpha_cutoff;
+        const bool needs_alpha_clip = can_alpha_clip && alpha_mode != 0;
+
+        ID3D11PixelShader* wanted = needs_alpha_clip ? alpha_clip_pixel_shader : nullptr;
+        if (wanted != bound_pixel_shader)
+        {
+            ReplayEngine::Rendering::Stats().CountStateSet(
+                ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
+            context->PSSetShader(wanted, nullptr, 0);
+            bound_pixel_shader = wanted;
+        }
+
+        if (needs_alpha_clip)
+        {
+            const float constants[4] = { 1.0f,
+                alpha_mode == 1 ? alpha_cutoff : 0.01f,
+                override_uses_replay_base_map ? 1.0f : 0.0f, 0.0f };
+            context->UpdateSubresource(alpha_constants, 0, nullptr, constants, 0, 0);
+            context->PSSetConstantBuffers(7, 1, &alpha_constants);
+            ID3D11ShaderResourceView* base_color[1]{
+                material->base_color_texture ? material->base_color_texture.Get()
+                                             : white_texture_.Get() };
+            context->PSSetShaderResources(0, 1, base_color);
+        }
 
         // LOD は使わない。影だけ粗いメッシュになると輪郭が本体からずれる。
         UINT stride = sizeof(Vertex), offset = 0;
@@ -208,4 +254,6 @@ void gltf_model::render_shadow(ID3D11DeviceContext* context, const XMFLOAT4X4& w
         // 影の描画は画面に見えるジオメトリの統計へ混ぜない。
         context->DrawIndexed(primitive.index_count, 0, 0);
     }
+
+    if (bound_pixel_shader != nullptr) context->PSSetShader(nullptr, nullptr, 0);
 }

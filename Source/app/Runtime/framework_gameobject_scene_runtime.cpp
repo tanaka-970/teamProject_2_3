@@ -364,7 +364,7 @@ void framework::sync_object_lights()
                 csm.constants.params3.z =
                     (std::max)(0.0f, (std::min)(1.0f, light->shadow_strength));
                 csm.constants.params.x =
-                    (std::max)(0.0f, (std::min)(0.05f, light->shadow_depth_bias));
+                    (std::max)(0.0f, (std::min)(0.5f, light->shadow_depth_bias));
                 csm.constants.params.y =
                     (std::max)(0.0f, (std::min)(6.0f, light->shadow_normal_bias));
                 csm.shadow_distance = (std::max)(1.0f, light->shadow_distance);

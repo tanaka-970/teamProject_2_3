@@ -5,6 +5,8 @@
 struct SHADOW_VS_OUT
 {
     float4 position : SV_POSITION;
+    // アルファ抜き材質の影のために UV を影パスへも運ぶ。
+    float2 texcoord : TEXCOORD;
 };
 
 SHADOW_VS_OUT main(VS_IN vin)
@@ -24,5 +26,6 @@ SHADOW_VS_OUT main(VS_IN vin)
 
     float4 world_position = mul(blended_position, world);
     vout.position = mul(world_position, light_view_projection);
+    vout.texcoord = vin.texcoord;
     return vout;
 }

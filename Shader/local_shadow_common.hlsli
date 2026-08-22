@@ -41,8 +41,15 @@ float local_shadow_sample_slice(int slice, float3 world_position,
     // 法線オフセットは影マップ 1 テクセルのワールド長に比例させる。
     float texel_world = light_distance * 2.0f / map_size;
     float slope = saturate(1.0f - NoL);
+    // 深度バイアスは CSM と同じくワールドメートル。行列の第3列がライトの
+    // 進行方向なので、そこへ押し戻してから射影する。
+    float3 light_forward = normalize(float3(source.view_projection[0][2],
+                                            source.view_projection[1][2],
+                                            source.view_projection[2][2]));
+    float depth_bias_world = source.params.z * (1.0f + slope * 2.0f);
     float3 offset_position = world_position +
-        world_normal * texel_world * (1.5f + slope * 3.0f);
+        world_normal * texel_world * (1.5f + slope * 3.0f) -
+        light_forward * depth_bias_world;
 
     float4 clip = mul(float4(offset_position, 1.0f), source.view_projection);
     if (clip.w <= 0.0f) return 1.0f; // ライトの後ろ側
@@ -52,7 +59,7 @@ float local_shadow_sample_slice(int slice, float3 world_position,
     if (any(uv < 0.0f) || any(uv > 1.0f)) return 1.0f;
     if (ndc.z <= 0.0f || ndc.z >= 1.0f) return 1.0f;
 
-    float reference = ndc.z - source.params.z * (1.0f + slope * 2.0f);
+    float reference = ndc.z;
 
     // 3x3 PCF。Point は 6 面ぶんあるのでタップ数を増やすと一気に重くなる。
     float texel = 1.0f / map_size;

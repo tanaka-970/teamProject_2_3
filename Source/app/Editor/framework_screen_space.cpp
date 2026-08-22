@@ -161,7 +161,7 @@ void framework::draw_screen_space_settings()
             // バイアス・濃さ・最遠距離は Directional Light Component が正本。
             if (shadow_stats.directional_light_present)
             {
-                ImGui::TextDisabled("深度バイアス: %.5f (Light Component)",
+                ImGui::TextDisabled("深度バイアス: %.3f m (Light Component)",
                     csm.constants.params.x);
                 ImGui::TextDisabled("法線オフセット: %.2f (Light Component)",
                     csm.constants.params.y);
@@ -173,7 +173,7 @@ void framework::draw_screen_space_settings()
             }
             else
             {
-                ImGui::SliderFloat("深度バイアス", &csm.constants.params.x, 0.0f, 0.01f, "%.5f");
+                ImGui::SliderFloat("深度バイアス (m)", &csm.constants.params.x, 0.0f, 0.5f, "%.3f");
                 ImGui::SliderFloat("法線オフセット (テクセル)", &csm.constants.params.y, 0.0f, 6.0f, "%.2f");
                 ImGui::SliderFloat("影の濃さ", &csm.constants.params3.z, 0.0f, 1.0f, "%.2f");
                 ImGui::SliderFloat("影の最遠距離 (m)", &csm.shadow_distance, 20.0f, 600.0f, "%.0f");

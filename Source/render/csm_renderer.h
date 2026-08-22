@@ -21,11 +21,12 @@ public:
         DirectX::XMFLOAT4   split_distances{ 12.0f, 34.0f, 90.0f, 240.0f };
         // x=depth_bias, y=normal_bias(テクセル倍率), z=filter_radius(テクセル), w=enable
         // filter_radius は 2 テクセル未満にしない。斜めの縁が階段状に出る。
-        DirectX::XMFLOAT4   params{ 0.0016f, 1.4f, 3.0f, 1.0f };
+        // x はワールドメートル。NDC ではないので深度レンジに依存しない。
+        DirectX::XMFLOAT4   params{ 0.02f, 1.4f, 3.0f, 1.0f };
         // x=shadow_map_size, y=cascade_blend(view z), z=light_size_uv, w=pcss_enable
         DirectX::XMFLOAT4   params2{ static_cast<float>(SHADOW_MAP_SIZE), 6.0f, 0.0035f, 1.0f };
-        // x=slope_bias_scale, y=max_bias, z=strength, w=tap_scale
-        DirectX::XMFLOAT4   params3{ 3.0f, 0.02f, 1.0f, 1.0f };
+        // x=slope_bias_scale, y=max_bias(ワールドメートル), z=strength, w=tap_scale
+        DirectX::XMFLOAT4   params3{ 3.0f, 0.25f, 1.0f, 1.0f };
         // カスケードごとの1テクセルのワールド長 (法線オフセットの基準)
         DirectX::XMFLOAT4   texel_world{ 0.01f, 0.01f, 0.01f, 0.01f };
     };

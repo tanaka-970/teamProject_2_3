@@ -1,10 +1,15 @@
 // 形状を各カスケードのシャドウマップへ複製するジオメトリシェーダー。
 #include "csm_common.hlsli"
 
-struct GS_IN  { float4 world_position : POSITION; };
+struct GS_IN
+{
+    float4 world_position : POSITION;
+    float2 texcoord : TEXCOORD;
+};
 struct GS_OUT
 {
     float4 position : SV_POSITION;
+    float2 texcoord : TEXCOORD;
     uint   slice    : SV_RenderTargetArrayIndex;
 };
 
@@ -17,6 +22,7 @@ void main(triangle GS_IN ipt[3], inout TriangleStream<GS_OUT> stream)
         {
             GS_OUT o;
             o.position = mul(ipt[v].world_position, csm_view_projection[c]);
+            o.texcoord = ipt[v].texcoord;
             o.slice    = c;
             stream.Append(o);
         }

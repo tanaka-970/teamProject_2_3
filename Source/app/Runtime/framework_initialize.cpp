@@ -261,6 +261,10 @@ bool framework::initialize()
     rd.CullMode = D3D11_CULL_NONE;
     rd.ScissorEnable = TRUE;
     device->CreateRasterizerState(&rd, rasterizer_states[(size_t)RASTER_STATE::SCISSOR].GetAddressOf());
+    // 鏡像変換された形状は巻き順が反転するので、裏面ではなく表面を落として辻褄を合わせる。
+    rd.ScissorEnable = FALSE;
+    rd.CullMode = D3D11_CULL_FRONT;
+    device->CreateRasterizerState(&rd, rasterizer_states[(size_t)RASTER_STATE::CULL_FRONT].GetAddressOf());
 
     D3D11_BUFFER_DESC cbd{};
     cbd.ByteWidth = sizeof(scene_constants);
@@ -278,6 +282,17 @@ bool framework::initialize()
     create_ps_from_cso(device.Get(), "static_mesh_gbuffer_ps.cso", static_mesh_gbuffer_ps.GetAddressOf());
     create_ps_from_cso(device.Get(), "skinned_mesh_gbuffer_ps.cso", skinned_mesh_gbuffer_ps.GetAddressOf());
     create_ps_from_cso(device.Get(), "object_pixelate_ps.cso", object_pixelate_ps.GetAddressOf());
+    create_ps_from_cso(device.Get(), "shadow_caster_alpha_ps.cso",
+        shadow_caster_alpha_ps.GetAddressOf());
+    create_ps_from_cso(device.Get(), "shadow_caster_alpha_skinned_ps.cso",
+        shadow_caster_alpha_skinned_ps.GetAddressOf());
+    {
+        D3D11_BUFFER_DESC shadow_alpha_desc{};
+        shadow_alpha_desc.ByteWidth = sizeof(shadow_alpha_constants);
+        shadow_alpha_desc.Usage = D3D11_USAGE_DEFAULT;
+        shadow_alpha_desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+        device->CreateBuffer(&shadow_alpha_desc, nullptr, shadow_alpha_cb.GetAddressOf());
+    }
     create_ps_from_cso(device.Get(), "skinned_mesh_stylized_character_ps.cso",
         skinned_stylized_character_ps.GetAddressOf());
     create_ps_from_cso(device.Get(), "static_mesh_stylized_character_ps.cso",
