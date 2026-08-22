@@ -180,6 +180,26 @@ namespace ReplayEngine::Scripting::CSharp::Detail
             table.rigidbody_get_angular_velocity = &NativeRigidbodyGetAngularVelocity;
             table.rigidbody_set_angular_velocity = &NativeRigidbodySetAngularVelocity;
 
+            table.input_key_held = &NativeInputKeyHeld;
+            table.input_key_pressed = &NativeInputKeyPressed;
+            table.input_key_released = &NativeInputKeyReleased;
+            table.input_mouse_held = &NativeInputMouseHeld;
+            table.input_mouse_pressed = &NativeInputMousePressed;
+            table.input_mouse_released = &NativeInputMouseReleased;
+            table.input_pointer_position = &NativeInputPointerPosition;
+            table.input_wheel_delta = &NativeInputWheelDelta;
+            table.input_pad_connected = &NativeInputPadConnected;
+            table.input_pad_button_held = &NativeInputPadButtonHeld;
+            table.input_pad_button_pressed = &NativeInputPadButtonPressed;
+            table.input_pad_button_released = &NativeInputPadButtonReleased;
+            table.input_pad_axis = &NativeInputPadAxis;
+            table.input_set_vibration = &NativeInputSetVibration;
+            table.instantiate_prefab_tracked = &NativeInstantiatePrefabTracked;
+            table.take_spawn_result = &NativeTakeSpawnResult;
+            table.get_current_scene_guid = &NativeGetCurrentSceneGuid;
+            table.quit_application = &NativeQuitApplication;
+            table.event_dropped_count = &NativeEventDroppedCount;
+
             // 自己記述ヘッダー。C# 側はこれを見て表の食い違いをその場で弾く。
             table.header.abi_version = kNativeApiAbiVersion;
             table.header.struct_size = static_cast<std::uint32_t>(sizeof(NativeApiTable));

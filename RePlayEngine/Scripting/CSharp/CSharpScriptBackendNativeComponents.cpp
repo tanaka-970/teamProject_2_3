@@ -385,4 +385,203 @@ namespace ReplayEngine::Scripting::CSharp::Detail
         if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
         return StatusCode(g_runtime_context->RigidbodySetAngularVelocity(handle, value));
     }
+
+    // ---- v11 生デバイス入力 ------------------------------------------------
+
+    namespace
+    {
+        int InputBool(int* out, RuntimeStatus status, bool value) noexcept
+        {
+            if (out == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+            *out = value ? 1 : 0;
+            return StatusCode(status);
+        }
+    }
+
+    int NativeInputKeyHeld(int key, int* out) noexcept
+    {
+        if (out == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+        *out = 0;
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        bool value = false;
+        const RuntimeStatus status = g_runtime_context->InputKeyHeld(key, value);
+        return InputBool(out, status, value);
+    }
+
+    int NativeInputKeyPressed(int key, int* out) noexcept
+    {
+        if (out == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+        *out = 0;
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        bool value = false;
+        const RuntimeStatus status = g_runtime_context->InputKeyPressed(key, value);
+        return InputBool(out, status, value);
+    }
+
+    int NativeInputKeyReleased(int key, int* out) noexcept
+    {
+        if (out == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+        *out = 0;
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        bool value = false;
+        const RuntimeStatus status = g_runtime_context->InputKeyReleased(key, value);
+        return InputBool(out, status, value);
+    }
+
+    int NativeInputMouseHeld(int button, int* out) noexcept
+    {
+        if (out == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+        *out = 0;
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        bool value = false;
+        const RuntimeStatus status = g_runtime_context->InputMouseButtonHeld(button, value);
+        return InputBool(out, status, value);
+    }
+
+    int NativeInputMousePressed(int button, int* out) noexcept
+    {
+        if (out == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+        *out = 0;
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        bool value = false;
+        const RuntimeStatus status =
+            g_runtime_context->InputMouseButtonPressed(button, value);
+        return InputBool(out, status, value);
+    }
+
+    int NativeInputMouseReleased(int button, int* out) noexcept
+    {
+        if (out == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+        *out = 0;
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        bool value = false;
+        const RuntimeStatus status =
+            g_runtime_context->InputMouseButtonReleased(button, value);
+        return InputBool(out, status, value);
+    }
+
+    int NativeInputPointerPosition(float* out_x, float* out_y) noexcept
+    {
+        if (out_x == nullptr || out_y == nullptr)
+            return StatusCode(RuntimeStatus::InvalidArgument);
+        *out_x = 0.0f;
+        *out_y = 0.0f;
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        return StatusCode(g_runtime_context->InputPointerPosition(*out_x, *out_y));
+    }
+
+    int NativeInputWheelDelta(float* out) noexcept
+    {
+        if (out == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+        *out = 0.0f;
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        return StatusCode(g_runtime_context->InputWheelDelta(*out));
+    }
+
+    int NativeInputPadConnected(int player_slot, int* out) noexcept
+    {
+        if (out == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+        *out = 0;
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        bool value = false;
+        const RuntimeStatus status =
+            g_runtime_context->InputGamepadConnected(player_slot, value);
+        return InputBool(out, status, value);
+    }
+
+    int NativeInputPadButtonHeld(int player_slot, int button, int* out) noexcept
+    {
+        if (out == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+        *out = 0;
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        bool value = false;
+        const RuntimeStatus status =
+            g_runtime_context->InputGamepadButtonHeld(player_slot, button, value);
+        return InputBool(out, status, value);
+    }
+
+    int NativeInputPadButtonPressed(int player_slot, int button, int* out) noexcept
+    {
+        if (out == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+        *out = 0;
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        bool value = false;
+        const RuntimeStatus status =
+            g_runtime_context->InputGamepadButtonPressed(player_slot, button, value);
+        return InputBool(out, status, value);
+    }
+
+    int NativeInputPadButtonReleased(int player_slot, int button, int* out) noexcept
+    {
+        if (out == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+        *out = 0;
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        bool value = false;
+        const RuntimeStatus status =
+            g_runtime_context->InputGamepadButtonReleased(player_slot, button, value);
+        return InputBool(out, status, value);
+    }
+
+    int NativeInputPadAxis(int player_slot, int axis, float* out) noexcept
+    {
+        if (out == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+        *out = 0.0f;
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        return StatusCode(g_runtime_context->InputGamepadAxis(player_slot, axis, *out));
+    }
+
+    int NativeInputSetVibration(int player_slot, float low, float high) noexcept
+    {
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        return StatusCode(
+            g_runtime_context->InputSetGamepadVibration(player_slot, low, high));
+    }
+
+    // ---- v11 Scene / 診断 --------------------------------------------------
+
+    int NativeInstantiatePrefabTracked(const char* asset_guid, DirectX::XMFLOAT3 position,
+        DirectX::XMFLOAT3 rotation_euler, DirectX::XMFLOAT3 scale,
+        Runtime::ObjectHandle parent, std::uint64_t* out_request) noexcept
+    {
+        if (out_request == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+        *out_request = 0;
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        RuntimeContext::SpawnRequestID request = 0;
+        const RuntimeStatus status = g_runtime_context->InstantiatePrefabDeferredTracked(
+            CString(asset_guid), position, rotation_euler, scale, parent, request);
+        *out_request = request;
+        return StatusCode(status);
+    }
+
+    int NativeTakeSpawnResult(std::uint64_t request, Runtime::ObjectHandle* out) noexcept
+    {
+        if (out == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+        *out = Runtime::ObjectHandle::None();
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        return StatusCode(g_runtime_context->TryTakeSpawnResult(request, *out));
+    }
+
+    int NativeGetCurrentSceneGuid(char* output, int output_capacity) noexcept
+    {
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        return WriteNativeText(g_runtime_context->CurrentSceneGuid(), output,
+            output_capacity);
+    }
+
+    int NativeQuitApplication(const char* reason) noexcept
+    {
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        return StatusCode(g_runtime_context->QuitApplication(CString(reason)));
+    }
+
+    int NativeEventDroppedCount(std::uint64_t subscription, std::uint64_t* out) noexcept
+    {
+        if (out == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+        *out = 0;
+        const auto it = g_event_subscriptions.find(subscription);
+        if (it == g_event_subscriptions.end())
+            return StatusCode(RuntimeStatus::InvalidArgument);
+        *out = it->second.dropped;
+        return StatusCode(RuntimeStatus::Ok);
+    }
 }

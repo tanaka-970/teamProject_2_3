@@ -137,6 +137,23 @@ namespace ReplayEngine::Runtime
             Reflection::MakeTypeGUID("a1000000000000000000000000000012");
         inline constexpr Reflection::TypeGUID CompositionMarker =
             Reflection::MakeTypeGUID("a1000000000000000000000000000013");
+
+        // 接触。C++ の OnCollisionXxx / OnTriggerXxx と同じ瞬間に発行する。
+        // source が「受け取る側」、target が「相手」。
+        // payload: point_x/y/z, normal_x/y/z, hit_kind, other_collider, other_valid
+        inline constexpr Reflection::TypeGUID CollisionEnter =
+            Reflection::MakeTypeGUID("a1000000000000000000000000000014");
+        inline constexpr Reflection::TypeGUID CollisionStay =
+            Reflection::MakeTypeGUID("a1000000000000000000000000000015");
+        inline constexpr Reflection::TypeGUID CollisionExit =
+            Reflection::MakeTypeGUID("a1000000000000000000000000000016");
+        // payload: self_collider, other_collider, self_is_trigger
+        inline constexpr Reflection::TypeGUID TriggerEnter =
+            Reflection::MakeTypeGUID("a1000000000000000000000000000017");
+        inline constexpr Reflection::TypeGUID TriggerStay =
+            Reflection::MakeTypeGUID("a1000000000000000000000000000018");
+        inline constexpr Reflection::TypeGUID TriggerExit =
+            Reflection::MakeTypeGUID("a1000000000000000000000000000019");
     }
 
     // イベントの発行と購読。

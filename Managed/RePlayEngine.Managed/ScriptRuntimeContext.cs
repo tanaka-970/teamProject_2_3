@@ -482,4 +482,45 @@ public sealed class ScriptRuntimeContext
         => NativeBridge.SetWorldScale(handle, value);
     public RuntimeStatus LookAt(ObjectHandle handle, Vector3 target)
         => NativeBridge.LookAt(handle, target, new Vector3(0.0f, 1.0f, 0.0f));
+
+    // ---- v11 Scene / 生成 ----------------------------------------------------
+
+    // 現在の Runtime Scene の Asset GUID。未接続なら空。
+    public RuntimeResult<string> CurrentSceneGuid() => NativeBridge.GetCurrentSceneGuid();
+
+    // プロセスは落とさない。要求として記録するだけ。
+    public RuntimeStatus QuitApplication(string reason = "") =>
+        NativeBridge.QuitApplication(reason ?? string.Empty);
+
+    // 遅延生成を積み、要求番号を返す。Flush 後に TakeSpawnResult で引き取る。
+    public RuntimeResult<ulong> InstantiateDeferred(string prefabAssetGuid,
+        Vector3 position, Vector3 rotationEuler, Vector3 scale, ObjectHandle parent = default)
+        => NativeBridge.InstantiatePrefabTracked(
+            prefabAssetGuid, position, rotationEuler, scale, parent);
+
+    // 完了した遅延生成を 1 件引き取る。
+    // まだ Flush されていなければ Status が TransitionInProgress になる。
+    public RuntimeResult<ObjectHandle> TakeSpawnResult(ulong request)
+        => NativeBridge.TakeSpawnResult(request);
+
+    // Scene 遷移で破棄されないようにする。PersistentComponent を付けるだけ。
+    public RuntimeStatus DontDestroyOnLoad(ObjectHandle handle)
+    {
+        var result = AddComponent<PersistentComponent>(handle);
+        return result.Status;
+    }
+
+    // 取りこぼして捨てられたイベント数。Poll 忘れの検出に使う。
+    public RuntimeResult<ulong> EventDroppedCount(EventSubscription subscription)
+        => NativeBridge.EventDroppedCount(subscription);
+
+    // ---- v11 生デバイス入力 --------------------------------------------------
+    //
+    // 実体は静的な Input クラス。Behaviour から Runtime 経由でも呼べるようにしておく。
+
+    public bool GetKey(Key key) => Input.GetKey(key);
+    public bool GetKeyDown(Key key) => Input.GetKeyDown(key);
+    public bool GetKeyUp(Key key) => Input.GetKeyUp(key);
+    public Vector2 MousePosition => Input.MousePosition;
+    public float MouseScrollDelta => Input.MouseScrollDelta;
 }

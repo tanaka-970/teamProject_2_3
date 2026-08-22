@@ -20,6 +20,8 @@
 #include "../../Components/Physics/SphereColliderComponent.h"
 #include "../../Object/GameObject/GameObject.h"
 #include "../../Physics/CollisionLayers.h"
+#include "../../Runtime/API/RuntimeContext.h"
+#include "../../Runtime/Events/EventBus.h"
 #include "../../Physics/ShapeSweep.h"
 
 #include <cmath>
@@ -32,6 +34,56 @@ namespace ReplayEngine::Scene
 
     namespace
     {
+        // Trigger の接触を EventBus へも流す。C++ の OnTriggerXxx と同じ瞬間に出す。
+        // source が受け取る側、target が相手。
+        void PublishTriggerEvent(Scene& scene, Core::ObjectID receiver,
+            const Core::TriggerContact& contact, int phase)
+        {
+            Runtime::RuntimeContext* runtime = scene.Services().Runtime();
+            if (runtime == nullptr) return;
+
+            const bool receiver_is_trigger = receiver == contact.trigger_object;
+            const Core::ObjectID other_id = receiver_is_trigger
+                ? contact.other_object : contact.trigger_object;
+
+            Runtime::EventRecord record;
+            switch (phase)
+            {
+            case 0:
+                record.type = Runtime::EngineEvents::TriggerEnter;
+                record.type_name = "TriggerEnter";
+                break;
+            case 1:
+                record.type = Runtime::EngineEvents::TriggerStay;
+                record.type_name = "TriggerStay";
+                break;
+            default:
+                record.type = Runtime::EngineEvents::TriggerExit;
+                record.type_name = "TriggerExit";
+                break;
+            }
+
+            const Runtime::HandleResolver resolver(scene);
+            Core::GameObject* receiver_object = scene.FindGameObjectByID(receiver);
+            Core::GameObject* other_object = scene.FindGameObjectByID(other_id);
+            if (receiver_object == nullptr) return;
+            record.source = resolver.MakeHandle(receiver_object);
+            record.target = other_object != nullptr && !other_object->PendingDestroy()
+                ? resolver.MakeHandle(other_object) : Runtime::ObjectHandle::None();
+
+            record.payload.Set("self_collider", Reflection::PropertyValue::MakeInt(
+                static_cast<int>(receiver_is_trigger
+                    ? contact.trigger_collider : contact.other_collider)));
+            record.payload.Set("other_collider", Reflection::PropertyValue::MakeInt(
+                static_cast<int>(receiver_is_trigger
+                    ? contact.other_collider : contact.trigger_collider)));
+            record.payload.Set("self_is_trigger",
+                Reflection::PropertyValue::MakeBool(receiver_is_trigger));
+            record.payload.Set("other_valid",
+                Reflection::PropertyValue::MakeBool(other_object != nullptr));
+            runtime->Events().Publish(std::move(record));
+        }
+
         // 相手の形を「これを内包する球」へ落とす。
         //
         // Trigger の入り口判定に必要なのは「触れたか」であって、
@@ -317,6 +369,8 @@ namespace ReplayEngine::Scene
 
         Core::GameObject* object = scene_->FindGameObjectByID(target);
         if (object == nullptr || !object->ActiveInHierarchy()) return;
+
+        PublishTriggerEvent(*scene_, target, contact, static_cast<int>(phase));
 
         // 添字で回す。配送中に Component が増えても添字は壊れない
         // （削除は予約のみで、実体は同期点まで残る）。

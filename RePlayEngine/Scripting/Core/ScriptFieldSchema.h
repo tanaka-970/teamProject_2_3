@@ -46,6 +46,12 @@ namespace ReplayEngine::Scripting
         // AssetReference のときに Picker で絞り込む Asset 種別名。空なら問わない。
         std::string asset_type;
 
+        // Inspector の折り畳み見出し。空なら Component 直下へ並べる。
+        std::string category;
+
+        // Enum のときの表示ラベル。添字が値に対応する。
+        std::vector<std::string> enum_labels;
+
         // ---- 組み立てを短くするための連結設定（C++17。指定イニシャライザは使わない） ----
 
         static ScriptFieldDefinition Make(std::string field_name, ScriptValueType field_type)

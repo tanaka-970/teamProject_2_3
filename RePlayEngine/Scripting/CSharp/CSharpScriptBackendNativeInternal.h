@@ -30,15 +30,20 @@
 
 namespace ReplayEngine::Scripting::CSharp::Detail
 {
+        // 1 購読あたりの未 Poll イベント上限。超えたら古いものから捨てる。
+        // Poll を忘れた Behaviour が 1 つあるだけでメモリが伸び続けるのを防ぐ。
+        inline constexpr std::size_t kMaxPendingEventsPerSubscription = 256;
+
         struct NativeEventSubscription final
         {
             Runtime::ScopedSubscription token;
             std::deque<std::string> pending;
+            std::uint64_t dropped = 0;
         };
 
         // 関数ポインタ表の互換番号。**末尾へ関数を足したら必ず 1 上げる。**
         // C# 側の NativeBridge.NativeApiAbiVersion と一致していないと表を拒否する。
-        inline constexpr std::uint32_t kNativeApiAbiVersion = 10;
+        inline constexpr std::uint32_t kNativeApiAbiVersion = 11;
 
         // 表の先頭に必ず置く自己記述ヘッダー。
         // 順番が 1 つずれても別関数を呼ばずに、その場で不一致として弾くために使う。
@@ -212,6 +217,27 @@ namespace ReplayEngine::Scripting::CSharp::Detail
             rigidbody_vec3_callback rigidbody_set_linear_velocity = nullptr;
             rigidbody_get_vec3_callback rigidbody_get_angular_velocity = nullptr;
             rigidbody_vec3_callback rigidbody_set_angular_velocity = nullptr;
+
+            // v11 additions. 生デバイス入力 / Scene / 診断。
+            input_key_callback input_key_held = nullptr;
+            input_key_callback input_key_pressed = nullptr;
+            input_key_callback input_key_released = nullptr;
+            input_key_callback input_mouse_held = nullptr;
+            input_key_callback input_mouse_pressed = nullptr;
+            input_key_callback input_mouse_released = nullptr;
+            input_pointer_position_callback input_pointer_position = nullptr;
+            input_pointer_callback input_wheel_delta = nullptr;
+            input_pad_connected_callback input_pad_connected = nullptr;
+            input_pad_button_callback input_pad_button_held = nullptr;
+            input_pad_button_callback input_pad_button_pressed = nullptr;
+            input_pad_button_callback input_pad_button_released = nullptr;
+            input_pad_axis_callback input_pad_axis = nullptr;
+            input_vibration_callback input_set_vibration = nullptr;
+            spawn_tracked_callback instantiate_prefab_tracked = nullptr;
+            spawn_take_callback take_spawn_result = nullptr;
+            get_text_callback get_current_scene_guid = nullptr;
+            quit_callback quit_application = nullptr;
+            event_dropped_callback event_dropped_count = nullptr;
         };
 
         // ヘッダー以降がすべて関数ポインタであることを、表を作る側で必ず確かめる。
@@ -469,6 +495,29 @@ namespace ReplayEngine::Scripting::CSharp::Detail
         DirectX::XMFLOAT3* out) noexcept;
     int NativeRigidbodySetAngularVelocity(Runtime::ComponentHandle handle,
         DirectX::XMFLOAT3 value) noexcept;
+
+    // v11 生デバイス入力 / Scene / 診断。
+    int NativeInputKeyHeld(int key, int* out) noexcept;
+    int NativeInputKeyPressed(int key, int* out) noexcept;
+    int NativeInputKeyReleased(int key, int* out) noexcept;
+    int NativeInputMouseHeld(int button, int* out) noexcept;
+    int NativeInputMousePressed(int button, int* out) noexcept;
+    int NativeInputMouseReleased(int button, int* out) noexcept;
+    int NativeInputPointerPosition(float* out_x, float* out_y) noexcept;
+    int NativeInputWheelDelta(float* out) noexcept;
+    int NativeInputPadConnected(int player_slot, int* out) noexcept;
+    int NativeInputPadButtonHeld(int player_slot, int button, int* out) noexcept;
+    int NativeInputPadButtonPressed(int player_slot, int button, int* out) noexcept;
+    int NativeInputPadButtonReleased(int player_slot, int button, int* out) noexcept;
+    int NativeInputPadAxis(int player_slot, int axis, float* out) noexcept;
+    int NativeInputSetVibration(int player_slot, float low, float high) noexcept;
+    int NativeInstantiatePrefabTracked(const char* asset_guid, DirectX::XMFLOAT3 position,
+        DirectX::XMFLOAT3 rotation_euler, DirectX::XMFLOAT3 scale,
+        Runtime::ObjectHandle parent, std::uint64_t* out_request) noexcept;
+    int NativeTakeSpawnResult(std::uint64_t request, Runtime::ObjectHandle* out) noexcept;
+    int NativeGetCurrentSceneGuid(char* output, int output_capacity) noexcept;
+    int NativeQuitApplication(const char* reason) noexcept;
+    int NativeEventDroppedCount(std::uint64_t subscription, std::uint64_t* out) noexcept;
 
     NativeApiTable MakeNativeApiTable() noexcept;
 }
