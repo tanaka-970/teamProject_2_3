@@ -1,4 +1,4 @@
-#include "SceneFlowValidation.h"
+﻿#include "SceneFlowValidation.h"
 
 #include "../API/RuntimeContext.h"
 #include "../Core/RuntimeResult.h"
@@ -193,9 +193,11 @@ namespace ReplayEngine::Runtime::Validation
             "Startup Scene と Default Character Prefab が独立して保存される");
         check.Expect(round_tripped && restored.SceneFlowGuid() == scene_flow_guid_sample,
             "Active Scene Flow が AssetGUID として往復する");
-        check.Expect(text.find("REPLAY_PROJECT 3") == 0 &&
+        const std::string current_header = std::string("REPLAY_PROJECT ") +
+            std::to_string(Project::ProjectSettingsSerializer::current_version);
+        check.Expect(text.find(current_header) == 0 &&
             text.find("SCENE_FLOW") != std::string::npos,
-            "保存されるプロジェクト設定が v3 になり Scene Flow を含む");
+            "保存されるプロジェクト設定が現行版になり Scene Flow を含む");
 
         Project::ProjectSettings empty_startup;
         empty_startup.SetDefaultCharacterPrefabGuid(prefab_guid_sample);
@@ -236,10 +238,10 @@ namespace ReplayEngine::Runtime::Validation
         const bool migrated_written =
             Project::ProjectSettingsSerializer::WriteText(migrated, migrated_out, error);
         check.Expect(migrated_written &&
-            migrated_out.str().find("REPLAY_PROJECT 3") == 0 &&
+            migrated_out.str().find(current_header) == 0 &&
             migrated_out.str().find("STARTUP_SCENE") != std::string::npos &&
             migrated_out.str().find("SCENE_FLOW") != std::string::npos,
-            "v1 を読み込んで保存すると v3 形式になる");
+            "v1 を読み込んで保存すると現行版の形式になる");
 
         Project::ProjectSettings poisoned;
         poisoned.SetStartupSceneGuid(guid_title);
