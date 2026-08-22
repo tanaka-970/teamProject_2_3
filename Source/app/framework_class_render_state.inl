@@ -122,6 +122,33 @@ public:
     Microsoft::WRL::ComPtr<ID3D11Buffer> shadow_alpha_cb;
     Microsoft::WRL::ComPtr<ID3D11PixelShader> shadow_caster_alpha_ps;
     Microsoft::WRL::ComPtr<ID3D11PixelShader> shadow_caster_alpha_skinned_ps;
+
+    // Shader\shadow_coverage_common.hlsli の SHADOW_COVERAGE_CONSTANTS(b8) と一致させる。
+    static constexpr int shadow_coverage_max_effects = 4;
+    static constexpr int shadow_coverage_max_regions = 4;
+    struct shadow_coverage_constants
+    {
+        DirectX::XMFLOAT4X4 view_projection{};
+        DirectX::XMFLOAT4 viewport{ 0.0f, 0.0f, 1.0f, 1.0f };
+        DirectX::XMFLOAT4 rect{ 0.0f, 0.0f, 1.0f, 1.0f };
+        // x=Effect数 y=マスク画像を貼ったEffectの番号(-1で無し) z=範囲数 w=予約
+        DirectX::XMFLOAT4 control{ 0.0f, -1.0f, 0.0f, 0.0f };
+        DirectX::XMFLOAT4 params0[shadow_coverage_max_effects]{};
+        DirectX::XMFLOAT4 params1[shadow_coverage_max_effects]{};
+        DirectX::XMFLOAT4 params2[shadow_coverage_max_effects]{};
+        DirectX::XMFLOAT4 params3[shadow_coverage_max_effects]{};
+        DirectX::XMFLOAT4 meta[shadow_coverage_max_effects]{};
+        DirectX::XMFLOAT4 region_params[shadow_coverage_max_regions]{};
+        DirectX::XMFLOAT4 region_settings[shadow_coverage_max_regions]{};
+    };
+    Microsoft::WRL::ComPtr<ID3D11Buffer> shadow_coverage_cb;
+    // 面消し Effect を持つ GameObject ごとの影用パラメータ。毎フレーム作り直す。
+    struct shadow_coverage_entry
+    {
+        shadow_coverage_constants constants{};
+        ID3D11ShaderResourceView* mask = nullptr;
+    };
+    std::unordered_map<std::uint64_t, shadow_coverage_entry> shadow_coverage_entries;
     // Point / Spot の動的シャドウマップ。CSM とは投影方法が違うので別リソース。
     ReplayEngine::Rendering::LocalShadowAtlas local_shadows;
 
@@ -162,6 +189,14 @@ public:
         int shadow_draw_calls = 0;
         int spot_shadow_lights = 0;
         int point_shadow_lights = 0;
+        // Model Effect Stack の面消しを影へ反映しているキャスター数。
+        int coverage_casters = 0;
+        // 影で再現できない面消し Effect の数。範囲が投げ縄/画像のものを含む。
+        int coverage_unsupported = 0;
+        // bounding_box が未設定でボリューム選別を掛けられなかったキャスター数。
+        int missing_bounds_primitive = 0;
+        int missing_bounds_static = 0;
+        int missing_bounds_landscape = 0;
         bool directional_light_present = false;
         bool directional_preview_light = false;
         bool directional_shadow_rendered = false;

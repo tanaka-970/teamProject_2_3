@@ -292,6 +292,13 @@ bool framework::initialize()
         shadow_alpha_desc.Usage = D3D11_USAGE_DEFAULT;
         shadow_alpha_desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
         device->CreateBuffer(&shadow_alpha_desc, nullptr, shadow_alpha_cb.GetAddressOf());
+
+        D3D11_BUFFER_DESC shadow_coverage_desc{};
+        shadow_coverage_desc.ByteWidth = sizeof(shadow_coverage_constants);
+        shadow_coverage_desc.Usage = D3D11_USAGE_DEFAULT;
+        shadow_coverage_desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+        device->CreateBuffer(&shadow_coverage_desc, nullptr,
+            shadow_coverage_cb.GetAddressOf());
     }
     create_ps_from_cso(device.Get(), "skinned_mesh_stylized_character_ps.cso",
         skinned_stylized_character_ps.GetAddressOf());
