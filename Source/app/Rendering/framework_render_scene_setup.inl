@@ -66,9 +66,7 @@
     // Shadow / CSM / GBuffer / Forward / Outline のどのパスにも
     // Player 専用の分岐は残っていない。
 
-    // 影の診断値はフレームごとに作り直す。「影が出ない」ときに
-    // Light が無いのか / Cast Shadow が切れているのか / 提出が 0 件なのかを
-    // Editor 上で切り分けるために使う。
+    // 影の診断値はフレームごとに作り直す。
     if (camera_pass_index == 0) shadow_stats.Reset();
     shadow_stats.directional_light_present = directional_light_present;
     shadow_stats.directional_preview_light = directional_light_is_preview;
@@ -80,17 +78,14 @@
         D3D11_VIEWPORT main_vp = viewport;
         csm.shadow_begin(immediate_context.Get());
 
-        // Scene の全キャスターを提出する。Primitive / 静的glTF /
-        // Skinned Mesh / Landscape はここを通って影を落とす。
-        // 移動・回転・拡縮・アニメーションはこのフレームの姿勢がそのまま入る。
+        // Scene の全キャスターを提出する。姿勢はこのフレームのものが入る。
         draw_shadow_caster_meshes(
             csm.caster_static_vs.Get(), csm.caster_static_il.Get(),
             csm.caster_skinned_vs.Get(), csm.caster_skinned_il.Get(),
             csm.shadow_volume_center, csm.shadow_volume_radius,
             csm.caster_extrusion);
 
-        // エディタのデバッグ用静的メッシュ。互換のために残しているだけで、
-        // これを消しても GameObject だけで影のテストは成立する。
+        // エディタのデバッグ用静的メッシュ。互換のために残しているだけ。
         if (enable_static_meshes && static_meshes[0])
         {
             DirectX::XMFLOAT4X4 world;
@@ -137,11 +132,7 @@
             render_target_view.Get(), depth_stencil_view.Get(), main_vp);
     }
 
-    // Point / Spot Light の影マップ。
-    //
-    // カメラに依存しないので、複数カメラパスがあっても 1 回だけ作る。
-    // Directional の CSM はカメラ視錐台からカスケードを作るためパスごとに
-    // 更新が要るが、こちらはライトの位置と向きだけで決まる。
+    // Point / Spot の影マップ。カメラに依存しないので 1 回だけ作る。
     if (camera_pass_index == 0 && enable_dynamic_shadows &&
         local_shadows.enabled && local_shadows.AtlasReady() &&
         !local_shadow_requests.empty())
@@ -154,8 +145,7 @@
         {
             local_shadows.BeginLight(immediate_context.Get(),
                 request.base_slice, request.slice_count);
-            // 影ボリュームはライトの到達距離そのもの。範囲外の物体は
-            // このライトの影マップへ書き込めないので描かない。
+            // 影ボリュームはライトの到達距離。範囲外の物体は影マップへ書けない。
             draw_shadow_caster_meshes(
                 csm.caster_static_vs.Get(), csm.caster_static_il.Get(),
                 csm.caster_skinned_vs.Get(), csm.caster_skinned_il.Get(),
@@ -240,8 +230,7 @@
 
     pbr.bind_pbr_resources(immediate_context.Get());
     csm.bind_resources(immediate_context.Get());
-    // Point / Spot の影マップ。前方描画の Toon / PBR も
-    // evaluate_point_lights() 経由でこれを読むため、Deferred 専用にしない。
+    // Point / Spot の影マップ。前方描画の Toon / PBR もこれを読む。
     local_shadows.BindResources(immediate_context.Get());
     toon.bind_resources(immediate_context.Get());
     immediate_context->PSSetShaderResources(1, 1, dummy_normal_srv.GetAddressOf());

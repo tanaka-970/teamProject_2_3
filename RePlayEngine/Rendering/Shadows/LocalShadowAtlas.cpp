@@ -13,8 +13,7 @@ namespace ReplayEngine::Rendering
 {
     namespace
     {
-        // Point Light の 6 面。TextureCube と同じ順番 (+X,-X,+Y,-Y,+Z,-Z) に
-        // 揃えてある。シェーダー側の面選択もこの順番を前提にしている。
+        // Point の 6 面。TextureCube と同じ順番 (+X,-X,+Y,-Y,+Z,-Z)。
         const XMFLOAT3 kFaceForward[LocalShadowAtlas::kPointFaceCount] = {
             {  1.0f,  0.0f,  0.0f },
             { -1.0f,  0.0f,  0.0f },
@@ -38,15 +37,13 @@ namespace ReplayEngine::Rendering
         if (device == nullptr) return false;
         device_ = device;
 
-        // 影マップ本体はここでは作らない。影付きの Point / Spot が
-        // 1 つも無い Scene では GPU メモリを一切使わないようにする。
+        // 影マップ本体はここでは作らない。影付きライトが出るまで確保しない。
         D3D11_SAMPLER_DESC sampler{};
         sampler.Filter = D3D11_FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT;
         sampler.AddressU = sampler.AddressV = sampler.AddressW =
             D3D11_TEXTURE_ADDRESS_BORDER;
         sampler.ComparisonFunc = D3D11_COMPARISON_LESS_EQUAL;
-        // 範囲外は「遮蔽なし」。Spot の円錐の外や Point の面の継ぎ目で
-        // 黒い縁が出ないよう、境界色は必ず 1.0 にする。
+        // 範囲外は遮蔽なし扱い。境界色は必ず 1.0 にする。
         sampler.BorderColor[0] = sampler.BorderColor[1] =
             sampler.BorderColor[2] = sampler.BorderColor[3] = 1.0f;
         sampler.MinLOD = 0.0f;
@@ -79,9 +76,7 @@ namespace ReplayEngine::Rendering
         if (FAILED(device->CreateBuffer(&pass_desc, nullptr,
             pass_constants_.GetAddressOf()))) return false;
 
-        // キャスターの Vertex Shader は CSM のものをそのまま使い回す。
-        // どちらも「ワールド座標へ変換して GS へ渡すだけ」で同じ仕事のため、
-        // 同じ .hlsl を二重に持たない。差し替わるのはこの GS だけ。
+        // キャスターの VS は CSM のものを使い回し、差し替えるのはこの GS だけ。
         create_gs_from_cso(device, "local_shadow_caster_gs.cso",
             caster_gs_.GetAddressOf());
 
@@ -159,9 +154,7 @@ namespace ReplayEngine::Rendering
 
     int LocalShadowAtlas::AllocatePointSlices() noexcept
     {
-        // Point は kMaxSpotShadows 以降を 6 面ずつ取る。
-        // Spot 用の先頭領域とは重ならないので、Scene 内のライトの並び順に
-        // 関係なく Spot と Point の両方が枠を取れる。
+        // Point は kMaxSpotShadows 以降を 6 面ずつ取り、Spot の領域と重ねない。
         if (next_point_base_ + kPointFaceCount > kSliceCount) return -1;
         const uint32_t base = next_point_base_;
         next_point_base_ += kPointFaceCount;
@@ -193,9 +186,7 @@ namespace ReplayEngine::Rendering
         const XMVECTOR eye = XMLoadFloat3(&position);
         const XMMATRIX view = XMMatrixLookToLH(eye, forward, up);
 
-        // 外コーンの全角を FOV にする。半角ではないので 2 倍する。
-        // 縁のフィルタ半径ぶんだけ余裕を持たせて、円錐の境界で
-        // 影がぶつ切りにならないようにする。
+        // 外コーンの全角を FOV にする。縁のフィルタ分だけ余裕を持たせる。
         const float outer = (std::max)(1.0f, (std::min)(179.0f, outer_angle_degrees));
         const float fov = (std::min)(XM_PI * 0.98f,
             XMConvertToRadians(outer) * 2.0f * 1.1f);
@@ -217,8 +208,7 @@ namespace ReplayEngine::Rendering
         const XMVECTOR eye = XMLoadFloat3(&position);
         const XMMATRIX view = XMMatrixLookToLH(eye,
             XMLoadFloat3(&kFaceForward[index]), XMLoadFloat3(&kFaceUp[index]));
-        // 立方体の 1 面なので FOV は必ず 90 度。ここを変えると面の境目に
-        // 隙間か重なりができる。
+        // 立方体の 1 面なので FOV は必ず 90 度。変えると面の境目がずれる。
         const XMMATRIX projection = XMMatrixPerspectiveFovLH(
             XM_PIDIV2, 1.0f, (std::max)(near_plane, 0.01f),
             (std::max)(far_plane, near_plane + 0.1f));
@@ -243,9 +233,7 @@ namespace ReplayEngine::Rendering
     {
         if (context == nullptr || atlas_dsv_ == nullptr) return;
 
-        // 影マップを読む側 (t13) から必ず外してから書き込む。
-        // 外し忘れると D3D11 が SRV と DSV の同時バインドを警告し、
-        // 片方を勝手に null にするため影が出なくなる。
+        // 読み側 (t13) を外してから書く。同時バインドは D3D11 が片方を null にする。
         ID3D11ShaderResourceView* null_srv[1] = { nullptr };
         context->PSSetShaderResources(kAtlasSlot, 1, null_srv);
         context->CSSetShaderResources(kAtlasSlot, 1, null_srv);
@@ -253,8 +241,7 @@ namespace ReplayEngine::Rendering
         context->OMSetRenderTargets(0, nullptr, atlas_dsv_.Get());
         if (!cleared_this_frame_)
         {
-            // クリアは 1 フレームに 1 回だけ。ライトごとに消すと
-            // 前のライトのスライスまで消えてしまう。
+            // クリアは 1 フレーム 1 回。ライトごとに消すと前のスライスまで消える。
             context->ClearDepthStencilView(atlas_dsv_.Get(),
                 D3D11_CLEAR_DEPTH, 1.0f, 0);
             cleared_this_frame_ = true;
@@ -295,9 +282,7 @@ namespace ReplayEngine::Rendering
         if (context == nullptr) return;
         context->PSSetSamplers(kSamplerSlot, 1, comparison_sampler_.GetAddressOf());
         context->PSSetShaderResources(kSliceBufferSlot, 1, slice_srv_.GetAddressOf());
-        // 影マップが未生成のフレームは null のまま貼る。
-        // シェーダー側は「スライス番号 < 0 なら影なし」で判定するので、
-        // null が読まれることはない。
+        // 未生成なら null のまま貼る。スライス番号が負なら読まれない。
         ID3D11ShaderResourceView* atlas[1] = { atlas_srv_.Get() };
         context->PSSetShaderResources(kAtlasSlot, 1, atlas);
     }

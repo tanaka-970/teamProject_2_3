@@ -331,12 +331,9 @@ void framework::sync_object_lights()
     directional_shadow_enabled = false;
 
     // Point / Spot の影スライスは毎フレーム割り当て直す。
-    // Unreal の Movable と同じで、どのライトが動いていても
-    // そのフレームの姿勢で影マップを作り直す前提にしている。
     local_shadow_requests.clear();
     local_shadows.BeginFrame();
-    // 影付きの Point / Spot が実際に現れたときだけ影マップを確保する。
-    // 使わない Scene で GPU メモリを取らないための遅延生成。
+    // 影付きライトが現れたときだけ影マップを確保する。
     const bool local_shadows_available = enable_dynamic_shadows &&
         local_shadows.enabled &&
         local_shadows.EnsureAtlas(device.Get(), local_shadows.resolution_setting);
@@ -360,13 +357,10 @@ void framework::sync_object_lights()
                 pbr.light.directional_color = {
                     light->color.x, light->color.y, light->color.z,
                     (std::max)(0.0f, light->intensity) };
-                // 影を出すかはこの Light の設定が正本。
-                // 全体設定 (enable_dynamic_shadows / csm_enabled_setting) は
-                // 上限としてだけ効き、Light 側の意思をここで上書きしない。
+                // 影を出すかはこの Light の設定が正本。全体設定は上限としてだけ効く。
                 directional_shadow_enabled = light->cast_shadows;
                 pbr.light.shadow_params.w = light->cast_shadows ? 1.0f : 0.0f;
-                // 影の品質値も Light Component が正本。
-                // 全体設定の同じ項目はここで毎フレーム上書きされる。
+                // 影の品質値も Light Component が正本。全体設定は毎フレーム上書きされる。
                 csm.constants.params3.z =
                     (std::max)(0.0f, (std::min)(1.0f, light->shadow_strength));
                 csm.constants.params.x =
@@ -392,8 +386,7 @@ void framework::sync_object_lights()
                     light->color.x, light->color.y, light->color.z,
                     (std::max)(0.0f, light->intensity) };
 
-                // 影マップは 1 灯で 6 面。枠が空いているライトだけが影付きになる。
-                // 溢れた分は影なしとして描かれる（真っ黒にはならない）。
+                // 1 灯で 6 面。枠が空いているライトだけ影付きになり、溢れた分は影なし。
                 int base_slice = -1;
                 if (local_shadows_available && light->cast_shadows)
                     base_slice = local_shadows.AllocatePointSlices();
@@ -495,10 +488,7 @@ void framework::sync_object_lights()
             light_direction = { 0.35f, -1.0f, 0.25f, 0.0f };
             pbr.light.directional_color = { 1.0f, 0.98f, 0.94f, 1.25f };
             directional_light_is_preview = true;
-            // Light をまだ置いていない Scene でも、物を動かせば影が付いてくる。
-            // 編集中の手応えのための表示専用の光で、Scene には保存されない。
-            // Play / Standalone はこの分岐へ来ないので、実行時の見た目は
-            // 従来どおり Scene の照明設定だけで決まる。
+            // Light が無い Scene View 用の表示専用の光。Scene には保存されない。
             directional_shadow_enabled = editor_preview_light_casts_shadows;
         }
         else
@@ -506,7 +496,6 @@ void framework::sync_object_lights()
             pbr.light.directional_color = { 0.0f, 0.0f, 0.0f, 0.0f };
         }
         // 旧 PBR 単一シャドウマップはプレビュー光では使わない。
-        // プレビュー光の影は CSM 側だけで出す。
         pbr.light.shadow_params.w = 0.0f;
     }
 }

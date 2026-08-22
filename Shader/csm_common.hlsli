@@ -169,13 +169,7 @@ float csm_sample_cascade(float3 world_position, float3 world_normal,
             float penumbra = csm_estimate_penumbra(
                 projected.xy, projected.z, cascade, rotation);
             should_filter = penumbra > 0.0f;
-            // 【下限を 0.5 テクセルまで下げてはいけない】
-            //   接地部は blocker と receiver がほぼ同じ深度なので penumbra が
-            //   0 に近づく。そこで半径を 0.5 テクセルまで縮めると、比較サンプラの
-            //   バイリニアが 1 テクセル内で完結してしまい、シャドウマップの
-            //   テクセルの角がそのまま輪郭に出る。斜めの辺が階段状になり、
-            //   平らな影が段差（＝厚み）を持っているように見える原因になる。
-            //   基本フィルタ半径を下限にして、常に複数テクセルをまたがせる。
+            // 下限を 0.5 テクセルにすると接地部でフィルタが効かず、輪郭が階段状になる。
             filter_radius = clamp(penumbra, max(filter_radius, 1.5f), 24.0f);
         }
         if (should_filter)

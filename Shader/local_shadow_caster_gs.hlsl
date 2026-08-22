@@ -1,12 +1,4 @@
-// Point / Spot Light の影マップへ、形状を必要なスライスぶん複製する。
-//
-// 頂点シェーダーは CSM のキャスター (csm_caster_static_vs /
-// csm_caster_skinned_vs) をそのまま使い回す。どちらも仕事は
-// 「ワールド座標へ変換して GS へ渡す」だけで同じなので、影の種類ごとに
-// 同じ .hlsl を増やさない。差し替わるのはこの GS だけ。
-//
-// Spot は 1 スライス、Point は 6 スライス。1 回の Draw で 6 面ぶんを
-// 出せるため、面ごとに Scene を描き直すより Draw Call が 1/6 で済む。
+// Point / Spot の影マップへ形状を必要なスライスぶん複製する GS。VS は CSM のものを使い回す。
 #include "local_shadow_common.hlsli"
 
 cbuffer LOCAL_SHADOW_PASS : register(b11)
@@ -43,13 +35,7 @@ void main(triangle GS_IN input[3], inout TriangleStream<GS_OUT> stream)
                 local_shadow_slices[slice].view_projection);
         }
 
-        // この面の視錐台の外にある三角形は出さない。
-        //
-        // 【ここが Point Light の影の速さを決める】
-        //   6 面へ無条件に複製すると、頂点処理もラスタライズも 6 倍になる。
-        //   実際にはほとんどの三角形が 1〜2 面にしか映らないので、
-        //   3 頂点が同じ面の外側に揃っているものを先に捨てる。
-        //   保守的な判定なので、映るべき三角形を落とすことはない。
+        // この面の外にある三角形は出さない。6 面複製の頂点処理を減らす本体。
         bool outside =
             (clip[0].x >  clip[0].w && clip[1].x >  clip[1].w && clip[2].x >  clip[2].w) ||
             (clip[0].x < -clip[0].w && clip[1].x < -clip[1].w && clip[2].x < -clip[2].w) ||

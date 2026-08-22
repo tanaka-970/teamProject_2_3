@@ -520,9 +520,7 @@ namespace ReplayEngine::Core::Detail
             PropertyRegistry::Register<PointLightComponent>(
                 MakeProperty("range", &PointLightComponent::range)
                     .Display("範囲").Range(0.01, 10000.0).Step(0.1));
-            // ---- 影 ----
-            // Point は 1 灯で 6 面ぶん描くので、既定は OFF。
-            // 必要な灯だけ ON にする運用にする。
+            // ---- 影 ---- Point は 1 灯で 6 面描くため既定は OFF。
             PropertyRegistry::Register<PointLightComponent>(
                 MakeProperty("cast_shadows", &PointLightComponent::cast_shadows)
                     .Display("影を落とす"));

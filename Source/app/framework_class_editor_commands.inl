@@ -377,8 +377,7 @@ private:
         const DirectX::XMFLOAT4& base_color_factor = DirectX::XMFLOAT4{ 1,1,1,1 },
         const DirectX::XMFLOAT3& emissive_color = DirectX::XMFLOAT3{ 0,0,0 },
         std::uint32_t texture_mask = 0,
-        // Mesh Renderer の Receive Shadow。GBuffer の normal.a の符号として
-        // 運ばれ、Deferred 照明側で影を掛けるかどうかを決める。
+        // Mesh Renderer の Receive Shadow。GBuffer の normal.a の符号で運ぶ。
         bool receive_shadow = true);
     void apply_toon_preset(int preset);
     void reset_editor_values();

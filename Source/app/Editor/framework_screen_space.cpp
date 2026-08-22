@@ -84,11 +84,7 @@ void framework::draw_screen_space_settings()
             ImGui::TreePop();
         }
 
-        // ---------------- 影 (全体設定) ----------------
-        //
-        // ここにあるのは「このプロジェクトで影機能をどこまで使うか」の上限だけ。
-        // 個々のライトが影を落とすか・どのくらい濃いかは Light Component 側が
-        // 正本で、Inspector で編集する。同じ値を 2 か所から変えられる状態は作らない。
+        // ---------------- 影 (全体設定。個々の値は Light Component が正本) ----------------
         if (ImGui::TreeNodeEx("影 (Shadow)", ImGuiTreeNodeFlags_DefaultOpen))
         {
             ImGui::Checkbox("動的影を使う", &enable_dynamic_shadows);
@@ -153,9 +149,7 @@ void framework::draw_screen_space_settings()
         // ---------------- CSM ----------------
         if (ImGui::TreeNodeEx("CSM (カスケードシャドウ)"))
         {
-            // csm.constants.params.w は
-            //   enable_dynamic_shadows && csm_enabled_setting && directional_shadow_enabled
-            // から毎フレーム作り直される。UI はユーザー設定側だけを触ること。
+            // params.w は毎フレーム作り直されるので UI はユーザー設定側だけを触ること。
             ImGui::Checkbox("有効##csm", &csm_enabled_setting);
             ImGui::SameLine();
             ImGui::TextDisabled(csm.constants.params.w >= 0.5f ? "(稼働中)" : "(停止中)");
@@ -164,9 +158,7 @@ void framework::draw_screen_space_settings()
             if (ImGui::Checkbox("PCSS (可変半影)", &pcss_enabled))
                 csm.constants.params2.w = pcss_enabled ? 1.0f : 0.0f;
 
-            // 深度バイアス / 法線バイアス / 影の濃さ / 影の最遠距離は
-            // Directional Light Component が正本。Light がある間は
-            // 毎フレームそちらの値で上書きされるので、ここでは触らせない。
+            // バイアス・濃さ・最遠距離は Directional Light Component が正本。
             if (shadow_stats.directional_light_present)
             {
                 ImGui::TextDisabled("深度バイアス: %.5f (Light Component)",

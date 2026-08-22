@@ -111,13 +111,10 @@ public:
 
     toon_renderer    toon;
     csm_renderer     csm;
-    // Point / Spot Light の動的シャドウマップ。CSM とは投影方法が違うため
-    // 別リソースにしてある。影付きライトが 0 の Scene では GPU メモリを使わない。
+    // Point / Spot の動的シャドウマップ。CSM とは投影方法が違うので別リソース。
     ReplayEngine::Rendering::LocalShadowAtlas local_shadows;
 
     // sync_object_lights() が決めた「今フレーム影マップを作るライト」。
-    // スライスの確保と行列作りは更新側、実際の描画は render() 側に分かれるので、
-    // 描画に要る値だけをここへ運ぶ。
     struct local_shadow_request
     {
         bool point = false;          // false なら Spot
@@ -128,29 +125,19 @@ public:
     };
     std::vector<local_shadow_request> local_shadow_requests;
 
-    // 影の全体設定。個々の Light Component の設定ではなく、
-    // 「このプロジェクトで影機能をどこまで使うか」の上限を持つ。
+    // 影の全体設定。個々の Light ではなくプロジェクト全体の上限を持つ。
     bool enable_dynamic_shadows{ true };
-    // CSM を使うかどうかのユーザー設定。
-    // シェーダーへ渡る csm.constants.params.w は
-    //   enable_dynamic_shadows && csm_enabled_setting && directional_shadow_enabled
-    // から毎フレーム作り直すので、UI はこちらを触ること。
-    // params.w を直接書くと、Light 側の Cast Shadows と二重管理になる。
+    // CSM を使うかのユーザー設定。params.w は毎フレーム作り直すので UI はこちらを触る。
     bool csm_enabled_setting{ true };
-    // Directional Light が 1 つも無い Scene View で、非保存のプレビュー光から
-    // 影を出すかどうか。編集中に物を動かした手応えを出すために既定で有効。
-    // Play / Standalone では Scene の照明設定を尊重するのでここは効かない。
+    // Light が無い Scene View でプレビュー光から影を出すか。Play では効かない。
     bool editor_preview_light_casts_shadows{ true };
 
-    // Directional Light の解決結果。sync_object_lights() が毎フレーム更新する。
-    // 影を出す/出さないの判断はこの 3 つに集約し、描画側で条件を再発明しない。
+    // Directional Light の解決結果。影を出す判断はこの 3 つに集約する。
     bool directional_light_present{ false };     // Scene に有効な Directional がある
     bool directional_light_is_preview{ false };  // Scene View 用の非保存プレビュー光
     bool directional_shadow_enabled{ false };    // その光が影を落とすか
 
     // 影の診断表示用。毎フレーム影パスの直前に 0 へ戻す。
-    // 「影が出ない」ときに、Light が無いのか、Cast Shadow が切れているのか、
-    // 提出が 0 件なのかを Editor 上で切り分けるために使う。
     struct shadow_frame_stats
     {
         int primitive_casters = 0;
@@ -160,7 +147,6 @@ public:
         int skipped_cast_shadow = 0;
         int culled_casters = 0;
         // Mesh Asset を解決できず影パスへ出せなかった Skinned Mesh の数。
-        // 0 でないときは影ではなく Asset 側の問題（通常描画にも出ていない）。
         int skinned_unresolved = 0;
         int shadow_draw_calls = 0;
         int spot_shadow_lights = 0;

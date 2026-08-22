@@ -486,13 +486,7 @@ void framework::draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shade
 
 namespace
 {
-    // ローカルAABBをワールド行列で変換し、外接球で影ボリュームと判定する。
-    //
-    // 影ボリューム（全カスケードを包む球）へ届かない物体は、どのカスケードの
-    // 深度にも書き込めない。つまり描いても影は 1 ピクセルも変わらないので、
-    // 影パスのドローコールから丸ごと外せる。
-    // extrusion は csm_renderer::caster_extrusion。カスケードより手前に
-    // あるキャスターも影を落とすので、その分だけ球を膨らませる。
+    // ローカルAABBを外接球にして影ボリュームと判定する。届かない物体は描かない。
     bool shadow_volume_intersects(const DirectX::XMFLOAT3& local_minimum,
         const DirectX::XMFLOAT3& local_maximum,
         const DirectX::XMFLOAT4X4& world,
@@ -556,31 +550,14 @@ bool framework::resolve_render_item_shadow_double_sided(
 }
 
 
-// ライト視点の影深度パスへ、Scene の全キャスターを提出する。
-//
-// 【この関数が影機能の本体】
-//   影が「動いている物体に追従しない」不具合の原因は、ほぼ全て
-//   ここへ提出されていないことにある。GBuffer / Forward へ描く物は
-//   Cast Shadow を切らない限り、例外なくここへも来ること。
-//
-// 通常描画との違い:
-//   - Pixel Shader を貼らない（深度だけを書く）。
-//   - Material / Texture / GBuffer 定数を一切触らない。
-//   - メインカメラの視錐台カリングは使わない。代わりに影ボリューム
-//     （その影マップに写り得る範囲を包む球）で選別する。画面外でも影は
-//     落ちるが、影ボリュームの外の物体は影マップに一切写らない。
-//   - RenderItem::cast_shadow == false は捨てる。
-//
-// Directional (CSM) と Point / Spot で共通の提出処理にしてある。
-// ライト種別ごとに提出処理を分けると、片方だけ対応漏れが起きる。
+// ライト視点の影深度パスへ Scene の全キャスターを提出する。Directional / Point / Spot 共通。
 void framework::draw_shadow_caster_meshes(
     ID3D11VertexShader* static_caster_vs, ID3D11InputLayout* static_caster_il,
     ID3D11VertexShader* skinned_caster_vs, ID3D11InputLayout* skinned_caster_il,
     const DirectX::XMFLOAT3& volume_center, float volume_radius,
     float volume_extrusion)
 {
-    // 影マップは深度テスト・深度書き込みの両方が要る。直前のパスが
-    // 何を残していても影響を受けないよう、ここで明示的に決める。
+    // 影マップは深度テストと書き込みの両方が要るのでここで明示する。
     immediate_context->OMSetDepthStencilState(
         depth_stencil_states[(size_t)DEPTH_STATE::ZT_ON_ZW_ON].Get(), 0);
     ReplayEngine::Rendering::Stats().CountStateSet(
@@ -589,8 +566,7 @@ void framework::draw_shadow_caster_meshes(
     ReplayEngine::Rendering::Stats().CountStateSet(
         ReplayEngine::Rendering::RenderStats::StateKind::Rasterizer, false);
 
-    // gltf_model 側の視錐台カリングはカメラ基準なので影パスでは使えない。
-    // 影パスの間だけ止め、通常描画の統計値も汚さないよう元へ戻す。
+    // gltf_model の視錐台カリングはカメラ基準なので影パスの間だけ止める。
     auto& culling = ReplayEngine::Rendering::Culling();
     const bool culling_was_enabled = culling.enabled;
     culling.enabled = false;
@@ -665,13 +641,7 @@ void framework::draw_shadow_caster_meshes(
             continue;
         }
 
-        // Skinned Mesh / Animator。骨変形はこのフレームの姿勢をそのまま使う。
-        // 通常描画と同じ keyframe を渡すので、影がアニメーションから遅れない。
-        //
-        // ここだけ影ボリュームのカリングを掛けない。skinned_mesh の
-        // bounding_box はバインドポーズのもので、アニメーション中の実際の
-        // 広がりを含まない。誤って捨てるとキャラクターの影だけが消えるという
-        // 最も分かりにくい壊れ方をするため、安全側に倒して常に描く。
+        // Skinned Mesh。bounding_box が当てにならないので影ボリュームのカリングは掛けない。
         skinned_mesh* mesh = resolve_object_mesh(item.mesh_asset);
         if (mesh == nullptr) { ++shadow_stats.skinned_unresolved; continue; }
         if (skinned_caster_vs == nullptr) continue;
@@ -686,8 +656,7 @@ void framework::draw_shadow_caster_meshes(
         if (draw_double_sided)
             immediate_context->RSSetState(
                 rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
-        // write_motion_vectors は必ず false。影パスで履歴を進めると
-        // GBuffer パスの前フレーム姿勢が壊れ、TAA が尾を引く。
+        // write_motion_vectors は必ず false。影パスで進めると TAA が尾を引く。
         mesh->render(immediate_context.Get(), item.world, item.tint,
             keyframe, nullptr, skinned_caster_vs, skinned_caster_il,
             false, false, false);
@@ -782,9 +751,7 @@ static_mesh* framework::resolve_landscape_gpu_mesh(
         }
         else
         {
-            // Sculpt / Topology edit では geometry だけが変わる。
-            // static_mesh を丸ごと再構築すると CSO/Texture まで毎回作り直すため、
-            // vertex/index buffer だけ更新する。
+            // Sculpt 中は geometry だけ変わるので vertex/index buffer だけ更新する。
             gpu_ready = cache.mesh->update_procedural_geometry(
                 device.Get(), vertices, data.Indices());
         }

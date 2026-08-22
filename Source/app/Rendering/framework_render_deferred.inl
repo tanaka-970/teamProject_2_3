@@ -30,8 +30,7 @@
                     { point.position.x, point.position.y, point.position.z },
                     point.position.w,
                     { point.color.x, point.color.y, point.color.z }, point.color.w,
-                    // 影マップのスロットは PS 版と同じものを渡す。
-                    // ここで落とすと、タイルドON/OFFで影の有無が変わる。
+                    // 影スロットは PS 版と同じものを渡す。落とすと影の有無が変わる。
                     static_cast<int>(point.shadow.x), point.shadow.y);
             }
             for (int i = 0; i < lights.data.light_counts.y && i < lights_manager::SPOT_LIGHT_MAX; ++i)

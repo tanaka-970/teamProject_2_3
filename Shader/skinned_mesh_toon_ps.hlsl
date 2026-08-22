@@ -62,9 +62,7 @@ float4 main(VS_OUT pin) : SV_TARGET
     float view_z = mul(float4(pin.world_position.xyz, 1.0f), view_projection).z;
     float shadow = csm_sample_shadow(pin.world_position.xyz, N, view_z);
     color *= shadow * 0.5f + 0.5f;
-    // 前方描画には GBuffer が無く Receive Shadow を運べないため、
-    // 従来どおり常に影を受ける扱いにする。Receive Shadow を尊重するのは
-    // Deferred 経路 (deferred_lighting_ps / tiled_deferred_lighting_cs)。
+    // 前方描画は GBuffer が無く Receive Shadow を運べないので常に影を受ける。
     color += evaluate_point_lights(pin.world_position.xyz, N, V, base.rgb,
         0.55f, 0.0f, 1.0f);
     color += evaluate_spot_lights(pin.world_position.xyz, N, V, base.rgb, 1.0f);

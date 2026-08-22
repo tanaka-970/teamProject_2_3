@@ -119,9 +119,7 @@ float4 main(VS_OUT pin) : SV_TARGET
     const float view_z = mul(float4(wp, 1.0f), frame_view).z;
     const float shadow_rotation_seed =
         interleaved_gradient_noise(pin.position.xy, frame_params.x);
-    // Receive Shadow が切られている面には影を掛けない。
-    // 影を落とす側 (Cast Shadow) とは独立した設定で、
-    // この面が他へ落とす影は影マップ側で作られるため消えない。
+    // Receive Shadow が false の面には影を掛けない。落とす側の影は消えない。
     float shadow_visibility = 1.0f;
     if (g.receive_shadow)
     {
