@@ -84,6 +84,65 @@ void framework::draw_screen_space_settings()
             ImGui::TreePop();
         }
 
+        // ---------------- 影 (全体設定) ----------------
+        //
+        // ここにあるのは「このプロジェクトで影機能をどこまで使うか」の上限だけ。
+        // 個々のライトが影を落とすか・どのくらい濃いかは Light Component 側が
+        // 正本で、Inspector で編集する。同じ値を 2 か所から変えられる状態は作らない。
+        if (ImGui::TreeNodeEx("影 (Shadow)", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::Checkbox("動的影を使う", &enable_dynamic_shadows);
+            ImGui::TextDisabled("切ると Directional / Point / Spot すべての影を止めます。");
+
+            ImGui::Checkbox("ライトが無いときも Scene View で影を出す",
+                &editor_preview_light_casts_shadows);
+            ImGui::TextDisabled("Scene に保存されないプレビュー光の影です。");
+            ImGui::TextDisabled("Play / Standalone では Scene の照明設定だけが使われます。");
+
+            ImGui::Separator();
+            ImGui::Checkbox("Point / Spot の影##local", &local_shadows.enabled);
+            int local_resolution = static_cast<int>(local_shadows.resolution_setting);
+            if (ImGui::SliderInt("影マップ解像度##local", &local_resolution, 256, 2048))
+            {
+                // 解像度を変えると次のフレームで作り直される。
+                local_shadows.resolution_setting =
+                    static_cast<std::uint32_t>((std::max)(256, local_resolution));
+            }
+            ImGui::TextDisabled("Spot は 1 灯 1 枚、Point は 1 灯 6 枚使います。");
+            ImGui::Text("影付きライト枠: Spot %u / Point %u",
+                ReplayEngine::Rendering::LocalShadowAtlas::kMaxSpotShadows,
+                ReplayEngine::Rendering::LocalShadowAtlas::kMaxPointShadows);
+            ImGui::Text("影マップ: %s",
+                local_shadows.AtlasReady() ? "確保済み" : "未確保 (影付きライトなし)");
+
+            ImGui::Separator();
+            ImGui::TextUnformatted("このフレームの影");
+            // 「影が出ない」ときにどこで止まっているかを切り分けるための表示。
+            if (!shadow_stats.directional_light_present)
+            {
+                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f),
+                    shadow_stats.directional_preview_light
+                        ? "Directional Light なし (プレビュー光で代用中)"
+                        : "Directional Light なし");
+            }
+            ImGui::Text("Directional 影: %s",
+                shadow_stats.directional_shadow_rendered ? "生成した" : "生成していない");
+            ImGui::Text("キャスター: Primitive %d / 静的 %d / Skinned %d / Landscape %d",
+                shadow_stats.primitive_casters, shadow_stats.static_casters,
+                shadow_stats.skinned_casters, shadow_stats.landscape_casters);
+            ImGui::Text("Cast Shadow=false で除外: %d", shadow_stats.skipped_cast_shadow);
+            ImGui::Text("影ボリューム外で除外: %d", shadow_stats.culled_casters);
+            ImGui::Text("影の描画コール: %d", shadow_stats.shadow_draw_calls);
+            ImGui::Text("影付き Spot %d / Point %d",
+                shadow_stats.spot_shadow_lights, shadow_stats.point_shadow_lights);
+            if (shadow_stats.TotalCasters() == 0 && shadow_stats.directional_shadow_rendered)
+            {
+                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f),
+                    "キャスターが 0 件です (Cast Shadow か影の最遠距離を確認)");
+            }
+            ImGui::TreePop();
+        }
+
         // ---------------- CSM ----------------
         if (ImGui::TreeNodeEx("CSM (カスケードシャドウ)"))
         {
@@ -98,15 +157,33 @@ void framework::draw_screen_space_settings()
             if (ImGui::Checkbox("PCSS (可変半影)", &pcss_enabled))
                 csm.constants.params2.w = pcss_enabled ? 1.0f : 0.0f;
 
-            ImGui::SliderFloat("深度バイアス", &csm.constants.params.x, 0.0f, 0.01f, "%.5f");
-            ImGui::SliderFloat("法線オフセット (テクセル)", &csm.constants.params.y, 0.0f, 6.0f, "%.2f");
+            // 深度バイアス / 法線バイアス / 影の濃さ / 影の最遠距離は
+            // Directional Light Component が正本。Light がある間は
+            // 毎フレームそちらの値で上書きされるので、ここでは触らせない。
+            if (shadow_stats.directional_light_present)
+            {
+                ImGui::TextDisabled("深度バイアス: %.5f (Light Component)",
+                    csm.constants.params.x);
+                ImGui::TextDisabled("法線オフセット: %.2f (Light Component)",
+                    csm.constants.params.y);
+                ImGui::TextDisabled("影の濃さ: %.2f (Light Component)",
+                    csm.constants.params3.z);
+                ImGui::TextDisabled("影の最遠距離: %.0f m (Light Component)",
+                    csm.shadow_distance);
+                ImGui::TextDisabled("↑ これらは Directional Light の Inspector で編集します");
+            }
+            else
+            {
+                ImGui::SliderFloat("深度バイアス", &csm.constants.params.x, 0.0f, 0.01f, "%.5f");
+                ImGui::SliderFloat("法線オフセット (テクセル)", &csm.constants.params.y, 0.0f, 6.0f, "%.2f");
+                ImGui::SliderFloat("影の濃さ", &csm.constants.params3.z, 0.0f, 1.0f, "%.2f");
+                ImGui::SliderFloat("影の最遠距離 (m)", &csm.shadow_distance, 20.0f, 600.0f, "%.0f");
+            }
             ImGui::SliderFloat("フィルタ半径 (テクセル)", &csm.constants.params.z, 0.5f, 8.0f, "%.2f");
             ImGui::SliderFloat("カスケード混合幅 (m)", &csm.constants.params2.y, 0.0f, 30.0f, "%.1f");
             ImGui::SliderFloat("光源サイズ (UV)", &csm.constants.params2.z, 0.0005f, 0.02f, "%.4f");
             ImGui::SliderFloat("傾斜バイアス倍率", &csm.constants.params3.x, 0.0f, 8.0f, "%.2f");
-            ImGui::SliderFloat("影の濃さ", &csm.constants.params3.z, 0.0f, 1.0f, "%.2f");
             ImGui::SliderFloat("分割の偏り", &csm.split_lambda, 0.0f, 1.0f, "%.2f");
-            ImGui::SliderFloat("影の最遠距離 (m)", &csm.shadow_distance, 20.0f, 600.0f, "%.0f");
             ImGui::SliderFloat("キャスター延長 (m)", &csm.caster_extrusion, 0.0f, 200.0f, "%.0f");
             ImGui::Text("分割: %.1f / %.1f / %.1f / %.1f",
                 csm.constants.split_distances.x, csm.constants.split_distances.y,
