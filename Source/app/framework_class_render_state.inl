@@ -159,6 +159,9 @@ public:
         int landscape_casters = 0;
         int skipped_cast_shadow = 0;
         int culled_casters = 0;
+        // Mesh Asset を解決できず影パスへ出せなかった Skinned Mesh の数。
+        // 0 でないときは影ではなく Asset 側の問題（通常描画にも出ていない）。
+        int skinned_unresolved = 0;
         int shadow_draw_calls = 0;
         int spot_shadow_lights = 0;
         int point_shadow_lights = 0;

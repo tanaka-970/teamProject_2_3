@@ -84,7 +84,10 @@ namespace ReplayEngine::Rendering
         int AllocatePointSlices() noexcept;
         void SetSlice(int slice, const DirectX::XMFLOAT4X4& view_projection,
             float near_plane, float far_plane, float depth_bias) noexcept;
-        std::uint32_t UsedSliceCount() const noexcept { return next_slice_; }
+        std::uint32_t UsedSliceCount() const noexcept
+        {
+            return next_spot_slice_ + (next_point_base_ - kMaxSpotShadows);
+        }
 
         // Spot の視錐台行列を作る。outer_angle は度。
         static DirectX::XMFLOAT4X4 MakeSpotViewProjection(
@@ -134,7 +137,11 @@ namespace ReplayEngine::Rendering
         Microsoft::WRL::ComPtr<ID3D11GeometryShader> caster_gs_;
 
         Slice slices_[kSliceCount]{};
-        std::uint32_t next_slice_ = 0;
+        // Spot と Point で確保カウンタを分ける。1 本の連番で管理すると、
+        // 先に現れた Point が Spot 用の先頭領域を飛び越えて確保を進めてしまい、
+        // 後から来た Spot が枠なしになる。
+        std::uint32_t next_spot_slice_ = 0;
+        std::uint32_t next_point_base_ = kMaxSpotShadows;
         std::uint32_t resolution_ = 0;
         D3D11_VIEWPORT viewport_{};
         bool cleared_this_frame_ = false;

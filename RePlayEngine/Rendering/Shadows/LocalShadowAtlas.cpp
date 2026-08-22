@@ -140,7 +140,8 @@ namespace ReplayEngine::Rendering
 
     void LocalShadowAtlas::BeginFrame() noexcept
     {
-        next_slice_ = 0;
+        next_spot_slice_ = 0;
+        next_point_base_ = kMaxSpotShadows;
         cleared_this_frame_ = false;
         for (Slice& slice : slices_)
         {
@@ -151,21 +152,19 @@ namespace ReplayEngine::Rendering
 
     int LocalShadowAtlas::AllocateSpotSlice() noexcept
     {
-        // Spot は先頭側から 1 枚ずつ取る。
-        if (next_slice_ >= kMaxSpotShadows) return -1;
-        return static_cast<int>(next_slice_++);
+        // Spot は先頭の kMaxSpotShadows 枚から 1 枚ずつ取る。
+        if (next_spot_slice_ >= kMaxSpotShadows) return -1;
+        return static_cast<int>(next_spot_slice_++);
     }
 
     int LocalShadowAtlas::AllocatePointSlices() noexcept
     {
-        // Point は 6 面をまとめて取る。Spot 用の領域を跨がないよう、
-        // 先頭を必ず kMaxSpotShadows 以降へ寄せる。
-        uint32_t base = (std::max)(next_slice_, kMaxSpotShadows);
-        // 6 の倍数境界へ揃えて、シェーダー側の面計算を単純に保つ。
-        const uint32_t offset = (base - kMaxSpotShadows) % kPointFaceCount;
-        if (offset != 0) base += kPointFaceCount - offset;
-        if (base + kPointFaceCount > kSliceCount) return -1;
-        next_slice_ = base + kPointFaceCount;
+        // Point は kMaxSpotShadows 以降を 6 面ずつ取る。
+        // Spot 用の先頭領域とは重ならないので、Scene 内のライトの並び順に
+        // 関係なく Spot と Point の両方が枠を取れる。
+        if (next_point_base_ + kPointFaceCount > kSliceCount) return -1;
+        const uint32_t base = next_point_base_;
+        next_point_base_ += kPointFaceCount;
         return static_cast<int>(base);
     }
 

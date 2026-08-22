@@ -132,6 +132,13 @@ void framework::draw_screen_space_settings()
                 shadow_stats.skinned_casters, shadow_stats.landscape_casters);
             ImGui::Text("Cast Shadow=false で除外: %d", shadow_stats.skipped_cast_shadow);
             ImGui::Text("影ボリューム外で除外: %d", shadow_stats.culled_casters);
+            if (shadow_stats.skinned_unresolved > 0)
+            {
+                ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.4f, 1.0f),
+                    "Mesh Asset を解決できない Skinned Mesh: %d",
+                    shadow_stats.skinned_unresolved);
+                ImGui::TextDisabled("影ではなく Asset の問題です (通常描画にも出ていません)");
+            }
             ImGui::Text("影の描画コール: %d", shadow_stats.shadow_draw_calls);
             ImGui::Text("影付き Spot %d / Point %d",
                 shadow_stats.spot_shadow_lights, shadow_stats.point_shadow_lights);
