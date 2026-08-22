@@ -184,7 +184,7 @@
             configure_visual(image.fill_color_2, image.fill_mode, image.fill_angle,
                 image.fill_center, image.stroke_color_2, image.stroke_mode,
                 false, 0.0f, {}, {}, {});
-            Flush(context, TextureFor(source.texture_guid, asset_database),
+            Flush(context, texture_for_source(source),
                 BlendForImage(image, states), states, scissor);
         };
 

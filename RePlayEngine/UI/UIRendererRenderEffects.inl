@@ -212,7 +212,7 @@
                     configure_visual(image.fill_color_2, image.fill_mode, image.fill_angle,
                         image.fill_center, image.stroke_color_2, image.stroke_mode,
                         false, 0.0f, {}, {}, {});
-                    Flush(context, TextureFor(resolved.texture_guid, asset_database),
+                    Flush(context, texture_for_source(resolved),
                         BlendForImage(image, states), states, nullptr);
                 });
         };
@@ -338,8 +338,8 @@
             configure_visual(image.fill_color_2, image.fill_mode, image.fill_angle,
                 image.fill_center, image.stroke_color_2, image.stroke_mode,
                 false, 0.0f, {}, {}, {});
-            Flush(context, TextureFor(resolved.texture_guid, asset_database),
-                states.blend_alpha, states, nullptr);
+             Flush(context, texture_for_source(resolved),
+                 states.blend_alpha, states, nullptr);
 
             ID3D11ShaderResourceView* null_srv = nullptr;
             context->PSSetShaderResources(0, 1, &null_srv);
@@ -374,9 +374,11 @@
         const auto render_shape_image = [&](const UIEffectStackComponent* effects,
             UIImageComponent& image, UIShapeImageComponent& shape_image,
             const RectTransformComponent& rect, float scale, float opacity,
-            const D3D11_RECT* scissor, const UIPuppetDeformComponent* puppet)
+            const D3D11_RECT* scissor, const UIPuppetDeformComponent* puppet,
+            bool map_image_to_path_bounds = true, bool allow_unattached = false)
         {
-            if (!image.ActiveInHierarchy() || !shape_image.ActiveInHierarchy() ||
+            if (!image.ActiveInHierarchy() ||
+                (!allow_unattached && !shape_image.ActiveInHierarchy()) ||
                 image.opacity <= 0.0f || image.fill_amount <= 0.0f ||
                 !shape_image.path_closed || shape_image.path_points.size() < 3)
                 return false;
@@ -436,7 +438,8 @@
             const ResolvedImageSource resolved = resolve_image_source(image);
             // RectTransform の枠外へ出た頂点にも Image の画素を供給する。
             // Path の外接矩形へ Image を伸ばし、最後に専用マスクで輪郭へ切り抜く。
-            DirectX::XMFLOAT4 draw_rect = path_bounds;
+            DirectX::XMFLOAT4 draw_rect = map_image_to_path_bounds
+                ? path_bounds : source_rect;
             DirectX::XMFLOAT4 uv = resolved.uv;
             const float fill = (std::min)((std::max)(image.fill_amount, 0.0f), 1.0f);
             if (image.fill_method == UIImageComponent::Horizontal)
@@ -458,8 +461,8 @@
             configure_visual(image.fill_color_2, image.fill_mode, image.fill_angle,
                 image.fill_center, image.stroke_color_2, image.stroke_mode,
                 false, 0.0f, {}, {}, {});
-            Flush(context, TextureFor(resolved.texture_guid, asset_database),
-                states.blend_alpha, states, nullptr);
+             Flush(context, texture_for_source(resolved),
+                 states.blend_alpha, states, nullptr);
 
             configure_effect_target(*mask_target);
             context->ClearRenderTargetView(mask_target->rtv.Get(), clear);

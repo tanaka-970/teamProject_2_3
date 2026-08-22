@@ -156,7 +156,11 @@ namespace ReplayEngine::UI
         struct ResolvedImageSource
         {
             std::string texture_guid;
+            std::filesystem::path texture_path;
             DirectX::XMFLOAT4 uv{ 0.0f, 0.0f, 1.0f, 1.0f };
+            // Atlas の自由形状領域。空なら通常の矩形 Image。
+            // 座標は Image の RectTransform 内の正規化座標へ変換済み。
+            std::vector<DirectX::XMFLOAT2> path_points;
             DirectX::XMFLOAT2 atlas_pivot{ 0.5f, 0.5f };
             bool rotated = false;
             bool from_atlas = false;
@@ -185,6 +189,7 @@ namespace ReplayEngine::UI
             const Assets::AssetDatabase* asset_database, ResolvedImageSource& out);
         ID3D11ShaderResourceView* TextureFor(const std::string& guid,
             const Assets::AssetDatabase* asset_database);
+        ID3D11ShaderResourceView* TextureForPath(const std::filesystem::path& path);
         void Flush(ID3D11DeviceContext* context, ID3D11ShaderResourceView* texture,
             ID3D11BlendState* blend_state, const RenderStates& states,
             const D3D11_RECT* scissor,
@@ -202,6 +207,7 @@ namespace ReplayEngine::UI
         VisualConstants visual_constants_{};
         Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> white_texture_;
         std::unordered_map<std::string, Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>> texture_cache_;
+        std::unordered_map<std::string, Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>> texture_path_cache_;
         std::unordered_map<std::string, CachedSpriteAtlas> sprite_atlas_cache_;
         std::unordered_map<std::uint64_t, TemporalHistoryEntry> temporal_history_cache_;
         std::uint64_t render_serial_ = 0;

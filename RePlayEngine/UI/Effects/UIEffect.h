@@ -5,6 +5,7 @@
 #include <DirectXMath.h>
 
 #include <array>
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -100,6 +101,7 @@ namespace ReplayEngine::UI
         Rectangle = 0,
         Ellipse = 1,
         TextureMask = 2,
+        Freeform = 3,
     };
 
     enum class UIEffectRegionScope : int
@@ -120,6 +122,8 @@ namespace ReplayEngine::UI
         float feather = 0.0f;
         float strength = 1.0f;
         std::string mask;
+        std::vector<DirectX::XMFLOAT2> path_points;
+        bool path_closed = true;
     };
 
     struct UIEffectRegion final : UIEffectRegionData
@@ -129,6 +133,18 @@ namespace ReplayEngine::UI
         // 追加範囲を積む。描画時は全範囲の union として合成する。
         std::vector<UIEffectRegionData> additional;
     };
+
+    inline void EnsureUIEffectRegionPath(UIEffectRegionData& region)
+    {
+        if (region.path_points.size() >= 3) return;
+        const float half_x = (std::max)(0.001f, region.size.x);
+        const float half_y = (std::max)(0.001f, region.size.y);
+        region.path_points = {
+            { region.center.x - half_x, region.center.y - half_y },
+            { region.center.x + half_x, region.center.y - half_y },
+            { region.center.x + half_x, region.center.y + half_y },
+            { region.center.x - half_x, region.center.y + half_y } };
+    }
 
     // Inspector で M マークを出す対象。値をキーフレームで動かせるだけの
     // Effect ではなく、現在時刻を参照して自律的に変化するものを示す。

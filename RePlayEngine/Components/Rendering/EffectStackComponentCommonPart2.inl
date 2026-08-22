@@ -401,6 +401,16 @@
             Reflection::PropertyValue::MakeFloat(effect_region.strength));
         output.Set("effect_region_mask",
             Reflection::PropertyValue::MakeAssetReference(effect_region.mask));
+        output.Set("effect_region_path_count",
+            Reflection::PropertyValue::MakeInt(static_cast<int>((std::min)(
+                effect_region.path_points.size(),
+                static_cast<std::size_t>(32)))));
+        for (std::size_t index = 0; index < effect_region.path_points.size() && index < 32;
+            ++index)
+        {
+            output.Set("effect_region_path_" + std::to_string(index),
+                Reflection::PropertyValue::MakeVector2(effect_region.path_points[index]));
+        }
         output.Set("effect_region_additional_count",
             Reflection::PropertyValue::MakeInt(static_cast<int>(effect_region.additional.size())));
         for (std::size_t index = 0; index < effect_region.additional.size(); ++index)
@@ -418,6 +428,14 @@
             output.Set(prefix + "feather", Reflection::PropertyValue::MakeFloat(region.feather));
             output.Set(prefix + "strength", Reflection::PropertyValue::MakeFloat(region.strength));
             output.Set(prefix + "mask", Reflection::PropertyValue::MakeAssetReference(region.mask));
+            output.Set(prefix + "path_count", Reflection::PropertyValue::MakeInt(static_cast<int>(
+                (std::min)(region.path_points.size(), static_cast<std::size_t>(32)))));
+            for (std::size_t point_index = 0;
+                point_index < region.path_points.size() && point_index < 32; ++point_index)
+            {
+                output.Set(prefix + "path_" + std::to_string(point_index),
+                    Reflection::PropertyValue::MakeVector2(region.path_points[point_index]));
+            }
         }
         output.Set("effect_count",
             Reflection::PropertyValue::MakeInt(static_cast<int>(effects.size())));
@@ -525,6 +543,20 @@
             effect_region.strength = value->AsFloat(effect_region.strength);
         if (const Reflection::PropertyValue* value = input.Find("effect_region_mask"))
             effect_region.mask = value->AsAssetReference().guid;
+        int path_count = 0;
+        if (const Reflection::PropertyValue* value = input.Find("effect_region_path_count"))
+            path_count = value->AsInt(0);
+        path_count = (std::max)(0, (std::min)(32, path_count));
+        effect_region.path_points.resize(static_cast<std::size_t>(path_count));
+        for (int index = 0; index < path_count; ++index)
+        {
+            const Reflection::PropertyValue* value = input.Find(
+                "effect_region_path_" + std::to_string(index));
+            if (value != nullptr) effect_region.path_points[static_cast<std::size_t>(index)] =
+                value->AsVector2();
+        }
+        if (effect_region.shape == static_cast<int>(UI::UIEffectRegionShape::Freeform))
+            UI::EnsureUIEffectRegionPath(effect_region);
         int additional_count = 0;
         if (const Reflection::PropertyValue* value = input.Find("effect_region_additional_count"))
             additional_count = value->AsInt(0);
@@ -557,6 +589,20 @@
                 region.strength = value->AsFloat(region.strength);
             if (const Reflection::PropertyValue* value = input.Find(prefix + "mask"))
                 region.mask = value->AsAssetReference().guid;
+            int region_path_count = 0;
+            if (const Reflection::PropertyValue* value = input.Find(prefix + "path_count"))
+                region_path_count = value->AsInt(0);
+            region_path_count = (std::max)(0, (std::min)(32, region_path_count));
+            region.path_points.resize(static_cast<std::size_t>(region_path_count));
+            for (int point_index = 0; point_index < region_path_count; ++point_index)
+            {
+                const Reflection::PropertyValue* value = input.Find(prefix + "path_" +
+                    std::to_string(point_index));
+                if (value != nullptr) region.path_points[
+                    static_cast<std::size_t>(point_index)] = value->AsVector2();
+            }
+            if (region.shape == static_cast<int>(UI::UIEffectRegionShape::Freeform))
+                UI::EnsureUIEffectRegionPath(region);
         }
         int inferred_count = effect_count;
         if (const Reflection::PropertyValue* stored_count = input.Find("effect_count"))
@@ -729,7 +775,7 @@
             desc.tooltip = tooltip;
             if (std::string(name) == "effect_region_shape")
             {
-                desc.enum_labels = { "矩形", "円 / 楕円", "画像マスク（投げ縄）" };
+                desc.enum_labels = { "矩形", "円 / 楕円", "画像マスク（投げ縄）", "自由形状" };
             }
             if (std::string(name) == "effect_region_scope")
             {
@@ -788,7 +834,11 @@
                 if (property == "effect_region_enabled")
                     stack.effect_region.enabled = value.AsBool(stack.effect_region.enabled);
                 else if (property == "effect_region_shape")
+                {
                     stack.effect_region.shape = value.AsInt(stack.effect_region.shape);
+                    if (stack.effect_region.shape == static_cast<int>(UI::UIEffectRegionShape::Freeform))
+                        UI::EnsureUIEffectRegionPath(stack.effect_region);
+                }
                 else if (property == "effect_region_scope")
                     stack.effect_region.scope = value.AsInt(stack.effect_region.scope);
                 else if (property == "effect_region_invert")
@@ -830,7 +880,7 @@
         add_region_property("effect_region_enabled", Reflection::PropertyType::Bool,
             Reflection::Animatable::Step, "範囲制限", "Effect Stack 全体を指定範囲だけへ適用する。");
         add_region_property("effect_region_shape", Reflection::PropertyType::Enum,
-            Reflection::Animatable::Step, "範囲形状", "矩形・円/楕円・白黒画像マスク（投げ縄）から選ぶ。");
+            Reflection::Animatable::Step, "範囲形状", "矩形・円/楕円・画像マスク（投げ縄）・自由形状から選ぶ。");
         add_region_property("effect_region_scope", Reflection::PropertyType::Enum,
             Reflection::Animatable::Step, "適用対象", "全 Effect へ強制適用するか、各 Effect の範囲適用スイッチで個別に選ぶ。");
         add_region_property("effect_region_invert", Reflection::PropertyType::Bool,

@@ -99,6 +99,9 @@ namespace ReplayEngine::Rendering::Effects
         struct EffectConstants
         {
             static constexpr std::size_t MaxAdditionalEffectRegions = 7;
+            static constexpr std::size_t MaxEffectRegions =
+                MaxAdditionalEffectRegions + 1;
+            static constexpr std::size_t MaxEffectRegionVertices = 32;
             DirectX::XMFLOAT4 effect_color{ 1.0f, 1.0f, 1.0f, 1.0f };
             DirectX::XMFLOAT4 effect_params0{ 0.0f, 1.0f, 0.5f, 1.0f };
             DirectX::XMFLOAT4 effect_params1{ 0.0f, 0.0f, 0.0f, 0.0f };
@@ -117,6 +120,9 @@ namespace ReplayEngine::Rendering::Effects
             DirectX::XMFLOAT4 effect_region_extra_params[MaxAdditionalEffectRegions]{};
             DirectX::XMFLOAT4 effect_region_extra_settings[MaxAdditionalEffectRegions]{};
             DirectX::XMFLOAT4 effect_region_count{ 0.0f, 0.0f, 0.0f, 0.0f };
+            DirectX::XMFLOAT4 effect_region_path_counts[MaxEffectRegions]{};
+            DirectX::XMFLOAT4 effect_region_path_points[MaxEffectRegions][
+                MaxEffectRegionVertices]{};
         };
 
         struct BrushStrokeInstance

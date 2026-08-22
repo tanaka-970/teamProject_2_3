@@ -658,7 +658,7 @@
             }
 
             static const char additional_shape_items[] =
-                "矩形\0円 / 楕円\0画像マスク（投げ縄）\0";
+                "矩形\0円 / 楕円\0画像マスク（投げ縄）\0自由形状\0";
             for (std::size_t index = 0;
                 index < effect_stack->effect_region.additional.size(); ++index)
             {
@@ -668,11 +668,13 @@
                 ImGui::Separator();
                 ImGui::Text("追加範囲 %d", static_cast<int>(index) + 1);
                 if (ImGui::Checkbox("有効", &region.enabled)) effect_changed = true;
-                int shape = (std::max)(0, (std::min)(2, region.shape));
+                int shape = (std::max)(0, (std::min)(3, region.shape));
                 ImGui::SetNextItemWidth(-1.0f);
                 if (ImGui::Combo("形状", &shape, additional_shape_items))
                 {
                     region.shape = shape;
+                    if (region.shape == static_cast<int>(ReplayEngine::UI::UIEffectRegionShape::Freeform))
+                        ReplayEngine::UI::EnsureUIEffectRegionPath(region);
                     effect_changed = true;
                 }
                 DirectX::XMFLOAT2 center = region.center;
@@ -1791,6 +1793,8 @@ void framework::draw_ui_hierarchy()
     }
 
     Core::GameObject* selected_ui = object_editor_context.Selection().ResolvePrimary(*scene);
+    if (selected_ui != nullptr && ContainsUI(*selected_ui))
+        selected_editor_object = editor_selection::game_object;
     if (selected_ui != nullptr && ContainsUI(*selected_ui))
     {
         DrawUIOrderControls(object_editor_context, selected_ui);

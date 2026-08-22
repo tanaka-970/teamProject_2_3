@@ -25,7 +25,7 @@ OBJECT
     PROPERTY "opacity" float 1
   END_COMPONENT
   COMPONENT "RectTransformComponent" 1
-    STABLE_ID 16
+    STABLE_ID 17
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
@@ -189,7 +189,7 @@ OBJECT
   NAME "Image"
   ENABLED 1
   PARENT 613
-  TRANSFORM 0 0 0 0 1.1257356405258179 0 1 1 1
+  TRANSFORM 0 0 0 0 0.13962280750274658 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 2
   COMPONENT "RectTransformComponent" 1
@@ -200,11 +200,11 @@ OBJECT
     PROPERTY_COUNT 8
     PROPERTY "anchor_min" vec2 0.14499999582767487 0.20399999618530273
     PROPERTY "anchor_max" vec2 0.59899997711181641 0.5220000147819519
-    PROPERTY "anchored_position" vec2 556.6668701171875 391.66677856445312
-    PROPERTY "size_delta" vec2 160 80
+    PROPERTY "anchored_position" vec2 422.38119506835938 114.20220184326172
+    PROPERTY "size_delta" vec2 159.99993896484375 120.64334106445312
     PROPERTY "pivot" vec2 0.5 0.5
-    PROPERTY "rotation" float 259.5
-    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 346.5
+    PROPERTY "scale" vec2 1.2699999809265137 1.6499999761581421
     PROPERTY "sort_order" int 0
   END_COMPONENT
   COMPONENT "UIImageComponent" 1
@@ -298,8 +298,8 @@ OBJECT
     PROPERTY_COUNT 8
     PROPERTY "anchor_min" vec2 0.5 0.5
     PROPERTY "anchor_max" vec2 0.83099997043609619 0.8529999852180481
-    PROPERTY "anchored_position" vec2 406.666748046875 -535.00006103515625
-    PROPERTY "size_delta" vec2 111 74.5
+    PROPERTY "anchored_position" vec2 1054.6962890625 -845.01190185546875
+    PROPERTY "size_delta" vec2 381.28994750976562 -359.3228759765625
     PROPERTY "pivot" vec2 0.50099998712539673 0.5
     PROPERTY "rotation" float -2
     PROPERTY "scale" vec2 1 1
@@ -312,8 +312,8 @@ OBJECT
     TYPE_VERSION 1
     PROPERTY_COUNT 18
     PROPERTY "sprite" assetref ""
-    PROPERTY "atlas" assetref "75051fcd391be0ead908e411240f6955"
-    PROPERTY "atlas_region" string "ude2"
+    PROPERTY "atlas" assetref ""
+    PROPERTY "atlas_region" string ""
     PROPERTY "color" color 1 1 1 1
     PROPERTY "fill_color_2" color 1 1 1 1
     PROPERTY "fill_mode" enum 0
@@ -347,7 +347,7 @@ OBJECT
     PROPERTY_COUNT 8
     PROPERTY "anchor_min" vec2 0.44900000095367432 0.46299999952316284
     PROPERTY "anchor_max" vec2 0.59299999475479126 0.5
-    PROPERTY "anchored_position" vec2 1071.3333740234375 310.6666259765625
+    PROPERTY "anchored_position" vec2 1142.761962890625 233.52375793457031
     PROPERTY "size_delta" vec2 160 100
     PROPERTY "pivot" vec2 0.5 0.5
     PROPERTY "rotation" float 0
@@ -386,9 +386,9 @@ OBJECT
     TYPE_VERSION 1
     PROPERTY_COUNT 4
     PROPERTY "path_closed" bool 1
-    PROPERTY "path_points" array vec2 4 -0.57408803701400757 -1.9686554670333862 0.86055451631546021 -1.143424391746521 0.035970240831375122 2.9827308654785156 -2.2567763328552246 0.27322220802307129
-    PROPERTY "path_in_handles" array vec2 4 0 0 0 0 0 0 0 0
-    PROPERTY "path_out_handles" array vec2 4 0 0 0 0 0 0 0 0
+    PROPERTY "path_points" array vec2 5 -0.57408803701400757 -1.9686554670333862 0.86055451631546021 -1.143424391746521 0.93477737903594971 0.59054297208786011 0.035970240831375122 2.9827308654785156 -2.2567763328552246 0.27322220802307129
+    PROPERTY "path_in_handles" array vec2 5 0 0 0 0 0.18424582481384277 -0.9219517707824707 0 0 0 0
+    PROPERTY "path_out_handles" array vec2 5 0 0 0 0 -0.22411611676216125 1.1214594841003418 0 0 0 0
   END_COMPONENT
 END_OBJECT
 OBJECT
@@ -446,14 +446,26 @@ OBJECT
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE "RePlayEngine.Optional.Effects"
     TYPE_VERSION 1
-    PROPERTY_COUNT 48
+    PROPERTY_COUNT 61
     PROPERTY "enabled" bool 1
     PROPERTY "target_scope" enum 0
     PROPERTY "capture_backdrop" bool 0
     PROPERTY "use_preset" bool 0
     PROPERTY "effect_preset" assetref ""
     PROPERTY "effect_count" int 1
+    PROPERTY "effect_region_enabled" bool 0
+    PROPERTY "effect_region_shape" enum 0
+    PROPERTY "effect_region_scope" enum 0
+    PROPERTY "effect_region_invert" bool 0
+    PROPERTY "effect_region_center" vec2 0.5 0.5
+    PROPERTY "effect_region_size" vec2 0.5 0.5
+    PROPERTY "effect_region_rotation" float 0
+    PROPERTY "effect_region_feather" float 0
+    PROPERTY "effect_region_strength" float 1
+    PROPERTY "effect_region_mask" assetref ""
+    PROPERTY "effect_region_additional_count" int 0
     PROPERTY "effects[0].enabled" bool 1
+    PROPERTY "effects[0].region_enabled" bool 1
     PROPERTY "effects[0].type" enum 43
     PROPERTY "effects[0].amount" float 18
     PROPERTY "effects[0].radius" float 180
@@ -461,6 +473,7 @@ OBJECT
     PROPERTY "effects[0].intensity" float 1
     PROPERTY "effects[0].seed" float 1
     PROPERTY "effects[0].custom_shader" assetref ""
+    PROPERTY "effect_region_path_count" int 0
     PROPERTY "effects[0].threshold" float 0.57300001382827759
     PROPERTY "effects[0].angle" float 6.8000001907348633
     PROPERTY "effects[0].progress" float 0.11999999731779099

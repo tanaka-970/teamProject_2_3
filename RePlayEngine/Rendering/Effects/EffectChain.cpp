@@ -462,13 +462,13 @@ namespace ReplayEngine::Rendering::Effects
                 (region->scope == static_cast<int>(UI::UIEffectRegionScope::AllEffects) ||
                     effect.region_enabled);
             const int region_shape = region != nullptr
-                ? (std::max)(0, (std::min)(2, region->shape)) : 0;
+                ? (std::max)(0, (std::min)(3, region->shape)) : 0;
             if (region_enabled)
             {
                 const auto fill_region = [](const UI::UIEffectRegionData& source,
                     DirectX::XMFLOAT4& params, DirectX::XMFLOAT4& settings)
                 {
-                    const int shape = (std::max)(0, (std::min)(2, source.shape));
+                    const int shape = (std::max)(0, (std::min)(3, source.shape));
                     params = {
                         source.center.x, source.center.y,
                         (std::max)(source.size.x, 0.0001f),
@@ -478,8 +478,25 @@ namespace ReplayEngine::Rendering::Effects
                         (std::max)(0.0f, (std::min)(1.0f, source.strength)),
                         static_cast<float>(shape) + (source.invert ? 4.0f : 0.0f) };
                 };
+                const auto fill_path = [&](const UI::UIEffectRegionData& source,
+                    std::size_t slot)
+                {
+                    if (source.shape != static_cast<int>(UI::UIEffectRegionShape::Freeform))
+                        return;
+                    const std::size_t count = (std::min)(
+                        source.path_points.size(), EffectConstants::MaxEffectRegionVertices);
+                    effect_constants.effect_region_path_counts[slot].x =
+                        static_cast<float>(count);
+                    for (std::size_t index = 0; index < count; ++index)
+                    {
+                        const DirectX::XMFLOAT2 point = source.path_points[index];
+                        effect_constants.effect_region_path_points[slot][index] = {
+                            point.x, point.y, 0.0f, 0.0f };
+                    }
+                };
                 fill_region(*region, effect_constants.effect_region_params,
                     effect_constants.effect_region_settings);
+                fill_path(*region, 0);
                 std::size_t region_count = 1;
                 for (const UI::UIEffectRegionData& additional : region->additional)
                 {
@@ -491,6 +508,7 @@ namespace ReplayEngine::Rendering::Effects
                     const std::size_t slot = region_count - 1;
                     fill_region(additional, effect_constants.effect_region_extra_params[slot],
                         effect_constants.effect_region_extra_settings[slot]);
+                    fill_path(additional, slot);
                     ++region_count;
                 }
                 effect_constants.effect_region_count.x =

@@ -60,6 +60,10 @@ namespace ReplayEngine::Assets
             {
                 input >> std::quoted(asset.image_guid);
             }
+            else if (head == "TEXTURE_DDS")
+            {
+                input >> std::quoted(asset.embedded_texture_path);
+            }
             else if (head == "REGION")
             {
                 SpriteAtlasRegion region;
@@ -73,6 +77,41 @@ namespace ReplayEngine::Assets
                     >> rotated;
                 region.rotated = rotated != 0;
                 if (!region.name.empty()) asset.regions.push_back(std::move(region));
+            }
+            else if (head == "REGION_PATH")
+            {
+                std::string region_name;
+                std::size_t count = 0;
+                input >> std::quoted(region_name) >> count;
+                if (region_name.empty() || count < 3 || count > 256) continue;
+
+                SpriteAtlasRegion* region = nullptr;
+                for (SpriteAtlasRegion& candidate : asset.regions)
+                {
+                    if (candidate.name == region_name)
+                    {
+                        region = &candidate;
+                        break;
+                    }
+                }
+                if (region == nullptr) continue;
+
+                region->path_points.clear();
+                region->path_points.reserve(count);
+                bool valid = true;
+                for (std::size_t index = 0; index < count; ++index)
+                {
+                    DirectX::XMFLOAT2 point{};
+                    if (!(input >> point.x >> point.y))
+                    {
+                        valid = false;
+                        break;
+                    }
+                    point.x = (std::max)(0.0f, (std::min)(1.0f, point.x));
+                    point.y = (std::max)(0.0f, (std::min)(1.0f, point.y));
+                    region->path_points.push_back(point);
+                }
+                if (!valid) region->path_points.clear();
             }
         }
 
@@ -141,6 +180,8 @@ namespace ReplayEngine::Assets
         file << "SPRITE_ATLAS_VERSION " << current_version << '\n';
         file << "ATLAS " << std::quoted(asset.name) << '\n';
         file << "IMAGE " << std::quoted(asset.image_guid) << '\n';
+        if (!asset.embedded_texture_path.empty())
+            file << "TEXTURE_DDS " << std::quoted(asset.embedded_texture_path) << '\n';
         file << std::setprecision(9);
         for (const SpriteAtlasRegion& region : asset.regions)
         {
@@ -151,6 +192,14 @@ namespace ReplayEngine::Assets
                 << region.original_size.x << ' ' << region.original_size.y << ' '
                 << region.trim_offset.x << ' ' << region.trim_offset.y << ' '
                 << (region.rotated ? 1 : 0) << '\n';
+            if (region.path_points.size() >= 3)
+            {
+                file << "REGION_PATH " << std::quoted(region.name) << ' '
+                    << region.path_points.size();
+                for (const DirectX::XMFLOAT2& point : region.path_points)
+                    file << ' ' << point.x << ' ' << point.y;
+                file << '\n';
+            }
         }
         return static_cast<bool>(file);
     }

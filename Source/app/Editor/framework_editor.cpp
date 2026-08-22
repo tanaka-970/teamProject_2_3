@@ -305,6 +305,8 @@ void framework::draw_editor_main_menu()
             object_editor_context.CanEdit()))
         {
             object_hierarchy_panel.CreateEmpty(object_editor_context);
+            if (object_editor_context.Selection().Primary().Valid())
+                selected_editor_object = editor_selection::game_object;
         }
         if (ImGui::MenuItem(u8"選択中を操作対象にする", nullptr, false,
             object_editor_context.CanEdit() && !object_editor_context.Selection().Empty()))
