@@ -42,9 +42,24 @@ public static unsafe class NativeBridge
         public override int GetHashCode() => HashCode.Combine(High, Low);
     }
 
+    // 関数ポインタ表の互換番号。C++ の Detail::kNativeApiAbiVersion と必ず一致させる。
+    public const uint NativeApiAbiVersion = 10;
+
+    // 表の先頭に必ず置く自己記述ヘッダー。C++ の Detail::NativeApiHeader と同じ並び。
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeApiHeader
+    {
+        public uint AbiVersion;
+        public uint StructSize;
+        public uint EntryCount;
+        public uint Reserved;
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     public struct NativeApi
     {
+        public NativeApiHeader Header;
+
         public delegate* unmanaged[Cdecl]<ulong, ObjectHandle*, int> FindGameObject;
         public delegate* unmanaged[Cdecl]<ObjectHandle, int> IsGameObjectValid;
         public delegate* unmanaged[Cdecl]<ObjectHandle, Vector3*, int> GetLocalPosition;
@@ -165,6 +180,39 @@ public static unsafe class NativeBridge
 
         // v9 追加。名前で GameObject を探す。C++ 側の表も同じ位置（末尾）。
         public delegate* unmanaged[Cdecl]<byte*, ObjectHandle*, int> FindGameObjectByName;
+
+        // v10 追加。Component 型・汎用プロパティ・World Transform・Rigidbody。
+        public delegate* unmanaged[Cdecl]<byte*, uint*, int> ComponentTypeId;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, int, int> GetComponentTypeName;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, int*, int> GetPropertyBool;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, int, int> SetPropertyBool;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, long*, int> GetPropertyInt;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, long, int> SetPropertyInt;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, double*, int> GetPropertyDouble;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, double, int> SetPropertyDouble;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, byte*, int, int> GetPropertyString;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, byte*, int> SetPropertyString;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, Vector2*, int> GetPropertyVector2;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, Vector2, int> SetPropertyVector2;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, Vector3*, int> GetPropertyVector3;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, Vector3, int> SetPropertyVector3;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, Vector4*, int> GetPropertyVector4;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, Vector4, int> SetPropertyVector4;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, Vector3, int> SetWorldPosition;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, Vector4*, int> GetWorldRotation;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, Vector4, int> SetWorldRotation;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, Vector3*, int> GetWorldScale;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, Vector3, int> SetWorldScale;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, Vector3*, Vector3*, Vector3*, int> GetWorldAxes;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, Vector3, Vector3, int> LookAt;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, Vector3, int> RigidbodyAddForce;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, Vector3, int> RigidbodyAddTorque;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, int> RigidbodyClearForces;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, Vector3, Vector3, int> RigidbodyTeleport;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, Vector3*, int> RigidbodyGetLinearVelocity;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, Vector3, int> RigidbodySetLinearVelocity;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, Vector3*, int> RigidbodyGetAngularVelocity;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, Vector3, int> RigidbodySetAngularVelocity;
     }
 
     private sealed class ManagedInstance
@@ -183,6 +231,27 @@ public static unsafe class NativeBridge
         if (table == null)
         {
             api = default;
+            return 0;
+        }
+
+        // 関数ポインタ表は順番で結びついている。1 つずれると別関数を呼ぶので、
+        // 受け取る前に「同じ版・同じ大きさ・同じ本数か」を必ず確かめる。
+        var header = table->Header;
+        var expectedSize = (uint)sizeof(NativeApi);
+        var expectedEntries =
+            (expectedSize - (uint)sizeof(NativeApiHeader)) / (uint)sizeof(void*);
+        if (header.AbiVersion != NativeApiAbiVersion ||
+            header.StructSize != expectedSize ||
+            header.EntryCount != expectedEntries)
+        {
+            api = default;
+            lastError =
+                $"Native API table mismatch: got abi={header.AbiVersion} size={header.StructSize} " +
+                $"entries={header.EntryCount}, expected abi={NativeApiAbiVersion} " +
+                $"size={expectedSize} entries={expectedEntries}. " +
+                "Rebuild RePlayEngine.Managed and the engine together.";
+            lastErrorFile = string.Empty;
+            lastErrorLine = 0;
             return 0;
         }
 
@@ -1803,4 +1872,251 @@ public static unsafe class NativeBridge
                 guid.High, guid.Low, name, source, target, encoded);
     }
 
+    // ---- v10 Component 型・汎用プロパティ・World Transform・Rigidbody ----------
+
+    internal static RuntimeResult<uint> ComponentTypeId(string typeName)
+    {
+        if (api.ComponentTypeId == null) return new(RuntimeStatus.ServiceUnavailable);
+        uint value = 0;
+        fixed (byte* text = Encoding.UTF8.GetBytes(typeName + "\0"))
+            return new RuntimeResult<uint>((RuntimeStatus)api.ComponentTypeId(text, &value), value);
+    }
+
+    internal static RuntimeResult<string> GetComponentTypeName(ComponentHandle handle)
+    {
+        if (api.GetComponentTypeName == null) return new(RuntimeStatus.ServiceUnavailable);
+        const int capacity = 256;
+        byte* output = stackalloc byte[capacity];
+        var status = (RuntimeStatus)api.GetComponentTypeName(handle, output, capacity);
+        return status == RuntimeStatus.Ok
+            ? new RuntimeResult<string>(status, FromUtf8(output))
+            : new RuntimeResult<string>(status);
+    }
+
+    internal static RuntimeResult<bool> GetPropertyBool(ComponentHandle handle, string name)
+    {
+        if (api.GetPropertyBool == null) return new(RuntimeStatus.ServiceUnavailable);
+        int value = 0;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            return new RuntimeResult<bool>(
+                (RuntimeStatus)api.GetPropertyBool(handle, text, &value), value != 0);
+    }
+
+    internal static RuntimeStatus SetPropertyBool(ComponentHandle handle, string name, bool value)
+    {
+        if (api.SetPropertyBool == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            return (RuntimeStatus)api.SetPropertyBool(handle, text, value ? 1 : 0);
+    }
+
+    internal static RuntimeResult<long> GetPropertyInt(ComponentHandle handle, string name)
+    {
+        if (api.GetPropertyInt == null) return new(RuntimeStatus.ServiceUnavailable);
+        long value = 0;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            return new RuntimeResult<long>(
+                (RuntimeStatus)api.GetPropertyInt(handle, text, &value), value);
+    }
+
+    internal static RuntimeStatus SetPropertyInt(ComponentHandle handle, string name, long value)
+    {
+        if (api.SetPropertyInt == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            return (RuntimeStatus)api.SetPropertyInt(handle, text, value);
+    }
+
+    internal static RuntimeResult<double> GetPropertyDouble(ComponentHandle handle, string name)
+    {
+        if (api.GetPropertyDouble == null) return new(RuntimeStatus.ServiceUnavailable);
+        double value = 0.0;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            return new RuntimeResult<double>(
+                (RuntimeStatus)api.GetPropertyDouble(handle, text, &value), value);
+    }
+
+    internal static RuntimeStatus SetPropertyDouble(ComponentHandle handle, string name, double value)
+    {
+        if (api.SetPropertyDouble == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            return (RuntimeStatus)api.SetPropertyDouble(handle, text, value);
+    }
+
+    internal static RuntimeResult<string> GetPropertyString(ComponentHandle handle, string name)
+    {
+        if (api.GetPropertyString == null) return new(RuntimeStatus.ServiceUnavailable);
+        const int capacity = 4096;
+        byte* output = stackalloc byte[capacity];
+        RuntimeStatus status;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            status = (RuntimeStatus)api.GetPropertyString(handle, text, output, capacity);
+        return status == RuntimeStatus.Ok
+            ? new RuntimeResult<string>(status, FromUtf8(output))
+            : new RuntimeResult<string>(status);
+    }
+
+    internal static RuntimeStatus SetPropertyString(ComponentHandle handle, string name, string value)
+    {
+        if (api.SetPropertyString == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+        fixed (byte* content = Encoding.UTF8.GetBytes(value + "\0"))
+            return (RuntimeStatus)api.SetPropertyString(handle, text, content);
+    }
+
+    internal static RuntimeResult<Vector2> GetPropertyVector2(ComponentHandle handle, string name)
+    {
+        if (api.GetPropertyVector2 == null) return new(RuntimeStatus.ServiceUnavailable);
+        Vector2 value = default;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            return new RuntimeResult<Vector2>(
+                (RuntimeStatus)api.GetPropertyVector2(handle, text, &value), value);
+    }
+
+    internal static RuntimeStatus SetPropertyVector2(ComponentHandle handle, string name, Vector2 value)
+    {
+        if (api.SetPropertyVector2 == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            return (RuntimeStatus)api.SetPropertyVector2(handle, text, value);
+    }
+
+    internal static RuntimeResult<Vector3> GetPropertyVector3(ComponentHandle handle, string name)
+    {
+        if (api.GetPropertyVector3 == null) return new(RuntimeStatus.ServiceUnavailable);
+        Vector3 value = default;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            return new RuntimeResult<Vector3>(
+                (RuntimeStatus)api.GetPropertyVector3(handle, text, &value), value);
+    }
+
+    internal static RuntimeStatus SetPropertyVector3(ComponentHandle handle, string name, Vector3 value)
+    {
+        if (api.SetPropertyVector3 == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            return (RuntimeStatus)api.SetPropertyVector3(handle, text, value);
+    }
+
+    internal static RuntimeResult<Vector4> GetPropertyVector4(ComponentHandle handle, string name)
+    {
+        if (api.GetPropertyVector4 == null) return new(RuntimeStatus.ServiceUnavailable);
+        Vector4 value = default;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            return new RuntimeResult<Vector4>(
+                (RuntimeStatus)api.GetPropertyVector4(handle, text, &value), value);
+    }
+
+    internal static RuntimeStatus SetPropertyVector4(ComponentHandle handle, string name, Vector4 value)
+    {
+        if (api.SetPropertyVector4 == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            return (RuntimeStatus)api.SetPropertyVector4(handle, text, value);
+    }
+
+    internal static RuntimeStatus SetWorldPosition(ObjectHandle handle, Vector3 value)
+    {
+        if (api.SetWorldPosition == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.SetWorldPosition(handle, value);
+    }
+
+    internal static RuntimeResult<Quaternion> GetWorldRotation(ObjectHandle handle)
+    {
+        if (api.GetWorldRotation == null) return new(RuntimeStatus.ServiceUnavailable);
+        Vector4 value = default;
+        var status = (RuntimeStatus)api.GetWorldRotation(handle, &value);
+        return new RuntimeResult<Quaternion>(status,
+            new Quaternion(value.X, value.Y, value.Z, value.W));
+    }
+
+    internal static RuntimeStatus SetWorldRotation(ObjectHandle handle, Quaternion value)
+    {
+        if (api.SetWorldRotation == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.SetWorldRotation(handle,
+            new Vector4(value.X, value.Y, value.Z, value.W));
+    }
+
+    internal static RuntimeResult<Vector3> GetWorldScale(ObjectHandle handle)
+    {
+        if (api.GetWorldScale == null) return new(RuntimeStatus.ServiceUnavailable);
+        Vector3 value = default;
+        return new RuntimeResult<Vector3>((RuntimeStatus)api.GetWorldScale(handle, &value), value);
+    }
+
+    internal static RuntimeStatus SetWorldScale(ObjectHandle handle, Vector3 value)
+    {
+        if (api.SetWorldScale == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.SetWorldScale(handle, value);
+    }
+
+    internal static RuntimeStatus GetWorldAxes(ObjectHandle handle,
+        out Vector3 forward, out Vector3 right, out Vector3 up)
+    {
+        forward = new Vector3(0.0f, 0.0f, 1.0f);
+        right = new Vector3(1.0f, 0.0f, 0.0f);
+        up = new Vector3(0.0f, 1.0f, 0.0f);
+        if (api.GetWorldAxes == null) return RuntimeStatus.ServiceUnavailable;
+        Vector3 f = default, r = default, u = default;
+        var status = (RuntimeStatus)api.GetWorldAxes(handle, &f, &r, &u);
+        if (status != RuntimeStatus.Ok) return status;
+        forward = f;
+        right = r;
+        up = u;
+        return status;
+    }
+
+    internal static RuntimeStatus LookAt(ObjectHandle handle, Vector3 target, Vector3 worldUp)
+    {
+        if (api.LookAt == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.LookAt(handle, target, worldUp);
+    }
+
+    internal static RuntimeStatus RigidbodyAddForce(ComponentHandle handle, Vector3 force)
+    {
+        if (api.RigidbodyAddForce == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.RigidbodyAddForce(handle, force);
+    }
+
+    internal static RuntimeStatus RigidbodyAddTorque(ComponentHandle handle, Vector3 torque)
+    {
+        if (api.RigidbodyAddTorque == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.RigidbodyAddTorque(handle, torque);
+    }
+
+    internal static RuntimeStatus RigidbodyClearForces(ComponentHandle handle)
+    {
+        if (api.RigidbodyClearForces == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.RigidbodyClearForces(handle);
+    }
+
+    internal static RuntimeStatus RigidbodyTeleport(ComponentHandle handle,
+        Vector3 position, Vector3 rotationEuler)
+    {
+        if (api.RigidbodyTeleport == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.RigidbodyTeleport(handle, position, rotationEuler);
+    }
+
+    internal static RuntimeResult<Vector3> RigidbodyGetLinearVelocity(ComponentHandle handle)
+    {
+        if (api.RigidbodyGetLinearVelocity == null) return new(RuntimeStatus.ServiceUnavailable);
+        Vector3 value = default;
+        return new RuntimeResult<Vector3>(
+            (RuntimeStatus)api.RigidbodyGetLinearVelocity(handle, &value), value);
+    }
+
+    internal static RuntimeStatus RigidbodySetLinearVelocity(ComponentHandle handle, Vector3 value)
+    {
+        if (api.RigidbodySetLinearVelocity == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.RigidbodySetLinearVelocity(handle, value);
+    }
+
+    internal static RuntimeResult<Vector3> RigidbodyGetAngularVelocity(ComponentHandle handle)
+    {
+        if (api.RigidbodyGetAngularVelocity == null) return new(RuntimeStatus.ServiceUnavailable);
+        Vector3 value = default;
+        return new RuntimeResult<Vector3>(
+            (RuntimeStatus)api.RigidbodyGetAngularVelocity(handle, &value), value);
+    }
+
+    internal static RuntimeStatus RigidbodySetAngularVelocity(ComponentHandle handle, Vector3 value)
+    {
+        if (api.RigidbodySetAngularVelocity == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.RigidbodySetAngularVelocity(handle, value);
+    }
 }

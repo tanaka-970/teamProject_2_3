@@ -1,4 +1,4 @@
-#include "CSharpScriptValidation.h"
+﻿#include "CSharpScriptValidation.h"
 
 #include "../CSharp/CSharpProject.h"
 #include "../CSharp/CSharpScriptBackend.h"
@@ -8,6 +8,7 @@
 #include "../../Object/GameObject/GameObject.h"
 #include "../../Object/Registry/BuiltInComponents.h"
 #include "../../Reflection/Registry/PropertyRegistry.h"
+#include "../../Runtime/API/RuntimeContext.h"
 #include "../../Scene/Runtime/Scene.h"
 #include "../../Scene/Serialization/PrefabSerializer.h"
 #include "../../Scene/Serialization/SceneData.h"
@@ -126,6 +127,7 @@ namespace ReplayEngine::Scripting::Validation
                 "    public ObjectReference Target;\n"
                 "    public ComponentReference TargetComponent;\n"
                 "    public string LastEventType = string.Empty;\n"
+                "    public int ApiChecks = 0;\n"
                 "    private EventSubscription subscription;\n"
                 "\n"
                 "    public override void Awake()\n"
@@ -137,6 +139,37 @@ namespace ReplayEngine::Scripting::Validation
                 "        if (Runtime.AudioUnavailable() != RuntimeStatus.ServiceUnavailable) Counter = -101;\n"
                 "        if (Runtime.RuntimeUIUnavailable() != RuntimeStatus.ServiceUnavailable) Counter = -102;\n"
                 "        if (Runtime.SaveGameUnavailable() != RuntimeStatus.ServiceUnavailable) Counter = -103;\n"
+                "        ApiChecks = RunComponentApiChecks();\n"
+                "    }\n"
+                "\n"
+                "    // v10 で足した型付き Component API を実行時に確かめる。\n"
+                "    private int RunComponentApiChecks()\n"
+                "    {\n"
+                "        var passed = 0;\n"
+                "        if (Runtime.ComponentTypeId(\"CameraComponent\").Value != 0) ++passed;\n"
+                "        Transform.LocalPosition = new Vector3(1.0f, 2.0f, 3.0f);\n"
+                "        if (Transform.LocalPosition.Y == 2.0f) ++passed;\n"
+                "        var axes = Transform.Forward;\n"
+                "        if (axes.Z > 0.99f) ++passed;\n"
+                "        var made = Runtime.CreateGameObject(\"ApiProbe\");\n"
+                "        if (!made.Succeeded) return passed;\n"
+                "        var addedCamera = Runtime.AddComponent<CameraComponent>(made.Value);\n"
+                "        if (addedCamera.Succeeded) ++passed;\n"
+                "        var camera = addedCamera.Value;\n"
+                "        camera.FieldOfView = 42.0f;\n"
+                "        if (camera.FieldOfView == 42.0f) ++passed;\n"
+                "        if (Runtime.TryGetComponent<CameraComponent>(made.Value, out var found) &&\n"
+                "            found.FieldOfView == 42.0f) ++passed;\n"
+                "        if (!Runtime.HasComponent<RigidbodyComponent>(made.Value)) ++passed;\n"
+                "        var body = Runtime.AddComponentOrDefault<RigidbodyComponent>(made.Value);\n"
+                "        if (body.IsValid && body.SetVelocity(new Vector3(0.0f, 5.0f, 0.0f)) ==\n"
+                "            RuntimeStatus.Ok && body.Velocity.Y == 5.0f) ++passed;\n"
+                "        if (body.IsValid && body.AddForce(new Vector3(0.0f, 1.0f, 0.0f)) ==\n"
+                "            RuntimeStatus.Ok) ++passed;\n"
+                "        var runtimeTransform = Runtime.Transform(made.Value);\n"
+                "        runtimeTransform.Position = new Vector3(4.0f, 5.0f, 6.0f);\n"
+                "        if (runtimeTransform.Position.Z == 6.0f) ++passed;\n"
+                "        return passed;\n"
                 "    }\n"
                 "\n"
                 "    public override void Update(float deltaTime)\n"
@@ -519,11 +552,31 @@ namespace ReplayEngine::Scripting::Validation
             check.Expect(false, "Missing C# Behaviour keeps serialized field data");
         }
 
+        // Behaviour から Runtime API を触れるよう、Play の直前だけ Context を繋ぐ。
+        // ここより前で繋ぐと EditorOnly Component が Scene 復元から外れ、
+        // 上の直列化チェックの前提が変わってしまう。
+        ReplayEngine::Runtime::RuntimeContext runtime_context(world);
+        world.Services().SetRuntime(&runtime_context);
+
         runtime->OnWorldActivating(world);
         world.Start();
         world.Update(0.016f);
         check.Expect(script == nullptr || script->HasInstance(),
             "Play start creates managed instance through Behaviour lifecycle");
+
+        // v10 の型付き Component API を、実際に動いている managed インスタンスから確かめる。
+        // ReadField は Play 中なら managed 側の今の値を返す。
+        if (script != nullptr && script->HasInstance())
+        {
+            const ScriptValue api_checks =
+                script->ReadField(ScriptNames::MakeFieldSavedName("ApiChecks"));
+            check.Expect(api_checks.AsInt() == 10,
+                "typed Component API works from a running C# behaviour");
+        }
+        else
+        {
+            check.Expect(false, "typed Component API works from a running C# behaviour");
+        }
         runtime->OnWorldUnloading(world);
         world.Clear();
         runtime->OnWorldUnloaded(world);

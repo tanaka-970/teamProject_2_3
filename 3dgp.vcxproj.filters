@@ -792,6 +792,9 @@
     <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendNative.cpp">
       <Filter>RePlayEngine\Scripting\CSharp</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendNativeComponents.cpp">
+      <Filter>RePlayEngine\Scripting\CSharp</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Scripting\CSharp\CSharpScriptBackendNativeScene.cpp">
       <Filter>RePlayEngine\Scripting\CSharp</Filter>
     </ClCompile>
@@ -831,6 +834,9 @@
     <ClCompile Include="RePlayEngine\Runtime\API\RuntimeContextServices.cpp">
       <Filter>RePlayEngine\Runtime\API</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Runtime\API\RuntimeContextComponentApi.cpp">
+      <Filter>RePlayEngine\Runtime\API</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Runtime\API\RuntimeSaveGameService.cpp">
       <Filter>RePlayEngine\Runtime\API</Filter>
     </ClCompile>
@@ -850,6 +856,9 @@
       <Filter>RePlayEngine\Runtime\Validation</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourRuntimeApiValidation.cpp">
+      <Filter>RePlayEngine\Runtime\Validation</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Runtime\Validation\ComponentApiValidation.cpp">
       <Filter>RePlayEngine\Runtime\Validation</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Runtime\Validation\BehaviourCollisionValidation.cpp">

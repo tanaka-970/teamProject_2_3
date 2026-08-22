@@ -254,6 +254,25 @@ namespace ReplayEngine::Runtime
             const DirectX::XMFLOAT3& value);
         RuntimeStatus GetWorldPosition(const ObjectHandle& handle,
             DirectX::XMFLOAT3& out) const;
+        RuntimeStatus SetWorldPosition(const ObjectHandle& handle,
+            const DirectX::XMFLOAT3& value);
+        RuntimeStatus GetWorldRotationQuaternion(const ObjectHandle& handle,
+            DirectX::XMFLOAT4& out) const;
+        RuntimeStatus SetWorldRotationQuaternion(const ObjectHandle& handle,
+            const DirectX::XMFLOAT4& value);
+        RuntimeStatus GetWorldScale(const ObjectHandle& handle,
+            DirectX::XMFLOAT3& out) const;
+        RuntimeStatus SetWorldScale(const ObjectHandle& handle,
+            const DirectX::XMFLOAT3& value);
+
+        // 前後左右上のワールド方向。回転から作るので Transform の正本は増えない。
+        RuntimeStatus GetWorldAxes(const ObjectHandle& handle,
+            DirectX::XMFLOAT3& forward, DirectX::XMFLOAT3& right,
+            DirectX::XMFLOAT3& up) const;
+
+        // ローカル前方をワールドの target 方向へ向ける。up が縮退なら失敗を返す。
+        RuntimeStatus LookAt(const ObjectHandle& handle,
+            const DirectX::XMFLOAT3& target, const DirectX::XMFLOAT3& world_up);
 
         // ---- Component ---------------------------------------------------------
 
@@ -272,6 +291,46 @@ namespace ReplayEngine::Runtime
             const std::string& field_name, Reflection::PropertyValue& out) const;
         RuntimeStatus SetScriptField(const ComponentHandle& handle,
             const std::string& field_name, const Reflection::PropertyValue& value);
+
+        // ---- Component の型とプロパティ ------------------------------------------
+        //
+        // Inspector と同じ PropertyRegistry を読む。Component 型ごとの専用 API を
+        // 増やさずに、登録済みのプロパティを名前で読み書きするための唯一の入口。
+
+        // 型名（"CameraComponent" など）から ComponentTypeID を引く。
+        // 未登録なら Core::invalid_component_type_id を返す。
+        Core::ComponentTypeID FindComponentTypeId(
+            const std::string& type_name) const noexcept;
+        RuntimeStatus GetComponentTypeName(const ComponentHandle& handle,
+            std::string& out) const;
+        RuntimeStatus GetComponentProperty(const ComponentHandle& handle,
+            const std::string& property_name, Reflection::PropertyValue& out) const;
+        RuntimeStatus SetComponentProperty(const ComponentHandle& handle,
+            const std::string& property_name, const Reflection::PropertyValue& value);
+
+        // ---- Rigidbody -----------------------------------------------------------
+        //
+        // 力は必ず Component の公開 API を通す。
+        // PhysicsDynamicsWorld の内部 Body や Solver はスクリプトへ出さない。
+
+        RuntimeStatus RigidbodyAddForce(const ComponentHandle& handle,
+            const DirectX::XMFLOAT3& force);
+        RuntimeStatus RigidbodyAddTorque(const ComponentHandle& handle,
+            const DirectX::XMFLOAT3& torque);
+        RuntimeStatus RigidbodyClearForces(const ComponentHandle& handle);
+        RuntimeStatus RigidbodyTeleport(const ComponentHandle& handle,
+            const DirectX::XMFLOAT3& position, const DirectX::XMFLOAT3& rotation_euler);
+
+        // 速度は Inspector 上は読み取り専用なので、汎用プロパティ API では書けない。
+        // Script から積む入口だけをここへ出す。
+        RuntimeStatus RigidbodyGetLinearVelocity(const ComponentHandle& handle,
+            DirectX::XMFLOAT3& out) const;
+        RuntimeStatus RigidbodySetLinearVelocity(const ComponentHandle& handle,
+            const DirectX::XMFLOAT3& value);
+        RuntimeStatus RigidbodyGetAngularVelocity(const ComponentHandle& handle,
+            DirectX::XMFLOAT3& out) const;
+        RuntimeStatus RigidbodySetAngularVelocity(const ComponentHandle& handle,
+            const DirectX::XMFLOAT3& value);
 
         // ---- Motion Player -----------------------------------------------------
 

@@ -203,5 +203,34 @@ namespace ReplayEngine::Scripting::CSharp::Detail
 
         // v9 Name lookup.
         using find_by_name_callback = int(__cdecl*)(const char*, Runtime::ObjectHandle*);
+
+        // v10 Component 型・汎用プロパティ・World Transform・Rigidbody。
+        using component_type_id_callback = int(__cdecl*)(const char*, std::uint32_t*);
+        using component_type_name_callback = int(__cdecl*)(Runtime::ComponentHandle, char*, int);
+        using get_property_bool_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, int*);
+        using set_property_bool_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, int);
+        using get_property_int_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, std::int64_t*);
+        using set_property_int_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, std::int64_t);
+        using get_property_double_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, double*);
+        using set_property_double_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, double);
+        using get_property_string_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, char*, int);
+        using set_property_string_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, const char*);
+        using get_property_vec2_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, DirectX::XMFLOAT2*);
+        using set_property_vec2_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, DirectX::XMFLOAT2);
+        using get_property_vec3_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, DirectX::XMFLOAT3*);
+        using set_property_vec3_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, DirectX::XMFLOAT3);
+        using get_property_vec4_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, DirectX::XMFLOAT4*);
+        using set_property_vec4_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, DirectX::XMFLOAT4);
+        using get_vec4_callback = int(__cdecl*)(Runtime::ObjectHandle, DirectX::XMFLOAT4*);
+        using set_vec4_callback = int(__cdecl*)(Runtime::ObjectHandle, DirectX::XMFLOAT4);
+        using get_world_axes_callback = int(__cdecl*)(Runtime::ObjectHandle,
+            DirectX::XMFLOAT3*, DirectX::XMFLOAT3*, DirectX::XMFLOAT3*);
+        using look_at_callback = int(__cdecl*)(Runtime::ObjectHandle,
+            DirectX::XMFLOAT3, DirectX::XMFLOAT3);
+        using rigidbody_vec3_callback = int(__cdecl*)(Runtime::ComponentHandle, DirectX::XMFLOAT3);
+        using rigidbody_get_vec3_callback = int(__cdecl*)(Runtime::ComponentHandle, DirectX::XMFLOAT3*);
+        using rigidbody_void_callback = int(__cdecl*)(Runtime::ComponentHandle);
+        using rigidbody_teleport_callback = int(__cdecl*)(Runtime::ComponentHandle,
+            DirectX::XMFLOAT3, DirectX::XMFLOAT3);
 #endif
 }

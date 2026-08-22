@@ -147,6 +147,45 @@ namespace ReplayEngine::Scripting::CSharp::Detail
             table.poll_event_with_payload = &NativePollEventWithPayload;
             table.publish_event_with_payload = &NativePublishEventWithPayload;
             table.find_game_object_by_name = &NativeFindGameObjectByName;
+
+            table.component_type_id = &NativeComponentTypeId;
+            table.get_component_type_name = &NativeGetComponentTypeName;
+            table.get_component_property_bool = &NativeGetComponentPropertyBool;
+            table.set_component_property_bool = &NativeSetComponentPropertyBool;
+            table.get_component_property_int = &NativeGetComponentPropertyInt;
+            table.set_component_property_int = &NativeSetComponentPropertyInt;
+            table.get_component_property_double = &NativeGetComponentPropertyDouble;
+            table.set_component_property_double = &NativeSetComponentPropertyDouble;
+            table.get_component_property_string = &NativeGetComponentPropertyString;
+            table.set_component_property_string = &NativeSetComponentPropertyString;
+            table.get_component_property_vec2 = &NativeGetComponentPropertyVec2;
+            table.set_component_property_vec2 = &NativeSetComponentPropertyVec2;
+            table.get_component_property_vec3 = &NativeGetComponentPropertyVec3;
+            table.set_component_property_vec3 = &NativeSetComponentPropertyVec3;
+            table.get_component_property_vec4 = &NativeGetComponentPropertyVec4;
+            table.set_component_property_vec4 = &NativeSetComponentPropertyVec4;
+            table.set_world_position = &NativeSetWorldPosition;
+            table.get_world_rotation = &NativeGetWorldRotation;
+            table.set_world_rotation = &NativeSetWorldRotation;
+            table.get_world_scale = &NativeGetWorldScale;
+            table.set_world_scale = &NativeSetWorldScale;
+            table.get_world_axes = &NativeGetWorldAxes;
+            table.look_at = &NativeLookAt;
+            table.rigidbody_add_force = &NativeRigidbodyAddForce;
+            table.rigidbody_add_torque = &NativeRigidbodyAddTorque;
+            table.rigidbody_clear_forces = &NativeRigidbodyClearForces;
+            table.rigidbody_teleport = &NativeRigidbodyTeleport;
+            table.rigidbody_get_linear_velocity = &NativeRigidbodyGetLinearVelocity;
+            table.rigidbody_set_linear_velocity = &NativeRigidbodySetLinearVelocity;
+            table.rigidbody_get_angular_velocity = &NativeRigidbodyGetAngularVelocity;
+            table.rigidbody_set_angular_velocity = &NativeRigidbodySetAngularVelocity;
+
+            // 自己記述ヘッダー。C# 側はこれを見て表の食い違いをその場で弾く。
+            table.header.abi_version = kNativeApiAbiVersion;
+            table.header.struct_size = static_cast<std::uint32_t>(sizeof(NativeApiTable));
+            table.header.entry_count = static_cast<std::uint32_t>(
+                (sizeof(NativeApiTable) - sizeof(NativeApiHeader)) / sizeof(void*));
+            table.header.reserved = 0;
             return table;
         }
 

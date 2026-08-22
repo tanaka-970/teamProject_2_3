@@ -364,4 +364,122 @@ public sealed class ScriptRuntimeContext
         string typeName = "", ObjectHandle source = default, ObjectHandle target = default)
         => NativeBridge.PublishEvent(eventTypeGuid, payload, typeName, source, target);
 
+    // ---- v10 型付き Component API ------------------------------------------
+    //
+    // uint の Component Type ID を手で書かなくて済むようにする。
+    // 型名から引いた ID は ComponentTypes が覚えるので、毎フレーム引き直さない。
+
+    public RuntimeResult<T> GetComponent<T>(ObjectHandle handle)
+        where T : IComponentBinding<T>
+    {
+        var typeId = ComponentTypes.IdOf<T>();
+        if (typeId == 0) return new RuntimeResult<T>(RuntimeStatus.ComponentNotFound);
+        var result = NativeBridge.GetComponent(handle, typeId);
+        return new RuntimeResult<T>(result.Status, T.FromHandle(result.Value));
+    }
+
+    public bool TryGetComponent<T>(ObjectHandle handle, out T component)
+        where T : IComponentBinding<T>
+    {
+        var result = GetComponent<T>(handle);
+        component = result.Value;
+        return result.Succeeded;
+    }
+
+    // 値をそのまま返す入口。戻り値を変数へ受ければプロパティへ代入できる。
+    public T GetComponentOrDefault<T>(ObjectHandle handle) where T : IComponentBinding<T>
+        => GetComponent<T>(handle).Value;
+
+    public T AddComponentOrDefault<T>(ObjectHandle handle) where T : IComponentBinding<T>
+        => AddComponent<T>(handle).Value;
+
+    public RuntimeResult<T> AddComponent<T>(ObjectHandle handle)
+        where T : IComponentBinding<T>
+    {
+        var typeId = ComponentTypes.IdOf<T>();
+        if (typeId == 0) return new RuntimeResult<T>(RuntimeStatus.ComponentNotFound);
+        var result = NativeBridge.AddComponent(handle, typeId);
+        return new RuntimeResult<T>(result.Status, T.FromHandle(result.Value));
+    }
+
+    public bool HasComponent<T>(ObjectHandle handle) where T : IComponentBinding<T>
+    {
+        var typeId = ComponentTypes.IdOf<T>();
+        if (typeId == 0) return false;
+        var result = NativeBridge.HasComponent(handle, typeId);
+        return result.Succeeded && result.Value;
+    }
+
+    public RuntimeResult<T[]> GetComponents<T>(ObjectHandle handle)
+        where T : IComponentBinding<T>
+    {
+        var typeId = ComponentTypes.IdOf<T>();
+        if (typeId == 0) return new RuntimeResult<T[]>(RuntimeStatus.ComponentNotFound, Array.Empty<T>());
+        var result = NativeBridge.GetComponents(handle, typeId);
+        if (!result.Succeeded || result.Value == null)
+            return new RuntimeResult<T[]>(result.Status, Array.Empty<T>());
+
+        var typed = new T[result.Value.Length];
+        for (var index = 0; index < result.Value.Length; ++index)
+            typed[index] = T.FromHandle(result.Value[index]);
+        return new RuntimeResult<T[]>(result.Status, typed);
+    }
+
+    // 型付きの入口がまだ無い Component を、C++ の型名で直接触る。
+    public RuntimeResult<GenericComponent> GetComponent(ObjectHandle handle, string nativeTypeName)
+    {
+        var typeId = ComponentTypes.IdOf(nativeTypeName);
+        if (typeId == 0) return new RuntimeResult<GenericComponent>(RuntimeStatus.ComponentNotFound);
+        var result = NativeBridge.GetComponent(handle, typeId);
+        return new RuntimeResult<GenericComponent>(result.Status, new GenericComponent(result.Value));
+    }
+
+    public RuntimeResult<uint> ComponentTypeId(string nativeTypeName)
+        => NativeBridge.ComponentTypeId(nativeTypeName);
+    public RuntimeResult<string> GetComponentTypeName(ComponentHandle handle)
+        => NativeBridge.GetComponentTypeName(handle);
+
+    // ---- v10 Component プロパティ（型付きの入口が無い値へ直接触る） -------------
+
+    public RuntimeResult<bool> GetComponentBool(ComponentHandle handle, string name)
+        => NativeBridge.GetPropertyBool(handle, name);
+    public RuntimeStatus SetComponentBool(ComponentHandle handle, string name, bool value)
+        => NativeBridge.SetPropertyBool(handle, name, value);
+    public RuntimeResult<long> GetComponentInt(ComponentHandle handle, string name)
+        => NativeBridge.GetPropertyInt(handle, name);
+    public RuntimeStatus SetComponentInt(ComponentHandle handle, string name, long value)
+        => NativeBridge.SetPropertyInt(handle, name, value);
+    public RuntimeResult<double> GetComponentFloat(ComponentHandle handle, string name)
+        => NativeBridge.GetPropertyDouble(handle, name);
+    public RuntimeStatus SetComponentFloat(ComponentHandle handle, string name, double value)
+        => NativeBridge.SetPropertyDouble(handle, name, value);
+    public RuntimeResult<string> GetComponentString(ComponentHandle handle, string name)
+        => NativeBridge.GetPropertyString(handle, name);
+    public RuntimeStatus SetComponentString(ComponentHandle handle, string name, string value)
+        => NativeBridge.SetPropertyString(handle, name, value);
+    public RuntimeResult<Vector3> GetComponentVector3(ComponentHandle handle, string name)
+        => NativeBridge.GetPropertyVector3(handle, name);
+    public RuntimeStatus SetComponentVector3(ComponentHandle handle, string name, Vector3 value)
+        => NativeBridge.SetPropertyVector3(handle, name, value);
+    public RuntimeResult<Vector4> GetComponentVector4(ComponentHandle handle, string name)
+        => NativeBridge.GetPropertyVector4(handle, name);
+    public RuntimeStatus SetComponentVector4(ComponentHandle handle, string name, Vector4 value)
+        => NativeBridge.SetPropertyVector4(handle, name, value);
+
+    // ---- v10 Transform ------------------------------------------------------
+
+    public TransformAccess Transform(ObjectHandle handle) => new(handle);
+
+    public RuntimeStatus SetWorldPosition(ObjectHandle handle, Vector3 value)
+        => NativeBridge.SetWorldPosition(handle, value);
+    public RuntimeResult<Quaternion> GetWorldRotation(ObjectHandle handle)
+        => NativeBridge.GetWorldRotation(handle);
+    public RuntimeStatus SetWorldRotation(ObjectHandle handle, Quaternion value)
+        => NativeBridge.SetWorldRotation(handle, value);
+    public RuntimeResult<Vector3> GetWorldScale(ObjectHandle handle)
+        => NativeBridge.GetWorldScale(handle);
+    public RuntimeStatus SetWorldScale(ObjectHandle handle, Vector3 value)
+        => NativeBridge.SetWorldScale(handle, value);
+    public RuntimeStatus LookAt(ObjectHandle handle, Vector3 target)
+        => NativeBridge.LookAt(handle, target, new Vector3(0.0f, 1.0f, 0.0f));
 }
