@@ -167,8 +167,12 @@ void framework::draw_inspector()
             ImGui::DragFloat("CSM Bias", &csm.constants.params.x, 0.0005f, 0, 0.05f, "%.5f");
             ImGui::DragFloat("Normal Bias", &csm.constants.params.y, 0.005f, 0, 1);
             ImGui::DragFloat("Filter", &csm.constants.params.z, 0.05f, 0, 8);
-            bool enabled = csm.constants.params.w > 0.5f;
-            if (ImGui::Checkbox("Enable CSM", &enabled)) csm.constants.params.w = enabled ? 1.0f : 0.0f;
+            // params.w は毎フレーム作り直されるので、UI はユーザー設定側を触る。
+            ImGui::Checkbox("Enable CSM", &csm_enabled_setting);
+            if (!(csm.constants.params.w > 0.5f) && csm_enabled_setting)
+            {
+                ImGui::TextDisabled("影を落とす Directional Light が無いため停止中");
+            }
         }
         break;
 

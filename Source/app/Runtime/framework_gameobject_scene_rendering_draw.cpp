@@ -44,6 +44,7 @@
 #include <commdlg.h>
 #include <algorithm>
 #include <cctype>
+#include <cfloat>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
@@ -480,6 +481,315 @@ void framework::draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shade
 }
 
 
+namespace
+{
+    // ローカルAABBをワールド行列で変換し、外接球で影ボリュームと判定する。
+    //
+    // 影ボリューム（全カスケードを包む球）へ届かない物体は、どのカスケードの
+    // 深度にも書き込めない。つまり描いても影は 1 ピクセルも変わらないので、
+    // 影パスのドローコールから丸ごと外せる。
+    // extrusion は csm_renderer::caster_extrusion。カスケードより手前に
+    // あるキャスターも影を落とすので、その分だけ球を膨らませる。
+    bool shadow_volume_intersects(const DirectX::XMFLOAT3& local_minimum,
+        const DirectX::XMFLOAT3& local_maximum,
+        const DirectX::XMFLOAT4X4& world,
+        const DirectX::XMFLOAT3& volume_center, float volume_radius,
+        float extrusion)
+    {
+        // 影ボリュームがまだ作られていないフレームは捨てない（安全側）。
+        if (!(volume_radius > 0.0f)) return true;
+        if (local_minimum.x > local_maximum.x) return true; // 未設定のAABB
+
+        const DirectX::XMMATRIX matrix = DirectX::XMLoadFloat4x4(&world);
+        DirectX::XMFLOAT3 minimum{ FLT_MAX, FLT_MAX, FLT_MAX };
+        DirectX::XMFLOAT3 maximum{ -FLT_MAX, -FLT_MAX, -FLT_MAX };
+        for (int corner = 0; corner < 8; ++corner)
+        {
+            const DirectX::XMVECTOR local = DirectX::XMVectorSet(
+                (corner & 1) ? local_maximum.x : local_minimum.x,
+                (corner & 2) ? local_maximum.y : local_minimum.y,
+                (corner & 4) ? local_maximum.z : local_minimum.z, 1.0f);
+            DirectX::XMFLOAT3 transformed{};
+            DirectX::XMStoreFloat3(&transformed,
+                DirectX::XMVector3TransformCoord(local, matrix));
+            minimum.x = (std::min)(minimum.x, transformed.x);
+            minimum.y = (std::min)(minimum.y, transformed.y);
+            minimum.z = (std::min)(minimum.z, transformed.z);
+            maximum.x = (std::max)(maximum.x, transformed.x);
+            maximum.y = (std::max)(maximum.y, transformed.y);
+            maximum.z = (std::max)(maximum.z, transformed.z);
+        }
+
+        const DirectX::XMFLOAT3 center{
+            (minimum.x + maximum.x) * 0.5f,
+            (minimum.y + maximum.y) * 0.5f,
+            (minimum.z + maximum.z) * 0.5f };
+        const DirectX::XMFLOAT3 extent{
+            (maximum.x - minimum.x) * 0.5f,
+            (maximum.y - minimum.y) * 0.5f,
+            (maximum.z - minimum.z) * 0.5f };
+        const float object_radius = std::sqrt(
+            extent.x * extent.x + extent.y * extent.y + extent.z * extent.z);
+
+        const float dx = center.x - volume_center.x;
+        const float dy = center.y - volume_center.y;
+        const float dz = center.z - volume_center.z;
+        const float distance_squared = dx * dx + dy * dy + dz * dz;
+        const float reach = volume_radius + object_radius +
+            (std::max)(extrusion, 0.0f);
+        return distance_squared <= reach * reach;
+    }
+}
+
+
+bool framework::resolve_render_item_shadow_double_sided(
+    const ReplayEngine::Rendering::RenderItem& source)
+{
+    const ReplayEngine::Rendering::MaterialAsset* material =
+        resolve_object_material(source.material_asset);
+    const bool material_double_sided = material != nullptr && material->double_sided;
+    return source.double_sided || material_double_sided ||
+        (source.material_override && source.override_material_double_sided);
+}
+
+
+// ライト視点の影深度パスへ、Scene の全キャスターを提出する。
+//
+// 【この関数が影機能の本体】
+//   影が「動いている物体に追従しない」不具合の原因は、ほぼ全て
+//   ここへ提出されていないことにある。GBuffer / Forward へ描く物は
+//   Cast Shadow を切らない限り、例外なくここへも来ること。
+//
+// 通常描画との違い:
+//   - Pixel Shader を貼らない（深度だけを書く）。
+//   - Material / Texture / GBuffer 定数を一切触らない。
+//   - メインカメラの視錐台カリングは使わない。代わりに影ボリューム
+//     （全カスケードを包む球）で選別する。画面外でも影は落ちるが、
+//     影ボリュームの外へ出た物体は影マップに一切写らないため捨ててよい。
+//   - RenderItem::cast_shadow == false は捨てる。
+void framework::draw_shadow_caster_meshes(
+    ID3D11VertexShader* static_caster_vs, ID3D11InputLayout* static_caster_il,
+    ID3D11VertexShader* skinned_caster_vs, ID3D11InputLayout* skinned_caster_il)
+{
+    // 影マップは深度テスト・深度書き込みの両方が要る。直前のパスが
+    // 何を残していても影響を受けないよう、ここで明示的に決める。
+    immediate_context->OMSetDepthStencilState(
+        depth_stencil_states[(size_t)DEPTH_STATE::ZT_ON_ZW_ON].Get(), 0);
+    ReplayEngine::Rendering::Stats().CountStateSet(
+        ReplayEngine::Rendering::RenderStats::StateKind::DepthStencil, false);
+    immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
+    ReplayEngine::Rendering::Stats().CountStateSet(
+        ReplayEngine::Rendering::RenderStats::StateKind::Rasterizer, false);
+
+    // gltf_model 側の視錐台カリングはカメラ基準なので影パスでは使えない。
+    // 影パスの間だけ止め、通常描画の統計値も汚さないよう元へ戻す。
+    auto& culling = ReplayEngine::Rendering::Culling();
+    const bool culling_was_enabled = culling.enabled;
+    culling.enabled = false;
+
+    const DirectX::XMFLOAT3 volume_center = csm.shadow_volume_center;
+    const float volume_radius = csm.shadow_volume_radius;
+    const float extrusion = csm.caster_extrusion;
+
+    for (const ReplayEngine::Rendering::RenderItem& item : object_render_items.Items())
+    {
+        if (!item.cast_shadow)
+        {
+            ++shadow_stats.skipped_cast_shadow;
+            continue;
+        }
+        if (item.mesh_asset.empty()) continue;
+
+        // Engine 内蔵 Primitive。Cube / Sphere などもここを通って影を落とす。
+        if (item.mesh_asset.rfind("builtin:", 0) == 0)
+        {
+            if (static_caster_vs == nullptr) continue;
+            static_mesh* primitive = resolve_builtin_primitive_mesh(item.mesh_asset);
+            if (primitive == nullptr) continue;
+            if (!shadow_volume_intersects(primitive->bounding_box[0],
+                primitive->bounding_box[1], item.world,
+                volume_center, volume_radius, extrusion))
+            {
+                ++shadow_stats.culled_casters;
+                continue;
+            }
+
+            const bool double_sided = resolve_render_item_shadow_double_sided(item);
+            if (double_sided)
+                immediate_context->RSSetState(
+                    rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+            primitive->render(immediate_context.Get(), item.world, item.tint,
+                nullptr, static_caster_vs, static_caster_il, false, false);
+            if (double_sided)
+                immediate_context->RSSetState(
+                    rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
+
+            ++shadow_stats.primitive_casters;
+            ++shadow_stats.shadow_draw_calls;
+            continue;
+        }
+
+        // Skin も Animation も持たない glTF は静的キャスターとして描く。
+        gltf_model* gltf = resolve_object_gltf(item.mesh_asset);
+        if (gltf != nullptr && !gltf->HasSkins() && !gltf->HasAnimations())
+        {
+            if (static_caster_vs == nullptr) continue;
+
+            DirectX::XMFLOAT3 local_minimum{}, local_maximum{};
+            if (gltf->ComputeBounds(local_minimum, local_maximum) &&
+                !shadow_volume_intersects(local_minimum, local_maximum, item.world,
+                    volume_center, volume_radius, extrusion))
+            {
+                ++shadow_stats.culled_casters;
+                continue;
+            }
+
+            const bool double_sided = resolve_render_item_shadow_double_sided(item);
+            if (double_sided)
+                immediate_context->RSSetState(
+                    rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+            gltf->render_shadow(immediate_context.Get(), item.world,
+                static_caster_vs, static_caster_il);
+            if (double_sided)
+                immediate_context->RSSetState(
+                    rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
+
+            ++shadow_stats.static_casters;
+            ++shadow_stats.shadow_draw_calls;
+            continue;
+        }
+
+        // Skinned Mesh / Animator。骨変形はこのフレームの姿勢をそのまま使う。
+        // 通常描画と同じ keyframe を渡すので、影がアニメーションから遅れない。
+        //
+        // ここだけ影ボリュームのカリングを掛けない。skinned_mesh の
+        // bounding_box はバインドポーズのもので、アニメーション中の実際の
+        // 広がりを含まない。誤って捨てるとキャラクターの影だけが消えるという
+        // 最も分かりにくい壊れ方をするため、安全側に倒して常に描く。
+        skinned_mesh* mesh = resolve_object_mesh(item.mesh_asset);
+        if (mesh == nullptr) continue;
+        if (skinned_caster_vs == nullptr) continue;
+
+        skinned_mesh::animation::keyframe blended_keyframe;
+        const skinned_mesh::animation::keyframe* keyframe =
+            resolve_render_item_keyframe(*mesh, item, blended_keyframe);
+
+        const bool draw_double_sided = resolve_render_item_shadow_double_sided(item) ||
+            (mesh->IsGltf() && item.material_asset.empty() &&
+                mesh->HasDoubleSidedMaterials());
+        if (draw_double_sided)
+            immediate_context->RSSetState(
+                rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+        // write_motion_vectors は必ず false。影パスで履歴を進めると
+        // GBuffer パスの前フレーム姿勢が壊れ、TAA が尾を引く。
+        mesh->render(immediate_context.Get(), item.world, item.tint,
+            keyframe, nullptr, skinned_caster_vs, skinned_caster_il,
+            false, false, false);
+        if (draw_double_sided)
+            immediate_context->RSSetState(
+                rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
+
+        ++shadow_stats.skinned_casters;
+        ++shadow_stats.shadow_draw_calls;
+    }
+
+    // Landscape も Mesh と同じ影パスへ入れる。専用の影処理は作らない。
+    if (static_caster_vs != nullptr)
+    {
+        ReplayEngine::Scene::Scene& scene = active_object_scene();
+        for (std::size_t object_index = 0; object_index < scene.GameObjectCount(); ++object_index)
+        {
+            ReplayEngine::Core::GameObject* object = scene.GameObjectAt(object_index);
+            if (object == nullptr || object->PendingDestroy() ||
+                !object->ActiveInHierarchy()) continue;
+
+            auto* renderer =
+                object->GetComponent<ReplayEngine::Components::LandscapeRendererComponent>();
+            if (renderer == nullptr || !renderer->visible ||
+                !renderer->ActiveInHierarchy()) continue;
+            if (!renderer->cast_shadow)
+            {
+                ++shadow_stats.skipped_cast_shadow;
+                continue;
+            }
+
+            static_mesh* landscape_mesh = resolve_landscape_gpu_mesh(*object);
+            if (landscape_mesh == nullptr) continue;
+
+            const DirectX::XMFLOAT4X4 world = object->GetTransform().WorldMatrixFloat4x4();
+            if (!shadow_volume_intersects(landscape_mesh->bounding_box[0],
+                landscape_mesh->bounding_box[1], world,
+                volume_center, volume_radius, extrusion))
+            {
+                ++shadow_stats.culled_casters;
+                continue;
+            }
+
+            if (renderer->double_sided)
+                immediate_context->RSSetState(
+                    rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
+            landscape_mesh->render(immediate_context.Get(), world, renderer->tint,
+                nullptr, static_caster_vs, static_caster_il, false, false);
+            if (renderer->double_sided)
+                immediate_context->RSSetState(
+                    rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
+
+            ++shadow_stats.landscape_casters;
+            ++shadow_stats.shadow_draw_calls;
+        }
+    }
+
+    culling.enabled = culling_was_enabled;
+}
+
+
+static_mesh* framework::resolve_landscape_gpu_mesh(
+    const ReplayEngine::Core::GameObject& object)
+{
+    const auto* landscape =
+        object.GetComponent<ReplayEngine::Components::LandscapeComponent>();
+    if (landscape == nullptr) return nullptr;
+
+    const auto& data = landscape->Data();
+    if (!data.Valid()) return nullptr;
+
+    const std::uint64_t cache_key = object.ID().Value();
+    landscape_gpu_cache_entry& cache = landscape_gpu_mesh_cache[cache_key];
+    if (cache.revision != data.Revision() || cache.mesh == nullptr)
+    {
+        std::vector<static_mesh::vertex> vertices;
+        vertices.reserve(data.VertexCount());
+        for (const ReplayEngine::Landscape::LandscapeVertex& source : data.Vertices())
+        {
+            static_mesh::vertex vertex{};
+            vertex.position = source.position;
+            vertex.normal = source.normal;
+            vertex.texcoord = source.uv;
+            vertices.push_back(vertex);
+        }
+
+        bool gpu_ready = false;
+        if (cache.mesh == nullptr)
+        {
+            cache.mesh = std::make_unique<static_mesh>(device.Get(), vertices, data.Indices());
+            gpu_ready = cache.mesh != nullptr && cache.mesh->is_loaded();
+        }
+        else
+        {
+            // Sculpt / Topology edit では geometry だけが変わる。
+            // static_mesh を丸ごと再構築すると CSO/Texture まで毎回作り直すため、
+            // vertex/index buffer だけ更新する。
+            gpu_ready = cache.mesh->update_procedural_geometry(
+                device.Get(), vertices, data.Indices());
+        }
+
+        if (gpu_ready) cache.revision = data.Revision();
+    }
+    if (cache.mesh == nullptr || !cache.mesh->is_loaded()) return nullptr;
+    return cache.mesh.get();
+}
+
+
 void framework::draw_landscape_scene_meshes(bool gbuffer_pass, bool depth_only)
 {
     ReplayEngine::Scene::Scene& scene = active_object_scene();
@@ -488,45 +798,11 @@ void framework::draw_landscape_scene_meshes(bool gbuffer_pass, bool depth_only)
         ReplayEngine::Core::GameObject* object = scene.GameObjectAt(object_index);
         if (object == nullptr || object->PendingDestroy() || !object->ActiveInHierarchy()) continue;
 
-        auto* landscape = object->GetComponent<ReplayEngine::Components::LandscapeComponent>();
         auto* renderer = object->GetComponent<ReplayEngine::Components::LandscapeRendererComponent>();
-        if (landscape == nullptr || renderer == nullptr || !renderer->visible ||
-            !renderer->ActiveInHierarchy() || !landscape->Data().Valid()) continue;
+        if (renderer == nullptr || !renderer->visible || !renderer->ActiveInHierarchy()) continue;
 
-        const auto& data = landscape->Data();
-        const std::uint64_t cache_key = object->ID().Value();
-        landscape_gpu_cache_entry& cache = landscape_gpu_mesh_cache[cache_key];
-        if (cache.revision != data.Revision() || cache.mesh == nullptr)
-        {
-            std::vector<static_mesh::vertex> vertices;
-            vertices.reserve(data.VertexCount());
-            for (const ReplayEngine::Landscape::LandscapeVertex& source : data.Vertices())
-            {
-                static_mesh::vertex vertex{};
-                vertex.position = source.position;
-                vertex.normal = source.normal;
-                vertex.texcoord = source.uv;
-                vertices.push_back(vertex);
-            }
-
-            bool gpu_ready = false;
-            if (cache.mesh == nullptr)
-            {
-                cache.mesh = std::make_unique<static_mesh>(device.Get(), vertices, data.Indices());
-                gpu_ready = cache.mesh != nullptr && cache.mesh->is_loaded();
-            }
-            else
-            {
-                // Sculpt / Topology edit では geometry だけが変わる。
-                // static_mesh を丸ごと再構築すると CSO/Texture まで毎回作り直すため、
-                // vertex/index buffer だけ更新する。
-                gpu_ready = cache.mesh->update_procedural_geometry(
-                    device.Get(), vertices, data.Indices());
-            }
-
-            if (gpu_ready) cache.revision = data.Revision();
-        }
-        if (cache.mesh == nullptr || !cache.mesh->is_loaded()) continue;
+        static_mesh* landscape_mesh = resolve_landscape_gpu_mesh(*object);
+        if (landscape_mesh == nullptr) continue;
 
         if (renderer->double_sided)
             immediate_context->RSSetState(
@@ -535,7 +811,7 @@ void framework::draw_landscape_scene_meshes(bool gbuffer_pass, bool depth_only)
         const DirectX::XMFLOAT4X4 world = object->GetTransform().WorldMatrixFloat4x4();
         if (depth_only)
         {
-            cache.mesh->render(immediate_context.Get(), world, renderer->tint,
+            landscape_mesh->render(immediate_context.Get(), world, renderer->tint,
                 nullptr, nullptr, nullptr, false, false);
         }
         else if (gbuffer_pass)
@@ -547,12 +823,12 @@ void framework::draw_landscape_scene_meshes(bool gbuffer_pass, bool depth_only)
                 false, false, 1.0f, 0.0f,
                 0.0f, 0.75f, 1.0f, 0.0f,
                 renderer->tint, { 0.0f, 0.0f, 0.0f }, 0u);
-            cache.mesh->render(immediate_context.Get(), world, renderer->tint,
+            landscape_mesh->render(immediate_context.Get(), world, renderer->tint,
                 static_mesh_gbuffer_ps.Get(), nullptr, nullptr, true, true);
         }
         else
         {
-            cache.mesh->render(immediate_context.Get(), world, renderer->tint,
+            landscape_mesh->render(immediate_context.Get(), world, renderer->tint,
                 static_forward_shader(SHADING_MODEL_PBR));
         }
 

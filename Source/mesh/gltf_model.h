@@ -66,6 +66,20 @@ public:
         // 深度プリパス用。ピクセルシェーダーとテクスチャを外して深度だけ描く。
         bool depth_only = false);
 
+    // ライト視点の影深度パス専用の入口。
+    //
+    // render() と分ける理由は3つある。
+    //   1. 影用の Vertex Shader / InputLayout へ差し替える必要がある。
+    //      render() は自前の vertex_shader_ を必ず貼るため使えない。
+    //   2. メインカメラの視錐台カリングを使ってはいけない。画面外の
+    //      キャスターも影は画面内へ落ちるので、捨てると影が欠ける。
+    //   3. 自動LODも使わない。粗いメッシュで深度を書くと影の輪郭がずれる。
+    // Geometry Shader と RenderTarget は呼び出し側 (csm/pbr) が設定済みの前提。
+    void render_shadow(ID3D11DeviceContext* context,
+        const DirectX::XMFLOAT4X4& world,
+        ID3D11VertexShader* caster_vertex_shader,
+        ID3D11InputLayout* caster_input_layout);
+
 private:
     static const std::filesystem::path& CacheRoot();
 

@@ -46,6 +46,14 @@ public:
     csm_constants constants{};
     D3D11_VIEWPORT viewport{};
 
+    // 全カスケードを包むワールド空間の球。update_cascades() が毎フレーム更新する。
+    // 影パスのキャスター選別に使う。ここへ届かない物体は影マップに一切写らない
+    // ので、描く前に捨てられる（影パスのドローコール削減の本体）。
+    DirectX::XMFLOAT3 shadow_volume_center{ 0.0f, 0.0f, 0.0f };
+    float shadow_volume_radius{ 0.0f };
+    // キャスター選別に使うライト方向（update_cascades() へ渡されたもの）。
+    DirectX::XMFLOAT3 shadow_light_direction{ 0.0f, -1.0f, 0.0f };
+
     // 分割距離の対数/等間隔ブレンド係数。1に近いほど近景を細かく分ける。
     float split_lambda{ 0.85f };
     // 影を落とす最遠距離。これより遠くはシャドウを打ち切る。

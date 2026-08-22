@@ -138,6 +138,12 @@ void csm_renderer::update_cascades(const XMFLOAT4& light_direction,
     const XMMATRIX inverse_view_projection =
         XMMatrixInverse(nullptr, view_matrix * projection_matrix);
 
+    // 全カスケードを包む球をこのループで育てる。影パスのキャスター選別に使う。
+    XMStoreFloat3(&shadow_light_direction, light);
+    bool shadow_volume_initialized = false;
+    XMVECTOR shadow_volume_center_v = XMVectorZero();
+    shadow_volume_radius = 0.0f;
+
     float previous_split = near_plane;
     for (UINT c = 0; c < CASCADE_COUNT; ++c)
     {
@@ -186,6 +192,35 @@ void csm_renderer::update_cascades(const XMFLOAT4& light_direction,
         // テクセル境界へ丸める都合上、半径も安定させておく。
         radius = std::ceil(radius * 16.0f) / 16.0f;
 
+        // このカスケードの境界球を、全体を包む球へ併合する。
+        if (!shadow_volume_initialized)
+        {
+            shadow_volume_center_v = center;
+            shadow_volume_radius = radius;
+            shadow_volume_initialized = true;
+        }
+        else
+        {
+            const XMVECTOR offset = XMVectorSubtract(center, shadow_volume_center_v);
+            const float distance = XMVectorGetX(XMVector3Length(offset));
+            if (distance + radius > shadow_volume_radius)
+            {
+                if (distance <= 1.0e-4f)
+                {
+                    shadow_volume_radius = (std::max)(shadow_volume_radius, radius);
+                }
+                else
+                {
+                    const float merged_radius =
+                        (shadow_volume_radius + distance + radius) * 0.5f;
+                    shadow_volume_center_v = XMVectorAdd(shadow_volume_center_v,
+                        XMVectorScale(offset,
+                            (merged_radius - shadow_volume_radius) / distance));
+                    shadow_volume_radius = merged_radius;
+                }
+            }
+        }
+
         const float diameter = radius * 2.0f;
         const float texels_per_unit = static_cast<float>(SHADOW_MAP_SIZE) / diameter;
 
@@ -216,6 +251,8 @@ void csm_renderer::update_cascades(const XMFLOAT4& light_direction,
         reinterpret_cast<float*>(&constants.texel_world)[c] =
             texel_world_size * 1.41421356f;
     }
+
+    XMStoreFloat3(&shadow_volume_center, shadow_volume_center_v);
 
     constants.params2.x = static_cast<float>(SHADOW_MAP_SIZE);
     (void)scene_radius; // 視錐台から自動で範囲を決めるため使用しない。

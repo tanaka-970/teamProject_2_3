@@ -320,6 +320,14 @@
     pbr.update_constants(immediate_context.Get());
     pbr.light.shadow_params.w = original_pbr_shadow_enable;
     {
+        // 【影を出すかどうかの正本】
+        //   Light Component の Cast Shadows と全体設定を、ここで 1 回だけ
+        //   掛け合わせる。以降のパスもシェーダーも csm_params.w だけを見る。
+        //   個別の場所で「影を出す条件」を再発明しないこと。
+        csm.constants.params.w =
+            (enable_dynamic_shadows && csm_enabled_setting && directional_shadow_enabled)
+            ? 1.0f : 0.0f;
+
         DirectX::XMFLOAT4X4 V4, P4;
         DirectX::XMStoreFloat4x4(&V4, V);
         DirectX::XMStoreFloat4x4(&P4, P);
