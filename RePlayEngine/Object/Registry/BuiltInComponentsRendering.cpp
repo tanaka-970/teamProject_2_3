@@ -507,7 +507,8 @@ namespace ReplayEngine::Core::Detail
         {
             ComponentRegistry::Register<DirectionalLightComponent>(
                 ComponentTypeInfo::Describe("Directional Light", "Lighting")
-                    .WithTooltip("GameObjectの回転方向から照らす平行光源。Scene内の先頭1つを使用。"));
+                    .WithTooltip("GameObjectの回転方向から照らす平行光源。Scene内の先頭1つを使用。")
+                    .WithVersion(2));
             PropertyRegistry::Register<DirectionalLightComponent>(
                 MakeProperty("color", &DirectionalLightComponent::color).Display("色").AsColor());
             PropertyRegistry::Register<DirectionalLightComponent>(
@@ -532,7 +533,8 @@ namespace ReplayEngine::Core::Detail
 
             ComponentRegistry::Register<PointLightComponent>(
                 ComponentTypeInfo::Describe("Point Light", "Lighting")
-                    .WithTooltip("Transform位置を中心に全方向へ照らす。"));
+                    .WithTooltip("Transform位置を中心に全方向へ照らす。")
+                    .WithVersion(2));
             PropertyRegistry::Register<PointLightComponent>(
                 MakeProperty("color", &PointLightComponent::color).Display("色").AsColor());
             PropertyRegistry::Register<PointLightComponent>(
@@ -557,7 +559,8 @@ namespace ReplayEngine::Core::Detail
 
             ComponentRegistry::Register<SpotLightComponent>(
                 ComponentTypeInfo::Describe("Spot Light", "Lighting")
-                    .WithTooltip("Transform位置と回転で円錐状に照らす。"));
+                    .WithTooltip("Transform位置と回転で円錐状に照らす。")
+                    .WithVersion(2));
             PropertyRegistry::Register<SpotLightComponent>(
                 MakeProperty("color", &SpotLightComponent::color).Display("色").AsColor());
             PropertyRegistry::Register<SpotLightComponent>(

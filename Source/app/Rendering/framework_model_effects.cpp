@@ -624,10 +624,15 @@ bool framework::bind_shadow_coverage_constants(ReplayEngine::Core::ObjectID owne
         }
     }
 
-    immediate_context->UpdateSubresource(shadow_coverage_cb.Get(), 0, nullptr,
-        &constants, 0, 0);
-    immediate_context->PSSetConstantBuffers(8, 1, shadow_coverage_cb.GetAddressOf());
-    immediate_context->PSSetShaderResources(46, 1, &mask);
+    // 0 件を積み直すのは、前に積んだ 0 件以外を消すときだけでよい。
+    if (active || !shadow_coverage_cb_is_empty)
+    {
+        immediate_context->UpdateSubresource(shadow_coverage_cb.Get(), 0, nullptr,
+            &constants, 0, 0);
+        immediate_context->PSSetConstantBuffers(8, 1, shadow_coverage_cb.GetAddressOf());
+        immediate_context->PSSetShaderResources(46, 1, &mask);
+        shadow_coverage_cb_is_empty = !active;
+    }
     if (active) ++shadow_stats.coverage_casters;
     return active;
 }

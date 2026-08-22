@@ -149,6 +149,8 @@ public:
         ID3D11ShaderResourceView* mask = nullptr;
     };
     std::unordered_map<std::uint64_t, shadow_coverage_entry> shadow_coverage_entries;
+    // b8 が「面消し 0 件」で埋まっているか。埋まっていれば積み直しを省ける。
+    bool shadow_coverage_cb_is_empty{ false };
     // Point / Spot の動的シャドウマップ。CSM とは投影方法が違うので別リソース。
     ReplayEngine::Rendering::LocalShadowAtlas local_shadows;
 

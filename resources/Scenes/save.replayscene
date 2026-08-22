@@ -360,7 +360,7 @@ OBJECT
     TYPE_MODULE ""
     TYPE_VERSION 1
     PROPERTY_COUNT 18
-    PROPERTY "sprite" assetref "26a27438bd1c1ae6f32d64fb6d88b607"
+    PROPERTY "sprite" assetref "4895d90a3b03c22cfcbbc684c56f9431"
     PROPERTY "atlas" assetref ""
     PROPERTY "atlas_region" string ""
     PROPERTY "color" color 1 1 1 1
