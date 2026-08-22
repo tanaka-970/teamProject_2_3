@@ -20,7 +20,7 @@ OBJECT
     PROPERTY "primitive_type" enum 0
     PROPERTY "material_asset" asset ""
     PROPERTY "material_override" bool 1
-    PROPERTY "tint" color 0.42 0.44 0.48 1
+    PROPERTY "tint" color 0.30 0.32 0.35 1
     PROPERTY "shading_model" enum 1
     PROPERTY "outline" bool 0
     PROPERTY "cast_shadow" bool 1
@@ -174,7 +174,7 @@ OBJECT
     TYPE_VERSION 1
     PROPERTY_COUNT 7
     PROPERTY "color" color 1 0.97 0.92 1
-    PROPERTY "intensity" float 0.7
+    PROPERTY "intensity" float 0.45
     PROPERTY "cast_shadows" bool 1
     PROPERTY "shadow_strength" float 1
     PROPERTY "shadow_depth_bias" float 0.0016
@@ -197,7 +197,7 @@ OBJECT
     TYPE_VERSION 1
     PROPERTY_COUNT 7
     PROPERTY "color" color 1 0.55 0.3 1
-    PROPERTY "intensity" float 10
+    PROPERTY "intensity" float 0
     PROPERTY "range" float 18
     PROPERTY "cast_shadows" bool 1
     PROPERTY "shadow_strength" float 1
@@ -220,7 +220,7 @@ OBJECT
     TYPE_VERSION 1
     PROPERTY_COUNT 9
     PROPERTY "color" color 0.5 0.75 1 1
-    PROPERTY "intensity" float 14
+    PROPERTY "intensity" float 0
     PROPERTY "range" float 24
     PROPERTY "inner_angle_degrees" float 18
     PROPERTY "outer_angle_degrees" float 30
@@ -287,7 +287,7 @@ OBJECT
   NAME "Main Camera"
   ENABLED 1
   PARENT 0
-  TRANSFORM 0 17 -17 0.78 0 0 1 1 1
+  TRANSFORM 0 11 -13 0.62 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 1
   COMPONENT "CameraComponent" 1

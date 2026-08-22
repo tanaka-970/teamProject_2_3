@@ -32,7 +32,8 @@ namespace ReplayEngine::Components
         // 法線方向へずらす量 (影マップのテクセル単位)。
         float shadow_normal_bias = 1.4f;
         // この距離より遠くには影を出さない。カスケードの総距離。
-        float shadow_distance = 240.0f;
+        // 伸ばすほど影マップ 1 テクセルが覆う範囲が広がり、輪郭が粗くなる。
+        float shadow_distance = 120.0f;
     };
 
     class PointLightComponent final : public Core::Component
