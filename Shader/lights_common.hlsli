@@ -2,6 +2,8 @@
 #ifndef __LIGHTS_COMMON_HLSLI__
 #define __LIGHTS_COMMON_HLSLI__
 
+#include "local_shadow_common.hlsli"
+
 #define POINT_LIGHT_MAX 8
 #define SPOT_LIGHT_MAX  4
 
@@ -9,13 +11,16 @@ struct PointLight
 {
     float4 position;   // xyz=位置 w=半径
     float4 color;      // rgb=色 a=強度
+    // x=影マップの先頭スライス (負なら影なし) y=影の濃さ z/w=予約
+    float4 shadow;
 };
 struct SpotLight
 {
     float4 position;   // xyz=位置 w=半径
     float4 direction;  // xyz=方向 w=内コーン (cos)
     float4 color;      // rgb=色 a=外コーン (cos)
-    float4 params;     // x=強度 y/z/w=unused
+    // x=強度 y=影マップのスライス (負なら影なし) z=影の濃さ w=予約
+    float4 params;
 };
 
 cbuffer LIGHTS_CONSTANT_BUFFER : register(b10)
@@ -25,7 +30,10 @@ cbuffer LIGHTS_CONSTANT_BUFFER : register(b10)
     int4       light_counts; // x=point, y=spot, z/w=unused
 };
 
-float3 evaluate_point_lights(float3 wp, float3 N, float3 V, float3 base_color, float roughness, float metallic)
+// receive_shadow: 1=影を受ける / 0=受けない。Mesh Renderer の設定を
+// そのまま渡す。0 のときは影マップのサンプル自体を飛ばす。
+float3 evaluate_point_lights(float3 wp, float3 N, float3 V, float3 base_color,
+                             float roughness, float metallic, float receive_shadow)
 {
     float3 result = 0;
     [unroll] for (int i = 0; i < POINT_LIGHT_MAX; ++i)
@@ -39,12 +47,20 @@ float3 evaluate_point_lights(float3 wp, float3 N, float3 V, float3 base_color, f
         float falloff = saturate(1.0f - d / pl.position.w);
         falloff *= falloff;
         float NoL = saturate(dot(N, L));
-        result += pl.color.rgb * pl.color.a * NoL * falloff * base_color;
+        if (NoL <= 0.0f) continue;
+        // 影マップを持つライトだけ遮蔽を引く。持たないライトは
+        // shadow.x が負なので、サンプルそのものが走らない。
+        float shadow = receive_shadow > 0.5f
+            ? local_shadow_point((int) pl.shadow.x, pl.shadow.y,
+                pl.position.xyz, wp, N, NoL)
+            : 1.0f;
+        result += pl.color.rgb * pl.color.a * NoL * falloff * base_color * shadow;
     }
     return result;
 }
 
-float3 evaluate_spot_lights(float3 wp, float3 N, float3 V, float3 base_color)
+float3 evaluate_spot_lights(float3 wp, float3 N, float3 V, float3 base_color,
+                            float receive_shadow)
 {
     float3 result = 0;
     [unroll] for (int i = 0; i < SPOT_LIGHT_MAX; ++i)
@@ -63,7 +79,12 @@ float3 evaluate_spot_lights(float3 wp, float3 N, float3 V, float3 base_color)
         float falloff = saturate(1.0f - d / sl.position.w);
         falloff *= falloff;
         float NoL = saturate(dot(N, L));
-        result += sl.color.rgb * sl.params.x * NoL * falloff * cone * base_color;
+        if (NoL <= 0.0f) continue;
+        float shadow = receive_shadow > 0.5f
+            ? local_shadow_spot((int) sl.params.y, sl.params.z, wp, N, d, NoL)
+            : 1.0f;
+        result += sl.color.rgb * sl.params.x * NoL * falloff * cone *
+            base_color * shadow;
     }
     return result;
 }

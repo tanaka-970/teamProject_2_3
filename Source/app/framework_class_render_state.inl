@@ -111,6 +111,22 @@ public:
 
     toon_renderer    toon;
     csm_renderer     csm;
+    // Point / Spot Light の動的シャドウマップ。CSM とは投影方法が違うため
+    // 別リソースにしてある。影付きライトが 0 の Scene では GPU メモリを使わない。
+    ReplayEngine::Rendering::LocalShadowAtlas local_shadows;
+
+    // sync_object_lights() が決めた「今フレーム影マップを作るライト」。
+    // スライスの確保と行列作りは更新側、実際の描画は render() 側に分かれるので、
+    // 描画に要る値だけをここへ運ぶ。
+    struct local_shadow_request
+    {
+        bool point = false;          // false なら Spot
+        int base_slice = -1;
+        int slice_count = 1;
+        DirectX::XMFLOAT3 position{ 0.0f, 0.0f, 0.0f };
+        float range = 10.0f;
+    };
+    std::vector<local_shadow_request> local_shadow_requests;
 
     // 影の全体設定。個々の Light Component の設定ではなく、
     // 「このプロジェクトで影機能をどこまで使うか」の上限を持つ。

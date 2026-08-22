@@ -304,6 +304,9 @@ bool framework::initialize()
 
     toon.initialize(device.Get());
     csm.initialize(device.Get());
+    // Point / Spot の影マップ本体はここでは作らない。
+    // 影付きライトが最初に現れたフレームで確保する。
+    local_shadows.Initialize(device.Get());
     test_trail.initialize(device.Get());
     particles.initialize(device.Get());
     post_process.Initialize(device.Get());

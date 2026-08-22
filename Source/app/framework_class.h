@@ -30,6 +30,7 @@
 #include "../../RePlayEngine/Rendering/Passes/SsrPass.h"
 #include "../../RePlayEngine/Rendering/Passes/TaaPass.h"
 #include "../../RePlayEngine/Rendering/Deferred/TiledDeferredPass.h"
+#include "../../RePlayEngine/Rendering/Shadows/LocalShadowAtlas.h"
 #include "../../RePlayEngine/Rendering/FrameConstants.h"
 #include "../../RePlayEngine/Rendering/RenderStats.h"
 #include "../../RePlayEngine/Rendering/Frustum.h"
