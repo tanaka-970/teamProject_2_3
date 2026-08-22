@@ -20,6 +20,75 @@ namespace
         if (!enabled || pixels <= 1.0f) return value;
         return std::round(value * pixels) / pixels;
     }
+
+    bool AtlasRegionIsFreeform(const ReplayEngine::Assets::SpriteAtlasRegion& region)
+    {
+        return region.path_points.size() >= 3;
+    }
+
+    void SetAtlasRegionPathToRect(ReplayEngine::Assets::SpriteAtlasRegion& region)
+    {
+        const auto& r = region.uv_rect;
+        region.path_points = {
+            { r.x, r.y },
+            { r.x + r.z, r.y },
+            { r.x + r.z, r.y + r.w },
+            { r.x, r.y + r.w } };
+    }
+
+    void UpdateAtlasRegionBoundsFromPath(
+        ReplayEngine::Assets::SpriteAtlasRegion& region)
+    {
+        if (!AtlasRegionIsFreeform(region)) return;
+        float min_x = region.path_points.front().x;
+        float min_y = region.path_points.front().y;
+        float max_x = min_x;
+        float max_y = min_y;
+        for (const DirectX::XMFLOAT2& point : region.path_points)
+        {
+            min_x = (std::min)(min_x, point.x);
+            min_y = (std::min)(min_y, point.y);
+            max_x = (std::max)(max_x, point.x);
+            max_y = (std::max)(max_y, point.y);
+        }
+        region.uv_rect = { min_x, min_y,
+            (std::max)(0.000001f, max_x - min_x),
+            (std::max)(0.000001f, max_y - min_y) };
+    }
+
+    float PointSegmentDistanceSquared(const ImVec2& point,
+        const ImVec2& a, const ImVec2& b, float& out_t)
+    {
+        const float dx = b.x - a.x;
+        const float dy = b.y - a.y;
+        const float length_squared = dx * dx + dy * dy;
+        out_t = length_squared > 0.000001f
+            ? ((point.x - a.x) * dx + (point.y - a.y) * dy) / length_squared
+            : 0.0f;
+        out_t = (std::max)(0.0f, (std::min)(1.0f, out_t));
+        const float cx = a.x + dx * out_t;
+        const float cy = a.y + dy * out_t;
+        const float ex = point.x - cx;
+        const float ey = point.y - cy;
+        return ex * ex + ey * ey;
+    }
+
+    bool AtlasPointInPolygon(const ReplayEngine::Assets::SpriteAtlasRegion& region,
+        float u, float v)
+    {
+        if (!AtlasRegionIsFreeform(region)) return false;
+        bool inside = false;
+        for (std::size_t index = 0; index < region.path_points.size(); ++index)
+        {
+            const auto& a = region.path_points[index];
+            const auto& b = region.path_points[(index + 1) % region.path_points.size()];
+            const bool crosses = ((a.y > v) != (b.y > v)) &&
+                (u < (b.x - a.x) * (v - a.y) /
+                    (b.y - a.y) + a.x);
+            if (crosses) inside = !inside;
+        }
+        return inside;
+    }
 }
 
 
@@ -125,6 +194,7 @@ void framework::draw_sprite_atlas_editor()
             {
                 begin_sprite_atlas_edit("Atlas画像を変更");
                 sprite_atlas_editor_asset.image_guid = selected->guid;
+                sprite_atlas_editor_asset.embedded_texture_path.clear();
                 commit_sprite_atlas_edit();
             }
         }
@@ -146,6 +216,7 @@ void framework::draw_sprite_atlas_editor()
                     {
                         begin_sprite_atlas_edit("Atlas画像を変更");
                         sprite_atlas_editor_asset.image_guid = record->guid;
+                        sprite_atlas_editor_asset.embedded_texture_path.clear();
                         commit_sprite_atlas_edit();
                     }
                 }
@@ -157,8 +228,19 @@ void framework::draw_sprite_atlas_editor()
     const ReplayEngine::Assets::AssetRecord* image_record =
         sprite_atlas_editor_asset.image_guid.empty() ? nullptr :
         asset_database.FindByGuid(sprite_atlas_editor_asset.image_guid);
-    ID3D11ShaderResourceView* texture = image_record != nullptr
-        ? project_thumbnail_for(image_record->source_path) : nullptr;
+    std::filesystem::path atlas_texture_path;
+    if (!sprite_atlas_editor_asset.embedded_texture_path.empty())
+    {
+        const std::filesystem::path candidate = sprite_atlas_editor_path.parent_path() /
+            std::filesystem::u8path(sprite_atlas_editor_asset.embedded_texture_path);
+        std::error_code texture_error;
+        if (std::filesystem::exists(candidate, texture_error) && !texture_error)
+            atlas_texture_path = candidate;
+    }
+    if (atlas_texture_path.empty() && image_record != nullptr)
+        atlas_texture_path = image_record->source_path;
+    ID3D11ShaderResourceView* texture = atlas_texture_path.empty()
+        ? nullptr : project_thumbnail_for(atlas_texture_path);
 
     float image_width = 1.0f;
     float image_height = 1.0f;
@@ -212,6 +294,7 @@ void framework::draw_sprite_atlas_editor()
                 origin.y + region.uv_rect.y * size.y);
             const ImVec2 b(a.x + region.uv_rect.z * size.x,
                 a.y + region.uv_rect.w * size.y);
+            const bool freeform = AtlasRegionIsFreeform(region);
             bool overlaps = false;
             if (index == sprite_atlas_selected_region)
             {
@@ -222,16 +305,40 @@ void framework::draw_sprite_atlas_editor()
             const ImU32 color = index == sprite_atlas_selected_region
                 ? (overlaps ? IM_COL32(255, 90, 90, 255) : IM_COL32(255, 210, 70, 255))
                 : IM_COL32(80, 220, 255, 210);
-            draw->AddRect(a, b, color, 0.0f, 0, index == sprite_atlas_selected_region ? 2.5f : 1.0f);
-            if (index == sprite_atlas_selected_region)
+            if (freeform)
             {
-                const ImVec2 handles[8] = {
-                    a, ImVec2((a.x+b.x)*0.5f,a.y), ImVec2(b.x,a.y),
-                    ImVec2(b.x,(a.y+b.y)*0.5f), b, ImVec2((a.x+b.x)*0.5f,b.y),
-                    ImVec2(a.x,b.y), ImVec2(a.x,(a.y+b.y)*0.5f) };
-                for (const ImVec2& h : handles)
-                    draw->AddRectFilled(ImVec2(h.x-4.0f,h.y-4.0f), ImVec2(h.x+4.0f,h.y+4.0f),
-                        IM_COL32(255,255,255,255));
+                draw->AddRect(a, b, color & 0x00ffffffu | 0x50000000u,
+                    0.0f, 0, 1.0f);
+                for (std::size_t point_index = 0; point_index < region.path_points.size(); ++point_index)
+                {
+                    const auto& point = region.path_points[point_index];
+                    const auto& next = region.path_points[(point_index + 1) % region.path_points.size()];
+                    const ImVec2 p(origin.x + point.x * size.x, origin.y + point.y * size.y);
+                    const ImVec2 q(origin.x + next.x * size.x, origin.y + next.y * size.y);
+                    draw->AddLine(p, q, color, index == sprite_atlas_selected_region ? 2.5f : 1.0f);
+                    if (index == sprite_atlas_selected_region)
+                    {
+                        const ImU32 point_color = static_cast<int>(point_index) ==
+                            sprite_atlas_active_point
+                            ? IM_COL32(255, 255, 255, 255)
+                            : IM_COL32(255, 235, 90, 255);
+                        draw->AddCircleFilled(p, 5.0f, point_color);
+                    }
+                }
+            }
+            else
+            {
+                draw->AddRect(a, b, color, 0.0f, 0, index == sprite_atlas_selected_region ? 2.5f : 1.0f);
+                if (index == sprite_atlas_selected_region)
+                {
+                    const ImVec2 handles[8] = {
+                        a, ImVec2((a.x+b.x)*0.5f,a.y), ImVec2(b.x,a.y),
+                        ImVec2(b.x,(a.y+b.y)*0.5f), b, ImVec2((a.x+b.x)*0.5f,b.y),
+                        ImVec2(a.x,b.y), ImVec2(a.x,(a.y+b.y)*0.5f) };
+                    for (const ImVec2& h : handles)
+                        draw->AddRectFilled(ImVec2(h.x-4.0f,h.y-4.0f), ImVec2(h.x+4.0f,h.y+4.0f),
+                            IM_COL32(255,255,255,255));
+                }
             }
             draw->AddText(ImVec2(a.x + 2.0f, a.y + 2.0f), color, region.name.c_str());
             const ImVec2 pivot(a.x + region.pivot.x * (b.x - a.x),
@@ -268,57 +375,155 @@ void framework::draw_sprite_atlas_editor()
             }
             else
             {
-                int hit_handle = -1;
+                bool handled_freeform = false;
                 if (sprite_atlas_selected_region >= 0 &&
-                    sprite_atlas_selected_region < static_cast<int>(sprite_atlas_editor_asset.regions.size()))
+                    sprite_atlas_selected_region < static_cast<int>(sprite_atlas_editor_asset.regions.size()) &&
+                    AtlasRegionIsFreeform(sprite_atlas_editor_asset.regions[
+                        sprite_atlas_selected_region]))
                 {
-                    const auto& r = sprite_atlas_editor_asset.regions[sprite_atlas_selected_region].uv_rect;
-                    const ImVec2 a(origin.x+r.x*size.x, origin.y+r.y*size.y);
-                    const ImVec2 b(a.x+r.z*size.x, a.y+r.w*size.y);
-                    const ImVec2 handles[8] = { a, ImVec2((a.x+b.x)*0.5f,a.y), ImVec2(b.x,a.y),
-                        ImVec2(b.x,(a.y+b.y)*0.5f), b, ImVec2((a.x+b.x)*0.5f,b.y),
-                        ImVec2(a.x,b.y), ImVec2(a.x,(a.y+b.y)*0.5f) };
-                    for (int h=0; h<8; ++h)
-                        if (std::fabs(mouse.x-handles[h].x)<=7.0f && std::fabs(mouse.y-handles[h].y)<=7.0f)
-                        { hit_handle=h; break; }
-                }
-                if (hit_handle >= 0)
-                {
-                    begin_sprite_atlas_edit("Atlas Regionの大きさを変更");
-                    sprite_atlas_active_handle = hit_handle;
-                    sprite_atlas_region_transform_dragging = true;
-                    sprite_atlas_transform_start_uv =
-                        sprite_atlas_editor_asset.regions[sprite_atlas_selected_region].uv_rect;
-                    sprite_atlas_transform_start_mouse = mouse;
-                }
-                else
-                {
-                    int hit = -1;
-                    for (int index = static_cast<int>(sprite_atlas_editor_asset.regions.size()) - 1; index >= 0; --index)
+                    auto& region = sprite_atlas_editor_asset.regions[sprite_atlas_selected_region];
+                    int hit_point = -1;
+                    for (int index = 0; index < static_cast<int>(region.path_points.size()); ++index)
                     {
-                        const auto& r = sprite_atlas_editor_asset.regions[index].uv_rect;
-                        if (u >= r.x && u <= r.x+r.z && v >= r.y && v <= r.y+r.w) { hit=index; break; }
+                        const auto& point = region.path_points[static_cast<std::size_t>(index)];
+                        const ImVec2 screen_point(origin.x + point.x * size.x,
+                            origin.y + point.y * size.y);
+                        if (std::fabs(mouse.x - screen_point.x) <= 8.0f &&
+                            std::fabs(mouse.y - screen_point.y) <= 8.0f)
+                        {
+                            hit_point = index;
+                            break;
+                        }
                     }
-                    sprite_atlas_selected_region = hit;
-                    if (ImGui::GetIO().KeyCtrl && hit >= 0)
+                    if (hit_point >= 0)
                     {
-                        begin_sprite_atlas_edit("Atlas Pivotを変更");
-                        auto& region = sprite_atlas_editor_asset.regions[hit];
-                        region.pivot.x = (std::max)(0.0f, (std::min)(1.0f,
-                            (u - region.uv_rect.x) /
-                            (std::max)(0.0001f, region.uv_rect.z)));
-                        region.pivot.y = (std::max)(0.0f, (std::min)(1.0f,
-                            (v - region.uv_rect.y) /
-                            (std::max)(0.0001f, region.uv_rect.w)));
-                        commit_sprite_atlas_edit();
-                    }
-                    else if (hit >= 0)
-                    {
-                        begin_sprite_atlas_edit("Atlas Regionを移動");
-                        sprite_atlas_active_handle = 8;
+                        begin_sprite_atlas_edit("Atlas 自由形状頂点を移動");
+                        sprite_atlas_active_point = hit_point;
+                        sprite_atlas_active_handle = -1;
                         sprite_atlas_region_transform_dragging = true;
-                        sprite_atlas_transform_start_uv = sprite_atlas_editor_asset.regions[hit].uv_rect;
                         sprite_atlas_transform_start_mouse = mouse;
+                        handled_freeform = true;
+                    }
+                    else
+                    {
+                        int hit_segment = -1;
+                        float hit_t = 0.0f;
+                        float closest = 10.0f * 10.0f;
+                        for (int index = 0; index < static_cast<int>(region.path_points.size()); ++index)
+                        {
+                            const int next_index = (index + 1) % static_cast<int>(region.path_points.size());
+                            const auto& a = region.path_points[static_cast<std::size_t>(index)];
+                            const auto& b = region.path_points[static_cast<std::size_t>(next_index)];
+                            const ImVec2 screen_a(origin.x + a.x * size.x, origin.y + a.y * size.y);
+                            const ImVec2 screen_b(origin.x + b.x * size.x, origin.y + b.y * size.y);
+                            float segment_t = 0.0f;
+                            const float distance = PointSegmentDistanceSquared(mouse,
+                                screen_a, screen_b, segment_t);
+                            if (distance < closest)
+                            {
+                                closest = distance;
+                                hit_segment = index;
+                                hit_t = segment_t;
+                            }
+                        }
+                        if (hit_segment >= 0)
+                        {
+                            begin_sprite_atlas_edit("Atlas 自由形状頂点を追加");
+                            const int next_index = (hit_segment + 1) %
+                                static_cast<int>(region.path_points.size());
+                            const auto& a = region.path_points[static_cast<std::size_t>(hit_segment)];
+                            const auto& b = region.path_points[static_cast<std::size_t>(next_index)];
+                            DirectX::XMFLOAT2 inserted{
+                                SnapAtlasUV(a.x + (b.x - a.x) * hit_t, image_width, sprite_atlas_pixel_snap),
+                                SnapAtlasUV(a.y + (b.y - a.y) * hit_t, image_height, sprite_atlas_pixel_snap) };
+                            inserted.x = (std::max)(0.0f, (std::min)(1.0f, inserted.x));
+                            inserted.y = (std::max)(0.0f, (std::min)(1.0f, inserted.y));
+                            region.path_points.insert(region.path_points.begin() + next_index, inserted);
+                            UpdateAtlasRegionBoundsFromPath(region);
+                            sprite_atlas_active_point = next_index;
+                            sprite_atlas_active_handle = -1;
+                            sprite_atlas_region_transform_dragging = true;
+                            sprite_atlas_transform_start_mouse = mouse;
+                            handled_freeform = true;
+                        }
+                        else if (AtlasPointInPolygon(region, u, v))
+                        {
+                            begin_sprite_atlas_edit("Atlas 自由形状を移動");
+                            sprite_atlas_active_point = -1;
+                            sprite_atlas_active_handle = 8;
+                            sprite_atlas_region_transform_dragging = true;
+                            sprite_atlas_transform_start_uv = region.uv_rect;
+                            sprite_atlas_transform_start_path_points = region.path_points;
+                            sprite_atlas_transform_start_mouse = mouse;
+                            handled_freeform = true;
+                        }
+                    }
+                }
+                if (!handled_freeform)
+                {
+                    int hit_handle = -1;
+                    if (sprite_atlas_selected_region >= 0 &&
+                        sprite_atlas_selected_region < static_cast<int>(sprite_atlas_editor_asset.regions.size()) &&
+                        !AtlasRegionIsFreeform(sprite_atlas_editor_asset.regions[
+                            sprite_atlas_selected_region]))
+                    {
+                        const auto& r = sprite_atlas_editor_asset.regions[sprite_atlas_selected_region].uv_rect;
+                        const ImVec2 a(origin.x+r.x*size.x, origin.y+r.y*size.y);
+                        const ImVec2 b(a.x+r.z*size.x, a.y+r.w*size.y);
+                        const ImVec2 handles[8] = { a, ImVec2((a.x+b.x)*0.5f,a.y), ImVec2(b.x,a.y),
+                            ImVec2(b.x,(a.y+b.y)*0.5f), b, ImVec2((a.x+b.x)*0.5f,b.y),
+                            ImVec2(a.x,b.y), ImVec2(a.x,(a.y+b.y)*0.5f) };
+                        for (int h=0; h<8; ++h)
+                            if (std::fabs(mouse.x-handles[h].x)<=7.0f && std::fabs(mouse.y-handles[h].y)<=7.0f)
+                            { hit_handle=h; break; }
+                    }
+                    if (hit_handle >= 0)
+                    {
+                        begin_sprite_atlas_edit("Atlas Regionの大きさを変更");
+                        sprite_atlas_active_point = -1;
+                        sprite_atlas_active_handle = hit_handle;
+                        sprite_atlas_region_transform_dragging = true;
+                        sprite_atlas_transform_start_uv =
+                            sprite_atlas_editor_asset.regions[sprite_atlas_selected_region].uv_rect;
+                        sprite_atlas_transform_start_mouse = mouse;
+                    }
+                    else
+                    {
+                        int hit = -1;
+                        for (int index = static_cast<int>(sprite_atlas_editor_asset.regions.size()) - 1; index >= 0; --index)
+                        {
+                            const auto& r = sprite_atlas_editor_asset.regions[index].uv_rect;
+                            const bool inside = AtlasRegionIsFreeform(sprite_atlas_editor_asset.regions[index])
+                                ? AtlasPointInPolygon(sprite_atlas_editor_asset.regions[index], u, v)
+                                : (u >= r.x && u <= r.x+r.z && v >= r.y && v <= r.y+r.w);
+                            if (inside) { hit=index; break; }
+                        }
+                        if (sprite_atlas_selected_region != hit)
+                            sprite_atlas_active_point = -1;
+                        sprite_atlas_selected_region = hit;
+                        if (ImGui::GetIO().KeyCtrl && hit >= 0)
+                        {
+                            begin_sprite_atlas_edit("Atlas Pivotを変更");
+                            auto& region = sprite_atlas_editor_asset.regions[hit];
+                            region.pivot.x = (std::max)(0.0f, (std::min)(1.0f,
+                                (u - region.uv_rect.x) /
+                                (std::max)(0.0001f, region.uv_rect.z)));
+                            region.pivot.y = (std::max)(0.0f, (std::min)(1.0f,
+                                (v - region.uv_rect.y) /
+                                (std::max)(0.0001f, region.uv_rect.w)));
+                            commit_sprite_atlas_edit();
+                        }
+                        else if (hit >= 0)
+                        {
+                            begin_sprite_atlas_edit("Atlas Regionを移動");
+                            sprite_atlas_active_handle = 8;
+                            sprite_atlas_active_point = -1;
+                            sprite_atlas_region_transform_dragging = true;
+                            sprite_atlas_transform_start_uv = sprite_atlas_editor_asset.regions[hit].uv_rect;
+                            sprite_atlas_transform_start_path_points =
+                                sprite_atlas_editor_asset.regions[hit].path_points;
+                            sprite_atlas_transform_start_mouse = mouse;
+                        }
                     }
                 }
             }
@@ -326,46 +531,87 @@ void framework::draw_sprite_atlas_editor()
         if (sprite_atlas_region_transform_dragging && sprite_atlas_selected_region >= 0 &&
             ImGui::IsMouseDown(0))
         {
-            auto& r = sprite_atlas_editor_asset.regions[sprite_atlas_selected_region].uv_rect;
+            auto& region = sprite_atlas_editor_asset.regions[sprite_atlas_selected_region];
+            auto& r = region.uv_rect;
             const float du = (mouse.x-sprite_atlas_transform_start_mouse.x)/(std::max)(1.0f,size.x);
             const float dv = (mouse.y-sprite_atlas_transform_start_mouse.y)/(std::max)(1.0f,size.y);
-            float l=sprite_atlas_transform_start_uv.x, t=sprite_atlas_transform_start_uv.y;
-            float rr=l+sprite_atlas_transform_start_uv.z, bb=t+sprite_atlas_transform_start_uv.w;
-            if (sprite_atlas_active_handle == 8) { l += du; rr += du; t += dv; bb += dv; }
+            if (sprite_atlas_active_point >= 0 &&
+                sprite_atlas_active_point < static_cast<int>(region.path_points.size()))
+            {
+                DirectX::XMFLOAT2& point = region.path_points[
+                    static_cast<std::size_t>(sprite_atlas_active_point)];
+                point.x = SnapAtlasUV((mouse.x - origin.x) /
+                    (std::max)(1.0f, size.x), image_width, sprite_atlas_pixel_snap);
+                point.y = SnapAtlasUV((mouse.y - origin.y) /
+                    (std::max)(1.0f, size.y), image_height, sprite_atlas_pixel_snap);
+                point.x = (std::max)(0.0f, (std::min)(1.0f, point.x));
+                point.y = (std::max)(0.0f, (std::min)(1.0f, point.y));
+                UpdateAtlasRegionBoundsFromPath(region);
+                region.original_size = { r.z * image_width, r.w * image_height };
+                sprite_atlas_editor_dirty = true;
+            }
+            else if (AtlasRegionIsFreeform(region) && sprite_atlas_active_handle == 8 &&
+                sprite_atlas_transform_start_path_points.size() == region.path_points.size())
+            {
+                const float width = sprite_atlas_transform_start_uv.z;
+                const float height = sprite_atlas_transform_start_uv.w;
+                const float moved_left = (std::max)(0.0f,
+                    (std::min)(1.0f - width, sprite_atlas_transform_start_uv.x + du));
+                const float moved_top = (std::max)(0.0f,
+                    (std::min)(1.0f - height, sprite_atlas_transform_start_uv.y + dv));
+                const float applied_du = moved_left - sprite_atlas_transform_start_uv.x;
+                const float applied_dv = moved_top - sprite_atlas_transform_start_uv.y;
+                for (std::size_t index = 0; index < region.path_points.size(); ++index)
+                {
+                    region.path_points[index] = {
+                        sprite_atlas_transform_start_path_points[index].x + applied_du,
+                        sprite_atlas_transform_start_path_points[index].y + applied_dv };
+                }
+                UpdateAtlasRegionBoundsFromPath(region);
+                region.original_size = { r.z * image_width, r.w * image_height };
+                sprite_atlas_editor_dirty = true;
+            }
             else
             {
-                if (sprite_atlas_active_handle==0 || sprite_atlas_active_handle==6 || sprite_atlas_active_handle==7) l += du;
-                if (sprite_atlas_active_handle==2 || sprite_atlas_active_handle==3 || sprite_atlas_active_handle==4) rr += du;
-                if (sprite_atlas_active_handle==0 || sprite_atlas_active_handle==1 || sprite_atlas_active_handle==2) t += dv;
-                if (sprite_atlas_active_handle==4 || sprite_atlas_active_handle==5 || sprite_atlas_active_handle==6) bb += dv;
-                if (ImGui::GetIO().KeyShift)
+                float l=sprite_atlas_transform_start_uv.x, t=sprite_atlas_transform_start_uv.y;
+                float rr=l+sprite_atlas_transform_start_uv.z, bb=t+sprite_atlas_transform_start_uv.w;
+                if (sprite_atlas_active_handle == 8) { l += du; rr += du; t += dv; bb += dv; }
+                else
                 {
-                    const float aspect = sprite_atlas_transform_start_uv.z /
-                        (std::max)(0.0001f, sprite_atlas_transform_start_uv.w);
-                    const float w = rr-l, h = bb-t;
-                    if (std::fabs(w) > std::fabs(h*aspect)) bb = t + w/aspect;
-                    else rr = l + h*aspect;
+                    if (sprite_atlas_active_handle==0 || sprite_atlas_active_handle==6 || sprite_atlas_active_handle==7) l += du;
+                    if (sprite_atlas_active_handle==2 || sprite_atlas_active_handle==3 || sprite_atlas_active_handle==4) rr += du;
+                    if (sprite_atlas_active_handle==0 || sprite_atlas_active_handle==1 || sprite_atlas_active_handle==2) t += dv;
+                    if (sprite_atlas_active_handle==4 || sprite_atlas_active_handle==5 || sprite_atlas_active_handle==6) bb += dv;
+                    if (ImGui::GetIO().KeyShift)
+                    {
+                        const float aspect = sprite_atlas_transform_start_uv.z /
+                            (std::max)(0.0001f, sprite_atlas_transform_start_uv.w);
+                        const float w = rr-l, h = bb-t;
+                        if (std::fabs(w) > std::fabs(h*aspect)) bb = t + w/aspect;
+                        else rr = l + h*aspect;
+                    }
                 }
+                l=SnapAtlasUV(l,image_width,sprite_atlas_pixel_snap); rr=SnapAtlasUV(rr,image_width,sprite_atlas_pixel_snap);
+                t=SnapAtlasUV(t,image_height,sprite_atlas_pixel_snap); bb=SnapAtlasUV(bb,image_height,sprite_atlas_pixel_snap);
+                if (sprite_atlas_active_handle==8)
+                {
+                    const float w=sprite_atlas_transform_start_uv.z, h=sprite_atlas_transform_start_uv.w;
+                    l=(std::max)(0.0f,(std::min)(1.0f-w,l)); t=(std::max)(0.0f,(std::min)(1.0f-h,t));
+                    rr=l+w; bb=t+h;
+                }
+                l=(std::max)(0.0f,(std::min)(1.0f,l)); rr=(std::max)(0.0f,(std::min)(1.0f,rr));
+                t=(std::max)(0.0f,(std::min)(1.0f,t)); bb=(std::max)(0.0f,(std::min)(1.0f,bb));
+                if (rr<l) std::swap(rr,l); if (bb<t) std::swap(bb,t);
+                r={l,t,(std::max)(1.0f/image_width,rr-l),(std::max)(1.0f/image_height,bb-t)};
+                region.original_size = {r.z*image_width,r.w*image_height};
+                sprite_atlas_editor_dirty=true;
             }
-            l=SnapAtlasUV(l,image_width,sprite_atlas_pixel_snap); rr=SnapAtlasUV(rr,image_width,sprite_atlas_pixel_snap);
-            t=SnapAtlasUV(t,image_height,sprite_atlas_pixel_snap); bb=SnapAtlasUV(bb,image_height,sprite_atlas_pixel_snap);
-            if (sprite_atlas_active_handle==8)
-            {
-                const float w=sprite_atlas_transform_start_uv.z, h=sprite_atlas_transform_start_uv.w;
-                l=(std::max)(0.0f,(std::min)(1.0f-w,l)); t=(std::max)(0.0f,(std::min)(1.0f-h,t));
-                rr=l+w; bb=t+h;
-            }
-            l=(std::max)(0.0f,(std::min)(1.0f,l)); rr=(std::max)(0.0f,(std::min)(1.0f,rr));
-            t=(std::max)(0.0f,(std::min)(1.0f,t)); bb=(std::max)(0.0f,(std::min)(1.0f,bb));
-            if (rr<l) std::swap(rr,l); if (bb<t) std::swap(bb,t);
-            r={l,t,(std::max)(1.0f/image_width,rr-l),(std::max)(1.0f/image_height,bb-t)};
-            sprite_atlas_editor_asset.regions[sprite_atlas_selected_region].original_size =
-                {r.z*image_width,r.w*image_height};
-            sprite_atlas_editor_dirty=true;
         }
         if (sprite_atlas_region_transform_dragging && ImGui::IsMouseReleased(0))
         {
-            sprite_atlas_region_transform_dragging=false; sprite_atlas_active_handle=-1;
+            sprite_atlas_region_transform_dragging=false;
+            sprite_atlas_active_handle=-1;
+            sprite_atlas_transform_start_path_points.clear();
             commit_sprite_atlas_edit();
         }
         if (sprite_atlas_region_dragging && ImGui::IsMouseDown(0))
@@ -389,6 +635,7 @@ void framework::draw_sprite_atlas_editor()
                 region.original_size={region.uv_rect.z*image_width,region.uv_rect.w*image_height};
                 sprite_atlas_editor_asset.regions.push_back(std::move(region));
                 sprite_atlas_selected_region=static_cast<int>(sprite_atlas_editor_asset.regions.size())-1;
+                sprite_atlas_active_point = -1;
                 commit_sprite_atlas_edit();
             }
             else cancel_sprite_atlas_edit();
@@ -416,6 +663,7 @@ void framework::draw_sprite_atlas_editor()
         region.original_size = { image_width * 0.25f, image_height * 0.25f };
         sprite_atlas_editor_asset.regions.push_back(std::move(region));
         sprite_atlas_selected_region = static_cast<int>(sprite_atlas_editor_asset.regions.size()) - 1;
+        sprite_atlas_active_point = -1;
         commit_sprite_atlas_edit();
     }
     ImGui::SameLine();
@@ -427,25 +675,56 @@ void framework::draw_sprite_atlas_editor()
             sprite_atlas_selected_region);
         sprite_atlas_selected_region = (std::min)(sprite_atlas_selected_region,
             static_cast<int>(sprite_atlas_editor_asset.regions.size()) - 1);
+        sprite_atlas_active_point = -1;
         commit_sprite_atlas_edit();
     }
 
     for (int index = 0; index < static_cast<int>(sprite_atlas_editor_asset.regions.size()); ++index)
     {
         if (ImGui::Selectable(sprite_atlas_editor_asset.regions[index].name.c_str(),
-            index == sprite_atlas_selected_region)) sprite_atlas_selected_region = index;
+            index == sprite_atlas_selected_region))
+        {
+            if (sprite_atlas_selected_region != index) sprite_atlas_active_point = -1;
+            sprite_atlas_selected_region = index;
+        }
     }
 
     if (sprite_atlas_editor_keyboard_focus && !ImGui::GetIO().WantTextInput &&
         sprite_atlas_selected_region >= 0 &&
         (ImGui::IsKeyPressed(VK_BACK) || ImGui::IsKeyPressed(VK_DELETE)))
     {
-        begin_sprite_atlas_edit("Atlas Regionを削除");
-        sprite_atlas_editor_asset.regions.erase(sprite_atlas_editor_asset.regions.begin() +
-            sprite_atlas_selected_region);
-        sprite_atlas_selected_region = (std::min)(sprite_atlas_selected_region,
-            static_cast<int>(sprite_atlas_editor_asset.regions.size()) - 1);
-        commit_sprite_atlas_edit();
+        auto& region = sprite_atlas_editor_asset.regions[
+            static_cast<std::size_t>(sprite_atlas_selected_region)];
+        if (AtlasRegionIsFreeform(region) && sprite_atlas_active_point >= 0 &&
+            sprite_atlas_active_point < static_cast<int>(region.path_points.size()))
+        {
+            if (region.path_points.size() > 3)
+            {
+                begin_sprite_atlas_edit("Atlas 自由形状頂点を削除");
+                region.path_points.erase(region.path_points.begin() +
+                    sprite_atlas_active_point);
+                sprite_atlas_active_point = (std::min)(sprite_atlas_active_point,
+                    static_cast<int>(region.path_points.size()) - 1);
+                UpdateAtlasRegionBoundsFromPath(region);
+                region.original_size = { region.uv_rect.z * image_width,
+                    region.uv_rect.w * image_height };
+                commit_sprite_atlas_edit();
+            }
+            else
+            {
+                sprite_atlas_editor_status = "自由形状は3頂点未満にできません";
+            }
+        }
+        else
+        {
+            begin_sprite_atlas_edit("Atlas Regionを削除");
+            sprite_atlas_editor_asset.regions.erase(sprite_atlas_editor_asset.regions.begin() +
+                sprite_atlas_selected_region);
+            sprite_atlas_selected_region = (std::min)(sprite_atlas_selected_region,
+                static_cast<int>(sprite_atlas_editor_asset.regions.size()) - 1);
+            sprite_atlas_active_point = -1;
+            commit_sprite_atlas_edit();
+        }
     }
 
     if (sprite_atlas_selected_region >= 0 &&
@@ -465,9 +744,31 @@ void framework::draw_sprite_atlas_editor()
                 sprite_atlas_history_transaction = true; commit_sprite_atlas_edit();
             }
         }
+        bool freeform = AtlasRegionIsFreeform(region);
+        const auto shape_before = sprite_atlas_editor_asset;
+        if (ImGui::Checkbox("自由形状", &freeform))
+        {
+            begin_sprite_atlas_edit(freeform
+                ? "Atlas Regionを自由形状化" : "Atlas Regionを矩形へ戻す");
+            if (freeform)
+                SetAtlasRegionPathToRect(region);
+            else
+                region.path_points.clear();
+            UpdateAtlasRegionBoundsFromPath(region);
+            region.original_size = { region.uv_rect.z * image_width,
+                region.uv_rect.w * image_height };
+            if (!sprite_atlas_history_transaction)
+            {
+                sprite_atlas_history_before = shape_before;
+                sprite_atlas_history_label = freeform
+                    ? "Atlas Regionを自由形状化" : "Atlas Regionを矩形へ戻す";
+                sprite_atlas_history_transaction = true;
+            }
+            commit_sprite_atlas_edit();
+        }
         float uv[4]{ region.uv_rect.x, region.uv_rect.y, region.uv_rect.z, region.uv_rect.w };
         const auto uv_before = sprite_atlas_editor_asset;
-        if (ImGui::DragFloat4("UV Rect", uv, 0.001f, 0.0f, 1.0f))
+        if (!freeform && ImGui::DragFloat4("UV Rect", uv, 0.001f, 0.0f, 1.0f))
         {
             region.uv_rect = {uv[0],uv[1],uv[2],uv[3]};
             if (!sprite_atlas_history_transaction)
@@ -475,6 +776,11 @@ void framework::draw_sprite_atlas_editor()
                 sprite_atlas_history_before=uv_before; sprite_atlas_history_label="Atlas UV Rectを変更";
                 sprite_atlas_history_transaction=true; commit_sprite_atlas_edit();
             }
+        }
+        if (freeform)
+        {
+            ImGui::TextDisabled("UV Rect は自由形状の外接矩形");
+            ImGui::Text("頂点: %d", static_cast<int>(region.path_points.size()));
         }
         float pivot[2]{ region.pivot.x, region.pivot.y };
         const auto pivot_before=sprite_atlas_editor_asset;
@@ -515,7 +821,10 @@ void framework::draw_sprite_atlas_editor()
             sprite_atlas_history_before=rotated_before; sprite_atlas_history_label="Atlas Rotatedを変更";
             sprite_atlas_history_transaction=true; commit_sprite_atlas_edit();
         }
-        ImGui::TextDisabled("Drag: 移動 / 8ハンドル: Resize / Shift: 縦横比固定");
+        if (freeform)
+            ImGui::TextDisabled("頂点ドラッグ / 線上クリック: 頂点追加 / 内側ドラッグ: 移動");
+        else
+            ImGui::TextDisabled("Drag: 移動 / 8ハンドル: Resize / Shift: 縦横比固定");
         ImGui::TextDisabled("Ctrl+Click: Pivot / Wheel: Zoom / MMB or Space+Drag: Pan");
     }
     ImGui::Separator();

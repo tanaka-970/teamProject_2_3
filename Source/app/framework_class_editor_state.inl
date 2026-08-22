@@ -94,7 +94,9 @@
     int sprite_atlas_active_handle{ -1 };
     bool sprite_atlas_region_transform_dragging{ false };
     DirectX::XMFLOAT4 sprite_atlas_transform_start_uv{ 0.0f, 0.0f, 0.0f, 0.0f };
+    std::vector<DirectX::XMFLOAT2> sprite_atlas_transform_start_path_points;
     ImVec2 sprite_atlas_transform_start_mouse{ 0.0f, 0.0f };
+    int sprite_atlas_active_point{ -1 };
     bool sprite_atlas_pixel_snap{ true };
     bool sprite_atlas_editor_keyboard_focus{ false };
     bool sprite_atlas_pan_dragging{ false };
@@ -199,7 +201,11 @@
     bool ui_effect_region_editing{ false };
     int ui_effect_region_index{ 0 };
     int ui_effect_region_handle{ -1 }; // 0..7 resize, 8 rotation
+    int ui_effect_region_point{ -1 }; // 自由形状の頂点
     ReplayEngine::Core::ObjectID ui_effect_region_object;
+    int ui_effect_region_selected_index{ -1 };
+    int ui_effect_region_selected_point{ -1 };
+    ReplayEngine::Core::ObjectID ui_effect_region_selected_object;
     ImVec2 ui_effect_region_start_mouse{ 0.0f, 0.0f };
     DirectX::XMFLOAT2 ui_effect_region_start_center{ 0.5f, 0.5f };
     DirectX::XMFLOAT2 ui_effect_region_start_size{ 0.5f, 0.5f };

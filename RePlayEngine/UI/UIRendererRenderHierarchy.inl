@@ -132,10 +132,25 @@
                         object.GetComponent<UIPuppetDeformComponent>();
                     UIShapeImageComponent* shape_image =
                         object.GetComponent<UIShapeImageComponent>();
-                    if (shape_image != nullptr && render_shape_image(self_effects,
-                        *image, *shape_image, *rect, scale, opacity, active_scissor, puppet))
+                    UIShapeImageComponent atlas_shape_image;
+                    const ResolvedImageSource atlas_source = shape_image == nullptr
+                        ? resolve_image_source(*image) : ResolvedImageSource{};
+                    const bool has_atlas_shape = shape_image == nullptr &&
+                        atlas_source.path_points.size() >= 3;
+                    if (has_atlas_shape)
                     {
-                        // 自由形状Imageの専用描画経路で完了。
+                        atlas_shape_image.path_closed = true;
+                        atlas_shape_image.path_points = atlas_source.path_points;
+                    }
+                    const bool rendered_shape_image = shape_image != nullptr
+                        ? render_shape_image(self_effects, *image, *shape_image, *rect,
+                            scale, opacity, active_scissor, puppet)
+                        : (has_atlas_shape && render_shape_image(self_effects, *image,
+                            atlas_shape_image, *rect, scale, opacity, active_scissor,
+                            puppet, false, true));
+                    if (rendered_shape_image)
+                    {
+                        // 自由形状 Image / Atlas 自由形状の専用描画経路で完了。
                     }
                     else
                     {

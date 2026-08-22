@@ -118,6 +118,14 @@
             return source;
         };
 
+        const auto texture_for_source = [this, asset_database](
+            const ResolvedImageSource& source)
+        {
+            return source.texture_path.empty()
+                ? TextureFor(source.texture_guid, asset_database)
+                : TextureForPath(source.texture_path);
+        };
+
         const auto append_image_geometry = [this, &draw_target_height](
             const DirectX::XMFLOAT4& rect, const DirectX::XMFLOAT4X4& matrix,
             const DirectX::XMFLOAT4& uv, const DirectX::XMFLOAT4& color,

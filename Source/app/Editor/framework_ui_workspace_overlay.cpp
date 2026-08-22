@@ -246,6 +246,28 @@ void framework::draw_ui_scene_overlay()
         return &selected_effect_stack->effect_region.additional[
             static_cast<std::size_t>(index - 1)];
     };
+    const auto effect_region_uv_to_scene = [&](const DirectX::XMFLOAT2& uv)
+    {
+        if (selected_rect == nullptr) return ImVec2{};
+        // Effect shaderのUVは左上原点、UI normalizedは左下原点。
+        const DirectX::XMFLOAT2 normalized{ uv.x, 1.0f - uv.y };
+        const DirectX::XMFLOAT2 canvas = NormalizedToCanvas(*selected_rect, normalized);
+        return ToSceneUIPoint(canvas, selected_canvas_scale,
+            target.left, target.top, target_width, target_height,
+            logical_width, logical_height);
+    };
+    const auto scene_to_effect_region_uv = [&](const ImVec2& point)
+    {
+        if (selected_rect == nullptr) return DirectX::XMFLOAT2{};
+        const DirectX::XMFLOAT2 canvas{
+            (point.x - target.left) * (logical_width / target_width) /
+                (std::max)(0.0001f, selected_canvas_scale),
+            (logical_height - (point.y - target.top) *
+                (logical_height / target_height)) /
+                (std::max)(0.0001f, selected_canvas_scale) };
+        const DirectX::XMFLOAT2 normalized = CanvasToNormalized(*selected_rect, canvas);
+        return DirectX::XMFLOAT2{ normalized.x, 1.0f - normalized.y };
+    };
     const auto effect_region_is_visible = [&](int index)
     {
         const ReplayEngine::UI::UIEffectRegionData* region = effect_region_at(index);
@@ -309,6 +331,8 @@ void framework::draw_ui_scene_overlay()
     int hovered_effect_region_handle = -1;
     int pressed_effect_region_index = -1;
     int pressed_effect_region_handle = -1;
+    int hovered_effect_region_point = -1;
+    int pressed_effect_region_point = -1;
     const ImGuiIO& input = ImGui::GetIO();
     const ImVec2 press_position = input.MouseClickedPos[ImGuiMouseButton_Left];
     const bool press_inside_target =
@@ -326,6 +350,10 @@ void framework::draw_ui_scene_overlay()
             for (int region_index = 0; region_index < effect_region_count(); ++region_index)
             {
                 if (!effect_region_is_visible(region_index)) continue;
+                const ReplayEngine::UI::UIEffectRegionData* region =
+                    effect_region_at(region_index);
+                if (region == nullptr || region->shape == static_cast<int>(
+                    ReplayEngine::UI::UIEffectRegionShape::Freeform)) continue;
                 for (int index = 0; index < 9; ++index)
                 {
                     const float dx = effect_region_handle_points[region_index][index].x -
@@ -349,6 +377,86 @@ void framework::draw_ui_scene_overlay()
         if (input.MouseDown[ImGuiMouseButton_Left])
             pressed_effect_region_handle = hit_effect_region_handle(press_position,
                 pressed_effect_region_index);
+
+        const auto hit_freeform = [&](const ImVec2& position,
+            int& out_region_index, int& out_handle)
+        {
+            out_region_index = -1;
+            out_handle = -1;
+            float nearest = 12.0f * 12.0f;
+            for (int region_index = 0; region_index < effect_region_count(); ++region_index)
+            {
+                const ReplayEngine::UI::UIEffectRegionData* region =
+                    effect_region_at(region_index);
+                if (!effect_region_is_visible(region_index) || region == nullptr ||
+                    region->shape != static_cast<int>(ReplayEngine::UI::UIEffectRegionShape::Freeform) ||
+                    region->path_points.size() < 2) continue;
+                const std::size_t count = (std::min)(region->path_points.size(),
+                    static_cast<std::size_t>(32));
+                for (std::size_t index = 0; index < count; ++index)
+                {
+                    const ImVec2 point = effect_region_uv_to_scene(region->path_points[index]);
+                    const float dx = point.x - position.x;
+                    const float dy = point.y - position.y;
+                    const float distance_sq = dx * dx + dy * dy;
+                    if (distance_sq <= nearest)
+                    {
+                        nearest = distance_sq;
+                        out_region_index = region_index;
+                        out_handle = 9 + static_cast<int>(index);
+                    }
+                }
+                const std::size_t segment_count = region->path_closed ? count : count - 1;
+                for (std::size_t index = 0; index < segment_count; ++index)
+                {
+                    const std::size_t next = (index + 1) % count;
+                    const ImVec2 a = effect_region_uv_to_scene(region->path_points[index]);
+                    const ImVec2 b = effect_region_uv_to_scene(region->path_points[next]);
+                    const float vx = b.x - a.x;
+                    const float vy = b.y - a.y;
+                    const float length_sq = vx * vx + vy * vy;
+                    const float wx = position.x - a.x;
+                    const float wy = position.y - a.y;
+                    const float t = length_sq > 0.0001f
+                        ? (std::max)(0.0f, (std::min)(1.0f,
+                            (wx * vx + wy * vy) / length_sq)) : 0.0f;
+                    const float dx = a.x + vx * t - position.x;
+                    const float dy = a.y + vy * t - position.y;
+                    const float distance_sq = dx * dx + dy * dy;
+                    if (distance_sq <= nearest)
+                    {
+                        nearest = distance_sq;
+                        out_region_index = region_index;
+                        out_handle = 1000 + static_cast<int>(index);
+                    }
+                }
+            }
+            return out_region_index >= 0;
+        };
+        if (scene_view_hovered)
+        {
+            int freeform_handle = -1;
+            int freeform_region = -1;
+            if (hit_freeform(mouse, freeform_region, freeform_handle))
+            {
+                hovered_effect_region_index = freeform_region;
+                hovered_effect_region_handle = freeform_handle;
+                hovered_effect_region_point = freeform_handle >= 9 &&
+                    freeform_handle < 1000 ? freeform_handle - 9 : -1;
+            }
+        }
+        if (input.MouseDown[ImGuiMouseButton_Left])
+        {
+            int freeform_handle = -1;
+            int freeform_region = -1;
+            if (hit_freeform(press_position, freeform_region, freeform_handle))
+            {
+                pressed_effect_region_index = freeform_region;
+                pressed_effect_region_handle = freeform_handle;
+                pressed_effect_region_point = freeform_handle >= 9 &&
+                    freeform_handle < 1000 ? freeform_handle - 9 : -1;
+            }
+        }
     }
 
     // Effect範囲は通常のUI枠より先に拾う。範囲の回転ハンドルが対象外の
@@ -367,11 +475,51 @@ void framework::draw_ui_scene_overlay()
             ui_effect_region_editing = false;
             ui_effect_region_index = pressed_effect_region_index;
             ui_effect_region_handle = pressed_effect_region_handle;
+            ui_effect_region_point = pressed_effect_region_point;
             ui_effect_region_object = selected_transform_target->ID();
+            ui_effect_region_selected_index = pressed_effect_region_index;
+            ui_effect_region_selected_point = pressed_effect_region_point;
+            ui_effect_region_selected_object = selected_transform_target->ID();
             ui_effect_region_start_mouse = press_position;
             if (ReplayEngine::UI::UIEffectRegionData* region = effect_region_at(
                 pressed_effect_region_index))
             {
+                if (pressed_effect_region_handle >= 1000 && region->path_points.size() >= 2)
+                {
+                    const std::size_t segment = static_cast<std::size_t>(
+                        pressed_effect_region_handle - 1000);
+                    const std::size_t count = (std::min)(region->path_points.size(),
+                        static_cast<std::size_t>(32));
+                    if (segment < count && object_editor_context.CanEdit())
+                    {
+                        const std::size_t next = (segment + 1) % count;
+                        const ImVec2 a = effect_region_uv_to_scene(region->path_points[segment]);
+                        const ImVec2 b = effect_region_uv_to_scene(region->path_points[next]);
+                        const float vx = b.x - a.x;
+                        const float vy = b.y - a.y;
+                        const float length_sq = vx * vx + vy * vy;
+                        const float wx = press_position.x - a.x;
+                        const float wy = press_position.y - a.y;
+                        const float t = length_sq > 0.0001f
+                            ? (std::max)(0.0f, (std::min)(1.0f,
+                                (wx * vx + wy * vy) / length_sq)) : 0.5f;
+                        const DirectX::XMFLOAT2 inserted{
+                            region->path_points[segment].x +
+                                (region->path_points[next].x - region->path_points[segment].x) * t,
+                            region->path_points[segment].y +
+                                (region->path_points[next].y - region->path_points[segment].y) * t };
+                        const std::size_t insert_at = segment + 1;
+                        object_editor_context.BeginEdit("Effect範囲の頂点を追加");
+                        region->path_points.insert(region->path_points.begin() +
+                            static_cast<std::ptrdiff_t>(insert_at), inserted);
+                        ui_effect_region_point = static_cast<int>(insert_at);
+                        ui_effect_region_handle = 9 + static_cast<int>(insert_at);
+                        ui_effect_region_selected_index = pressed_effect_region_index;
+                        ui_effect_region_selected_point = static_cast<int>(insert_at);
+                        ui_effect_region_selected_object = selected_transform_target->ID();
+                        ui_effect_region_editing = true;
+                    }
+                }
                 ui_effect_region_start_center = region->center;
                 ui_effect_region_start_size = region->size;
                 ui_effect_region_start_rotation = region->rotation;
@@ -833,6 +981,46 @@ void framework::draw_ui_scene_overlay()
         ? selected_transform_target->GetComponent<UIEffectStackComponent>() : nullptr;
     rebuild_effect_region_handles();
 
+    if (selected_transform_target == nullptr ||
+        ui_effect_region_selected_object != selected_transform_target->ID())
+    {
+        ui_effect_region_selected_index = -1;
+        ui_effect_region_selected_point = -1;
+        ui_effect_region_selected_object = Core::ObjectID::Invalid();
+    }
+
+    const bool effect_point_delete_pressed = scene_view_focused &&
+        !ImGui::GetIO().WantTextInput && object_editor_context.CanEdit() &&
+        (ImGui::IsKeyPressed(VK_BACK) || ImGui::IsKeyPressed(VK_DELETE));
+    if (effect_point_delete_pressed && selected_effect_stack != nullptr &&
+        ui_effect_region_selected_point >= 0 &&
+        ui_effect_region_selected_index >= 0 &&
+        ui_effect_region_selected_object == selected_transform_target->ID())
+    {
+        ReplayEngine::UI::UIEffectRegionData* selected_region = effect_region_at(
+            ui_effect_region_selected_index);
+        if (selected_region != nullptr && ui_effect_region_selected_point <
+            static_cast<int>(selected_region->path_points.size()))
+        {
+            const std::size_t minimum_points = selected_region->path_closed ? 3u : 2u;
+            if (selected_region->path_points.size() > minimum_points)
+            {
+                object_editor_context.BeginEdit("Effect範囲の頂点を削除");
+                selected_region->path_points.erase(selected_region->path_points.begin() +
+                    ui_effect_region_selected_point);
+                selected_effect_stack->OnPropertyChanged(nullptr);
+                ui_effect_region_selected_point = (std::min)(
+                    ui_effect_region_selected_point,
+                    static_cast<int>(selected_region->path_points.size()) - 1);
+                object_editor_context.CommitEdit();
+            }
+            else
+            {
+                object_editor_context.SetStatus("閉じた適用範囲は3頂点未満にできません");
+            }
+        }
+    }
+
     const bool effect_region_candidate = selected_transform_target != nullptr &&
         selected_effect_stack != nullptr && ui_effect_region_candidate &&
         effect_region_at(ui_effect_region_index) != nullptr &&
@@ -870,7 +1058,13 @@ void framework::draw_ui_scene_overlay()
                 ui_effect_region_index);
             if (active_region == nullptr) return;
             ReplayEngine::UI::UIEffectRegionData& region = *active_region;
-            if (ui_effect_region_handle == 8)
+            if (ui_effect_region_point >= 0 && ui_effect_region_handle >= 9 &&
+                ui_effect_region_handle < 41 &&
+                static_cast<std::size_t>(ui_effect_region_point) < region.path_points.size())
+            {
+                region.path_points[static_cast<std::size_t>(ui_effect_region_point)] = current_uv;
+            }
+            else if (ui_effect_region_handle == 8)
             {
                 const float start_dx = start_uv.x - ui_effect_region_start_center.x;
                 const float start_dy = start_uv.y - ui_effect_region_start_center.y;
@@ -937,6 +1131,7 @@ void framework::draw_ui_scene_overlay()
             ui_effect_region_editing = false;
             ui_effect_region_index = 0;
             ui_effect_region_handle = -1;
+            ui_effect_region_point = -1;
             ui_effect_region_object = Core::ObjectID::Invalid();
         }
     }
@@ -1101,7 +1296,49 @@ void framework::draw_ui_scene_overlay()
                 *effect_region_at(region_index);
             const ImU32 range_color = region.shape == 2
                 ? IM_COL32(120, 220, 255, 235) : IM_COL32(255, 120, 220, 235);
-            if (region.shape == 1)
+            if (region.shape == static_cast<int>(ReplayEngine::UI::UIEffectRegionShape::Freeform))
+            {
+                const std::size_t count = (std::min)(region.path_points.size(),
+                    static_cast<std::size_t>(32));
+                if (count >= 2)
+                {
+                    const std::size_t segment_count = region.path_closed ? count : count - 1;
+                    for (std::size_t index = 0; index < segment_count; ++index)
+                    {
+                        const std::size_t next = (index + 1) % count;
+                        draw_list->AddLine(
+                            effect_region_uv_to_scene(region.path_points[index]),
+                            effect_region_uv_to_scene(region.path_points[next]),
+                            range_color, 2.0f);
+                    }
+                }
+                for (std::size_t index = 0; index < count; ++index)
+                {
+                    const bool active = (ui_effect_region_candidate &&
+                        ui_effect_region_object == selected_transform_target->ID() &&
+                        ui_effect_region_index == region_index &&
+                        ui_effect_region_point == static_cast<int>(index)) ||
+                        (ui_effect_region_selected_object == selected_transform_target->ID() &&
+                            ui_effect_region_selected_index == region_index &&
+                            ui_effect_region_selected_point == static_cast<int>(index));
+                    const bool hot = hovered_effect_region_index == region_index &&
+                        hovered_effect_region_point == static_cast<int>(index);
+                    const ImVec2 point = effect_region_uv_to_scene(region.path_points[index]);
+                    draw_list->AddCircleFilled(point, active || hot ? 7.0f : 5.5f,
+                        active ? IM_COL32(255, 245, 120, 255) : range_color, 12);
+                    draw_list->AddCircle(point, active || hot ? 7.0f : 5.5f,
+                        IM_COL32(35, 38, 44, 255), 12, 1.0f);
+                }
+                if (count > 0)
+                {
+                    const ImVec2 label_point = effect_region_uv_to_scene(region.path_points[0]);
+                    const std::string range_label = "EFFECT " +
+                        std::to_string(region_index + 1) + " / FREEFORM";
+                    draw_list->AddText(ImVec2(label_point.x + 7.0f, label_point.y + 7.0f),
+                        range_color, range_label.c_str());
+                }
+            }
+            else if (region.shape == 1)
             {
                 const float half_x = (std::max)(0.001f, region.size.x);
                 const float half_y = (std::max)(0.001f, region.size.y);
@@ -1130,40 +1367,48 @@ void framework::draw_ui_scene_overlay()
                     previous = current;
                 }
             }
-            else
+            else if (region.shape != static_cast<int>(ReplayEngine::UI::UIEffectRegionShape::Freeform))
             {
                 draw_list->AddQuad(effect_region_outline[region_index][0],
                     effect_region_outline[region_index][1],
                     effect_region_outline[region_index][2],
                     effect_region_outline[region_index][3], range_color, 2.0f);
             }
-            draw_list->AddLine(effect_region_handle_points[region_index][7],
-                effect_region_handle_points[region_index][8], range_color, 1.5f);
-            for (int index = 0; index < 9; ++index)
+            if (region.shape != static_cast<int>(ReplayEngine::UI::UIEffectRegionShape::Freeform))
             {
-                const bool active = ui_effect_region_candidate &&
-                    ui_effect_region_object == selected_transform_target->ID() &&
-                    ui_effect_region_index == region_index &&
-                    ui_effect_region_handle == index;
-                const bool hot = hovered_effect_region_index == region_index &&
-                    hovered_effect_region_handle == index;
-                const ImU32 fill = active
-                    ? IM_COL32(255, 245, 120, 255)
-                    : (hot ? IM_COL32(240, 255, 190, 255) : range_color);
-                if (index == 8)
-                    draw_list->AddCircleFilled(effect_region_handle_points[region_index][index],
-                        6.0f, fill, 12);
-                else
-                    draw_list->AddCircleFilled(effect_region_handle_points[region_index][index],
-                        5.0f, fill, 12);
-                draw_list->AddCircle(effect_region_handle_points[region_index][index],
-                    index == 8 ? 6.0f : 5.0f, IM_COL32(35, 38, 44, 255), 12, 1.0f);
+                draw_list->AddLine(effect_region_handle_points[region_index][7],
+                    effect_region_handle_points[region_index][8], range_color, 1.5f);
+                for (int index = 0; index < 9; ++index)
+                {
+                    const bool active = ui_effect_region_candidate &&
+                        ui_effect_region_object == selected_transform_target->ID() &&
+                        ui_effect_region_index == region_index &&
+                        ui_effect_region_handle == index;
+                    const bool hot = hovered_effect_region_index == region_index &&
+                        hovered_effect_region_handle == index;
+                    const ImU32 fill = active
+                        ? IM_COL32(255, 245, 120, 255)
+                        : (hot ? IM_COL32(240, 255, 190, 255) : range_color);
+                    if (index == 8)
+                        draw_list->AddCircleFilled(effect_region_handle_points[region_index][index],
+                            6.0f, fill, 12);
+                    else
+                        draw_list->AddCircleFilled(effect_region_handle_points[region_index][index],
+                            5.0f, fill, 12);
+                    draw_list->AddCircle(effect_region_handle_points[region_index][index],
+                        index == 8 ? 6.0f : 5.0f, IM_COL32(35, 38, 44, 255), 12, 1.0f);
+                }
             }
-            const char* range_label = region.shape == 1 ? "EFFECT / ELLIPSE" :
-                (region.shape == 2 ? "EFFECT / MASK" : "EFFECT / RECT");
-            draw_list->AddText(ImVec2(effect_region_outline[region_index][0].x + 7.0f,
-                effect_region_outline[region_index][0].y + 7.0f), range_color,
-                range_label);
+            if (region.shape != static_cast<int>(ReplayEngine::UI::UIEffectRegionShape::Freeform))
+            {
+                const char* shape_label = region.shape == 1 ? "ELLIPSE" :
+                    (region.shape == 2 ? "MASK" : "RECT");
+                const std::string range_label = "EFFECT " +
+                    std::to_string(region_index + 1) + " / " + shape_label;
+                draw_list->AddText(ImVec2(effect_region_outline[region_index][0].x + 7.0f,
+                    effect_region_outline[region_index][0].y + 7.0f), range_color,
+                    range_label.c_str());
+            }
         }
 
         const auto norm_to_scene = [&](const DirectX::XMFLOAT2& normalized)

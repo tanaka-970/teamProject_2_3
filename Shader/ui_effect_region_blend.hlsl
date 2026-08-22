@@ -22,6 +22,8 @@ cbuffer UIEffectConstants : register(b0)
     float4 effect_region_extra_params[7];
     float4 effect_region_extra_settings[7];
     float4 effect_region_count;    // x = enabled region count
+    float4 effect_region_path_counts[8];
+    float4 effect_region_path_points[8][32];
 };
 
 struct VSOutput
@@ -30,7 +32,8 @@ struct VSOutput
     float2 uv : TEXCOORD0;
 };
 
-float single_region_weight(float2 uv, float4 region_params, float4 region_settings)
+float single_region_weight(float2 uv, float4 region_params, float4 region_settings,
+    int region_index)
 {
     const float shape_flags = region_settings.w;
     float mask = 1.0;
@@ -65,6 +68,28 @@ float single_region_weight(float2 uv, float4 region_params, float4 region_settin
                 : smoothstep(0.5 - feather * 0.5,
                     0.5 + feather * 0.5, mask_value);
         }
+        else if (shape == 3)
+        {
+            const int point_count = min(32, max(0,
+                (int)floor(effect_region_path_counts[region_index].x + 0.5)));
+            bool inside = false;
+            if (point_count >= 3)
+            {
+                [loop]
+                for (int index = 0; index < 32; ++index)
+                {
+                    if (index >= point_count) break;
+                    const int next = index + 1 < point_count ? index + 1 : 0;
+                    const float2 a = effect_region_path_points[region_index][index].xy;
+                    const float2 b = effect_region_path_points[region_index][next].xy;
+                    const bool crosses = ((a.y > uv.y) != (b.y > uv.y)) &&
+                        (uv.x < (b.x - a.x) * (uv.y - a.y) /
+                            (b.y - a.y) + a.x);
+                    if (crosses) inside = !inside;
+                }
+            }
+            mask = inside ? 1.0 : 0.0;
+        }
         else if (shape == 1)
         {
             const float distance_to_edge = length(local / size);
@@ -91,17 +116,19 @@ float single_region_weight(float2 uv, float4 region_params, float4 region_settin
 float region_weight(float2 uv)
 {
     const int region_count = (int)floor(effect_region_count.x + 0.5);
-    if (region_count <= 0) return 0.0;
-
-    float mask = single_region_weight(uv,
-        effect_region_params, effect_region_settings);
-    [unroll]
-    for (int index = 0; index < 7; ++index)
+    float mask = 0.0;
+    if (region_count > 0)
     {
-        if (index >= region_count - 1) break;
-        mask = max(mask, single_region_weight(uv,
-            effect_region_extra_params[index],
-            effect_region_extra_settings[index]));
+        mask = single_region_weight(uv,
+            effect_region_params, effect_region_settings, 0);
+        [unroll]
+        for (int index = 0; index < 7; ++index)
+        {
+            if (index >= region_count - 1) break;
+            mask = max(mask, single_region_weight(uv,
+                effect_region_extra_params[index],
+                effect_region_extra_settings[index], index + 1));
+        }
     }
     return saturate(mask);
 }

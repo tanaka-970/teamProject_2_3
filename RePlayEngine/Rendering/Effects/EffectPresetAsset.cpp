@@ -54,6 +54,26 @@ namespace ReplayEngine::Rendering::Effects
         properties.Remove("effect_region_strength");
         properties.Remove("effect_region_mask");
         properties.Remove("effect_region_additional_count");
+        properties.Remove("effect_region_path_count");
+        for (int point = 0; point < 32; ++point)
+            properties.Remove("effect_region_path_" + std::to_string(point));
+        for (int index = 1; index <= UI::UIEffectRegion::MaxAdditionalCount; ++index)
+        {
+            const std::string prefix = "effect_region_" + std::to_string(index) + "_";
+            properties.Remove(prefix + "enabled");
+            properties.Remove(prefix + "shape");
+            properties.Remove(prefix + "scope");
+            properties.Remove(prefix + "invert");
+            properties.Remove(prefix + "center");
+            properties.Remove(prefix + "size");
+            properties.Remove(prefix + "rotation");
+            properties.Remove(prefix + "feather");
+            properties.Remove(prefix + "strength");
+            properties.Remove(prefix + "mask");
+            properties.Remove(prefix + "path_count");
+            for (int point = 0; point < 32; ++point)
+                properties.Remove(prefix + "path_" + std::to_string(point));
+        }
 
         std::error_code filesystem_error;
         if (!path.parent_path().empty())

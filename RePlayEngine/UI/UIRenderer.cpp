@@ -76,6 +76,7 @@ namespace ReplayEngine::UI
         render_target_pool_.Release();
         effect_chain_.Release();
         texture_cache_.clear();
+        texture_path_cache_.clear();
         sprite_atlas_cache_.clear();
         for (auto& entry : temporal_history_cache_) entry.second.target.Release();
         temporal_history_cache_.clear();
@@ -221,15 +222,39 @@ namespace ReplayEngine::UI
         }
 
         const Assets::SpriteAtlasRegion* region = cached.asset.FindRegion(image.atlas_region);
-        if (region == nullptr || cached.asset.image_guid.empty())
+        if (region == nullptr || (cached.asset.image_guid.empty() &&
+            cached.asset.embedded_texture_path.empty()))
             return !out.texture_guid.empty();
 
+        if (!cached.asset.embedded_texture_path.empty())
+        {
+            const std::filesystem::path embedded_path = path.parent_path() /
+                std::filesystem::u8path(cached.asset.embedded_texture_path);
+            std::error_code embedded_error;
+            if (std::filesystem::exists(embedded_path, embedded_error) && !embedded_error)
+                out.texture_path = embedded_path;
+        }
         out.texture_guid = cached.asset.image_guid;
         out.uv = {
             region->uv_rect.x + region->uv_rect.z * image.uv_offset.x,
             region->uv_rect.y + region->uv_rect.w * image.uv_offset.y,
             region->uv_rect.z * image.uv_scale.x,
             region->uv_rect.w * image.uv_scale.y };
+        if (region->path_points.size() >= 3 && region->uv_rect.z > 0.000001f &&
+            region->uv_rect.w > 0.000001f)
+        {
+            out.path_points.reserve(region->path_points.size());
+            for (const DirectX::XMFLOAT2& point : region->path_points)
+            {
+                const float relative_x =
+                    (point.x - region->uv_rect.x) / region->uv_rect.z;
+                const float relative_y =
+                    (point.y - region->uv_rect.y) / region->uv_rect.w;
+                out.path_points.push_back(region->rotated
+                    ? DirectX::XMFLOAT2{ relative_y, relative_x }
+                    : DirectX::XMFLOAT2{ relative_x, 1.0f - relative_y });
+            }
+        }
         out.atlas_pivot = region->pivot;
         out.rotated = region->rotated;
         out.from_atlas = true;
@@ -255,6 +280,24 @@ namespace ReplayEngine::UI
             return white_texture_.Get();
 
         texture_cache_[guid] = loaded;
+        return loaded.Get();
+    }
+
+    ID3D11ShaderResourceView* UIRenderer::TextureForPath(
+        const std::filesystem::path& path)
+    {
+        if (path.empty() || device_ == nullptr) return white_texture_.Get();
+        const std::filesystem::path normalized = path.lexically_normal();
+        const std::string key = normalized.generic_u8string();
+        if (const auto it = texture_path_cache_.find(key); it != texture_path_cache_.end())
+            return it->second.Get();
+
+        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> loaded;
+        if (FAILED(load_texture_from_file(device_.Get(), normalized.wstring().c_str(),
+            loaded.GetAddressOf(), nullptr)) || !loaded)
+            return white_texture_.Get();
+
+        texture_path_cache_[key] = loaded;
         return loaded.Get();
     }
 

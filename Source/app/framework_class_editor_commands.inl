@@ -128,6 +128,15 @@
                     project_request_delete(project_selected_entry_path);
                     return 0;
                 }
+                if (active_editor_workspace == editor_workspace::ui &&
+                    scene_view_focused &&
+                    ui_effect_region_selected_point >= 0 &&
+                    object_editor_context.Selection().Primary() ==
+                        ui_effect_region_selected_object)
+                {
+                    // Scene View の自由形状頂点を先に処理させる。
+                    return 0;
+                }
                 if (selected_editor_object == editor_selection::game_object)
                 {
                     object_hierarchy_panel.DestroySelection(object_editor_context);

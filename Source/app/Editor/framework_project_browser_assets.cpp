@@ -2,6 +2,7 @@
 #include "texture.h"
 #include "../../RePlayEngine/Assets/AssetCache.h"
 #include "../../RePlayEngine/Assets/SpriteAtlasAsset.h"
+#include "../../RePlayEngine/Assets/TextureCompressor.h"
 #include "../../RePlayEngine/Localization/LocalizationTable.h"
 #include "../../RePlayEngine/Rendering/Effects/EffectPresetAsset.h"
 #include "../../RePlayEngine/Editor/Style/EditorStyle.h"
@@ -450,6 +451,83 @@ bool framework::open_sprite_atlas_asset(const ReplayEngine::Assets::AssetRecord&
 bool framework::save_current_sprite_atlas()
 {
     if (!sprite_atlas_editor_loaded || sprite_atlas_editor_path.empty()) return false;
+
+    // Atlas は元画像に依存しないよう、保存時に同じフォルダへ BC 圧縮 DDS を作る。
+    // 画像が既に削除されていても、過去に作った DDS があればそのまま使える。
+    if (!sprite_atlas_editor_asset.image_guid.empty())
+    {
+        const ReplayEngine::Assets::AssetRecord* image_record =
+            asset_database.FindByGuid(sprite_atlas_editor_asset.image_guid);
+        const std::filesystem::path dds_path =
+            sprite_atlas_editor_path.parent_path() /
+            (sprite_atlas_editor_path.filename().u8string() + ".dds");
+        const bool atlas_already_references_cache =
+            sprite_atlas_editor_asset.embedded_texture_path == dds_path.filename().u8string();
+        std::error_code file_error;
+        const bool dds_exists = std::filesystem::exists(dds_path, file_error) && !file_error;
+        bool cache_ready = dds_exists;
+        if (image_record != nullptr)
+        {
+            std::filesystem::path source_path = image_record->source_path;
+            bool source_exists = std::filesystem::exists(source_path, file_error) && !file_error;
+            if (!source_exists)
+            {
+                // 元PNGが消えていても、既存の foo.dds キャッシュを入力にできる。
+                std::filesystem::path dds_source = source_path;
+                dds_source.replace_extension(".dds");
+                source_exists = std::filesystem::exists(dds_source, file_error) && !file_error;
+                if (source_exists) source_path = dds_source;
+            }
+            if (source_exists)
+            {
+                bool source_is_newer = !dds_exists || !atlas_already_references_cache;
+                if (dds_exists)
+                {
+                    const auto source_time = std::filesystem::last_write_time(source_path, file_error);
+                    const auto dds_time = std::filesystem::last_write_time(dds_path, file_error);
+                    source_is_newer = !file_error && source_time > dds_time;
+                }
+                if (source_is_newer)
+                {
+                    std::string extension = source_path.extension().u8string();
+                    std::transform(extension.begin(), extension.end(), extension.begin(),
+                        [](unsigned char character)
+                        {
+                            return static_cast<char>(std::tolower(character));
+                        });
+                    if (extension == ".dds")
+                    {
+                        std::filesystem::copy_file(source_path, dds_path,
+                            std::filesystem::copy_options::overwrite_existing, file_error);
+                        cache_ready = !file_error;
+                    }
+                    else
+                    {
+                        const auto result = ReplayEngine::Assets::TextureCompressor::Compress(
+                            source_path, dds_path,
+                            ReplayEngine::Assets::TextureCompressor::Format::Auto);
+                        cache_ready = result.succeeded;
+                        if (!cache_ready)
+                        {
+                            sprite_atlas_editor_status = "DDSキャッシュ作成失敗: " + result.error;
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+        if (!cache_ready)
+        {
+            sprite_atlas_editor_status = "Atlas画像またはDDSキャッシュが見つかりません";
+            return false;
+        }
+        sprite_atlas_editor_asset.embedded_texture_path =
+            dds_path.filename().u8string();
+    }
+    else
+    {
+        sprite_atlas_editor_asset.embedded_texture_path.clear();
+    }
 
     // Atlas はScene外Assetなので、保存前bytesを既存FileEditHistoryへ積む。
     // 新しいUndo基盤は作らない。
