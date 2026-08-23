@@ -238,6 +238,100 @@ public sealed class ScriptRuntimeContext
         return NativeBridge.Raycast(origin, direction, maxDistance, layer, mask, ignore);
     }
 
+    public RuntimeResult<PhysicsHit[]> RaycastAll(Vector3 origin, Vector3 direction,
+        float maxDistance = 1000.0f, int layer = 0, int mask = -1,
+        ObjectHandle ignore = default) => Query(new NativeBridge.PhysicsQueryRequestNative
+        {
+            Kind = PhysicsQueryKind.RaycastAll, PointA = origin, Direction = direction,
+            Rotation = Quaternion.Identity, MaxDistance = maxDistance,
+            Layer = layer, Mask = mask, Ignore = ignore,
+        });
+
+    public RuntimeResult<PhysicsHit[]> OverlapSphere(Vector3 center, float radius,
+        int layer = 0, int mask = -1, ObjectHandle ignore = default)
+        => Query(new NativeBridge.PhysicsQueryRequestNative
+        {
+            Kind = PhysicsQueryKind.OverlapSphere, PointA = center,
+            Rotation = Quaternion.Identity, Radius = radius,
+            Layer = layer, Mask = mask, Ignore = ignore,
+        });
+
+    public RuntimeResult<PhysicsHit[]> OverlapBox(Vector3 center, Vector3 halfExtents,
+        Quaternion rotation = default, int layer = 0, int mask = -1,
+        ObjectHandle ignore = default) => Query(new NativeBridge.PhysicsQueryRequestNative
+        {
+            Kind = PhysicsQueryKind.OverlapBox, PointA = center, HalfExtents = halfExtents,
+            Rotation = rotation.IsZero ? Quaternion.Identity : rotation,
+            Layer = layer, Mask = mask, Ignore = ignore,
+        });
+
+    public RuntimeResult<PhysicsHit[]> OverlapCapsule(Vector3 pointA, Vector3 pointB,
+        float radius, int layer = 0, int mask = -1, ObjectHandle ignore = default)
+        => Query(new NativeBridge.PhysicsQueryRequestNative
+        {
+            Kind = PhysicsQueryKind.OverlapCapsule, PointA = pointA, PointB = pointB,
+            Rotation = Quaternion.Identity, Radius = radius,
+            Layer = layer, Mask = mask, Ignore = ignore,
+        });
+
+    public RuntimeResult<PhysicsHit> SphereCast(Vector3 origin, float radius,
+        Vector3 direction, float maxDistance, int layer = 0, int mask = -1,
+        ObjectHandle ignore = default)
+        => First(SphereCastAll(origin, radius, direction, maxDistance, layer, mask, ignore));
+
+    public RuntimeResult<PhysicsHit[]> SphereCastAll(Vector3 origin, float radius,
+        Vector3 direction, float maxDistance, int layer = 0, int mask = -1,
+        ObjectHandle ignore = default) => Query(new NativeBridge.PhysicsQueryRequestNative
+        {
+            Kind = PhysicsQueryKind.SphereCast, PointA = origin, Direction = direction,
+            Rotation = Quaternion.Identity, Radius = radius, MaxDistance = maxDistance,
+            Layer = layer, Mask = mask, Ignore = ignore,
+        });
+
+    public RuntimeResult<PhysicsHit> BoxCast(Vector3 center, Vector3 halfExtents,
+        Quaternion rotation, Vector3 direction, float maxDistance, int layer = 0,
+        int mask = -1, ObjectHandle ignore = default)
+        => First(BoxCastAll(center, halfExtents, rotation, direction, maxDistance,
+            layer, mask, ignore));
+
+    public RuntimeResult<PhysicsHit[]> BoxCastAll(Vector3 center, Vector3 halfExtents,
+        Quaternion rotation, Vector3 direction, float maxDistance, int layer = 0,
+        int mask = -1, ObjectHandle ignore = default)
+        => Query(new NativeBridge.PhysicsQueryRequestNative
+        {
+            Kind = PhysicsQueryKind.BoxCast, PointA = center, Direction = direction,
+            HalfExtents = halfExtents,
+            Rotation = rotation.IsZero ? Quaternion.Identity : rotation,
+            MaxDistance = maxDistance, Layer = layer, Mask = mask, Ignore = ignore,
+        });
+
+    public RuntimeResult<PhysicsHit> CapsuleCast(Vector3 pointA, Vector3 pointB,
+        float radius, Vector3 direction, float maxDistance, int layer = 0,
+        int mask = -1, ObjectHandle ignore = default)
+        => First(CapsuleCastAll(pointA, pointB, radius, direction, maxDistance,
+            layer, mask, ignore));
+
+    public RuntimeResult<PhysicsHit[]> CapsuleCastAll(Vector3 pointA, Vector3 pointB,
+        float radius, Vector3 direction, float maxDistance, int layer = 0,
+        int mask = -1, ObjectHandle ignore = default)
+        => Query(new NativeBridge.PhysicsQueryRequestNative
+        {
+            Kind = PhysicsQueryKind.CapsuleCast, PointA = pointA, PointB = pointB,
+            Direction = direction, Rotation = Quaternion.Identity, Radius = radius,
+            MaxDistance = maxDistance, Layer = layer, Mask = mask, Ignore = ignore,
+        });
+
+    private static RuntimeResult<PhysicsHit[]> Query(
+        NativeBridge.PhysicsQueryRequestNative request) => NativeBridge.PhysicsQuery(request);
+
+    private static RuntimeResult<PhysicsHit> First(RuntimeResult<PhysicsHit[]> result)
+    {
+        if (!result.Succeeded) return new RuntimeResult<PhysicsHit>(result.Status);
+        return result.Value.Length == 0
+            ? new RuntimeResult<PhysicsHit>(RuntimeStatus.Ok)
+            : new RuntimeResult<PhysicsHit>(RuntimeStatus.Ok, result.Value[0]);
+    }
+
     public RuntimeResult<EventSubscription> SubscribeEvent(string eventTypeGuid, ObjectHandle owner = default)
     {
         return NativeBridge.SubscribeEvent(eventTypeGuid, owner);

@@ -120,6 +120,31 @@ public struct RaycastHit
     public bool Valid => valid != 0;
 }
 
+public enum PhysicsQueryKind : int
+{
+    RaycastAll = 0,
+    OverlapSphere = 1,
+    OverlapBox = 2,
+    OverlapCapsule = 3,
+    SphereCast = 4,
+    BoxCast = 5,
+    CapsuleCast = 6,
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PhysicsHit
+{
+    public Vector3 Point;
+    public Vector3 Normal;
+    public float Distance;
+    public float Fraction;
+    public ObjectHandle Object;
+    public uint ColliderId;
+    private int valid;
+
+    public bool Valid => valid != 0;
+}
+
 public enum UIFocusDirection : int
 {
     Up = 0,

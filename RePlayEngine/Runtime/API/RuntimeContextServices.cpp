@@ -438,6 +438,62 @@ namespace ReplayEngine::Runtime
         return RuntimeStatus::Ok;
     }
 
+    RuntimeStatus RuntimeContext::PhysicsQuery(const PhysicsQueryRequest& request,
+        std::vector<Scene::PhysicsQueryHit>& out) const
+    {
+        out.clear();
+        const Scene::IPhysicsQueryService* physics = world_->Services().Physics();
+        if (physics == nullptr || !physics->CollisionAvailable())
+            return RuntimeStatus::ServiceUnavailable;
+
+        Scene::CollisionQueryFilter filter;
+        filter.layer = request.layer;
+        filter.mask = request.mask;
+        if (!request.ignore.IsEmpty())
+        {
+            RuntimeStatus status = RuntimeStatus::Ok;
+            if (ResolveObject(request.ignore, status) == nullptr) return status;
+            filter.ignore_object = request.ignore.object;
+        }
+
+        switch (request.kind)
+        {
+        case PhysicsQueryKind::RaycastAll:
+            if (request.max_distance <= 0.0f) return RuntimeStatus::InvalidArgument;
+            physics->RaycastAllFiltered(request.point_a, request.direction,
+                request.max_distance, filter, out);
+            break;
+        case PhysicsQueryKind::OverlapSphere:
+            if (request.radius < 0.0f) return RuntimeStatus::InvalidArgument;
+            physics->OverlapSphere(request.point_a, request.radius, filter, out);
+            break;
+        case PhysicsQueryKind::OverlapBox:
+            physics->OverlapBox(request.point_a, request.half_extents,
+                request.rotation, filter, out);
+            break;
+        case PhysicsQueryKind::OverlapCapsule:
+            if (request.radius < 0.0f) return RuntimeStatus::InvalidArgument;
+            physics->OverlapCapsule(request.point_a, request.point_b,
+                request.radius, filter, out);
+            break;
+        case PhysicsQueryKind::SphereCast:
+            physics->SphereCastAll(request.point_a, request.direction,
+                request.radius, request.max_distance, filter, out);
+            break;
+        case PhysicsQueryKind::BoxCast:
+            physics->BoxCastAll(request.point_a, request.half_extents,
+                request.rotation, request.direction, request.max_distance, filter, out);
+            break;
+        case PhysicsQueryKind::CapsuleCast:
+            physics->CapsuleCastAll(request.point_a, request.point_b, request.radius,
+                request.direction, request.max_distance, filter, out);
+            break;
+        default:
+            return RuntimeStatus::InvalidArgument;
+        }
+        return RuntimeStatus::Ok;
+    }
+
     // ---- Log ----------------------------------------------------------------
 
     void RuntimeContext::Log(LogLevel level, const std::string& message,

@@ -31,22 +31,31 @@ namespace ReplayEngine::Runtime
             RuntimeContext* runtime = world.Services().Runtime();
             if (runtime == nullptr) return;
 
-            EventRecord record;
+            Reflection::TypeGUID type;
+            const char* type_name = nullptr;
             switch (event.phase)
             {
             case ContactPhase::Enter:
-                record.type = EngineEvents::CollisionEnter;
-                record.type_name = "CollisionEnter";
+                type = EngineEvents::CollisionEnter;
+                type_name = "CollisionEnter";
                 break;
             case ContactPhase::Stay:
-                record.type = EngineEvents::CollisionStay;
-                record.type_name = "CollisionStay";
+                type = EngineEvents::CollisionStay;
+                type_name = "CollisionStay";
                 break;
             default:
-                record.type = EngineEvents::CollisionExit;
-                record.type_name = "CollisionExit";
+                type = EngineEvents::CollisionExit;
+                type_name = "CollisionExit";
                 break;
             }
+
+            // 購読者がいなければ PropertyBag を組む前に抜ける。
+            // 接触は毎フレーム起きるので、組んでから捨てると確保が減らない。
+            if (!runtime->Events().HasSubscribers(type)) return;
+
+            EventRecord record;
+            record.type = type;
+            record.type_name = type_name;
             record.source = event.self;
             record.target = event.other;
             record.payload.Set("point_x",
@@ -63,9 +72,19 @@ namespace ReplayEngine::Runtime
                 Reflection::PropertyValue::MakeFloat(event.contact_normal.z));
             record.payload.Set("hit_kind",
                 Reflection::PropertyValue::MakeInt(static_cast<int>(event.hit_kind)));
+            record.payload.Set("self_collider",
+                Reflection::PropertyValue::MakeInt(static_cast<int>(event.self_collider)));
             record.payload.Set("other_collider",
                 Reflection::PropertyValue::MakeInt(
                     static_cast<int>(event.other_collider)));
+            record.payload.Set("relative_velocity_x",
+                Reflection::PropertyValue::MakeFloat(event.relative_velocity.x));
+            record.payload.Set("relative_velocity_y",
+                Reflection::PropertyValue::MakeFloat(event.relative_velocity.y));
+            record.payload.Set("relative_velocity_z",
+                Reflection::PropertyValue::MakeFloat(event.relative_velocity.z));
+            record.payload.Set("penetration_depth",
+                Reflection::PropertyValue::MakeFloat(event.penetration_depth));
             record.payload.Set("other_valid",
                 Reflection::PropertyValue::MakeBool(event.other_valid));
             runtime->Events().Publish(std::move(record));
@@ -89,9 +108,12 @@ namespace ReplayEngine::Runtime
         event.phase = phase;
         event.hit_kind = contact.kind;
         event.self = contact.self;
+        event.self_collider = contact.self_collider;
         event.other_collider = contact.other_collider;
         event.contact_point = contact.point;
         event.contact_normal = contact.normal;
+        event.relative_velocity = contact.relative_velocity;
+        event.penetration_depth = contact.penetration;
         event.frame_index = frame_index;
 
         // 相手は「居ればつなぐ」。Exit は相手が消えたことで起きる場合があるので、
@@ -136,8 +158,10 @@ namespace ReplayEngine::Runtime
     }
 
     void CollisionEventDispatcher::Observe(Scene::Scene& world, const ObjectHandle& self,
-        CollisionHitKind kind, ObjectID other, Scene::ColliderID other_collider,
+        CollisionHitKind kind, Scene::ColliderID self_collider, ObjectID other,
+        Scene::ColliderID other_collider,
         const DirectX::XMFLOAT3& point, const DirectX::XMFLOAT3& normal,
+        const DirectX::XMFLOAT3& relative_velocity, float penetration,
         std::uint64_t frame_index)
     {
         // 同じ「自分 × 接触の種類」の組で既に接触中かを探す。
@@ -146,9 +170,12 @@ namespace ReplayEngine::Runtime
         //   Motor は 1 FixedUpdate につき床を 1 つ、壁を 1 つしか確定させない。
         //   複数持てるようにしても、埋まらない枠が増えるだけで意味が無い。
         const auto found = std::find_if(contacts_.begin(), contacts_.end(),
-            [&self, kind](const Contact& contact)
+            [&self, kind, self_collider, other, other_collider](const Contact& contact)
             {
-                return contact.self == self && contact.kind == kind;
+                if (contact.self != self || contact.kind != kind) return false;
+                if (kind != CollisionHitKind::Rigidbody) return true;
+                return contact.self_collider == self_collider && contact.other == other &&
+                    contact.other_collider == other_collider;
             });
 
         if (found == contacts_.end())
@@ -156,10 +183,13 @@ namespace ReplayEngine::Runtime
             Contact contact;
             contact.self = self;
             contact.kind = kind;
+            contact.self_collider = self_collider;
             contact.other = other;
             contact.other_collider = other_collider;
             contact.point = point;
             contact.normal = normal;
+            contact.relative_velocity = relative_velocity;
+            contact.penetration = penetration;
             contact.seen_this_frame = true;
 
             contacts_.push_back(contact);
@@ -181,6 +211,8 @@ namespace ReplayEngine::Runtime
             found->other_collider = other_collider;
             found->point = point;
             found->normal = normal;
+            found->relative_velocity = relative_velocity;
+            found->penetration = penetration;
             found->seen_this_frame = true;
 
             ++enter_count_;
@@ -190,6 +222,8 @@ namespace ReplayEngine::Runtime
 
         found->point = point;
         found->normal = normal;
+        found->relative_velocity = relative_velocity;
+        found->penetration = penetration;
         found->seen_this_frame = true;
 
         ++stay_count_;
@@ -237,15 +271,54 @@ namespace ReplayEngine::Runtime
             if (motor->HasGround() && motor->LastGroundSource().object.Valid())
             {
                 Observe(world, self, CollisionHitKind::CharacterGround,
-                    motor->LastGroundSource().object, motor->LastGroundSource().collider,
-                    motor->LastGroundPoint(), motor->GroundNormal(), frame_index);
+                    Scene::invalid_collider_id, motor->LastGroundSource().object,
+                    motor->LastGroundSource().collider,
+                    motor->LastGroundPoint(), motor->GroundNormal(),
+                    DirectX::XMFLOAT3{}, 0.0f, frame_index);
             }
 
             if (motor->HasWallContact() && motor->LastWallSource().object.Valid())
             {
                 Observe(world, self, CollisionHitKind::CharacterWall,
-                    motor->LastWallSource().object, motor->LastWallSource().collider,
-                    motor->LastWallPoint(), motor->LastWallNormal(), frame_index);
+                    Scene::invalid_collider_id, motor->LastWallSource().object,
+                    motor->LastWallSource().collider,
+                    motor->LastWallPoint(), motor->LastWallNormal(),
+                    DirectX::XMFLOAT3{}, 0.0f, frame_index);
+            }
+        }
+
+        // Rigidbody Solver が実際に解いた接触を両側の視点へ配送する。
+        const Scene::IPhysicsDynamicsService* dynamics = world.Services().PhysicsDynamics();
+        if (dynamics != nullptr)
+        {
+            for (const Scene::PhysicsContact& physics : dynamics->Contacts())
+            {
+                GameObject* object_a = world.FindGameObjectByID(physics.object_a);
+                GameObject* object_b = world.FindGameObjectByID(physics.object_b);
+                if (object_a == nullptr || object_b == nullptr ||
+                    object_a->PendingDestroy() || object_b->PendingDestroy()) continue;
+
+                const ObjectHandle handle_a = resolver.MakeHandle(object_a);
+                const ObjectHandle handle_b = resolver.MakeHandle(object_b);
+                if (!handle_a.IsEmpty())
+                {
+                    Observe(world, handle_a, CollisionHitKind::Rigidbody,
+                        physics.collider_a, physics.object_b, physics.collider_b,
+                        physics.point, physics.normal, physics.relative_velocity,
+                        physics.penetration, frame_index);
+                }
+                if (!handle_b.IsEmpty())
+                {
+                    const DirectX::XMFLOAT3 opposite_normal{
+                        -physics.normal.x, -physics.normal.y, -physics.normal.z };
+                    const DirectX::XMFLOAT3 opposite_velocity{
+                        -physics.relative_velocity.x, -physics.relative_velocity.y,
+                        -physics.relative_velocity.z };
+                    Observe(world, handle_b, CollisionHitKind::Rigidbody,
+                        physics.collider_b, physics.object_a, physics.collider_a,
+                        physics.point, opposite_normal, opposite_velocity,
+                        physics.penetration, frame_index);
+                }
             }
         }
 

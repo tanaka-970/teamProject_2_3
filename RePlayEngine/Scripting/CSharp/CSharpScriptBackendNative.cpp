@@ -199,6 +199,7 @@ namespace ReplayEngine::Scripting::CSharp::Detail
             table.get_current_scene_guid = &NativeGetCurrentSceneGuid;
             table.quit_application = &NativeQuitApplication;
             table.event_dropped_count = &NativeEventDroppedCount;
+            table.physics_query = &NativePhysicsQuery;
 
             // 自己記述ヘッダー。C# 側はこれを見て表の食い違いをその場で弾く。
             table.header.abi_version = kNativeApiAbiVersion;

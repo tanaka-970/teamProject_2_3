@@ -42,6 +42,32 @@ namespace ReplayEngine::Runtime
     // ログの重要度。
     enum class LogLevel : std::int32_t { Info = 0, Warning = 1, Error = 2 };
 
+    enum class PhysicsQueryKind : std::int32_t
+    {
+        RaycastAll = 0,
+        OverlapSphere = 1,
+        OverlapBox = 2,
+        OverlapCapsule = 3,
+        SphereCast = 4,
+        BoxCast = 5,
+        CapsuleCast = 6,
+    };
+
+    struct PhysicsQueryRequest final
+    {
+        PhysicsQueryKind kind = PhysicsQueryKind::RaycastAll;
+        DirectX::XMFLOAT3 point_a{ 0.0f, 0.0f, 0.0f };
+        DirectX::XMFLOAT3 point_b{ 0.0f, 0.0f, 0.0f };
+        DirectX::XMFLOAT3 direction{ 0.0f, 0.0f, 1.0f };
+        DirectX::XMFLOAT4 rotation{ 0.0f, 0.0f, 0.0f, 1.0f };
+        DirectX::XMFLOAT3 half_extents{ 0.5f, 0.5f, 0.5f };
+        float radius = 0.5f;
+        float max_distance = 0.0f;
+        int layer = 0;
+        int mask = -1;
+        ObjectHandle ignore;
+    };
+
     // Prefab を Runtime から生成するための窓口。
     //
     // なぜインターフェイスで挟むか:
@@ -451,6 +477,8 @@ namespace ReplayEngine::Runtime
             const DirectX::XMFLOAT3& direction, float max_distance,
             int layer, int mask, const ObjectHandle& ignore,
             Scene::RaycastHit& out) const;
+        RuntimeStatus PhysicsQuery(const PhysicsQueryRequest& request,
+            std::vector<Scene::PhysicsQueryHit>& out) const;
 
         // ---- Log ----------------------------------------------------------------
 

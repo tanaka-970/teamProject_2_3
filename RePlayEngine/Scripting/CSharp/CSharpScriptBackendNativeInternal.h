@@ -43,7 +43,7 @@ namespace ReplayEngine::Scripting::CSharp::Detail
 
         // 関数ポインタ表の互換番号。**末尾へ関数を足したら必ず 1 上げる。**
         // C# 側の NativeBridge.NativeApiAbiVersion と一致していないと表を拒否する。
-        inline constexpr std::uint32_t kNativeApiAbiVersion = 11;
+        inline constexpr std::uint32_t kNativeApiAbiVersion = 12;
 
         // 表の先頭に必ず置く自己記述ヘッダー。
         // 順番が 1 つずれても別関数を呼ばずに、その場で不一致として弾くために使う。
@@ -238,6 +238,9 @@ namespace ReplayEngine::Scripting::CSharp::Detail
             get_text_callback get_current_scene_guid = nullptr;
             quit_callback quit_application = nullptr;
             event_dropped_callback event_dropped_count = nullptr;
+
+            // v12 additions. 複数 Hit Physics Query。
+            physics_query_callback physics_query = nullptr;
         };
 
         // ヘッダー以降がすべて関数ポインタであることを、表を作る側で必ず確かめる。
@@ -421,6 +424,8 @@ namespace ReplayEngine::Scripting::CSharp::Detail
     int NativeSweepSphere(DirectX::XMFLOAT3 start, DirectX::XMFLOAT3 end, float radius,
         float maximum_normal_y, Runtime::ObjectHandle ignore,
         NativeSphereSweepHit* out) noexcept;
+    int NativePhysicsQuery(NativePhysicsQueryRequest request,
+        NativePhysicsQueryHit* output, int capacity, int* count) noexcept;
     int NativeInstantiatePrefabDeferred(const char* asset_guid, DirectX::XMFLOAT3 position,
         DirectX::XMFLOAT3 rotation_euler, DirectX::XMFLOAT3 scale,
         Runtime::ObjectHandle parent) noexcept;
