@@ -61,11 +61,7 @@ namespace ReplayEngine::Runtime
 
     // Collision Event が「どういう接触から来たか」。
     //
-    // 【重要】RePlayEngine には剛体物理エンジンが無い。
-    //   一般的な Collider どうしの衝突解決は存在せず、実際に取得できるのは
-    //   CharacterMotor が自分の移動を解決するために撃っている問い合わせの結果だけ。
-    //   それを汎用の Collision であるかのように配送しない。
-    //   どの種類の接触なのかを必ず hit_kind で示す。
+    // CharacterMotor の問い合わせ接触と Rigidbody Solver 接触を hit_kind で区別する。
     enum class CollisionHitKind : std::int32_t
     {
         // 分類できないもの。通常は使わない。
@@ -78,26 +74,24 @@ namespace ReplayEngine::Runtime
         // CharacterMotor の移動掃引 (SweepSphere) が当たった壁。
         // 接触時の球中心と面法線が取れる。
         CharacterWall = 2,
+
+        // Rigidbody Solver が解いた Collider 同士の接触。
+        Rigidbody = 3,
     };
 
     const char* ToString(CollisionHitKind kind) noexcept;
 
     // Collision の接触 1 件分。
     //
-    // 【取得できる情報の範囲】
-    //   contact_point / contact_normal … 取得できる（問い合わせの戻り値）
-    //   penetration_depth              … 取得できない。めり込み量を解く処理が無い
-    //   relative_velocity              … 取得できない。相手側の速度を持つ仕組みが無い
-    //
-    //   取得できない項目はフィールド自体を置いていない。
-    //   0 を入れて「取れているように見せる」ことを避けるため。
-    //   将来 RigidBody を導入したときに足す。
+    // Rigidbody では penetration_depth / relative_velocity も有効。
+    // CharacterMotor 接触では両方 0 になる。
     struct CollisionEvent final
     {
         ContactPhase phase = ContactPhase::Enter;
         CollisionHitKind hit_kind = CollisionHitKind::Unknown;
 
         ObjectHandle self;
+        Scene::ColliderID self_collider = Scene::invalid_collider_id;
         ObjectHandle other;
         Scene::ColliderID other_collider = Scene::invalid_collider_id;
 
@@ -106,6 +100,9 @@ namespace ReplayEngine::Runtime
 
         // ワールドの面法線。
         DirectX::XMFLOAT3 contact_normal{ 0.0f, 1.0f, 0.0f };
+
+        DirectX::XMFLOAT3 relative_velocity{ 0.0f, 0.0f, 0.0f };
+        float penetration_depth = 0.0f;
 
         std::uint64_t frame_index = 0;
 

@@ -42,12 +42,20 @@ public readonly struct CollisionInfo
         source.TryGetDouble("normal_y", out var ny);
         source.TryGetDouble("normal_z", out var nz);
         source.TryGetInt("hit_kind", out var kind);
+        source.TryGetInt("self_collider", out var selfCollider);
         source.TryGetInt("other_collider", out var collider);
+        source.TryGetDouble("relative_velocity_x", out var rvx);
+        source.TryGetDouble("relative_velocity_y", out var rvy);
+        source.TryGetDouble("relative_velocity_z", out var rvz);
+        source.TryGetDouble("penetration_depth", out var penetration);
         source.TryGetBool("other_valid", out var valid);
         ContactPoint = new Vector3((float)px, (float)py, (float)pz);
         ContactNormal = new Vector3((float)nx, (float)ny, (float)nz);
         HitKind = kind;
+        SelfColliderId = selfCollider;
         OtherColliderId = collider;
+        RelativeVelocity = new Vector3((float)rvx, (float)rvy, (float)rvz);
+        PenetrationDepth = (float)penetration;
         OtherValid = valid;
     }
 
@@ -57,7 +65,10 @@ public readonly struct CollisionInfo
     public Vector3 ContactPoint { get; }
     public Vector3 ContactNormal { get; }
     public int HitKind { get; }
+    public int SelfColliderId { get; }
     public int OtherColliderId { get; }
+    public Vector3 RelativeVelocity { get; }
+    public float PenetrationDepth { get; }
 }
 
 // Trigger の接触 1 件分。

@@ -246,5 +246,33 @@ namespace ReplayEngine::Scripting::CSharp::Detail
         using get_text_callback = int(__cdecl*)(char*, int);
         using quit_callback = int(__cdecl*)(const char*);
         using event_dropped_callback = int(__cdecl*)(std::uint64_t, std::uint64_t*);
+
+        // v12 複数 Hit Physics Query。
+        struct NativePhysicsQueryRequest final
+        {
+            std::int32_t kind = 0;
+            DirectX::XMFLOAT3 point_a{};
+            DirectX::XMFLOAT3 point_b{};
+            DirectX::XMFLOAT3 direction{ 0.0f, 0.0f, 1.0f };
+            DirectX::XMFLOAT4 rotation{ 0.0f, 0.0f, 0.0f, 1.0f };
+            DirectX::XMFLOAT3 half_extents{ 0.5f, 0.5f, 0.5f };
+            float radius = 0.5f;
+            float max_distance = 0.0f;
+            std::int32_t layer = 0;
+            std::int32_t mask = -1;
+            Runtime::ObjectHandle ignore{};
+        };
+        struct NativePhysicsQueryHit final
+        {
+            DirectX::XMFLOAT3 point{};
+            DirectX::XMFLOAT3 normal{ 0.0f, 1.0f, 0.0f };
+            float distance = 0.0f;
+            float fraction = 0.0f;
+            Runtime::ObjectHandle object{};
+            std::uint32_t collider_id = 0;
+            std::int32_t valid = 0;
+        };
+        using physics_query_callback = int(__cdecl*)(NativePhysicsQueryRequest,
+            NativePhysicsQueryHit*, int, int*);
 #endif
 }

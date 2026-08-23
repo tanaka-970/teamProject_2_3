@@ -43,7 +43,7 @@ public static unsafe class NativeBridge
     }
 
     // 関数ポインタ表の互換番号。C++ の Detail::kNativeApiAbiVersion と必ず一致させる。
-    public const uint NativeApiAbiVersion = 11;
+    public const uint NativeApiAbiVersion = 12;
 
     // 表の先頭に必ず置く自己記述ヘッダー。C++ の Detail::NativeApiHeader と同じ並び。
     [StructLayout(LayoutKind.Sequential)]
@@ -234,6 +234,25 @@ public static unsafe class NativeBridge
         public delegate* unmanaged[Cdecl]<byte*, int, int> GetCurrentSceneGuid;
         public delegate* unmanaged[Cdecl]<byte*, int> QuitApplication;
         public delegate* unmanaged[Cdecl]<ulong, ulong*, int> EventDroppedCount;
+
+        // v12 複数 Hit Physics Query。
+        public delegate* unmanaged[Cdecl]<PhysicsQueryRequestNative, PhysicsHit*, int, int*, int> PhysicsQuery;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct PhysicsQueryRequestNative
+    {
+        public PhysicsQueryKind Kind;
+        public Vector3 PointA;
+        public Vector3 PointB;
+        public Vector3 Direction;
+        public Quaternion Rotation;
+        public Vector3 HalfExtents;
+        public float Radius;
+        public float MaxDistance;
+        public int Layer;
+        public int Mask;
+        public ObjectHandle Ignore;
     }
 
     private sealed class ManagedInstance
@@ -1035,6 +1054,29 @@ public static unsafe class NativeBridge
         RaycastHit hit = default;
         var status = (RuntimeStatus)api.Raycast(origin, direction, maxDistance, layer, mask, ignore, &hit);
         return new RuntimeResult<RaycastHit>(status, hit);
+    }
+
+    internal static RuntimeResult<PhysicsHit[]> PhysicsQuery(PhysicsQueryRequestNative request)
+    {
+        if (api.PhysicsQuery == null)
+            return new RuntimeResult<PhysicsHit[]>(RuntimeStatus.ServiceUnavailable,
+                Array.Empty<PhysicsHit>());
+
+        int count = 0;
+        var status = (RuntimeStatus)api.PhysicsQuery(request, null, 0, &count);
+        if (status != RuntimeStatus.Ok || count <= 0)
+            return new RuntimeResult<PhysicsHit[]>(status, Array.Empty<PhysicsHit>());
+
+        var hits = new PhysicsHit[count];
+        fixed (PhysicsHit* output = hits)
+        {
+            int written = count;
+            status = (RuntimeStatus)api.PhysicsQuery(request, output, count, &written);
+            if (status != RuntimeStatus.Ok)
+                return new RuntimeResult<PhysicsHit[]>(status, Array.Empty<PhysicsHit>());
+            if (written < hits.Length) Array.Resize(ref hits, written);
+        }
+        return new RuntimeResult<PhysicsHit[]>(status, hits);
     }
 
     internal static RuntimeResult<ComponentHandle> FindMotionPlayer(ObjectHandle owner, string key)
