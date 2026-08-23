@@ -9,7 +9,7 @@ public abstract class ScriptBehaviour
 	// ゲームオブジェクトにアタッチされたスクリプトのライフサイクルイベントを定義
 	private readonly List<EventSubscription> eventSubscriptions = new();
 	private readonly CoroutineRunner runner = new();
-	private ContactEventPump? contactPump;
+	private EngineEventPump? eventPump;
 	// ゲームオブジェクトとコンポーネントのハンドルを保持するためのプロパティ
 	internal void Attach(ScriptRuntimeContext context, ObjectHandle gameObject, ComponentHandle component)
     {
@@ -17,6 +17,7 @@ public abstract class ScriptBehaviour
         GameObject = gameObject;
         Component = component;
         Transform = new TransformAccess(gameObject);
+        eventPump = new EngineEventPump(this);
     }
 
     protected ScriptRuntimeContext Runtime { get; private set; } = ScriptRuntimeContext.Unavailable;
@@ -69,7 +70,7 @@ public abstract class ScriptBehaviour
     // 特定の GameObject へ紐づかないものはこちらを使う。
     protected RuntimeResult<EventSubscription> SubscribeGlobalEvent(string eventTypeGuid)
     {
-        var result = Runtime.SubscribeEvent(eventTypeGuid);
+        var result = Runtime.SubscribeEvent(eventTypeGuid, scope: EventScope.Global);
         if (result.Succeeded && result.Value.IsValid)
         {
             eventSubscriptions.Add(result.Value);
@@ -122,7 +123,7 @@ public abstract class ScriptBehaviour
         }
         eventSubscriptions.Clear();
         runner.CancelAll();
-        contactPump = null;
+        eventPump = null;
     }
 
     // ---- 接触イベント ---------------------------------------------------------
@@ -137,11 +138,29 @@ public abstract class ScriptBehaviour
     public virtual void OnTriggerStay(TriggerInfo trigger) { }
     public virtual void OnTriggerExit(TriggerInfo trigger) { }
 
+    // ---- Engine 型付きイベント --------------------------------------------
+
+    public virtual void OnBeforeSceneUnload(SceneEventInfo scene) { }
+    public virtual void OnSceneLoadRequested(SceneEventInfo scene) { }
+    public virtual void OnSceneLoadStarted(SceneEventInfo scene) { }
+    public virtual void OnSceneLoaded(SceneEventInfo scene) { }
+    public virtual void OnSceneLoadFailed(SceneEventInfo scene) { }
+    public virtual void OnWorldChanged(SceneEventInfo scene) { }
+    public virtual void OnApplicationQuit(ApplicationQuitEventInfo application) { }
+    public virtual void OnButtonClicked(ButtonEventInfo button) { }
+    public virtual void OnButtonStateChanged(ButtonEventInfo button) { }
+    public virtual void OnInputFieldValueChanged(InputFieldEventInfo input) { }
+    public virtual void OnInputFieldSubmitted(InputFieldEventInfo input) { }
+    public virtual void OnInputFieldCanceled(InputFieldEventInfo input) { }
+    public virtual void OnAnimationEvent(MotionEventInfo animationEvent) { }
+    public virtual void OnCompositionMarker(MotionEventInfo marker) { }
+    public virtual void OnAnimatorStateChanged(AnimatorStateEventInfo animator) { }
+
     // Engine が毎フレーム呼ぶ。Update の直前に接触と時間を進める。
     internal void PumpFrame(float deltaTime)
     {
-        contactPump ??= new ContactEventPump(this);
-        contactPump.Pump();
+        eventPump ??= new EngineEventPump(this);
+        eventPump.Pump();
         runner.Advance(deltaTime);
     }
 
@@ -154,30 +173,53 @@ public abstract class ScriptBehaviour
     public virtual void OnDisable() { }
     public virtual void OnDestroy() { }
 
-    // 接触イベントを Poll して仮想メソッドへ配る。
-    private sealed class ContactEventPump
+    // Engine Event を Poll して型付き仮想メソッドへ配る。
+    private sealed class EngineEventPump
     {
         private readonly ScriptBehaviour owner;
-        private readonly List<(EventSubscription subscription, int kind)> subscriptions = new();
+        private readonly List<(EventSubscription subscription, int kind, bool ownSource)> subscriptions = new();
 
-        internal ContactEventPump(ScriptBehaviour owner)
+        internal EngineEventPump(ScriptBehaviour owner)
         {
             this.owner = owner;
-            Subscribe(nameof(OnCollisionEnter), EngineEventIds.CollisionEnter, 0);
-            Subscribe(nameof(OnCollisionStay), EngineEventIds.CollisionStay, 1);
-            Subscribe(nameof(OnCollisionExit), EngineEventIds.CollisionExit, 2);
-            Subscribe(nameof(OnTriggerEnter), EngineEventIds.TriggerEnter, 3);
-            Subscribe(nameof(OnTriggerStay), EngineEventIds.TriggerStay, 4);
-            Subscribe(nameof(OnTriggerExit), EngineEventIds.TriggerExit, 5);
+            Subscribe(nameof(OnCollisionEnter), EngineEventIds.CollisionEnter, 0, ownSource: true);
+            Subscribe(nameof(OnCollisionStay), EngineEventIds.CollisionStay, 1, ownSource: true);
+            Subscribe(nameof(OnCollisionExit), EngineEventIds.CollisionExit, 2, ownSource: true);
+            Subscribe(nameof(OnTriggerEnter), EngineEventIds.TriggerEnter, 3, ownSource: true);
+            Subscribe(nameof(OnTriggerStay), EngineEventIds.TriggerStay, 4, ownSource: true);
+            Subscribe(nameof(OnTriggerExit), EngineEventIds.TriggerExit, 5, ownSource: true);
+            Subscribe(nameof(OnBeforeSceneUnload), EngineEventIds.BeforeSceneUnload, 6, global: true);
+            Subscribe(nameof(OnSceneLoadRequested), EngineEventIds.SceneLoadRequested, 7, global: true);
+            Subscribe(nameof(OnSceneLoadStarted), EngineEventIds.SceneLoadStarted, 8, global: true);
+            Subscribe(nameof(OnSceneLoaded), EngineEventIds.SceneLoaded, 9, global: true);
+            Subscribe(nameof(OnSceneLoadFailed), EngineEventIds.SceneLoadFailed, 10, global: true);
+            Subscribe(nameof(OnWorldChanged), EngineEventIds.WorldChanged, 11, global: true);
+            Subscribe(nameof(OnApplicationQuit), EngineEventIds.ApplicationQuitRequested, 12, global: true);
+            Subscribe(nameof(OnButtonClicked), EngineEventIds.ButtonClicked, 13, ownSource: true);
+            Subscribe(nameof(OnButtonStateChanged), EngineEventIds.ButtonStateChanged, 14, ownSource: true);
+            Subscribe(nameof(OnInputFieldValueChanged), EngineEventIds.InputFieldValueChanged, 15,
+                ownSource: true);
+            Subscribe(nameof(OnInputFieldSubmitted), EngineEventIds.InputFieldSubmitted, 16,
+                ownSource: true);
+            Subscribe(nameof(OnInputFieldCanceled), EngineEventIds.InputFieldCanceled, 17,
+                ownSource: true);
+            Subscribe(nameof(OnAnimationEvent), EngineEventIds.MotionEvent, 18, ownSource: true);
+            Subscribe(nameof(OnCompositionMarker), EngineEventIds.CompositionMarker, 19,
+                ownSource: true);
+            Subscribe(nameof(OnAnimatorStateChanged), EngineEventIds.AnimatorStateChanged, 20,
+                ownSource: true);
         }
 
-        private void Subscribe(string methodName, string eventGuid, int kind)
+        private void Subscribe(string methodName, string eventGuid, int kind,
+            bool global = false, bool ownSource = false)
         {
             if (!Overrides(methodName)) return;
-            var result = owner.SubscribeEvent(eventGuid);
+            var result = global
+                ? owner.SubscribeGlobalEvent(eventGuid)
+                : owner.SubscribeEvent(eventGuid);
             if (result.Succeeded && result.Value.IsValid)
             {
-                subscriptions.Add((result.Value, kind));
+                subscriptions.Add((result.Value, kind, ownSource));
             }
         }
 
@@ -190,7 +232,7 @@ public abstract class ScriptBehaviour
 
         internal void Pump()
         {
-            foreach (var (subscription, kind) in subscriptions)
+            foreach (var (subscription, kind, ownSource) in subscriptions)
             {
                 // 1 フレームで積まれたぶんをすべて配る。
                 // 上限は C++ 側の購読キューが持っている。
@@ -198,6 +240,7 @@ public abstract class ScriptBehaviour
                 {
                     var polled = owner.Runtime.PollEvent(subscription);
                     if (!polled.Succeeded || string.IsNullOrEmpty(polled.Value.TypeGuid)) break;
+                    if (ownSource && !SameObject(polled.Value.Source, owner.GameObject)) continue;
                     Dispatch(kind, polled.Value);
                 }
             }
@@ -212,8 +255,27 @@ public abstract class ScriptBehaviour
             case 2: owner.OnCollisionExit(new CollisionInfo(record)); break;
             case 3: owner.OnTriggerEnter(new TriggerInfo(record)); break;
             case 4: owner.OnTriggerStay(new TriggerInfo(record)); break;
-            default: owner.OnTriggerExit(new TriggerInfo(record)); break;
+            case 5: owner.OnTriggerExit(new TriggerInfo(record)); break;
+            case 6: owner.OnBeforeSceneUnload(new SceneEventInfo(record)); break;
+            case 7: owner.OnSceneLoadRequested(new SceneEventInfo(record)); break;
+            case 8: owner.OnSceneLoadStarted(new SceneEventInfo(record)); break;
+            case 9: owner.OnSceneLoaded(new SceneEventInfo(record)); break;
+            case 10: owner.OnSceneLoadFailed(new SceneEventInfo(record)); break;
+            case 11: owner.OnWorldChanged(new SceneEventInfo(record)); break;
+            case 12: owner.OnApplicationQuit(new ApplicationQuitEventInfo(record)); break;
+            case 13: owner.OnButtonClicked(new ButtonEventInfo(record)); break;
+            case 14: owner.OnButtonStateChanged(new ButtonEventInfo(record)); break;
+            case 15: owner.OnInputFieldValueChanged(new InputFieldEventInfo(record)); break;
+            case 16: owner.OnInputFieldSubmitted(new InputFieldEventInfo(record)); break;
+            case 17: owner.OnInputFieldCanceled(new InputFieldEventInfo(record)); break;
+            case 18: owner.OnAnimationEvent(new MotionEventInfo(record)); break;
+            case 19: owner.OnCompositionMarker(new MotionEventInfo(record)); break;
+            default: owner.OnAnimatorStateChanged(new AnimatorStateEventInfo(record)); break;
             }
         }
+
+        private static bool SameObject(ObjectHandle left, ObjectHandle right)
+            => left.World == right.World && left.Object == right.Object &&
+                left.Generation == right.Generation;
     }
 }

@@ -200,6 +200,8 @@ namespace ReplayEngine::Scripting::CSharp::Detail
             table.quit_application = &NativeQuitApplication;
             table.event_dropped_count = &NativeEventDroppedCount;
             table.physics_query = &NativePhysicsQuery;
+            table.subscribe_event_scoped = &NativeSubscribeEventScoped;
+            table.component_command = &NativeComponentCommand;
 
             // 自己記述ヘッダー。C# 側はこれを見て表の食い違いをその場で弾く。
             table.header.abi_version = kNativeApiAbiVersion;

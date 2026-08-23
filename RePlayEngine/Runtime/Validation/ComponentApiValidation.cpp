@@ -6,9 +6,12 @@
 #include "BehaviourValidationInternal.h"
 
 #include "../../Components/Camera/CameraComponent.h"
+#include "../../Components/Audio/AudioSourceComponent.h"
 #include "../../Components/Physics/RigidbodyComponent.h"
+#include "../../Components/Rendering/AnimatorComponent.h"
 #include "../../Components/Rendering/LightComponents.h"
 #include "../../Components/Rendering/MeshRendererComponent.h"
+#include "../../Components/Rendering/ParticleEmitterComponent.h"
 #include "../../Object/Registry/BuiltInComponents.h"
 #include "../../Reflection/Property/PropertyValue.h"
 #include "../../Scripting/CSharp/CSharpScriptBackendNativeInternal.h"
@@ -82,8 +85,10 @@ namespace ReplayEngine::Runtime::Validation
                 "Native API 表の関数本数が大きさと合っている");
             check.Expect(table.component_type_id != nullptr &&
                 table.get_component_property_double != nullptr &&
-                table.rigidbody_add_force != nullptr,
-                "v10 で足した callback が表へ入っている");
+                table.rigidbody_add_force != nullptr &&
+                table.subscribe_event_scoped != nullptr &&
+                table.component_command != nullptr,
+                "Component と型付き Event の callback が表へ入っている");
         }
 
         // ---- 型名から ComponentTypeID を引く -------------------------------
@@ -278,6 +283,68 @@ namespace ReplayEngine::Runtime::Validation
             Near(read.AsVector3().x, 3.0f),
             "読み取り専用でも読むことはできる");
 
+        // ---- Animator / Audio / Particle 実行命令 ---------------------------
+        {
+            ObjectHandle effects_object;
+            runtime.CreateGameObject("RuntimeEffects", effects_object);
+
+            ComponentHandle animator_handle;
+            check.Expect(Succeeded(runtime.AddComponent(effects_object,
+                Components::AnimatorComponent::StaticTypeID(), animator_handle)),
+                "Animator を Runtime API から追加できる");
+            Core::GameObject* effects = world.FindGameObjectByID(effects_object.object);
+            auto* animator = effects != nullptr
+                ? effects->GetComponent<Components::AnimatorComponent>() : nullptr;
+            if (animator != nullptr)
+            {
+                animator->SetStateCount(2);
+                animator->states[0].name = "Idle";
+                animator->states[0].clip = 1;
+                animator->states[1].name = "Run";
+                animator->states[1].clip = 2;
+                animator->OnStart();
+            }
+            check.Expect(animator != nullptr && Succeeded(runtime.InvokeComponentCommand(
+                animator_handle, ComponentCommand::AnimatorPlayState, "Run", 0.1f,
+                0.5f)) && animator->CurrentStateName() == "Run" &&
+                Near(animator->AnimationTime(), 0.5f),
+                "Animator の State・ブレンド・開始時刻を命令できる");
+            check.Expect(Succeeded(runtime.InvokeComponentCommand(animator_handle,
+                ComponentCommand::AnimatorSetBool, "grounded", 0.0f, 0.0f, 1)) &&
+                animator != nullptr && animator->GetBool("grounded"),
+                "Animator の Bool Parameter を設定できる");
+            check.Expect(Succeeded(runtime.InvokeComponentCommand(animator_handle,
+                ComponentCommand::AnimatorSetFloat, "speed", 3.5f)) &&
+                animator != nullptr && Near(animator->GetFloat("speed"), 3.5f),
+                "Animator の Float Parameter を設定できる");
+
+            ComponentHandle particle_handle;
+            check.Expect(Succeeded(runtime.AddComponent(effects_object,
+                Components::ParticleEmitterComponent::StaticTypeID(), particle_handle)),
+                "Particle Emitter を Runtime API から追加できる");
+            auto* particle = effects != nullptr
+                ? effects->GetComponent<Components::ParticleEmitterComponent>() : nullptr;
+            check.Expect(particle != nullptr && Succeeded(runtime.InvokeComponentCommand(
+                particle_handle, ComponentCommand::ParticleEmit, std::string(),
+                0.0f, 0.0f, 64)) && particle->ConsumeBurst() == 64,
+                "Particle の Burst 発生数が描画側へ渡る");
+            check.Expect(particle != nullptr && Succeeded(runtime.InvokeComponentCommand(
+                particle_handle, ComponentCommand::ParticleClear)) &&
+                particle->ConsumeClearRequest(),
+                "Particle の Clear 要求が描画側へ渡る");
+
+            ComponentHandle audio_handle;
+            check.Expect(Succeeded(runtime.AddComponent(effects_object,
+                Components::AudioSourceComponent::StaticTypeID(), audio_handle)),
+                "Audio Source を Runtime API から追加できる");
+            check.Expect(runtime.InvokeComponentCommand(audio_handle,
+                ComponentCommand::AudioPlay) == RuntimeStatus::ServiceUnavailable,
+                "Audio Service 未接続の Play は成功扱いにしない");
+            check.Expect(Succeeded(runtime.InvokeComponentCommand(audio_handle,
+                ComponentCommand::AudioStop)),
+                "Audio Stop は未再生でも安全に完了する");
+        }
+
 
         // ---- v11 生デバイス入力 ---------------------------------------------
         //
@@ -381,7 +448,19 @@ namespace ReplayEngine::Runtime::Validation
                 "CollisionEnter が購読者へ届く");
             check.Expect(trigger_events == 0,
                 "別種のイベントは届かない");
-        }
+
+            check.Expect(runtime.Events().HasSubscribers(
+                Runtime::EngineEvents::CollisionEnter),
+                "購読中の型は HasSubscribers が true");
+            check.Expect(!runtime.Events().HasSubscribers(
+                Runtime::EngineEvents::CollisionStay),
+                "購読していない型は HasSubscribers が false");
+        }
+
+        // 購読を捨てたあとは false へ戻る。接触の発行側はこれを見て抜ける。
+        check.Expect(!runtime.Events().HasSubscribers(
+            Runtime::EngineEvents::CollisionEnter),
+            "購読を解除すると HasSubscribers が false へ戻る");
 
         return check.Report("component-api validation");
     }

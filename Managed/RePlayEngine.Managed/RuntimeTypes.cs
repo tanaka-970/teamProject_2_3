@@ -131,6 +131,30 @@ public enum PhysicsQueryKind : int
     CapsuleCast = 6,
 }
 
+public enum EventScope : int
+{
+    Scene = 0,
+    Global = 1,
+}
+
+internal enum ComponentCommand : int
+{
+    AnimatorPlayState = 0,
+    AnimatorPause = 1,
+    AnimatorResume = 2,
+    AnimatorStop = 3,
+    AnimatorSetBool = 4,
+    AnimatorSetFloat = 5,
+    AnimatorSetTrigger = 6,
+    AnimatorResetTrigger = 7,
+    AudioPlay = 8,
+    AudioStop = 9,
+    ParticlePlay = 10,
+    ParticleStop = 11,
+    ParticleEmit = 12,
+    ParticleClear = 13,
+}
+
 [StructLayout(LayoutKind.Sequential)]
 public struct PhysicsHit
 {
@@ -218,6 +242,12 @@ public readonly struct RuntimeEvent
         value = 0.0;
         return false;
     }
+    public bool TryGetUInt64(string key, out ulong value)
+    {
+        if (Payload != null) return Payload.TryGetUInt64(key, out value);
+        value = 0;
+        return false;
+    }
     public bool TryGetString(string key, out string value)
     {
         if (Payload != null) return Payload.TryGetString(key, out value);
@@ -259,6 +289,7 @@ public sealed class RuntimeEventPayload
     {
         Bool,
         Int,
+        UInt64,
         Double,
         String,
     }
@@ -287,6 +318,12 @@ public sealed class RuntimeEventPayload
     public RuntimeEventPayload SetInt(string key, int value)
     {
         values[key ?? string.Empty] = new ValueEntry(ValueKind.Int, value);
+        return this;
+    }
+
+    public RuntimeEventPayload SetUInt64(string key, ulong value)
+    {
+        values[key ?? string.Empty] = new ValueEntry(ValueKind.UInt64, value);
         return this;
     }
 
@@ -338,6 +375,18 @@ public sealed class RuntimeEventPayload
         return false;
     }
 
+    public bool TryGetUInt64(string key, out ulong value)
+    {
+        if (values.TryGetValue(key ?? string.Empty, out var entry) &&
+            entry.Kind == ValueKind.UInt64)
+        {
+            value = (ulong)entry.Value;
+            return true;
+        }
+        value = 0;
+        return false;
+    }
+
     public bool TryGetString(string key, out string value)
     {
         if (values.TryGetValue(key ?? string.Empty, out var entry) &&
@@ -365,6 +414,11 @@ public sealed class RuntimeEventPayload
                 case ValueKind.Int:
                     builder.Append("i:").Append(key).Append(':')
                         .Append(((int)pair.Value.Value).ToString(CultureInfo.InvariantCulture))
+                        .Append('\n');
+                    break;
+                case ValueKind.UInt64:
+                    builder.Append("u:").Append(key).Append(':')
+                        .Append(((ulong)pair.Value.Value).ToString(CultureInfo.InvariantCulture))
                         .Append('\n');
                     break;
                 case ValueKind.Double:
@@ -397,6 +451,11 @@ public sealed class RuntimeEventPayload
                 if (!int.TryParse(parts[2], NumberStyles.Integer,
                     CultureInfo.InvariantCulture, out var intValue)) return false;
                 SetInt(key, intValue);
+                return true;
+            case 'u':
+                if (!ulong.TryParse(parts[2], NumberStyles.None,
+                    CultureInfo.InvariantCulture, out var uint64Value)) return false;
+                SetUInt64(key, uint64Value);
                 return true;
             case 'd':
                 if (!double.TryParse(parts[2], NumberStyles.Float,

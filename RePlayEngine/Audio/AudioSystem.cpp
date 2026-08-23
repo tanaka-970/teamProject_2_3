@@ -242,6 +242,16 @@ namespace ReplayEngine::Audio
         }
     }
 
+    bool AudioSystem::IsPlaying(AudioVoiceHandle handle) const noexcept
+    {
+        if (!handle.Valid()) return false;
+        return std::any_of(voices_.begin(), voices_.end(),
+            [handle](const ActiveVoice& active)
+            {
+                return active.handle.value == handle.value;
+            });
+    }
+
     void AudioSystem::StopAll() noexcept
     {
         for (ActiveVoice& active : voices_)

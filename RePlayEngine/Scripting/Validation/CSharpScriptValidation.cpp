@@ -9,6 +9,7 @@
 #include "../../Object/Registry/BuiltInComponents.h"
 #include "../../Reflection/Registry/PropertyRegistry.h"
 #include "../../Runtime/API/RuntimeContext.h"
+#include "../../Runtime/Events/EventBus.h"
 #include "../../Scene/Runtime/Scene.h"
 #include "../../Scene/Serialization/PrefabSerializer.h"
 #include "../../Scene/Serialization/SceneData.h"
@@ -19,6 +20,7 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <limits>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -131,6 +133,7 @@ namespace ReplayEngine::Scripting::Validation
                 "    public string LastEventType = string.Empty;\n"
                 "    public int ApiChecks = 0;\n"
                 "    public int RuntimeChecks = 0;\n"
+                "    public int TypedEventChecks = 0;\n"
                 "    [Range(0.0, 10.0)] public float RangedValue = 1.0f;\n"
                 "    [Tooltip(\"説明文\")] [Header(\"見出し\")] public int Described = 3;\n"
                 "    [HideInInspector] public int Hidden = 5;\n"
@@ -169,6 +172,12 @@ namespace ReplayEngine::Scripting::Validation
                 "        if (!Input.GamepadConnected()) ++passed;\n"
                 "        if (Input.MouseScrollDelta == 0.0f) ++passed;\n"
                 "        if (EngineEventIds.CollisionEnter.Length == 32) ++passed;\n"
+                "        if (EngineEventIds.ButtonClicked.Length == 32) ++passed;\n"
+                "        if (Vector3.Cross(Vector3.Right, Vector3.Up).Z > 0.99f) ++passed;\n"
+                "        var turned = Quaternion.AngleAxis(MathF.PI * 0.5f, Vector3.Up) * Vector3.Forward;\n"
+                "        if (turned.X > 0.99f) ++passed;\n"
+                "        if (Runtime.OverlapSphere(Vector3.Zero, 1.0f).Status ==\n"
+                "            RuntimeStatus.ServiceUnavailable) ++passed;\n"
                 "        if (Runtime.CurrentSceneGuid().Status != RuntimeStatus.Ok ||\n"
                 "            Runtime.CurrentSceneGuid().Value != null) ++passed;\n"
                 "        var spawn = Runtime.InstantiateDeferred(\"missing\",\n"
@@ -206,7 +215,26 @@ namespace ReplayEngine::Scripting::Validation
                 "        var runtimeTransform = Runtime.Transform(made.Value);\n"
                 "        runtimeTransform.Position = new Vector3(4.0f, 5.0f, 6.0f);\n"
                 "        if (runtimeTransform.Position.Z == 6.0f) ++passed;\n"
+                "        var animator = Runtime.AddComponentOrDefault<AnimatorComponent>(made.Value);\n"
+                "        if (animator.IsValid) ++passed;\n"
+                "        if (animator.IsValid && animator.Pause() == RuntimeStatus.Ok &&\n"
+                "            animator.Resume() == RuntimeStatus.Ok && animator.Stop() == RuntimeStatus.Ok) ++passed;\n"
+                "        var particles = Runtime.AddComponentOrDefault<ParticleEmitterComponent>(made.Value);\n"
+                "        if (particles.IsValid) ++passed;\n"
+                "        if (particles.IsValid && particles.Emit(32) == RuntimeStatus.Ok &&\n"
+                "            particles.Stop() == RuntimeStatus.Ok && particles.Play() == RuntimeStatus.Ok &&\n"
+                "            particles.Clear() == RuntimeStatus.Ok) ++passed;\n"
+                "        var audio = Runtime.AddComponentOrDefault<AudioSourceComponent>(made.Value);\n"
+                "        if (audio.IsValid) ++passed;\n"
+                "        if (audio.IsValid && audio.Play() == RuntimeStatus.ServiceUnavailable &&\n"
+                "            audio.Stop() == RuntimeStatus.Ok) ++passed;\n"
                 "        return passed;\n"
+                "    }\n"
+                "\n"
+                "    public override void OnWorldChanged(SceneEventInfo scene)\n"
+                "    {\n"
+                "        if (scene.SceneAssetGuid == \"typed-event\" &&\n"
+                "            scene.WorldInstance == ulong.MaxValue - 7) ++TypedEventChecks;\n"
                 "    }\n"
                 "\n"
                 "    public override void Update(float deltaTime)\n"
@@ -648,14 +676,30 @@ namespace ReplayEngine::Scripting::Validation
         {
             const ScriptValue api_checks =
                 script->ReadField(ScriptNames::MakeFieldSavedName("ApiChecks"));
-            check.Expect(api_checks.AsInt() == 10,
+            check.Expect(api_checks.AsInt() == 16,
                 "typed Component API works from a running C# behaviour");
 
-            // Coroutine 1 + Timer 1 + Tween 1 + 生入力/Scene 7 = 10。
+            // Coroutine 1 + Timer 1 + Tween 1 + 生入力/Scene/Math/Physics 11 = 14。
             const ScriptValue runtime_checks =
                 script->ReadField(ScriptNames::MakeFieldSavedName("RuntimeChecks"));
-            check.Expect(runtime_checks.AsInt() == 10,
+            check.Expect(runtime_checks.AsInt() == 14,
                 "coroutine / timer / tween / input / scene API run from C#");
+
+            Runtime::EventRecord typed_event;
+            typed_event.type = Runtime::EngineEvents::WorldChanged;
+            typed_event.type_name = "WorldChanged";
+            typed_event.payload.Set("scene_guid",
+                Reflection::PropertyValue::MakeString("typed-event"));
+            typed_event.payload.Set("world_instance",
+                Reflection::PropertyValue::MakeUInt64(
+                    (std::numeric_limits<std::uint64_t>::max)() - 7));
+            Runtime::EventBus::Global().Publish(std::move(typed_event));
+            Runtime::EventBus::Global().Dispatch(nullptr);
+            world.Update(0.016f);
+            const ScriptValue typed_event_checks =
+                script->ReadField(ScriptNames::MakeFieldSavedName("TypedEventChecks"));
+            check.Expect(typed_event_checks.AsInt() == 1,
+                "Global Event と UInt64 payload が型付き C# callback へ届く");
         }
         else
         {

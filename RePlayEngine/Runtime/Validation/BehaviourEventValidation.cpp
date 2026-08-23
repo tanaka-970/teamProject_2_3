@@ -185,6 +185,19 @@ namespace ReplayEngine::Runtime::Validation
         check.Expect(&EventBus::Global() != &bus,
             "Global Bus と Scene Bus は別の実体");
 
+        // Poll 忘れやイベント暴走で待ち行列が無制限に増えないこと。
+        {
+            const std::uint64_t dropped_before = bus.DroppedEventCount();
+            EventRecord record;
+            record.type = event_a;
+            for (int index = 0; index < 5000; ++index) bus.Publish(record);
+            check.Expect(bus.PendingEventCount() == 4096,
+                "イベント待ち行列が 4096 件で打ち切られる");
+            check.Expect(bus.DroppedEventCount() - dropped_before == 904,
+                "待ち行列上限を超えた件数が診断へ残る");
+            bus.Dispatch(&runtime.Resolver());
+        }
+
         world.Services().SetRuntime(nullptr);
         return check.Report("Event validation");
     }

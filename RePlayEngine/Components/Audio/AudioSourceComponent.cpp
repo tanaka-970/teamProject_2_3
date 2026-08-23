@@ -39,6 +39,13 @@ namespace ReplayEngine::Components
         voice_.Reset();
     }
 
+    bool AudioSourceComponent::IsPlaying() const noexcept
+    {
+        if (!voice_.Valid()) return false;
+        const Audio::IAudioPlaybackService* audio = AudioService();
+        return audio != nullptr && audio->IsPlaying(voice_);
+    }
+
     void AudioSourceComponent::OnEnable()
     {
         play_on_start_consumed_ = false;

@@ -3,6 +3,9 @@
 #include "../Gameplay/CharacterMotorComponent.h"
 #include "../../Object/GameObject/GameObject.h"
 #include "../../Reflection/Property/PropertyValue.h"
+#include "../../Runtime/API/RuntimeContext.h"
+#include "../../Runtime/Events/EventBus.h"
+#include "../../Scene/Runtime/Scene.h"
 
 #include <algorithm>
 #include <cmath>
@@ -78,7 +81,7 @@ namespace ReplayEngine::Components
     void AnimatorComponent::RebuildDynamicProperties() const
     {
         dynamic_properties_.clear();
-        dynamic_properties_.reserve(states.size() * 4 + transitions.size() * 5);
+        dynamic_properties_.reserve(states.size() * 4 + transitions.size() * 6);
 
         for (std::size_t i = 0; i < states.size(); ++i)
         {
@@ -191,12 +194,14 @@ namespace ReplayEngine::Components
             };
             make_string("from", "遷移元", &AnimationTransition::from);
             make_string("to", "遷移先", &AnimationTransition::to);
+            make_string("parameter", "パラメーター", &AnimationTransition::parameter);
 
             Reflection::PropertyDesc condition = MakeAnimatorDynamicProperty(
                 "transitions", index, "condition", Reflection::PropertyType::Enum, category.c_str());
             condition.display_name = "条件";
             condition.enum_labels = { "常に", "接地中", "空中", "水平速度 >", "水平速度 <=",
-                "垂直速度 >", "垂直速度 <=" };
+                "垂直速度 >", "垂直速度 <=", "Bool true", "Bool false",
+                "Float >", "Float <=", "Trigger" };
             condition.getter = [index](const Core::Component& component)
             {
                 const AnimatorComponent& animator = static_cast<const AnimatorComponent&>(component);
@@ -210,7 +215,7 @@ namespace ReplayEngine::Components
                 AnimatorComponent& animator = static_cast<AnimatorComponent&>(component);
                 if (index < 0 || static_cast<std::size_t>(index) >= animator.transitions.size()) return;
                 int raw = value.AsInt(0);
-                raw = (std::max)(0, (std::min)(6, raw));
+                raw = (std::max)(0, (std::min)(11, raw));
                 animator.transitions[static_cast<std::size_t>(index)].condition =
                     static_cast<TransitionCondition>(raw);
             };
@@ -279,6 +284,9 @@ namespace ReplayEngine::Components
         previous_speed_ = 1.0f;
         transition_time_ = 0.0f;
         transition_duration_ = 0.0f;
+        bool_parameters_.clear();
+        float_parameters_.clear();
+        trigger_parameters_.clear();
     }
 
     void AnimatorComponent::OnStart()
@@ -351,6 +359,19 @@ namespace ReplayEngine::Components
         case TransitionCondition::VerticalSpeedLessEqual:
             return motor != nullptr && motor->ActiveInHierarchy() &&
                 motor->Velocity().y <= transition.threshold;
+        case TransitionCondition::BoolTrue:
+            return !transition.parameter.empty() && GetBool(transition.parameter);
+        case TransitionCondition::BoolFalse:
+            return !transition.parameter.empty() && !GetBool(transition.parameter);
+        case TransitionCondition::FloatGreater:
+            return !transition.parameter.empty() &&
+                GetFloat(transition.parameter) > transition.threshold;
+        case TransitionCondition::FloatLessEqual:
+            return !transition.parameter.empty() &&
+                GetFloat(transition.parameter) <= transition.threshold;
+        case TransitionCondition::Trigger:
+            return !transition.parameter.empty() &&
+                trigger_parameters_.find(transition.parameter) != trigger_parameters_.end();
         }
         return false;
     }
@@ -361,6 +382,8 @@ namespace ReplayEngine::Components
         if (state_index == current_state_index_) return;
 
         const AnimationState& next = states[static_cast<std::size_t>(state_index)];
+        const std::string previous_state = current_state_name_;
+        const int previous_clip = current_clip_;
 
         if (current_clip_ >= 0 && blend_time > 0.0f)
         {
@@ -385,6 +408,92 @@ namespace ReplayEngine::Components
         animation_time_ = 0.0f;
         current_loop_ = next.loop;
         current_speed_ = (std::max)(0.0f, next.speed);
+
+        Scene::Scene* scene = GetScene();
+        Runtime::RuntimeContext* runtime = scene != nullptr
+            ? scene->Services().Runtime() : nullptr;
+        if (runtime != nullptr && Owner() != nullptr &&
+            runtime->Events().HasSubscribers(Runtime::EngineEvents::AnimatorStateChanged))
+        {
+            Runtime::EventRecord record;
+            record.type = Runtime::EngineEvents::AnimatorStateChanged;
+            record.type_name = "AnimatorStateChanged";
+            record.source = runtime->Resolver().MakeHandle(Owner());
+            record.frame_index = runtime->FrameIndex();
+            record.payload.Set("previous_state",
+                Reflection::PropertyValue::MakeString(previous_state));
+            record.payload.Set("state",
+                Reflection::PropertyValue::MakeString(current_state_name_));
+            record.payload.Set("previous_clip",
+                Reflection::PropertyValue::MakeInt(previous_clip));
+            record.payload.Set("clip",
+                Reflection::PropertyValue::MakeInt(current_clip_));
+            record.payload.Set("blend_time",
+                Reflection::PropertyValue::MakeFloat(transition_duration_));
+            record.payload.Set("animator_component",
+                Reflection::PropertyValue::MakeUInt64(StableID()));
+            runtime->Events().Publish(std::move(record));
+        }
+    }
+
+    bool AnimatorComponent::PlayState(const std::string& state_name,
+        float blend_time, float start_time)
+    {
+        const int state = FindStateIndex(state_name);
+        if (state < 0 || !std::isfinite(blend_time) || !std::isfinite(start_time))
+            return false;
+        if (state == current_state_index_)
+        {
+            animation_time_ = (std::max)(0.0f, start_time);
+        }
+        else
+        {
+            EnterState(state, (std::max)(0.0f, blend_time));
+            animation_time_ = (std::max)(0.0f, start_time);
+        }
+        playing = true;
+        return true;
+    }
+
+    void AnimatorComponent::Stop() noexcept
+    {
+        playing = false;
+        animation_time_ = 0.0f;
+        previous_clip_ = -1;
+        transition_time_ = 0.0f;
+        transition_duration_ = 0.0f;
+    }
+
+    void AnimatorComponent::SetBool(const std::string& name, bool value)
+    {
+        if (!name.empty()) bool_parameters_[name] = value;
+    }
+
+    bool AnimatorComponent::GetBool(const std::string& name) const noexcept
+    {
+        const auto found = bool_parameters_.find(name);
+        return found != bool_parameters_.end() && found->second;
+    }
+
+    void AnimatorComponent::SetFloat(const std::string& name, float value)
+    {
+        if (!name.empty() && std::isfinite(value)) float_parameters_[name] = value;
+    }
+
+    float AnimatorComponent::GetFloat(const std::string& name) const noexcept
+    {
+        const auto found = float_parameters_.find(name);
+        return found != float_parameters_.end() ? found->second : 0.0f;
+    }
+
+    void AnimatorComponent::SetTrigger(const std::string& name)
+    {
+        if (!name.empty()) trigger_parameters_.insert(name);
+    }
+
+    void AnimatorComponent::ResetTrigger(const std::string& name) noexcept
+    {
+        trigger_parameters_.erase(name);
     }
 
     void AnimatorComponent::OnUpdate(float delta_time)
@@ -414,6 +523,8 @@ namespace ReplayEngine::Components
                 if (!TransitionMatches(transition, motor)) continue;
 
                 EnterState(target, transition.blend_time);
+                if (transition.condition == TransitionCondition::Trigger)
+                    trigger_parameters_.erase(transition.parameter);
                 break;
             }
 

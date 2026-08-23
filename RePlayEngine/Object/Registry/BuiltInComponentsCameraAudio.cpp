@@ -157,5 +157,11 @@ namespace ReplayEngine::Core::Detail
             PropertyRegistry::Register<AudioSourceComponent>(
                 MakeProperty("max_distance", &AudioSourceComponent::max_distance)
                     .Display("Max Distance").Range(0.001, 100000.0).Step(0.1));
+            PropertyRegistry::Register<AudioSourceComponent>(
+                MakeAccessorProperty<AudioSourceComponent>("is_playing", PropertyType::Bool,
+                    [](const AudioSourceComponent& component)
+                    { return PropertyValue::MakeBool(component.IsPlaying()); },
+                    [](AudioSourceComponent&, const PropertyValue&) {})
+                .Display("再生中").RuntimeOnly().ReadOnly().NotSerializable());
         }
 }

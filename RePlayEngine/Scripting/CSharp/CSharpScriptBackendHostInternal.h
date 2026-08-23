@@ -274,5 +274,11 @@ namespace ReplayEngine::Scripting::CSharp::Detail
         };
         using physics_query_callback = int(__cdecl*)(NativePhysicsQueryRequest,
             NativePhysicsQueryHit*, int, int*);
+
+        // v13 型付きイベントと実行時 Component 操作。
+        using subscribe_event_scoped_callback = int(__cdecl*)(std::uint64_t, std::uint64_t,
+            Runtime::ObjectHandle, int, std::uint64_t*);
+        using component_command_callback = int(__cdecl*)(Runtime::ComponentHandle, int,
+            const char*, float, float, int);
 #endif
 }

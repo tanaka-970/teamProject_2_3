@@ -147,6 +147,16 @@ namespace ReplayEngine::Scripting::CSharp::Detail
                     payload.Set(std::move(key), Reflection::PropertyValue::MakeInt(value));
                     break;
                 }
+                case 'u':
+                {
+                    std::uint64_t value = 0;
+                    const auto parsed = std::from_chars(value_text.data(),
+                        value_text.data() + value_text.size(), value);
+                    if (parsed.ec != std::errc{} || parsed.ptr != value_text.data() + value_text.size())
+                        return RuntimeStatus::InvalidArgument;
+                    payload.Set(std::move(key), Reflection::PropertyValue::MakeUInt64(value));
+                    break;
+                }
                 case 'd':
                 {
                     std::istringstream stream{ std::string(value_text) };
@@ -196,6 +206,9 @@ namespace ReplayEngine::Scripting::CSharp::Detail
                 case Reflection::PropertyType::Int:
                     stream << "payload=i:" << key << ':' << entry.value.AsInt() << '\n';
                     break;
+                case Reflection::PropertyType::UInt64:
+                    stream << "payload=u:" << key << ':' << entry.value.AsUInt64() << '\n';
+                    break;
                 case Reflection::PropertyType::Float:
                     stream << "payload=d:" << key << ':'
                         << EventPayloadDoubleText(static_cast<double>(entry.value.AsFloat())) << '\n';
@@ -218,15 +231,31 @@ namespace ReplayEngine::Scripting::CSharp::Detail
         int NativeSubscribeEvent(std::uint64_t high, std::uint64_t low,
             Runtime::ObjectHandle owner, std::uint64_t* out) noexcept
         {
+            return NativeSubscribeEventScoped(high, low, owner,
+                static_cast<int>(Runtime::EventScope::Scene), out);
+        }
+
+        int NativeSubscribeEventScoped(std::uint64_t high, std::uint64_t low,
+            Runtime::ObjectHandle owner, int scope, std::uint64_t* out) noexcept
+        {
             if (out == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
             *out = Runtime::invalid_subscription_id;
             if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+            if (scope != static_cast<int>(Runtime::EventScope::Scene) &&
+                scope != static_cast<int>(Runtime::EventScope::Global))
+            {
+                return StatusCode(RuntimeStatus::InvalidArgument);
+            }
 
             const Reflection::TypeGUID type{ high, low };
             if (!type.IsValid()) return StatusCode(RuntimeStatus::InvalidArgument);
 
             const std::uint64_t id = g_next_event_subscription++;
-            Runtime::ScopedSubscription token = g_runtime_context->Events().Subscribe(
+            Runtime::EventBus& bus = scope == static_cast<int>(Runtime::EventScope::Global)
+                ? Runtime::EventBus::Global() : g_runtime_context->Events();
+            if (scope == static_cast<int>(Runtime::EventScope::Global))
+                owner = Runtime::ObjectHandle::None();
+            Runtime::ScopedSubscription token = bus.Subscribe(
                 type,
                 [id](const Runtime::EventRecord& record)
                 {

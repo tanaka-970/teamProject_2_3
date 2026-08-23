@@ -332,9 +332,10 @@ public sealed class ScriptRuntimeContext
             : new RuntimeResult<PhysicsHit>(RuntimeStatus.Ok, result.Value[0]);
     }
 
-    public RuntimeResult<EventSubscription> SubscribeEvent(string eventTypeGuid, ObjectHandle owner = default)
+    public RuntimeResult<EventSubscription> SubscribeEvent(string eventTypeGuid,
+        ObjectHandle owner = default, EventScope scope = EventScope.Scene)
     {
-        return NativeBridge.SubscribeEvent(eventTypeGuid, owner);
+        return NativeBridge.SubscribeEvent(eventTypeGuid, owner, scope);
     }
 
     public RuntimeStatus UnsubscribeEvent(EventSubscription subscription)

@@ -26,6 +26,7 @@ namespace ReplayEngine::Components
 
         void Play();
         void Stop() noexcept;
+        bool IsPlaying() const noexcept;
 
         void OnEnable() override;
         void OnDisable() override;
