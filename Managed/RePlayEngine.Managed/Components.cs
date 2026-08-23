@@ -111,8 +111,30 @@ public readonly struct AnimatorComponent : IComponentBinding<AnimatorComponent>
         set => Accessor.SetFloat("walk_speed_threshold", value);
     }
 
-    public RuntimeStatus Play() { Playing = true; return RuntimeStatus.Ok; }
-    public RuntimeStatus Stop() { Playing = false; return RuntimeStatus.Ok; }
+    public string CurrentState => Accessor.GetString("current_state");
+    public int CurrentClip => Accessor.GetInt("current_clip", -1);
+    public float AnimationTime => Accessor.GetFloat("animation_time");
+    public float BlendFactor => Accessor.GetFloat("blend_factor", 1.0f);
+
+    public RuntimeStatus Play(string stateName, float blendTime = 0.0f,
+        float startTime = 0.0f) => NativeBridge.InvokeComponentCommand(Handle,
+            ComponentCommand.AnimatorPlayState, stateName, blendTime, startTime);
+    public RuntimeStatus Play() => NativeBridge.InvokeComponentCommand(Handle,
+        ComponentCommand.AnimatorResume);
+    public RuntimeStatus Pause() => NativeBridge.InvokeComponentCommand(Handle,
+        ComponentCommand.AnimatorPause);
+    public RuntimeStatus Resume() => NativeBridge.InvokeComponentCommand(Handle,
+        ComponentCommand.AnimatorResume);
+    public RuntimeStatus Stop() => NativeBridge.InvokeComponentCommand(Handle,
+        ComponentCommand.AnimatorStop);
+    public RuntimeStatus SetBool(string name, bool value) => NativeBridge.InvokeComponentCommand(
+        Handle, ComponentCommand.AnimatorSetBool, name, integer: value ? 1 : 0);
+    public RuntimeStatus SetFloat(string name, float value) => NativeBridge.InvokeComponentCommand(
+        Handle, ComponentCommand.AnimatorSetFloat, name, value);
+    public RuntimeStatus SetTrigger(string name) => NativeBridge.InvokeComponentCommand(
+        Handle, ComponentCommand.AnimatorSetTrigger, name);
+    public RuntimeStatus ResetTrigger(string name) => NativeBridge.InvokeComponentCommand(
+        Handle, ComponentCommand.AnimatorResetTrigger, name);
 }
 
 public readonly struct MeshRendererComponent : IComponentBinding<MeshRendererComponent>
@@ -165,6 +187,36 @@ public readonly struct MeshRendererComponent : IComponentBinding<MeshRendererCom
         get => Accessor.GetString("material_asset");
         set => Accessor.SetString("material_asset", value);
     }
+    public bool MaterialOverride
+    {
+        get => Accessor.GetBool("material_override");
+        set => Accessor.SetBool("material_override", value);
+    }
+    public Color MaterialBaseColor
+    {
+        get => Accessor.GetColor("material.base_color");
+        set => Accessor.SetColor("material.base_color", value);
+    }
+    public float Metallic
+    {
+        get => Accessor.GetFloat("material.metallic");
+        set => Accessor.SetFloat("material.metallic", value);
+    }
+    public float Roughness
+    {
+        get => Accessor.GetFloat("material.roughness", 0.55f);
+        set => Accessor.SetFloat("material.roughness", value);
+    }
+    public Vector3 EmissiveColor
+    {
+        get => Accessor.GetVector3("material.emissive_color");
+        set => Accessor.SetVector3("material.emissive_color", value);
+    }
+    public float EmissiveStrength
+    {
+        get => Accessor.GetFloat("material.emissive_strength");
+        set => Accessor.SetFloat("material.emissive_strength", value);
+    }
 }
 
 public readonly struct SkinnedMeshRendererComponent : IComponentBinding<SkinnedMeshRendererComponent>
@@ -212,6 +264,36 @@ public readonly struct SkinnedMeshRendererComponent : IComponentBinding<SkinnedM
         get => Accessor.GetString("material_asset");
         set => Accessor.SetString("material_asset", value);
     }
+    public bool MaterialOverride
+    {
+        get => Accessor.GetBool("material_override");
+        set => Accessor.SetBool("material_override", value);
+    }
+    public Color MaterialBaseColor
+    {
+        get => Accessor.GetColor("material.base_color");
+        set => Accessor.SetColor("material.base_color", value);
+    }
+    public float Metallic
+    {
+        get => Accessor.GetFloat("material.metallic");
+        set => Accessor.SetFloat("material.metallic", value);
+    }
+    public float Roughness
+    {
+        get => Accessor.GetFloat("material.roughness", 0.55f);
+        set => Accessor.SetFloat("material.roughness", value);
+    }
+    public Vector3 EmissiveColor
+    {
+        get => Accessor.GetVector3("material.emissive_color");
+        set => Accessor.SetVector3("material.emissive_color", value);
+    }
+    public float EmissiveStrength
+    {
+        get => Accessor.GetFloat("material.emissive_strength");
+        set => Accessor.SetFloat("material.emissive_strength", value);
+    }
 }
 
 public readonly struct PrimitiveMeshRendererComponent : IComponentBinding<PrimitiveMeshRendererComponent>
@@ -248,6 +330,41 @@ public readonly struct PrimitiveMeshRendererComponent : IComponentBinding<Primit
     {
         get => Accessor.GetBool("receive_shadow", true);
         set => Accessor.SetBool("receive_shadow", value);
+    }
+    public string MaterialAsset
+    {
+        get => Accessor.GetString("material_asset");
+        set => Accessor.SetString("material_asset", value);
+    }
+    public bool MaterialOverride
+    {
+        get => Accessor.GetBool("material_override");
+        set => Accessor.SetBool("material_override", value);
+    }
+    public Color MaterialBaseColor
+    {
+        get => Accessor.GetColor("material.base_color");
+        set => Accessor.SetColor("material.base_color", value);
+    }
+    public float Metallic
+    {
+        get => Accessor.GetFloat("material.metallic");
+        set => Accessor.SetFloat("material.metallic", value);
+    }
+    public float Roughness
+    {
+        get => Accessor.GetFloat("material.roughness", 0.55f);
+        set => Accessor.SetFloat("material.roughness", value);
+    }
+    public Vector3 EmissiveColor
+    {
+        get => Accessor.GetVector3("material.emissive_color");
+        set => Accessor.SetVector3("material.emissive_color", value);
+    }
+    public float EmissiveStrength
+    {
+        get => Accessor.GetFloat("material.emissive_strength");
+        set => Accessor.SetFloat("material.emissive_strength", value);
     }
 }
 
@@ -591,6 +708,26 @@ public readonly struct AudioSourceComponent : IComponentBinding<AudioSourceCompo
         get => Accessor.GetBool("play_on_start");
         set => Accessor.SetBool("play_on_start", value);
     }
+    public bool Spatial
+    {
+        get => Accessor.GetInt("spatial") == 1;
+        set => Accessor.SetInt("spatial", value ? 1 : 0);
+    }
+    public float MinDistance
+    {
+        get => Accessor.GetFloat("min_distance", 1.0f);
+        set => Accessor.SetFloat("min_distance", value);
+    }
+    public float MaxDistance
+    {
+        get => Accessor.GetFloat("max_distance", 30.0f);
+        set => Accessor.SetFloat("max_distance", value);
+    }
+    public bool IsPlaying => Accessor.GetBool("is_playing");
+    public RuntimeStatus Play() => NativeBridge.InvokeComponentCommand(Handle,
+        ComponentCommand.AudioPlay);
+    public RuntimeStatus Stop() => NativeBridge.InvokeComponentCommand(Handle,
+        ComponentCommand.AudioStop);
 }
 
 public readonly struct ParticleEmitterComponent : IComponentBinding<ParticleEmitterComponent>
@@ -639,8 +776,14 @@ public readonly struct ParticleEmitterComponent : IComponentBinding<ParticleEmit
         set => Accessor.SetInt("max_particles", value);
     }
 
-    public RuntimeStatus Play() { Emitting = true; return RuntimeStatus.Ok; }
-    public RuntimeStatus Stop() { Emitting = false; return RuntimeStatus.Ok; }
+    public RuntimeStatus Play() => NativeBridge.InvokeComponentCommand(Handle,
+        ComponentCommand.ParticlePlay);
+    public RuntimeStatus Stop() => NativeBridge.InvokeComponentCommand(Handle,
+        ComponentCommand.ParticleStop);
+    public RuntimeStatus Emit(int count) => NativeBridge.InvokeComponentCommand(Handle,
+        ComponentCommand.ParticleEmit, integer: count);
+    public RuntimeStatus Clear() => NativeBridge.InvokeComponentCommand(Handle,
+        ComponentCommand.ParticleClear);
 }
 
 public readonly struct CharacterMotorComponent : IComponentBinding<CharacterMotorComponent>

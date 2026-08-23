@@ -42,6 +42,9 @@
             clamp_finite(emitter.end_size, 0.02f, 0.001f, 100.0f),
             0.0f, 0.0f, 0.0f
         };
+        if (emitter.ConsumeClearRequest()) particles.clear();
+        const int burst = emitter.ConsumeBurst();
+        if (burst > 0) particles.emit(static_cast<UINT>(burst));
 
         switch (emitter.blend_mode)
         {

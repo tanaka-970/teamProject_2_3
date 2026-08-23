@@ -8,12 +8,16 @@
 
 #include "RuntimeContext.h"
 
+#include "../../Components/Audio/AudioSourceComponent.h"
 #include "../../Components/Physics/RigidbodyComponent.h"
+#include "../../Components/Rendering/AnimatorComponent.h"
+#include "../../Components/Rendering/ParticleEmitterComponent.h"
 #include "../../Object/Component/Component.h"
 #include "../../Object/GameObject/GameObject.h"
 #include "../../Object/Registry/ComponentRegistry.h"
 #include "../../Reflection/Property/PropertyDesc.h"
 #include "../../Reflection/Registry/PropertyRegistry.h"
+#include "../../Scene/Runtime/Scene.h"
 
 #include <cmath>
 
@@ -345,6 +349,72 @@ namespace ReplayEngine::Runtime
         const RuntimeStatus status = ResolveRigidbody(resolver_, handle, body);
         if (status != RuntimeStatus::Ok) return status;
         body->angular_velocity = value;
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus RuntimeContext::InvokeComponentCommand(const ComponentHandle& handle,
+        ComponentCommand command, const std::string& text, float scalar,
+        float secondary_scalar, int integer)
+    {
+        Component* component = nullptr;
+        const RuntimeStatus status = resolver_.TryResolve(handle, component);
+        if (component == nullptr) return status;
+
+        if (command >= ComponentCommand::AnimatorPlayState &&
+            command <= ComponentCommand::AnimatorResetTrigger)
+        {
+            auto* animator = dynamic_cast<Components::AnimatorComponent*>(component);
+            if (animator == nullptr) return RuntimeStatus::TypeMismatch;
+            switch (command)
+            {
+            case ComponentCommand::AnimatorPlayState:
+                return animator->PlayState(text, scalar, secondary_scalar)
+                    ? RuntimeStatus::Ok : RuntimeStatus::InvalidArgument;
+            case ComponentCommand::AnimatorPause: animator->Pause(); break;
+            case ComponentCommand::AnimatorResume: animator->Resume(); break;
+            case ComponentCommand::AnimatorStop: animator->Stop(); break;
+            case ComponentCommand::AnimatorSetBool: animator->SetBool(text, integer != 0); break;
+            case ComponentCommand::AnimatorSetFloat: animator->SetFloat(text, scalar); break;
+            case ComponentCommand::AnimatorSetTrigger: animator->SetTrigger(text); break;
+            case ComponentCommand::AnimatorResetTrigger: animator->ResetTrigger(text); break;
+            default: return RuntimeStatus::UnsupportedOperation;
+            }
+            return RuntimeStatus::Ok;
+        }
+
+        if (command == ComponentCommand::AudioPlay ||
+            command == ComponentCommand::AudioStop)
+        {
+            auto* source = dynamic_cast<Components::AudioSourceComponent*>(component);
+            if (source == nullptr) return RuntimeStatus::TypeMismatch;
+            if (command == ComponentCommand::AudioPlay)
+            {
+                Scene::Scene* scene = source->GetScene();
+                Audio::IAudioPlaybackService* audio = scene != nullptr
+                    ? scene->Services().Audio() : nullptr;
+                if (audio == nullptr || !audio->Available())
+                    return RuntimeStatus::ServiceUnavailable;
+                if (source->clip_path.empty()) return RuntimeStatus::InvalidArgument;
+                source->Play();
+                if (!source->IsPlaying()) return RuntimeStatus::AssetMissing;
+            }
+            else source->Stop();
+            return RuntimeStatus::Ok;
+        }
+
+        auto* emitter = dynamic_cast<Components::ParticleEmitterComponent*>(component);
+        if (emitter == nullptr) return RuntimeStatus::TypeMismatch;
+        switch (command)
+        {
+        case ComponentCommand::ParticlePlay: emitter->emitting = true; break;
+        case ComponentCommand::ParticleStop: emitter->emitting = false; break;
+        case ComponentCommand::ParticleEmit:
+            if (integer <= 0) return RuntimeStatus::InvalidArgument;
+            emitter->Emit(integer);
+            break;
+        case ComponentCommand::ParticleClear: emitter->Clear(); break;
+        default: return RuntimeStatus::UnsupportedOperation;
+        }
         return RuntimeStatus::Ok;
     }
 }

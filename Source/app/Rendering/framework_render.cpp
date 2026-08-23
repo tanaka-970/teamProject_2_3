@@ -102,7 +102,7 @@ namespace
             {
                 const auto* emitter = dynamic_cast<const ParticleEmitterComponent*>(
                     object->ComponentAt(component_index));
-                if (emitter == nullptr || !emitter->emitting ||
+                if (emitter == nullptr || (!emitter->emitting && !emitter->HasPendingRequest()) ||
                     !emitter->ActiveInHierarchy())
                 {
                     continue;

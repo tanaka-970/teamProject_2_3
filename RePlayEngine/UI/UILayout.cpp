@@ -631,7 +631,9 @@ namespace ReplayEngine::UI
                     selectable->navigation_enabled = button->navigation_enabled;
                     selectable->navigation_order = button->navigation_order;
                 }
+                const int previous_state = button->state;
                 int next_state = UIButtonComponent::Normal;
+                bool activated = false;
                 if (!button->interactable || !button->ActiveInHierarchy())
                     next_state = UIButtonComponent::Disabled;
                 else if (!input_captured)
@@ -647,12 +649,15 @@ namespace ReplayEngine::UI
                             UIFocusManager::SetFocus(*scene, selectable);
                         button->focused = selectable != nullptr && selectable->focused;
                         const bool submit_down = button->focused && input != nullptr && input->Held("UISubmit");
+                        const bool submit_released = button->focused && input != nullptr &&
+                            input->Released("UISubmit");
                         if ((hovered && mouse_down) || submit_down) next_state = UIButtonComponent::Pressed;
                         else if (hovered || button->focused) next_state = UIButtonComponent::Hover;
+                        activated = previous_state == UIButtonComponent::Pressed &&
+                            ((hovered && mouse_released) || submit_released);
                     }
                 }
 
-                const int previous_state = button->state;
                 button->state = next_state;
                 ApplyButtonVisual(*button);
                 if (previous_state != next_state)
@@ -670,6 +675,24 @@ namespace ReplayEngine::UI
                             record.payload.Set("previous_state", Reflection::PropertyValue::MakeInt(previous_state));
                             record.payload.Set("state", Reflection::PropertyValue::MakeInt(next_state));
                             record.payload.Set("button_component", Reflection::PropertyValue::MakeUInt64(button->StableID()));
+                            runtime->Events().Publish(std::move(record));
+                        }
+                    }
+                }
+                if (activated)
+                {
+                    if (Runtime::RuntimeContext* runtime = button->GetScene() != nullptr
+                        ? button->GetScene()->Services().Runtime() : nullptr)
+                    {
+                        if (Core::GameObject* owner = button->Owner())
+                        {
+                            Runtime::EventRecord record;
+                            record.type = Runtime::EngineEvents::ButtonClicked;
+                            record.type_name = "ButtonClicked";
+                            record.source = runtime->Resolver().MakeHandle(owner);
+                            record.frame_index = runtime->FrameIndex();
+                            record.payload.Set("button_component",
+                                Reflection::PropertyValue::MakeUInt64(button->StableID()));
                             runtime->Events().Publish(std::move(record));
                         }
                     }

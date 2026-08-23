@@ -27,6 +27,9 @@ public static class EngineEventIds
     public const string TriggerEnter = "a1000000000000000000000000000017";
     public const string TriggerStay = "a1000000000000000000000000000018";
     public const string TriggerExit = "a1000000000000000000000000000019";
+    public const string ButtonClicked = "a1000000000000000000000000000020";
+    public const string InputFieldValueChanged = "a1000000000000000000000000000021";
+    public const string AnimatorStateChanged = "a1000000000000000000000000000022";
 }
 
 // 接触 1 件分。OnCollisionEnter などが受け取る。
@@ -102,12 +105,118 @@ public readonly struct SceneEventInfo
     internal SceneEventInfo(RuntimeEvent source)
     {
         TypeGuid = source.TypeGuid;
-        source.TryGetString("scene", out var scene);
+        source.TryGetString("scene_guid", out var scene);
+        source.TryGetInt("status", out var status);
+        source.TryGetUInt64("world_instance", out var world);
         SceneAssetGuid = scene;
+        Status = (RuntimeStatus)status;
+        WorldInstance = world;
         FrameIndex = source.FrameIndex;
     }
 
     public string TypeGuid { get; }
     public string SceneAssetGuid { get; }
+    public RuntimeStatus Status { get; }
+    public ulong WorldInstance { get; }
     public ulong FrameIndex { get; }
+}
+
+public readonly struct ApplicationQuitEventInfo
+{
+    internal ApplicationQuitEventInfo(RuntimeEvent source)
+    {
+        source.TryGetString("reason", out var reason);
+        Reason = reason;
+        FrameIndex = source.FrameIndex;
+    }
+
+    public string Reason { get; }
+    public ulong FrameIndex { get; }
+}
+
+public readonly struct ButtonEventInfo
+{
+    internal ButtonEventInfo(RuntimeEvent source)
+    {
+        Button = source.Source;
+        source.TryGetInt("previous_state", out var previous);
+        source.TryGetInt("state", out var state);
+        source.TryGetUInt64("button_component", out var component);
+        PreviousState = previous;
+        State = state;
+        ComponentId = component;
+    }
+
+    public ObjectHandle Button { get; }
+    public int PreviousState { get; }
+    public int State { get; }
+    public ulong ComponentId { get; }
+}
+
+public readonly struct InputFieldEventInfo
+{
+    internal InputFieldEventInfo(RuntimeEvent source)
+    {
+        InputField = source.Source;
+        source.TryGetString("text", out var text);
+        source.TryGetUInt64("input_component", out var component);
+        Text = text;
+        ComponentId = component;
+    }
+
+    public ObjectHandle InputField { get; }
+    public string Text { get; }
+    public ulong ComponentId { get; }
+}
+
+public readonly struct MotionEventInfo
+{
+    internal MotionEventInfo(RuntimeEvent source)
+    {
+        Source = source.Source;
+        Target = source.Target;
+        source.TryGetString("name", out var name);
+        source.TryGetString("parameter", out var parameter);
+        source.TryGetString("composition", out var composition);
+        source.TryGetDouble("time", out var time);
+        Name = name;
+        Parameter = parameter;
+        CompositionAssetGuid = composition;
+        Time = (float)time;
+    }
+
+    public ObjectHandle Source { get; }
+    public ObjectHandle Target { get; }
+    public string Name { get; }
+    public string Parameter { get; }
+    public string CompositionAssetGuid { get; }
+    public float Time { get; }
+}
+
+public readonly struct AnimatorStateEventInfo
+{
+    internal AnimatorStateEventInfo(RuntimeEvent source)
+    {
+        Animator = source.Source;
+        source.TryGetString("previous_state", out var previous);
+        source.TryGetString("state", out var state);
+        source.TryGetInt("previous_clip", out var previousClip);
+        source.TryGetInt("clip", out var clip);
+        source.TryGetDouble("blend_time", out var blend);
+        source.TryGetUInt64("animator_component", out var component);
+        PreviousState = previous;
+        State = state;
+        PreviousClip = previousClip;
+        Clip = clip;
+        BlendTime = (float)blend;
+        ComponentId = component;
+    }
+
+    public ObjectHandle Animator { get; }
+    public string PreviousState { get; }
+    public string State { get; }
+    public int PreviousClip { get; }
+    public int Clip { get; }
+    public float BlendTime { get; }
+    public ulong ComponentId { get; }
 }

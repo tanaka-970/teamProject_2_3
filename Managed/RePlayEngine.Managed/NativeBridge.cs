@@ -43,7 +43,7 @@ public static unsafe class NativeBridge
     }
 
     // 関数ポインタ表の互換番号。C++ の Detail::kNativeApiAbiVersion と必ず一致させる。
-    public const uint NativeApiAbiVersion = 12;
+    public const uint NativeApiAbiVersion = 13;
 
     // 表の先頭に必ず置く自己記述ヘッダー。C++ の Detail::NativeApiHeader と同じ並び。
     [StructLayout(LayoutKind.Sequential)]
@@ -237,6 +237,10 @@ public static unsafe class NativeBridge
 
         // v12 複数 Hit Physics Query。
         public delegate* unmanaged[Cdecl]<PhysicsQueryRequestNative, PhysicsHit*, int, int*, int> PhysicsQuery;
+
+        // v13 Global/Scene Event 購読と Component 実行命令。
+        public delegate* unmanaged[Cdecl]<ulong, ulong, ObjectHandle, int, ulong*, int> SubscribeEventScoped;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, int, byte*, float, float, int, int> ComponentCommand;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -1169,14 +1173,29 @@ public static unsafe class NativeBridge
             (RuntimeStatus)api.MotionGetDuration(player, &value), value);
     }
 
-    internal static RuntimeResult<EventSubscription> SubscribeEvent(string eventTypeGuid, ObjectHandle owner)
+    internal static RuntimeResult<EventSubscription> SubscribeEvent(string eventTypeGuid,
+        ObjectHandle owner, EventScope scope = EventScope.Scene)
     {
-        if (api.SubscribeEvent == null) return new(RuntimeStatus.ServiceUnavailable);
+        if (api.SubscribeEventScoped == null) return new(RuntimeStatus.ServiceUnavailable);
         if (!TryParseGuidText(eventTypeGuid, out var guid)) return new(RuntimeStatus.InvalidArgument);
 
         ulong id = 0;
-        var status = (RuntimeStatus)api.SubscribeEvent(guid.High, guid.Low, owner, &id);
+        var status = (RuntimeStatus)api.SubscribeEventScoped(guid.High, guid.Low,
+            owner, (int)scope, &id);
         return new RuntimeResult<EventSubscription>(status, new EventSubscription(id));
+    }
+
+    internal static RuntimeStatus InvokeComponentCommand(ComponentHandle handle,
+        ComponentCommand command, string text = "", float scalar = 0.0f,
+        float secondaryScalar = 0.0f, int integer = 0)
+    {
+        if (api.ComponentCommand == null) return RuntimeStatus.ServiceUnavailable;
+        if (text == null) return RuntimeStatus.InvalidArgument;
+        fixed (byte* pointer = Encoding.UTF8.GetBytes(text + "\0"))
+        {
+            return (RuntimeStatus)api.ComponentCommand(handle, (int)command, pointer,
+                scalar, secondaryScalar, integer);
+        }
     }
 
     internal static RuntimeStatus UnsubscribeEvent(EventSubscription subscription)

@@ -69,6 +69,20 @@ namespace ReplayEngine::Scripting::CSharp::Detail
         }
     }
 
+    int NativeComponentCommand(Runtime::ComponentHandle handle, int command,
+        const char* text, float scalar, float secondary_scalar, int integer) noexcept
+    {
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        if (command < static_cast<int>(Runtime::ComponentCommand::AnimatorPlayState) ||
+            command > static_cast<int>(Runtime::ComponentCommand::ParticleClear))
+        {
+            return StatusCode(RuntimeStatus::InvalidArgument);
+        }
+        return StatusCode(g_runtime_context->InvokeComponentCommand(handle,
+            static_cast<Runtime::ComponentCommand>(command), CString(text), scalar,
+            secondary_scalar, integer));
+    }
+
     // ---- Component の型 -------------------------------------------------------
 
     int NativeComponentTypeId(const char* type_name, std::uint32_t* out) noexcept

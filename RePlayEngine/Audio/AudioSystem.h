@@ -34,6 +34,7 @@ namespace ReplayEngine::Audio
         void Stop(AudioVoiceHandle handle) noexcept override;
         void UpdateVoice(AudioVoiceHandle handle,
             const AudioPlaybackParams& params) noexcept override;
+        bool IsPlaying(AudioVoiceHandle handle) const noexcept override;
 
         void StopAll() noexcept;
         void UpdateFromScene(const Scene::Scene& scene) noexcept;

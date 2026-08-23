@@ -243,6 +243,31 @@ namespace ReplayEngine::Core::Detail
             PropertyRegistry::Register<AnimatorComponent>(
                 MakeProperty("playing", &AnimatorComponent::playing).Display("再生"));
 
+            PropertyRegistry::Register<AnimatorComponent>(
+                MakeAccessorProperty<AnimatorComponent>("current_state", PropertyType::String,
+                    [](const AnimatorComponent& component)
+                    { return PropertyValue::MakeString(component.CurrentStateName()); },
+                    [](AnimatorComponent&, const PropertyValue&) {})
+                .Display("現在の State").RuntimeOnly().ReadOnly().NotSerializable());
+            PropertyRegistry::Register<AnimatorComponent>(
+                MakeAccessorProperty<AnimatorComponent>("current_clip", PropertyType::Int,
+                    [](const AnimatorComponent& component)
+                    { return PropertyValue::MakeInt(component.CurrentClip()); },
+                    [](AnimatorComponent&, const PropertyValue&) {})
+                .Display("現在のクリップ").RuntimeOnly().ReadOnly().NotSerializable());
+            PropertyRegistry::Register<AnimatorComponent>(
+                MakeAccessorProperty<AnimatorComponent>("animation_time", PropertyType::Float,
+                    [](const AnimatorComponent& component)
+                    { return PropertyValue::MakeFloat(component.AnimationTime()); },
+                    [](AnimatorComponent&, const PropertyValue&) {})
+                .Display("再生時間").RuntimeOnly().ReadOnly().NotSerializable());
+            PropertyRegistry::Register<AnimatorComponent>(
+                MakeAccessorProperty<AnimatorComponent>("blend_factor", PropertyType::Float,
+                    [](const AnimatorComponent& component)
+                    { return PropertyValue::MakeFloat(component.BlendFactor()); },
+                    [](AnimatorComponent&, const PropertyValue&) {})
+                .Display("ブレンド率").RuntimeOnly().ReadOnly().NotSerializable());
+
             // 旧 Scene の保存名は絶対に消さない。State Machine を使う Scene では
             // advanced な互換値として残り、states が空なら従来どおり実処理にも使われる。
             PropertyRegistry::Register<AnimatorComponent>(

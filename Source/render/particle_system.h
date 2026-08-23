@@ -4,6 +4,8 @@
 #include <wrl.h>
 #include <DirectXMath.h>
 
+#include <algorithm>
+
 class particle_system
 {
 public:
@@ -55,4 +57,15 @@ public:
     void release() noexcept;
     void simulate(ID3D11DeviceContext* ctx, float delta_time);
     void render(ID3D11DeviceContext* ctx);
+    void emit(UINT count) noexcept
+    {
+        const UINT available = MAX_COUNT - (std::min)(pending_burst, MAX_COUNT);
+        pending_burst = (std::min)(MAX_COUNT,
+            pending_burst + (std::min)(count, available));
+    }
+    void clear() noexcept { clear_requested = true; }
+
+private:
+    UINT pending_burst{ 0 };
+    bool clear_requested{ true };
 };

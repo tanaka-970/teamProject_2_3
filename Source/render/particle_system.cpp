@@ -92,6 +92,8 @@ void particle_system::release() noexcept
     particle_ps.Reset();
     constants = {};
     active_count = MAX_COUNT;
+    pending_burst = 0;
+    clear_requested = true;
     initialized = false;
 }
 
@@ -101,23 +103,24 @@ void particle_system::simulate(ID3D11DeviceContext* ctx, float delta_time)
 
     active_count = (std::max)(1u, (std::min)(active_count, MAX_COUNT));
 
-    static bool first_run = true;
     constants.simulation_time.x = delta_time;
     constants.simulation_time.y += delta_time;
-    // spawn_count = rate * delta_time
-    constants.simulation_time.w = constants.spawn_origin.w * delta_time;
+    // 連続発生と API から要求された Burst を同じ Dispatch へまとめる。
+    constants.simulation_time.w = constants.spawn_origin.w * delta_time +
+        static_cast<float>((std::min)(pending_burst, active_count));
+    pending_burst = 0;
     ctx->UpdateSubresource(constant_buffer.Get(), 0, nullptr, &constants, 0, 0);
     ctx->CSSetConstantBuffers(6, 1, constant_buffer.GetAddressOf());
 
     UINT initial_counts = 0;
     ctx->CSSetUnorderedAccessViews(0, 1, particle_uav.GetAddressOf(), &initial_counts);
 
-    if (first_run)
+    if (clear_requested)
     {
         ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
         ctx->CSSetShader(initialize_cs.Get(), nullptr, 0);
         ctx->Dispatch((MAX_COUNT + THREADS - 1) / THREADS, 1, 1);
-        first_run = false;
+        clear_requested = false;
     }
 
     ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);

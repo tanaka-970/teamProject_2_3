@@ -53,6 +53,24 @@ namespace ReplayEngine::Runtime
         CapsuleCast = 6,
     };
 
+    enum class ComponentCommand : std::int32_t
+    {
+        AnimatorPlayState = 0,
+        AnimatorPause = 1,
+        AnimatorResume = 2,
+        AnimatorStop = 3,
+        AnimatorSetBool = 4,
+        AnimatorSetFloat = 5,
+        AnimatorSetTrigger = 6,
+        AnimatorResetTrigger = 7,
+        AudioPlay = 8,
+        AudioStop = 9,
+        ParticlePlay = 10,
+        ParticleStop = 11,
+        ParticleEmit = 12,
+        ParticleClear = 13,
+    };
+
     struct PhysicsQueryRequest final
     {
         PhysicsQueryKind kind = PhysicsQueryKind::RaycastAll;
@@ -333,6 +351,9 @@ namespace ReplayEngine::Runtime
             const std::string& property_name, Reflection::PropertyValue& out) const;
         RuntimeStatus SetComponentProperty(const ComponentHandle& handle,
             const std::string& property_name, const Reflection::PropertyValue& value);
+        RuntimeStatus InvokeComponentCommand(const ComponentHandle& handle,
+            ComponentCommand command, const std::string& text = std::string(),
+            float scalar = 0.0f, float secondary_scalar = 0.0f, int integer = 0);
 
         // ---- Rigidbody -----------------------------------------------------------
         //

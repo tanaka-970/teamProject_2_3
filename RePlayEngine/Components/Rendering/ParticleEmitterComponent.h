@@ -5,6 +5,8 @@
 
 #include <DirectXMath.h>
 
+#include <algorithm>
+
 namespace ReplayEngine::Components
 {
     class ParticleEmitterComponent final : public Core::Component
@@ -30,5 +32,36 @@ namespace ReplayEngine::Components
         Reflection::AssetReference sprite;
         int blend_mode = 1;
         int max_particles = 10000;
+
+        void Emit(int count) const noexcept
+        {
+            if (count <= 0) return;
+            const int limit = (std::max)(1, max_particles);
+            const long long combined = static_cast<long long>(pending_burst_) +
+                static_cast<long long>((std::min)(count, limit));
+            pending_burst_ = static_cast<int>((std::min)(
+                static_cast<long long>(limit), combined));
+        }
+        void Clear() const noexcept { clear_requested_ = true; }
+        int ConsumeBurst() const noexcept
+        {
+            const int result = pending_burst_;
+            pending_burst_ = 0;
+            return result;
+        }
+        bool ConsumeClearRequest() const noexcept
+        {
+            const bool result = clear_requested_;
+            clear_requested_ = false;
+            return result;
+        }
+        bool HasPendingRequest() const noexcept
+        {
+            return pending_burst_ > 0 || clear_requested_;
+        }
+
+    private:
+        mutable int pending_burst_ = 0;
+        mutable bool clear_requested_ = false;
     };
 }

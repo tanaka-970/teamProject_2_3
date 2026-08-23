@@ -43,7 +43,7 @@ namespace ReplayEngine::Scripting::CSharp::Detail
 
         // 関数ポインタ表の互換番号。**末尾へ関数を足したら必ず 1 上げる。**
         // C# 側の NativeBridge.NativeApiAbiVersion と一致していないと表を拒否する。
-        inline constexpr std::uint32_t kNativeApiAbiVersion = 12;
+        inline constexpr std::uint32_t kNativeApiAbiVersion = 13;
 
         // 表の先頭に必ず置く自己記述ヘッダー。
         // 順番が 1 つずれても別関数を呼ばずに、その場で不一致として弾くために使う。
@@ -241,6 +241,10 @@ namespace ReplayEngine::Scripting::CSharp::Detail
 
             // v12 additions. 複数 Hit Physics Query。
             physics_query_callback physics_query = nullptr;
+
+            // v13 additions. Global/Scene 購読と Component 実行命令。
+            subscribe_event_scoped_callback subscribe_event_scoped = nullptr;
+            component_command_callback component_command = nullptr;
         };
 
         // ヘッダー以降がすべて関数ポインタであることを、表を作る側で必ず確かめる。
@@ -443,6 +447,8 @@ namespace ReplayEngine::Scripting::CSharp::Detail
     int NativePublishEventWithPayload(std::uint64_t high, std::uint64_t low,
         const char* type_name, Runtime::ObjectHandle source, Runtime::ObjectHandle target,
         const char* payload_text) noexcept;
+    int NativeSubscribeEventScoped(std::uint64_t high, std::uint64_t low,
+        Runtime::ObjectHandle owner, int scope, std::uint64_t* out) noexcept;
 
     // v10 Component 型・汎用プロパティ・World Transform・Rigidbody。
     int NativeComponentTypeId(const char* type_name, std::uint32_t* out) noexcept;
@@ -500,6 +506,8 @@ namespace ReplayEngine::Scripting::CSharp::Detail
         DirectX::XMFLOAT3* out) noexcept;
     int NativeRigidbodySetAngularVelocity(Runtime::ComponentHandle handle,
         DirectX::XMFLOAT3 value) noexcept;
+    int NativeComponentCommand(Runtime::ComponentHandle handle, int command,
+        const char* text, float scalar, float secondary_scalar, int integer) noexcept;
 
     // v11 生デバイス入力 / Scene / 診断。
     int NativeInputKeyHeld(int key, int* out) noexcept;
