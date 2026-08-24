@@ -47,6 +47,14 @@ namespace ReplayEngine::Runtime::Detail
                 return false;
             }
 
+            Rendering::DX12::D3D12FrameConstants frame_constants;
+            ++checks;
+            if (!context.SubmitFrameConstants(frame_constants))
+            {
+                std::fprintf(stderr, "DX12 validation failed: %s frame constants\n", label);
+                return false;
+            }
+
             Rendering::RenderItemList render_items;
             Rendering::RenderItem first_item;
             first_item.owner = Core::ObjectID{ 101 };

@@ -13,6 +13,10 @@ namespace ReplayEngine::Rendering::DX12::D3D12ResourceFactory
         const void* data, std::uint64_t size, D3D12_RESOURCE_STATES final_state,
         Microsoft::WRL::ComPtr<ID3D12Resource>& resource) noexcept;
 
+    bool CreateConstantBuffer(ID3D12Device* device, D3D12UploadContext& uploader,
+        const void* data, std::uint32_t size,
+        Microsoft::WRL::ComPtr<ID3D12Resource>& resource) noexcept;
+
     bool CreateVertexBuffer(ID3D12Device* device, D3D12UploadContext& uploader,
         const void* data, std::uint32_t size, std::uint32_t stride,
         Microsoft::WRL::ComPtr<ID3D12Resource>& resource,

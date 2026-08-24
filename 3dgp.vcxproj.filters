@@ -654,6 +654,9 @@
     <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12RenderItemBatch.cpp">
       <Filter>RePlayEngine\Rendering\DX12</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12MeshBuffer.cpp">
+      <Filter>RePlayEngine\Rendering\DX12</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12UploadContext.cpp">
       <Filter>RePlayEngine\Rendering\DX12</Filter>
     </ClCompile>
@@ -1593,6 +1596,12 @@
       <Filter>RePlayEngine\Rendering\DX12</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12DescriptorHeapAllocator.h">
+      <Filter>RePlayEngine\Rendering\DX12</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12FrameConstants.h">
+      <Filter>RePlayEngine\Rendering\DX12</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12MeshBuffer.h">
       <Filter>RePlayEngine\Rendering\DX12</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12RenderItemBatch.h">

@@ -1,5 +1,8 @@
 #include "D3D12ResourceFactory.h"
 
+#include <cstring>
+#include <vector>
+
 namespace ReplayEngine::Rendering::DX12::D3D12ResourceFactory
 {
     bool CreateBufferWithData(ID3D12Device* device, D3D12UploadContext& uploader,
@@ -30,6 +33,27 @@ namespace ReplayEngine::Rendering::DX12::D3D12ResourceFactory
             return false;
         }
         return true;
+    }
+
+    bool CreateConstantBuffer(ID3D12Device* device, D3D12UploadContext& uploader,
+        const void* data, std::uint32_t size,
+        Microsoft::WRL::ComPtr<ID3D12Resource>& resource) noexcept
+    {
+        resource.Reset();
+        if (device == nullptr || !uploader.IsInitialized() || data == nullptr || size == 0)
+            return false;
+        const std::uint32_t aligned_size = AlignConstantBufferSize(size);
+        try
+        {
+            std::vector<std::uint8_t> padded_data(aligned_size, 0);
+            std::memcpy(padded_data.data(), data, size);
+            return CreateBufferWithData(device, uploader, padded_data.data(), aligned_size,
+                D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER, resource);
+        }
+        catch (...)
+        {
+            return false;
+        }
     }
 
     bool CreateVertexBuffer(ID3D12Device* device, D3D12UploadContext& uploader,
