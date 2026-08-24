@@ -47,6 +47,9 @@ namespace ReplayEngine::Rendering::DX12
         std::string key;
         std::vector<D3D12StaticVertex> vertices;
         std::vector<std::uint32_t> indices;
+        // 同じFrame slotの動的Line/Trailを再アップロードするときだけ置換する。
+        // BeginFrameが該当slotのFenceを待った後なので、GPU使用中のResourceを解放しない。
+        bool replace_existing = false;
     };
 
     struct D3D12StaticTextureSource final
