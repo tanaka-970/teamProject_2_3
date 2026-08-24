@@ -220,10 +220,16 @@ namespace ReplayEngine::Rendering::DX12
         float bloom_intensity = 0.25f;
         float vignette_strength = 0.138f;
         float fxaa_enable = 1.0f;
+        float taa_blend = 0.88f;
+        float ssao_strength = 1.0f;
+        float ssr_strength = 1.0f;
         DirectX::XMFLOAT4 color_filter{ 1, 1, 1, 1 };
         bool bloom_enabled = true;
         bool vignette_enabled = false;
         bool fxaa_enabled = true;
+        bool taa_enabled = true;
+        bool ssao_enabled = true;
+        bool ssr_enabled = true;
     };
 
     struct D3D12StaticSceneSubmission final
@@ -528,6 +534,12 @@ namespace ReplayEngine::Rendering::DX12
             D3D12DescriptorAllocation srv{};
         };
 
+        struct Scene3DHistoryTarget final
+        {
+            Microsoft::WRL::ComPtr<ID3D12Resource> resource;
+            D3D12DescriptorAllocation srv{};
+        };
+
         struct Scene3DShadowTarget final
         {
             Microsoft::WRL::ComPtr<ID3D12Resource> resource;
@@ -586,6 +598,8 @@ namespace ReplayEngine::Rendering::DX12
         std::vector<std::uint8_t> scene3d_shadow_alpha_ps_;
         Scene3DTarget scene3d_gbuffer_[5];
         Scene3DDepthTarget scene3d_depth_{};
+        Scene3DHistoryTarget scene3d_history_{};
+        bool scene3d_history_valid_ = false;
         Scene3DShadowTarget scene3d_directional_shadow_{};
         Scene3DShadowTarget scene3d_local_shadow_{};
         D3D12DescriptorAllocation scene3d_null_directional_shadow_srv_{};
