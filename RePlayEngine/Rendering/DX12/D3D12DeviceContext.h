@@ -211,6 +211,18 @@ namespace ReplayEngine::Rendering::DX12
         bool enabled = false;
     };
 
+    struct D3D12PostProcessSubmission final
+    {
+        float exposure = 0.619f;
+        float bloom_intensity = 0.25f;
+        float vignette_strength = 0.138f;
+        float fxaa_enable = 1.0f;
+        DirectX::XMFLOAT4 color_filter{ 1, 1, 1, 1 };
+        bool bloom_enabled = true;
+        bool vignette_enabled = false;
+        bool fxaa_enabled = true;
+    };
+
     struct D3D12StaticSceneSubmission final
     {
         std::vector<D3D12StaticMeshSource> mesh_sources;
@@ -224,6 +236,8 @@ namespace ReplayEngine::Rendering::DX12
         std::vector<D3D12SpotLightSubmission> spot_lights;
         D3D12DirectionalShadowSubmission directional_shadow{};
         D3D12LocalShadowSubmission local_shadows{};
+        D3D12PostProcessSubmission post_process{};
+        DirectX::XMFLOAT4 background_color{ 0, 0, 0, 1 };
     };
 
     struct D3D12OffscreenTarget final
@@ -545,6 +559,8 @@ namespace ReplayEngine::Rendering::DX12
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_static_gbuffer_pipelines_[6];
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_skinned_gbuffer_pipelines_[6];
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_lighting_pipeline_;
+        Microsoft::WRL::ComPtr<ID3D12RootSignature> scene3d_postprocess_root_signature_;
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_postprocess_pipeline_;
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_static_depth_pipelines_[4];
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_skinned_depth_pipelines_[4];
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_static_forward_blend_pipelines_[2];
@@ -558,6 +574,7 @@ namespace ReplayEngine::Rendering::DX12
         std::vector<std::uint8_t> scene3d_forward_ps_;
         std::vector<std::uint8_t> scene3d_fullscreen_vs_;
         std::vector<std::uint8_t> scene3d_lighting_ps_;
+        std::vector<std::uint8_t> scene3d_postprocess_ps_;
         std::vector<std::uint8_t> scene3d_shadow_static_vs_;
         std::vector<std::uint8_t> scene3d_shadow_skinned_vs_;
         std::vector<std::uint8_t> scene3d_shadow_alpha_ps_;

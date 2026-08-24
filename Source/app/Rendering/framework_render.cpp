@@ -381,6 +381,38 @@ void framework::render(float elapsed_time)
             csm.update_cascades(light_direction, shadow_view, shadow_projection, 30.0f);
 
             ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission static_scene;
+            const ReplayEngine::Rendering::PostProcessPass::Settings& post_settings =
+                post_process.GetSettings();
+            static_scene.post_process.exposure = clamp_finite(post_settings.exposure,
+                0.619f, 0.01f, 8.0f);
+            static_scene.post_process.bloom_intensity = clamp_finite(post_settings.bloom_intensity,
+                0.25f, 0.0f, 8.0f);
+            static_scene.post_process.vignette_strength = clamp_finite(post_settings.vignette_strength,
+                0.138f, 0.0f, 1.0f);
+            static_scene.post_process.fxaa_enable = clamp_finite(post_settings.fxaa_enable,
+                1.0f, 0.0f, 1.0f);
+            static_scene.post_process.color_filter = clamp_color(post_settings.color_filter);
+            static_scene.post_process.bloom_enabled = enable_bloom_shader;
+            static_scene.post_process.vignette_enabled = enable_vignette_shader;
+            static_scene.post_process.fxaa_enabled = enable_fxaa_shader;
+            const auto volume_selection =
+                ReplayEngine::Components::ResolvePostProcessVolumeSelection(active_object_scene());
+            if (volume_selection.Valid())
+            {
+                const PostProcessVolumeComponent& volume = *volume_selection.component;
+                static_scene.post_process.exposure = clamp_finite(volume.exposure,
+                    static_scene.post_process.exposure, 0.01f, 8.0f);
+                static_scene.post_process.bloom_intensity = clamp_finite(volume.bloom_intensity,
+                    static_scene.post_process.bloom_intensity, 0.0f, 8.0f);
+                static_scene.post_process.vignette_strength = clamp_finite(volume.vignette_intensity,
+                    static_scene.post_process.vignette_strength, 0.0f, 1.0f);
+                static_scene.post_process.color_filter = clamp_color(volume.color_filter);
+                static_scene.post_process.bloom_enabled = volume.bloom_enabled;
+                static_scene.post_process.vignette_enabled = volume.vignette_enabled;
+                static_scene.post_process.fxaa_enabled = enable_fxaa_shader;
+            }
+            static_scene.background_color = {
+                clear_color[0], clear_color[1], clear_color[2], clear_color[3] };
             const bool upload_ok =
                 dx12_device_context.SubmitFrameConstants(constants) &&
                 dx12_device_context.SubmitRenderItems(object_render_items);

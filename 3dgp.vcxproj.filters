@@ -2212,6 +2212,9 @@
     <None Include="Shader\dx12_lighting_ps.hlsl">
       <Filter>Shader</Filter>
     </None>
+    <None Include="Shader\dx12_postprocess_ps.hlsl">
+      <Filter>Shader</Filter>
+    </None>
     <None Include="Shader\dx12_shadow_alpha_ps.hlsl">
       <Filter>Shader</Filter>
     </None>
