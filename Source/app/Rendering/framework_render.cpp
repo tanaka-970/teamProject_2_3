@@ -190,8 +190,8 @@ void framework::update_frame_constants(const DirectX::XMMATRIX& view,
     const float height = static_cast<float>(SCREEN_HEIGHT);
     frame_constants.screen_size = { width, height, 1.0f / width, 1.0f / height };
     frame_constants.camera_planes = { near_plane, far_plane, tan_half_fov_y, aspect };
-    // z is accumulated effect/composer time. Golden capture passes elapsed_time=0,
-    // so visual regression remains deterministic instead of advancing while capturing.
+    // zはEffect/Composerの累積時間。Golden Capture中はelapsed_time=0にして、
+    // 撮影中に時間を進めず、Visual Regressionを決定的にする。
     if (advance_effect_time) shader_composer_time += (std::max)(0.0f, elapsed_time);
     frame_constants.frame_params = { static_cast<float>(frame_index), elapsed_time, shader_composer_time, 0.0f };
 
@@ -314,6 +314,9 @@ void framework::render(float elapsed_time)
     if (dx12_framework_active)
     {
         apply_pending_resize();
+        shadow_stats.Reset();
+        shadow_stats.directional_preview_light = directional_light_is_preview;
+        bool dx12_capture_requested = false;
         const float clear_color[4] =
         {
             background_color.x, background_color.y, background_color.z, background_color.w
@@ -367,17 +370,144 @@ void framework::render(float elapsed_time)
                 static_cast<float>(frame_index), elapsed_time, shader_composer_time, 0.0f
             };
 
+            // DX11 render_setup.inl を通らない DX12 path でも、既存 CSM の CPU cascade
+            // calculation を同じ値で更新する。GPU buffer/resource は DX12 backend が持つ。
+            csm.constants.params.w =
+                (enable_dynamic_shadows && csm_enabled_setting && directional_shadow_enabled)
+                ? 1.0f : 0.0f;
+            DirectX::XMFLOAT4X4 shadow_view{}, shadow_projection{};
+            DirectX::XMStoreFloat4x4(&shadow_view, view);
+            DirectX::XMStoreFloat4x4(&shadow_projection, projection);
+            csm.update_cascades(light_direction, shadow_view, shadow_projection, 30.0f);
+
             ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission static_scene;
             const bool upload_ok =
                 dx12_device_context.SubmitFrameConstants(constants) &&
                 dx12_device_context.SubmitRenderItems(object_render_items);
             const bool static_scene_ok = upload_ok &&
                 build_dx12_static_scene(static_scene) &&
-                dx12_device_context.DrawStaticScene(static_scene);
-        // 一時的な Upload 領域不足や Asset 提出失敗が起きても、フレームを完了して
-        // Fence を打つ。次の BeginFrame に開いた Command List を持ち越さない。
+                dx12_device_context.DrawScene3D(static_scene);
+#ifdef USE_IMGUI
+            bool imgui_ok = true;
+            if (imgui_frame_active)
+            {
+                imgui_frame_active = false;
+                ImGui::Render();
+                imgui_ok = dx12_device_context.DrawImGui(ImGui::GetDrawData());
+            }
+#else
+            const bool imgui_ok = true;
+#endif
+            if (upload_ok)
+            {
+                // DX12はD3D11の影提出関数を通らないため、実際に提出したSceneから診断値を作る。
+                shadow_stats.directional_light_present =
+                    static_scene.directional_light.enabled;
+                shadow_stats.directional_shadow_rendered =
+                    static_scene.directional_shadow.enabled;
+                for (const auto& draw : static_scene.draws)
+                {
+                    if (!draw.cast_shadow)
+                    {
+                        ++shadow_stats.skipped_cast_shadow;
+                        continue;
+                    }
+                    if (draw.mesh_key.rfind("builtin:", 0) == 0)
+                        ++shadow_stats.primitive_casters;
+                    else
+                        ++shadow_stats.static_casters;
+                }
+                for (const auto& draw : static_scene.skinned_draws)
+                {
+                    if (draw.surface.cast_shadow)
+                        ++shadow_stats.skinned_casters;
+                    else
+                        ++shadow_stats.skipped_cast_shadow;
+                }
+                if (static_scene.local_shadows.enabled)
+                {
+                    int used_local_slices = 0;
+                    for (std::uint32_t slice = 0;
+                        slice < ReplayEngine::Rendering::DX12::D3D12LocalShadowSubmission::SliceCount;
+                        ++slice)
+                    {
+                        if ((static_scene.local_shadows.used_slice_mask &
+                            (1u << slice)) != 0)
+                            ++used_local_slices;
+                    }
+                    for (const auto& light : static_scene.point_lights)
+                    {
+                        const bool valid_range = light.cast_shadows &&
+                            light.shadow_slice >= 0 && light.shadow_slice + 5 <
+                            static_cast<std::int32_t>(
+                                ReplayEngine::Rendering::DX12::D3D12LocalShadowSubmission::SliceCount);
+                        bool all_faces_present = valid_range;
+                        if (valid_range)
+                        {
+                            for (std::int32_t face = 0; face < 6; ++face)
+                            {
+                                const std::uint32_t bit = 1u << static_cast<std::uint32_t>(
+                                    light.shadow_slice + face);
+                                all_faces_present = all_faces_present &&
+                                    (static_scene.local_shadows.used_slice_mask & bit) != 0;
+                            }
+                        }
+                        if (all_faces_present) ++shadow_stats.point_shadow_lights;
+                    }
+                    for (const auto& light : static_scene.spot_lights)
+                    {
+                        if (light.cast_shadows && light.shadow_slice >= 0 &&
+                            light.shadow_slice < static_cast<std::int32_t>(
+                                ReplayEngine::Rendering::DX12::D3D12LocalShadowSubmission::SliceCount) &&
+                            (static_scene.local_shadows.used_slice_mask &
+                                (1u << static_cast<std::uint32_t>(light.shadow_slice))) != 0)
+                            ++shadow_stats.spot_shadow_lights;
+                    }
+                    const int casters = shadow_stats.primitive_casters +
+                        shadow_stats.static_casters + shadow_stats.skinned_casters;
+                        const int passes = used_local_slices +
+                        (shadow_stats.directional_shadow_rendered ?
+                            static_cast<int>(ReplayEngine::Rendering::DX12::
+                                D3D12DirectionalShadowSubmission::CascadeCount) : 0);
+                    shadow_stats.shadow_draw_calls = casters * passes;
+                }
+                else if (shadow_stats.directional_shadow_rendered)
+                {
+                    const int casters = shadow_stats.primitive_casters +
+                        shadow_stats.static_casters + shadow_stats.skinned_casters;
+                    shadow_stats.shadow_draw_calls = casters * static_cast<int>(
+                        ReplayEngine::Rendering::DX12::D3D12DirectionalShadowSubmission::CascadeCount);
+                }
+            }
+            std::uint64_t component_count = 0;
+            const auto& runtime_scene = active_object_scene();
+            for (std::size_t object_index = 0;
+                object_index < runtime_scene.GameObjectCount(); ++object_index)
+            {
+                const auto* object = runtime_scene.GameObjectAt(object_index);
+                if (object != nullptr) component_count += object->ComponentCount();
+            }
+            ReplayEngine::Rendering::Stats().SetSceneCounters(
+                runtime_scene.GameObjectCount(), component_count,
+                static_scene.draws.size() + static_scene.skinned_draws.size(),
+                static_scene.draws.size() + static_scene.skinned_draws.size());
+            for (const auto& draw : static_scene.draws)
+            {
+                ReplayEngine::Rendering::Stats().CountDrawIndexed(
+                    draw.index_count != 0 ? draw.index_count : 3u);
+            }
+            for (const auto& draw : static_scene.skinned_draws)
+            {
+                ReplayEngine::Rendering::Stats().CountDrawIndexed(
+                    draw.surface.index_count != 0 ? draw.surface.index_count : 3u);
+            }
+            dx12_capture_requested = prepare_dx12_golden_capture();
+            // 一時的な Upload 領域不足や Asset 提出失敗が起きても、フレームを完了して
+            // Fence を打つ。次の BeginFrame に開いた Command List を持ち越さない。
             const bool end_ok = dx12_device_context.EndFrame();
-            ok = upload_ok && static_scene_ok && end_ok;
+            if (end_ok && dx12_capture_requested) tick_golden_capture();
+            ReplayEngine::Rendering::Stats().EndFrame(nullptr);
+            ok = upload_ok && static_scene_ok && imgui_ok && end_ok;
         }
 
         if (!ok && !dx12_framework_render_error_reported)

@@ -2,8 +2,8 @@
 
 void framework::update(float elapsed_time)
 {
-    if (!dx12_framework_active)
-        ReplayEngine::Rendering::Stats().BeginFrame(immediate_context.Get());
+    ReplayEngine::Rendering::Stats().BeginFrame(
+        dx12_framework_active ? nullptr : immediate_context.Get());
     REPLAY_PROFILE_SCOPE("Update");
     // 基準画像を撮る間はワールドを止める。
     //
@@ -66,10 +66,43 @@ void framework::update(float elapsed_time)
         update_object_scene(elapsed_time);
     }
 
-    // Editor/Game UI はまだ D3D11 ImGui Backend を使う。DX12 Bootstrap 経路では
-    // World/Runtime の更新を継続するが、Present できない D3D11 UI Frame は構築しない。
-    // ImGui の移行は後続 Renderer Phase で行う。
-    if (dx12_framework_active) return;
+    // Win32入力はDX11/DX12で共有し、描画Backendだけを選ぶ。
+    // DX12経路でもEditorのUI状態を構築しないと、入力・選択・Inspector編集が
+    // Scene3DのBackend切替だけで失われる。
+    if (dx12_framework_active)
+    {
+#ifdef USE_IMGUI
+        if (!editor_mode)
+        {
+            if (show_render_stats && ImGui::GetCurrentContext() &&
+                dx12_device_context.ImGuiReady())
+            {
+                ImGui_ImplWin32_NewFrame();
+                ImGui::NewFrame();
+                imgui_frame_active = true;
+                REPLAY_PROFILE_SCOPE("ProfilerBuildUI");
+                draw_render_stats_overlay();
+            }
+            return;
+        }
+        if (ImGui::GetCurrentContext())
+        {
+            ImGui_ImplWin32_NewFrame();
+            ImGui::NewFrame();
+            imgui_frame_active = true;
+            {
+                REPLAY_PROFILE_SCOPE("EditorCamera");
+                update_editor_camera(elapsed_time);
+            }
+            {
+                REPLAY_PROFILE_SCOPE("EditorBuildUI");
+                draw_editor();
+                draw_render_stats_overlay();
+            }
+        }
+#endif
+        return;
+    }
 
 #ifdef USE_IMGUI
     // Standalone でも F4 Profiler だけは描画できるようにする。
