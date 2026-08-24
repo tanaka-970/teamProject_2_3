@@ -23,14 +23,34 @@ namespace ReplayEngine::Rendering::DX12
             { { -0.65f, -0.55f, 0.0f }, { 0.2f, 0.4f, 1.0f, 1.0f } },
         };
 
+        constexpr std::uint16_t kValidationIndices[] = { 0, 1, 2 };
+
         constexpr char kValidationVertexShader[] = R"(
+struct RenderItemData
+{
+    row_major float4x4 world;
+    float4 tint;
+    uint owner_low;
+    uint owner_high;
+    uint flags;
+    uint reserved;
+};
+cbuffer FrameConstants : register(b0)
+{
+    row_major float4x4 view_projection;
+    float4 camera_position;
+    float4 time_parameters;
+};
+StructuredBuffer<RenderItemData> render_items : register(t0);
 struct VertexInput { float3 position : POSITION; float4 color : COLOR; };
 struct VertexOutput { float4 position : SV_POSITION; float4 color : COLOR; };
-VertexOutput main(VertexInput input)
+VertexOutput main(VertexInput input, uint instance_id : SV_InstanceID)
 {
     VertexOutput output;
-    output.position = float4(input.position, 1.0f);
-    output.color = input.color;
+    const RenderItemData item = render_items[instance_id];
+    output.position = mul(mul(float4(input.position, 1.0f), item.world),
+        view_projection);
+    output.color = input.color * item.tint;
     return output;
 })";
 
@@ -75,6 +95,8 @@ float4 main(PixelInput input) : SV_TARGET
     {
         if (device_ != nullptr) WaitForGpu();
         ReleaseValidationTriangleResources();
+        for (auto& constant_buffer : frame_constant_buffers_)
+            constant_buffer.Reset();
         ReleaseRenderTargets();
         for (auto& batch : render_item_batches_)
             batch.Reset(&resource_descriptor_allocator_);
@@ -205,7 +227,10 @@ float4 main(PixelInput input) : SV_TARGET
     {
         if (!rtv_allocator_.Initialize(device_.Get(),
             D3D12_DESCRIPTOR_HEAP_TYPE_RTV, FrameCount, false) ||
-            !rtv_allocator_.Allocate(FrameCount, rtv_allocation_))
+            !rtv_allocator_.Allocate(FrameCount, rtv_allocation_) ||
+            !dsv_allocator_.Initialize(device_.Get(),
+                D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 1, false) ||
+            !dsv_allocator_.Allocate(1, dsv_allocation_))
             return false;
         for (std::uint32_t index = 0; index < FrameCount; ++index)
         {
@@ -214,6 +239,29 @@ float4 main(PixelInput input) : SV_TARGET
             device_->CreateRenderTargetView(render_targets_[index].Get(), nullptr,
                 rtv_allocator_.CpuHandle(rtv_allocation_.index + index));
         }
+
+        D3D12_HEAP_PROPERTIES depth_heap{};
+        depth_heap.Type = D3D12_HEAP_TYPE_DEFAULT;
+        D3D12_RESOURCE_DESC depth_description{};
+        depth_description.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        depth_description.Width = width_;
+        depth_description.Height = height_;
+        depth_description.DepthOrArraySize = 1;
+        depth_description.MipLevels = 1;
+        depth_description.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+        depth_description.SampleDesc.Count = 1;
+        depth_description.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        depth_description.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+        D3D12_CLEAR_VALUE clear_value{};
+        clear_value.Format = depth_description.Format;
+        clear_value.DepthStencil.Depth = 1.0f;
+        clear_value.DepthStencil.Stencil = 0;
+        if (FAILED(device_->CreateCommittedResource(&depth_heap, D3D12_HEAP_FLAG_NONE,
+            &depth_description, D3D12_RESOURCE_STATE_DEPTH_WRITE, &clear_value,
+            IID_PPV_ARGS(&depth_stencil_buffer_))))
+            return false;
+        device_->CreateDepthStencilView(depth_stencil_buffer_.Get(), nullptr,
+            dsv_allocator_.CpuHandle(dsv_allocation_.index));
         return true;
     }
 
@@ -236,6 +284,23 @@ float4 main(PixelInput input) : SV_TARGET
         D3D12_ROOT_SIGNATURE_DESC root_signature_desc{};
         root_signature_desc.Flags =
             D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+        D3D12_DESCRIPTOR_RANGE render_item_range{};
+        render_item_range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+        render_item_range.NumDescriptors = 1;
+        render_item_range.BaseShaderRegister = 0;
+        render_item_range.OffsetInDescriptorsFromTableStart =
+            D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+        D3D12_ROOT_PARAMETER root_parameter_list[2]{};
+        root_parameter_list[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+        root_parameter_list[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+        root_parameter_list[0].Descriptor.ShaderRegister = 0;
+        root_parameter_list[1].ParameterType =
+            D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+        root_parameter_list[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+        root_parameter_list[1].DescriptorTable.NumDescriptorRanges = 1;
+        root_parameter_list[1].DescriptorTable.pDescriptorRanges = &render_item_range;
+        root_signature_desc.NumParameters = 2;
+        root_signature_desc.pParameters = root_parameter_list;
         Microsoft::WRL::ComPtr<ID3DBlob> serialized_root_signature;
         Microsoft::WRL::ComPtr<ID3DBlob> errors;
         if (FAILED(D3D12SerializeRootSignature(&root_signature_desc,
@@ -261,7 +326,9 @@ float4 main(PixelInput input) : SV_TARGET
         rasterizer_desc.CullMode = D3D12_CULL_MODE_NONE;
         rasterizer_desc.DepthClipEnable = TRUE;
         D3D12_DEPTH_STENCIL_DESC depth_stencil_desc{};
-        depth_stencil_desc.DepthEnable = FALSE;
+        depth_stencil_desc.DepthEnable = TRUE;
+        depth_stencil_desc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+        depth_stencil_desc.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
         depth_stencil_desc.StencilEnable = FALSE;
 
         D3D12_GRAPHICS_PIPELINE_STATE_DESC pipeline_desc{};
@@ -281,21 +348,24 @@ float4 main(PixelInput input) : SV_TARGET
             IID_PPV_ARGS(&validation_pipeline_))))
             return false;
 
-        return D3D12ResourceFactory::CreateBufferWithData(device_.Get(), upload_context_,
-            kValidationVertices, sizeof(kValidationVertices),
-            D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER, validation_vertex_buffer_);
+        return validation_mesh_.Upload(device_.Get(), upload_context_,
+            kValidationVertices, sizeof(kValidationVertices), sizeof(ValidationVertex),
+            kValidationIndices, sizeof(kValidationIndices), DXGI_FORMAT_R16_UINT);
     }
 
     void D3D12DeviceContext::ReleaseRenderTargets() noexcept
     {
         for (auto& target : render_targets_) target.Reset();
+        depth_stencil_buffer_.Reset();
         rtv_allocator_.Reset();
         rtv_allocation_ = {};
+        dsv_allocator_.Reset();
+        dsv_allocation_ = {};
     }
 
     void D3D12DeviceContext::ReleaseValidationTriangleResources() noexcept
     {
-        validation_vertex_buffer_.Reset();
+        validation_mesh_.Reset();
         validation_pipeline_.Reset();
         validation_root_signature_.Reset();
     }
@@ -347,8 +417,11 @@ float4 main(PixelInput input) : SV_TARGET
             D3D12_RESOURCE_STATE_RENDER_TARGET))
             return false;
         const D3D12_CPU_DESCRIPTOR_HANDLE view = CurrentRenderTargetView();
-        command_list_->OMSetRenderTargets(1, &view, FALSE, nullptr);
+        const D3D12_CPU_DESCRIPTOR_HANDLE depth_view = CurrentDepthStencilView();
+        command_list_->OMSetRenderTargets(1, &view, FALSE, &depth_view);
         command_list_->ClearRenderTargetView(view, clear_color, 0, nullptr);
+        command_list_->ClearDepthStencilView(depth_view,
+            D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
         frame_open_ = true;
         return true;
     }
@@ -359,6 +432,15 @@ float4 main(PixelInput input) : SV_TARGET
         if (!frame_open_) return false;
         return render_item_batches_[frame_index_].Upload(device_.Get(),
             upload_context_, resource_descriptor_allocator_, items);
+    }
+
+    bool D3D12DeviceContext::SubmitFrameConstants(
+        const D3D12FrameConstants& constants) noexcept
+    {
+        if (!frame_open_) return false;
+        frame_constant_buffers_[frame_index_].Reset();
+        return D3D12ResourceFactory::CreateConstantBuffer(device_.Get(), upload_context_,
+            &constants, sizeof(constants), frame_constant_buffers_[frame_index_]);
     }
 
     bool D3D12DeviceContext::EndFrame() noexcept
@@ -381,7 +463,10 @@ float4 main(PixelInput input) : SV_TARGET
     bool D3D12DeviceContext::DrawValidationTriangle() noexcept
     {
         if (!frame_open_ || validation_pipeline_ == nullptr ||
-            validation_root_signature_ == nullptr || validation_vertex_buffer_ == nullptr)
+            validation_root_signature_ == nullptr || !validation_mesh_.IsValid() ||
+            frame_constant_buffers_[frame_index_] == nullptr ||
+            render_item_batches_[frame_index_].Empty() ||
+            resource_descriptor_allocator_.Heap() == nullptr)
             return false;
         D3D12_VIEWPORT viewport{};
         viewport.Width = static_cast<float>(width_);
@@ -392,13 +477,20 @@ float4 main(PixelInput input) : SV_TARGET
         command_list_->RSSetScissorRects(1, &scissor);
         command_list_->SetGraphicsRootSignature(validation_root_signature_.Get());
         command_list_->SetPipelineState(validation_pipeline_.Get());
-        D3D12_VERTEX_BUFFER_VIEW vertex_view{};
-        vertex_view.BufferLocation = validation_vertex_buffer_->GetGPUVirtualAddress();
-        vertex_view.SizeInBytes = sizeof(kValidationVertices);
-        vertex_view.StrideInBytes = sizeof(ValidationVertex);
+        ID3D12DescriptorHeap* descriptor_heaps[] =
+        {
+            resource_descriptor_allocator_.Heap()
+        };
+        command_list_->SetDescriptorHeaps(1, descriptor_heaps);
+        command_list_->SetGraphicsRootConstantBufferView(0,
+            frame_constant_buffers_[frame_index_]->GetGPUVirtualAddress());
+        command_list_->SetGraphicsRootDescriptorTable(1,
+            render_item_batches_[frame_index_].ShaderResourceAllocation().gpu);
         command_list_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-        command_list_->IASetVertexBuffers(0, 1, &vertex_view);
-        command_list_->DrawInstanced(3, 1, 0, 0);
+        command_list_->IASetVertexBuffers(0, 1, &validation_mesh_.VertexView());
+        command_list_->IASetIndexBuffer(&validation_mesh_.IndexView());
+        command_list_->DrawIndexedInstanced(validation_mesh_.IndexCount(),
+            static_cast<UINT>(render_item_batches_[frame_index_].Size()), 0, 0, 0);
         return true;
     }
 
@@ -415,5 +507,10 @@ float4 main(PixelInput input) : SV_TARGET
     D3D12_CPU_DESCRIPTOR_HANDLE D3D12DeviceContext::CurrentRenderTargetView() const noexcept
     {
         return rtv_allocator_.CpuHandle(rtv_allocation_.index + frame_index_);
+    }
+
+    D3D12_CPU_DESCRIPTOR_HANDLE D3D12DeviceContext::CurrentDepthStencilView() const noexcept
+    {
+        return dsv_allocator_.CpuHandle(dsv_allocation_.index);
     }
 }

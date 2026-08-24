@@ -6,6 +6,8 @@
 #include <wrl.h>
 
 #include "D3D12DescriptorHeapAllocator.h"
+#include "D3D12FrameConstants.h"
+#include "D3D12MeshBuffer.h"
 #include "D3D12RenderItemBatch.h"
 #include "D3D12ShaderCompiler.h"
 #include "D3D12UploadContext.h"
@@ -31,6 +33,7 @@ namespace ReplayEngine::Rendering::DX12
         bool Resize(std::uint32_t width, std::uint32_t height) noexcept;
 
         bool BeginFrame(const float clear_color[4]) noexcept;
+        bool SubmitFrameConstants(const D3D12FrameConstants& constants) noexcept;
         bool SubmitRenderItems(
             const ::ReplayEngine::Rendering::RenderItemList& items) noexcept;
         bool DrawValidationTriangle() noexcept;
@@ -60,6 +63,7 @@ namespace ReplayEngine::Rendering::DX12
             return render_targets_[frame_index_].Get();
         }
         D3D12_CPU_DESCRIPTOR_HANDLE CurrentRenderTargetView() const noexcept;
+        D3D12_CPU_DESCRIPTOR_HANDLE CurrentDepthStencilView() const noexcept;
 
     private:
         bool CreateDevice(bool enable_debug_layer, bool force_warp) noexcept;
@@ -80,7 +84,9 @@ namespace ReplayEngine::Rendering::DX12
         Microsoft::WRL::ComPtr<IDXGISwapChain3> swap_chain_;
         Microsoft::WRL::ComPtr<ID3D12RootSignature> validation_root_signature_;
         Microsoft::WRL::ComPtr<ID3D12PipelineState> validation_pipeline_;
-        Microsoft::WRL::ComPtr<ID3D12Resource> validation_vertex_buffer_;
+        D3D12MeshBuffer validation_mesh_;
+        Microsoft::WRL::ComPtr<ID3D12Resource> frame_constant_buffers_[FrameCount];
+        Microsoft::WRL::ComPtr<ID3D12Resource> depth_stencil_buffer_;
         Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> command_list_;
         Microsoft::WRL::ComPtr<ID3D12Fence> fence_;
         Microsoft::WRL::ComPtr<ID3D12CommandAllocator> command_allocators_[FrameCount];
@@ -88,6 +94,8 @@ namespace ReplayEngine::Rendering::DX12
 
         D3D12DescriptorHeapAllocator rtv_allocator_;
         D3D12DescriptorAllocation rtv_allocation_{};
+        D3D12DescriptorHeapAllocator dsv_allocator_;
+        D3D12DescriptorAllocation dsv_allocation_{};
         D3D12DescriptorHeapAllocator resource_descriptor_allocator_;
         D3D12UploadContext upload_context_;
         D3D12RenderItemBatch render_item_batches_[FrameCount];
