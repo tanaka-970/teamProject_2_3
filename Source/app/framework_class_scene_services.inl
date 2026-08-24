@@ -57,7 +57,8 @@
         // DX12 Phase 2 Bridge。Engine 所有の RenderItem List を Cache 可能な Static
         // Geometry/Material Submission へ変換する。実際の Skinned Animation は Phase 3 に残す。
     bool build_dx12_static_scene(
-        ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission& submission);
+        ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission& submission,
+        float elapsed_time);
     // depth_only = true で深度プリパス用の描画になる。
     // 深度プリパスを使う構成では、GBuffer へ出すものを必ずここでも描くこと。
     // 描き漏らすと DepthFunc=EQUAL に落とされて画面から消える。

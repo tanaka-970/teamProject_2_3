@@ -21,6 +21,7 @@
 #include "../../RePlayEngine/Components/Rendering/SkinnedMeshRendererComponent.h"
 #include "../../RePlayEngine/Components/Rendering/LineRendererComponent.h"
 #include "../../RePlayEngine/Components/Rendering/TrailComponent.h"
+#include "../../RePlayEngine/Components/Rendering/ParticleEmitterComponent.h"
 #include "../../RePlayEngine/Components/Landscape/LandscapeComponent.h"
 #include "../../RePlayEngine/Components/Landscape/LandscapeRendererComponent.h"
 #include "../../RePlayEngine/Components/Landscape/LandscapeColliderComponent.h"
@@ -284,7 +285,8 @@ ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
 }
 
 bool framework::build_dx12_static_scene(
-    ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission& submission)
+    ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission& submission,
+    float elapsed_time)
 {
     using namespace ReplayEngine::Rendering;
     using namespace ReplayEngine::Rendering::DX12;
@@ -696,6 +698,236 @@ bool framework::build_dx12_static_scene(
                 const auto style = trail->StrokeStyle();
                 if (add_ribbon(key_prefix, path, alpha, style))
                     add_ribbon_draw(key_prefix, key_prefix, style);
+            }
+        }
+    }
+
+    // ParticleEmitterもComponentの値を正本にし、DX12の透明Forwardへ提出する。
+    // D3D11専用のStructuredBufferへ依存せず、寿命のあるCPU状態をビルボードへ
+    // 変換することで、テクスチャ・Blend・深度の既存Material契約を再利用する。
+    {
+        using ReplayEngine::Components::ParticleEmitterComponent;
+        using Particle = framework::dx12_particle_instance;
+        ReplayEngine::Scene::Scene& scene = active_object_scene();
+        const float delta = (std::max)(0.0f, (std::min)(elapsed_time, 0.1f));
+        const DirectX::XMVECTOR world_up = DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+        const DirectX::XMVECTOR camera_forward_world =
+            DirectX::XMVector3Normalize(camera_forward);
+
+        struct ParticleBucket final
+        {
+            D3D12StaticMeshSource source;
+            DirectX::XMFLOAT4 color_sum{};
+            std::size_t count = 0;
+        };
+
+        const auto next_random = [](std::uint32_t& state) noexcept
+        {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            return static_cast<float>(state & 0x00FFFFFFu) /
+                static_cast<float>(0x01000000u);
+        };
+        const auto clamp_color = [](const DirectX::XMFLOAT4& value) noexcept
+        {
+            return DirectX::XMFLOAT4{
+                (std::max)(0.0f, (std::min)(1.0f, value.x)),
+                (std::max)(0.0f, (std::min)(1.0f, value.y)),
+                (std::max)(0.0f, (std::min)(1.0f, value.z)),
+                (std::max)(0.0f, (std::min)(1.0f, value.w)) };
+        };
+        const auto clamp_value = [](float value, float fallback,
+            float minimum, float maximum) noexcept
+        {
+            if (!std::isfinite(value)) value = fallback;
+            return (std::max)(minimum, (std::min)(maximum, value));
+        };
+        const auto lerp_color = [&clamp_color](const DirectX::XMFLOAT4& a,
+            const DirectX::XMFLOAT4& b, float t) noexcept
+        {
+            return clamp_color(DirectX::XMFLOAT4{
+                a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t,
+                a.z + (b.z - a.z) * t, a.w + (b.w - a.w) * t });
+        };
+
+        for (std::size_t object_index = 0; object_index < scene.GameObjectCount();
+            ++object_index)
+        {
+            const ReplayEngine::Core::GameObject* object = scene.GameObjectAt(object_index);
+            if (object == nullptr || object->PendingDestroy() ||
+                !object->ActiveInHierarchy()) continue;
+            const ParticleEmitterComponent* emitter = nullptr;
+            for (std::size_t component_index = 0; component_index < object->ComponentCount();
+                ++component_index)
+            {
+                emitter = dynamic_cast<const ParticleEmitterComponent*>(
+                    object->ComponentAt(component_index));
+                if (emitter != nullptr && emitter->ActiveInHierarchy()) break;
+                emitter = nullptr;
+            }
+            if (emitter == nullptr || (!emitter->emitting && !emitter->HasPendingRequest()))
+                continue;
+
+            const ReplayEngine::Core::ObjectID object_id = object->ID();
+            std::vector<Particle>& state = dx12_particle_states[object_id];
+            float& spawn_remainder = dx12_particle_spawn_remainders[object_id];
+            if (emitter->ConsumeClearRequest())
+            {
+                state.clear();
+                spawn_remainder = 0.0f;
+            }
+
+            const int max_particles = (std::max)(1, (std::min)(emitter->max_particles, 10000));
+            const DirectX::XMFLOAT4X4 object_world = object->GetTransform().WorldMatrixFloat4x4();
+            const DirectX::XMMATRIX object_matrix = DirectX::XMLoadFloat4x4(&object_world);
+            const DirectX::XMVECTOR origin = DirectX::XMVector3TransformCoord(
+                DirectX::XMVectorZero(), object_matrix);
+            const DirectX::XMVECTOR direction_input = DirectX::XMVector3TransformNormal(
+                DirectX::XMLoadFloat3(&emitter->direction), object_matrix);
+            const DirectX::XMVECTOR direction = normalize_or_fallback(
+                direction_input, world_up);
+            const DirectX::XMVECTOR basis_seed =
+                std::abs(DirectX::XMVectorGetX(DirectX::XMVector3Dot(direction, world_up))) < 0.98f
+                ? world_up : DirectX::XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f);
+            const DirectX::XMVECTOR basis_right = normalize_or_fallback(
+                DirectX::XMVector3Cross(basis_seed, direction),
+                DirectX::XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f));
+            const DirectX::XMVECTOR basis_up = DirectX::XMVector3Cross(direction, basis_right);
+            const float lifetime = clamp_value(emitter->lifetime, 1.5f, 0.01f, 60.0f);
+            const float start_speed = clamp_value(emitter->start_speed, 2.0f, 0.0f, 200.0f);
+            const float gravity = clamp_value(emitter->gravity, 1.8f, -100.0f, 100.0f);
+            const float drag = clamp_value(emitter->drag, 0.5f, 0.0f, 20.0f);
+            const float start_size = clamp_value(emitter->start_size, 0.1f, 0.001f, 100.0f);
+            const float end_size = clamp_value(emitter->end_size, 0.02f, 0.001f, 100.0f);
+            const float cone = clamp_value(emitter->cone_angle, 0.4f, 0.0f, 3.14159f);
+
+            for (Particle& particle : state)
+            {
+                particle.age += delta;
+                if (particle.age >= particle.life) continue;
+                particle.velocity.y -= gravity * delta;
+                particle.velocity.x *= std::exp(-drag * delta);
+                particle.velocity.y *= std::exp(-drag * delta);
+                particle.velocity.z *= std::exp(-drag * delta);
+                particle.position.x += particle.velocity.x * delta;
+                particle.position.y += particle.velocity.y * delta;
+                particle.position.z += particle.velocity.z * delta;
+                const float life_t = (std::max)(0.0f, (std::min)(1.0f,
+                    particle.age / (std::max)(particle.life, 0.001f)));
+                particle.size = start_size + (end_size - start_size) * life_t;
+                particle.color = lerp_color(emitter->start_color, emitter->end_color, life_t);
+                particle.rotation += delta * 1.7f;
+            }
+            state.erase(std::remove_if(state.begin(), state.end(),
+                [](const Particle& particle) { return particle.age >= particle.life; }), state.end());
+
+            const float spawn_rate = emitter->emitting
+                ? clamp_value(emitter->spawn_rate, 200.0f, 0.0f, 20000.0f) : 0.0f;
+            spawn_remainder += spawn_rate * delta;
+            int spawn_count = static_cast<int>(spawn_remainder);
+            spawn_remainder -= static_cast<float>(spawn_count);
+            spawn_count += (std::max)(0, emitter->ConsumeBurst());
+            spawn_count = (std::min)(spawn_count,
+                max_particles - static_cast<int>(state.size()));
+
+            std::uint32_t random_state = static_cast<std::uint32_t>(
+                object_id.Value() ^ (static_cast<std::uint64_t>(frame_index) * 747796405ull));
+            for (int spawn_index = 0; spawn_index < spawn_count; ++spawn_index)
+            {
+                const float radius = std::sqrt(next_random(random_state));
+                const float azimuth = next_random(random_state) * DirectX::XM_2PI;
+                const float angle = radius * cone;
+                const float sin_angle = std::sin(angle);
+                const DirectX::XMVECTOR cone_direction = DirectX::XMVectorAdd(
+                    DirectX::XMVectorScale(direction, std::cos(angle)),
+                    DirectX::XMVectorAdd(
+                        DirectX::XMVectorScale(basis_right, std::cos(azimuth) * sin_angle),
+                        DirectX::XMVectorScale(basis_up, std::sin(azimuth) * sin_angle)));
+                const DirectX::XMVECTOR spawn_direction = DirectX::XMVector3Normalize(
+                    cone_direction);
+                const float particle_life = lifetime *
+                    (0.75f + next_random(random_state) * 0.5f);
+                const float speed = start_speed * (0.75f + next_random(random_state) * 0.5f);
+                Particle particle;
+                DirectX::XMStoreFloat3(&particle.position, origin);
+                DirectX::XMStoreFloat3(&particle.velocity,
+                    DirectX::XMVectorScale(spawn_direction, speed));
+                particle.color = clamp_color(emitter->start_color);
+                particle.life = particle_life;
+                particle.size = start_size;
+                particle.rotation = next_random(random_state) * DirectX::XM_2PI;
+                state.push_back(particle);
+            }
+            if (state.size() > static_cast<std::size_t>(max_particles))
+                state.resize(static_cast<std::size_t>(max_particles));
+            if (state.empty()) continue;
+
+            ParticleBucket buckets[8]{};
+            for (std::size_t particle_index = 0; particle_index < state.size(); ++particle_index)
+            {
+                const Particle& particle = state[particle_index];
+                const float life_t = particle.life > 0.0f ? particle.age / particle.life : 1.0f;
+                const std::size_t bucket_index = (std::min)(static_cast<std::size_t>(7),
+                    static_cast<std::size_t>((std::max)(0.0f, life_t) * 8.0f));
+                ParticleBucket& bucket = buckets[bucket_index];
+                if (bucket.source.key.empty())
+                    bucket.source.key = "particle:" + std::to_string(object_id.Value()) + ":slot:" +
+                        std::to_string(dx12_device_context.FrameIndex()) + ":bucket:" +
+                        std::to_string(bucket_index);
+                bucket.source.replace_existing = true;
+                DirectX::XMVECTOR center = DirectX::XMLoadFloat3(&particle.position);
+                const DirectX::XMVECTOR right = DirectX::XMVectorScale(camera_right, particle.size);
+                const DirectX::XMVECTOR up = DirectX::XMVectorScale(camera_up, particle.size);
+                const DirectX::XMVECTOR corners[4] = {
+                    DirectX::XMVectorAdd(DirectX::XMVectorSubtract(center, right), up),
+                    DirectX::XMVectorAdd(DirectX::XMVectorAdd(center, right), up),
+                    DirectX::XMVectorSubtract(DirectX::XMVectorAdd(center, right), up),
+                    DirectX::XMVectorSubtract(DirectX::XMVectorSubtract(center, right), up) };
+                const std::uint32_t base = static_cast<std::uint32_t>(bucket.source.vertices.size());
+                for (std::uint32_t corner = 0; corner < 4; ++corner)
+                {
+                    D3D12StaticVertex vertex;
+                    DirectX::XMStoreFloat3(&vertex.position, corners[corner]);
+                    DirectX::XMStoreFloat3(&vertex.normal, camera_forward_world);
+                    vertex.texcoord = { (corner == 1 || corner == 2) ? 1.0f : 0.0f,
+                        (corner >= 2) ? 1.0f : 0.0f };
+                    bucket.source.vertices.push_back(vertex);
+                }
+                bucket.source.indices.insert(bucket.source.indices.end(),
+                    { base, base + 1, base + 2, base, base + 2, base + 3 });
+                bucket.color_sum.x += particle.color.x;
+                bucket.color_sum.y += particle.color.y;
+                bucket.color_sum.z += particle.color.z;
+                bucket.color_sum.w += particle.color.w;
+                ++bucket.count;
+            }
+
+            std::string sprite_texture_key = add_asset_texture(emitter->sprite.guid);
+            if (sprite_texture_key.empty()) sprite_texture_key = "__dx12_white";
+            for (std::size_t bucket_index = 0; bucket_index < 8; ++bucket_index)
+            {
+                ParticleBucket& bucket = buckets[bucket_index];
+                if (bucket.count == 0 || bucket.source.vertices.empty()) continue;
+                const float inverse_count = 1.0f / static_cast<float>(bucket.count);
+                D3D12StaticDrawItem draw;
+                draw.mesh_key = bucket.source.key;
+                draw.motion_key = bucket.source.key;
+                draw.base_color = {
+                    bucket.color_sum.x * inverse_count,
+                    bucket.color_sum.y * inverse_count,
+                    bucket.color_sum.z * inverse_count,
+                    bucket.color_sum.w * inverse_count };
+                draw.base_color_texture_key = sprite_texture_key;
+                draw.alpha_mode = D3D12StaticAlphaMode::Blend;
+                draw.lighting_model = static_cast<std::int32_t>(
+                    ReplayEngine::Rendering::ShaderLightingModel::Unlit);
+                draw.roughness = 1.0f;
+                draw.cast_shadow = false;
+                draw.receive_shadow = false;
+                draw.double_sided = true;
+                submission.mesh_sources.push_back(std::move(bucket.source));
+                submission.draws.push_back(std::move(draw));
             }
         }
     }
