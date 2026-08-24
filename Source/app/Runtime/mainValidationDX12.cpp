@@ -2,6 +2,7 @@
 #include "mainInternal.h"
 
 #include "../../../RePlayEngine/Rendering/DX12/D3D12DeviceContext.h"
+#include "../../../RePlayEngine/Rendering/DX12/D3D12DescriptorHeapAllocator.h"
 
 #include <cstdio>
 #include <cstring>
@@ -43,6 +44,28 @@ namespace ReplayEngine::Runtime::Detail
             if (!context.BeginFrame(color))
             {
                 std::fprintf(stderr, "DX12 validation failed: %s BeginFrame\n", label);
+                return false;
+            }
+
+            Rendering::RenderItemList render_items;
+            Rendering::RenderItem first_item;
+            first_item.owner = Core::ObjectID{ 101 };
+            first_item.mesh_asset = "builtin:validation";
+            first_item.cast_shadow = true;
+            render_items.Add(first_item);
+            Rendering::RenderItem second_item;
+            second_item.owner = Core::ObjectID{ 102 };
+            second_item.mesh_asset = "builtin:validation";
+            second_item.skinned = true;
+            second_item.outline = true;
+            render_items.Add(second_item);
+            ++checks;
+            if (!context.SubmitRenderItems(render_items) ||
+                context.RenderItemBatch().Size() != render_items.Size() ||
+                context.RenderItemBatch().GpuBuffer() == nullptr ||
+                !context.RenderItemBatch().ShaderResourceAllocation().IsValid())
+            {
+                std::fprintf(stderr, "DX12 validation failed: %s render item upload\n", label);
                 return false;
             }
 
@@ -95,6 +118,25 @@ namespace ReplayEngine::Runtime::Detail
             ++checks;
             if (!ok)
                 std::fprintf(stderr, "DX12 validation failed: device objects\n");
+        }
+
+        if (ok)
+        {
+            Rendering::DX12::D3D12DescriptorAllocation descriptors{};
+            ++checks;
+            if (!context.ResourceDescriptorAllocator().Allocate(4, descriptors) ||
+                context.ResourceDescriptorAllocator().Used() != 4)
+            {
+                std::fprintf(stderr, "DX12 validation failed: descriptor allocate\n");
+                ok = false;
+            }
+            ++checks;
+            if (ok && (!context.ResourceDescriptorAllocator().Free(descriptors) ||
+                context.ResourceDescriptorAllocator().Used() != 0))
+            {
+                std::fprintf(stderr, "DX12 validation failed: descriptor free\n");
+                ok = false;
+            }
         }
 
         constexpr float first_color[] = { 0.08f, 0.12f, 0.20f, 1.0f };

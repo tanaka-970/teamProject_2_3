@@ -52,6 +52,11 @@
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup>
+    <!-- 既存のPCH+並列コンパイルを維持し、マシンごとにメモリと速度を調整できるようにする。 -->
+    <ReplayBuildCores Condition="'$(ReplayBuildCores)'==''">8</ReplayBuildCores>
+    <UseMultiToolTask>true</UseMultiToolTask>
+  </PropertyGroup>
   <ImportGroup Label="ExtensionSettings">
   </ImportGroup>
   <ImportGroup Label="Shared">
@@ -86,14 +91,14 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <ProcessorNumber>8</ProcessorNumber>
+      <ProcessorNumber>$(ReplayBuildCores)</ProcessorNumber>
       <PrecompiledHeader>
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>USE_IMGUI;WIN32;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>.;.\Source\app;.\Source\core;.\Source\mesh;.\Source\render;.\cereal-master\include;.\DirectXTK-main\Inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;.\Source\app;.\Source\core;.\Source\mesh;.\Source\render;.\cereal-master\include;.\DirectXTK-main\Inc;.\ThirdParty\DXC\inc;.\ThirdParty\DirectX-Headers\include;.\ThirdParty\D3D12MemoryAllocator\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <!-- /FS: 並列ビルドで複数の CL.EXE が同じ PDB へ書くときの競合 (C1041) を防ぐ -->
       <AdditionalOptions>/utf-8 /validate-charset /FS %(AdditionalOptions)</AdditionalOptions>
@@ -119,7 +124,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <ProcessorNumber>8</ProcessorNumber>
+      <ProcessorNumber>$(ReplayBuildCores)</ProcessorNumber>
       <!-- プリコンパイル済みヘッダ。ビルド時間の短縮だけが目的。
            ForcedIncludeFiles で全 .cpp の先頭へ自動挿入するため、
            各ソースへ #include "pch.h" を書き足していない。
@@ -131,7 +136,7 @@
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>_DEBUG;_WINDOWS;USE_IMGUI;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>.;.\Source;.\Source\app;.\Source\core;.\Source\mesh;.\Source\render;.\cereal-master\include;.\DirectXTK-main\Inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;.\Source;.\Source\app;.\Source\core;.\Source\mesh;.\Source\render;.\cereal-master\include;.\DirectXTK-main\Inc;.\ThirdParty\DXC\inc;.\ThirdParty\DirectX-Headers\include;.\ThirdParty\D3D12MemoryAllocator\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <EnableASAN Condition="'$(ReplayEnableASAN)'=='true'">true</EnableASAN>
       <DebugInformationFormat Condition="'$(ReplayEnableASAN)'=='true'">ProgramDatabase</DebugInformationFormat>
@@ -155,7 +160,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <ProcessorNumber>8</ProcessorNumber>
+      <ProcessorNumber>$(ReplayBuildCores)</ProcessorNumber>
       <WarningLevel>Level3</WarningLevel>
       <PrecompiledHeader>
       </PrecompiledHeader>
@@ -164,7 +169,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>.;.\Source\app;.\Source\core;.\Source\mesh;.\Source\render;.\cereal-master\include;.\DirectXTK-main\Inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;.\Source\app;.\Source\core;.\Source\mesh;.\Source\render;.\cereal-master\include;.\DirectXTK-main\Inc;.\ThirdParty\DXC\inc;.\ThirdParty\DirectX-Headers\include;.\ThirdParty\D3D12MemoryAllocator\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <!-- /FS: 並列ビルドで複数の CL.EXE が同じ PDB へ書くときの競合 (C1041) を防ぐ -->
       <AdditionalOptions>/utf-8 /validate-charset /FS %(AdditionalOptions)</AdditionalOptions>
@@ -189,7 +194,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <ProcessorNumber>8</ProcessorNumber>
+      <ProcessorNumber>$(ReplayBuildCores)</ProcessorNumber>
       <WarningLevel>Level3</WarningLevel>
       <!-- Debug|x64 と同じプリコンパイル済みヘッダ設定。
            これが無いと pch.cpp が既定名 stdafx.h を作りにいって C2857 で落ちる。 -->
@@ -206,7 +211,7 @@
       <SDLCheck>true</SDLCheck>
       <!-- /FS: 荳ｦ蛻励ン繝ｫ繝峨〒隍・・ｽ・ｽ縺ｮCL.EXE縺悟酔縺榔DB縺ｸ譖ｸ縺上→縺搾ｿｽE遶ｶ蜷・C1041)繧帝亟縺・-->
       <AdditionalOptions>/utf-8 /validate-charset /FS %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalIncludeDirectories>.;.\Source\app;.\Source\core;.\Source\mesh;.\Source\render;.\cereal-master\include;.\DirectXTK-main\Inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;.\Source\app;.\Source\core;.\Source\mesh;.\Source\render;.\cereal-master\include;.\DirectXTK-main\Inc;.\ThirdParty\DXC\inc;.\ThirdParty\DirectX-Headers\include;.\ThirdParty\D3D12MemoryAllocator\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ObjectFileName>$(IntDir)%(RelativeDir)</ObjectFileName>
     </ClCompile>
     <Link>
@@ -234,6 +239,11 @@
     <ClCompile Include="Source\render\csm_renderer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Deferred\deferred_renderer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12DeviceContext.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12DescriptorHeapAllocator.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12RenderItemBatch.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12UploadContext.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12ResourceFactory.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12ShaderCompiler.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Shadows\LocalShadowAtlas.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Passes\PostProcessPass.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Effects\EffectChain.cpp" />
@@ -318,6 +328,7 @@
     <ClCompile Include="Source\app\Runtime\mainValidationPhysics.cpp" />
     <ClCompile Include="Source\app\Runtime\mainValidationMotion.cpp" />
     <ClCompile Include="Source\app\Runtime\mainValidationDX12.cpp" />
+    <ClCompile Include="Source\app\Runtime\mainValidationDXC.cpp" />
     <ClCompile Include="Source\app\Runtime\framework_gameobject_scene_motion.cpp" />
     <ClCompile Include="Source\app\Runtime\framework_gameobject_scene_runtime.cpp" />
     <ClCompile Include="Source\app\Runtime\framework_gameobject_scene_play.cpp" />
@@ -617,6 +628,11 @@
     <ClInclude Include="Source\render\motion_vector_context.h" />
     <ClInclude Include="RePlayEngine\Rendering\Deferred\deferred_renderer.h" />
     <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12DeviceContext.h" />
+    <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12DescriptorHeapAllocator.h" />
+    <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12RenderItemBatch.h" />
+    <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12UploadContext.h" />
+    <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12ResourceFactory.h" />
+    <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12ShaderCompiler.h" />
     <ClInclude Include="RePlayEngine\Rendering\Shadows\LocalShadowAtlas.h" />
     <ClInclude Include="RePlayEngine\Rendering\Passes\PostProcessPass.h" />
     <ClInclude Include="RePlayEngine\Rendering\FrameConstants.h" />

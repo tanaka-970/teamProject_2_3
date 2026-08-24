@@ -480,6 +480,9 @@
     <ClCompile Include="Source\app\Runtime\mainValidationDX12.cpp">
       <Filter>Source\App\Runtime</Filter>
     </ClCompile>
+    <ClCompile Include="Source\app\Runtime\mainValidationDXC.cpp">
+      <Filter>Source\App\Runtime</Filter>
+    </ClCompile>
     <ClCompile Include="Source\app\Runtime\framework_gameobject_scene_motion.cpp">
       <Filter>Source\App\Runtime</Filter>
     </ClCompile>
@@ -643,6 +646,21 @@
       <Filter>RePlayEngine\Rendering\Deferred</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12DeviceContext.cpp">
+      <Filter>RePlayEngine\Rendering\DX12</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12DescriptorHeapAllocator.cpp">
+      <Filter>RePlayEngine\Rendering\DX12</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12RenderItemBatch.cpp">
+      <Filter>RePlayEngine\Rendering\DX12</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12UploadContext.cpp">
+      <Filter>RePlayEngine\Rendering\DX12</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12ResourceFactory.cpp">
+      <Filter>RePlayEngine\Rendering\DX12</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12ShaderCompiler.cpp">
       <Filter>RePlayEngine\Rendering\DX12</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Rendering\Passes\PostProcessPass.cpp">
@@ -1572,6 +1590,21 @@
       <Filter>RePlayEngine\Rendering\Deferred</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12DeviceContext.h">
+      <Filter>RePlayEngine\Rendering\DX12</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12DescriptorHeapAllocator.h">
+      <Filter>RePlayEngine\Rendering\DX12</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12RenderItemBatch.h">
+      <Filter>RePlayEngine\Rendering\DX12</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12UploadContext.h">
+      <Filter>RePlayEngine\Rendering\DX12</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12ResourceFactory.h">
+      <Filter>RePlayEngine\Rendering\DX12</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12ShaderCompiler.h">
       <Filter>RePlayEngine\Rendering\DX12</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Core\Components\IComponent.h">

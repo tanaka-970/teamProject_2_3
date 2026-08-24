@@ -5,6 +5,11 @@
 #include <dxgi1_6.h>
 #include <wrl.h>
 
+#include "D3D12DescriptorHeapAllocator.h"
+#include "D3D12RenderItemBatch.h"
+#include "D3D12ShaderCompiler.h"
+#include "D3D12UploadContext.h"
+
 #include <cstdint>
 
 namespace ReplayEngine::Rendering::DX12
@@ -26,6 +31,8 @@ namespace ReplayEngine::Rendering::DX12
         bool Resize(std::uint32_t width, std::uint32_t height) noexcept;
 
         bool BeginFrame(const float clear_color[4]) noexcept;
+        bool SubmitRenderItems(
+            const ::ReplayEngine::Rendering::RenderItemList& items) noexcept;
         bool DrawValidationTriangle() noexcept;
         bool EndFrame() noexcept;
         void WaitForGpu() noexcept;
@@ -39,6 +46,15 @@ namespace ReplayEngine::Rendering::DX12
         ID3D12Device* Device() const noexcept { return device_.Get(); }
         ID3D12CommandQueue* CommandQueue() const noexcept { return command_queue_.Get(); }
         ID3D12GraphicsCommandList* CommandList() const noexcept { return command_list_.Get(); }
+        D3D12UploadContext& UploadContext() noexcept { return upload_context_; }
+        D3D12DescriptorHeapAllocator& ResourceDescriptorAllocator() noexcept
+        {
+            return resource_descriptor_allocator_;
+        }
+        const D3D12RenderItemBatch& RenderItemBatch() const noexcept
+        {
+            return render_item_batches_[frame_index_];
+        }
         ID3D12Resource* CurrentRenderTarget() const noexcept
         {
             return render_targets_[frame_index_].Get();
@@ -62,7 +78,6 @@ namespace ReplayEngine::Rendering::DX12
         Microsoft::WRL::ComPtr<ID3D12Device> device_;
         Microsoft::WRL::ComPtr<ID3D12CommandQueue> command_queue_;
         Microsoft::WRL::ComPtr<IDXGISwapChain3> swap_chain_;
-        Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> rtv_heap_;
         Microsoft::WRL::ComPtr<ID3D12RootSignature> validation_root_signature_;
         Microsoft::WRL::ComPtr<ID3D12PipelineState> validation_pipeline_;
         Microsoft::WRL::ComPtr<ID3D12Resource> validation_vertex_buffer_;
@@ -71,9 +86,13 @@ namespace ReplayEngine::Rendering::DX12
         Microsoft::WRL::ComPtr<ID3D12CommandAllocator> command_allocators_[FrameCount];
         Microsoft::WRL::ComPtr<ID3D12Resource> render_targets_[FrameCount];
 
+        D3D12DescriptorHeapAllocator rtv_allocator_;
+        D3D12DescriptorAllocation rtv_allocation_{};
+        D3D12DescriptorHeapAllocator resource_descriptor_allocator_;
+        D3D12UploadContext upload_context_;
+        D3D12RenderItemBatch render_item_batches_[FrameCount];
         HANDLE fence_event_ = nullptr;
         std::uint64_t fence_values_[FrameCount]{};
-        std::uint32_t rtv_descriptor_size_ = 0;
         std::uint32_t frame_index_ = 0;
         std::uint32_t width_ = 0;
         std::uint32_t height_ = 0;
