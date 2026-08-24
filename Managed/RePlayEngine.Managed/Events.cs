@@ -30,6 +30,7 @@ public static class EngineEventIds
     public const string ButtonClicked = "a1000000000000000000000000000020";
     public const string InputFieldValueChanged = "a1000000000000000000000000000021";
     public const string AnimatorStateChanged = "a1000000000000000000000000000022";
+    public const string SliderValueChanged = "a1000000000000000000000000000023";
 }
 
 // 接触 1 件分。OnCollisionEnter などが受け取る。
@@ -166,6 +167,25 @@ public readonly struct InputFieldEventInfo
 
     public ObjectHandle InputField { get; }
     public string Text { get; }
+    public ulong ComponentId { get; }
+}
+
+public readonly struct SliderEventInfo
+{
+    internal SliderEventInfo(RuntimeEvent source)
+    {
+        Slider = source.Source;
+        source.TryGetDouble("value", out var value);
+        source.TryGetDouble("normalized", out var normalized);
+        source.TryGetUInt64("slider_component", out var component);
+        Value = (float)value;
+        NormalizedValue = (float)normalized;
+        ComponentId = component;
+    }
+
+    public ObjectHandle Slider { get; }
+    public float Value { get; }
+    public float NormalizedValue { get; }
     public ulong ComponentId { get; }
 }
 

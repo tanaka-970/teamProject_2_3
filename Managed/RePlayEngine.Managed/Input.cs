@@ -2,6 +2,49 @@
 
 namespace ReplayEngine;
 
+public readonly struct InputActionId : IEquatable<InputActionId>
+{
+    public InputActionId(string name) => Name = name ?? string.Empty;
+    public string Name { get; }
+    public bool IsValid => !string.IsNullOrWhiteSpace(Name);
+    public bool Equals(InputActionId other) => string.Equals(Name, other.Name, StringComparison.Ordinal);
+    public override bool Equals(object? obj) => obj is InputActionId other && Equals(other);
+    public override int GetHashCode() => StringComparer.Ordinal.GetHashCode(Name ?? string.Empty);
+    public override string ToString() => Name ?? string.Empty;
+}
+
+public readonly struct InputAxisId : IEquatable<InputAxisId>
+{
+    public InputAxisId(string name) => Name = name ?? string.Empty;
+    public string Name { get; }
+    public bool IsValid => !string.IsNullOrWhiteSpace(Name);
+    public bool Equals(InputAxisId other) => string.Equals(Name, other.Name, StringComparison.Ordinal);
+    public override bool Equals(object? obj) => obj is InputAxisId other && Equals(other);
+    public override int GetHashCode() => StringComparer.Ordinal.GetHashCode(Name ?? string.Empty);
+    public override string ToString() => Name ?? string.Empty;
+}
+
+// Engine既定Input Action Assetと同じ名前。独自Assetは同じ型で定数を定義できる。
+public static class InputActions
+{
+    public static readonly InputActionId Jump = new("Jump");
+    public static readonly InputActionId Dash = new("Dash");
+    public static readonly InputActionId Menu = new("Menu");
+    public static readonly InputActionId UISubmit = new("UISubmit");
+    public static readonly InputActionId UICancel = new("UICancel");
+    public static readonly InputActionId NavigateUp = new("NavigateUp");
+    public static readonly InputActionId NavigateDown = new("NavigateDown");
+    public static readonly InputActionId NavigateLeft = new("NavigateLeft");
+    public static readonly InputActionId NavigateRight = new("NavigateRight");
+    public static readonly InputActionId PrimaryClick = new("PrimaryClick");
+}
+
+public static class InputAxes
+{
+    public static readonly InputAxisId MoveX = new("MoveX");
+    public static readonly InputAxisId MoveY = new("MoveY");
+}
+
 // キーボードの仮想キーコード。Windows の VK_* と同じ値。
 public enum Key
 {
@@ -57,6 +100,19 @@ public enum GamepadAxis
 // Editor がキーボード/マウスを掴んでいる間は false / 0 を返す。
 public static class Input
 {
+    public static RuntimeResult<bool> GetAction(InputActionId action, int playerSlot = 0)
+        => action.IsValid ? NativeBridge.InputHeld(action.Name, playerSlot)
+            : new(RuntimeStatus.InvalidArgument);
+    public static RuntimeResult<bool> GetActionDown(InputActionId action, int playerSlot = 0)
+        => action.IsValid ? NativeBridge.InputPressed(action.Name, playerSlot)
+            : new(RuntimeStatus.InvalidArgument);
+    public static RuntimeResult<bool> GetActionUp(InputActionId action, int playerSlot = 0)
+        => action.IsValid ? NativeBridge.InputReleased(action.Name, playerSlot)
+            : new(RuntimeStatus.InvalidArgument);
+    public static RuntimeResult<float> GetAxis(InputAxisId axis, int playerSlot = 0)
+        => axis.IsValid ? NativeBridge.InputAxis(axis.Name, playerSlot)
+            : new(RuntimeStatus.InvalidArgument);
+
     public static bool GetKey(Key key) => Flag(NativeBridge.InputKeyHeld((int)key));
     public static bool GetKeyDown(Key key) => Flag(NativeBridge.InputKeyPressed((int)key));
     public static bool GetKeyUp(Key key) => Flag(NativeBridge.InputKeyReleased((int)key));

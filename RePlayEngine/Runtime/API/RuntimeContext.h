@@ -156,6 +156,16 @@ namespace ReplayEngine::Runtime
 
         virtual bool SceneTransitionInProgress() const = 0;
         virtual const std::string& CurrentSceneGuid() const = 0;
+
+        // 非同期ロードUIとScript待機用。既存の差し替え実装は安全な既定値を使える。
+        virtual float SceneTransitionProgress() const
+        {
+            return SceneTransitionInProgress() ? 0.0f : 1.0f;
+        }
+        virtual RuntimeStatus LastSceneTransitionStatus() const
+        {
+            return RuntimeStatus::Ok;
+        }
     };
 
     // ログの出力先。framework / Editor が実装する。
@@ -477,6 +487,10 @@ namespace ReplayEngine::Runtime
 
         // 遷移中か。要求の二重発行を避けたい Behaviour が見る。
         bool SceneTransitionInProgress() const noexcept;
+
+        // 0..1 の進捗と、直近に完了した遷移の成否。
+        float SceneTransitionProgress() const noexcept;
+        RuntimeStatus SceneTransitionStatus() const noexcept;
 
         // 現在の Runtime Scene の AssetGUID。未接続なら空。
         const std::string& CurrentSceneGuid() const noexcept;

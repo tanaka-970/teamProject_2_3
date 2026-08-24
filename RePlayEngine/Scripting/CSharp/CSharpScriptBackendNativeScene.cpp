@@ -472,4 +472,20 @@ namespace ReplayEngine::Scripting::CSharp::Detail
         }
         return StatusCode(RuntimeStatus::Ok);
     }
+
+    int NativeGetSceneTransitionState(float* progress, int* in_progress,
+        int* transition_status) noexcept
+    {
+        if (progress == nullptr || in_progress == nullptr || transition_status == nullptr)
+            return StatusCode(RuntimeStatus::InvalidArgument);
+        *progress = 0.0f;
+        *in_progress = 0;
+        *transition_status = StatusCode(RuntimeStatus::ServiceUnavailable);
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+
+        *progress = g_runtime_context->SceneTransitionProgress();
+        *in_progress = g_runtime_context->SceneTransitionInProgress() ? 1 : 0;
+        *transition_status = StatusCode(g_runtime_context->SceneTransitionStatus());
+        return StatusCode(RuntimeStatus::Ok);
+    }
 }

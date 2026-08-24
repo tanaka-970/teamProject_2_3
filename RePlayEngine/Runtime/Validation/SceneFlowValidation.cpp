@@ -305,6 +305,9 @@ namespace ReplayEngine::Runtime::Validation
             check.Expect(!bare_runtime.SceneTransitionInProgress() &&
                 bare_runtime.CurrentSceneGuid().empty(),
                 "Scene Flow 未接続でも状態問い合わせが安全に答える");
+            check.Expect(bare_runtime.SceneTransitionProgress() == 0.0f &&
+                bare_runtime.SceneTransitionStatus() == RuntimeStatus::ServiceUnavailable,
+                "Scene Flow 未接続の進捗と成否は利用不可を明示する");
         }
 
         // -----------------------------------------------------------------
@@ -350,11 +353,19 @@ namespace ReplayEngine::Runtime::Validation
 
         check.Expect(Succeeded(flow.BeginStartupScene(guid_title)),
             "正常な Startup Scene の起動要求が受理される");
+        check.Expect(runtime.SceneTransitionInProgress() &&
+            runtime.SceneTransitionProgress() > 0.0f &&
+            runtime.SceneTransitionProgress() < 1.0f &&
+            runtime.SceneTransitionStatus() == RuntimeStatus::TransitionInProgress,
+            "Scene 読み込み中は進捗と実行中状態をRuntime APIへ公開する");
         flow.Tick();
         flow.Tick();
         check.Expect(flow.StartupState() == StartupSceneState::Ready &&
             !flow.StartupBlocked() && CurrentSceneName(scenes) == "FlowTitle",
             "Startup Scene の読み込みが完了し Ready になる");
+        check.Expect(runtime.SceneTransitionProgress() == 1.0f &&
+            runtime.SceneTransitionStatus() == RuntimeStatus::Ok,
+            "Scene 読み込み完了後は進捗1と成功状態を公開する");
         check.Expect(flow.History().empty() && !flow.CanReturn(),
             "起動 Scene は履歴の起点であり、戻り先を作らない");
 

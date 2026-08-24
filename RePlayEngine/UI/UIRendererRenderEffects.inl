@@ -192,18 +192,7 @@
                     DirectX::XMFLOAT4 source = draw_rect;
                     const ResolvedImageSource resolved = resolve_image_source(image);
                     DirectX::XMFLOAT4 uv = resolved.uv;
-                    const float fill = (std::min)((std::max)(image.fill_amount, 0.0f),
-                        1.0f);
-                    if (image.fill_method == UIImageComponent::Horizontal)
-                    {
-                        source.z *= fill;
-                        uv.z *= fill;
-                    }
-                    else if (image.fill_method == UIImageComponent::Vertical)
-                    {
-                        source.w *= fill;
-                        uv.w *= fill;
-                    }
+                    apply_image_fill(image, source, uv);
                     DirectX::XMFLOAT4X4 identity{};
                     DirectX::XMStoreFloat4x4(&identity, DirectX::XMMatrixIdentity());
                     append_image_geometry(source, identity, uv,
@@ -318,17 +307,7 @@
                 source_rect.w };
             const ResolvedImageSource resolved = resolve_image_source(image);
             DirectX::XMFLOAT4 uv = resolved.uv;
-            const float fill = (std::min)((std::max)(image.fill_amount, 0.0f), 1.0f);
-            if (image.fill_method == UIImageComponent::Horizontal)
-            {
-                draw_rect.z *= fill;
-                uv.z *= fill;
-            }
-            else if (image.fill_method == UIImageComponent::Vertical)
-            {
-                draw_rect.w *= fill;
-                uv.w *= fill;
-            }
+            apply_image_fill(image, draw_rect, uv);
 
             DirectX::XMFLOAT4X4 identity{};
             DirectX::XMStoreFloat4x4(&identity, DirectX::XMMatrixIdentity());
@@ -441,17 +420,7 @@
             DirectX::XMFLOAT4 draw_rect = map_image_to_path_bounds
                 ? path_bounds : source_rect;
             DirectX::XMFLOAT4 uv = resolved.uv;
-            const float fill = (std::min)((std::max)(image.fill_amount, 0.0f), 1.0f);
-            if (image.fill_method == UIImageComponent::Horizontal)
-            {
-                draw_rect.z *= fill;
-                uv.z *= fill;
-            }
-            else if (image.fill_method == UIImageComponent::Vertical)
-            {
-                draw_rect.w *= fill;
-                uv.w *= fill;
-            }
+            apply_image_fill(image, draw_rect, uv);
 
             configure_effect_target(*target);
             context->ClearRenderTargetView(target->rtv.Get(), clear);

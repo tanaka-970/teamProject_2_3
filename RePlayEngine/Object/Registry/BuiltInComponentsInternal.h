@@ -44,6 +44,7 @@
 #include "../../Components/UI/UISelectableComponent.h"
 #include "../../Components/UI/UILayoutGroupComponents.h"
 #include "../../Components/UI/UIScrollViewComponent.h"
+#include "../../Components/UI/UISliderComponent.h"
 #include "../../Components/UI/UIInputFieldComponent.h"
 #include "../../Components/UI/UILanguageSwitchComponent.h"
 #include "../../Components/UI/UIButtonPropertyToggleComponent.h"
@@ -123,6 +124,7 @@ namespace ReplayEngine::Core::Detail
         using Components::UIInputFieldComponent;
         using Components::UILanguageSwitchComponent;
         using Components::UIScrollViewComponent;
+        using Components::UISliderComponent;
         using Components::UIGridLayoutGroupComponent;
         using Components::UIVerticalLayoutGroupComponent;
         using Components::UIHorizontalLayoutGroupComponent;

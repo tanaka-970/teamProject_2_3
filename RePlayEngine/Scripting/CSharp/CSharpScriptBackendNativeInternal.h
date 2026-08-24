@@ -43,7 +43,7 @@ namespace ReplayEngine::Scripting::CSharp::Detail
 
         // 関数ポインタ表の互換番号。**末尾へ関数を足したら必ず 1 上げる。**
         // C# 側の NativeBridge.NativeApiAbiVersion と一致していないと表を拒否する。
-        inline constexpr std::uint32_t kNativeApiAbiVersion = 13;
+        inline constexpr std::uint32_t kNativeApiAbiVersion = 16;
 
         // 表の先頭に必ず置く自己記述ヘッダー。
         // 順番が 1 つずれても別関数を呼ばずに、その場で不一致として弾くために使う。
@@ -245,6 +245,20 @@ namespace ReplayEngine::Scripting::CSharp::Detail
             // v13 additions. Global/Scene 購読と Component 実行命令。
             subscribe_event_scoped_callback subscribe_event_scoped = nullptr;
             component_command_callback component_command = nullptr;
+
+            // v14 Component 型メタデータ。
+            component_type_info_callback component_type_info = nullptr;
+
+            // v15 Component プロパティの Object / Component 参照。
+            get_property_object_reference_callback get_component_property_object_reference = nullptr;
+            set_property_object_reference_callback set_component_property_object_reference = nullptr;
+            get_property_component_reference_callback get_component_property_component_reference = nullptr;
+            set_property_component_reference_callback set_component_property_component_reference = nullptr;
+            component_to_reference_callback component_to_reference = nullptr;
+            resolve_component_reference_callback resolve_component_reference = nullptr;
+
+            // v16 Scene 遷移状態。
+            scene_transition_state_callback get_scene_transition_state = nullptr;
         };
 
         // ヘッダー以降がすべて関数ポインタであることを、表を作る側で必ず確かめる。
@@ -454,6 +468,20 @@ namespace ReplayEngine::Scripting::CSharp::Detail
     int NativeComponentTypeId(const char* type_name, std::uint32_t* out) noexcept;
     int NativeGetComponentTypeName(Runtime::ComponentHandle handle, char* output,
         int output_capacity) noexcept;
+    int NativeComponentTypeInfo(const char* type_name, char* output,
+        int output_capacity) noexcept;
+    int NativeGetComponentPropertyObjectReference(Runtime::ComponentHandle handle,
+        const char* name, std::uint64_t* owner) noexcept;
+    int NativeSetComponentPropertyObjectReference(Runtime::ComponentHandle handle,
+        const char* name, std::uint64_t owner) noexcept;
+    int NativeGetComponentPropertyComponentReference(Runtime::ComponentHandle handle,
+        const char* name, std::uint64_t* owner, std::uint32_t* component) noexcept;
+    int NativeSetComponentPropertyComponentReference(Runtime::ComponentHandle handle,
+        const char* name, std::uint64_t owner, std::uint32_t component) noexcept;
+    int NativeComponentToReference(Runtime::ComponentHandle handle,
+        std::uint64_t* owner, std::uint32_t* component) noexcept;
+    int NativeResolveComponentReference(std::uint64_t owner, std::uint32_t component,
+        Runtime::ComponentHandle* out) noexcept;
     int NativeGetComponentPropertyBool(Runtime::ComponentHandle handle,
         const char* name, int* out) noexcept;
     int NativeSetComponentPropertyBool(Runtime::ComponentHandle handle,
@@ -531,6 +559,8 @@ namespace ReplayEngine::Scripting::CSharp::Detail
     int NativeGetCurrentSceneGuid(char* output, int output_capacity) noexcept;
     int NativeQuitApplication(const char* reason) noexcept;
     int NativeEventDroppedCount(std::uint64_t subscription, std::uint64_t* out) noexcept;
+    int NativeGetSceneTransitionState(float* progress, int* in_progress,
+        int* transition_status) noexcept;
 
     NativeApiTable MakeNativeApiTable() noexcept;
 }

@@ -75,6 +75,23 @@ namespace ReplayEngine::Runtime
         return scene_flow_ != nullptr && scene_flow_->SceneTransitionInProgress();
     }
 
+    float RuntimeContext::SceneTransitionProgress() const noexcept
+    {
+        if (scene_flow_ == nullptr) return 0.0f;
+        const float value = scene_flow_->SceneTransitionProgress();
+        if (value < 0.0f) return 0.0f;
+        if (value > 1.0f) return 1.0f;
+        return value;
+    }
+
+    RuntimeStatus RuntimeContext::SceneTransitionStatus() const noexcept
+    {
+        if (scene_flow_ == nullptr) return RuntimeStatus::ServiceUnavailable;
+        if (scene_flow_->SceneTransitionInProgress())
+            return RuntimeStatus::TransitionInProgress;
+        return scene_flow_->LastSceneTransitionStatus();
+    }
+
     const std::string& RuntimeContext::CurrentSceneGuid() const noexcept
     {
         // 未接続でも参照を返せるようにするための空文字列。

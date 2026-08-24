@@ -2980,6 +2980,9 @@
     <ClCompile Include="RePlayEngine\Components\UI\UIScrollViewComponent.cpp"><Filter>ソース ファイル\RePlayEngine\Components\UI</Filter></ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="RePlayEngine\Components\UI\UISliderComponent.cpp"><Filter>ソース ファイル\RePlayEngine\Components\UI</Filter></ClCompile>
+  </ItemGroup>
+  <ItemGroup>
     <ClCompile Include="RePlayEngine\UI\UIFocusManager.cpp"><Filter>ソース ファイル\RePlayEngine\UI</Filter></ClCompile>
   
     <ClCompile Include="RePlayEngine\Components\UI\UIInputFieldComponent.cpp">
@@ -2996,6 +2999,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="RePlayEngine\Components\UI\UIScrollViewComponent.h"><Filter>ヘッダー ファイル\RePlayEngine\Components\UI</Filter></ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="RePlayEngine\Components\UI\UISliderComponent.h"><Filter>ヘッダー ファイル\RePlayEngine\Components\UI</Filter></ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="RePlayEngine\UI\UIFocusManager.h"><Filter>ヘッダー ファイル\RePlayEngine\UI</Filter></ClInclude>

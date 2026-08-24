@@ -182,10 +182,20 @@ public readonly struct MeshRendererComponent : IComponentBinding<MeshRendererCom
         get => Accessor.GetString("mesh_asset");
         set => Accessor.SetString("mesh_asset", value);
     }
+    public AssetReference<ModelAsset> MeshReference
+    {
+        get => new(MeshAsset);
+        set => MeshAsset = value.AssetGuid;
+    }
     public string MaterialAsset
     {
         get => Accessor.GetString("material_asset");
         set => Accessor.SetString("material_asset", value);
+    }
+    public AssetReference<ReplayEngine.MaterialAsset> MaterialReference
+    {
+        get => new(MaterialAsset);
+        set => MaterialAsset = value.AssetGuid;
     }
     public bool MaterialOverride
     {

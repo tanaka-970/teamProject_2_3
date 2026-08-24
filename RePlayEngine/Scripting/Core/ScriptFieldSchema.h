@@ -52,6 +52,9 @@ namespace ReplayEngine::Scripting
         // Enum のときの表示ラベル。添字が値に対応する。
         std::vector<std::string> enum_labels;
 
+        // Array の要素型。type が Array のときだけ使う。
+        ScriptValueType array_element_type = ScriptValueType::Bool;
+
         // ---- 組み立てを短くするための連結設定（C++17。指定イニシャライザは使わない） ----
 
         static ScriptFieldDefinition Make(std::string field_name, ScriptValueType field_type)
@@ -160,7 +163,7 @@ namespace ReplayEngine::Scripting
         //   - 名前が空
         //   - 名前が重複している（先勝ち）
         //   - 名前へ予約接頭辞が含まれている
-        //   - 配列などのコンテナ型（初期版では未対応）
+        //   - 配列の要素が配列などのコンテナ型
         // 落とした件数と理由は rejected へ入る。呼び出し側が診断へ出す。
         static std::shared_ptr<const ScriptFieldSchema> Build(
             ScriptTypeID type_id, std::uint32_t revision,
