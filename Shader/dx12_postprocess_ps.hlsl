@@ -1,5 +1,15 @@
+// HDR Sceneを最終表示へ変換する共通パス。
+// 現フレームのGBufferと前フレームHDR履歴をここで使い、TAA/SSAO/SSRを
+// 照明ゲインで代用せず、実際の画面空間入力として合成する。
+
 Texture2D sceneTexture : register(t0);
+Texture2D historyTexture : register(t1);
+Texture2D sceneDepth : register(t2);
+Texture2D sceneVelocity : register(t3);
+Texture2D sceneNormal : register(t4);
+Texture2D sceneMaterial : register(t5);
 SamplerState sceneSampler : register(s0);
+SamplerState pointSampler : register(s1);
 
 cbuffer PostProcessConstants : register(b0)
 {
@@ -7,9 +17,14 @@ cbuffer PostProcessConstants : register(b0)
     float bloomIntensity;
     float vignetteStrength;
     float fxaaEnabled;
+    float taaBlend;
+    float ssaoStrength;
+    float ssrStrength;
+    float historyValid;
     float2 screenSize;
     float2 padding;
     float4 colorFilter;
+    float4 featureFlags; // x=TAA、y=SSAO、z=SSR
 };
 
 struct PixelInput
@@ -45,6 +60,60 @@ float3 fxaa(float2 uv)
     return averageLuma < lumaMin || averageLuma > lumaMax ? center : average;
 }
 
+float ssao(float2 uv)
+{
+    const float centerDepth = sceneDepth.SampleLevel(pointSampler, uv, 0).r;
+    if (centerDepth >= 0.999999f) return 1.0f;
+    const float2 pixel = 1.0f / max(screenSize, float2(1.0f, 1.0f));
+    const float neighborDepth[4] = {
+        sceneDepth.SampleLevel(pointSampler, uv + float2(pixel.x, 0.0f), 0).r,
+        sceneDepth.SampleLevel(pointSampler, uv - float2(pixel.x, 0.0f), 0).r,
+        sceneDepth.SampleLevel(pointSampler, uv + float2(0.0f, pixel.y), 0).r,
+        sceneDepth.SampleLevel(pointSampler, uv - float2(0.0f, pixel.y), 0).r };
+    float occlusion = 0.0f;
+    [unroll] for (int index = 0; index < 4; ++index)
+    {
+        const float difference = centerDepth - neighborDepth[index];
+        occlusion += saturate(difference * 32.0f) *
+            saturate(1.0f - abs(difference) * 48.0f);
+    }
+    return saturate(1.0f - occlusion * 0.2f * ssaoStrength);
+}
+
+float3 screenSpaceReflection(float2 uv, float3 color)
+{
+    if (historyValid < 0.5f || featureFlags.z < 0.5f) return color;
+    const float4 material = sceneMaterial.SampleLevel(pointSampler, uv, 0);
+    const float roughness = saturate(material.g);
+    const float3 normal = normalize(sceneNormal.SampleLevel(pointSampler, uv, 0).xyz * 2.0f - 1.0f);
+    const float2 reflection_offset = normal.xy * (0.018f + 0.032f * (1.0f - roughness)) *
+        ssrStrength;
+    const float2 reflection_uv = saturate(uv + reflection_offset);
+    const float3 reflection = historyTexture.SampleLevel(sceneSampler, reflection_uv, 0).rgb;
+    const float confidence = saturate((1.0f - roughness) * 0.35f * ssrStrength);
+    return lerp(color, reflection, confidence);
+}
+
+float3 temporalResolve(float2 uv, float3 color)
+{
+    if (historyValid < 0.5f || featureFlags.x < 0.5f) return color;
+    const float2 velocity = sceneVelocity.SampleLevel(pointSampler, uv, 0).rg;
+    const float2 historyUv = uv - velocity;
+    if (any(historyUv < 0.0f) || any(historyUv > 1.0f)) return color;
+    const float motionPixels = length(velocity * screenSize);
+    const float motionWeight = saturate(1.0f - motionPixels / 48.0f);
+    const float weight = saturate(taaBlend) * motionWeight;
+    const float3 history = historyTexture.SampleLevel(sceneSampler, historyUv, 0).rgb;
+    const float2 pixel = 1.0f / max(screenSize, float2(1.0f, 1.0f));
+    const float3 neighborhoodMin = min(color,
+        min(sampleScene(uv + float2(pixel.x, 0.0f)),
+            sampleScene(uv - float2(pixel.x, 0.0f))));
+    const float3 neighborhoodMax = max(color,
+        max(sampleScene(uv + float2(pixel.x, 0.0f)),
+            sampleScene(uv - float2(pixel.x, 0.0f))));
+    return lerp(color, clamp(history, neighborhoodMin, neighborhoodMax), weight);
+}
+
 float3 acesToneMap(float3 color)
 {
     color *= exp2(exposure);
@@ -56,16 +125,19 @@ float3 acesToneMap(float3 color)
 float4 main(PixelInput input) : SV_TARGET
 {
     float3 color = fxaaEnabled > 0.5f ? fxaa(input.uv) : sampleScene(input.uv);
+    if (featureFlags.y > 0.5f)
+        color *= ssao(input.uv);
+    color = screenSpaceReflection(input.uv, color);
+    color = temporalResolve(input.uv, color);
 
-    // 単一パスの可変半径近似。別の明るさ固定値ではなく、実SceneのHDR値からBloomを作る。
+    // 実SceneのHDR値からBloomを作る。固定の明るさを加算しない。
     const float2 pixel = 1.0f / max(screenSize, float2(1.0f, 1.0f));
     float3 bloom = 0.0f;
     bloom += max(sampleScene(input.uv + pixel * float2(-2.0f, 0.0f)) - 1.0f, 0.0f);
     bloom += max(sampleScene(input.uv + pixel * float2(2.0f, 0.0f)) - 1.0f, 0.0f);
     bloom += max(sampleScene(input.uv + pixel * float2(0.0f, -2.0f)) - 1.0f, 0.0f);
     bloom += max(sampleScene(input.uv + pixel * float2(0.0f, 2.0f)) - 1.0f, 0.0f);
-    bloom *= 0.25f * bloomIntensity;
-    color += bloom;
+    color += bloom * (0.25f * bloomIntensity);
 
     color = acesToneMap(max(color, 0.0f));
     if (vignetteStrength > 0.0f)

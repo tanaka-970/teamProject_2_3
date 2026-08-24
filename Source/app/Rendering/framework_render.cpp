@@ -391,10 +391,16 @@ void framework::render(float elapsed_time)
                 0.138f, 0.0f, 1.0f);
             static_scene.post_process.fxaa_enable = clamp_finite(post_settings.fxaa_enable,
                 1.0f, 0.0f, 1.0f);
+            static_scene.post_process.taa_blend = 0.88f;
+            static_scene.post_process.ssao_strength = 1.0f;
+            static_scene.post_process.ssr_strength = 1.0f;
             static_scene.post_process.color_filter = clamp_color(post_settings.color_filter);
             static_scene.post_process.bloom_enabled = enable_bloom_shader;
             static_scene.post_process.vignette_enabled = enable_vignette_shader;
             static_scene.post_process.fxaa_enabled = enable_fxaa_shader;
+            static_scene.post_process.taa_enabled = enable_taa;
+            static_scene.post_process.ssao_enabled = enable_ssao;
+            static_scene.post_process.ssr_enabled = enable_ssr;
             const auto volume_selection =
                 ReplayEngine::Components::ResolvePostProcessVolumeSelection(active_object_scene());
             if (volume_selection.Valid())
