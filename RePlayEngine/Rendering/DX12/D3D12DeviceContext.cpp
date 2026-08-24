@@ -762,12 +762,14 @@ namespace ReplayEngine::Rendering::DX12
         color_description.Height = height;
         color_description.DepthOrArraySize = 1;
         color_description.MipLevels = 1;
-        color_description.Format = kBackBufferFormat;
+        // SceneView/GameViewは最終表示前のHDRリニア値を保持する。
+        // SwapChainのLDRへ直接書くとExposure/Tone Mappingが成立しない。
+        color_description.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
         color_description.SampleDesc.Count = 1;
         color_description.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
         color_description.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
         D3D12_CLEAR_VALUE color_clear{};
-        color_clear.Format = kBackBufferFormat;
+        color_clear.Format = color_description.Format;
         color_clear.Color[3] = 1.0f;
         if (FAILED(device_->CreateCommittedResource(&default_heap,
             D3D12_HEAP_FLAG_NONE, &color_description,
@@ -779,7 +781,7 @@ namespace ReplayEngine::Rendering::DX12
         }
         device_->CreateRenderTargetView(target.color.Get(), nullptr, target.rtv.cpu);
         D3D12_SHADER_RESOURCE_VIEW_DESC srv{};
-        srv.Format = kBackBufferFormat;
+        srv.Format = color_description.Format;
         srv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
         srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         srv.Texture2D.MipLevels = 1;

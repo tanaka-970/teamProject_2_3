@@ -1038,6 +1038,7 @@
     <None Include="Shader\dx12_imgui_vs.hlsl" />
     <None Include="Shader\dx12_lighting_common.hlsli" />
     <None Include="Shader\dx12_lighting_ps.hlsl" />
+    <None Include="Shader\dx12_postprocess_ps.hlsl" />
     <None Include="Shader\dx12_shadow_alpha_ps.hlsl" />
     <None Include="Shader\dx12_shadow_skinned_vs.hlsl" />
     <None Include="Shader\dx12_shadow_static_vs.hlsl" />
