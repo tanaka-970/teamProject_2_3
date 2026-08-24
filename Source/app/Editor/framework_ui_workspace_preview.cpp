@@ -10,6 +10,7 @@
 #include "../../RePlayEngine/Components/UI/UITextComponent.h"
 #include "../../RePlayEngine/Components/UI/UIButtonComponent.h"
 #include "../../RePlayEngine/Components/UI/UIMaskComponent.h"
+#include "../../RePlayEngine/Assets/SpriteAtlasAsset.h"
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
 #include "../../RePlayEngine/Scene/Runtime/Scene.h"
 #include "../../RePlayEngine/UI/UILayout.h"
@@ -125,7 +126,7 @@
     void DrawPreviewObject(ImDrawList* draw_list, Core::GameObject& object,
         const ImVec2& origin, float canvas_height, float zoom,
         Core::ObjectID selected,
-        const std::function<ID3D11ShaderResourceView*(const UIImageComponent&)>& texture_for_image)
+        const std::function<ImTextureID(const UIImageComponent&)>& texture_for_image)
     {
         RectTransformComponent* rect = object.GetComponent<RectTransformComponent>();
         if (rect != nullptr && HasUIComponent(object))
@@ -148,7 +149,7 @@
                         PreviewQuad(*rect, draw_rect, origin, canvas_height, zoom,
                             image_points);
                         const ImU32 tint = ColorToU32(image->color, image->opacity);
-                        ID3D11ShaderResourceView* texture = texture_for_image(*image);
+                        const ImTextureID texture = texture_for_image(*image);
                         if (texture != nullptr)
                         {
                             const ImVec2 uv0(uv.x, uv.y + uv.w);
@@ -156,7 +157,7 @@
                             const ImVec2 uv2(uv.x + uv.z, uv.y);
                             const ImVec2 uv3(uv.x, uv.y);
                             draw_list->AddImageQuad(
-                                reinterpret_cast<ImTextureID>(texture),
+                                texture,
                                 image_points[0], image_points[1],
                                 image_points[2], image_points[3],
                                 uv0, uv1, uv2, uv3, tint);
@@ -199,6 +200,52 @@
             if (child != nullptr) DrawPreviewObject(draw_list, *child,
                 origin, canvas_height, zoom, selected, texture_for_image);
         }
+    }
+
+    std::filesystem::path PreviewImagePath(const UIImageComponent& image,
+        const Assets::AssetDatabase& asset_database)
+    {
+        std::filesystem::path image_path;
+        std::string image_guid = image.sprite.guid;
+        if (!image.atlas.guid.empty() && !image.atlas_region.empty())
+        {
+            const Assets::AssetRecord* atlas_record =
+                asset_database.FindByGuid(image.atlas.guid);
+            if (atlas_record != nullptr && atlas_record->kind == Assets::AssetKind::SpriteAtlas)
+            {
+                const std::filesystem::path atlas_path = atlas_record->cache_path.empty()
+                    ? atlas_record->source_path : atlas_record->cache_path;
+                Assets::SpriteAtlasAsset atlas;
+                std::string error;
+                if (Assets::SpriteAtlasAsset::LoadFromFile(atlas_path, atlas, error))
+                {
+                    const Assets::SpriteAtlasRegion* region =
+                        atlas.FindRegion(image.atlas_region);
+                    if (region != nullptr)
+                    {
+                        image_guid = atlas.image_guid;
+                        if (!atlas.embedded_texture_path.empty())
+                        {
+                            const std::filesystem::path embedded = atlas_path.parent_path() /
+                                std::filesystem::u8path(atlas.embedded_texture_path);
+                            std::error_code file_error;
+                            if (std::filesystem::is_regular_file(embedded, file_error) &&
+                                !file_error)
+                                image_path = embedded;
+                        }
+                    }
+                }
+            }
+        }
+        if (image_path.empty() && !image_guid.empty())
+        {
+            const Assets::AssetRecord* image_record =
+                asset_database.FindByGuid(image_guid);
+            if (image_record != nullptr && image_record->kind == Assets::AssetKind::Image)
+                image_path = image_record->cache_path.empty()
+                    ? image_record->source_path : image_record->cache_path;
+        }
+        return image_path;
     }
 
 
@@ -559,9 +606,26 @@ void framework::draw_ui_preview()
                 IM_COL32(255, 255, 255, 24));
     }
 
-    // 実際の Runtime UIRenderer が出した RT をそのまま表示する。
-    // UIImage/UIText/UIShape/Mask/Effect/Puppet を ImGui で再実装しない。
-    if (ui_preview_runtime_srv)
+    // DX11はRuntime UIRendererのRTを表示する。DX12はD3D11のRTを更新しないため、
+    // Sceneの既存UIデータを同じ座標・画像・選択状態でImGuiへ提出する。
+    if (dx12_framework_active)
+    {
+        const auto texture_for_image = [this](const UIImageComponent& image) -> ImTextureID
+        {
+            const std::filesystem::path path = PreviewImagePath(image, asset_database);
+            return reinterpret_cast<ImTextureID>(
+                dx12_device_context.ImGuiTextureForPath(path));
+        };
+        const std::vector<Core::GameObject*> canvases = SortedCanvases(*scene);
+        for (Core::GameObject* canvas : canvases)
+        {
+            if (canvas != nullptr)
+                DrawPreviewObject(draw_list, *canvas, origin,
+                    static_cast<float>(preview_height), ui_preview_zoom,
+                    Core::ObjectID::Invalid(), texture_for_image);
+        }
+    }
+    else if (ui_preview_runtime_srv)
     {
         draw_list->AddImage(reinterpret_cast<ImTextureID>(ui_preview_runtime_srv.Get()),
             origin, ImVec2(origin.x + canvas_size.x, origin.y + canvas_size.y),
