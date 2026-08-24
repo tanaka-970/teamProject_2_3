@@ -24,6 +24,10 @@
 #include <unordered_set>
 #include <vector>
 
+#ifdef USE_IMGUI
+struct ImDrawData;
+#endif
+
 namespace ReplayEngine::Rendering::DX12
 {
     struct D3D12StaticVertex final
@@ -77,6 +81,8 @@ namespace ReplayEngine::Rendering::DX12
     struct D3D12StaticDrawItem final
     {
         std::string mesh_key;
+        // Object + mesh/subset の安定キー。Static Transform の motion vector 履歴に使う。
+        std::string motion_key;
         std::string base_color_texture_key;
         // 空文字なら Phase 2 Material Bridge の Pixel Shader を使う。空でない Key は、
         // Static Phase 2 Root Signature に適合する場合に DXC Compile 済みの
@@ -84,6 +90,9 @@ namespace ReplayEngine::Rendering::DX12
         std::string shader_key;
         std::vector<std::uint8_t> material_constants;
         std::vector<D3D12StaticMaterialTexture> material_textures;
+        // ResolvedMaterialBinding::TextureSemantic の bit mask。
+        // slot番号だけで Toon RampMap 等を NormalMap と誤認しないために使う。
+        std::uint32_t material_texture_semantic_mask = 0;
         std::uint32_t start_index = 0;
         std::uint32_t index_count = 0; // 0 は Cache 済み Index Buffer 全体を描画する。
         DirectX::XMFLOAT4X4 world{
@@ -100,15 +109,121 @@ namespace ReplayEngine::Rendering::DX12
         float ambient_occlusion = 1.0f;
         float alpha_cutoff = 0.5f;
         D3D12StaticAlphaMode alpha_mode = D3D12StaticAlphaMode::Opaque;
+        std::int32_t lighting_model = 0; // ShaderLightingModel::Pbr
         bool double_sided = false;
+        bool cast_shadow = true;
+        bool receive_shadow = true;
+    };
+
+    struct D3D12SkinnedVertex final
+    {
+        DirectX::XMFLOAT3 position{};
+        DirectX::XMFLOAT3 normal{ 0.0f, 1.0f, 0.0f };
+        DirectX::XMFLOAT4 tangent{ 1.0f, 0.0f, 0.0f, 1.0f };
+        DirectX::XMFLOAT2 texcoord{};
+        DirectX::XMFLOAT4 bone_weights{ 1.0f, 0.0f, 0.0f, 0.0f };
+        std::uint32_t bone_indices[4]{};
+        DirectX::XMFLOAT3 morph_position{};
+        DirectX::XMFLOAT3 morph_normal{};
+    };
+
+    static_assert(sizeof(D3D12SkinnedVertex) == 104,
+        "DX12 skinned vertex ABI must match the existing skinned_mesh::vertex payload.");
+
+    struct D3D12SkinnedMeshSource final
+    {
+        std::string key;
+        std::vector<D3D12SkinnedVertex> vertices;
+        std::vector<std::uint32_t> indices;
+    };
+
+    struct D3D12SkinnedDrawItem final
+    {
+        D3D12StaticDrawItem surface;
+        // owner + mesh/subset を含む安定キー。前フレームの Bone/World 履歴に使う。
+        std::string motion_key;
+        // CPU Animator が確定した姿勢から生成した可変長 Bone Palette。
+        // 256/600 などの固定長定数バッファにはしない。
+        std::vector<DirectX::XMFLOAT4X4> bone_palette;
+        float morph_weight = 0.0f;
+    };
+
+    struct D3D12DirectionalLightSubmission final
+    {
+        DirectX::XMFLOAT3 direction{ 0.0f, -1.0f, 0.0f };
+        float intensity = 0.0f;
+        DirectX::XMFLOAT3 color{ 1.0f, 1.0f, 1.0f };
+        float shadow_strength = 1.0f;
+        bool enabled = false;
+        bool cast_shadows = false;
+    };
+
+    struct D3D12PointLightSubmission final
+    {
+        DirectX::XMFLOAT3 position{};
+        float range = 1.0f;
+        DirectX::XMFLOAT3 color{ 1.0f, 1.0f, 1.0f };
+        float intensity = 1.0f;
+        bool cast_shadows = false;
+        float shadow_strength = 1.0f;
+        std::int32_t shadow_slice = -1;
+    };
+
+    struct D3D12SpotLightSubmission final
+    {
+        DirectX::XMFLOAT3 position{};
+        float range = 1.0f;
+        DirectX::XMFLOAT3 direction{ 0.0f, 0.0f, 1.0f };
+        float inner_cos = 0.95f;
+        DirectX::XMFLOAT3 color{ 1.0f, 1.0f, 1.0f };
+        float outer_cos = 0.85f;
+        float intensity = 1.0f;
+        bool cast_shadows = false;
+        float shadow_strength = 1.0f;
+        std::int32_t shadow_slice = -1;
+    };
+
+    struct D3D12DirectionalShadowSubmission final
+    {
+        static constexpr std::uint32_t CascadeCount = 4;
+        DirectX::XMFLOAT4X4 view_projection[CascadeCount]{};
+        DirectX::XMFLOAT4 split_distances{};
+        DirectX::XMFLOAT4 params{};
+        DirectX::XMFLOAT4 params2{};
+        DirectX::XMFLOAT4 params3{};
+        DirectX::XMFLOAT4 texel_world{};
+        std::uint32_t resolution = 2048;
+        bool enabled = false;
+    };
+
+    struct D3D12LocalShadowSliceSubmission final
+    {
+        DirectX::XMFLOAT4X4 view_projection{};
+        DirectX::XMFLOAT4 params{};
+    };
+
+    struct D3D12LocalShadowSubmission final
+    {
+        static constexpr std::uint32_t SliceCount = 16;
+        D3D12LocalShadowSliceSubmission slices[SliceCount]{};
+        std::uint32_t used_slice_mask = 0;
+        std::uint32_t resolution = 1024;
+        bool enabled = false;
     };
 
     struct D3D12StaticSceneSubmission final
     {
         std::vector<D3D12StaticMeshSource> mesh_sources;
+        std::vector<D3D12SkinnedMeshSource> skinned_mesh_sources;
         std::vector<D3D12StaticTextureSource> texture_sources;
         std::vector<D3D12StaticShaderSource> shader_sources;
         std::vector<D3D12StaticDrawItem> draws;
+        std::vector<D3D12SkinnedDrawItem> skinned_draws;
+        D3D12DirectionalLightSubmission directional_light{};
+        std::vector<D3D12PointLightSubmission> point_lights;
+        std::vector<D3D12SpotLightSubmission> spot_lights;
+        D3D12DirectionalShadowSubmission directional_shadow{};
+        D3D12LocalShadowSubmission local_shadows{};
     };
 
     struct D3D12OffscreenTarget final
@@ -151,9 +266,22 @@ namespace ReplayEngine::Rendering::DX12
         bool SubmitRenderItems(
             const ::ReplayEngine::Rendering::RenderItemList& items) noexcept;
         bool DrawStaticScene(const D3D12StaticSceneSubmission& submission) noexcept;
+        // Scene 3D: Static + Skinned + GBuffer + Deferred + Forward Transparent。
+        bool DrawScene3D(const D3D12StaticSceneSubmission& submission) noexcept;
         bool DrawValidationTriangle() noexcept;
         bool EndFrame() noexcept;
         bool WaitForGpu() noexcept;
+        // Present 前に現在の Back Buffer を Readback へコピーする要求を積む。
+        bool RequestBackBufferCapture() noexcept;
+        // Present 済みの Readback を CPU 側の RGBA8 画像として回収する。
+        bool ConsumeBackBufferCapture(std::vector<std::uint8_t>& rgba,
+            std::uint32_t& width, std::uint32_t& height) noexcept;
+#ifdef USE_IMGUI
+        // ImGuiのWin32入力は既存Platform Backendを使い、描画だけをDX12へ接続する。
+        bool InitializeImGui() noexcept;
+        bool DrawImGui(::ImDrawData* draw_data) noexcept;
+        bool ImGuiReady() const noexcept { return imgui_ready_; }
+#endif
         // Scene/Asset Reload の境界。Cache 済み Static Mesh/Texture を解放する前に
         // GPU Idle を待ち、古い Asset を保持し続けないようにする。
         bool ClearStaticAssetCaches() noexcept;
@@ -186,6 +314,14 @@ namespace ReplayEngine::Rendering::DX12
         HRESULT LastDeviceRemovedReason() const noexcept
         {
             return last_device_removed_reason_;
+        }
+        const char* LastInitializationStage() const noexcept
+        {
+            return last_initialization_stage_;
+        }
+        HRESULT LastInitializationResult() const noexcept
+        {
+            return last_initialization_result_;
         }
 
         ID3D12Device* Device() const noexcept { return device_.Get(); }
@@ -224,9 +360,13 @@ namespace ReplayEngine::Rendering::DX12
         {
             return static_mesh_cache_.find(key) != static_mesh_cache_.end();
         }
+        bool HasSkinnedMesh(const std::string& key) const noexcept
+        {
+            return skinned_mesh_cache_.find(key) != skinned_mesh_cache_.end();
+        }
         bool HasStaticTexture(const std::string& key) const noexcept
         {
-            // File Decode の失敗も解決済みとして扱う。DrawStaticScene は White Texture へ戻し、
+            // File Decodeの失敗も解決済みとして扱う。DrawStaticSceneはWhite Textureへ戻し、
             // build_dx12_static_scene が同じ不正 Asset を毎フレーム再試行しないようにする。
             return key.empty() || texture_cache_.find(key) != texture_cache_.end() ||
                 static_texture_failures_.find(key) != static_texture_failures_.end();
@@ -269,7 +409,18 @@ namespace ReplayEngine::Rendering::DX12
         bool CreateValidationTriangleResources() noexcept;
         bool CreateStaticRendererResources() noexcept;
         void ReleaseStaticRendererResources() noexcept;
+        bool CreateScene3DRendererResources() noexcept;
+        void ReleaseScene3DRendererResources() noexcept;
+#ifdef USE_IMGUI
+        bool CreateImGuiRendererResources() noexcept;
+        void ReleaseImGuiRendererResources() noexcept;
+#endif
+        bool EnsureScene3DRenderTargets() noexcept;
+        void ReleaseScene3DRenderTargets() noexcept;
+        bool EnsureScene3DShadowTargets(const D3D12StaticSceneSubmission& submission) noexcept;
+        void ReleaseScene3DShadowTargets() noexcept;
         bool EnsureStaticMesh(const D3D12StaticMeshSource& source) noexcept;
+        bool EnsureSkinnedMesh(const D3D12SkinnedMeshSource& source) noexcept;
         bool EnsureStaticTexture(const D3D12StaticTextureSource& source) noexcept;
         bool EnsureStaticShader(const D3D12StaticShaderSource& source) noexcept;
         bool CreateSolidStaticTexture(const char* key, std::uint32_t rgba) noexcept;
@@ -283,9 +434,12 @@ namespace ReplayEngine::Rendering::DX12
         void ReleaseValidationTriangleResources() noexcept;
         bool WaitForFrame(std::uint32_t frame_index) noexcept;
         bool TransitionCurrentRenderTarget(D3D12_RESOURCE_STATES after) noexcept;
+        bool RecordBackBufferCapture() noexcept;
+        void ReleaseBackBufferCapture() noexcept;
         std::uint64_t SignalQueue() noexcept;
         void ReclaimDeferredDescriptors() noexcept;
         void ReportDeviceRemoved(HRESULT trigger) noexcept;
+        void SetInitializationFailure(const char* stage, HRESULT result) noexcept;
 
         struct StaticTextureResource final
         {
@@ -339,6 +493,39 @@ namespace ReplayEngine::Rendering::DX12
         static_assert(sizeof(StaticFrameCompatibilityConstants) % 16 == 0);
         static_assert(sizeof(StaticBridgeMaterialConstants) % 16 == 0);
 
+        struct Scene3DTarget final
+        {
+            Microsoft::WRL::ComPtr<ID3D12Resource> resource;
+            D3D12DescriptorAllocation rtv{};
+            D3D12DescriptorAllocation srv{};
+            DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
+        };
+
+        struct Scene3DDepthTarget final
+        {
+            Microsoft::WRL::ComPtr<ID3D12Resource> resource;
+            D3D12DescriptorAllocation dsv{};
+            D3D12DescriptorAllocation srv{};
+        };
+
+        struct Scene3DShadowTarget final
+        {
+            Microsoft::WRL::ComPtr<ID3D12Resource> resource;
+            D3D12DescriptorAllocation dsv{};
+            D3D12DescriptorAllocation srv{};
+            std::uint32_t resolution = 0;
+            std::uint32_t array_size = 0;
+        };
+
+        struct Scene3DMotionHistory final
+        {
+            DirectX::XMFLOAT4X4 world{
+                1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
+            std::vector<DirectX::XMFLOAT4X4> bones;
+            std::uint64_t frame_serial = 0;
+            bool valid = false;
+        };
+
         Microsoft::WRL::ComPtr<IDXGIFactory7> factory_;
         Microsoft::WRL::ComPtr<IDXGIAdapter4> adapter_;
         Microsoft::WRL::ComPtr<ID3D12Device> device_;
@@ -350,6 +537,41 @@ namespace ReplayEngine::Rendering::DX12
         Microsoft::WRL::ComPtr<ID3D12RootSignature> static_root_signature_;
         std::vector<std::uint8_t> static_vertex_shader_bytecode_;
         StaticPipelineSet static_bridge_pipelines_{};
+
+        // Scene 3D本番RendererのResource。
+        Microsoft::WRL::ComPtr<ID3D12RootSignature> scene3d_geometry_root_signature_;
+        Microsoft::WRL::ComPtr<ID3D12RootSignature> scene3d_lighting_root_signature_;
+        Microsoft::WRL::ComPtr<ID3D12RootSignature> scene3d_shadow_root_signature_;
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_static_gbuffer_pipelines_[6];
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_skinned_gbuffer_pipelines_[6];
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_lighting_pipeline_;
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_static_depth_pipelines_[4];
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_skinned_depth_pipelines_[4];
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_static_forward_blend_pipelines_[2];
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_skinned_forward_blend_pipelines_[2];
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_static_shadow_pipelines_[4];
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_skinned_shadow_pipelines_[4];
+        std::vector<std::uint8_t> scene3d_static_vs_;
+        std::vector<std::uint8_t> scene3d_skinned_vs_;
+        std::vector<std::uint8_t> scene3d_gbuffer_ps_;
+        std::vector<std::uint8_t> scene3d_depth_alpha_ps_;
+        std::vector<std::uint8_t> scene3d_forward_ps_;
+        std::vector<std::uint8_t> scene3d_fullscreen_vs_;
+        std::vector<std::uint8_t> scene3d_lighting_ps_;
+        std::vector<std::uint8_t> scene3d_shadow_static_vs_;
+        std::vector<std::uint8_t> scene3d_shadow_skinned_vs_;
+        std::vector<std::uint8_t> scene3d_shadow_alpha_ps_;
+        Scene3DTarget scene3d_gbuffer_[5];
+        Scene3DDepthTarget scene3d_depth_{};
+        Scene3DShadowTarget scene3d_directional_shadow_{};
+        Scene3DShadowTarget scene3d_local_shadow_{};
+        D3D12DescriptorAllocation scene3d_null_directional_shadow_srv_{};
+        D3D12DescriptorAllocation scene3d_null_local_shadow_srv_{};
+        std::uint32_t scene3d_width_ = 0;
+        std::uint32_t scene3d_height_ = 0;
+        std::unordered_map<std::string, std::unique_ptr<D3D12MeshBuffer>> skinned_mesh_cache_;
+        std::unordered_map<std::string, Scene3DMotionHistory> scene3d_motion_history_;
+        std::uint64_t scene3d_frame_serial_ = 0;
         D3D12DescriptorAllocation static_samplers_[3]{};
         std::unordered_map<std::string, std::unique_ptr<D3D12MeshBuffer>> static_mesh_cache_;
         std::unordered_map<std::string, StaticTextureResource> texture_cache_;
@@ -361,6 +583,14 @@ namespace ReplayEngine::Rendering::DX12
         Microsoft::WRL::ComPtr<ID3D12Fence> fence_;
         D3D12FrameResource frame_resources_[FrameCount];
         Microsoft::WRL::ComPtr<ID3D12Resource> render_targets_[FrameCount];
+        Microsoft::WRL::ComPtr<ID3D12Resource> back_buffer_capture_readback_;
+        D3D12_PLACED_SUBRESOURCE_FOOTPRINT back_buffer_capture_footprint_{};
+        std::uint64_t back_buffer_capture_row_size_ = 0;
+        std::uint32_t back_buffer_capture_row_count_ = 0;
+        std::uint32_t back_buffer_capture_width_ = 0;
+        std::uint32_t back_buffer_capture_height_ = 0;
+        bool back_buffer_capture_requested_ = false;
+        bool back_buffer_capture_recorded_ = false;
 
         D3D12DescriptorHeapAllocator rtv_allocator_;
         D3D12DescriptorAllocation rtv_allocation_{};
@@ -374,6 +604,17 @@ namespace ReplayEngine::Rendering::DX12
         D3D12FrameConstants current_frame_constants_{};
         D3D12OffscreenTarget scene_view_target_{};
         D3D12OffscreenTarget game_view_target_{};
+#ifdef USE_IMGUI
+        Microsoft::WRL::ComPtr<ID3D12RootSignature> imgui_root_signature_;
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> imgui_pipeline_;
+        Microsoft::WRL::ComPtr<ID3D12Resource> imgui_font_texture_;
+        D3D12DescriptorAllocation imgui_font_srv_{};
+        D3D12DescriptorAllocation imgui_fallback_srv_{};
+        std::vector<std::uint8_t> imgui_vertex_shader_;
+        std::vector<std::uint8_t> imgui_pixel_shader_;
+        std::uint64_t imgui_font_texture_id_ = 0;
+        bool imgui_ready_ = false;
+#endif
         HANDLE fence_event_ = nullptr;
         std::uint64_t next_fence_value_ = 1;
         std::uint64_t last_signaled_fence_value_ = 0;
@@ -388,5 +629,7 @@ namespace ReplayEngine::Rendering::DX12
         bool validation_resources_enabled_ = false;
         bool fatal_error_ = false;
         HRESULT last_device_removed_reason_ = S_OK;
+        char last_initialization_stage_[128]{};
+        HRESULT last_initialization_result_ = S_OK;
     };
 }

@@ -9,7 +9,6 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
-#include <fstream>
 #include <iterator>
 #include <limits>
 #include <vector>
@@ -37,117 +36,6 @@ namespace ReplayEngine::Rendering::DX12
         };
 
         constexpr std::uint16_t kValidationIndices[] = { 0, 1, 2 };
-
-        constexpr char kValidationVertexShader[] = R"(
-struct RenderItemData
-{
-    row_major float4x4 world;
-    float4 tint;
-    uint owner_low;
-    uint owner_high;
-    uint flags;
-    uint reserved;
-};
-cbuffer FrameConstants : register(b0)
-{
-    row_major float4x4 view_projection;
-    float4 camera_position;
-    float4 time_parameters;
-};
-StructuredBuffer<RenderItemData> render_items : register(t0);
-struct VertexInput { float3 position : POSITION; float4 color : COLOR; };
-struct VertexOutput { float4 position : SV_POSITION; float4 color : COLOR; };
-VertexOutput main(VertexInput input, uint instance_id : SV_InstanceID)
-{
-    VertexOutput output;
-    const RenderItemData item = render_items[instance_id];
-    output.position = mul(mul(float4(input.position, 1.0f), item.world),
-        view_projection);
-    output.color = input.color * item.tint;
-    return output;
-})";
-
-        constexpr char kValidationPixelShader[] = R"(
-struct PixelInput { float4 position : SV_POSITION; float4 color : COLOR; };
-float4 main(PixelInput input) : SV_TARGET
-{
-    return input.color;
-})";
-
-        constexpr char kStaticVertexShader[] = R"(
-cbuffer OBJECT_CONSTANT_BUFFER : register(b0)
-{
-    row_major float4x4 world;
-    float4 material_color;
-};
-cbuffer SCENE_CONSTANT_BUFFER : register(b1)
-{
-    row_major float4x4 view_projection;
-    float4 light_direction;
-    float4 camera_position;
-};
-struct VertexInput
-{
-    float3 position : POSITION;
-    float3 normal : NORMAL;
-    float2 texcoord : TEXCOORD;
-};
-struct VS_OUT
-{
-    float4 position : SV_POSITION;
-    float4 world_position : POSITION;
-    float4 world_normal : NORMAL;
-    float4 color : COLOR;
-    float2 texcoord : TEXCOORD;
-    float4 current_clip : TEXCOORD1;
-    float4 previous_clip : TEXCOORD2;
-};
-VS_OUT main(VertexInput input)
-{
-    VS_OUT output;
-    const float4 local_position = float4(input.position, 1.0f);
-    output.world_position = mul(local_position, world);
-    output.position = mul(output.world_position, view_projection);
-    output.world_normal = float4(normalize(mul(float4(input.normal, 0.0f), world).xyz), 0.0f);
-    output.color = material_color;
-    output.texcoord = input.texcoord;
-    output.current_clip = output.position;
-    output.previous_clip = output.position;
-    return output;
-})";
-
-        constexpr char kStaticPixelShader[] = R"(
-cbuffer REPLAY_MATERIAL_CB : register(b9)
-{
-    float4 base_color;
-    float4 emissive_strength;
-    float4 surface_params;
-    float4 render_params;
-};
-Texture2D BaseMap : register(t0);
-SamplerState BaseSampler : register(s1);
-struct PixelInput
-{
-    float4 position : SV_POSITION;
-    float4 world_position : POSITION;
-    float4 world_normal : NORMAL;
-    float4 color : COLOR;
-    float2 texcoord : TEXCOORD;
-    float4 current_clip : TEXCOORD1;
-    float4 previous_clip : TEXCOORD2;
-};
-float4 main(PixelInput input) : SV_TARGET
-{
-    float4 texel = BaseMap.Sample(BaseSampler, input.texcoord) * base_color * input.color;
-    const uint alpha_mode = (uint)(render_params.x + 0.5f);
-    if (alpha_mode == 1u && texel.a < surface_params.w) discard;
-
-    // Phase 2 では Deferred Lighting を Phase 3 へ残す。Static Bridge は
-    // Texture/Material の編集を維持しつつ、Custom Unlit Surface Shader を
-    // 同じ Root Signature と PSO Cache で実行できるようにする。
-    float3 color = texel.rgb + emissive_strength.rgb * emissive_strength.w;
-    return float4(color, texel.a);
-})";
 
         struct DecodedRgbaImage final
         {
@@ -517,6 +405,7 @@ float4 main(PixelInput input) : SV_TARGET
         {
             if (message != nullptr) OutputDebugStringA(message);
         }
+
     }
 
     D3D12DeviceContext::~D3D12DeviceContext()
@@ -528,29 +417,53 @@ float4 main(PixelInput input) : SV_TARGET
         std::uint32_t height, bool enable_debug_layer, bool force_warp,
         bool create_validation_resources) noexcept
     {
-        if (window == nullptr || !IsValidSize(width, height)) return false;
+        last_initialization_stage_[0] = '\0';
+        last_initialization_result_ = S_OK;
+        if (window == nullptr || !IsValidSize(width, height))
+        {
+            SetInitializationFailure("invalid-window-or-size", E_INVALIDARG);
+            return false;
+        }
         Shutdown();
         validation_resources_enabled_ = create_validation_resources;
         if (!CreateDevice(enable_debug_layer, force_warp))
         {
+            SetInitializationFailure("CreateDevice", E_FAIL);
             Shutdown();
             return false;
         }
-        if (!CreateSwapChain(window, width, height) || !CreateRenderTargets())
+        if (!CreateSwapChain(window, width, height))
         {
+            SetInitializationFailure("CreateSwapChain", E_FAIL);
+            Shutdown();
+            return false;
+        }
+        if (!CreateRenderTargets())
+        {
+            SetInitializationFailure("CreateRenderTargets", E_FAIL);
             Shutdown();
             return false;
         }
         if (!CreateStaticRendererResources())
         {
+            SetInitializationFailure("CreateStaticRendererResources", E_FAIL);
+            Shutdown();
+            return false;
+        }
+        if (!CreateScene3DRendererResources())
+        {
+            SetInitializationFailure("CreateScene3DRendererResources", E_FAIL);
             Shutdown();
             return false;
         }
         if (validation_resources_enabled_ && !CreateValidationTriangleResources())
         {
+            SetInitializationFailure("CreateValidationTriangleResources", E_FAIL);
             Shutdown();
             return false;
         }
+        std::snprintf(last_initialization_stage_, sizeof(last_initialization_stage_),
+            "%s", "success");
         return true;
     }
 
@@ -560,8 +473,13 @@ float4 main(PixelInput input) : SV_TARGET
 
         for (auto& batch : render_item_batches_)
             batch.Reset(&resource_descriptor_allocator_);
+#ifdef USE_IMGUI
+        ReleaseImGuiRendererResources();
+#endif
         ReleaseValidationTriangleResources();
+        ReleaseScene3DRendererResources();
         ReleaseStaticRendererResources();
+        ReleaseBackBufferCapture();
         ReleaseRenderTargets();
 
         upload_context_.Shutdown();
@@ -742,12 +660,26 @@ float4 main(PixelInput input) : SV_TARGET
         description.Flags = allow_tearing_ ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0u;
 
         Microsoft::WRL::ComPtr<IDXGISwapChain1> swap_chain;
-        if (FAILED(factory_->CreateSwapChainForHwnd(command_queue_.Get(), window,
-            &description, nullptr, nullptr, &swap_chain)))
+        const HRESULT create_result = factory_->CreateSwapChainForHwnd(
+            command_queue_.Get(), window, &description, nullptr, nullptr, &swap_chain);
+        if (FAILED(create_result))
+        {
+            SetInitializationFailure("CreateSwapChainForHwnd", create_result);
             return false;
-        if (FAILED(factory_->MakeWindowAssociation(window, DXGI_MWA_NO_ALT_ENTER)))
+        }
+        const HRESULT association_result = factory_->MakeWindowAssociation(
+            window, DXGI_MWA_NO_ALT_ENTER);
+        if (FAILED(association_result))
+        {
+            SetInitializationFailure("MakeWindowAssociation", association_result);
             return false;
-        if (FAILED(swap_chain.As(&swap_chain_))) return false;
+        }
+        const HRESULT query_result = swap_chain.As(&swap_chain_);
+        if (FAILED(query_result))
+        {
+            SetInitializationFailure("QuerySwapChain4", query_result);
+            return false;
+        }
         frame_index_ = swap_chain_->GetCurrentBackBufferIndex();
         width_ = width;
         height_ = height;
@@ -757,10 +689,10 @@ float4 main(PixelInput input) : SV_TARGET
     bool D3D12DeviceContext::CreateRenderTargets() noexcept
     {
         if (!rtv_allocator_.Initialize(device_.Get(),
-            D3D12_DESCRIPTOR_HEAP_TYPE_RTV, FrameCount + 2u, false) ||
+            D3D12_DESCRIPTOR_HEAP_TYPE_RTV, FrameCount + 12u, false) ||
             !rtv_allocator_.Allocate(FrameCount, rtv_allocation_) ||
             !dsv_allocator_.Initialize(device_.Get(),
-                D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 3, false) ||
+                D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 32, false) ||
             !dsv_allocator_.Allocate(1, dsv_allocation_))
             return false;
 
@@ -897,12 +829,12 @@ float4 main(PixelInput input) : SV_TARGET
         D3D12ShaderCompiler shader_compiler;
         if (!shader_compiler.Initialize(D3D12ShaderCompiler::FindDefaultLibraryPath()))
             return false;
-        const std::filesystem::path source_name =
-            std::filesystem::current_path() / "DX12ValidationTriangle.hlsl";
-        const D3D12ShaderCompileResult vertex_shader = shader_compiler.CompileSource(
-            kValidationVertexShader, source_name, L"main", L"vs_6_0");
-        const D3D12ShaderCompileResult pixel_shader = shader_compiler.CompileSource(
-            kValidationPixelShader, source_name, L"main", L"ps_6_0");
+        const std::filesystem::path shader_directory =
+            std::filesystem::current_path() / "Shader";
+        const D3D12ShaderCompileResult vertex_shader = shader_compiler.CompileFile(
+            shader_directory / "dx12_validation_triangle_vs.hlsl", L"main", L"vs_6_0");
+        const D3D12ShaderCompileResult pixel_shader = shader_compiler.CompileFile(
+            shader_directory / "dx12_validation_triangle_ps.hlsl", L"main", L"ps_6_0");
         shader_compiler.Shutdown();
         if (!vertex_shader.succeeded || vertex_shader.bytecode.empty() ||
             !pixel_shader.succeeded || pixel_shader.bytecode.empty())
@@ -987,12 +919,12 @@ float4 main(PixelInput input) : SV_TARGET
         D3D12ShaderCompiler shader_compiler;
         if (!shader_compiler.Initialize(D3D12ShaderCompiler::FindDefaultLibraryPath()))
             return false;
-        const std::filesystem::path source_name =
-            std::filesystem::current_path() / "DX12StaticRenderer.hlsl";
-        const D3D12ShaderCompileResult vertex_shader = shader_compiler.CompileSource(
-            kStaticVertexShader, source_name, L"main", L"vs_6_0", debug_layer_enabled_);
-        const D3D12ShaderCompileResult pixel_shader = shader_compiler.CompileSource(
-            kStaticPixelShader, source_name, L"main", L"ps_6_0", debug_layer_enabled_);
+        const std::filesystem::path shader_directory =
+            std::filesystem::current_path() / "Shader";
+        const D3D12ShaderCompileResult vertex_shader = shader_compiler.CompileFile(
+            shader_directory / "dx12_static_bridge_vs.hlsl", L"main", L"vs_6_0", debug_layer_enabled_);
+        const D3D12ShaderCompileResult pixel_shader = shader_compiler.CompileFile(
+            shader_directory / "dx12_static_bridge_ps.hlsl", L"main", L"ps_6_0", debug_layer_enabled_);
         shader_compiler.Shutdown();
         if (!vertex_shader.succeeded || vertex_shader.bytecode.empty() ||
             !pixel_shader.succeeded || pixel_shader.bytecode.empty())
@@ -1478,13 +1410,16 @@ float4 main(PixelInput input) : SV_TARGET
         std::size_t persistent_textures = 0;
         for (const auto& entry : texture_cache_)
             if (entry.first.rfind("__dx12_", 0) == 0) ++persistent_textures;
-        if (static_mesh_cache_.empty() && texture_cache_.size() <= persistent_textures &&
-            static_texture_failures_.empty() && custom_static_pipelines_.empty() &&
-            custom_static_shader_failures_.empty())
+        if (static_mesh_cache_.empty() && skinned_mesh_cache_.empty() &&
+            texture_cache_.size() <= persistent_textures && static_texture_failures_.empty() &&
+            custom_static_pipelines_.empty() && custom_static_shader_failures_.empty() &&
+            scene3d_motion_history_.empty())
             return true;
         if (!WaitForGpu()) return false;
 
         static_mesh_cache_.clear();
+        skinned_mesh_cache_.clear();
+        scene3d_motion_history_.clear();
         static_texture_failures_.clear();
         custom_static_pipelines_.clear();
         custom_static_shader_failures_.clear();
@@ -1744,6 +1679,11 @@ float4 main(PixelInput input) : SV_TARGET
             !IsValidSize(width, height))
             return false;
         if (!WaitForGpu()) return false;
+        ReleaseBackBufferCapture();
+        // Scene 3DのShadow DSVもdsv_allocator_が所有する。
+        // Swap Chain ResizeでDescriptor Heapを再構築する前に解放する。
+        ReleaseScene3DRenderTargets();
+        ReleaseScene3DShadowTargets();
         ReleaseRenderTargets();
         const UINT flags = allow_tearing_ ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0u;
         const HRESULT result = swap_chain_->ResizeBuffers(FrameCount, width, height,
@@ -1821,6 +1761,167 @@ float4 main(PixelInput input) : SV_TARGET
             return false;
         return resource_state_tracker_.Transition(command_list_.Get(),
             render_targets_[frame_index_].Get(), after);
+    }
+
+    bool D3D12DeviceContext::RequestBackBufferCapture() noexcept
+    {
+        if (!frame_open_ || back_buffer_capture_requested_ ||
+            back_buffer_capture_recorded_ || back_buffer_capture_readback_ != nullptr)
+            return false;
+        back_buffer_capture_requested_ = true;
+        return true;
+    }
+
+    bool D3D12DeviceContext::RecordBackBufferCapture() noexcept
+    {
+        if (!back_buffer_capture_requested_ || !frame_open_ ||
+            device_ == nullptr || command_list_ == nullptr ||
+            render_targets_[frame_index_] == nullptr)
+            return false;
+
+        const D3D12_RESOURCE_DESC source_desc =
+            render_targets_[frame_index_]->GetDesc();
+        if (source_desc.Format != kBackBufferFormat || source_desc.Width == 0 ||
+            source_desc.Height == 0 || source_desc.DepthOrArraySize != 1 ||
+            source_desc.MipLevels != 1 || source_desc.SampleDesc.Count != 1)
+            return false;
+
+        D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint{};
+        UINT row_count = 0;
+        UINT64 row_size = 0;
+        UINT64 total_bytes = 0;
+        device_->GetCopyableFootprints(&source_desc, 0, 1, 0, &footprint,
+            &row_count, &row_size, &total_bytes);
+        if (row_count != source_desc.Height || row_size < source_desc.Width * 4ull ||
+            total_bytes == 0 || total_bytes > (std::numeric_limits<UINT64>::max)())
+            return false;
+
+        D3D12_HEAP_PROPERTIES heap{};
+        heap.Type = D3D12_HEAP_TYPE_READBACK;
+        heap.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+        heap.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+        heap.CreationNodeMask = 1;
+        heap.VisibleNodeMask = 1;
+
+        D3D12_RESOURCE_DESC readback_desc{};
+        readback_desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+        readback_desc.Width = total_bytes;
+        readback_desc.Height = 1;
+        readback_desc.DepthOrArraySize = 1;
+        readback_desc.MipLevels = 1;
+        readback_desc.Format = DXGI_FORMAT_UNKNOWN;
+        readback_desc.SampleDesc.Count = 1;
+        readback_desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+        HRESULT result = device_->CreateCommittedResource(&heap,
+            D3D12_HEAP_FLAG_NONE, &readback_desc, D3D12_RESOURCE_STATE_COPY_DEST,
+            nullptr, IID_PPV_ARGS(back_buffer_capture_readback_.ReleaseAndGetAddressOf()));
+        if (FAILED(result)) return false;
+
+        if (!resource_state_tracker_.Transition(command_list_.Get(),
+            render_targets_[frame_index_].Get(), D3D12_RESOURCE_STATE_COPY_SOURCE))
+        {
+            back_buffer_capture_readback_.Reset();
+            return false;
+        }
+
+        D3D12_TEXTURE_COPY_LOCATION destination{};
+        destination.pResource = back_buffer_capture_readback_.Get();
+        destination.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+        destination.PlacedFootprint = footprint;
+        D3D12_TEXTURE_COPY_LOCATION source{};
+        source.pResource = render_targets_[frame_index_].Get();
+        source.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+        source.SubresourceIndex = 0;
+        command_list_->CopyTextureRegion(&destination, 0, 0, 0, &source, nullptr);
+
+        if (!resource_state_tracker_.Transition(command_list_.Get(),
+            render_targets_[frame_index_].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET))
+        {
+            back_buffer_capture_readback_.Reset();
+            return false;
+        }
+
+        back_buffer_capture_footprint_ = footprint;
+        back_buffer_capture_row_size_ = row_size;
+        back_buffer_capture_row_count_ = row_count;
+        back_buffer_capture_width_ = static_cast<std::uint32_t>(source_desc.Width);
+        back_buffer_capture_height_ = source_desc.Height;
+        back_buffer_capture_requested_ = false;
+        back_buffer_capture_recorded_ = true;
+        return true;
+    }
+
+    void D3D12DeviceContext::ReleaseBackBufferCapture() noexcept
+    {
+        back_buffer_capture_readback_.Reset();
+        back_buffer_capture_footprint_ = {};
+        back_buffer_capture_row_size_ = 0;
+        back_buffer_capture_row_count_ = 0;
+        back_buffer_capture_width_ = 0;
+        back_buffer_capture_height_ = 0;
+        back_buffer_capture_requested_ = false;
+        back_buffer_capture_recorded_ = false;
+    }
+
+    bool D3D12DeviceContext::ConsumeBackBufferCapture(
+        std::vector<std::uint8_t>& rgba, std::uint32_t& width,
+        std::uint32_t& height) noexcept
+    {
+        rgba.clear();
+        width = 0;
+        height = 0;
+        if (!back_buffer_capture_recorded_ || back_buffer_capture_readback_ == nullptr ||
+            back_buffer_capture_width_ == 0 || back_buffer_capture_height_ == 0 ||
+            back_buffer_capture_row_count_ != back_buffer_capture_height_ ||
+            back_buffer_capture_row_size_ <
+                static_cast<std::uint64_t>(back_buffer_capture_width_) * 4ull)
+        {
+            ReleaseBackBufferCapture();
+            return false;
+        }
+        if (!WaitForGpu())
+        {
+            ReleaseBackBufferCapture();
+            return false;
+        }
+
+        const std::size_t tight_row =
+            static_cast<std::size_t>(back_buffer_capture_width_) * 4u;
+        const std::size_t byte_count = tight_row * back_buffer_capture_height_;
+        try
+        {
+            rgba.resize(byte_count);
+        }
+        catch (...)
+        {
+            ReleaseBackBufferCapture();
+            return false;
+        }
+
+        D3D12_RANGE range{ 0, back_buffer_capture_footprint_.Footprint.RowPitch *
+            static_cast<SIZE_T>(back_buffer_capture_row_count_) };
+        void* mapped = nullptr;
+        const HRESULT map_result = back_buffer_capture_readback_->Map(0, &range, &mapped);
+        if (FAILED(map_result) || mapped == nullptr)
+        {
+            ReleaseBackBufferCapture();
+            return false;
+        }
+
+        const std::uint8_t* source = static_cast<const std::uint8_t*>(mapped) +
+            back_buffer_capture_footprint_.Offset;
+        const std::size_t source_row_pitch =
+            back_buffer_capture_footprint_.Footprint.RowPitch;
+        for (std::uint32_t row = 0; row < back_buffer_capture_height_; ++row)
+        {
+            std::memcpy(rgba.data() + static_cast<std::size_t>(row) * tight_row,
+                source + static_cast<std::size_t>(row) * source_row_pitch, tight_row);
+        }
+        back_buffer_capture_readback_->Unmap(0, nullptr);
+        width = back_buffer_capture_width_;
+        height = back_buffer_capture_height_;
+        ReleaseBackBufferCapture();
+        return true;
     }
 
     bool D3D12DeviceContext::BeginFrame(const float clear_color[4]) noexcept
@@ -1918,6 +2019,12 @@ float4 main(PixelInput input) : SV_TARGET
     {
         if (!frame_open_) return false;
         const std::uint32_t submitted_frame = frame_index_;
+        if (back_buffer_capture_requested_ && !RecordBackBufferCapture())
+        {
+            // 撮影失敗で通常の Present まで巻き戻すことはしない。
+            // 呼び出し側は Readback の回収失敗として検出する。
+            back_buffer_capture_requested_ = false;
+        }
         if (!TransitionCurrentRenderTarget(D3D12_RESOURCE_STATE_PRESENT))
         {
             frame_open_ = false;
@@ -2061,5 +2168,19 @@ float4 main(PixelInput input) : SV_TARGET
     D3D12_CPU_DESCRIPTOR_HANDLE D3D12DeviceContext::CurrentDepthStencilView() const noexcept
     {
         return dsv_allocator_.CpuHandle(dsv_allocation_.index);
+    }
+
+    void D3D12DeviceContext::SetInitializationFailure(const char* stage,
+        HRESULT result) noexcept
+    {
+        if (last_initialization_stage_[0] != '\0') return;
+        std::snprintf(last_initialization_stage_, sizeof(last_initialization_stage_),
+            "%s", stage != nullptr ? stage : "unknown");
+        last_initialization_result_ = result;
+        char message[256]{};
+        std::snprintf(message, sizeof(message),
+            "[DX12] initialization failed at %s (hr=0x%08lx)\n",
+            last_initialization_stage_, static_cast<unsigned long>(result));
+        DebugMessage(message);
     }
 }

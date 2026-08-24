@@ -65,20 +65,35 @@
         log_shutdown_reason("initialize() 完了");
 
 #ifdef USE_IMGUI
-        IMGUI_CHECKVERSION();
-        ImGui::CreateContext();
-        ImGuiIO& io = ImGui::GetIO();
-        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-        io.ConfigWindowsMoveFromTitleBarOnly = true;
-        if (!io.Fonts->AddFontFromFileTTF(
-            "C:\\Windows\\Fonts\\meiryo.ttc", 15.0f, nullptr, glyphRangesJapanese))
         {
-            io.Fonts->AddFontDefault();
+            // Editorの入力はDX11/DX12で同じWin32 Platform Backendを使う。
+            // Renderer Backendだけを選択的に切り替えることで、UI編集の状態を
+            // Scene3D backendの違いで失わない。
+            IMGUI_CHECKVERSION();
+            ImGui::CreateContext();
+            ImGuiIO& io = ImGui::GetIO();
+            io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+            io.ConfigWindowsMoveFromTitleBarOnly = true;
+            if (!io.Fonts->AddFontFromFileTTF(
+                "C:\\Windows\\Fonts\\meiryo.ttc", 15.0f, nullptr, glyphRangesJapanese))
+            {
+                io.Fonts->AddFontDefault();
+                }
+                ImGui_ImplWin32_Init(hwnd);
+            if (dx12_framework_active)
+            {
+                if (!dx12_device_context.InitializeImGui())
+                {
+                    push_editor_log("Error", "DX12 ImGui Renderer の初期化に失敗しました");
+                }
+            }
+            else
+            {
+                ImGui_ImplDX11_Init(device.Get(), immediate_context.Get());
+            }
+            ImGui::StyleColorsDark();
+            configure_editor_style();
         }
-        ImGui_ImplWin32_Init(hwnd);
-        ImGui_ImplDX11_Init(device.Get(), immediate_context.Get());
-        ImGui::StyleColorsDark();
-        configure_editor_style();
 #endif
 
         // Device / Shader / Script / Editor の初期化が終わるまで Window は隠す。
@@ -92,8 +107,8 @@
 
         while (WM_QUIT != msg.message)
         {
-            // Drain a bounded batch, then advance one frame. Waiting for the queue to
-            // become completely empty allowed WM_PAINT/input traffic to starve render.
+            // メッセージを上限付きで処理してから1フレーム進める。
+            // Queueが空になるまで待つと、WM_PAINT/Inputが描画を飢えさせる。
             for (int message_count = 0; message_count < 64 &&
                 PeekMessage(&msg, NULL, 0, 0, PM_REMOVE); ++message_count)
             {
@@ -176,6 +191,15 @@
                             ReplayEngine::Rendering::Stats().SetPaused(true);
                             log_shutdown_reason(
                                 "Profiler benchmark: Startup Scene ready; warmup begins next frame");
+
+                            // プロファイルと同時に撮影する場合は、Runtime World が確定した
+                            // 直後に要求する。通常の Smoke Test の終了間際へ任せると、
+                            // プロファイル終了後の空シーンを撮影してしまう。
+                            if (automated_frame_capture_pending)
+                            {
+                                automated_frame_capture_pending = false;
+                                request_golden(golden_request_kind::capture);
+                            }
                         }
                         else
                         {
@@ -241,6 +265,14 @@
                         if (static_cast<std::uint64_t>(profile_benchmark_frame_index) >=
                             capture_end)
                         {
+                            // 撮影対象を Runtime World に固定するため、撮影完了まで
+                            // プロファイルの終了通知を送らない。
+                            if (automated_frame_capture_pending || golden_capture_pending())
+                            {
+                                ++profile_benchmark_drain_frames;
+                                continue;
+                            }
+
                             // paused frame でも BeginFrame/EndFrame は DONOTFLUSH の
                             // Query 回収だけを進める。GPU を待って CPU をブロックしない。
                             const std::size_t pending =
@@ -362,9 +394,12 @@
         // ImGui/Scene の破棄より前に Stroke と Collider interactive-edit を必ず閉じる。
         reset_landscape_editor_state(true);
         if (!standalone_game_mode) save_editor_session();
-        ImGui_ImplDX11_Shutdown();
-        ImGui_ImplWin32_Shutdown();
-        ImGui::DestroyContext();
+        if (ImGui::GetCurrentContext())
+        {
+            if (!dx12_framework_active) ImGui_ImplDX11_Shutdown();
+            ImGui_ImplWin32_Shutdown();
+            ImGui::DestroyContext();
+        }
 #endif
 
         if (is_fullscreen()) toggle_fullscreen();
