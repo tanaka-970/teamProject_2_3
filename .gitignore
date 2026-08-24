@@ -116,6 +116,9 @@ imgui.ini
 [Oo]bj/
 [Bb]in/
 
+# DX12外部依存本体。Tools/dx12_dependencies.json の固定値から取得する。
+/ThirdParty/
+
 # Visual Studio のソリューション単位のキャッシュ・個人設定。
 # .suo / CopilotIndices / FileContentIndex などが入り、
 # 人によって必ず中身が変わるためマージ衝突の原因にしかならない。
