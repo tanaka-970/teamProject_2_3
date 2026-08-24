@@ -139,6 +139,9 @@
     <Filter Include="RePlayEngine\Rendering\Deferred">
       <UniqueIdentifier>{b4444444-4444-4444-8444-444444444444}</UniqueIdentifier>
     </Filter>
+    <Filter Include="RePlayEngine\Rendering\DX12">
+      <UniqueIdentifier>{e512d12a-4b4a-4b1b-9a12-12d3d12a0001}</UniqueIdentifier>
+    </Filter>
     <Filter Include="RePlayEngine\Rendering\Shadows">
       <UniqueIdentifier>{5adc0000-0000-4000-8000-5ad000000001}</UniqueIdentifier>
     </Filter>
@@ -474,6 +477,9 @@
     <ClCompile Include="Source\app\Runtime\mainValidationMotion.cpp">
       <Filter>Source\App\Runtime</Filter>
     </ClCompile>
+    <ClCompile Include="Source\app\Runtime\mainValidationDX12.cpp">
+      <Filter>Source\App\Runtime</Filter>
+    </ClCompile>
     <ClCompile Include="Source\app\Runtime\framework_gameobject_scene_motion.cpp">
       <Filter>Source\App\Runtime</Filter>
     </ClCompile>
@@ -635,6 +641,9 @@
     </ClCompile>
     <ClCompile Include="RePlayEngine\Rendering\Deferred\deferred_renderer.cpp">
       <Filter>RePlayEngine\Rendering\Deferred</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12DeviceContext.cpp">
+      <Filter>RePlayEngine\Rendering\DX12</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Rendering\Passes\PostProcessPass.cpp">
       <Filter>RePlayEngine\Rendering\Passes</Filter>
@@ -1561,6 +1570,9 @@
     </ClInclude>
     <ClInclude Include="RePlayEngine\Rendering\Deferred\deferred_renderer.h">
       <Filter>RePlayEngine\Rendering\Deferred</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12DeviceContext.h">
+      <Filter>RePlayEngine\Rendering\DX12</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Core\Components\IComponent.h">
       <Filter>RePlayEngine\Core\Components</Filter>

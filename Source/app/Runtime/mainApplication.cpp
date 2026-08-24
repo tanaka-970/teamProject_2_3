@@ -43,6 +43,7 @@ using ReplayEngine::Runtime::Detail::RunHeadlessHandleValidation;
 using ReplayEngine::Runtime::Detail::RunHeadlessCameraComponentValidation;
 using ReplayEngine::Runtime::Detail::RunHeadlessPlayerSpeedValidation;
 using ReplayEngine::Runtime::Detail::RunHeadlessSerializationValidation;
+using ReplayEngine::Runtime::Detail::RunHeadlessDX12Validation;
 #if defined(_DEBUG)
 using ReplayEngine::Runtime::Detail::DXGILiveObjectFileSummary;
 using ReplayEngine::Runtime::Detail::AcquireDXGIDebugInterfaces;
@@ -57,6 +58,8 @@ LRESULT CALLBACK window_procedure(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpa
 
 int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _In_ LPSTR cmd_line, _In_ int cmd_show)
 {
+    const int dx12_validation_result = RunHeadlessDX12Validation(cmd_line);
+    if (dx12_validation_result >= 0) return dx12_validation_result;
     const int large_scene_validation_result = RunHeadlessLargeSceneValidation(cmd_line);
     if (large_scene_validation_result >= 0) return large_scene_validation_result;
     const int validation_result = RunHeadlessSceneValidation(cmd_line);
