@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <windows.h>
 #include <unknwn.h>
@@ -21,6 +21,21 @@ namespace ReplayEngine::Rendering::DX12
         std::string diagnostics;
     };
 
+    struct D3D12ShaderDefine final
+    {
+        std::wstring name;
+        std::wstring value;
+    };
+
+    struct D3D12ShaderCompileOptions final
+    {
+        bool debug = false;
+        bool optimize = true;
+        bool warnings_as_errors = false;
+        std::vector<std::filesystem::path> include_directories;
+        std::vector<D3D12ShaderDefine> defines;
+    };
+
     class D3D12ShaderCompiler final
     {
     public:
@@ -36,9 +51,16 @@ namespace ReplayEngine::Rendering::DX12
         D3D12ShaderCompileResult CompileSource(std::string_view source,
             const std::filesystem::path& source_name, std::wstring_view entry_point,
             std::wstring_view target_profile, bool debug = false) const;
+        D3D12ShaderCompileResult CompileSource(std::string_view source,
+            const std::filesystem::path& source_name, std::wstring_view entry_point,
+            std::wstring_view target_profile,
+            const D3D12ShaderCompileOptions& options) const;
         D3D12ShaderCompileResult CompileFile(const std::filesystem::path& source_path,
             std::wstring_view entry_point, std::wstring_view target_profile,
             bool debug = false) const;
+        D3D12ShaderCompileResult CompileFile(const std::filesystem::path& source_path,
+            std::wstring_view entry_point, std::wstring_view target_profile,
+            const D3D12ShaderCompileOptions& options) const;
 
         bool IsInitialized() const noexcept
         {

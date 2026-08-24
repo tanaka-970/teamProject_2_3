@@ -484,5 +484,37 @@ bool framework::initialize()
     // AssetDatabase の読み込み後に呼ぶ必要がある（Asset 参照を解決するため）。
     initialize_object_scene();
 
+    if (dx12_framework_requested)
+    {
+        // Phase 1 では未移行の System のために D3D11 Device/Context を生かしておくが、
+        // Flip Model の HWND は有効な Swap Chain 所有者を 1 つだけ持つ必要がある。
+        // 旧経路の初期化を完了し、Window Back Buffer を切り離してから DX12 へ Present を渡す。
+        if (immediate_context)
+        {
+            immediate_context->OMSetRenderTargets(0, nullptr, nullptr);
+            immediate_context->ClearState();
+            immediate_context->Flush();
+        }
+        render_target_view.Reset();
+        depth_stencil_view.Reset();
+        swap_chain.Reset();
+
+        bool enable_dx12_debug = false;
+#if defined(_DEBUG) || defined(DEBUG)
+        enable_dx12_debug = true;
+#endif
+        if (!dx12_device_context.Initialize(hwnd, client_width, client_height,
+            enable_dx12_debug, false, false))
+        {
+            push_editor_log("Error",
+                "DX12 framework bootstrap の初期化に失敗しました");
+            return false;
+        }
+        dx12_framework_active = true;
+        dx12_framework_render_error_reported = false;
+        push_editor_log("Info",
+            "DX12 framework bootstrap: DX12 が SwapChain / Present を所有します");
+    }
+
     return true;
 }

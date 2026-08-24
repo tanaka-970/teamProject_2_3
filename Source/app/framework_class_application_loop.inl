@@ -6,6 +6,8 @@
     void set_startup_scene_path(std::filesystem::path scene_path);
     void set_startup_window_size(UINT width, UINT height) noexcept;
     void request_startup_fullscreen() noexcept { startup_fullscreen_requested = true; }
+    void request_dx12_framework() noexcept { dx12_framework_requested = true; }
+    bool dx12_framework_enabled() const noexcept { return dx12_framework_active; }
     bool standalone_game() const noexcept { return standalone_game_mode; }
     const std::filesystem::path& content_root_path() const noexcept
     {

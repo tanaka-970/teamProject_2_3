@@ -1,6 +1,6 @@
-#include "D3D12RenderItemBatch.h"
+﻿#include "D3D12RenderItemBatch.h"
 
-#include "D3D12ResourceFactory.h"
+#include <cstring>
 
 namespace ReplayEngine::Rendering::DX12
 {
@@ -18,38 +18,52 @@ namespace ReplayEngine::Rendering::DX12
     }
 
     bool D3D12RenderItemBatch::Upload(ID3D12Device* device,
-        D3D12UploadContext& uploader,
+        D3D12LinearUploadAllocator& upload_allocator,
         D3D12DescriptorHeapAllocator& descriptor_allocator,
         const RenderItemList& items) noexcept
     {
         Reset(&descriptor_allocator);
-        if (device == nullptr || !uploader.IsInitialized() ||
+        if (device == nullptr || !upload_allocator.IsInitialized() ||
             !descriptor_allocator.IsInitialized())
             return false;
 
-        gpu_items_.reserve(items.Size());
-        for (const RenderItem& item : items.Items())
+        try
         {
-            D3D12RenderItemGpuData gpu_item{};
-            gpu_item.world = item.world;
-            gpu_item.tint = item.tint;
-            gpu_item.owner = item.owner.Value();
-            gpu_item.flags = RenderItemFlags(item);
-            gpu_items_.push_back(gpu_item);
+            gpu_items_.reserve(items.Size());
+            for (const RenderItem& item : items.Items())
+            {
+                D3D12RenderItemGpuData gpu_item{};
+                gpu_item.world = item.world;
+                gpu_item.tint = item.tint;
+                gpu_item.owner = item.owner.Value();
+                gpu_item.flags = RenderItemFlags(item);
+                gpu_items_.push_back(gpu_item);
+            }
         }
-        if (gpu_items_.empty()) return true;
-
-        if (!D3D12ResourceFactory::CreateBufferWithData(device, uploader,
-            gpu_items_.data(), sizeof(D3D12RenderItemGpuData) * gpu_items_.size(),
-            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, gpu_buffer_))
+        catch (...)
         {
             gpu_items_.clear();
             return false;
         }
+        if (gpu_items_.empty()) return true;
+
+        const std::uint64_t byte_size =
+            sizeof(D3D12RenderItemGpuData) * gpu_items_.size();
+        D3D12UploadAllocation upload{};
+        if (!upload_allocator.Allocate(byte_size,
+            sizeof(D3D12RenderItemGpuData), upload))
+        {
+            gpu_items_.clear();
+            return false;
+        }
+        std::memcpy(upload.cpu, gpu_items_.data(), static_cast<std::size_t>(byte_size));
+        gpu_buffer_ = upload.resource;
+        gpu_buffer_offset_ = upload.offset;
 
         if (!descriptor_allocator.Allocate(1, shader_resource_allocation_))
         {
-            gpu_buffer_.Reset();
+            gpu_buffer_ = nullptr;
+            gpu_buffer_offset_ = 0;
             gpu_items_.clear();
             return false;
         }
@@ -58,9 +72,10 @@ namespace ReplayEngine::Rendering::DX12
         view.Format = DXGI_FORMAT_UNKNOWN;
         view.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
         view.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+        view.Buffer.FirstElement = upload.offset / sizeof(D3D12RenderItemGpuData);
         view.Buffer.NumElements = static_cast<UINT>(gpu_items_.size());
         view.Buffer.StructureByteStride = sizeof(D3D12RenderItemGpuData);
-        device->CreateShaderResourceView(gpu_buffer_.Get(), &view,
+        device->CreateShaderResourceView(upload.resource, &view,
             shader_resource_allocation_.cpu);
         return true;
     }
@@ -72,7 +87,8 @@ namespace ReplayEngine::Rendering::DX12
             shader_resource_allocation_.IsValid())
             descriptor_allocator->Free(shader_resource_allocation_);
         shader_resource_allocation_ = {};
-        gpu_buffer_.Reset();
+        gpu_buffer_ = nullptr;
+        gpu_buffer_offset_ = 0;
         gpu_items_.clear();
     }
 }

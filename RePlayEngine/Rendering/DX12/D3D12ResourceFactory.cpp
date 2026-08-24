@@ -1,4 +1,4 @@
-#include "D3D12ResourceFactory.h"
+﻿#include "D3D12ResourceFactory.h"
 
 #include <cstring>
 #include <vector>
@@ -89,4 +89,74 @@ namespace ReplayEngine::Rendering::DX12::D3D12ResourceFactory
         view.Format = format;
         return true;
     }
+
+    bool CreateTexture2D(ID3D12Device* device, D3D12UploadContext& uploader,
+        std::uint32_t width, std::uint32_t height, std::uint16_t mip_levels,
+        DXGI_FORMAT format, const std::vector<D3D12TextureSubresourceSource>& subresources,
+        Microsoft::WRL::ComPtr<ID3D12Resource>& resource) noexcept
+    {
+        resource.Reset();
+        if (device == nullptr || !uploader.IsInitialized() || width == 0 || height == 0 ||
+            mip_levels == 0 || format == DXGI_FORMAT_UNKNOWN ||
+            subresources.size() != mip_levels)
+            return false;
+
+        D3D12_HEAP_PROPERTIES heap_properties{};
+        heap_properties.Type = D3D12_HEAP_TYPE_DEFAULT;
+        D3D12_RESOURCE_DESC description{};
+        description.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        description.Width = width;
+        description.Height = height;
+        description.DepthOrArraySize = 1;
+        description.MipLevels = mip_levels;
+        description.Format = format;
+        description.SampleDesc.Count = 1;
+        description.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        if (FAILED(device->CreateCommittedResource(&heap_properties,
+            D3D12_HEAP_FLAG_NONE, &description, D3D12_RESOURCE_STATE_COPY_DEST,
+            nullptr, IID_PPV_ARGS(&resource))))
+            return false;
+        if (!uploader.UploadTextureSubresources(resource.Get(), subresources,
+            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE))
+        {
+            resource.Reset();
+            return false;
+        }
+        return true;
+    }
+
+    bool CreateTexture2DRgba8(ID3D12Device* device, D3D12UploadContext& uploader,
+        const void* rgba_data, std::uint32_t width, std::uint32_t height,
+        std::uint32_t row_pitch, Microsoft::WRL::ComPtr<ID3D12Resource>& resource) noexcept
+    {
+        resource.Reset();
+        if (device == nullptr || !uploader.IsInitialized() || rgba_data == nullptr ||
+            width == 0 || height == 0 || row_pitch < width * 4u)
+            return false;
+
+        D3D12_HEAP_PROPERTIES heap_properties{};
+        heap_properties.Type = D3D12_HEAP_TYPE_DEFAULT;
+        D3D12_RESOURCE_DESC description{};
+        description.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        description.Width = width;
+        description.Height = height;
+        description.DepthOrArraySize = 1;
+        description.MipLevels = 1;
+        description.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        description.SampleDesc.Count = 1;
+        description.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        if (FAILED(device->CreateCommittedResource(&heap_properties,
+            D3D12_HEAP_FLAG_NONE, &description, D3D12_RESOURCE_STATE_COPY_DEST,
+            nullptr, IID_PPV_ARGS(&resource))))
+            return false;
+
+        if (!uploader.UploadTexture2D(resource.Get(), rgba_data, width, height, row_pitch,
+            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE))
+        {
+            resource.Reset();
+            return false;
+        }
+        return true;
+    }
+
 }

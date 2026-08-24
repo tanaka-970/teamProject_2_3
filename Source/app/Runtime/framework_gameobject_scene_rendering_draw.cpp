@@ -23,6 +23,7 @@
 #include "../../RePlayEngine/Components/Landscape/LandscapeRendererComponent.h"
 #include "../../RePlayEngine/Components/Landscape/LandscapeColliderComponent.h"
 #include "../../RePlayEngine/Rendering/Shaders/BuiltInShaders.h"
+#include "../../RePlayEngine/Rendering/Shaders/ShaderConstantPacker.h"
 #include "../../RePlayEngine/Rendering/ShaderStack/BuiltInShaderLayers.h"
 #include "../../RePlayEngine/Object/Registry/BuiltInComponents.h"
 #include "../../RePlayEngine/Project/ProjectSettingsSerializer.h"
@@ -48,9 +49,11 @@
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <utility>
+#include <unordered_set>
 #include <vector>
 
 
@@ -267,6 +270,371 @@ ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
     }
     return item;
 }
+
+bool framework::build_dx12_static_scene(
+    ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission& submission)
+{
+    using namespace ReplayEngine::Rendering;
+    using namespace ReplayEngine::Rendering::DX12;
+
+    submission = {};
+    std::unordered_set<std::string> mesh_source_keys;
+    std::unordered_set<std::string> texture_source_keys;
+    std::unordered_set<std::string> shader_source_keys;
+
+    const auto multiply_color = [](const DirectX::XMFLOAT4& a,
+        const DirectX::XMFLOAT4& b) noexcept
+    {
+        return DirectX::XMFLOAT4{ a.x * b.x, a.y * b.y, a.z * b.z, a.w * b.w };
+    };
+    const auto multiply_world = [](const DirectX::XMFLOAT4X4& local,
+        const DirectX::XMFLOAT4X4& world) noexcept
+    {
+        DirectX::XMFLOAT4X4 result{};
+        DirectX::XMStoreFloat4x4(&result,
+            DirectX::XMLoadFloat4x4(&local) * DirectX::XMLoadFloat4x4(&world));
+        return result;
+    };
+    const auto alpha_mode = [](int mode) noexcept
+    {
+        if (mode == 1) return D3D12StaticAlphaMode::Mask;
+        if (mode == 2) return D3D12StaticAlphaMode::Blend;
+        return D3D12StaticAlphaMode::Opaque;
+    };
+    const auto material_alpha_mode = [](MaterialAlphaMode mode) noexcept
+    {
+        switch (mode)
+        {
+        case MaterialAlphaMode::Mask: return D3D12StaticAlphaMode::Mask;
+        case MaterialAlphaMode::Blend: return D3D12StaticAlphaMode::Blend;
+        default: return D3D12StaticAlphaMode::Opaque;
+        }
+    };
+
+    const auto add_texture = [this, &submission, &texture_source_keys](
+        const std::filesystem::path& input_path) -> std::string
+    {
+        if (input_path.empty()) return {};
+        std::filesystem::path resolved = input_path;
+        if (resolved.is_relative())
+        {
+            std::error_code ec;
+            if (!std::filesystem::exists(resolved, ec) || ec)
+                resolved = content_path(resolved);
+        }
+        resolved = resolved.lexically_normal();
+        const std::string key = resolved.generic_string();
+        if (key.empty()) return {};
+        if (!dx12_device_context.HasStaticTexture(key) &&
+            texture_source_keys.insert(key).second)
+        {
+            D3D12StaticTextureSource source;
+            source.key = key;
+            source.source_path = resolved;
+            submission.texture_sources.push_back(std::move(source));
+        }
+        return key;
+    };
+
+    const auto add_asset_texture = [this, &add_texture](
+        const std::string& asset_guid) -> std::string
+    {
+        if (asset_guid.empty()) return {};
+        const ReplayEngine::Assets::AssetRecord* record =
+            asset_database.FindByGuid(asset_guid);
+        if (record == nullptr) return {};
+        return add_texture(content_path(record->source_path));
+    };
+
+    struct BaseTextureBinding final
+    {
+        std::string asset_guid;
+        std::string fallback_key{ "__dx12_white" };
+    };
+    const auto fallback_texture_key = [](const std::string& fallback) -> std::string
+    {
+        if (fallback == "black") return "__dx12_black";
+        if (fallback == "gray") return "__dx12_gray";
+        if (fallback == "bump") return "__dx12_bump";
+        return "__dx12_white";
+    };
+    const auto base_texture_binding = [&fallback_texture_key](const RenderItem& item) -> BaseTextureBinding
+    {
+        for (const ResolvedMaterialTexture& texture : item.material_binding.textures)
+        {
+            if (texture.property_name != "BaseMap") continue;
+            BaseTextureBinding binding;
+            binding.asset_guid = texture.asset_guid;
+            binding.fallback_key = fallback_texture_key(texture.default_texture);
+            return binding;
+        }
+        return {};
+    };
+
+    const auto fill_external_material = [this, &submission, &shader_source_keys,
+        &material_alpha_mode, &multiply_color, &add_asset_texture,
+        &base_texture_binding, &fallback_texture_key](
+        const RenderItem& source_item, const RenderItem& item,
+        D3D12StaticDrawItem& draw) -> bool
+    {
+        const MaterialAsset* material = resolve_object_material(source_item.material_asset);
+        const bool external = material != nullptr;
+        draw.base_color = multiply_color(item.material_base_color, item.tint);
+        draw.vertex_tint = item.tint;
+        draw.emissive = item.emissive_color;
+        draw.emissive_strength = item.emissive_strength;
+        draw.metallic = item.metallic;
+        draw.roughness = item.roughness;
+        draw.ambient_occlusion = item.ambient_occlusion;
+        draw.double_sided = item.double_sided;
+        if (!external) return false;
+
+        draw.alpha_mode = material_alpha_mode(material->alpha_mode);
+        draw.alpha_cutoff = material->alpha_cutoff;
+        const BaseTextureBinding binding = base_texture_binding(item);
+        std::string texture_guid = binding.asset_guid;
+        if (texture_guid.empty()) texture_guid = material->base_color_texture;
+        draw.base_color_texture_key = add_asset_texture(texture_guid);
+        if (draw.base_color_texture_key.empty())
+            draw.base_color_texture_key = binding.fallback_key;
+
+        // 既存の MaterialBindingResolver を b9 の Byte と t40 以降の Slot の正本として使う。
+        // DX12 Backend はこの解決済み Packet だけを利用する。
+        draw.material_constants = item.material_binding.constants;
+        for (const ResolvedMaterialTexture& texture : item.material_binding.textures)
+        {
+            D3D12StaticMaterialTexture mapped;
+            mapped.slot = texture.slot;
+            mapped.texture_key = add_asset_texture(texture.asset_guid);
+            if (mapped.texture_key.empty())
+                mapped.texture_key = fallback_texture_key(texture.default_texture);
+            draw.material_textures.push_back(std::move(mapped));
+        }
+
+        // BuiltIn の PBR/Toon/FBX/Pixelate/Unlit はまだ Deferred/Light/Shadow の
+        // Global Resource Set に依存するため、Phase 2 Bridge で意図的に描画する。
+        // 安定した b0/b1/b4/b9、t0/t40 以降、s0..s2 の ABI だけに依存する
+        // Project/Composer Surface Shader は、実際の SM6 Custom Pixel Shader として実行できる。
+        const ShaderCatalog::Entry* shader_entry =
+            shader_library.Catalog().Find(item.material_binding.shader);
+        if (shader_entry != nullptr && shader_entry->info.domain == ShaderDomain::Surface &&
+            shader_entry->schema && item.material_binding.usable_shader)
+        {
+            const std::string generic = shader_entry->info.source_path.generic_string();
+            const bool built_in = generic.find("/BuiltIn/") != std::string::npos ||
+                generic.find("\\BuiltIn\\") != std::string::npos;
+            if (!built_in)
+            {
+                draw.shader_key = item.material_binding.shader.ToString();
+                if (!draw.shader_key.empty() &&
+                    !dx12_device_context.HasStaticShader(draw.shader_key) &&
+                    shader_source_keys.insert(draw.shader_key).second)
+                {
+                    D3D12StaticShaderSource shader;
+                    shader.key = draw.shader_key;
+                    shader.source_path = shader_entry->info.source_path;
+                    if (shader.source_path.is_relative())
+                        shader.source_path = std::filesystem::current_path() /
+                            shader.source_path;
+                    shader.source_path = shader.source_path.lexically_normal();
+                    shader.generated_declaration =
+                        ShaderConstantPacker::GenerateHlslDeclaration(*shader_entry->schema);
+                    submission.shader_sources.push_back(std::move(shader));
+                }
+            }
+        }
+        return true;
+    };
+
+    const auto make_mesh_source = [&submission, &mesh_source_keys](
+        const std::string& key, auto vertex_begin, auto vertex_end,
+        const std::vector<std::uint32_t>& indices)
+    {
+        if (!mesh_source_keys.insert(key).second) return;
+        D3D12StaticMeshSource source;
+        source.key = key;
+        try
+        {
+            source.vertices.reserve(static_cast<std::size_t>(
+                std::distance(vertex_begin, vertex_end)));
+            for (auto it = vertex_begin; it != vertex_end; ++it)
+            {
+                D3D12StaticVertex vertex;
+                vertex.position = it->position;
+                vertex.normal = it->normal;
+                vertex.texcoord = it->texcoord;
+                source.vertices.push_back(vertex);
+            }
+            source.indices = indices;
+            submission.mesh_sources.push_back(std::move(source));
+        }
+        catch (...)
+        {
+            mesh_source_keys.erase(key);
+        }
+    };
+
+    for (const RenderItem& source_item : object_render_items.Items())
+    {
+        if (source_item.mesh_asset.empty()) continue;
+        // 実際の Bone Palette / Animation Skinning は意図的に Phase 3 の担当とする。
+        if (source_item.skinned) continue;
+
+        const RenderItem item = resolve_render_item_material(source_item);
+        if (item.mesh_asset.rfind("builtin:", 0) == 0)
+        {
+            static_mesh* primitive = resolve_builtin_primitive_mesh(item.mesh_asset);
+            if (primitive == nullptr || primitive->cpu_vertices().empty() ||
+                primitive->cpu_indices().empty())
+                continue;
+            if (!dx12_device_context.HasStaticMesh(item.mesh_asset))
+                make_mesh_source(item.mesh_asset, primitive->cpu_vertices().begin(),
+                    primitive->cpu_vertices().end(), primitive->cpu_indices());
+
+            D3D12StaticDrawItem draw;
+            draw.mesh_key = item.mesh_asset;
+            draw.world = item.world;
+            (void)fill_external_material(source_item, item, draw);
+            submission.draws.push_back(std::move(draw));
+            continue;
+        }
+
+        gltf_model* gltf = resolve_object_gltf(item.mesh_asset);
+        if (gltf != nullptr && !gltf->HasSkins() && !gltf->HasAnimations())
+        {
+            bool geometry_missing = false;
+            for (std::size_t primitive_index = 0;
+                primitive_index < gltf->StaticPrimitiveCount(); ++primitive_index)
+            {
+                const std::string key = item.mesh_asset + "#gltf:" +
+                    std::to_string(primitive_index);
+                if (!dx12_device_context.HasStaticMesh(key))
+                {
+                    geometry_missing = true;
+                    break;
+                }
+            }
+            std::vector<gltf_model::StaticPrimitiveExport> exported;
+            if (geometry_missing)
+            {
+                if (!gltf->ExportStaticPrimitives(exported)) continue;
+                for (std::size_t primitive_index = 0;
+                    primitive_index < exported.size(); ++primitive_index)
+                {
+                    const std::string key = item.mesh_asset + "#gltf:" +
+                        std::to_string(primitive_index);
+                    if (!dx12_device_context.HasStaticMesh(key))
+                        make_mesh_source(key, exported[primitive_index].vertices.begin(),
+                            exported[primitive_index].vertices.end(),
+                            exported[primitive_index].indices);
+                }
+            }
+
+            for (std::size_t primitive_index = 0;
+                primitive_index < gltf->StaticPrimitiveCount(); ++primitive_index)
+            {
+                gltf_model::StaticPrimitiveInfo info;
+                if (!gltf->StaticPrimitiveInfoAt(primitive_index, info)) continue;
+                D3D12StaticDrawItem draw;
+                draw.mesh_key = item.mesh_asset + "#gltf:" +
+                    std::to_string(primitive_index);
+                draw.world = multiply_world(info.node_transform, item.world);
+                const bool external = fill_external_material(source_item, item, draw);
+                if (!external)
+                {
+                    draw.base_color = multiply_color(info.embedded_base_color,
+                        source_item.tint);
+                    draw.base_color_texture_key = add_texture(
+                        info.embedded_base_color_texture);
+                    draw.alpha_mode = alpha_mode(info.alpha_mode);
+                    draw.alpha_cutoff = info.alpha_cutoff;
+                    draw.double_sided = item.double_sided;
+                }
+                submission.draws.push_back(std::move(draw));
+            }
+            continue;
+        }
+
+        // FBX/cereal と Bind Pose の GLB は内部的には skinned_mesh で表現されるが、
+        // MeshRenderer の Submission（skinned=false）は有効な Static Geometry として扱う。
+        skinned_mesh* mesh_asset = resolve_object_mesh(item.mesh_asset);
+        if (mesh_asset == nullptr) continue;
+        std::filesystem::path model_source;
+        std::string model_reason;
+        (void)resolve_model_source(item.mesh_asset, model_source, model_reason);
+
+        for (std::size_t mesh_index = 0; mesh_index < mesh_asset->meshes.size(); ++mesh_index)
+        {
+            const skinned_mesh::mesh& mesh = mesh_asset->meshes[mesh_index];
+            if (mesh.vertices.empty() || mesh.indices.empty()) continue;
+            const std::string mesh_key = item.mesh_asset + "#mesh:" +
+                std::to_string(mesh_index);
+            if (!dx12_device_context.HasStaticMesh(mesh_key))
+                make_mesh_source(mesh_key, mesh.vertices.begin(), mesh.vertices.end(),
+                    mesh.indices);
+
+            const DirectX::XMFLOAT4X4 mesh_world =
+                multiply_world(mesh.default_global_transform, item.world);
+            const auto append_draw = [&](std::uint32_t start, std::uint32_t count,
+                std::uint64_t material_id)
+            {
+                D3D12StaticDrawItem draw;
+                draw.mesh_key = mesh_key;
+                draw.start_index = start;
+                draw.index_count = count;
+                draw.world = mesh_world;
+                const bool external = fill_external_material(source_item, item, draw);
+                if (!external)
+                {
+                    const auto material_it = mesh_asset->materials.find(material_id);
+                    if (material_it != mesh_asset->materials.end())
+                    {
+                        const skinned_mesh::material& material = material_it->second;
+                        draw.base_color = multiply_color(material.Kd, source_item.tint);
+                        std::filesystem::path texture_path(material.texture_filenames[0]);
+                        if (!texture_path.empty() && texture_path.is_relative() &&
+                            !model_source.empty())
+                            texture_path = model_source.parent_path() / texture_path;
+                        draw.base_color_texture_key = add_texture(texture_path);
+                        if (const skinned_mesh::gltf_material_info* gltf_material =
+                            mesh_asset->GltfMaterial(material_id))
+                        {
+                            draw.metallic = gltf_material->metallic;
+                            draw.roughness = gltf_material->roughness;
+                            draw.ambient_occlusion = gltf_material->occlusion;
+                            draw.emissive = gltf_material->emissive;
+                            draw.emissive_strength = gltf_material->emissive_strength;
+                            draw.alpha_mode = alpha_mode(gltf_material->alpha_mode);
+                            draw.alpha_cutoff = gltf_material->alpha_cutoff;
+                            draw.double_sided = gltf_material->double_sided ||
+                                item.double_sided;
+                        }
+                    }
+                    else
+                    {
+                        draw.base_color = source_item.tint;
+                        draw.double_sided = item.double_sided;
+                    }
+                }
+                submission.draws.push_back(std::move(draw));
+            };
+
+            if (mesh.subsets.empty())
+            {
+                append_draw(0, static_cast<std::uint32_t>(mesh.indices.size()), 0);
+            }
+            else
+            {
+                for (const skinned_mesh::mesh::subset& subset : mesh.subsets)
+                    append_draw(subset.start_index_location, subset.index_count,
+                        subset.material_unique_id);
+            }
+        }
+    }
+    return true;
+}
+
+
 
 void framework::draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shader,
     bool gbuffer_pass, bool depth_only, ReplayEngine::Core::ObjectID only_owner,

@@ -232,6 +232,25 @@ void static_mesh::render(ID3D11DeviceContext* immediate_context,
 
 void static_mesh::create_com_buffers(ID3D11Device* device, vertex* vertices, size_t vertex_count, uint32_t* indices, size_t index_count)
 {
+// Renderer Backend 共通の正本として CPU Copy を保持する。
+// Procedural Mesh でも使い、DX11 と DX12 が同じ編集結果を見るようにする。
+	try
+	{
+		if (vertices != nullptr && vertex_count != 0)
+			cpu_vertices_.assign(vertices, vertices + vertex_count);
+		else
+			cpu_vertices_.clear();
+		if (indices != nullptr && index_count != 0)
+			cpu_indices_.assign(indices, indices + index_count);
+		else
+			cpu_indices_.clear();
+	}
+	catch (...)
+	{
+		cpu_vertices_.clear();
+		cpu_indices_.clear();
+	}
+
 	HRESULT hr = S_OK;
 
 	D3D11_BUFFER_DESC buffer_desc{};

@@ -33,6 +33,7 @@
 #include "../../RePlayEngine/Rendering/Shadows/LocalShadowAtlas.h"
 #include "../../RePlayEngine/Rendering/FrameConstants.h"
 #include "../../RePlayEngine/Rendering/RenderStats.h"
+#include "../../RePlayEngine/Rendering/DX12/D3D12DeviceContext.h"
 #include "../../RePlayEngine/Rendering/Frustum.h"
 #include "../render/motion_vector_context.h"
 #include "../../RePlayEngine/Rendering/RenderGraph/RenderGraph.h"

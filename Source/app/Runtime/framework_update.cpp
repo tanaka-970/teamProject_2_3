@@ -2,7 +2,8 @@
 
 void framework::update(float elapsed_time)
 {
-    ReplayEngine::Rendering::Stats().BeginFrame(immediate_context.Get());
+    if (!dx12_framework_active)
+        ReplayEngine::Rendering::Stats().BeginFrame(immediate_context.Get());
     REPLAY_PROFILE_SCOPE("Update");
     // 基準画像を撮る間はワールドを止める。
     //
@@ -64,6 +65,11 @@ void framework::update(float elapsed_time)
         REPLAY_PROFILE_SCOPE("SceneUpdate");
         update_object_scene(elapsed_time);
     }
+
+    // Editor/Game UI はまだ D3D11 ImGui Backend を使う。DX12 Bootstrap 経路では
+    // World/Runtime の更新を継続するが、Present できない D3D11 UI Frame は構築しない。
+    // ImGui の移行は後続 Renderer Phase で行う。
+    if (dx12_framework_active) return;
 
 #ifdef USE_IMGUI
     // Standalone でも F4 Profiler だけは描画できるようにする。

@@ -53,6 +53,8 @@
 
 void framework::clear_object_mesh_cache() noexcept
 {
+    if (dx12_framework_active && dx12_device_context.IsInitialized())
+        (void)dx12_device_context.ClearStaticAssetCaches();
     object_mesh_cache.clear();
     // GameObject と Asset Browser が共有するGLB実体を、DeviceのLive Object確認前に解放する。
     stage_gltf_model.reset();
@@ -64,6 +66,8 @@ void framework::clear_object_mesh_cache() noexcept
 
 void framework::clear_object_material_cache() noexcept
 {
+    if (dx12_framework_active && dx12_device_context.IsInitialized())
+        (void)dx12_device_context.ClearStaticAssetCaches();
     object_material_cache.clear();
     object_material_failures.clear();
     object_shader_lighting_failures.clear();

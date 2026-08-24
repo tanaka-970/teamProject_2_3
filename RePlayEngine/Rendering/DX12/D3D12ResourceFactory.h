@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "D3D12UploadContext.h"
 
@@ -6,6 +6,7 @@
 #include <wrl.h>
 
 #include <cstdint>
+#include <vector>
 
 namespace ReplayEngine::Rendering::DX12::D3D12ResourceFactory
 {
@@ -26,6 +27,15 @@ namespace ReplayEngine::Rendering::DX12::D3D12ResourceFactory
         const void* data, std::uint32_t size, DXGI_FORMAT format,
         Microsoft::WRL::ComPtr<ID3D12Resource>& resource,
         D3D12_INDEX_BUFFER_VIEW& view) noexcept;
+
+    bool CreateTexture2DRgba8(ID3D12Device* device, D3D12UploadContext& uploader,
+        const void* rgba_data, std::uint32_t width, std::uint32_t height,
+        std::uint32_t row_pitch, Microsoft::WRL::ComPtr<ID3D12Resource>& resource) noexcept;
+
+    bool CreateTexture2D(ID3D12Device* device, D3D12UploadContext& uploader,
+        std::uint32_t width, std::uint32_t height, std::uint16_t mip_levels,
+        DXGI_FORMAT format, const std::vector<D3D12TextureSubresourceSource>& subresources,
+        Microsoft::WRL::ComPtr<ID3D12Resource>& resource) noexcept;
 
     constexpr std::uint32_t AlignConstantBufferSize(std::uint32_t size) noexcept
     {

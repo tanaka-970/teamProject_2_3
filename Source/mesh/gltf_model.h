@@ -56,6 +56,33 @@ public:
         return collision_triangles_;
     }
 
+    // API に依存しない Static Geometry の Export。DX12 移行 Backend が利用する。
+    // メモリ上の LOD Source 配列が解放済みの場合は、D3D11 GPU Buffer から Readback せず、
+    // 既存の .replaymesh Cache から同じデータを読む。
+    struct StaticVertex
+    {
+        DirectX::XMFLOAT3 position{};
+        DirectX::XMFLOAT3 normal{ 0, 1, 0 };
+        DirectX::XMFLOAT2 texcoord{};
+    };
+    struct StaticPrimitiveInfo
+    {
+        DirectX::XMFLOAT4X4 node_transform{};
+        DirectX::XMFLOAT4 embedded_base_color{ 1, 1, 1, 1 };
+        std::filesystem::path embedded_base_color_texture;
+        int material = -1;
+        int alpha_mode = 0;
+        float alpha_cutoff = 0.5f;
+    };
+    struct StaticPrimitiveExport : StaticPrimitiveInfo
+    {
+        std::vector<StaticVertex> vertices;
+        std::vector<std::uint32_t> indices;
+    };
+    std::size_t StaticPrimitiveCount() const noexcept { return primitives_.size(); }
+    bool StaticPrimitiveInfoAt(std::size_t index, StaticPrimitiveInfo& out) const;
+    bool ExportStaticPrimitives(std::vector<StaticPrimitiveExport>& out) const;
+
     // write_motion_vectors ��G-Buffer�p�X�ł̂� true �ɂ���B
     // �O�t���[���̃��[���h�s���VS(b6)�֍ڂ��A������1�t���[���i�߂�B
     void render(ID3D11DeviceContext* context,
@@ -87,12 +114,7 @@ public:
 private:
     static const std::filesystem::path& CacheRoot();
 
-    struct Vertex
-    {
-        DirectX::XMFLOAT3 position{};
-        DirectX::XMFLOAT3 normal{ 0, 1, 0 };
-        DirectX::XMFLOAT2 texcoord{};
-    };
+    using Vertex = StaticVertex;
 
     // ディスクキャッシュ用のCPU側データ。保存が済んだら捨てる。
     struct LodCacheEntry
