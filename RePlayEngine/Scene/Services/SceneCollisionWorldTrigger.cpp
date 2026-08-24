@@ -42,26 +42,35 @@ namespace ReplayEngine::Scene
             Runtime::RuntimeContext* runtime = scene.Services().Runtime();
             if (runtime == nullptr) return;
 
+            Reflection::TypeGUID type;
+            const char* type_name = nullptr;
+            switch (phase)
+            {
+            case 0:
+                type = Runtime::EngineEvents::TriggerEnter;
+                type_name = "TriggerEnter";
+                break;
+            case 1:
+                type = Runtime::EngineEvents::TriggerStay;
+                type_name = "TriggerStay";
+                break;
+            default:
+                type = Runtime::EngineEvents::TriggerExit;
+                type_name = "TriggerExit";
+                break;
+            }
+
+            // 購読者がいなければ PropertyBag を組む前に抜ける。
+            // Trigger は受け手 2 つへ配るので、1 接触につき 2 件ぶん効く。
+            if (!runtime->Events().HasSubscribers(type)) return;
+
             const bool receiver_is_trigger = receiver == contact.trigger_object;
             const Core::ObjectID other_id = receiver_is_trigger
                 ? contact.other_object : contact.trigger_object;
 
             Runtime::EventRecord record;
-            switch (phase)
-            {
-            case 0:
-                record.type = Runtime::EngineEvents::TriggerEnter;
-                record.type_name = "TriggerEnter";
-                break;
-            case 1:
-                record.type = Runtime::EngineEvents::TriggerStay;
-                record.type_name = "TriggerStay";
-                break;
-            default:
-                record.type = Runtime::EngineEvents::TriggerExit;
-                record.type_name = "TriggerExit";
-                break;
-            }
+            record.type = type;
+            record.type_name = type_name;
 
             const Runtime::HandleResolver resolver(scene);
             Core::GameObject* receiver_object = scene.FindGameObjectByID(receiver);
