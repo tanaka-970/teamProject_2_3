@@ -565,7 +565,11 @@ void framework::draw_project_folder_contents()
         const ImVec2 icon_size(project_thumbnail_size, project_thumbnail_size);
         if (thumbnail != nullptr)
         {
-            if (ImGui::ImageButton(reinterpret_cast<ImTextureID>(thumbnail),
+            const ImTextureID thumbnail_id = dx12_framework_active
+                ? reinterpret_cast<ImTextureID>(
+                    dx12_device_context.ImGuiTextureForPath(entry.path))
+                : reinterpret_cast<ImTextureID>(thumbnail);
+            if (thumbnail_id != nullptr && ImGui::ImageButton(thumbnail_id,
                 icon_size, ImVec2(0, 0), ImVec2(1, 1), 2))
             {
                 project_selected_entry_path = entry.path;

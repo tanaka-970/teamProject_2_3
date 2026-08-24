@@ -283,7 +283,11 @@ void framework::draw_sprite_atlas_editor()
         const float scale = base_scale * sprite_atlas_zoom;
         const ImVec2 size(image_width * scale, image_height * scale);
         const ImVec2 origin = ImGui::GetCursorScreenPos();
-        ImGui::Image(reinterpret_cast<ImTextureID>(texture), size,
+        const ImTextureID atlas_texture_id = dx12_framework_active
+            ? reinterpret_cast<ImTextureID>(
+                dx12_device_context.ImGuiTextureForPath(atlas_texture_path))
+            : reinterpret_cast<ImTextureID>(texture);
+        ImGui::Image(atlas_texture_id, size,
             ImVec2(0, 0), ImVec2(1, 1));
         ImDrawList* draw = ImGui::GetWindowDrawList();
 
