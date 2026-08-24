@@ -1,12 +1,8 @@
 #include "D3D12DeviceContext.h"
+#include "D3D12ResourceFactory.h"
 
 #include <algorithm>
-#include <cstring>
-#include <iterator>
-
-#include <d3dcompiler.h>
-
-#pragma comment(lib, "d3dcompiler.lib")
+#include <filesystem>
 
 namespace ReplayEngine::Rendering::DX12
 {
@@ -80,6 +76,8 @@ float4 main(PixelInput input) : SV_TARGET
         if (device_ != nullptr) WaitForGpu();
         ReleaseValidationTriangleResources();
         ReleaseRenderTargets();
+        for (auto& batch : render_item_batches_)
+            batch.Reset(&resource_descriptor_allocator_);
         if (fence_event_ != nullptr)
         {
             CloseHandle(fence_event_);
@@ -88,8 +86,9 @@ float4 main(PixelInput input) : SV_TARGET
         command_list_.Reset();
         for (auto& allocator : command_allocators_) allocator.Reset();
         fence_.Reset();
-        rtv_heap_.Reset();
         swap_chain_.Reset();
+        resource_descriptor_allocator_.Reset();
+        upload_context_.Shutdown();
         command_queue_.Reset();
         device_.Reset();
         adapter_.Reset();
@@ -155,6 +154,10 @@ float4 main(PixelInput input) : SV_TARGET
         if (FAILED(device_->CreateCommandQueue(&queue_desc,
             IID_PPV_ARGS(&command_queue_))))
             return false;
+        if (!upload_context_.Initialize(device_.Get(), command_queue_.Get()) ||
+            !resource_descriptor_allocator_.Initialize(device_.Get(),
+                D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 4096, true))
+            return false;
 
         for (auto& allocator : command_allocators_)
         {
@@ -200,47 +203,41 @@ float4 main(PixelInput input) : SV_TARGET
 
     bool D3D12DeviceContext::CreateRenderTargets() noexcept
     {
-        D3D12_DESCRIPTOR_HEAP_DESC heap_desc{};
-        heap_desc.NumDescriptors = FrameCount;
-        heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-        if (FAILED(device_->CreateDescriptorHeap(&heap_desc,
-            IID_PPV_ARGS(&rtv_heap_))))
+        if (!rtv_allocator_.Initialize(device_.Get(),
+            D3D12_DESCRIPTOR_HEAP_TYPE_RTV, FrameCount, false) ||
+            !rtv_allocator_.Allocate(FrameCount, rtv_allocation_))
             return false;
-        rtv_descriptor_size_ = device_->GetDescriptorHandleIncrementSize(
-            D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-
-        D3D12_CPU_DESCRIPTOR_HANDLE handle = rtv_heap_->GetCPUDescriptorHandleForHeapStart();
         for (std::uint32_t index = 0; index < FrameCount; ++index)
         {
             if (FAILED(swap_chain_->GetBuffer(index, IID_PPV_ARGS(&render_targets_[index]))))
                 return false;
-            device_->CreateRenderTargetView(render_targets_[index].Get(), nullptr, handle);
-            handle.ptr += rtv_descriptor_size_;
+            device_->CreateRenderTargetView(render_targets_[index].Get(), nullptr,
+                rtv_allocator_.CpuHandle(rtv_allocation_.index + index));
         }
         return true;
     }
 
     bool D3D12DeviceContext::CreateValidationTriangleResources() noexcept
     {
-        Microsoft::WRL::ComPtr<ID3DBlob> vertex_shader;
-        Microsoft::WRL::ComPtr<ID3DBlob> pixel_shader;
-        Microsoft::WRL::ComPtr<ID3DBlob> errors;
-        if (FAILED(D3DCompile(kValidationVertexShader,
-            sizeof(kValidationVertexShader) - 1, "DX12ValidationTriangle.hlsl",
-            nullptr, nullptr, "main", "vs_5_0", D3DCOMPILE_ENABLE_STRICTNESS,
-            0, &vertex_shader, &errors)))
+        D3D12ShaderCompiler shader_compiler;
+        if (!shader_compiler.Initialize(D3D12ShaderCompiler::FindDefaultLibraryPath()))
             return false;
-        errors.Reset();
-        if (FAILED(D3DCompile(kValidationPixelShader,
-            sizeof(kValidationPixelShader) - 1, "DX12ValidationTriangle.hlsl",
-            nullptr, nullptr, "main", "ps_5_0", D3DCOMPILE_ENABLE_STRICTNESS,
-            0, &pixel_shader, &errors)))
+        const std::filesystem::path source_name =
+            std::filesystem::current_path() / "DX12ValidationTriangle.hlsl";
+        const D3D12ShaderCompileResult vertex_shader = shader_compiler.CompileSource(
+            kValidationVertexShader, source_name, L"main", L"vs_6_0");
+        const D3D12ShaderCompileResult pixel_shader = shader_compiler.CompileSource(
+            kValidationPixelShader, source_name, L"main", L"ps_6_0");
+        shader_compiler.Shutdown();
+        if (!vertex_shader.succeeded || vertex_shader.bytecode.empty() ||
+            !pixel_shader.succeeded || pixel_shader.bytecode.empty())
             return false;
 
         D3D12_ROOT_SIGNATURE_DESC root_signature_desc{};
         root_signature_desc.Flags =
             D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
         Microsoft::WRL::ComPtr<ID3DBlob> serialized_root_signature;
+        Microsoft::WRL::ComPtr<ID3DBlob> errors;
         if (FAILED(D3D12SerializeRootSignature(&root_signature_desc,
             D3D_ROOT_SIGNATURE_VERSION_1, &serialized_root_signature, &errors)))
             return false;
@@ -269,8 +266,8 @@ float4 main(PixelInput input) : SV_TARGET
 
         D3D12_GRAPHICS_PIPELINE_STATE_DESC pipeline_desc{};
         pipeline_desc.pRootSignature = validation_root_signature_.Get();
-        pipeline_desc.VS = { vertex_shader->GetBufferPointer(), vertex_shader->GetBufferSize() };
-        pipeline_desc.PS = { pixel_shader->GetBufferPointer(), pixel_shader->GetBufferSize() };
+        pipeline_desc.VS = { vertex_shader.bytecode.data(), vertex_shader.bytecode.size() };
+        pipeline_desc.PS = { pixel_shader.bytecode.data(), pixel_shader.bytecode.size() };
         pipeline_desc.BlendState = blend_desc;
         pipeline_desc.SampleMask = UINT_MAX;
         pipeline_desc.RasterizerState = rasterizer_desc;
@@ -284,32 +281,16 @@ float4 main(PixelInput input) : SV_TARGET
             IID_PPV_ARGS(&validation_pipeline_))))
             return false;
 
-        const UINT64 vertex_buffer_size = sizeof(kValidationVertices);
-        D3D12_HEAP_PROPERTIES heap_properties{};
-        heap_properties.Type = D3D12_HEAP_TYPE_UPLOAD;
-        D3D12_RESOURCE_DESC resource_desc{};
-        resource_desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-        resource_desc.Width = vertex_buffer_size;
-        resource_desc.Height = 1;
-        resource_desc.DepthOrArraySize = 1;
-        resource_desc.MipLevels = 1;
-        resource_desc.SampleDesc.Count = 1;
-        resource_desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-        if (FAILED(device_->CreateCommittedResource(&heap_properties,
-            D3D12_HEAP_FLAG_NONE, &resource_desc, D3D12_RESOURCE_STATE_GENERIC_READ,
-            nullptr, IID_PPV_ARGS(&validation_vertex_buffer_))))
-            return false;
-        void* mapped_data = nullptr;
-        if (FAILED(validation_vertex_buffer_->Map(0, nullptr, &mapped_data))) return false;
-        std::memcpy(mapped_data, kValidationVertices, sizeof(kValidationVertices));
-        validation_vertex_buffer_->Unmap(0, nullptr);
-        return true;
+        return D3D12ResourceFactory::CreateBufferWithData(device_.Get(), upload_context_,
+            kValidationVertices, sizeof(kValidationVertices),
+            D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER, validation_vertex_buffer_);
     }
 
     void D3D12DeviceContext::ReleaseRenderTargets() noexcept
     {
         for (auto& target : render_targets_) target.Reset();
-        rtv_heap_.Reset();
+        rtv_allocator_.Reset();
+        rtv_allocation_ = {};
     }
 
     void D3D12DeviceContext::ReleaseValidationTriangleResources() noexcept
@@ -372,6 +353,14 @@ float4 main(PixelInput input) : SV_TARGET
         return true;
     }
 
+    bool D3D12DeviceContext::SubmitRenderItems(
+        const ::ReplayEngine::Rendering::RenderItemList& items) noexcept
+    {
+        if (!frame_open_) return false;
+        return render_item_batches_[frame_index_].Upload(device_.Get(),
+            upload_context_, resource_descriptor_allocator_, items);
+    }
+
     bool D3D12DeviceContext::EndFrame() noexcept
     {
         if (!frame_open_) return false;
@@ -425,10 +414,6 @@ float4 main(PixelInput input) : SV_TARGET
 
     D3D12_CPU_DESCRIPTOR_HANDLE D3D12DeviceContext::CurrentRenderTargetView() const noexcept
     {
-        D3D12_CPU_DESCRIPTOR_HANDLE handle{};
-        if (rtv_heap_ == nullptr) return handle;
-        handle = rtv_heap_->GetCPUDescriptorHandleForHeapStart();
-        handle.ptr += static_cast<SIZE_T>(frame_index_) * rtv_descriptor_size_;
-        return handle;
+        return rtv_allocator_.CpuHandle(rtv_allocation_.index + frame_index_);
     }
 }

@@ -102,6 +102,7 @@ namespace ReplayEngine::Runtime::Detail
     int RunHeadlessPlayerSpeedValidation(const char* command_line);
     int RunHeadlessInputValidation();
     int RunHeadlessDX12Validation(const char* command_line);
+    int RunHeadlessDXCValidation(const char* command_line);
     int RunHeadlessMotionEventsValidation();
     int RunHeadlessPhysicsValidation(const char* command_line);
     int RunHeadlessMotionTriggerValidation(const char* command_line);
