@@ -9,6 +9,7 @@
 #include "../../Runtime/API/RuntimeContext.h"
 #include "../../Runtime/Core/RuntimeResult.h"
 #include "../../Runtime/Events/EventBus.h"
+#include "../../Object/Registry/ComponentRegistry.h"
 
 #include <DirectXMath.h>
 
@@ -43,6 +44,13 @@ namespace ReplayEngine::Scripting::CSharp::Detail
             if (source.Type() == wanted)
             {
                 out = source;
+                return true;
+            }
+            if (wanted == PropertyType::String &&
+                (source.Type() == PropertyType::AssetReference ||
+                    source.Type() == PropertyType::SceneReference))
+            {
+                out = PropertyValue::MakeString(source.AsString());
                 return true;
             }
             return source.ConvertTo(wanted, out);
@@ -108,6 +116,25 @@ namespace ReplayEngine::Scripting::CSharp::Detail
             g_runtime_context->GetComponentTypeName(handle, name);
         if (status != RuntimeStatus::Ok) return StatusCode(status);
         return WriteNativeText(name, output, output_capacity);
+    }
+
+    int NativeComponentTypeInfo(const char* type_name, char* output,
+        int output_capacity) noexcept
+    {
+        if (output == nullptr || output_capacity <= 0)
+            return StatusCode(RuntimeStatus::InvalidArgument);
+        const Core::ComponentTypeInfo* info =
+            Core::ComponentRegistry::Find(CString(type_name));
+        if (info == nullptr) return StatusCode(RuntimeStatus::ComponentNotFound);
+
+        std::ostringstream stream;
+        stream << info->type_name << '\t' << info->type_id << '\t'
+            << info->type_guid.ToString() << '\t' << info->DisplayName() << '\t'
+            << info->category << '\t' << info->module_id << '\t'
+            << info->type_version << '\t' << (info->allow_multiple ? 1 : 0) << '\t'
+            << (info->serializable ? 1 : 0) << '\t'
+            << (info->runtime_available ? 1 : 0);
+        return WriteNativeText(stream.str(), output, output_capacity);
     }
 
     // ---- 汎用プロパティ -------------------------------------------------------
@@ -218,6 +245,84 @@ namespace ReplayEngine::Scripting::CSharp::Detail
             written = converted;
         }
         return WriteProperty(handle, name, written);
+    }
+
+    int NativeGetComponentPropertyObjectReference(Runtime::ComponentHandle handle,
+        const char* name, std::uint64_t* owner) noexcept
+    {
+        if (owner == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+        *owner = 0;
+        PropertyValue value;
+        const RuntimeStatus status = ReadProperty(handle, name,
+            PropertyType::ObjectReference, value);
+        if (status != RuntimeStatus::Ok) return StatusCode(status);
+        *owner = value.AsObjectReference().Value();
+        return StatusCode(RuntimeStatus::Ok);
+    }
+
+    int NativeSetComponentPropertyObjectReference(Runtime::ComponentHandle handle,
+        const char* name, std::uint64_t owner) noexcept
+    {
+        return WriteProperty(handle, name,
+            PropertyValue::MakeObjectReference(Core::ObjectID(owner)));
+    }
+
+    int NativeGetComponentPropertyComponentReference(Runtime::ComponentHandle handle,
+        const char* name, std::uint64_t* owner, std::uint32_t* component) noexcept
+    {
+        if (owner == nullptr || component == nullptr)
+            return StatusCode(RuntimeStatus::InvalidArgument);
+        *owner = 0;
+        *component = 0;
+        PropertyValue value;
+        const RuntimeStatus status = ReadProperty(handle, name,
+            PropertyType::ComponentReference, value);
+        if (status != RuntimeStatus::Ok) return StatusCode(status);
+        const Reflection::ComponentReference reference = value.AsComponentReference();
+        *owner = reference.owner.Value();
+        *component = reference.component;
+        return StatusCode(RuntimeStatus::Ok);
+    }
+
+    int NativeSetComponentPropertyComponentReference(Runtime::ComponentHandle handle,
+        const char* name, std::uint64_t owner, std::uint32_t component) noexcept
+    {
+        Reflection::ComponentReference reference;
+        reference.owner = Core::ObjectID(owner);
+        reference.component = component;
+        return WriteProperty(handle, name,
+            PropertyValue::MakeComponentReference(reference));
+    }
+
+    int NativeComponentToReference(Runtime::ComponentHandle handle,
+        std::uint64_t* owner, std::uint32_t* component) noexcept
+    {
+        if (owner == nullptr || component == nullptr)
+            return StatusCode(RuntimeStatus::InvalidArgument);
+        *owner = 0;
+        *component = 0;
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        Core::Component* resolved = nullptr;
+        const RuntimeStatus status =
+            g_runtime_context->Resolver().TryResolve(handle, resolved);
+        if (status != RuntimeStatus::Ok || resolved == nullptr) return StatusCode(status);
+        *owner = handle.owner.object.Value();
+        *component = resolved->StableID();
+        return StatusCode(RuntimeStatus::Ok);
+    }
+
+    int NativeResolveComponentReference(std::uint64_t owner, std::uint32_t component,
+        Runtime::ComponentHandle* out) noexcept
+    {
+        if (out == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+        *out = Runtime::ComponentHandle::None();
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        const Runtime::ObjectHandle owner_handle =
+            g_runtime_context->Resolver().FindByObjectID(Core::ObjectID(owner));
+        if (owner_handle.IsEmpty()) return StatusCode(RuntimeStatus::ObjectDestroyed);
+        *out = g_runtime_context->Resolver().FindComponentByStableID(owner_handle, component);
+        return StatusCode(out->IsEmpty()
+            ? RuntimeStatus::ComponentNotFound : RuntimeStatus::Ok);
     }
 
     int NativeGetComponentPropertyVec2(Runtime::ComponentHandle handle,

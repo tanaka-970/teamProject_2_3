@@ -280,5 +280,21 @@ namespace ReplayEngine::Scripting::CSharp::Detail
             Runtime::ObjectHandle, int, std::uint64_t*);
         using component_command_callback = int(__cdecl*)(Runtime::ComponentHandle, int,
             const char*, float, float, int);
+        using component_type_info_callback = int(__cdecl*)(const char*, char*, int);
+        using get_property_object_reference_callback = int(__cdecl*)(
+            Runtime::ComponentHandle, const char*, std::uint64_t*);
+        using set_property_object_reference_callback = int(__cdecl*)(
+            Runtime::ComponentHandle, const char*, std::uint64_t);
+        using get_property_component_reference_callback = int(__cdecl*)(
+            Runtime::ComponentHandle, const char*, std::uint64_t*, std::uint32_t*);
+        using set_property_component_reference_callback = int(__cdecl*)(
+            Runtime::ComponentHandle, const char*, std::uint64_t, std::uint32_t);
+        using component_to_reference_callback = int(__cdecl*)(Runtime::ComponentHandle,
+            std::uint64_t*, std::uint32_t*);
+        using resolve_component_reference_callback = int(__cdecl*)(std::uint64_t,
+            std::uint32_t, Runtime::ComponentHandle*);
+
+        // v16 Scene 遷移の進捗・実行中・最終結果。
+        using scene_transition_state_callback = int(__cdecl*)(float*, int*, int*);
 #endif
 }

@@ -38,6 +38,12 @@ public static class ComponentTypes
     public static uint IdOf<T>() where T : IComponentBinding<T>
         => IdOf(T.NativeTypeName);
 
+    public static RuntimeResult<ComponentTypeMetadata> InfoOf(string nativeTypeName)
+        => NativeBridge.ComponentTypeInfo(nativeTypeName);
+
+    public static RuntimeResult<ComponentTypeMetadata> InfoOf<T>()
+        where T : IComponentBinding<T> => InfoOf(T.NativeTypeName);
+
     // Scene を跨いでも型 ID は変わらないが、Assembly 再読み込みの後に
     // 明示的に捨てたい場合のための入口。
     public static void ClearCache() => Cache.Clear();
@@ -55,6 +61,13 @@ public readonly struct ComponentAccessor
     public bool IsValid => !Handle.IsEmpty;
 
     public RuntimeResult<string> TypeName() => NativeBridge.GetComponentTypeName(Handle);
+    public RuntimeResult<ComponentTypeMetadata> TypeInfo()
+    {
+        var name = TypeName();
+        return name.Succeeded ? ComponentTypes.InfoOf(name.Value) : new(name.Status);
+    }
+    public RuntimeResult<ComponentReference> Reference()
+        => NativeBridge.ComponentToReference(Handle);
 
     public RuntimeStatus SetEnabled(bool enabled)
         => NativeBridge.SetComponentEnabled(Handle, enabled);
@@ -69,6 +82,10 @@ public readonly struct ComponentAccessor
     public RuntimeResult<Vector2> TryGetVector2(string name) => NativeBridge.GetPropertyVector2(Handle, name);
     public RuntimeResult<Vector3> TryGetVector3(string name) => NativeBridge.GetPropertyVector3(Handle, name);
     public RuntimeResult<Vector4> TryGetVector4(string name) => NativeBridge.GetPropertyVector4(Handle, name);
+    public RuntimeResult<ObjectReference> TryGetObjectReference(string name)
+        => NativeBridge.GetPropertyObjectReference(Handle, name);
+    public RuntimeResult<ComponentReference> TryGetComponentReference(string name)
+        => NativeBridge.GetPropertyComponentReference(Handle, name);
 
     public RuntimeStatus SetBool(string name, bool value) => NativeBridge.SetPropertyBool(Handle, name, value);
     public RuntimeStatus SetInt(string name, long value) => NativeBridge.SetPropertyInt(Handle, name, value);
@@ -78,6 +95,10 @@ public readonly struct ComponentAccessor
     public RuntimeStatus SetVector2(string name, Vector2 value) => NativeBridge.SetPropertyVector2(Handle, name, value);
     public RuntimeStatus SetVector3(string name, Vector3 value) => NativeBridge.SetPropertyVector3(Handle, name, value);
     public RuntimeStatus SetVector4(string name, Vector4 value) => NativeBridge.SetPropertyVector4(Handle, name, value);
+    public RuntimeStatus SetObjectReference(string name, ObjectReference value)
+        => NativeBridge.SetPropertyObjectReference(Handle, name, value);
+    public RuntimeStatus SetComponentReference(string name, ComponentReference value)
+        => NativeBridge.SetPropertyComponentReference(Handle, name, value);
 
     public RuntimeStatus SetColor(string name, Color value)
         => NativeBridge.SetPropertyVector4(Handle, name, new Vector4(value.R, value.G, value.B, value.A));
@@ -137,6 +158,18 @@ public readonly struct ComponentAccessor
     {
         var result = TryGetColor(name);
         return result.Succeeded ? result.Value : new Color(1.0f, 1.0f, 1.0f);
+    }
+
+    public ObjectReference GetObjectReference(string name)
+    {
+        var result = TryGetObjectReference(name);
+        return result.Succeeded ? result.Value : default;
+    }
+
+    public ComponentReference GetComponentReference(string name)
+    {
+        var result = TryGetComponentReference(name);
+        return result.Succeeded ? result.Value : default;
     }
 }
 

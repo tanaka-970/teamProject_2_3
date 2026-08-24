@@ -12,9 +12,14 @@
 #include "../../Components/Rendering/LightComponents.h"
 #include "../../Components/Rendering/MeshRendererComponent.h"
 #include "../../Components/Rendering/ParticleEmitterComponent.h"
+#include "../../Components/UI/CanvasComponent.h"
+#include "../../Components/UI/UIImageComponent.h"
+#include "../../Components/UI/RectTransformComponent.h"
+#include "../../Components/UI/UISliderComponent.h"
 #include "../../Object/Registry/BuiltInComponents.h"
 #include "../../Reflection/Property/PropertyValue.h"
 #include "../../Scripting/CSharp/CSharpScriptBackendNativeInternal.h"
+#include "../../UI/UILayout.h"
 
 #include <cmath>
 
@@ -87,8 +92,16 @@ namespace ReplayEngine::Runtime::Validation
                 table.get_component_property_double != nullptr &&
                 table.rigidbody_add_force != nullptr &&
                 table.subscribe_event_scoped != nullptr &&
-                table.component_command != nullptr,
+                table.component_command != nullptr &&
+                table.component_type_info != nullptr &&
+                table.get_scene_transition_state != nullptr,
                 "Component と型付き Event の callback が表へ入っている");
+
+            char camera_type_info[1024]{};
+            check.Expect(table.component_type_info("CameraComponent", camera_type_info,
+                static_cast<int>(sizeof(camera_type_info))) == 0 &&
+                std::string(camera_type_info).find("CameraComponent\t") == 0,
+                "Component 型メタデータを Native API から取得できる");
         }
 
         // ---- 型名から ComponentTypeID を引く -------------------------------
@@ -343,6 +356,104 @@ namespace ReplayEngine::Runtime::Validation
             check.Expect(Succeeded(runtime.InvokeComponentCommand(audio_handle,
                 ComponentCommand::AudioStop)),
                 "Audio Stop は未再生でも安全に完了する");
+        }
+
+        // ---- UI Slider / ComponentReference / AssetReference ----------------
+        {
+            ObjectHandle canvas_object;
+            ObjectHandle slider_object;
+            runtime.CreateGameObject("Canvas", canvas_object);
+            runtime.CreateGameObject("Slider", slider_object);
+            ComponentHandle canvas;
+            ComponentHandle image;
+            ComponentHandle slider_handle;
+            check.Expect(Succeeded(runtime.AddComponent(canvas_object,
+                Components::CanvasComponent::StaticTypeID(), canvas)) &&
+                Succeeded(runtime.AddComponent(slider_object,
+                    Components::UIImageComponent::StaticTypeID(), image)) &&
+                Succeeded(runtime.AddComponent(slider_object,
+                    Components::UISliderComponent::StaticTypeID(), slider_handle)) &&
+                Succeeded(runtime.SetParent(slider_object, canvas_object, false)),
+                "Slider と描画用 Image を Canvas 配下へ作れる");
+
+            Core::GameObject* slider_owner = world.FindGameObjectByID(slider_object.object);
+            auto* slider = slider_owner != nullptr
+                ? slider_owner->GetComponent<Components::UISliderComponent>() : nullptr;
+            auto* image_component = slider_owner != nullptr
+                ? slider_owner->GetComponent<Components::UIImageComponent>() : nullptr;
+            Reflection::ComponentReference image_reference;
+            if (image_component != nullptr)
+            {
+                image_reference.owner = slider_owner->ID();
+                image_reference.component = image_component->StableID();
+            }
+            check.Expect(slider != nullptr && image_component != nullptr &&
+                Succeeded(runtime.SetComponentProperty(slider_handle, "fill_image",
+                    Reflection::PropertyValue::MakeComponentReference(image_reference))) &&
+                Succeeded(runtime.GetComponentProperty(slider_handle, "fill_image", read)) &&
+                read.AsComponentReference() == image_reference,
+                "Slider の ComponentReference を汎用 API で往復できる");
+
+            namespace CSharpDetail = Scripting::CSharp::Detail;
+            RuntimeContext* previous_context = CSharpDetail::g_runtime_context;
+            CSharpDetail::g_runtime_context = &runtime;
+            const CSharpDetail::NativeApiTable table = CSharpDetail::MakeNativeApiTable();
+            std::uint64_t reference_owner = 0;
+            std::uint32_t reference_component = 0;
+            ComponentHandle resolved_reference;
+            check.Expect(table.get_component_property_component_reference != nullptr &&
+                table.get_component_property_component_reference(slider_handle, "fill_image",
+                    &reference_owner, &reference_component) == 0 &&
+                reference_owner == slider_object.object.Value() &&
+                reference_component == image_reference.component,
+                "ComponentReference を Native ABI から読める");
+            check.Expect(table.component_to_reference != nullptr &&
+                table.resolve_component_reference != nullptr &&
+                table.component_to_reference(image, &reference_owner,
+                    &reference_component) == 0 &&
+                table.resolve_component_reference(reference_owner, reference_component,
+                    &resolved_reference) == 0 && resolved_reference == image,
+                "ComponentHandle と保存参照を相互変換できる");
+
+            check.Expect(table.set_component_property_string(image, "sprite",
+                "validation-image-guid") == 0,
+                "AssetReference を文字列 API から設定できる");
+            char sprite_guid[128]{};
+            check.Expect(table.get_component_property_string(image, "sprite", sprite_guid,
+                static_cast<int>(sizeof(sprite_guid))) == 0 &&
+                std::string(sprite_guid) == "validation-image-guid",
+                "AssetReference を文字列 API から取得できる");
+            CSharpDetail::g_runtime_context = previous_context;
+
+            if (slider != nullptr && image_component != nullptr)
+            {
+                slider->minimum = 0.0f;
+                slider->maximum = 10.0f;
+                slider->SetValue(2.0f);
+                int slider_events = 0;
+                Runtime::ScopedSubscription slider_token = runtime.Events().Subscribe(
+                    Runtime::EngineEvents::SliderValueChanged,
+                    [&slider_events](const Runtime::EventRecord& event)
+                    {
+                        if (event.payload.Find("slider_component") != nullptr) ++slider_events;
+                    });
+                UI::UILayout::Resolve(world, 1920.0f, 1080.0f);
+                UI::UILayout::UpdateButtons(world, 1920.0f, 1080.0f,
+                    985.0f, 540.0f, true, true, false, 0.0f, false, false);
+                UI::UILayout::UpdateButtons(world, 1920.0f, 1080.0f,
+                    985.0f, 540.0f, false, false, true, 0.0f, false, false);
+                runtime.Events().Dispatch(&runtime.Resolver());
+                check.Expect(Near(slider->value, 7.5f, 0.05f) &&
+                    Near(image_component->fill_amount, 0.75f, 0.01f),
+                    "Pointer 操作が Slider 値と Image の Fill へ反映される");
+                check.Expect(slider_events == 1,
+                    "Slider の値変更イベントが一度だけ届く");
+            }
+            else
+            {
+                check.Expect(false, "Pointer 操作が Slider 値と Image の Fill へ反映される");
+                check.Expect(false, "Slider の値変更イベントが一度だけ届く");
+            }
         }
 
 

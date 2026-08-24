@@ -118,6 +118,32 @@
             return source;
         };
 
+        const auto apply_image_fill = [](const UIImageComponent& image,
+            DirectX::XMFLOAT4& rect, DirectX::XMFLOAT4& uv)
+        {
+            const float fill = (std::min)((std::max)(image.fill_amount, 0.0f), 1.0f);
+            if (image.fill_method == UIImageComponent::Horizontal)
+            {
+                if (image.fill_reverse)
+                {
+                    rect.x += rect.z * (1.0f - fill);
+                    uv.x += uv.z * (1.0f - fill);
+                }
+                rect.z *= fill;
+                uv.z *= fill;
+            }
+            else if (image.fill_method == UIImageComponent::Vertical)
+            {
+                if (image.fill_reverse)
+                {
+                    rect.y += rect.w * (1.0f - fill);
+                    uv.y += uv.w * (1.0f - fill);
+                }
+                rect.w *= fill;
+                uv.w *= fill;
+            }
+        };
+
         const auto texture_for_source = [this, asset_database](
             const ResolvedImageSource& source)
         {

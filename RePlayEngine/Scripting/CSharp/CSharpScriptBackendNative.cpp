@@ -202,6 +202,18 @@ namespace ReplayEngine::Scripting::CSharp::Detail
             table.physics_query = &NativePhysicsQuery;
             table.subscribe_event_scoped = &NativeSubscribeEventScoped;
             table.component_command = &NativeComponentCommand;
+            table.component_type_info = &NativeComponentTypeInfo;
+            table.get_component_property_object_reference =
+                &NativeGetComponentPropertyObjectReference;
+            table.set_component_property_object_reference =
+                &NativeSetComponentPropertyObjectReference;
+            table.get_component_property_component_reference =
+                &NativeGetComponentPropertyComponentReference;
+            table.set_component_property_component_reference =
+                &NativeSetComponentPropertyComponentReference;
+            table.component_to_reference = &NativeComponentToReference;
+            table.resolve_component_reference = &NativeResolveComponentReference;
+            table.get_scene_transition_state = &NativeGetSceneTransitionState;
 
             // 自己記述ヘッダー。C# 側はこれを見て表の食い違いをその場で弾く。
             table.header.abi_version = kNativeApiAbiVersion;

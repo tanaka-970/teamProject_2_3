@@ -971,10 +971,12 @@
     <ClCompile Include="RePlayEngine\Components\UI\UISelectableComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\UI\UILayoutGroupComponents.cpp" />
     <ClCompile Include="RePlayEngine\Components\UI\UIScrollViewComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\UISliderComponent.cpp" />
     <ClCompile Include="RePlayEngine\UI\UIFocusManager.cpp" />
     <ClInclude Include="RePlayEngine\Components\UI\UISelectableComponent.h" />
     <ClInclude Include="RePlayEngine\Components\UI\UILayoutGroupComponents.h" />
     <ClInclude Include="RePlayEngine\Components\UI\UIScrollViewComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\UI\UISliderComponent.h" />
     <ClInclude Include="RePlayEngine\UI\UIFocusManager.h" />
     <ClCompile Include="RePlayEngine\Components\UI\UIInputFieldComponent.cpp" />
     <ClCompile Include="RePlayEngine\UI\UIInputFieldSystem.cpp" />

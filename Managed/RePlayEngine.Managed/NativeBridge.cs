@@ -7,13 +7,21 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Loader;
 using System.Text;
+using System.Text.Json;
 
 namespace ReplayEngine;
 
 public static unsafe class NativeBridge
 {
+    private static readonly JsonSerializerOptions FieldJsonOptions = new()
+    {
+        IncludeFields = true,
+        PropertyNameCaseInsensitive = false,
+        IgnoreReadOnlyProperties = true,
+    };
     private static readonly ScriptRuntimeContext Context = new();
     private static readonly Dictionary<ulong, ManagedInstance> Instances = new();
+    private static readonly Dictionary<ComponentInstanceKey, ScriptBehaviour> InstancesByComponent = new();
     private static readonly Dictionary<TypeGuid, Type> Types = new();
     private static AssemblyLoadContext? scriptContext;
     private static Assembly? scriptAssembly;
@@ -43,7 +51,7 @@ public static unsafe class NativeBridge
     }
 
     // 関数ポインタ表の互換番号。C++ の Detail::kNativeApiAbiVersion と必ず一致させる。
-    public const uint NativeApiAbiVersion = 13;
+    public const uint NativeApiAbiVersion = 16;
 
     // 表の先頭に必ず置く自己記述ヘッダー。C++ の Detail::NativeApiHeader と同じ並び。
     [StructLayout(LayoutKind.Sequential)]
@@ -241,6 +249,20 @@ public static unsafe class NativeBridge
         // v13 Global/Scene Event 購読と Component 実行命令。
         public delegate* unmanaged[Cdecl]<ulong, ulong, ObjectHandle, int, ulong*, int> SubscribeEventScoped;
         public delegate* unmanaged[Cdecl]<ComponentHandle, int, byte*, float, float, int, int> ComponentCommand;
+
+        // v14 Component 型メタデータ。
+        public delegate* unmanaged[Cdecl]<byte*, byte*, int, int> ComponentTypeInfo;
+
+        // v15 Component プロパティの Object / Component 参照。
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, ulong*, int> GetPropertyObjectReference;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, ulong, int> SetPropertyObjectReference;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, ulong*, uint*, int> GetPropertyComponentReference;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, ulong, uint, int> SetPropertyComponentReference;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, ulong*, uint*, int> ComponentToReference;
+        public delegate* unmanaged[Cdecl]<ulong, uint, ComponentHandle*, int> ResolveComponentReference;
+
+        // v16 Scene 遷移の進捗・実行中・最終結果。
+        public delegate* unmanaged[Cdecl]<float*, int*, int*, int> GetSceneTransitionState;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -261,12 +283,41 @@ public static unsafe class NativeBridge
 
     private sealed class ManagedInstance
     {
-        public ManagedInstance(ScriptBehaviour behaviour)
+        public ManagedInstance(ScriptBehaviour behaviour, ComponentHandle component)
         {
             Behaviour = behaviour;
+            Component = component;
         }
 
         public ScriptBehaviour Behaviour { get; }
+        public ComponentHandle Component { get; }
+    }
+
+    private readonly struct ComponentInstanceKey : IEquatable<ComponentInstanceKey>
+    {
+        internal ComponentInstanceKey(ComponentHandle handle)
+        {
+            World = handle.Owner.World;
+            Object = handle.Owner.Object;
+            Generation = handle.Owner.Generation;
+            Instance = handle.Instance;
+            TypeId = handle.TypeId;
+        }
+
+        private ulong World { get; }
+        private ulong Object { get; }
+        private uint Generation { get; }
+        private ulong Instance { get; }
+        private uint TypeId { get; }
+
+        public bool Equals(ComponentInstanceKey other) =>
+            World == other.World && Object == other.Object &&
+            Generation == other.Generation && Instance == other.Instance &&
+            TypeId == other.TypeId;
+        public override bool Equals(object? obj) =>
+            obj is ComponentInstanceKey other && Equals(other);
+        public override int GetHashCode() =>
+            HashCode.Combine(World, Object, Generation, Instance, TypeId);
     }
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
@@ -331,7 +382,9 @@ public static unsafe class NativeBridge
                     var guid = ReadGuid(type);
                     if (guid.HasValue)
                     {
-                        discovered[guid.Value] = type;
+                        if (!discovered.TryAdd(guid.Value, type))
+                            throw new InvalidOperationException(
+                                $"Duplicate ReplayGuid on C# Behaviour: {type.FullName}.");
                     }
                 }
             }
@@ -343,6 +396,7 @@ public static unsafe class NativeBridge
 
             var oldContext = scriptContext;
             Types.Clear();
+            InstancesByComponent.Clear();
             foreach (var pair in discovered)
             {
                 Types[pair.Key] = pair.Value;
@@ -377,6 +431,7 @@ public static unsafe class NativeBridge
 
         UnloadScriptContext();
         Types.Clear();
+        InstancesByComponent.Clear();
         WriteUtf8("Unloaded C# assembly.", output, outputCapacity);
         return 1;
     }
@@ -422,7 +477,8 @@ public static unsafe class NativeBridge
 
             behaviour.Attach(Context, owner, component);
             var handle = nextHandle++;
-            Instances[handle] = new ManagedInstance(behaviour);
+            Instances[handle] = new ManagedInstance(behaviour, component);
+            InstancesByComponent[new ComponentInstanceKey(component)] = behaviour;
             ClearLastError();
             return handle;
         }
@@ -437,6 +493,7 @@ public static unsafe class NativeBridge
     public static int DestroyInstance(ulong instance)
     {
         if (!Instances.Remove(instance, out var state)) return 0;
+        InstancesByComponent.Remove(new ComponentInstanceKey(state.Component));
         state.Behaviour.ReleaseManagedSubscriptions();
         return 1;
     }
@@ -1535,11 +1592,14 @@ public static unsafe class NativeBridge
             builder.Append(range != null
                 ? range.Maximum.ToString(CultureInfo.InvariantCulture) : string.Empty);
             builder.Append('\t');
-            builder.Append(Escape(assetType != null ? assetType.Kind : string.Empty));
+            builder.Append(Escape(assetType != null
+                ? assetType.Kind : TypedAssetKind(field.FieldType)));
             builder.Append('\t');
             builder.Append(Escape(header != null ? header.Text : string.Empty));
             builder.Append('\t');
             builder.Append(Escape(EnumLabels(field.FieldType)));
+            builder.Append('\t');
+            builder.Append(Escape(CollectionElementTypeName(field.FieldType)));
             builder.Append('\n');
         }
 
@@ -1609,10 +1669,61 @@ public static unsafe class NativeBridge
         if (type == typeof(Color)) return "color";
         if (type == typeof(ObjectReference)) return "object";
         if (type == typeof(ComponentReference)) return "component";
-        if (type == typeof(AssetReference)) return "asset";
+        if (typeof(IAssetReference).IsAssignableFrom(type)) return "asset";
         // enum は内部 int。ラベルは EnumLabels が別列で渡す。
         if (type.IsEnum && Enum.GetUnderlyingType(type) == typeof(int)) return "enum";
+        if (TryGetCollectionElementType(type, out var elementType) &&
+            MapScalarFieldType(elementType) != null) return "array";
+        if (IsJsonFieldType(type)) return "json";
         return null;
+    }
+
+    private static string? MapScalarFieldType(Type type)
+    {
+        var mapped = MapFieldType(type);
+        return mapped is "array" or "json" ? null : mapped;
+    }
+
+    private static bool TryGetCollectionElementType(Type type, out Type elementType)
+    {
+        if (type.IsArray && type.GetArrayRank() == 1)
+        {
+            elementType = type.GetElementType()!;
+            return true;
+        }
+        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>))
+        {
+            elementType = type.GetGenericArguments()[0];
+            return true;
+        }
+        elementType = typeof(void);
+        return false;
+    }
+
+    private static string CollectionElementTypeName(Type type)
+    {
+        return TryGetCollectionElementType(type, out var elementType)
+            ? MapScalarFieldType(elementType) ?? string.Empty
+            : string.Empty;
+    }
+
+    private static string TypedAssetKind(Type type)
+    {
+        if (!type.IsGenericType ||
+            type.GetGenericTypeDefinition() != typeof(AssetReference<>))
+            return string.Empty;
+        var marker = type.GetGenericArguments()[0];
+        return marker.GetProperty("Kind", BindingFlags.Public | BindingFlags.Static)?
+            .GetValue(null) as string ?? string.Empty;
+    }
+
+    private static bool IsJsonFieldType(Type type)
+    {
+        if (type == typeof(AnimationCurve)) return true;
+        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>))
+            return type.GetGenericArguments()[0] == typeof(string);
+        return type.IsDefined(typeof(SerializableAttribute), true) &&
+            type != typeof(string) && !typeof(ScriptBehaviour).IsAssignableFrom(type);
     }
 
     private static object? ParseValue(Type type, string text)
@@ -1632,8 +1743,14 @@ public static unsafe class NativeBridge
         if (type == typeof(Color)) return new Color(ParseFloat(parts, 0), ParseFloat(parts, 1), ParseFloat(parts, 2), ParseFloat(parts, 3));
         if (type == typeof(ObjectReference)) return new ObjectReference { ObjectId = ParseULong(parts, 0) };
         if (type == typeof(ComponentReference)) return new ComponentReference { OwnerObjectId = ParseULong(parts, 0), ComponentStableId = (uint)ParseULong(parts, 1) };
-        if (type == typeof(AssetReference)) return new AssetReference(text);
+        if (typeof(IAssetReference).IsAssignableFrom(type))
+            return Activator.CreateInstance(type, text);
         if (type.IsEnum) return Enum.ToObject(type, int.Parse(text, CultureInfo.InvariantCulture));
+        if (TryGetCollectionElementType(type, out var elementType))
+            return ParseCollection(type, elementType, text);
+        if (IsJsonFieldType(type))
+            return string.IsNullOrEmpty(text) ? Activator.CreateInstance(type) :
+                JsonSerializer.Deserialize(text, type, FieldJsonOptions);
         return type.IsValueType ? Activator.CreateInstance(type) : null;
     }
 
@@ -1678,12 +1795,51 @@ public static unsafe class NativeBridge
             var reference = (ComponentReference)value;
             return $"{reference.OwnerObjectId.ToString(CultureInfo.InvariantCulture)},{reference.ComponentStableId.ToString(CultureInfo.InvariantCulture)}";
         }
-        if (type == typeof(AssetReference)) return ((AssetReference)value).Guid ?? string.Empty;
+        if (value is IAssetReference assetReference) return assetReference.AssetGuid;
         if (type.IsEnum)
             return Convert.ToInt32(value, CultureInfo.InvariantCulture)
                 .ToString(CultureInfo.InvariantCulture);
+        if (TryGetCollectionElementType(type, out var elementType))
+            return FormatCollection(value, elementType);
+        if (IsJsonFieldType(type))
+            return JsonSerializer.Serialize(value, type, FieldJsonOptions);
 
         return string.Empty;
+    }
+
+    private static string FormatCollection(object value, Type elementType)
+    {
+        if (value is not System.Collections.IEnumerable enumerable) return string.Empty;
+        var values = new List<string>();
+        foreach (var element in enumerable)
+        {
+            var text = FormatValue(element, elementType);
+            values.Add(Convert.ToHexString(Encoding.UTF8.GetBytes(text)));
+        }
+        return $"{MapScalarFieldType(elementType)}|{values.Count.ToString(CultureInfo.InvariantCulture)}|{string.Join(';', values)}";
+    }
+
+    private static object ParseCollection(Type collectionType, Type elementType, string text)
+    {
+        var fields = text.Split('|', 3);
+        var encoded = fields.Length == 3 && fields[2].Length != 0
+            ? fields[2].Split(';') : Array.Empty<string>();
+        var count = fields.Length > 1 && int.TryParse(fields[1], NumberStyles.None,
+            CultureInfo.InvariantCulture, out var parsedCount)
+            ? Math.Clamp(parsedCount, 0, 65536) : 0;
+        count = Math.Min(count, encoded.Length);
+
+        var array = Array.CreateInstance(elementType, count);
+        for (var index = 0; index < count; ++index)
+        {
+            var itemText = Encoding.UTF8.GetString(Convert.FromHexString(encoded[index]));
+            array.SetValue(ParseValue(elementType, itemText), index);
+        }
+        if (collectionType.IsArray) return array;
+
+        var list = (System.Collections.IList)Activator.CreateInstance(collectionType)!;
+        foreach (var item in array) list.Add(item);
+        return list;
     }
 
     private static string F(float value) => value.ToString("R", CultureInfo.InvariantCulture);
@@ -2029,6 +2185,29 @@ public static unsafe class NativeBridge
             : new RuntimeResult<string>(status);
     }
 
+    internal static RuntimeResult<ComponentTypeMetadata> ComponentTypeInfo(string typeName)
+    {
+        if (api.ComponentTypeInfo == null) return new(RuntimeStatus.ServiceUnavailable);
+        const int capacity = 2048;
+        byte* output = stackalloc byte[capacity];
+        RuntimeStatus status;
+        fixed (byte* text = Encoding.UTF8.GetBytes(typeName + "\0"))
+            status = (RuntimeStatus)api.ComponentTypeInfo(text, output, capacity);
+        if (status != RuntimeStatus.Ok) return new(status);
+        var fields = FromUtf8(output).Split('\t');
+        if (fields.Length < 10 ||
+            !uint.TryParse(fields[1], NumberStyles.None, CultureInfo.InvariantCulture,
+                out var typeId) ||
+            !int.TryParse(fields[6], NumberStyles.Integer, CultureInfo.InvariantCulture,
+                out var version))
+        {
+            return new(RuntimeStatus.TypeMismatch);
+        }
+        return new(status, new ComponentTypeMetadata(fields[0], typeId, fields[2],
+            fields[3], fields[4], fields[5], version, fields[7] == "1",
+            fields[8] == "1", fields[9] == "1"));
+    }
+
     internal static RuntimeResult<bool> GetPropertyBool(ComponentHandle handle, string name)
     {
         if (api.GetPropertyBool == null) return new(RuntimeStatus.ServiceUnavailable);
@@ -2096,6 +2275,79 @@ public static unsafe class NativeBridge
         fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
         fixed (byte* content = Encoding.UTF8.GetBytes(value + "\0"))
             return (RuntimeStatus)api.SetPropertyString(handle, text, content);
+    }
+
+    internal static RuntimeResult<ObjectReference> GetPropertyObjectReference(
+        ComponentHandle handle, string name)
+    {
+        if (api.GetPropertyObjectReference == null)
+            return new(RuntimeStatus.ServiceUnavailable);
+        ulong owner = 0;
+        RuntimeStatus status;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            status = (RuntimeStatus)api.GetPropertyObjectReference(handle, text, &owner);
+        return new RuntimeResult<ObjectReference>(status,
+            new ObjectReference { ObjectId = owner });
+    }
+
+    internal static RuntimeStatus SetPropertyObjectReference(ComponentHandle handle,
+        string name, ObjectReference value)
+    {
+        if (api.SetPropertyObjectReference == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            return (RuntimeStatus)api.SetPropertyObjectReference(handle, text, value.ObjectId);
+    }
+
+    internal static RuntimeResult<ComponentReference> GetPropertyComponentReference(
+        ComponentHandle handle, string name)
+    {
+        if (api.GetPropertyComponentReference == null)
+            return new(RuntimeStatus.ServiceUnavailable);
+        ulong owner = 0;
+        uint component = 0;
+        RuntimeStatus status;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            status = (RuntimeStatus)api.GetPropertyComponentReference(
+                handle, text, &owner, &component);
+        return new RuntimeResult<ComponentReference>(status, new ComponentReference
+        {
+            OwnerObjectId = owner,
+            ComponentStableId = component,
+        });
+    }
+
+    internal static RuntimeStatus SetPropertyComponentReference(ComponentHandle handle,
+        string name, ComponentReference value)
+    {
+        if (api.SetPropertyComponentReference == null)
+            return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            return (RuntimeStatus)api.SetPropertyComponentReference(handle, text,
+                value.OwnerObjectId, value.ComponentStableId);
+    }
+
+    internal static RuntimeResult<ComponentReference> ComponentToReference(ComponentHandle handle)
+    {
+        if (api.ComponentToReference == null) return new(RuntimeStatus.ServiceUnavailable);
+        ulong owner = 0;
+        uint component = 0;
+        var status = (RuntimeStatus)api.ComponentToReference(handle, &owner, &component);
+        return new RuntimeResult<ComponentReference>(status, new ComponentReference
+        {
+            OwnerObjectId = owner,
+            ComponentStableId = component,
+        });
+    }
+
+    internal static RuntimeResult<ComponentHandle> ResolveComponentReference(
+        ComponentReference reference)
+    {
+        if (api.ResolveComponentReference == null)
+            return new(RuntimeStatus.ServiceUnavailable);
+        ComponentHandle handle = default;
+        var status = (RuntimeStatus)api.ResolveComponentReference(
+            reference.OwnerObjectId, reference.ComponentStableId, &handle);
+        return new RuntimeResult<ComponentHandle>(status, handle);
     }
 
     internal static RuntimeResult<Vector2> GetPropertyVector2(ComponentHandle handle, string name)
@@ -2352,6 +2604,50 @@ public static unsafe class NativeBridge
         if (api.QuitApplication == null) return RuntimeStatus.ServiceUnavailable;
         fixed (byte* text = Encoding.UTF8.GetBytes(reason + "\0"))
             return (RuntimeStatus)api.QuitApplication(text);
+    }
+
+    internal static RuntimeResult<SceneTransitionInfo> GetSceneTransitionState()
+    {
+        if (api.GetSceneTransitionState == null)
+            return new(RuntimeStatus.ServiceUnavailable);
+        float progress = 0.0f;
+        int inProgress = 0;
+        int transitionStatus = (int)RuntimeStatus.ServiceUnavailable;
+        var status = (RuntimeStatus)api.GetSceneTransitionState(
+            &progress, &inProgress, &transitionStatus);
+        return new RuntimeResult<SceneTransitionInfo>(status,
+            new SceneTransitionInfo(progress, inProgress != 0,
+                (RuntimeStatus)transitionStatus));
+    }
+
+    internal static RuntimeResult<T> GetBehaviour<T>(ComponentHandle component)
+        where T : ScriptBehaviour
+    {
+        if (component.IsEmpty) return new(RuntimeStatus.InvalidHandle);
+        if (!InstancesByComponent.TryGetValue(new ComponentInstanceKey(component),
+            out var behaviour))
+            return new(RuntimeStatus.ComponentNotFound);
+        return behaviour is T typed
+            ? new RuntimeResult<T>(RuntimeStatus.Ok, typed)
+            : new RuntimeResult<T>(RuntimeStatus.TypeMismatch);
+    }
+
+    internal static RuntimeResult<T[]> GetBehaviours<T>(ObjectHandle owner)
+        where T : ScriptBehaviour
+    {
+        if (owner.IsEmpty) return new(RuntimeStatus.InvalidHandle, Array.Empty<T>());
+        var found = new List<T>();
+        foreach (var pair in InstancesByComponent)
+        {
+            var behaviour = pair.Value;
+            var candidate = behaviour.GameObject;
+            if (candidate.World == owner.World && candidate.Object == owner.Object &&
+                candidate.Generation == owner.Generation && behaviour is T typed)
+                found.Add(typed);
+        }
+        return found.Count == 0
+            ? new RuntimeResult<T[]>(RuntimeStatus.ComponentNotFound, Array.Empty<T>())
+            : new RuntimeResult<T[]>(RuntimeStatus.Ok, found.ToArray());
     }
 
     internal static RuntimeResult<ulong> EventDroppedCount(EventSubscription subscription)

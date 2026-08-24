@@ -104,6 +104,23 @@ public struct ComponentReference
     public uint ComponentStableId;
 
     public bool IsAssigned => OwnerObjectId != 0 && ComponentStableId != 0;
+
+    public RuntimeResult<ComponentHandle> Resolve()
+        => NativeBridge.ResolveComponentReference(this);
+}
+
+public readonly struct SceneTransitionInfo
+{
+    internal SceneTransitionInfo(float progress, bool inProgress, RuntimeStatus status)
+    {
+        Progress = progress;
+        InProgress = inProgress;
+        Status = status;
+    }
+
+    public float Progress { get; }
+    public bool InProgress { get; }
+    public RuntimeStatus Status { get; }
 }
 
 
@@ -118,6 +135,38 @@ public struct RaycastHit
     private int valid;
 
     public bool Valid => valid != 0;
+}
+
+public readonly struct ComponentTypeMetadata
+{
+    internal ComponentTypeMetadata(string nativeTypeName, uint typeId, string typeGuid,
+        string displayName, string category, string moduleId, int version,
+        bool allowsMultiple, bool serializable, bool runtimeAvailable)
+    {
+        NativeTypeName = nativeTypeName;
+        TypeId = typeId;
+        TypeGuid = typeGuid;
+        DisplayName = displayName;
+        Category = category;
+        ModuleId = moduleId;
+        Version = version;
+        AllowsMultiple = allowsMultiple;
+        Serializable = serializable;
+        RuntimeAvailable = runtimeAvailable;
+    }
+
+    public string NativeTypeName { get; }
+    public uint TypeId { get; }
+    public string TypeGuid { get; }
+    public bool HasPersistentGuid => TypeGuid.Length == 32 &&
+        TypeGuid != "00000000000000000000000000000000";
+    public string DisplayName { get; }
+    public string Category { get; }
+    public string ModuleId { get; }
+    public int Version { get; }
+    public bool AllowsMultiple { get; }
+    public bool Serializable { get; }
+    public bool RuntimeAvailable { get; }
 }
 
 public enum PhysicsQueryKind : int

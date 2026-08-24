@@ -160,6 +160,8 @@ namespace ReplayEngine::Runtime
             Reflection::MakeTypeGUID("a1000000000000000000000000000021");
         inline constexpr Reflection::TypeGUID AnimatorStateChanged =
             Reflection::MakeTypeGUID("a1000000000000000000000000000022");
+        inline constexpr Reflection::TypeGUID SliderValueChanged =
+            Reflection::MakeTypeGUID("a1000000000000000000000000000023");
     }
 
     // イベントの発行と購読。

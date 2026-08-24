@@ -46,6 +46,18 @@ public abstract class ScriptBehaviour
     protected bool HasComponent<T>() where T : IComponentBinding<T>
         => Runtime.HasComponent<T>(GameObject);
 
+    protected RuntimeResult<T> GetBehaviour<T>() where T : ScriptBehaviour
+        => Runtime.GetBehaviour<T>(GameObject);
+
+    protected RuntimeResult<T> GetBehaviour<T>(ObjectHandle target)
+        where T : ScriptBehaviour => Runtime.GetBehaviour<T>(target);
+
+    protected RuntimeResult<T[]> GetBehaviours<T>() where T : ScriptBehaviour
+        => Runtime.GetBehaviours<T>(GameObject);
+
+    protected bool TryGetBehaviour<T>(out T behaviour) where T : ScriptBehaviour
+        => Runtime.TryGetBehaviour(GameObject, out behaviour);
+
     // 値をそのまま返す入口。戻り値を変数へ受ければプロパティへ代入できる。
     //   var camera = GetComponentOrDefault<CameraComponent>();
     //   camera.FieldOfView = 42.0f;
@@ -155,6 +167,7 @@ public abstract class ScriptBehaviour
     public virtual void OnAnimationEvent(MotionEventInfo animationEvent) { }
     public virtual void OnCompositionMarker(MotionEventInfo marker) { }
     public virtual void OnAnimatorStateChanged(AnimatorStateEventInfo animator) { }
+    public virtual void OnSliderValueChanged(SliderEventInfo slider) { }
 
     // Engine が毎フレーム呼ぶ。Update の直前に接触と時間を進める。
     internal void PumpFrame(float deltaTime)
@@ -207,6 +220,8 @@ public abstract class ScriptBehaviour
             Subscribe(nameof(OnCompositionMarker), EngineEventIds.CompositionMarker, 19,
                 ownSource: true);
             Subscribe(nameof(OnAnimatorStateChanged), EngineEventIds.AnimatorStateChanged, 20,
+                ownSource: true);
+            Subscribe(nameof(OnSliderValueChanged), EngineEventIds.SliderValueChanged, 21,
                 ownSource: true);
         }
 
@@ -270,7 +285,8 @@ public abstract class ScriptBehaviour
             case 17: owner.OnInputFieldCanceled(new InputFieldEventInfo(record)); break;
             case 18: owner.OnAnimationEvent(new MotionEventInfo(record)); break;
             case 19: owner.OnCompositionMarker(new MotionEventInfo(record)); break;
-            default: owner.OnAnimatorStateChanged(new AnimatorStateEventInfo(record)); break;
+            case 20: owner.OnAnimatorStateChanged(new AnimatorStateEventInfo(record)); break;
+            case 21: owner.OnSliderValueChanged(new SliderEventInfo(record)); break;
             }
         }
 

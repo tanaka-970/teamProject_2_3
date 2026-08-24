@@ -61,6 +61,7 @@ namespace ReplayEngine::Components
         float opacity = 1.0f;
         float fill_amount = 1.0f;
         int fill_method = Horizontal;
+        bool fill_reverse = false;
         DirectX::XMFLOAT2 uv_offset{ 0.0f, 0.0f };
         DirectX::XMFLOAT2 uv_scale{ 1.0f, 1.0f };
         int blend_mode = Normal;

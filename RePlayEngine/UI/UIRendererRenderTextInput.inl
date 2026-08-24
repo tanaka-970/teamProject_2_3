@@ -166,17 +166,7 @@
             const ResolvedImageSource source = resolve_image_source(image);
             DirectX::XMFLOAT4 draw_rect = rect.ResolvedRect();
             DirectX::XMFLOAT4 uv = source.uv;
-            const float fill = (std::min)((std::max)(image.fill_amount, 0.0f), 1.0f);
-            if (image.fill_method == UIImageComponent::Horizontal)
-            {
-                draw_rect.z *= fill;
-                uv.z *= fill;
-            }
-            else if (image.fill_method == UIImageComponent::Vertical)
-            {
-                draw_rect.w *= fill;
-                uv.w *= fill;
-            }
+            apply_image_fill(image, draw_rect, uv);
 
             append_image_geometry(draw_rect, rect.ResolvedMatrix(), uv,
                 MultiplyAlpha(image.color, image.opacity * opacity), scale,

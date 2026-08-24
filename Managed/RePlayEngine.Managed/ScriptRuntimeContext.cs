@@ -110,20 +110,32 @@ public sealed class ScriptRuntimeContext
         return NativeBridge.InputHeld(action, playerSlot);
     }
 
+    public RuntimeResult<bool> InputHeld(InputActionId action, int playerSlot = 0)
+        => Input.GetAction(action, playerSlot);
+
     public RuntimeResult<bool> InputPressed(string action, int playerSlot = 0)
     {
         return NativeBridge.InputPressed(action, playerSlot);
     }
+
+    public RuntimeResult<bool> InputPressed(InputActionId action, int playerSlot = 0)
+        => Input.GetActionDown(action, playerSlot);
 
     public RuntimeResult<bool> InputReleased(string action, int playerSlot = 0)
     {
         return NativeBridge.InputReleased(action, playerSlot);
     }
 
+    public RuntimeResult<bool> InputReleased(InputActionId action, int playerSlot = 0)
+        => Input.GetActionUp(action, playerSlot);
+
     public RuntimeResult<float> InputAxis(string axis, int playerSlot = 0)
     {
         return NativeBridge.InputAxis(axis, playerSlot);
     }
+
+    public RuntimeResult<float> InputAxis(InputAxisId axis, int playerSlot = 0)
+        => Input.GetAxis(axis, playerSlot);
 
     public RuntimeResult<float> PointerDeltaX() => NativeBridge.InputPointerDeltaX();
     public RuntimeResult<float> PointerDeltaY() => NativeBridge.InputPointerDeltaY();
@@ -195,20 +207,40 @@ public sealed class ScriptRuntimeContext
         return NativeBridge.Instantiate(prefabAssetGuid, position, rotationEuler, scale, parent);
     }
 
+    public RuntimeResult<ObjectHandle> Instantiate(AssetReference<PrefabAsset> prefab,
+        Vector3 position, Vector3 rotationEuler, Vector3 scale,
+        ObjectHandle parent = default)
+        => Instantiate(prefab.AssetGuid, position, rotationEuler, scale, parent);
+
     public RuntimeStatus LoadScene(string sceneAssetGuid)
     {
         return NativeBridge.LoadScene(sceneAssetGuid);
     }
+
+    public RuntimeStatus LoadScene(AssetReference<SceneAsset> scene)
+        => LoadScene(scene.AssetGuid);
+
+    public SceneLoadOperation LoadSceneAsync(string sceneAssetGuid)
+        => new(this, LoadScene(sceneAssetGuid));
+
+    public SceneLoadOperation LoadSceneAsync(AssetReference<SceneAsset> scene)
+        => LoadSceneAsync(scene.AssetGuid);
 
     public RuntimeStatus ReloadScene()
     {
         return NativeBridge.ReloadScene();
     }
 
+    public SceneLoadOperation ReloadSceneAsync()
+        => new(this, ReloadScene());
+
     public RuntimeStatus ReturnToPreviousScene()
     {
         return NativeBridge.ReturnToPreviousScene();
     }
+
+    public SceneLoadOperation ReturnToPreviousSceneAsync()
+        => new(this, ReturnToPreviousScene());
 
     /// <summary>Fires an event in the active Scene Flow asset.</summary>
     public RuntimeStatus TriggerSceneFlow(string eventName)
@@ -437,6 +469,11 @@ public sealed class ScriptRuntimeContext
         => NativeBridge.InstantiatePrefabDeferred(
             prefabAssetGuid, position, rotationEuler, scale, parent);
 
+    public RuntimeStatus InstantiatePrefabDeferred(AssetReference<PrefabAsset> prefab,
+        Vector3 position, Vector3 rotationEuler, Vector3 scale,
+        ObjectHandle parent = default)
+        => InstantiatePrefabDeferred(prefab.AssetGuid, position, rotationEuler, scale, parent);
+
     public RuntimeStatus FlushDeferredOperations()
         => NativeBridge.FlushDeferredOperations();
 
@@ -449,6 +486,8 @@ public sealed class ScriptRuntimeContext
     public RuntimeResult<float> TimeScale => NativeBridge.TimeScale();
     public RuntimeResult<bool> SceneTransitionInProgress
         => NativeBridge.SceneTransitionInProgress();
+    public RuntimeResult<SceneTransitionInfo> SceneTransition
+        => NativeBridge.GetSceneTransitionState();
     public bool PhysicsAvailable => NativeBridge.PhysicsAvailable();
     public bool SceneFlowAvailable => NativeBridge.SceneFlowAvailable();
 
@@ -531,8 +570,38 @@ public sealed class ScriptRuntimeContext
 
     public RuntimeResult<uint> ComponentTypeId(string nativeTypeName)
         => NativeBridge.ComponentTypeId(nativeTypeName);
+
+    public RuntimeResult<ComponentTypeMetadata> ComponentTypeInfo(string nativeTypeName)
+        => NativeBridge.ComponentTypeInfo(nativeTypeName);
+
+    public RuntimeResult<ComponentTypeMetadata> ComponentTypeInfo<T>()
+        where T : IComponentBinding<T> => ComponentTypes.InfoOf<T>();
     public RuntimeResult<string> GetComponentTypeName(ComponentHandle handle)
         => NativeBridge.GetComponentTypeName(handle);
+
+    // 実行中のC# Behaviourを型で取得する。公開フィールドやメソッドを直接扱える。
+    public RuntimeResult<T> GetBehaviour<T>(ComponentHandle component)
+        where T : ScriptBehaviour => NativeBridge.GetBehaviour<T>(component);
+
+    public RuntimeResult<T> GetBehaviour<T>(ObjectHandle owner)
+        where T : ScriptBehaviour
+    {
+        var result = NativeBridge.GetBehaviours<T>(owner);
+        return result.Succeeded && result.Value.Length != 0
+            ? new RuntimeResult<T>(RuntimeStatus.Ok, result.Value[0])
+            : new RuntimeResult<T>(result.Status);
+    }
+
+    public RuntimeResult<T[]> GetBehaviours<T>(ObjectHandle owner)
+        where T : ScriptBehaviour => NativeBridge.GetBehaviours<T>(owner);
+
+    public bool TryGetBehaviour<T>(ObjectHandle owner, out T behaviour)
+        where T : ScriptBehaviour
+    {
+        var result = GetBehaviour<T>(owner);
+        behaviour = result.Value;
+        return result.Succeeded;
+    }
 
     // ---- v10 Component プロパティ（型付きの入口が無い値へ直接触る） -------------
 
@@ -592,6 +661,11 @@ public sealed class ScriptRuntimeContext
         Vector3 position, Vector3 rotationEuler, Vector3 scale, ObjectHandle parent = default)
         => NativeBridge.InstantiatePrefabTracked(
             prefabAssetGuid, position, rotationEuler, scale, parent);
+
+    public RuntimeResult<ulong> InstantiateDeferred(AssetReference<PrefabAsset> prefab,
+        Vector3 position, Vector3 rotationEuler, Vector3 scale,
+        ObjectHandle parent = default)
+        => InstantiateDeferred(prefab.AssetGuid, position, rotationEuler, scale, parent);
 
     // 完了した遅延生成を 1 件引き取る。
     // まだ Flush されていなければ Status が TransitionInProgress になる。

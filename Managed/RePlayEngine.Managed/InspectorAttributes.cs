@@ -66,14 +66,47 @@ public sealed class AssetTypeAttribute : Attribute
 }
 
 // Asset を GUID で持つフィールド。Inspector では Picker になる。
-[System.Runtime.InteropServices.StructLayout(
-    System.Runtime.InteropServices.LayoutKind.Sequential)]
-public struct AssetReference
+public interface IAssetReference
+{
+    string AssetGuid { get; }
+}
+
+public interface IAssetKind
+{
+}
+
+public readonly struct SceneAsset : IAssetKind { public static string Kind => "Scene"; }
+public readonly struct PrefabAsset : IAssetKind { public static string Kind => "Prefab"; }
+public readonly struct ImageAsset : IAssetKind { public static string Kind => "Image"; }
+public readonly struct SpriteAtlasAsset : IAssetKind { public static string Kind => "SpriteAtlas"; }
+public readonly struct ModelAsset : IAssetKind { public static string Kind => "Model"; }
+public readonly struct MaterialAsset : IAssetKind { public static string Kind => "Material"; }
+public readonly struct AudioAsset : IAssetKind { public static string Kind => "Audio"; }
+public readonly struct MotionAsset : IAssetKind { public static string Kind => "Motion"; }
+public readonly struct CompositionAsset : IAssetKind { public static string Kind => "Composition"; }
+
+public struct AssetReference : IAssetReference
 {
     public AssetReference(string guid) => Guid = guid ?? string.Empty;
 
     public string Guid;
 
+    public string AssetGuid => Guid ?? string.Empty;
     public bool IsValid => !string.IsNullOrEmpty(Guid);
+    public override string ToString() => Guid ?? string.Empty;
+}
+
+// Asset種別を型で固定する参照。InspectorのPickerもTKindに対応する種別へ絞られる。
+[System.Runtime.InteropServices.StructLayout(
+    System.Runtime.InteropServices.LayoutKind.Sequential)]
+public struct AssetReference<TKind> : IAssetReference where TKind : struct, IAssetKind
+{
+    public AssetReference(string guid) => Guid = guid ?? string.Empty;
+
+    public string Guid;
+
+    public string AssetGuid => Guid ?? string.Empty;
+    public bool IsValid => !string.IsNullOrEmpty(Guid);
+    public AssetReference Untyped => new(Guid);
     public override string ToString() => Guid ?? string.Empty;
 }
