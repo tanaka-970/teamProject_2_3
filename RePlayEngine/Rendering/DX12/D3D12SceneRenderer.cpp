@@ -1262,6 +1262,12 @@ namespace ReplayEngine::Rendering::DX12
         bool upload_ok = true;
         for (const D3D12StaticMeshSource& source : submission.mesh_sources)
         {
+            if (source.replace_existing)
+            {
+                const auto existing = static_mesh_cache_.find(source.key);
+                if (existing != static_mesh_cache_.end())
+                    static_mesh_cache_.erase(existing);
+            }
             if (static_mesh_cache_.find(source.key) == static_mesh_cache_.end() &&
                 !EnsureStaticMesh(source))
                 upload_ok = false;

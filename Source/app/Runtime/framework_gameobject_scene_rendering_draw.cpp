@@ -19,6 +19,8 @@
 #include "../../RePlayEngine/Components/Rendering/MaterialOverrideDynamicProperties.h"
 #include "../../RePlayEngine/Components/Rendering/PrimitiveMeshRendererComponent.h"
 #include "../../RePlayEngine/Components/Rendering/SkinnedMeshRendererComponent.h"
+#include "../../RePlayEngine/Components/Rendering/LineRendererComponent.h"
+#include "../../RePlayEngine/Components/Rendering/TrailComponent.h"
 #include "../../RePlayEngine/Components/Landscape/LandscapeComponent.h"
 #include "../../RePlayEngine/Components/Landscape/LandscapeRendererComponent.h"
 #include "../../RePlayEngine/Components/Landscape/LandscapeColliderComponent.h"
@@ -213,6 +215,16 @@ ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
         binding_material.properties.Set(entry.name, entry.value);
     }
 
+    // Material Asset が無い場合は、Builtin Primitive の旧 shading_model を
+    // そのまま使う。仮 Material を Shader Catalog へ解決すると、正常な
+    // Primitive まで「欠落 Shader」と誤判定してマゼンタへ落ちる。
+    if (!has_material_asset)
+    {
+        item.material_binding = {};
+        item.pixelate_enabled = source.pixelate_enabled;
+        return item;
+    }
+
     const bool resolved = MaterialBindingResolver::Resolve(binding_material,
         shader_library.Catalog(), variant, item.material_binding);
     // binding_material は一時コピーなので、LayerStack の借用先だけ元Assetへ戻す。
@@ -278,6 +290,11 @@ bool framework::build_dx12_static_scene(
     using namespace ReplayEngine::Rendering::DX12;
 
     submission = {};
+    constexpr std::uint32_t kNormalMapSemantic = 1u << 1;
+    constexpr std::uint32_t kEmissiveMapSemantic = 1u << 4;
+        // glTFはOcclusion/Roughness/Metalnessを1枚のTextureのR/G/Bへ格納する。
+    constexpr std::uint32_t kPackedOrmMapSemantic = 1u << 6;
+
     std::unordered_set<std::string> mesh_source_keys;
     std::unordered_set<std::string> texture_source_keys;
     std::unordered_set<std::string> shader_source_keys;
@@ -336,6 +353,19 @@ bool framework::build_dx12_static_scene(
         return key;
     };
 
+    const auto add_material_texture = [&add_texture](
+        D3D12StaticDrawItem& draw, std::uint32_t slot,
+        const std::filesystem::path& input_path, std::uint32_t semantic_bit)
+    {
+        const std::string key = add_texture(input_path);
+        if (key.empty()) return;
+        D3D12StaticMaterialTexture mapped;
+        mapped.slot = slot;
+        mapped.texture_key = key;
+        draw.material_textures.push_back(std::move(mapped));
+        draw.material_texture_semantic_mask |= semantic_bit;
+    };
+
     const auto add_asset_texture = [this, &add_texture](
         const std::string& asset_guid) -> std::string
     {
@@ -387,6 +417,9 @@ bool framework::build_dx12_static_scene(
         draw.roughness = item.roughness;
         draw.ambient_occlusion = item.ambient_occlusion;
         draw.double_sided = item.double_sided;
+        draw.lighting_model = static_cast<std::int32_t>(item.lighting_model);
+        draw.cast_shadow = item.cast_shadow;
+        draw.receive_shadow = item.receive_shadow;
         if (!external) return false;
 
         draw.alpha_mode = material_alpha_mode(material->alpha_mode);
@@ -401,6 +434,7 @@ bool framework::build_dx12_static_scene(
         // 既存の MaterialBindingResolver を b9 の Byte と t40 以降の Slot の正本として使う。
         // DX12 Backend はこの解決済み Packet だけを利用する。
         draw.material_constants = item.material_binding.constants;
+        draw.material_texture_semantic_mask = item.material_binding.TextureSemanticMask();
         for (const ResolvedMaterialTexture& texture : item.material_binding.textures)
         {
             D3D12StaticMaterialTexture mapped;
@@ -411,10 +445,10 @@ bool framework::build_dx12_static_scene(
             draw.material_textures.push_back(std::move(mapped));
         }
 
-        // BuiltIn の PBR/Toon/FBX/Pixelate/Unlit はまだ Deferred/Light/Shadow の
-        // Global Resource Set に依存するため、Phase 2 Bridge で意図的に描画する。
+        // BuiltInのPBR/Toon/FBX/Pixelate/UnlitはまだDeferred/Light/Shadowの
+        // Global Resource Setに依存するため、Phase 2 Bridgeで意図的に描画する。
         // 安定した b0/b1/b4/b9、t0/t40 以降、s0..s2 の ABI だけに依存する
-        // Project/Composer Surface Shader は、実際の SM6 Custom Pixel Shader として実行できる。
+        // Project/Composer Surface Shaderは実際のSM6 Custom Pixel Shaderとして実行できる。
         const ShaderCatalog::Entry* shader_entry =
             shader_library.Catalog().Find(item.material_binding.shader);
         if (shader_entry != nullptr && shader_entry->info.domain == ShaderDomain::Surface &&
@@ -474,13 +508,335 @@ bool framework::build_dx12_static_scene(
         }
     };
 
+    std::unordered_set<std::string> skinned_mesh_source_keys;
+    const auto make_skinned_mesh_source = [&submission, &skinned_mesh_source_keys](
+        const std::string& key, const skinned_mesh::mesh& mesh)
+    {
+        if (!skinned_mesh_source_keys.insert(key).second) return;
+        D3D12SkinnedMeshSource source;
+        source.key = key;
+        try
+        {
+            source.vertices.reserve(mesh.vertices.size());
+            for (const skinned_mesh::vertex& input : mesh.vertices)
+            {
+                D3D12SkinnedVertex vertex;
+                vertex.position = input.position;
+                vertex.normal = input.normal;
+                vertex.tangent = input.tangent;
+                vertex.texcoord = input.texcoord;
+                vertex.bone_weights = { input.bone_weights[0], input.bone_weights[1],
+                    input.bone_weights[2], input.bone_weights[3] };
+                for (std::uint32_t influence = 0; influence < 4; ++influence)
+                    vertex.bone_indices[influence] = input.bone_indices[influence];
+                vertex.morph_position = input.morph_position;
+                vertex.morph_normal = input.morph_normal;
+                source.vertices.push_back(vertex);
+            }
+            source.indices = mesh.indices;
+            submission.skinned_mesh_sources.push_back(std::move(source));
+        }
+        catch (...)
+        {
+            skinned_mesh_source_keys.erase(key);
+        }
+    };
+
+    const auto normalize_or_fallback = [](const DirectX::XMVECTOR& value,
+        const DirectX::XMVECTOR& fallback) noexcept
+    {
+        const float length = DirectX::XMVectorGetX(DirectX::XMVector3LengthSq(value));
+        return length > 1.0e-8f ? DirectX::XMVector3Normalize(value) : fallback;
+    };
+    DirectX::XMFLOAT4X4 inverse_view{};
+    DirectX::XMStoreFloat4x4(&inverse_view,
+        DirectX::XMMatrixInverse(nullptr, viewport_view_matrix()));
+    const DirectX::XMVECTOR camera_right = normalize_or_fallback(
+        DirectX::XMVectorSet(inverse_view._11, inverse_view._12, inverse_view._13, 0.0f),
+        DirectX::XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f));
+    const DirectX::XMVECTOR camera_up = normalize_or_fallback(
+        DirectX::XMVectorSet(inverse_view._21, inverse_view._22, inverse_view._23, 0.0f),
+        DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f));
+    const DirectX::XMVECTOR camera_forward = normalize_or_fallback(
+        DirectX::XMVectorSet(inverse_view._31, inverse_view._32, inverse_view._33, 0.0f),
+        DirectX::XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f));
+
+    const auto add_ribbon = [&submission, &normalize_or_fallback, camera_right,
+        camera_up, camera_forward](const std::string& key,
+        const std::vector<DirectX::XMFLOAT3>& points,
+        const std::vector<float>& point_alpha,
+        const ReplayEngine::Rendering::LineStrokeStyle& style) -> bool
+    {
+        if (key.empty() || points.size() < 2) return false;
+        D3D12StaticMeshSource source;
+        source.key = key;
+        source.replace_existing = true;
+        try
+        {
+            source.vertices.reserve((points.size() - 1) * 4);
+            source.indices.reserve((points.size() - 1) * 6);
+            const float width_start = (std::max)(0.0f, style.width_start);
+            const float width_end = (std::max)(0.0f, style.width_end);
+            for (std::size_t index = 0; index + 1 < points.size(); ++index)
+            {
+                const float t0 = static_cast<float>(index) /
+                    static_cast<float>(points.size() - 1);
+                const float t1 = static_cast<float>(index + 1) /
+                    static_cast<float>(points.size() - 1);
+                const DirectX::XMVECTOR p0 = DirectX::XMLoadFloat3(&points[index]);
+                const DirectX::XMVECTOR p1 = DirectX::XMLoadFloat3(&points[index + 1]);
+                const DirectX::XMVECTOR tangent = normalize_or_fallback(
+                    DirectX::XMVectorSubtract(p1, p0),
+                    DirectX::XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f));
+                const DirectX::XMVECTOR side = normalize_or_fallback(
+                    DirectX::XMVector3Cross(tangent, camera_forward), camera_right);
+                const float half_width0 = width_start * 0.5f * (1.0f - t0) +
+                    width_end * 0.5f * t0;
+                const float half_width1 = width_start * 0.5f * (1.0f - t1) +
+                    width_end * 0.5f * t1;
+                const DirectX::XMVECTOR left0 = DirectX::XMVectorSubtract(p0,
+                    DirectX::XMVectorScale(side, half_width0));
+                const DirectX::XMVECTOR right0 = DirectX::XMVectorAdd(p0,
+                    DirectX::XMVectorScale(side, half_width0));
+                const DirectX::XMVECTOR left1 = DirectX::XMVectorSubtract(p1,
+                    DirectX::XMVectorScale(side, half_width1));
+                const DirectX::XMVECTOR right1 = DirectX::XMVectorAdd(p1,
+                    DirectX::XMVectorScale(side, half_width1));
+                D3D12StaticVertex vertices[4]{};
+                DirectX::XMStoreFloat3(&vertices[0].position, left0);
+                DirectX::XMStoreFloat3(&vertices[1].position, right0);
+                DirectX::XMStoreFloat3(&vertices[2].position, right1);
+                DirectX::XMStoreFloat3(&vertices[3].position, left1);
+                for (D3D12StaticVertex& vertex : vertices)
+                {
+                    DirectX::XMStoreFloat3(&vertex.normal, camera_up);
+                    vertex.texcoord = { t0, 0.0f };
+                }
+                vertices[2].texcoord = { t1, 1.0f };
+                vertices[3].texcoord = { t1, 0.0f };
+                const std::uint32_t base = static_cast<std::uint32_t>(source.vertices.size());
+                source.vertices.insert(source.vertices.end(), std::begin(vertices), std::end(vertices));
+                source.indices.insert(source.indices.end(),
+                    { base, base + 1, base + 2, base, base + 2, base + 3 });
+            }
+        }
+        catch (...)
+        {
+            return false;
+        }
+        if (source.vertices.empty() || source.indices.empty()) return false;
+        submission.mesh_sources.push_back(std::move(source));
+        return true;
+    };
+
+    const auto add_ribbon_draw = [&submission](const std::string& key,
+        const std::string& motion_key, const ReplayEngine::Rendering::LineStrokeStyle& style)
+    {
+        D3D12StaticDrawItem draw;
+        draw.mesh_key = key;
+        draw.motion_key = motion_key;
+        draw.alpha_mode = D3D12StaticAlphaMode::Blend;
+        draw.base_color = style.fill_color;
+        draw.cast_shadow = false;
+        draw.receive_shadow = false;
+        draw.double_sided = true;
+        submission.draws.push_back(std::move(draw));
+    };
+
+    // LineRenderer/TrailもCPU側の点列を正本にし、DX12では一時Ribbon Meshへ変換する。
+    // Frame slotごとに置換するので、毎フレームの軌跡更新で古いGPU Resourceを蓄積しない。
+    {
+        ReplayEngine::Scene::Scene& scene = active_object_scene();
+        std::vector<DirectX::XMFLOAT3> path;
+        std::vector<float> alpha;
+        for (std::size_t object_index = 0; object_index < scene.GameObjectCount(); ++object_index)
+        {
+            const ReplayEngine::Core::GameObject* object = scene.GameObjectAt(object_index);
+            if (object == nullptr || object->PendingDestroy() || !object->ActiveInHierarchy()) continue;
+            const DirectX::XMFLOAT4X4 world = object->GetTransform().WorldMatrixFloat4x4();
+            for (std::size_t component_index = 0; component_index < object->ComponentCount();
+                ++component_index)
+            {
+                const auto* component = object->ComponentAt(component_index);
+                const std::string key_prefix = "ribbon:" +
+                    std::to_string(object->ID().Value()) + ":" +
+                    std::to_string(component_index) + ":slot:" +
+                    std::to_string(dx12_device_context.FrameIndex());
+                if (const auto* line = dynamic_cast<const ReplayEngine::Components::LineRendererComponent*>(component))
+                {
+                    if (!line->ActiveInHierarchy() || line->points.size() < 2) continue;
+                    path = ReplayEngine::Rendering::BuildCatmullRomLinePath(
+                        line->points, line->smoothing, line->closed);
+                    for (DirectX::XMFLOAT3& point : path)
+                    {
+                        DirectX::XMStoreFloat3(&point,
+                            DirectX::XMVector3TransformCoord(
+                                DirectX::XMLoadFloat3(&point), DirectX::XMLoadFloat4x4(&world)));
+                    }
+                    const auto style = line->StrokeStyle();
+                    if (add_ribbon(key_prefix, path, {}, style))
+                        add_ribbon_draw(key_prefix, key_prefix, style);
+                    continue;
+                }
+                const auto* trail = dynamic_cast<const ReplayEngine::Components::TrailComponent*>(component);
+                if (trail == nullptr || !trail->ActiveInHierarchy()) continue;
+                trail->RuntimePath(path, alpha);
+                if (path.size() < 2) continue;
+                if (!trail->world_space)
+                {
+                    DirectX::XMFLOAT4X4 parent_world{};
+                    const auto* parent = object->Parent();
+                    if (parent != nullptr) parent_world = parent->GetTransform().WorldMatrixFloat4x4();
+                    else DirectX::XMStoreFloat4x4(&parent_world, DirectX::XMMatrixIdentity());
+                    for (DirectX::XMFLOAT3& point : path)
+                        DirectX::XMStoreFloat3(&point,
+                            DirectX::XMVector3TransformCoord(
+                                DirectX::XMLoadFloat3(&point), DirectX::XMLoadFloat4x4(&parent_world)));
+                }
+                const auto style = trail->StrokeStyle();
+                if (add_ribbon(key_prefix, path, alpha, style))
+                    add_ribbon_draw(key_prefix, key_prefix, style);
+            }
+        }
+    }
+
     for (const RenderItem& source_item : object_render_items.Items())
     {
         if (source_item.mesh_asset.empty()) continue;
-        // 実際の Bone Palette / Animation Skinning は意図的に Phase 3 の担当とする。
-        if (source_item.skinned) continue;
 
         const RenderItem item = resolve_render_item_material(source_item);
+        if (source_item.skinned)
+        {
+            skinned_mesh* mesh_asset = resolve_object_mesh(item.mesh_asset);
+            if (mesh_asset == nullptr) continue;
+            std::filesystem::path model_source;
+            std::string model_reason;
+            (void)resolve_model_source(item.mesh_asset, model_source, model_reason);
+
+            skinned_mesh::animation::keyframe blended_keyframe;
+            const skinned_mesh::animation::keyframe* keyframe =
+                resolve_render_item_keyframe(*mesh_asset, item, blended_keyframe);
+
+            for (std::size_t mesh_index = 0; mesh_index < mesh_asset->meshes.size(); ++mesh_index)
+            {
+                const skinned_mesh::mesh& mesh = mesh_asset->meshes[mesh_index];
+                if (mesh.vertices.empty() || mesh.indices.empty()) continue;
+                const std::string mesh_key = item.mesh_asset + "#skinned:" +
+                    std::to_string(mesh_index);
+                if (!dx12_device_context.HasSkinnedMesh(mesh_key))
+                    make_skinned_mesh_source(mesh_key, mesh);
+
+                DirectX::XMFLOAT4X4 mesh_world =
+                    multiply_world(mesh.default_global_transform, item.world);
+                float morph_weight = mesh.default_morph_weight;
+                std::size_t palette_size = (std::max)(static_cast<std::size_t>(1),
+                    mesh.bind_pose.bones.size());
+                for (const skinned_mesh::vertex& vertex : mesh.vertices)
+                {
+                    for (std::uint32_t influence = 0; influence < 4; ++influence)
+                        palette_size = (std::max)(palette_size,
+                            static_cast<std::size_t>(vertex.bone_indices[influence]) + 1u);
+                }
+                std::vector<DirectX::XMFLOAT4X4> palette(palette_size,
+                    DirectX::XMFLOAT4X4{ 1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 });
+
+                if (keyframe != nullptr && mesh.node_index >= 0 &&
+                    static_cast<std::size_t>(mesh.node_index) < keyframe->nodes.size())
+                {
+                    const skinned_mesh::animation::keyframe::node& mesh_node =
+                        keyframe->nodes[static_cast<std::size_t>(mesh.node_index)];
+                    mesh_world = multiply_world(mesh_node.global_transform, item.world);
+                    morph_weight = mesh_node.morph_weight;
+                    const DirectX::XMMATRIX inverse_mesh = DirectX::XMMatrixInverse(nullptr,
+                        DirectX::XMLoadFloat4x4(&mesh_node.global_transform));
+                    for (std::size_t bone_index = 0; bone_index < mesh.bind_pose.bones.size();
+                        ++bone_index)
+                    {
+                        const skeleton::bone& bone = mesh.bind_pose.bones[bone_index];
+                        if (bone.node_index < 0 ||
+                            static_cast<std::size_t>(bone.node_index) >= keyframe->nodes.size())
+                            continue;
+                        const auto& bone_node =
+                            keyframe->nodes[static_cast<std::size_t>(bone.node_index)];
+                        DirectX::XMStoreFloat4x4(&palette[bone_index],
+                            DirectX::XMLoadFloat4x4(&bone.offset_transform) *
+                            DirectX::XMLoadFloat4x4(&bone_node.global_transform) * inverse_mesh);
+                    }
+                }
+
+                const auto append_skinned_draw = [&](std::uint32_t start, std::uint32_t count,
+                    std::uint64_t material_id)
+                {
+                    D3D12SkinnedDrawItem skinned_draw;
+                    D3D12StaticDrawItem& draw = skinned_draw.surface;
+                    draw.mesh_key = mesh_key;
+                    draw.start_index = start;
+                    draw.index_count = count;
+                    draw.world = mesh_world;
+                    const bool external = fill_external_material(source_item, item, draw);
+                    if (!external)
+                    {
+                        const auto material_it = mesh_asset->materials.find(material_id);
+                        if (material_it != mesh_asset->materials.end())
+                        {
+                            const skinned_mesh::material& material = material_it->second;
+                            draw.base_color = multiply_color(material.Kd, source_item.tint);
+                            std::filesystem::path texture_path(material.texture_filenames[0]);
+                            if (!texture_path.empty() && texture_path.is_relative() &&
+                                !model_source.empty())
+                                texture_path = model_source.parent_path() / texture_path;
+                            draw.base_color_texture_key = add_texture(texture_path);
+                            const auto embedded_texture_path =
+                                [&material, &model_source](std::size_t slot)
+                            {
+                                std::filesystem::path path(material.texture_filenames[slot]);
+                                if (!path.empty() && path.is_relative() &&
+                                    !model_source.empty())
+                                    path = model_source.parent_path() / path;
+                                return path;
+                            };
+                            add_material_texture(draw, 41u, embedded_texture_path(1),
+                                kNormalMapSemantic);
+                            add_material_texture(draw, 42u, embedded_texture_path(2),
+                                kPackedOrmMapSemantic);
+                            add_material_texture(draw, 44u, embedded_texture_path(3),
+                                kEmissiveMapSemantic);
+                            if (const skinned_mesh::gltf_material_info* gltf_material =
+                                mesh_asset->GltfMaterial(material_id))
+                            {
+                                draw.metallic = gltf_material->metallic;
+                                draw.roughness = gltf_material->roughness;
+                                draw.ambient_occlusion = gltf_material->occlusion;
+                                draw.emissive = gltf_material->emissive;
+                                draw.emissive_strength = gltf_material->emissive_strength;
+                                draw.alpha_mode = alpha_mode(gltf_material->alpha_mode);
+                                draw.alpha_cutoff = gltf_material->alpha_cutoff;
+                                draw.double_sided = gltf_material->double_sided || item.double_sided;
+                                if (gltf_material->unlit) draw.lighting_model = 2;
+                            }
+                        }
+                        else
+                        {
+                            draw.base_color = source_item.tint;
+                            draw.double_sided = item.double_sided;
+                        }
+                    }
+                    skinned_draw.motion_key = std::to_string(source_item.owner.Value()) + ":" +
+                        mesh_key + ":" + std::to_string(start);
+                    skinned_draw.bone_palette = palette;
+                    skinned_draw.morph_weight = morph_weight;
+                    submission.skinned_draws.push_back(std::move(skinned_draw));
+                };
+
+                if (mesh.subsets.empty())
+                    append_skinned_draw(0, static_cast<std::uint32_t>(mesh.indices.size()), 0);
+                else
+                    for (const skinned_mesh::mesh::subset& subset : mesh.subsets)
+                        append_skinned_draw(subset.start_index_location, subset.index_count,
+                            subset.material_unique_id);
+            }
+            continue;
+        }
         if (item.mesh_asset.rfind("builtin:", 0) == 0)
         {
             static_mesh* primitive = resolve_builtin_primitive_mesh(item.mesh_asset);
@@ -493,6 +849,7 @@ bool framework::build_dx12_static_scene(
 
             D3D12StaticDrawItem draw;
             draw.mesh_key = item.mesh_asset;
+            draw.motion_key = std::to_string(source_item.owner.Value()) + ":" + draw.mesh_key;
             draw.world = item.world;
             (void)fill_external_material(source_item, item, draw);
             submission.draws.push_back(std::move(draw));
@@ -538,6 +895,7 @@ bool framework::build_dx12_static_scene(
                 D3D12StaticDrawItem draw;
                 draw.mesh_key = item.mesh_asset + "#gltf:" +
                     std::to_string(primitive_index);
+                draw.motion_key = std::to_string(source_item.owner.Value()) + ":" + draw.mesh_key;
                 draw.world = multiply_world(info.node_transform, item.world);
                 const bool external = fill_external_material(source_item, item, draw);
                 if (!external)
@@ -546,6 +904,16 @@ bool framework::build_dx12_static_scene(
                         source_item.tint);
                     draw.base_color_texture_key = add_texture(
                         info.embedded_base_color_texture);
+                    add_material_texture(draw, 41u, info.embedded_normal_texture,
+                        kNormalMapSemantic);
+                    add_material_texture(draw, 42u, info.embedded_orm_texture,
+                        kPackedOrmMapSemantic);
+                    if (!info.embedded_orm_texture.empty())
+                    {
+                        draw.metallic = 1.0f;
+                        draw.roughness = 1.0f;
+                        draw.ambient_occlusion = 1.0f;
+                    }
                     draw.alpha_mode = alpha_mode(info.alpha_mode);
                     draw.alpha_cutoff = info.alpha_cutoff;
                     draw.double_sided = item.double_sided;
@@ -580,6 +948,8 @@ bool framework::build_dx12_static_scene(
             {
                 D3D12StaticDrawItem draw;
                 draw.mesh_key = mesh_key;
+                draw.motion_key = std::to_string(source_item.owner.Value()) + ":" + mesh_key +
+                    ":" + std::to_string(start);
                 draw.start_index = start;
                 draw.index_count = count;
                 draw.world = mesh_world;
@@ -596,6 +966,21 @@ bool framework::build_dx12_static_scene(
                             !model_source.empty())
                             texture_path = model_source.parent_path() / texture_path;
                         draw.base_color_texture_key = add_texture(texture_path);
+                        const auto embedded_texture_path =
+                            [&material, &model_source](std::size_t slot)
+                        {
+                            std::filesystem::path path(material.texture_filenames[slot]);
+                            if (!path.empty() && path.is_relative() &&
+                                !model_source.empty())
+                                path = model_source.parent_path() / path;
+                            return path;
+                        };
+                        add_material_texture(draw, 41u, embedded_texture_path(1),
+                            kNormalMapSemantic);
+                        add_material_texture(draw, 42u, embedded_texture_path(2),
+                            kPackedOrmMapSemantic);
+                        add_material_texture(draw, 44u, embedded_texture_path(3),
+                            kEmissiveMapSemantic);
                         if (const skinned_mesh::gltf_material_info* gltf_material =
                             mesh_asset->GltfMaterial(material_id))
                         {
@@ -630,6 +1015,124 @@ bool framework::build_dx12_static_scene(
                         subset.material_unique_id);
             }
         }
+    }
+
+    // Landscapeは既存LandscapeDataの頂点/Indexを正本として、そのままStatic Mesh提出へ変換する。
+    // D3D11専用のstatic_meshキャッシュをDX12から参照しないため、編集後のRevisionもキーへ含める。
+    {
+        ReplayEngine::Scene::Scene& scene = active_object_scene();
+        for (std::size_t object_index = 0; object_index < scene.GameObjectCount(); ++object_index)
+        {
+            const ReplayEngine::Core::GameObject* object = scene.GameObjectAt(object_index);
+            if (object == nullptr || object->PendingDestroy() || !object->ActiveInHierarchy()) continue;
+            const auto* landscape = object->GetComponent<ReplayEngine::Components::LandscapeComponent>();
+            const auto* renderer = object->GetComponent<ReplayEngine::Components::LandscapeRendererComponent>();
+            if (landscape == nullptr || renderer == nullptr || !renderer->visible ||
+                !renderer->ActiveInHierarchy() || !landscape->Data().Valid()) continue;
+
+            const auto& data = landscape->Data();
+            const std::string mesh_key = "landscape:" +
+                std::to_string(object->ID().Value()) + ":" + std::to_string(data.Revision());
+            if (!dx12_device_context.HasStaticMesh(mesh_key))
+            {
+                D3D12StaticMeshSource source;
+                source.key = mesh_key;
+                source.vertices.reserve(data.Vertices().size());
+                for (const auto& input : data.Vertices())
+                {
+                    D3D12StaticVertex vertex;
+                    vertex.position = input.position;
+                    vertex.normal = input.normal;
+                    vertex.texcoord = input.uv;
+                    source.vertices.push_back(vertex);
+                }
+                source.indices = data.Indices();
+                submission.mesh_sources.push_back(std::move(source));
+            }
+
+            D3D12StaticDrawItem draw;
+            draw.mesh_key = mesh_key;
+            draw.motion_key = std::to_string(object->ID().Value()) + ":" + mesh_key;
+            draw.world = object->GetTransform().WorldMatrixFloat4x4();
+            draw.base_color = renderer->tint;
+            draw.double_sided = renderer->double_sided;
+            draw.cast_shadow = renderer->cast_shadow;
+            draw.receive_shadow = renderer->receive_shadow;
+            draw.lighting_model = static_cast<std::int32_t>(ShaderLightingModel::Pbr);
+            submission.draws.push_back(std::move(draw));
+        }
+    }
+
+    submission.directional_light.enabled = directional_light_present;
+    submission.directional_light.direction = { light_direction.x, light_direction.y, light_direction.z };
+    submission.directional_light.color = { pbr.light.directional_color.x,
+        pbr.light.directional_color.y, pbr.light.directional_color.z };
+    submission.directional_light.intensity = pbr.light.directional_color.w;
+    submission.directional_light.cast_shadows = directional_shadow_enabled;
+    submission.directional_light.shadow_strength = pbr.light.shadow_params.x;
+
+    const int point_count = (std::max)(0, (std::min)(lights_manager::POINT_LIGHT_MAX,
+        lights.data.light_counts.x));
+    submission.point_lights.reserve(static_cast<std::size_t>(point_count));
+    for (int index = 0; index < point_count; ++index)
+    {
+        const lights_manager::point_light& source = lights.data.point_lights[index];
+        D3D12PointLightSubmission light;
+        light.position = { source.position.x, source.position.y, source.position.z };
+        light.range = source.position.w;
+        light.color = { source.color.x, source.color.y, source.color.z };
+        light.intensity = source.color.w;
+        light.cast_shadows = source.shadow.x >= 0.0f;
+        light.shadow_strength = source.shadow.y;
+        light.shadow_slice = static_cast<std::int32_t>(source.shadow.x);
+        submission.point_lights.push_back(light);
+    }
+
+    const int spot_count = (std::max)(0, (std::min)(lights_manager::SPOT_LIGHT_MAX,
+        lights.data.light_counts.y));
+    submission.spot_lights.reserve(static_cast<std::size_t>(spot_count));
+    for (int index = 0; index < spot_count; ++index)
+    {
+        const lights_manager::spot_light& source = lights.data.spot_lights[index];
+        D3D12SpotLightSubmission light;
+        light.position = { source.position.x, source.position.y, source.position.z };
+        light.range = source.position.w;
+        light.direction = { source.direction.x, source.direction.y, source.direction.z };
+        light.inner_cos = source.direction.w;
+        light.color = { source.color.x, source.color.y, source.color.z };
+        light.outer_cos = source.color.w;
+        light.intensity = source.params.x;
+        light.cast_shadows = source.params.y >= 0.0f;
+        light.shadow_strength = source.params.z;
+        light.shadow_slice = static_cast<std::int32_t>(source.params.y);
+        submission.spot_lights.push_back(light);
+    }
+
+    // ShadowのProjection/AllocationにおけるCPU正本は既存CSM/LocalShadowAtlas。
+    // DX12側で別のCascade分割やPoint Face選択を作らず、確定済み値だけを提出する。
+    submission.directional_shadow.enabled =
+        csm.constants.params.w > 0.5f && submission.directional_light.cast_shadows;
+    submission.directional_shadow.resolution = csm_renderer::SHADOW_MAP_SIZE;
+    for (std::uint32_t cascade = 0;
+        cascade < D3D12DirectionalShadowSubmission::CascadeCount; ++cascade)
+        submission.directional_shadow.view_projection[cascade] =
+            csm.constants.view_projection[cascade];
+    submission.directional_shadow.split_distances = csm.constants.split_distances;
+    submission.directional_shadow.params = csm.constants.params;
+    submission.directional_shadow.params2 = csm.constants.params2;
+    submission.directional_shadow.params3 = csm.constants.params3;
+    submission.directional_shadow.texel_world = csm.constants.texel_world;
+
+    submission.local_shadows.enabled = enable_dynamic_shadows && local_shadows.enabled;
+    submission.local_shadows.resolution = local_shadows.resolution_setting;
+    for (std::uint32_t slice = 0;
+        slice < D3D12LocalShadowSubmission::SliceCount; ++slice)
+    {
+        ReplayEngine::Rendering::LocalShadowAtlas::Slice source{};
+        if (!local_shadows.TryGetSlice(slice, source)) continue;
+        submission.local_shadows.slices[slice].view_projection = source.view_projection;
+        submission.local_shadows.slices[slice].params = source.params;
+        submission.local_shadows.used_slice_mask |= (1u << slice);
     }
     return true;
 }
