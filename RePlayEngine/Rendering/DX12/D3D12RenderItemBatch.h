@@ -1,12 +1,11 @@
-#pragma once
+﻿#pragma once
 
 #include "D3D12DescriptorHeapAllocator.h"
-#include "D3D12UploadContext.h"
+#include "D3D12FrameResource.h"
 
 #include "../Adapter/RenderItem.h"
 
 #include <d3d12.h>
-#include <wrl.h>
 
 #include <cstdint>
 #include <vector>
@@ -43,7 +42,7 @@ namespace ReplayEngine::Rendering::DX12
         D3D12RenderItemBatch(const D3D12RenderItemBatch&) = delete;
         D3D12RenderItemBatch& operator=(const D3D12RenderItemBatch&) = delete;
 
-        bool Upload(ID3D12Device* device, D3D12UploadContext& uploader,
+        bool Upload(ID3D12Device* device, D3D12LinearUploadAllocator& upload_allocator,
             D3D12DescriptorHeapAllocator& descriptor_allocator,
             const RenderItemList& items) noexcept;
         void Reset(D3D12DescriptorHeapAllocator* descriptor_allocator) noexcept;
@@ -54,7 +53,8 @@ namespace ReplayEngine::Rendering::DX12
         {
             return gpu_items_;
         }
-        ID3D12Resource* GpuBuffer() const noexcept { return gpu_buffer_.Get(); }
+        ID3D12Resource* GpuBuffer() const noexcept { return gpu_buffer_; }
+        std::uint64_t GpuBufferOffset() const noexcept { return gpu_buffer_offset_; }
         const D3D12DescriptorAllocation& ShaderResourceAllocation() const noexcept
         {
             return shader_resource_allocation_;
@@ -62,7 +62,8 @@ namespace ReplayEngine::Rendering::DX12
 
     private:
         std::vector<D3D12RenderItemGpuData> gpu_items_;
-        Microsoft::WRL::ComPtr<ID3D12Resource> gpu_buffer_;
+        ID3D12Resource* gpu_buffer_ = nullptr; // FrameResource の upload heap を非所有参照。
+        std::uint64_t gpu_buffer_offset_ = 0;
         D3D12DescriptorAllocation shader_resource_allocation_{};
     };
 }

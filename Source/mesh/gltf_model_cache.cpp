@@ -14,6 +14,7 @@
 #include "texture.h"
 
 #include <atomic>
+#include <cmath>
 #include <fstream>
 #include <map>
 
@@ -22,8 +23,9 @@ using namespace DirectX;
 namespace
 {
     constexpr std::uint32_t kMeshCacheMagic = 0x48534D52u;  // 'RMSH'
-    // v2: GLB内蔵画像をDDSキャッシュへ解決したURIを保存する。
-    constexpr std::uint32_t kMeshCacheVersion = 2;
+    // v3: v2のTexture URIに加え alphaMode / alphaCutoff を保存する。
+    // 派生キャッシュなので旧v2は安全に無効化され、元glTFから一度だけ再生成される。
+    constexpr std::uint32_t kMeshCacheVersion = 3;
 
     // 文字列は長さ+本体で書く。
     void WriteString(std::ofstream& stream, const std::string& text)
@@ -137,6 +139,10 @@ bool gltf_model::SaveMeshCache(const std::string& filename) const
         WriteString(stream, material.base_color_uri);
         WriteString(stream, material.normal_uri);
         WriteString(stream, material.orm_uri);
+        stream.write(reinterpret_cast<const char*>(&material.alpha_mode),
+            sizeof(material.alpha_mode));
+        stream.write(reinterpret_cast<const char*>(&material.alpha_cutoff),
+            sizeof(material.alpha_cutoff));
     }
 
     // --- プリミティブ ---
@@ -187,6 +193,13 @@ bool gltf_model::LoadMeshCache(ID3D11Device* device, const std::string& filename
         if (!ReadString(stream, materials_[i].base_color_uri)) return false;
         if (!ReadString(stream, materials_[i].normal_uri)) return false;
         if (!ReadString(stream, materials_[i].orm_uri)) return false;
+        stream.read(reinterpret_cast<char*>(&materials_[i].alpha_mode),
+            sizeof(materials_[i].alpha_mode));
+        stream.read(reinterpret_cast<char*>(&materials_[i].alpha_cutoff),
+            sizeof(materials_[i].alpha_cutoff));
+        if (!stream || materials_[i].alpha_mode < 0 || materials_[i].alpha_mode > 2 ||
+            !std::isfinite(materials_[i].alpha_cutoff))
+            return false;
     }
 
     // --- プリミティブ ---
@@ -253,6 +266,144 @@ bool gltf_model::LoadMeshCache(ID3D11Device* device, const std::string& filename
     }
 
     return !failed.load();
+}
+
+
+bool gltf_model::StaticPrimitiveInfoAt(std::size_t index,
+    StaticPrimitiveInfo& out) const
+{
+    if (!loaded_ || has_skins_ || has_animations_ || index >= primitives_.size())
+        return false;
+    const Primitive& primitive = primitives_[index];
+    out = {};
+    out.node_transform = primitive.node_transform;
+    out.material = primitive.material;
+    if (primitive.material >= 0 &&
+        primitive.material < static_cast<int>(materials_.size()))
+    {
+        const Material& material = materials_[static_cast<std::size_t>(primitive.material)];
+        out.embedded_base_color = material.base_color;
+        out.alpha_mode = material.alpha_mode;
+        out.alpha_cutoff = material.alpha_cutoff;
+        if (!material.base_color_uri.empty())
+            out.embedded_base_color_texture =
+                std::filesystem::path(source_filename_).parent_path() /
+                std::filesystem::path(material.base_color_uri);
+    }
+    return true;
+}
+
+
+bool gltf_model::ExportStaticPrimitives(
+    std::vector<StaticPrimitiveExport>& out) const
+{
+    out.clear();
+    if (!loaded_ || has_skins_ || has_animations_ || primitives_.empty()) return false;
+
+    const auto append_exports = [this, &out](const std::vector<Primitive>& primitives,
+        const std::vector<Material>& materials) -> bool
+    {
+        try
+        {
+            out.reserve(primitives.size());
+            const std::filesystem::path base_directory =
+                std::filesystem::path(source_filename_).parent_path();
+            for (const Primitive& primitive : primitives)
+            {
+                if (primitive.source_vertices.empty() || primitive.source_indices.empty())
+                    return false;
+                StaticPrimitiveExport exported;
+                exported.vertices = primitive.source_vertices;
+                exported.indices = primitive.source_indices;
+                exported.node_transform = primitive.node_transform;
+                exported.material = primitive.material;
+                if (primitive.material >= 0 &&
+                    primitive.material < static_cast<int>(materials.size()))
+                {
+                    const Material& material = materials[static_cast<std::size_t>(primitive.material)];
+                    exported.embedded_base_color = material.base_color;
+                    exported.alpha_mode = material.alpha_mode;
+                    exported.alpha_cutoff = material.alpha_cutoff;
+                    if (!material.base_color_uri.empty())
+                        exported.embedded_base_color_texture =
+                            base_directory / std::filesystem::path(material.base_color_uri);
+                }
+                out.push_back(std::move(exported));
+            }
+            return !out.empty();
+        }
+        catch (...)
+        {
+            out.clear();
+            return false;
+        }
+    };
+
+    bool all_sources_resident = true;
+    for (const Primitive& primitive : primitives_)
+    {
+        if (primitive.source_vertices.empty() || primitive.source_indices.empty())
+        {
+            all_sources_resident = false;
+            break;
+        }
+    }
+    if (all_sources_resident) return append_exports(primitives_, materials_);
+
+// glTF Runtime は LOD/Cache 処理後に大きな CPU Geometry を意図的に解放する。
+// DX12 のために数百 MB を保持させてはいけない。DX12 Mesh Cache がこの Model を初めて
+// 必要としたときに、展開済みの replaymesh Cache を一度だけ読む。
+    const std::filesystem::path cache_path = MeshCachePath(source_filename_);
+    if (cache_path.empty() || !std::filesystem::exists(cache_path)) return false;
+    std::ifstream stream(cache_path, std::ios::binary);
+    if (!stream) return false;
+
+    std::uint32_t magic = 0, version = 0;
+    stream.read(reinterpret_cast<char*>(&magic), sizeof(magic));
+    stream.read(reinterpret_cast<char*>(&version), sizeof(version));
+    if (!stream || magic != kMeshCacheMagic || version != kMeshCacheVersion) return false;
+
+    std::uint32_t material_count = 0;
+    stream.read(reinterpret_cast<char*>(&material_count), sizeof(material_count));
+    if (!stream || material_count > 4096) return false;
+    std::vector<Material> materials((std::max)(size_t{ 1 },
+        static_cast<size_t>(material_count)));
+    for (std::uint32_t i = 0; i < material_count; ++i)
+    {
+        stream.read(reinterpret_cast<char*>(&materials[i].base_color),
+            sizeof(materials[i].base_color));
+        if (!ReadString(stream, materials[i].base_color_uri)) return false;
+        if (!ReadString(stream, materials[i].normal_uri)) return false;
+        if (!ReadString(stream, materials[i].orm_uri)) return false;
+        stream.read(reinterpret_cast<char*>(&materials[i].alpha_mode),
+            sizeof(materials[i].alpha_mode));
+        stream.read(reinterpret_cast<char*>(&materials[i].alpha_cutoff),
+            sizeof(materials[i].alpha_cutoff));
+        if (!stream || materials[i].alpha_mode < 0 || materials[i].alpha_mode > 2 ||
+            !std::isfinite(materials[i].alpha_cutoff))
+            return false;
+    }
+
+    std::uint32_t primitive_count = 0;
+    stream.read(reinterpret_cast<char*>(&primitive_count), sizeof(primitive_count));
+    if (!stream || primitive_count == 0 || primitive_count > 65536) return false;
+    std::vector<Primitive> primitives(primitive_count);
+    for (std::uint32_t i = 0; i < primitive_count; ++i)
+    {
+        Primitive& primitive = primitives[i];
+        stream.read(reinterpret_cast<char*>(&primitive.node_transform),
+            sizeof(primitive.node_transform));
+        stream.read(reinterpret_cast<char*>(&primitive.bounds_minimum),
+            sizeof(primitive.bounds_minimum));
+        stream.read(reinterpret_cast<char*>(&primitive.bounds_maximum),
+            sizeof(primitive.bounds_maximum));
+        stream.read(reinterpret_cast<char*>(&primitive.material),
+            sizeof(primitive.material));
+        if (!stream) return false;
+        if (!ReadVector(stream, primitive.source_vertices, 1u << 24)) return false;
+        if (!ReadVector(stream, primitive.source_indices, 1u << 26)) return false;
+    }
+    return append_exports(primitives, materials);
 }
 
 void gltf_model::LoadTexturesFromUris(ID3D11Device* device, const std::string& gltf_filename)

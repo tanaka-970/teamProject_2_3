@@ -6,6 +6,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -93,6 +94,8 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
         return 75;
     }
     const bool shutdown_regression_requested = ParseShutdownRegression(cmd_line);
+    const bool dx12_framework_requested = cmd_line != nullptr &&
+        std::strstr(cmd_line, "--dx12-framework") != nullptr;
     std::string capture_frame_name;
     const bool capture_frame_requested =
         ParseCaptureFrame(cmd_line, capture_frame_name);
@@ -182,6 +185,7 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
     {
 	    framework application(hwnd);
         application.configure_content_root(executable_layout.content_root);
+        if (dx12_framework_requested) application.request_dx12_framework();
         if (game_launch.file_found && !profile_benchmark.requested)
         {
             application.configure_standalone_game(

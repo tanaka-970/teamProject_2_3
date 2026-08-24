@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 // UNIT.13
 #include <d3d11.h>
@@ -53,10 +53,17 @@ public:
 	};
 	std::vector<material> materials;
 
+	// Renderer Backend 移行用の Bridge。DX12 が旧 D3D11 Buffer を Readback せず、
+	// 同じ Mesh を Upload できるよう CPU Geometry を保持する。
+	const std::vector<vertex>& cpu_vertices() const noexcept { return cpu_vertices_; }
+	const std::vector<uint32_t>& cpu_indices() const noexcept { return cpu_indices_; }
+
 	// UNIT.16
 	DirectX::XMFLOAT3 bounding_box[2]{ { D3D11_FLOAT32_MAX, D3D11_FLOAT32_MAX, D3D11_FLOAT32_MAX }, { -D3D11_FLOAT32_MAX, -D3D11_FLOAT32_MAX, -D3D11_FLOAT32_MAX } };
 
 private:
+	std::vector<vertex> cpu_vertices_;
+	std::vector<uint32_t> cpu_indices_;
 	Microsoft::WRL::ComPtr<ID3D11Buffer> vertex_buffer;
 	Microsoft::WRL::ComPtr<ID3D11Buffer> index_buffer;
 

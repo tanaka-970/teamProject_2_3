@@ -224,6 +224,21 @@ bool framework::toggle_fullscreen()
 
 bool framework::resize_back_buffers(UINT width, UINT height)
 {
+    if (dx12_framework_active)
+    {
+        if (width == 0 || height == 0 ||
+            !dx12_device_context.Resize(width, height))
+            return false;
+        client_width = width;
+        client_height = height;
+        if (game_scene)
+        {
+            game_scene->Gameplay().SetAspect(
+                static_cast<float>(width) / static_cast<float>(height));
+        }
+        return true;
+    }
+
     if (!device || !immediate_context || !swap_chain || width == 0 || height == 0)
     {
         return false;
@@ -275,10 +290,10 @@ bool framework::resize_back_buffers(UINT width, UINT height)
     const bool deferred_ready = deferred.initialize(device.Get(), width, height);
     enable_deferred = deferred_requested && deferred_ready;
 
-    // These passes own textures whose dimensions must exactly follow the current
-    // render size.  Leaving their startup-size resources alive after ResizeBuffers
-    // makes SSR copy a 1920x1080 lit texture into a 1600x900 history texture and
-    // D3D11 reports COPYRESOURCE_INVALIDSOURCE every frame.
+    // これらの Pass は現在の描画サイズと完全に一致する Texture を所有する。
+    // ResizeBuffers 後も起動時サイズの Resource を残すと、SSR が 1920x1080 の Lit Texture を
+    // 1600x900 の History Texture へ Copy することになり、D3D11 が毎フレーム
+    // COPYRESOURCE_INVALIDSOURCE を報告する。
     ssao_pass.Initialize(device.Get(), width, height);
     ssr_pass.Initialize(device.Get(), width, height);
     taa_pass.Initialize(device.Get(), width, height);
@@ -305,6 +320,13 @@ bool framework::uninitialize()
     // Scene View の視点を残す。再起動後に同じ場所から再開できる。
     // 失敗しても続行する（次回は既定位置になるだけ）。
     if (!standalone_game_mode) save_editor_camera_state();
+
+    // Scene/Asset を破棄する前に DX12 Queue を停止する。Phase 1 はコピー済みの
+    // RenderItem/Frame Data だけを Upload するが、後続 Phase の Resource 対応 Renderer
+    // に対してもこの解放順序が安全になる。
+    if (dx12_device_context.IsInitialized()) dx12_device_context.Shutdown();
+    dx12_framework_active = false;
+    dx12_framework_render_error_reported = false;
 
     // ---- D3D リソースの解放順 -------------------------------------------
     //

@@ -240,6 +240,8 @@
     <ClCompile Include="RePlayEngine\Rendering\Deferred\deferred_renderer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12DeviceContext.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12DescriptorHeapAllocator.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12FrameResource.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12ResourceStateTracker.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12RenderItemBatch.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12MeshBuffer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12UploadContext.cpp" />
@@ -631,6 +633,8 @@
     <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12DeviceContext.h" />
     <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12DescriptorHeapAllocator.h" />
     <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12FrameConstants.h" />
+    <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12FrameResource.h" />
+    <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12ResourceStateTracker.h" />
     <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12MeshBuffer.h" />
     <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12RenderItemBatch.h" />
     <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12UploadContext.h" />

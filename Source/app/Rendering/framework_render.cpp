@@ -311,6 +311,98 @@ void framework::bind_gbuffer_material(
 
 void framework::render(float elapsed_time)
 {
+    if (dx12_framework_active)
+    {
+        apply_pending_resize();
+        const float clear_color[4] =
+        {
+            background_color.x, background_color.y, background_color.z, background_color.w
+        };
+        bool ok = dx12_device_context.BeginFrame(clear_color);
+        if (ok)
+        {
+            ReplayEngine::Rendering::DX12::D3D12FrameConstants constants{};
+            const DirectX::XMMATRIX view = viewport_view_matrix();
+            const DirectX::XMMATRIX projection = viewport_projection_matrix();
+            const DirectX::XMMATRIX view_projection = view * projection;
+            DirectX::XMStoreFloat4x4(&constants.view, view);
+            DirectX::XMStoreFloat4x4(&constants.projection, projection);
+            DirectX::XMStoreFloat4x4(&constants.view_projection, view_projection);
+            DirectX::XMStoreFloat4x4(&constants.inv_view,
+                DirectX::XMMatrixInverse(nullptr, view));
+            DirectX::XMStoreFloat4x4(&constants.inv_projection,
+                DirectX::XMMatrixInverse(nullptr, projection));
+            DirectX::XMStoreFloat4x4(&constants.inv_view_projection,
+                DirectX::XMMatrixInverse(nullptr, view_projection));
+            if (!previous_view_projection_valid)
+            {
+                DirectX::XMStoreFloat4x4(&previous_view_projection, view_projection);
+                previous_view_projection_valid = true;
+            }
+            constants.prev_view_projection = previous_view_projection;
+            const DirectX::XMFLOAT3 eye = viewport_eye_position();
+            constants.camera_position = { eye.x, eye.y, eye.z, 1.0f };
+            const float viewport_width = static_cast<float>(
+                (std::max)(SCREEN_WIDTH, static_cast<LONG>(1)));
+            const float viewport_height = static_cast<float>(
+                (std::max)(SCREEN_HEIGHT, static_cast<LONG>(1)));
+            constants.screen_size = { viewport_width, viewport_height,
+                1.0f / viewport_width, 1.0f / viewport_height };
+            const DirectX::XMFLOAT4X4& projection_values = constants.projection;
+            const float tan_half_fov_y = projection_values._22 != 0.0f
+                ? 1.0f / projection_values._22 : 1.0f;
+            const float aspect = projection_values._11 != 0.0f
+                ? projection_values._22 / projection_values._11 : 1.0f;
+            const float near_plane = projection_values._33 != 0.0f
+                ? -projection_values._43 / projection_values._33 : 0.1f;
+            const float far_plane = (projection_values._33 - 1.0f) != 0.0f
+                ? projection_values._43 / (projection_values._33 - 1.0f) : 10000.0f;
+            constants.camera_planes = { near_plane, far_plane, tan_half_fov_y, aspect };
+            constants.jitter = { taa_jitter_ndc.x, taa_jitter_ndc.y,
+                previous_taa_jitter_ndc.x, previous_taa_jitter_ndc.y };
+            if (!golden_capture_pending())
+                shader_composer_time += (std::max)(0.0f, elapsed_time);
+            constants.time_parameters =
+            {
+                static_cast<float>(frame_index), elapsed_time, shader_composer_time, 0.0f
+            };
+
+            ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission static_scene;
+            const bool upload_ok =
+                dx12_device_context.SubmitFrameConstants(constants) &&
+                dx12_device_context.SubmitRenderItems(object_render_items);
+            const bool static_scene_ok = upload_ok &&
+                build_dx12_static_scene(static_scene) &&
+                dx12_device_context.DrawStaticScene(static_scene);
+        // 一時的な Upload 領域不足や Asset 提出失敗が起きても、フレームを完了して
+        // Fence を打つ。次の BeginFrame に開いた Command List を持ち越さない。
+            const bool end_ok = dx12_device_context.EndFrame();
+            ok = upload_ok && static_scene_ok && end_ok;
+        }
+
+        if (!ok && !dx12_framework_render_error_reported)
+        {
+            dx12_framework_render_error_reported = true;
+            push_editor_log("Error",
+                "DX12 framework frame の記録または Present に失敗しました");
+            OutputDebugStringA("[DX12] framework frame failed.\n");
+        }
+        if (ok)
+        {
+            dx12_framework_render_error_reported = false;
+            const DirectX::XMMATRIX current_view_projection =
+                viewport_view_matrix() * viewport_projection_matrix();
+            DirectX::XMStoreFloat4x4(&previous_view_projection, current_view_projection);
+            previous_view_projection_valid = true;
+            previous_taa_jitter_ndc = taa_jitter_ndc;
+        }
+
+    // Phase 2 では TAA/PostFX を移行していないが、旧 Present 経路と
+    // エンジンの時間フレーム番号の意味をそろえる。
+        if (!golden_capture_pending()) ++frame_index;
+        return;
+    }
+
     // render() の処理順・ローカル状態を変えず、連続断片を内部 .inl へ移動する。
 #include "framework_render_setup.inl"
 #include "framework_render_scene_setup.inl"

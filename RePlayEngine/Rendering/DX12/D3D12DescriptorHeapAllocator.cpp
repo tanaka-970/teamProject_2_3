@@ -1,4 +1,4 @@
-#include "D3D12DescriptorHeapAllocator.h"
+﻿#include "D3D12DescriptorHeapAllocator.h"
 
 #include <algorithm>
 
@@ -10,6 +10,9 @@ namespace ReplayEngine::Rendering::DX12
     {
         Reset();
         if (device == nullptr || capacity == 0) return false;
+        if (shader_visible && type != D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV &&
+            type != D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER)
+            return false;
 
         D3D12_DESCRIPTOR_HEAP_DESC description{};
         description.NumDescriptors = capacity;
@@ -27,8 +30,21 @@ namespace ReplayEngine::Rendering::DX12
         shader_visible_ = shader_visible;
         cpu_start_ = heap_->GetCPUDescriptorHandleForHeapStart();
         if (shader_visible_) gpu_start_ = heap_->GetGPUDescriptorHandleForHeapStart();
-        free_ranges_.push_back({ 0, capacity_ });
-        allocated_.assign(capacity_, 0);
+        try
+        {
+            // 1 つの Descriptor につき、空きまたは遅延解放の管理項目は最大 1 件。
+            // あらかじめ容量を確保し、リソース破棄中の noexcept な Free/Retire 経路で
+            // vector の拡張が起きないようにする。
+            free_ranges_.reserve(capacity_);
+            retired_.reserve(capacity_);
+            free_ranges_.push_back({ 0, capacity_ });
+            allocated_.assign(capacity_, 0);
+        }
+        catch (...)
+        {
+            Reset();
+            return false;
+        }
         return true;
     }
 
@@ -36,9 +52,11 @@ namespace ReplayEngine::Rendering::DX12
     {
         heap_.Reset();
         free_ranges_.clear();
+        retired_.clear();
         allocated_.clear();
         cpu_start_ = {};
         gpu_start_ = {};
+        type_ = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
         capacity_ = 0;
         used_ = 0;
         descriptor_size_ = 0;
@@ -70,20 +88,81 @@ namespace ReplayEngine::Rendering::DX12
         return false;
     }
 
-    bool D3D12DescriptorHeapAllocator::Free(
-        const D3D12DescriptorAllocation& allocation) noexcept
+    bool D3D12DescriptorHeapAllocator::IsAllocatedRange(
+        const D3D12DescriptorAllocation& allocation) const noexcept
     {
         if (!IsInitialized() || !allocation.IsValid() ||
-            allocation.index >= capacity_ || allocation.count > capacity_ - allocation.index)
+            allocation.index >= capacity_ ||
+            allocation.count > capacity_ - allocation.index)
             return false;
         const auto first = allocated_.begin() + allocation.index;
         const auto last = first + allocation.count;
-        if (std::find(first, last, static_cast<std::uint8_t>(0)) != last) return false;
+        return std::find(first, last, static_cast<std::uint8_t>(0)) == last;
+    }
+
+    bool D3D12DescriptorHeapAllocator::Free(
+        const D3D12DescriptorAllocation& allocation) noexcept
+    {
+        if (!IsAllocatedRange(allocation)) return false;
+        for (const RetiredAllocation& retired : retired_)
+        {
+            if (retired.allocation.index == allocation.index &&
+                retired.allocation.count == allocation.count)
+                return false;
+        }
+        return FreeRange(allocation);
+    }
+
+    bool D3D12DescriptorHeapAllocator::Retire(
+        const D3D12DescriptorAllocation& allocation,
+        std::uint64_t fence_value) noexcept
+    {
+        if (!IsAllocatedRange(allocation) || fence_value == 0) return false;
+        for (const RetiredAllocation& retired : retired_)
+        {
+            if (retired.allocation.index == allocation.index &&
+                retired.allocation.count == allocation.count)
+                return false;
+        }
+        try
+        {
+            retired_.push_back({ allocation, fence_value });
+        }
+        catch (...)
+        {
+            return false;
+        }
+        return true;
+    }
+
+    void D3D12DescriptorHeapAllocator::ReleaseCompleted(
+        std::uint64_t completed_fence_value) noexcept
+    {
+        std::size_t index = 0;
+        while (index < retired_.size())
+        {
+            if (retired_[index].fence_value > completed_fence_value)
+            {
+                ++index;
+                continue;
+            }
+            const D3D12DescriptorAllocation allocation = retired_[index].allocation;
+            retired_.erase(retired_.begin() + index);
+            FreeRange(allocation);
+        }
+    }
+
+    bool D3D12DescriptorHeapAllocator::FreeRange(
+        const D3D12DescriptorAllocation& allocation) noexcept
+    {
+        if (!IsAllocatedRange(allocation)) return false;
+        const auto first = allocated_.begin() + allocation.index;
+        const auto last = first + allocation.count;
         std::fill(first, last, static_cast<std::uint8_t>(0));
         used_ -= allocation.count;
 
         const auto insert_at = std::lower_bound(free_ranges_.begin(), free_ranges_.end(),
-            allocation.index, [](const FreeRange& range, std::uint32_t index)
+            allocation.index, [](const DescriptorFreeRange& range, std::uint32_t index)
             { return range.begin < index; });
         const std::size_t inserted_index = static_cast<std::size_t>(
             insert_at - free_ranges_.begin());

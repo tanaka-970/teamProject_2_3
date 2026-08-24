@@ -1,4 +1,4 @@
-#include "D3D12ShaderCompiler.h"
+﻿#include "D3D12ShaderCompiler.h"
 
 #include <windows.h>
 
@@ -66,6 +66,17 @@ namespace ReplayEngine::Rendering::DX12
         std::wstring_view entry_point, std::wstring_view target_profile,
         bool debug) const
     {
+        D3D12ShaderCompileOptions options;
+        options.debug = debug;
+        options.optimize = !debug;
+        return CompileSource(source, source_name, entry_point, target_profile, options);
+    }
+
+    D3D12ShaderCompileResult D3D12ShaderCompiler::CompileSource(
+        std::string_view source, const std::filesystem::path& source_name,
+        std::wstring_view entry_point, std::wstring_view target_profile,
+        const D3D12ShaderCompileOptions& options) const
+    {
         D3D12ShaderCompileResult result;
         if (!IsInitialized() || source.empty() || entry_point.empty() ||
             target_profile.empty())
@@ -83,15 +94,31 @@ namespace ReplayEngine::Rendering::DX12
         AppendArgument(argument_storage, L"-HV");
         AppendArgument(argument_storage, L"2021");
         AppendArgument(argument_storage, L"-Ges");
-        if (debug)
+        if (options.debug)
         {
             AppendArgument(argument_storage, L"-Zi");
             AppendArgument(argument_storage, L"-Qembed_debug");
         }
+        AppendArgument(argument_storage, options.optimize ? L"-O3" : L"-Od");
+        if (options.warnings_as_errors) AppendArgument(argument_storage, L"-WX");
+
         const std::filesystem::path include_directory = source_name.has_parent_path()
             ? source_name.parent_path() : std::filesystem::current_path();
         AppendArgument(argument_storage, L"-I");
         AppendArgument(argument_storage, include_directory.wstring());
+        for (const std::filesystem::path& include : options.include_directories)
+        {
+            if (include.empty()) continue;
+            AppendArgument(argument_storage, L"-I");
+            AppendArgument(argument_storage, include.wstring());
+        }
+        for (const D3D12ShaderDefine& define : options.defines)
+        {
+            if (define.name.empty()) continue;
+            AppendArgument(argument_storage, L"-D");
+            AppendArgument(argument_storage, define.value.empty()
+                ? define.name : define.name + L"=" + define.value);
+        }
         arguments.reserve(argument_storage.size());
         for (const auto& argument : argument_storage)
             arguments.push_back(argument.c_str());
@@ -143,6 +170,17 @@ namespace ReplayEngine::Rendering::DX12
         const std::filesystem::path& source_path, std::wstring_view entry_point,
         std::wstring_view target_profile, bool debug) const
     {
+        D3D12ShaderCompileOptions options;
+        options.debug = debug;
+        options.optimize = !debug;
+        return CompileFile(source_path, entry_point, target_profile, options);
+    }
+
+    D3D12ShaderCompileResult D3D12ShaderCompiler::CompileFile(
+        const std::filesystem::path& source_path, std::wstring_view entry_point,
+        std::wstring_view target_profile,
+        const D3D12ShaderCompileOptions& options) const
+    {
         std::ifstream file(source_path, std::ios::binary);
         if (!file)
         {
@@ -152,7 +190,7 @@ namespace ReplayEngine::Rendering::DX12
         }
         const std::string source((std::istreambuf_iterator<char>(file)),
             std::istreambuf_iterator<char>());
-        return CompileSource(source, source_path, entry_point, target_profile, debug);
+        return CompileSource(source, source_path, entry_point, target_profile, options);
     }
 
     std::filesystem::path D3D12ShaderCompiler::FindDefaultLibraryPath()
