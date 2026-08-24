@@ -116,8 +116,7 @@ imgui.ini
 [Oo]bj/
 [Bb]in/
 
-# DX12外部依存本体。Tools/dx12_dependencies.json の固定値から取得する。
-/ThirdParty/
+# DX12外部依存は公式配布ツリーをそのまま保持し、Tools/dx12_dependencies.json で版を固定する。
 
 # Visual Studio のソリューション単位のキャッシュ・個人設定。
 # .suo / CopilotIndices / FileContentIndex などが入り、
