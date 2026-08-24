@@ -417,7 +417,7 @@ void framework::render(float elapsed_time)
                 dx12_device_context.SubmitFrameConstants(constants) &&
                 dx12_device_context.SubmitRenderItems(object_render_items);
             const bool static_scene_ok = upload_ok &&
-                build_dx12_static_scene(static_scene) &&
+                build_dx12_static_scene(static_scene, elapsed_time) &&
                 dx12_device_context.DrawScene3D(static_scene);
 #ifdef USE_IMGUI
             bool imgui_ok = true;

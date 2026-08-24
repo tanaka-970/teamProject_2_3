@@ -221,6 +221,23 @@ public:
     shadow_frame_stats shadow_stats{};
     trail            test_trail;
     particle_system  particles;
+
+    // DX12用パーティクルの実行状態。Emitter Componentが設定と要求の正本で、
+    // ここはフレームをまたぐ寿命・速度だけを保持する。
+    struct dx12_particle_instance final
+    {
+        DirectX::XMFLOAT3 position{};
+        DirectX::XMFLOAT3 velocity{};
+        DirectX::XMFLOAT4 color{};
+        float age = 0.0f;
+        float life = 1.0f;
+        float size = 0.1f;
+        float rotation = 0.0f;
+    };
+    std::unordered_map<ReplayEngine::Core::ObjectID,
+        std::vector<dx12_particle_instance>> dx12_particle_states;
+    std::unordered_map<ReplayEngine::Core::ObjectID, float> dx12_particle_spawn_remainders;
+
     deferred_renderer deferred;
     lights_manager   lights;
     ReplayEngine::Scene::SceneManager scene_manager;
