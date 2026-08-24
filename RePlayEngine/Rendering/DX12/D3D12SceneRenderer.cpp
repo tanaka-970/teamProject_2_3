@@ -933,8 +933,22 @@ namespace ReplayEngine::Rendering::DX12
                 const std::uint64_t texture_id = command.TextureId == nullptr
                     ? 0 : static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(
                         command.TextureId));
-                const D3D12_GPU_DESCRIPTOR_HANDLE texture = texture_id == imgui_font_texture_id_
-                    ? imgui_font_srv_.gpu : imgui_fallback_srv_.gpu;
+                D3D12_GPU_DESCRIPTOR_HANDLE texture = imgui_fallback_srv_.gpu;
+                if (texture_id == imgui_font_texture_id_)
+                {
+                    texture = imgui_font_srv_.gpu;
+                }
+                else if (texture_id != 0)
+                {
+                    const auto* request = reinterpret_cast<const ImGuiTextureRequest*>(
+                        static_cast<std::uintptr_t>(texture_id));
+                    if (imgui_texture_request_addresses_.find(request) !=
+                        imgui_texture_request_addresses_.end())
+                    {
+                        const auto found = texture_cache_.find(request->key);
+                        if (found != texture_cache_.end()) texture = found->second.srv.gpu;
+                    }
+                }
                 command_list_->SetGraphicsRootDescriptorTable(1, texture);
                 command_list_->DrawIndexedInstanced(command.ElemCount, 1,
                     command.IdxOffset + static_cast<UINT>(global_index_offset),
@@ -944,6 +958,34 @@ namespace ReplayEngine::Rendering::DX12
             global_index_offset += list->IdxBuffer.Size;
         }
         return true;
+    }
+
+    void* D3D12DeviceContext::ImGuiTextureForPath(
+        const std::filesystem::path& source_path) noexcept
+    {
+        if (!imgui_ready_ || source_path.empty()) return nullptr;
+        std::filesystem::path resolved = source_path.lexically_normal();
+        if (resolved.is_relative())
+            resolved = std::filesystem::current_path() / resolved;
+        resolved = resolved.lexically_normal();
+        const std::string key = resolved.generic_string();
+        if (key.empty()) return nullptr;
+        const auto found = imgui_texture_requests_.find(key);
+        if (found != imgui_texture_requests_.end()) return found->second.get();
+        try
+        {
+            auto request = std::make_unique<ImGuiTextureRequest>();
+            request->key = key;
+            request->source_path = resolved;
+            ImGuiTextureRequest* result = request.get();
+            imgui_texture_requests_.emplace(key, std::move(request));
+            imgui_texture_request_addresses_.insert(result);
+            return result;
+        }
+        catch (...)
+        {
+            return nullptr;
+        }
     }
 
     void D3D12DeviceContext::ReleaseImGuiRendererResources() noexcept
@@ -959,6 +1001,8 @@ namespace ReplayEngine::Rendering::DX12
         if (imgui_fallback_srv_.IsValid()) resource_descriptor_allocator_.Free(imgui_fallback_srv_);
         imgui_font_srv_ = {};
         imgui_fallback_srv_ = {};
+        imgui_texture_request_addresses_.clear();
+        imgui_texture_requests_.clear();
     }
 #endif
 
@@ -1288,6 +1332,21 @@ namespace ReplayEngine::Rendering::DX12
                     upload_ok = false;
             }
         }
+#ifdef USE_IMGUI
+        for (const auto& request_entry : imgui_texture_requests_)
+        {
+            const ImGuiTextureRequest& request = *request_entry.second;
+            if (texture_cache_.find(request.key) != texture_cache_.end() ||
+                static_texture_failures_.find(request.key) != static_texture_failures_.end())
+                continue;
+            D3D12StaticTextureSource source;
+            source.key = request.key;
+            source.source_path = request.source_path;
+            if (!EnsureStaticTexture(source) &&
+                static_texture_failures_.find(source.key) == static_texture_failures_.end())
+                upload_ok = false;
+        }
+#endif
         const bool batch_ok = upload_context_.EndBatch();
         if (!upload_ok || !batch_ok) return false;
         const auto white = texture_cache_.find("__dx12_white");

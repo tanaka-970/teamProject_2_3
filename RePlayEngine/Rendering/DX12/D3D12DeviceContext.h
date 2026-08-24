@@ -298,6 +298,9 @@ namespace ReplayEngine::Rendering::DX12
         bool InitializeImGui() noexcept;
         bool DrawImGui(::ImDrawData* draw_data) noexcept;
         bool ImGuiReady() const noexcept { return imgui_ready_; }
+        // Editorが持つAsset pathを、DX12 ImGui用SRVへ遅延登録する。
+        // 戻り値はD3D11 SRVポインタではなく、このContext専用の安定したID。
+        void* ImGuiTextureForPath(const std::filesystem::path& source_path) noexcept;
 #endif
         // Scene/Asset Reload の境界。Cache 済み Static Mesh/Texture を解放する前に
         // GPU Idle を待ち、古い Asset を保持し続けないようにする。
@@ -625,6 +628,11 @@ namespace ReplayEngine::Rendering::DX12
         D3D12OffscreenTarget scene_view_target_{};
         D3D12OffscreenTarget game_view_target_{};
 #ifdef USE_IMGUI
+        struct ImGuiTextureRequest final
+        {
+            std::string key;
+            std::filesystem::path source_path;
+        };
         Microsoft::WRL::ComPtr<ID3D12RootSignature> imgui_root_signature_;
         Microsoft::WRL::ComPtr<ID3D12PipelineState> imgui_pipeline_;
         Microsoft::WRL::ComPtr<ID3D12Resource> imgui_font_texture_;
@@ -632,6 +640,8 @@ namespace ReplayEngine::Rendering::DX12
         D3D12DescriptorAllocation imgui_fallback_srv_{};
         std::vector<std::uint8_t> imgui_vertex_shader_;
         std::vector<std::uint8_t> imgui_pixel_shader_;
+        std::unordered_map<std::string, std::unique_ptr<ImGuiTextureRequest>> imgui_texture_requests_;
+        std::unordered_set<const ImGuiTextureRequest*> imgui_texture_request_addresses_;
         std::uint64_t imgui_font_texture_id_ = 0;
         bool imgui_ready_ = false;
 #endif
