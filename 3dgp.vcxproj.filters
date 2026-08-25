@@ -642,6 +642,9 @@
     <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12DeviceContext.cpp">
       <Filter>RePlayEngine\Rendering\DX12</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12Diagnostics.cpp">
+      <Filter>RePlayEngine\Rendering\DX12</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12SceneRenderer.cpp">
       <Filter>RePlayEngine\Rendering\DX12</Filter>
     </ClCompile>
@@ -1578,6 +1581,9 @@
       <Filter>RePlayEngine\Rendering\Deferred</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12DeviceContext.h">
+      <Filter>RePlayEngine\Rendering\DX12</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12Diagnostics.h">
       <Filter>RePlayEngine\Rendering\DX12</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12DescriptorHeapAllocator.h">

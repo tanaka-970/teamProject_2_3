@@ -159,20 +159,6 @@ std::filesystem::path framework::collision_cache_path(
     return root / (identity + "_v1.replaycollision");
 }
 
-Microsoft::WRL::ComPtr<ID3D11Debug> framework::acquire_d3d11_debug() const noexcept
-{
-    Microsoft::WRL::ComPtr<ID3D11Debug> debug;
-    if (device) device.As(&debug);
-    return debug;
-}
-
-Microsoft::WRL::ComPtr<ID3D11InfoQueue> framework::acquire_d3d11_info_queue() const noexcept
-{
-    Microsoft::WRL::ComPtr<ID3D11InfoQueue> info_queue;
-    if (device) device.As(&info_queue);
-    return info_queue;
-}
-
 bool framework::is_fullscreen() const
 {
     return borderless_fullscreen;
@@ -224,86 +210,14 @@ bool framework::toggle_fullscreen()
 
 bool framework::resize_back_buffers(UINT width, UINT height)
 {
-    if (dx12_framework_active)
-    {
-        if (width == 0 || height == 0 ||
-            !dx12_device_context.Resize(width, height))
-            return false;
-        client_width = width;
-        client_height = height;
-        if (game_scene)
-        {
-            game_scene->Gameplay().SetAspect(
-                static_cast<float>(width) / static_cast<float>(height));
-        }
-        return true;
-    }
-
-    if (!device || !immediate_context || !swap_chain || width == 0 || height == 0)
-    {
+    if (width == 0 || height == 0 || !dx12_device_context.Resize(width, height))
         return false;
-    }
-
-    ID3D11RenderTargetView* null_target = nullptr;
-    immediate_context->OMSetRenderTargets(1, &null_target, nullptr);
-    immediate_context->ClearState();
-    render_target_view.Reset();
-    depth_stencil_view.Reset();
-
-    HRESULT result = swap_chain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0);
-    if (FAILED(result))
-    {
-        OutputDebugStringA("[Window] Back-buffer resize failed.\n");
-        return false;
-    }
-
-    Microsoft::WRL::ComPtr<ID3D11Texture2D> back_buffer;
-    result = swap_chain->GetBuffer(0, IID_PPV_ARGS(back_buffer.GetAddressOf()));
-    if (FAILED(result)) return false;
-    result = device->CreateRenderTargetView(back_buffer.Get(), nullptr, render_target_view.GetAddressOf());
-    if (FAILED(result)) return false;
-
-    D3D11_TEXTURE2D_DESC depth_desc{};
-    depth_desc.Width = width;
-    depth_desc.Height = height;
-    depth_desc.MipLevels = 1;
-    depth_desc.ArraySize = 1;
-    depth_desc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-    depth_desc.SampleDesc.Count = 1;
-    depth_desc.Usage = D3D11_USAGE_DEFAULT;
-    depth_desc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
-    Microsoft::WRL::ComPtr<ID3D11Texture2D> depth_buffer;
-    result = device->CreateTexture2D(&depth_desc, nullptr, depth_buffer.GetAddressOf());
-    if (FAILED(result)) return false;
-    result = device->CreateDepthStencilView(depth_buffer.Get(), nullptr, depth_stencil_view.GetAddressOf());
-    if (FAILED(result)) return false;
-
-    D3D11_VIEWPORT viewport{};
-    viewport.Width = static_cast<float>(width);
-    viewport.Height = static_cast<float>(height);
-    viewport.MaxDepth = 1.0f;
-    immediate_context->RSSetViewports(1, &viewport);
-
-    framebuffers[0] = std::make_unique<framebuffer>(device.Get(), width, height);
-    bloom_pass.Initialize(device.Get(), width, height);
-    const bool deferred_requested = enable_deferred;
-    const bool deferred_ready = deferred.initialize(device.Get(), width, height);
-    enable_deferred = deferred_requested && deferred_ready;
-
-    // これらの Pass は現在の描画サイズと完全に一致する Texture を所有する。
-    // ResizeBuffers 後も起動時サイズの Resource を残すと、SSR が 1920x1080 の Lit Texture を
-    // 1600x900 の History Texture へ Copy することになり、D3D11 が毎フレーム
-    // COPYRESOURCE_INVALIDSOURCE を報告する。
-    ssao_pass.Initialize(device.Get(), width, height);
-    ssr_pass.Initialize(device.Get(), width, height);
-    taa_pass.Initialize(device.Get(), width, height);
-    tiled_deferred.Initialize(device.Get(), width, height);
-
     client_width = width;
     client_height = height;
     if (game_scene)
     {
-        game_scene->Gameplay().SetAspect(static_cast<float>(width) / static_cast<float>(height));
+        game_scene->Gameplay().SetAspect(
+            static_cast<float>(width) / static_cast<float>(height));
     }
     return true;
 }
@@ -320,23 +234,6 @@ bool framework::uninitialize()
     // Scene View の視点を残す。再起動後に同じ場所から再開できる。
     // 失敗しても続行する（次回は既定位置になるだけ）。
     if (!standalone_game_mode) save_editor_camera_state();
-
-    // Scene/Asset を破棄する前に DX12 Queue を停止する。Phase 1 はコピー済みの
-    // RenderItem/Frame Data だけを Upload するが、後続 Phase の Resource 対応 Renderer
-    // に対してもこの解放順序が安全になる。
-    if (dx12_device_context.IsInitialized()) dx12_device_context.Shutdown();
-    dx12_framework_active = false;
-    dx12_framework_render_error_reported = false;
-
-    // ---- D3D リソースの解放順 -------------------------------------------
-    //
-    // ここで明示的に手放さないと、ID3D11Debug::ReportLiveDeviceObjects が
-    // 走る時点でまだ生きている所有者が残る。
-    // とくに次の 2 つは「関数内 static / ファイルスコープ static」なので、
-    // 破棄されるのは main() が返ったあと = Report より後になる。
-    //   - Source/core/texture.cpp の テクスチャキャッシュ (SRV)
-    //   - RePlayEngine/Rendering/RenderStats.h の Stats() (ID3D11Query)
-    // どちらも Device より先に、ここで落とす。
 
     // Dynamics が保持する Body 表は Scene の非所有 ID だけだが、Scene を
     // 破棄する前に明示的に切り離す。これで終了時にも古い World を参照する
@@ -363,52 +260,16 @@ bool framework::uninitialize()
     // 4) 衝突用の Cook データ。参照が 0 になったものを表から外す。
     object_collision_cook_cache.Collect();
 
-    // 5) Material Catalog が作った PixelShader / 既定Texture / Asset Texture。
-    //    Device の Live Object Report より先に必ず解放する。
-    material_gpu_binder.Clear();
-
-    // 5.4) Effect 用 RT pool。SRV/RTV を Renderer 本体より先に明示解放する。
     scene_effect_texture_refs.clear();
     scene_effect_temporal_history.clear();
     scene_effect_frame_serial = 0;
-    scene_effect_targets.Release();
-    scene_effect_chain.Release();
-    ui_renderer.ReleaseTransientTargets();
-    line_stroke_renderer.Release();
-
-    // 5.5) UI Renderer / FontAtlas。内部の SRV を texture cache より先に手放す。
-    // Editor Canvas Preview のRT/SRVもDevice Live Object Reportより先に落とす。
-    ui_preview_runtime_srv.Reset();
-    ui_preview_runtime_rtv.Reset();
-    ui_preview_runtime_texture.Reset();
     ui_preview_runtime_width = 0;
     ui_preview_runtime_height = 0;
-    ui_renderer.Release();
-    ui_font_atlas.Release();
 
-    // 6) 旧テクスチャキャッシュ (SRV)。
-    //    static なので明示的に呼ばないと Report まで生き残る。
-    release_all_textures();
+    if (dx12_device_context.IsInitialized()) dx12_device_context.Shutdown();
+    dx12_framework_active = false;
+    dx12_framework_render_error_reported = false;
 
-    // 7) GPU 統計の Query Pool。同じく static。
-    ReplayEngine::Rendering::Stats().Release();
-
-    // 7.5) Compute / Deferred が持つ UAV と DepthStencilState。
-    //      この 2 つは initialize() の作り直しでリセット対象から漏れており、
-    //      resize のたびに前の実体が孤児になっていた。
-    //      作り直し側は release() を通すよう直したので、
-    //      ここでは終了時の最後の所有参照を落とす。
-    particles.release();
-    deferred.release();
-
-    // 8) パイプラインに残ったバインドを外してから、積んだコマンドを流し切る。
-    //    参照カウントを持っているのはバインド状態も同じなので、
-    //    ClearState を通さないと最後の描画で使ったリソースが残る。
-    if (immediate_context)
-    {
-        immediate_context->ClearState();
-        immediate_context->Flush();
-    }
     return true;
 }
 

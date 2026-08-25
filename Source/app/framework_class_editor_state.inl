@@ -66,9 +66,6 @@
     bool show_ui_hierarchy_panel{ true };
     bool show_ui_preview_panel{ false };
     // Canvas Preview は ImGui の近似描画ではなく Runtime UIRenderer の出力を表示する。
-    Microsoft::WRL::ComPtr<ID3D11Texture2D> ui_preview_runtime_texture;
-    Microsoft::WRL::ComPtr<ID3D11RenderTargetView> ui_preview_runtime_rtv;
-    Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> ui_preview_runtime_srv;
     int ui_preview_runtime_width{ 0 };
     int ui_preview_runtime_height{ 0 };
     bool ui_preview_runtime_requested{ false };

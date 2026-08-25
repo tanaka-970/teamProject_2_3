@@ -559,17 +559,16 @@ void framework::draw_project_folder_contents()
         const bool renaming = !project_rename_target.empty() &&
             project_rename_target == entry.path;
 
-        ID3D11ShaderResourceView* thumbnail =
-            entry.is_directory ? nullptr : project_thumbnail_for(entry.path);
+        const bool has_thumbnail = !entry.is_directory &&
+            IsImageExtension(ToLowerCopy(entry.path.extension().u8string()));
+        const ImTextureID thumbnail_id = has_thumbnail
+            ? reinterpret_cast<ImTextureID>(dx12_device_context.ImGuiTextureForPath(entry.path))
+            : nullptr;
 
         const ImVec2 icon_size(project_thumbnail_size, project_thumbnail_size);
-        if (thumbnail != nullptr)
+        if (thumbnail_id != nullptr)
         {
-            const ImTextureID thumbnail_id = dx12_framework_active
-                ? reinterpret_cast<ImTextureID>(
-                    dx12_device_context.ImGuiTextureForPath(entry.path))
-                : reinterpret_cast<ImTextureID>(thumbnail);
-            if (thumbnail_id != nullptr && ImGui::ImageButton(thumbnail_id,
+            if (ImGui::ImageButton(thumbnail_id,
                 icon_size, ImVec2(0, 0), ImVec2(1, 1), 2))
             {
                 project_selected_entry_path = entry.path;

@@ -39,13 +39,6 @@ namespace
         return (std::min)((std::max)(value, low), high);
     }
 
-    std::uint64_t buffer_byte_width(ID3D11Buffer* buffer) noexcept
-    {
-        if (buffer == nullptr) return 0;
-        D3D11_BUFFER_DESC desc{};
-        buffer->GetDesc(&desc);
-        return desc.ByteWidth;
-    }
 
     DirectX::XMFLOAT4 clamp_color(const DirectX::XMFLOAT4& value) noexcept
     {
@@ -143,119 +136,6 @@ void framework::store_debug_mesh_world(DirectX::XMFLOAT4X4& world) const
     DirectX::XMStoreFloat4x4(&world, C * S * R * T);
 }
 
-void framework::update_frame_constants(const DirectX::XMMATRIX& view,
-    const DirectX::XMMATRIX& projection, float elapsed_time, bool advance_effect_time)
-{
-    if (!frame_constants_cb) return;
-
-    const DirectX::XMMATRIX view_projection = view * projection;
-    DirectX::XMStoreFloat4x4(&frame_constants.view, view);
-    DirectX::XMStoreFloat4x4(&frame_constants.projection, projection);
-    DirectX::XMStoreFloat4x4(&frame_constants.view_projection, view_projection);
-    DirectX::XMStoreFloat4x4(&frame_constants.inv_view,
-        DirectX::XMMatrixInverse(nullptr, view));
-    DirectX::XMStoreFloat4x4(&frame_constants.inv_projection,
-        DirectX::XMMatrixInverse(nullptr, projection));
-    DirectX::XMStoreFloat4x4(&frame_constants.inv_view_projection,
-        DirectX::XMMatrixInverse(nullptr, view_projection));
-
-    // 初回フレームは前フレームが無いので、今フレームで埋めて再投影を無効化する。
-    if (!previous_view_projection_valid)
-    {
-        DirectX::XMStoreFloat4x4(&previous_view_projection, view_projection);
-        previous_view_projection_valid = true;
-    }
-    frame_constants.prev_view_projection = previous_view_projection;
-
-    const DirectX::XMFLOAT4X4& p = frame_constants.projection;
-    // projection._22 = 1/tan(fovY/2)、_11 = 1/(tan(fovY/2)*aspect)。
-    const float tan_half_fov_y = p._22 != 0.0f ? 1.0f / p._22 : 1.0f;
-    const float aspect = p._11 != 0.0f ? p._22 / p._11 : 1.0f;
-    // LH透視射影は _33 = far/(far-near)、_43 = -near*far/(far-near)。
-    const float near_plane = p._33 != 0.0f ? -p._43 / p._33 : 0.1f;
-    const float far_plane = (p._33 - 1.0f) != 0.0f ? p._43 / (p._33 - 1.0f) : 10000.0f;
-
-    // CameraComponent / 補助 View / 従来 Camera のどれを描いていても、
-    // view/projection と同じ窓口から Eye を取る。ここだけ旧 Gameplay Camera を
-    // 直接読むと、分割 Viewport で鏡面・SSAO の視点だけ別 Camera になる。
-    const DirectX::XMFLOAT3 frame_eye = viewport_eye_position();
-    frame_constants.camera_position =
-        { frame_eye.x, frame_eye.y, frame_eye.z, 1.0f };
-    const float width = static_cast<float>(SCREEN_WIDTH);
-    const float height = static_cast<float>(SCREEN_HEIGHT);
-    frame_constants.screen_size = { width, height, 1.0f / width, 1.0f / height };
-    frame_constants.camera_planes = { near_plane, far_plane, tan_half_fov_y, aspect };
-    // zはEffect/Composerの累積時間。Golden Capture中はelapsed_time=0にして、
-    // 撮影中に時間を進めず、Visual Regressionを決定的にする。
-    if (advance_effect_time) shader_composer_time += (std::max)(0.0f, elapsed_time);
-    frame_constants.frame_params = { static_cast<float>(frame_index), elapsed_time, shader_composer_time, 0.0f };
-
-    // TAAのジッター量(NDC)。射影行列へ加算済みの値をそのまま共有し、
-    // モーションベクター側で打ち消せるようにしておく。
-    frame_constants.jitter = { taa_jitter_ndc.x, taa_jitter_ndc.y,
-        previous_taa_jitter_ndc.x, previous_taa_jitter_ndc.y };
-
-    // メッシュ側がモーションベクターを書くために必要なフレーム共通の情報。
-    motion_vectors::FrameContext& motion_frame = motion_vectors::Frame();
-    motion_frame.previous_view_projection = previous_view_projection;
-    motion_frame.current_jitter = taa_jitter_ndc;
-    motion_frame.previous_jitter = previous_taa_jitter_ndc;
-    motion_frame.enabled = previous_view_projection_valid;
-    motion_frame.frame_id = frame_index + 1; // 0は「未描画」を表すため使わない
-
-    immediate_context->UpdateSubresource(frame_constants_cb.Get(), 0, nullptr,
-        &frame_constants, 0, 0);
-    // b4はこのフレーム定数の専用スロット。他のパスが上書きしないため、
-    // フレーム先頭で一度貼れば SSAO/SSR/TAA/タイルド照明すべてから読める。
-    ID3D11Buffer* buffers[1]{ frame_constants_cb.Get() };
-    immediate_context->PSSetConstantBuffers(4, 1, buffers);
-    immediate_context->CSSetConstantBuffers(4, 1, buffers);
-}
-
-// 【マテリアルが唯一の真実】
-//
-// 以前はここでグローバルフラグ（use_pbr_skin / enable_toon_shader など）を
-// 見て、false なら nullptr を返したり SHADING_MODEL_UNLIT へ降格させていた。
-//
-// その結果、
-//   「描画確認」タブのチェックを外す
-//     -> 全マテリアルの指定が無視されて Unlit になる
-//     -> 画面にもログにも理由が出ない
-// という状態になっていた。マテリアルでトゥーンを選んだのに
-// 反映されない原因がこれ。
-//
-// Unity ではマテリアルが指定した絵柄が必ず使われる。
-// グローバルなスイッチがマテリアルを黙って上書きすることはない。
-// ここもそれに合わせ、**指定された絵柄をそのまま返す**。
-//
-// フラグは描画を止める役目をやめ、診断表示だけに使う
-// （framework_editor.cpp の draw_runtime_mode_banner で警告を出す）。
-
-ID3D11PixelShader* framework::skinned_forward_shader(int shading) const
-{
-    // nullptrは各メッシュが持つ標準ピクセルシェーダーを使う指定になる。
-    switch (shading)
-    {
-    case SHADING_MODEL_PBR:      return pbr.skinned_mesh_ps();
-    case SHADING_MODEL_TOON:     return toon.skinned_mesh_ps();
-    case SHADING_MODEL_UNLIT:    return skinned_mesh_unlit_ps.Get();
-    case SHADING_MODEL_PIXELATE: return object_pixelate_ps.Get();
-    default:                     return nullptr;
-    }
-}
-
-ID3D11PixelShader* framework::static_forward_shader(int shading) const
-{
-    switch (shading)
-    {
-    case SHADING_MODEL_PBR:      return pbr.static_mesh_ps();
-    case SHADING_MODEL_TOON:     return toon.static_mesh_ps();
-    case SHADING_MODEL_UNLIT:    return static_mesh_unlit_ps.Get();
-    case SHADING_MODEL_PIXELATE: return object_pixelate_ps.Get();
-    default:                     return nullptr;
-    }
-}
-
 ReplayEngine::Rendering::ShaderLightingModel framework::deferred_lighting_model(
     int shading) const
 {
@@ -274,35 +154,6 @@ ReplayEngine::Rendering::ShaderLightingModel framework::deferred_lighting_model(
     return ShaderLightingModel::Unlit;
 }
 
-void framework::bind_gbuffer_material(
-    ReplayEngine::Rendering::ShaderLightingModel lighting_model,
-    bool stage_surface, bool pixelate_enabled,
-    float pixelate_size, float pixelate_strength, float metallic, float roughness,
-    float ambient_occlusion, float emissive_strength,
-    const DirectX::XMFLOAT4& base_color_factor,
-    const DirectX::XMFLOAT3& emissive_color,
-    std::uint32_t texture_mask,
-    bool receive_shadow)
-{
-    material_override_constants constants{};
-    constants.base_color_factor = base_color_factor;
-    constants.emissive_factor = DirectX::XMFLOAT4{
-        emissive_color.x, emissive_color.y, emissive_color.z, emissive_strength };
-    constants.mat_params = stage_surface
-        ? DirectX::XMFLOAT4{ 0.0f, 0.88f, 1.0f, 0.0f }
-        : DirectX::XMFLOAT4{ metallic, roughness, ambient_occlusion, 0.0f };
-    constants.lighting_model = static_cast<unsigned int>(lighting_model);
-    constants.texture_contrast = stage_surface ? stage_texture_contrast : 1.0f;
-    constants.pixelate_size = pixelate_enabled ? pixelate_size : 0.0f;
-    constants.pixelate_strength = pixelate_enabled ? pixelate_strength : 0.0f;
-    constants.texture_mask = texture_mask;
-    constants.receive_shadow = receive_shadow ? 1.0f : 0.0f;
-
-    immediate_context->UpdateSubresource(material_override_cb.Get(), 0,
-        nullptr, &constants, 0, 0);
-    immediate_context->PSSetConstantBuffers(9, 1,
-        material_override_cb.GetAddressOf());
-}
 
 void framework::render(float elapsed_time)
 {
@@ -436,6 +287,11 @@ void framework::render(float elapsed_time)
                 ReplayEngine::Rendering::Stats().BeginPhase(
                     ReplayEngine::Rendering::RenderStats::Phase::GameUI, nullptr);
                 ui_ok = build_dx12_ui(ui_frame);
+                if (ui_ok && scene_manager.IsExclusive())
+                {
+                    ui_frame = {};
+                    ui_ok = scene_manager.BuildRuntimeUI(ui_frame, viewport_width, viewport_height);
+                }
                 if (ui_ok)
                 {
                     ReplayEngine::Rendering::Stats().SetUICounters(

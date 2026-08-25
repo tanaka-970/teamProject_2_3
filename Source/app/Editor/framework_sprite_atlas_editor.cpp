@@ -6,9 +6,44 @@
 #include <cstddef>
 #include <string>
 #include <utility>
+#include <wincodec.h>
+#include <wrl.h>
 
 namespace
 {
+
+    bool ReadImageSize(const std::filesystem::path& path, float& width, float& height)
+    {
+        width = 1.0f;
+        height = 1.0f;
+        if (path.empty()) return false;
+        bool uninitialize_com = false;
+        Microsoft::WRL::ComPtr<IWICImagingFactory> factory;
+        HRESULT hr = CoCreateInstance(CLSID_WICImagingFactory2, nullptr,
+            CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&factory));
+        if (hr == CO_E_NOTINITIALIZED)
+        {
+            const HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+            uninitialize_com = SUCCEEDED(com);
+            hr = CoCreateInstance(CLSID_WICImagingFactory2, nullptr,
+                CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&factory));
+        }
+        Microsoft::WRL::ComPtr<IWICBitmapDecoder> decoder;
+        if (SUCCEEDED(hr))
+            hr = factory->CreateDecoderFromFilename(path.c_str(), nullptr, GENERIC_READ,
+                WICDecodeMetadataCacheOnDemand, &decoder);
+        Microsoft::WRL::ComPtr<IWICBitmapFrameDecode> frame;
+        if (SUCCEEDED(hr)) hr = decoder->GetFrame(0, &frame);
+        UINT image_width = 0;
+        UINT image_height = 0;
+        if (SUCCEEDED(hr)) hr = frame->GetSize(&image_width, &image_height);
+        if (uninitialize_com) CoUninitialize();
+        if (FAILED(hr) || image_width == 0 || image_height == 0) return false;
+        width = static_cast<float>(image_width);
+        height = static_cast<float>(image_height);
+        return true;
+    }
+
     bool AtlasRectOverlaps(const DirectX::XMFLOAT4& a, const DirectX::XMFLOAT4& b)
     {
         return a.x < b.x + b.z && a.x + a.z > b.x &&
@@ -239,30 +274,14 @@ void framework::draw_sprite_atlas_editor()
     }
     if (atlas_texture_path.empty() && image_record != nullptr)
         atlas_texture_path = image_record->source_path;
-    ID3D11ShaderResourceView* texture = atlas_texture_path.empty()
-        ? nullptr : project_thumbnail_for(atlas_texture_path);
+    const ImTextureID atlas_texture_id = atlas_texture_path.empty()
+        ? nullptr
+        : reinterpret_cast<ImTextureID>(dx12_device_context.ImGuiTextureForPath(atlas_texture_path));
 
     float image_width = 1.0f;
     float image_height = 1.0f;
-    if (texture != nullptr)
-    {
-        ID3D11Resource* resource = nullptr;
-        texture->GetResource(&resource);
-        if (resource != nullptr)
-        {
-            ID3D11Texture2D* texture2d = nullptr;
-            if (SUCCEEDED(resource->QueryInterface(__uuidof(ID3D11Texture2D),
-                reinterpret_cast<void**>(&texture2d))) && texture2d != nullptr)
-            {
-                D3D11_TEXTURE2D_DESC desc{};
-                texture2d->GetDesc(&desc);
-                image_width = static_cast<float>((std::max)(1u, desc.Width));
-                image_height = static_cast<float>((std::max)(1u, desc.Height));
-                texture2d->Release();
-            }
-            resource->Release();
-        }
-    }
+    if (!atlas_texture_path.empty())
+        ReadImageSize(atlas_texture_path, image_width, image_height);
 
     ImGui::Separator();
     ImGui::BeginChild("##AtlasMain", ImVec2(0.0f, 0.0f), false);
@@ -272,7 +291,7 @@ void framework::draw_sprite_atlas_editor()
     ImGui::BeginChild("##AtlasImage", ImVec2(view_width, 0.0f), true,
         ImGuiWindowFlags_HorizontalScrollbar);
 
-    if (texture == nullptr)
+    if (atlas_texture_id == nullptr)
     {
         ImGui::TextDisabled("Atlas画像を設定してください。");
     }
@@ -283,10 +302,6 @@ void framework::draw_sprite_atlas_editor()
         const float scale = base_scale * sprite_atlas_zoom;
         const ImVec2 size(image_width * scale, image_height * scale);
         const ImVec2 origin = ImGui::GetCursorScreenPos();
-        const ImTextureID atlas_texture_id = dx12_framework_active
-            ? reinterpret_cast<ImTextureID>(
-                dx12_device_context.ImGuiTextureForPath(atlas_texture_path))
-            : reinterpret_cast<ImTextureID>(texture);
         ImGui::Image(atlas_texture_id, size,
             ImVec2(0, 0), ImVec2(1, 1));
         ImDrawList* draw = ImGui::GetWindowDrawList();

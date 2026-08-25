@@ -832,6 +832,7 @@ namespace ReplayEngine::Rendering::DX12
 
     bool D3D12DeviceContext::DrawImGui(ImDrawData* draw_data) noexcept
     {
+        BeginGpuPass(D3D12GpuPass::ImGui);
         if (!imgui_ready_ || draw_data == nullptr || !frame_open_) return true;
         if (draw_data->DisplaySize.x <= 0.0f || draw_data->DisplaySize.y <= 0.0f ||
             draw_data->TotalVtxCount <= 0 || draw_data->TotalIdxCount <= 0)
@@ -979,6 +980,7 @@ namespace ReplayEngine::Rendering::DX12
             global_vertex_offset += list->VtxBuffer.Size;
             global_index_offset += list->IdxBuffer.Size;
         }
+        EndGpuPass(D3D12GpuPass::ImGui);
         return true;
     }
 
@@ -1728,6 +1730,7 @@ namespace ReplayEngine::Rendering::DX12
         // Scene 3DはDirectional/Point/SpotのShadow Mapから描画を開始する。
         if (directional_shadow_available)
         {
+            BeginGpuPass(D3D12GpuPass::ShadowDirectional);
             if (!resource_state_tracker_.Transition(command_list_.Get(),
                 scene3d_directional_shadow_.resource.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE))
                 return false;
@@ -1757,10 +1760,12 @@ namespace ReplayEngine::Rendering::DX12
                 scene3d_directional_shadow_.resource.Get(),
                 D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE))
                 return false;
+            EndGpuPass(D3D12GpuPass::ShadowDirectional);
         }
 
         if (local_shadow_available)
         {
+            BeginGpuPass(D3D12GpuPass::ShadowLocal);
             if (!resource_state_tracker_.Transition(command_list_.Get(),
                 scene3d_local_shadow_.resource.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE))
                 return false;
@@ -1789,6 +1794,7 @@ namespace ReplayEngine::Rendering::DX12
             if (!resource_state_tracker_.Transition(command_list_.Get(),
                 scene3d_local_shadow_.resource.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE))
                 return false;
+            EndGpuPass(D3D12GpuPass::ShadowLocal);
         }
 
         const D3D12_VIEWPORT viewport{ 0.0f, 0.0f,
@@ -1797,6 +1803,7 @@ namespace ReplayEngine::Rendering::DX12
         command_list_->RSSetViewports(1, &viewport);
         command_list_->RSSetScissorRects(1, &scissor);
 
+        BeginGpuPass(D3D12GpuPass::GBuffer);
         // Depth Prepass。Opaque/MaskはGBufferと同じGeometry/Alpha Cutoffを使う。
         if (!resource_state_tracker_.Transition(command_list_.Get(), scene3d_depth_.resource.Get(),
             D3D12_RESOURCE_STATE_DEPTH_WRITE))
@@ -1900,6 +1907,8 @@ namespace ReplayEngine::Rendering::DX12
             D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE))
             return false;
 
+        EndGpuPass(D3D12GpuPass::GBuffer);
+        BeginGpuPass(D3D12GpuPass::Lighting);
         // Deferred LightingはSwapChainではなくHDR Scene Targetへ出力する。
         // ここで初めて照明結果と最終表示変換を分離できる。
         if (!resource_state_tracker_.Transition(command_list_.Get(), scene_view_target_.color.Get(),
@@ -1926,6 +1935,8 @@ namespace ReplayEngine::Rendering::DX12
         command_list_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         command_list_->DrawInstanced(3, 1, 0, 0);
 
+        EndGpuPass(D3D12GpuPass::Lighting);
+        BeginGpuPass(D3D12GpuPass::Forward);
         // Transparent MaterialはForwardに残し、同じLight/Shadowデータを共有する。
         if (!resource_state_tracker_.Transition(command_list_.Get(), scene3d_depth_.resource.Get(),
             D3D12_RESOURCE_STATE_DEPTH_WRITE))
@@ -1966,6 +1977,8 @@ namespace ReplayEngine::Rendering::DX12
             draw_mesh(*it->second, draw.surface);
         }
 
+        EndGpuPass(D3D12GpuPass::Forward);
+        BeginGpuPass(D3D12GpuPass::PostProcess);
         // 最終表示パス。HDR Scene TargetをExposure/Tone Mapping/Bloom/Vignette/FXAAで
         // SwapChainのLDRへ変換する。Scene TargetをSRVへ戻してから参照する。
         if (!resource_state_tracker_.Transition(command_list_.Get(), scene_view_target_.color.Get(),
@@ -2023,6 +2036,7 @@ namespace ReplayEngine::Rendering::DX12
             return false;
         command_list_->CopyResource(scene3d_history_.resource.Get(), scene_view_target_.color.Get());
         scene3d_history_valid_ = true;
+        EndGpuPass(D3D12GpuPass::PostProcess);
 
         ++scene3d_frame_serial_;
         for (const D3D12StaticDrawItem& draw : submission.draws)

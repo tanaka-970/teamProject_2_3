@@ -238,8 +238,6 @@
         skinned_mesh& mesh, const ReplayEngine::Rendering::RenderItem& item,
         skinned_mesh::animation::keyframe& blended_keyframe) const;
     void draw_project_panel();
-    bool ensure_ui_preview_render_target(int width, int height);
-    void render_ui_preview_target();
 
     // --- Project ブラウザ (Unity 型 2 ペイン) ------------------------------
     // 左にフォルダツリー、右にそのフォルダの中身。
@@ -290,8 +288,6 @@
     void draw_project_delete_popup();
     bool project_delete_confirmed();
     void project_begin_rename_selected();
-    ID3D11ShaderResourceView* project_thumbnail_for(
-        const std::filesystem::path& path);
     ReplayEngine::Assets::AssetKind project_kind_for(
         const std::filesystem::path& path) const;
 

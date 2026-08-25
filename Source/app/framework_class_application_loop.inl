@@ -20,8 +20,18 @@
     std::filesystem::path content_path(const std::filesystem::path& relative) const;
     std::filesystem::path saved_path(const std::filesystem::path& relative = {}) const;
     std::filesystem::path collision_cache_path(const std::string& identity) const;
-    Microsoft::WRL::ComPtr<ID3D11Debug> acquire_d3d11_debug() const noexcept;
-    Microsoft::WRL::ComPtr<ID3D11InfoQueue> acquire_d3d11_info_queue() const noexcept;
+    std::uint32_t dx12_shutdown_live_object_lines() const noexcept
+    {
+        return dx12_device_context.LastShutdownLiveObjectLines();
+    }
+    std::uint32_t dx12_shutdown_live_object_detail_lines() const noexcept
+    {
+        return dx12_device_context.LastShutdownLiveObjectDetailLines();
+    }
+    bool dx12_shutdown_live_object_report_ok() const noexcept
+    {
+        return dx12_device_context.LastShutdownLiveObjectReportOk();
+    }
 
     // 終了理由と主要な進行状況を Saved/engine_log.txt へ追記する。
     // 「なぜ落ちたか」が分からないと原因の切り分けができないため、

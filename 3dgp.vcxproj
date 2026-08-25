@@ -239,6 +239,7 @@
     <ClCompile Include="Source\render\csm_renderer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Deferred\deferred_renderer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12DeviceContext.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12Diagnostics.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12SceneRenderer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12UIRenderer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12DescriptorHeapAllocator.cpp" />
@@ -631,6 +632,7 @@
     <ClInclude Include="Source\render\motion_vector_context.h" />
     <ClInclude Include="RePlayEngine\Rendering\Deferred\deferred_renderer.h" />
     <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12DeviceContext.h" />
+    <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12Diagnostics.h" />
     <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12DescriptorHeapAllocator.h" />
     <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12FrameConstants.h" />
     <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12FrameResource.h" />

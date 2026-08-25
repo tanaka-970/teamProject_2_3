@@ -1,5 +1,6 @@
 ﻿#include "D3D12DeviceContext.h"
 #include "D3D12ResourceFactory.h"
+#include "D3D12ObjectName.h"
 
 #include <d3d12sdklayers.h>
 #include <wincodec.h>
@@ -491,6 +492,8 @@ namespace ReplayEngine::Rendering::DX12
 
         upload_context_.Shutdown();
         for (auto& frame : frame_resources_) frame.Shutdown();
+        diagnostics_.DrainInfoQueue();
+        diagnostics_.PrepareLiveObjectReport();
 
         if (fence_event_ != nullptr)
         {
@@ -505,15 +508,11 @@ namespace ReplayEngine::Rendering::DX12
         command_queue_.Reset();
         resource_state_tracker_.Reset();
 
-        if (debug_layer_enabled_ && device_ != nullptr)
-        {
-            Microsoft::WRL::ComPtr<ID3D12DebugDevice> debug_device;
-            if (SUCCEEDED(device_.As(&debug_device)) && debug_device)
-            {
-                debug_device->ReportLiveDeviceObjects(
-                    D3D12_RLDO_DETAIL | D3D12_RLDO_IGNORE_INTERNAL);
-            }
-        }
+        last_shutdown_live_object_lines_ = 0;
+        last_shutdown_live_object_detail_lines_ = 0;
+        last_shutdown_live_object_report_ok_ = diagnostics_.ReportLiveObjects(
+            last_shutdown_live_object_lines_, last_shutdown_live_object_detail_lines_);
+        diagnostics_.Shutdown();
         device_.Reset();
         adapter_.Reset();
         factory_.Reset();
@@ -608,6 +607,7 @@ namespace ReplayEngine::Rendering::DX12
         if (FAILED(D3D12CreateDevice(adapter_.Get(), D3D_FEATURE_LEVEL_11_0,
             IID_PPV_ARGS(&device_))))
             return false;
+        SetD3D12ObjectName(device_.Get(), L"Device", L"Primary");
 
         if (debug_layer_enabled_)
         {
@@ -631,6 +631,7 @@ namespace ReplayEngine::Rendering::DX12
         if (FAILED(device_->CreateCommandQueue(&queue_desc,
             IID_PPV_ARGS(&command_queue_))))
             return false;
+        SetD3D12ObjectName(command_queue_.Get(), L"CommandQueue", L"Direct");
 
         if (!upload_context_.Initialize(device_.Get(), command_queue_.Get()) ||
             !resource_descriptor_allocator_.Initialize(device_.Get(),
@@ -647,10 +648,13 @@ namespace ReplayEngine::Rendering::DX12
             frame_resources_[0].command_allocator.Get(), nullptr,
             IID_PPV_ARGS(&command_list_))))
             return false;
+        SetD3D12ObjectName(command_list_.Get(), L"CommandList", L"Frame");
         if (FAILED(command_list_->Close())) return false;
         if (FAILED(device_->CreateFence(0, D3D12_FENCE_FLAG_NONE,
             IID_PPV_ARGS(&fence_))))
             return false;
+        SetD3D12ObjectName(fence_.Get(), L"Fence", L"Frame");
+        if (!diagnostics_.Initialize(device_.Get(), command_queue_.Get())) return false;
         fence_event_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
         return fence_event_ != nullptr;
     }
@@ -1964,6 +1968,8 @@ namespace ReplayEngine::Rendering::DX12
         if (!IsInitialized() || fatal_error_ || frame_open_ || clear_color == nullptr)
             return false;
         if (!WaitForFrame(frame_index_)) return false;
+        const std::uint64_t completed_fence = fence_ ? fence_->GetCompletedValue() : 0;
+        diagnostics_.BeginFrame(frame_index_, completed_fence);
 
         D3D12FrameResource& frame = frame_resources_[frame_index_];
         render_item_batches_[frame_index_].Reset(&resource_descriptor_allocator_);
@@ -2060,6 +2066,7 @@ namespace ReplayEngine::Rendering::DX12
             // 呼び出し側は Readback の回収失敗として検出する。
             back_buffer_capture_requested_ = false;
         }
+        diagnostics_.BeginPass(command_list_.Get(), D3D12GpuPass::Present);
         if (!TransitionCurrentRenderTarget(D3D12_RESOURCE_STATE_PRESENT))
         {
             frame_open_ = false;
@@ -2067,6 +2074,8 @@ namespace ReplayEngine::Rendering::DX12
             ReportDeviceRemoved(E_FAIL);
             return false;
         }
+        diagnostics_.EndPass(command_list_.Get(), D3D12GpuPass::Present);
+        diagnostics_.ResolveQueries(command_list_.Get());
         const HRESULT close_result = command_list_->Close();
         if (FAILED(close_result))
         {
@@ -2092,6 +2101,8 @@ namespace ReplayEngine::Rendering::DX12
             return false;
         }
         frame_resources_[submitted_frame].fence_value = signal_value;
+        diagnostics_.MarkSubmitted(submitted_frame, signal_value);
+        diagnostics_.DrainInfoQueue();
         frame_index_ = swap_chain_->GetCurrentBackBufferIndex();
         frame_open_ = false;
         return true;
