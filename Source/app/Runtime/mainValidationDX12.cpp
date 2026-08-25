@@ -17,9 +17,10 @@ namespace ReplayEngine::Runtime::Detail
     {
         constexpr wchar_t kValidationWindowClass[] =
             L"ReplayEngineDX12ValidationWindowClass";
-        constexpr const char* kStaticValidationKey = "validation:phase2-static";
-        constexpr const char* kDdsValidationKey = "validation:phase2-dds";
-        constexpr const char* kShaderValidationKey = "validation:phase2-custom-shader";
+        constexpr const char* kStaticValidationKey = "validation:static";
+        constexpr const char* kSkinnedValidationKey = "validation:skinned";
+        constexpr const char* kDdsValidationKey = "validation:dds";
+        constexpr const char* kShaderValidationKey = "validation:custom-shader";
 
         bool WriteValidationDds(const std::filesystem::path& path)
         {
@@ -155,29 +156,134 @@ namespace ReplayEngine::Runtime::Detail
                 Rendering::DX12::D3D12StaticShaderSource shader_source;
                 shader_source.key = kShaderValidationKey;
                 shader_source.source_path = std::filesystem::current_path() /
-                    "DX12ValidationCustomSurface.hlsl";
-                shader_source.generated_declaration =
-                    "#define REPLAY_MATERIAL_SCHEMA_INJECTED 1\n"
-                    "cbuffer REPLAY_MATERIAL_CB : register(b9) { float4 PhaseColor; };\n"
-                    "Texture2D PhaseMap : register(t40);\n";
+                    "Shader" / "dx12_validation_custom_surface_ps.hlsl";
+                shader_source.generated_declaration.clear();
                 static_scene.shader_sources.push_back(std::move(shader_source));
             }
+            if (!context.HasSkinnedMesh(kSkinnedValidationKey))
+            {
+                Rendering::DX12::D3D12SkinnedMeshSource skinned_source;
+                skinned_source.key = kSkinnedValidationKey;
+                Rendering::DX12::D3D12SkinnedVertex a;
+                a.position = { -0.35f, -0.25f, 0.25f };
+                a.normal = { 0.0f, 0.0f, -1.0f };
+                a.texcoord = { 0.0f, 1.0f };
+                Rendering::DX12::D3D12SkinnedVertex b;
+                b.position = { 0.0f, 0.35f, 0.25f };
+                b.normal = { 0.0f, 0.0f, -1.0f };
+                b.texcoord = { 0.5f, 0.0f };
+                Rendering::DX12::D3D12SkinnedVertex c;
+                c.position = { 0.35f, -0.25f, 0.25f };
+                c.normal = { 0.0f, 0.0f, -1.0f };
+                c.texcoord = { 1.0f, 1.0f };
+                skinned_source.vertices = { a, b, c };
+                skinned_source.indices = { 0, 1, 2 };
+                static_scene.skinned_mesh_sources.push_back(std::move(skinned_source));
+            }
+
             Rendering::DX12::D3D12StaticDrawItem static_draw;
             static_draw.mesh_key = kStaticValidationKey;
             static_draw.base_color_texture_key = kDdsValidationKey;
             static_draw.shader_key = kShaderValidationKey;
             static_draw.material_constants.resize(sizeof(DirectX::XMFLOAT4));
-            const DirectX::XMFLOAT4 phase_color{ 0.85f, 0.65f, 0.25f, 1.0f };
-            std::memcpy(static_draw.material_constants.data(), &phase_color, sizeof(phase_color));
+            const DirectX::XMFLOAT4 validation_color{ 0.85f, 0.65f, 0.25f, 1.0f };
+            std::memcpy(static_draw.material_constants.data(), &validation_color, sizeof(validation_color));
             Rendering::DX12::D3D12StaticMaterialTexture mapped_texture;
             mapped_texture.slot = 40;
             mapped_texture.texture_key = kDdsValidationKey;
             static_draw.material_textures.push_back(std::move(mapped_texture));
             static_draw.base_color_texture_key = kDdsValidationKey;
-            static_draw.base_color = phase_color;
+            static_draw.base_color = validation_color;
             static_scene.draws.push_back(std::move(static_draw));
+
+            Rendering::DX12::D3D12SkinnedDrawItem skinned_draw;
+            skinned_draw.surface.mesh_key = kSkinnedValidationKey;
+            skinned_draw.surface.base_color_texture_key = kDdsValidationKey;
+            skinned_draw.surface.base_color = { 0.25f, 0.75f, 0.95f, 1.0f };
+            skinned_draw.motion_key = "validation:scene3d-motion";
+            skinned_draw.bone_palette.push_back(DirectX::XMFLOAT4X4{
+                1,0,0,0, 0,1,0,0, 0,0,1,0,
+                static_cast<float>(submitted_frame & 1u) * 0.01f,0,0,1 });
+            static_scene.skinned_draws.push_back(std::move(skinned_draw));
+            static_scene.directional_light.enabled = true;
+            static_scene.directional_light.direction = { 0.3f, -1.0f, 0.25f };
+            static_scene.directional_light.color = { 1.0f, 0.95f, 0.9f };
+            static_scene.directional_light.intensity = 1.5f;
+            static_scene.directional_light.cast_shadows = true;
+            static_scene.directional_light.shadow_strength = 1.0f;
+            static_scene.directional_shadow.enabled = true;
+            static_scene.directional_shadow.resolution = 64;
+            static_scene.directional_shadow.split_distances = { 10.0f, 25.0f, 50.0f, 100.0f };
+            static_scene.directional_shadow.params = { 0.002f, 1.0f, 1.5f, 1.0f };
+            static_scene.directional_shadow.params2 = { 64.0f, 2.0f, 0.002f, 0.0f };
+            static_scene.directional_shadow.params3 = { 2.0f, 0.02f, 1.0f, 1.0f };
+            static_scene.directional_shadow.texel_world = { 0.01f, 0.02f, 0.04f, 0.08f };
+            for (std::uint32_t cascade = 0;
+                cascade < Rendering::DX12::D3D12DirectionalShadowSubmission::CascadeCount; ++cascade)
+            {
+                static_scene.directional_shadow.view_projection[cascade] = DirectX::XMFLOAT4X4{
+                    1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
+            }
+
+            Rendering::DX12::D3D12PointLightSubmission point;
+            point.position = { 0.0f, 1.0f, -1.0f };
+            point.range = 5.0f;
+            point.color = { 0.4f, 0.65f, 1.0f };
+            point.intensity = 2.0f;
+            point.cast_shadows = true;
+            point.shadow_strength = 1.0f;
+            point.shadow_slice = 0;
+            static_scene.point_lights.push_back(point);
+            Rendering::DX12::D3D12SpotLightSubmission spot;
+            spot.position = { 0.0f, 2.0f, -1.0f };
+            spot.direction = { 0.0f, -1.0f, 0.4f };
+            spot.range = 6.0f;
+            spot.intensity = 1.5f;
+            spot.cast_shadows = true;
+            spot.shadow_strength = 1.0f;
+            spot.shadow_slice = 6;
+            static_scene.spot_lights.push_back(spot);
+
+            static_scene.local_shadows.enabled = true;
+            static_scene.local_shadows.resolution = 64;
+            static_scene.local_shadows.used_slice_mask = 0x7Fu; // point 0..5 + spot 6
+            for (std::uint32_t slice = 0;
+                slice < Rendering::DX12::D3D12LocalShadowSubmission::SliceCount; ++slice)
+            {
+                static_scene.local_shadows.slices[slice].view_projection = DirectX::XMFLOAT4X4{
+                    1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
+                static_scene.local_shadows.slices[slice].params = { 0.05f, 10.0f, 0.002f, 0.0f };
+            }
+
             if (!Check(context.DrawStaticScene(static_scene),
-                "Phase2 production static mesh/material draw", checks))
+                "DX12 static mesh/material draw", checks))
+                return false;
+
+            // 旧Static Bridge検証を変えずに、Alpha Testの整合性と
+            // Forward Transparent経路も実行する。
+            Rendering::DX12::D3D12StaticDrawItem mask_draw = static_scene.draws.front();
+            mask_draw.alpha_mode = Rendering::DX12::D3D12StaticAlphaMode::Mask;
+            mask_draw.alpha_cutoff = 0.5f;
+            mask_draw.base_color.w = 0.9f;
+            static_scene.draws.push_back(std::move(mask_draw));
+
+            Rendering::DX12::D3D12StaticDrawItem transparent_draw = static_scene.draws.front();
+            transparent_draw.alpha_mode = Rendering::DX12::D3D12StaticAlphaMode::Blend;
+            transparent_draw.base_color.w = 0.35f;
+            transparent_draw.cast_shadow = false;
+            static_scene.draws.push_back(std::move(transparent_draw));
+
+            Rendering::DX12::D3D12SkinnedDrawItem second_skinned = static_scene.skinned_draws.front();
+            second_skinned.motion_key = "validation:skinned-secondary";
+            second_skinned.surface.base_color = { 0.95f, 0.35f, 0.25f, 1.0f };
+            second_skinned.surface.world._41 = 0.1f;
+            static_scene.skinned_draws.push_back(std::move(second_skinned));
+
+            if (!Check(context.DrawScene3D(static_scene),
+                "DX12 skinned/animation/depth/GBuffer/deferred/forward/light/shadow draw", checks))
+                return false;
+            if (!Check(context.HasSkinnedMesh(kSkinnedValidationKey),
+                "DX12 skinned mesh cache", checks))
                 return false;
             if (!Check(context.HasStaticMesh(kStaticValidationKey) &&
                 context.HasStaticTexture(kDdsValidationKey) &&
@@ -187,7 +293,7 @@ namespace ReplayEngine::Runtime::Detail
                 context.HasStaticTexture("__dx12_bump") &&
                 context.HasCompiledStaticShader(kShaderValidationKey) &&
                 context.StaticMeshCacheSize() >= 1 && context.TextureCacheSize() >= 5,
-                "Phase2 static mesh/DDS/custom shader/default texture caches", checks))
+                "DX12 static mesh/DDS/custom shader/default texture caches", checks))
                 return false;
 
             if (!Check(context.DrawValidationTriangle(), "validation triangle", checks))
@@ -211,8 +317,33 @@ namespace ReplayEngine::Runtime::Detail
 
     int RunHeadlessDX12Validation(const char* command_line)
     {
-        if (command_line == nullptr ||
-            std::strstr(command_line, "--validate-dx12-device") == nullptr)
+        if (command_line == nullptr)
+            return -1;
+
+        constexpr const char* kDx12ValidationCommands[] =
+        {
+            "--validate-dx12-device",
+            "--validate-dx12-skinned",
+            "--validate-dx12-animation",
+            "--validate-dx12-gbuffer",
+            "--validate-dx12-deferred",
+            "--validate-dx12-directional-light",
+            "--validate-dx12-point-light",
+            "--validate-dx12-spot-light",
+            "--validate-dx12-csm",
+            "--validate-dx12-point-shadow",
+            "--validate-dx12-spot-shadow",
+        };
+        bool requested = false;
+        for (const char* validation_command : kDx12ValidationCommands)
+        {
+            if (std::strstr(command_line, validation_command) != nullptr)
+            {
+                requested = true;
+                break;
+            }
+        }
+        if (!requested)
             return -1;
 
         const HINSTANCE instance = GetModuleHandleW(nullptr);
@@ -231,7 +362,9 @@ namespace ReplayEngine::Runtime::Detail
 #if defined(_DEBUG) || defined(DEBUG)
         enable_debug = true;
 #endif
-        ok = Check(context.Initialize(window, 64, 64, enable_debug, false, true),
+        // 通常のDebug実行は軽いDebug Layerだけにし、GPU検証はこの専用経路で有効化する。
+        ok = Check(context.Initialize(window, 64, 64, enable_debug, false, true,
+            enable_debug),
             "Initialize", checks);
 
         if (ok)
@@ -334,28 +467,8 @@ namespace ReplayEngine::Runtime::Detail
             std::filesystem::current_path() / "DX12ValidationTexture.dds";
         if (ok)
             ok = Check(WriteValidationDds(validation_dds),
-                "write Phase2 DDS validation texture", checks);
+                "write DX12 DDS validation texture", checks);
 
-        const std::filesystem::path validation_shader =
-            std::filesystem::current_path() / "DX12ValidationCustomSurface.hlsl";
-        if (ok)
-        {
-            std::ofstream shader_file(validation_shader, std::ios::binary | std::ios::trunc);
-            shader_file <<
-                "#ifndef REPLAY_MATERIAL_SCHEMA_INJECTED\n"
-                "cbuffer REPLAY_MATERIAL_CB : register(b9) { float4 PhaseColor; };\n"
-                "Texture2D PhaseMap : register(t40);\n"
-                "#endif\n"
-                "#include \"static_mesh.hlsli\"\n"
-                "#include \"frame_common.hlsli\"\n"
-                "SamplerState PhaseSampler : register(s1);\n"
-                "float4 main(VS_OUT pin) : SV_TARGET\n"
-                "{\n"
-                "    return PhaseMap.Sample(PhaseSampler, pin.texcoord) * PhaseColor * pin.color;\n"
-                "}\n";
-            ok = Check(static_cast<bool>(shader_file),
-                "write Phase2 custom ShaderAsset validation source", checks);
-        }
 
         constexpr float colors[][4] =
         {
@@ -407,11 +520,12 @@ namespace ReplayEngine::Runtime::Detail
         if (ok)
         {
             ok = Check(context.ClearStaticAssetCaches(),
-                "Phase2 static asset cache clear", checks);
+                "DX12 static asset cache clear", checks);
         }
         if (ok)
         {
             ok = Check(!context.HasStaticMesh(kStaticValidationKey) &&
+                !context.HasSkinnedMesh(kSkinnedValidationKey) &&
                 !context.HasStaticTexture(kDdsValidationKey) &&
                 context.HasStaticTexture("__dx12_white") &&
                 context.HasStaticTexture("__dx12_black") &&
@@ -429,8 +543,6 @@ namespace ReplayEngine::Runtime::Detail
         }
         std::error_code remove_error;
         std::filesystem::remove(validation_dds, remove_error);
-        remove_error.clear();
-        std::filesystem::remove(validation_shader, remove_error);
         context.Shutdown();
         DestroyWindow(window);
         UnregisterClassW(kValidationWindowClass, instance);

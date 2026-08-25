@@ -415,7 +415,7 @@ namespace ReplayEngine::Rendering::DX12
 
     bool D3D12DeviceContext::Initialize(HWND window, std::uint32_t width,
         std::uint32_t height, bool enable_debug_layer, bool force_warp,
-        bool create_validation_resources) noexcept
+        bool create_validation_resources, bool enable_gpu_validation) noexcept
     {
         last_initialization_stage_[0] = '\0';
         last_initialization_result_ = S_OK;
@@ -426,7 +426,7 @@ namespace ReplayEngine::Rendering::DX12
         }
         Shutdown();
         validation_resources_enabled_ = create_validation_resources;
-        if (!CreateDevice(enable_debug_layer, force_warp))
+        if (!CreateDevice(enable_debug_layer, force_warp, enable_gpu_validation))
         {
             SetInitializationFailure("CreateDevice", E_FAIL);
             Shutdown();
@@ -527,7 +527,8 @@ namespace ReplayEngine::Rendering::DX12
         current_frame_constants_ = {};
     }
 
-    bool D3D12DeviceContext::ConfigureDebug(bool enable_debug_layer) noexcept
+    bool D3D12DeviceContext::ConfigureDebug(bool enable_debug_layer,
+        bool enable_gpu_validation) noexcept
     {
         debug_layer_enabled_ = false;
         gpu_validation_enabled_ = false;
@@ -541,7 +542,7 @@ namespace ReplayEngine::Rendering::DX12
             debug_layer_enabled_ = true;
 
             Microsoft::WRL::ComPtr<ID3D12Debug1> debug1;
-            if (SUCCEEDED(debug.As(&debug1)) && debug1)
+            if (enable_gpu_validation && SUCCEEDED(debug.As(&debug1)) && debug1)
             {
                 debug1->SetEnableGPUBasedValidation(TRUE);
                 debug1->SetEnableSynchronizedCommandQueueValidation(TRUE);
@@ -560,9 +561,9 @@ namespace ReplayEngine::Rendering::DX12
     }
 
     bool D3D12DeviceContext::CreateDevice(bool enable_debug_layer,
-        bool force_warp) noexcept
+        bool force_warp, bool enable_gpu_validation) noexcept
     {
-        if (!ConfigureDebug(enable_debug_layer)) return false;
+        if (!ConfigureDebug(enable_debug_layer, enable_gpu_validation)) return false;
         const UINT factory_flags = debug_layer_enabled_ ? DXGI_CREATE_FACTORY_DEBUG : 0u;
         if (FAILED(CreateDXGIFactory2(factory_flags, IID_PPV_ARGS(&factory_))))
             return false;

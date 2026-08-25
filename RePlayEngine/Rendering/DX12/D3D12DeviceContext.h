@@ -280,7 +280,8 @@ namespace ReplayEngine::Rendering::DX12
 
         bool Initialize(HWND window, std::uint32_t width, std::uint32_t height,
             bool enable_debug_layer = false, bool force_warp = false,
-            bool create_validation_resources = true) noexcept;
+            bool create_validation_resources = true,
+            bool enable_gpu_validation = false) noexcept;
         void Shutdown() noexcept;
         bool Resize(std::uint32_t width, std::uint32_t height) noexcept;
 
@@ -425,8 +426,9 @@ namespace ReplayEngine::Rendering::DX12
         }
 
     private:
-        bool ConfigureDebug(bool enable_debug_layer) noexcept;
-        bool CreateDevice(bool enable_debug_layer, bool force_warp) noexcept;
+        bool ConfigureDebug(bool enable_debug_layer, bool enable_gpu_validation) noexcept;
+        bool CreateDevice(bool enable_debug_layer, bool force_warp,
+            bool enable_gpu_validation) noexcept;
         bool CreateSwapChain(HWND window, std::uint32_t width,
             std::uint32_t height) noexcept;
         bool CreateRenderTargets() noexcept;
