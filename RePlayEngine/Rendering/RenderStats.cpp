@@ -768,6 +768,17 @@ namespace ReplayEngine::Rendering
         current_scene_.effect_stack_count = effect_stacks;
     }
 
+    void RenderStats::SetUICounters(std::uint64_t draw_commands,
+        std::uint64_t vertices, std::uint64_t texture_count,
+        std::uint64_t mask_depth, std::uint64_t clipped_commands) noexcept
+    {
+        current_cpu_.ui_draw_commands = draw_commands;
+        current_cpu_.ui_vertices = vertices;
+        current_cpu_.ui_texture_count = texture_count;
+        current_cpu_.ui_mask_depth = mask_depth;
+        current_cpu_.ui_clipped_commands = clipped_commands;
+    }
+
     void RenderStats::SetEngineMemoryBytes(std::uint64_t texture_bytes,
         std::uint64_t buffer_bytes, std::uint64_t render_target_bytes) noexcept
     {
@@ -875,6 +886,7 @@ namespace ReplayEngine::Rendering
         }
         csv << "frame_id,cpu_frame_ms,gpu_frame_ms,gpu_valid,gpu_disjoint,query_ring_busy,"
             "gpu_scope_limit,scope_depth_limit,trace_event_limit,draw_calls,triangles,vertices,instances,effect_passes,"
+            "ui_draw_commands,ui_vertices,ui_texture_count,ui_mask_depth,ui_clipped_commands,"
             "rt_acquires,rt_reuses,rt_creates,rt_binds,state_sets,state_redundant,"
             "shader_sets,shader_redundant,blend_sets,blend_redundant,raster_sets,raster_redundant,"
             "depth_sets,depth_redundant,input_layout_sets,input_layout_redundant,"
@@ -907,6 +919,11 @@ namespace ReplayEngine::Rendering
                 << frame.cpu.draw_calls << ',' << frame.cpu.triangles << ','
                 << frame.cpu.vertices << ',' << frame.cpu.instances << ','
                 << frame.cpu.effect_passes << ','
+                << frame.cpu.ui_draw_commands << ','
+                << frame.cpu.ui_vertices << ','
+                << frame.cpu.ui_texture_count << ','
+                << frame.cpu.ui_mask_depth << ','
+                << frame.cpu.ui_clipped_commands << ','
                 << frame.cpu.render_target_acquires << ','
                 << frame.cpu.render_target_reuses << ','
                 << frame.cpu.render_target_creates << ','

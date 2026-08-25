@@ -52,6 +52,11 @@ namespace ReplayEngine::Rendering
             std::uint64_t vertices = 0;
             std::uint64_t instances = 0;
             std::uint64_t effect_passes = 0;
+            std::uint64_t ui_draw_commands = 0;
+            std::uint64_t ui_vertices = 0;
+            std::uint64_t ui_texture_count = 0;
+            std::uint64_t ui_mask_depth = 0;
+            std::uint64_t ui_clipped_commands = 0;
             std::uint64_t render_target_acquires = 0;
             std::uint64_t render_target_reuses = 0;
             std::uint64_t render_target_creates = 0;
@@ -244,6 +249,9 @@ namespace ReplayEngine::Rendering
         void SetSceneCounters(std::uint64_t objects, std::uint64_t components,
             std::uint64_t culling_tested, std::uint64_t culling_visible,
             std::uint64_t effect_stacks = 0) noexcept;
+        void SetUICounters(std::uint64_t draw_commands, std::uint64_t vertices,
+            std::uint64_t texture_count, std::uint64_t mask_depth,
+            std::uint64_t clipped_commands) noexcept;
         void SetEngineMemoryBytes(std::uint64_t texture_bytes,
             std::uint64_t buffer_bytes, std::uint64_t render_target_bytes) noexcept;
         void SetDuplicateAssetGuids(std::uint32_t assets, std::uint32_t shaders) noexcept;

@@ -456,6 +456,12 @@ namespace ReplayEngine::Rendering::DX12
             Shutdown();
             return false;
         }
+        if (!CreateUIRendererResources() || !CreateUIEffectResources())
+        {
+            SetInitializationFailure("CreateUIRendererResources", E_FAIL);
+            Shutdown();
+            return false;
+        }
         if (validation_resources_enabled_ && !CreateValidationTriangleResources())
         {
             SetInitializationFailure("CreateValidationTriangleResources", E_FAIL);
@@ -476,6 +482,7 @@ namespace ReplayEngine::Rendering::DX12
 #ifdef USE_IMGUI
         ReleaseImGuiRendererResources();
 #endif
+        ReleaseUIRendererResources();
         ReleaseValidationTriangleResources();
         ReleaseScene3DRendererResources();
         ReleaseStaticRendererResources();
@@ -742,13 +749,19 @@ namespace ReplayEngine::Rendering::DX12
             return false;
 
         if (!CreateOffscreenTarget(scene_view_target_, width_, height_) ||
-            !CreateOffscreenTarget(game_view_target_, width_, height_))
+            !CreateOffscreenTarget(game_view_target_, width_, height_) ||
+            !CreateOffscreenTarget(ui_effect_targets_[0], width_, height_,
+                DXGI_FORMAT_R8G8B8A8_UNORM) ||
+            !CreateOffscreenTarget(ui_effect_targets_[1], width_, height_,
+                DXGI_FORMAT_R8G8B8A8_UNORM) ||
+            !CreateOffscreenTarget(ui_effect_targets_[2], width_, height_,
+                DXGI_FORMAT_R8G8B8A8_UNORM))
             return false;
         return true;
     }
 
     bool D3D12DeviceContext::CreateOffscreenTarget(D3D12OffscreenTarget& target,
-        std::uint32_t width, std::uint32_t height) noexcept
+        std::uint32_t width, std::uint32_t height, DXGI_FORMAT format) noexcept
     {
         if (!IsValidSize(width, height)) return false;
         ReleaseOffscreenTarget(target);
@@ -769,9 +782,9 @@ namespace ReplayEngine::Rendering::DX12
         color_description.Height = height;
         color_description.DepthOrArraySize = 1;
         color_description.MipLevels = 1;
-        // SceneView/GameViewは最終表示前のHDRリニア値を保持する。
-        // SwapChainのLDRへ直接書くとExposure/Tone Mappingが成立しない。
-        color_description.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+        // SceneView/GameViewはHDR、UI Effect RTはSwapChainと同じLDR RGBA8。
+        // UIのping-pongは最終合成前のアルファを保持する必要がある。
+        color_description.Format = format;
         color_description.SampleDesc.Count = 1;
         color_description.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
         color_description.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
@@ -830,6 +843,7 @@ namespace ReplayEngine::Rendering::DX12
         }
         target.width = width;
         target.height = height;
+        target.format = format;
         return true;
     }
 
@@ -1660,6 +1674,10 @@ namespace ReplayEngine::Rendering::DX12
     {
         ReleaseOffscreenTarget(scene_view_target_);
         ReleaseOffscreenTarget(game_view_target_);
+        ReleaseOffscreenTarget(ui_preview_target_);
+        for (auto& target : ui_preview_effect_targets_)
+            ReleaseOffscreenTarget(target);
+        for (auto& target : ui_effect_targets_) ReleaseOffscreenTarget(target);
         for (auto& target : render_targets_)
         {
             if (target) resource_state_tracker_.Forget(target.Get());

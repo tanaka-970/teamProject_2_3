@@ -10,11 +10,10 @@ public:
     Microsoft::WRL::ComPtr<ID3D11RenderTargetView> render_target_view;
     Microsoft::WRL::ComPtr<ID3D11DepthStencilView> depth_stencil_view;
 
-    // DX12 移行 Bootstrap。未移行の Asset/Editor Service が必要とする間は旧 D3D11
-    // Device/Context を生かすが、HWND の Swap Chain を所有する API は常に 1 つだけにする。
-    // --dx12-framework でこの経路を選択する。
+    // 製品の実行経路は DX12 固定。未移行サービスの CPU/API 境界は段階的に
+    // 解消するが、HWND の SwapChain / Present / ImGui Renderer は DX12 のみが所有する。
     ReplayEngine::Rendering::DX12::D3D12DeviceContext dx12_device_context;
-    bool dx12_framework_requested{ false };
+    bool dx12_framework_requested{ true };
     bool dx12_framework_active{ false };
     bool dx12_framework_render_error_reported{ false };
 

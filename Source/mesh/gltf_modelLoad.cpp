@@ -161,7 +161,6 @@ bool gltf_model::PrepareDeviceResources(ID3D11Device* device)
 
 bool gltf_model::Load(ID3D11Device* device, const std::string& filename)
 {
-    if (!device) { error_ = "Direct3D device is null"; return false; }
     std::string extension = std::filesystem::path(filename).extension().string();
     std::transform(extension.begin(), extension.end(), extension.begin(),
         [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
@@ -201,7 +200,7 @@ bool gltf_model::Load(ID3D11Device* device, const std::string& filename)
     has_skins_ = !model.skins.empty();
     has_animations_ = !model.animations.empty();
 
-    if (!PrepareDeviceResources(device)) return false;
+    if (device != nullptr && !PrepareDeviceResources(device)) return false;
 
     timings_.parse_ms = elapsed_ms(load_start);
     timings_.image_count = static_cast<int>(model.images.size());
@@ -299,8 +298,9 @@ bool gltf_model::Load(ID3D11Device* device, const std::string& filename)
             }
         }
 
-        CreateTextureWithMipChain(device, rgba, width, height,
-            image_views[i].GetAddressOf());
+        if (device != nullptr)
+            CreateTextureWithMipChain(device, rgba, width, height,
+                image_views[i].GetAddressOf());
 
         // 外部URIは従来どおり元画像の隣にDDSを作る。ここではGLB内蔵画像だけを
         // 既存TextureCompressorへ渡し、デコード済みRGBAを再利用する。
@@ -497,15 +497,20 @@ bool gltf_model::Load(ID3D11Device* device, const std::string& filename)
                 }
                 collision_triangles_.push_back(triangle);
             }
-            D3D11_BUFFER_DESC desc{};
-            desc.Usage = D3D11_USAGE_DEFAULT; desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-            desc.ByteWidth = static_cast<UINT>(vertices.size() * sizeof(Vertex));
-            D3D11_SUBRESOURCE_DATA initial{ vertices.data(), 0, 0 };
-            if (FAILED(device->CreateBuffer(&desc, &initial, primitive.vertex_buffer.GetAddressOf()))) continue;
-            desc.BindFlags = D3D11_BIND_INDEX_BUFFER;
-            desc.ByteWidth = static_cast<UINT>(indices.size() * sizeof(uint32_t));
-            initial.pSysMem = indices.data();
-            if (FAILED(device->CreateBuffer(&desc, &initial, primitive.index_buffer.GetAddressOf()))) continue;
+            if (device != nullptr)
+            {
+                D3D11_BUFFER_DESC desc{};
+                desc.Usage = D3D11_USAGE_DEFAULT; desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+                desc.ByteWidth = static_cast<UINT>(vertices.size() * sizeof(Vertex));
+                D3D11_SUBRESOURCE_DATA initial{ vertices.data(), 0, 0 };
+                if (FAILED(device->CreateBuffer(&desc, &initial,
+                    primitive.vertex_buffer.GetAddressOf()))) continue;
+                desc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+                desc.ByteWidth = static_cast<UINT>(indices.size() * sizeof(uint32_t));
+                initial.pSysMem = indices.data();
+                if (FAILED(device->CreateBuffer(&desc, &initial,
+                    primitive.index_buffer.GetAddressOf()))) continue;
+            }
             primitives_.push_back(std::move(primitive));
         }
     }
@@ -513,5 +518,5 @@ bool gltf_model::Load(ID3D11Device* device, const std::string& filename)
     timings_.total_ms = elapsed_ms(load_start);
 
     if (primitives_.empty()) { error_ = "glTF contains no supported triangle primitives"; return false; }
-    return vertex_shader_ && pixel_shader_ && input_layout_ && constant_buffer_;
+    return device == nullptr || (vertex_shader_ && pixel_shader_ && input_layout_ && constant_buffer_);
 }

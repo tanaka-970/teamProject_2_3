@@ -306,6 +306,8 @@ private:
 
     // Present の直前に呼ぶ。Present のあとはバックバッファの中身が保証されない。
     void tick_golden_capture();
+    // DX12 は Present 前に GPU Readback を記録し、Present 後に回収する。
+    bool prepare_dx12_golden_capture() noexcept;
 
     void draw_golden_panel();
 

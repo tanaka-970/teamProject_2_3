@@ -29,7 +29,14 @@ namespace ReplayEngine::Scene
 
     bool LoadingScene::Initialize(ID3D11Device* device)
     {
-        if (!device) return false;
+        if (!device)
+        {
+            // DX12の起動経路ではロードタスクだけを実行し、旧D3D11の
+            // ロード画面Spriteは作らない。描画はDX12のFrameへ統合される。
+            initialized_ = true;
+            StartTasks();
+            return true;
+        }
         solid_ = std::make_unique<sprite>(device, nullptr, "sprite_solid_ps.cso");
         star_ = std::make_unique<sprite>(device,
             L"resources\\RePlayEngine\\BootLogo\\BootStar.png", "sprite_masked_ps.cso");

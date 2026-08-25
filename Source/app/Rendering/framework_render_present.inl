@@ -113,7 +113,9 @@ post_process.Execute(immediate_context.Get(), *bit_block_transfer,
         ImGui::Render();
         {
             REPLAY_PROFILE_GPU_SCOPE(immediate_context.Get(), "ImGuiRender");
-            ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+            // 製品経路はDX12固定。旧分岐は互換コードとして残るが、
+            // D3D11 ImGui backendへは提出しない。
+            ImGui::GetDrawData();
         }
         if (editor_hide_requested)
         {

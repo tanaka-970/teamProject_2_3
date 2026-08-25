@@ -50,7 +50,9 @@ gltf_model::gltf_model(ID3D11Device* device, const std::string& filename)
             timings_.mesh_from_cache = true;
 
             // 描画に必要なシェーダーと定数バッファはキャッシュに含まないので作る。
-            loaded_ = PrepareDeviceResources(device);
+            // DX12のScene提出はCPU Geometry/URIを利用するため、DX12起動時は
+            // 旧D3D11のGPU資源を作らずにキャッシュをそのまま公開する。
+            loaded_ = device != nullptr ? PrepareDeviceResources(device) : true;
             timings_.total_ms = std::chrono::duration<double, std::milli>(
                 Clock::now() - cache_start).count();
         }
@@ -62,6 +64,14 @@ gltf_model::gltf_model(ID3D11Device* device, const std::string& filename)
         // キャッシュ経路でもコリジョンとLODは同じ手順で用意する。
     }
     if (!loaded_) return;
+
+    // CPU-only importではLOD GPU bufferを作らず、ExportStaticPrimitivesへ
+    // 原型Geometryを保持する。DX12 upload側がFence寿命を所有する。
+    if (device == nullptr)
+    {
+        lods_ready_.store(true);
+        return;
+    }
 
     // 初回(キャッシュミス)のときだけ書き出す。次回起動から解析を飛ばせる。
     if (!timings_.mesh_from_cache) SaveMeshCache(filename);

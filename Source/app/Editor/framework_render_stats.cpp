@@ -302,6 +302,10 @@ void framework::draw_render_stats_overlay()
             ImGui::Text(u8"Effect Pass %s / RT acquire %s (reuse %s / create %s)",
                 separated(cpu.effect_passes).c_str(), separated(cpu.render_target_acquires).c_str(),
                 separated(cpu.render_target_reuses).c_str(), separated(cpu.render_target_creates).c_str());
+            ImGui::Text(u8"Runtime UI Cmd %s / Vert %s / Tex %s / Mask depth %s / Clipped %s",
+                separated(cpu.ui_draw_commands).c_str(), separated(cpu.ui_vertices).c_str(),
+                separated(cpu.ui_texture_count).c_str(), separated(cpu.ui_mask_depth).c_str(),
+                separated(cpu.ui_clipped_commands).c_str());
             if (gpu.valid)
             {
                 const double screen_pixels = static_cast<double>(SCREEN_WIDTH) *

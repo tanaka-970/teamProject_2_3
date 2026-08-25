@@ -32,9 +32,17 @@ namespace ReplayEngine::UI
         };
 
         bool Initialize(ID3D11Device* device);
+        // DX12 RuntimeではCPUのAtlas生成だけを有効にし、D3D11 SRVを作らない。
+        bool InitializeCpuOnly();
         void Release() noexcept;
 
         ID3D11ShaderResourceView* Texture() const noexcept;
+
+        // DX12 backend が同じCPU正本からAtlasをUploadするための読み取り専用スナップショット。
+        // 呼び出し側は返されたRGBAをGPUへコピーするだけで、FontAtlasへGPU所有権を持ち込まない。
+        bool CopyActiveAtlas(std::string& key, std::vector<std::uint8_t>& rgba,
+            std::uint32_t& width, std::uint32_t& height,
+            std::uint64_t& revision) const;
 
         const GlyphInfo& Glyph(std::uint32_t codepoint, float font_size);
         void BuildGlyphs(Components::UITextComponent& text_component,
@@ -44,6 +52,10 @@ namespace ReplayEngine::UI
         struct FaceAtlas final
         {
             Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> texture;
+            std::vector<std::uint8_t> rgba;
+            std::uint32_t atlas_width = 0;
+            std::uint32_t atlas_height = 0;
+            std::uint64_t revision = 0;
             std::vector<unsigned char> font_data;
             std::vector<std::uint32_t> requested_codepoints;
             std::unordered_map<std::uint32_t, GlyphInfo> baked_glyphs;

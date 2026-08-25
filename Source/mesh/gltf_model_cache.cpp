@@ -229,6 +229,16 @@ bool gltf_model::LoadMeshCache(ID3D11Device* device, const std::string& filename
     if (!ReadVector(stream, collision_triangles_, 1u << 24)) return false;
 
     // --- GPUバッファを作る。プリミティブ単位で並列化できる ---
+    if (device == nullptr)
+    {
+        for (Primitive& primitive : primitives_)
+        {
+            primitive.index_count = static_cast<uint32_t>(primitive.source_indices.size());
+            primitive.vertex_count = static_cast<uint32_t>(primitive.source_vertices.size());
+        }
+        return true;
+    }
+
     std::atomic<bool> failed{ false };
     ReplayEngine::Assets::ParallelLoader::Run(primitives_.size(), [&](std::size_t i)
     {
@@ -285,10 +295,17 @@ bool gltf_model::StaticPrimitiveInfoAt(std::size_t index,
         out.embedded_base_color = material.base_color;
         out.alpha_mode = material.alpha_mode;
         out.alpha_cutoff = material.alpha_cutoff;
+        const std::filesystem::path base_directory =
+            std::filesystem::path(source_filename_).parent_path();
         if (!material.base_color_uri.empty())
             out.embedded_base_color_texture =
-                std::filesystem::path(source_filename_).parent_path() /
-                std::filesystem::path(material.base_color_uri);
+                base_directory / std::filesystem::path(material.base_color_uri);
+        if (!material.normal_uri.empty())
+            out.embedded_normal_texture =
+                base_directory / std::filesystem::path(material.normal_uri);
+        if (!material.orm_uri.empty())
+            out.embedded_orm_texture =
+                base_directory / std::filesystem::path(material.orm_uri);
     }
     return true;
 }
@@ -327,6 +344,12 @@ bool gltf_model::ExportStaticPrimitives(
                     if (!material.base_color_uri.empty())
                         exported.embedded_base_color_texture =
                             base_directory / std::filesystem::path(material.base_color_uri);
+                    if (!material.normal_uri.empty())
+                        exported.embedded_normal_texture =
+                            base_directory / std::filesystem::path(material.normal_uri);
+                    if (!material.orm_uri.empty())
+                        exported.embedded_orm_texture =
+                            base_directory / std::filesystem::path(material.orm_uri);
                 }
                 out.push_back(std::move(exported));
             }

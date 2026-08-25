@@ -7,6 +7,7 @@
 
 #include <filesystem>
 #include <cctype>
+#include <cstdio>
 #include <cstring>
 #include <string>
 
@@ -111,6 +112,8 @@ bool framework::initialize()
         push_editor_log("Warning", "Audio は silent mode で起動します");
     }
 
+    if (!dx12_framework_requested)
+    {
     UINT create_device_flags{ 0 };
 #ifdef _DEBUG
     create_device_flags |= D3D11_CREATE_DEVICE_DEBUG;
@@ -130,9 +133,20 @@ bool framework::initialize()
     swap_chain_desc.Windowed      = !FULLSCREEN;
     swap_chain_desc.SwapEffect    = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 
-    hr = D3D11CreateDeviceAndSwapChain(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, create_device_flags,
-        &feature_levels, 1, D3D11_SDK_VERSION, &swap_chain_desc,
-        swap_chain.GetAddressOf(), device.GetAddressOf(), NULL, immediate_context.GetAddressOf());
+    if (dx12_framework_requested)
+    {
+        // DX12 が HWND の SwapChain を所有するため、D3D11 は Device/Context だけ作る。
+        hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
+            create_device_flags, &feature_levels, 1, D3D11_SDK_VERSION,
+            device.GetAddressOf(), nullptr, immediate_context.GetAddressOf());
+    }
+    else
+    {
+        hr = D3D11CreateDeviceAndSwapChain(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL,
+            create_device_flags, &feature_levels, 1, D3D11_SDK_VERSION,
+            &swap_chain_desc, swap_chain.GetAddressOf(), device.GetAddressOf(),
+            NULL, immediate_context.GetAddressOf());
+    }
     _ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
 
 #if defined(_DEBUG) || defined(DEBUG)
@@ -150,11 +164,32 @@ bool framework::initialize()
 #endif
 
     Microsoft::WRL::ComPtr<ID3D11Texture2D> back_buffer{};
-    hr = swap_chain->GetBuffer(0, __uuidof(ID3D11Texture2D),
-        reinterpret_cast<LPVOID*>(back_buffer.GetAddressOf()));
-    _ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+    if (dx12_framework_requested)
+    {
+        // D3D11 の未移行初期化は一部のオフスクリーン資源を必要とするため、
+        // 画面へ接続しない一時 RTV だけを用意する。
+        D3D11_TEXTURE2D_DESC dummy_target_desc{};
+        dummy_target_desc.Width = (std::max)(1u, client_width);
+        dummy_target_desc.Height = (std::max)(1u, client_height);
+        dummy_target_desc.MipLevels = 1;
+        dummy_target_desc.ArraySize = 1;
+        dummy_target_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        dummy_target_desc.SampleDesc.Count = 1;
+        dummy_target_desc.Usage = D3D11_USAGE_DEFAULT;
+        dummy_target_desc.BindFlags = D3D11_BIND_RENDER_TARGET;
+        hr = device->CreateTexture2D(&dummy_target_desc, nullptr,
+            back_buffer.GetAddressOf());
+        _ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+    }
+    else
+    {
+        hr = swap_chain->GetBuffer(0, __uuidof(ID3D11Texture2D),
+            reinterpret_cast<LPVOID*>(back_buffer.GetAddressOf()));
+        _ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
+    }
 
-    hr = device->CreateRenderTargetView(back_buffer.Get(), NULL, render_target_view.GetAddressOf());
+    hr = device->CreateRenderTargetView(back_buffer.Get(), NULL,
+        render_target_view.GetAddressOf());
     _ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
 
     Microsoft::WRL::ComPtr<ID3D11Texture2D> depth_stencil_buffer{};
@@ -345,13 +380,19 @@ bool framework::initialize()
     ReplayEngine::Rendering::Stats().Initialize(device.Get());
     lights.initialize(device.Get());
     uiManager.Initalize(device.Get());
-    if (!ui_font_atlas.Initialize(device.Get()))
+    const bool ui_font_ok = dx12_framework_requested
+        ? ui_font_atlas.InitializeCpuOnly()
+        : ui_font_atlas.Initialize(device.Get());
+    if (!ui_font_ok)
         push_editor_log("Warning", "UI FontAtlas を初期化できません。UIText は描画されません");
-    if (!ui_renderer.Initialize(device.Get()))
-        push_editor_log("Warning", "UIRenderer を初期化できません。Canvas UI は描画されません");
-    scene_effect_targets.Initialize(device.Get());
-    if (!scene_effect_chain.Initialize(device.Get()))
-        push_editor_log("Warning", "3D/Screen EffectChain を初期化できません。Effect Stack は描画されません");
+    if (!dx12_framework_requested)
+    {
+        if (!ui_renderer.Initialize(device.Get()))
+            push_editor_log("Warning", "UIRenderer を初期化できません。Canvas UI は描画されません");
+        scene_effect_targets.Initialize(device.Get());
+        if (!scene_effect_chain.Initialize(device.Get()))
+            push_editor_log("Warning", "3D/Screen EffectChain を初期化できません。Effect Stack は描画されません");
+    }
     lights.data.light_counts = { 0, 0, 0, 0 };
 
     // 法線テクスチャを持たない材質で使うダミー法線を作る。kwjkshhakjwhhwhhsbkkwhiiwnzkkhjsowjjw
@@ -373,6 +414,15 @@ bool framework::initialize()
         hr = device->CreateShaderResourceView(tex.Get(), nullptr, dummy_normal_srv.GetAddressOf());
         _ASSERT_EXPR(SUCCEEDED(hr), hr_trace(hr));
     }
+    }
+
+    if (dx12_framework_requested)
+    {
+        const bool ui_font_ok = ui_font_atlas.InitializeCpuOnly();
+        if (!ui_font_ok)
+            push_editor_log("Warning", "UI FontAtlas を初期化できません。UIText は描画されません");
+        lights.data.light_counts = { 0, 0, 0, 0 };
+    }
 
     auto loading_scene = std::make_unique<ReplayEngine::Scene::LoadingScene>();
     // 任意アセットの読み込みは「無ければスキップして続行」に統一する。
@@ -380,6 +430,7 @@ bool framework::initialize()
     // 失敗は OutputDebugString へ理由付きで出す（Visual Studio の出力ウィンドウで読める）。
     loading_scene->AddTask("UI image", [this]
     {
+        if (dx12_framework_requested) return true;
         const std::filesystem::path ui_image_path =
             content_path(std::filesystem::path("resources") / "screenshot.jpg");
         const std::wstring ui_image = ui_image_path.wstring();
@@ -400,6 +451,7 @@ bool framework::initialize()
     // mesh_asset (AssetGUID) が指し、resolve_object_mesh() が読み込む。
     loading_scene->AddTask("Debug mesh", [this]
     {
+        if (dx12_framework_requested) return true;
         // static_mesh は .obj 専用。構築前に can_load で検証し、
         // 失敗を assert ではなくログとして上へ返す。
         const std::filesystem::path debug_mesh_path =
@@ -430,6 +482,7 @@ bool framework::initialize()
     });
     loading_scene->AddTask("IBL images", [this]
     {
+        if (dx12_framework_requested) return true;
         const std::wstring diffuse = content_path(
             std::filesystem::path("resources") / "ibl" / "diffuse_iem.dds").wstring();
         const std::wstring specular = content_path(
@@ -455,7 +508,7 @@ bool framework::initialize()
     }
     // Game 起動ではロゴの裏でロードを進める。Editor 起動では固定長の
     // ロゴ待ちを省き、暗いロード画面から直接セッションを復元する。
-    if (object_boot_from_startup_scene)
+    if (object_boot_from_startup_scene && !dx12_framework_requested)
     {
         scene_manager.SetScene(
             std::make_unique<ReplayEngine::Scene::BootLogoScene>(), device.Get());
@@ -486,9 +539,8 @@ bool framework::initialize()
 
     if (dx12_framework_requested)
     {
-        // Phase 1 では未移行の System のために D3D11 Device/Context を生かしておくが、
-        // Flip Model の HWND は有効な Swap Chain 所有者を 1 つだけ持つ必要がある。
-        // 旧経路の初期化を完了し、Window Back Buffer を切り離してから DX12 へ Present を渡す。
+        // DX12がSwapChain / Presentを所有する。旧描画資源はDX12初期化前に
+        // 生成していないため、ここでは残っている互換所有者を明示的に切る。
         if (immediate_context)
         {
             immediate_context->OMSetRenderTargets(0, nullptr, nullptr);
@@ -498,6 +550,7 @@ bool framework::initialize()
         render_target_view.Reset();
         depth_stencil_view.Reset();
         swap_chain.Reset();
+        immediate_context.Reset();
 
         bool enable_dx12_debug = false;
 #if defined(_DEBUG) || defined(DEBUG)
@@ -506,8 +559,12 @@ bool framework::initialize()
         if (!dx12_device_context.Initialize(hwnd, client_width, client_height,
             enable_dx12_debug, false, false))
         {
-            push_editor_log("Error",
-                "DX12 framework bootstrap の初期化に失敗しました");
+            char error_message[256]{};
+            std::snprintf(error_message, sizeof(error_message),
+                "DX12 framework bootstrap の初期化に失敗しました: %s (hr=0x%08lx)",
+                dx12_device_context.LastInitializationStage(),
+                static_cast<unsigned long>(dx12_device_context.LastInitializationResult()));
+            push_editor_log("Error", error_message);
             return false;
         }
         dx12_framework_active = true;
