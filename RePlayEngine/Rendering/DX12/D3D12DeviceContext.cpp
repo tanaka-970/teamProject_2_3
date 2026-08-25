@@ -607,8 +607,14 @@ namespace ReplayEngine::Rendering::DX12
             Microsoft::WRL::ComPtr<ID3D12InfoQueue> info_queue;
             if (SUCCEEDED(device_.As(&info_queue)) && info_queue)
             {
-                info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, TRUE);
-                info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, TRUE);
+                // IDEのデバッガ接続時だけ即時停止し、CLI検証ではメッセージを収集して
+                // 最後まで検証結果を返す。デバッガ未接続で停止すると、実機検証の
+                // エラー内容と終了時のLive Objectを回収できない。
+                const BOOL break_on_error = ::IsDebuggerPresent() ? TRUE : FALSE;
+                info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION,
+                    break_on_error);
+                info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR,
+                    break_on_error);
             }
         }
 
