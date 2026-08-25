@@ -94,8 +94,9 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
         return 75;
     }
     const bool shutdown_regression_requested = ParseShutdownRegression(cmd_line);
-    const bool dx12_framework_requested = cmd_line != nullptr &&
-        std::strstr(cmd_line, "--dx12-framework") != nullptr;
+    // Renderer選択は製品仕様としてDX12に固定する。旧移行フラグは互換的に
+    // 受け付けても意味を持たず、通常起動・Editor・Capture・Validationを同じ経路へ揃える。
+    const bool dx12_framework_requested = true;
     std::string capture_frame_name;
     const bool capture_frame_requested =
         ParseCaptureFrame(cmd_line, capture_frame_name);
@@ -188,7 +189,7 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
 	{
 	    framework application(hwnd);
         application.configure_content_root(executable_layout.content_root);
-        if (dx12_framework_requested) application.request_dx12_framework();
+        application.request_dx12_framework();
         if (game_launch.file_found && !profile_benchmark.requested)
         {
             application.configure_standalone_game(
@@ -246,7 +247,7 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
                 profile_benchmark.requested);
 	    // DX12フレームワークの実機確認は明示的な起動要求なので、起動元が
 	    // SW_HIDEを渡しても画面を表示し、実描画を確認できるようにする。
-	    const int requested_show_command = dx12_framework_requested ? SW_SHOWNORMAL : cmd_show;
+        const int requested_show_command = SW_SHOWNORMAL;
 	    exit_code = application.run(
             hide_automated_window ? SW_HIDE : requested_show_command);
         if (capture_frame_requested)

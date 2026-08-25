@@ -65,6 +65,17 @@ namespace ReplayEngine::Rendering
         {
             return next_spot_slice_ + (next_point_base_ - kMaxSpotShadows);
         }
+        // DX12 backend も CPU 側で確定済みの同じ shadow slice 行列を使う。
+        // GPU resource を共有せず、既存の allocation / projection logic だけを再利用する。
+        bool TryGetSlice(std::uint32_t slice, Slice& out) const noexcept
+        {
+            if (slice >= kSliceCount) return false;
+            const bool spot_used = slice < next_spot_slice_;
+            const bool point_used = slice >= kMaxSpotShadows && slice < next_point_base_;
+            if (!spot_used && !point_used) return false;
+            out = slices_[slice];
+            return true;
+        }
 
         // Spot の視錐台行列を作る。outer_angle は度。
         static DirectX::XMFLOAT4X4 MakeSpotViewProjection(

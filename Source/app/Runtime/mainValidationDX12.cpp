@@ -282,6 +282,49 @@ namespace ReplayEngine::Runtime::Detail
             if (!Check(context.DrawScene3D(static_scene),
                 "DX12 skinned/animation/depth/GBuffer/deferred/forward/light/shadow draw", checks))
                 return false;
+            // Runtime UI の実提出も同じ Command List / Frame Upload / Descriptor Heap で
+            // 検証する。固定色を製品描画へ出す診断UIではなく、通常のUI DrawCommand ABIを使う。
+            Rendering::DX12::D3D12UIFrame ui_frame;
+            ui_frame.target_width = context.Width();
+            ui_frame.target_height = context.Height();
+            // Exercise the same offscreen/ping-pong path used by UIEffectStack,
+            // including backdrop capture, instead of validating only direct quads.
+            ui_frame.requires_offscreen = true;
+            ui_frame.capture_backdrop = true;
+            Rendering::DX12::D3D12UIEffectCommand blur_effect;
+            blur_effect.kind = 1;
+            blur_effect.radius = 2.0f;
+            blur_effect.intensity = 1.0f;
+            ui_frame.effects.push_back(blur_effect);
+            Rendering::DX12::D3D12UIBatch ui_batch;
+            ui_batch.texture_key = "__dx12_white";
+            ui_batch.constants.screen_size = {
+                static_cast<float>(context.Width()), static_cast<float>(context.Height()), 0, 0 };
+            ui_batch.scissor = { 0, 0, static_cast<LONG>(context.Width()),
+                static_cast<LONG>(context.Height()) };
+            ui_batch.scissor_enabled = true;
+            ui_batch.vertices =
+            {
+                { { 4, 4 }, { 0, 1 }, { 1, 1, 1, 0.15f }, { 0, 0, 1, 1 } },
+                { { 4, 20 }, { 0, 0 }, { 1, 1, 1, 0.15f }, { 0, 0, 1, 1 } },
+                { { 20, 20 }, { 1, 0 }, { 1, 1, 1, 0.15f }, { 0, 0, 1, 1 } },
+                { { 4, 4 }, { 0, 1 }, { 1, 1, 1, 0.15f }, { 0, 0, 1, 1 } },
+                { { 20, 20 }, { 1, 0 }, { 1, 1, 1, 0.15f }, { 0, 0, 1, 1 } },
+                { { 20, 4 }, { 1, 1 }, { 1, 1, 1, 0.15f }, { 0, 0, 1, 1 } },
+            };
+            ui_batch.effect_group = 0;
+            Rendering::DX12::D3D12UIEffectGroup ui_group;
+            ui_group.first_batch = 0;
+            ui_group.batch_count = 1;
+            ui_group.effects = ui_frame.effects;
+            ui_group.capture_backdrop = true;
+            ui_group.target_scope = 1;
+            ui_frame.effect_groups.push_back(std::move(ui_group));
+            ui_frame.effects.clear();
+            ui_frame.batches.push_back(std::move(ui_batch));
+            if (!Check(context.DrawRuntimeUI(ui_frame),
+                "DX12 runtime UI command recording", checks))
+                return false;
             if (!Check(context.HasSkinnedMesh(kSkinnedValidationKey),
                 "DX12 skinned mesh cache", checks))
                 return false;

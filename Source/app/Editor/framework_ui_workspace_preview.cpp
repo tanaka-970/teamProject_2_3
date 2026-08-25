@@ -410,7 +410,10 @@ void framework::draw_ui_preview()
     // Runtime と同一の UIRenderer を使う Preview RT は描画フェーズで更新される。
     // この panel から必要解像度を要求しておき、次の render pass から同じ RT を使う。
     ui_preview_runtime_requested = true;
-    ensure_ui_preview_render_target(preview_width, preview_height);
+    ui_preview_runtime_width = preview_width;
+    ui_preview_runtime_height = preview_height;
+    if (!dx12_framework_active)
+        ensure_ui_preview_render_target(preview_width, preview_height);
 
     ImVec2 avail = ImGui::GetContentRegionAvail();
     avail.x = (std::max)(avail.x, 64.0f);
@@ -606,24 +609,18 @@ void framework::draw_ui_preview()
                 IM_COL32(255, 255, 255, 24));
     }
 
-    // DX11はRuntime UIRendererのRTを表示する。DX12はD3D11のRTを更新しないため、
-    // Sceneの既存UIデータを同じ座標・画像・選択状態でImGuiへ提出する。
+    // Runtime と同じ CPU UI frame を DX12 Preview target へ描画し、その SRV を表示する。
     if (dx12_framework_active)
     {
-        const auto texture_for_image = [this](const UIImageComponent& image) -> ImTextureID
-        {
-            const std::filesystem::path path = PreviewImagePath(image, asset_database);
-            return reinterpret_cast<ImTextureID>(
-                dx12_device_context.ImGuiTextureForPath(path));
-        };
-        const std::vector<Core::GameObject*> canvases = SortedCanvases(*scene);
-        for (Core::GameObject* canvas : canvases)
-        {
-            if (canvas != nullptr)
-                DrawPreviewObject(draw_list, *canvas, origin,
-                    static_cast<float>(preview_height), ui_preview_zoom,
-                    Core::ObjectID::Invalid(), texture_for_image);
-        }
+        void* preview_texture = dx12_device_context.ImGuiTextureForUIPreview();
+        if (preview_texture != nullptr)
+            draw_list->AddImage(reinterpret_cast<ImTextureID>(preview_texture),
+                origin, ImVec2(origin.x + canvas_size.x, origin.y + canvas_size.y),
+                ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f), IM_COL32_WHITE);
+        else
+            draw_list->AddText(ImVec2(origin.x + 12.0f, origin.y + 12.0f),
+                IM_COL32(255, 160, 100, 255),
+                "DX12 UI Preview target unavailable");
     }
     else if (ui_preview_runtime_srv)
     {

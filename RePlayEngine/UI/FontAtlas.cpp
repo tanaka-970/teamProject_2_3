@@ -80,6 +80,13 @@ namespace ReplayEngine::UI
         return EnsureFallbackFace();
     }
 
+    bool FontAtlas::InitializeCpuOnly()
+    {
+        Release();
+        active_face_key_ = fallback_face_key;
+        return EnsureFallbackFace();
+    }
+
     void FontAtlas::Release() noexcept
     {
         faces_.clear();
@@ -106,10 +113,28 @@ namespace ReplayEngine::UI
         return face != nullptr ? face->texture.Get() : nullptr;
     }
 
+    bool FontAtlas::CopyActiveAtlas(std::string& key, std::vector<std::uint8_t>& rgba,
+        std::uint32_t& width, std::uint32_t& height, std::uint64_t& revision) const
+    {
+        const FaceAtlas* face = ActiveFace();
+        if (face == nullptr || face->rgba.empty()) return false;
+        key = active_face_key_;
+        rgba = face->rgba;
+        width = face->atlas_width;
+        height = face->atlas_height;
+        revision = face->revision;
+        return width != 0 && height != 0;
+    }
+
     bool FontAtlas::EnsureWhiteTexture(FaceAtlas& face)
     {
-        if (face.texture || device_ == nullptr) return face.texture != nullptr;
+        if (face.texture) return true;
         const std::uint32_t pixel = 0xFFFFFFFFu;
+        face.rgba = { 0xFF, 0xFF, 0xFF, 0xFF };
+        face.atlas_width = 1;
+        face.atlas_height = 1;
+        ++face.revision;
+        if (device_ == nullptr) return true;
         D3D11_TEXTURE2D_DESC desc{};
         desc.Width = 1; desc.Height = 1; desc.MipLevels = 1; desc.ArraySize = 1;
         desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;

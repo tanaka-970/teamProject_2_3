@@ -87,10 +87,6 @@
                     push_editor_log("Error", "DX12 ImGui Renderer の初期化に失敗しました");
                 }
             }
-            else
-            {
-                ImGui_ImplDX11_Init(device.Get(), immediate_context.Get());
-            }
             ImGui::StyleColorsDark();
             configure_editor_style();
         }
@@ -350,6 +346,9 @@
                     }
                     if (rendered_frames >= automated_smoke_test_frames)
                     {
+                        // 非表示の自動検証では未保存確認へ応答する人がいない。
+                        // WM_CLOSE を通常経路へ渡しつつ、モーダル確認で止めない。
+                        object_exit_confirmed = true;
                         automated_smoke_test_frames = 0;
                         PostMessage(hwnd, WM_CLOSE, 0, 0);
                     }
@@ -396,7 +395,6 @@
         if (!standalone_game_mode) save_editor_session();
         if (ImGui::GetCurrentContext())
         {
-            if (!dx12_framework_active) ImGui_ImplDX11_Shutdown();
             ImGui_ImplWin32_Shutdown();
             ImGui::DestroyContext();
         }

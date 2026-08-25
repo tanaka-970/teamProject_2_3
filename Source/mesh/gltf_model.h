@@ -70,6 +70,8 @@ public:
         DirectX::XMFLOAT4X4 node_transform{};
         DirectX::XMFLOAT4 embedded_base_color{ 1, 1, 1, 1 };
         std::filesystem::path embedded_base_color_texture;
+        std::filesystem::path embedded_normal_texture;
+        std::filesystem::path embedded_orm_texture;
         int material = -1;
         int alpha_mode = 0;
         float alpha_cutoff = 0.5f;

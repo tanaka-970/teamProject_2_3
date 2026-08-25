@@ -1071,6 +1071,37 @@ bool framework::build_dx12_static_scene(
         }
         if (item.mesh_asset.rfind("builtin:", 0) == 0)
         {
+            if (dx12_framework_active)
+            {
+                std::vector<static_mesh::vertex> cpu_vertices;
+                std::vector<std::uint32_t> cpu_indices;
+                if (!build_builtin_primitive_cpu(item.mesh_asset, cpu_vertices, cpu_indices) ||
+                    cpu_vertices.empty() || cpu_indices.empty())
+                    continue;
+                if (!dx12_device_context.HasStaticMesh(item.mesh_asset))
+                {
+                    D3D12StaticMeshSource source;
+                    source.key = item.mesh_asset;
+                    source.vertices.reserve(cpu_vertices.size());
+                    for (const static_mesh::vertex& input : cpu_vertices)
+                    {
+                        D3D12StaticVertex vertex;
+                        vertex.position = input.position;
+                        vertex.normal = input.normal;
+                        vertex.texcoord = input.texcoord;
+                        source.vertices.push_back(vertex);
+                    }
+                    source.indices = cpu_indices;
+                    submission.mesh_sources.push_back(std::move(source));
+                }
+                D3D12StaticDrawItem draw;
+                draw.mesh_key = item.mesh_asset;
+                draw.motion_key = std::to_string(source_item.owner.Value()) + ":" + draw.mesh_key;
+                draw.world = item.world;
+                (void)fill_external_material(source_item, item, draw);
+                submission.draws.push_back(std::move(draw));
+                continue;
+            }
             static_mesh* primitive = resolve_builtin_primitive_mesh(item.mesh_asset);
             if (primitive == nullptr || primitive->cpu_vertices().empty() ||
                 primitive->cpu_indices().empty())

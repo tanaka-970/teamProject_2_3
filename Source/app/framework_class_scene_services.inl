@@ -50,6 +50,9 @@
         std::string& out_reason) const;
     skinned_mesh* resolve_object_mesh(const std::string& asset_guid);
     static_mesh* resolve_builtin_primitive_mesh(const std::string& builtin_id);
+    bool build_builtin_primitive_cpu(const std::string& builtin_id,
+        std::vector<static_mesh::vertex>& vertices,
+        std::vector<std::uint32_t>& indices) const;
     const ReplayEngine::Rendering::MaterialAsset* resolve_object_material(
         const std::string& asset_guid);
     ReplayEngine::Rendering::RenderItem resolve_render_item_material(
@@ -59,6 +62,14 @@
     bool build_dx12_static_scene(
         ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission& submission,
         float elapsed_time);
+    // Canvas/RectTransform の解決結果を、GPU APIを呼ばないDX12 UIコマンドへ変換する。
+    bool build_dx12_ui(
+        ReplayEngine::Rendering::DX12::D3D12UIFrame& frame);
+    bool build_dx12_ui_for_scene(
+        ReplayEngine::Rendering::DX12::D3D12UIFrame& frame,
+        ReplayEngine::Scene::Scene& scene,
+        std::uint32_t target_width, std::uint32_t target_height,
+        float logical_width, float logical_height);
     // depth_only = true で深度プリパス用の描画になる。
     // 深度プリパスを使う構成では、GBuffer へ出すものを必ずここでも描くこと。
     // 描き漏らすと DepthFunc=EQUAL に落とされて画面から消える。

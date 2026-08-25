@@ -336,7 +336,8 @@ void framework::sync_object_lights()
     // 影付きライトが現れたときだけ影マップを確保する。
     const bool local_shadows_available = enable_dynamic_shadows &&
         local_shadows.enabled &&
-        local_shadows.EnsureAtlas(device.Get(), local_shadows.resolution_setting);
+        (dx12_framework_active ||
+            local_shadows.EnsureAtlas(device.Get(), local_shadows.resolution_setting));
 
     for (std::size_t index = 0; index < scene.GameObjectCount(); ++index)
     {

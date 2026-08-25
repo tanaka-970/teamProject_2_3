@@ -17,6 +17,7 @@
 #include <DirectXMath.h>
 
 #include <cstdint>
+#include <array>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -249,6 +250,136 @@ namespace ReplayEngine::Rendering::DX12
         DirectX::XMFLOAT4 background_color{ 0, 0, 0, 1 };
     };
 
+    enum class D3D12UIBlendMode : std::uint32_t
+    {
+        Alpha = 0,
+        Additive = 1,
+        Multiply = 2,
+        Screen = 3,
+        Premultiplied = 4,
+    };
+
+    struct D3D12UIVertex final
+    {
+        DirectX::XMFLOAT2 position{};
+        DirectX::XMFLOAT2 uv{};
+        DirectX::XMFLOAT4 color{ 1, 1, 1, 1 };
+        DirectX::XMFLOAT4 uv_bounds{ 0, 0, 1, 1 };
+    };
+
+    struct D3D12UIVisualConstants final
+    {
+        DirectX::XMFLOAT4 screen_size{ 1, 1, 0, 0 };
+        DirectX::XMFLOAT4 fill_color_2{ 1, 1, 1, 1 };
+        // x = shape kind, y = text/SDF flag, z = stroke width, w = reserved.
+        DirectX::XMFLOAT4 mode{ 0, 0, 0, 0 };
+        DirectX::XMFLOAT4 outline_color{ 0, 0, 0, 1 };
+        DirectX::XMFLOAT4 shadow_offset{ 0, 0, 0, 0 };
+        DirectX::XMFLOAT4 shadow_color{ 0, 0, 0, 0 };
+        // x/y = atlas size, z = SDF spread, w = reserved.
+        DirectX::XMFLOAT4 atlas_size{ 2048, 2048, 8, 0 };
+        // x = gradient angle (radians), y/z = gradient center, w = fill mode.
+        DirectX::XMFLOAT4 fill_parameters{ 0, 0.5f, 0.5f, 0 };
+        // x = clip kind (1=circle, 2=rounded rectangle), y = invert,
+        // z = feather in pixels, w = corner radius in normalized units.
+        DirectX::XMFLOAT4 clip_parameters{ 0, 0, 0, 0 };
+        // pixel-space left/top/right/bottom bounds for the optional clip.
+        DirectX::XMFLOAT4 clip_bounds{ 0, 0, 0, 0 };
+        // x = 1 for luma matte, 0 for alpha matte.
+        DirectX::XMFLOAT4 mask_parameters{ 0, 0, 0, 0 };
+        // UV offset/scale used when the matte is a region inside an atlas.
+        DirectX::XMFLOAT4 mask_uv{ 0, 0, 1, 1 };
+        // Up to four track-matte UVs and per-matte operation/luma flags.
+        DirectX::XMFLOAT4 mask_uvs[4]{
+            { 0, 0, 1, 1 }, { 0, 0, 1, 1 },
+            { 0, 0, 1, 1 }, { 0, 0, 1, 1 } };
+        DirectX::XMFLOAT4 mask_operations{ 0, 0, 0, 0 };
+        DirectX::XMFLOAT4 mask_luma{ 0, 0, 0, 0 };
+    };
+
+    static_assert(sizeof(D3D12UIVisualConstants) % 16 == 0);
+
+    struct D3D12UIFontAtlasSource final
+    {
+        std::string key;
+        std::vector<std::uint8_t> rgba;
+        std::uint32_t width = 0;
+        std::uint32_t height = 0;
+        std::uint64_t revision = 0;
+    };
+
+    struct D3D12UIClip final
+    {
+        DirectX::XMFLOAT4 bounds{};
+        DirectX::XMFLOAT4 parameters{};
+    };
+
+    struct D3D12UIMask final
+    {
+        std::string texture_key;
+        bool luma = false;
+        bool invert = false;
+        std::int32_t operation = 0; // 0=Add, 1=Subtract, 2=Intersect.
+        DirectX::XMFLOAT4 uv{ 0, 0, 1, 1 };
+    };
+
+    struct D3D12UIBatch final
+    {
+        std::vector<D3D12UIVertex> vertices;
+        std::string texture_key;
+        D3D12UIVisualConstants constants{};
+        D3D12UIBlendMode blend = D3D12UIBlendMode::Alpha;
+        D3D12_RECT scissor{ 0, 0, 0, 0 };
+        bool scissor_enabled = false;
+        D3D12UIClip clip{};
+        bool clip_enabled = false;
+        std::array<D3D12UIMask, 4> masks{};
+        std::uint32_t mask_count = 0;
+        bool mask_enabled = false;
+        // -1 = direct draw; otherwise this batch belongs to an effect group.
+        std::int32_t effect_group = -1;
+    };
+
+    struct D3D12UIEffectCommand final
+    {
+        // 1=Blur, 2=Glow, 3=Outline, 4=DropShadow, 5=ColorAdjust.
+        std::uint32_t kind = 0;
+        float radius = 0.0f;
+        float intensity = 1.0f;
+        float amount = 1.0f;
+        DirectX::XMFLOAT2 direction{ 0.0f, 0.0f };
+        DirectX::XMFLOAT4 color{ 1, 1, 1, 1 };
+        DirectX::XMFLOAT4 color_2{ 1, 1, 1, 1 };
+    };
+
+    struct D3D12UIEffectGroup final
+    {
+        std::uint32_t first_batch = 0;
+        std::uint32_t batch_count = 0;
+        std::vector<D3D12UIEffectCommand> effects;
+        bool capture_backdrop = false;
+        // 0 = Self, 1 = Subtree. Kept for diagnostics and validation.
+        std::int32_t target_scope = 0;
+    };
+
+    struct D3D12UIFrame final
+    {
+        std::uint32_t target_width = 0;
+        std::uint32_t target_height = 0;
+        std::vector<D3D12StaticTextureSource> texture_sources;
+        std::vector<D3D12UIFontAtlasSource> font_atlases;
+        std::vector<D3D12UIBatch> batches;
+        std::uint32_t draw_commands = 0;
+        std::uint32_t vertex_count = 0;
+        std::uint32_t texture_count = 0;
+        std::uint32_t mask_depth = 0;
+        std::uint32_t clipped_commands = 0;
+        std::vector<D3D12UIEffectCommand> effects;
+        std::vector<D3D12UIEffectGroup> effect_groups;
+        bool requires_offscreen = false;
+        bool capture_backdrop = false;
+    };
+
     struct D3D12OffscreenTarget final
     {
         Microsoft::WRL::ComPtr<ID3D12Resource> color;
@@ -258,6 +389,7 @@ namespace ReplayEngine::Rendering::DX12
         D3D12DescriptorAllocation srv{};
         std::uint32_t width = 0;
         std::uint32_t height = 0;
+        DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
 
         bool IsValid() const noexcept
         {
@@ -292,6 +424,11 @@ namespace ReplayEngine::Rendering::DX12
         bool DrawStaticScene(const D3D12StaticSceneSubmission& submission) noexcept;
         // Scene 3D: Static + Skinned + GBuffer + Deferred + Forward Transparent。
         bool DrawScene3D(const D3D12StaticSceneSubmission& submission) noexcept;
+        // Runtime Canvas のCPUコマンドを、Scene3D/PostProcess後の同じBack Bufferへ記録する。
+        bool DrawRuntimeUI(const D3D12UIFrame& frame) noexcept;
+        // Editor Canvas Preview。Runtime と同じ UI frame を専用 offscreen target へ記録する。
+        bool EnsureUIPreviewTarget(std::uint32_t width, std::uint32_t height) noexcept;
+        bool DrawRuntimeUIPreview(const D3D12UIFrame& frame) noexcept;
         bool DrawValidationTriangle() noexcept;
         bool EndFrame() noexcept;
         bool WaitForGpu() noexcept;
@@ -308,6 +445,8 @@ namespace ReplayEngine::Rendering::DX12
         // Editorが持つAsset pathを、DX12 ImGui用SRVへ遅延登録する。
         // 戻り値はD3D11 SRVポインタではなく、このContext専用の安定したID。
         void* ImGuiTextureForPath(const std::filesystem::path& source_path) noexcept;
+        // UI Preview offscreen SRVをImGui TextureIdとして返す。
+        void* ImGuiTextureForUIPreview() const noexcept;
 #endif
         // Scene/Asset Reload の境界。Cache 済み Static Mesh/Texture を解放する前に
         // GPU Idle を待ち、古い Asset を保持し続けないようにする。
@@ -433,12 +572,20 @@ namespace ReplayEngine::Rendering::DX12
             std::uint32_t height) noexcept;
         bool CreateRenderTargets() noexcept;
         bool CreateOffscreenTarget(D3D12OffscreenTarget& target,
-            std::uint32_t width, std::uint32_t height) noexcept;
+            std::uint32_t width, std::uint32_t height,
+            DXGI_FORMAT format = DXGI_FORMAT_R16G16B16A16_FLOAT) noexcept;
+        bool DrawRuntimeUIToTarget(const D3D12UIFrame& frame,
+            D3D12OffscreenTarget* output_target,
+            D3D12OffscreenTarget* effect_targets) noexcept;
         bool CreateValidationTriangleResources() noexcept;
         bool CreateStaticRendererResources() noexcept;
         void ReleaseStaticRendererResources() noexcept;
         bool CreateScene3DRendererResources() noexcept;
         void ReleaseScene3DRendererResources() noexcept;
+        bool CreateUIRendererResources() noexcept;
+        void ReleaseUIRendererResources() noexcept;
+        bool CreateUIEffectResources() noexcept;
+        void ReleaseUIEffectResources() noexcept;
 #ifdef USE_IMGUI
         bool CreateImGuiRendererResources() noexcept;
         void ReleaseImGuiRendererResources() noexcept;
@@ -450,6 +597,7 @@ namespace ReplayEngine::Rendering::DX12
         bool EnsureStaticMesh(const D3D12StaticMeshSource& source) noexcept;
         bool EnsureSkinnedMesh(const D3D12SkinnedMeshSource& source) noexcept;
         bool EnsureStaticTexture(const D3D12StaticTextureSource& source) noexcept;
+        bool EnsureUIFontTexture(const D3D12UIFontAtlasSource& source) noexcept;
         bool EnsureStaticShader(const D3D12StaticShaderSource& source) noexcept;
         bool CreateSolidStaticTexture(const char* key, std::uint32_t rgba) noexcept;
         struct StaticPipelineSet;
@@ -614,6 +762,8 @@ namespace ReplayEngine::Rendering::DX12
         D3D12DescriptorAllocation static_samplers_[3]{};
         std::unordered_map<std::string, std::unique_ptr<D3D12MeshBuffer>> static_mesh_cache_;
         std::unordered_map<std::string, StaticTextureResource> texture_cache_;
+        std::unordered_map<std::string, StaticTextureResource> ui_font_texture_cache_;
+        std::unordered_map<std::string, std::uint64_t> ui_font_texture_revisions_;
         std::unordered_set<std::string> static_texture_failures_;
         std::unordered_map<std::string, StaticPipelineSet> custom_static_pipelines_;
         std::unordered_set<std::string> custom_static_shader_failures_;
@@ -643,6 +793,17 @@ namespace ReplayEngine::Rendering::DX12
         D3D12FrameConstants current_frame_constants_{};
         D3D12OffscreenTarget scene_view_target_{};
         D3D12OffscreenTarget game_view_target_{};
+        D3D12OffscreenTarget ui_preview_target_{};
+        D3D12OffscreenTarget ui_preview_effect_targets_[3]{};
+        // [0]/[1] are the effect ping-pong pair, [2] is the optional backdrop copy.
+        D3D12OffscreenTarget ui_effect_targets_[3]{};
+        Microsoft::WRL::ComPtr<ID3D12RootSignature> ui_root_signature_;
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> ui_pipelines_[5];
+        std::vector<std::uint8_t> ui_vertex_shader_;
+        std::vector<std::uint8_t> ui_pixel_shader_;
+        Microsoft::WRL::ComPtr<ID3D12RootSignature> ui_effect_root_signature_;
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> ui_effect_pipeline_;
+        std::vector<std::uint8_t> ui_effect_pixel_shader_;
 #ifdef USE_IMGUI
         struct ImGuiTextureRequest final
         {
@@ -659,6 +820,7 @@ namespace ReplayEngine::Rendering::DX12
         std::unordered_map<std::string, std::unique_ptr<ImGuiTextureRequest>> imgui_texture_requests_;
         std::unordered_set<const ImGuiTextureRequest*> imgui_texture_request_addresses_;
         std::uint64_t imgui_font_texture_id_ = 0;
+        std::uint64_t ui_preview_texture_id_ = 0;
         bool imgui_ready_ = false;
 #endif
         HANDLE fence_event_ = nullptr;

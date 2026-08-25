@@ -956,6 +956,10 @@ namespace ReplayEngine::Rendering::DX12
                 {
                     texture = imgui_font_srv_.gpu;
                 }
+                else if (texture_id == ui_preview_texture_id_)
+                {
+                    texture = ui_preview_target_.srv.gpu;
+                }
                 else if (texture_id != 0)
                 {
                     const auto* request = reinterpret_cast<const ImGuiTextureRequest*>(
@@ -1006,10 +1010,18 @@ namespace ReplayEngine::Rendering::DX12
         }
     }
 
+    void* D3D12DeviceContext::ImGuiTextureForUIPreview() const noexcept
+    {
+        if (!imgui_ready_ || !ui_preview_target_.srv.IsValid()) return nullptr;
+        return reinterpret_cast<void*>(static_cast<std::uintptr_t>(
+            ui_preview_target_.srv.gpu.ptr));
+    }
+
     void D3D12DeviceContext::ReleaseImGuiRendererResources() noexcept
     {
         imgui_ready_ = false;
         imgui_font_texture_id_ = 0;
+        ui_preview_texture_id_ = 0;
         imgui_font_texture_.Reset();
         imgui_pipeline_.Reset();
         imgui_root_signature_.Reset();

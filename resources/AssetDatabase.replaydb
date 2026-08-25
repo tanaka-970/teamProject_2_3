@@ -1,4 +1,4 @@
-REPLAY_ASSET_DB 2 174
+REPLAY_ASSET_DB 2 176
 "60412424bb1443240b2bf2160eee6923" 1 "ExampleStage" "resources/Stage/ExampleStage.cereal" "resources/.replay_cache/models/f9fffac39252a621_v0.replaycache"
 "1bd1358040255f5bd18f3be0d79fbe3c" 1 "AllAnimation1" "resources/AnimationModel/AllAnimation1.cereal" "resources/.replay_cache/models/6a20e727f78fb359_v0.replaycache"
 "e5c4168feb92f8fd7357f6cbc1f66e22" 1 "scene" "resources/Stage/city_3d_model_gltf/scene.gltf" "resources/.replay_cache/models/98fd72a862da8c8f_v0.replaycache"
@@ -173,3 +173,5 @@ REPLAY_ASSET_DB 2 174
 "43ad21af24af52abf5d7bab4098d5808" 5 "EffectShadowTest" "resources/Scenes/EffectShadowTest.replayscene" ""
 "ec26bc1e5678f6c7203ccffab8064ebc" 7 "ComponentApiSample" "Scripts/ComponentApiSample.cs" ""
 "88a91b511b940dfb8cf1ec83ed9af7ae" 7 "ValidationCSharpBehaviour" "Scripts/ValidationCSharpBehaviour.cs" ""
+"a4e53568ae35bd37e95e10a5ed7ad304" 5 "Demo" "resources/Scenes/Demo.replayscene" ""
+"05f41064a38e8b1d6ceda5831dea09ba" 2 "DX12ValidationTexture" "DX12ValidationTexture.dds" ""

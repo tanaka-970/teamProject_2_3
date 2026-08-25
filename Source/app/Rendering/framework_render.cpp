@@ -314,6 +314,13 @@ void framework::render(float elapsed_time)
     if (dx12_framework_active)
     {
         apply_pending_resize();
+        if (ui_preview_runtime_requested && show_ui_preview_panel &&
+            ui_preview_runtime_width > 0 && ui_preview_runtime_height > 0)
+        {
+            dx12_device_context.EnsureUIPreviewTarget(
+                static_cast<std::uint32_t>(ui_preview_runtime_width),
+                static_cast<std::uint32_t>(ui_preview_runtime_height));
+        }
         shadow_stats.Reset();
         shadow_stats.directional_preview_light = directional_light_is_preview;
         bool dx12_capture_requested = false;
@@ -425,6 +432,51 @@ void framework::render(float elapsed_time)
             const bool static_scene_ok = upload_ok &&
                 build_dx12_static_scene(static_scene, elapsed_time) &&
                 dx12_device_context.DrawScene3D(static_scene);
+            ReplayEngine::Rendering::DX12::D3D12UIFrame ui_frame;
+            bool ui_ok = false;
+            if (upload_ok)
+            {
+                // DX12でも既存ProfilerのCPUカウンタへRuntime UIの提出量を記録する。
+                // GPU timestampはD3D11専用のため、ここではDraw/Vertexだけを共有する。
+                ReplayEngine::Rendering::Stats().BeginPhase(
+                    ReplayEngine::Rendering::RenderStats::Phase::GameUI, nullptr);
+                ui_ok = build_dx12_ui(ui_frame);
+                if (ui_ok)
+                {
+                    ReplayEngine::Rendering::Stats().SetUICounters(
+                        ui_frame.draw_commands, ui_frame.vertex_count,
+                        ui_frame.texture_count, ui_frame.mask_depth,
+                        ui_frame.clipped_commands);
+                    for (const auto& batch : ui_frame.batches)
+                    {
+                        ReplayEngine::Rendering::Stats().CountDraw(
+                            static_cast<std::uint32_t>(batch.vertices.size()));
+                    }
+                    ui_ok = dx12_device_context.DrawRuntimeUI(ui_frame);
+
+                    if (editor_mode && show_ui_preview_panel &&
+                        ui_preview_runtime_requested &&
+                        ui_preview_runtime_width > 0 && ui_preview_runtime_height > 0)
+                    {
+                        ReplayEngine::Scene::Scene* preview_scene =
+                            object_editor_context.GetScene();
+                        if (preview_scene != nullptr)
+                        {
+                            ReplayEngine::Rendering::DX12::D3D12UIFrame preview_frame;
+                            const bool preview_built = build_dx12_ui_for_scene(
+                                preview_frame, *preview_scene,
+                                static_cast<std::uint32_t>(ui_preview_runtime_width),
+                                static_cast<std::uint32_t>(ui_preview_runtime_height),
+                                static_cast<float>(ui_preview_runtime_width),
+                                static_cast<float>(ui_preview_runtime_height));
+                            if (preview_built)
+                                ui_ok = dx12_device_context.DrawRuntimeUIPreview(preview_frame) && ui_ok;
+                        }
+                    }
+                }
+                ReplayEngine::Rendering::Stats().EndPhase(
+                    ReplayEngine::Rendering::RenderStats::Phase::GameUI, nullptr);
+            }
 #ifdef USE_IMGUI
             bool imgui_ok = true;
             if (imgui_frame_active)
@@ -545,7 +597,7 @@ void framework::render(float elapsed_time)
             const bool end_ok = dx12_device_context.EndFrame();
             if (end_ok && dx12_capture_requested) tick_golden_capture();
             ReplayEngine::Rendering::Stats().EndFrame(nullptr);
-            ok = upload_ok && static_scene_ok && imgui_ok && end_ok;
+            ok = upload_ok && static_scene_ok && ui_ok && imgui_ok && end_ok;
         }
 
         if (!ok && !dx12_framework_render_error_reported)

@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <limits>
@@ -279,6 +280,14 @@ namespace ReplayEngine::UI
             const std::uint32_t a = static_cast<std::uint32_t>(sdf_alpha[index]);
             rgba[index] = (a << 24) | 0x00FFFFFFu;
         }
+        face.rgba.resize(rgba.size() * sizeof(std::uint32_t));
+        std::memcpy(face.rgba.data(), rgba.data(), face.rgba.size());
+        face.atlas_width = atlas_width;
+        face.atlas_height = atlas_height;
+        ++face.revision;
+        face.baked_glyphs = std::move(baked);
+        face.scaled_glyphs.clear();
+        if (device_ == nullptr) return true;
         D3D11_TEXTURE2D_DESC desc{};
         desc.Width = atlas_width; desc.Height = atlas_height; desc.MipLevels = 1; desc.ArraySize = 1;
         desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM; desc.SampleDesc.Count = 1;
@@ -293,8 +302,6 @@ namespace ReplayEngine::UI
         face.texture.Reset();
         if (FAILED(device_->CreateShaderResourceView(texture.Get(), &srv, face.texture.GetAddressOf())))
             return false;
-        face.baked_glyphs = std::move(baked);
-        face.scaled_glyphs.clear();
         return true;
     }
 }

@@ -240,6 +240,7 @@
     <ClCompile Include="RePlayEngine\Rendering\Deferred\deferred_renderer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12DeviceContext.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12SceneRenderer.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12UIRenderer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12DescriptorHeapAllocator.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12FrameResource.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\DX12\D3D12ResourceStateTracker.cpp" />
@@ -317,7 +318,6 @@
     <ClCompile Include="Source\render\trail.cpp" />
     <ClCompile Include="imgui\imgui.cpp" />
     <ClCompile Include="imgui\imgui_draw.cpp" />
-    <ClCompile Include="imgui\imgui_impl_dx11.cpp" />
     <ClCompile Include="imgui\imgui_impl_win32.cpp" />
     <ClCompile Include="imgui\imgui_ja_gryph_ranges.cpp" />
     <ClCompile Include="imgui\imgui_widgets.cpp" />
@@ -371,6 +371,7 @@
     <ClCompile Include="Source\app\Editor\framework_ui_focus_style.cpp" />
     <ClCompile Include="Source\app\Runtime\framework_update.cpp" />
     <ClCompile Include="Source\app\Rendering\framework_render.cpp" />
+    <ClCompile Include="Source\app\Rendering\framework_dx12_ui.cpp" />
     <ClCompile Include="Source\app\Rendering\framework_effect_stack.cpp" />
     <ClCompile Include="Source\app\Rendering\framework_model_effects.cpp" />
     <ClCompile Include="Source\core\shader.cpp" />
@@ -737,7 +738,6 @@
     <ClInclude Include="Source\core\high_resolution_timer.h" />
     <ClInclude Include="imgui\imconfig.h" />
     <ClInclude Include="imgui\imgui.h" />
-    <ClInclude Include="imgui\imgui_impl_dx11.h" />
     <ClInclude Include="imgui\imgui_impl_win32.h" />
     <ClInclude Include="imgui\imgui_internal.h" />
     <ClInclude Include="imgui\imstb_rectpack.h" />
@@ -1036,6 +1036,9 @@
     <None Include="Shader\dx12_gbuffer_ps.hlsl" />
     <None Include="Shader\dx12_imgui_ps.hlsl" />
     <None Include="Shader\dx12_imgui_vs.hlsl" />
+    <None Include="Shader\dx12_ui_ps.hlsl" />
+    <None Include="Shader\dx12_ui_effect_ps.hlsl" />
+    <None Include="Shader\dx12_ui_vs.hlsl" />
     <None Include="Shader\dx12_lighting_common.hlsli" />
     <None Include="Shader\dx12_lighting_ps.hlsl" />
     <None Include="Shader\dx12_postprocess_ps.hlsl" />
