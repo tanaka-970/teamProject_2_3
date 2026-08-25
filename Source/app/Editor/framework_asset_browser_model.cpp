@@ -111,7 +111,10 @@ bool framework::prewarm_model_asset(const std::filesystem::path& path)
             if (!std::filesystem::exists(cache, error)) return false;
             return skinned_mesh_cache.Load(path, [this, path]
             {
-                return std::make_shared<skinned_mesh>(device.Get(), path.string().c_str());
+                const bool cpu_only = dx12_framework_requested || dx12_framework_active;
+                return std::make_shared<skinned_mesh>(
+                    cpu_only ? nullptr : device.Get(), path.string().c_str(), false, 0.0f,
+                    !cpu_only);
             }) != nullptr;
         }
     }

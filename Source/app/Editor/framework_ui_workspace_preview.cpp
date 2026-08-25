@@ -387,6 +387,10 @@ void framework::draw_ui_preview()
     ImGui::SliderFloat(u8"拡大", &ui_preview_zoom, 0.10f, 2.0f, "%.2f");
     ImGui::SameLine();
     ImGui::Checkbox(u8"グリッド", &ui_preview_grid);
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(120.0f);
+    ImGui::ColorEdit4(u8"Canvas 背景色", &ui_preview_background_color.x,
+        ImGuiColorEditFlags_NoInputs);
 
     int preview_width = 1920;
     int preview_height = 1080;
@@ -595,8 +599,11 @@ void framework::draw_ui_preview()
     const ImVec2 clip_max(cursor.x + avail.x, cursor.y + avail.y);
     draw_list->PushClipRect(clip_min, clip_max, true);
     draw_list->AddRectFilled(clip_min, clip_max, IM_COL32(23, 26, 30, 255));
+    const ImU32 canvas_background = ImGui::ColorConvertFloat4ToU32(ImVec4(
+        ui_preview_background_color.x, ui_preview_background_color.y,
+        ui_preview_background_color.z, ui_preview_background_color.w));
     draw_list->AddRectFilled(origin, ImVec2(origin.x + canvas_size.x, origin.y + canvas_size.y),
-        IM_COL32(36, 38, 42, 255));
+        canvas_background);
 
     if (ui_preview_grid && ui_preview_grid_size > 1.0f)
     {

@@ -191,43 +191,163 @@ namespace ReplayEngine::Rendering::DX12
     bool D3D12DeviceContext::CreateUIEffectResources() noexcept
     {
         if (device_ == nullptr || ui_vertex_shader_.empty()) return false;
+
+        // UIEffectKindの保存順と同じ並びにする。全種類を個別PSOへ割り当て、
+        // 未対応Effectを黙って素通しする状態を作らない。
+        static constexpr std::array<const wchar_t*, UIEffectKindCount> shader_files
+        {
+            L"ui_effect_blur.hlsl",
+            L"ui_effect_glow.hlsl",
+            L"ui_effect_color_adjust.hlsl",
+            L"ui_effect_noise.hlsl",
+            L"ui_effect_shake.hlsl",
+            L"ui_effect_mask.hlsl",
+            L"ui_effect_wipe.hlsl",
+            L"ui_effect_dissolve.hlsl",
+            L"ui_effect_distortion.hlsl",
+            L"ui_effect_chromatic_aberration.hlsl",
+            L"ui_effect_kuwahara.hlsl",
+            L"ui_effect_halftone.hlsl",
+            L"ui_effect_directional_blur.hlsl",
+            L"ui_effect_radial_blur.hlsl",
+            L"ui_effect_rotational_blur.hlsl",
+            L"ui_effect_vignette.hlsl",
+            L"ui_effect_light_streaks.hlsl",
+            L"ui_effect_lens_distortion.hlsl",
+            L"ui_effect_posterize.hlsl",
+            L"ui_effect_threshold.hlsl",
+            L"ui_effect_color_ramp.hlsl",
+            L"ui_effect_levels.hlsl",
+            L"ui_effect_temperature.hlsl",
+            L"ui_effect_edge_detect.hlsl",
+            L"ui_effect_outline.hlsl",
+            L"ui_effect_long_shadow.hlsl",
+            L"ui_effect_cross_hatch.hlsl",
+            L"ui_effect_brush_stroke.hlsl",
+            L"ui_effect_mosaic.hlsl",
+            L"ui_effect_crystallize.hlsl",
+            L"ui_effect_stained_glass.hlsl",
+            L"ui_effect_twirl.hlsl",
+            L"ui_effect_spherize.hlsl",
+            L"ui_effect_ripple.hlsl",
+            L"ui_effect_polar_coordinates.hlsl",
+            L"ui_effect_scanlines.hlsl",
+            L"ui_effect_crt.hlsl",
+            L"ui_effect_glitch.hlsl",
+            L"ui_effect_dither.hlsl",
+            L"ui_effect_vhs.hlsl",
+            L"ui_effect_letterbox.hlsl",
+            L"ui_effect_waveform.hlsl",
+            L"ui_effect_displacement_map.hlsl",
+            L"ui_effect_turbulent_displace.hlsl",
+            L"ui_effect_fractal_noise.hlsl",
+            L"ui_effect_motion_blur.hlsl",
+            L"ui_effect_echo.hlsl",
+            L"ui_effect_drop_shadow.hlsl",
+            L"ui_effect_inner_shadow.hlsl",
+            L"ui_effect_lut.hlsl",
+            L"ui_effect_tone_curve.hlsl",
+            L"ui_effect_matte_composite.hlsl",
+            L"ui_effect_matte_morphology.hlsl",
+            L"ui_effect_bevel_emboss.hlsl",
+            L"ui_effect_kaleidoscope.hlsl",
+            L"ui_effect_page_curl.hlsl",
+            L"ui_effect_ascii_led_matrix.hlsl",
+            L"ui_effect_feedback_zoom.hlsl",
+            L"ui_effect_liquid_glass.hlsl",
+            L"ui_effect_light_sweep.hlsl",
+            L"ui_effect_shockwave.hlsl",
+            L"ui_effect_pixel_sort.hlsl",
+            L"ui_effect_hologram.hlsl",
+            L"ui_effect_iridescent_foil.hlsl",
+            L"ui_effect_radar_sweep.hlsl",
+            L"ui_effect_energy_pulse.hlsl",
+            L"ui_effect_circuit_flow.hlsl",
+            L"ui_effect_heat_haze.hlsl",
+            L"ui_effect_water_caustics.hlsl",
+            L"ui_effect_voronoi_shatter.hlsl",
+            L"ui_effect_ink_bleed.hlsl",
+            L"ui_effect_burn_reveal.hlsl",
+            L"ui_effect_portal_vortex.hlsl",
+            L"ui_effect_frost_crack.hlsl"
+        };
+
         D3D12ShaderCompiler compiler;
         if (!compiler.Initialize(D3D12ShaderCompiler::FindDefaultLibraryPath())) return false;
         const std::filesystem::path shader_directory =
             std::filesystem::current_path() / "Shader";
-        const auto pixel = compiler.CompileFile(shader_directory / "dx12_ui_effect_ps.hlsl",
-            L"main", L"ps_6_0", debug_layer_enabled_);
-        compiler.Shutdown();
-        if (!pixel.succeeded)
+        const auto effect_vertex = compiler.CompileFile(
+            shader_directory / L"dx12_ui_effect_vs.hlsl",
+            L"main", L"vs_6_0", debug_layer_enabled_);
+        if (!effect_vertex.succeeded)
         {
-            OutputDebugStringA("[DX12] UI effect shader compilation failed.\n");
-            std::fprintf(stderr, "[DX12] UI effect shader compilation failed: 0x%08lx\n",
-                static_cast<unsigned long>(pixel.status));
-            if (!pixel.diagnostics.empty()) OutputDebugStringA(pixel.diagnostics.c_str());
-            if (!pixel.diagnostics.empty()) std::fprintf(stderr, "%s\n", pixel.diagnostics.c_str());
+            if (!effect_vertex.diagnostics.empty())
+            {
+                OutputDebugStringA(effect_vertex.diagnostics.c_str());
+                std::fprintf(stderr, "%s\n", effect_vertex.diagnostics.c_str());
+            }
+            compiler.Shutdown();
+            ReleaseUIEffectResources();
             return false;
         }
-        ui_effect_pixel_shader_ = pixel.bytecode;
+        std::array<std::vector<std::uint8_t>, UIEffectKindCount> pixel_bytecodes;
+        for (std::size_t index = 0; index < shader_files.size(); ++index)
+        {
+            const auto pixel = compiler.CompileFile(shader_directory / shader_files[index],
+                L"main", L"ps_6_0", debug_layer_enabled_);
+            if (!pixel.succeeded)
+            {
+                std::fwprintf(stderr,
+                    L"[DX12] UI Effect shader compilation failed: %ls (0x%08lx)\n",
+                    shader_files[index], static_cast<unsigned long>(pixel.status));
+                if (!pixel.diagnostics.empty())
+                {
+                    OutputDebugStringA(pixel.diagnostics.c_str());
+                    std::fprintf(stderr, "%s\n", pixel.diagnostics.c_str());
+                }
+                compiler.Shutdown();
+                ReleaseUIEffectResources();
+                return false;
+            }
+            pixel_bytecodes[index] = pixel.bytecode;
+        }
+        const auto region_pixel = compiler.CompileFile(
+            shader_directory / L"ui_effect_region_blend.hlsl",
+            L"main", L"ps_6_0", debug_layer_enabled_);
+        compiler.Shutdown();
+        if (!region_pixel.succeeded || region_pixel.bytecode.empty())
+        {
+            if (!region_pixel.diagnostics.empty())
+            {
+                OutputDebugStringA(region_pixel.diagnostics.c_str());
+                std::fprintf(stderr, "%s\n", region_pixel.diagnostics.c_str());
+            }
+            ReleaseUIEffectResources();
+            return false;
+        }
 
-        D3D12_DESCRIPTOR_RANGE texture_ranges[2]{};
+        // 通常Effectはt0/t1、適用範囲の合成はさらに元画像t2を読む。
+        D3D12_DESCRIPTOR_RANGE texture_ranges[3]{};
         for (std::size_t index = 0; index < std::size(texture_ranges); ++index)
         {
             texture_ranges[index].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
             texture_ranges[index].NumDescriptors = 1;
             texture_ranges[index].BaseShaderRegister = static_cast<UINT>(index);
         }
-        D3D12_ROOT_PARAMETER parameters[3]{};
+        D3D12_ROOT_PARAMETER parameters[4]{};
         parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
         parameters[0].Descriptor.ShaderRegister = 0;
-        // The shared UI vertex shader also consumes screen_size from b0.
         parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
         for (std::size_t index = 0; index < std::size(texture_ranges); ++index)
         {
-            parameters[index + 1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+            parameters[index + 1].ParameterType =
+                D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
             parameters[index + 1].DescriptorTable.NumDescriptorRanges = 1;
-            parameters[index + 1].DescriptorTable.pDescriptorRanges = &texture_ranges[index];
+            parameters[index + 1].DescriptorTable.pDescriptorRanges =
+                &texture_ranges[index];
             parameters[index + 1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
         }
+
         D3D12_STATIC_SAMPLER_DESC sampler{};
         sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
         sampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
@@ -238,16 +358,18 @@ namespace ReplayEngine::Rendering::DX12
         sampler.ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
         sampler.MaxLOD = D3D12_FLOAT32_MAX;
         sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
         D3D12_ROOT_SIGNATURE_DESC root_desc{};
         root_desc.NumParameters = static_cast<UINT>(std::size(parameters));
         root_desc.pParameters = parameters;
         root_desc.NumStaticSamplers = 1;
         root_desc.pStaticSamplers = &sampler;
         root_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
-        if (!SerializeUiRootSignature(device_.Get(), root_desc, ui_effect_root_signature_))
+        if (!SerializeUiRootSignature(device_.Get(), root_desc,
+            ui_effect_root_signature_))
             return false;
 
-        const D3D12_INPUT_ELEMENT_DESC input_layout[] =
+        const D3D12_INPUT_ELEMENT_DESC input_layout[]
         {
             { "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0,
                 static_cast<UINT>(offsetof(D3D12UIVertex, position)),
@@ -262,30 +384,66 @@ namespace ReplayEngine::Rendering::DX12
                 static_cast<UINT>(offsetof(D3D12UIVertex, uv_bounds)),
                 D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         };
-        D3D12_GRAPHICS_PIPELINE_STATE_DESC pipeline{};
-        pipeline.pRootSignature = ui_effect_root_signature_.Get();
-        pipeline.VS = { ui_vertex_shader_.data(), ui_vertex_shader_.size() };
-        pipeline.PS = { ui_effect_pixel_shader_.data(), ui_effect_pixel_shader_.size() };
-        pipeline.InputLayout = { input_layout, static_cast<UINT>(std::size(input_layout)) };
-        pipeline.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-        pipeline.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
-        pipeline.RasterizerState.DepthClipEnable = TRUE;
-        pipeline.DepthStencilState.DepthEnable = FALSE;
-        pipeline.DepthStencilState.StencilEnable = FALSE;
-        pipeline.BlendState.RenderTarget[0].BlendEnable = FALSE;
-        pipeline.BlendState.RenderTarget[0].RenderTargetWriteMask =
-            D3D12_COLOR_WRITE_ENABLE_ALL;
-        pipeline.SampleMask = UINT_MAX;
-        pipeline.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-        pipeline.NumRenderTargets = 1;
-        pipeline.RTVFormats[0] = kUiRenderTargetFormat;
-        pipeline.SampleDesc.Count = 1;
-        const HRESULT pipeline_result = device_->CreateGraphicsPipelineState(&pipeline,
-            IID_PPV_ARGS(&ui_effect_pipeline_));
-        if (FAILED(pipeline_result))
+
+        for (std::size_t index = 0; index < ui_effect_pipelines_.size(); ++index)
         {
-            std::fprintf(stderr, "[DX12] UI effect PSO creation failed: 0x%08lx\n",
-                static_cast<unsigned long>(pipeline_result));
+            D3D12_GRAPHICS_PIPELINE_STATE_DESC pipeline{};
+            pipeline.pRootSignature = ui_effect_root_signature_.Get();
+            pipeline.VS = { effect_vertex.bytecode.data(), effect_vertex.bytecode.size() };
+            pipeline.PS = { pixel_bytecodes[index].data(), pixel_bytecodes[index].size() };
+            pipeline.InputLayout = {
+                input_layout, static_cast<UINT>(std::size(input_layout)) };
+            pipeline.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
+            pipeline.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+            pipeline.RasterizerState.DepthClipEnable = TRUE;
+            pipeline.DepthStencilState.DepthEnable = FALSE;
+            pipeline.DepthStencilState.StencilEnable = FALSE;
+            pipeline.BlendState.RenderTarget[0].BlendEnable = FALSE;
+            pipeline.BlendState.RenderTarget[0].RenderTargetWriteMask =
+                D3D12_COLOR_WRITE_ENABLE_ALL;
+            pipeline.SampleMask = UINT_MAX;
+            pipeline.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+            pipeline.NumRenderTargets = 1;
+            pipeline.RTVFormats[0] = kUiRenderTargetFormat;
+            pipeline.SampleDesc.Count = 1;
+            const HRESULT result = device_->CreateGraphicsPipelineState(
+                &pipeline, IID_PPV_ARGS(&ui_effect_pipelines_[index]));
+            if (FAILED(result))
+            {
+                std::fprintf(stderr,
+                    "[DX12] UI Effect PSO[%zu] creation failed: 0x%08lx\n",
+                    index, static_cast<unsigned long>(result));
+                ReleaseUIEffectResources();
+                return false;
+            }
+        }
+        D3D12_GRAPHICS_PIPELINE_STATE_DESC region_pipeline{};
+        region_pipeline.pRootSignature = ui_effect_root_signature_.Get();
+        region_pipeline.VS = { effect_vertex.bytecode.data(), effect_vertex.bytecode.size() };
+        region_pipeline.PS = {
+            region_pixel.bytecode.data(), region_pixel.bytecode.size() };
+        region_pipeline.InputLayout = {
+            input_layout, static_cast<UINT>(std::size(input_layout)) };
+        region_pipeline.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
+        region_pipeline.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+        region_pipeline.RasterizerState.DepthClipEnable = TRUE;
+        region_pipeline.DepthStencilState.DepthEnable = FALSE;
+        region_pipeline.DepthStencilState.StencilEnable = FALSE;
+        region_pipeline.BlendState.RenderTarget[0].BlendEnable = FALSE;
+        region_pipeline.BlendState.RenderTarget[0].RenderTargetWriteMask =
+            D3D12_COLOR_WRITE_ENABLE_ALL;
+        region_pipeline.SampleMask = UINT_MAX;
+        region_pipeline.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        region_pipeline.NumRenderTargets = 1;
+        region_pipeline.RTVFormats[0] = kUiRenderTargetFormat;
+        region_pipeline.SampleDesc.Count = 1;
+        const HRESULT region_result = device_->CreateGraphicsPipelineState(
+            &region_pipeline, IID_PPV_ARGS(&ui_effect_region_pipeline_));
+        if (FAILED(region_result))
+        {
+            std::fprintf(stderr,
+                "[DX12] UI Effect region PSO creation failed: 0x%08lx\n",
+                static_cast<unsigned long>(region_result));
             ReleaseUIEffectResources();
             return false;
         }
@@ -309,9 +467,9 @@ namespace ReplayEngine::Rendering::DX12
 
     void D3D12DeviceContext::ReleaseUIEffectResources() noexcept
     {
-        ui_effect_pipeline_.Reset();
+        for (auto& pipeline : ui_effect_pipelines_) pipeline.Reset();
+        ui_effect_region_pipeline_.Reset();
         ui_effect_root_signature_.Reset();
-        ui_effect_pixel_shader_.clear();
     }
 
     bool D3D12DeviceContext::EnsureUIFontTexture(
@@ -386,7 +544,8 @@ namespace ReplayEngine::Rendering::DX12
                 if (!resource_state_tracker_.Transition(command_list_.Get(),
                     output_target->color.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET))
                     return false;
-                const float clear[4]{ 0, 0, 0, 0 };
+                const float clear[4]{ frame.clear_color.x, frame.clear_color.y,
+                    frame.clear_color.z, frame.clear_color.w };
                 command_list_->ClearRenderTargetView(output_target->rtv.cpu, clear, 0, nullptr);
                 if (!resource_state_tracker_.Transition(command_list_.Get(),
                     output_target->color.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE))
@@ -512,7 +671,8 @@ namespace ReplayEngine::Rendering::DX12
         };
 
         const auto draw_composite = [&](D3D12_GPU_DESCRIPTOR_HANDLE source,
-            D3D12_CPU_DESCRIPTOR_HANDLE rtv) noexcept
+            D3D12_CPU_DESCRIPTOR_HANDLE rtv,
+            const D3D12_RECT* composite_scissor = nullptr) noexcept
         {
             const auto vertices = make_fullscreen_vertices();
             D3D12UploadAllocation vertex_upload{};
@@ -531,7 +691,8 @@ namespace ReplayEngine::Rendering::DX12
                 static_cast<std::size_t>(D3D12UIBlendMode::Alpha)].Get());
             command_list_->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
             command_list_->RSSetViewports(1, &viewport);
-            command_list_->RSSetScissorRects(1, &full_scissor);
+            command_list_->RSSetScissorRects(1,
+                composite_scissor != nullptr ? composite_scissor : &full_scissor);
             command_list_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
             command_list_->SetGraphicsRootConstantBufferView(0, constants_upload.gpu);
             command_list_->SetGraphicsRootDescriptorTable(1, source);
@@ -561,21 +722,63 @@ namespace ReplayEngine::Rendering::DX12
             if (!resource_state_tracker_.Transition(command_list_.Get(),
                 output_target->color.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET))
                 return false;
-            const float clear[4]{ 0, 0, 0, 0 };
+            const float clear[4]{ frame.clear_color.x, frame.clear_color.y,
+                frame.clear_color.z, frame.clear_color.w };
             command_list_->ClearRenderTargetView(output_target->rtv.cpu, clear, 0, nullptr);
         }
 
         if ((!frame.requires_offscreen && !frame.capture_backdrop && frame.effect_groups.empty()) ||
             !effect_targets[0].IsValid() ||
-            ui_effect_pipeline_ == nullptr)
+            ui_effect_pipelines_[0] == nullptr)
         {
             return draw_batches(output_rtv, -1, 0, frame.batches.size()) && finish_output();
         }
 
+        auto& history_targets = output_target != nullptr
+            ? ui_preview_effect_history_targets_ : ui_effect_history_targets_;
         const auto apply_effects = [&](D3D12OffscreenTarget*& source_target,
             const std::vector<D3D12UIEffectCommand>& effects,
             bool capture_backdrop, D3D12OffscreenTarget* backdrop_target) noexcept
         {
+            UIEffectHistoryEntry* history = nullptr;
+            std::uint64_t history_map_key = 0;
+            for (const D3D12UIEffectCommand& effect : effects)
+            {
+                if (effect.temporal && effect.history_key != 0)
+                {
+                    history_map_key = effect.history_key ^
+                        (static_cast<std::uint64_t>(frame.target_width) *
+                            0x9E3779B185EBCA87ull) ^
+                        (static_cast<std::uint64_t>(frame.target_height) *
+                            0xC2B2AE3D27D4EB4Full);
+                    break;
+                }
+            }
+            if (history_map_key != 0)
+            {
+                try
+                {
+                    auto [found, inserted] = history_targets.try_emplace(history_map_key);
+                    history = &found->second;
+                    if (!history->target.IsValid() ||
+                        history->target.width != frame.target_width ||
+                        history->target.height != frame.target_height)
+                    {
+                        if (!CreateOffscreenTarget(history->target,
+                            frame.target_width, frame.target_height,
+                            DXGI_FORMAT_R8G8B8A8_UNORM))
+                        {
+                            history_targets.erase(found);
+                            return false;
+                        }
+                        history->valid = false;
+                    }
+                }
+                catch (...)
+                {
+                    return false;
+                }
+            }
             for (const D3D12UIEffectCommand& effect : effects)
             {
                 D3D12OffscreenTarget* destination = source_target == &effect_targets[0]
@@ -586,18 +789,75 @@ namespace ReplayEngine::Rendering::DX12
                 command_list_->RSSetViewports(1, &viewport);
                 command_list_->RSSetScissorRects(1, &full_scissor);
                 command_list_->SetGraphicsRootSignature(ui_effect_root_signature_.Get());
-                command_list_->SetPipelineState(ui_effect_pipeline_.Get());
+                if (effect.kind >= ui_effect_pipelines_.size() ||
+                    ui_effect_pipelines_[effect.kind] == nullptr)
+                    return false;
+                command_list_->SetPipelineState(ui_effect_pipelines_[effect.kind].Get());
 
-                D3D12UIVisualConstants constants{};
-                constants.screen_size = { static_cast<float>(frame.target_width),
-                    static_cast<float>(frame.target_height), 0, 0 };
-                constants.mode.x = static_cast<float>(effect.kind);
-                constants.fill_color_2 = effect.color;
-                constants.outline_color = effect.color_2;
-                constants.shadow_offset = { effect.direction.x, effect.direction.y, 0, 0 };
-                constants.shadow_color = effect.color_2;
-                constants.fill_parameters = { effect.radius, effect.intensity,
-                    effect.amount, capture_backdrop ? 1.0f : 0.0f };
+                // 移行前EffectChainと同じレジスタ順・同じ値で定数を渡す。
+                D3D12UIEffectConstants constants{};
+                constants.effect_color = effect.color;
+                constants.effect_params0 = { effect.radius, effect.intensity,
+                    effect.threshold, effect.amount };
+                constants.effect_params1 = { effect.angle, effect.progress,
+                    effect.softness, effect.speed };
+                constants.effect_params2 = { effect.direction.x, effect.direction.y,
+                    effect.seed, effect.time };
+                constants.target_size = { static_cast<float>(frame.target_width),
+                    static_cast<float>(frame.target_height),
+                    1.0f / static_cast<float>(frame.target_width),
+                    1.0f / static_cast<float>(frame.target_height) };
+                constants.effect_color_2 = effect.color_2;
+                constants.effect_color_3 = effect.color_3;
+                constants.effect_color_4 = effect.color_4;
+                constants.effect_color_stops = effect.color_stops;
+                constants.effect_params3.x = static_cast<float>(effect.waveform);
+                constants.effect_params3.z = effect.brush_atlas ? 1.0f : 0.0f;
+                constants.brush_pattern_settings = effect.brush_pattern_settings;
+                constants.brush_pattern_weights = effect.brush_pattern_weights;
+                constants.effect_region_params = effect.effect_region_params;
+                constants.effect_region_settings = effect.effect_region_settings;
+                constants.effect_region_extra_params = effect.effect_region_extra_params;
+                constants.effect_region_extra_settings = effect.effect_region_extra_settings;
+                constants.effect_region_count = effect.effect_region_count;
+                constants.effect_region_path_counts = effect.effect_region_path_counts;
+                constants.effect_region_path_points = effect.effect_region_path_points;
+                // Mask Effectは移行前と同じcenter/sizeの既定補正を使う。
+                if (effect.kind == 5)
+                {
+                    const float center_x = effect.direction.x > 0.0f && effect.direction.x < 1.0f
+                        ? effect.direction.x : 0.5f;
+                    const float center_y = effect.direction.y > 0.0f && effect.direction.y < 1.0f
+                        ? effect.direction.y : 0.5f;
+                    const float half_width = effect.seed > 0.0f && effect.seed < 1.0f
+                        ? effect.seed : 0.5f;
+                    const float half_height = effect.speed > 0.0f && effect.speed < 1.0f
+                        ? effect.speed : 0.5f;
+                    constants.effect_params2 = {
+                        center_x, center_y, half_width, half_height };
+                    constants.effect_params1.w =
+                        effect.auxiliary_texture_key.empty() ? 0.0f : 1.0f;
+                }
+                D3D12_GPU_DESCRIPTOR_HANDLE auxiliary = backdrop_target != nullptr
+                    ? backdrop_target->srv.gpu : source_target->srv.gpu;
+                bool auxiliary_valid = false;
+                if (effect.temporal && history != nullptr && history->valid)
+                {
+                    auxiliary = history->target.srv.gpu;
+                    auxiliary_valid = true;
+                }
+                else if (!effect.auxiliary_texture_key.empty())
+                {
+                    const auto found = texture_cache_.find(effect.auxiliary_texture_key);
+                    if (found != texture_cache_.end())
+                    {
+                        auxiliary = found->second.srv.gpu;
+                        auxiliary_valid = true;
+                    }
+                }
+                constants.effect_params3.y = auxiliary_valid ? 1.0f : 0.0f;
+                if (effect.kind == 5)
+                    constants.effect_params1.w = auxiliary_valid ? 1.0f : 0.0f;
                 const auto vertices = make_fullscreen_vertices();
                 D3D12UploadAllocation vertex_upload{};
                 D3D12UploadAllocation constants_upload{};
@@ -609,8 +869,10 @@ namespace ReplayEngine::Rendering::DX12
                 std::memcpy(constants_upload.cpu, &constants, sizeof(constants));
                 command_list_->SetGraphicsRootConstantBufferView(0, constants_upload.gpu);
                 command_list_->SetGraphicsRootDescriptorTable(1, source_target->srv.gpu);
-                command_list_->SetGraphicsRootDescriptorTable(2,
-                    backdrop_target != nullptr ? backdrop_target->srv.gpu : source_target->srv.gpu);
+                command_list_->SetGraphicsRootDescriptorTable(2, auxiliary);
+                // 通常Effectでは未使用。Region passとRoot Signatureを共通化するため
+                // 常に有効な元画像をt2へ結ぶ。
+                command_list_->SetGraphicsRootDescriptorTable(3, source_target->srv.gpu);
                 D3D12_VERTEX_BUFFER_VIEW view{};
                 view.BufferLocation = vertex_upload.gpu;
                 view.SizeInBytes = sizeof(vertices);
@@ -621,7 +883,76 @@ namespace ReplayEngine::Rendering::DX12
                 if (!resource_state_tracker_.Transition(command_list_.Get(),
                     destination->color.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE))
                     return false;
-                source_target = destination;
+                if (effect.region_enabled)
+                {
+                    if (ui_effect_region_pipeline_ == nullptr) return false;
+                    D3D12OffscreenTarget* region_destination = nullptr;
+                    for (std::size_t target_index = 0; target_index < 3; ++target_index)
+                    {
+                        D3D12OffscreenTarget* candidate = &effect_targets[target_index];
+                        if (candidate != source_target && candidate != destination)
+                        {
+                            region_destination = candidate;
+                            break;
+                        }
+                    }
+                    if (region_destination == nullptr || !region_destination->IsValid() ||
+                        !resource_state_tracker_.Transition(command_list_.Get(),
+                            region_destination->color.Get(),
+                            D3D12_RESOURCE_STATE_RENDER_TARGET))
+                        return false;
+                    command_list_->OMSetRenderTargets(1,
+                        &region_destination->rtv.cpu, FALSE, nullptr);
+                    command_list_->SetPipelineState(ui_effect_region_pipeline_.Get());
+                    command_list_->SetGraphicsRootConstantBufferView(0,
+                        constants_upload.gpu);
+                    command_list_->SetGraphicsRootDescriptorTable(1,
+                        destination->srv.gpu);
+                    D3D12_GPU_DESCRIPTOR_HANDLE region_mask = source_target->srv.gpu;
+                    if (!effect.region_mask_texture_key.empty())
+                    {
+                        const auto found = texture_cache_.find(
+                            effect.region_mask_texture_key);
+                        if (found != texture_cache_.end())
+                            region_mask = found->second.srv.gpu;
+                    }
+                    command_list_->SetGraphicsRootDescriptorTable(2, region_mask);
+                    command_list_->SetGraphicsRootDescriptorTable(3,
+                        source_target->srv.gpu);
+                    command_list_->IASetPrimitiveTopology(
+                        D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+                    command_list_->IASetVertexBuffers(0, 1, &view);
+                    command_list_->DrawInstanced(
+                        static_cast<UINT>(vertices.size()), 1, 0, 0);
+                    if (!resource_state_tracker_.Transition(command_list_.Get(),
+                        region_destination->color.Get(),
+                        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE))
+                        return false;
+                    source_target = region_destination;
+                }
+                else
+                {
+                    source_target = destination;
+                }
+            }
+            if (history != nullptr)
+            {
+                // 移行前と同じくStack全体の最終結果を次回描画の履歴にする。
+                if (!resource_state_tracker_.Transition(command_list_.Get(),
+                    source_target->color.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE) ||
+                    !resource_state_tracker_.Transition(command_list_.Get(),
+                        history->target.color.Get(), D3D12_RESOURCE_STATE_COPY_DEST))
+                    return false;
+                command_list_->CopyResource(history->target.color.Get(),
+                    source_target->color.Get());
+                if (!resource_state_tracker_.Transition(command_list_.Get(),
+                    source_target->color.Get(),
+                    D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE) ||
+                    !resource_state_tracker_.Transition(command_list_.Get(),
+                        history->target.color.Get(),
+                        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE))
+                    return false;
+                history->valid = true;
             }
             return true;
         };
@@ -630,22 +961,22 @@ namespace ReplayEngine::Rendering::DX12
         {
             const auto capture_current_backdrop = [&](D3D12OffscreenTarget*& target) noexcept
             {
-                if (!effect_targets[2].IsValid()) return false;
+                if (!effect_targets[3].IsValid()) return false;
                 ID3D12Resource* backdrop_source = output_target != nullptr
                     ? output_target->color.Get() : render_targets_[frame_index_].Get();
                 if (!resource_state_tracker_.Transition(command_list_.Get(), backdrop_source,
                     D3D12_RESOURCE_STATE_COPY_SOURCE) ||
                     !resource_state_tracker_.Transition(command_list_.Get(),
-                        effect_targets[2].color.Get(), D3D12_RESOURCE_STATE_COPY_DEST))
+                        effect_targets[3].color.Get(), D3D12_RESOURCE_STATE_COPY_DEST))
                     return false;
-                command_list_->CopyResource(effect_targets[2].color.Get(), backdrop_source);
+                command_list_->CopyResource(effect_targets[3].color.Get(), backdrop_source);
                 if (!resource_state_tracker_.Transition(command_list_.Get(), backdrop_source,
                     D3D12_RESOURCE_STATE_RENDER_TARGET) ||
                     !resource_state_tracker_.Transition(command_list_.Get(),
-                        effect_targets[2].color.Get(),
+                        effect_targets[3].color.Get(),
                         D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE))
                     return false;
-                target = &effect_targets[2];
+                target = &effect_targets[3];
                 return true;
             };
 
@@ -675,7 +1006,7 @@ namespace ReplayEngine::Rendering::DX12
                     frame.batches.size());
                 if (group_first != batch_index || group_end <= group_first)
                 {
-                    // Invalid/non-contiguous group metadata must not stall the frame.
+                    // 不正または非連続なGroup情報でもフレーム処理を停止させない。
                     ++batch_index;
                     continue;
                 }
@@ -684,11 +1015,34 @@ namespace ReplayEngine::Rendering::DX12
                 if (group.capture_backdrop && !capture_current_backdrop(group_backdrop))
                     return false;
                 D3D12OffscreenTarget* source_target = &effect_targets[0];
-                if (!resource_state_tracker_.Transition(command_list_.Get(),
-                    source_target->color.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET))
-                    return false;
-                const float clear[4]{ 0, 0, 0, 0 };
-                command_list_->ClearRenderTargetView(source_target->rtv.cpu, clear, 0, nullptr);
+                if (group_backdrop != nullptr)
+                {
+                    // 移行前は「背景を捕捉したRTへ対象UIを重ねてからEffect」を掛ける。
+                    // t1へ背景を結ぶだけではBlurなどt0専用Effectに背景が届かない。
+                    if (!resource_state_tracker_.Transition(command_list_.Get(),
+                        group_backdrop->color.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE) ||
+                        !resource_state_tracker_.Transition(command_list_.Get(),
+                            source_target->color.Get(), D3D12_RESOURCE_STATE_COPY_DEST))
+                        return false;
+                    command_list_->CopyResource(source_target->color.Get(),
+                        group_backdrop->color.Get());
+                    if (!resource_state_tracker_.Transition(command_list_.Get(),
+                        group_backdrop->color.Get(),
+                        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE) ||
+                        !resource_state_tracker_.Transition(command_list_.Get(),
+                            source_target->color.Get(),
+                            D3D12_RESOURCE_STATE_RENDER_TARGET))
+                        return false;
+                }
+                else
+                {
+                    if (!resource_state_tracker_.Transition(command_list_.Get(),
+                        source_target->color.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET))
+                        return false;
+                    const float clear[4]{ 0, 0, 0, 0 };
+                    command_list_->ClearRenderTargetView(source_target->rtv.cpu,
+                        clear, 0, nullptr);
+                }
                 if (!draw_batches(source_target->rtv.cpu,
                     static_cast<std::int32_t>(group_index), group_first, group_end))
                     return false;
@@ -697,7 +1051,10 @@ namespace ReplayEngine::Rendering::DX12
                     return false;
                 if (!apply_effects(source_target, group.effects,
                     group.capture_backdrop, group_backdrop)) return false;
-                if (!draw_composite(source_target->srv.gpu, output_rtv))
+                const D3D12_RECT* group_scissor = group.composite_scissor_enabled
+                    ? &group.composite_scissor : nullptr;
+                if (!draw_composite(source_target->srv.gpu, output_rtv,
+                    group_scissor))
                     return false;
                 batch_index = group_end;
             }
@@ -705,30 +1062,51 @@ namespace ReplayEngine::Rendering::DX12
         }
 
         D3D12OffscreenTarget* backdrop_target = nullptr;
-        if (frame.capture_backdrop && effect_targets[2].IsValid())
+        if (frame.capture_backdrop && effect_targets[3].IsValid())
         {
             ID3D12Resource* backdrop_source = output_target != nullptr
                 ? output_target->color.Get() : render_targets_[frame_index_].Get();
             if (!resource_state_tracker_.Transition(command_list_.Get(), backdrop_source,
                 D3D12_RESOURCE_STATE_COPY_SOURCE) ||
                 !resource_state_tracker_.Transition(command_list_.Get(),
-                    effect_targets[2].color.Get(), D3D12_RESOURCE_STATE_COPY_DEST))
+                    effect_targets[3].color.Get(), D3D12_RESOURCE_STATE_COPY_DEST))
                 return false;
-            command_list_->CopyResource(effect_targets[2].color.Get(), backdrop_source);
+            command_list_->CopyResource(effect_targets[3].color.Get(), backdrop_source);
             if (!resource_state_tracker_.Transition(command_list_.Get(), backdrop_source,
                 D3D12_RESOURCE_STATE_RENDER_TARGET) ||
                 !resource_state_tracker_.Transition(command_list_.Get(),
-                    effect_targets[2].color.Get(),
+                    effect_targets[3].color.Get(),
                     D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE))
                 return false;
-            backdrop_target = &effect_targets[2];
+            backdrop_target = &effect_targets[3];
         }
 
         D3D12OffscreenTarget* source_target = &effect_targets[0];
-        if (!resource_state_tracker_.Transition(command_list_.Get(), source_target->color.Get(),
-            D3D12_RESOURCE_STATE_RENDER_TARGET)) return false;
-        const float clear[4]{ 0, 0, 0, 0 };
-        command_list_->ClearRenderTargetView(source_target->rtv.cpu, clear, 0, nullptr);
+        if (backdrop_target != nullptr)
+        {
+            if (!resource_state_tracker_.Transition(command_list_.Get(),
+                backdrop_target->color.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE) ||
+                !resource_state_tracker_.Transition(command_list_.Get(),
+                    source_target->color.Get(), D3D12_RESOURCE_STATE_COPY_DEST))
+                return false;
+            command_list_->CopyResource(source_target->color.Get(),
+                backdrop_target->color.Get());
+            if (!resource_state_tracker_.Transition(command_list_.Get(),
+                backdrop_target->color.Get(),
+                D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE) ||
+                !resource_state_tracker_.Transition(command_list_.Get(),
+                    source_target->color.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET))
+                return false;
+        }
+        else
+        {
+            if (!resource_state_tracker_.Transition(command_list_.Get(),
+                source_target->color.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET))
+                return false;
+            const float clear[4]{ 0, 0, 0, 0 };
+            command_list_->ClearRenderTargetView(source_target->rtv.cpu,
+                clear, 0, nullptr);
+        }
         if (!draw_batches(source_target->rtv.cpu, -2, 0, frame.batches.size())) return false;
         if (!resource_state_tracker_.Transition(command_list_.Get(), source_target->color.Get(),
             D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE)) return false;
@@ -758,6 +1136,9 @@ namespace ReplayEngine::Rendering::DX12
         ReleaseOffscreenTarget(ui_preview_target_);
         for (D3D12OffscreenTarget& target : ui_preview_effect_targets_)
             ReleaseOffscreenTarget(target);
+        for (auto& entry : ui_preview_effect_history_targets_)
+            ReleaseOffscreenTarget(entry.second.target);
+        ui_preview_effect_history_targets_.clear();
         if (!CreateOffscreenTarget(ui_preview_target_, width, height,
             DXGI_FORMAT_R8G8B8A8_UNORM) ||
             !CreateOffscreenTarget(ui_preview_effect_targets_[0], width, height,
@@ -765,6 +1146,8 @@ namespace ReplayEngine::Rendering::DX12
             !CreateOffscreenTarget(ui_preview_effect_targets_[1], width, height,
                 DXGI_FORMAT_R8G8B8A8_UNORM) ||
             !CreateOffscreenTarget(ui_preview_effect_targets_[2], width, height,
+                DXGI_FORMAT_R8G8B8A8_UNORM) ||
+            !CreateOffscreenTarget(ui_preview_effect_targets_[3], width, height,
                 DXGI_FORMAT_R8G8B8A8_UNORM))
         {
             ReleaseOffscreenTarget(ui_preview_target_);

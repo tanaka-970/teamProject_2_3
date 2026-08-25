@@ -184,6 +184,8 @@ void framework::draw_ui_scene_overlay()
     Scene::Scene* scene = object_editor_context.GetScene();
     if (scene == nullptr) return;
 
+    // ImGuiとDX12は同じクライアント座標を使う。ここで画面座標へ変換すると、
+    // ウィンドウ位置の分だけ選択枠と素材がずれるため変換を挟まない。
     const object_ui_viewport target = object_ui_viewport_target();
     const float target_width = (std::max)(1.0f, target.width);
     const float target_height = (std::max)(1.0f, target.height);

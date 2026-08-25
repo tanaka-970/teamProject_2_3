@@ -69,48 +69,7 @@
         ReplayEngine::Rendering::DX12::D3D12UIFrame& frame,
         ReplayEngine::Scene::Scene& scene,
         std::uint32_t target_width, std::uint32_t target_height,
-        float logical_width, float logical_height);
-    // depth_only = true で深度プリパス用の描画になる。
-    // 深度プリパスを使う構成では、GBuffer へ出すものを必ずここでも描くこと。
-    // 描き漏らすと DepthFunc=EQUAL に落とされて画面から消える。
-    void draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shader,
-        bool gbuffer_pass, bool depth_only = false,
-        ReplayEngine::Core::ObjectID only_owner = ReplayEngine::Core::ObjectID::Invalid(),
-        bool skip_model_effect_owners = false,
-        std::uint32_t rendering_layer_mask = 0xFFFFFFFFu);
-    ID3D11ShaderResourceView* resolve_scene_effect_texture(const std::string& asset_guid);
-    ReplayEngine::UI::UIRenderTarget* apply_scene_effect_chain(
-        ID3D11ShaderResourceView* source,
-        const std::vector<ReplayEngine::UI::UIEffect>& effects,
-        std::uint32_t width, std::uint32_t height, DXGI_FORMAT format,
-        float effect_time, std::uint64_t temporal_owner_key = 0,
-        const ReplayEngine::UI::UIEffectRegion* effect_region = nullptr);
-    void begin_scene_effect_frame() noexcept;
-    void draw_model_effect_stacks(const D3D11_VIEWPORT& camera_viewport);
-    // Model Effect Stack が使う画面上の矩形。影パスと Effect 本体で同じ値を使う。
-    struct model_effect_screen_rect
-    {
-        long left = 0;
-        long top = 0;
-        long right = 0;
-        long bottom = 0;
-        bool Valid() const noexcept { return right > left && bottom > top; }
-        std::uint32_t Width() const noexcept
-        {
-            return Valid() ? static_cast<std::uint32_t>(right - left) : 0u;
-        }
-        std::uint32_t Height() const noexcept
-        {
-            return Valid() ? static_cast<std::uint32_t>(bottom - top) : 0u;
-        }
-    };
-    bool compute_model_effect_screen_rect(ReplayEngine::Core::ObjectID owner,
-        const D3D11_VIEWPORT& camera_viewport, model_effect_screen_rect& out_base,
-        model_effect_screen_rect& out_expanded);
-    // 面を消す Effect を持つ Object の影用パラメータを毎フレーム作り直す。
-    void collect_shadow_coverage(const D3D11_VIEWPORT& camera_viewport);
-    // 影パスで使う面消し定数 (b8) を積む。持たない Object では 0 件を積む。
-    bool bind_shadow_coverage_constants(ReplayEngine::Core::ObjectID owner);
+        const object_ui_viewport& viewport);
     // LandscapeRendererComponent 用の procedural static mesh 描画。
     // AssetGUIDを介さず、LandscapeData::Revision が変わったときだけGPU Meshを作り直す。
     void draw_landscape_scene_meshes(bool gbuffer_pass, bool depth_only = false);

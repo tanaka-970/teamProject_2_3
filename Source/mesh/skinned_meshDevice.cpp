@@ -18,6 +18,10 @@ using namespace DirectX;
 
 void skinned_mesh::create_com_objects(ID3D11Device* device, const char* fbx_filename)
 {
+    // DX12のCPU先読みや検証経路ではD3D11デバイスを持たないため、
+    // GPU資源生成を要求された場合でもnullデバイスを参照しない。
+    if (device == nullptr) return;
+
     for (mesh& mesh : meshes)
     {
         HRESULT hr{ S_OK };

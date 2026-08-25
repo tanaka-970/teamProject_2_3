@@ -54,17 +54,11 @@ namespace framework_ui_workspace_detail
         return false;
     }
 
-    // 図形マスクの子 Image を選択していても、移動・拡縮は組になったマスク全体へ適用する。
+    // 選択枠は実際に選んだObjectのRectTransformへ一致させる。
+    // 親の図形マスクを動かす場合は親を選び、子Imageを選んだ場合は
+    // 切り抜き内の素材位置・サイズだけを編集する。
     inline Core::GameObject* UITransformEditTarget(Core::GameObject* object) noexcept
     {
-        if (object == nullptr) return nullptr;
-        for (Core::GameObject* parent = object->Parent(); parent != nullptr;
-            parent = parent->Parent())
-        {
-            const UIMaskComponent* mask = parent->GetComponent<UIMaskComponent>();
-            if (mask != nullptr && mask->mask_mode == UIMaskComponent::Shape)
-                return parent;
-        }
         return object;
     }
 

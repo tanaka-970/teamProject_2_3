@@ -3,7 +3,9 @@
 
 #include "../../../RePlayEngine/Rendering/DX12/D3D12DeviceContext.h"
 #include "../../../RePlayEngine/Rendering/DX12/D3D12DescriptorHeapAllocator.h"
+#include "../../../RePlayEngine/UI/Effects/UIEffect.h"
 
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -287,15 +289,28 @@ namespace ReplayEngine::Runtime::Detail
             Rendering::DX12::D3D12UIFrame ui_frame;
             ui_frame.target_width = context.Width();
             ui_frame.target_height = context.Height();
-            // Exercise the same offscreen/ping-pong path used by UIEffectStack,
-            // including backdrop capture, instead of validating only direct quads.
+            // 直接Quadだけでなく、UIEffectStackと同じオフスクリーン往復と
+            // Backdrop取得を通して検証する。
             ui_frame.requires_offscreen = true;
             ui_frame.capture_backdrop = true;
             Rendering::DX12::D3D12UIEffectCommand blur_effect;
-            blur_effect.kind = 1;
+            blur_effect.kind = static_cast<std::uint32_t>(
+                ReplayEngine::UI::UIEffectKind::Blur);
             blur_effect.radius = 2.0f;
             blur_effect.intensity = 1.0f;
+            blur_effect.region_enabled = true;
+            blur_effect.effect_region_params = { 0.5f, 0.5f, 0.35f, 0.35f };
+            blur_effect.effect_region_settings = { 0.0f, 0.05f, 1.0f, 0.0f };
+            blur_effect.effect_region_count.x = 1.0f;
             ui_frame.effects.push_back(blur_effect);
+            Rendering::DX12::D3D12UIEffectCommand echo_effect;
+            echo_effect.kind = static_cast<std::uint32_t>(
+                ReplayEngine::UI::UIEffectKind::Echo);
+            echo_effect.temporal = true;
+            echo_effect.history_key = 1;
+            echo_effect.intensity = 0.4f;
+            echo_effect.amount = 1.0f;
+            ui_frame.effects.push_back(echo_effect);
             Rendering::DX12::D3D12UIBatch ui_batch;
             ui_batch.texture_key = "__dx12_white";
             ui_batch.constants.screen_size = {
@@ -312,12 +327,58 @@ namespace ReplayEngine::Runtime::Detail
                 { { 20, 20 }, { 1, 0 }, { 1, 1, 1, 0.15f }, { 0, 0, 1, 1 } },
                 { { 20, 4 }, { 1, 1 }, { 1, 1, 1, 0.15f }, { 0, 0, 1, 1 } },
             };
+            const auto triangle_area_twice = [](const Rendering::DX12::D3D12UIVertex& a,
+                const Rendering::DX12::D3D12UIVertex& b,
+                const Rendering::DX12::D3D12UIVertex& c) noexcept
+            {
+                return (b.position.x - a.position.x) *
+                    (c.position.y - a.position.y) -
+                    (b.position.y - a.position.y) *
+                    (c.position.x - a.position.x);
+            };
+            if (!Check(std::fabs(triangle_area_twice(ui_batch.vertices[0],
+                    ui_batch.vertices[1], ui_batch.vertices[2])) > 1.0f &&
+                std::fabs(triangle_area_twice(ui_batch.vertices[3],
+                    ui_batch.vertices[4], ui_batch.vertices[5])) > 1.0f,
+                "DX12 UI quad contains two non-degenerate triangles", checks))
+                return false;
+
+            // Nested Shape Clipと画面座標Matteを実際のUI PSへ通す。
+            ui_batch.clip_enabled = true;
+            ui_batch.clip_count = 2;
+            ui_batch.clips[0].parameters = { 2, 0, 0, 0 };
+            ui_batch.clips[0].bounds = { 12, 12, 10, 10 };
+            ui_batch.clips[0].shape = { 5, 0.5f, 0, 0 };
+            ui_batch.clips[1].parameters = { 5, 0, 0, 0.2f };
+            ui_batch.clips[1].bounds = { 12, 12, 9, 9 };
+            ui_batch.clips[1].shape = { 5, 0.5f, 15, 0 };
+            ui_batch.clip = ui_batch.clips[0];
+            ui_batch.constants.clip_parameters = ui_batch.clips[0].parameters;
+            ui_batch.constants.clip_bounds = ui_batch.clips[0].bounds;
+            ui_batch.constants.clip_shape = ui_batch.clips[0].shape;
+            ui_batch.constants.clip_state.x = 2.0f;
+            ui_batch.constants.clip_parameters_extra[0] =
+                ui_batch.clips[1].parameters;
+            ui_batch.constants.clip_bounds_extra[0] = ui_batch.clips[1].bounds;
+            ui_batch.constants.clip_shapes_extra[0] = ui_batch.clips[1].shape;
+            ui_batch.mask_enabled = true;
+            ui_batch.mask_count = 1;
+            ui_batch.masks[0].texture_key = "__dx12_white";
+            ui_batch.masks[0].screen_origin = { 4, 4 };
+            ui_batch.masks[0].screen_inverse = { 1.0f / 16.0f, 0,
+                0, 1.0f / 16.0f };
+            ui_batch.constants.mask_parameters.x = 1.0f;
+            ui_batch.constants.mask_origins[0] = { 4, 4, 0, 0 };
+            ui_batch.constants.mask_inverses[0] =
+                ui_batch.masks[0].screen_inverse;
             ui_batch.effect_group = 0;
             Rendering::DX12::D3D12UIEffectGroup ui_group;
             ui_group.first_batch = 0;
             ui_group.batch_count = 1;
             ui_group.effects = ui_frame.effects;
             ui_group.capture_backdrop = true;
+            ui_group.composite_scissor = { 2, 2, 22, 22 };
+            ui_group.composite_scissor_enabled = true;
             ui_group.target_scope = 1;
             ui_frame.effect_groups.push_back(std::move(ui_group));
             ui_frame.effects.clear();

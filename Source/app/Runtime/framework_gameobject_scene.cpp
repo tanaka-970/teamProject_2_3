@@ -395,7 +395,9 @@ framework::object_ui_viewport framework::object_ui_viewport_target() const noexc
 #ifdef USE_IMGUI
     if (editor_mode && !object_scene_play_mode && scene_view_overlay_valid)
     {
-        // Editor では Scene View の矩形へ、実行時は従来どおりウィンドウ全体へ描く。
+        // このアプリはImGuiのマルチビューポートを有効にしていないため、
+        // Scene View・MousePos・DX12バックバッファは全てクライアント座標になる。
+        // 移行前どおり同じ矩形を描画・選択枠・入力判定で共有する。
         target.left = scene_view_overlay_position.x;
         target.top = scene_view_overlay_position.y;
         target.width = (std::max)(1.0f, scene_view_overlay_size.x);

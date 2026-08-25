@@ -271,30 +271,56 @@ namespace ReplayEngine::Rendering::DX12
     {
         DirectX::XMFLOAT4 screen_size{ 1, 1, 0, 0 };
         DirectX::XMFLOAT4 fill_color_2{ 1, 1, 1, 1 };
-        // x = shape kind, y = text/SDF flag, z = stroke width, w = reserved.
+        DirectX::XMFLOAT4 fill_color_3{ 1, 1, 1, 1 };
+        DirectX::XMFLOAT4 fill_color_4{ 1, 1, 1, 1 };
+        // x/y/zは色2/3/4の位置。y/zが負なら色3/4は未設定。
+        DirectX::XMFLOAT4 fill_stops{ 1, -1, -1, 0 };
+        DirectX::XMFLOAT4 stroke_color_2{ 1, 1, 1, 1 };
+        // xはStroke方式。残りは将来の線端・結合方式用。
+        DirectX::XMFLOAT4 stroke_parameters{ 0, 0, 0, 0 };
+        // xはShape種別、yはText/SDF、zはOutline幅、wは予約領域。
         DirectX::XMFLOAT4 mode{ 0, 0, 0, 0 };
         DirectX::XMFLOAT4 outline_color{ 0, 0, 0, 1 };
         DirectX::XMFLOAT4 shadow_offset{ 0, 0, 0, 0 };
         DirectX::XMFLOAT4 shadow_color{ 0, 0, 0, 0 };
-        // x/y = atlas size, z = SDF spread, w = reserved.
+        // x/yはAtlas寸法、zはSDF spread、wは予約領域。
         DirectX::XMFLOAT4 atlas_size{ 2048, 2048, 8, 0 };
-        // x = gradient angle (radians), y/z = gradient center, w = fill mode.
+        // xはGradient角度、y/zは中心、wはFill方式。
         DirectX::XMFLOAT4 fill_parameters{ 0, 0.5f, 0.5f, 0 };
-        // x = clip kind (1=circle, 2=rounded rectangle), y = invert,
-        // z = feather in pixels, w = corner radius in normalized units.
+        // xはClip形状、yは反転、zはFeather画素、wは正規化角丸半径。
         DirectX::XMFLOAT4 clip_parameters{ 0, 0, 0, 0 };
-        // pixel-space left/top/right/bottom bounds for the optional clip.
+        // 任意Clipの画素座標left/top/right/bottom。
         DirectX::XMFLOAT4 clip_bounds{ 0, 0, 0, 0 };
-        // x = 1 for luma matte, 0 for alpha matte.
+        // xはMask数、yは反転。
         DirectX::XMFLOAT4 mask_parameters{ 0, 0, 0, 0 };
-        // UV offset/scale used when the matte is a region inside an atlas.
+        // Atlas内Matte領域のUV offset/scale。
         DirectX::XMFLOAT4 mask_uv{ 0, 0, 1, 1 };
-        // Up to four track-matte UVs and per-matte operation/luma flags.
+        // 最大4枚のTrack Matte UVと合成方式・Lumaフラグ。
         DirectX::XMFLOAT4 mask_uvs[4]{
             { 0, 0, 1, 1 }, { 0, 0, 1, 1 },
             { 0, 0, 1, 1 }, { 0, 0, 1, 1 } };
         DirectX::XMFLOAT4 mask_operations{ 0, 0, 0, 0 };
         DirectX::XMFLOAT4 mask_luma{ 0, 0, 0, 0 };
+        // xは辺数、yは星の内径、zは画面上の回転角、wは予約領域。
+        DirectX::XMFLOAT4 clip_shape{ 0, 0, 0, 0 };
+        // 画面座標を各Matteの0..1矩形へ戻す原点と逆行列。
+        DirectX::XMFLOAT4 mask_origins[4]{};
+        DirectX::XMFLOAT4 mask_inverses[4]{};
+        DirectX::XMFLOAT4 mask_inverts{ 0, 0, 0, 0 };
+        DirectX::XMFLOAT4 mask_rotated{ 0, 0, 0, 0 };
+        // 形状Clipは最大4階層を積み、全てのalphaを交差させる。
+        DirectX::XMFLOAT4 clip_state{ 0, 0, 0, 0 };
+        DirectX::XMFLOAT4 clip_parameters_extra[3]{};
+        DirectX::XMFLOAT4 clip_bounds_extra[3]{};
+        DirectX::XMFLOAT4 clip_shapes_extra[3]{};
+        DirectX::XMFLOAT4X4 world_canvas_matrix{
+            1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
+        DirectX::XMFLOAT4X4 world_view_projection{
+            1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
+        // xはWorld Space有効、y/zはCanvas平面幅・高さ。
+        DirectX::XMFLOAT4 world_canvas_parameters{ 0, 0, 0, 0 };
+        // Scene Viewを含む描画領域left/top/width/height。
+        DirectX::XMFLOAT4 world_viewport{ 0, 0, 1, 1 };
     };
 
     static_assert(sizeof(D3D12UIVisualConstants) % 16 == 0);
@@ -312,6 +338,7 @@ namespace ReplayEngine::Rendering::DX12
     {
         DirectX::XMFLOAT4 bounds{};
         DirectX::XMFLOAT4 parameters{};
+        DirectX::XMFLOAT4 shape{};
     };
 
     struct D3D12UIMask final
@@ -319,8 +346,12 @@ namespace ReplayEngine::Rendering::DX12
         std::string texture_key;
         bool luma = false;
         bool invert = false;
-        std::int32_t operation = 0; // 0=Add, 1=Subtract, 2=Intersect.
+        bool rotated = false;
+        std::int32_t operation = 0; // 0=加算、1=減算、2=交差。
         DirectX::XMFLOAT4 uv{ 0, 0, 1, 1 };
+        DirectX::XMFLOAT2 screen_origin{ 0, 0 };
+        // x/yがlocal X、z/wがlocal Yを求める逆行列の各行。
+        DirectX::XMFLOAT4 screen_inverse{ 1, 0, 0, 1 };
     };
 
     struct D3D12UIBatch final
@@ -332,24 +363,77 @@ namespace ReplayEngine::Rendering::DX12
         D3D12_RECT scissor{ 0, 0, 0, 0 };
         bool scissor_enabled = false;
         D3D12UIClip clip{};
+        std::array<D3D12UIClip, 4> clips{};
+        std::uint32_t clip_count = 0;
         bool clip_enabled = false;
         std::array<D3D12UIMask, 4> masks{};
         std::uint32_t mask_count = 0;
         bool mask_enabled = false;
-        // -1 = direct draw; otherwise this batch belongs to an effect group.
+        // -1は直接描画。それ以外は所属するEffect Groupの番号。
         std::int32_t effect_group = -1;
     };
 
     struct D3D12UIEffectCommand final
     {
-        // 1=Blur, 2=Glow, 3=Outline, 4=DropShadow, 5=ColorAdjust.
+        // UIEffectKind と同じ連番。Sceneの保存値を変換せずPSO選択へ使う。
         std::uint32_t kind = 0;
         float radius = 0.0f;
         float intensity = 1.0f;
+        float threshold = 0.0f;
         float amount = 1.0f;
+        float angle = 0.0f;
+        float progress = 0.0f;
+        float softness = 0.0f;
+        float speed = 0.0f;
+        float seed = 0.0f;
+        float time = 0.0f;
+        std::int32_t waveform = 0;
         DirectX::XMFLOAT2 direction{ 0.0f, 0.0f };
         DirectX::XMFLOAT4 color{ 1, 1, 1, 1 };
         DirectX::XMFLOAT4 color_2{ 1, 1, 1, 1 };
+        DirectX::XMFLOAT4 color_3{ 1, 1, 1, 1 };
+        DirectX::XMFLOAT4 color_4{ 1, 1, 1, 1 };
+        DirectX::XMFLOAT4 color_stops{ 0.333333f, 0.666667f, 1.0f, 0.0f };
+        std::string auxiliary_texture_key;
+        bool temporal = false;
+        std::uint64_t history_key = 0;
+        bool brush_atlas = false;
+        DirectX::XMFLOAT4 brush_pattern_settings{};
+        std::array<DirectX::XMFLOAT4, 4> brush_pattern_weights{};
+        bool region_enabled = false;
+        std::string region_mask_texture_key;
+        DirectX::XMFLOAT4 effect_region_params{ 0.5f, 0.5f, 0.5f, 0.5f };
+        DirectX::XMFLOAT4 effect_region_settings{ 0, 0, 1, -1 };
+        std::array<DirectX::XMFLOAT4, 7> effect_region_extra_params{};
+        std::array<DirectX::XMFLOAT4, 7> effect_region_extra_settings{};
+        DirectX::XMFLOAT4 effect_region_count{};
+        std::array<DirectX::XMFLOAT4, 8> effect_region_path_counts{};
+        std::array<std::array<DirectX::XMFLOAT4, 32>, 8>
+            effect_region_path_points{};
+    };
+
+    struct D3D12UIEffectConstants final
+    {
+        DirectX::XMFLOAT4 effect_color{ 1, 1, 1, 1 };
+        DirectX::XMFLOAT4 effect_params0{};
+        DirectX::XMFLOAT4 effect_params1{};
+        DirectX::XMFLOAT4 effect_params2{};
+        DirectX::XMFLOAT4 target_size{ 1, 1, 1, 1 };
+        DirectX::XMFLOAT4 effect_color_2{ 1, 1, 1, 1 };
+        DirectX::XMFLOAT4 effect_color_3{ 1, 1, 1, 1 };
+        DirectX::XMFLOAT4 effect_color_4{ 1, 1, 1, 1 };
+        DirectX::XMFLOAT4 effect_color_stops{ 0.333333f, 0.666667f, 1, 0 };
+        DirectX::XMFLOAT4 effect_params3{};
+        DirectX::XMFLOAT4 brush_pattern_settings{};
+        std::array<DirectX::XMFLOAT4, 4> brush_pattern_weights{};
+        DirectX::XMFLOAT4 effect_region_params{ 0.5f, 0.5f, 0.5f, 0.5f };
+        DirectX::XMFLOAT4 effect_region_settings{ 0, 0, 1, -1 };
+        std::array<DirectX::XMFLOAT4, 7> effect_region_extra_params{};
+        std::array<DirectX::XMFLOAT4, 7> effect_region_extra_settings{};
+        DirectX::XMFLOAT4 effect_region_count{};
+        std::array<DirectX::XMFLOAT4, 8> effect_region_path_counts{};
+        std::array<std::array<DirectX::XMFLOAT4, 32>, 8>
+            effect_region_path_points{};
     };
 
     struct D3D12UIEffectGroup final
@@ -358,7 +442,9 @@ namespace ReplayEngine::Rendering::DX12
         std::uint32_t batch_count = 0;
         std::vector<D3D12UIEffectCommand> effects;
         bool capture_backdrop = false;
-        // 0 = Self, 1 = Subtree. Kept for diagnostics and validation.
+        D3D12_RECT composite_scissor{ 0, 0, 0, 0 };
+        bool composite_scissor_enabled = false;
+        // 0 = Self、1 = Subtree。診断と検証でも保存値をそのまま使う。
         std::int32_t target_scope = 0;
     };
 
@@ -366,6 +452,7 @@ namespace ReplayEngine::Rendering::DX12
     {
         std::uint32_t target_width = 0;
         std::uint32_t target_height = 0;
+        DirectX::XMFLOAT4 clear_color{ 0, 0, 0, 0 };
         std::vector<D3D12StaticTextureSource> texture_sources;
         std::vector<D3D12UIFontAtlasSource> font_atlases;
         std::vector<D3D12UIBatch> batches;
@@ -794,16 +881,28 @@ namespace ReplayEngine::Rendering::DX12
         D3D12OffscreenTarget scene_view_target_{};
         D3D12OffscreenTarget game_view_target_{};
         D3D12OffscreenTarget ui_preview_target_{};
-        D3D12OffscreenTarget ui_preview_effect_targets_[3]{};
-        // [0]/[1] are the effect ping-pong pair, [2] is the optional backdrop copy.
-        D3D12OffscreenTarget ui_effect_targets_[3]{};
+        D3D12OffscreenTarget ui_preview_effect_targets_[4]{};
+        // [0]/[1]/[2]はEffectとRegion合成の循環先、[3]はBackdropの退避先。
+        D3D12OffscreenTarget ui_effect_targets_[4]{};
+        struct UIEffectHistoryEntry final
+        {
+            D3D12OffscreenTarget target{};
+            bool valid = false;
+        };
+        // Game ViewとCanvas Previewは解像度も更新周期も異なるため履歴を混ぜない。
+        std::unordered_map<std::uint64_t, UIEffectHistoryEntry>
+            ui_effect_history_targets_;
+        std::unordered_map<std::uint64_t, UIEffectHistoryEntry>
+            ui_preview_effect_history_targets_;
         Microsoft::WRL::ComPtr<ID3D12RootSignature> ui_root_signature_;
         Microsoft::WRL::ComPtr<ID3D12PipelineState> ui_pipelines_[5];
         std::vector<std::uint8_t> ui_vertex_shader_;
         std::vector<std::uint8_t> ui_pixel_shader_;
         Microsoft::WRL::ComPtr<ID3D12RootSignature> ui_effect_root_signature_;
-        Microsoft::WRL::ComPtr<ID3D12PipelineState> ui_effect_pipeline_;
-        std::vector<std::uint8_t> ui_effect_pixel_shader_;
+        static constexpr std::size_t UIEffectKindCount = 74;
+        std::array<Microsoft::WRL::ComPtr<ID3D12PipelineState>, UIEffectKindCount>
+            ui_effect_pipelines_{};
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> ui_effect_region_pipeline_;
 #ifdef USE_IMGUI
         struct ImGuiTextureRequest final
         {

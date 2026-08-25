@@ -755,6 +755,8 @@ namespace ReplayEngine::Rendering::DX12
             !CreateOffscreenTarget(ui_effect_targets_[1], width_, height_,
                 DXGI_FORMAT_R8G8B8A8_UNORM) ||
             !CreateOffscreenTarget(ui_effect_targets_[2], width_, height_,
+                DXGI_FORMAT_R8G8B8A8_UNORM) ||
+            !CreateOffscreenTarget(ui_effect_targets_[3], width_, height_,
                 DXGI_FORMAT_R8G8B8A8_UNORM))
             return false;
         return true;
@@ -1678,6 +1680,12 @@ namespace ReplayEngine::Rendering::DX12
         for (auto& target : ui_preview_effect_targets_)
             ReleaseOffscreenTarget(target);
         for (auto& target : ui_effect_targets_) ReleaseOffscreenTarget(target);
+        for (auto& entry : ui_effect_history_targets_)
+            ReleaseOffscreenTarget(entry.second.target);
+        ui_effect_history_targets_.clear();
+        for (auto& entry : ui_preview_effect_history_targets_)
+            ReleaseOffscreenTarget(entry.second.target);
+        ui_preview_effect_history_targets_.clear();
         for (auto& target : render_targets_)
         {
             if (target) resource_state_tracker_.Forget(target.Get());
