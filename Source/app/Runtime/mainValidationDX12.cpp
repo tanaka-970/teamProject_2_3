@@ -323,6 +323,7 @@ namespace ReplayEngine::Runtime::Detail
         constexpr const char* kDx12ValidationCommands[] =
         {
             "--validate-dx12-device",
+            "--validate-dx12-gpu",
             "--validate-dx12-skinned",
             "--validate-dx12-animation",
             "--validate-dx12-gbuffer",
@@ -346,6 +347,10 @@ namespace ReplayEngine::Runtime::Detail
         if (!requested)
             return -1;
 
+        // 標準検証はDebug Layerで安定して全件確認し、GPU検証は明示指定時だけ有効にする。
+        const bool gpu_validation_requested =
+            std::strstr(command_line, "--validate-dx12-gpu") != nullptr;
+
         const HINSTANCE instance = GetModuleHandleW(nullptr);
         HWND window = CreateValidationWindow(instance);
         if (window == nullptr)
@@ -362,9 +367,9 @@ namespace ReplayEngine::Runtime::Detail
 #if defined(_DEBUG) || defined(DEBUG)
         enable_debug = true;
 #endif
-        // 通常のDebug実行は軽いDebug Layerだけにし、GPU検証はこの専用経路で有効化する。
+        // 通常の検証は軽いDebug Layerだけにし、GPU検証は明示指定時だけ有効化する。
         ok = Check(context.Initialize(window, 64, 64, enable_debug, false, true,
-            enable_debug),
+            gpu_validation_requested && enable_debug),
             "Initialize", checks);
 
         if (ok)

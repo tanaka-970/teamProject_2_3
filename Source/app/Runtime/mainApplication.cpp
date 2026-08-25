@@ -161,7 +161,10 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
         static_cast<LONG>(game_launch.window_width),
         static_cast<LONG>(game_launch.window_height) };
 	AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, FALSE);
-	HWND hwnd = CreateWindowExW(0, APPLICATION_NAME, L"", WS_OVERLAPPEDWINDOW,
+	const wchar_t* window_title = dx12_framework_requested
+		? L"3dgp - DX12" : APPLICATION_NAME;
+	HWND hwnd = CreateWindowExW(0, APPLICATION_NAME, window_title,
+		WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT, CW_USEDEFAULT, rc.right - rc.left, rc.bottom - rc.top,
 		NULL, NULL, instance, NULL);
 
@@ -182,7 +185,7 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
     const bool dxgi_live_report_available =
         AcquireDXGIDebugInterfaces(dxgi_debug, dxgi_info_queue, dxgi_debug_module);
 #endif
-    {
+	{
 	    framework application(hwnd);
         application.configure_content_root(executable_layout.content_root);
         if (dx12_framework_requested) application.request_dx12_framework();
@@ -214,15 +217,25 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
         {
             // 数フレーム描画してから終了させる。
             // 一度も描画せずに終わると、描画経路で作られるリソースを通らない。
-            application.set_automated_smoke_test_frames(
-                automated_smoke_test_frames > 0 ? automated_smoke_test_frames : 60u);
+            // Profile benchmarkと同時指定した場合は、Profile側の終了条件を優先し、
+            // 終了シナリオだけを同じメッセージループの後段で実行する。
+            if (!profile_benchmark.requested)
+            {
+                application.set_automated_smoke_test_frames(
+                    automated_smoke_test_frames > 0 ? automated_smoke_test_frames : 60u);
+            }
             application.request_shutdown_regression();
         }
 
         if (capture_frame_requested)
         {
-            application.set_automated_smoke_test_frames(
-                automated_smoke_test_frames > 0 ? automated_smoke_test_frames : 240u);
+            // プロファイル撮影はプロファイル側で Runtime World の準備完了を
+            // 起点に予約する。別の Smoke Test の終了時刻へ混ぜない。
+            if (!profile_benchmark.requested)
+            {
+                application.set_automated_smoke_test_frames(
+                    automated_smoke_test_frames > 0 ? automated_smoke_test_frames : 240u);
+            }
             application.request_automated_frame_capture(capture_frame_name);
         }
 	    SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&application));
@@ -231,8 +244,11 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
         const bool hide_automated_window = !capture_frame_requested &&
             (automated_smoke_test_frames > 0 || shutdown_regression_requested ||
                 profile_benchmark.requested);
+	    // DX12フレームワークの実機確認は明示的な起動要求なので、起動元が
+	    // SW_HIDEを渡しても画面を表示し、実描画を確認できるようにする。
+	    const int requested_show_command = dx12_framework_requested ? SW_SHOWNORMAL : cmd_show;
 	    exit_code = application.run(
-            hide_automated_window ? SW_HIDE : cmd_show);
+            hide_automated_window ? SW_HIDE : requested_show_command);
         if (capture_frame_requested)
         {
             capture_frame_ok = application.golden_last_capture_ok();
