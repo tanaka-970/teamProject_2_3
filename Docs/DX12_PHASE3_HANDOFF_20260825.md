@@ -304,6 +304,11 @@ Profileの形式:
 - DX11依存の完全撤去とプロジェクト参照整理
 - Phase 3後の追加Material、複数カメラ、複数Sceneを製品仕様として拡張する
 
+詳細な作業境界と受け入れ条件は、次の文書を正本とする。
+
+- `Docs\\DX12_PHASE4_HANDOFF_20260825.md`
+- `Docs\\DX12_PHASE5_HANDOFF_20260825.md`
+
 Phase 3で受け入れたPostProcess、Editor ImGui、Particle、Trail、Landscapeを後戻りさせない。
 
 ## 5. 変更箇所の地図
