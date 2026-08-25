@@ -75,6 +75,10 @@ namespace
 
 bool framework::initialize()
 {
+    // 製品起動ではDX12を唯一のRendererとする。呼び出し元の指定漏れや
+    // 旧移行フラグの値に関係なく、初期化中にD3D11経路へ入らないよう固定する。
+    dx12_framework_requested = true;
+    dx12_framework_active = false;
     HRESULT hr{ S_OK };
 
     std::string asset_database_error;

@@ -372,8 +372,6 @@
     <ClCompile Include="Source\app\Runtime\framework_update.cpp" />
     <ClCompile Include="Source\app\Rendering\framework_render.cpp" />
     <ClCompile Include="Source\app\Rendering\framework_dx12_ui.cpp" />
-    <ClCompile Include="Source\app\Rendering\framework_effect_stack.cpp" />
-    <ClCompile Include="Source\app\Rendering\framework_model_effects.cpp" />
     <ClCompile Include="Source\core\shader.cpp" />
     <ClCompile Include="Source\mesh\skinned_mesh.cpp" />
     <ClCompile Include="Source\mesh\skinned_meshImport.cpp" />
@@ -719,12 +717,6 @@
     <ClInclude Include="RePlayEngine\UI\UIRendererRenderBackdrop.inl" />
     <ClInclude Include="RePlayEngine\UI\UIRendererRenderEffects.inl" />
     <ClInclude Include="RePlayEngine\UI\UIRendererRenderHierarchy.inl" />
-    <ClInclude Include="Source\app\Rendering\framework_render_setup.inl" />
-    <ClInclude Include="Source\app\Rendering\framework_render_scene_setup.inl" />
-    <ClInclude Include="Source\app\Rendering\framework_render_deferred.inl" />
-    <ClInclude Include="Source\app\Rendering\framework_render_forward.inl" />
-    <ClInclude Include="Source\app\Rendering\framework_render_effects.inl" />
-    <ClInclude Include="Source\app\Rendering\framework_render_present.inl" />
     <ClInclude Include="Source\app\framework_class.h" />
     <ClInclude Include="Source\app\Editor\GoldenImageState.h" />
     <ClInclude Include="Source\app\Editor\framework_motion_workspaceInternal.h" />

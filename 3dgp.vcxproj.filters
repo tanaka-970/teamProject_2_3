@@ -579,12 +579,6 @@
     <ClCompile Include="Source\app\Rendering\framework_dx12_ui.cpp">
       <Filter>Source\App\Rendering</Filter>
     </ClCompile>
-    <ClCompile Include="Source\app\Rendering\framework_effect_stack.cpp">
-      <Filter>Source\App\Rendering</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\app\Rendering\framework_model_effects.cpp">
-      <Filter>Source\App\Rendering</Filter>
-    </ClCompile>
     <ClCompile Include="Source\core\shader.cpp">
       <Filter>Source\Core</Filter>
     </ClCompile>
@@ -1462,24 +1456,6 @@
     </ClInclude>
     <ClInclude Include="RePlayEngine\UI\UIRendererRenderHierarchy.inl">
       <Filter>RePlayEngine\UI</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\app\Rendering\framework_render_setup.inl">
-      <Filter>Source\App\Rendering</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\app\Rendering\framework_render_scene_setup.inl">
-      <Filter>Source\App\Rendering</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\app\Rendering\framework_render_deferred.inl">
-      <Filter>Source\App\Rendering</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\app\Rendering\framework_render_forward.inl">
-      <Filter>Source\App\Rendering</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\app\Rendering\framework_render_effects.inl">
-      <Filter>Source\App\Rendering</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\app\Rendering\framework_render_present.inl">
-      <Filter>Source\App\Rendering</Filter>
     </ClInclude>
     <ClInclude Include="Source\app\framework_class.h">
       <Filter>Source\App</Filter>

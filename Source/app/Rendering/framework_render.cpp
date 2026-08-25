@@ -22,12 +22,7 @@
 #include <unordered_set>
 
 // 分割一覧（framework_render.cpp）:
-//   framework_render_setup.inl       … backbuffer/Camera/frame constants
-//   framework_render_scene_setup.inl … Particle/Shadow/Depth/GBuffer 準備
-//   framework_render_deferred.inl    … Deferred Lighting/Material Layer
-//   framework_render_forward.inl     … Outline/TAA/Forward 経路
-//   framework_render_effects.inl     … Model/Screen Effect と PostProcess 前半
-//   framework_render_present.inl     … UI/統計/履歴/Golden Capture/Present
+//   framework_dx12_ui.cpp             … DX12 UI の提出と合成
 // 関数へ再分割せず本文を連続断片のまま include するため、描画順は変更しない。
 
 namespace
@@ -463,12 +458,18 @@ void framework::render(float elapsed_time)
                         if (preview_scene != nullptr)
                         {
                             ReplayEngine::Rendering::DX12::D3D12UIFrame preview_frame;
+                            object_ui_viewport preview_viewport{};
+                            preview_viewport.width = static_cast<float>(
+                                ui_preview_runtime_width);
+                            preview_viewport.height = static_cast<float>(
+                                ui_preview_runtime_height);
+                            preview_viewport.logical_width = preview_viewport.width;
+                            preview_viewport.logical_height = preview_viewport.height;
                             const bool preview_built = build_dx12_ui_for_scene(
                                 preview_frame, *preview_scene,
                                 static_cast<std::uint32_t>(ui_preview_runtime_width),
                                 static_cast<std::uint32_t>(ui_preview_runtime_height),
-                                static_cast<float>(ui_preview_runtime_width),
-                                static_cast<float>(ui_preview_runtime_height));
+                                preview_viewport);
                             if (preview_built)
                                 ui_ok = dx12_device_context.DrawRuntimeUIPreview(preview_frame) && ui_ok;
                         }
@@ -623,11 +624,6 @@ void framework::render(float elapsed_time)
         return;
     }
 
-    // render() の処理順・ローカル状態を変えず、連続断片を内部 .inl へ移動する。
-#include "framework_render_setup.inl"
-#include "framework_render_scene_setup.inl"
-#include "framework_render_deferred.inl"
-#include "framework_render_forward.inl"
-#include "framework_render_effects.inl"
-#include "framework_render_present.inl"
+    // 製品の描画経路はDX12に統一する。旧D3D11描画断片はここから取り込まない。
+    // 旧経路を残したままでは、将来の変更で意図しないフォールバックが入り込む。あと、わかりにくい
 }

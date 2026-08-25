@@ -72,6 +72,9 @@
     int ui_preview_runtime_width{ 0 };
     int ui_preview_runtime_height{ 0 };
     bool ui_preview_runtime_requested{ false };
+    // Scene背景とは別に、透明なCanvas Previewの下地色を選べるようにする。
+    DirectX::XMFLOAT4 ui_preview_background_color{
+        36.0f / 255.0f, 38.0f / 255.0f, 42.0f / 255.0f, 1.0f };
     bool show_ui_inspector_panel{ true };
     bool show_motion_layers_panel{ true };
     bool show_motion_preview_panel{ true };

@@ -1,17 +1,10 @@
 cbuffer UIConstants : register(b0)
 {
-    float4 screen_size;
-    float4 fill_color_2;
-    float4 mode;
-    float4 outline_color;
-    float4 shadow_offset;
-    float4 shadow_color;
-    float4 atlas_size;
-    float4 fill_parameters;
-    float4 clip_parameters;
-    float4 clip_bounds;
-    float4 mask_parameters;
-    float4 mask_uv;
+    float4 screen_size : packoffset(c0);
+    row_major float4x4 world_canvas_matrix : packoffset(c44);
+    row_major float4x4 world_view_projection : packoffset(c48);
+    float4 world_canvas_parameters : packoffset(c52);
+    float4 world_viewport : packoffset(c53);
 };
 
 struct VSInput
@@ -33,10 +26,25 @@ struct VSOutput
 VSOutput main(VSInput input)
 {
     VSOutput output;
-    float2 safe_size = max(screen_size.xy, float2(1.0, 1.0));
-    float2 ndc = float2(input.position.x / safe_size.x * 2.0 - 1.0,
-        1.0 - input.position.y / safe_size.y * 2.0);
-    output.position = float4(ndc, 0.0, 1.0);
+    if (world_canvas_parameters.x > 0.5)
+    {
+        const float2 viewport_size = max(world_viewport.zw, float2(1.0, 1.0));
+        const float2 normalized = (input.position - world_viewport.xy) /
+            viewport_size;
+        const float3 canvas_position = float3(
+            (normalized.x - 0.5) * world_canvas_parameters.y,
+            (0.5 - normalized.y) * world_canvas_parameters.z, 0.0);
+        const float4 world_position = mul(float4(canvas_position, 1.0),
+            world_canvas_matrix);
+        output.position = mul(world_position, world_view_projection);
+    }
+    else
+    {
+        const float2 safe_size = max(screen_size.xy, float2(1.0, 1.0));
+        const float2 ndc = float2(input.position.x / safe_size.x * 2.0 - 1.0,
+            1.0 - input.position.y / safe_size.y * 2.0);
+        output.position = float4(ndc, 0.0, 1.0);
+    }
     output.uv = input.uv;
     output.color = input.color;
     output.uv_bounds = input.uv_bounds;

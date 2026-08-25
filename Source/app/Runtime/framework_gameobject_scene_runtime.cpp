@@ -214,13 +214,21 @@ void framework::update_object_scene(float elapsed_time)
     const float mouse_y = ui_logical_height -
         ((static_cast<float>(mouse.y) - ui_viewport.top) *
             (ui_logical_height / viewport_height));
+    const bool pointer_inside_viewport =
+        static_cast<float>(mouse.x) >= ui_viewport.left &&
+        static_cast<float>(mouse.y) >= ui_viewport.top &&
+        static_cast<float>(mouse.x) < ui_viewport.left + viewport_width &&
+        static_cast<float>(mouse.y) < ui_viewport.top + viewport_height;
     const bool mouse_down = game_input.Held("PrimaryClick");
     const bool mouse_pressed = mouse_down && !ui_pointer_down_last;
     const bool mouse_released = !mouse_down && ui_pointer_down_last;
-    bool input_captured = false;
+    // Editorのドックやツールバー上では、前フレームのImGui capture状態に依存せず
+    // Runtime UIへ入力を流さない。Scene/Game View内だけを同じViewport変換で公開する。
+    bool input_captured = editor_mode && !pointer_inside_viewport;
 #ifdef USE_IMGUI
     if (editor_mode && ImGui::GetCurrentContext())
-        input_captured = ImGui::GetIO().WantCaptureMouse && !scene_view_hovered;
+        input_captured = input_captured ||
+            (ImGui::GetIO().WantCaptureMouse && !scene_view_hovered);
 #endif
     {
         REPLAY_PROFILE_SCOPE("UI/InputNavigation");

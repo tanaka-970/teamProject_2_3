@@ -91,7 +91,7 @@ void framework::draw_inspector()
     case editor_selection::world:
         ImGui::TextUnformatted("ワールド");
         ImGui::Separator();
-        ImGui::ColorEdit4("背景色", &background_color.x);
+        ImGui::ColorEdit4("Scene / Game 背景色", &background_color.x);
         ImGui::Checkbox("背景画像", &draw_background_image);
         ImGui::Checkbox("ゲームシーン", &enable_scene_game);
         ImGui::Checkbox("パーティクル", &enable_particles);
