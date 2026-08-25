@@ -6,6 +6,7 @@
 #include <wrl.h>
 
 #include "D3D12DescriptorHeapAllocator.h"
+#include "D3D12Diagnostics.h"
 #include "D3D12FrameConstants.h"
 #include "D3D12FrameResource.h"
 #include "D3D12MeshBuffer.h"
@@ -597,6 +598,39 @@ namespace ReplayEngine::Rendering::DX12
         {
             return resource_state_tracker_;
         }
+        const D3D12GpuTimingSnapshot& GpuTiming() const noexcept
+        {
+            return diagnostics_.LatestTiming();
+        }
+        void ConsumeDebugMessages(std::vector<D3D12DebugMessage>& out)
+        {
+            diagnostics_.ConsumeMessages(out);
+        }
+        void SetDebugLogPath(std::filesystem::path path)
+        {
+            diagnostics_.SetDebugLogPath(std::move(path));
+        }
+        void SetBreakOnError(bool enabled) noexcept
+        {
+            diagnostics_.SetBreakOnError(enabled);
+        }
+        bool ReportLiveObjects(std::uint32_t& live_lines,
+            std::uint32_t& detail_lines) noexcept
+        {
+            return diagnostics_.ReportLiveObjects(live_lines, detail_lines);
+        }
+        std::uint32_t LastShutdownLiveObjectLines() const noexcept
+        {
+            return last_shutdown_live_object_lines_;
+        }
+        std::uint32_t LastShutdownLiveObjectDetailLines() const noexcept
+        {
+            return last_shutdown_live_object_detail_lines_;
+        }
+        bool LastShutdownLiveObjectReportOk() const noexcept
+        {
+            return last_shutdown_live_object_report_ok_;
+        }
         const D3D12RenderItemBatch& RenderItemBatch() const noexcept
         {
             return render_item_batches_[frame_index_];
@@ -703,6 +737,14 @@ namespace ReplayEngine::Rendering::DX12
         void ReclaimDeferredDescriptors() noexcept;
         void ReportDeviceRemoved(HRESULT trigger) noexcept;
         void SetInitializationFailure(const char* stage, HRESULT result) noexcept;
+        void BeginGpuPass(D3D12GpuPass pass) noexcept
+        {
+            diagnostics_.BeginPass(command_list_.Get(), pass);
+        }
+        void EndGpuPass(D3D12GpuPass pass) noexcept
+        {
+            diagnostics_.EndPass(command_list_.Get(), pass);
+        }
 
         struct StaticTextureResource final
         {
@@ -876,6 +918,10 @@ namespace ReplayEngine::Rendering::DX12
         D3D12DescriptorHeapAllocator sampler_descriptor_allocator_;
         D3D12UploadContext upload_context_;
         D3D12ResourceStateTracker resource_state_tracker_;
+        D3D12Diagnostics diagnostics_;
+        std::uint32_t last_shutdown_live_object_lines_ = 0;
+        std::uint32_t last_shutdown_live_object_detail_lines_ = 0;
+        bool last_shutdown_live_object_report_ok_ = true;
         D3D12RenderItemBatch render_item_batches_[FrameCount];
         D3D12FrameConstants current_frame_constants_{};
         D3D12OffscreenTarget scene_view_target_{};

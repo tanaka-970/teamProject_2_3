@@ -1,4 +1,4 @@
-#include "D3D12DeviceContext.h"
+﻿#include "D3D12DeviceContext.h"
 #include "D3D12ResourceFactory.h"
 
 #include <algorithm>
@@ -1119,7 +1119,14 @@ namespace ReplayEngine::Rendering::DX12
 
     bool D3D12DeviceContext::DrawRuntimeUI(const D3D12UIFrame& frame) noexcept
     {
-        return DrawRuntimeUIToTarget(frame, nullptr, ui_effect_targets_);
+        BeginGpuPass(D3D12GpuPass::RuntimeUI);
+        if (!frame.effects.empty() || !frame.effect_groups.empty())
+            BeginGpuPass(D3D12GpuPass::UIEffect);
+        const bool result = DrawRuntimeUIToTarget(frame, nullptr, ui_effect_targets_);
+        if (!frame.effects.empty() || !frame.effect_groups.empty())
+            EndGpuPass(D3D12GpuPass::UIEffect);
+        EndGpuPass(D3D12GpuPass::RuntimeUI);
+        return result;
     }
 
     bool D3D12DeviceContext::EnsureUIPreviewTarget(
@@ -1164,8 +1171,11 @@ namespace ReplayEngine::Rendering::DX12
 
     bool D3D12DeviceContext::DrawRuntimeUIPreview(const D3D12UIFrame& frame) noexcept
     {
+        BeginGpuPass(D3D12GpuPass::UIPreview);
         if (!ui_preview_target_.IsValid()) return false;
-        return DrawRuntimeUIToTarget(frame, &ui_preview_target_,
+        const bool result = DrawRuntimeUIToTarget(frame, &ui_preview_target_,
             ui_preview_effect_targets_);
+        EndGpuPass(D3D12GpuPass::UIPreview);
+        return result;
     }
 }

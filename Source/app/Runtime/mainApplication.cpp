@@ -32,8 +32,6 @@ using ReplayEngine::Runtime::Detail::GameLaunchConfig;
 using ReplayEngine::Runtime::Detail::ParseAutomatedSmokeTestFrames;
 using ReplayEngine::Runtime::Detail::ParseProfileBenchmark;
 using ReplayEngine::Runtime::Detail::ProfileBenchmarkConfig;
-using ReplayEngine::Runtime::Detail::D3D11LiveObjectFileSummary;
-using ReplayEngine::Runtime::Detail::WriteD3D11LiveObjectReportFile;
 using ReplayEngine::Runtime::Detail::ValidationFolder;
 using ReplayEngine::Runtime::Detail::RunHeadlessLargeSceneValidation;
 using ReplayEngine::Runtime::Detail::RunHeadlessSceneValidation;
@@ -172,11 +170,9 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
     int exit_code = 0;
     bool capture_frame_ok = false;
     std::string capture_frame_summary;
-    Microsoft::WRL::ComPtr<ID3D11Debug> d3d11_debug;
-    Microsoft::WRL::ComPtr<ID3D11InfoQueue> d3d11_info_queue;
-    D3D11LiveObjectFileSummary d3d11_live_report_summary{};
-    HRESULT d3d11_live_report_result = E_NOINTERFACE;
-    bool d3d11_live_report_available = false;
+    std::uint32_t dx12_live_object_lines = 0;
+    std::uint32_t dx12_live_object_detail_lines = 0;
+    bool dx12_live_report_ok = true;
 #if defined(_DEBUG)
     Microsoft::WRL::ComPtr<IDXGIDebug1> dxgi_debug;
     Microsoft::WRL::ComPtr<IDXGIInfoQueue> dxgi_info_queue;
@@ -228,7 +224,14 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
             application.request_shutdown_regression();
         }
 
-        if (capture_frame_requested)
+        if (shutdown_regression_requested &&
+        (!dx12_live_report_ok || dx12_live_object_lines != 0 ||
+            dx12_live_object_detail_lines != 0) && exit_code == 0)
+    {
+        exit_code = 75;
+    }
+
+    if (capture_frame_requested)
         {
             // プロファイル撮影はプロファイル側で Runtime World の準備完了を
             // 起点に予約する。別の Smoke Test の終了時刻へ混ぜない。
@@ -255,56 +258,13 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
             capture_frame_ok = application.golden_last_capture_ok();
             capture_frame_summary = application.golden_last_capture_summary();
         }
-        d3d11_debug = application.acquire_d3d11_debug();
-        d3d11_info_queue = application.acquire_d3d11_info_queue();
+        dx12_live_object_lines = application.dx12_shutdown_live_object_lines();
+        dx12_live_object_detail_lines = application.dx12_shutdown_live_object_detail_lines();
+        dx12_live_report_ok = application.dx12_shutdown_live_object_report_ok();
     }
-
-    // ReportLiveDeviceObjects が出す行だけを測りたいので、直前に古い警告を捨てる。
-    // 出力後は WriteD3D11LiveObjectReportFile が全件を書いてから Clear する。
-    if (d3d11_info_queue) d3d11_info_queue->ClearStoredMessages();
-    if (d3d11_debug)
-    {
-        d3d11_live_report_available = true;
-        d3d11_live_report_result = d3d11_debug->ReportLiveDeviceObjects(
-            D3D11_RLDO_SUMMARY | D3D11_RLDO_DETAIL | D3D11_RLDO_IGNORE_INTERNAL);
-        d3d11_live_report_summary = WriteD3D11LiveObjectReportFile(
-            d3d11_info_queue.Get(), d3d11_live_report_available,
-            d3d11_live_report_result);
-        std::fprintf(stderr, "D3D11 Live Object Report: %s (0x%08lx)\n",
-            SUCCEEDED(d3d11_live_report_result) ? "completed" : "failed",
-            static_cast<unsigned long>(d3d11_live_report_result));
-        std::fprintf(stderr,
-            "D3D11 Live Object Details: %llu lines, summary ",
-            static_cast<unsigned long long>(
-                d3d11_live_report_summary.live_object_detail_lines));
-        if (d3d11_live_report_summary.live_object_summary_found)
-        {
-            std::fprintf(stderr, "%llu",
-                static_cast<unsigned long long>(
-                    d3d11_live_report_summary.live_object_summary_count));
-        }
-        else
-        {
-            std::fprintf(stderr, "unknown");
-        }
-        std::fprintf(stderr,
-            " (%llu info queue messages, Saved/Validation/D3D11LiveObjects.txt)\n",
-            static_cast<unsigned long long>(
-                d3d11_live_report_summary.readable_messages));
-        if (FAILED(d3d11_live_report_result) && exit_code == 0) exit_code = 73;
-    }
-    else
-    {
-        d3d11_live_report_summary = WriteD3D11LiveObjectReportFile(
-            d3d11_info_queue.Get(), d3d11_live_report_available,
-            d3d11_live_report_result);
-    }
-    d3d11_info_queue.Reset();
-    d3d11_debug.Reset();
 
 #if defined(_DEBUG)
-    // D3D11 Debug 自身が Device を生かす参照を手放したあとで、
-    // プロセス全体を追跡する DXGI から最終確認する。
+    // DX12 Device の解放後にプロセス全体を追跡する DXGI から最終確認する。
     if (dxgi_live_report_available && dxgi_debug && dxgi_info_queue)
     {
         dxgi_info_queue->ClearStoredMessages(DXGI_DEBUG_ALL);
@@ -361,23 +321,10 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
             report << "REPLAY_RUNTIME_SMOKE 1\n";
             report << "RENDERED_FRAMES " << automated_smoke_test_frames << '\n';
             report << "EXIT_CODE " << exit_code << '\n';
-            report << "D3D11_DEBUG_AVAILABLE " << (d3d11_live_report_available ? 1 : 0) << '\n';
-            report << "D3D11_LIVE_REPORT_HRESULT 0x" << std::hex << std::setw(8)
-                << std::setfill('0') << static_cast<unsigned long>(
-                    d3d11_live_report_result) << '\n';
-            report << std::dec << std::setfill(' ');
-            report << "D3D11_LIVE_OBJECT_DETAIL_LINES "
-                << d3d11_live_report_summary.live_object_detail_lines << '\n';
-            report << "D3D11_LIVE_OBJECT_SUMMARY_COUNT ";
-            if (d3d11_live_report_summary.live_object_summary_found)
-            {
-                report << d3d11_live_report_summary.live_object_summary_count;
-            }
-            else
-            {
-                report << "UNKNOWN";
-            }
-            report << '\n';
+            report << "DX12_LIVE_REPORT_OK " << (dx12_live_report_ok ? 1 : 0) << '\n';
+            report << "D3D12_LIVE_OBJECT_LINES " << dx12_live_object_lines << '\n';
+            report << "D3D12_LIVE_OBJECT_DETAIL_LINES "
+                << dx12_live_object_detail_lines << '\n';
         }
     }
 	if (SUCCEEDED(com_result)) CoUninitialize();

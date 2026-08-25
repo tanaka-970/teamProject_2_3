@@ -367,11 +367,6 @@ private:
     void store_debug_mesh_world(DirectX::XMFLOAT4X4& world) const;
 
     // SSAO/SSR/TAAが共有するフレーム定数を作ってb9へ載せる。
-    void update_frame_constants(const DirectX::XMMATRIX& view,
-        const DirectX::XMMATRIX& projection, float elapsed_time,
-        bool advance_effect_time = true);
-    ID3D11PixelShader* skinned_forward_shader(int shading) const;
-    ID3D11PixelShader* static_forward_shader(int shading) const;
     ReplayEngine::Rendering::ShaderLightingModel deferred_lighting_model(
         int shading) const;
     void bind_gbuffer_material(

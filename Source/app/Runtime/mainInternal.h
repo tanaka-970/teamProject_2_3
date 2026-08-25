@@ -56,29 +56,12 @@ namespace ReplayEngine::Runtime::Detail
     };
     ProfileBenchmarkConfig ParseProfileBenchmark(const char* command_line);
 
-    struct D3D11LiveObjectFileSummary
-    {
-        std::uint64_t stored_messages = 0;
-        std::uint64_t readable_messages = 0;
-        std::uint64_t live_object_detail_lines = 0;
-        std::uint64_t live_object_summary_count = 0;
-        bool live_object_summary_found = false;
-        std::uint64_t live_device_lines = 0;
-        std::uint64_t live_device_refcount = 0;
-        bool live_device_refcount_found = false;
-        std::uint64_t live_context_lines = 0;
-        std::uint64_t live_debug_interface_lines = 0;
-    };
-    D3D11LiveObjectFileSummary WriteD3D11LiveObjectReportFile(
-        ID3D11InfoQueue* info_queue, bool report_available, HRESULT report_result);
-
 #if defined(_DEBUG)
     struct DXGILiveObjectFileSummary
     {
         std::uint64_t stored_messages = 0;
         std::uint64_t readable_messages = 0;
         std::uint64_t live_object_lines = 0;
-        std::uint64_t live_d3d11_device_lines = 0;
     };
     DXGILiveObjectFileSummary WriteDXGILiveObjectReportFile(
         IDXGIInfoQueue* info_queue, bool report_available, HRESULT report_result);

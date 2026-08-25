@@ -1,5 +1,4 @@
 ﻿#include "framework.h"
-#include "texture.h"
 #include "../../RePlayEngine/Assets/AssetCache.h"
 #include "../../RePlayEngine/Assets/SpriteAtlasAsset.h"
 #include "../../RePlayEngine/Assets/TextureCompressor.h"
@@ -61,34 +60,6 @@ ReplayEngine::Assets::AssetKind framework::project_kind_for(
         extension == ReplayEngine::Rendering::ShaderComposerAsset::file_extension)
         return AssetKind::Shader;
     return AssetKind::Unknown;
-}
-
-// -----------------------------------------------------------------------------
-//  サムネイル
-//
-//  load_texture_from_file はパスをキーに内部キャッシュを持ち、
-//  失敗も記録するので毎フレーム呼んでも再読込は起きない。
-//  ここで独自キャッシュは持たない。
-// -----------------------------------------------------------------------------
-ID3D11ShaderResourceView* framework::project_thumbnail_for(
-    const std::filesystem::path& path)
-{
-    if (!device) return nullptr;
-
-    const std::string extension = ToLowerCopy(path.extension().u8string());
-    if (!IsImageExtension(extension)) return nullptr;
-
-    ID3D11ShaderResourceView* view = nullptr;
-    D3D11_TEXTURE2D_DESC description{};
-    const HRESULT result = load_texture_from_file(device.Get(),
-        path.wstring().c_str(), &view, &description);
-    if (FAILED(result)) return nullptr;
-
-    // load_texture_from_file は cache 所有 SRV を CopyTo(AddRef) する。Browser は毎 frame
-    // 呼ぶため、呼び出し分を Release しないと RefCount が frame ごとに増え続ける。
-    ID3D11ShaderResourceView* borrowed = view;
-    if (view != nullptr) view->Release();
-    return borrowed;
 }
 
 // -----------------------------------------------------------------------------
