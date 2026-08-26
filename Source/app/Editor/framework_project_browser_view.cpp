@@ -288,6 +288,8 @@ bool framework::project_open_entry(const std::filesystem::path& path)
         return open_motion_asset(*record);
     if (kind == AssetKind::SpriteAtlas && record != nullptr)
         return open_sprite_atlas_asset(*record);
+    if (kind == AssetKind::EasingCurve && record != nullptr)
+        return open_easing_curve_asset(*record);
     if (kind == AssetKind::Shader)
     {
         std::string open_error;
@@ -375,6 +377,11 @@ void framework::draw_project_create_submenu(const std::filesystem::path& target_
         {
             select_target();
             project_create_effect_preset(project_new_item_name);
+        }
+        if (ImGui::MenuItem("Easing Curve"))
+        {
+            select_target();
+            project_create_easing_curve(project_new_item_name);
         }
         ImGui::EndMenu();
     }
@@ -529,6 +536,7 @@ void framework::draw_project_folder_contents()
             else if (kind == AssetKind::Localization) filter_type = 10;
             else if (kind == AssetKind::EffectPreset) filter_type = 11;
             else if (kind == AssetKind::InputAction) filter_type = 12;
+            else if (kind == AssetKind::EasingCurve) filter_type = 14;
             else filter_type = 13;
             if (asset_type_filter != filter_type) continue;
         }

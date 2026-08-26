@@ -326,6 +326,7 @@ namespace ReplayEngine::Editor::Detail
             if (name == "SpriteAtlas") return Assets::AssetKind::SpriteAtlas;
             if (name == "Localization") return Assets::AssetKind::Localization;
             if (name == "EffectPreset") return Assets::AssetKind::EffectPreset;
+            if (name == "EasingCurve") return Assets::AssetKind::EasingCurve;
             return Assets::AssetKind::Unknown;
         }
 

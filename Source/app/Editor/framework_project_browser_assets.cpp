@@ -6,6 +6,7 @@
 #include "../../RePlayEngine/Rendering/Effects/EffectPresetAsset.h"
 #include "../../RePlayEngine/Editor/Style/EditorStyle.h"
 #include "../../RePlayEngine/Motion/CompositionAsset.h"
+#include "../../RePlayEngine/Motion/EasingCurveAsset.h"
 #include "../../RePlayEngine/Motion/MotionAsset.h"
 #include "../../RePlayEngine/Rendering/Materials/MaterialAsset.h"
 #include "../../RePlayEngine/Rendering/Shaders/ShaderAssetFactory.h"
@@ -16,6 +17,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <filesystem>
 #include <string>
 #include <system_error>
@@ -41,6 +43,8 @@ ReplayEngine::Assets::AssetKind framework::project_kind_for(
         return AssetKind::Motion;
     if (extension == ReplayEngine::Motion::CompositionAsset::file_extension)
         return AssetKind::Composition;
+    if (extension == ReplayEngine::Motion::EasingCurveAsset::file_extension)
+        return AssetKind::EasingCurve;
     if (extension == ReplayEngine::Localization::LocalizationTable::file_extension)
         return AssetKind::Localization;
     if (extension == ReplayEngine::Rendering::Effects::EffectPresetAsset::file_extension)
@@ -621,6 +625,108 @@ bool framework::project_create_effect_preset(const std::string& name)
     project_tree_reveal_selection_pending = true;
     project_record_created_path(path, "Effect Preset を作成");
     project_browser_status = "Effect Preset を作成しました: " + path.filename().u8string();
+    return true;
+}
+
+
+bool framework::project_create_easing_curve(const std::string& name)
+{
+    using ReplayEngine::Assets::AssetKind;
+    using ReplayEngine::Motion::EasingCurveAsset;
+    const std::string safe = SafeProjectFileName(name.empty() ? "NewEasingCurve" : name);
+    if (safe.empty()) return false;
+    std::error_code error;
+    const std::filesystem::path root = std::filesystem::current_path(error);
+    if (error) return false;
+    const std::filesystem::path folder = root / project_current_folder;
+    std::filesystem::create_directories(folder, error);
+    if (error) return false;
+    const std::filesystem::path path = UniqueProjectPath(folder, safe,
+        EasingCurveAsset::file_extension, &asset_database);
+
+    EasingCurveAsset curve;
+    curve.name = safe;
+    curve.sample_count = 64;
+    curve.samples.resize(static_cast<std::size_t>(curve.sample_count));
+    const float denominator = static_cast<float>(curve.sample_count - 1);
+    for (int index = 0; index < curve.sample_count; ++index)
+        curve.samples[static_cast<std::size_t>(index)] = static_cast<float>(index) / denominator;
+    curve.control_points = { { 0.0f, 0.0f }, { 1.0f, 1.0f } };
+    curve.Normalize();
+
+    std::string save_error;
+    if (!curve.SaveToFile(path, save_error))
+    {
+        project_browser_status = "Easing Curve 作成失敗: " + save_error;
+        return false;
+    }
+    const auto& record = asset_database.Register(path, AssetKind::EasingCurve);
+    if (!asset_database.Save(save_error))
+    {
+        project_browser_status = "Easing Curve は作成しましたが DB 保存失敗: " + save_error;
+        return false;
+    }
+    selected_asset_guid = record.guid;
+    project_selected_entry_path = path;
+    selected_editor_object = editor_selection::asset;
+    project_tree_reveal_selection_pending = true;
+    set_project_folder(path.parent_path());
+    open_easing_curve_asset(record);
+    project_record_created_path(path, "Easing Curve を作成");
+    project_browser_status = "Easing Curve を作成しました: " + path.filename().u8string();
+    return true;
+}
+
+bool framework::open_easing_curve_asset(const ReplayEngine::Assets::AssetRecord& asset)
+{
+    if (asset.kind != ReplayEngine::Assets::AssetKind::EasingCurve) return false;
+    ReplayEngine::Motion::EasingCurveAsset curve;
+    std::string error;
+    if (!curve.LoadFromFile(asset.source_path, error))
+    {
+        easing_editor_status = error;
+        return false;
+    }
+    easing_editor_asset = std::move(curve);
+    easing_editor_path = asset.source_path;
+    easing_editor_guid = asset.guid;
+    easing_editor_loaded = true;
+    easing_editor_dirty = false;
+    easing_editor_drawing = false;
+    easing_editor_freehand_points.clear();
+    easing_editor_active_control_point = -1;
+    easing_editor_active_sample = -1;
+    easing_editor_context_control_point = -1;
+    std::snprintf(easing_editor_name_buffer, IM_ARRAYSIZE(easing_editor_name_buffer), "%s",
+        easing_editor_asset.name.c_str());
+    show_easing_editor_panel = true;
+    easing_editor_status = "Easing Curve を開きました: " + asset.display_name;
+    return true;
+}
+
+bool framework::save_current_easing_curve()
+{
+    if (!easing_editor_loaded || easing_editor_path.empty()) return false;
+    easing_editor_asset.name = easing_editor_name_buffer;
+    easing_editor_asset.Normalize();
+    std::string error;
+    if (!easing_editor_asset.SaveToFile(easing_editor_path, error))
+    {
+        easing_editor_status = error;
+        return false;
+    }
+    const auto& record = asset_database.Register(easing_editor_path,
+        ReplayEngine::Assets::AssetKind::EasingCurve);
+    easing_editor_guid = record.guid;
+    ReplayEngine::Motion::EasingCurveAsset::Invalidate(record.guid);
+    std::string db_error;
+    if (!asset_database.Save(db_error))
+    {
+        easing_editor_status = "Easing Curve は保存しましたがDB保存失敗: " + db_error;
+        return false;
+    }
+    easing_editor_dirty = false;
+    easing_editor_status = "保存しました: " + easing_editor_path.filename().u8string();
     return true;
 }
 

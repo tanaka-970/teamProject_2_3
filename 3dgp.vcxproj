@@ -382,6 +382,7 @@
     <ClCompile Include="RePlayEngine\Scripting\Core\ScriptValue.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\Core\ScriptWorld.cpp" />
     <ClCompile Include="Source\app\Editor\framework_project_browser.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_easing_editor.cpp" />
     <ClCompile Include="Source\app\Editor\framework_sprite_atlas_editor.cpp" />
     <ClCompile Include="Source\app\Editor\framework_project_browser_assets.cpp" />
     <ClCompile Include="Source\app\Editor\framework_project_browser_shader_creation.cpp" />
@@ -483,6 +484,7 @@
     <ClCompile Include="RePlayEngine\Editor\Commands\SceneEditHistory.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Commands\FileEditHistory.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Commands\MotionEditHistory.cpp" />
+    <ClCompile Include="RePlayEngine\Motion\EasingCurveAsset.cpp" />
     <ClCompile Include="RePlayEngine\Motion\MotionEasing.cpp" />
     <ClCompile Include="RePlayEngine\Motion\MotionAsset.cpp" />
     <ClCompile Include="RePlayEngine\Motion\MotionAssetLoad.cpp" />
@@ -700,6 +702,7 @@
     <ClInclude Include="RePlayEngine\Reflection\Property\PropertyBag.h" />
     <ClInclude Include="RePlayEngine\Reflection\Property\References.h" />
     <ClInclude Include="RePlayEngine\Reflection\Registry\TypeGUID.h" />
+    <ClInclude Include="RePlayEngine\Motion\EasingCurveAsset.h" />
     <ClInclude Include="RePlayEngine\Motion\MotionEasing.h" />
     <ClInclude Include="RePlayEngine\Motion\MotionAsset.h" />
     <ClInclude Include="RePlayEngine\Motion\CompositionAsset.h" />
