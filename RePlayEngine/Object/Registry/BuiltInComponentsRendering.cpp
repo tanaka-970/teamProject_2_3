@@ -42,6 +42,13 @@ namespace ReplayEngine::Core::Detail
             PropertyRegistry::Register<MeshRendererComponent>(
                 MakeProperty("receive_shadow", &MeshRendererComponent::receive_shadow)
                     .Display("影を受ける"));
+
+            PropertyRegistry::Register<MeshRendererComponent>(
+                MakeProperty("shadow_alpha_clip", &MeshRendererComponent::shadow_alpha_clip)
+                    .Display("影をアルファで抜く"));
+            PropertyRegistry::Register<MeshRendererComponent>(
+                MakeProperty("shadow_alpha_cutoff", &MeshRendererComponent::shadow_alpha_cutoff)
+                    .Display("影の抜きしきい値").Range(0.0, 1.0).Step(0.01));
             PropertyRegistry::Register<MeshRendererComponent>(
                 MakeProperty("rendering_layer", &MeshRendererComponent::rendering_layer)
                     .Display("Rendering Layer").Range(0.0, 31.0).Step(1.0));
@@ -96,6 +103,13 @@ namespace ReplayEngine::Core::Detail
                 MakeProperty("cast_shadow", &PrimitiveMeshRendererComponent::cast_shadow).Display("影を落とす"));
             PropertyRegistry::Register<PrimitiveMeshRendererComponent>(
                 MakeProperty("receive_shadow", &PrimitiveMeshRendererComponent::receive_shadow).Display("影を受ける"));
+
+            PropertyRegistry::Register<PrimitiveMeshRendererComponent>(
+                MakeProperty("shadow_alpha_clip", &PrimitiveMeshRendererComponent::shadow_alpha_clip)
+                    .Display("影をアルファで抜く"));
+            PropertyRegistry::Register<PrimitiveMeshRendererComponent>(
+                MakeProperty("shadow_alpha_cutoff", &PrimitiveMeshRendererComponent::shadow_alpha_cutoff)
+                    .Display("影の抜きしきい値").Range(0.0, 1.0).Step(0.01));
             PropertyRegistry::Register<PrimitiveMeshRendererComponent>(
                 MakeProperty("rendering_layer", &PrimitiveMeshRendererComponent::rendering_layer)
                     .Display("Rendering Layer").Range(0.0, 31.0).Step(1.0));
@@ -142,6 +156,13 @@ namespace ReplayEngine::Core::Detail
             PropertyRegistry::Register<SkinnedMeshRendererComponent>(
                 MakeProperty("receive_shadow", &SkinnedMeshRendererComponent::receive_shadow)
                     .Display("影を受ける"));
+
+            PropertyRegistry::Register<SkinnedMeshRendererComponent>(
+                MakeProperty("shadow_alpha_clip", &SkinnedMeshRendererComponent::shadow_alpha_clip)
+                    .Display("影をアルファで抜く"));
+            PropertyRegistry::Register<SkinnedMeshRendererComponent>(
+                MakeProperty("shadow_alpha_cutoff", &SkinnedMeshRendererComponent::shadow_alpha_cutoff)
+                    .Display("影の抜きしきい値").Range(0.0, 1.0).Step(0.01));
             PropertyRegistry::Register<SkinnedMeshRendererComponent>(
                 MakeProperty("rendering_layer", &SkinnedMeshRendererComponent::rendering_layer)
                     .Display("Rendering Layer").Range(0.0, 31.0).Step(1.0));
@@ -492,9 +513,22 @@ namespace ReplayEngine::Core::Detail
             PropertyRegistry::Register<DirectionalLightComponent>(
                 MakeProperty("intensity", &DirectionalLightComponent::intensity)
                     .Display("強さ").Range(0.0, 100.0).Step(0.05));
+            // ---- 影 (Unity の Light > Shadow Type / Unreal の Cast Shadows) ----
             PropertyRegistry::Register<DirectionalLightComponent>(
                 MakeProperty("cast_shadows", &DirectionalLightComponent::cast_shadows)
                     .Display("影を落とす"));
+            PropertyRegistry::Register<DirectionalLightComponent>(
+                MakeProperty("shadow_strength", &DirectionalLightComponent::shadow_strength)
+                    .Display("影の濃さ").Range(0.0, 1.0).Step(0.01));
+            PropertyRegistry::Register<DirectionalLightComponent>(
+                MakeProperty("shadow_depth_bias", &DirectionalLightComponent::shadow_depth_bias)
+                    .Display("深度バイアス (m)").Range(0.0, 0.5).Step(0.001));
+            PropertyRegistry::Register<DirectionalLightComponent>(
+                MakeProperty("shadow_normal_bias", &DirectionalLightComponent::shadow_normal_bias)
+                    .Display("法線バイアス").Range(0.0, 6.0).Step(0.05));
+            PropertyRegistry::Register<DirectionalLightComponent>(
+                MakeProperty("shadow_distance", &DirectionalLightComponent::shadow_distance)
+                    .Display("影の最遠距離").Range(1.0, 2000.0).Step(1.0));
 
             ComponentRegistry::Register<PointLightComponent>(
                 ComponentTypeInfo::Describe("Point Light", "Lighting")
@@ -507,6 +541,19 @@ namespace ReplayEngine::Core::Detail
             PropertyRegistry::Register<PointLightComponent>(
                 MakeProperty("range", &PointLightComponent::range)
                     .Display("範囲").Range(0.01, 10000.0).Step(0.1));
+            // ---- 影 ---- Point は 1 灯で 6 面描くため既定は OFF。
+            PropertyRegistry::Register<PointLightComponent>(
+                MakeProperty("cast_shadows", &PointLightComponent::cast_shadows)
+                    .Display("影を落とす"));
+            PropertyRegistry::Register<PointLightComponent>(
+                MakeProperty("shadow_strength", &PointLightComponent::shadow_strength)
+                    .Display("影の濃さ").Range(0.0, 1.0).Step(0.01));
+            PropertyRegistry::Register<PointLightComponent>(
+                MakeProperty("shadow_depth_bias", &PointLightComponent::shadow_depth_bias)
+                    .Display("深度バイアス (m)").Range(0.0, 0.5).Step(0.001));
+            PropertyRegistry::Register<PointLightComponent>(
+                MakeProperty("shadow_near_plane", &PointLightComponent::shadow_near_plane)
+                    .Display("影のニア").Range(0.01, 10.0).Step(0.01));
 
             ComponentRegistry::Register<SpotLightComponent>(
                 ComponentTypeInfo::Describe("Spot Light", "Lighting")
@@ -525,6 +572,19 @@ namespace ReplayEngine::Core::Detail
             PropertyRegistry::Register<SpotLightComponent>(
                 MakeProperty("outer_angle_degrees", &SpotLightComponent::outer_angle_degrees)
                     .Display("外側角度").Range(0.1, 179.0).Step(0.5));
+            // ---- 影 ----
+            PropertyRegistry::Register<SpotLightComponent>(
+                MakeProperty("cast_shadows", &SpotLightComponent::cast_shadows)
+                    .Display("影を落とす"));
+            PropertyRegistry::Register<SpotLightComponent>(
+                MakeProperty("shadow_strength", &SpotLightComponent::shadow_strength)
+                    .Display("影の濃さ").Range(0.0, 1.0).Step(0.01));
+            PropertyRegistry::Register<SpotLightComponent>(
+                MakeProperty("shadow_depth_bias", &SpotLightComponent::shadow_depth_bias)
+                    .Display("深度バイアス (m)").Range(0.0, 0.5).Step(0.001));
+            PropertyRegistry::Register<SpotLightComponent>(
+                MakeProperty("shadow_near_plane", &SpotLightComponent::shadow_near_plane)
+                    .Display("影のニア").Range(0.01, 10.0).Step(0.01));
         }
         void RegisterEffectStacks()
         {

@@ -1,0 +1,366 @@
+REPLAY_SCENE 11
+SCENE "ShadowTest"
+SCENE_STATE 0
+COLLISION_STATE 2 0
+OBJECT_COUNT 14
+OBJECT
+  ID 3
+  NAME "Ground"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 24 1 24
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "primitive_type" enum 0
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.30 0.32 0.35 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 4
+  NAME "GroundNoReceive"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 9 0.02 0 0 0 0 6 1 12
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "primitive_type" enum 0
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.55 0.3 0.3 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 5
+  NAME "CasterCube"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 1.5 0 0 0.6 0 1.4 1.4 1.4
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.9 0.5 0.35 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 6
+  NAME "CasterSphere"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -4.5 1.8 2 0 0 0 1.6 1.6 1.6
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.4 0.7 0.95 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 7
+  NAME "CasterCapsule"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 4 2 -3 0 0 0.35 1.2 1.6 1.2
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "primitive_type" enum 3
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.5 0.9 0.55 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 8
+  NAME "NoCastCube"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -4 1.2 -4 0 0 0 1.2 1.2 1.2
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.95 0.95 0.35 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 9
+  NAME "SkinnedCaster"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -2.6 2.6 4.5 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "SkinnedMeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 13
+    PROPERTY "mesh_asset" asset "ec24e9cfab50d6a6324f279c4d0064a5"
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_override" bool 0
+    PROPERTY "tint" color 1 1 1 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+    PROPERTY "visual_rotation_offset" vec3 0 0 0
+    PROPERTY "local_position_offset" vec3 0 0 0
+    PROPERTY "local_scale_multiplier" vec3 0.035 0.035 0.035
+    PROPERTY "apply_fbx_coordinate_transform" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 10
+  NAME "SkinnedNoCast"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 1.6 2.6 4.5 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "SkinnedMeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 13
+    PROPERTY "mesh_asset" asset "ec24e9cfab50d6a6324f279c4d0064a5"
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_override" bool 0
+    PROPERTY "tint" color 1 1 1 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+    PROPERTY "visual_rotation_offset" vec3 0 0 0
+    PROPERTY "local_position_offset" vec3 0 0 0
+    PROPERTY "local_scale_multiplier" vec3 0.035 0.035 0.035
+    PROPERTY "apply_fbx_coordinate_transform" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 11
+  NAME "Directional Light"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 10 0 -0.55 0.9 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "DirectionalLightComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "color" color 1 0.97 0.92 1
+    PROPERTY "intensity" float 0.45
+    PROPERTY "cast_shadows" bool 1
+    PROPERTY "shadow_strength" float 1
+    PROPERTY "shadow_depth_bias" float 0.0016
+    PROPERTY "shadow_normal_bias" float 1.4
+    PROPERTY "shadow_distance" float 120
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 12
+  NAME "Point Light"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 7 4 5 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PointLightComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "color" color 1 0.55 0.3 1
+    PROPERTY "intensity" float 0
+    PROPERTY "range" float 18
+    PROPERTY "cast_shadows" bool 1
+    PROPERTY "shadow_strength" float 1
+    PROPERTY "shadow_depth_bias" float 0.0025
+    PROPERTY "shadow_near_plane" float 0.15
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 13
+  NAME "Spot Light"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -8 8 -2 1.5708 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "SpotLightComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "color" color 0.5 0.75 1 1
+    PROPERTY "intensity" float 0
+    PROPERTY "range" float 24
+    PROPERTY "inner_angle_degrees" float 18
+    PROPERTY "outer_angle_degrees" float 30
+    PROPERTY "cast_shadows" bool 1
+    PROPERTY "shadow_strength" float 1
+    PROPERTY "shadow_depth_bias" float 0.0018
+    PROPERTY "shadow_near_plane" float 0.15
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 14
+  NAME "SpotCaster"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -8 2.2 -2 0 0.4 0 1.3 1.3 1.3
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.9 0.9 0.95 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 15
+  NAME "PointCaster"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 7 1.6 2 0 0.8 0 1.3 1.3 1.3
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.9 0.9 0.95 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 16
+  NAME "Main Camera"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 11 -13 0.62 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "CameraComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "projection_mode" enum 0
+    PROPERTY "field_of_view_degrees" float 55
+    PROPERTY "orthographic_size" float 5
+    PROPERTY "near_clip" float 0.1
+    PROPERTY "far_clip" float 1000
+    PROPERTY "priority" int 0
+    PROPERTY "viewport_enabled" bool 0
+    PROPERTY "viewport_rect" vec4 0 0 1 1
+  END_COMPONENT
+END_OBJECT

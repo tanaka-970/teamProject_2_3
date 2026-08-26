@@ -286,7 +286,8 @@ void framework::bind_gbuffer_material(
     float ambient_occlusion, float emissive_strength,
     const DirectX::XMFLOAT4& base_color_factor,
     const DirectX::XMFLOAT3& emissive_color,
-    std::uint32_t texture_mask)
+    std::uint32_t texture_mask,
+    bool receive_shadow)
 {
     material_override_constants constants{};
     constants.base_color_factor = base_color_factor;
@@ -300,6 +301,7 @@ void framework::bind_gbuffer_material(
     constants.pixelate_size = pixelate_enabled ? pixelate_size : 0.0f;
     constants.pixelate_strength = pixelate_enabled ? pixelate_strength : 0.0f;
     constants.texture_mask = texture_mask;
+    constants.receive_shadow = receive_shadow ? 1.0f : 0.0f;
 
     immediate_context->UpdateSubresource(material_override_cb.Get(), 0,
         nullptr, &constants, 0, 0);

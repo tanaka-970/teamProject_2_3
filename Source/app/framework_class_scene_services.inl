@@ -42,6 +42,12 @@
     // Editor の Runtime 診断パネル。読み取り専用。
     void draw_runtime_diagnostics_panel();
     gltf_model* resolve_object_gltf(const std::string& asset_guid);
+    // Model Asset の実ファイルを引く共通処理。形式ごとの分岐をここへ集約する。
+    enum class model_source_format { unsupported, fbx_cereal, gltf };
+    model_source_format resolve_model_source(
+        const std::string& asset_guid,
+        std::filesystem::path& out_source,
+        std::string& out_reason) const;
     skinned_mesh* resolve_object_mesh(const std::string& asset_guid);
     static_mesh* resolve_builtin_primitive_mesh(const std::string& builtin_id);
     const ReplayEngine::Rendering::MaterialAsset* resolve_object_material(
@@ -61,12 +67,66 @@
         ID3D11ShaderResourceView* source,
         const std::vector<ReplayEngine::UI::UIEffect>& effects,
         std::uint32_t width, std::uint32_t height, DXGI_FORMAT format,
-        float effect_time);
+        float effect_time, std::uint64_t temporal_owner_key = 0,
+        const ReplayEngine::UI::UIEffectRegion* effect_region = nullptr);
     void begin_scene_effect_frame() noexcept;
     void draw_model_effect_stacks(const D3D11_VIEWPORT& camera_viewport);
+    // Model Effect Stack が使う画面上の矩形。影パスと Effect 本体で同じ値を使う。
+    struct model_effect_screen_rect
+    {
+        long left = 0;
+        long top = 0;
+        long right = 0;
+        long bottom = 0;
+        bool Valid() const noexcept { return right > left && bottom > top; }
+        std::uint32_t Width() const noexcept
+        {
+            return Valid() ? static_cast<std::uint32_t>(right - left) : 0u;
+        }
+        std::uint32_t Height() const noexcept
+        {
+            return Valid() ? static_cast<std::uint32_t>(bottom - top) : 0u;
+        }
+    };
+    bool compute_model_effect_screen_rect(ReplayEngine::Core::ObjectID owner,
+        const D3D11_VIEWPORT& camera_viewport, model_effect_screen_rect& out_base,
+        model_effect_screen_rect& out_expanded);
+    // 面を消す Effect を持つ Object の影用パラメータを毎フレーム作り直す。
+    void collect_shadow_coverage(const D3D11_VIEWPORT& camera_viewport);
+    // 影パスで使う面消し定数 (b8) を積む。持たない Object では 0 件を積む。
+    bool bind_shadow_coverage_constants(ReplayEngine::Core::ObjectID owner);
     // LandscapeRendererComponent 用の procedural static mesh 描画。
     // AssetGUIDを介さず、LandscapeData::Revision が変わったときだけGPU Meshを作り直す。
     void draw_landscape_scene_meshes(bool gbuffer_pass, bool depth_only = false);
+    // Landscape の GPU Mesh キャッシュを引く共通入口。影パスと通常描画で共有する。
+    static_mesh* resolve_landscape_gpu_mesh(
+        const ReplayEngine::Core::GameObject& object);
+
+    // ライト視点の影深度パス専用の提出処理。volume_* は影マップに写り得る範囲を包む球。
+    void draw_shadow_caster_meshes(
+        ID3D11VertexShader* static_caster_vs,
+        ID3D11InputLayout* static_caster_il,
+        ID3D11VertexShader* skinned_caster_vs,
+        ID3D11InputLayout* skinned_caster_il,
+        const DirectX::XMFLOAT3& volume_center,
+        float volume_radius,
+        float volume_extrusion);
+    // 影パスが材質から必要とする値だけをまとめて引く。
+    struct shadow_material_state
+    {
+        bool double_sided = false;
+        // 0=抜かない 1=cutoffで抜く 2=Mesh内蔵材質のalpha_modeを見る
+        int alpha_mode = 0;
+        float alpha_cutoff = 0.5f;
+        // true なら BaseMap を t40 (Material Asset) から読む。false は t0。
+        bool uses_replay_base_map = false;
+    };
+    shadow_material_state resolve_shadow_material_state(
+        const ReplayEngine::Rendering::RenderItem& source);
+    // 影用のアルファ抜き定数 (b7) を積む。alpha_mode が 0 なら PS は貼らない。
+    void bind_shadow_alpha_constants(const shadow_material_state& state);
+    // world 行列が鏡像なら巻き順が反転するので、裏面ではなく表面を落とす。
+    void set_shadow_cull_state(bool double_sided, const DirectX::XMFLOAT4X4& world);
     void update_line_trails(float elapsed_time);
     void draw_line_strokes();
     void clear_object_mesh_cache() noexcept;
@@ -76,6 +136,8 @@
     void update_object_camera_follow(float elapsed_time);
     void refresh_object_scene_services();
     const ReplayEngine::Motion::MotionAsset* resolve_motion_asset(
+        const std::string& asset_guid);
+    const ReplayEngine::Motion::CompositionAsset* resolve_composition_asset(
         const std::string& asset_guid);
     void prepare_material_motion_bindings(ReplayEngine::Scene::Scene& scene);
     void prepare_ui_effect_shader_schemas(ReplayEngine::Scene::Scene& scene);
@@ -201,6 +263,8 @@
         skinned_mesh& mesh, const ReplayEngine::Rendering::RenderItem& item,
         skinned_mesh::animation::keyframe& blended_keyframe) const;
     void draw_project_panel();
+    bool ensure_ui_preview_render_target(int width, int height);
+    void render_ui_preview_target();
 
     // --- Project ブラウザ (Unity 型 2 ペイン) ------------------------------
     // 左にフォルダツリー、右にそのフォルダの中身。
@@ -208,11 +272,24 @@
     void draw_project_browser();
     void draw_project_folder_tree(const std::filesystem::path& folder, int depth);
     void draw_project_folder_contents();
+    void draw_project_create_submenu(const std::filesystem::path& target_folder);
+    void draw_project_entry_context_items(const std::filesystem::path& path);
+    bool project_open_entry(const std::filesystem::path& path);
     void set_project_folder(const std::filesystem::path& folder);
     bool project_create_folder(const std::string& name);
     bool project_create_csharp_behaviour(const std::string& class_name);
     bool project_create_material(const std::string& name);
     bool project_create_motion(const std::string& name);
+    bool project_create_composition(const std::string& name);
+    bool project_create_sprite_atlas(const std::string& name);
+    bool open_sprite_atlas_asset(const ReplayEngine::Assets::AssetRecord& asset);
+    bool save_current_sprite_atlas();
+    void draw_sprite_atlas_editor();
+    void begin_sprite_atlas_edit(const std::string& label);
+    void commit_sprite_atlas_edit();
+    void cancel_sprite_atlas_edit();
+    bool undo_sprite_atlas_edit();
+    bool redo_sprite_atlas_edit();
     bool project_create_scene_flow(const std::string& name);
     bool project_create_localization(const std::string& name);
     bool project_create_effect_preset(const std::string& name);
@@ -224,6 +301,16 @@
         ReplayEngine::Rendering::ShaderDomain domain);
     bool project_rename_entry(const std::filesystem::path& path,
         const std::string& new_name);
+    bool project_move_entry(const std::filesystem::path& path,
+        const std::filesystem::path& destination_folder);
+    bool project_duplicate_entry(const std::filesystem::path& path);
+    void project_show_in_explorer(const std::filesystem::path& path);
+    void project_copy_path(const std::filesystem::path& path, bool absolute);
+    void project_record_created_path(const std::filesystem::path& path,
+        const std::string& label);
+    void project_apply_external_history_change();
+    void project_notify_path_relocated(const std::filesystem::path& from,
+        const std::filesystem::path& to);
     void project_request_delete(const std::filesystem::path& path);
     void draw_project_delete_popup();
     bool project_delete_confirmed();

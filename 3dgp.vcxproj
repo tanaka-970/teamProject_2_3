@@ -233,6 +233,7 @@
     <ClCompile Include="Source\mesh\UI.cpp" />
     <ClCompile Include="Source\render\csm_renderer.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Deferred\deferred_renderer.cpp" />
+    <ClCompile Include="RePlayEngine\Rendering\Shadows\LocalShadowAtlas.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Passes\PostProcessPass.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Effects\EffectChain.cpp" />
     <ClCompile Include="RePlayEngine\Rendering\Passes\BloomPass.cpp" />
@@ -414,6 +415,7 @@
     <ClCompile Include="RePlayEngine\Scripting\Core\ScriptValue.cpp" />
     <ClCompile Include="RePlayEngine\Scripting\Core\ScriptWorld.cpp" />
     <ClCompile Include="Source\app\Editor\framework_project_browser.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_sprite_atlas_editor.cpp" />
     <ClCompile Include="Source\app\Editor\framework_project_browser_assets.cpp" />
     <ClCompile Include="Source\app\Editor\framework_project_browser_shader_creation.cpp" />
     <ClCompile Include="Source\app\Editor\framework_project_browser_rename.cpp" />
@@ -519,6 +521,7 @@
     <ClCompile Include="RePlayEngine\Motion\MotionBindingResolver.cpp" />
     <ClCompile Include="RePlayEngine\Motion\MotionMixer.cpp" />
     <ClCompile Include="RePlayEngine\Components\Motion\MotionPlayerComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\Motion\CompositionPlayerComponent.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Hierarchy\HierarchyPanel.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Hierarchy\HierarchyPanelCommands.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Inspector\InspectorPanel.cpp" />
@@ -539,6 +542,7 @@
     <ClCompile Include="RePlayEngine\Components\Gameplay\CharacterMotorComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Gameplay\EnemyBehaviourComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Navigation\NavAgentComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Navigation\GridPathfinder.cpp" />
     <ClCompile Include="RePlayEngine\Components\Gameplay\PlayerInputComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Gameplay\PlayerControllerComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\Audio\AudioSourceComponent.cpp" />
@@ -596,6 +600,7 @@
     <ClCompile Include="Source\app\Runtime\framework_runtime_scene.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Validation\EditorIntegrationValidation.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Validation\AnimationUndoValidation.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Validation\EditorCameraValidation.cpp" />
     <ClCompile Include="RePlayEngine\Runtime\Validation\StressValidation.cpp" />
     <ClCompile Include="Source\app\Runtime\framework_shutdown_regression.cpp" />
 </ItemGroup>
@@ -606,6 +611,7 @@
     <ClInclude Include="Source\render\deferred_renderer.h" />
     <ClInclude Include="Source\render\motion_vector_context.h" />
     <ClInclude Include="RePlayEngine\Rendering\Deferred\deferred_renderer.h" />
+    <ClInclude Include="RePlayEngine\Rendering\Shadows\LocalShadowAtlas.h" />
     <ClInclude Include="RePlayEngine\Rendering\Passes\PostProcessPass.h" />
     <ClInclude Include="RePlayEngine\Rendering\FrameConstants.h" />
     <ClInclude Include="RePlayEngine\Rendering\RenderStats.h" />
@@ -749,6 +755,7 @@
     <ClInclude Include="RePlayEngine\Motion\MotionBindingResolver.h" />
     <ClInclude Include="RePlayEngine\Motion\MotionMixer.h" />
     <ClInclude Include="RePlayEngine\Components\Motion\MotionPlayerComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Motion\CompositionPlayerComponent.h" />
     <ClInclude Include="RePlayEngine\Runtime\Core\RuntimeResult.h" />
     <ClInclude Include="RePlayEngine\Runtime\Handles\RuntimeHandles.h" />
     <ClInclude Include="RePlayEngine\Runtime\Handles\HandleResolver.h" />
@@ -838,6 +845,7 @@
     <ClInclude Include="RePlayEngine\Components\Gameplay\CharacterMotorComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\EnemyBehaviourComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Navigation\NavAgentComponent.h" />
+    <ClInclude Include="RePlayEngine\Navigation\GridPathfinder.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\PlayerInputComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\PlayerControllerComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Audio\AudioListenerComponent.h" />
@@ -894,6 +902,7 @@
     <ClInclude Include="RePlayEngine\Editor\Validation\EditorIntegrationValidation.h" />
     <ClInclude Include="RePlayEngine\Editor\Validation\EditorIntegrationValidationInternal.h" />
     <ClInclude Include="RePlayEngine\Editor\Validation\AnimationUndoValidation.h" />
+    <ClInclude Include="RePlayEngine\Editor\Validation\EditorCameraValidation.h" />
     <ClInclude Include="RePlayEngine\Runtime\Validation\StressValidation.h" />
     <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderMaterialValidation.h" />
     <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderLightingValidation.h" />
@@ -916,6 +925,10 @@
     <ClCompile Include="RePlayEngine\Components\UI\CanvasComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\UI\RectTransformComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\UI\UIImageComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Assets\SpriteAtlasAsset.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\UIPuppetDeformComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\UIShapeComponent.cpp" />
+    <ClCompile Include="RePlayEngine\Components\UI\UIShapeImageComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\UI\UITextComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\UI\UIButtonComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\UI\UIMaskComponent.cpp" />
@@ -931,6 +944,10 @@
     <ClInclude Include="RePlayEngine\Components\UI\CanvasComponent.h" />
     <ClInclude Include="RePlayEngine\Components\UI\RectTransformComponent.h" />
     <ClInclude Include="RePlayEngine\Components\UI\UIImageComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\UI\UIPuppetDeformComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\UI\UIShapeComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\UI\UIShapeImageComponent.h" />
+    <ClInclude Include="RePlayEngine\Assets\SpriteAtlasAsset.h" />
     <ClInclude Include="RePlayEngine\Components\UI\UITextComponent.h" />
     <ClInclude Include="RePlayEngine\Components\UI\UIButtonComponent.h" />
     <ClInclude Include="RePlayEngine\Components\UI\UIMaskComponent.h" />
@@ -998,6 +1015,8 @@
     <None Include="RePlayEngine\Shaders\TeamDeferred\Skinning.hlsli" />
     <None Include="RePlayEngine\Shaders\TeamDeferred\TerrainCarve.hlsli" />
     <None Include="Shader\csm_common.hlsli" />
+    <None Include="Shader\local_shadow_common.hlsli" />
+    <None Include="Shader\shadow_alpha_common.hlsli" />
     <None Include="Shader\frame_common.hlsli" />
     <None Include="Shader\PostEffects\AmbientOcclusion\ssao_common.hlsli" />
     <None Include="Shader\PostEffects\Reflection\ssr_common.hlsli" />
@@ -1017,6 +1036,7 @@
     <None Include="Shader\sprite.hlsli" />
     <None Include="Shader\static_mesh.hlsli" />
     <None Include="Shader\toon_common.hlsli" />
+    <None Include="Shader\ui_effect_dynamic_common.hlsli" />
     <None Include="Shader\Materials\StylizedCharacter\stylized_character_common.hlsli" />
     <None Include="Shader\Layers\Pixelate.hlsl" />
     <None Include="Shader\Layers\BuiltIn\Pbr.hlsl" />
@@ -1453,6 +1473,204 @@
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
     </FxCompile>
+    <FxCompile Include="Shader\ui_effect_displacement_map.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_turbulent_displace.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_fractal_noise.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_motion_blur.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_echo.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_drop_shadow.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_inner_shadow.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_lut.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_tone_curve.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_matte_composite.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_matte_morphology.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_bevel_emboss.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_kaleidoscope.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_page_curl.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_ascii_led_matrix.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_feedback_zoom.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_liquid_glass.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_light_sweep.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_shockwave.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_pixel_sort.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_hologram.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_iridescent_foil.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_radar_sweep.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_energy_pulse.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_circuit_flow.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_heat_haze.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_water_caustics.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_voronoi_shatter.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_ink_bleed.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_burn_reveal.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_portal_vortex.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_frost_crack.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\ui_effect_region_blend.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
     <FxCompile Include="Shader\line_stroke_vs.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Vertex</ShaderType>
@@ -1506,6 +1724,24 @@
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\shadow_caster_alpha_ps.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\shadow_caster_alpha_skinned_ps.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shader\local_shadow_caster_gs.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Geometry</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Geometry</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Geometry</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Geometry</ShaderType>
     </FxCompile>
     <FxCompile Include="Shader\csm_caster_gs.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Geometry</ShaderType>

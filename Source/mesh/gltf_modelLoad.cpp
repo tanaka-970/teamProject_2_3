@@ -335,6 +335,10 @@ bool gltf_model::Load(ID3D11Device* device, const std::string& filename)
     for (size_t i = 0; i < model.materials.size(); ++i)
     {
         const auto& source = model.materials[i].pbrMetallicRoughness;
+        // アルファ抜きの宣言。影パスもここを見て抜くので、通常描画と食い違わない。
+        materials_[i].alpha_mode = model.materials[i].alphaMode == "MASK" ? 1
+            : (model.materials[i].alphaMode == "BLEND" ? 2 : 0);
+        materials_[i].alpha_cutoff = static_cast<float>(model.materials[i].alphaCutoff);
         if (source.baseColorFactor.size() == 4)
             materials_[i].base_color = { static_cast<float>(source.baseColorFactor[0]), static_cast<float>(source.baseColorFactor[1]),
                 static_cast<float>(source.baseColorFactor[2]), static_cast<float>(source.baseColorFactor[3]) };

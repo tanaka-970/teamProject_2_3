@@ -3,6 +3,7 @@
 #include "framework.h"
 #include "texture.h"
 #include "../../RePlayEngine/Assets/AssetCache.h"
+#include "../../RePlayEngine/Assets/AssetDatabase.h"
 #include "../../RePlayEngine/Localization/LocalizationTable.h"
 #include "../../RePlayEngine/Rendering/Effects/EffectPresetAsset.h"
 #include "../../RePlayEngine/Editor/Style/EditorStyle.h"
@@ -58,34 +59,100 @@ namespace framework_project_browser::Detail
             lower_extension == ".gif";
     }
 
-    inline std::string SafeProjectFileName(std::string name)
+    inline std::filesystem::path NormalizeProjectPath(const std::filesystem::path& value)
     {
-        for (char& character : name)
+        std::error_code error;
+        std::filesystem::path absolute = std::filesystem::absolute(value, error);
+        if (error) absolute = value;
+        return absolute.lexically_normal();
+    }
+
+    inline bool IsProjectPathInsideOrEqual(const std::filesystem::path& value,
+        const std::filesystem::path& parent)
+    {
+        const std::filesystem::path absolute_value = NormalizeProjectPath(value);
+        const std::filesystem::path absolute_parent = NormalizeProjectPath(parent);
+        std::error_code error;
+        const std::filesystem::path relative =
+            std::filesystem::relative(absolute_value, absolute_parent, error);
+        if (error) return absolute_value == absolute_parent;
+        if (relative.empty() || relative == ".") return true;
+        const auto first = relative.begin();
+        return first != relative.end() && first->generic_u8string() != "..";
+    }
+
+    inline bool ValidateProjectEntryName(const std::string& name, std::string& error)
+    {
+        error.clear();
+        if (name.empty() || name == "." || name == "..")
         {
-            if (character == '<' || character == '>' || character == ':' ||
-                character == '"' || character == '/' || character == '\\' ||
-                character == '|' || character == '?' || character == '*')
+            error = "名前が空か、使用できない名前です";
+            return false;
+        }
+        if (name.back() == ' ' || name.back() == '.')
+        {
+            error = "名前の末尾に空白または . は使えません";
+            return false;
+        }
+        for (unsigned char character : name)
+        {
+            if (character < 32 || character == '<' || character == '>' ||
+                character == ':' || character == '"' || character == '/' ||
+                character == '\\' || character == '|' || character == '?' || character == '*')
             {
-                character = '_';
+                error = "Windowsで使用できない文字が含まれています";
+                return false;
             }
         }
-        while (!name.empty() && (name.back() == ' ' || name.back() == '.')) name.pop_back();
-        return name;
+        std::string base = name;
+        const std::size_t dot = base.find('.');
+        if (dot != std::string::npos) base.resize(dot);
+        base = ToLowerCopy(base);
+        static const char* const reserved[] =
+        {
+            "con", "prn", "aux", "nul",
+            "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9",
+            "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
+        };
+        for (const char* value : reserved)
+        {
+            if (base == value)
+            {
+                error = "Windowsの予約名は使えません: " + name;
+                return false;
+            }
+        }
+        return true;
+    }
+
+    inline std::string SafeProjectFileName(std::string name)
+    {
+        std::string error;
+        return ValidateProjectEntryName(name, error) ? name : std::string();
     }
 
     // 新規作成時だけ Unity/Explorer 風の "Name (1)" 連番を付ける。
     // 既存ファイルや手動 rename は勝手に変えない。
     inline std::filesystem::path UniqueProjectPath(const std::filesystem::path& folder,
-        const std::string& stem, const std::string& extension = {})
+        const std::string& stem, const std::string& extension = {},
+        const ReplayEngine::Assets::AssetDatabase* database = nullptr)
     {
+        const auto available = [&](const std::filesystem::path& candidate)
+        {
+            std::error_code error;
+            if (std::filesystem::exists(candidate, error) && !error) return false;
+            // Project Trash の Undo 待ち Asset は filesystem 上では消えていても
+            // AssetDatabase に元 path/GUID を保持している。ここを再利用すると
+            // 削除 Asset と新規 Asset が同一 GUID になり得るので予約済みとして扱う。
+            return database == nullptr || database->FindByPath(candidate) == nullptr;
+        };
+
         std::filesystem::path candidate = folder / (stem + extension);
-        std::error_code error;
-        if (!std::filesystem::exists(candidate, error) || error) return candidate;
+        if (available(candidate)) return candidate;
         for (int suffix = 1; suffix < 10000; ++suffix)
         {
             candidate = folder / (stem + " (" + std::to_string(suffix) + ")" + extension);
-            error.clear();
-            if (!std::filesystem::exists(candidate, error) || error) return candidate;
+            if (available(candidate)) return candidate;
         }
         return candidate;
     }
@@ -192,6 +259,8 @@ namespace framework_project_browser::Detail
         case AssetKind::Font:     return "FONT";
         case AssetKind::Localization: return "LOC";
         case AssetKind::EffectPreset: return "FX";
+        case AssetKind::SpriteAtlas:return "ATLAS";
+        case AssetKind::Composition:return "COMP";
         default:                  return "FILE";
         }
     }
@@ -214,6 +283,8 @@ namespace framework_project_browser::Detail
         case AssetKind::Localization:return ImVec4(0.62f, 0.92f, 0.82f, 1.0f);
         case AssetKind::EffectPreset:return ImVec4(0.96f, 0.66f, 0.92f, 1.0f);
         case AssetKind::InputAction:return ImVec4(0.55f, 0.90f, 1.0f, 1.0f);
+        case AssetKind::SpriteAtlas:return ImVec4(0.90f, 0.72f, 1.00f, 1.0f);
+        case AssetKind::Composition:return ImVec4(0.55f, 0.90f, 1.00f, 1.0f);
         default:                  return ImVec4(0.72f, 0.72f, 0.72f, 1.0f);
         }
     }

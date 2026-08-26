@@ -211,16 +211,23 @@ void main(uint3 group_id : SV_GroupID,
     // 影はCSMを優先し、無効時のみ従来の単一シャドウマップへ落とす。
     const float shadow_rotation_seed =
         interleaved_gradient_noise(float2(pixel), frame_params.x);
-    const float shadow_visibility = csm_params.w >= 0.5f
-        ? csm_sample_shadow_hq(world_position, N, view_z,
-            saturate(dot(N, L)), shadow_rotation_seed)
-        : sample_shadow(world_position);
+    // PS 版と同じ判定。片方だけ見るとタイルド ON/OFF で影が変わる。
+    float shadow_visibility = 1.0f;
+    if (g.receive_shadow)
+    {
+        shadow_visibility = csm_params.w >= 0.5f
+            ? csm_sample_shadow_hq(world_position, N, view_z,
+                saturate(dot(N, L)), shadow_rotation_seed)
+            : sample_shadow(world_position);
+    }
 
     // 平行光源 + IBL + SSAO/SSR は共通のPBR評価を使う。
     // (evaluate_pbr_ex内の点光源/スポットはCB配列版なので、ここでは使わない)
+    // ここでの点光源/スポットは 0 灯。タイル内のライトは下のループで評価する。
     float3 color = evaluate_pbr_ex(g.base_color, g.emissive,
         g.metalness, g.roughness, g.occlusion,
-        N, V, world_position, shadow_visibility, screen);
+        N, V, world_position, shadow_visibility, screen,
+        g.receive_shadow ? 1.0f : 0.0f);
 
     // タイル内のライトだけを評価する。
     const float alpha_roughness = max(g.roughness * g.roughness, 0.0025f);
@@ -253,6 +260,19 @@ void main(uint3 group_id : SV_GroupID,
         }
         if (attenuation <= 0.0f) continue;
 
+        // 影は PS 版 (lights_common.hlsli) と同じ関数を使う。
+        const int shadow_slice = (int) light.params.z;
+        float local_shadow = 1.0f;
+        if (shadow_slice >= 0 && g.receive_shadow)
+        {
+            local_shadow = ((int) light.params.y == TILED_LIGHT_TYPE_SPOT)
+                ? local_shadow_spot(shadow_slice, light.params.w,
+                    world_position, N, sqrt(max(distance_squared, 1.0e-8f)), NoL)
+                : local_shadow_point(shadow_slice, light.params.w,
+                    light.position_radius.xyz, world_position, N, NoL);
+            if (local_shadow <= 0.0f) continue;
+        }
+
         // 平行光源と同じBRDFを使い、点光源だけ簡易式になる不整合を避ける。
         const float3 H = normalize(light_dir + V);
         const float NoH = saturate(dot(N, H));
@@ -262,7 +282,7 @@ void main(uint3 group_id : SV_GroupID,
             VoH, NoL, NoV, NoH) * energy_compensation;
 
         local_lighting += (diffuse + specular) * NoL * attenuation *
-            light.color_intensity.rgb * light.color_intensity.a;
+            light.color_intensity.rgb * light.color_intensity.a * local_shadow;
     }
 
     color += local_lighting * max(ibl_params.w, 0.0f);

@@ -66,6 +66,24 @@ public:
         // 深度プリパス用。ピクセルシェーダーとテクスチャを外して深度だけ描く。
         bool depth_only = false);
 
+    // 影深度パス専用の入口。VS/InputLayout を差し替え、LOD もカメラ視錐台カリングも使わない。
+    // alpha_clip_pixel_shader / alpha_constants を渡すと、アルファ抜きを宣言した
+    // Primitive だけ Pixel Shader を貼って抜く。渡さなければ従来どおり深度だけ描く。
+    // override_alpha_mode が 0 以上なら Material Asset 側の指定を優先する。
+    void render_shadow(ID3D11DeviceContext* context,
+        const DirectX::XMFLOAT4X4& world,
+        ID3D11VertexShader* caster_vertex_shader,
+        ID3D11InputLayout* caster_input_layout,
+        ID3D11PixelShader* alpha_clip_pixel_shader = nullptr,
+        ID3D11Buffer* alpha_constants = nullptr,
+        int override_alpha_mode = -1,
+        float override_alpha_cutoff = 0.5f,
+        bool override_uses_replay_base_map = false,
+        // 面消し Effect のように、抜きが無い primitive でも PS を貼りたいとき true。
+        bool force_pixel_shader = false);
+    // アルファ抜きを宣言した Material が 1 つでもあるか。
+    bool HasAlphaMaskMaterials() const noexcept;
+
 private:
     static const std::filesystem::path& CacheRoot();
 
@@ -125,6 +143,9 @@ private:
         std::string base_color_uri;
         std::string normal_uri;
         std::string orm_uri;
+        // glTF の alphaMode。0=OPAQUE 1=MASK 2=BLEND。影のアルファ抜きに使う。
+        int alpha_mode = 0;
+        float alpha_cutoff = 0.5f;
     };
 
     struct Constants

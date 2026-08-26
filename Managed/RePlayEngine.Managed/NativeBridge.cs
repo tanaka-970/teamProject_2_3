@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -22,6 +22,9 @@ public static unsafe class NativeBridge
     private static string lastErrorFile = string.Empty;
     private static int lastErrorLine;
 
+
+    [ThreadStatic]
+    private static RuntimeEventPayload? pendingParsedEventPayload;
     private static NativeApi api;
 
     internal static float TimeDeltaTime { get; private set; }
@@ -116,6 +119,52 @@ public static unsafe class NativeBridge
         public delegate* unmanaged[Cdecl]<ObjectHandle, uint, ComponentHandle*, int, int*, int> GetComponents;
         public delegate* unmanaged[Cdecl]<ComponentHandle, int, int> SetComponentEnabled;
         public delegate* unmanaged[Cdecl]<ComponentHandle, int*, int> GetComponentEnabled;
+        // v5 Script Field / UI Focus / Event publish API. Keep in exact C++ tail order.
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, int*, int> GetScriptBool;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, int, int> SetScriptBool;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, int*, int> GetScriptInt;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, int, int> SetScriptInt;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, double*, int> GetScriptDouble;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, double, int> SetScriptDouble;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, byte*, int, int> GetScriptString;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, byte*, int> SetScriptString;
+        public delegate* unmanaged[Cdecl]<ObjectHandle*, int> UIGetFocus;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, int> UISetFocus;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, int, ObjectHandle*, int> UIFindFocus;
+        public delegate* unmanaged[Cdecl]<ulong, ulong, byte*, ObjectHandle, ObjectHandle, int> PublishEvent;
+
+        // v6 Object / hierarchy / log API. Keep in exact C++ tail order.
+        public delegate* unmanaged[Cdecl]<byte*, ObjectHandle, int> LogInfo;
+        public delegate* unmanaged[Cdecl]<byte*, ObjectHandle, int> LogWarning;
+        public delegate* unmanaged[Cdecl]<byte*, ObjectHandle, int> LogError;
+        public delegate* unmanaged[Cdecl]<byte*, ObjectHandle*, int> CreateGameObject;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, Vector3*, int> GetWorldPosition;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, ObjectHandle, int, int> SetParent;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, ObjectHandle*, int> GetParent;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, ObjectHandle*, int, int*, int> GetChildren;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, byte*, int, int> GetName;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, byte*, int> SetName;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, int*, int> GetGameObjectEnabled;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, int, int> SetGameObjectEnabled;
+
+        // v7 Physics / deferred / runtime-state API. Keep in exact C++ tail order.
+        public delegate* unmanaged[Cdecl]<Vector3, float, float, float, float, ObjectHandle, GroundHit*, int> QueryGround;
+        public delegate* unmanaged[Cdecl]<Vector3, Vector3, float, float, ObjectHandle, SphereSweepHit*, int> SweepSphere;
+        public delegate* unmanaged[Cdecl]<byte*, Vector3, Vector3, Vector3, ObjectHandle, int> InstantiatePrefabDeferred;
+        public delegate* unmanaged[Cdecl]<int> FlushDeferredOperations;
+        public delegate* unmanaged[Cdecl]<ulong*, int> PendingDeferredOperationCount;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, uint, int*, int> HasComponent;
+        public delegate* unmanaged[Cdecl]<float*, int> GetTimeScale;
+        public delegate* unmanaged[Cdecl]<int*, int> GetSceneTransitionInProgress;
+        public delegate* unmanaged[Cdecl]<int> PhysicsAvailable;
+        public delegate* unmanaged[Cdecl]<int> SceneFlowAvailable;
+
+        // v8 Event payload API. Keep in exact C++ tail order.
+        public delegate* unmanaged[Cdecl]<ulong, byte*, int, int*, int> PollEventWithPayload;
+        public delegate* unmanaged[Cdecl]<ulong, ulong, byte*, ObjectHandle, ObjectHandle, byte*, int> PublishEventWithPayload;
+
+        // v9 追加。名前で GameObject を探す。C++ 側の表も同じ位置（末尾）。
+        public delegate* unmanaged[Cdecl]<byte*, ObjectHandle*, int> FindGameObjectByName;
     }
 
     private sealed class ManagedInstance
@@ -379,6 +428,17 @@ public static unsafe class NativeBridge
         if (api.FindGameObject == null) return new(RuntimeStatus.ServiceUnavailable);
         ObjectHandle result = default;
         var status = (RuntimeStatus)api.FindGameObject(objectId, &result);
+        return new RuntimeResult<ObjectHandle>(status, result);
+    }
+
+    internal static RuntimeResult<ObjectHandle> FindGameObjectByName(string name)
+    {
+        if (api.FindGameObjectByName == null) return new(RuntimeStatus.ServiceUnavailable);
+        if (name == null) return new(RuntimeStatus.InvalidArgument);
+        ObjectHandle result = default;
+        RuntimeStatus status;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            status = (RuntimeStatus)api.FindGameObjectByName(text, &result);
         return new RuntimeResult<ObjectHandle>(status, result);
     }
 
@@ -993,6 +1053,27 @@ public static unsafe class NativeBridge
     internal static RuntimeResult<RuntimeEvent> PollEvent(EventSubscription subscription)
     {
         if (!subscription.IsValid) return new(RuntimeStatus.InvalidHandle);
+
+        if (api.PollEventWithPayload != null)
+        {
+            int requiredCapacity = 0;
+            var payloadStatus = (RuntimeStatus)api.PollEventWithPayload(
+                subscription.Id, null, 0, &requiredCapacity);
+            if (payloadStatus != RuntimeStatus.Ok) return new(payloadStatus);
+            if (requiredCapacity <= 0) return new(RuntimeStatus.Ok);
+
+            var payloadBuffer = new byte[requiredCapacity];
+            fixed (byte* output = payloadBuffer)
+            {
+                payloadStatus = (RuntimeStatus)api.PollEventWithPayload(
+                    subscription.Id, output, payloadBuffer.Length, &requiredCapacity);
+                if (payloadStatus != RuntimeStatus.Ok) return new(payloadStatus);
+                var payloadText = FromUtf8(output);
+                if (string.IsNullOrEmpty(payloadText)) return new(RuntimeStatus.Ok);
+                return new RuntimeResult<RuntimeEvent>(RuntimeStatus.Ok,
+                    ParseRuntimeEvent(payloadText));
+            }
+        }
         if (api.PollEvent == null) return new(RuntimeStatus.ServiceUnavailable);
 
         const int capacity = 4096;
@@ -1003,6 +1084,112 @@ public static unsafe class NativeBridge
         var text = FromUtf8(buffer);
         if (string.IsNullOrEmpty(text)) return new(RuntimeStatus.Ok);
         return new RuntimeResult<RuntimeEvent>(RuntimeStatus.Ok, ParseRuntimeEvent(text));
+    }
+
+    internal static RuntimeResult<bool> GetScriptFieldBool(ComponentHandle component, string fieldName)
+    {
+        if (api.GetScriptBool == null) return new(RuntimeStatus.ServiceUnavailable);
+        int value = 0;
+        fixed (byte* field = Encoding.UTF8.GetBytes(fieldName + "\0"))
+        {
+            var status = (RuntimeStatus)api.GetScriptBool(component, field, &value);
+            return new RuntimeResult<bool>(status, value != 0);
+        }
+    }
+
+    internal static RuntimeStatus SetScriptFieldBool(ComponentHandle component, string fieldName, bool value)
+    {
+        if (api.SetScriptBool == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* field = Encoding.UTF8.GetBytes(fieldName + "\0"))
+            return (RuntimeStatus)api.SetScriptBool(component, field, value ? 1 : 0);
+    }
+
+    internal static RuntimeResult<int> GetScriptFieldInt(ComponentHandle component, string fieldName)
+    {
+        if (api.GetScriptInt == null) return new(RuntimeStatus.ServiceUnavailable);
+        int value = 0;
+        fixed (byte* field = Encoding.UTF8.GetBytes(fieldName + "\0"))
+        {
+            var status = (RuntimeStatus)api.GetScriptInt(component, field, &value);
+            return new RuntimeResult<int>(status, value);
+        }
+    }
+
+    internal static RuntimeStatus SetScriptFieldInt(ComponentHandle component, string fieldName, int value)
+    {
+        if (api.SetScriptInt == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* field = Encoding.UTF8.GetBytes(fieldName + "\0"))
+            return (RuntimeStatus)api.SetScriptInt(component, field, value);
+    }
+
+    internal static RuntimeResult<double> GetScriptFieldDouble(ComponentHandle component, string fieldName)
+    {
+        if (api.GetScriptDouble == null) return new(RuntimeStatus.ServiceUnavailable);
+        double value = 0.0;
+        fixed (byte* field = Encoding.UTF8.GetBytes(fieldName + "\0"))
+        {
+            var status = (RuntimeStatus)api.GetScriptDouble(component, field, &value);
+            return new RuntimeResult<double>(status, value);
+        }
+    }
+
+    internal static RuntimeStatus SetScriptFieldDouble(ComponentHandle component, string fieldName, double value)
+    {
+        if (api.SetScriptDouble == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* field = Encoding.UTF8.GetBytes(fieldName + "\0"))
+            return (RuntimeStatus)api.SetScriptDouble(component, field, value);
+    }
+
+    internal static RuntimeResult<string> GetScriptFieldString(ComponentHandle component, string fieldName)
+    {
+        if (api.GetScriptString == null) return new(RuntimeStatus.ServiceUnavailable);
+        const int capacity = 4096;
+        byte* output = stackalloc byte[capacity];
+        fixed (byte* field = Encoding.UTF8.GetBytes(fieldName + "\0"))
+        {
+            var status = (RuntimeStatus)api.GetScriptString(component, field, output, capacity);
+            return status == RuntimeStatus.Ok
+                ? new RuntimeResult<string>(status, FromUtf8(output))
+                : new RuntimeResult<string>(status);
+        }
+    }
+
+    internal static RuntimeStatus SetScriptFieldString(ComponentHandle component, string fieldName, string value)
+    {
+        if (api.SetScriptString == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* field = Encoding.UTF8.GetBytes(fieldName + "\0"))
+        fixed (byte* text = Encoding.UTF8.GetBytes(value + "\0"))
+            return (RuntimeStatus)api.SetScriptString(component, field, text);
+    }
+
+    internal static RuntimeResult<ObjectHandle> GetUIFocus()
+    {
+        if (api.UIGetFocus == null) return new(RuntimeStatus.ServiceUnavailable);
+        ObjectHandle value = default;
+        return new RuntimeResult<ObjectHandle>((RuntimeStatus)api.UIGetFocus(&value), value);
+    }
+
+    internal static RuntimeStatus SetUIFocus(ObjectHandle target)
+    {
+        if (api.UISetFocus == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.UISetFocus(target);
+    }
+
+    internal static RuntimeResult<ObjectHandle> FindUIFocus(ObjectHandle from, UIFocusDirection direction)
+    {
+        if (api.UIFindFocus == null) return new(RuntimeStatus.ServiceUnavailable);
+        ObjectHandle value = default;
+        var status = (RuntimeStatus)api.UIFindFocus(from, (int)direction, &value);
+        return new RuntimeResult<ObjectHandle>(status, value);
+    }
+
+    internal static RuntimeStatus PublishEvent(string eventTypeGuid, string typeName,
+        ObjectHandle source, ObjectHandle target)
+    {
+        if (api.PublishEvent == null) return RuntimeStatus.ServiceUnavailable;
+        if (!TryParseGuidText(eventTypeGuid, out var guid)) return RuntimeStatus.InvalidArgument;
+        fixed (byte* name = Encoding.UTF8.GetBytes(typeName + "\0"))
+            return (RuntimeStatus)api.PublishEvent(guid.High, guid.Low, name, source, target);
     }
 
     private static IEnumerable<Type> DiscoverBehaviourTypes(Assembly assembly)
@@ -1025,6 +1212,8 @@ public static unsafe class NativeBridge
         ulong targetObject = 0;
         uint targetGeneration = 0;
 
+        var payload = new RuntimeEventPayload();
+
         foreach (var rawLine in text.Split('\n'))
         {
             if (string.IsNullOrWhiteSpace(rawLine)) continue;
@@ -1033,6 +1222,12 @@ public static unsafe class NativeBridge
 
             var key = rawLine[..separator];
             var value = UnescapeEventValue(rawLine[(separator + 1)..]);
+
+            if (key == "payload")
+            {
+                payload.TryAddEncoded(value);
+                continue;
+            }
             switch (key)
             {
                 case "type": typeGuid = value; break;
@@ -1059,6 +1254,8 @@ public static unsafe class NativeBridge
             Object = targetObject,
             Generation = targetGeneration,
         };
+
+        pendingParsedEventPayload = payload;
         return new RuntimeEvent(typeGuid, typeName, source, target, frame);
     }
 
@@ -1399,4 +1596,211 @@ public static unsafe class NativeBridge
 
         return builder.ToString();
     }
+
+    // ---- v6 Object / hierarchy / log ---------------------------------------
+
+    internal static RuntimeStatus LogInfo(string message, ObjectHandle source)
+    {
+        if (api.LogInfo == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(message + "\0"))
+            return (RuntimeStatus)api.LogInfo(text, source);
+    }
+
+    internal static RuntimeStatus LogWarning(string message, ObjectHandle source)
+    {
+        if (api.LogWarning == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(message + "\0"))
+            return (RuntimeStatus)api.LogWarning(text, source);
+    }
+
+    internal static RuntimeStatus LogError(string message, ObjectHandle source)
+    {
+        if (api.LogError == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(message + "\0"))
+            return (RuntimeStatus)api.LogError(text, source);
+    }
+
+    internal static RuntimeResult<ObjectHandle> CreateGameObject(string name)
+    {
+        if (api.CreateGameObject == null) return new(RuntimeStatus.ServiceUnavailable);
+        ObjectHandle value = default;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+        {
+            var status = (RuntimeStatus)api.CreateGameObject(text, &value);
+            return new RuntimeResult<ObjectHandle>(status, value);
+        }
+    }
+
+    internal static RuntimeResult<Vector3> GetWorldPosition(ObjectHandle handle)
+    {
+        if (api.GetWorldPosition == null) return new(RuntimeStatus.ServiceUnavailable);
+        Vector3 value = default;
+        var status = (RuntimeStatus)api.GetWorldPosition(handle, &value);
+        return new RuntimeResult<Vector3>(status, value);
+    }
+
+    internal static RuntimeStatus SetParent(ObjectHandle child, ObjectHandle parent,
+        bool preserveWorldTransform)
+    {
+        if (api.SetParent == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.SetParent(child, parent, preserveWorldTransform ? 1 : 0);
+    }
+
+    internal static RuntimeResult<ObjectHandle> GetParent(ObjectHandle handle)
+    {
+        if (api.GetParent == null) return new(RuntimeStatus.ServiceUnavailable);
+        ObjectHandle value = default;
+        var status = (RuntimeStatus)api.GetParent(handle, &value);
+        return new RuntimeResult<ObjectHandle>(status, value);
+    }
+
+    internal static RuntimeResult<ObjectHandle[]> GetChildren(ObjectHandle handle)
+    {
+        if (api.GetChildren == null) return new(RuntimeStatus.ServiceUnavailable);
+        int count = 0;
+        var status = (RuntimeStatus)api.GetChildren(handle, null, 0, &count);
+        if (status != RuntimeStatus.Ok) return new(status);
+        if (count <= 0) return new RuntimeResult<ObjectHandle[]>(RuntimeStatus.Ok,
+            Array.Empty<ObjectHandle>());
+
+        var values = new ObjectHandle[count];
+        fixed (ObjectHandle* output = values)
+        {
+            status = (RuntimeStatus)api.GetChildren(handle, output, values.Length, &count);
+        }
+        if (status != RuntimeStatus.Ok) return new(status);
+        if (count != values.Length) Array.Resize(ref values, Math.Clamp(count, 0, values.Length));
+        return new RuntimeResult<ObjectHandle[]>(RuntimeStatus.Ok, values);
+    }
+
+    internal static RuntimeResult<string> GetName(ObjectHandle handle)
+    {
+        if (api.GetName == null) return new(RuntimeStatus.ServiceUnavailable);
+        const int capacity = 4096;
+        byte* output = stackalloc byte[capacity];
+        var status = (RuntimeStatus)api.GetName(handle, output, capacity);
+        return status == RuntimeStatus.Ok
+            ? new RuntimeResult<string>(status, FromUtf8(output))
+            : new RuntimeResult<string>(status);
+    }
+
+    internal static RuntimeStatus SetName(ObjectHandle handle, string name)
+    {
+        if (api.SetName == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            return (RuntimeStatus)api.SetName(handle, text);
+    }
+
+    internal static RuntimeResult<bool> IsGameObjectEnabled(ObjectHandle handle)
+    {
+        if (api.GetGameObjectEnabled == null) return new(RuntimeStatus.ServiceUnavailable);
+        int value = 0;
+        var status = (RuntimeStatus)api.GetGameObjectEnabled(handle, &value);
+        return new RuntimeResult<bool>(status, value != 0);
+    }
+
+    internal static RuntimeStatus SetGameObjectEnabled(ObjectHandle handle, bool enabled)
+    {
+        if (api.SetGameObjectEnabled == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.SetGameObjectEnabled(handle, enabled ? 1 : 0);
+    }
+
+
+    // ---- v7 Physics / deferred / runtime state -----------------------------
+
+    internal static RuntimeResult<GroundHit> QueryGround(Vector3 origin, float radius,
+        float upOffset, float downDistance, float walkableNormalY, ObjectHandle ignore)
+    {
+        if (api.QueryGround == null) return new(RuntimeStatus.ServiceUnavailable);
+        GroundHit value = default;
+        var status = (RuntimeStatus)api.QueryGround(origin, radius, upOffset,
+            downDistance, walkableNormalY, ignore, &value);
+        return new RuntimeResult<GroundHit>(status, value);
+    }
+
+    internal static RuntimeResult<SphereSweepHit> SweepSphere(Vector3 start, Vector3 end,
+        float radius, float maximumNormalY, ObjectHandle ignore)
+    {
+        if (api.SweepSphere == null) return new(RuntimeStatus.ServiceUnavailable);
+        SphereSweepHit value = default;
+        var status = (RuntimeStatus)api.SweepSphere(start, end, radius,
+            maximumNormalY, ignore, &value);
+        return new RuntimeResult<SphereSweepHit>(status, value);
+    }
+
+    internal static RuntimeStatus InstantiatePrefabDeferred(string guid, Vector3 position,
+        Vector3 rotationEuler, Vector3 scale, ObjectHandle parent)
+    {
+        if (api.InstantiatePrefabDeferred == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(guid + "\0"))
+            return (RuntimeStatus)api.InstantiatePrefabDeferred(
+                text, position, rotationEuler, scale, parent);
+    }
+
+    internal static RuntimeStatus FlushDeferredOperations()
+    {
+        if (api.FlushDeferredOperations == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.FlushDeferredOperations();
+    }
+
+    internal static RuntimeResult<ulong> PendingDeferredOperationCount()
+    {
+        if (api.PendingDeferredOperationCount == null)
+            return new(RuntimeStatus.ServiceUnavailable);
+        ulong value = 0;
+        var status = (RuntimeStatus)api.PendingDeferredOperationCount(&value);
+        return new RuntimeResult<ulong>(status, value);
+    }
+
+    internal static RuntimeResult<bool> HasComponent(ObjectHandle handle, uint componentTypeId)
+    {
+        if (api.HasComponent == null) return new(RuntimeStatus.ServiceUnavailable);
+        int value = 0;
+        var status = (RuntimeStatus)api.HasComponent(handle, componentTypeId, &value);
+        return new RuntimeResult<bool>(status, value != 0);
+    }
+
+    internal static RuntimeResult<float> TimeScale()
+    {
+        if (api.GetTimeScale == null) return new(RuntimeStatus.ServiceUnavailable);
+        float value = 0.0f;
+        var status = (RuntimeStatus)api.GetTimeScale(&value);
+        return new RuntimeResult<float>(status, value);
+    }
+
+    internal static RuntimeResult<bool> SceneTransitionInProgress()
+    {
+        if (api.GetSceneTransitionInProgress == null)
+            return new(RuntimeStatus.ServiceUnavailable);
+        int value = 0;
+        var status = (RuntimeStatus)api.GetSceneTransitionInProgress(&value);
+        return new RuntimeResult<bool>(status, value != 0);
+    }
+
+    internal static bool PhysicsAvailable()
+        => api.PhysicsAvailable != null && api.PhysicsAvailable() != 0;
+
+    internal static bool SceneFlowAvailable()
+        => api.SceneFlowAvailable != null && api.SceneFlowAvailable() != 0;
+
+
+    internal static RuntimeEventPayload ConsumeParsedEventPayload()
+    {
+        var payload = pendingParsedEventPayload ?? new RuntimeEventPayload();
+        pendingParsedEventPayload = null;
+        return payload;
+    }
+
+    internal static RuntimeStatus PublishEvent(string eventTypeGuid, RuntimeEventPayload payload,
+        string typeName, ObjectHandle source, ObjectHandle target)
+    {
+        if (api.PublishEventWithPayload == null) return RuntimeStatus.ServiceUnavailable;
+        if (!TryParseGuidText(eventTypeGuid, out var guid)) return RuntimeStatus.InvalidArgument;
+        var encodedPayload = payload.Serialize();
+        fixed (byte* name = Encoding.UTF8.GetBytes(typeName + "\0"))
+        fixed (byte* encoded = Encoding.UTF8.GetBytes(encodedPayload + "\0"))
+            return (RuntimeStatus)api.PublishEventWithPayload(
+                guid.High, guid.Low, name, source, target, encoded);
+    }
+
 }

@@ -158,14 +158,14 @@
 
         const auto render_image = [&](UIImageComponent& image,
             const RectTransformComponent& rect, float scale, float opacity,
-            const D3D11_RECT* scissor)
+            const D3D11_RECT* scissor, const UIPuppetDeformComponent* puppet)
         {
             if (!image.ActiveInHierarchy() || image.opacity <= 0.0f || image.fill_amount <= 0.0f)
                 return;
 
+            const ResolvedImageSource source = resolve_image_source(image);
             DirectX::XMFLOAT4 draw_rect = rect.ResolvedRect();
-            DirectX::XMFLOAT4 uv{ image.uv_offset.x, image.uv_offset.y,
-                image.uv_scale.x, image.uv_scale.y };
+            DirectX::XMFLOAT4 uv = source.uv;
             const float fill = (std::min)((std::max)(image.fill_amount, 0.0f), 1.0f);
             if (image.fill_method == UIImageComponent::Horizontal)
             {
@@ -178,44 +178,31 @@
                 uv.w *= fill;
             }
 
-            append_quad(draw_rect, rect.ResolvedMatrix(), uv,
-                MultiplyAlpha(image.color, image.opacity * opacity), scale);
+            append_image_geometry(draw_rect, rect.ResolvedMatrix(), uv,
+                MultiplyAlpha(image.color, image.opacity * opacity), scale,
+                puppet, source.rotated);
             configure_visual(image.fill_color_2, image.fill_mode, image.fill_angle,
                 image.fill_center, image.stroke_color_2, image.stroke_mode,
                 false, 0.0f, {}, {}, {});
-            Flush(context, TextureFor(image.sprite.guid, asset_database),
+            Flush(context, texture_for_source(source),
                 BlendForImage(image, states), states, scissor);
         };
 
-        const auto render_shape = [&](UIShapeComponent& shape,
-            const RectTransformComponent& rect, float scale, float opacity,
-            const D3D11_RECT* scissor)
+        const auto render_shape_geometry = [&](UIShapeComponent& shape,
+            const DirectX::XMFLOAT4& r, const DirectX::XMFLOAT4X4& matrix,
+            float scale, float opacity, const D3D11_RECT* scissor)
         {
-            if (!shape.ActiveInHierarchy() || opacity <= 0.0f) return;
-
-            const DirectX::XMFLOAT4 r = rect.ResolvedRect();
+            if (opacity <= 0.0f) return;
             bool closed = true;
             build_shape_path(shape, r, scale, closed);
             if (shape_path.empty()) return;
 
-            const DirectX::XMFLOAT4X4 matrix = rect.ResolvedMatrix();
             const bool has_fill = closed && shape.shape != UIShapeComponent::Line &&
                 shape.fill_color.w * opacity > 0.0f && shape_path.size() >= 3;
             const bool split_draws = shape.fill_mode != UIShapeComponent::Solid ||
                 shape.stroke_mode != UIShapeComponent::StrokeSolid;
             if (has_fill)
             {
-                DirectX::XMFLOAT2 center{ 0.0f, 0.0f };
-                for (const DirectX::XMFLOAT2& point : shape_path)
-                {
-                    center.x += point.x;
-                    center.y += point.y;
-                }
-                const float inv_count = 1.0f /
-                    static_cast<float>((std::max)(std::size_t{ 1 }, shape_path.size()));
-                center.x *= inv_count;
-                center.y *= inv_count;
-
                 const DirectX::XMFLOAT4 fill =
                     MultiplyAlpha(shape.fill_color, opacity);
                 configure_visual(shape.fill_color_2, shape.fill_mode,
@@ -227,11 +214,67 @@
                 visual_constants_.fill_stops = {
                     shape.fill_stop_2, shape.fill_stop_3,
                     shape.fill_stop_4, 0.0f };
+                // Concave Path でもはみ出さない Ear Clipping Tessellation。
+                std::vector<std::size_t> polygon_indices(shape_path.size());
+                for (std::size_t index = 0; index < polygon_indices.size(); ++index)
+                    polygon_indices[index] = index;
+                float signed_area = 0.0f;
                 for (std::size_t index = 0; index < shape_path.size(); ++index)
                 {
-                    append_triangle_local(center, shape_path[index],
-                        shape_path[(index + 1) % shape_path.size()],
-                        r, matrix, fill, scale);
+                    const DirectX::XMFLOAT2& a = shape_path[index];
+                    const DirectX::XMFLOAT2& b = shape_path[(index + 1) % shape_path.size()];
+                    signed_area += a.x * b.y - b.x * a.y;
+                }
+                if (signed_area < 0.0f)
+                    std::reverse(polygon_indices.begin(), polygon_indices.end());
+                const auto cross = [](const DirectX::XMFLOAT2& a,
+                    const DirectX::XMFLOAT2& b, const DirectX::XMFLOAT2& c)
+                {
+                    return (b.x - a.x) * (c.y - a.y) -
+                        (b.y - a.y) * (c.x - a.x);
+                };
+                const auto point_in_triangle = [&cross](const DirectX::XMFLOAT2& p,
+                    const DirectX::XMFLOAT2& a, const DirectX::XMFLOAT2& b,
+                    const DirectX::XMFLOAT2& c)
+                {
+                    const float c0 = cross(a, b, p);
+                    const float c1 = cross(b, c, p);
+                    const float c2 = cross(c, a, p);
+                    constexpr float epsilon = -0.00001f;
+                    return c0 >= epsilon && c1 >= epsilon && c2 >= epsilon;
+                };
+                std::size_t guard = shape_path.size() * shape_path.size();
+                while (polygon_indices.size() > 2 && guard-- > 0)
+                {
+                    bool clipped = false;
+                    for (std::size_t index = 0; index < polygon_indices.size(); ++index)
+                    {
+                        const std::size_t prev = polygon_indices[
+                            (index + polygon_indices.size() - 1) % polygon_indices.size()];
+                        const std::size_t curr = polygon_indices[index];
+                        const std::size_t next = polygon_indices[(index + 1) % polygon_indices.size()];
+                        const DirectX::XMFLOAT2& a = shape_path[prev];
+                        const DirectX::XMFLOAT2& b = shape_path[curr];
+                        const DirectX::XMFLOAT2& c = shape_path[next];
+                        if (cross(a, b, c) <= 0.00001f) continue;
+                        bool contains = false;
+                        for (std::size_t candidate : polygon_indices)
+                        {
+                            if (candidate == prev || candidate == curr || candidate == next) continue;
+                            if (point_in_triangle(shape_path[candidate], a, b, c))
+                            {
+                                contains = true;
+                                break;
+                            }
+                        }
+                        if (contains) continue;
+                        append_triangle_local(a, b, c, r, matrix, fill, scale);
+                        polygon_indices.erase(polygon_indices.begin() +
+                            static_cast<std::ptrdiff_t>(index));
+                        clipped = true;
+                        break;
+                    }
+                    if (!clipped) break;
                 }
                 if (split_draws)
                 {
@@ -260,6 +303,15 @@
             {
                 Flush(context, white_texture_.Get(), states.blend_alpha, states, scissor);
             }
+        };
+
+        const auto render_shape = [&](UIShapeComponent& shape,
+            const RectTransformComponent& rect, float scale, float opacity,
+            const D3D11_RECT* scissor)
+        {
+            if (!shape.ActiveInHierarchy() || opacity <= 0.0f) return;
+            render_shape_geometry(shape, rect.ResolvedRect(), rect.ResolvedMatrix(),
+                scale, opacity, scissor);
         };
 
         const auto animator_anchor = [](int anchor) noexcept

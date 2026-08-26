@@ -20,11 +20,13 @@ public:
         DirectX::XMFLOAT4X4 view_projection[CASCADE_COUNT];
         DirectX::XMFLOAT4   split_distances{ 12.0f, 34.0f, 90.0f, 240.0f };
         // x=depth_bias, y=normal_bias(テクセル倍率), z=filter_radius(テクセル), w=enable
-        DirectX::XMFLOAT4   params{ 0.0016f, 1.4f, 2.0f, 1.0f };
+        // filter_radius は 2 テクセル未満にしない。斜めの縁が階段状に出る。
+        // x はワールドメートル。NDC ではないので深度レンジに依存しない。
+        DirectX::XMFLOAT4   params{ 0.02f, 1.4f, 3.0f, 1.0f };
         // x=shadow_map_size, y=cascade_blend(view z), z=light_size_uv, w=pcss_enable
         DirectX::XMFLOAT4   params2{ static_cast<float>(SHADOW_MAP_SIZE), 6.0f, 0.0035f, 1.0f };
-        // x=slope_bias_scale, y=max_bias, z=strength, w=tap_scale
-        DirectX::XMFLOAT4   params3{ 3.0f, 0.02f, 1.0f, 1.0f };
+        // x=slope_bias_scale, y=max_bias(ワールドメートル), z=strength, w=tap_scale
+        DirectX::XMFLOAT4   params3{ 3.0f, 0.25f, 1.0f, 1.0f };
         // カスケードごとの1テクセルのワールド長 (法線オフセットの基準)
         DirectX::XMFLOAT4   texel_world{ 0.01f, 0.01f, 0.01f, 0.01f };
     };
@@ -46,10 +48,17 @@ public:
     csm_constants constants{};
     D3D11_VIEWPORT viewport{};
 
+    // 全カスケードを包むワールド空間の球。影パスのキャスター選別に使う。
+    DirectX::XMFLOAT3 shadow_volume_center{ 0.0f, 0.0f, 0.0f };
+    float shadow_volume_radius{ 0.0f };
+    // キャスター選別に使うライト方向（update_cascades() へ渡されたもの）。
+    DirectX::XMFLOAT3 shadow_light_direction{ 0.0f, -1.0f, 0.0f };
+
     // 分割距離の対数/等間隔ブレンド係数。1に近いほど近景を細かく分ける。
     float split_lambda{ 0.85f };
     // 影を落とす最遠距離。これより遠くはシャドウを打ち切る。
-    float shadow_distance{ 240.0f };
+    // 伸ばすほど影マップ 1 テクセルが覆うワールド長が広がり、輪郭が粗くなる。
+    float shadow_distance{ 120.0f };
     // 画面外のキャスターを拾うためにライト方向へ伸ばす量。
     float caster_extrusion{ 60.0f };
 

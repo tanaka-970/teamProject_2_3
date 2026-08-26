@@ -98,6 +98,12 @@ post_process.Execute(immediate_context.Get(), *bit_block_transfer,
     ReplayEngine::Rendering::Stats().BeginPhase(
         ReplayEngine::Rendering::RenderStats::Phase::EditorUI, immediate_context.Get());
 #ifdef USE_IMGUI
+    // Canvas Preview は本番と同じ UIRenderer を Editor 用 RT へ描いてから、
+    // その SRV を ImGui の Preview Window に表示する。
+    render_ui_preview_target();
+    // Preview 描画でレイアウト解決先と viewport が変わるため、Editor UI前に
+    // client viewport を念のため再設定する。
+    immediate_context->RSSetViewports(1, &viewport);
     // update()でNewFrameを通したフレームだけ描く。ロード完了フレームのように
     // 途中でeditor_modeが立った場合は次フレームからUIを出す。
     if (imgui_frame_active)

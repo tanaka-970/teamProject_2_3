@@ -20,6 +20,7 @@
 #include "../../../RePlayEngine/Object/Registry/BuiltInComponents.h"
 #include "../../../RePlayEngine/Editor/Validation/AnimationUndoValidation.h"
 #include "../../../RePlayEngine/Editor/Validation/EditorIntegrationValidation.h"
+#include "../../../RePlayEngine/Editor/Validation/EditorCameraValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/BehaviourValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/RuntimeSceneValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/SceneFlowValidation.h"
@@ -433,6 +434,14 @@ namespace ReplayEngine::Runtime::Detail
             ReplayEngine::Core::RegisterBuiltInComponents();
             Game::RegisterGameBehaviours();
             return ReplayEngine::Editor::Validation::RunEditorIntegrationValidation();
+        }
+
+        // Editor Camera の開始関門・操作継続・Preset 永続化。
+        // ImGui 自体は回さず、UI が渡すのと同じ純粋入力/API を直接検証する。
+        // 終了コード帯は 1900-1999。
+        if (command == "--validate-editor-camera")
+        {
+            return ReplayEngine::Editor::Validation::RunEditorCameraValidation();
         }
 
         // Phase 9。反復と大量データの耐久検査。

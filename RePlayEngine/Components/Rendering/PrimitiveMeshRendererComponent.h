@@ -77,6 +77,9 @@ namespace ReplayEngine::Components
         bool outline = false;
         bool cast_shadow = true;
         bool receive_shadow = true;
+        // Material Asset を使わない形式でも影をアルファで抜くか。既定は抜かない。
+        bool shadow_alpha_clip = false;
+        float shadow_alpha_cutoff = 0.5f;
         // Screen Effect Stack の Rendering Layer mask。0..31。
         int rendering_layer = 0;
         bool visible = true;

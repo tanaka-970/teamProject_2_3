@@ -1,4 +1,4 @@
-namespace ReplayEngine;
+﻿namespace ReplayEngine;
 
 public sealed class ScriptRuntimeContext
 {
@@ -15,6 +15,15 @@ public sealed class ScriptRuntimeContext
     public RuntimeResult<ObjectHandle> FindGameObject(ulong objectId)
     {
         return NativeBridge.FindGameObject(objectId);
+    }
+
+    // 名前で探す。見つからなければ Status が Ok 以外になり、Handle は無効。
+    //
+    // 同じ名前が複数あるときは Scene の並び順で最初のものが返る。
+    // 破棄予定のものは飛ばす。名前を一意にするのは呼び出し側の責任。
+    public RuntimeResult<ObjectHandle> FindGameObject(string name)
+    {
+        return NativeBridge.FindGameObjectByName(name);
     }
 
     public RuntimeStatus IsValid(ObjectHandle handle)
@@ -244,6 +253,32 @@ public sealed class ScriptRuntimeContext
         return NativeBridge.PollEvent(subscription);
     }
 
+    public RuntimeResult<bool> GetScriptFieldBool(ComponentHandle component, string fieldName)
+        => NativeBridge.GetScriptFieldBool(component, fieldName);
+    public RuntimeStatus SetScriptFieldBool(ComponentHandle component, string fieldName, bool value)
+        => NativeBridge.SetScriptFieldBool(component, fieldName, value);
+    public RuntimeResult<int> GetScriptFieldInt(ComponentHandle component, string fieldName)
+        => NativeBridge.GetScriptFieldInt(component, fieldName);
+    public RuntimeStatus SetScriptFieldInt(ComponentHandle component, string fieldName, int value)
+        => NativeBridge.SetScriptFieldInt(component, fieldName, value);
+    public RuntimeResult<double> GetScriptFieldDouble(ComponentHandle component, string fieldName)
+        => NativeBridge.GetScriptFieldDouble(component, fieldName);
+    public RuntimeStatus SetScriptFieldDouble(ComponentHandle component, string fieldName, double value)
+        => NativeBridge.SetScriptFieldDouble(component, fieldName, value);
+    public RuntimeResult<string> GetScriptFieldString(ComponentHandle component, string fieldName)
+        => NativeBridge.GetScriptFieldString(component, fieldName);
+    public RuntimeStatus SetScriptFieldString(ComponentHandle component, string fieldName, string value)
+        => NativeBridge.SetScriptFieldString(component, fieldName, value);
+
+    public RuntimeResult<ObjectHandle> GetUIFocus() => NativeBridge.GetUIFocus();
+    public RuntimeStatus SetUIFocus(ObjectHandle target) => NativeBridge.SetUIFocus(target);
+    public RuntimeResult<ObjectHandle> FindUIFocus(ObjectHandle from, UIFocusDirection direction)
+        => NativeBridge.FindUIFocus(from, direction);
+
+    public RuntimeStatus PublishEvent(string eventTypeGuid, string typeName = "",
+        ObjectHandle source = default, ObjectHandle target = default)
+        => NativeBridge.PublishEvent(eventTypeGuid, typeName, source, target);
+
     [Obsolete("Use InputAvailable and the InputHeld/InputPressed/InputReleased APIs.")]
     public RuntimeStatus InputUnavailable()
         => InputAvailable ? RuntimeStatus.Ok : RuntimeStatus.ServiceUnavailable;
@@ -259,4 +294,74 @@ public sealed class ScriptRuntimeContext
     [Obsolete("Use SaveGameAvailable and the SaveGame APIs.")]
     public RuntimeStatus SaveGameUnavailable()
         => SaveGameAvailable ? RuntimeStatus.Ok : RuntimeStatus.ServiceUnavailable;
+
+    // ---- v6 Object / hierarchy / log ---------------------------------------
+
+    public RuntimeStatus LogInfo(string message, ObjectHandle source = default)
+        => NativeBridge.LogInfo(message, source);
+    public RuntimeStatus LogWarning(string message, ObjectHandle source = default)
+        => NativeBridge.LogWarning(message, source);
+    public RuntimeStatus LogError(string message, ObjectHandle source = default)
+        => NativeBridge.LogError(message, source);
+
+    public RuntimeResult<ObjectHandle> CreateGameObject(string name = "")
+        => NativeBridge.CreateGameObject(name);
+    public RuntimeResult<Vector3> GetWorldPosition(ObjectHandle handle)
+        => NativeBridge.GetWorldPosition(handle);
+    public RuntimeStatus SetParent(ObjectHandle child, ObjectHandle parent = default,
+        bool preserveWorldTransform = true)
+        => NativeBridge.SetParent(child, parent, preserveWorldTransform);
+    public RuntimeResult<ObjectHandle> GetParent(ObjectHandle handle)
+        => NativeBridge.GetParent(handle);
+    public RuntimeResult<ObjectHandle[]> GetChildren(ObjectHandle handle)
+        => NativeBridge.GetChildren(handle);
+    public RuntimeResult<string> GetName(ObjectHandle handle)
+        => NativeBridge.GetName(handle);
+    public RuntimeStatus SetName(ObjectHandle handle, string name)
+        => NativeBridge.SetName(handle, name);
+    public RuntimeResult<bool> IsEnabled(ObjectHandle handle)
+        => NativeBridge.IsGameObjectEnabled(handle);
+    public RuntimeStatus SetEnabled(ObjectHandle handle, bool enabled)
+        => NativeBridge.SetGameObjectEnabled(handle, enabled);
+
+
+    // ---- v7 Physics / deferred / runtime state -----------------------------
+
+    public RuntimeResult<GroundHit> QueryGround(Vector3 origin, float radius,
+        float upOffset, float downDistance, float walkableNormalY,
+        ObjectHandle ignore = default)
+        => NativeBridge.QueryGround(origin, radius, upOffset, downDistance,
+            walkableNormalY, ignore);
+
+    public RuntimeResult<SphereSweepHit> SweepSphere(Vector3 start, Vector3 end,
+        float radius, float maximumNormalY, ObjectHandle ignore = default)
+        => NativeBridge.SweepSphere(start, end, radius, maximumNormalY, ignore);
+
+    public RuntimeStatus InstantiatePrefabDeferred(string prefabAssetGuid, Vector3 position,
+        Vector3 rotationEuler, Vector3 scale, ObjectHandle parent = default)
+        => NativeBridge.InstantiatePrefabDeferred(
+            prefabAssetGuid, position, rotationEuler, scale, parent);
+
+    public RuntimeStatus FlushDeferredOperations()
+        => NativeBridge.FlushDeferredOperations();
+
+    public RuntimeResult<ulong> PendingDeferredOperationCount()
+        => NativeBridge.PendingDeferredOperationCount();
+
+    public RuntimeResult<bool> HasComponent(ObjectHandle handle, uint componentTypeId)
+        => NativeBridge.HasComponent(handle, componentTypeId);
+
+    public RuntimeResult<float> TimeScale => NativeBridge.TimeScale();
+    public RuntimeResult<bool> SceneTransitionInProgress
+        => NativeBridge.SceneTransitionInProgress();
+    public bool PhysicsAvailable => NativeBridge.PhysicsAvailable();
+    public bool SceneFlowAvailable => NativeBridge.SceneFlowAvailable();
+
+
+    // ---- v8 Event payload --------------------------------------------------
+
+    public RuntimeStatus PublishEvent(string eventTypeGuid, RuntimeEventPayload payload,
+        string typeName = "", ObjectHandle source = default, ObjectHandle target = default)
+        => NativeBridge.PublishEvent(eventTypeGuid, payload, typeName, source, target);
+
 }

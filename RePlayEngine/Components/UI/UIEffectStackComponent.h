@@ -18,6 +18,12 @@ namespace ReplayEngine::Components
         REPLAY_COMPONENT_BODY(UIEffectStackComponent)
 
     public:
+        enum TargetScope : int
+        {
+            Self = 0,
+            Subtree = 1,
+        };
+
         UIEffectStackComponent();
 
         const std::vector<Reflection::PropertyDesc>* DynamicProperties()
@@ -41,9 +47,15 @@ namespace ReplayEngine::Components
             Rendering::ShaderPropertySchemaRef schema);
 
         bool enabled = true;
+        // Self は従来互換。Subtree はこの GameObject と全子孫を 1 枚に Precompose してから
+        // Effect Stack を 1 回適用する。
+        int target_scope = Self;
         // Screen Space Overlay の Image / Text だけ、直前まで描かれた画素を
         // Effect の入力へ含める。既定 false は従来の offscreen 経路を保つ。
         bool capture_backdrop = false;
+        // Stack 全体へ掛ける範囲制限。shape=TextureMask なら投げ縄などの
+        // 白黒画像を指定でき、invert で範囲外だけへ反転できる。
+        UI::UIEffectRegion effect_region;
         // false の既存 Scene は inline 値をそのまま使う。Preset 参照は追加の選択肢。
         bool use_preset = false;
         Reflection::AssetReference effect_preset;

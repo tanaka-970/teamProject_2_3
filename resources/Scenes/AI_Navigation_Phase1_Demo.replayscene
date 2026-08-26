@@ -8,7 +8,7 @@ OBJECT
   NAME "Player"
   ENABLED 1
   PARENT 0
-  TRANSFORM 0 0.89999997615814209 6 0 0 0 1 1 1
+  TRANSFORM 5.0466737747192383 0.66499996185302734 -2.1315927505493164 0 23.350353240966797 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 6
   COMPONENT "PrimitiveMeshRendererComponent" 1
@@ -96,7 +96,7 @@ OBJECT
     TYPE_VERSION 1
     PROPERTY_COUNT 3
     PROPERTY "max_health" int 100
-    PROPERTY "current_health" int 100
+    PROPERTY "current_health" int 0
     PROPERTY "invulnerable" bool 0
   END_COMPONENT
 END_OBJECT
@@ -132,7 +132,7 @@ OBJECT
   NAME "Enemy_ContactDamage"
   ENABLED 1
   PARENT 0
-  TRANSFORM -4 0.89999997615814209 -5 0 0 0 1 1 1
+  TRANSFORM 5.4548783302307129 0.76499998569488525 -5.9545259475708008 0 -44.489585876464844 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 7
   COMPONENT "PrimitiveMeshRendererComponent" 1
@@ -198,10 +198,13 @@ OBJECT
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE "RePlayEngine.BuiltIn"
     TYPE_VERSION 1
-    PROPERTY_COUNT 3
+    PROPERTY_COUNT 6
     PROPERTY "move_speed" float 2.5
     PROPERTY "turn_speed_degrees" float 360
     PROPERTY "stopping_distance" float 0.34999999403953552
+    PROPERTY "path_grid_size" float 1
+    PROPERTY "path_max_range" float 24
+    PROPERTY "path_max_search_cells" int 4096
   END_COMPONENT
   COMPONENT "SphereColliderComponent" 1
     STABLE_ID 5
@@ -258,7 +261,7 @@ OBJECT
   NAME "Enemy_AttackMotion"
   ENABLED 1
   PARENT 0
-  TRANSFORM 4 0.89999997615814209 -5 0 0 0 1 1 1
+  TRANSFORM -5.5297164916992188 0.66499996185302734 -6.2832889556884766 0 -51.294174194335938 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 7
   COMPONENT "PrimitiveMeshRendererComponent" 1
@@ -324,10 +327,13 @@ OBJECT
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE "RePlayEngine.BuiltIn"
     TYPE_VERSION 1
-    PROPERTY_COUNT 3
+    PROPERTY_COUNT 6
     PROPERTY "move_speed" float 2.5
     PROPERTY "turn_speed_degrees" float 360
     PROPERTY "stopping_distance" float 0.34999999403953552
+    PROPERTY "path_grid_size" float 1
+    PROPERTY "path_max_range" float 24
+    PROPERTY "path_max_search_cells" int 4096
   END_COMPONENT
   COMPONENT "SphereColliderComponent" 1
     STABLE_ID 5
@@ -384,7 +390,7 @@ OBJECT
   NAME "LOS_Blocker"
   ENABLED 1
   PARENT 0
-  TRANSFORM 0 3.0753297805786133 0 0 0 0 6 2.5 0.60000002384185791
+  TRANSFORM 0 0.87529999017715454 0 0 0 0 6 2.5 0.60000002384185791
   PREFAB "" 0 0
   COMPONENT_COUNT 2
   COMPONENT "PrimitiveMeshRendererComponent" 1
@@ -440,7 +446,7 @@ OBJECT
     TYPE_MODULE ""
     TYPE_VERSION 1
     PROPERTY_COUNT 17
-    PROPERTY "primitive_type" enum 1
+    PROPERTY "primitive_type" enum 0
     PROPERTY "material_asset" asset ""
     PROPERTY "material_override" bool 0
     PROPERTY "tint" color 0.18000000715255737 0.20000000298023224 0.18000000715255737 1
@@ -470,6 +476,6 @@ OBJECT
     PROPERTY "collision_mask" layermask -1
     PROPERTY "is_trigger" bool 0
     PROPERTY "debug_draw" bool 1
-    PROPERTY "size" vec3 1 1 1
+    PROPERTY "size" vec3 1 0.059999998658895493 1
   END_COMPONENT
 END_OBJECT

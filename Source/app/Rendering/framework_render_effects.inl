@@ -38,7 +38,9 @@
                 layer_source->srv.Get(),
                 camera_pass.screen_effect->EffectiveEffects(&asset_database),
                 layer_width, layer_height, DXGI_FORMAT_R16G16B16A16_FLOAT,
-                shader_composer_time);
+                shader_composer_time, static_cast<std::uint64_t>(
+                    reinterpret_cast<std::uintptr_t>(camera_pass.screen_effect)),
+                &camera_pass.screen_effect->effect_region);
 
             immediate_context->OMSetRenderTargets(1,
                 framebuffers[0]->render_target_view.GetAddressOf(),
@@ -92,6 +94,7 @@
 
     pbr.unbind_pbr_resources(immediate_context.Get());
     csm.unbind_resources(immediate_context.Get());
+    local_shadows.UnbindResources(immediate_context.Get());
     toon.unbind_resources(immediate_context.Get());
     framebuffers[0]->deactivate(immediate_context.Get());
 
@@ -190,7 +193,9 @@
         {
             before_result = apply_scene_effect_chain(effect_source, screen_effect->EffectiveEffects(&asset_database),
                 effect_width, effect_height, DXGI_FORMAT_R16G16B16A16_FLOAT,
-                shader_composer_time);
+                shader_composer_time, static_cast<std::uint64_t>(
+                    reinterpret_cast<std::uintptr_t>(screen_effect)),
+                &screen_effect->effect_region);
             if (before_result != nullptr)
             {
                 if (full_viewport)
@@ -257,7 +262,9 @@ post_process.Execute(immediate_context.Get(), *bit_block_transfer,
             ReplayEngine::UI::UIRenderTarget* effected = apply_scene_effect_chain(
                 post_target->srv.Get(), screen_effect->EffectiveEffects(&asset_database),
                 effect_width, effect_height, DXGI_FORMAT_R8G8B8A8_UNORM,
-                shader_composer_time);
+                shader_composer_time, static_cast<std::uint64_t>(
+                    reinterpret_cast<std::uintptr_t>(screen_effect)),
+                &screen_effect->effect_region);
 
             immediate_context->OMSetRenderTargets(1, render_target_view.GetAddressOf(), nullptr);
 

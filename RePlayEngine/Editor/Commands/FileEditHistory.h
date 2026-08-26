@@ -17,6 +17,22 @@ namespace ReplayEngine::Editor
     class FileEditHistory final
     {
     public:
+        enum class AppliedKind
+        {
+            None,
+            FileContent,
+            PathMove,
+            PathCreate,
+        };
+
+        struct AppliedChange final
+        {
+            AppliedKind kind = AppliedKind::None;
+            std::filesystem::path from_path;
+            std::filesystem::path to_path;
+            std::string label;
+        };
+
         static constexpr std::size_t maximum_entries = 128;
         static constexpr std::uintmax_t maximum_snapshot_bytes = 4u * 1024u * 1024u;
 
@@ -28,6 +44,15 @@ namespace ReplayEngine::Editor
         // 呼び出し側が「保存前 bytes」をすでに持っている場合の即時操作用。
         bool RecordSavedChange(const std::filesystem::path& path, std::string label,
             const std::vector<std::uint8_t>& before, std::string& error);
+
+        // 既に filesystem 上で完了した move/rename/delete-to-trash を履歴へ積む。
+        // Undo/Redo は rename で往復するため、ファイルでもフォルダでも内容を失わない。
+        bool RecordPathMove(const std::filesystem::path& from,
+            const std::filesystem::path& to, std::string label, std::string& error);
+
+        // 新規作成/複製した path。Undo 時は hidden stash へ退避し、Redo で戻す。
+        bool RecordPathCreated(const std::filesystem::path& path,
+            const std::filesystem::path& stash_root, std::string label, std::string& error);
 
         bool Undo(std::filesystem::path& restored_path, std::string& label,
             std::string& error);
@@ -41,15 +66,25 @@ namespace ReplayEngine::Editor
         {
             return transaction_.path;
         }
+        const AppliedChange& LastAppliedChange() const noexcept { return last_applied_; }
         void Clear() noexcept;
 
         static bool ReadFile(const std::filesystem::path& path,
             std::vector<std::uint8_t>& bytes, std::string& error);
 
     private:
+        enum class EntryKind
+        {
+            FileContent,
+            PathMove,
+            PathCreate,
+        };
+
         struct Entry final
         {
+            EntryKind kind = EntryKind::FileContent;
             std::filesystem::path path;
+            std::filesystem::path secondary_path;
             std::string label;
             std::vector<std::uint8_t> before;
             std::vector<std::uint8_t> after;
@@ -65,10 +100,15 @@ namespace ReplayEngine::Editor
         static std::filesystem::path Normalize(const std::filesystem::path& path);
         static bool WriteFileAtomic(const std::filesystem::path& path,
             const std::vector<std::uint8_t>& bytes, std::string& error);
+        static bool MovePath(const std::filesystem::path& from,
+            const std::filesystem::path& to, std::string& error);
+        static std::filesystem::path UniqueStashPath(const std::filesystem::path& root,
+            const std::filesystem::path& original);
         bool Push(Entry entry);
 
         std::vector<Entry> entries_;
         std::size_t cursor_ = 0;
         Transaction transaction_;
+        AppliedChange last_applied_;
     };
 }

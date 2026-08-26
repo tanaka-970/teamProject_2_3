@@ -17,10 +17,12 @@
 
 namespace ReplayEngine::Core { class Component; class GameObject; }
 namespace ReplayEngine::Scene { class Scene; }
+namespace ReplayEngine::Reflection { class PropertyValue; }
 
 namespace ReplayEngine::Runtime
 {
     class EventBus;
+    struct EventRecord;
 
     // 時間の情報。framework が毎フレーム更新する。
     struct RuntimeTime final
@@ -213,6 +215,15 @@ namespace ReplayEngine::Runtime
 
         bool IsValid(const ObjectHandle& handle) const noexcept;
         ObjectHandle FindByObjectID(Core::ObjectID id) const noexcept;
+
+        // 名前で探す。見つからなければ空 Handle。
+        //
+        // 同じ名前が複数あるときは Scene の並び順で最初のものを返す
+        // （Scene::FindGameObjectByName の挙動をそのまま使う）。
+        // 破棄予定のものは飛ばす。
+        // 名前を一意にするのは呼び出し側の責任。
+        ObjectHandle FindByName(const std::string& name) const noexcept;
+
         ObjectHandle ControlledObject() const noexcept;
 
         RuntimeStatus GetName(const ObjectHandle& handle, std::string& out) const;
@@ -257,6 +268,10 @@ namespace ReplayEngine::Runtime
             Core::ComponentTypeID type_id, ComponentHandle& out);
         RuntimeStatus SetComponentEnabled(const ComponentHandle& handle, bool enabled);
         RuntimeStatus IsComponentEnabled(const ComponentHandle& handle, bool& out) const;
+        RuntimeStatus GetScriptField(const ComponentHandle& handle,
+            const std::string& field_name, Reflection::PropertyValue& out) const;
+        RuntimeStatus SetScriptField(const ComponentHandle& handle,
+            const std::string& field_name, const Reflection::PropertyValue& value);
 
         // ---- Motion Player -----------------------------------------------------
 
@@ -429,6 +444,14 @@ namespace ReplayEngine::Runtime
             const DirectX::XMFLOAT2& position, const DirectX::XMFLOAT2& size,
             const DirectX::XMFLOAT2& scale, float rotation, int sort_order);
         RuntimeStatus SetUIButtonInteractable(const ObjectHandle& object, bool interactable);
+        RuntimeStatus GetUIFocus(ObjectHandle& out);
+        RuntimeStatus SetUIFocus(const ObjectHandle& object);
+        RuntimeStatus FindUIFocusInDirection(const ObjectHandle& from, int direction,
+            ObjectHandle& out);
+
+        // ---- Event --------------------------------------------------------------
+
+        RuntimeStatus PublishEvent(EventRecord record);
 
     private:
         struct PendingInstantiation

@@ -159,8 +159,36 @@ namespace ReplayEngine::Editor
         }
         ImGui::SameLine();
 
-        const bool opened = ImGui::CollapsingHeader(title.c_str(),
-            ImGuiTreeNodeFlags_DefaultOpen);
+        ImGuiTreeNodeFlags header_flags = ImGuiTreeNodeFlags_DefaultOpen;
+        if (selected_component_owner_ == (component.Owner() != nullptr ?
+            component.Owner()->ID().Value() : 0ull) &&
+            selected_component_stable_ == component.StableID())
+            header_flags |= ImGuiTreeNodeFlags_Selected;
+        const bool opened = ImGui::CollapsingHeader(title.c_str(), header_flags);
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
+        {
+            selected_component_owner_ = component.Owner() != nullptr
+                ? component.Owner()->ID().Value() : 0ull;
+            selected_component_stable_ = component.StableID();
+        }
+        if (ImGui::BeginPopupContextItem("##ComponentHeaderMenu"))
+        {
+            selected_component_owner_ = component.Owner() != nullptr
+                ? component.Owner()->ID().Value() : 0ull;
+            selected_component_stable_ = component.StableID();
+            if (removable && editable && ImGui::MenuItem("コンポーネントを削除", "Backspace"))
+            {
+                const auto dependents = component.Owner() != nullptr
+                    ? Core::ComponentDependencyRules::FindDirectDependents(*component.Owner(), component)
+                    : std::vector<Core::Component*>{};
+                if (dependents.empty())
+                {
+                    pending_removal_ = &component;
+                    pending_removal_label_ = title;
+                }
+            }
+            ImGui::EndPopup();
+        }
 
         if (info != nullptr && !info->tooltip.empty() && ImGui::IsItemHovered())
         {
@@ -451,6 +479,19 @@ namespace ReplayEngine::Editor
                 ImGui::PushID(static_cast<int>(effect_index) + 41000);
                 ImGui::Text("%zu", effect_index + 1);
                 ImGui::SameLine();
+                const bool time_driven = UI::IsTimeDrivenEffect(
+                    static_cast<UI::UIEffectKind>(stack->effects[effect_index].kind));
+                if (time_driven)
+                {
+                    ImGui::TextColored(ImVec4(0.30f, 0.85f, 1.0f, 1.0f), "M");
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::BeginTooltip();
+                        ImGui::TextUnformatted("時間で自律的に動く Effect");
+                        ImGui::EndTooltip();
+                    }
+                    ImGui::SameLine();
+                }
                 bool moved = false;
                 if (editable && effect_index > 0 && ImGui::SmallButton("↑"))
                 {

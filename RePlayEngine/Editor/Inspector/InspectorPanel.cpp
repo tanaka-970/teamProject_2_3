@@ -32,6 +32,8 @@
 #include "imgui/imgui.h"
 #include "imgui/imgui_internal.h"
 
+#include <Windows.h>
+
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -127,6 +129,12 @@ namespace ReplayEngine::Editor
             }
         }
 
+        if (selected_component_owner_ != object->ID().Value())
+        {
+            selected_component_owner_ = object->ID().Value();
+            selected_component_stable_ = Core::invalid_component_stable_id;
+        }
+
         DrawGameObjectHeader(context, *object);
         DrawPlayerComposition(context, *object, show_game_template_components);
         ImGui::Separator();
@@ -145,6 +153,43 @@ namespace ReplayEngine::Editor
             ImGui::PushID(static_cast<int>(index));
             DrawComponent(context, *component);
             ImGui::PopID();
+        }
+
+        // Inspector がキーボード所有者のときだけ Backspace を Component 削除へ使う。
+        // InputText 等の文字編集が所有している間は文字削除を最優先する。
+        if (pending_removal_ == nullptr && context.CanEdit() &&
+            ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
+            !ImGui::GetIO().WantTextInput &&
+            ImGui::IsKeyPressed(VK_BACK) &&
+            selected_component_stable_ != Core::invalid_component_stable_id)
+        {
+            Core::Component* selected_component =
+                object->FindComponentByStableID(selected_component_stable_);
+            if (selected_component != nullptr && !selected_component->PendingDestroy())
+            {
+                if (!Core::ComponentRegistry::IsRemovable(selected_component->TypeID()))
+                {
+                    context.SetStatus("このコンポーネントは削除できません");
+                }
+                else
+                {
+                    const auto dependents = Core::ComponentDependencyRules::FindDirectDependents(
+                        *object, *selected_component);
+                    if (!dependents.empty())
+                    {
+                        context.SetStatus(Core::ComponentRegistry::DisplayNameOf(
+                            selected_component->TypeID()) + " は " +
+                            Core::ComponentRegistry::DisplayNameOf(dependents.front()->TypeID()) +
+                            " が必須として使用中です");
+                    }
+                    else
+                    {
+                        pending_removal_ = selected_component;
+                        pending_removal_label_ = Core::ComponentRegistry::DisplayNameOf(
+                            selected_component->TypeID());
+                    }
+                }
+            }
         }
 
         // 走査を終えてから削除を確定させる。
@@ -174,6 +219,7 @@ namespace ReplayEngine::Editor
             }
             pending_removal_ = nullptr;
             pending_removal_label_.clear();
+            selected_component_stable_ = Core::invalid_component_stable_id;
         }
 
         ImGui::Separator();

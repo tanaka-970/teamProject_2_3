@@ -6,11 +6,53 @@
 #include "../../RePlayEngine/Scene/LoadingScene.h"
 
 #include <filesystem>
+#include <cctype>
 #include <cstring>
 #include <string>
 
 namespace
 {
+    bool IsFontFile(const std::filesystem::path& path)
+    {
+        std::string extension = path.extension().u8string();
+        for (char& character : extension)
+        {
+            character = static_cast<char>(std::tolower(
+                static_cast<unsigned char>(character)));
+        }
+        return extension == ".ttf" || extension == ".otf" || extension == ".ttc";
+    }
+
+    std::size_t RegisterProjectFonts(const std::filesystem::path& fonts_root,
+        ReplayEngine::Assets::AssetDatabase& asset_database)
+    {
+        std::error_code error;
+        if (!std::filesystem::is_directory(fonts_root, error) || error)
+            return 0;
+
+        std::size_t registered_count = 0;
+        std::filesystem::recursive_directory_iterator iterator(fonts_root, error);
+        const std::filesystem::recursive_directory_iterator end;
+        while (iterator != end && !error)
+        {
+            const std::filesystem::directory_entry entry = *iterator;
+            std::error_code entry_error;
+            if (entry.is_regular_file(entry_error) && !entry_error &&
+                IsFontFile(entry.path()))
+            {
+                const auto* record = asset_database.FindByPath(entry.path());
+                if (record == nullptr || record->kind != ReplayEngine::Assets::AssetKind::Font)
+                {
+                    asset_database.Register(entry.path(),
+                        ReplayEngine::Assets::AssetKind::Font);
+                    ++registered_count;
+                }
+            }
+            iterator.increment(error);
+        }
+        return registered_count;
+    }
+
     void SetDebugName(ID3D11DeviceChild* object, const char* name)
     {
 #if defined(_DEBUG) || defined(DEBUG)
@@ -37,6 +79,29 @@ bool framework::initialize()
     std::string asset_database_error;
     if (!asset_database.Load(asset_database_error))
         object_editor_context.SetStatus("AssetDatabase: " + asset_database_error);
+
+    // resources/fonts へ TTF/OTF/TTC を置くだけで、Project Browser を開かなくても
+    // UIText の Font picker へ出せるように起動時登録する。
+    if (!standalone_game_mode)
+    {
+        const std::size_t registered_fonts = RegisterProjectFonts(
+            content_path(std::filesystem::path("resources") / "fonts"), asset_database);
+        if (registered_fonts > 0)
+        {
+            std::string save_error;
+            if (!asset_database.Save(save_error))
+            {
+                object_editor_context.SetStatus(
+                    "フォントAssetDatabase保存失敗: " + save_error);
+            }
+            else
+            {
+                push_editor_log("Info",
+                    "resources/fonts からフォントを自動登録しました: " +
+                    std::to_string(registered_fonts) + "件");
+            }
+        }
+    }
 
     // Input Action Asset は ProjectSettings 読み込み後に initialize_object_scene() で適用する。
     // ここではまだ project_settings が未読込なので参照しない。
@@ -196,6 +261,10 @@ bool framework::initialize()
     rd.CullMode = D3D11_CULL_NONE;
     rd.ScissorEnable = TRUE;
     device->CreateRasterizerState(&rd, rasterizer_states[(size_t)RASTER_STATE::SCISSOR].GetAddressOf());
+    // 鏡像変換された形状は巻き順が反転するので、裏面ではなく表面を落として辻褄を合わせる。
+    rd.ScissorEnable = FALSE;
+    rd.CullMode = D3D11_CULL_FRONT;
+    device->CreateRasterizerState(&rd, rasterizer_states[(size_t)RASTER_STATE::CULL_FRONT].GetAddressOf());
 
     D3D11_BUFFER_DESC cbd{};
     cbd.ByteWidth = sizeof(scene_constants);
@@ -213,6 +282,24 @@ bool framework::initialize()
     create_ps_from_cso(device.Get(), "static_mesh_gbuffer_ps.cso", static_mesh_gbuffer_ps.GetAddressOf());
     create_ps_from_cso(device.Get(), "skinned_mesh_gbuffer_ps.cso", skinned_mesh_gbuffer_ps.GetAddressOf());
     create_ps_from_cso(device.Get(), "object_pixelate_ps.cso", object_pixelate_ps.GetAddressOf());
+    create_ps_from_cso(device.Get(), "shadow_caster_alpha_ps.cso",
+        shadow_caster_alpha_ps.GetAddressOf());
+    create_ps_from_cso(device.Get(), "shadow_caster_alpha_skinned_ps.cso",
+        shadow_caster_alpha_skinned_ps.GetAddressOf());
+    {
+        D3D11_BUFFER_DESC shadow_alpha_desc{};
+        shadow_alpha_desc.ByteWidth = sizeof(shadow_alpha_constants);
+        shadow_alpha_desc.Usage = D3D11_USAGE_DEFAULT;
+        shadow_alpha_desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+        device->CreateBuffer(&shadow_alpha_desc, nullptr, shadow_alpha_cb.GetAddressOf());
+
+        D3D11_BUFFER_DESC shadow_coverage_desc{};
+        shadow_coverage_desc.ByteWidth = sizeof(shadow_coverage_constants);
+        shadow_coverage_desc.Usage = D3D11_USAGE_DEFAULT;
+        shadow_coverage_desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+        device->CreateBuffer(&shadow_coverage_desc, nullptr,
+            shadow_coverage_cb.GetAddressOf());
+    }
     create_ps_from_cso(device.Get(), "skinned_mesh_stylized_character_ps.cso",
         skinned_stylized_character_ps.GetAddressOf());
     create_ps_from_cso(device.Get(), "static_mesh_stylized_character_ps.cso",
@@ -239,6 +326,8 @@ bool framework::initialize()
 
     toon.initialize(device.Get());
     csm.initialize(device.Get());
+    // 影マップ本体は影付きライトが最初に現れたフレームで確保する。
+    local_shadows.Initialize(device.Get());
     test_trail.initialize(device.Get());
     particles.initialize(device.Get());
     post_process.Initialize(device.Get());

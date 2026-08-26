@@ -80,6 +80,11 @@ namespace ReplayEngine::Rendering
         bool cast_shadow = true;
         bool receive_shadow = true;
 
+        // Material Asset を持たない形式 (FBX/cereal など) で影のアルファ抜きを使うか。
+        // 既定は false。diffuse の alpha を勝手に使うと意図しない穴が空くため明示指定にする。
+        bool shadow_alpha_clip = false;
+        float shadow_alpha_cutoff = 0.5f;
+
         // Screen Effect Stack の layer mask 用。0..31。
         // 名前やObjectIDとは独立した描画選別値で、既存Sceneの既定は0。
         int rendering_layer = 0;
