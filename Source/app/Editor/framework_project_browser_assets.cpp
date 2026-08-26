@@ -657,13 +657,13 @@ bool framework::project_create_easing_curve(const std::string& name)
     std::string save_error;
     if (!curve.SaveToFile(path, save_error))
     {
-        project_browser_status = "Easing Curve 作成失敗: " + save_error;
+        project_browser_status = std::string(u8"イージングカーブ作成失敗: ") + save_error;
         return false;
     }
     const auto& record = asset_database.Register(path, AssetKind::EasingCurve);
     if (!asset_database.Save(save_error))
     {
-        project_browser_status = "Easing Curve は作成しましたが DB 保存失敗: " + save_error;
+        project_browser_status = std::string(u8"イージングカーブは作成しましたが DB 保存失敗: ") + save_error;
         return false;
     }
     selected_asset_guid = record.guid;
@@ -672,8 +672,9 @@ bool framework::project_create_easing_curve(const std::string& name)
     project_tree_reveal_selection_pending = true;
     set_project_folder(path.parent_path());
     open_easing_curve_asset(record);
-    project_record_created_path(path, "Easing Curve を作成");
-    project_browser_status = "Easing Curve を作成しました: " + path.filename().u8string();
+    easing_editor_formula_preset_index = 0;
+    project_record_created_path(path, u8"イージングカーブを作成");
+    project_browser_status = std::string(u8"イージングカーブを作成しました: ") + path.filename().u8string();
     return true;
 }
 
@@ -697,10 +698,11 @@ bool framework::open_easing_curve_asset(const ReplayEngine::Assets::AssetRecord&
     easing_editor_active_control_point = -1;
     easing_editor_active_sample = -1;
     easing_editor_context_control_point = -1;
+    easing_editor_formula_preset_index = -1;
     std::snprintf(easing_editor_name_buffer, IM_ARRAYSIZE(easing_editor_name_buffer), "%s",
         easing_editor_asset.name.c_str());
     show_easing_editor_panel = true;
-    easing_editor_status = "Easing Curve を開きました: " + asset.display_name;
+    easing_editor_status = std::string(u8"イージングカーブを開きました: ") + asset.display_name;
     return true;
 }
 
@@ -722,11 +724,11 @@ bool framework::save_current_easing_curve()
     std::string db_error;
     if (!asset_database.Save(db_error))
     {
-        easing_editor_status = "Easing Curve は保存しましたがDB保存失敗: " + db_error;
+        easing_editor_status = std::string(u8"イージングカーブは保存しましたがDB保存失敗: ") + db_error;
         return false;
     }
     easing_editor_dirty = false;
-    easing_editor_status = "保存しました: " + easing_editor_path.filename().u8string();
+    easing_editor_status = std::string(u8"保存しました: ") + easing_editor_path.filename().u8string();
     return true;
 }
 

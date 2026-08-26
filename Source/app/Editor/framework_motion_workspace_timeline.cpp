@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <limits>
@@ -166,26 +167,26 @@ namespace
 void framework::draw_motion_timeline()
 {
     if (!show_motion_timeline_panel) return;
-    if (!ImGui::Begin("タイムライン", &show_motion_timeline_panel))
+    if (!ImGui::Begin(u8"タイムライン", &show_motion_timeline_panel))
     {
         ImGui::End();
         return;
     }
 
-    if (ImGui::CollapsingHeader("コマンドガイド"))
+    if (ImGui::CollapsingHeader(u8"コマンドガイド"))
     {
-        ImGui::TextDisabled("文字入力中は Motion ショートカットを無効化します。");
-        ImGui::BulletText("S          Keyを追加");
-        ImGui::BulletText("Delete     選択Keyを削除");
-        ImGui::BulletText("Ctrl+D     選択Keyを複製");
-        ImGui::BulletText("Ctrl+C     選択Keyをコピー");
-        ImGui::BulletText("Ctrl+V     Keyを貼り付け");
-        ImGui::BulletText("Space      再生 / 停止");
-        ImGui::BulletText("Home       先頭へ移動");
-        ImGui::BulletText("End        末尾へ移動");
-        ImGui::BulletText("PageUp     1フレーム戻る");
-        ImGui::BulletText("PageDown   1フレーム進む");
-        ImGui::BulletText("F9         EaseInOutCubicを一括適用");
+        ImGui::TextDisabled(u8"文字入力中はモーションショートカットを無効化します。");
+        ImGui::BulletText(u8"S          キーを追加");
+        ImGui::BulletText(u8"Delete     選択キーを削除");
+        ImGui::BulletText(u8"Ctrl+D     選択キーを複製");
+        ImGui::BulletText(u8"Ctrl+C     選択キーをコピー");
+        ImGui::BulletText(u8"Ctrl+V     キーを貼り付け");
+        ImGui::BulletText(u8"Space      再生 / 停止");
+        ImGui::BulletText(u8"Home       先頭へ移動");
+        ImGui::BulletText(u8"End        末尾へ移動");
+        ImGui::BulletText(u8"PageUp     1フレーム戻る");
+        ImGui::BulletText(u8"PageDown   1フレーム進む");
+        ImGui::BulletText(u8"F9         EaseInOutCubicを一括適用");
         ImGui::Separator();
     }
 
@@ -194,20 +195,20 @@ void framework::draw_motion_timeline()
         ImGui::SetNextItemWidth(86.0f);
         int fps = motion_editor_fps;
         if (ImGui::DragInt("FPS", &fps, 1.0f, 1, 240)) motion_editor_fps = (std::max)(1, fps);
-        ImGui::SameLine(); ImGui::Checkbox("Frame表示", &motion_editor_display_frames);
-        ImGui::SameLine(); ImGui::Checkbox("Snap", &motion_editor_frame_snap);
+        ImGui::SameLine(); ImGui::Checkbox(u8"フレーム表示", &motion_editor_display_frames);
+        ImGui::SameLine(); ImGui::Checkbox(u8"フレーム吸着", &motion_editor_frame_snap);
         ImGui::SameLine();
         ImGui::SetNextItemWidth(120.0f);
-        ImGui::SliderFloat("Zoom", &motion_timeline_zoom, 1.0f, 12.0f, "%.1fx");
+        ImGui::SliderFloat(u8"拡大", &motion_timeline_zoom, 1.0f, 12.0f, "%.1fx");
 
         const float frame_step = FrameStep(motion_editor_fps);
-        if (ImGui::Button("|< 1F")) step_motion_preview_frames(-1);
+        if (ImGui::Button(u8"◀ 1F")) step_motion_preview_frames(-1);
         ImGui::SameLine();
-        if (ImGui::Button("1F >|")) step_motion_preview_frames(1);
+        if (ImGui::Button(u8"1F ▶")) step_motion_preview_frames(1);
         ImGui::SameLine();
         if (motion_editor_display_frames)
-            ImGui::Text("Playhead: %dF", MotionFrameAt(motion_preview_time, motion_editor_fps));
-        else ImGui::Text("Playhead: %.4fs", motion_preview_time);
+            ImGui::Text(u8"再生位置: %dF", MotionFrameAt(motion_preview_time, motion_editor_fps));
+        else ImGui::Text(u8"再生位置: %.4fs", motion_preview_time);
 
         const float width = (std::max)(480.0f,
             (std::max)(1.0f, motion_editor_composition.duration) * 100.0f * motion_timeline_zoom);
@@ -265,7 +266,7 @@ void framework::draw_motion_timeline()
 
     if (!motion_editor_loaded)
     {
-        ImGui::TextDisabled("Motion / Composition Asset が未選択です。");
+        ImGui::TextDisabled(u8"モーション / コンポジションアセットが未選択です。");
         ImGui::End();
         return;
     }
@@ -275,37 +276,37 @@ void framework::draw_motion_timeline()
     int fps = motion_editor_fps;
     if (ImGui::DragInt("FPS", &fps, 1.0f, 1, 240)) motion_editor_fps = (std::max)(1, fps);
     ImGui::SameLine();
-    ImGui::Checkbox("Frame表示", &motion_editor_display_frames);
+    ImGui::Checkbox(u8"フレーム表示", &motion_editor_display_frames);
     ImGui::SameLine();
-    ImGui::Checkbox("Snap", &motion_editor_frame_snap);
+    ImGui::Checkbox(u8"フレーム吸着", &motion_editor_frame_snap);
     ImGui::SameLine();
     ImGui::SetNextItemWidth(120.0f);
-    ImGui::SliderFloat("Zoom", &motion_timeline_zoom, 1.0f, 12.0f, "%.1fx");
+    ImGui::SliderFloat(u8"拡大", &motion_timeline_zoom, 1.0f, 12.0f, "%.1fx");
     ImGui::SameLine();
-    ImGui::Checkbox("Box Select", &motion_box_select_mode);
+    ImGui::Checkbox(u8"範囲選択", &motion_box_select_mode);
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("ON中はTrack上をドラッグして範囲内のKeyをまとめて選択します。");
+        ImGui::SetTooltip(u8"有効中はトラック上をドラッグして範囲内のキーをまとめて選択します。");
 
     const float frame_step = FrameStep(motion_editor_fps);
-    if (ImGui::Button("|< 1F")) step_motion_preview_frames(-1);
+    if (ImGui::Button(u8"◀ 1F")) step_motion_preview_frames(-1);
     ImGui::SameLine();
-    if (ImGui::Button("1F >|")) step_motion_preview_frames(1);
+    if (ImGui::Button(u8"1F ▶")) step_motion_preview_frames(1);
     ImGui::SameLine();
     if (motion_editor_display_frames)
-        ImGui::Text("Playhead: %dF", MotionFrameAt(motion_preview_time, motion_editor_fps));
+        ImGui::Text(u8"再生位置: %dF", MotionFrameAt(motion_preview_time, motion_editor_fps));
     else
-        ImGui::Text("Playhead: %.4fs", motion_preview_time);
+        ImGui::Text(u8"再生位置: %.4fs", motion_preview_time);
 
     if (motion_selected_track >= 0 &&
         motion_selected_track < static_cast<int>(motion_editor_asset.tracks.size()))
     {
         MotionTrack& selected_track = motion_editor_asset.tracks[motion_selected_track];
-        if (ImGui::Button("+ Key @ Playhead"))
+        if (ImGui::Button(u8"再生位置にキーを追加"))
         {
             ReplayEngine::Reflection::PropertyValue value;
             if (!MotionEvaluator::EvaluateTrack(selected_track, motion_preview_time, value) &&
                 !selected_track.keys.empty()) value = selected_track.keys.back().value;
-            motion_edit_history.Begin(motion_editor_asset, "Keyを追加");
+            motion_edit_history.Begin(motion_editor_asset, u8"キーを追加");
             MotionKeyframe key;
             key.time = SnapMotionTime(motion_preview_time, motion_editor_fps,
                 motion_editor_frame_snap);
@@ -318,13 +319,13 @@ void framework::draw_motion_timeline()
             motion_selected_keys.clear();
         }
         ImGui::SameLine();
-        if (ImGui::Button("Copy")) copy_motion_keys();
+        if (ImGui::Button(u8"コピー")) copy_motion_keys();
         ImGui::SameLine();
-        if (ImGui::Button("Paste")) paste_motion_keys();
+        if (ImGui::Button(u8"貼り付け")) paste_motion_keys();
         ImGui::SameLine();
-        if (ImGui::Button("Duplicate")) duplicate_motion_keys();
+        if (ImGui::Button(u8"複製")) duplicate_motion_keys();
         ImGui::SameLine();
-        if (ImGui::Button("Delete")) delete_motion_keys();
+        if (ImGui::Button(u8"削除")) delete_motion_keys();
     }
 
     ImGui::Separator();
@@ -434,7 +435,7 @@ void framework::draw_motion_timeline()
             ReplayEngine::Reflection::PropertyValue value;
             if (!MotionEvaluator::EvaluateTrack(track, time, value) && !track.keys.empty())
                 value = track.keys.back().value;
-            motion_edit_history.Begin(motion_editor_asset, "TimelineでKeyを追加");
+            motion_edit_history.Begin(motion_editor_asset, u8"タイムラインでキーを追加");
             MotionKeyframe key; key.time = time; key.value = value;
             track.keys.push_back(std::move(key));
             motion_editor_asset.SortKeys();
@@ -475,7 +476,7 @@ void framework::draw_motion_timeline()
                 motion_selected_event = -1;
             }
             if (!motion_box_select_mode && ImGui::IsItemActivated())
-                motion_edit_history.Begin(motion_editor_asset, "TimelineでKeyを移動");
+                motion_edit_history.Begin(motion_editor_asset, u8"タイムラインでキーを移動");
             if (!motion_box_select_mode && ImGui::IsItemActive() && ImGui::IsMouseDragging(0))
             {
                 const float dt = ImGui::GetIO().MouseDelta.x / marker_span *
@@ -510,7 +511,7 @@ void framework::draw_motion_timeline()
         MotionEventTrack& track = motion_editor_asset.event_tracks[event_track_index];
         ImGui::PushID(100000 + event_track_index);
         const std::string label = track.object.Valid()
-            ? "Event: " + track.object.ToString() : "Event: Broadcast";
+            ? std::string(u8"イベント: ") + track.object.ToString() : std::string(u8"イベント: ブロードキャスト");
         if (ImGui::Selectable(label.c_str(), motion_selected_event_track == event_track_index,
             ImGuiSelectableFlags_SpanAllColumns, ImVec2(110.0f, 0.0f)))
         {
@@ -542,7 +543,7 @@ void framework::draw_motion_timeline()
                 motion_selected_keys.clear();
             }
             if (ImGui::IsItemActivated())
-                motion_edit_history.Begin(motion_editor_asset, "Eventを移動");
+                motion_edit_history.Begin(motion_editor_asset, u8"イベントを移動");
             if (ImGui::IsItemActive() && ImGui::IsMouseDragging(0))
             {
                 const float dt = ImGui::GetIO().MouseDelta.x / marker_span *
@@ -580,7 +581,7 @@ void framework::draw_motion_timeline()
 void framework::draw_motion_graph_editor()
 {
     if (!show_motion_graph_panel) return;
-    if (!ImGui::Begin("グラフエディター", &show_motion_graph_panel))
+    if (!ImGui::Begin(u8"グラフエディター", &show_motion_graph_panel))
     {
         ImGui::End();
         return;
@@ -589,7 +590,7 @@ void framework::draw_motion_graph_editor()
     if (!motion_editor_loaded || motion_selected_track < 0 ||
         motion_selected_track >= static_cast<int>(motion_editor_asset.tracks.size()))
     {
-        ImGui::TextDisabled("Track / Keyを選択してください。");
+        ImGui::TextDisabled(u8"トラック / キーを選択してください。");
         ImGui::End();
         return;
     }
@@ -599,13 +600,13 @@ void framework::draw_motion_graph_editor()
     motion_graph_channel = (std::max)(0, (std::min)(channel_count - 1,
         motion_graph_channel));
 
-    ImGui::Checkbox("Speed Graph", &motion_graph_speed_mode);
+    ImGui::Checkbox(u8"速度グラフ", &motion_graph_speed_mode);
     ImGui::SameLine();
-    ImGui::Checkbox("Overlay Tracks", &motion_graph_overlay_tracks);
+    ImGui::Checkbox(u8"他トラックを重ねる", &motion_graph_overlay_tracks);
     if (channel_count > 1)
     {
         ImGui::SameLine();
-        ImGui::Text("Channel:");
+        ImGui::TextUnformatted(u8"チャンネル:");
         for (int channel = 0; channel < channel_count; ++channel)
         {
             ImGui::SameLine();
@@ -614,28 +615,108 @@ void framework::draw_motion_graph_editor()
         }
     }
 
+    struct GraphPoint final
+    {
+        float time = 0.0f;
+        float value = 0.0f;
+    };
+
+    const float duration = (std::max)(0.0001f, motion_editor_asset.duration);
+    const auto build_eased_curve = [&](const MotionTrack& source, int channel,
+        std::vector<GraphPoint>& points)
+    {
+        points.clear();
+        if (!source.enabled || source.keys.empty()) return;
+        const auto push_value = [&](float time,
+            const ReplayEngine::Reflection::PropertyValue& value)
+        {
+            const float scalar = ScalarChannel(value, source.value_type, channel);
+            if (!std::isfinite(time) || !std::isfinite(scalar)) return;
+            points.push_back({ time, scalar });
+        };
+
+        if (source.keys.size() == 1)
+        {
+            push_value(0.0f, source.keys.front().value);
+            push_value(duration, source.keys.front().value);
+            return;
+        }
+        if (source.keys.front().time > 0.0f)
+        {
+            push_value(0.0f, source.keys.front().value);
+            push_value(source.keys.front().time, source.keys.front().value);
+        }
+
+        const int subdivisions = source.keys.size() > 128 ? 16 : 24;
+        for (std::size_t key_index = 0; key_index + 1 < source.keys.size(); ++key_index)
+        {
+            const MotionKeyframe& a = source.keys[key_index];
+            const MotionKeyframe& b = source.keys[key_index + 1];
+            const float span = b.time - a.time;
+            if (!std::isfinite(span)) continue;
+            if (span <= 0.0f)
+            {
+                push_value(b.time, b.value);
+                continue;
+            }
+
+            if (a.easing == MotionEasing::Step)
+            {
+                push_value(a.time, a.value);
+                push_value(b.time, a.value);
+                push_value(b.time, b.value);
+                continue;
+            }
+
+            for (int sample = 0; sample <= subdivisions; ++sample)
+            {
+                const float normalized = static_cast<float>(sample) /
+                    static_cast<float>(subdivisions);
+                const float sample_time = a.time + span * normalized;
+                const float eased = ReplayEngine::Motion::ApplyEasing(
+                    a.easing, normalized, a.bezier);
+                if (!std::isfinite(eased))
+                {
+                    points.push_back({ sample_time,
+                        (std::numeric_limits<float>::quiet_NaN)() });
+                    continue;
+                }
+                const ReplayEngine::Reflection::PropertyValue mixed =
+                    ReplayEngine::Reflection::PropertyValue::Lerp(a.value, b.value, eased);
+                const float scalar = ScalarChannel(mixed, source.value_type, channel);
+                points.push_back({ sample_time, std::isfinite(scalar) ? scalar :
+                    (std::numeric_limits<float>::quiet_NaN)() });
+            }
+        }
+
+        if (source.keys.back().time < duration)
+        {
+            push_value(source.keys.back().time, source.keys.back().value);
+            push_value(duration, source.keys.back().value);
+        }
+    };
+
     constexpr int sample_count = 256;
     std::vector<float> samples(static_cast<std::size_t>(sample_count), 0.0f);
-    float min_value = (std::numeric_limits<float>::max)();
-    float max_value = (std::numeric_limits<float>::lowest)();
     ReplayEngine::Reflection::PropertyValue evaluated;
-    const float duration = (std::max)(0.0001f, motion_editor_asset.duration);
     for (int sample = 0; sample < sample_count; ++sample)
     {
         const float t = duration * sample / static_cast<float>(sample_count - 1);
         float value = 0.0f;
         if (MotionEvaluator::EvaluateTrack(track, t, evaluated))
             value = ScalarChannel(evaluated, track.value_type, motion_graph_channel);
-        samples[static_cast<std::size_t>(sample)] = value;
+        samples[static_cast<std::size_t>(sample)] = std::isfinite(value) ? value : 0.0f;
     }
     if (motion_graph_speed_mode)
     {
         const float dt = duration / static_cast<float>(sample_count - 1);
         std::vector<float> speed(samples.size(), 0.0f);
         for (int sample = 1; sample < sample_count - 1; ++sample)
-            speed[static_cast<std::size_t>(sample)] =
-                (samples[static_cast<std::size_t>(sample + 1)] -
-                    samples[static_cast<std::size_t>(sample - 1)]) / (2.0f * dt);
+        {
+            const float value = (samples[static_cast<std::size_t>(sample + 1)] -
+                samples[static_cast<std::size_t>(sample - 1)]) / (2.0f * dt);
+            speed[static_cast<std::size_t>(sample)] = std::isfinite(value) ? value : 0.0f;
+        }
         if (sample_count > 1)
         {
             speed.front() = (samples[1] - samples[0]) / dt;
@@ -643,7 +724,12 @@ void framework::draw_motion_graph_editor()
         }
         samples.swap(speed);
     }
-    struct OverlayCurve
+
+    std::vector<GraphPoint> eased_points;
+    if (!motion_graph_speed_mode)
+        build_eased_curve(track, motion_graph_channel, eased_points);
+
+    struct OverlayCurve final
     {
         std::string name;
         std::vector<float> values;
@@ -663,18 +749,24 @@ void framework::draw_motion_graph_editor()
             for (int sample = 0; sample < sample_count; ++sample)
             {
                 const float t = duration * sample / static_cast<float>(sample_count - 1);
+                float value = 0.0f;
                 if (MotionEvaluator::EvaluateTrack(overlay_track, t, evaluated))
-                    curve.values[static_cast<std::size_t>(sample)] =
-                        ScalarChannel(evaluated, overlay_track.value_type, motion_graph_channel);
+                    value = ScalarChannel(evaluated, overlay_track.value_type, motion_graph_channel);
+                curve.values[static_cast<std::size_t>(sample)] =
+                    std::isfinite(value) ? value : 0.0f;
             }
             if (motion_graph_speed_mode)
             {
                 const float dt = duration / static_cast<float>(sample_count - 1);
                 std::vector<float> speed(curve.values.size(), 0.0f);
                 for (int sample = 1; sample < sample_count - 1; ++sample)
-                    speed[static_cast<std::size_t>(sample)] =
+                {
+                    const float value =
                         (curve.values[static_cast<std::size_t>(sample + 1)] -
                             curve.values[static_cast<std::size_t>(sample - 1)]) / (2.0f * dt);
+                    speed[static_cast<std::size_t>(sample)] =
+                        std::isfinite(value) ? value : 0.0f;
+                }
                 if (sample_count > 1)
                 {
                     speed.front() = (curve.values[1] - curve.values[0]) / dt;
@@ -687,18 +779,39 @@ void framework::draw_motion_graph_editor()
         }
     }
 
-    for (const float value : samples)
+    float min_value = (std::numeric_limits<float>::max)();
+    float max_value = (std::numeric_limits<float>::lowest)();
+    if (motion_graph_speed_mode)
     {
-        min_value = (std::min)(min_value, value);
-        max_value = (std::max)(max_value, value);
+        for (const float value : samples)
+        {
+            if (!std::isfinite(value)) continue;
+            min_value = (std::min)(min_value, value);
+            max_value = (std::max)(max_value, value);
+        }
+    }
+    else
+    {
+        for (const GraphPoint& point : eased_points)
+        {
+            if (!std::isfinite(point.value)) continue;
+            min_value = (std::min)(min_value, point.value);
+            max_value = (std::max)(max_value, point.value);
+        }
     }
     for (const OverlayCurve& curve : overlay_curves)
     {
         for (const float value : curve.values)
         {
+            if (!std::isfinite(value)) continue;
             min_value = (std::min)(min_value, value);
             max_value = (std::max)(max_value, value);
         }
+    }
+    if (!std::isfinite(min_value) || !std::isfinite(max_value))
+    {
+        min_value = 0.0f;
+        max_value = 1.0f;
     }
     if (std::fabs(max_value - min_value) < 0.0001f)
     {
@@ -728,10 +841,10 @@ void framework::draw_motion_graph_editor()
         draw->AddLine(ImVec2(graph_origin.x, gy), ImVec2(graph_origin.x + graph_size.x, gy),
             IM_COL32(55,55,60,255));
     }
-    const auto to_graph = [&](int sample, float value)
+    const auto to_graph = [&](float time, float value)
     {
-        const float x = graph_origin.x + graph_size.x * sample /
-            static_cast<float>(sample_count - 1);
+        const float normalized_time = std::clamp(time / duration, 0.0f, 1.0f);
+        const float x = graph_origin.x + graph_size.x * normalized_time;
         const float n = (value - min_value) / (max_value - min_value);
         const float y = graph_origin.y + graph_size.y * (1.0f - n);
         return ImVec2(x, y);
@@ -748,35 +861,108 @@ void framework::draw_motion_graph_editor()
         const ImU32 color = overlay_colors[curve_index %
             (sizeof(overlay_colors) / sizeof(overlay_colors[0]))];
         for (int sample = 1; sample < sample_count; ++sample)
-            draw->AddLine(to_graph(sample - 1, curve.values[static_cast<std::size_t>(sample - 1)]),
-                to_graph(sample, curve.values[static_cast<std::size_t>(sample)]), color, 1.0f);
+        {
+            const float a_time = duration * static_cast<float>(sample - 1) /
+                static_cast<float>(sample_count - 1);
+            const float b_time = duration * static_cast<float>(sample) /
+                static_cast<float>(sample_count - 1);
+            draw->AddLine(to_graph(a_time, curve.values[static_cast<std::size_t>(sample - 1)]),
+                to_graph(b_time, curve.values[static_cast<std::size_t>(sample)]), color, 1.0f);
+        }
     }
-    for (int sample = 1; sample < sample_count; ++sample)
-        draw->AddLine(to_graph(sample - 1, samples[static_cast<std::size_t>(sample - 1)]),
-            to_graph(sample, samples[static_cast<std::size_t>(sample)]),
-            IM_COL32(85, 190, 255, 255), 2.0f);
 
-    // Value graphではKey値を重ねる。Back/ElasticのovershootもEvaluatorサンプルに含まれる。
+    if (motion_graph_speed_mode)
+    {
+        for (int sample = 1; sample < sample_count; ++sample)
+        {
+            const float a_time = duration * static_cast<float>(sample - 1) /
+                static_cast<float>(sample_count - 1);
+            const float b_time = duration * static_cast<float>(sample) /
+                static_cast<float>(sample_count - 1);
+            draw->AddLine(to_graph(a_time, samples[static_cast<std::size_t>(sample - 1)]),
+                to_graph(b_time, samples[static_cast<std::size_t>(sample)]),
+                IM_COL32(85, 190, 255, 255), 2.0f);
+        }
+    }
+    else
+    {
+        for (std::size_t index = 1; index < eased_points.size(); ++index)
+        {
+            const GraphPoint& a = eased_points[index - 1];
+            const GraphPoint& b = eased_points[index];
+            if (!std::isfinite(a.time) || !std::isfinite(a.value) ||
+                !std::isfinite(b.time) || !std::isfinite(b.value)) continue;
+            draw->AddLine(to_graph(a.time, a.value), to_graph(b.time, b.value),
+                IM_COL32(85, 190, 255, 255), 2.0f);
+        }
+    }
+
+    const float playhead_time = std::clamp(motion_preview_time, 0.0f, duration);
+    const float playhead_x = graph_origin.x + graph_size.x * playhead_time / duration;
+    draw->AddLine(ImVec2(playhead_x, graph_origin.y),
+        ImVec2(playhead_x, graph_origin.y + graph_size.y), IM_COL32(255, 210, 70, 185), 1.0f);
+
+    bool playhead_value_valid = false;
+    float playhead_value = 0.0f;
+    if (!motion_graph_speed_mode)
+    {
+        if (MotionEvaluator::EvaluateTrack(track, playhead_time, evaluated))
+        {
+            playhead_value = ScalarChannel(evaluated, track.value_type, motion_graph_channel);
+            playhead_value_valid = std::isfinite(playhead_value);
+        }
+    }
+    else
+    {
+        const float delta = (std::max)(0.0001f, duration /
+            static_cast<float>(sample_count - 1));
+        const float before_time = (std::max)(0.0f, playhead_time - delta);
+        const float after_time = (std::min)(duration, playhead_time + delta);
+        ReplayEngine::Reflection::PropertyValue before_value;
+        ReplayEngine::Reflection::PropertyValue after_value;
+        if (after_time > before_time && MotionEvaluator::EvaluateTrack(track, before_time,
+            before_value) && MotionEvaluator::EvaluateTrack(track, after_time, after_value))
+        {
+            const float before = ScalarChannel(before_value, track.value_type, motion_graph_channel);
+            const float after = ScalarChannel(after_value, track.value_type, motion_graph_channel);
+            playhead_value = (after - before) / (after_time - before_time);
+            playhead_value_valid = std::isfinite(playhead_value);
+        }
+    }
+
     if (!motion_graph_speed_mode)
     {
         for (int key_index = 0; key_index < static_cast<int>(track.keys.size()); ++key_index)
         {
             const MotionKeyframe& key = track.keys[key_index];
-            const float x = graph_origin.x + graph_size.x * key.time / duration;
             const float value = ScalarChannel(key.value, track.value_type, motion_graph_channel);
-            const float n = (value - min_value) / (max_value - min_value);
-            const float y = graph_origin.y + graph_size.y * (1.0f - n);
-            draw->AddCircleFilled(ImVec2(x, y),
+            if (!std::isfinite(value)) continue;
+            const ImVec2 point = to_graph(key.time, value);
+            draw->AddCircleFilled(point,
                 motion_selected_key == key_index ? 5.0f : 3.5f,
                 motion_selected_key == key_index ? IM_COL32(255,210,70,255) :
                     IM_COL32(220,220,220,255));
         }
     }
-    ImGui::Text("Range %.4f .. %.4f   %s", min_value, max_value,
-        motion_graph_speed_mode ? "value/sec" : "value");
+
+    if (playhead_value_valid)
+    {
+        const ImVec2 intersection = to_graph(playhead_time, playhead_value);
+        draw->AddCircleFilled(intersection, 4.0f, IM_COL32(255, 225, 95, 255));
+        char value_text[80]{};
+        std::snprintf(value_text, sizeof(value_text), "%.4f", playhead_value);
+        const ImVec2 text_size = ImGui::CalcTextSize(value_text);
+        const float label_x = (std::min)(graph_origin.x + graph_size.x - text_size.x - 4.0f,
+            intersection.x + 6.0f);
+        const float label_y = (std::max)(graph_origin.y + 3.0f, intersection.y - text_size.y - 3.0f);
+        draw->AddText(ImVec2(label_x, label_y), IM_COL32(255, 235, 145, 255), value_text);
+    }
+
+    ImGui::Text(u8"範囲 %.4f .. %.4f   %s", min_value, max_value,
+        motion_graph_speed_mode ? u8"値/秒" : u8"値");
     if (!overlay_curves.empty())
     {
-        ImGui::TextDisabled("Selected: %s", track.name.c_str());
+        ImGui::TextDisabled(u8"選択: %s", track.name.c_str());
         for (const OverlayCurve& curve : overlay_curves)
         {
             ImGui::SameLine();
@@ -786,7 +972,7 @@ void framework::draw_motion_graph_editor()
 
     if (motion_selected_key < 0 || motion_selected_key >= static_cast<int>(track.keys.size()))
     {
-        ImGui::TextDisabled("Keyを選ぶと補間ハンドルを編集できます。");
+        ImGui::TextDisabled(u8"キーを選ぶと補間ハンドルを編集できます。");
         ImGui::End();
         return;
     }
@@ -794,16 +980,16 @@ void framework::draw_motion_graph_editor()
     MotionKeyframe& key = track.keys[motion_selected_key];
     ImGui::Separator();
     MotionEasing easing = key.easing;
-    if (DrawEasingCombo("Easing", easing))
+    if (DrawEasingCombo(u8"イージング", easing))
     {
-        motion_edit_history.Begin(motion_editor_asset, "Easingを変更");
+        motion_edit_history.Begin(motion_editor_asset, u8"イージングを変更");
         key.easing = easing;
         motion_edit_history.Commit(motion_editor_asset);
         motion_editor_dirty = true;
     }
-    if (ImGui::Button("Auto Smooth"))
+    if (ImGui::Button(u8"自動スムーズ"))
     {
-        motion_edit_history.Begin(motion_editor_asset, "Auto Smooth");
+        motion_edit_history.Begin(motion_editor_asset, u8"自動スムーズ");
         ReplayEngine::Motion::MotionBezierHandles smooth_handles{};
         if (BuildAutoSmoothBezier(track, motion_selected_key, motion_graph_channel, smooth_handles))
         {
@@ -812,51 +998,50 @@ void framework::draw_motion_graph_editor()
         }
         else
         {
-            // Constant segments and the final key have no outgoing value slope to infer.
             key.easing = MotionEasing::EaseInOutCubic;
         }
         motion_edit_history.Commit(motion_editor_asset);
         motion_editor_dirty = true;
     }
     ImGui::SameLine();
-    if (ImGui::Button("Linear"))
+    if (ImGui::Button(u8"線形"))
     {
-        motion_edit_history.Begin(motion_editor_asset, "Linear");
+        motion_edit_history.Begin(motion_editor_asset, u8"線形");
         key.easing = MotionEasing::Linear;
         motion_edit_history.Commit(motion_editor_asset);
         motion_editor_dirty = true;
     }
     ImGui::SameLine();
-    if (ImGui::Button("Ease In"))
+    if (ImGui::Button(u8"イーズイン"))
     {
-        motion_edit_history.Begin(motion_editor_asset, "Ease In");
+        motion_edit_history.Begin(motion_editor_asset, u8"イーズイン");
         key.easing = MotionEasing::CustomBezier;
         key.bezier.out_handle = { 0.42f, 0.0f };
         key.bezier.in_handle = { 1.0f, 1.0f };
         motion_edit_history.Commit(motion_editor_asset); motion_editor_dirty = true;
     }
     ImGui::SameLine();
-    if (ImGui::Button("Ease Out"))
+    if (ImGui::Button(u8"イーズアウト"))
     {
-        motion_edit_history.Begin(motion_editor_asset, "Ease Out");
+        motion_edit_history.Begin(motion_editor_asset, u8"イーズアウト");
         key.easing = MotionEasing::CustomBezier;
         key.bezier.out_handle = { 0.0f, 0.0f };
         key.bezier.in_handle = { 0.58f, 1.0f };
         motion_edit_history.Commit(motion_editor_asset); motion_editor_dirty = true;
     }
     ImGui::SameLine();
-    if (ImGui::Button("Ease InOut"))
+    if (ImGui::Button(u8"イーズインアウト"))
     {
-        motion_edit_history.Begin(motion_editor_asset, "Ease InOut");
+        motion_edit_history.Begin(motion_editor_asset, u8"イーズインアウト");
         key.easing = MotionEasing::CustomBezier;
         key.bezier.out_handle = { 0.42f, 0.0f };
         key.bezier.in_handle = { 0.58f, 1.0f };
         motion_edit_history.Commit(motion_editor_asset); motion_editor_dirty = true;
     }
     ImGui::SameLine();
-    if (ImGui::Button("Hold"))
+    if (ImGui::Button(u8"保持"))
     {
-        motion_edit_history.Begin(motion_editor_asset, "Hold");
+        motion_edit_history.Begin(motion_editor_asset, u8"保持");
         key.easing = MotionEasing::Step;
         motion_edit_history.Commit(motion_editor_asset); motion_editor_dirty = true;
     }
@@ -866,19 +1051,18 @@ void framework::draw_motion_graph_editor()
         float out_handle[2]{ key.bezier.out_handle.x, key.bezier.out_handle.y };
         float in_handle[2]{ key.bezier.in_handle.x, key.bezier.in_handle.y };
         bool numeric_changed = false;
-        numeric_changed |= ImGui::DragFloat2("Out", out_handle, 0.005f, -2.0f, 2.0f);
-        numeric_changed |= ImGui::DragFloat2("In", in_handle, 0.005f, -2.0f, 2.0f);
+        numeric_changed |= ImGui::DragFloat2(u8"出力ハンドル", out_handle, 0.005f, -2.0f, 2.0f);
+        numeric_changed |= ImGui::DragFloat2(u8"入力ハンドル", in_handle, 0.005f, -2.0f, 2.0f);
         if (numeric_changed)
         {
-            motion_edit_history.Begin(motion_editor_asset, "Bezierを変更");
+            motion_edit_history.Begin(motion_editor_asset, u8"ベジェを変更");
             key.bezier.out_handle = { out_handle[0], out_handle[1] };
             key.bezier.in_handle = { in_handle[0], in_handle[1] };
             motion_edit_history.Commit(motion_editor_asset);
             motion_editor_dirty = true;
         }
 
-        // Direct visual Bezier handles. x/y are deliberately allowed outside 0..1
-        // so overshoot and anticipation can be authored rather than clamped away.
+        // ベジェハンドルは0..1外も許可し、予備動作とオーバーシュートを編集できるようにする。
         const ImVec2 bezier_origin = ImGui::GetCursorScreenPos();
         const ImVec2 bezier_size((std::max)(220.0f, ImGui::GetContentRegionAvail().x), 180.0f);
         ImGui::InvisibleButton("##bezier_handles", bezier_size);
@@ -923,7 +1107,7 @@ void framework::draw_motion_graph_editor()
             if (dist2(mouse,p1) <= 100.0f) dragging_handle = 1;
             else if (dist2(mouse,p2) <= 100.0f) dragging_handle = 2;
             if (dragging_handle != 0) motion_edit_history.Begin(motion_editor_asset,
-                "Bezier Handleをドラッグ");
+                u8"ベジェハンドルをドラッグ");
         }
         if (dragging_handle != 0 && ImGui::IsMouseDown(0))
         {

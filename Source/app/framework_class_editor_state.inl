@@ -84,11 +84,12 @@
     ReplayEngine::Motion::EasingCurveAsset easing_editor_asset;
     std::filesystem::path easing_editor_path;
     std::string easing_editor_guid;
-    std::string easing_editor_status{ "Easing Curve が未選択です" };
+    std::string easing_editor_status{ u8"イージングカーブが未選択です" };
     bool easing_editor_loaded{ false };
     bool easing_editor_dirty{ false };
     char easing_editor_name_buffer[128]{};
     int easing_editor_preset_index{ 0 };
+    int easing_editor_formula_preset_index{ -1 };
     bool easing_editor_drawing{ false };
     std::vector<DirectX::XMFLOAT2> easing_editor_freehand_points;
     int easing_editor_active_control_point{ -1 };
