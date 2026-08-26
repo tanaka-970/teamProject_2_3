@@ -682,7 +682,9 @@ namespace ReplayEngine::UI
                 slider->dragging = true;
             }
 
-            if (!input_captured && active && slider->dragging && mouse_down)
+            // 押下開始時に所有権を得たdragは、ポインターが矩形外へ出ても継続する。
+            // 毎フレームのhover/captureで止めるとSliderだけ操作感が途切れる。
+            if (active && slider->dragging && mouse_down)
             {
                 const DirectX::XMFLOAT4 bounds = rect->ResolvedRect();
                 float normalized = 0.0f;

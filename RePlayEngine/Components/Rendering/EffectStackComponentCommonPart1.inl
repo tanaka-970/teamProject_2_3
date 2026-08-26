@@ -5,8 +5,9 @@
 #include "../../Reflection/Property/PropertyBag.h"
 #include "../../Reflection/Property/PropertyValue.h"
 #include "../../Rendering/Materials/MaterialSchema.h"
-#include "../../Rendering/Effects/EffectChain.h"
+#include "../../UI/Effects/UIEffect.h"
 #include "../../Rendering/Effects/EffectPresetAsset.h"
+#include "../../Rendering/Effects/EffectChain.h"
 
 #include <algorithm>
 #include <array>

@@ -2,29 +2,16 @@
 
 #include "framework_application.h"
 
-#include <d3d11.h>
-#include <d3d11sdklayers.h>
-#include "sprite_batch.h"
-#include <wrl.h>
-#include "geometric_primitive.h"
 #include "static_mesh.h"
-#include "framebuffer.h"
-#include "fullscreen_quad.h"
-#include "UI.h"
 #include "pbr_renderer.h"
 #include "toon_renderer.h"
 #include "csm_renderer.h"
-#include "trail.h"
-#include "particle_system.h"
-#include "deferred_renderer.h"
 #include "lights_manager.h"
 #include "shading_model.h"
 #include "../game/game_scene.h"
 #include "../game/game_input.h"
 #include "../../RePlayEngine/Scene/SceneManager.h"
 #include "../../RePlayEngine/Rendering/Passes/PostProcessPass.h"
-#include "../../RePlayEngine/Rendering/Effects/EffectChain.h"
-#include "../../RePlayEngine/UI/Effects/UIRenderTargetPool.h"
 #include "../../RePlayEngine/Rendering/Passes/BloomPass.h"
 #include "../../RePlayEngine/Rendering/Passes/SsaoPass.h"
 #include "../../RePlayEngine/Rendering/Passes/SsrPass.h"
@@ -33,6 +20,7 @@
 #include "../../RePlayEngine/Rendering/Shadows/LocalShadowAtlas.h"
 #include "../../RePlayEngine/Rendering/FrameConstants.h"
 #include "../../RePlayEngine/Rendering/RenderStats.h"
+#include "../../RePlayEngine/Rendering/DX12/D3D12DeviceContext.h"
 #include "../../RePlayEngine/Rendering/Frustum.h"
 #include "../render/motion_vector_context.h"
 #include "../../RePlayEngine/Rendering/RenderGraph/RenderGraph.h"
@@ -40,7 +28,6 @@
 #include "../../RePlayEngine/Rendering/Materials/CharacterMaterialProfile.h"
 #include "../../RePlayEngine/Rendering/Materials/CharacterMaterialGpuData.h"
 #include "../../RePlayEngine/Rendering/Materials/MaterialAsset.h"
-#include "../../RePlayEngine/Rendering/Materials/MaterialGpuBinder.h"
 #include "../../RePlayEngine/Rendering/Shaders/ShaderLibrary.h"
 #include "../../RePlayEngine/Rendering/Capture/GoldenImage.h"
 #include "../../RePlayEngine/Assets/AssetDatabase.h"
@@ -49,11 +36,11 @@
 #include "../../RePlayEngine/Assets/ConcurrentResourceCache.h"
 #include "../../RePlayEngine/Core/ObjectID/RuntimeIdentity.h"
 #include "../../RePlayEngine/Motion/CompositionAsset.h"
+#include "../../RePlayEngine/Motion/EasingCurveAsset.h"
 #include "../../RePlayEngine/Motion/MotionAsset.h"
 #include "../../RePlayEngine/Motion/MotionMixer.h"
 #include "../../RePlayEngine/Reflection/Property/PropertyBag.h"
 #include "../../RePlayEngine/UI/FontAtlas.h"
-#include "../../RePlayEngine/UI/UIRenderer.h"
 #include "../../RePlayEngine/UI/UIInputFieldSystem.h"
 #include "../../RePlayEngine/Audio/AudioSystem.h"
 #include "../../RePlayEngine/Runtime/API/RuntimeSaveGameService.h"
@@ -112,7 +99,7 @@ class framework
     friend struct ReplayEngine::Editor::GoldenImageState;
 
     // framework_class.h 分割一覧:
-    //   framework_class_render_state.inl     … D3D11/描画状態と基礎状態
+    //   framework_class_render_state.inl     … DX12 描画状態と基礎状態
     //   framework_class_runtime_scene.inl    … Runtime World/衝突/編集カメラ
     //   framework_class_application_loop.inl … 起動設定と run() メインループ
     //   framework_class_editor_commands.inl  … Window/Editor/制作機能の宣言

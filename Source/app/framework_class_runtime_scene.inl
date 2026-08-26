@@ -120,24 +120,6 @@
     ReplayEngine::Editor::ValidationPanel   object_validation_panel;
     ReplayEngine::Rendering::RenderItemList object_render_items;
     ReplayEngine::UI::FontAtlas             ui_font_atlas;
-    ReplayEngine::UI::UIRenderer            ui_renderer;
-    // UI Effect と同じ EffectChain を 3D/Screen から使うための描画ホスト。
-    // Texture の恒久キャッシュは持たず、load_texture_from_file の共有キャッシュから
-    // Apply 中だけ ComPtr を保持する。UIRenderer の texture_cache_ は移動しない。
-    ReplayEngine::Rendering::Effects::EffectChain scene_effect_chain;
-    ReplayEngine::UI::UIRenderTargetPool scene_effect_targets;
-    struct scene_effect_temporal_history_entry
-    {
-        ReplayEngine::UI::UIRenderTarget target;
-        bool valid = false;
-        std::uint64_t last_used_serial = 0;
-    };
-    std::unordered_map<std::uint64_t, scene_effect_temporal_history_entry>
-        scene_effect_temporal_history;
-    std::uint64_t scene_effect_frame_serial = 0;
-    std::vector<Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>>
-        scene_effect_texture_refs;
-    ReplayEngine::Rendering::LineStrokeRenderer line_stroke_renderer;
     bool ui_pointer_down_last{ false };
     float ui_mouse_wheel_delta{ 0.0f };
 
@@ -323,9 +305,6 @@
     bool             enable_particles{ false };
     bool             enable_trail    { false };
 
-    // ダミー法線テクスチャ (法線マップが無いマテリアル用フォールバック)
-    Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> dummy_normal_srv;
-
     int toon_preset_index{ 0 };
 
     framework(HWND hwnd);
@@ -388,6 +367,9 @@
         profile_benchmark_gpu_drain_timeout = false;
         profile_benchmark_scene_ready = false;
         profile_benchmark_startup_failed = false;
+        profile_benchmark_startup_profile_ok = false;
+        profile_benchmark_initialize_stage_ms.fill(0.0);
+        profile_benchmark_initialize_total_ms = 0.0;
         profile_benchmark_max_draw_calls = 0;
         profile_benchmark_max_objects = 0;
         profile_benchmark_max_components = 0;

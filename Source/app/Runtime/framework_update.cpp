@@ -2,7 +2,7 @@
 
 void framework::update(float elapsed_time)
 {
-    ReplayEngine::Rendering::Stats().BeginFrame(immediate_context.Get());
+    ReplayEngine::Rendering::Stats().BeginFrame();
     REPLAY_PROFILE_SCOPE("Update");
     // 基準画像を撮る間はワールドを止める。
     //
@@ -65,46 +65,39 @@ void framework::update(float elapsed_time)
         update_object_scene(elapsed_time);
     }
 
-#ifdef USE_IMGUI
-    // Standalone でも F4 Profiler だけは描画できるようにする。
-    // Editor 全体を起動せず、Profiler が表示されているフレームだけ
-    // ImGui の NewFrame を作るため、非表示時の追加 UI コストは発生しない。
-    if (!editor_mode)
+    // Win32入力とEditor UIはDX12 ImGui Rendererへ統一する。
+    if (dx12_framework_active)
     {
-        if (show_render_stats)
+#ifdef USE_IMGUI
+        if (!editor_mode)
         {
-            ImGui_ImplDX11_NewFrame();
+            if (show_render_stats && ImGui::GetCurrentContext() &&
+                dx12_device_context.ImGuiReady())
+            {
+                ImGui_ImplWin32_NewFrame();
+                ImGui::NewFrame();
+                imgui_frame_active = true;
+                REPLAY_PROFILE_SCOPE("ProfilerBuildUI");
+                draw_render_stats_overlay();
+            }
+            return;
+        }
+        if (ImGui::GetCurrentContext())
+        {
             ImGui_ImplWin32_NewFrame();
             ImGui::NewFrame();
             imgui_frame_active = true;
-            REPLAY_PROFILE_SCOPE("ProfilerBuildUI");
-            draw_render_stats_overlay();
+            {
+                REPLAY_PROFILE_SCOPE("EditorCamera");
+                update_editor_camera(elapsed_time);
+            }
+            {
+                REPLAY_PROFILE_SCOPE("EditorBuildUI");
+                draw_editor();
+                draw_render_stats_overlay();
+            }
         }
+#endif
         return;
     }
-    ImGui_ImplDX11_NewFrame();
-    ImGui_ImplWin32_NewFrame();
-    ImGui::NewFrame();
-    imgui_frame_active = true;
-
-    // Scene View の編集カメラ。
-    //
-    // draw_editor() より先に呼ぶ理由:
-    //   カメラがこのフレームでマウス／キーを消費したかを
-    //   editor_camera_consumed_input で先に確定させる必要がある。
-    //   Gizmo と矩形選択（draw_editor から呼ばれる）はその結果を見て、
-    //   カメラ操作中は動かないようにしている。
-    //
-    // Runtime Camera へは一切書き込まない。読むのは描画行列を返すときだけ。
-    {
-        REPLAY_PROFILE_SCOPE("EditorCamera");
-        update_editor_camera(elapsed_time);
-    }
-
-    {
-        REPLAY_PROFILE_SCOPE("EditorBuildUI");
-        draw_editor();
-        draw_render_stats_overlay();
-    }
-#endif
 }

@@ -669,7 +669,12 @@ namespace ReplayEngine::Core::Detail
                     .Recommends<UISelectableComponent>());
             PropertyRegistry::Register<UISliderComponent>(MakeProperty("minimum", &UISliderComponent::minimum).Display("最小値"));
             PropertyRegistry::Register<UISliderComponent>(MakeProperty("maximum", &UISliderComponent::maximum).Display("最大値"));
-            PropertyRegistry::Register<UISliderComponent>(MakeProperty("value", &UISliderComponent::value).Display("値"));
+            // 生メンバーへ直接書くと範囲外の値が残るため、必ず SetValue を通す。
+            PropertyRegistry::Register<UISliderComponent>(
+                MakeAccessorProperty<UISliderComponent>("value", PropertyType::Float,
+                    [](const UISliderComponent& c) { return PropertyValue::MakeFloat(c.value); },
+                    [](UISliderComponent& c, const PropertyValue& v) { c.SetValue(v.AsFloat(c.value)); })
+                .Display("値"));
             PropertyRegistry::Register<UISliderComponent>(MakeProperty("whole_numbers", &UISliderComponent::whole_numbers).Display("整数のみ"));
             PropertyRegistry::Register<UISliderComponent>(MakeProperty("direction", &UISliderComponent::direction).Display("方向").AsEnum({ "左から右", "右から左", "下から上", "上から下" }));
             PropertyRegistry::Register<UISliderComponent>(MakeProperty("interactable", &UISliderComponent::interactable).Display("操作可能"));

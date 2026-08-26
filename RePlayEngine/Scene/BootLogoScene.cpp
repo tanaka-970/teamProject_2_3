@@ -1,10 +1,10 @@
-#include "BootLogoScene.h"
+﻿#include "BootLogoScene.h"
 
 namespace ReplayEngine::Scene
 {
-    bool BootLogoScene::Initialize(ID3D11Device* device)
+    bool BootLogoScene::Initialize()
     {
-        return logo_.Initialize(device);
+        return logo_.Initialize();
     }
 
     void BootLogoScene::Update(float elapsed_time)
@@ -12,9 +12,10 @@ namespace ReplayEngine::Scene
         logo_.Update(elapsed_time);
     }
 
-    void BootLogoScene::Render(const RenderContext& context)
+    bool BootLogoScene::BuildRuntimeUI(Rendering::DX12::D3D12UIFrame& frame,
+        float width, float height)
     {
-        logo_.Render(context.device_context, context.width, context.height);
+        return logo_.BuildRuntimeUI(frame, width, height);
     }
 
     bool BootLogoScene::OnKeyDown(WPARAM key)
