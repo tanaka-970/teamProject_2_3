@@ -269,6 +269,8 @@
     void ui_preview_resolution_size(int& width, int& height) const noexcept;
     bool open_motion_asset(const ReplayEngine::Assets::AssetRecord& asset);
     bool save_current_motion_asset();
+    // S キーと Key追加 ボタンの共通経路。現在のプレビュー時刻へキーを打つ。
+    bool add_motion_key_at_preview_time();
     bool undo_motion_edit();
     bool redo_motion_edit();
     void draw_motion_layers();

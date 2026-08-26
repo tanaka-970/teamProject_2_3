@@ -161,6 +161,44 @@ bool framework::save_current_motion_asset()
     return true;
 }
 
+bool framework::add_motion_key_at_preview_time()
+{
+    using namespace ReplayEngine::Motion;
+    using ReplayEngine::Reflection::PropertyDesc;
+    if (motion_selected_track < 0 ||
+        motion_selected_track >= static_cast<int>(motion_editor_asset.tracks.size()))
+        return false;
+
+    MotionTrack& track = motion_editor_asset.tracks[motion_selected_track];
+    motion_edit_history.Begin(motion_editor_asset, "Keyを追加");
+    MotionKeyframe key;
+    key.time = motion_preview_time;
+    ReplayEngine::Scene::Scene* scene = object_editor_context.GetScene();
+    ReplayEngine::Core::Component* bound_component = scene != nullptr
+        ? ResolveBindingComponent(*scene, track.binding) : nullptr;
+    const PropertyDesc* bound_desc = bound_component != nullptr
+        ? FindPropertyForComponent(*bound_component, track.binding.property)
+        : nullptr;
+    key.value = bound_desc != nullptr
+        ? bound_desc->Capture(*bound_component) : DefaultValueFor(track.value_type);
+    key.easing = MotionEasing::Linear;
+    track.keys.push_back(key);
+    motion_editor_asset.SortKeys();
+    motion_selected_key = -1;
+    for (int index = 0; index < static_cast<int>(track.keys.size()); ++index)
+    {
+        if (track.keys[index].time == key.time)
+        {
+            motion_selected_key = index;
+            break;
+        }
+    }
+    motion_edit_history.Commit(motion_editor_asset);
+    motion_editor_dirty = true;
+    motion_editor_status = "Keyを追加しました";
+    return true;
+}
+
 bool framework::undo_motion_edit()
 {
     stop_motion_preview();

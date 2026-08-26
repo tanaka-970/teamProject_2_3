@@ -171,6 +171,11 @@ void framework::draw_editor()
 
     if (active_editor_workspace == editor_workspace::motion)
     {
+        // S で現在のプレビュー時刻へキーを打つ。文字入力中は誤爆させない。
+        if (!ImGui::GetIO().WantTextInput &&
+            !ImGui::GetIO().KeyCtrl && !ImGui::GetIO().KeyAlt &&
+            ImGui::IsKeyPressed('S', false))
+            add_motion_key_at_preview_time();
         draw_scene_view_panel();
         if (show_hierarchy_panel) draw_scene_hierarchy();
         draw_motion_layers();
