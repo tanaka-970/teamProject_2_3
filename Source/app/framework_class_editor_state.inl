@@ -165,6 +165,11 @@
     int ui_preview_custom_width{ 1920 };
     int ui_preview_custom_height{ 1080 };
     float ui_preview_zoom{ 0.5f };
+    // UI Scene View のカメラ移動量。描画・選択枠・入力判定が同じ矩形を使うよう
+    // object_ui_viewport_target() の一箇所だけで足す。
+    float ui_preview_pan_x{ 0.0f };
+    float ui_preview_pan_y{ 0.0f };
+    bool ui_preview_panning{ false };
     bool ui_preview_grid{ true };
     float ui_preview_grid_size{ 100.0f };
     ImVec2 ui_preview_pan{ 0.0f, 0.0f };
