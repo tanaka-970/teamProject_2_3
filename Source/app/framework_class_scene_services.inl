@@ -234,6 +234,10 @@
     bool project_create_scene_flow(const std::string& name);
     bool project_create_localization(const std::string& name);
     bool project_create_effect_preset(const std::string& name);
+    bool project_create_easing_curve(const std::string& name);
+    bool open_easing_curve_asset(const ReplayEngine::Assets::AssetRecord& asset);
+    bool save_current_easing_curve();
+    void draw_easing_editor();
     bool project_create_input_action_asset(const std::string& name);
     bool load_active_input_action_asset();
     bool project_create_surface_shader(const std::string& name);

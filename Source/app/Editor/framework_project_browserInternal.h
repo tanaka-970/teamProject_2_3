@@ -260,6 +260,7 @@ namespace framework_project_browser::Detail
         case AssetKind::EffectPreset: return "FX";
         case AssetKind::SpriteAtlas:return "ATLAS";
         case AssetKind::Composition:return "COMP";
+        case AssetKind::EasingCurve:return "EASE";
         default:                  return "FILE";
         }
     }
@@ -284,6 +285,7 @@ namespace framework_project_browser::Detail
         case AssetKind::InputAction:return ImVec4(0.55f, 0.90f, 1.0f, 1.0f);
         case AssetKind::SpriteAtlas:return ImVec4(0.90f, 0.72f, 1.00f, 1.0f);
         case AssetKind::Composition:return ImVec4(0.55f, 0.90f, 1.00f, 1.0f);
+        case AssetKind::EasingCurve:return ImVec4(0.78f, 0.96f, 0.56f, 1.0f);
         default:                  return ImVec4(0.72f, 0.72f, 0.72f, 1.0f);
         }
     }

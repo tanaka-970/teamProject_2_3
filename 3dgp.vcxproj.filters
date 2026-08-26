@@ -963,6 +963,9 @@
     <ClCompile Include="RePlayEngine\Editor\Commands\MotionEditHistory.cpp">
       <Filter>RePlayEngine\Editor\Commands</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Motion\EasingCurveAsset.cpp">
+      <Filter>RePlayEngine\Motion</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Motion\MotionEasing.cpp">
       <Filter>RePlayEngine\Motion</Filter>
     </ClCompile>
@@ -1618,6 +1621,9 @@
     </ClInclude>
     <ClInclude Include="RePlayEngine\Reflection\Property\References.h">
       <Filter>RePlayEngine\Reflection\Property</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Motion\EasingCurveAsset.h">
+      <Filter>RePlayEngine\Motion</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Motion\MotionEasing.h">
       <Filter>RePlayEngine\Motion</Filter>
@@ -2371,6 +2377,9 @@
       <Filter>Source\App\Editor</Filter>
     </ClCompile>
     <ClCompile Include="Source\app\Editor\framework_project_browser_assets.cpp">
+      <Filter>Source\App\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\app\Editor\framework_easing_editor.cpp">
       <Filter>Source\App\Editor</Filter>
     </ClCompile>
     <ClCompile Include="Source\app\Editor\framework_sprite_atlas_editor.cpp">

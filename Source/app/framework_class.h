@@ -36,6 +36,7 @@
 #include "../../RePlayEngine/Assets/ConcurrentResourceCache.h"
 #include "../../RePlayEngine/Core/ObjectID/RuntimeIdentity.h"
 #include "../../RePlayEngine/Motion/CompositionAsset.h"
+#include "../../RePlayEngine/Motion/EasingCurveAsset.h"
 #include "../../RePlayEngine/Motion/MotionAsset.h"
 #include "../../RePlayEngine/Motion/MotionMixer.h"
 #include "../../RePlayEngine/Reflection/Property/PropertyBag.h"

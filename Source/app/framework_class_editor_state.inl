@@ -80,6 +80,22 @@
     bool show_motion_timeline_panel{ true };
     bool show_motion_graph_panel{ true };
     bool show_sprite_atlas_editor_panel{ false };
+    bool show_easing_editor_panel{ false };
+    ReplayEngine::Motion::EasingCurveAsset easing_editor_asset;
+    std::filesystem::path easing_editor_path;
+    std::string easing_editor_guid;
+    std::string easing_editor_status{ "Easing Curve が未選択です" };
+    bool easing_editor_loaded{ false };
+    bool easing_editor_dirty{ false };
+    char easing_editor_name_buffer[128]{};
+    int easing_editor_preset_index{ 0 };
+    bool easing_editor_drawing{ false };
+    std::vector<DirectX::XMFLOAT2> easing_editor_freehand_points;
+    int easing_editor_active_control_point{ -1 };
+    int easing_editor_active_sample{ -1 };
+    int easing_editor_context_control_point{ -1 };
+    DirectX::XMFLOAT2 easing_editor_context_point{ 0.5f, 0.5f };
+
     ReplayEngine::Assets::SpriteAtlasAsset sprite_atlas_editor_asset;
     std::filesystem::path sprite_atlas_editor_path;
     std::string sprite_atlas_editor_guid;
