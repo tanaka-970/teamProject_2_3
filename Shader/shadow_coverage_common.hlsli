@@ -3,11 +3,15 @@
 #define __SHADOW_COVERAGE_COMMON_HLSLI__
 
 // s1 のサンプラーを共有する。影パスの Pixel Shader は必ず両方を include する。
+#ifndef SHADOW_COVERAGE_STANDALONE
 #include "shadow_alpha_common.hlsli"
+#define shadow_coverage_sampler shadow_alpha_sampler
+#elif !defined(shadow_coverage_sampler)
+SamplerState shadow_coverage_sampler : register(s0);
+#endif
 
 #define SHADOW_COVERAGE_MAX_EFFECTS 4
 #define SHADOW_COVERAGE_MAX_REGIONS 4
-#define shadow_coverage_sampler shadow_alpha_sampler
 
 Texture2D shadow_coverage_mask_map : register(t46);
 

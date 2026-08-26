@@ -107,6 +107,7 @@ void framework::draw_editor()
                 ImGui::DockBuilderDockWindow("Motion レイヤー", left);
                 ImGui::DockBuilderDockWindow("階層", left);
                 ImGui::DockBuilderDockWindow("Motion インスペクター", right);
+                ImGui::DockBuilderDockWindow(u8"イージングカーブ###EasingCurveEditor", right);
                 // Motion Workspace でも central node には Dock しない。
                 // 3D 表示は draw_scene_view_panel() がこの空き領域へ配置する。
                 ImGui::DockBuilderDockWindow("タイムライン", bottom);
@@ -153,6 +154,7 @@ void framework::draw_editor()
     draw_unsaved_object_scene_prompt();
     draw_export_game_dialog();
     draw_sprite_atlas_editor();
+    draw_easing_editor();
 
     if (active_editor_workspace == editor_workspace::ui)
     {
@@ -165,11 +167,52 @@ void framework::draw_editor()
         draw_ui_focus_style_manager();
         if (active_editor_view == editor_view::scene) handle_viewport_selection();
         draw_collider_debug_overlay();
+        draw_dx12_debug_panel();
         return;
     }
 
     if (active_editor_workspace == editor_workspace::motion)
     {
+        // Motionショートカットは文字入力中に発火させない。
+        const ImGuiIO& motion_io = ImGui::GetIO();
+        if (!motion_io.WantTextInput)
+        {
+            if (!motion_io.KeyCtrl && !motion_io.KeyAlt &&
+                ImGui::IsKeyPressed('S', false))
+                add_motion_key_at_preview_time();
+            if (!motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
+                ImGui::IsKeyPressed(VK_DELETE, false))
+                delete_motion_keys();
+            if (motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
+                ImGui::IsKeyPressed('D', false))
+                duplicate_motion_keys();
+            if (motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
+                ImGui::IsKeyPressed('C', false))
+                copy_motion_keys();
+            if (motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
+                ImGui::IsKeyPressed('V', false))
+                paste_motion_keys();
+            if (!motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
+                ImGui::IsKeyPressed(VK_SPACE, false))
+                toggle_motion_preview_playback();
+            if (!motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
+                ImGui::IsKeyPressed(VK_HOME, false))
+                seek_motion_preview_time(0.0f);
+            if (!motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
+                ImGui::IsKeyPressed(VK_END, false))
+                seek_motion_preview_time(motion_editor_loaded
+                    ? motion_editor_asset.duration : motion_editor_composition.duration);
+            if (!motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
+                ImGui::IsKeyPressed(VK_NEXT, false))
+                step_motion_preview_frames(1);
+            if (!motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
+                ImGui::IsKeyPressed(VK_PRIOR, false))
+                step_motion_preview_frames(-1);
+            if (!motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
+                ImGui::IsKeyPressed(VK_F9, false))
+                apply_motion_easing_to_selection(
+                    ReplayEngine::Motion::MotionEasing::EaseInOutCubic);
+        }
         draw_scene_view_panel();
         if (show_hierarchy_panel) draw_scene_hierarchy();
         draw_motion_layers();
@@ -183,6 +226,7 @@ void framework::draw_editor()
         draw_ui_focus_style_manager();
         if (active_editor_view == editor_view::scene) handle_viewport_selection();
         draw_collider_debug_overlay();
+        draw_dx12_debug_panel();
         return;
     }
 
@@ -205,6 +249,7 @@ void framework::draw_editor()
         object_validation_panel.Draw(object_editor_context, &asset_database,
             &object_collision_world, object_render_items.Size());
     draw_collision_diagnostics_panel();
+    draw_dx12_debug_panel();
     draw_search_results();
     if (active_editor_view == editor_view::scene) handle_viewport_selection();
 

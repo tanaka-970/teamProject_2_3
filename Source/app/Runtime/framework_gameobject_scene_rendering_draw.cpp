@@ -19,10 +19,14 @@
 #include "../../RePlayEngine/Components/Rendering/MaterialOverrideDynamicProperties.h"
 #include "../../RePlayEngine/Components/Rendering/PrimitiveMeshRendererComponent.h"
 #include "../../RePlayEngine/Components/Rendering/SkinnedMeshRendererComponent.h"
+#include "../../RePlayEngine/Components/Rendering/LineRendererComponent.h"
+#include "../../RePlayEngine/Components/Rendering/TrailComponent.h"
+#include "../../RePlayEngine/Components/Rendering/ParticleEmitterComponent.h"
 #include "../../RePlayEngine/Components/Landscape/LandscapeComponent.h"
 #include "../../RePlayEngine/Components/Landscape/LandscapeRendererComponent.h"
 #include "../../RePlayEngine/Components/Landscape/LandscapeColliderComponent.h"
 #include "../../RePlayEngine/Rendering/Shaders/BuiltInShaders.h"
+#include "../../RePlayEngine/Rendering/Shaders/ShaderConstantPacker.h"
 #include "../../RePlayEngine/Rendering/ShaderStack/BuiltInShaderLayers.h"
 #include "../../RePlayEngine/Object/Registry/BuiltInComponents.h"
 #include "../../RePlayEngine/Project/ProjectSettingsSerializer.h"
@@ -48,9 +52,11 @@
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <utility>
+#include <unordered_set>
 #include <vector>
 
 
@@ -210,6 +216,16 @@ ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
         binding_material.properties.Set(entry.name, entry.value);
     }
 
+    // Material Asset が無い場合は、Builtin Primitive の旧 shading_model を
+    // そのまま使う。仮 Material を Shader Catalog へ解決すると、正常な
+    // Primitive まで「欠落 Shader」と誤判定してマゼンタへ落ちる。
+    if (!has_material_asset)
+    {
+        item.material_binding = {};
+        item.pixelate_enabled = source.pixelate_enabled;
+        return item;
+    }
+
     const bool resolved = MaterialBindingResolver::Resolve(binding_material,
         shader_library.Catalog(), variant, item.material_binding);
     // binding_material は一時コピーなので、LayerStack の借用先だけ元Assetへ戻す。
@@ -267,675 +283,1142 @@ ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
     }
     return item;
 }
-
-void framework::draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shader,
-    bool gbuffer_pass, bool depth_only, ReplayEngine::Core::ObjectID only_owner,
-    bool skip_model_effect_owners, std::uint32_t rendering_layer_mask)
+bool framework::build_dx12_static_scene(
+    ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission& submission,
+    float elapsed_time)
 {
-    if (object_render_items.Empty()) return;
+    using namespace ReplayEngine::Rendering;
+    using namespace ReplayEngine::Rendering::DX12;
 
-    for (const ReplayEngine::Rendering::RenderItem& source_item : object_render_items.Items())
+    // 呼出し側がフレームごとに選択した背景色とポストプロセス設定は、
+    // Scene内の描画項目を集め直しても失ってはいけない。
+    // 全体を初期化すると背景が常に既定の黒へ戻り、Inspectorを動かしても反映されない。
+    const D3D12PostProcessSubmission selected_post_process = submission.post_process;
+    const DirectX::XMFLOAT4 selected_background_color = submission.background_color;
+    submission = {};
+    submission.post_process = selected_post_process;
+    submission.background_color = selected_background_color;
+    constexpr std::uint32_t kNormalMapSemantic = 1u << 1;
+    constexpr std::uint32_t kEmissiveMapSemantic = 1u << 4;
+        // glTFはOcclusion/Roughness/Metalnessを1枚のTextureのR/G/Bへ格納する。
+    constexpr std::uint32_t kPackedOrmMapSemantic = 1u << 6;
+
+    std::unordered_set<std::string> mesh_source_keys;
+    std::unordered_set<std::string> texture_source_keys;
+    std::unordered_set<std::string> shader_source_keys;
+
+    const auto multiply_color = [](const DirectX::XMFLOAT4& a,
+        const DirectX::XMFLOAT4& b) noexcept
     {
-        if (only_owner.Valid() && source_item.owner != only_owner) continue;
-        if (rendering_layer_mask != 0xFFFFFFFFu)
+        return DirectX::XMFLOAT4{ a.x * b.x, a.y * b.y, a.z * b.z, a.w * b.w };
+    };
+    const auto multiply_world = [](const DirectX::XMFLOAT4X4& local,
+        const DirectX::XMFLOAT4X4& world) noexcept
+    {
+        DirectX::XMFLOAT4X4 result{};
+        DirectX::XMStoreFloat4x4(&result,
+            DirectX::XMLoadFloat4x4(&local) * DirectX::XMLoadFloat4x4(&world));
+        return result;
+    };
+    const auto alpha_mode = [](int mode) noexcept
+    {
+        if (mode == 1) return D3D12StaticAlphaMode::Mask;
+        if (mode == 2) return D3D12StaticAlphaMode::Blend;
+        return D3D12StaticAlphaMode::Opaque;
+    };
+    const auto material_alpha_mode = [](MaterialAlphaMode mode) noexcept
+    {
+        switch (mode)
         {
-            const int layer = (std::max)(0, (std::min)(31, source_item.rendering_layer));
-            if ((rendering_layer_mask & (1u << static_cast<unsigned int>(layer))) == 0u) continue;
+        case MaterialAlphaMode::Mask: return D3D12StaticAlphaMode::Mask;
+        case MaterialAlphaMode::Blend: return D3D12StaticAlphaMode::Blend;
+        default: return D3D12StaticAlphaMode::Opaque;
         }
-        if (skip_model_effect_owners && !only_owner.Valid())
+    };
+
+    const auto add_texture = [this, &submission, &texture_source_keys](
+        const std::filesystem::path& input_path) -> std::string
+    {
+        if (input_path.empty()) return {};
+        std::filesystem::path resolved = input_path;
+        if (resolved.is_relative())
         {
-            const ReplayEngine::Core::GameObject* owner =
-                active_object_scene().FindGameObjectByID(source_item.owner);
-            const auto* model_effect = owner != nullptr
-                ? owner->GetComponent<ReplayEngine::Components::ModelEffectStackComponent>()
-                : nullptr;
-            if (model_effect != nullptr && model_effect->ActiveInHierarchy() &&
-                model_effect->enabled && model_effect->HasActiveEffects(&asset_database))
+            std::error_code ec;
+            if (!std::filesystem::exists(resolved, ec) || ec)
+                resolved = content_path(resolved);
+        }
+        resolved = resolved.lexically_normal();
+        const std::string key = resolved.generic_string();
+        if (key.empty()) return {};
+        if (!dx12_device_context.HasStaticTexture(key) &&
+            texture_source_keys.insert(key).second)
+        {
+            D3D12StaticTextureSource source;
+            source.key = key;
+            source.source_path = resolved;
+            submission.texture_sources.push_back(std::move(source));
+        }
+        return key;
+    };
+
+    const auto add_material_texture = [&add_texture](
+        D3D12StaticDrawItem& draw, std::uint32_t slot,
+        const std::filesystem::path& input_path, std::uint32_t semantic_bit)
+    {
+        const std::string key = add_texture(input_path);
+        if (key.empty()) return;
+        D3D12StaticMaterialTexture mapped;
+        mapped.slot = slot;
+        mapped.texture_key = key;
+        draw.material_textures.push_back(std::move(mapped));
+        draw.material_texture_semantic_mask |= semantic_bit;
+    };
+
+    const auto add_asset_texture = [this, &add_texture](
+        const std::string& asset_guid) -> std::string
+    {
+        if (asset_guid.empty()) return {};
+        const ReplayEngine::Assets::AssetRecord* record =
+            asset_database.FindByGuid(asset_guid);
+        if (record == nullptr) return {};
+        return add_texture(content_path(record->source_path));
+    };
+
+    struct BaseTextureBinding final
+    {
+        std::string asset_guid;
+        std::string fallback_key{ "__dx12_white" };
+    };
+    const auto fallback_texture_key = [](const std::string& fallback) -> std::string
+    {
+        if (fallback == "black") return "__dx12_black";
+        if (fallback == "gray") return "__dx12_gray";
+        if (fallback == "bump") return "__dx12_bump";
+        return "__dx12_white";
+    };
+    const auto base_texture_binding = [&fallback_texture_key](const RenderItem& item) -> BaseTextureBinding
+    {
+        for (const ResolvedMaterialTexture& texture : item.material_binding.textures)
+        {
+            if (texture.property_name != "BaseMap") continue;
+            BaseTextureBinding binding;
+            binding.asset_guid = texture.asset_guid;
+            binding.fallback_key = fallback_texture_key(texture.default_texture);
+            return binding;
+        }
+        return {};
+    };
+
+    const auto fill_external_material = [this, &submission, &shader_source_keys,
+        &material_alpha_mode, &multiply_color, &add_asset_texture,
+        &base_texture_binding, &fallback_texture_key](
+        const RenderItem& source_item, const RenderItem& item,
+        D3D12StaticDrawItem& draw) -> bool
+    {
+        const MaterialAsset* material = resolve_object_material(source_item.material_asset);
+        const bool external = material != nullptr;
+        draw.base_color = multiply_color(item.material_base_color, item.tint);
+        draw.vertex_tint = item.tint;
+        draw.emissive = item.emissive_color;
+        draw.emissive_strength = item.emissive_strength;
+        draw.metallic = item.metallic;
+        draw.roughness = item.roughness;
+        draw.ambient_occlusion = item.ambient_occlusion;
+        draw.double_sided = item.double_sided;
+        draw.lighting_model = static_cast<std::int32_t>(item.lighting_model);
+        draw.cast_shadow = item.cast_shadow;
+        draw.receive_shadow = item.receive_shadow;
+        if (!external) return false;
+
+        draw.alpha_mode = material_alpha_mode(material->alpha_mode);
+        draw.alpha_cutoff = material->alpha_cutoff;
+        const BaseTextureBinding binding = base_texture_binding(item);
+        std::string texture_guid = binding.asset_guid;
+        if (texture_guid.empty()) texture_guid = material->base_color_texture;
+        draw.base_color_texture_key = add_asset_texture(texture_guid);
+        if (draw.base_color_texture_key.empty())
+            draw.base_color_texture_key = binding.fallback_key;
+
+        // 既存の MaterialBindingResolver を b9 の Byte と t40 以降の Slot の正本として使う。
+        // DX12 Backend はこの解決済み Packet だけを利用する。
+        draw.material_constants = item.material_binding.constants;
+        draw.material_texture_semantic_mask = item.material_binding.TextureSemanticMask();
+        for (const ResolvedMaterialTexture& texture : item.material_binding.textures)
+        {
+            D3D12StaticMaterialTexture mapped;
+            mapped.slot = texture.slot;
+            mapped.texture_key = add_asset_texture(texture.asset_guid);
+            if (mapped.texture_key.empty())
+                mapped.texture_key = fallback_texture_key(texture.default_texture);
+            draw.material_textures.push_back(std::move(mapped));
+        }
+
+        // BuiltInのPBR/Toon/FBX/Pixelate/UnlitはまだDeferred/Light/Shadowの
+        // Global Resource Setに依存するため、Phase 2 Bridgeで意図的に描画する。
+        // 安定した b0/b1/b4/b9、t0/t40 以降、s0..s2 の ABI だけに依存する
+        // Project/Composer Surface Shaderは実際のSM6 Custom Pixel Shaderとして実行できる。
+        const ShaderCatalog::Entry* shader_entry =
+            shader_library.Catalog().Find(item.material_binding.shader);
+        if (shader_entry != nullptr && shader_entry->info.domain == ShaderDomain::Surface &&
+            shader_entry->schema && item.material_binding.usable_shader)
+        {
+            const std::string generic = shader_entry->info.source_path.generic_string();
+            const bool built_in = generic.find("/BuiltIn/") != std::string::npos ||
+                generic.find("\\BuiltIn\\") != std::string::npos;
+            if (!built_in)
             {
-                continue;
+                draw.shader_key = item.material_binding.shader.ToString();
+                if (!draw.shader_key.empty() &&
+                    !dx12_device_context.HasStaticShader(draw.shader_key) &&
+                    shader_source_keys.insert(draw.shader_key).second)
+                {
+                    D3D12StaticShaderSource shader;
+                    shader.key = draw.shader_key;
+                    shader.source_path = shader_entry->info.source_path;
+                    if (shader.source_path.is_relative())
+                        shader.source_path = std::filesystem::current_path() /
+                            shader.source_path;
+                    shader.source_path = shader.source_path.lexically_normal();
+                    shader.generated_declaration =
+                        ShaderConstantPacker::GenerateHlslDeclaration(*shader_entry->schema);
+                    submission.shader_sources.push_back(std::move(shader));
+                }
             }
         }
+        return true;
+    };
 
-        const ReplayEngine::Rendering::RenderItem item =
-            resolve_render_item_material(source_item);
-        // Asset 未指定・解決不可・読み込み失敗のいずれでも nullptr が返る。
-        // その場合はこの GameObject を描かずに次へ進むだけで、実行は継続する。
-        if (item.mesh_asset.empty()) continue;
+    const auto make_mesh_source = [&submission, &mesh_source_keys](
+        const std::string& key, auto vertex_begin, auto vertex_end,
+        const std::vector<std::uint32_t>& indices)
+    {
+        if (!mesh_source_keys.insert(key).second) return;
+        D3D12StaticMeshSource source;
+        source.key = key;
+        try
+        {
+            source.vertices.reserve(static_cast<std::size_t>(
+                std::distance(vertex_begin, vertex_end)));
+            for (auto it = vertex_begin; it != vertex_end; ++it)
+            {
+                D3D12StaticVertex vertex;
+                vertex.position = it->position;
+                vertex.normal = it->normal;
+                vertex.texcoord = it->texcoord;
+                source.vertices.push_back(vertex);
+            }
+            source.indices = indices;
+            submission.mesh_sources.push_back(std::move(source));
+        }
+        catch (...)
+        {
+            mesh_source_keys.erase(key);
+        }
+    };
 
-        // Engine 内蔵 Primitive も通常の MeshRendererComponent から提出される。
-        // 特殊な Primitive GameObject は作らず、asset id だけ builtin:* を使う。
+    std::unordered_set<std::string> skinned_mesh_source_keys;
+    const auto make_skinned_mesh_source = [&submission, &skinned_mesh_source_keys](
+        const std::string& key, const skinned_mesh::mesh& mesh)
+    {
+        if (!skinned_mesh_source_keys.insert(key).second) return;
+        D3D12SkinnedMeshSource source;
+        source.key = key;
+        try
+        {
+            source.vertices.reserve(mesh.vertices.size());
+            for (const skinned_mesh::vertex& input : mesh.vertices)
+            {
+                D3D12SkinnedVertex vertex;
+                vertex.position = input.position;
+                vertex.normal = input.normal;
+                vertex.tangent = input.tangent;
+                vertex.texcoord = input.texcoord;
+                vertex.bone_weights = { input.bone_weights[0], input.bone_weights[1],
+                    input.bone_weights[2], input.bone_weights[3] };
+                for (std::uint32_t influence = 0; influence < 4; ++influence)
+                    vertex.bone_indices[influence] = input.bone_indices[influence];
+                vertex.morph_position = input.morph_position;
+                vertex.morph_normal = input.morph_normal;
+                source.vertices.push_back(vertex);
+            }
+            source.indices = mesh.indices;
+            submission.skinned_mesh_sources.push_back(std::move(source));
+        }
+        catch (...)
+        {
+            skinned_mesh_source_keys.erase(key);
+        }
+    };
+
+    const auto normalize_or_fallback = [](const DirectX::XMVECTOR& value,
+        const DirectX::XMVECTOR& fallback) noexcept
+    {
+        const float length = DirectX::XMVectorGetX(DirectX::XMVector3LengthSq(value));
+        return length > 1.0e-8f ? DirectX::XMVector3Normalize(value) : fallback;
+    };
+    DirectX::XMFLOAT4X4 inverse_view{};
+    DirectX::XMStoreFloat4x4(&inverse_view,
+        DirectX::XMMatrixInverse(nullptr, viewport_view_matrix()));
+    const DirectX::XMVECTOR camera_right = normalize_or_fallback(
+        DirectX::XMVectorSet(inverse_view._11, inverse_view._12, inverse_view._13, 0.0f),
+        DirectX::XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f));
+    const DirectX::XMVECTOR camera_up = normalize_or_fallback(
+        DirectX::XMVectorSet(inverse_view._21, inverse_view._22, inverse_view._23, 0.0f),
+        DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f));
+    const DirectX::XMVECTOR camera_forward = normalize_or_fallback(
+        DirectX::XMVectorSet(inverse_view._31, inverse_view._32, inverse_view._33, 0.0f),
+        DirectX::XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f));
+
+    const auto add_ribbon = [&submission, &normalize_or_fallback, camera_right,
+        camera_up, camera_forward](const std::string& key,
+        const std::vector<DirectX::XMFLOAT3>& points,
+        const std::vector<float>& point_alpha,
+        const ReplayEngine::Rendering::LineStrokeStyle& style) -> bool
+    {
+        if (key.empty() || points.size() < 2) return false;
+        D3D12StaticMeshSource source;
+        source.key = key;
+        source.replace_existing = true;
+        try
+        {
+            source.vertices.reserve((points.size() - 1) * 4);
+            source.indices.reserve((points.size() - 1) * 6);
+            const float width_start = (std::max)(0.0f, style.width_start);
+            const float width_end = (std::max)(0.0f, style.width_end);
+            for (std::size_t index = 0; index + 1 < points.size(); ++index)
+            {
+                const float t0 = static_cast<float>(index) /
+                    static_cast<float>(points.size() - 1);
+                const float t1 = static_cast<float>(index + 1) /
+                    static_cast<float>(points.size() - 1);
+                const DirectX::XMVECTOR p0 = DirectX::XMLoadFloat3(&points[index]);
+                const DirectX::XMVECTOR p1 = DirectX::XMLoadFloat3(&points[index + 1]);
+                const DirectX::XMVECTOR tangent = normalize_or_fallback(
+                    DirectX::XMVectorSubtract(p1, p0),
+                    DirectX::XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f));
+                const DirectX::XMVECTOR side = normalize_or_fallback(
+                    DirectX::XMVector3Cross(tangent, camera_forward), camera_right);
+                const float half_width0 = width_start * 0.5f * (1.0f - t0) +
+                    width_end * 0.5f * t0;
+                const float half_width1 = width_start * 0.5f * (1.0f - t1) +
+                    width_end * 0.5f * t1;
+                const DirectX::XMVECTOR left0 = DirectX::XMVectorSubtract(p0,
+                    DirectX::XMVectorScale(side, half_width0));
+                const DirectX::XMVECTOR right0 = DirectX::XMVectorAdd(p0,
+                    DirectX::XMVectorScale(side, half_width0));
+                const DirectX::XMVECTOR left1 = DirectX::XMVectorSubtract(p1,
+                    DirectX::XMVectorScale(side, half_width1));
+                const DirectX::XMVECTOR right1 = DirectX::XMVectorAdd(p1,
+                    DirectX::XMVectorScale(side, half_width1));
+                D3D12StaticVertex vertices[4]{};
+                DirectX::XMStoreFloat3(&vertices[0].position, left0);
+                DirectX::XMStoreFloat3(&vertices[1].position, right0);
+                DirectX::XMStoreFloat3(&vertices[2].position, right1);
+                DirectX::XMStoreFloat3(&vertices[3].position, left1);
+                for (D3D12StaticVertex& vertex : vertices)
+                {
+                    DirectX::XMStoreFloat3(&vertex.normal, camera_up);
+                    vertex.texcoord = { t0, 0.0f };
+                }
+                vertices[2].texcoord = { t1, 1.0f };
+                vertices[3].texcoord = { t1, 0.0f };
+                const std::uint32_t base = static_cast<std::uint32_t>(source.vertices.size());
+                source.vertices.insert(source.vertices.end(), std::begin(vertices), std::end(vertices));
+                source.indices.insert(source.indices.end(),
+                    { base, base + 1, base + 2, base, base + 2, base + 3 });
+            }
+        }
+        catch (...)
+        {
+            return false;
+        }
+        if (source.vertices.empty() || source.indices.empty()) return false;
+        submission.mesh_sources.push_back(std::move(source));
+        return true;
+    };
+
+    const auto add_ribbon_draw = [&submission](const std::string& key,
+        const std::string& motion_key, const ReplayEngine::Rendering::LineStrokeStyle& style)
+    {
+        D3D12StaticDrawItem draw;
+        draw.mesh_key = key;
+        draw.motion_key = motion_key;
+        draw.alpha_mode = D3D12StaticAlphaMode::Blend;
+        draw.base_color = style.fill_color;
+        draw.cast_shadow = false;
+        draw.receive_shadow = false;
+        draw.double_sided = true;
+        submission.draws.push_back(std::move(draw));
+    };
+
+    // LineRenderer/TrailもCPU側の点列を正本にし、DX12では一時Ribbon Meshへ変換する。
+    // Frame slotごとに置換するので、毎フレームの軌跡更新で古いGPU Resourceを蓄積しない。
+    {
+        ReplayEngine::Scene::Scene& scene = active_object_scene();
+        std::vector<DirectX::XMFLOAT3> path;
+        std::vector<float> alpha;
+        for (std::size_t object_index = 0; object_index < scene.GameObjectCount(); ++object_index)
+        {
+            const ReplayEngine::Core::GameObject* object = scene.GameObjectAt(object_index);
+            if (object == nullptr || object->PendingDestroy() || !object->ActiveInHierarchy()) continue;
+            const DirectX::XMFLOAT4X4 world = object->GetTransform().WorldMatrixFloat4x4();
+            for (std::size_t component_index = 0; component_index < object->ComponentCount();
+                ++component_index)
+            {
+                const auto* component = object->ComponentAt(component_index);
+                const std::string key_prefix = "ribbon:" +
+                    std::to_string(object->ID().Value()) + ":" +
+                    std::to_string(component_index) + ":slot:" +
+                    std::to_string(dx12_device_context.FrameIndex());
+                if (const auto* line = dynamic_cast<const ReplayEngine::Components::LineRendererComponent*>(component))
+                {
+                    if (!line->ActiveInHierarchy() || line->points.size() < 2) continue;
+                    path = ReplayEngine::Rendering::BuildCatmullRomLinePath(
+                        line->points, line->smoothing, line->closed);
+                    for (DirectX::XMFLOAT3& point : path)
+                    {
+                        DirectX::XMStoreFloat3(&point,
+                            DirectX::XMVector3TransformCoord(
+                                DirectX::XMLoadFloat3(&point), DirectX::XMLoadFloat4x4(&world)));
+                    }
+                    const auto style = line->StrokeStyle();
+                    if (add_ribbon(key_prefix, path, {}, style))
+                        add_ribbon_draw(key_prefix, key_prefix, style);
+                    continue;
+                }
+                const auto* trail = dynamic_cast<const ReplayEngine::Components::TrailComponent*>(component);
+                if (trail == nullptr || !trail->ActiveInHierarchy()) continue;
+                trail->RuntimePath(path, alpha);
+                if (path.size() < 2) continue;
+                if (!trail->world_space)
+                {
+                    DirectX::XMFLOAT4X4 parent_world{};
+                    const auto* parent = object->Parent();
+                    if (parent != nullptr) parent_world = parent->GetTransform().WorldMatrixFloat4x4();
+                    else DirectX::XMStoreFloat4x4(&parent_world, DirectX::XMMatrixIdentity());
+                    for (DirectX::XMFLOAT3& point : path)
+                        DirectX::XMStoreFloat3(&point,
+                            DirectX::XMVector3TransformCoord(
+                                DirectX::XMLoadFloat3(&point), DirectX::XMLoadFloat4x4(&parent_world)));
+                }
+                const auto style = trail->StrokeStyle();
+                if (add_ribbon(key_prefix, path, alpha, style))
+                    add_ribbon_draw(key_prefix, key_prefix, style);
+            }
+        }
+    }
+
+    // ParticleEmitterもComponentの値を正本にし、DX12の透明Forwardへ提出する。
+    // D3D11専用のStructuredBufferへ依存せず、寿命のあるCPU状態をビルボードへ
+    // 変換することで、テクスチャ・Blend・深度の既存Material契約を再利用する。
+    {
+        using ReplayEngine::Components::ParticleEmitterComponent;
+        using Particle = framework::dx12_particle_instance;
+        ReplayEngine::Scene::Scene& scene = active_object_scene();
+        const float delta = (std::max)(0.0f, (std::min)(elapsed_time, 0.1f));
+        const DirectX::XMVECTOR world_up = DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+        const DirectX::XMVECTOR camera_forward_world =
+            DirectX::XMVector3Normalize(camera_forward);
+
+        struct ParticleBucket final
+        {
+            D3D12StaticMeshSource source;
+            DirectX::XMFLOAT4 color_sum{};
+            std::size_t count = 0;
+        };
+
+        const auto next_random = [](std::uint32_t& state) noexcept
+        {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            return static_cast<float>(state & 0x00FFFFFFu) /
+                static_cast<float>(0x01000000u);
+        };
+        const auto clamp_color = [](const DirectX::XMFLOAT4& value) noexcept
+        {
+            return DirectX::XMFLOAT4{
+                (std::max)(0.0f, (std::min)(1.0f, value.x)),
+                (std::max)(0.0f, (std::min)(1.0f, value.y)),
+                (std::max)(0.0f, (std::min)(1.0f, value.z)),
+                (std::max)(0.0f, (std::min)(1.0f, value.w)) };
+        };
+        const auto clamp_value = [](float value, float fallback,
+            float minimum, float maximum) noexcept
+        {
+            if (!std::isfinite(value)) value = fallback;
+            return (std::max)(minimum, (std::min)(maximum, value));
+        };
+        const auto lerp_color = [&clamp_color](const DirectX::XMFLOAT4& a,
+            const DirectX::XMFLOAT4& b, float t) noexcept
+        {
+            return clamp_color(DirectX::XMFLOAT4{
+                a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t,
+                a.z + (b.z - a.z) * t, a.w + (b.w - a.w) * t });
+        };
+
+        for (std::size_t object_index = 0; object_index < scene.GameObjectCount();
+            ++object_index)
+        {
+            const ReplayEngine::Core::GameObject* object = scene.GameObjectAt(object_index);
+            if (object == nullptr || object->PendingDestroy() ||
+                !object->ActiveInHierarchy()) continue;
+            const ParticleEmitterComponent* emitter = nullptr;
+            for (std::size_t component_index = 0; component_index < object->ComponentCount();
+                ++component_index)
+            {
+                emitter = dynamic_cast<const ParticleEmitterComponent*>(
+                    object->ComponentAt(component_index));
+                if (emitter != nullptr && emitter->ActiveInHierarchy()) break;
+                emitter = nullptr;
+            }
+            if (emitter == nullptr || (!emitter->emitting && !emitter->HasPendingRequest()))
+                continue;
+
+            const ReplayEngine::Core::ObjectID object_id = object->ID();
+            std::vector<Particle>& state = dx12_particle_states[object_id];
+            float& spawn_remainder = dx12_particle_spawn_remainders[object_id];
+            if (emitter->ConsumeClearRequest())
+            {
+                state.clear();
+                spawn_remainder = 0.0f;
+            }
+
+            const int max_particles = (std::max)(1, (std::min)(emitter->max_particles, 10000));
+            const DirectX::XMFLOAT4X4 object_world = object->GetTransform().WorldMatrixFloat4x4();
+            const DirectX::XMMATRIX object_matrix = DirectX::XMLoadFloat4x4(&object_world);
+            const DirectX::XMVECTOR origin = DirectX::XMVector3TransformCoord(
+                DirectX::XMVectorZero(), object_matrix);
+            const DirectX::XMVECTOR direction_input = DirectX::XMVector3TransformNormal(
+                DirectX::XMLoadFloat3(&emitter->direction), object_matrix);
+            const DirectX::XMVECTOR direction = normalize_or_fallback(
+                direction_input, world_up);
+            const DirectX::XMVECTOR basis_seed =
+                std::abs(DirectX::XMVectorGetX(DirectX::XMVector3Dot(direction, world_up))) < 0.98f
+                ? world_up : DirectX::XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f);
+            const DirectX::XMVECTOR basis_right = normalize_or_fallback(
+                DirectX::XMVector3Cross(basis_seed, direction),
+                DirectX::XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f));
+            const DirectX::XMVECTOR basis_up = DirectX::XMVector3Cross(direction, basis_right);
+            const float lifetime = clamp_value(emitter->lifetime, 1.5f, 0.01f, 60.0f);
+            const float start_speed = clamp_value(emitter->start_speed, 2.0f, 0.0f, 200.0f);
+            const float gravity = clamp_value(emitter->gravity, 1.8f, -100.0f, 100.0f);
+            const float drag = clamp_value(emitter->drag, 0.5f, 0.0f, 20.0f);
+            const float start_size = clamp_value(emitter->start_size, 0.1f, 0.001f, 100.0f);
+            const float end_size = clamp_value(emitter->end_size, 0.02f, 0.001f, 100.0f);
+            const float cone = clamp_value(emitter->cone_angle, 0.4f, 0.0f, 3.14159f);
+
+            for (Particle& particle : state)
+            {
+                particle.age += delta;
+                if (particle.age >= particle.life) continue;
+                particle.velocity.y -= gravity * delta;
+                particle.velocity.x *= std::exp(-drag * delta);
+                particle.velocity.y *= std::exp(-drag * delta);
+                particle.velocity.z *= std::exp(-drag * delta);
+                particle.position.x += particle.velocity.x * delta;
+                particle.position.y += particle.velocity.y * delta;
+                particle.position.z += particle.velocity.z * delta;
+                const float life_t = (std::max)(0.0f, (std::min)(1.0f,
+                    particle.age / (std::max)(particle.life, 0.001f)));
+                particle.size = start_size + (end_size - start_size) * life_t;
+                particle.color = lerp_color(emitter->start_color, emitter->end_color, life_t);
+                particle.rotation += delta * 1.7f;
+            }
+            state.erase(std::remove_if(state.begin(), state.end(),
+                [](const Particle& particle) { return particle.age >= particle.life; }), state.end());
+
+            const float spawn_rate = emitter->emitting
+                ? clamp_value(emitter->spawn_rate, 200.0f, 0.0f, 20000.0f) : 0.0f;
+            spawn_remainder += spawn_rate * delta;
+            int spawn_count = static_cast<int>(spawn_remainder);
+            spawn_remainder -= static_cast<float>(spawn_count);
+            spawn_count += (std::max)(0, emitter->ConsumeBurst());
+            spawn_count = (std::min)(spawn_count,
+                max_particles - static_cast<int>(state.size()));
+
+            std::uint32_t random_state = static_cast<std::uint32_t>(
+                object_id.Value() ^ (static_cast<std::uint64_t>(frame_index) * 747796405ull));
+            for (int spawn_index = 0; spawn_index < spawn_count; ++spawn_index)
+            {
+                const float radius = std::sqrt(next_random(random_state));
+                const float azimuth = next_random(random_state) * DirectX::XM_2PI;
+                const float angle = radius * cone;
+                const float sin_angle = std::sin(angle);
+                const DirectX::XMVECTOR cone_direction = DirectX::XMVectorAdd(
+                    DirectX::XMVectorScale(direction, std::cos(angle)),
+                    DirectX::XMVectorAdd(
+                        DirectX::XMVectorScale(basis_right, std::cos(azimuth) * sin_angle),
+                        DirectX::XMVectorScale(basis_up, std::sin(azimuth) * sin_angle)));
+                const DirectX::XMVECTOR spawn_direction = DirectX::XMVector3Normalize(
+                    cone_direction);
+                const float particle_life = lifetime *
+                    (0.75f + next_random(random_state) * 0.5f);
+                const float speed = start_speed * (0.75f + next_random(random_state) * 0.5f);
+                Particle particle;
+                DirectX::XMStoreFloat3(&particle.position, origin);
+                DirectX::XMStoreFloat3(&particle.velocity,
+                    DirectX::XMVectorScale(spawn_direction, speed));
+                particle.color = clamp_color(emitter->start_color);
+                particle.life = particle_life;
+                particle.size = start_size;
+                particle.rotation = next_random(random_state) * DirectX::XM_2PI;
+                state.push_back(particle);
+            }
+            if (state.size() > static_cast<std::size_t>(max_particles))
+                state.resize(static_cast<std::size_t>(max_particles));
+            if (state.empty()) continue;
+
+            ParticleBucket buckets[8]{};
+            for (std::size_t particle_index = 0; particle_index < state.size(); ++particle_index)
+            {
+                const Particle& particle = state[particle_index];
+                const float life_t = particle.life > 0.0f ? particle.age / particle.life : 1.0f;
+                const std::size_t bucket_index = (std::min)(static_cast<std::size_t>(7),
+                    static_cast<std::size_t>((std::max)(0.0f, life_t) * 8.0f));
+                ParticleBucket& bucket = buckets[bucket_index];
+                if (bucket.source.key.empty())
+                    bucket.source.key = "particle:" + std::to_string(object_id.Value()) + ":slot:" +
+                        std::to_string(dx12_device_context.FrameIndex()) + ":bucket:" +
+                        std::to_string(bucket_index);
+                bucket.source.replace_existing = true;
+                DirectX::XMVECTOR center = DirectX::XMLoadFloat3(&particle.position);
+                const DirectX::XMVECTOR right = DirectX::XMVectorScale(camera_right, particle.size);
+                const DirectX::XMVECTOR up = DirectX::XMVectorScale(camera_up, particle.size);
+                const DirectX::XMVECTOR corners[4] = {
+                    DirectX::XMVectorAdd(DirectX::XMVectorSubtract(center, right), up),
+                    DirectX::XMVectorAdd(DirectX::XMVectorAdd(center, right), up),
+                    DirectX::XMVectorSubtract(DirectX::XMVectorAdd(center, right), up),
+                    DirectX::XMVectorSubtract(DirectX::XMVectorSubtract(center, right), up) };
+                const std::uint32_t base = static_cast<std::uint32_t>(bucket.source.vertices.size());
+                for (std::uint32_t corner = 0; corner < 4; ++corner)
+                {
+                    D3D12StaticVertex vertex;
+                    DirectX::XMStoreFloat3(&vertex.position, corners[corner]);
+                    DirectX::XMStoreFloat3(&vertex.normal, camera_forward_world);
+                    vertex.texcoord = { (corner == 1 || corner == 2) ? 1.0f : 0.0f,
+                        (corner >= 2) ? 1.0f : 0.0f };
+                    bucket.source.vertices.push_back(vertex);
+                }
+                bucket.source.indices.insert(bucket.source.indices.end(),
+                    { base, base + 1, base + 2, base, base + 2, base + 3 });
+                bucket.color_sum.x += particle.color.x;
+                bucket.color_sum.y += particle.color.y;
+                bucket.color_sum.z += particle.color.z;
+                bucket.color_sum.w += particle.color.w;
+                ++bucket.count;
+            }
+
+            std::string sprite_texture_key = add_asset_texture(emitter->sprite.guid);
+            if (sprite_texture_key.empty()) sprite_texture_key = "__dx12_white";
+            for (std::size_t bucket_index = 0; bucket_index < 8; ++bucket_index)
+            {
+                ParticleBucket& bucket = buckets[bucket_index];
+                if (bucket.count == 0 || bucket.source.vertices.empty()) continue;
+                const float inverse_count = 1.0f / static_cast<float>(bucket.count);
+                D3D12StaticDrawItem draw;
+                draw.mesh_key = bucket.source.key;
+                draw.motion_key = bucket.source.key;
+                draw.base_color = {
+                    bucket.color_sum.x * inverse_count,
+                    bucket.color_sum.y * inverse_count,
+                    bucket.color_sum.z * inverse_count,
+                    bucket.color_sum.w * inverse_count };
+                draw.base_color_texture_key = sprite_texture_key;
+                draw.alpha_mode = D3D12StaticAlphaMode::Blend;
+                draw.lighting_model = static_cast<std::int32_t>(
+                    ReplayEngine::Rendering::ShaderLightingModel::Unlit);
+                draw.roughness = 1.0f;
+                draw.cast_shadow = false;
+                draw.receive_shadow = false;
+                draw.double_sided = true;
+                submission.mesh_sources.push_back(std::move(bucket.source));
+                submission.draws.push_back(std::move(draw));
+            }
+        }
+    }
+
+    for (const RenderItem& source_item : object_render_items.Items())
+    {
+        if (source_item.mesh_asset.empty()) continue;
+
+        const RenderItem item = resolve_render_item_material(source_item);
+        if (source_item.skinned)
+        {
+            skinned_mesh* mesh_asset = resolve_object_mesh(item.mesh_asset);
+            if (mesh_asset == nullptr) continue;
+            std::filesystem::path model_source;
+            std::string model_reason;
+            (void)resolve_model_source(item.mesh_asset, model_source, model_reason);
+
+            skinned_mesh::animation::keyframe blended_keyframe;
+            const skinned_mesh::animation::keyframe* keyframe =
+                resolve_render_item_keyframe(*mesh_asset, item, blended_keyframe);
+
+            for (std::size_t mesh_index = 0; mesh_index < mesh_asset->meshes.size(); ++mesh_index)
+            {
+                const skinned_mesh::mesh& mesh = mesh_asset->meshes[mesh_index];
+                if (mesh.vertices.empty() || mesh.indices.empty()) continue;
+                const std::string mesh_key = item.mesh_asset + "#skinned:" +
+                    std::to_string(mesh_index);
+                if (!dx12_device_context.HasSkinnedMesh(mesh_key))
+                    make_skinned_mesh_source(mesh_key, mesh);
+
+                DirectX::XMFLOAT4X4 mesh_world =
+                    multiply_world(mesh.default_global_transform, item.world);
+                float morph_weight = mesh.default_morph_weight;
+                std::size_t palette_size = (std::max)(static_cast<std::size_t>(1),
+                    mesh.bind_pose.bones.size());
+                for (const skinned_mesh::vertex& vertex : mesh.vertices)
+                {
+                    for (std::uint32_t influence = 0; influence < 4; ++influence)
+                        palette_size = (std::max)(palette_size,
+                            static_cast<std::size_t>(vertex.bone_indices[influence]) + 1u);
+                }
+                std::vector<DirectX::XMFLOAT4X4> palette(palette_size,
+                    DirectX::XMFLOAT4X4{ 1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 });
+
+                if (keyframe != nullptr && mesh.node_index >= 0 &&
+                    static_cast<std::size_t>(mesh.node_index) < keyframe->nodes.size())
+                {
+                    const skinned_mesh::animation::keyframe::node& mesh_node =
+                        keyframe->nodes[static_cast<std::size_t>(mesh.node_index)];
+                    mesh_world = multiply_world(mesh_node.global_transform, item.world);
+                    morph_weight = mesh_node.morph_weight;
+                    const DirectX::XMMATRIX inverse_mesh = DirectX::XMMatrixInverse(nullptr,
+                        DirectX::XMLoadFloat4x4(&mesh_node.global_transform));
+                    for (std::size_t bone_index = 0; bone_index < mesh.bind_pose.bones.size();
+                        ++bone_index)
+                    {
+                        const skeleton::bone& bone = mesh.bind_pose.bones[bone_index];
+                        if (bone.node_index < 0 ||
+                            static_cast<std::size_t>(bone.node_index) >= keyframe->nodes.size())
+                            continue;
+                        const auto& bone_node =
+                            keyframe->nodes[static_cast<std::size_t>(bone.node_index)];
+                        DirectX::XMStoreFloat4x4(&palette[bone_index],
+                            DirectX::XMLoadFloat4x4(&bone.offset_transform) *
+                            DirectX::XMLoadFloat4x4(&bone_node.global_transform) * inverse_mesh);
+                    }
+                }
+
+                const auto append_skinned_draw = [&](std::uint32_t start, std::uint32_t count,
+                    std::uint64_t material_id)
+                {
+                    D3D12SkinnedDrawItem skinned_draw;
+                    D3D12StaticDrawItem& draw = skinned_draw.surface;
+                    draw.mesh_key = mesh_key;
+                    draw.owner_id = source_item.owner.Value();
+                    draw.rendering_layer = static_cast<std::uint32_t>((std::max)(0,
+                        (std::min)(31, item.rendering_layer)));
+                    draw.start_index = start;
+                    draw.index_count = count;
+                    draw.world = mesh_world;
+                    const bool external = fill_external_material(source_item, item, draw);
+                    if (!external)
+                    {
+                        const auto material_it = mesh_asset->materials.find(material_id);
+                        if (material_it != mesh_asset->materials.end())
+                        {
+                            const skinned_mesh::material& material = material_it->second;
+                            draw.base_color = multiply_color(material.Kd, source_item.tint);
+                            std::filesystem::path texture_path(material.texture_filenames[0]);
+                            if (!texture_path.empty() && texture_path.is_relative() &&
+                                !model_source.empty())
+                                texture_path = model_source.parent_path() / texture_path;
+                            draw.base_color_texture_key = add_texture(texture_path);
+                            const auto embedded_texture_path =
+                                [&material, &model_source](std::size_t slot)
+                            {
+                                std::filesystem::path path(material.texture_filenames[slot]);
+                                if (!path.empty() && path.is_relative() &&
+                                    !model_source.empty())
+                                    path = model_source.parent_path() / path;
+                                return path;
+                            };
+                            add_material_texture(draw, 41u, embedded_texture_path(1),
+                                kNormalMapSemantic);
+                            add_material_texture(draw, 42u, embedded_texture_path(2),
+                                kPackedOrmMapSemantic);
+                            add_material_texture(draw, 44u, embedded_texture_path(3),
+                                kEmissiveMapSemantic);
+                            if (const skinned_mesh::gltf_material_info* gltf_material =
+                                mesh_asset->GltfMaterial(material_id))
+                            {
+                                draw.metallic = gltf_material->metallic;
+                                draw.roughness = gltf_material->roughness;
+                                draw.ambient_occlusion = gltf_material->occlusion;
+                                draw.emissive = gltf_material->emissive;
+                                draw.emissive_strength = gltf_material->emissive_strength;
+                                draw.alpha_mode = alpha_mode(gltf_material->alpha_mode);
+                                draw.alpha_cutoff = gltf_material->alpha_cutoff;
+                                draw.double_sided = gltf_material->double_sided || item.double_sided;
+                                if (gltf_material->unlit) draw.lighting_model = 2;
+                            }
+                        }
+                        else
+                        {
+                            draw.base_color = source_item.tint;
+                            draw.double_sided = item.double_sided;
+                        }
+                    }
+                    skinned_draw.motion_key = std::to_string(source_item.owner.Value()) + ":" +
+                        mesh_key + ":" + std::to_string(start);
+                    skinned_draw.bone_palette = palette;
+                    skinned_draw.morph_weight = morph_weight;
+                    submission.skinned_draws.push_back(std::move(skinned_draw));
+                };
+
+                if (mesh.subsets.empty())
+                    append_skinned_draw(0, static_cast<std::uint32_t>(mesh.indices.size()), 0);
+                else
+                    for (const skinned_mesh::mesh::subset& subset : mesh.subsets)
+                        append_skinned_draw(subset.start_index_location, subset.index_count,
+                            subset.material_unique_id);
+            }
+            continue;
+        }
         if (item.mesh_asset.rfind("builtin:", 0) == 0)
         {
+            if (dx12_framework_active)
+            {
+                std::vector<static_mesh::vertex> cpu_vertices;
+                std::vector<std::uint32_t> cpu_indices;
+                if (!build_builtin_primitive_cpu(item.mesh_asset, cpu_vertices, cpu_indices) ||
+                    cpu_vertices.empty() || cpu_indices.empty())
+                    continue;
+                if (!dx12_device_context.HasStaticMesh(item.mesh_asset))
+                {
+                    D3D12StaticMeshSource source;
+                    source.key = item.mesh_asset;
+                    source.vertices.reserve(cpu_vertices.size());
+                    for (const static_mesh::vertex& input : cpu_vertices)
+                    {
+                        D3D12StaticVertex vertex;
+                        vertex.position = input.position;
+                        vertex.normal = input.normal;
+                        vertex.texcoord = input.texcoord;
+                        source.vertices.push_back(vertex);
+                    }
+                    source.indices = cpu_indices;
+                    submission.mesh_sources.push_back(std::move(source));
+                }
+                D3D12StaticDrawItem draw;
+                draw.mesh_key = item.mesh_asset;
+                draw.owner_id = source_item.owner.Value();
+                draw.rendering_layer = static_cast<std::uint32_t>((std::max)(0,
+                    (std::min)(31, item.rendering_layer)));
+                draw.motion_key = std::to_string(source_item.owner.Value()) + ":" + draw.mesh_key;
+                draw.world = item.world;
+                (void)fill_external_material(source_item, item, draw);
+                submission.draws.push_back(std::move(draw));
+                continue;
+            }
             static_mesh* primitive = resolve_builtin_primitive_mesh(item.mesh_asset);
-            if (primitive == nullptr) continue;
+            if (primitive == nullptr || primitive->cpu_vertices().empty() ||
+                primitive->cpu_indices().empty())
+                continue;
+            if (!dx12_device_context.HasStaticMesh(item.mesh_asset))
+                make_mesh_source(item.mesh_asset, primitive->cpu_vertices().begin(),
+                    primitive->cpu_vertices().end(), primitive->cpu_indices());
 
-            if (item.double_sided)
-                immediate_context->RSSetState(
-                    rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
-
-            if (depth_only)
-            {
-                primitive->render(immediate_context.Get(), item.world, item.tint,
-                    nullptr, nullptr, nullptr, false, false);
-            }
-            else if (gbuffer_pass)
-            {
-                if (item.material_binding.usable_shader)
-                {
-                    material_gpu_binder.BindGBufferTextures(device.Get(), immediate_context.Get(),
-                        asset_database, item.material_binding);
-                }
-                else
-                {
-                    material_gpu_binder.UnbindTextures(immediate_context.Get());
-                }
-                bind_gbuffer_material(item.lighting_model,
-                    false, item.pixelate_enabled, item.pixelate_size,
-                    item.pixelate_strength, item.metallic, item.roughness,
-                    item.ambient_occlusion, item.emissive_strength,
-                    item.material_base_color, item.emissive_color,
-                    item.material_binding.usable_shader
-                        ? item.material_binding.TextureSemanticMask() : 0u,
-                    item.receive_shadow);
-                primitive->render(immediate_context.Get(), item.world, item.tint,
-                    static_mesh_gbuffer_ps.Get(), nullptr, nullptr, true, true);
-                material_gpu_binder.UnbindTextures(immediate_context.Get());
-            }
-            else
-            {
-                primitive->render(immediate_context.Get(), item.world, item.tint,
-                    override_pixel_shader != nullptr ? override_pixel_shader :
-                        static_forward_shader(item.shading_model));
-            }
-
-            if (item.double_sided)
-                immediate_context->RSSetState(
-                    rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
+            D3D12StaticDrawItem draw;
+            draw.mesh_key = item.mesh_asset;
+            draw.owner_id = source_item.owner.Value();
+            draw.rendering_layer = static_cast<std::uint32_t>((std::max)(0,
+                (std::min)(31, item.rendering_layer)));
+            draw.motion_key = std::to_string(source_item.owner.Value()) + ":" + draw.mesh_key;
+            draw.world = item.world;
+            (void)fill_external_material(source_item, item, draw);
+            submission.draws.push_back(std::move(draw));
             continue;
         }
 
-        // Skin/Animationを持たないglTFは従来の軽い静的経路を維持する。
-        // 持つものだけ既存skinned_mesh/Animator経路へ送る。
         gltf_model* gltf = resolve_object_gltf(item.mesh_asset);
         if (gltf != nullptr && !gltf->HasSkins() && !gltf->HasAnimations())
         {
-            if (item.double_sided)
-                immediate_context->RSSetState(
-                    rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
-
-            if (depth_only)
+            bool geometry_missing = false;
+            for (std::size_t primitive_index = 0;
+                primitive_index < gltf->StaticPrimitiveCount(); ++primitive_index)
             {
-                gltf->render(immediate_context.Get(), item.world, item.tint,
-                    nullptr, false, true);
+                const std::string key = item.mesh_asset + "#gltf:" +
+                    std::to_string(primitive_index);
+                if (!dx12_device_context.HasStaticMesh(key))
+                {
+                    geometry_missing = true;
+                    break;
+                }
             }
-            else if (gbuffer_pass)
+            std::vector<gltf_model::StaticPrimitiveExport> exported;
+            if (geometry_missing)
             {
-                // Unity/Unrealと同じ優先順位: GLB内蔵Materialを既定にし、
-                // RePlay Materialが明示指定された場合だけ外部Materialで上書きする。
-                // 仮Materialのwhite BaseMap(t40)でGLBのBaseColor(t0)を隠さない。
-                const bool use_external_material = !source_item.material_asset.empty() &&
-                    item.material_binding.usable_shader;
-                if (use_external_material)
+                if (!gltf->ExportStaticPrimitives(exported)) continue;
+                for (std::size_t primitive_index = 0;
+                    primitive_index < exported.size(); ++primitive_index)
                 {
-                    material_gpu_binder.BindGBufferTextures(device.Get(), immediate_context.Get(),
-                        asset_database, item.material_binding);
+                    const std::string key = item.mesh_asset + "#gltf:" +
+                        std::to_string(primitive_index);
+                    if (!dx12_device_context.HasStaticMesh(key))
+                        make_mesh_source(key, exported[primitive_index].vertices.begin(),
+                            exported[primitive_index].vertices.end(),
+                            exported[primitive_index].indices);
                 }
-                else
+            }
+
+            for (std::size_t primitive_index = 0;
+                primitive_index < gltf->StaticPrimitiveCount(); ++primitive_index)
+            {
+                gltf_model::StaticPrimitiveInfo info;
+                if (!gltf->StaticPrimitiveInfoAt(primitive_index, info)) continue;
+                D3D12StaticDrawItem draw;
+                draw.mesh_key = item.mesh_asset + "#gltf:" +
+                    std::to_string(primitive_index);
+                draw.owner_id = source_item.owner.Value();
+                draw.rendering_layer = static_cast<std::uint32_t>((std::max)(0,
+                    (std::min)(31, item.rendering_layer)));
+                draw.motion_key = std::to_string(source_item.owner.Value()) + ":" + draw.mesh_key;
+                draw.world = multiply_world(info.node_transform, item.world);
+                const bool external = fill_external_material(source_item, item, draw);
+                if (!external)
                 {
-                    material_gpu_binder.UnbindTextures(immediate_context.Get());
+                    draw.base_color = multiply_color(info.embedded_base_color,
+                        source_item.tint);
+                    draw.base_color_texture_key = add_texture(
+                        info.embedded_base_color_texture);
+                    add_material_texture(draw, 41u, info.embedded_normal_texture,
+                        kNormalMapSemantic);
+                    add_material_texture(draw, 42u, info.embedded_orm_texture,
+                        kPackedOrmMapSemantic);
+                    if (!info.embedded_orm_texture.empty())
+                    {
+                        draw.metallic = 1.0f;
+                        draw.roughness = 1.0f;
+                        draw.ambient_occlusion = 1.0f;
+                    }
+                    draw.alpha_mode = alpha_mode(info.alpha_mode);
+                    draw.alpha_cutoff = info.alpha_cutoff;
+                    draw.double_sided = item.double_sided;
                 }
-                bind_gbuffer_material(item.lighting_model,
-                    false, item.pixelate_enabled, item.pixelate_size,
-                    item.pixelate_strength, item.metallic, item.roughness,
-                    item.ambient_occlusion, item.emissive_strength,
-                    item.material_base_color, item.emissive_color,
-                    use_external_material
-                        ? item.material_binding.TextureSemanticMask() : 0u,
-                    item.receive_shadow);
-                gltf->render(immediate_context.Get(), item.world, item.tint,
-                    static_mesh_gbuffer_ps.Get(), true, false);
-                material_gpu_binder.UnbindTextures(immediate_context.Get());
+                submission.draws.push_back(std::move(draw));
+            }
+            continue;
+        }
+
+        // FBX/cereal と Bind Pose の GLB は内部的には skinned_mesh で表現されるが、
+        // MeshRenderer の Submission（skinned=false）は有効な Static Geometry として扱う。
+        skinned_mesh* mesh_asset = resolve_object_mesh(item.mesh_asset);
+        if (mesh_asset == nullptr) continue;
+        std::filesystem::path model_source;
+        std::string model_reason;
+        (void)resolve_model_source(item.mesh_asset, model_source, model_reason);
+
+        for (std::size_t mesh_index = 0; mesh_index < mesh_asset->meshes.size(); ++mesh_index)
+        {
+            const skinned_mesh::mesh& mesh = mesh_asset->meshes[mesh_index];
+            if (mesh.vertices.empty() || mesh.indices.empty()) continue;
+            const std::string mesh_key = item.mesh_asset + "#mesh:" +
+                std::to_string(mesh_index);
+            if (!dx12_device_context.HasStaticMesh(mesh_key))
+                make_mesh_source(mesh_key, mesh.vertices.begin(), mesh.vertices.end(),
+                    mesh.indices);
+
+            const DirectX::XMFLOAT4X4 mesh_world =
+                multiply_world(mesh.default_global_transform, item.world);
+            const auto append_draw = [&](std::uint32_t start, std::uint32_t count,
+                std::uint64_t material_id)
+            {
+                D3D12StaticDrawItem draw;
+                draw.mesh_key = mesh_key;
+                draw.owner_id = source_item.owner.Value();
+                draw.rendering_layer = static_cast<std::uint32_t>((std::max)(0,
+                    (std::min)(31, item.rendering_layer)));
+                draw.motion_key = std::to_string(source_item.owner.Value()) + ":" + mesh_key +
+                    ":" + std::to_string(start);
+                draw.start_index = start;
+                draw.index_count = count;
+                draw.world = mesh_world;
+                const bool external = fill_external_material(source_item, item, draw);
+                if (!external)
+                {
+                    const auto material_it = mesh_asset->materials.find(material_id);
+                    if (material_it != mesh_asset->materials.end())
+                    {
+                        const skinned_mesh::material& material = material_it->second;
+                        draw.base_color = multiply_color(material.Kd, source_item.tint);
+                        std::filesystem::path texture_path(material.texture_filenames[0]);
+                        if (!texture_path.empty() && texture_path.is_relative() &&
+                            !model_source.empty())
+                            texture_path = model_source.parent_path() / texture_path;
+                        draw.base_color_texture_key = add_texture(texture_path);
+                        const auto embedded_texture_path =
+                            [&material, &model_source](std::size_t slot)
+                        {
+                            std::filesystem::path path(material.texture_filenames[slot]);
+                            if (!path.empty() && path.is_relative() &&
+                                !model_source.empty())
+                                path = model_source.parent_path() / path;
+                            return path;
+                        };
+                        add_material_texture(draw, 41u, embedded_texture_path(1),
+                            kNormalMapSemantic);
+                        add_material_texture(draw, 42u, embedded_texture_path(2),
+                            kPackedOrmMapSemantic);
+                        add_material_texture(draw, 44u, embedded_texture_path(3),
+                            kEmissiveMapSemantic);
+                        if (const skinned_mesh::gltf_material_info* gltf_material =
+                            mesh_asset->GltfMaterial(material_id))
+                        {
+                            draw.metallic = gltf_material->metallic;
+                            draw.roughness = gltf_material->roughness;
+                            draw.ambient_occlusion = gltf_material->occlusion;
+                            draw.emissive = gltf_material->emissive;
+                            draw.emissive_strength = gltf_material->emissive_strength;
+                            draw.alpha_mode = alpha_mode(gltf_material->alpha_mode);
+                            draw.alpha_cutoff = gltf_material->alpha_cutoff;
+                            draw.double_sided = gltf_material->double_sided ||
+                                item.double_sided;
+                        }
+                    }
+                    else
+                    {
+                        draw.base_color = source_item.tint;
+                        draw.double_sided = item.double_sided;
+                    }
+                }
+                submission.draws.push_back(std::move(draw));
+            };
+
+            if (mesh.subsets.empty())
+            {
+                append_draw(0, static_cast<std::uint32_t>(mesh.indices.size()), 0);
             }
             else
             {
-                gltf->render(immediate_context.Get(), item.world, item.legacy_tint,
-                    override_pixel_shader != nullptr ? override_pixel_shader :
-                        static_forward_shader(item.shading_model), false, false);
+                for (const skinned_mesh::mesh::subset& subset : mesh.subsets)
+                    append_draw(subset.start_index_location, subset.index_count,
+                        subset.material_unique_id);
             }
-
-            if (item.double_sided)
-                immediate_context->RSSetState(
-                    rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
-            continue;
         }
-
-        skinned_mesh* mesh = resolve_object_mesh(item.mesh_asset);
-        if (mesh == nullptr) continue;
-        const bool use_embedded_gltf_materials = mesh->IsGltf() &&
-            source_item.material_asset.empty();
-        const bool draw_double_sided = item.double_sided ||
-            (use_embedded_gltf_materials && mesh->HasDoubleSidedMaterials());
-
-        // Animator の current / previous clip と blend factor は RenderItem だけを
-        // 介して Renderer へ渡す。Motion Runtime とは混ぜず、既存の
-        // skinned_mesh::blend_animations() で姿勢を作る。
-        skinned_mesh::animation::keyframe blended_keyframe;
-        const skinned_mesh::animation::keyframe* keyframe =
-            resolve_render_item_keyframe(*mesh, item, blended_keyframe);
-
-        if (depth_only)
-        {
-            // 深度プリパス。ピクセルシェーダーを外し、モーションベクターも書かない。
-            //
-            // 【ここを通さないと何も見えない】
-            //   本描画は DepthFunc=EQUAL で走る。プリパスで深度を書いていない
-            //   メッシュは深度比較に必ず失敗し、画面から丸ごと消える。
-            //   GBuffer へ出すものは、例外なくここでも描くこと。
-            if (draw_double_sided)
-                immediate_context->RSSetState(
-                    rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
-            mesh->render(immediate_context.Get(), item.world, item.tint,
-                keyframe, nullptr, nullptr, nullptr, false, false,
-                use_embedded_gltf_materials);
-            if (draw_double_sided)
-                immediate_context->RSSetState(
-                    rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
-            continue;
-        }
-
-        // GBuffer パスでは Component が指定した描画方式を材質定数へ流す。
-        if (gbuffer_pass)
-        {
-            if (item.material_binding.usable_shader)
-            {
-                material_gpu_binder.BindGBufferTextures(device.Get(), immediate_context.Get(),
-                    asset_database, item.material_binding);
-            }
-            else
-            {
-                material_gpu_binder.UnbindTextures(immediate_context.Get());
-            }
-
-            bind_gbuffer_material(item.lighting_model,
-                false, item.pixelate_enabled, item.pixelate_size,
-                item.pixelate_strength, item.metallic, item.roughness,
-                item.ambient_occlusion, item.emissive_strength,
-                item.material_base_color,
-                item.emissive_color,
-                item.material_binding.usable_shader
-                    ? item.material_binding.TextureSemanticMask() : 0u,
-                item.receive_shadow);
-        }
-
-        // 最後の引数がモーションベクター出力。GBuffer パスだけで真にする
-        // （複数回渡すと前フレーム姿勢が壊れる）。
-        if (draw_double_sided)
-            immediate_context->RSSetState(
-                rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
-        mesh->render(immediate_context.Get(), item.world, item.tint,
-            keyframe, override_pixel_shader, nullptr, nullptr, true, gbuffer_pass,
-            use_embedded_gltf_materials);
-        if (gbuffer_pass)
-            material_gpu_binder.UnbindTextures(immediate_context.Get());
-        if (draw_double_sided)
-            immediate_context->RSSetState(
-                rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
-    }
-}
-
-
-namespace
-{
-    // ローカルAABBを外接球にして影ボリュームと判定する。届かない物体は描かない。
-    bool shadow_volume_intersects(const DirectX::XMFLOAT3& local_minimum,
-        const DirectX::XMFLOAT3& local_maximum,
-        const DirectX::XMFLOAT4X4& world,
-        const DirectX::XMFLOAT3& volume_center, float volume_radius,
-        float extrusion)
-    {
-        // 影ボリュームがまだ作られていないフレームは捨てない（安全側）。
-        if (!(volume_radius > 0.0f)) return true;
-        if (local_minimum.x > local_maximum.x) return true; // 未設定のAABB
-
-        const DirectX::XMMATRIX matrix = DirectX::XMLoadFloat4x4(&world);
-        DirectX::XMFLOAT3 minimum{ FLT_MAX, FLT_MAX, FLT_MAX };
-        DirectX::XMFLOAT3 maximum{ -FLT_MAX, -FLT_MAX, -FLT_MAX };
-        for (int corner = 0; corner < 8; ++corner)
-        {
-            const DirectX::XMVECTOR local = DirectX::XMVectorSet(
-                (corner & 1) ? local_maximum.x : local_minimum.x,
-                (corner & 2) ? local_maximum.y : local_minimum.y,
-                (corner & 4) ? local_maximum.z : local_minimum.z, 1.0f);
-            DirectX::XMFLOAT3 transformed{};
-            DirectX::XMStoreFloat3(&transformed,
-                DirectX::XMVector3TransformCoord(local, matrix));
-            minimum.x = (std::min)(minimum.x, transformed.x);
-            minimum.y = (std::min)(minimum.y, transformed.y);
-            minimum.z = (std::min)(minimum.z, transformed.z);
-            maximum.x = (std::max)(maximum.x, transformed.x);
-            maximum.y = (std::max)(maximum.y, transformed.y);
-            maximum.z = (std::max)(maximum.z, transformed.z);
-        }
-
-        const DirectX::XMFLOAT3 center{
-            (minimum.x + maximum.x) * 0.5f,
-            (minimum.y + maximum.y) * 0.5f,
-            (minimum.z + maximum.z) * 0.5f };
-        const DirectX::XMFLOAT3 extent{
-            (maximum.x - minimum.x) * 0.5f,
-            (maximum.y - minimum.y) * 0.5f,
-            (maximum.z - minimum.z) * 0.5f };
-        const float object_radius = std::sqrt(
-            extent.x * extent.x + extent.y * extent.y + extent.z * extent.z);
-
-        const float dx = center.x - volume_center.x;
-        const float dy = center.y - volume_center.y;
-        const float dz = center.z - volume_center.z;
-        const float distance_squared = dx * dx + dy * dy + dz * dz;
-        const float reach = volume_radius + object_radius +
-            (std::max)(extrusion, 0.0f);
-        return distance_squared <= reach * reach;
-    }
-}
-
-
-framework::shadow_material_state framework::resolve_shadow_material_state(
-    const ReplayEngine::Rendering::RenderItem& source)
-{
-    using ReplayEngine::Rendering::MaterialAlphaMode;
-    shadow_material_state state{};
-
-    const ReplayEngine::Rendering::MaterialAsset* material =
-        resolve_object_material(source.material_asset);
-
-    state.double_sided = source.double_sided ||
-        (material != nullptr && material->double_sided) ||
-        (source.material_override && source.override_material_double_sided);
-
-    if (material != nullptr && material->alpha_mode != MaterialAlphaMode::Opaque)
-    {
-        // Material Asset がアルファ抜きを宣言している。BaseMap は t40 側。
-        state.alpha_mode = 1;
-        state.alpha_cutoff = material->alpha_mode == MaterialAlphaMode::Mask
-            ? material->alpha_cutoff : 0.01f;
-        state.uses_replay_base_map = !material->base_color_texture.empty();
-        return state;
     }
 
-    // FBX/cereal のように内蔵材質が抜きを宣言できない形式のための明示指定。BaseMap は t0。
-    if (source.shadow_alpha_clip)
-    {
-        state.alpha_mode = 1;
-        state.alpha_cutoff = (std::max)(0.0f, (std::min)(1.0f, source.shadow_alpha_cutoff));
-        state.uses_replay_base_map = false;
-    }
-    return state;
-}
-
-void framework::bind_shadow_alpha_constants(const shadow_material_state& state)
-{
-    if (shadow_alpha_cb == nullptr) return;
-    shadow_alpha_constants constants{};
-    constants.params = {
-        static_cast<float>(state.alpha_mode),
-        state.alpha_cutoff,
-        state.uses_replay_base_map ? 1.0f : 0.0f,
-        0.0f };
-    immediate_context->UpdateSubresource(shadow_alpha_cb.Get(), 0, nullptr, &constants, 0, 0);
-    immediate_context->PSSetConstantBuffers(7, 1, shadow_alpha_cb.GetAddressOf());
-}
-
-void framework::set_shadow_cull_state(bool double_sided, const DirectX::XMFLOAT4X4& world)
-{
-    if (double_sided)
-    {
-        immediate_context->RSSetState(
-            rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
-        return;
-    }
-
-    // 3x3 の行列式が負なら鏡像。FBX 座標変換のように反転が入ると巻き順も
-    // 裏返るため、そのまま裏面カリングすると影の深度が反対側の面になる。
-    const float determinant =
-        world._11 * (world._22 * world._33 - world._23 * world._32) -
-        world._12 * (world._21 * world._33 - world._23 * world._31) +
-        world._13 * (world._21 * world._32 - world._22 * world._31);
-    immediate_context->RSSetState(determinant < 0.0f
-        ? rasterizer_states[(size_t)RASTER_STATE::CULL_FRONT].Get()
-        : rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
-}
-
-
-// ライト視点の影深度パスへ Scene の全キャスターを提出する。Directional / Point / Spot 共通。
-void framework::draw_shadow_caster_meshes(
-    ID3D11VertexShader* static_caster_vs, ID3D11InputLayout* static_caster_il,
-    ID3D11VertexShader* skinned_caster_vs, ID3D11InputLayout* skinned_caster_il,
-    const DirectX::XMFLOAT3& volume_center, float volume_radius,
-    float volume_extrusion)
-{
-    // 影マップは深度テストと書き込みの両方が要るのでここで明示する。
-    immediate_context->OMSetDepthStencilState(
-        depth_stencil_states[(size_t)DEPTH_STATE::ZT_ON_ZW_ON].Get(), 0);
-    ReplayEngine::Rendering::Stats().CountStateSet(
-        ReplayEngine::Rendering::RenderStats::StateKind::DepthStencil, false);
-    immediate_context->RSSetState(rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
-    ReplayEngine::Rendering::Stats().CountStateSet(
-        ReplayEngine::Rendering::RenderStats::StateKind::Rasterizer, false);
-
-    // b8 は他のパスにも使われるので、影パスごとに必ず 1 回は積み直す。
-    shadow_coverage_cb_is_empty = false;
-
-    // gltf_model の視錐台カリングはカメラ基準なので影パスの間だけ止める。
-    auto& culling = ReplayEngine::Rendering::Culling();
-    const bool culling_was_enabled = culling.enabled;
-    culling.enabled = false;
-
-    const float extrusion = volume_extrusion;
-
-    for (const ReplayEngine::Rendering::RenderItem& item : object_render_items.Items())
-    {
-        if (!item.cast_shadow)
-        {
-            ++shadow_stats.skipped_cast_shadow;
-            continue;
-        }
-        if (item.mesh_asset.empty()) continue;
-
-        const shadow_material_state material_state = resolve_shadow_material_state(item);
-
-        // Engine 内蔵 Primitive。Cube / Sphere などもここを通って影を落とす。
-        if (item.mesh_asset.rfind("builtin:", 0) == 0)
-        {
-            if (static_caster_vs == nullptr) continue;
-            static_mesh* primitive = resolve_builtin_primitive_mesh(item.mesh_asset);
-            if (primitive == nullptr) continue;
-            if (primitive->bounding_box[0].x > primitive->bounding_box[1].x)
-                ++shadow_stats.missing_bounds_primitive;
-            if (!shadow_volume_intersects(primitive->bounding_box[0],
-                primitive->bounding_box[1], item.world,
-                volume_center, volume_radius, extrusion))
-            {
-                ++shadow_stats.culled_casters;
-                continue;
-            }
-
-            const bool coverage = bind_shadow_coverage_constants(item.owner);
-            const bool alpha_clip = material_state.alpha_mode != 0;
-            const bool use_shadow_ps = (alpha_clip || coverage) &&
-                shadow_caster_alpha_ps != nullptr;
-            if (use_shadow_ps)
-            {
-                bind_shadow_alpha_constants(material_state);
-                if (alpha_clip && material_state.uses_replay_base_map)
-                {
-                    // material_binding は材質解決後の RenderItem にしか入らない。
-                    // アルファ抜きのときだけ解決する。
-                    const ReplayEngine::Rendering::RenderItem resolved =
-                        resolve_render_item_material(item);
-                    material_gpu_binder.BindGBufferTextures(device.Get(),
-                        immediate_context.Get(), asset_database, resolved.material_binding);
-                }
-            }
-            set_shadow_cull_state(material_state.double_sided, item.world);
-            primitive->render(immediate_context.Get(), item.world, item.tint,
-                use_shadow_ps ? shadow_caster_alpha_ps.Get() : nullptr,
-                static_caster_vs, static_caster_il, use_shadow_ps, false);
-            if (use_shadow_ps && alpha_clip && material_state.uses_replay_base_map)
-                material_gpu_binder.UnbindTextures(immediate_context.Get());
-            immediate_context->RSSetState(
-                rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
-
-            ++shadow_stats.primitive_casters;
-            ++shadow_stats.shadow_draw_calls;
-            continue;
-        }
-
-        // Skin も Animation も持たない glTF は静的キャスターとして描く。
-        gltf_model* gltf = resolve_object_gltf(item.mesh_asset);
-        if (gltf != nullptr && !gltf->HasSkins() && !gltf->HasAnimations())
-        {
-            if (static_caster_vs == nullptr) continue;
-
-            DirectX::XMFLOAT3 local_minimum{}, local_maximum{};
-            if (!gltf->ComputeBounds(local_minimum, local_maximum))
-            {
-                ++shadow_stats.missing_bounds_static;
-            }
-            else if (!shadow_volume_intersects(local_minimum, local_maximum, item.world,
-                volume_center, volume_radius, extrusion))
-            {
-                ++shadow_stats.culled_casters;
-                continue;
-            }
-
-            const bool coverage = bind_shadow_coverage_constants(item.owner);
-            // Material Asset の指定が無ければ glTF 内蔵の alphaMode をそのまま使う。
-            const bool alpha_clip = shadow_caster_alpha_ps != nullptr &&
-                (material_state.alpha_mode != 0 || gltf->HasAlphaMaskMaterials());
-            const bool use_shadow_ps = (alpha_clip || coverage) &&
-                shadow_caster_alpha_ps != nullptr;
-            if (alpha_clip && material_state.uses_replay_base_map)
-            {
-                const ReplayEngine::Rendering::RenderItem resolved =
-                    resolve_render_item_material(item);
-                material_gpu_binder.BindGBufferTextures(device.Get(),
-                    immediate_context.Get(), asset_database, resolved.material_binding);
-            }
-            set_shadow_cull_state(material_state.double_sided, item.world);
-            gltf->render_shadow(immediate_context.Get(), item.world,
-                static_caster_vs, static_caster_il,
-                use_shadow_ps ? shadow_caster_alpha_ps.Get() : nullptr,
-                use_shadow_ps ? shadow_alpha_cb.Get() : nullptr,
-                material_state.alpha_mode != 0 ? material_state.alpha_mode : -1,
-                material_state.alpha_cutoff,
-                material_state.uses_replay_base_map,
-                coverage);
-            if (alpha_clip && material_state.uses_replay_base_map)
-                material_gpu_binder.UnbindTextures(immediate_context.Get());
-            immediate_context->RSSetState(
-                rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
-
-            ++shadow_stats.static_casters;
-            ++shadow_stats.shadow_draw_calls;
-            continue;
-        }
-
-        // Skinned Mesh。bounding_box が当てにならないので影ボリュームのカリングは掛けない。
-        skinned_mesh* mesh = resolve_object_mesh(item.mesh_asset);
-        if (mesh == nullptr) { ++shadow_stats.skinned_unresolved; continue; }
-        if (skinned_caster_vs == nullptr) continue;
-
-        skinned_mesh::animation::keyframe blended_keyframe;
-        const skinned_mesh::animation::keyframe* keyframe =
-            resolve_render_item_keyframe(*mesh, item, blended_keyframe);
-
-        const bool use_embedded_gltf_materials = mesh->IsGltf() &&
-            item.material_asset.empty();
-        const bool draw_double_sided = material_state.double_sided ||
-            (use_embedded_gltf_materials && mesh->HasDoubleSidedMaterials());
-
-        // 内蔵材質側の alpha_mode は subset ごとに b0 へ載るので、PS 内で見る。
-        shadow_material_state skinned_alpha = material_state;
-        if (skinned_alpha.alpha_mode == 0 && use_embedded_gltf_materials &&
-            mesh->HasAlphaMaskMaterials())
-        {
-            skinned_alpha.alpha_mode = 2;
-            skinned_alpha.uses_replay_base_map = false;
-        }
-        const bool coverage = bind_shadow_coverage_constants(item.owner);
-        const bool alpha_clip = skinned_alpha.alpha_mode != 0;
-        const bool use_shadow_ps = (alpha_clip || coverage) &&
-            shadow_caster_alpha_skinned_ps != nullptr;
-        if (use_shadow_ps)
-        {
-            bind_shadow_alpha_constants(skinned_alpha);
-            if (alpha_clip && skinned_alpha.uses_replay_base_map)
-            {
-                const ReplayEngine::Rendering::RenderItem resolved =
-                    resolve_render_item_material(item);
-                material_gpu_binder.BindGBufferTextures(device.Get(),
-                    immediate_context.Get(), asset_database, resolved.material_binding);
-            }
-        }
-
-        set_shadow_cull_state(draw_double_sided, item.world);
-        // write_motion_vectors は必ず false。影パスで進めると TAA が尾を引く。
-        mesh->render(immediate_context.Get(), item.world, item.tint,
-            keyframe, use_shadow_ps ? shadow_caster_alpha_skinned_ps.Get() : nullptr,
-            skinned_caster_vs, skinned_caster_il,
-            use_shadow_ps, false, use_embedded_gltf_materials);
-        if (use_shadow_ps && alpha_clip && skinned_alpha.uses_replay_base_map)
-            material_gpu_binder.UnbindTextures(immediate_context.Get());
-        immediate_context->RSSetState(
-            rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
-
-        ++shadow_stats.skinned_casters;
-        ++shadow_stats.shadow_draw_calls;
-    }
-
-    // Landscape も Mesh と同じ影パスへ入れる。専用の影処理は作らない。
-    if (static_caster_vs != nullptr)
+    // Landscapeは既存LandscapeDataの頂点/Indexを正本として、そのままStatic Mesh提出へ変換する。
+    // D3D11専用のstatic_meshキャッシュをDX12から参照しないため、編集後のRevisionもキーへ含める。
     {
         ReplayEngine::Scene::Scene& scene = active_object_scene();
         for (std::size_t object_index = 0; object_index < scene.GameObjectCount(); ++object_index)
         {
-            ReplayEngine::Core::GameObject* object = scene.GameObjectAt(object_index);
-            if (object == nullptr || object->PendingDestroy() ||
-                !object->ActiveInHierarchy()) continue;
+            const ReplayEngine::Core::GameObject* object = scene.GameObjectAt(object_index);
+            if (object == nullptr || object->PendingDestroy() || !object->ActiveInHierarchy()) continue;
+            const auto* landscape = object->GetComponent<ReplayEngine::Components::LandscapeComponent>();
+            const auto* renderer = object->GetComponent<ReplayEngine::Components::LandscapeRendererComponent>();
+            if (landscape == nullptr || renderer == nullptr || !renderer->visible ||
+                !renderer->ActiveInHierarchy() || !landscape->Data().Valid()) continue;
 
-            auto* renderer =
-                object->GetComponent<ReplayEngine::Components::LandscapeRendererComponent>();
-            if (renderer == nullptr || !renderer->visible ||
-                !renderer->ActiveInHierarchy()) continue;
-            if (!renderer->cast_shadow)
+            const auto& data = landscape->Data();
+            const std::string mesh_key = "landscape:" +
+                std::to_string(object->ID().Value()) + ":" + std::to_string(data.Revision());
+            if (!dx12_device_context.HasStaticMesh(mesh_key))
             {
-                ++shadow_stats.skipped_cast_shadow;
-                continue;
+                D3D12StaticMeshSource source;
+                source.key = mesh_key;
+                source.vertices.reserve(data.Vertices().size());
+                for (const auto& input : data.Vertices())
+                {
+                    D3D12StaticVertex vertex;
+                    vertex.position = input.position;
+                    vertex.normal = input.normal;
+                    vertex.texcoord = input.uv;
+                    source.vertices.push_back(vertex);
+                }
+                source.indices = data.Indices();
+                submission.mesh_sources.push_back(std::move(source));
             }
 
-            static_mesh* landscape_mesh = resolve_landscape_gpu_mesh(*object);
-            if (landscape_mesh == nullptr) continue;
-
-            const DirectX::XMFLOAT4X4 world = object->GetTransform().WorldMatrixFloat4x4();
-            if (landscape_mesh->bounding_box[0].x > landscape_mesh->bounding_box[1].x)
-                ++shadow_stats.missing_bounds_landscape;
-            if (!shadow_volume_intersects(landscape_mesh->bounding_box[0],
-                landscape_mesh->bounding_box[1], world,
-                volume_center, volume_radius, extrusion))
-            {
-                ++shadow_stats.culled_casters;
-                continue;
-            }
-
-            set_shadow_cull_state(renderer->double_sided, world);
-            landscape_mesh->render(immediate_context.Get(), world, renderer->tint,
-                nullptr, static_caster_vs, static_caster_il, false, false);
-            immediate_context->RSSetState(
-                rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
-
-            ++shadow_stats.landscape_casters;
-            ++shadow_stats.shadow_draw_calls;
+            D3D12StaticDrawItem draw;
+            draw.mesh_key = mesh_key;
+            draw.owner_id = object->ID().Value();
+            draw.rendering_layer = 0;
+            draw.motion_key = std::to_string(object->ID().Value()) + ":" + mesh_key;
+            draw.world = object->GetTransform().WorldMatrixFloat4x4();
+            draw.base_color = renderer->tint;
+            draw.double_sided = renderer->double_sided;
+            draw.cast_shadow = renderer->cast_shadow;
+            draw.receive_shadow = renderer->receive_shadow;
+            draw.lighting_model = static_cast<std::int32_t>(ShaderLightingModel::Pbr);
+            submission.draws.push_back(std::move(draw));
         }
     }
 
-    // 影パスで貼った Pixel Shader / 材質定数を次のパスへ持ち越さない。
-    immediate_context->PSSetShader(nullptr, nullptr, 0);
-    ID3D11ShaderResourceView* null_coverage_mask = nullptr;
-    immediate_context->PSSetShaderResources(46, 1, &null_coverage_mask);
-    culling.enabled = culling_was_enabled;
-}
+    submission.directional_light.enabled = directional_light_present;
+    submission.directional_light.direction = { light_direction.x, light_direction.y, light_direction.z };
+    submission.directional_light.color = { pbr.light.directional_color.x,
+        pbr.light.directional_color.y, pbr.light.directional_color.z };
+    submission.directional_light.intensity = pbr.light.directional_color.w;
+    submission.directional_light.cast_shadows = directional_shadow_enabled;
+    submission.directional_light.shadow_strength = pbr.light.shadow_params.x;
 
-
-static_mesh* framework::resolve_landscape_gpu_mesh(
-    const ReplayEngine::Core::GameObject& object)
-{
-    const auto* landscape =
-        object.GetComponent<ReplayEngine::Components::LandscapeComponent>();
-    if (landscape == nullptr) return nullptr;
-
-    const auto& data = landscape->Data();
-    if (!data.Valid()) return nullptr;
-
-    const std::uint64_t cache_key = object.ID().Value();
-    landscape_gpu_cache_entry& cache = landscape_gpu_mesh_cache[cache_key];
-    if (cache.revision != data.Revision() || cache.mesh == nullptr)
+    const int point_count = (std::max)(0, (std::min)(lights_manager::POINT_LIGHT_MAX,
+        lights.data.light_counts.x));
+    submission.point_lights.reserve(static_cast<std::size_t>(point_count));
+    for (int index = 0; index < point_count; ++index)
     {
-        std::vector<static_mesh::vertex> vertices;
-        vertices.reserve(data.VertexCount());
-        for (const ReplayEngine::Landscape::LandscapeVertex& source : data.Vertices())
-        {
-            static_mesh::vertex vertex{};
-            vertex.position = source.position;
-            vertex.normal = source.normal;
-            vertex.texcoord = source.uv;
-            vertices.push_back(vertex);
-        }
-
-        bool gpu_ready = false;
-        if (cache.mesh == nullptr)
-        {
-            cache.mesh = std::make_unique<static_mesh>(device.Get(), vertices, data.Indices());
-            gpu_ready = cache.mesh != nullptr && cache.mesh->is_loaded();
-        }
-        else
-        {
-            // Sculpt 中は geometry だけ変わるので vertex/index buffer だけ更新する。
-            gpu_ready = cache.mesh->update_procedural_geometry(
-                device.Get(), vertices, data.Indices());
-        }
-
-        if (gpu_ready) cache.revision = data.Revision();
+        const lights_manager::point_light& source = lights.data.point_lights[index];
+        D3D12PointLightSubmission light;
+        light.position = { source.position.x, source.position.y, source.position.z };
+        light.range = source.position.w;
+        light.color = { source.color.x, source.color.y, source.color.z };
+        light.intensity = source.color.w;
+        light.cast_shadows = source.shadow.x >= 0.0f;
+        light.shadow_strength = source.shadow.y;
+        light.shadow_slice = static_cast<std::int32_t>(source.shadow.x);
+        submission.point_lights.push_back(light);
     }
-    if (cache.mesh == nullptr || !cache.mesh->is_loaded()) return nullptr;
-    return cache.mesh.get();
-}
 
-
-void framework::draw_landscape_scene_meshes(bool gbuffer_pass, bool depth_only)
-{
-    ReplayEngine::Scene::Scene& scene = active_object_scene();
-    for (std::size_t object_index = 0; object_index < scene.GameObjectCount(); ++object_index)
+    const int spot_count = (std::max)(0, (std::min)(lights_manager::SPOT_LIGHT_MAX,
+        lights.data.light_counts.y));
+    submission.spot_lights.reserve(static_cast<std::size_t>(spot_count));
+    for (int index = 0; index < spot_count; ++index)
     {
-        ReplayEngine::Core::GameObject* object = scene.GameObjectAt(object_index);
-        if (object == nullptr || object->PendingDestroy() || !object->ActiveInHierarchy()) continue;
-
-        auto* renderer = object->GetComponent<ReplayEngine::Components::LandscapeRendererComponent>();
-        if (renderer == nullptr || !renderer->visible || !renderer->ActiveInHierarchy()) continue;
-
-        static_mesh* landscape_mesh = resolve_landscape_gpu_mesh(*object);
-        if (landscape_mesh == nullptr) continue;
-
-        if (renderer->double_sided)
-            immediate_context->RSSetState(
-                rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get());
-
-        const DirectX::XMFLOAT4X4 world = object->GetTransform().WorldMatrixFloat4x4();
-        if (depth_only)
-        {
-            landscape_mesh->render(immediate_context.Get(), world, renderer->tint,
-                nullptr, nullptr, nullptr, false, false);
-        }
-        else if (gbuffer_pass)
-        {
-            // Landscape はまず標準PBR surfaceとしてGBufferへ出す。
-            // Material Component連携はこの任意Mesh基盤の上へ後から追加できる。
-            bind_gbuffer_material(
-                ReplayEngine::Rendering::ShaderLightingModel::Pbr,
-                false, false, 1.0f, 0.0f,
-                0.0f, 0.75f, 1.0f, 0.0f,
-                renderer->tint, { 0.0f, 0.0f, 0.0f }, 0u,
-                renderer->receive_shadow);
-            landscape_mesh->render(immediate_context.Get(), world, renderer->tint,
-                static_mesh_gbuffer_ps.Get(), nullptr, nullptr, true, true);
-        }
-        else
-        {
-            landscape_mesh->render(immediate_context.Get(), world, renderer->tint,
-                static_forward_shader(SHADING_MODEL_PBR));
-        }
-
-        if (renderer->double_sided)
-            immediate_context->RSSetState(
-                rasterizer_states[(size_t)RASTER_STATE::SOLID].Get());
+        const lights_manager::spot_light& source = lights.data.spot_lights[index];
+        D3D12SpotLightSubmission light;
+        light.position = { source.position.x, source.position.y, source.position.z };
+        light.range = source.position.w;
+        light.direction = { source.direction.x, source.direction.y, source.direction.z };
+        light.inner_cos = source.direction.w;
+        light.color = { source.color.x, source.color.y, source.color.z };
+        light.outer_cos = source.color.w;
+        light.intensity = source.params.x;
+        light.cast_shadows = source.params.y >= 0.0f;
+        light.shadow_strength = source.params.z;
+        light.shadow_slice = static_cast<std::int32_t>(source.params.y);
+        submission.spot_lights.push_back(light);
     }
+
+    // ShadowのProjection/AllocationにおけるCPU正本は既存CSM/LocalShadowAtlas。
+    // DX12側で別のCascade分割やPoint Face選択を作らず、確定済み値だけを提出する。
+    submission.directional_shadow.enabled =
+        csm.constants.params.w > 0.5f && submission.directional_light.cast_shadows;
+    submission.directional_shadow.resolution = csm_renderer::SHADOW_MAP_SIZE;
+    for (std::uint32_t cascade = 0;
+        cascade < D3D12DirectionalShadowSubmission::CascadeCount; ++cascade)
+        submission.directional_shadow.view_projection[cascade] =
+            csm.constants.view_projection[cascade];
+    submission.directional_shadow.split_distances = csm.constants.split_distances;
+    submission.directional_shadow.params = csm.constants.params;
+    submission.directional_shadow.params2 = csm.constants.params2;
+    submission.directional_shadow.params3 = csm.constants.params3;
+    submission.directional_shadow.texel_world = csm.constants.texel_world;
+
+    submission.local_shadows.enabled = enable_dynamic_shadows && local_shadows.enabled;
+    submission.local_shadows.resolution = local_shadows.resolution_setting;
+    for (std::uint32_t slice = 0;
+        slice < D3D12LocalShadowSubmission::SliceCount; ++slice)
+    {
+        ReplayEngine::Rendering::LocalShadowAtlas::Slice source{};
+        if (!local_shadows.TryGetSlice(slice, source)) continue;
+        submission.local_shadows.slices[slice].view_projection = source.view_projection;
+        submission.local_shadows.slices[slice].params = source.params;
+        submission.local_shadows.used_slice_mask |= (1u << slice);
+    }
+    return true;
 }

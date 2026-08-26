@@ -1,7 +1,5 @@
-#pragma once
+﻿#pragma once
 
-#include <d3d11.h>
-#include <dxgi.h>
 
 #include <cstdint>
 #include <filesystem>
@@ -79,13 +77,7 @@ namespace ReplayEngine::Rendering::Capture
     public:
         // バックバッファを CPU 側へ吸い上げる。
         //
-        // Present の直前に呼ぶこと。
-        // Present のあとはバックバッファの中身が保証されない
-        // （DISCARD なので実装依存で消える）。
-        static bool CaptureBackBuffer(ID3D11Device* device,
-            ID3D11DeviceContext* context, IDXGISwapChain* swap_chain,
-            Image& out, std::string& error);
-
+        // 画面取得は D3D12DeviceContext の Readback 経路だけを使用する。
         static bool SavePng(const std::filesystem::path& path,
             const Image& image, std::string& error);
 

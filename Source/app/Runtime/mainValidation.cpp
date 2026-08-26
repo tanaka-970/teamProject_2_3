@@ -42,7 +42,6 @@
 #include "../../game/Behaviours/ValidationBehaviours.h"
 #include "../../game/game_input.h"
 #include "../../mesh/skinned_mesh.h"
-#include "../../core/texture.h"
 
 namespace ReplayEngine::Runtime::Detail
 {
@@ -122,7 +121,7 @@ namespace
             {
                 // 全件調査はCPU import・DDS cache生成を対象にする。GPU生成は通常ビルドと
                 // 実機smokeで別に確認し、58体分を一度にVRAMへ積まない。
-                skinned_mesh model(nullptr, file, false, 0.0f, false);
+                skinned_mesh model(file, false, 0.0f);
                 const bool ok = model.IsGltf() && !model.meshes.empty() && !model.materials.empty();
                 std::ostringstream row;
                 row << (ok ? "OK " : "NG ") << file.generic_string()
@@ -500,7 +499,7 @@ namespace ReplayEngine::Runtime::Detail
 
         // シェーダ基盤。フェーズ 1（実行時コンパイル）。
         //
-        // D3D デバイスを作らずに走る。D3DCompile はデバイス非依存なので、
+        // D3D デバイスを作らずに走る。DXC はデバイス非依存なので、
         // ヘッドレスで検証できる。終了コード帯は 900-949。
         if (command == "--validate-shader-compile")
         {
