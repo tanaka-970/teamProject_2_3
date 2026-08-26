@@ -489,6 +489,13 @@ bool skinned_mesh::HasDoubleSidedMaterials() const noexcept
     return false;
 }
 
+bool skinned_mesh::HasAlphaMaskMaterials() const noexcept
+{
+    for (const auto& entry : gltf_materials_)
+        if (entry.second.alpha_mode != 0) return true;
+    return false;
+}
+
 bool skinned_mesh::import_gltf(ID3D11Device*, const std::filesystem::path& filename,
     float requested_sampling_rate)
 {

@@ -93,6 +93,7 @@ namespace GameInput
 
         actions_["Jump"] = { VK_SPACE, 0, XINPUT_GAMEPAD_A };
         actions_["Dash"] = { VK_SHIFT, 0, XINPUT_GAMEPAD_LEFT_SHOULDER };
+        actions_["Menu"] = { 'P', 0, XINPUT_GAMEPAD_START };
         actions_["UISubmit"] = { VK_RETURN, VK_SPACE, XINPUT_GAMEPAD_A };
         actions_["UICancel"] = { VK_ESCAPE, 0, XINPUT_GAMEPAD_B };
         actions_["NavigateUp"] = { VK_UP, 0, XINPUT_GAMEPAD_DPAD_UP };
@@ -116,7 +117,7 @@ namespace GameInput
         axes_["MoveY"] = { 'S', VK_DOWN, 'W', VK_UP,
             GamepadAxis::LeftY, 0.18f };
 
-        for (const char* name : { "UISubmit", "UICancel", "NavigateUp",
+        for (const char* name : { "Menu", "UISubmit", "UICancel", "NavigateUp",
             "NavigateDown", "NavigateLeft", "NavigateRight" })
         {
             auto found = actions_.find(name);

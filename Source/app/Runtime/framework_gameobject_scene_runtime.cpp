@@ -326,6 +326,17 @@ void framework::sync_object_lights()
     const ReplayEngine::Scene::Scene& scene = active_object_scene();
     lights.data.light_counts = { 0, 0, 0, 0 };
     bool directional_found = false;
+    directional_light_present = false;
+    directional_light_is_preview = false;
+    directional_shadow_enabled = false;
+
+    // Point / Spot の影スライスは毎フレーム割り当て直す。
+    local_shadow_requests.clear();
+    local_shadows.BeginFrame();
+    // 影付きライトが現れたときだけ影マップを確保する。
+    const bool local_shadows_available = enable_dynamic_shadows &&
+        local_shadows.enabled &&
+        local_shadows.EnsureAtlas(device.Get(), local_shadows.resolution_setting);
 
     for (std::size_t index = 0; index < scene.GameObjectCount(); ++index)
     {
@@ -346,7 +357,18 @@ void framework::sync_object_lights()
                 pbr.light.directional_color = {
                     light->color.x, light->color.y, light->color.z,
                     (std::max)(0.0f, light->intensity) };
+                // 影を出すかはこの Light の設定が正本。全体設定は上限としてだけ効く。
+                directional_shadow_enabled = light->cast_shadows;
                 pbr.light.shadow_params.w = light->cast_shadows ? 1.0f : 0.0f;
+                // 影の品質値も Light Component が正本。全体設定は毎フレーム上書きされる。
+                csm.constants.params3.z =
+                    (std::max)(0.0f, (std::min)(1.0f, light->shadow_strength));
+                csm.constants.params.x =
+                    (std::max)(0.0f, (std::min)(0.5f, light->shadow_depth_bias));
+                csm.constants.params.y =
+                    (std::max)(0.0f, (std::min)(6.0f, light->shadow_normal_bias));
+                csm.shadow_distance = (std::max)(1.0f, light->shadow_distance);
+                directional_light_present = true;
                 directional_found = true;
             }
         }
@@ -363,6 +385,38 @@ void framework::sync_object_lights()
                 lights.data.point_lights[slot].color = {
                     light->color.x, light->color.y, light->color.z,
                     (std::max)(0.0f, light->intensity) };
+
+                // 1 灯で 6 面。枠が空いているライトだけ影付きになり、溢れた分は影なし。
+                int base_slice = -1;
+                if (local_shadows_available && light->cast_shadows)
+                    base_slice = local_shadows.AllocatePointSlices();
+                lights.data.point_lights[slot].shadow = {
+                    static_cast<float>(base_slice),
+                    (std::max)(0.0f, (std::min)(1.0f, light->shadow_strength)),
+                    0.0f, 0.0f };
+
+                if (base_slice >= 0)
+                {
+                    const float range = (std::max)(0.01f, light->range);
+                    const float near_plane = (std::max)(0.01f, light->shadow_near_plane);
+                    const float bias = (std::max)(0.0f,
+                        (std::min)(0.05f, light->shadow_depth_bias));
+                    for (int face = 0; face < 6; ++face)
+                    {
+                        local_shadows.SetSlice(base_slice + face,
+                            ReplayEngine::Rendering::LocalShadowAtlas::
+                                MakePointFaceViewProjection(position, face,
+                                    near_plane, range),
+                            near_plane, range, bias);
+                    }
+                    local_shadow_request request{};
+                    request.point = true;
+                    request.base_slice = base_slice;
+                    request.slice_count = 6;
+                    request.position = position;
+                    request.range = range;
+                    local_shadow_requests.push_back(request);
+                }
             }
         }
 
@@ -390,6 +444,34 @@ void framework::sync_object_lights()
                     light->color.x, light->color.y, light->color.z,
                     std::cos(XMConvertToRadians(outer)) };
                 lights.data.spot_lights[slot].params.x = (std::max)(0.0f, light->intensity);
+
+                // Spot は円錐 1 つぶんなので影マップも 1 枚で足りる。
+                int slice = -1;
+                if (local_shadows_available && light->cast_shadows)
+                    slice = local_shadows.AllocateSpotSlice();
+                lights.data.spot_lights[slot].params.y = static_cast<float>(slice);
+                lights.data.spot_lights[slot].params.z =
+                    (std::max)(0.0f, (std::min)(1.0f, light->shadow_strength));
+
+                if (slice >= 0)
+                {
+                    const float range = (std::max)(0.01f, light->range);
+                    const float near_plane = (std::max)(0.01f, light->shadow_near_plane);
+                    const float bias = (std::max)(0.0f,
+                        (std::min)(0.05f, light->shadow_depth_bias));
+                    local_shadows.SetSlice(slice,
+                        ReplayEngine::Rendering::LocalShadowAtlas::MakeSpotViewProjection(
+                            position, direction_value, outer, near_plane, range),
+                        near_plane, range, bias);
+
+                    local_shadow_request request{};
+                    request.point = false;
+                    request.base_slice = slice;
+                    request.slice_count = 1;
+                    request.position = position;
+                    request.range = range;
+                    local_shadow_requests.push_back(request);
+                }
             }
         }
     }
@@ -405,11 +487,15 @@ void framework::sync_object_lights()
         {
             light_direction = { 0.35f, -1.0f, 0.25f, 0.0f };
             pbr.light.directional_color = { 1.0f, 0.98f, 0.94f, 1.25f };
+            directional_light_is_preview = true;
+            // Light が無い Scene View 用の表示専用の光。Scene には保存されない。
+            directional_shadow_enabled = editor_preview_light_casts_shadows;
         }
         else
         {
             pbr.light.directional_color = { 0.0f, 0.0f, 0.0f, 0.0f };
         }
+        // 旧 PBR 単一シャドウマップはプレビュー光では使わない。
         pbr.light.shadow_params.w = 0.0f;
     }
 }

@@ -310,13 +310,26 @@ void framework::draw_editor_camera_preset_manager()
     ImGui::TextUnformatted(u8"プリセット名");
     ImGui::SameLine(210.0f);
     ImGui::SetNextItemWidth(320.0f);
-    if (ImGui::InputText("##CameraPresetName", name_buffer.data(), name_buffer.size(),
-        ImGuiInputTextFlags_EnterReturnsTrue))
+    ImGui::InputText("##CameraPresetName", name_buffer.data(), name_buffer.size());
+
+    // Enter だけでなく、フォーカスが外れたときにも確定させる。
+    //
+    // 以前は ImGuiInputTextFlags_EnterReturnsTrue だけだったため、
+    // 名前を打ってから他所をクリックすると、入力が黙って捨てられていた。
+    // 「入力しても反映されない」の正体がこれ。
+    // IsItemDeactivatedAfterEdit() は Enter での確定も拾うので、両方まかなえる。
+    if (ImGui::IsItemDeactivatedAfterEdit())
     {
         if (name_buffer[0] != '\0')
         {
             edit.name = name_buffer.data();
             changed = true;
+        }
+        else
+        {
+            // 空名は採用しない。欄を現在の名前へ戻して、
+            // 「空欄のまま反映されない」状態を残さない。
+            std::snprintf(name_buffer.data(), name_buffer.size(), "%s", edit.name.c_str());
         }
     }
 

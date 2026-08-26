@@ -6,6 +6,8 @@
 #include "../../RePlayEngine/Components/Camera/CameraTargetComponent.h"
 #include "../../RePlayEngine/Components/Camera/FollowTargetComponent.h"
 #include "../../RePlayEngine/Components/Motion/MotionPlayerComponent.h"
+#include "../../RePlayEngine/Components/Motion/CompositionPlayerComponent.h"
+#include "../../RePlayEngine/Motion/CompositionAsset.h"
 #include "../../RePlayEngine/Components/Core/PropertyLinkComponent.h"
 #include "../../RePlayEngine/Components/UI/UIEffectStackComponent.h"
 #include "../../RePlayEngine/Components/UI/UISpriteAnimatorComponent.h"
@@ -39,7 +41,9 @@
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <string>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -82,6 +86,36 @@ const ReplayEngine::Motion::MotionAsset* framework::resolve_motion_asset(
     }
 
     auto inserted = motion_asset_cache.emplace(asset_guid, std::move(asset));
+    return &inserted.first->second;
+}
+
+
+const ReplayEngine::Motion::CompositionAsset* framework::resolve_composition_asset(
+    const std::string& asset_guid)
+{
+    if (asset_guid.empty()) return nullptr;
+    auto cached = composition_asset_cache.find(asset_guid);
+    if (cached != composition_asset_cache.end()) return &cached->second;
+
+    const ReplayEngine::Assets::AssetRecord* record = asset_database.FindByGuid(asset_guid);
+    if (record == nullptr || record->kind != ReplayEngine::Assets::AssetKind::Composition)
+    {
+        if (composition_asset_load_failures.insert(asset_guid).second)
+            push_editor_log("Warning", "Composition Assetを解決できません: " + asset_guid);
+        return nullptr;
+    }
+
+    ReplayEngine::Motion::CompositionAsset asset;
+    std::string error;
+    const std::filesystem::path composition_path = content_path(record->source_path);
+    if (!ReplayEngine::Motion::CompositionAsset::LoadFromFile(
+        composition_path, asset, error))
+    {
+        if (composition_asset_load_failures.insert(asset_guid).second)
+            push_editor_log("Warning", error, composition_path);
+        return nullptr;
+    }
+    auto inserted = composition_asset_cache.emplace(asset_guid, std::move(asset));
     return &inserted.first->second;
 }
 
@@ -204,6 +238,7 @@ void framework::evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
     float scaled_delta_time, float unscaled_delta_time)
 {
     using ReplayEngine::Components::MotionPlayerComponent;
+    using ReplayEngine::Components::CompositionPlayerComponent;
     using ReplayEngine::Motion::MotionBindingResolver;
     using ReplayEngine::Motion::MotionEvaluator;
     using ReplayEngine::Motion::MotionTrack;
@@ -280,6 +315,212 @@ void framework::evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
     {
         if (last < first) return;
         for (long long i = first; i <= last; ++i) callback(i);
+    };
+
+    const auto crossed_once = [](double before, double after, double point)
+    {
+        if (after >= before) return point > before && point <= after;
+        return point < before && point >= after;
+    };
+
+    const auto publish_composition_marker =
+        [&](const ReplayEngine::Motion::CompositionMarker& marker,
+            const CompositionPlayerComponent& player)
+    {
+        if (object_runtime_context == nullptr || marker.name.empty()) return;
+        ReplayEngine::Runtime::EventRecord record;
+        record.type = ReplayEngine::Runtime::EngineEvents::CompositionMarker;
+        record.type_name = "CompositionMarker";
+        record.source = object_runtime_context->Resolver().MakeHandle(player.Owner());
+        record.frame_index = object_runtime_frame_index;
+        record.payload.Set("name",
+            ReplayEngine::Reflection::PropertyValue::MakeString(marker.name));
+        record.payload.Set("time",
+            ReplayEngine::Reflection::PropertyValue::MakeFloat(marker.time));
+        record.payload.Set("composition",
+            ReplayEngine::Reflection::PropertyValue::MakeString(player.composition.guid));
+        object_runtime_context->Events().Publish(std::move(record));
+    };
+
+    const auto publish_composition_markers =
+        [&](const ReplayEngine::Motion::CompositionAsset& asset,
+            const CompositionPlayerComponent& player, float before,
+            float delta_time)
+    {
+        if (object_runtime_context == nullptr || asset.markers.empty() ||
+            asset.duration <= 0.0f || delta_time == 0.0f || player.speed == 0.0f)
+        {
+            return;
+        }
+        const double travel = static_cast<double>(delta_time) *
+            static_cast<double>(player.speed);
+        const double from = static_cast<double>(before);
+        const double duration = static_cast<double>(asset.duration);
+        if (!player.loop)
+        {
+            const double to = (std::max)(0.0, (std::min)(duration, from + travel));
+            for (const auto& marker : asset.markers)
+                if (crossed_once(from, to, marker.time))
+                    publish_composition_marker(marker, player);
+            return;
+        }
+
+        const double to = from + travel;
+        for (const auto& marker : asset.markers)
+        {
+            const double mt = static_cast<double>(marker.time);
+            if (travel > 0.0)
+            {
+                const long long first = static_cast<long long>(std::floor((from - mt) / duration)) + 1;
+                const long long last = static_cast<long long>(std::floor((to - mt) / duration));
+                publish_repeated(first, last, [&](long long) { publish_composition_marker(marker, player); });
+            }
+            else if (travel < 0.0)
+            {
+                const long long first = static_cast<long long>(std::ceil((to - mt) / duration));
+                const long long last = static_cast<long long>(std::ceil((from - mt) / duration)) - 1;
+                publish_repeated(first, last, [&](long long) { publish_composition_marker(marker, player); });
+            }
+        }
+    };
+
+    const auto publish_composition_motion_event =
+        [&](const ReplayEngine::Motion::MotionEventTrack& track,
+            const ReplayEngine::Motion::MotionEvent& event,
+            const CompositionPlayerComponent& player)
+    {
+        if (object_runtime_context == nullptr || event.name.empty()) return;
+        ReplayEngine::Runtime::ObjectHandle target =
+            ReplayEngine::Runtime::ObjectHandle::None();
+        if (track.object.Valid())
+        {
+            target = object_runtime_context->Resolver().FindByObjectID(track.object);
+            if (target.IsEmpty()) return;
+        }
+        ReplayEngine::Runtime::EventRecord record;
+        record.type = ReplayEngine::Runtime::EngineEvents::MotionEvent;
+        record.type_name = "MotionEvent";
+        record.source = object_runtime_context->Resolver().MakeHandle(player.Owner());
+        record.target = target;
+        record.frame_index = object_runtime_frame_index;
+        record.payload.Set("name",
+            ReplayEngine::Reflection::PropertyValue::MakeString(event.name));
+        record.payload.Set("parameter",
+            ReplayEngine::Reflection::PropertyValue::MakeString(event.parameter));
+        record.payload.Set("time",
+            ReplayEngine::Reflection::PropertyValue::MakeFloat(event.time));
+        record.payload.Set("composition",
+            ReplayEngine::Reflection::PropertyValue::MakeString(player.composition.guid));
+        object_runtime_context->Events().Publish(std::move(record));
+    };
+
+    const auto publish_composition_motion_events =
+        [&](const ReplayEngine::Motion::CompositionAsset& root_composition,
+            const CompositionPlayerComponent& player, float before, float delta_time)
+    {
+        if (object_runtime_context == nullptr || root_composition.duration <= 0.0f ||
+            delta_time == 0.0f || player.speed == 0.0f) return;
+
+        const double duration = static_cast<double>(root_composition.duration);
+        const double travel = static_cast<double>(delta_time) *
+            static_cast<double>(player.speed);
+        const double from = static_cast<double>(before);
+        const double unwrapped_to = from + travel;
+        constexpr double epsilon = 1.0e-8;
+
+        const auto crossed_root_time = [&](double event_time, const auto& emit)
+        {
+            if (event_time < -epsilon || event_time > duration + epsilon) return;
+            if (!player.loop)
+            {
+                const double to = (std::max)(0.0,
+                    (std::min)(duration, unwrapped_to));
+                if (crossed_once(from, to, event_time)) emit();
+                return;
+            }
+            if (travel > 0.0)
+            {
+                const long long first = static_cast<long long>(std::floor(
+                    (from - event_time) / duration)) + 1;
+                const long long last = static_cast<long long>(std::floor(
+                    (unwrapped_to - event_time + epsilon) / duration));
+                publish_repeated(first, last, [&](long long) { emit(); });
+            }
+            else if (travel < 0.0)
+            {
+                const long long first = static_cast<long long>(std::ceil(
+                    (unwrapped_to - event_time - epsilon) / duration));
+                const long long last = static_cast<long long>(std::ceil(
+                    (from - event_time) / duration)) - 1;
+                publish_repeated(first, last, [&](long long) { emit(); });
+            }
+        };
+
+        std::unordered_set<std::string> recursion;
+        if (!player.composition.guid.empty()) recursion.insert(player.composition.guid);
+        std::function<void(const ReplayEngine::Motion::CompositionAsset&, double, double,
+            double, double, int)> visit;
+        visit = [&](const ReplayEngine::Motion::CompositionAsset& composition,
+            double root_offset, double root_scale, double valid_min, double valid_max, int depth)
+        {
+            if (depth > 16 || std::fabs(root_scale) < 1.0e-9) return;
+            for (const ReplayEngine::Motion::CompositionMotionLayer& layer : composition.layers)
+            {
+                if (!layer.enabled || std::fabs(layer.time_scale) < 1.0e-9f) continue;
+                const double layer_in = static_cast<double>(layer.in_time);
+                const double layer_out = layer.out_time >= 0.0f
+                    ? static_cast<double>(layer.out_time)
+                    : static_cast<double>(composition.duration);
+                const double root_a = root_offset + layer_in * root_scale;
+                const double root_b = root_offset + layer_out * root_scale;
+                const double layer_valid_min = (std::max)(valid_min,
+                    (std::min)(root_a, root_b));
+                const double layer_valid_max = (std::min)(valid_max,
+                    (std::max)(root_a, root_b));
+                if (layer_valid_max + epsilon < layer_valid_min) continue;
+
+                const double source_root_offset = root_offset +
+                    static_cast<double>(layer.start_offset) * root_scale;
+                const double source_root_scale = root_scale /
+                    static_cast<double>(layer.time_scale);
+                if (!layer.motion_guid.empty())
+                {
+                    const ReplayEngine::Motion::MotionAsset* motion =
+                        resolve_motion_asset(layer.motion_guid);
+                    if (motion == nullptr) continue;
+                    for (const ReplayEngine::Motion::MotionEventTrack& track : motion->event_tracks)
+                    {
+                        for (const ReplayEngine::Motion::MotionEvent& event : track.events)
+                        {
+                            if (event.name.empty() || event.time < 0.0f ||
+                                event.time > motion->duration) continue;
+                            const double root_time = source_root_offset +
+                                static_cast<double>(event.time) * source_root_scale;
+                            if (root_time + epsilon < layer_valid_min ||
+                                root_time - epsilon > layer_valid_max) continue;
+                            crossed_root_time(root_time, [&]()
+                            {
+                                publish_composition_motion_event(track, event, player);
+                            });
+                        }
+                    }
+                    continue;
+                }
+
+                if (!layer.composition_guid.empty())
+                {
+                    if (recursion.find(layer.composition_guid) != recursion.end()) continue;
+                    const ReplayEngine::Motion::CompositionAsset* nested =
+                        resolve_composition_asset(layer.composition_guid);
+                    if (nested == nullptr) continue;
+                    recursion.insert(layer.composition_guid);
+                    visit(*nested, source_root_offset, source_root_scale,
+                        layer_valid_min, layer_valid_max, depth + 1);
+                    recursion.erase(layer.composition_guid);
+                }
+            }
+        };
+        visit(root_composition, 0.0, 1.0, 0.0, duration, 0);
     };
 
     auto publish_motion_events =
@@ -387,6 +628,58 @@ void framework::evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
         }
     };
 
+    std::function<void(const ReplayEngine::Motion::CompositionAsset&,
+        float, ReplayEngine::Core::GameObject*, float, int,
+        std::unordered_set<std::string>&)> contribute_composition;
+    contribute_composition =
+        [&](const ReplayEngine::Motion::CompositionAsset& composition,
+            float composition_time, ReplayEngine::Core::GameObject* owner,
+            float parent_weight, int depth, std::unordered_set<std::string>& recursion)
+    {
+        if (owner == nullptr || depth > 16 || parent_weight <= 0.0f) return;
+        for (const ReplayEngine::Motion::CompositionMotionLayer& layer : composition.layers)
+        {
+            if (!layer.enabled || layer.weight <= 0.0f) continue;
+            if (composition_time < layer.in_time) continue;
+            if (layer.out_time >= 0.0f && composition_time > layer.out_time) continue;
+
+            const float source_time = (composition_time - layer.start_offset) * layer.time_scale;
+            const float layer_weight = parent_weight * layer.weight;
+            if (!layer.motion_guid.empty())
+            {
+                const ReplayEngine::Motion::MotionAsset* motion =
+                    resolve_motion_asset(layer.motion_guid);
+                if (motion == nullptr) continue;
+                const float t = (std::max)(0.0f,
+                    (std::min)(motion->duration, source_time));
+                for (const MotionTrack& track : motion->tracks)
+                {
+                    PropertyValue value;
+                    if (!MotionEvaluator::EvaluateTrack(track, t, value)) continue;
+                    const ReplayEngine::Motion::ResolvedMotionBinding binding =
+                        MotionBindingResolver::Resolve(scene, track.binding, owner);
+                    if (!binding.Valid()) continue;
+                    motion_mixer.Contribute(binding, value, layer_weight, track.blend_mode);
+                }
+                continue;
+            }
+
+            if (!layer.composition_guid.empty())
+            {
+                if (recursion.find(layer.composition_guid) != recursion.end()) continue;
+                const ReplayEngine::Motion::CompositionAsset* nested =
+                    resolve_composition_asset(layer.composition_guid);
+                if (nested == nullptr) continue;
+                recursion.insert(layer.composition_guid);
+                const float nested_time = (std::max)(0.0f,
+                    (std::min)(nested->duration, source_time));
+                contribute_composition(*nested, nested_time, owner, layer_weight,
+                    depth + 1, recursion);
+                recursion.erase(layer.composition_guid);
+            }
+        }
+    };
+
     motion_mixer.BeginFrame();
 
     for (std::size_t object_index = 0; object_index < scene.GameObjectCount();
@@ -405,11 +698,38 @@ void framework::evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
             ReplayEngine::Core::Component* component =
                 object->ComponentAt(component_index);
             if (component == nullptr || component->PendingDestroy() ||
-                !component->ActiveInHierarchy() ||
-                component->TypeID() != MotionPlayerComponent::StaticTypeID())
+                !component->ActiveInHierarchy())
             {
                 continue;
             }
+
+            if (component->TypeID() == CompositionPlayerComponent::StaticTypeID())
+            {
+                CompositionPlayerComponent& player =
+                    static_cast<CompositionPlayerComponent&>(*component);
+                const ReplayEngine::Motion::CompositionAsset* composition =
+                    resolve_composition_asset(player.composition.guid);
+                if (composition == nullptr || !player.ShouldContribute()) continue;
+
+                const float player_delta_time = player.ignore_time_scale
+                    ? unscaled_delta_time : scaled_delta_time;
+                const float previous_time = player.time;
+                if (player.state == CompositionPlayerComponent::Playing)
+                {
+                    publish_composition_markers(*composition, player,
+                        previous_time, player_delta_time);
+                    publish_composition_motion_events(*composition, player,
+                        previous_time, player_delta_time);
+                    player.Advance(composition->duration, player_delta_time);
+                }
+                std::unordered_set<std::string> recursion;
+                if (!player.composition.guid.empty()) recursion.insert(player.composition.guid);
+                contribute_composition(*composition, player.time, player.Owner(),
+                    (std::max)(0.0f, player.weight), 0, recursion);
+                continue;
+            }
+
+            if (component->TypeID() != MotionPlayerComponent::StaticTypeID()) continue;
 
             MotionPlayerComponent& player =
                 static_cast<MotionPlayerComponent&>(*component);

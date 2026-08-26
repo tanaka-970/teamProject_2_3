@@ -37,6 +37,8 @@ namespace ReplayEngine::Assets
             case AssetKind::Motion: return "motions";
             case AssetKind::Localization: return "localization";
             case AssetKind::EffectPreset: return "effects";
+            case AssetKind::SpriteAtlas: return "sprite_atlases";
+            case AssetKind::Composition: return "compositions";
             default: return "unknown";
             }
         }

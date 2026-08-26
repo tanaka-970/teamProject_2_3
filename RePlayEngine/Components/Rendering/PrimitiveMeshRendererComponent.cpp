@@ -78,6 +78,8 @@ namespace ReplayEngine::Components
         out.outline = outline;
         out.cast_shadow = cast_shadow;
         out.receive_shadow = receive_shadow;
+        out.shadow_alpha_clip = shadow_alpha_clip;
+        out.shadow_alpha_cutoff = shadow_alpha_cutoff;
         out.rendering_layer = (std::max)(0, (std::min)(31, rendering_layer));
         out.double_sided =
             primitive_type == static_cast<int>(Plane) ||

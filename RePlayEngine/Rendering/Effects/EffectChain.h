@@ -42,6 +42,19 @@ namespace ReplayEngine::Rendering::Effects
             // EffectChain は独自の Texture cache を持たない。
             std::function<ID3D11ShaderResourceView*(const std::string&)> resolve_texture;
 
+            // UI Track Matte のように「Assetではなく実行時RT」を t1 へ渡すための入口。
+            // EffectChain は所有しない。通常Effectでは nullptr のまま。
+            ID3D11ShaderResourceView* runtime_mask_texture = nullptr;
+            bool runtime_mask_luma = false;
+            bool runtime_mask_invert = false;
+
+            // MotionBlur / Echo は前回の合成結果を t1 として受け取れる。
+            // History の所有は Renderer 側。EffectChain は参照するだけ。
+            ID3D11ShaderResourceView* runtime_history_texture = nullptr;
+
+            // Stack 全体/個別 Effect の範囲制限。参照のみで所有しない。
+            const UI::UIEffectRegion* effect_region = nullptr;
+
             // 描画先切替と fullscreen quad は既存 renderer の経路をそのまま使う。
             // これにより抽出前後で頂点生成・通常 UI shader・state 設定を変えない。
             std::function<void(UI::UIRenderTarget&)> configure_target;
@@ -50,6 +63,13 @@ namespace ReplayEngine::Rendering::Effects
             std::function<void(float, float, ID3D11ShaderResourceView*,
                 ID3D11BlendState*, ID3D11PixelShader*, ID3D11Buffer*)>
                 draw_effect_fullscreen;
+            // source_effected=t0, source_original=t2, region_mask=t1。
+            // 範囲ブレンドは通常の Effect 出力と元画像を同時に読むため、
+            // 呼び出し側が3枚目の ping-pong RT へ描画する。
+            std::function<void(float, float, ID3D11ShaderResourceView*,
+                ID3D11ShaderResourceView*, ID3D11ShaderResourceView*,
+                ID3D11BlendState*, ID3D11PixelShader*, ID3D11Buffer*)>
+                draw_region_fullscreen;
         };
 
         bool Initialize(ID3D11Device* device);
@@ -61,7 +81,8 @@ namespace ReplayEngine::Rendering::Effects
             const std::vector<UI::UIEffect>& effects,
             UI::UIRenderTarget* current,
             UI::UIRenderTarget* first,
-            UI::UIRenderTarget* second);
+            UI::UIRenderTarget* second,
+            UI::UIRenderTarget* third);
 
         static DirectX::XMFLOAT4 ExpandBounds(const std::vector<UI::UIEffect>& effects,
             float target_width, float target_height) noexcept;
@@ -77,6 +98,10 @@ namespace ReplayEngine::Rendering::Effects
 
         struct EffectConstants
         {
+            static constexpr std::size_t MaxAdditionalEffectRegions = 7;
+            static constexpr std::size_t MaxEffectRegions =
+                MaxAdditionalEffectRegions + 1;
+            static constexpr std::size_t MaxEffectRegionVertices = 32;
             DirectX::XMFLOAT4 effect_color{ 1.0f, 1.0f, 1.0f, 1.0f };
             DirectX::XMFLOAT4 effect_params0{ 0.0f, 1.0f, 0.5f, 1.0f };
             DirectX::XMFLOAT4 effect_params1{ 0.0f, 0.0f, 0.0f, 0.0f };
@@ -90,6 +115,14 @@ namespace ReplayEngine::Rendering::Effects
             DirectX::XMFLOAT4 effect_params3{ 0.0f, 0.0f, 0.0f, 0.0f };
             DirectX::XMFLOAT4 brush_pattern_settings{ 0.0f, 0.0f, 0.0f, 0.0f };
             std::array<DirectX::XMFLOAT4, 4> brush_pattern_weights{};
+            DirectX::XMFLOAT4 effect_region_params{ 0.5f, 0.5f, 0.5f, 0.5f };
+            DirectX::XMFLOAT4 effect_region_settings{ 0.0f, 0.0f, 1.0f, 0.0f };
+            DirectX::XMFLOAT4 effect_region_extra_params[MaxAdditionalEffectRegions]{};
+            DirectX::XMFLOAT4 effect_region_extra_settings[MaxAdditionalEffectRegions]{};
+            DirectX::XMFLOAT4 effect_region_count{ 0.0f, 0.0f, 0.0f, 0.0f };
+            DirectX::XMFLOAT4 effect_region_path_counts[MaxEffectRegions]{};
+            DirectX::XMFLOAT4 effect_region_path_points[MaxEffectRegions][
+                MaxEffectRegionVertices]{};
         };
 
         struct BrushStrokeInstance
@@ -100,7 +133,7 @@ namespace ReplayEngine::Rendering::Effects
             float padding = 0.0f;
         };
 
-        static constexpr std::size_t effect_shader_count = 42;
+        static constexpr std::size_t effect_shader_count = 74;
 
         bool EnsureBrushStrokeInstanceCapacity(std::size_t instance_count);
         bool EnsureCustomEffectConstantBuffer(std::uint32_t byte_width);
@@ -112,6 +145,7 @@ namespace ReplayEngine::Rendering::Effects
         Microsoft::WRL::ComPtr<ID3D11Device> device_;
         Microsoft::WRL::ComPtr<ID3D11VertexShader> brush_stroke_vertex_shader_;
         Microsoft::WRL::ComPtr<ID3D11PixelShader> brush_stroke_pixel_shader_;
+        Microsoft::WRL::ComPtr<ID3D11PixelShader> effect_region_pixel_shader_;
         std::array<Microsoft::WRL::ComPtr<ID3D11PixelShader>,
             effect_shader_count> effect_pixel_shaders_;
         Microsoft::WRL::ComPtr<ID3D11Buffer> effect_constant_buffer_;

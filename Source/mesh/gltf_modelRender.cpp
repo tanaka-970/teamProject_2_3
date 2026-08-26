@@ -167,3 +167,96 @@ void gltf_model::render(ID3D11DeviceContext* context, const XMFLOAT4X4& world,
         motion_history_valid_ = true;
     }
 }
+
+bool gltf_model::HasAlphaMaskMaterials() const noexcept
+{
+    for (const Material& material : materials_)
+    {
+        if (material.alpha_mode != 0) return true;
+    }
+    return false;
+}
+
+void gltf_model::render_shadow(ID3D11DeviceContext* context, const XMFLOAT4X4& world,
+    ID3D11VertexShader* caster_vertex_shader, ID3D11InputLayout* caster_input_layout,
+    ID3D11PixelShader* alpha_clip_pixel_shader, ID3D11Buffer* alpha_constants,
+    int override_alpha_mode, float override_alpha_cutoff,
+    bool override_uses_replay_base_map, bool force_pixel_shader)
+{
+    if (!loaded_ || !context || !caster_vertex_shader) return;
+
+    ID3D11InputLayout* selected_layout =
+        caster_input_layout ? caster_input_layout : input_layout_.Get();
+    ReplayEngine::Rendering::Stats().TrackStateSet(
+        ReplayEngine::Rendering::RenderStats::StateKind::InputLayout, selected_layout);
+    context->IASetInputLayout(selected_layout);
+    context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    ReplayEngine::Rendering::Stats().CountStateSet(
+        ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
+    context->VSSetShader(caster_vertex_shader, nullptr, 0);
+
+    const bool can_alpha_clip =
+        alpha_clip_pixel_shader != nullptr && alpha_constants != nullptr;
+    ID3D11PixelShader* bound_pixel_shader = nullptr;
+    context->PSSetShader(nullptr, nullptr, 0);
+
+    for (const auto& primitive : primitives_)
+    {
+        ID3D11Buffer* vertex_buffer = primitive.vertex_buffer.Get();
+        ID3D11Buffer* index_buffer = primitive.index_buffer.Get();
+        if (vertex_buffer == nullptr || index_buffer == nullptr) continue;
+
+        const Material* material = primitive.material >= 0 &&
+            primitive.material < static_cast<int>(materials_.size())
+            ? &materials_[primitive.material] : &materials_[0];
+
+        // Material Asset の指定があればそれを、無ければ glTF 内蔵の alphaMode を使う。
+        const int alpha_mode = override_alpha_mode >= 0
+            ? override_alpha_mode : material->alpha_mode;
+        const float alpha_cutoff = override_alpha_mode >= 0
+            ? override_alpha_cutoff : material->alpha_cutoff;
+        const bool needs_alpha_clip = can_alpha_clip && alpha_mode != 0;
+        const bool needs_pixel_shader = needs_alpha_clip ||
+            (force_pixel_shader && alpha_clip_pixel_shader != nullptr);
+
+        ID3D11PixelShader* wanted = needs_pixel_shader ? alpha_clip_pixel_shader : nullptr;
+        if (wanted != bound_pixel_shader)
+        {
+            ReplayEngine::Rendering::Stats().CountStateSet(
+                ReplayEngine::Rendering::RenderStats::StateKind::Shader, false);
+            context->PSSetShader(wanted, nullptr, 0);
+            bound_pixel_shader = wanted;
+        }
+
+        // 抜かない primitive でも PS を貼るときは、抜き方 0 の定数で上書きする。
+        if (needs_pixel_shader && alpha_constants != nullptr)
+        {
+            const float constants[4] = { needs_alpha_clip ? 1.0f : 0.0f,
+                alpha_mode == 1 ? alpha_cutoff : 0.01f,
+                override_uses_replay_base_map ? 1.0f : 0.0f, 0.0f };
+            context->UpdateSubresource(alpha_constants, 0, nullptr, constants, 0, 0);
+            context->PSSetConstantBuffers(7, 1, &alpha_constants);
+            ID3D11ShaderResourceView* base_color[1]{
+                material->base_color_texture ? material->base_color_texture.Get()
+                                             : white_texture_.Get() };
+            context->PSSetShaderResources(0, 1, base_color);
+        }
+
+        // LOD は使わない。影だけ粗いメッシュになると輪郭が本体からずれる。
+        UINT stride = sizeof(Vertex), offset = 0;
+        context->IASetVertexBuffers(0, 1, &vertex_buffer, &stride, &offset);
+        context->IASetIndexBuffer(index_buffer, DXGI_FORMAT_R32_UINT, 0);
+
+        Constants constants{};
+        XMStoreFloat4x4(&constants.world,
+            XMLoadFloat4x4(&primitive.node_transform) * XMLoadFloat4x4(&world));
+        constants.material_color = { 1.0f, 1.0f, 1.0f, 1.0f };
+        context->UpdateSubresource(constant_buffer_.Get(), 0, nullptr, &constants, 0, 0);
+        context->VSSetConstantBuffers(0, 1, constant_buffer_.GetAddressOf());
+
+        // 影の描画は画面に見えるジオメトリの統計へ混ぜない。
+        context->DrawIndexed(primitive.index_count, 0, 0);
+    }
+
+    if (bound_pixel_shader != nullptr) context->PSSetShader(nullptr, nullptr, 0);
+}

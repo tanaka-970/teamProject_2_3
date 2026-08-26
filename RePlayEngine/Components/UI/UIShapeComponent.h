@@ -1,8 +1,11 @@
-#pragma once
+﻿#pragma once
 
 #include "../../Object/Component/Component.h"
+#include "../../Reflection/Property/PropertyDesc.h"
 
 #include <DirectXMath.h>
+
+#include <vector>
 
 namespace ReplayEngine::Components
 {
@@ -20,6 +23,7 @@ namespace ReplayEngine::Components
             BezierPath = 4,
             Superellipse = 5,
             PolarFormula = 6,
+            CustomBezierPath = 7,
         };
 
         enum FillMode : int
@@ -36,6 +40,11 @@ namespace ReplayEngine::Components
         };
 
         UIShapeComponent() = default;
+
+        const std::vector<Reflection::PropertyDesc>*
+            DynamicProperties() const noexcept override;
+        void OnPropertyChanged(const char* property_name) override;
+        void SetPathPointCount(int count);
 
         int shape = Rectangle;
         DirectX::XMFLOAT4 fill_color{ 1.0f, 1.0f, 1.0f, 1.0f };
@@ -67,5 +76,18 @@ namespace ReplayEngine::Components
         float dash_length = 0.0f;
         float dash_gap = 0.0f;
         float dash_offset = 0.0f;
+
+        // CustomBezierPath は正規化座標 0..1 の anchor / tangent を使う。
+        // 配列自体が Scene 保存を担当し、個々の point[n].* は Dynamic Property として
+        // Motion からアニメーションできる。
+        bool path_closed = true;
+        std::vector<DirectX::XMFLOAT2> path_points;
+        std::vector<DirectX::XMFLOAT2> path_in_handles;
+        std::vector<DirectX::XMFLOAT2> path_out_handles;
+
+    private:
+        void NormalizePathArrays();
+        void RebuildDynamicProperties() const;
+        mutable std::vector<Reflection::PropertyDesc> dynamic_properties_;
     };
 }

@@ -113,7 +113,13 @@ void framework::draw_collider_debug_overlay()
         draw_list->AddLine(start, end, line.color, 1.0f);
     }
 
-    // AI は Scene View の実際の矩形へ投影する。Picking/ハンドルも同じ矩形を使う。
+    // AI もクライアント矩形へ投影する。Scene View の矩形は切り抜きにだけ使う。
+    //
+    // 3D はクライアント領域全体へ描かれており、viewport_projection_matrix() も
+    // クライアントのアスペクトで作られている。ここで Scene View の矩形へ投影すると
+    // アスペクトが食い違い、画面端へ行くほど実際の絵とズレる。
+    // カメラを回すと線が動いて見えたのはこれが原因。
+    // Gizmo / Grid / Collider は前からクライアント矩形を使っている。
     const ImVec2 scene_origin{ scene_view_min_x, scene_view_min_y };
     const ImVec2 scene_size{
         (std::max)(1.0f, scene_view_max_x - scene_view_min_x),
@@ -129,8 +135,8 @@ void framework::draw_collider_debug_overlay()
         bool valid = true;
         for (std::size_t index = 0; index < polygon.points.size(); ++index)
         {
-            if (!ProjectToScreen(view_projection, polygon.points[index], scene_origin,
-                scene_size, projected[index]))
+            if (!ProjectToScreen(view_projection, polygon.points[index], main_origin,
+                main_size, projected[index]))
             {
                 valid = false;
                 break;
@@ -144,15 +150,15 @@ void framework::draw_collider_debug_overlay()
     {
         ImVec2 start{};
         ImVec2 end{};
-        if (!ProjectToScreen(view_projection, line.start, scene_origin, scene_size, start)) continue;
-        if (!ProjectToScreen(view_projection, line.end, scene_origin, scene_size, end)) continue;
+        if (!ProjectToScreen(view_projection, line.start, main_origin, main_size, start)) continue;
+        if (!ProjectToScreen(view_projection, line.end, main_origin, main_size, end)) continue;
         draw_list->AddLine(start, end, line.color, 1.5f);
     }
 
     for (const ReplayEngine::Editor::DebugWorldLabel& label : ai_frame.labels)
     {
         ImVec2 position{};
-        if (!ProjectToScreen(view_projection, label.position, scene_origin, scene_size, position))
+        if (!ProjectToScreen(view_projection, label.position, main_origin, main_size, position))
             continue;
         draw_list->AddText(position, label.color, label.text.c_str());
     }
@@ -176,14 +182,14 @@ void framework::draw_collider_debug_overlay()
                     center.x - (std::max)(0.05f, enemy->attack_range), center.y, center.z };
                 ImVec2 detection_screen{};
                 ImVec2 attack_screen{};
-                if (ProjectToScreen(view_projection, detection_world, scene_origin, scene_size,
+                if (ProjectToScreen(view_projection, detection_world, main_origin, main_size,
                     detection_screen))
                 {
                     draw_list->AddCircleFilled(detection_screen, 6.0f,
                         ReplayEngine::Editor::AINavigationDebugColors::detection);
                     draw_list->AddCircle(detection_screen, 8.0f, IM_COL32(255, 255, 255, 220));
                 }
-                if (ProjectToScreen(view_projection, attack_world, scene_origin, scene_size,
+                if (ProjectToScreen(view_projection, attack_world, main_origin, main_size,
                     attack_screen))
                 {
                     draw_list->AddCircleFilled(attack_screen, 6.0f,
@@ -228,10 +234,10 @@ bool framework::handle_ai_navigation_debug_edit()
 
     const DirectX::XMMATRIX view_projection =
         viewport_view_matrix() * viewport_projection_matrix();
-    const ImVec2 scene_origin{ scene_view_min_x, scene_view_min_y };
-    const ImVec2 scene_size{
-        (std::max)(1.0f, scene_view_max_x - scene_view_min_x),
-        (std::max)(1.0f, scene_view_max_y - scene_view_min_y) };
+    // 描画と同じ投影規約を使う。ここだけ Scene View 矩形にすると、
+    // 線は正しい位置に出ているのにハンドルだけ掴めない状態になる。
+    const ImVec2 main_origin = ImGui::GetMainViewport()->Pos;
+    const ImVec2 main_size = ImGui::GetMainViewport()->Size;
     const DirectX::XMFLOAT3 center = selected_object->GetTransform().WorldPosition();
     const DirectX::XMFLOAT3 detection_world{
         center.x + (std::max)(0.05f, enemy->detection_range), center.y, center.z };
@@ -240,9 +246,9 @@ bool framework::handle_ai_navigation_debug_edit()
     ImVec2 detection_screen{};
     ImVec2 attack_screen{};
     const bool detection_visible = ProjectToScreen(view_projection, detection_world,
-        scene_origin, scene_size, detection_screen);
+        main_origin, main_size, detection_screen);
     const bool attack_visible = ProjectToScreen(view_projection, attack_world,
-        scene_origin, scene_size, attack_screen);
+        main_origin, main_size, attack_screen);
 
     const ImVec2 mouse = ImGui::GetMousePos();
     const bool inside_scene = mouse.x >= scene_view_min_x && mouse.x <= scene_view_max_x &&

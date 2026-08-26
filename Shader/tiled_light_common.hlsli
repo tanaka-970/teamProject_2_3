@@ -7,6 +7,8 @@
 #ifndef __TILED_LIGHT_COMMON_HLSLI__
 #define __TILED_LIGHT_COMMON_HLSLI__
 
+#include "local_shadow_common.hlsli"
+
 // 1タイルの1辺(ピクセル)。16x16=256スレッドはGCN/NVIDIAどちらでも扱いやすい。
 #define TILE_SIZE 16
 // 1タイルが保持できるライト数の上限。超えた分は捨てる(実用上まず溢れない)。
@@ -20,7 +22,8 @@ struct TiledLight
     float4 position_radius; // xyz=ワールド位置, w=影響半径
     float4 color_intensity; // rgb=色, a=強度
     float4 direction_cone;  // xyz=向き(スポット), w=内コーンcos
-    float4 params;          // x=外コーンcos, y=種類, z/w=予約
+    // x=外コーンcos, y=種類, z=影マップの先頭スライス(負なら影なし), w=影の濃さ
+    float4 params;
 };
 
 StructuredBuffer<TiledLight> tiled_lights : register(t20);

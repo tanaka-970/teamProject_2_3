@@ -272,6 +272,25 @@ namespace ReplayEngine::Scripting
         return true;
     }
 
+    bool ScriptComponent::TryWriteRuntimeField(const std::string& saved_name,
+        const ScriptValue& value)
+    {
+        const ScriptFieldDefinition* definition =
+            schema_ ? schema_->FindBySavedName(saved_name) : nullptr;
+        if (definition == nullptr || definition->read_only || !value.IsFinite()) return false;
+
+        if (value.Type() == definition->type)
+        {
+            WriteField(saved_name, value);
+            return true;
+        }
+
+        ScriptValue converted;
+        if (!value.ConvertTo(definition->type, converted)) return false;
+        WriteField(saved_name, converted);
+        return true;
+    }
+
     void ScriptComponent::BindSchema(ScriptFieldSchemaRef schema)
     {
         if (schema_.get() == schema.get()) return;

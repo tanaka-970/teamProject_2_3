@@ -362,6 +362,8 @@ void framework::draw_editor_toolbar()
         }
         ImGui::InputTextWithHint("##FeatureSearch", "Search...", editor_search_text,
             IM_ARRAYSIZE(editor_search_text));
+        // 倒すのは draw_editor() の先頭でやっている。
+        // ここは描かれたフレームで立て直すだけ。
         search_input_active = ImGui::IsItemActive();
     }
 }

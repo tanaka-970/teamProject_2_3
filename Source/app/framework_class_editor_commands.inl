@@ -45,38 +45,54 @@
             if (msg == WM_KEYDOWN && control_down && !ImGui::GetIO().WantTextInput &&
                 !runtime_ui_text_owner && (wparam == 'Z' || wparam == 'Y'))
             {
-                if (active_editor_workspace == editor_workspace::motion)
+                bool handled = false;
+                if (sprite_atlas_editor_loaded && sprite_atlas_editor_keyboard_focus)
+                    handled = (wparam == 'Z') ? undo_sprite_atlas_edit() : redo_sprite_atlas_edit();
+                else if (active_editor_workspace == editor_workspace::motion)
                 {
                     if (wparam == 'Z') undo_motion_edit();
                     else redo_motion_edit();
+                    handled = true;
                 }
                 else
                 {
-                    const bool external_context =
-                        selected_editor_object == editor_selection::asset ||
-                        selected_editor_object == editor_selection::world;
-                    bool handled = false;
+                    const bool external_context = project_browser_focused;
                     if (external_context)
                     {
-                        handled = (wparam == 'Z')
-                            ? undo_external_file_edit()
-                            : redo_external_file_edit();
+                        handled = (wparam == 'Z') ? undo_external_file_edit() : redo_external_file_edit();
+                        if (!handled)
+                            project_browser_status = wparam == 'Z'
+                                ? "Projectで取り消せるファイル操作はありません"
+                                : "Projectでやり直せるファイル操作はありません";
                     }
-                    if (!handled)
+                    else
                     {
                         if (wparam == 'Z') object_editor_context.Undo();
                         else object_editor_context.Redo();
+                        handled = true;
                     }
                 }
                 return 0;
             }
             if (shortcut_pressed && wparam == 'D')
             {
-                object_hierarchy_panel.DuplicateSelection(object_editor_context);
+                if (project_browser_focused && !project_selected_entry_path.empty())
+                    project_duplicate_entry(project_selected_entry_path);
+                else
+                    object_hierarchy_panel.DuplicateSelection(object_editor_context);
+                return 0;
+            }
+            if (shortcut_pressed && wparam == 'N' &&
+                (GetKeyState(VK_SHIFT) & 0x8000) != 0 && project_browser_focused)
+            {
+                if (project_create_folder("New Folder")) project_begin_rename_selected();
                 return 0;
             }
             if (shortcut_pressed && (wparam == 'C' || wparam == 'V'))
             {
+                // Project WindowにFocusがある時、SceneのGameObject Copy/Pasteへ
+                // 誤爆させない。Project AssetはCtrl+D/Drag Moveを使う。
+                if (project_browser_focused) return 0;
                 std::string clipboard_error;
                 if (wparam == 'C')
                 {
@@ -100,13 +116,25 @@
                 }
                 return 0;
             }
-            if (msg == WM_KEYDOWN && wparam == VK_DELETE &&
+            if (msg == WM_KEYDOWN && (wparam == VK_DELETE || wparam == VK_BACK) &&
                 !ImGui::GetIO().WantTextInput && !runtime_ui_text_owner)
             {
-                if (selected_editor_object == editor_selection::asset &&
+                // Atlas Editor 内の Delete/Backspace は Region 削除へ渡す。
+                if (sprite_atlas_editor_loaded && sprite_atlas_editor_keyboard_focus) return 0;
+                if (project_browser_focused &&
+                    selected_editor_object == editor_selection::asset &&
                     !project_selected_entry_path.empty())
                 {
                     project_request_delete(project_selected_entry_path);
+                    return 0;
+                }
+                if (active_editor_workspace == editor_workspace::ui &&
+                    scene_view_focused &&
+                    ui_effect_region_selected_point >= 0 &&
+                    object_editor_context.Selection().Primary() ==
+                        ui_effect_region_selected_object)
+                {
+                    // Scene View の自由形状頂点を先に処理させる。
                     return 0;
                 }
                 if (selected_editor_object == editor_selection::game_object)
@@ -114,6 +142,13 @@
                     object_hierarchy_panel.DestroySelection(object_editor_context);
                     return 0;
                 }
+            }
+            if (msg == WM_KEYDOWN && wparam == VK_RETURN && project_browser_focused &&
+                !ImGui::GetIO().WantTextInput && !runtime_ui_text_owner &&
+                !project_selected_entry_path.empty())
+            {
+                project_open_entry(project_selected_entry_path);
+                return 0;
             }
             if (msg == WM_KEYDOWN && wparam == 'F' && !runtime_ui_text_owner &&
                 (GetKeyState(VK_CONTROL) & 0x8000))
@@ -222,10 +257,11 @@
             const bool control_down = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
             if (editor_mode && !control_down)
             {
-                if (selected_editor_object == editor_selection::asset &&
+                if (project_browser_focused &&
+                    selected_editor_object == editor_selection::asset &&
                     !project_selected_entry_path.empty())
                     project_begin_rename_selected();
-                else
+                else if (selected_editor_object == editor_selection::game_object)
                     object_hierarchy_panel.BeginRenameSelection(object_editor_context);
                 return 0;
             }
@@ -340,7 +376,9 @@ private:
         float ambient_occlusion = 1.0f, float emissive_strength = 0.0f,
         const DirectX::XMFLOAT4& base_color_factor = DirectX::XMFLOAT4{ 1,1,1,1 },
         const DirectX::XMFLOAT3& emissive_color = DirectX::XMFLOAT3{ 0,0,0 },
-        std::uint32_t texture_mask = 0);
+        std::uint32_t texture_mask = 0,
+        // Mesh Renderer の Receive Shadow。GBuffer の normal.a の符号で運ぶ。
+        bool receive_shadow = true);
     void apply_toon_preset(int preset);
     void reset_editor_values();
     void draw_editor();

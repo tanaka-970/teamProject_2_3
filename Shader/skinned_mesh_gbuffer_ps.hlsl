@@ -25,7 +25,9 @@ cbuffer GBUFFER_MATERIAL_CONSTANTS : register(b9)
     float  pixelate_size;
     float  pixelate_strength;
     uint   texture_mask;
-    float3 _replay_gbuffer_padding;
+    // 0 のとき照明側で影を掛けない (Mesh Renderer の Receive Shadow)。
+    float  receive_shadow;
+    float2 _replay_gbuffer_padding;
 };
 
 static const uint REPLAY_TEX_BASE      = 1u << 0;
@@ -90,6 +92,7 @@ GBufferOut main(VS_OUT pin)
     d.metalness = saturate(metallic);
     d.occlusion_strength = saturate(occlusion);
     d.velocity = compute_motion_vector(pin.current_clip, pin.previous_clip);
+    d.receive_shadow = receive_shadow >= 0.5f;
 
     if (embedded_gltf && gltf_alpha.x > 0.5f)
     {

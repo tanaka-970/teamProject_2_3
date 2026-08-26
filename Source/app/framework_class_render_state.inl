@@ -23,8 +23,9 @@ public:
     enum class BLEND_STATE { NONE, ALPHA, ADD, MULTIPLY, SCREEN, PREMULTIPLIED };
     Microsoft::WRL::ComPtr<ID3D11BlendState> blend_states[6];
 
-    enum class RASTER_STATE { SOLID, WIREFRAME, CULL_NONE, WIREFRAME_CULL_NONE, SCISSOR };
-    Microsoft::WRL::ComPtr<ID3D11RasterizerState> rasterizer_states[5];
+    // CULL_FRONT は world 行列の行列式が負（鏡像）のときに使う。
+    enum class RASTER_STATE { SOLID, WIREFRAME, CULL_NONE, WIREFRAME_CULL_NONE, SCISSOR, CULL_FRONT };
+    Microsoft::WRL::ComPtr<ID3D11RasterizerState> rasterizer_states[6];
 
     struct scene_constants
     {
@@ -82,7 +83,9 @@ public:
         float pixelate_size{ 0.0f };
         float pixelate_strength{ 0.0f };
         unsigned int texture_mask{ 0 };
-        DirectX::XMFLOAT3 padding{ 0.0f, 0.0f, 0.0f };
+        // Mesh Renderer の Receive Shadow。0 で影を受けない。
+        float receive_shadow{ 1.0f };
+        DirectX::XMFLOAT2 padding{ 0.0f, 0.0f };
     };
     static_assert(sizeof(material_override_constants) == 80,
         "GBUFFER_MATERIAL_CONSTANTS must stay byte-identical to HLSL");
@@ -109,6 +112,103 @@ public:
 
     toon_renderer    toon;
     csm_renderer     csm;
+
+    // Shader\shadow_alpha_common.hlsli の SHADOW_ALPHA_CONSTANTS(b7) と一致させる。
+    struct shadow_alpha_constants
+    {
+        // x=抜き方(0/1/2) y=cutoff z=BaseMapの出所(0:t0 1:t40) w=予約
+        DirectX::XMFLOAT4 params{ 0.0f, 0.5f, 0.0f, 0.0f };
+    };
+    Microsoft::WRL::ComPtr<ID3D11Buffer> shadow_alpha_cb;
+    Microsoft::WRL::ComPtr<ID3D11PixelShader> shadow_caster_alpha_ps;
+    Microsoft::WRL::ComPtr<ID3D11PixelShader> shadow_caster_alpha_skinned_ps;
+
+    // Shader\shadow_coverage_common.hlsli の SHADOW_COVERAGE_CONSTANTS(b8) と一致させる。
+    static constexpr int shadow_coverage_max_effects = 4;
+    static constexpr int shadow_coverage_max_regions = 4;
+    struct shadow_coverage_constants
+    {
+        DirectX::XMFLOAT4X4 view_projection{};
+        DirectX::XMFLOAT4 viewport{ 0.0f, 0.0f, 1.0f, 1.0f };
+        DirectX::XMFLOAT4 rect{ 0.0f, 0.0f, 1.0f, 1.0f };
+        // x=Effect数 y=マスク画像を貼ったEffectの番号(-1で無し) z=範囲数 w=予約
+        DirectX::XMFLOAT4 control{ 0.0f, -1.0f, 0.0f, 0.0f };
+        DirectX::XMFLOAT4 params0[shadow_coverage_max_effects]{};
+        DirectX::XMFLOAT4 params1[shadow_coverage_max_effects]{};
+        DirectX::XMFLOAT4 params2[shadow_coverage_max_effects]{};
+        DirectX::XMFLOAT4 params3[shadow_coverage_max_effects]{};
+        DirectX::XMFLOAT4 meta[shadow_coverage_max_effects]{};
+        DirectX::XMFLOAT4 region_params[shadow_coverage_max_regions]{};
+        DirectX::XMFLOAT4 region_settings[shadow_coverage_max_regions]{};
+    };
+    Microsoft::WRL::ComPtr<ID3D11Buffer> shadow_coverage_cb;
+    // 面消し Effect を持つ GameObject ごとの影用パラメータ。毎フレーム作り直す。
+    struct shadow_coverage_entry
+    {
+        shadow_coverage_constants constants{};
+        ID3D11ShaderResourceView* mask = nullptr;
+    };
+    std::unordered_map<std::uint64_t, shadow_coverage_entry> shadow_coverage_entries;
+    // Point / Spot の動的シャドウマップ。CSM とは投影方法が違うので別リソース。
+    ReplayEngine::Rendering::LocalShadowAtlas local_shadows;
+
+    // sync_object_lights() が決めた「今フレーム影マップを作るライト」。
+    struct local_shadow_request
+    {
+        bool point = false;          // false なら Spot
+        int base_slice = -1;
+        int slice_count = 1;
+        DirectX::XMFLOAT3 position{ 0.0f, 0.0f, 0.0f };
+        float range = 10.0f;
+    };
+    std::vector<local_shadow_request> local_shadow_requests;
+
+    // 影の全体設定。個々の Light ではなくプロジェクト全体の上限を持つ。
+    bool enable_dynamic_shadows{ true };
+    // CSM を使うかのユーザー設定。params.w は毎フレーム作り直すので UI はこちらを触る。
+    bool csm_enabled_setting{ true };
+    // Light が無い Scene View でプレビュー光から影を出すか。Play では効かない。
+    bool editor_preview_light_casts_shadows{ true };
+
+    // Directional Light の解決結果。影を出す判断はこの 3 つに集約する。
+    bool directional_light_present{ false };     // Scene に有効な Directional がある
+    bool directional_light_is_preview{ false };  // Scene View 用の非保存プレビュー光
+    bool directional_shadow_enabled{ false };    // その光が影を落とすか
+
+    // 影の診断表示用。毎フレーム影パスの直前に 0 へ戻す。
+    struct shadow_frame_stats
+    {
+        int primitive_casters = 0;
+        int static_casters = 0;
+        int skinned_casters = 0;
+        int landscape_casters = 0;
+        int skipped_cast_shadow = 0;
+        int culled_casters = 0;
+        // Mesh Asset を解決できず影パスへ出せなかった Skinned Mesh の数。
+        int skinned_unresolved = 0;
+        int shadow_draw_calls = 0;
+        int spot_shadow_lights = 0;
+        int point_shadow_lights = 0;
+        // Model Effect Stack の面消しを影へ反映しているキャスター数。
+        int coverage_casters = 0;
+        // 影で再現できない面消し Effect の数。範囲が投げ縄/画像のものを含む。
+        int coverage_unsupported = 0;
+        // bounding_box が未設定でボリューム選別を掛けられなかったキャスター数。
+        int missing_bounds_primitive = 0;
+        int missing_bounds_static = 0;
+        int missing_bounds_landscape = 0;
+        bool directional_light_present = false;
+        bool directional_preview_light = false;
+        bool directional_shadow_rendered = false;
+
+        void Reset() noexcept { *this = shadow_frame_stats{}; }
+        int TotalCasters() const noexcept
+        {
+            return primitive_casters + static_casters +
+                skinned_casters + landscape_casters;
+        }
+    };
+    shadow_frame_stats shadow_stats{};
     trail            test_trail;
     particle_system  particles;
     deferred_renderer deferred;
@@ -171,6 +271,8 @@ public:
     ReplayEngine::Motion::MotionMixer motion_mixer;
     std::unordered_map<std::string, ReplayEngine::Motion::MotionAsset> motion_asset_cache;
     std::unordered_set<std::string> motion_asset_load_failures;
+    std::unordered_map<std::string, ReplayEngine::Motion::CompositionAsset> composition_asset_cache;
+    std::unordered_set<std::string> composition_asset_load_failures;
     ReplayEngine::Assets::AsyncAssetManager async_asset_manager;
 
     // プロジェクト設定。Default Controlled Character Prefab を持つ。

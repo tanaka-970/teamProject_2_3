@@ -177,8 +177,6 @@ void framework::draw_model_effect_stacks(const D3D11_VIEWPORT& camera_viewport)
         (std::max)(1.0f, framebuffers[0]->viewport.Width));
     const std::uint32_t full_height = static_cast<std::uint32_t>(
         (std::max)(1.0f, framebuffers[0]->viewport.Height));
-    const DirectX::XMMATRIX view = viewport_view_matrix();
-    const DirectX::XMMATRIX projection = viewport_projection_matrix();
     std::unordered_set<ReplayEngine::Core::ObjectID> rendered_owners;
 
     for (const RenderItem& item : object_render_items.Items())
@@ -194,126 +192,18 @@ void framework::draw_model_effect_stacks(const D3D11_VIEWPORT& camera_viewport)
             continue;
         }
 
-        // 半透明は、元の scene 色と「モデルだけを描いた RT」を単純 alpha 合成すると
-        // 本体が二重に混ざる。背景込みの正しい post-effect 合成には別の
-        // per-object color/depth capture が必要になるため、現段階では破綻させるより
-        // 既存描画へ安全にフォールバックする。Opaque/Mask は通常どおり Effect 対象。
-        bool blended_owner = false;
-        for (const RenderItem& candidate : object_render_items.Items())
+        model_effect_screen_rect base_bounds{};
+        model_effect_screen_rect expanded_bounds{};
+        if (!compute_model_effect_screen_rect(item.owner, camera_viewport,
+            base_bounds, expanded_bounds))
         {
-            if (candidate.owner != item.owner) continue;
-
-            const RenderItem resolved = resolve_render_item_material(candidate);
-            if (resolved.material_base_color.w < 0.999f || resolved.tint.w < 0.999f ||
-                resolved.legacy_tint.w < 0.999f)
-            {
-                blended_owner = true;
-                break;
-            }
-
-            if (const ReplayEngine::Rendering::MaterialAsset* material =
-                resolve_object_material(candidate.material_asset))
-            {
-                if (material->alpha_mode == ReplayEngine::Rendering::MaterialAlphaMode::Blend)
-                {
-                    blended_owner = true;
-                    break;
-                }
-            }
-
-            if (candidate.material_asset.empty())
-            {
-                if (skinned_mesh* mesh = resolve_object_mesh(candidate.mesh_asset);
-                    mesh != nullptr && mesh->IsGltf())
-                {
-                    for (const auto& entry : mesh->materials)
-                    {
-                        const skinned_mesh::gltf_material_info* info =
-                            mesh->GltfMaterial(entry.first);
-                        if ((info != nullptr && info->alpha_mode == 2) ||
-                            entry.second.Kd.w < 0.999f)
-                        {
-                            blended_owner = true;
-                            break;
-                        }
-                    }
-                    if (blended_owner) break;
-                }
-            }
+            continue;
         }
-        if (blended_owner) continue;
-
-        // 1 GameObject が複数 Renderer / RenderItem を持つ場合も、owner 全体を
-        // 1つの Effect 対象として扱う。最初の RenderItem だけで crop すると
-        // 別パーツが欠けるため、各 item の画面 Bounds を先に union する。
-        ModelScreenRect base_rect{};
-        bool have_screen_bounds = false;
-        for (const RenderItem& candidate : object_render_items.Items())
-        {
-            if (candidate.owner != item.owner) continue;
-
-            DirectX::XMFLOAT3 minimum{};
-            DirectX::XMFLOAT3 maximum{};
-            bool have_bounds = false;
-            if (candidate.mesh_asset.rfind("builtin:", 0) == 0)
-            {
-                if (static_mesh* mesh = resolve_builtin_primitive_mesh(candidate.mesh_asset))
-                {
-                    minimum = mesh->bounding_box[0];
-                    maximum = mesh->bounding_box[1];
-                    have_bounds = finite_bounds(minimum, maximum);
-                }
-            }
-            else if (gltf_model* model = resolve_object_gltf(candidate.mesh_asset))
-            {
-                have_bounds = model->ComputeBounds(minimum, maximum) &&
-                    finite_bounds(minimum, maximum);
-            }
-
-            if (!have_bounds)
-            {
-                if (skinned_mesh* mesh = resolve_object_mesh(candidate.mesh_asset))
-                {
-                    minimum = { D3D11_FLOAT32_MAX, D3D11_FLOAT32_MAX, D3D11_FLOAT32_MAX };
-                    maximum = { -D3D11_FLOAT32_MAX, -D3D11_FLOAT32_MAX, -D3D11_FLOAT32_MAX };
-                    for (const skinned_mesh::mesh& part : mesh->meshes)
-                    {
-                        if (!finite_bounds(part.bounding_box[0], part.bounding_box[1])) continue;
-                        minimum.x = (std::min)(minimum.x, part.bounding_box[0].x);
-                        minimum.y = (std::min)(minimum.y, part.bounding_box[0].y);
-                        minimum.z = (std::min)(minimum.z, part.bounding_box[0].z);
-                        maximum.x = (std::max)(maximum.x, part.bounding_box[1].x);
-                        maximum.y = (std::max)(maximum.y, part.bounding_box[1].y);
-                        maximum.z = (std::max)(maximum.z, part.bounding_box[1].z);
-                    }
-                    have_bounds = finite_bounds(minimum, maximum);
-                }
-            }
-            if (!have_bounds) continue;
-
-            const ModelScreenRect candidate_rect = project_bounds(minimum, maximum,
-                candidate.world, view, projection, camera_viewport, {}, 0.0f);
-            if (!candidate_rect.Valid()) continue;
-            if (!have_screen_bounds)
-            {
-                base_rect = candidate_rect;
-                have_screen_bounds = true;
-            }
-            else
-            {
-                base_rect.left = (std::min)(base_rect.left, candidate_rect.left);
-                base_rect.top = (std::min)(base_rect.top, candidate_rect.top);
-                base_rect.right = (std::max)(base_rect.right, candidate_rect.right);
-                base_rect.bottom = (std::max)(base_rect.bottom, candidate_rect.bottom);
-            }
-        }
-        if (!have_screen_bounds || !base_rect.Valid()) continue;
-
-        const DirectX::XMFLOAT4 expansion = effect->ExpandBounds(
-            static_cast<float>(base_rect.Width()), static_cast<float>(base_rect.Height()),
-            &asset_database);
-        const ModelScreenRect rect = expand_rect(base_rect, camera_viewport, expansion,
-            effect->max_bleed_pixels);
+        ModelScreenRect rect{};
+        rect.left = expanded_bounds.left;
+        rect.top = expanded_bounds.top;
+        rect.right = expanded_bounds.right;
+        rect.bottom = expanded_bounds.bottom;
         if (!rect.Valid()) continue;
 
         ReplayEngine::UI::UIRenderTarget* full_target =
@@ -360,7 +250,9 @@ void framework::draw_model_effect_stacks(const D3D11_VIEWPORT& camera_viewport)
 
         ReplayEngine::UI::UIRenderTarget* effected = apply_scene_effect_chain(
             cropped_target->srv.Get(), effect->EffectiveEffects(&asset_database), rect.Width(), rect.Height(),
-            DXGI_FORMAT_R16G16B16A16_FLOAT, shader_composer_time);
+            DXGI_FORMAT_R16G16B16A16_FLOAT, shader_composer_time,
+            static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(effect)),
+            &effect->effect_region);
         ID3D11ShaderResourceView* result =
             effected != nullptr ? effected->srv.Get() : cropped_target->srv.Get();
 
@@ -397,4 +289,345 @@ void framework::draw_model_effect_stacks(const D3D11_VIEWPORT& camera_viewport)
             framebuffers[0]->depth_stencil_view.Get());
         immediate_context->RSSetViewports(1, &camera_viewport);
     }
+}
+
+bool framework::compute_model_effect_screen_rect(ReplayEngine::Core::ObjectID owner,
+    const D3D11_VIEWPORT& camera_viewport, model_effect_screen_rect& out_base,
+    model_effect_screen_rect& out_expanded)
+{
+    using ReplayEngine::Components::ModelEffectStackComponent;
+    using ReplayEngine::Rendering::RenderItem;
+
+    out_base = {};
+    out_expanded = {};
+    if (!owner.Valid()) return false;
+
+    ReplayEngine::Core::GameObject* object = active_object_scene().FindGameObjectByID(owner);
+    ModelEffectStackComponent* effect = object != nullptr
+        ? object->GetComponent<ModelEffectStackComponent>() : nullptr;
+    if (effect == nullptr || !effect->ActiveInHierarchy() || !effect->enabled ||
+        !effect->HasActiveEffects(&asset_database))
+    {
+        return false;
+    }
+
+    // 半透明は、元の scene 色と「モデルだけを描いた RT」を単純 alpha 合成すると
+    // 本体が二重に混ざるため Effect の対象から外す。影の面消しも同じ条件で外す。
+    for (const RenderItem& candidate : object_render_items.Items())
+    {
+        if (candidate.owner != owner) continue;
+
+        const RenderItem resolved = resolve_render_item_material(candidate);
+        if (resolved.material_base_color.w < 0.999f || resolved.tint.w < 0.999f ||
+            resolved.legacy_tint.w < 0.999f)
+        {
+            return false;
+        }
+
+        if (const ReplayEngine::Rendering::MaterialAsset* material =
+            resolve_object_material(candidate.material_asset))
+        {
+            if (material->alpha_mode == ReplayEngine::Rendering::MaterialAlphaMode::Blend)
+                return false;
+        }
+
+        if (candidate.material_asset.empty())
+        {
+            if (skinned_mesh* mesh = resolve_object_mesh(candidate.mesh_asset);
+                mesh != nullptr && mesh->IsGltf())
+            {
+                for (const auto& entry : mesh->materials)
+                {
+                    const skinned_mesh::gltf_material_info* info =
+                        mesh->GltfMaterial(entry.first);
+                    if ((info != nullptr && info->alpha_mode == 2) ||
+                        entry.second.Kd.w < 0.999f)
+                    {
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+
+    // 1 GameObject が複数 Renderer / RenderItem を持つ場合も owner 全体で 1 つの
+    // Effect 対象として扱う。最初の RenderItem だけで crop すると別パーツが欠ける。
+    const DirectX::XMMATRIX view = viewport_view_matrix();
+    const DirectX::XMMATRIX projection = viewport_projection_matrix();
+    ModelScreenRect base_rect{};
+    bool have_screen_bounds = false;
+    for (const RenderItem& candidate : object_render_items.Items())
+    {
+        if (candidate.owner != owner) continue;
+
+        DirectX::XMFLOAT3 minimum{};
+        DirectX::XMFLOAT3 maximum{};
+        bool have_bounds = false;
+        if (candidate.mesh_asset.rfind("builtin:", 0) == 0)
+        {
+            if (static_mesh* mesh = resolve_builtin_primitive_mesh(candidate.mesh_asset))
+            {
+                minimum = mesh->bounding_box[0];
+                maximum = mesh->bounding_box[1];
+                have_bounds = finite_bounds(minimum, maximum);
+            }
+        }
+        else if (gltf_model* model = resolve_object_gltf(candidate.mesh_asset))
+        {
+            have_bounds = model->ComputeBounds(minimum, maximum) &&
+                finite_bounds(minimum, maximum);
+        }
+
+        if (!have_bounds)
+        {
+            if (skinned_mesh* mesh = resolve_object_mesh(candidate.mesh_asset))
+            {
+                minimum = { D3D11_FLOAT32_MAX, D3D11_FLOAT32_MAX, D3D11_FLOAT32_MAX };
+                maximum = { -D3D11_FLOAT32_MAX, -D3D11_FLOAT32_MAX, -D3D11_FLOAT32_MAX };
+                for (const skinned_mesh::mesh& part : mesh->meshes)
+                {
+                    if (!finite_bounds(part.bounding_box[0], part.bounding_box[1])) continue;
+                    minimum.x = (std::min)(minimum.x, part.bounding_box[0].x);
+                    minimum.y = (std::min)(minimum.y, part.bounding_box[0].y);
+                    minimum.z = (std::min)(minimum.z, part.bounding_box[0].z);
+                    maximum.x = (std::max)(maximum.x, part.bounding_box[1].x);
+                    maximum.y = (std::max)(maximum.y, part.bounding_box[1].y);
+                    maximum.z = (std::max)(maximum.z, part.bounding_box[1].z);
+                }
+                have_bounds = finite_bounds(minimum, maximum);
+            }
+        }
+        if (!have_bounds) continue;
+
+        const ModelScreenRect candidate_rect = project_bounds(minimum, maximum,
+            candidate.world, view, projection, camera_viewport, {}, 0.0f);
+        if (!candidate_rect.Valid()) continue;
+        if (!have_screen_bounds)
+        {
+            base_rect = candidate_rect;
+            have_screen_bounds = true;
+        }
+        else
+        {
+            base_rect.left = (std::min)(base_rect.left, candidate_rect.left);
+            base_rect.top = (std::min)(base_rect.top, candidate_rect.top);
+            base_rect.right = (std::max)(base_rect.right, candidate_rect.right);
+            base_rect.bottom = (std::max)(base_rect.bottom, candidate_rect.bottom);
+        }
+    }
+    if (!have_screen_bounds || !base_rect.Valid()) return false;
+
+    const DirectX::XMFLOAT4 expansion = effect->ExpandBounds(
+        static_cast<float>(base_rect.Width()), static_cast<float>(base_rect.Height()),
+        &asset_database);
+    const ModelScreenRect expanded = expand_rect(base_rect, camera_viewport, expansion,
+        effect->max_bleed_pixels);
+    if (!expanded.Valid()) return false;
+
+    out_base.left = base_rect.left;
+    out_base.top = base_rect.top;
+    out_base.right = base_rect.right;
+    out_base.bottom = base_rect.bottom;
+    out_expanded.left = expanded.left;
+    out_expanded.top = expanded.top;
+    out_expanded.right = expanded.right;
+    out_expanded.bottom = expanded.bottom;
+    return true;
+}
+
+namespace
+{
+    // 面(アルファ)を減らす Effect だけが影に意味を持つ。色を変えるだけのものは対象外。
+    bool IsShadowCoverageEffect(ReplayEngine::UI::UIEffectKind kind) noexcept
+    {
+        using ReplayEngine::UI::UIEffectKind;
+        return kind == UIEffectKind::Mask || kind == UIEffectKind::Wipe ||
+            kind == UIEffectKind::Dissolve || kind == UIEffectKind::BurnReveal;
+    }
+
+    // 影で再現できるのは矩形と楕円だけ。投げ縄と画像マスクはここで弾く。
+    bool IsShadowCoverageRegionShape(int shape) noexcept
+    {
+        using ReplayEngine::UI::UIEffectRegionShape;
+        return shape == static_cast<int>(UIEffectRegionShape::Rectangle) ||
+            shape == static_cast<int>(UIEffectRegionShape::Ellipse);
+    }
+
+    void FillShadowCoverageRegion(const ReplayEngine::UI::UIEffectRegionData& source,
+        DirectX::XMFLOAT4& params, DirectX::XMFLOAT4& settings) noexcept
+    {
+        params = {
+            source.center.x, source.center.y,
+            (std::max)(source.size.x, 0.0001f),
+            (std::max)(source.size.y, 0.0001f) };
+        settings = {
+            source.rotation, (std::max)(source.feather, 0.0f),
+            (std::max)(0.0f, (std::min)(1.0f, source.strength)),
+            static_cast<float>((std::max)(0, (std::min)(3, source.shape))) +
+                (source.invert ? 4.0f : 0.0f) };
+    }
+}
+
+void framework::collect_shadow_coverage(const D3D11_VIEWPORT& camera_viewport)
+{
+    using ReplayEngine::Components::ModelEffectStackComponent;
+    using ReplayEngine::Core::GameObject;
+    using ReplayEngine::Rendering::RenderItem;
+    using ReplayEngine::UI::UIEffect;
+    using ReplayEngine::UI::UIEffectKind;
+    using ReplayEngine::UI::UIEffectRegionScope;
+
+    shadow_coverage_entries.clear();
+    if (object_render_items.Empty() || device == nullptr) return;
+
+    const DirectX::XMMATRIX view_projection =
+        viewport_view_matrix() * viewport_projection_matrix();
+    std::unordered_set<ReplayEngine::Core::ObjectID> visited;
+
+    for (const RenderItem& item : object_render_items.Items())
+    {
+        if (!item.owner.Valid() || !visited.insert(item.owner).second) continue;
+
+        GameObject* object = active_object_scene().FindGameObjectByID(item.owner);
+        ModelEffectStackComponent* effect = object != nullptr
+            ? object->GetComponent<ModelEffectStackComponent>() : nullptr;
+        if (effect == nullptr) continue;
+
+        model_effect_screen_rect base_bounds{};
+        model_effect_screen_rect expanded_bounds{};
+        if (!compute_model_effect_screen_rect(item.owner, camera_viewport,
+            base_bounds, expanded_bounds))
+        {
+            continue;
+        }
+
+        shadow_coverage_entry entry{};
+        int count = 0;
+        int mask_index = -1;
+        for (const UIEffect& source : effect->EffectiveEffects(&asset_database))
+        {
+            if (!source.enabled) continue;
+            const UIEffectKind kind = static_cast<UIEffectKind>(source.kind);
+            // カスタムシェーダーは面を消すかどうかを外から判定できない。
+            if (!source.custom_shader.empty() || !IsShadowCoverageEffect(kind)) continue;
+            if (count >= shadow_coverage_max_effects)
+            {
+                ++shadow_stats.coverage_unsupported;
+                continue;
+            }
+
+            ID3D11ShaderResourceView* mask = source.mask.empty()
+                ? nullptr : resolve_scene_effect_texture(source.mask);
+            const bool bind_mask = mask != nullptr &&
+                (entry.mask == nullptr || entry.mask == mask);
+            if (mask != nullptr && !bind_mask) ++shadow_stats.coverage_unsupported;
+            if (bind_mask)
+            {
+                entry.mask = mask;
+                mask_index = count;
+            }
+
+            entry.constants.params0[count] = {
+                source.radius, source.intensity, source.threshold, source.amount };
+            entry.constants.params1[count] = {
+                source.angle, source.progress, source.softness, source.speed };
+            entry.constants.params2[count] = {
+                source.direction.x, source.direction.y, source.seed, shader_composer_time };
+            entry.constants.params3[count] = {
+                static_cast<float>(source.waveform), bind_mask ? 1.0f : 0.0f, 0.0f, 0.0f };
+
+            if (kind == UIEffectKind::Mask)
+            {
+                // EffectChain と同じ読み替え。direction を中心、seed/speed を半径に使う。
+                const float center_x = source.direction.x > 0.0f && source.direction.x < 1.0f
+                    ? source.direction.x : 0.5f;
+                const float center_y = source.direction.y > 0.0f && source.direction.y < 1.0f
+                    ? source.direction.y : 0.5f;
+                const float half_width = source.seed > 0.0f && source.seed < 1.0f
+                    ? source.seed : 0.5f;
+                const float half_height = source.speed > 0.0f && source.speed < 1.0f
+                    ? source.speed : 0.5f;
+                entry.constants.params2[count] = {
+                    center_x, center_y, half_width, half_height };
+                entry.constants.params1[count].w = bind_mask ? 1.0f : 0.0f;
+            }
+
+            const bool region_applies = effect->effect_region.enabled &&
+                (effect->effect_region.scope ==
+                    static_cast<int>(UIEffectRegionScope::AllEffects) ||
+                    source.region_enabled);
+            entry.constants.meta[count] = {
+                static_cast<float>(source.kind), region_applies ? 1.0f : 0.0f, 0.0f, 0.0f };
+            ++count;
+        }
+        if (count == 0) continue;
+
+        int region_count = 0;
+        if (effect->effect_region.enabled)
+        {
+            if (!IsShadowCoverageRegionShape(effect->effect_region.shape))
+            {
+                // 範囲を再現できないときは面消しごと諦める。影だけ消えるより安全。
+                ++shadow_stats.coverage_unsupported;
+                continue;
+            }
+            FillShadowCoverageRegion(effect->effect_region,
+                entry.constants.region_params[0], entry.constants.region_settings[0]);
+            region_count = 1;
+            for (const auto& additional : effect->effect_region.additional)
+            {
+                if (region_count >= shadow_coverage_max_regions) break;
+                if (!additional.enabled) continue;
+                if (!IsShadowCoverageRegionShape(additional.shape))
+                {
+                    ++shadow_stats.coverage_unsupported;
+                    continue;
+                }
+                FillShadowCoverageRegion(additional,
+                    entry.constants.region_params[region_count],
+                    entry.constants.region_settings[region_count]);
+                ++region_count;
+            }
+        }
+
+        DirectX::XMStoreFloat4x4(&entry.constants.view_projection, view_projection);
+        entry.constants.viewport = {
+            camera_viewport.TopLeftX, camera_viewport.TopLeftY,
+            camera_viewport.Width, camera_viewport.Height };
+        entry.constants.rect = {
+            static_cast<float>(expanded_bounds.left),
+            static_cast<float>(expanded_bounds.top),
+            static_cast<float>(expanded_bounds.Width()),
+            static_cast<float>(expanded_bounds.Height()) };
+        entry.constants.control = {
+            static_cast<float>(count), static_cast<float>(mask_index),
+            static_cast<float>(region_count), 0.0f };
+        shadow_coverage_entries.emplace(item.owner.Value(), entry);
+    }
+}
+
+bool framework::bind_shadow_coverage_constants(ReplayEngine::Core::ObjectID owner)
+{
+    if (shadow_coverage_cb == nullptr || immediate_context == nullptr) return false;
+
+    shadow_coverage_constants constants{};
+    ID3D11ShaderResourceView* mask = nullptr;
+    bool active = false;
+    if (owner.Valid() && !shadow_coverage_entries.empty())
+    {
+        const auto found = shadow_coverage_entries.find(owner.Value());
+        if (found != shadow_coverage_entries.end())
+        {
+            constants = found->second.constants;
+            mask = found->second.mask;
+            active = true;
+        }
+    }
+
+    immediate_context->UpdateSubresource(shadow_coverage_cb.Get(), 0, nullptr,
+        &constants, 0, 0);
+    immediate_context->PSSetConstantBuffers(8, 1, shadow_coverage_cb.GetAddressOf());
+    immediate_context->PSSetShaderResources(46, 1, &mask);
+    if (active) ++shadow_stats.coverage_casters;
+    return active;
 }

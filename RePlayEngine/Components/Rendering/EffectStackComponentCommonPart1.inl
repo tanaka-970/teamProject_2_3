@@ -14,6 +14,7 @@
 #include <cstdio>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace ReplayEngine::Components
 {
@@ -85,6 +86,8 @@ namespace ReplayEngine::Components
             const std::string& property)
         {
             if (property == "enabled") return Reflection::PropertyValue::MakeBool(effect.enabled);
+            if (property == "region_enabled")
+                return Reflection::PropertyValue::MakeBool(effect.region_enabled);
             if (property == "type") return Reflection::PropertyValue::MakeEnum(effect.kind);
             if (property == "radius") return Reflection::PropertyValue::MakeFloat(effect.radius);
             if (property == "intensity") return Reflection::PropertyValue::MakeFloat(effect.intensity);
@@ -131,6 +134,8 @@ namespace ReplayEngine::Components
             const Reflection::PropertyValue& value)
         {
             if (property == "enabled") effect.enabled = value.AsBool(effect.enabled);
+            else if (property == "region_enabled")
+                effect.region_enabled = value.AsBool(effect.region_enabled);
             else if (property == "type") effect.kind = value.AsInt(effect.kind);
             else if (property == "radius") effect.radius = value.AsFloat(effect.radius);
             else if (property == "intensity") effect.intensity = value.AsFloat(effect.intensity);

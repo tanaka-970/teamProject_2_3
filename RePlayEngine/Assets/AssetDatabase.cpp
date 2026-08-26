@@ -28,6 +28,21 @@ namespace ReplayEngine::Assets
                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
             return key;
         }
+
+        bool PathInsideOrEqual(const std::filesystem::path& value,
+            const std::filesystem::path& root, std::filesystem::path& relative)
+        {
+            std::error_code error;
+            relative = std::filesystem::relative(value, root, error);
+            if (error) return PathKey(value) == PathKey(root);
+            if (relative.empty() || relative == ".")
+            {
+                relative.clear();
+                return true;
+            }
+            const auto first = relative.begin();
+            return first != relative.end() && first->generic_u8string() != "..";
+        }
     }
 
     AssetDatabase::AssetDatabase(std::filesystem::path database_path)
@@ -157,6 +172,20 @@ namespace ReplayEngine::Assets
         }
         AssetRecord record{};
         record.guid = MakeGuid(normalized);
+        // Rename/Move は既存 GUID を維持するため、元パスが後から再利用されると
+        // path-derived GUID が移動済みAssetの GUID と衝突し得る。
+        // 既存 record は一切変更せず、新規登録側だけ deterministic salt を足して回避する。
+        if (FindByGuid(record.guid) != nullptr)
+        {
+            const std::string base = normalized.generic_u8string();
+            for (std::uint32_t suffix = 1; suffix < 1000000u; ++suffix)
+            {
+                const std::filesystem::path salted = std::filesystem::u8path(
+                    base + "#replay-guid-" + std::to_string(suffix));
+                record.guid = MakeGuid(salted);
+                if (FindByGuid(record.guid) == nullptr) break;
+            }
+        }
         record.display_name = normalized.stem().u8string();
         record.source_path = normalized;
         record.cache_path = cache.empty() ? std::filesystem::path{} : NormalizeProjectPath(cache);
@@ -172,6 +201,48 @@ namespace ReplayEngine::Assets
         if (found == records_.end()) return false;
         records_.erase(found, records_.end());
         return true;
+    }
+
+    bool AssetDatabase::RelocatePath(const std::filesystem::path& old_source,
+        const std::filesystem::path& new_source, bool update_display_name)
+    {
+        const std::filesystem::path old_normalized = NormalizeProjectPath(old_source);
+        const std::filesystem::path new_normalized = NormalizeProjectPath(new_source);
+        const std::string old_key = PathKey(old_normalized);
+        const auto found = std::find_if(records_.begin(), records_.end(),
+            [&old_key](const AssetRecord& record)
+            { return PathKey(record.source_path) == old_key; });
+        if (found == records_.end()) return false;
+
+        // 同じ行先を別 GUID が既に使っている場合は、参照を壊すので拒否する。
+        const std::string new_key = PathKey(new_normalized);
+        const auto collision = std::find_if(records_.begin(), records_.end(),
+            [&new_key, &found](const AssetRecord& record)
+            { return &record != &*found && PathKey(record.source_path) == new_key; });
+        if (collision != records_.end()) return false;
+
+        found->source_path = new_normalized;
+        if (update_display_name) found->display_name = new_normalized.stem().u8string();
+        return true;
+    }
+
+    std::size_t AssetDatabase::RelocateTree(const std::filesystem::path& old_root,
+        const std::filesystem::path& new_root)
+    {
+        const std::filesystem::path old_normalized = NormalizeProjectPath(old_root);
+        const std::filesystem::path new_normalized = NormalizeProjectPath(new_root);
+        std::size_t changed = 0;
+        for (AssetRecord& record : records_)
+        {
+            std::filesystem::path relative;
+            if (!PathInsideOrEqual(record.source_path, old_normalized, relative)) continue;
+            record.source_path = relative.empty()
+                ? new_normalized
+                : (new_normalized / relative).lexically_normal();
+            record.display_name = record.source_path.stem().u8string();
+            ++changed;
+        }
+        return changed;
     }
 
     const AssetRecord* AssetDatabase::FindByGuid(const std::string& guid) const noexcept

@@ -107,6 +107,46 @@ namespace ReplayEngine::Scripting::CSharp::Detail
             table.get_components = &NativeGetComponents;
             table.set_component_enabled = &NativeSetComponentEnabled;
             table.get_component_enabled = &NativeGetComponentEnabled;
+            table.get_script_bool = &NativeGetScriptBool;
+            table.set_script_bool = &NativeSetScriptBool;
+            table.get_script_int = &NativeGetScriptInt;
+            table.set_script_int = &NativeSetScriptInt;
+            table.get_script_double = &NativeGetScriptDouble;
+            table.set_script_double = &NativeSetScriptDouble;
+            table.get_script_string = &NativeGetScriptString;
+            table.set_script_string = &NativeSetScriptString;
+            table.ui_get_focus = &NativeGetUIFocus;
+            table.ui_set_focus = &NativeSetUIFocus;
+            table.ui_find_focus = &NativeFindUIFocus;
+            table.publish_event = &NativePublishEvent;
+
+            table.log_info = &NativeLogInfo;
+            table.log_warning = &NativeLogWarning;
+            table.log_error = &NativeLogError;
+            table.create_game_object = &NativeCreateGameObject;
+            table.get_world_position = &NativeGetWorldPosition;
+            table.set_parent = &NativeSetParent;
+            table.get_parent = &NativeGetParent;
+            table.get_children = &NativeGetChildren;
+            table.get_name = &NativeGetName;
+            table.set_name = &NativeSetName;
+            table.get_game_object_enabled = &NativeGetGameObjectEnabled;
+            table.set_game_object_enabled = &NativeSetGameObjectEnabled;
+
+            table.query_ground = &NativeQueryGround;
+            table.sweep_sphere = &NativeSweepSphere;
+            table.instantiate_prefab_deferred = &NativeInstantiatePrefabDeferred;
+            table.flush_deferred_operations = &NativeFlushDeferredOperations;
+            table.pending_deferred_operation_count = &NativePendingDeferredOperationCount;
+            table.has_component = &NativeHasComponent;
+            table.get_time_scale = &NativeGetTimeScale;
+            table.get_scene_transition_in_progress = &NativeGetSceneTransitionInProgress;
+            table.physics_available = &NativePhysicsAvailable;
+            table.scene_flow_available = &NativeSceneFlowAvailable;
+
+            table.poll_event_with_payload = &NativePollEventWithPayload;
+            table.publish_event_with_payload = &NativePublishEventWithPayload;
+            table.find_game_object_by_name = &NativeFindGameObjectByName;
             return table;
         }
 

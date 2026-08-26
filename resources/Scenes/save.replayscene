@@ -1,0 +1,512 @@
+REPLAY_SCENE 11
+SCENE "新しいシーン"
+SCENE_STATE 0
+COLLISION_STATE 2 0
+OBJECT_COUNT 9
+OBJECT
+  ID 612
+  NAME "Canvas"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "CanvasComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 6
+    PROPERTY "reference_resolution" vec2 1920 1080
+    PROPERTY "render_mode" enum 0
+    PROPERTY "scale_mode" enum 1
+    PROPERTY "match_width_or_height" float 0.5
+    PROPERTY "sort_order" int 0
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 17
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0 0
+    PROPERTY "anchor_max" vec2 1 1
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 0 0
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 623
+  NAME "UI図形イメージ"
+  ENABLED 1
+  PARENT 612
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -466.29995727539062 -48.01995849609375
+    PROPERTY "size_delta" vec2 903.04010009765625 962.3599853515625
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIMaskComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 15
+    PROPERTY "enabled_mask" bool 1
+    PROPERTY "show_mask_graphic" bool 0
+    PROPERTY "mask_mode" enum 2
+    PROPERTY "shape_kind" enum 1
+    PROPERTY "shape_sides" int 5
+    PROPERTY "shape_inner_radius" float 0.94999998807907104
+    PROPERTY "shape_corner_radius" float 0
+    PROPERTY "shape_rotation" float 0
+    PROPERTY "group_scale" vec2 1 1
+    PROPERTY "mask_image" assetref ""
+    PROPERTY "mask_object" objref 0
+    PROPERTY "matte_objects" array objref 0
+    PROPERTY "matte_operations" array int 0
+    PROPERTY "invert" bool 0
+    PROPERTY "softness" float 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 622
+  NAME "Image (1)"
+  ENABLED 1
+  PARENT 623
+  TRANSFORM 6.0500001907348633 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 903.04010009765625 962.3599853515625
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 18
+    PROPERTY "sprite" assetref ""
+    PROPERTY "atlas" assetref ""
+    PROPERTY "atlas_region" string ""
+    PROPERTY "color" color 0.97239285707473755 0.99190282821655273 0.028110627084970474 1
+    PROPERTY "fill_color_2" color 1 1 1 1
+    PROPERTY "fill_mode" enum 1
+    PROPERTY "fill_angle" float 0
+    PROPERTY "fill_center" vec2 0.65299999713897705 0.5
+    PROPERTY "stroke_mode" enum 0
+    PROPERTY "stroke_color_2" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "fill_amount" float 1
+    PROPERTY "fill_method" enum 0
+    PROPERTY "blend_mode" enum 0
+    PROPERTY "uv_offset" vec2 0 0
+    PROPERTY "uv_scale" vec2 1 1
+    PROPERTY "nine_slice" vec4 0 0 0 0
+    PROPERTY "preserve_aspect" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 613
+  NAME "narukami"
+  ENABLED 1
+  PARENT 612
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.70300000905990601 0.91399997472763062
+    PROPERTY "anchor_max" vec2 1.1200000047683716 1.6940000057220459
+    PROPERTY "anchored_position" vec2 -1414.1517333984375 -1082.3031005859375
+    PROPERTY "size_delta" vec2 160 385
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 5.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 18
+    PROPERTY "sprite" assetref ""
+    PROPERTY "atlas" assetref "75051fcd391be0ead908e411240f6955"
+    PROPERTY "atlas_region" string "hontai"
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "fill_color_2" color 1 1 1 1
+    PROPERTY "fill_mode" enum 0
+    PROPERTY "fill_angle" float 0
+    PROPERTY "fill_center" vec2 0.5 0.5
+    PROPERTY "stroke_mode" enum 0
+    PROPERTY "stroke_color_2" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "fill_amount" float 1
+    PROPERTY "fill_method" enum 0
+    PROPERTY "blend_mode" enum 0
+    PROPERTY "uv_offset" vec2 0 0
+    PROPERTY "uv_scale" vec2 1 1
+    PROPERTY "nine_slice" vec4 0 0 0 0
+    PROPERTY "preserve_aspect" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 614
+  NAME "Image"
+  ENABLED 1
+  PARENT 613
+  TRANSFORM 0 0 0 0 0.13962280750274658 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.14499999582767487 0.20399999618530273
+    PROPERTY "anchor_max" vec2 0.59899997711181641 0.5220000147819519
+    PROPERTY "anchored_position" vec2 422.38119506835938 114.20220184326172
+    PROPERTY "size_delta" vec2 159.99993896484375 120.64334106445312
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 346.5
+    PROPERTY "scale" vec2 1.2699999809265137 1.6499999761581421
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 18
+    PROPERTY "sprite" assetref ""
+    PROPERTY "atlas" assetref "75051fcd391be0ead908e411240f6955"
+    PROPERTY "atlas_region" string "ude"
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "fill_color_2" color 1 1 1 1
+    PROPERTY "fill_mode" enum 0
+    PROPERTY "fill_angle" float 0
+    PROPERTY "fill_center" vec2 0.5 0.5
+    PROPERTY "stroke_mode" enum 0
+    PROPERTY "stroke_color_2" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "fill_amount" float 1
+    PROPERTY "fill_method" enum 0
+    PROPERTY "blend_mode" enum 0
+    PROPERTY "uv_offset" vec2 0 0
+    PROPERTY "uv_scale" vec2 1 1
+    PROPERTY "nine_slice" vec4 0 0 0 0
+    PROPERTY "preserve_aspect" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 617
+  NAME "Image"
+  ENABLED 1
+  PARENT 614
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.73500001430511475 1.0980000495910645
+    PROPERTY "anchored_position" vec2 -1010.000244140625 -683.33349609375
+    PROPERTY "size_delta" vec2 160 80
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 18
+    PROPERTY "sprite" assetref ""
+    PROPERTY "atlas" assetref ""
+    PROPERTY "atlas_region" string ""
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "fill_color_2" color 1 1 1 1
+    PROPERTY "fill_mode" enum 0
+    PROPERTY "fill_angle" float 0
+    PROPERTY "fill_center" vec2 0.5 0.5
+    PROPERTY "stroke_mode" enum 0
+    PROPERTY "stroke_color_2" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "fill_amount" float 1
+    PROPERTY "fill_method" enum 0
+    PROPERTY "blend_mode" enum 0
+    PROPERTY "uv_offset" vec2 0 0
+    PROPERTY "uv_scale" vec2 1 1
+    PROPERTY "nine_slice" vec4 0 0 0 0
+    PROPERTY "preserve_aspect" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 615
+  NAME "Image (1)"
+  ENABLED 1
+  PARENT 613
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.83099997043609619 0.8529999852180481
+    PROPERTY "anchored_position" vec2 1054.6962890625 -845.01190185546875
+    PROPERTY "size_delta" vec2 381.28994750976562 -359.3228759765625
+    PROPERTY "pivot" vec2 0.50099998712539673 0.5
+    PROPERTY "rotation" float -2
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 18
+    PROPERTY "sprite" assetref ""
+    PROPERTY "atlas" assetref ""
+    PROPERTY "atlas_region" string ""
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "fill_color_2" color 1 1 1 1
+    PROPERTY "fill_mode" enum 0
+    PROPERTY "fill_angle" float 0
+    PROPERTY "fill_center" vec2 0.5 0.5
+    PROPERTY "stroke_mode" enum 0
+    PROPERTY "stroke_color_2" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "fill_amount" float 1
+    PROPERTY "fill_method" enum 0
+    PROPERTY "blend_mode" enum 0
+    PROPERTY "uv_offset" vec2 0 0
+    PROPERTY "uv_scale" vec2 1 1
+    PROPERTY "nine_slice" vec4 0 0 0 0
+    PROPERTY "preserve_aspect" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 626
+  NAME "自由図形 Image"
+  ENABLED 1
+  PARENT 613
+  TRANSFORM 0 0 0 0.54977869987487793 0.81157809495925903 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.44900000095367432 0.46299999952316284
+    PROPERTY "anchor_max" vec2 0.59299999475479126 0.5
+    PROPERTY "anchored_position" vec2 1142.761962890625 233.52375793457031
+    PROPERTY "size_delta" vec2 160 100
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 18
+    PROPERTY "sprite" assetref "26a27438bd1c1ae6f32d64fb6d88b607"
+    PROPERTY "atlas" assetref ""
+    PROPERTY "atlas_region" string ""
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "fill_color_2" color 1 1 1 1
+    PROPERTY "fill_mode" enum 0
+    PROPERTY "fill_angle" float 0
+    PROPERTY "fill_center" vec2 0.5 0.5
+    PROPERTY "stroke_mode" enum 0
+    PROPERTY "stroke_color_2" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "fill_amount" float 1
+    PROPERTY "fill_method" enum 0
+    PROPERTY "blend_mode" enum 0
+    PROPERTY "uv_offset" vec2 0 0
+    PROPERTY "uv_scale" vec2 1 1
+    PROPERTY "nine_slice" vec4 0 0 0 0
+    PROPERTY "preserve_aspect" bool 0
+  END_COMPONENT
+  COMPONENT "UIShapeImageComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "path_closed" bool 1
+    PROPERTY "path_points" array vec2 5 -0.57408803701400757 -1.9686554670333862 0.86055451631546021 -1.143424391746521 0.93477737903594971 0.59054297208786011 0.035970240831375122 2.9827308654785156 -2.2567763328552246 0.27322220802307129
+    PROPERTY "path_in_handles" array vec2 5 0 0 0 0 0.18424582481384277 -0.9219517707824707 0 0 0 0
+    PROPERTY "path_out_handles" array vec2 5 0 0 0 0 -0.22411611676216125 1.1214594841003418 0 0 0 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 628
+  NAME "Text"
+  ENABLED 1
+  PARENT 612
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 383.5 354
+    PROPERTY "size_delta" vec2 839 166
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 20
+    PROPERTY "text" string "Text"
+    PROPERTY "font" assetref "8d49f84fe9df766763f71a26d79ca356"
+    PROPERTY "font_size" float 335
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float -19.5
+    PROPERTY "line_spacing" float 0.36000001430511475
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+    PROPERTY "number_source" compref 0 0
+    PROPERTY "number_source_property" string ""
+    PROPERTY "number_format" string ""
+    PROPERTY "number_digits" int 0
+    PROPERTY "outline_width" float 0
+    PROPERTY "outline_color" color 0 0 0 1
+    PROPERTY "shadow_offset" vec2 21.5 0
+    PROPERTY "shadow_color" color 0.18218624591827393 0.03983018547296524 0.03983018547296524 0
+  END_COMPONENT
+  COMPONENT "UIEffectStackComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE "RePlayEngine.Optional.Effects"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 61
+    PROPERTY "enabled" bool 1
+    PROPERTY "target_scope" enum 0
+    PROPERTY "capture_backdrop" bool 0
+    PROPERTY "use_preset" bool 0
+    PROPERTY "effect_preset" assetref ""
+    PROPERTY "effect_count" int 1
+    PROPERTY "effect_region_enabled" bool 0
+    PROPERTY "effect_region_shape" enum 0
+    PROPERTY "effect_region_scope" enum 0
+    PROPERTY "effect_region_invert" bool 0
+    PROPERTY "effect_region_center" vec2 0.5 0.5
+    PROPERTY "effect_region_size" vec2 0.5 0.5
+    PROPERTY "effect_region_rotation" float 0
+    PROPERTY "effect_region_feather" float 0
+    PROPERTY "effect_region_strength" float 1
+    PROPERTY "effect_region_mask" assetref ""
+    PROPERTY "effect_region_additional_count" int 0
+    PROPERTY "effects[0].enabled" bool 1
+    PROPERTY "effects[0].region_enabled" bool 1
+    PROPERTY "effects[0].type" enum 43
+    PROPERTY "effects[0].amount" float 18
+    PROPERTY "effects[0].radius" float 180
+    PROPERTY "effects[0].speed" float 0.80000001192092896
+    PROPERTY "effects[0].intensity" float 1
+    PROPERTY "effects[0].seed" float 1
+    PROPERTY "effects[0].custom_shader" assetref ""
+    PROPERTY "effect_region_path_count" int 0
+    PROPERTY "effects[0].threshold" float 0.57300001382827759
+    PROPERTY "effects[0].angle" float 6.8000001907348633
+    PROPERTY "effects[0].progress" float 0.11999999731779099
+    PROPERTY "effects[0].softness" float 0.34999999403953552
+    PROPERTY "effects[0].direction" vec2 1 1
+    PROPERTY "effects[0].color" color 0 0 0 1
+    PROPERTY "effects[0].color_2" color 1 1 1 1
+    PROPERTY "effects[0].color_3" color 1 1 1 1
+    PROPERTY "effects[0].color_4" color 1 1 1 1
+    PROPERTY "effects[0].color_stop_2" float 0.33333298563957214
+    PROPERTY "effects[0].color_stop_3" float 0.66666698455810547
+    PROPERTY "effects[0].color_stop_4" float 1
+    PROPERTY "effects[0].mask" assetref ""
+    PROPERTY "effects[0].brush_atlas_enabled" bool 0
+    PROPERTY "effects[0].brush_instanced_renderer_enabled" bool 0
+    PROPERTY "effects[0].brush_pattern_mode" enum 0
+    PROPERTY "effects[0].brush_pattern_index" enum 0
+    PROPERTY "effects[0].brush_pattern_weight_0" float 0
+    PROPERTY "effects[0].brush_pattern_weight_1" float 0
+    PROPERTY "effects[0].brush_pattern_weight_2" float 0
+    PROPERTY "effects[0].brush_pattern_weight_3" float 0
+    PROPERTY "effects[0].brush_pattern_weight_4" float 0
+    PROPERTY "effects[0].brush_pattern_weight_5" float 0
+    PROPERTY "effects[0].brush_pattern_weight_6" float 0
+    PROPERTY "effects[0].brush_pattern_weight_7" float 0
+    PROPERTY "effects[0].brush_pattern_weight_8" float 0
+    PROPERTY "effects[0].brush_pattern_weight_9" float 0
+    PROPERTY "effects[0].brush_pattern_weight_10" float 0
+    PROPERTY "effects[0].brush_pattern_weight_11" float 0
+    PROPERTY "effects[0].brush_pattern_weight_12" float 0
+    PROPERTY "effects[0].brush_pattern_weight_13" float 0
+    PROPERTY "effects[0].brush_pattern_weight_14" float 0
+    PROPERTY "effects[0].brush_pattern_weight_15" float 0
+    PROPERTY "effects[0].waveform" enum 0
+  END_COMPONENT
+END_OBJECT

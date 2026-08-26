@@ -1,4 +1,4 @@
-#include "EditorCameraPreset.h"
+﻿#include "EditorCameraPreset.h"
 
 #include <algorithm>
 #include <chrono>
@@ -322,9 +322,28 @@ namespace ReplayEngine::Editor
             return false;
         }
         if (preset.id.empty()) preset.id = MakeUniqueId();
-        if (preset.name.empty()) preset.name = "My Camera";
+        const std::filesystem::path save_path = MakePersonalPath(preset);
+        if (preset.name.empty())
+        {
+            // UI と同じく、既存 preset の空名は採用しない。
+            // 以前はここで無条件に "My Camera" へ変えていたため、
+            // データ層を直接使うと保存済みの表示名を失っていた。
+            EditorCameraPreset existing;
+            std::string load_error;
+            std::error_code exists_error;
+            if (std::filesystem::exists(save_path, exists_error) && !exists_error &&
+                LoadPresetFile(save_path, EditorCameraPresetScope::Personal,
+                    existing, load_error) && !existing.name.empty())
+            {
+                preset.name = existing.name;
+            }
+            else
+            {
+                preset.name = "My Camera";
+            }
+        }
         preset.Sanitize();
-        preset.source_path = MakePersonalPath(preset);
+        preset.source_path = save_path;
         return SavePresetFile(preset, preset.source_path, error);
     }
 

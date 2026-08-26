@@ -1,0 +1,162 @@
+REPLAY_SCENE 11
+SCENE "SkinnedShadowTest"
+SCENE_STATE 0
+COLLISION_STATE 2 0
+OBJECT_COUNT 6
+OBJECT
+  ID 3
+  NAME "Ground"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 14 1 14
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "primitive_type" enum 0
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.16 0.17 0.20 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 4
+  NAME "SkinnedCaster"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -3.5 1.2 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "SkinnedMeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 13
+    PROPERTY "mesh_asset" asset "ec24e9cfab50d6a6324f279c4d0064a5"
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_override" bool 0
+    PROPERTY "tint" color 1 1 1 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+    PROPERTY "visual_rotation_offset" vec3 0 0 0
+    PROPERTY "local_position_offset" vec3 0 0 0
+    PROPERTY "local_scale_multiplier" vec3 0.018 0.018 0.018
+    PROPERTY "apply_fbx_coordinate_transform" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 5
+  NAME "SkinnedNoCast"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 1.5 1.2 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "SkinnedMeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 13
+    PROPERTY "mesh_asset" asset "ec24e9cfab50d6a6324f279c4d0064a5"
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_override" bool 0
+    PROPERTY "tint" color 1 1 1 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+    PROPERTY "visual_rotation_offset" vec3 0 0 0
+    PROPERTY "local_position_offset" vec3 0 0 0
+    PROPERTY "local_scale_multiplier" vec3 0.018 0.018 0.018
+    PROPERTY "apply_fbx_coordinate_transform" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 6
+  NAME "RefCube"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -1 1.2 2.5 0 0.4 0 1.2 1.2 1.2
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.8 0.8 0.85 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 7
+  NAME "Directional Light"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 8 0 -1 1.5708 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "DirectionalLightComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "color" color 1 0.97 0.93 1
+    PROPERTY "intensity" float 0.5
+    PROPERTY "cast_shadows" bool 1
+    PROPERTY "shadow_strength" float 1
+    PROPERTY "shadow_depth_bias" float 0.0016
+    PROPERTY "shadow_normal_bias" float 1.4
+    PROPERTY "shadow_distance" float 60
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 8
+  NAME "Main Camera"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 9 -8 0.8 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "CameraComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "projection_mode" enum 0
+    PROPERTY "field_of_view_degrees" float 55
+    PROPERTY "orthographic_size" float 5
+    PROPERTY "near_clip" float 0.1
+    PROPERTY "far_clip" float 1000
+    PROPERTY "priority" int 0
+    PROPERTY "viewport_enabled" bool 0
+    PROPERTY "viewport_rect" vec4 0 0 1 1
+  END_COMPONENT
+END_OBJECT

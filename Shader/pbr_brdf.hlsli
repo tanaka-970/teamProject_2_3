@@ -249,7 +249,9 @@ PbrScreenSpaceInputs pbr_default_screen_inputs()
 float3 evaluate_pbr_ex(float3 base_color, float3 emissive,
                        float metallic, float roughness, float occlusion,
                        float3 N, float3 V, float3 world_position,
-                       float shadow, PbrScreenSpaceInputs screen)
+                       float shadow, PbrScreenSpaceInputs screen,
+                       // 1=影を受ける / 0=受けない。Point / Spot の影にも効く。
+                       float receive_shadow)
 {
     // perceptual -> alpha
     float alpha_roughness = max(roughness * roughness, 0.0025f);
@@ -281,8 +283,9 @@ float3 evaluate_pbr_ex(float3 base_color, float3 emissive,
     }
 
     direct *= shadow;
-    direct += evaluate_point_lights(world_position, N, V, base_color, roughness, metallic);
-    direct += evaluate_spot_lights(world_position, N, V, base_color);
+    direct += evaluate_point_lights(world_position, N, V, base_color,
+        roughness, metallic, receive_shadow);
+    direct += evaluate_spot_lights(world_position, N, V, base_color, receive_shadow);
 
     // 間接光はマルチスキャッタIBLで拡散/鏡面を同時に解く。
     float3 ibl_diffuse, ibl_specular;
@@ -322,9 +325,10 @@ float3 evaluate_pbr(float3 base_color, float3 emissive,
                     float metallic, float roughness, float occlusion,
                     float3 N, float3 V, float3 world_position)
 {
+    // 前方描画は Receive Shadow を運ぶ経路が無いので常に受ける扱い。
     return evaluate_pbr_ex(base_color, emissive, metallic, roughness, occlusion,
         N, V, world_position, sample_shadow(world_position),
-        pbr_default_screen_inputs());
+        pbr_default_screen_inputs(), 1.0f);
 }
 
 #endif // PBR_BRDF_CORE_ONLY

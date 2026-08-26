@@ -261,7 +261,7 @@ bool framework::undo_external_file_edit()
         if (!error.empty()) project_browser_status = error;
         return false;
     }
-    reload_external_file_edit_target(restored);
+    project_apply_external_history_change();
     project_browser_status = "Undo: " + label;
     return true;
 }
@@ -276,7 +276,7 @@ bool framework::redo_external_file_edit()
         if (!error.empty()) project_browser_status = error;
         return false;
     }
-    reload_external_file_edit_target(restored);
+    project_apply_external_history_change();
     project_browser_status = "Redo: " + label;
     return true;
 }
@@ -303,6 +303,26 @@ void framework::reload_external_file_edit_target(const std::filesystem::path& re
         load_active_input_action_asset();
         sync_runtime_scene_flow_asset();
         return;
+    }
+
+    if (sprite_atlas_editor_loaded && !sprite_atlas_editor_path.empty() &&
+        normalize(sprite_atlas_editor_path) == target)
+    {
+        ReplayEngine::Assets::SpriteAtlasAsset restored_atlas;
+        std::string atlas_error;
+        if (ReplayEngine::Assets::SpriteAtlasAsset::LoadFromFile(
+            sprite_atlas_editor_path, restored_atlas, atlas_error))
+        {
+            sprite_atlas_editor_asset = std::move(restored_atlas);
+            sprite_atlas_selected_region = (std::min)(sprite_atlas_selected_region,
+                static_cast<int>(sprite_atlas_editor_asset.regions.size()) - 1);
+            sprite_atlas_editor_dirty = false;
+            sprite_atlas_editor_status = "Undo/RedoでAtlasを再読込しました";
+        }
+        else
+        {
+            sprite_atlas_editor_status = "Atlas再読込失敗: " + atlas_error;
+        }
     }
 
     for (const auto& record : asset_database.Records())

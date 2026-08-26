@@ -20,7 +20,13 @@ void framework::update(float elapsed_time)
     if (ImGui::GetCurrentContext() &&
         (editor_mode || (standalone_game_mode && show_render_stats)))
     {
-        keyboard_captured = ImGui::GetIO().WantCaptureKeyboard;
+        // Play中にGame/Scene Viewをフォーカスしている場合は、
+        // ImGuiのWindowフォーカスだけを理由にGameplayキーボードを遮断しない。
+        // InputTextなど他のEditor UIにフォーカスがある場合は従来どおり捕捉する。
+        const bool game_view_owns_keyboard =
+            editor_mode && object_scene_play_mode && scene_view_focused;
+        keyboard_captured = ImGui::GetIO().WantCaptureKeyboard &&
+            !game_view_owns_keyboard;
         // Standalone Profiler を開いている間は Profiler がマウスを所有する。
         // Editor だけは従来どおり Scene View 上の操作を通す。
         mouse_captured = ImGui::GetIO().WantCaptureMouse &&

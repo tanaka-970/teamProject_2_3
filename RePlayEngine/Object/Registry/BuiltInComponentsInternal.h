@@ -35,6 +35,7 @@
 #include "../../Components/Landscape/LandscapeRendererComponent.h"
 #include "../../Components/Landscape/LandscapeColliderComponent.h"
 #include "../../Components/Motion/MotionPlayerComponent.h"
+#include "../../Components/Motion/CompositionPlayerComponent.h"
 #include "../../Components/UI/CanvasComponent.h"
 #include "../../Components/UI/RectTransformComponent.h"
 #include "../../Components/UI/UIImageComponent.h"
@@ -49,6 +50,8 @@
 #include "../../Components/UI/UIMaskComponent.h"
 #include "../../Components/UI/UIEffectStackComponent.h"
 #include "../../Components/UI/UIShapeComponent.h"
+#include "../../Components/UI/UIShapeImageComponent.h"
+#include "../../Components/UI/UIPuppetDeformComponent.h"
 #include "../../Components/UI/UISpriteAnimatorComponent.h"
 #include "../../Components/UI/UITextAnimatorComponent.h"
 #include "../../Components/Rendering/AnimatorComponent.h"
@@ -87,6 +90,7 @@ namespace ReplayEngine::Core::Detail
         using Components::LandscapeColliderComponent;
         using Components::LineRendererComponent;
         using Components::MotionPlayerComponent;
+        using Components::CompositionPlayerComponent;
         using Components::MeshRendererComponent;
         using Components::ModelEffectStackComponent;
         using Components::ScreenEffectStackComponent;
@@ -127,6 +131,8 @@ namespace ReplayEngine::Core::Detail
         using Components::UIMaskComponent;
         using Components::UIEffectStackComponent;
         using Components::UIShapeComponent;
+        using Components::UIShapeImageComponent;
+        using Components::UIPuppetDeformComponent;
         using Components::UISpriteAnimatorComponent;
         using Components::UITextComponent;
         using Components::UITextAnimatorComponent;

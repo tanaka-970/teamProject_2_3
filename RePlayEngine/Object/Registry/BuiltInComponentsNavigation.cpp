@@ -8,8 +8,8 @@ namespace ReplayEngine::Core::Detail
             ComponentTypeInfo::Describe("Nav Agent", "Navigation")
                 .InModule("RePlayEngine.BuiltIn")
                 .WithTooltip(
-                    "指定したワールド座標へ移動する汎用 Agent。Phase 1 は直線移動、"
-                    "Phase 2 以降も MoveTo / Stop / Arrived の API は維持する。"));
+                    "指定したワールド座標へ移動する汎用 Agent。Phase 2 は既存衝突世界を"
+                    "グリッド探索し、MoveTo / Stop / Arrived の API は維持する。"));
 
         PropertyRegistry::Register<NavAgentComponent>(
             MakeProperty("move_speed", &NavAgentComponent::move_speed)
@@ -20,6 +20,18 @@ namespace ReplayEngine::Core::Detail
         PropertyRegistry::Register<NavAgentComponent>(
             MakeProperty("stopping_distance", &NavAgentComponent::stopping_distance)
                 .Display("停止距離").Range(0.0, 1000.0).Step(0.05));
+        PropertyRegistry::Register<NavAgentComponent>(
+            MakeProperty("path_grid_size", &NavAgentComponent::path_grid_size)
+                .Display("経路グリッド間隔").Range(0.05, 100.0).Step(0.05)
+                .Tooltip("衝突世界を標本化する間隔。小さいほど細かいが探索コストが増える。"));
+        PropertyRegistry::Register<NavAgentComponent>(
+            MakeProperty("path_max_range", &NavAgentComponent::path_max_range)
+                .Display("経路探索最大範囲").Range(1.0, 1000.0).Step(1.0)
+                .Tooltip("開始地点から X/Z 各方向へ探索する上限。上限外は直進へフォールバックする。"));
+        PropertyRegistry::Register<NavAgentComponent>(
+            MakeProperty("path_max_search_cells", &NavAgentComponent::path_max_search_cells)
+                .Display("経路探索最大升目数").Range(16.0, 65536.0).Step(16.0)
+                .Tooltip("A* が生成してよい升目数。超えたら探索を打ち切り直進へフォールバックする。"));
 
         ComponentRegistry::Register<EnemyBehaviourComponent>(
             ComponentTypeInfo::Describe("Enemy Behaviour", "Gameplay")

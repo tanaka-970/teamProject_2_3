@@ -25,6 +25,8 @@ struct GBufferData
     float  metalness;
     float  occlusion_strength;
     float2 velocity;
+    // Mesh Renderer の Receive Shadow。false なら照明側で影を掛けない。
+    bool   receive_shadow;
 };
 
 GBufferOut EncodeGBuffer(GBufferData d)
@@ -33,7 +35,8 @@ GBufferOut EncodeGBuffer(GBufferData d)
     // alpha には「シェーダの種類」ではなく照明式だけを 8bit で保存する。
     o.base_color = float4(d.base_color, (float) d.lighting_model / 255.0f);
     o.emissive   = float4(d.emissive, 1.0f);
-    o.normal     = float4(d.world_normal * 0.5f + 0.5f, 1.0f);
+    // normal.a は符号が Receive Shadow、絶対値が Pixelate 強度。FP16 なので符号を持てる。
+    o.normal     = float4(d.world_normal * 0.5f + 0.5f, d.receive_shadow ? 1.0f : -1.0f);
     o.parameter  = float4(d.occlusion, d.roughness, d.metalness, d.occlusion_strength);
     o.velocity   = d.velocity;
     return o;
@@ -50,6 +53,7 @@ GBufferData DecodeGBuffer(float4 base, float4 emi, float4 nor, float4 par)
     d.roughness      = par.g;
     d.metalness      = par.b;
     d.occlusion_strength = par.a;
+    d.receive_shadow = nor.a >= 0.0f;
     return d;
 }
 
@@ -60,7 +64,9 @@ void EncodePixelateSettings(inout GBufferOut output,
     float pixel_size, float pixel_strength)
 {
     output.emissive.a = -max(pixel_size, 1.0f);
-    output.normal.a = saturate(pixel_strength);
+    // Receive Shadow の符号を保つ。強度 0 だと符号が消えるので下限を入れる。
+    const float strength = max(saturate(pixel_strength), 0.001f);
+    output.normal.a = output.normal.a < 0.0f ? -strength : strength;
 }
 
 bool HasPixelateSettings(float4 emissive_value)
@@ -75,7 +81,8 @@ float DecodePixelateSize(float4 emissive_value)
 
 float DecodePixelateStrength(float4 normal_value)
 {
-    return saturate(normal_value.a);
+    // 符号は Receive Shadow が使っているので絶対値を取る。
+    return saturate(abs(normal_value.a));
 }
 
 #endif

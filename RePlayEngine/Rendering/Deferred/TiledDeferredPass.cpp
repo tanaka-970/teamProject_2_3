@@ -70,20 +70,23 @@ namespace ReplayEngine::Rendering
     }
 
     void TiledDeferredPass::AddPointLight(const XMFLOAT3& position, float radius,
-        const XMFLOAT3& color, float intensity)
+        const XMFLOAT3& color, float intensity,
+        int shadow_slice, float shadow_strength)
     {
         if (lights_.size() >= kMaxLightCapacity || radius <= 0.0f) return;
         Light light{};
         light.position_radius = { position.x, position.y, position.z, radius };
         light.color_intensity = { color.x, color.y, color.z, intensity };
         light.direction_cone = { 0.0f, -1.0f, 0.0f, 1.0f };
-        light.params = { 0.0f, static_cast<float>(LightType::Point), 0.0f, 0.0f };
+        light.params = { 0.0f, static_cast<float>(LightType::Point),
+            static_cast<float>(shadow_slice), shadow_strength };
         lights_.push_back(light);
     }
 
     void TiledDeferredPass::AddSpotLight(const XMFLOAT3& position, float radius,
         const XMFLOAT3& direction, float inner_cosine, float outer_cosine,
-        const XMFLOAT3& color, float intensity)
+        const XMFLOAT3& color, float intensity,
+        int shadow_slice, float shadow_strength)
     {
         if (lights_.size() >= kMaxLightCapacity || radius <= 0.0f) return;
         Light light{};
@@ -92,7 +95,8 @@ namespace ReplayEngine::Rendering
         light.direction_cone = { direction.x, direction.y, direction.z, inner_cosine };
         // 内コーンが外コーンより内側(cosが大きい)であることを保証する。
         light.params = { (std::min)(outer_cosine, inner_cosine - 1.0e-4f),
-            static_cast<float>(LightType::Spot), 0.0f, 0.0f };
+            static_cast<float>(LightType::Spot),
+            static_cast<float>(shadow_slice), shadow_strength };
         lights_.push_back(light);
     }
 

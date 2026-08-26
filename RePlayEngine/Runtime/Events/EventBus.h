@@ -135,6 +135,8 @@ namespace ReplayEngine::Runtime
             Reflection::MakeTypeGUID("a1000000000000000000000000000011");
         inline constexpr Reflection::TypeGUID InputFieldCanceled =
             Reflection::MakeTypeGUID("a1000000000000000000000000000012");
+        inline constexpr Reflection::TypeGUID CompositionMarker =
+            Reflection::MakeTypeGUID("a1000000000000000000000000000013");
     }
 
     // イベントの発行と購読。

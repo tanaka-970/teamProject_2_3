@@ -338,6 +338,8 @@ public:
     bool IsGltf() const noexcept { return imported_gltf_; }
     bool HasAnimations() const noexcept { return !animation_clips.empty(); }
     bool HasDoubleSidedMaterials() const noexcept;
+    // アルファ抜きを宣言した GLB 内蔵材質が 1 つでもあるか。影パスの判定に使う。
+    bool HasAlphaMaskMaterials() const noexcept;
 
 #if REPLAY_ENABLE_FBX_IMPORTER
     void fetch_materials(FbxScene* fbx_scene, std::unordered_map<uint64_t, material>& materials);

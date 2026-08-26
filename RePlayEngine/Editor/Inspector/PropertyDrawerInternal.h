@@ -322,6 +322,8 @@ namespace ReplayEngine::Editor::Detail
             if (name == "SceneFlow") return Assets::AssetKind::SceneFlow;
             if (name == "Font") return Assets::AssetKind::Font;
             if (name == "Motion") return Assets::AssetKind::Motion;
+            if (name == "Composition") return Assets::AssetKind::Composition;
+            if (name == "SpriteAtlas") return Assets::AssetKind::SpriteAtlas;
             if (name == "Localization") return Assets::AssetKind::Localization;
             if (name == "EffectPreset") return Assets::AssetKind::EffectPreset;
             return Assets::AssetKind::Unknown;

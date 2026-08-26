@@ -26,7 +26,8 @@ namespace ReplayEngine::Rendering
             DirectX::XMFLOAT4 position_radius{ 0.0f, 0.0f, 0.0f, 0.0f };
             DirectX::XMFLOAT4 color_intensity{ 1.0f, 1.0f, 1.0f, 1.0f };
             DirectX::XMFLOAT4 direction_cone{ 0.0f, -1.0f, 0.0f, 1.0f };
-            DirectX::XMFLOAT4 params{ 0.0f, 0.0f, 0.0f, 0.0f }; // x=外コーンcos, y=種類
+            // x=外コーンcos, y=種類, z=影マップ先頭スライス(負なら影なし), w=影の濃さ
+            DirectX::XMFLOAT4 params{ 0.0f, 0.0f, -1.0f, 1.0f };
         };
 
         enum class LightType : int { Point = 0, Spot = 1 };
@@ -48,11 +49,14 @@ namespace ReplayEngine::Rendering
 
         // 1フレーム分のライトを積む。Dispatch前に呼ぶ。
         void ClearLights() noexcept { lights_.clear(); }
+        // shadow_slice が負なら影マップ無し。PS 版と同じ値をそのまま運ぶ。
         void AddPointLight(const DirectX::XMFLOAT3& position, float radius,
-            const DirectX::XMFLOAT3& color, float intensity);
+            const DirectX::XMFLOAT3& color, float intensity,
+            int shadow_slice = -1, float shadow_strength = 1.0f);
         void AddSpotLight(const DirectX::XMFLOAT3& position, float radius,
             const DirectX::XMFLOAT3& direction, float inner_cosine, float outer_cosine,
-            const DirectX::XMFLOAT3& color, float intensity);
+            const DirectX::XMFLOAT3& color, float intensity,
+            int shadow_slice = -1, float shadow_strength = 1.0f);
         size_t LightCount() const noexcept { return lights_.size(); }
 
         // G-BufferとSSAO/SSRを読み、output_uav へライティング結果を書く。

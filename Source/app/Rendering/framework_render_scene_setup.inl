@@ -66,41 +66,99 @@
     // Shadow / CSM / GBuffer / Forward / Outline のどのパスにも
     // Player 専用の分岐は残っていない。
 
-    if (csm.constants.params.w > 0.5f && enable_static_meshes && static_meshes[0])
+    // 影の診断値はフレームごとに作り直す。
+    if (camera_pass_index == 0) shadow_stats.Reset();
+    shadow_stats.directional_light_present = directional_light_present;
+    shadow_stats.directional_preview_light = directional_light_is_preview;
+
+    // Model Effect Stack の面消しを影へ渡す。Effect 本体と同じ矩形をここで作る。
+    collect_shadow_coverage(camera_output_viewport);
+
+    if (csm.constants.params.w > 0.5f)
     {
         REPLAY_PROFILE_GPU_SCOPE(immediate_context.Get(), "CSM Shadow");
         // カスケードシャドウ用深度を先に作る。終了時に元のRTVとViewportを復元する。
         D3D11_VIEWPORT main_vp = viewport;
         csm.shadow_begin(immediate_context.Get());
 
-        DirectX::XMFLOAT4X4 world;
-        store_debug_mesh_world(world);
-        static_meshes[0]->render(immediate_context.Get(), world, material_color,
-            nullptr,
-            csm.caster_static_vs.Get(),
-            csm.caster_static_il.Get(),
-            false);
+        // Scene の全キャスターを提出する。姿勢はこのフレームのものが入る。
+        draw_shadow_caster_meshes(
+            csm.caster_static_vs.Get(), csm.caster_static_il.Get(),
+            csm.caster_skinned_vs.Get(), csm.caster_skinned_il.Get(),
+            csm.shadow_volume_center, csm.shadow_volume_radius,
+            csm.caster_extrusion);
+
+        // エディタのデバッグ用静的メッシュ。互換のために残しているだけ。
+        if (enable_static_meshes && static_meshes[0])
+        {
+            DirectX::XMFLOAT4X4 world;
+            store_debug_mesh_world(world);
+            static_meshes[0]->render(immediate_context.Get(), world, material_color,
+                nullptr,
+                csm.caster_static_vs.Get(),
+                csm.caster_static_il.Get(),
+                false);
+            ++shadow_stats.shadow_draw_calls;
+        }
 
         csm.shadow_end(immediate_context.Get(),
             render_target_view.Get(), depth_stencil_view.Get(), main_vp);
+        shadow_stats.directional_shadow_rendered = true;
     }
 
-    if (pbr_shadow_enabled && enable_static_meshes && static_meshes[0])
+    if (pbr_shadow_enabled && enable_dynamic_shadows)
     {
         REPLAY_PROFILE_GPU_SCOPE(immediate_context.Get(), "PBR Shadow");
         // PBR固有のシャドウマップはCSMと別リソースなので、必要な場合だけ生成する。
+        // CSM が無効な構成でも影が消えないよう、こちらにも Scene 全体を流す。
         D3D11_VIEWPORT main_vp = viewport;
         pbr.shadow_begin(immediate_context.Get());
 
-        DirectX::XMFLOAT4X4 world;
-        store_debug_mesh_world(world);
-        static_meshes[0]->render(immediate_context.Get(), world, material_color,
-            nullptr,
-            pbr.shadow_caster_static_vs.Get(),
-            pbr.shadow_caster_static_il.Get(),
-            false);
+        draw_shadow_caster_meshes(
+            pbr.shadow_caster_static_vs.Get(), pbr.shadow_caster_static_il.Get(),
+            pbr.shadow_caster_skinned_vs.Get(), pbr.shadow_caster_skinned_il.Get(),
+            csm.shadow_volume_center, csm.shadow_volume_radius,
+            csm.caster_extrusion);
+
+        if (enable_static_meshes && static_meshes[0])
+        {
+            DirectX::XMFLOAT4X4 world;
+            store_debug_mesh_world(world);
+            static_meshes[0]->render(immediate_context.Get(), world, material_color,
+                nullptr,
+                pbr.shadow_caster_static_vs.Get(),
+                pbr.shadow_caster_static_il.Get(),
+                false);
+        }
 
         pbr.shadow_end(immediate_context.Get(),
+            render_target_view.Get(), depth_stencil_view.Get(), main_vp);
+    }
+
+    // Point / Spot の影マップ。カメラに依存しないので 1 回だけ作る。
+    if (camera_pass_index == 0 && enable_dynamic_shadows &&
+        local_shadows.enabled && local_shadows.AtlasReady() &&
+        !local_shadow_requests.empty())
+    {
+        REPLAY_PROFILE_GPU_SCOPE(immediate_context.Get(), "Local Shadow");
+        const D3D11_VIEWPORT main_vp = viewport;
+        local_shadows.UploadSlices(immediate_context.Get());
+
+        for (const local_shadow_request& request : local_shadow_requests)
+        {
+            local_shadows.BeginLight(immediate_context.Get(),
+                request.base_slice, request.slice_count);
+            // 影ボリュームはライトの到達距離。範囲外の物体は影マップへ書けない。
+            draw_shadow_caster_meshes(
+                csm.caster_static_vs.Get(), csm.caster_static_il.Get(),
+                csm.caster_skinned_vs.Get(), csm.caster_skinned_il.Get(),
+                request.position, request.range, 0.0f);
+
+            if (request.point) ++shadow_stats.point_shadow_lights;
+            else ++shadow_stats.spot_shadow_lights;
+        }
+
+        local_shadows.End(immediate_context.Get(),
             render_target_view.Get(), depth_stencil_view.Get(), main_vp);
     }
 
@@ -144,7 +202,9 @@
             framebuffers[0]->shader_resource_views[0].Get(),
             camera_pass.screen_effect->EffectiveEffects(&asset_database),
             background_width, background_height, DXGI_FORMAT_R16G16B16A16_FLOAT,
-            shader_composer_time);
+            shader_composer_time, static_cast<std::uint64_t>(
+                reinterpret_cast<std::uintptr_t>(camera_pass.screen_effect)),
+            &camera_pass.screen_effect->effect_region);
         immediate_context->OMSetRenderTargets(1,
             framebuffers[0]->render_target_view.GetAddressOf(),
             framebuffers[0]->depth_stencil_view.Get());
@@ -173,6 +233,8 @@
 
     pbr.bind_pbr_resources(immediate_context.Get());
     csm.bind_resources(immediate_context.Get());
+    // Point / Spot の影マップ。前方描画の Toon / PBR もこれを読む。
+    local_shadows.BindResources(immediate_context.Get());
     toon.bind_resources(immediate_context.Get());
     immediate_context->PSSetShaderResources(1, 1, dummy_normal_srv.GetAddressOf());
     ReplayEngine::Rendering::Stats().CountStateSet(ReplayEngine::Rendering::RenderStats::StateKind::ShaderResource, false);

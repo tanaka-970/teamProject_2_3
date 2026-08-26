@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../../Rendering/ShaderComposer/ShaderComposerAsset.h"
 
@@ -18,6 +18,11 @@ namespace ReplayEngine::Editor
     public:
         bool Open(const std::filesystem::path& path, std::string& error);
         void Close() noexcept { visible_ = false; keyboard_focus_ = false; }
+        void ClearAsset() noexcept
+        {
+            visible_ = false; keyboard_focus_ = false; dirty_ = false;
+            path_.clear(); asset_ = {}; selected_node_ = 0; pending_output_node_ = 0; status_.clear();
+        }
         bool IsVisible() const noexcept { return visible_; }
         bool OwnsKeyboardShortcut() const noexcept { return visible_ && keyboard_focus_; }
         bool HasAsset() const noexcept { return !path_.empty(); }

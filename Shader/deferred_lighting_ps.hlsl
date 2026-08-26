@@ -119,9 +119,14 @@ float4 main(VS_OUT pin) : SV_TARGET
     const float view_z = mul(float4(wp, 1.0f), frame_view).z;
     const float shadow_rotation_seed =
         interleaved_gradient_noise(pin.position.xy, frame_params.x);
-    const float shadow_visibility = csm_params.w >= 0.5f
-        ? csm_sample_shadow_hq(wp, N, view_z, saturate(dot(N, L)), shadow_rotation_seed)
-        : sample_shadow(wp);
+    // Receive Shadow が false の面には影を掛けない。落とす側の影は消えない。
+    float shadow_visibility = 1.0f;
+    if (g.receive_shadow)
+    {
+        shadow_visibility = csm_params.w >= 0.5f
+            ? csm_sample_shadow_hq(wp, N, view_z, saturate(dot(N, L)), shadow_rotation_seed)
+            : sample_shadow(wp);
+    }
     if (debug_mode == 7) return float4(shadow_visibility.xxx, 1);
 
     float3 color = 0;
@@ -145,8 +150,10 @@ float4 main(VS_OUT pin) : SV_TARGET
         // トゥーンでも影とAOは共通のものを使い、PBRと陰の位置がずれないようにする。
         color *= lerp(1.0f, shadow_visibility, 0.85f);
         color += g.base_color * ambient_strength * 0.5f * screen.ambient_occlusion;
-        color += evaluate_point_lights(wp, N, V, g.base_color, g.roughness, g.metalness);
-        color += evaluate_spot_lights(wp, N, V, g.base_color);
+        color += evaluate_point_lights(wp, N, V, g.base_color,
+            g.roughness, g.metalness, g.receive_shadow ? 1.0f : 0.0f);
+        color += evaluate_spot_lights(wp, N, V, g.base_color,
+            g.receive_shadow ? 1.0f : 0.0f);
         color += g.emissive;
     }
     else // PBR (デフォルト)
@@ -154,7 +161,8 @@ float4 main(VS_OUT pin) : SV_TARGET
         // マルチスキャッタIBL + SSAO/SSR + CSMを合わせたフルPBR評価。
         color = evaluate_pbr_ex(g.base_color, g.emissive,
             g.metalness, g.roughness, g.occlusion,
-            N, V, wp, shadow_visibility, screen);
+            N, V, wp, shadow_visibility, screen,
+            g.receive_shadow ? 1.0f : 0.0f);
     }
     return float4(color, 1.0f);
 }

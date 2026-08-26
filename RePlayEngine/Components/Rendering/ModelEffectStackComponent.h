@@ -41,6 +41,8 @@ namespace ReplayEngine::Components
             Rendering::ShaderPropertySchemaRef schema);
 
         bool enabled = true;
+        // Stack 全体へ掛ける矩形/楕円/画像マスク範囲。
+        UI::UIEffectRegion effect_region;
         // false の既存 Scene は inline 値をそのまま使う。Preset 参照は追加の選択肢。
         bool use_preset = false;
         Reflection::AssetReference effect_preset;

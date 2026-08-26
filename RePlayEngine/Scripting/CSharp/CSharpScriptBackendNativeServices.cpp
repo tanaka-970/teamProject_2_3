@@ -1,4 +1,4 @@
-#include "CSharpScriptBackendNativeInternal.h"
+﻿#include "CSharpScriptBackendNativeInternal.h"
 
 #include <algorithm>
 #include <cstring>
@@ -349,4 +349,130 @@ namespace ReplayEngine::Scripting::CSharp::Detail
         if (status == RuntimeStatus::Ok) *out = value ? 1 : 0;
         return StatusCode(status);
     }
+    // ---- Script Field --------------------------------------------------------
+
+    int NativeGetScriptBool(Runtime::ComponentHandle component, const char* field, int* out) noexcept
+    {
+        if (out == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+        *out = 0;
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        Reflection::PropertyValue value;
+        RuntimeStatus status = g_runtime_context->GetScriptField(component, CString(field), value);
+        if (status != RuntimeStatus::Ok) return StatusCode(status);
+        Reflection::PropertyValue converted;
+        if (value.Type() != Reflection::PropertyType::Bool &&
+            !value.ConvertTo(Reflection::PropertyType::Bool, converted))
+            return StatusCode(RuntimeStatus::TypeMismatch);
+        const Reflection::PropertyValue& result =
+            value.Type() == Reflection::PropertyType::Bool ? value : converted;
+        *out = result.AsBool() ? 1 : 0;
+        return StatusCode(RuntimeStatus::Ok);
+    }
+
+    int NativeSetScriptBool(Runtime::ComponentHandle component, const char* field, int value) noexcept
+    {
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        return StatusCode(g_runtime_context->SetScriptField(component, CString(field),
+            Reflection::PropertyValue::MakeBool(value != 0)));
+    }
+
+    int NativeGetScriptInt(Runtime::ComponentHandle component, const char* field, int* out) noexcept
+    {
+        if (out == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+        *out = 0;
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        Reflection::PropertyValue value;
+        RuntimeStatus status = g_runtime_context->GetScriptField(component, CString(field), value);
+        if (status != RuntimeStatus::Ok) return StatusCode(status);
+        Reflection::PropertyValue converted;
+        if (value.Type() != Reflection::PropertyType::Int &&
+            !value.ConvertTo(Reflection::PropertyType::Int, converted))
+            return StatusCode(RuntimeStatus::TypeMismatch);
+        const Reflection::PropertyValue& result =
+            value.Type() == Reflection::PropertyType::Int ? value : converted;
+        *out = result.AsInt();
+        return StatusCode(RuntimeStatus::Ok);
+    }
+
+    int NativeSetScriptInt(Runtime::ComponentHandle component, const char* field, int value) noexcept
+    {
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        return StatusCode(g_runtime_context->SetScriptField(component, CString(field),
+            Reflection::PropertyValue::MakeInt(value)));
+    }
+
+    int NativeGetScriptDouble(Runtime::ComponentHandle component, const char* field, double* out) noexcept
+    {
+        if (out == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+        *out = 0.0;
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        Reflection::PropertyValue value;
+        RuntimeStatus status = g_runtime_context->GetScriptField(component, CString(field), value);
+        if (status != RuntimeStatus::Ok) return StatusCode(status);
+        Reflection::PropertyValue converted;
+        if (value.Type() != Reflection::PropertyType::Double &&
+            !value.ConvertTo(Reflection::PropertyType::Double, converted))
+            return StatusCode(RuntimeStatus::TypeMismatch);
+        const Reflection::PropertyValue& result =
+            value.Type() == Reflection::PropertyType::Double ? value : converted;
+        *out = result.AsDouble();
+        return StatusCode(RuntimeStatus::Ok);
+    }
+
+    int NativeSetScriptDouble(Runtime::ComponentHandle component, const char* field, double value) noexcept
+    {
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        return StatusCode(g_runtime_context->SetScriptField(component, CString(field),
+            Reflection::PropertyValue::MakeDouble(value)));
+    }
+
+    int NativeGetScriptString(Runtime::ComponentHandle component, const char* field,
+        char* output, int output_capacity) noexcept
+    {
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        Reflection::PropertyValue value;
+        RuntimeStatus status = g_runtime_context->GetScriptField(component, CString(field), value);
+        if (status != RuntimeStatus::Ok) return StatusCode(status);
+        Reflection::PropertyValue converted;
+        if (value.Type() != Reflection::PropertyType::String &&
+            !value.ConvertTo(Reflection::PropertyType::String, converted))
+            return StatusCode(RuntimeStatus::TypeMismatch);
+        const Reflection::PropertyValue& result =
+            value.Type() == Reflection::PropertyType::String ? value : converted;
+        return WriteTextExact(result.AsString(), output, output_capacity);
+    }
+
+    int NativeSetScriptString(Runtime::ComponentHandle component, const char* field,
+        const char* value) noexcept
+    {
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        return StatusCode(g_runtime_context->SetScriptField(component, CString(field),
+            Reflection::PropertyValue::MakeString(CString(value))));
+    }
+
+    // ---- UI Focus ------------------------------------------------------------
+
+    int NativeGetUIFocus(Runtime::ObjectHandle* out) noexcept
+    {
+        if (out == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+        *out = Runtime::ObjectHandle::None();
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        return StatusCode(g_runtime_context->GetUIFocus(*out));
+    }
+
+    int NativeSetUIFocus(Runtime::ObjectHandle object) noexcept
+    {
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        return StatusCode(g_runtime_context->SetUIFocus(object));
+    }
+
+    int NativeFindUIFocus(Runtime::ObjectHandle from, int direction,
+        Runtime::ObjectHandle* out) noexcept
+    {
+        if (out == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+        *out = Runtime::ObjectHandle::None();
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        return StatusCode(g_runtime_context->FindUIFocusInDirection(from, direction, *out));
+    }
+
 }
