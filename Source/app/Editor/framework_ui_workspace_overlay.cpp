@@ -376,7 +376,8 @@ void framework::draw_ui_scene_overlay()
         if (scene_view_hovered)
             hovered_effect_region_handle = hit_effect_region_handle(mouse,
                 hovered_effect_region_index);
-        if (input.MouseDown[ImGuiMouseButton_Left])
+        // 移動ドラッグ中は範囲ハンドルの座標も動くため、押した瞬間の判定だけを使う。
+        if (input.MouseDown[ImGuiMouseButton_Left] && !ui_preview_drag_object.Valid())
             pressed_effect_region_handle = hit_effect_region_handle(press_position,
                 pressed_effect_region_index);
 
@@ -447,7 +448,7 @@ void framework::draw_ui_scene_overlay()
                     freeform_handle < 1000 ? freeform_handle - 9 : -1;
             }
         }
-        if (input.MouseDown[ImGuiMouseButton_Left])
+        if (input.MouseDown[ImGuiMouseButton_Left] && !ui_preview_drag_object.Valid())
         {
             int freeform_handle = -1;
             int freeform_region = -1;
@@ -543,7 +544,10 @@ void framework::draw_ui_scene_overlay()
             resize_handle_points[ResizeTopLeft] };
         if (target_hovered)
             hovered_resize_handle = HitResizeBorder(resize_corners, mouse);
-        if (input.MouseDown[ImGuiMouseButton_Left] && press_inside_target)
+        // 判定はボタンを押した瞬間だけ行う。ドラッグ中は矩形が動くので角ハンドルの
+        // 座標も動き、押した位置へ後から重なった時点でリサイズへ乗り換えてしまう。
+        if (input.MouseDown[ImGuiMouseButton_Left] && press_inside_target &&
+            !ui_preview_drag_object.Valid())
             pressed_resize_handle = HitResizeBorder(resize_corners, press_position);
     }
 
