@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstring>
 #include <filesystem>
 #include <string>
@@ -46,6 +47,19 @@ namespace framework_motion_workspace::Detail
         std::transform(value.begin(), value.end(), value.begin(),
             [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
         return value;
+    }
+
+    inline float FrameStep(int fps) noexcept
+    {
+        return 1.0f / static_cast<float>((std::max)(1, fps));
+    }
+
+    inline float SnapMotionTime(float time, int fps, bool snap) noexcept
+    {
+        const float safe = (std::max)(0.0f, time);
+        if (!snap) return safe;
+        const float frame = FrameStep(fps);
+        return std::round(safe / frame) * frame;
     }
 
     inline const char* PropertyTypeLabel(PropertyType type) noexcept

@@ -40,14 +40,7 @@ void framework::draw_motion_preview()
     }
 
     if (ImGui::Button(motion_preview_active ? "停止" : "再生"))
-    {
-        if (motion_preview_active) stop_motion_preview();
-        else
-        {
-            capture_motion_preview_targets();
-            motion_preview_active = true;
-        }
-    }
+        toggle_motion_preview_playback();
     ImGui::SameLine();
     if (ImGui::Button("復元")) stop_motion_preview();
     ImGui::SameLine();

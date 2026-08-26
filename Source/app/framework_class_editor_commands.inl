@@ -76,6 +76,8 @@
             }
             if (shortcut_pressed && wparam == 'D')
             {
+                // Motion Workspace の Ctrl+D は Key 複製が持つ。GameObject を巻き添えにしない。
+                if (active_editor_workspace == editor_workspace::motion) return 0;
                 if (project_browser_focused && !project_selected_entry_path.empty())
                     project_duplicate_entry(project_selected_entry_path);
                 else
@@ -93,6 +95,8 @@
                 // Project WindowにFocusがある時、SceneのGameObject Copy/Pasteへ
                 // 誤爆させない。Project AssetはCtrl+D/Drag Moveを使う。
                 if (project_browser_focused) return 0;
+                // Motion Workspace の Ctrl+C / Ctrl+V は Key の複写が持つ。
+                if (active_editor_workspace == editor_workspace::motion) return 0;
                 std::string clipboard_error;
                 if (wparam == 'C')
                 {
@@ -121,6 +125,8 @@
             {
                 // Atlas Editor 内の Delete/Backspace は Region 削除へ渡す。
                 if (sprite_atlas_editor_loaded && sprite_atlas_editor_keyboard_focus) return 0;
+                // Motion Workspace の Delete は Key 削除が持つ。GameObject を消さない。
+                if (active_editor_workspace == editor_workspace::motion) return 0;
                 if (project_browser_focused &&
                     selected_editor_object == editor_selection::asset &&
                     !project_selected_entry_path.empty())

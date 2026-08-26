@@ -171,11 +171,46 @@ void framework::draw_editor()
 
     if (active_editor_workspace == editor_workspace::motion)
     {
-        // S で現在のプレビュー時刻へキーを打つ。文字入力中は誤爆させない。
-        if (!ImGui::GetIO().WantTextInput &&
-            !ImGui::GetIO().KeyCtrl && !ImGui::GetIO().KeyAlt &&
-            ImGui::IsKeyPressed('S', false))
-            add_motion_key_at_preview_time();
+        // Motionショートカットは文字入力中に発火させない。
+        const ImGuiIO& motion_io = ImGui::GetIO();
+        if (!motion_io.WantTextInput)
+        {
+            if (!motion_io.KeyCtrl && !motion_io.KeyAlt &&
+                ImGui::IsKeyPressed('S', false))
+                add_motion_key_at_preview_time();
+            if (!motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
+                ImGui::IsKeyPressed(VK_DELETE, false))
+                delete_motion_keys();
+            if (motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
+                ImGui::IsKeyPressed('D', false))
+                duplicate_motion_keys();
+            if (motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
+                ImGui::IsKeyPressed('C', false))
+                copy_motion_keys();
+            if (motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
+                ImGui::IsKeyPressed('V', false))
+                paste_motion_keys();
+            if (!motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
+                ImGui::IsKeyPressed(VK_SPACE, false))
+                toggle_motion_preview_playback();
+            if (!motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
+                ImGui::IsKeyPressed(VK_HOME, false))
+                seek_motion_preview_time(0.0f);
+            if (!motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
+                ImGui::IsKeyPressed(VK_END, false))
+                seek_motion_preview_time(motion_editor_loaded
+                    ? motion_editor_asset.duration : motion_editor_composition.duration);
+            if (!motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
+                ImGui::IsKeyPressed(VK_NEXT, false))
+                step_motion_preview_frames(1);
+            if (!motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
+                ImGui::IsKeyPressed(VK_PRIOR, false))
+                step_motion_preview_frames(-1);
+            if (!motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
+                ImGui::IsKeyPressed(VK_F9, false))
+                apply_motion_easing_to_selection(
+                    ReplayEngine::Motion::MotionEasing::EaseInOutCubic);
+        }
         draw_scene_view_panel();
         if (show_hierarchy_panel) draw_scene_hierarchy();
         draw_motion_layers();
