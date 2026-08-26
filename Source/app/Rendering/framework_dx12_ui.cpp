@@ -362,13 +362,23 @@ bool framework::build_dx12_ui_for_scene(
 
     const auto add_font_source = [&](std::string& key) -> bool
     {
+        std::uint64_t revision = 0;
+        if (!ui_font_atlas.ActiveAtlasRevision(key, revision)) return false;
+        const auto old = font_revisions.find(key);
+        if (old != font_revisions.end() && old->second == revision) return true;
+        // 同じ版が既に GPU にあるなら Atlas 本体を複製しない。
+        if (dx12_device_context.HasUIFontTexture(key, revision))
+        {
+            font_revisions[key] = revision;
+            return true;
+        }
         std::vector<std::uint8_t> rgba;
         std::uint32_t width = 0;
         std::uint32_t height = 0;
-        std::uint64_t revision = 0;
-        if (!ui_font_atlas.CopyActiveAtlas(key, rgba, width, height, revision)) return false;
-        const auto old = font_revisions.find(key);
-        if (old != font_revisions.end() && old->second == revision) return true;
+        std::uint64_t copied_revision = 0;
+        if (!ui_font_atlas.CopyActiveAtlas(key, rgba, width, height, copied_revision))
+            return false;
+        revision = copied_revision;
         D3D12UIFontAtlasSource source;
         source.key = key;
         source.rgba = std::move(rgba);

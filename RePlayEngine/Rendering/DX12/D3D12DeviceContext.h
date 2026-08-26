@@ -718,6 +718,17 @@ namespace ReplayEngine::Rendering::DX12
         {
             return ui_font_texture_cache_.size();
         }
+        // 同じ版の Font Atlas を既に持っているか。提出側が 2048x2048 の
+        // RGBA を毎フレーム複製しないための問い合わせ。
+        bool HasUIFontTexture(const std::string& key,
+            std::uint64_t revision) const noexcept
+        {
+            if (ui_font_texture_cache_.find(key) == ui_font_texture_cache_.end())
+                return false;
+            const auto stored = ui_font_texture_revisions_.find(key);
+            return stored != ui_font_texture_revisions_.end() &&
+                stored->second == revision;
+        }
         std::size_t RuntimeUIEffectHistoryCount() const noexcept
         {
             return ui_effect_history_targets_.size();

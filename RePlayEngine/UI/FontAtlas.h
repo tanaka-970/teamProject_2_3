@@ -34,6 +34,9 @@ namespace ReplayEngine::UI
 
         // DX12 backend が同じCPU正本からAtlasをUploadするための読み取り専用スナップショット。
         // 呼び出し側は返されたRGBAをGPUへコピーするだけで、FontAtlasへGPU所有権を持ち込まない。
+        // Atlas 本体をコピーせずに現在のキーと版だけを取る。
+        // 毎フレームの取得で 2048x2048 の RGBA を複製しないため。
+        bool ActiveAtlasRevision(std::string& key, std::uint64_t& revision) const;
         bool CopyActiveAtlas(std::string& key, std::vector<std::uint8_t>& rgba,
             std::uint32_t& width, std::uint32_t& height,
             std::uint64_t& revision) const;
