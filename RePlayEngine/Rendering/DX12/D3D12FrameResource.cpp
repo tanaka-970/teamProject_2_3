@@ -1,4 +1,5 @@
 ﻿#include "D3D12FrameResource.h"
+#include "D3D12ObjectName.h"
 
 #include <limits>
 
@@ -45,6 +46,7 @@ namespace ReplayEngine::Rendering::DX12
             &description, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
             IID_PPV_ARGS(&resource_))))
             return false;
+        SetD3D12ObjectName(resource_.Get(), L"Frame.UploadHeap", L"Mapped");
 
         void* mapped = nullptr;
         D3D12_RANGE no_read{ 0, 0 };
@@ -96,6 +98,7 @@ namespace ReplayEngine::Rendering::DX12
         if (FAILED(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
             IID_PPV_ARGS(&command_allocator))))
             return false;
+        SetD3D12ObjectName(command_allocator.Get(), L"Frame.CommandAllocator", L"Direct");
         if (!upload_allocator.Initialize(device, upload_capacity))
         {
             command_allocator.Reset();

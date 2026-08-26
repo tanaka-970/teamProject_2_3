@@ -1,4 +1,5 @@
-#include "D3D12MeshBuffer.h"
+﻿#include "D3D12MeshBuffer.h"
+#include "D3D12ObjectName.h"
 
 namespace ReplayEngine::Rendering::DX12
 {
@@ -27,6 +28,12 @@ namespace ReplayEngine::Rendering::DX12
         }
         index_count_ = index_size / index_stride;
         return true;
+    }
+
+    void D3D12MeshBuffer::SetDebugName(std::string_view key) noexcept
+    {
+        SetD3D12ObjectNameUtf8(vertex_buffer_.Get(), L"Mesh.VB", key);
+        SetD3D12ObjectNameUtf8(index_buffer_.Get(), L"Mesh.IB", key);
     }
 
     void D3D12MeshBuffer::Reset() noexcept

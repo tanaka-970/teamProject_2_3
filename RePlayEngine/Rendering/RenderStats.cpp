@@ -1,14 +1,13 @@
 ﻿#include "RenderStats.h"
 
-#include <d3d11sdklayers.h>
-#include <psapi.h>
+// psapi.h は windows.h の型に依存するため、順序を入れ替えない。
 #include <windows.h>
+#include <psapi.h>
 
 #include <algorithm>
 #include <cmath>
 #include <cctype>
 #include <cstdio>
-#include <cstring>
 #include <fstream>
 #include <iomanip>
 #include <numeric>
@@ -18,33 +17,6 @@
 
 namespace
 {
-    void SetDebugName(ID3D11DeviceChild* object, const std::string& name)
-    {
-#if defined(_DEBUG) || defined(DEBUG)
-        if (object == nullptr || name.empty()) return;
-        object->SetPrivateData(WKPDID_D3DDebugObjectName,
-            static_cast<UINT>(name.size()), name.data());
-#else
-        (void)object;
-        (void)name;
-#endif
-    }
-
-    std::wstring Utf8ToWide(const std::string& text)
-    {
-        if (text.empty()) return {};
-        const int count = MultiByteToWideChar(CP_UTF8, 0, text.data(),
-            static_cast<int>(text.size()), nullptr, 0);
-        if (count <= 0)
-        {
-            return std::wstring(text.begin(), text.end());
-        }
-        std::wstring output(static_cast<std::size_t>(count), L'\0');
-        MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()),
-            output.data(), count);
-        return output;
-    }
-
     std::string EscapeCsv(const std::string& text)
     {
         if (text.find_first_of(",\"\r\n") == std::string::npos) return text;
@@ -102,85 +74,17 @@ namespace ReplayEngine::Rendering
 {
     RenderStats::ScopedCpu::ScopedCpu(const char* name) noexcept
     {
-        token_ = Stats().BeginScope(name, nullptr, false);
+        token_ = Stats().BeginScope(name);
     }
 
     RenderStats::ScopedCpu::~ScopedCpu() noexcept
     {
-        if (token_ != 0) Stats().EndScope(token_, nullptr);
+        if (token_ != 0) Stats().EndScope(token_);
     }
 
-    RenderStats::ScopedGpu::ScopedGpu(ID3D11DeviceContext* context,
-        const char* name) noexcept : context_(context)
-    {
-        token_ = Stats().BeginScope(name, context, true);
-    }
-
-    RenderStats::ScopedGpu::~ScopedGpu() noexcept
-    {
-        if (token_ != 0) Stats().EndScope(token_, context_);
-    }
-
-    bool RenderStats::Initialize(ID3D11Device* device)
+    bool RenderStats::Initialize() noexcept
     {
         Release();
-        if (device == nullptr) return false;
-
-        D3D11_QUERY_DESC pipeline_desc{};
-        pipeline_desc.Query = D3D11_QUERY_PIPELINE_STATISTICS;
-        D3D11_QUERY_DESC disjoint_desc{};
-        disjoint_desc.Query = D3D11_QUERY_TIMESTAMP_DISJOINT;
-        D3D11_QUERY_DESC timestamp_desc{};
-        timestamp_desc.Query = D3D11_QUERY_TIMESTAMP;
-
-        for (std::size_t slot_index = 0; slot_index < query_slots_.size(); ++slot_index)
-        {
-            QuerySlot& slot = query_slots_[slot_index];
-            slot.pipeline.Reset();
-            slot.disjoint.Reset();
-            slot.frame_begin.Reset();
-            slot.frame_end.Reset();
-            if (FAILED(device->CreateQuery(&pipeline_desc, slot.pipeline.GetAddressOf())) ||
-                FAILED(device->CreateQuery(&disjoint_desc, slot.disjoint.GetAddressOf())) ||
-                FAILED(device->CreateQuery(&timestamp_desc, slot.frame_begin.GetAddressOf())) ||
-                FAILED(device->CreateQuery(&timestamp_desc, slot.frame_end.GetAddressOf())))
-            {
-                Release();
-                return false;
-            }
-            SetDebugName(slot.pipeline.Get(), "Profiler.Pipeline[" + std::to_string(slot_index) + "]");
-            SetDebugName(slot.disjoint.Get(), "Profiler.Disjoint[" + std::to_string(slot_index) + "]");
-            SetDebugName(slot.frame_begin.Get(), "Profiler.FrameBegin[" + std::to_string(slot_index) + "]");
-            SetDebugName(slot.frame_end.Get(), "Profiler.FrameEnd[" + std::to_string(slot_index) + "]");
-
-            for (std::size_t scope_index = 0; scope_index < slot.scopes.size(); ++scope_index)
-            {
-                GpuScopeQueries& pair = slot.scopes[scope_index];
-                pair.begin.Reset();
-                pair.end.Reset();
-                if (FAILED(device->CreateQuery(&timestamp_desc, pair.begin.GetAddressOf())) ||
-                    FAILED(device->CreateQuery(&timestamp_desc, pair.end.GetAddressOf())))
-                {
-                    Release();
-                    return false;
-                }
-#if defined(_DEBUG) || defined(DEBUG)
-                const std::string prefix = "Profiler.Scope[" + std::to_string(slot_index) + "][" +
-                    std::to_string(scope_index) + "]";
-                SetDebugName(pair.begin.Get(), prefix + ".Begin");
-                SetDebugName(pair.end.Get(), prefix + ".End");
-#endif
-            }
-        }
-
-        Microsoft::WRL::ComPtr<IDXGIDevice> dxgi_device;
-        Microsoft::WRL::ComPtr<IDXGIAdapter> adapter;
-        if (SUCCEEDED(device->QueryInterface(IID_PPV_ARGS(dxgi_device.GetAddressOf()))) &&
-            dxgi_device && SUCCEEDED(dxgi_device->GetAdapter(adapter.GetAddressOf())) && adapter)
-        {
-            adapter.As(&adapter3_);
-        }
-
         initialized_ = true;
         enabled_ = true;
         paused_ = false;
@@ -193,49 +97,32 @@ namespace ReplayEngine::Rendering
         current_scope_nodes_.clear();
         current_trace_events_.clear();
         current_scope_lookup_.clear();
+        history_.clear();
         phase_tokens_.fill(0);
-        for (QuerySlot& slot : query_slots_)
-        {
-            slot.pipeline.Reset();
-            slot.disjoint.Reset();
-            slot.frame_begin.Reset();
-            slot.frame_end.Reset();
-            for (GpuScopeQueries& pair : slot.scopes)
-            {
-                pair.begin.Reset();
-                pair.end.Reset();
-            }
-            slot.scope_count = 0;
-            slot.pending = false;
-            slot.sample = {};
-        }
-        annotation_.Reset();
-        adapter3_.Reset();
-        write_index_ = 0;
-        frame_open_ = false;
-        gpu_frame_recording_ = false;
-        initialized_ = false;
+        last_state_values_.fill(nullptr);
+        last_state_valid_.fill(false);
+        latest_sample_ = {};
+        current_cpu_ = {};
+        resolved_cpu_ = {};
         resolved_gpu_ = {};
-        current_gpu_scope_limit_hit_ = false;
-        current_query_ring_busy_ = false;
+        frame_open_ = false;
+        initialized_ = false;
         current_scope_depth_limit_hit_ = false;
         current_trace_event_limit_hit_ = false;
+        pending_external_gpu_frames_ = 0;
+        latest_external_gpu_source_frame_ = 0;
         pending_enabled_change_ = false;
         pending_paused_change_ = false;
     }
 
     void RenderStats::SetEnabled(bool enabled) noexcept
     {
-        // UI は BeginFrame 後に描画される。そこで即時OFFすると、
-        // すでに Begin 済みの DISJOINT / PIPELINE query が End されず壊れる。
-        // フレーム途中の変更は EndFrame 後へ遅延する。
         if (frame_open_)
         {
             pending_enabled_change_ = true;
             pending_enabled_value_ = enabled;
             return;
         }
-
         enabled_ = enabled;
         if (!enabled)
         {
@@ -262,11 +149,10 @@ namespace ReplayEngine::Rendering
         if (!directory.empty()) output_directory_ = std::move(directory);
     }
 
-    void RenderStats::BeginFrame(ID3D11DeviceContext* context)
+    void RenderStats::BeginFrame()
     {
-        ResolveAvailableQueries(context);
+        if (!initialized_) Initialize();
         if (!enabled_ || paused_) return;
-
         ++frame_id_;
         current_cpu_ = {};
         current_scope_nodes_.clear();
@@ -274,8 +160,6 @@ namespace ReplayEngine::Rendering
         current_scope_lookup_.clear();
         active_scopes_.clear();
         phase_tokens_.fill(0);
-        current_gpu_scope_limit_hit_ = false;
-        current_query_ring_busy_ = false;
         current_scope_depth_limit_hit_ = false;
         current_trace_event_limit_hit_ = false;
         last_state_values_.fill(nullptr);
@@ -283,26 +167,6 @@ namespace ReplayEngine::Rendering
         cpu_frame_begin_ = std::chrono::steady_clock::now();
         counting_enabled_ = true;
         frame_open_ = true;
-        gpu_frame_recording_ = false;
-
-        if (context != nullptr && !annotation_)
-        {
-            context->QueryInterface(IID_PPV_ARGS(annotation_.GetAddressOf()));
-        }
-
-        if (!initialized_ || context == nullptr) return;
-        QuerySlot& slot = query_slots_[write_index_];
-        if (slot.pending)
-        {
-            current_query_ring_busy_ = true;
-            return;
-        }
-
-        slot.scope_count = 0;
-        context->Begin(slot.disjoint.Get());
-        context->End(slot.frame_begin.Get());
-        context->Begin(slot.pipeline.Get());
-        gpu_frame_recording_ = true;
     }
 
     std::uint32_t RenderStats::FindOrCreateScopeNode(const char* name)
@@ -315,12 +179,10 @@ namespace ReplayEngine::Rendering
         const std::string path = parent_path.empty() ? safe_name : parent_path + "/" + safe_name;
         const auto found = current_scope_lookup_.find(path);
         if (found != current_scope_lookup_.end()) return found->second;
-
         ScopeSnapshot node{};
         node.id = static_cast<std::uint32_t>(current_scope_nodes_.size() + 1u);
         node.parent_id = parent_id;
-        node.depth = static_cast<std::uint16_t>((std::min)(
-            active_scopes_.size(), kMaxScopeDepth));
+        node.depth = static_cast<std::uint16_t>((std::min)(active_scopes_.size(), kMaxScopeDepth));
         node.name = safe_name;
         node.path = path;
         const auto budget = budgets_.find(path);
@@ -335,8 +197,7 @@ namespace ReplayEngine::Rendering
         return index;
     }
 
-    std::uint64_t RenderStats::BeginScope(const char* name,
-        ID3D11DeviceContext* context, bool gpu_timing) noexcept
+    std::uint64_t RenderStats::BeginScope(const char* name) noexcept
     {
         if (!enabled_ || paused_ || !frame_open_) return 0;
         if (active_scopes_.size() >= kMaxScopeDepth)
@@ -345,65 +206,32 @@ namespace ReplayEngine::Rendering
             last_output_status_ = "Profiler scope depth limit reached";
             return 0;
         }
-
         const auto now = std::chrono::steady_clock::now();
         const std::uint32_t node_index = FindOrCreateScopeNode(name);
         ScopeSnapshot& node = current_scope_nodes_[node_index];
-        const double start_us = std::chrono::duration<double, std::micro>(
-            now - cpu_frame_begin_).count();
+        const double start_us = std::chrono::duration<double, std::micro>(now - cpu_frame_begin_).count();
         if (node.calls == 0 || start_us < node.cpu_start_us) node.cpu_start_us = start_us;
-
         ActiveScope active{};
         active.token = next_scope_token_++;
         if (active.token == 0) active.token = next_scope_token_++;
         active.node_index = node_index;
         active.cpu_begin = now;
         active.cpu_start_us = start_us;
-
         if (current_trace_events_.size() < kMaxTraceEventsPerFrame)
         {
             TraceEvent event{};
             event.path = node.path;
             event.depth = node.depth;
             event.cpu_start_us = start_us;
-            active.trace_event_index =
-                static_cast<std::uint32_t>(current_trace_events_.size());
+            active.trace_event_index = static_cast<std::uint32_t>(current_trace_events_.size());
             current_trace_events_.push_back(std::move(event));
         }
-        else
-        {
-            current_trace_event_limit_hit_ = true;
-        }
-
-        if (gpu_timing && gpu_frame_recording_ && context != nullptr)
-        {
-            QuerySlot& slot = query_slots_[write_index_];
-            if (slot.scope_count < kMaxGpuScopesPerFrame)
-            {
-                const std::uint32_t query_index = slot.scope_count++;
-                active.gpu_query_index = query_index;
-                slot.scope_meta[query_index] = {
-                    node_index, active.trace_event_index, start_us, 0.0 };
-                context->End(slot.scopes[query_index].begin.Get());
-            }
-            else
-            {
-                current_gpu_scope_limit_hit_ = true;
-            }
-        }
-
-        if (annotation_)
-        {
-            const std::wstring wide_name = Utf8ToWide(node.name);
-            annotation_->BeginEvent(wide_name.c_str());
-            active.annotation_open = true;
-        }
-
+        else current_trace_event_limit_hit_ = true;
         active_scopes_.push_back(active);
         return active.token;
     }
 
-    void RenderStats::EndScope(std::uint64_t token, ID3D11DeviceContext* context) noexcept
+    void RenderStats::EndScope(std::uint64_t token) noexcept
     {
         if (token == 0 || active_scopes_.empty()) return;
         if (active_scopes_.back().token != token)
@@ -411,54 +239,33 @@ namespace ReplayEngine::Rendering
             last_output_status_ = "Profiler scope close order mismatch";
             return;
         }
-
         const auto now = std::chrono::steady_clock::now();
-        ActiveScope active = active_scopes_.back();
+        const ActiveScope active = active_scopes_.back();
         active_scopes_.pop_back();
-        if (active.node_index < current_scope_nodes_.size())
-        {
-            ScopeSnapshot& node = current_scope_nodes_[active.node_index];
-            const double duration_ms = std::chrono::duration<double, std::milli>(
-                now - active.cpu_begin).count();
-            node.cpu_ms += duration_ms;
-            ++node.calls;
-            if (active.trace_event_index != UINT32_MAX &&
-                active.trace_event_index < current_trace_events_.size())
-            {
-                current_trace_events_[active.trace_event_index].cpu_duration_us =
-                    duration_ms * 1000.0;
-            }
-
-            if (active.gpu_query_index != UINT32_MAX && gpu_frame_recording_ &&
-                context != nullptr)
-            {
-                QuerySlot& slot = query_slots_[write_index_];
-                if (active.gpu_query_index < slot.scope_count)
-                {
-                    context->End(slot.scopes[active.gpu_query_index].end.Get());
-                    slot.scope_meta[active.gpu_query_index].cpu_duration_us = duration_ms * 1000.0;
-                }
-            }
-        }
-        if (active.annotation_open && annotation_) annotation_->EndEvent();
+        if (active.node_index >= current_scope_nodes_.size()) return;
+        ScopeSnapshot& node = current_scope_nodes_[active.node_index];
+        const double duration_ms = std::chrono::duration<double, std::milli>(now - active.cpu_begin).count();
+        node.cpu_ms += duration_ms;
+        ++node.calls;
+        if (active.trace_event_index != UINT32_MAX && active.trace_event_index < current_trace_events_.size())
+            current_trace_events_[active.trace_event_index].cpu_duration_us = duration_ms * 1000.0;
     }
 
-    void RenderStats::BeginPhase(Phase phase, ID3D11DeviceContext* context)
+    void RenderStats::BeginPhase(Phase phase)
     {
         const std::size_t index = static_cast<std::size_t>(phase);
         if (index >= phase_count || phase_tokens_[index] != 0) return;
-        phase_tokens_[index] = BeginScope(PhaseName(phase), context, true);
+        phase_tokens_[index] = BeginScope(PhaseName(phase));
     }
 
-    void RenderStats::EndPhase(Phase phase, ID3D11DeviceContext* context)
+    void RenderStats::EndPhase(Phase phase)
     {
         const std::size_t index = static_cast<std::size_t>(phase);
         if (index >= phase_count) return;
         const std::uint64_t token = phase_tokens_[index];
         if (token == 0) return;
-        EndScope(token, context);
+        EndScope(token);
         phase_tokens_[index] = 0;
-
         for (const ScopeSnapshot& scope : current_scope_nodes_)
         {
             if (scope.parent_id == 0 && scope.name == PhaseName(phase))
@@ -475,54 +282,24 @@ namespace ReplayEngine::Rendering
         frames_since_memory_sample_ = 0;
         sampled_memory_.vram_valid = false;
         sampled_memory_.process_memory_valid = false;
-
-        if (adapter3_)
-        {
-            DXGI_QUERY_VIDEO_MEMORY_INFO info{};
-            if (SUCCEEDED(adapter3_->QueryVideoMemoryInfo(0,
-                DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &info)))
-            {
-                sampled_memory_.vram_usage_bytes = info.CurrentUsage;
-                sampled_memory_.vram_budget_bytes = info.Budget;
-                sampled_memory_.vram_valid = true;
-            }
-        }
-
         PROCESS_MEMORY_COUNTERS_EX counters{};
         counters.cb = sizeof(counters);
-        if (GetProcessMemoryInfo(GetCurrentProcess(),
-            reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&counters), sizeof(counters)))
+        if (GetProcessMemoryInfo(GetCurrentProcess(), reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&counters), sizeof(counters)))
         {
             sampled_memory_.working_set_bytes = counters.WorkingSetSize;
             sampled_memory_.process_memory_valid = true;
         }
     }
 
-    void RenderStats::EndFrame(ID3D11DeviceContext* context)
+    void RenderStats::EndFrame()
     {
-        if (!enabled_ || paused_)
-        {
-            ResolveAvailableQueries(context);
-            return;
-        }
-        if (!frame_open_)
-        {
-            ResolveAvailableQueries(context);
-            return;
-        }
-
-        while (!active_scopes_.empty())
-        {
-            EndScope(active_scopes_.back().token, context);
-        }
+        if (!enabled_ || paused_ || !frame_open_) return;
+        while (!active_scopes_.empty()) EndScope(active_scopes_.back().token);
         phase_tokens_.fill(0);
-
         const auto cpu_end = std::chrono::steady_clock::now();
-        current_cpu_.frame_ms = std::chrono::duration<double, std::milli>(
-            cpu_end - cpu_frame_begin_).count();
+        current_cpu_.frame_ms = std::chrono::duration<double, std::milli>(cpu_end - cpu_frame_begin_).count();
         resolved_cpu_ = current_cpu_;
         SampleMemoryCounters();
-
         FrameSample sample{};
         sample.frame_id = frame_id_;
         sample.cpu_frame_ms = current_cpu_.frame_ms;
@@ -533,38 +310,16 @@ namespace ReplayEngine::Rendering
         sample.memory.render_target_bytes = current_engine_memory_.render_target_bytes;
         sample.memory.duplicate_asset_guids = current_engine_memory_.duplicate_asset_guids;
         sample.memory.duplicate_shader_guids = current_engine_memory_.duplicate_shader_guids;
-        sample.memory.resident_texture_guid_refs =
-            current_engine_memory_.resident_texture_guid_refs;
-        sample.memory.duplicate_resident_texture_guids =
-            current_engine_memory_.duplicate_resident_texture_guids;
+        sample.memory.resident_texture_guid_refs = current_engine_memory_.resident_texture_guid_refs;
+        sample.memory.duplicate_resident_texture_guids = current_engine_memory_.duplicate_resident_texture_guids;
         sample.scene = current_scene_;
         sample.scopes = current_scope_nodes_;
-        sample.gpu_scope_limit_hit = current_gpu_scope_limit_hit_;
-        sample.gpu_query_ring_busy = current_query_ring_busy_;
         sample.scope_depth_limit_hit = current_scope_depth_limit_hit_;
         sample.trace_event_limit_hit = current_trace_event_limit_hit_;
         sample.trace_events = current_trace_events_;
         ApplyBudgets(sample);
-
-        if (gpu_frame_recording_ && initialized_ && context != nullptr)
-        {
-            QuerySlot& slot = query_slots_[write_index_];
-            context->End(slot.pipeline.Get());
-            context->End(slot.frame_end.Get());
-            context->End(slot.disjoint.Get());
-            slot.sample = std::move(sample);
-            slot.pending = true;
-            write_index_ = (write_index_ + 1u) % kQueryCount;
-        }
-        else
-        {
-            PushHistory(std::move(sample));
-        }
-
+        PushHistory(std::move(sample));
         frame_open_ = false;
-        gpu_frame_recording_ = false;
-        ResolveAvailableQueries(context);
-
         if (pending_paused_change_)
         {
             paused_ = pending_paused_value_;
@@ -578,133 +333,62 @@ namespace ReplayEngine::Rendering
         }
     }
 
-    void RenderStats::ResolveAvailableQueries(ID3D11DeviceContext* context)
+    void RenderStats::ApplyExternalGpuTiming(std::uint64_t source_frame_id,
+        const std::vector<ExternalGpuPassTiming>& timings) noexcept
     {
-        if (!initialized_ || context == nullptr) return;
-        for (QuerySlot& slot : query_slots_)
+        if (history_.empty() || timings.empty()) return;
+        if (source_frame_id != 0 && source_frame_id == latest_external_gpu_source_frame_) return;
+        latest_external_gpu_source_frame_ = source_frame_id;
+        FrameSample* sample = &history_.back();
+        GpuCounters gpu{};
+        double gpu_cursor_us = 0.0;
+        for (const auto& timing : timings)
         {
-            if (!slot.pending) continue;
-
-            D3D11_QUERY_DATA_PIPELINE_STATISTICS statistics{};
-            D3D11_QUERY_DATA_TIMESTAMP_DISJOINT timing{};
-            UINT64 frame_begin = 0;
-            UINT64 frame_end = 0;
-            if (context->GetData(slot.pipeline.Get(), &statistics, sizeof(statistics),
-                    D3D11_ASYNC_GETDATA_DONOTFLUSH) != S_OK ||
-                context->GetData(slot.disjoint.Get(), &timing, sizeof(timing),
-                    D3D11_ASYNC_GETDATA_DONOTFLUSH) != S_OK ||
-                context->GetData(slot.frame_begin.Get(), &frame_begin, sizeof(frame_begin),
-                    D3D11_ASYNC_GETDATA_DONOTFLUSH) != S_OK ||
-                context->GetData(slot.frame_end.Get(), &frame_end, sizeof(frame_end),
-                    D3D11_ASYNC_GETDATA_DONOTFLUSH) != S_OK)
+            if (!timing.valid || timing.milliseconds < 0.0) continue;
+            gpu.valid = true;
+            gpu.timing_valid = true;
+            gpu.frame_ms += timing.milliseconds;
+            const std::size_t phase_index = static_cast<std::size_t>(timing.phase);
+            if (phase_index < phase_count)
             {
-                continue;
+                gpu.phase_ms[phase_index] += timing.milliseconds;
+                gpu.phase_timing_valid[phase_index] = true;
             }
-
-            FrameSample sample = std::move(slot.sample);
-            sample.gpu.input_vertices = statistics.IAVertices;
-            sample.gpu.input_primitives = statistics.IAPrimitives;
-            sample.gpu.vertex_shader_invocations = statistics.VSInvocations;
-            sample.gpu.clipper_invocations = statistics.CInvocations;
-            sample.gpu.rasterized_primitives = statistics.CPrimitives;
-            sample.gpu.pixel_shader_invocations = statistics.PSInvocations;
-            sample.gpu.compute_shader_invocations = statistics.CSInvocations;
-            sample.gpu.valid = true;
-            sample.gpu.disjoint = timing.Disjoint != FALSE;
-            sample.gpu_disjoint = sample.gpu.disjoint;
-            sample.gpu.timing_valid = !sample.gpu.disjoint && timing.Frequency > 0 &&
-                frame_end >= frame_begin;
-            sample.gpu_valid = sample.gpu.timing_valid;
-            if (sample.gpu.timing_valid)
-            {
-                sample.gpu.frame_ms = static_cast<double>(frame_end - frame_begin) * 1000.0 /
-                    static_cast<double>(timing.Frequency);
-                sample.gpu_frame_ms = sample.gpu.frame_ms;
-
-                bool scopes_ready = true;
-                std::array<UINT64, kMaxGpuScopesPerFrame> starts{};
-                std::array<UINT64, kMaxGpuScopesPerFrame> ends{};
-                for (std::uint32_t index = 0; index < slot.scope_count; ++index)
-                {
-                    if (context->GetData(slot.scopes[index].begin.Get(), &starts[index],
-                            sizeof(UINT64), D3D11_ASYNC_GETDATA_DONOTFLUSH) != S_OK ||
-                        context->GetData(slot.scopes[index].end.Get(), &ends[index],
-                            sizeof(UINT64), D3D11_ASYNC_GETDATA_DONOTFLUSH) != S_OK)
-                    {
-                        scopes_ready = false;
-                        break;
-                    }
-                }
-                if (!scopes_ready)
-                {
-                    slot.sample = std::move(sample);
-                    continue;
-                }
-
-                for (std::uint32_t index = 0; index < slot.scope_count; ++index)
-                {
-                    const GpuScopeMeta& meta = slot.scope_meta[index];
-                    if (meta.node_index >= sample.scopes.size() || ends[index] < starts[index])
-                        continue;
-                    ScopeSnapshot& node = sample.scopes[meta.node_index];
-                    const double duration_ms = static_cast<double>(ends[index] - starts[index]) *
-                        1000.0 / static_cast<double>(timing.Frequency);
-                    node.gpu_ms += duration_ms;
-                    node.gpu_valid = true;
-                    const double start_us = starts[index] >= frame_begin
-                        ? static_cast<double>(starts[index] - frame_begin) * 1000000.0 /
-                            static_cast<double>(timing.Frequency)
-                        : 0.0;
-                    if (node.gpu_start_us == 0.0 || start_us < node.gpu_start_us)
-                        node.gpu_start_us = start_us;
-                    if (meta.trace_event_index != UINT32_MAX &&
-                        meta.trace_event_index < sample.trace_events.size())
-                    {
-                        TraceEvent& event = sample.trace_events[meta.trace_event_index];
-                        event.gpu_start_us = start_us;
-                        event.gpu_duration_us = duration_ms * 1000.0;
-                        event.gpu_valid = true;
-                    }
-                }
-            }
-
-            sample.gpu.phase_ms.fill(0.0);
-            sample.gpu.phase_timing_valid.fill(false);
-            for (std::size_t phase = 0; phase < phase_count; ++phase)
-            {
-                for (const ScopeSnapshot& scope : sample.scopes)
-                {
-                    if (scope.parent_id == 0 && scope.name == PhaseName(static_cast<Phase>(phase)))
-                    {
-                        if (scope.gpu_valid)
-                        {
-                            sample.gpu.phase_ms[phase] = scope.gpu_ms;
-                            sample.gpu.phase_timing_valid[phase] = true;
-                        }
-                        break;
-                    }
-                }
-            }
-
-            ApplyBudgets(sample);
-            if (sample.frame_id >= latest_sample_.frame_id)
-                resolved_gpu_ = sample.gpu;
-            slot.pending = false;
-            slot.scope_count = 0;
-            PushHistory(std::move(sample));
+            ScopeSnapshot scope{};
+            scope.id = static_cast<std::uint32_t>(sample->scopes.size() + 1u);
+            scope.name = timing.name;
+            scope.path = std::string("GPU/") + timing.name;
+            scope.gpu_ms = timing.milliseconds;
+            scope.gpu_start_us = gpu_cursor_us;
+            scope.calls = 1;
+            scope.gpu_valid = true;
+            const auto budget = budgets_.find(scope.path);
+            if (budget != budgets_.end()) scope.gpu_budget_ms = budget->second.gpu_ms;
+            sample->scopes.push_back(scope);
+            TraceEvent event{};
+            event.path = scope.path;
+            event.gpu_start_us = gpu_cursor_us;
+            event.gpu_duration_us = timing.milliseconds * 1000.0;
+            event.gpu_valid = true;
+            sample->trace_events.push_back(std::move(event));
+            gpu_cursor_us += timing.milliseconds * 1000.0;
         }
+        sample->gpu = gpu;
+        sample->gpu_frame_ms = gpu.frame_ms;
+        sample->gpu_valid = gpu.timing_valid;
+        sample->gpu_disjoint = false;
+        resolved_gpu_ = gpu;
+        latest_sample_ = *sample;
+        pending_external_gpu_frames_ = source_frame_id != 0 && source_frame_id + 1 < frame_id_
+            ? static_cast<std::size_t>(frame_id_ - source_frame_id - 1) : 0;
+        ApplyBudgets(*sample);
     }
 
     void RenderStats::PushHistory(FrameSample sample)
     {
-        if (sample.frame_id >= latest_sample_.frame_id)
-            latest_sample_ = sample;
-
-        const auto insert_at = std::upper_bound(history_.begin(), history_.end(),
-            sample.frame_id, [](std::uint64_t frame_id, const FrameSample& existing)
-            {
-                return frame_id < existing.frame_id;
-            });
+        if (sample.frame_id >= latest_sample_.frame_id) latest_sample_ = sample;
+        const auto insert_at = std::upper_bound(history_.begin(), history_.end(), sample.frame_id,
+            [](std::uint64_t frame_id, const FrameSample& existing) { return frame_id < existing.frame_id; });
         history_.insert(insert_at, std::move(sample));
         while (history_.size() > history_limit_) history_.pop_front();
         MaybeAutoExport();
@@ -741,7 +425,6 @@ namespace ReplayEngine::Rendering
         }
     }
 
-
     void RenderStats::TrackStateSet(StateKind kind, const void* identity, std::uint64_t count) noexcept
     {
         if (!counting_enabled_ || !enabled_ || paused_) return;
@@ -769,8 +452,8 @@ namespace ReplayEngine::Rendering
     }
 
     void RenderStats::SetUICounters(std::uint64_t draw_commands,
-        std::uint64_t vertices, std::uint64_t texture_count,
-        std::uint64_t mask_depth, std::uint64_t clipped_commands) noexcept
+        std::uint64_t vertices, std::uint64_t texture_count, std::uint64_t mask_depth,
+        std::uint64_t clipped_commands) noexcept
     {
         current_cpu_.ui_draw_commands = draw_commands;
         current_cpu_.ui_vertices = vertices;
@@ -787,8 +470,7 @@ namespace ReplayEngine::Rendering
         current_engine_memory_.render_target_bytes = render_target_bytes;
     }
 
-    void RenderStats::SetDuplicateAssetGuids(std::uint32_t assets,
-        std::uint32_t shaders) noexcept
+    void RenderStats::SetDuplicateAssetGuids(std::uint32_t assets, std::uint32_t shaders) noexcept
     {
         current_engine_memory_.duplicate_asset_guids = assets;
         current_engine_memory_.duplicate_shader_guids = shaders;

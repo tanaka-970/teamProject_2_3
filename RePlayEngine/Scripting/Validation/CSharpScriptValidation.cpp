@@ -604,8 +604,16 @@ namespace ReplayEngine::Scripting::Validation
             ScriptValue pulled_scene_reference;
             const bool got_scene_reference = backend->GetField(instance,
                 "field.NextScene", pulled_scene_reference);
-            check.Expect(set_scene_reference && got_scene_reference &&
-                pulled_scene_reference.AsString() == "scene-guid-updated",
+            const bool scene_reference_ok = set_scene_reference && got_scene_reference &&
+                pulled_scene_reference.AsString() == "scene-guid-updated";
+            if (!scene_reference_ok)
+            {
+                // 失敗時だけ実値を出す。set/get のどちらで落ちたかを切り分ける。
+                std::fprintf(stderr, "  [DIAG] NextScene set=%d get=%d value=%s\n",
+                    set_scene_reference ? 1 : 0, got_scene_reference ? 1 : 0,
+                    pulled_scene_reference.AsString().c_str());
+            }
+            check.Expect(scene_reference_ok,
                 "型付きAssetReferenceをmanaged instanceと双方向に同期できる");
 
             std::vector<ScriptValue> score_values;
@@ -829,6 +837,12 @@ namespace ReplayEngine::Scripting::Validation
         {
             const ScriptValue api_checks =
                 script->ReadField(ScriptNames::MakeFieldSavedName("ApiChecks"));
+            if (api_checks.AsInt() != 23)
+            {
+                // 失敗時だけ実値を出す。何個目で止まったかの手がかりにする。
+                std::fprintf(stderr, "  [DIAG] ApiChecks=%lld (expected 23)\n",
+                    static_cast<long long>(api_checks.AsInt()));
+            }
             check.Expect(api_checks.AsInt() == 23,
                 "typed Component API works from a running C# behaviour");
 

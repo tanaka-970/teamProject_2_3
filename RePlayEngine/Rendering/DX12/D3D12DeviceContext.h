@@ -14,16 +14,20 @@
 #include "D3D12ResourceStateTracker.h"
 #include "D3D12ShaderCompiler.h"
 #include "D3D12UploadContext.h"
+#include "../../UI/Effects/UIEffect.h"
 
 #include <DirectXMath.h>
 
 #include <cstdint>
 #include <array>
 #include <filesystem>
+#include <limits>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #ifdef USE_IMGUI
@@ -86,6 +90,8 @@ namespace ReplayEngine::Rendering::DX12
     struct D3D12StaticDrawItem final
     {
         std::string mesh_key;
+        std::uint64_t owner_id = 0;
+        std::uint32_t rendering_layer = 0;
         // Object + mesh/subset の安定キー。Static Transform の motion vector 履歴に使う。
         std::string motion_key;
         std::string base_color_texture_key;
@@ -466,6 +472,10 @@ namespace ReplayEngine::Rendering::DX12
         std::vector<D3D12UIEffectGroup> effect_groups;
         bool requires_offscreen = false;
         bool capture_backdrop = false;
+        bool preserve_output = false;
+        bool background_only = false;
+        // Screen Effect Stack の Temporal 履歴は Runtime UI と別の表で持つ。
+        bool scene_effect_history = false;
     };
 
     struct D3D12OffscreenTarget final
@@ -486,6 +496,38 @@ namespace ReplayEngine::Rendering::DX12
         }
     };
 
+    struct D3D12ModelEffectStackSubmission final
+    {
+        std::uint64_t owner_id = 0;
+        std::int32_t depth_mode = 0;
+        D3D12_RECT scissor{ 0, 0, 0, 0 };
+        bool scissor_enabled = false;
+        std::vector<D3D12UIEffectCommand> effects;
+    };
+
+    struct D3D12ScreenEffectStackSubmission final
+    {
+        std::uint64_t owner_id = 0;
+        std::int32_t apply_stage = 0;
+        std::int32_t target_mode = 0;
+        std::uint32_t target_rendering_layer_mask = 0;
+        std::vector<D3D12UIEffectCommand> effects;
+    };
+
+    struct D3D12SceneEffectSubmission final
+    {
+        std::vector<D3D12StaticTextureSource> texture_sources;
+        std::vector<D3D12ModelEffectStackSubmission> model_effects;
+        std::vector<D3D12ScreenEffectStackSubmission> screen_effects;
+
+        void Clear()
+        {
+            texture_sources.clear();
+            model_effects.clear();
+            screen_effects.clear();
+        }
+    };
+
     class D3D12DeviceContext final
     {
     public:
@@ -501,7 +543,8 @@ namespace ReplayEngine::Rendering::DX12
         bool Initialize(HWND window, std::uint32_t width, std::uint32_t height,
             bool enable_debug_layer = false, bool force_warp = false,
             bool create_validation_resources = true,
-            bool enable_gpu_validation = false) noexcept;
+            bool enable_gpu_validation = false,
+            bool enable_dred = false) noexcept;
         void Shutdown() noexcept;
         bool Resize(std::uint32_t width, std::uint32_t height) noexcept;
 
@@ -514,6 +557,10 @@ namespace ReplayEngine::Rendering::DX12
         bool DrawScene3D(const D3D12StaticSceneSubmission& submission) noexcept;
         // Runtime Canvas のCPUコマンドを、Scene3D/PostProcess後の同じBack Bufferへ記録する。
         bool DrawRuntimeUI(const D3D12UIFrame& frame) noexcept;
+        void SetSceneEffects(D3D12SceneEffectSubmission submission)
+        {
+            scene_effect_submission_ = std::move(submission);
+        }
         // Editor Canvas Preview。Runtime と同じ UI frame を専用 offscreen target へ記録する。
         bool EnsureUIPreviewTarget(std::uint32_t width, std::uint32_t height) noexcept;
         bool DrawRuntimeUIPreview(const D3D12UIFrame& frame) noexcept;
@@ -548,6 +595,12 @@ namespace ReplayEngine::Rendering::DX12
         std::uint64_t LastSignaledFenceValue() const noexcept
         {
             return last_signaled_fence_value_;
+        }
+        std::uint64_t CompletedFenceValue() const noexcept
+        {
+            if (fence_ == nullptr) return 0;
+            const std::uint64_t value = fence_->GetCompletedValue();
+            return value == (std::numeric_limits<std::uint64_t>::max)() ? 0 : value;
         }
         std::uint64_t FrameFenceValue(std::uint32_t index) const noexcept
         {
@@ -602,6 +655,10 @@ namespace ReplayEngine::Rendering::DX12
         {
             return diagnostics_.LatestTiming();
         }
+        std::uint32_t GpuPassSequence(D3D12GpuPass pass) const noexcept
+        {
+            return diagnostics_.PassSequence(pass);
+        }
         void ConsumeDebugMessages(std::vector<D3D12DebugMessage>& out)
         {
             diagnostics_.ConsumeMessages(out);
@@ -613,7 +670,21 @@ namespace ReplayEngine::Rendering::DX12
         void SetBreakOnError(bool enabled) noexcept
         {
             diagnostics_.SetBreakOnError(enabled);
+            resource_state_tracker_.SetBreakOnError(enabled);
         }
+        void SetStatsCsvPath(std::filesystem::path path)
+        {
+            diagnostics_.SetStatsCsvPath(std::move(path));
+        }
+        void SetFrameDumpCount(std::uint32_t count) noexcept
+        {
+            diagnostics_.SetFrameDumpCount(count);
+        }
+        const D3D12RuntimeStats& RuntimeStats() const noexcept
+        {
+            return diagnostics_.RuntimeStats();
+        }
+        bool ForceDeviceRemovedDiagnostic() noexcept;
         bool ReportLiveObjects(std::uint32_t& live_lines,
             std::uint32_t& detail_lines) noexcept
         {
@@ -642,6 +713,34 @@ namespace ReplayEngine::Rendering::DX12
         std::size_t TextureCacheSize() const noexcept
         {
             return texture_cache_.size();
+        }
+        std::size_t UIFontTextureCacheSize() const noexcept
+        {
+            return ui_font_texture_cache_.size();
+        }
+        std::size_t RuntimeUIEffectHistoryCount() const noexcept
+        {
+            return ui_effect_history_targets_.size();
+        }
+        std::size_t UIPreviewEffectHistoryCount() const noexcept
+        {
+            return ui_preview_effect_history_targets_.size();
+        }
+        std::size_t SceneEffectHistoryCount() const noexcept
+        {
+            return scene_effect_history_targets_.size();
+        }
+        std::uint32_t LastModelEffectStackCount() const noexcept
+        {
+            return last_model_effect_stack_count_;
+        }
+        std::uint32_t LastScreenEffectStackCount() const noexcept
+        {
+            return last_screen_effect_stack_count_;
+        }
+        std::uint32_t LastShadowCoverageDrawCount() const noexcept
+        {
+            return last_shadow_coverage_draw_count_;
         }
         bool HasStaticMesh(const std::string& key) const noexcept
         {
@@ -686,18 +785,25 @@ namespace ReplayEngine::Rendering::DX12
         }
 
     private:
-        bool ConfigureDebug(bool enable_debug_layer, bool enable_gpu_validation) noexcept;
+        bool ConfigureDebug(bool enable_debug_layer, bool enable_gpu_validation,
+            bool enable_dred) noexcept;
         bool CreateDevice(bool enable_debug_layer, bool force_warp,
-            bool enable_gpu_validation) noexcept;
+            bool enable_gpu_validation, bool enable_dred) noexcept;
         bool CreateSwapChain(HWND window, std::uint32_t width,
             std::uint32_t height) noexcept;
         bool CreateRenderTargets() noexcept;
         bool CreateOffscreenTarget(D3D12OffscreenTarget& target,
             std::uint32_t width, std::uint32_t height,
-            DXGI_FORMAT format = DXGI_FORMAT_R16G16B16A16_FLOAT) noexcept;
+            DXGI_FORMAT format = DXGI_FORMAT_R16G16B16A16_FLOAT,
+            const wchar_t* debug_name = L"Offscreen") noexcept;
         bool DrawRuntimeUIToTarget(const D3D12UIFrame& frame,
             D3D12OffscreenTarget* output_target,
             D3D12OffscreenTarget* effect_targets) noexcept;
+        bool CompositeSceneEffectTarget(const D3D12OffscreenTarget& source,
+            D3D12OffscreenTarget& destination, const D3D12_RECT* scissor) noexcept;
+        bool BuildRenderingLayerLdrSource(const D3D12OffscreenTarget& layer_source,
+            D3D12OffscreenTarget& ldr_output) noexcept;
+        bool CompositeUIEffectTargetToCurrent(const D3D12OffscreenTarget& source) noexcept;
         bool CreateValidationTriangleResources() noexcept;
         bool CreateStaticRendererResources() noexcept;
         void ReleaseStaticRendererResources() noexcept;
@@ -723,7 +829,7 @@ namespace ReplayEngine::Rendering::DX12
         bool CreateSolidStaticTexture(const char* key, std::uint32_t rgba) noexcept;
         struct StaticPipelineSet;
         bool CreateStaticPipelineSet(const std::vector<std::uint8_t>& pixel_shader,
-            StaticPipelineSet& pipelines) noexcept;
+            StaticPipelineSet& pipelines, std::string_view debug_key = {}) noexcept;
         ID3D12PipelineState* StaticPipeline(const std::string& shader_key,
             bool double_sided, D3D12StaticAlphaMode alpha_mode) const noexcept;
         void ReleaseRenderTargets() noexcept;
@@ -736,6 +842,9 @@ namespace ReplayEngine::Rendering::DX12
         std::uint64_t SignalQueue() noexcept;
         void ReclaimDeferredDescriptors() noexcept;
         void ReportDeviceRemoved(HRESULT trigger) noexcept;
+        void WriteDeviceRemovedReport(HRESULT trigger, HRESULT reason,
+            bool forced_validation) noexcept;
+        D3D12RuntimeStats BuildRuntimeStats() const noexcept;
         void SetInitializationFailure(const char* stage, HRESULT result) noexcept;
         void BeginGpuPass(D3D12GpuPass pass) noexcept
         {
@@ -862,6 +971,8 @@ namespace ReplayEngine::Rendering::DX12
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_skinned_depth_pipelines_[4];
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_static_forward_blend_pipelines_[2];
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_skinned_forward_blend_pipelines_[2];
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_static_model_effect_pipelines_[4];
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_skinned_model_effect_pipelines_[4];
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_static_shadow_pipelines_[4];
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_skinned_shadow_pipelines_[4];
         std::vector<std::uint8_t> scene3d_static_vs_;
@@ -930,6 +1041,11 @@ namespace ReplayEngine::Rendering::DX12
         D3D12OffscreenTarget ui_preview_effect_targets_[4]{};
         // [0]/[1]/[2]はEffectとRegion合成の循環先、[3]はBackdropの退避先。
         D3D12OffscreenTarget ui_effect_targets_[4]{};
+        D3D12OffscreenTarget scene_effect_targets_[4]{};
+        D3D12SceneEffectSubmission scene_effect_submission_{};
+        std::uint32_t last_model_effect_stack_count_ = 0;
+        std::uint32_t last_screen_effect_stack_count_ = 0;
+        std::uint32_t last_shadow_coverage_draw_count_ = 0;
         struct UIEffectHistoryEntry final
         {
             D3D12OffscreenTarget target{};
@@ -940,15 +1056,27 @@ namespace ReplayEngine::Rendering::DX12
             ui_effect_history_targets_;
         std::unordered_map<std::uint64_t, UIEffectHistoryEntry>
             ui_preview_effect_history_targets_;
+        std::unordered_map<std::uint64_t, UIEffectHistoryEntry>
+            scene_effect_history_targets_;
         Microsoft::WRL::ComPtr<ID3D12RootSignature> ui_root_signature_;
         Microsoft::WRL::ComPtr<ID3D12PipelineState> ui_pipelines_[5];
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> ui_hdr_composite_pipeline_;
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> ui_background_composite_pipeline_;
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> ui_hdr_background_composite_pipeline_;
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> ui_screen_layer_extract_pipeline_;
         std::vector<std::uint8_t> ui_vertex_shader_;
         std::vector<std::uint8_t> ui_pixel_shader_;
         Microsoft::WRL::ComPtr<ID3D12RootSignature> ui_effect_root_signature_;
-        static constexpr std::size_t UIEffectKindCount = 74;
+        static constexpr std::size_t UIEffectKindCount =
+            static_cast<std::size_t>(ReplayEngine::UI::UIEffectKind::Count);
+        static_assert(UIEffectKindCount == 74,
+            "UIEffectKind の永続化値とDX12 Effect Shader表の対応が変わりました。");
         std::array<Microsoft::WRL::ComPtr<ID3D12PipelineState>, UIEffectKindCount>
             ui_effect_pipelines_{};
+        std::array<Microsoft::WRL::ComPtr<ID3D12PipelineState>, UIEffectKindCount>
+            ui_effect_hdr_pipelines_{};
         Microsoft::WRL::ComPtr<ID3D12PipelineState> ui_effect_region_pipeline_;
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> ui_effect_region_hdr_pipeline_;
 #ifdef USE_IMGUI
         struct ImGuiTextureRequest final
         {
@@ -971,6 +1099,11 @@ namespace ReplayEngine::Rendering::DX12
         HANDLE fence_event_ = nullptr;
         std::uint64_t next_fence_value_ = 1;
         std::uint64_t last_signaled_fence_value_ = 0;
+        std::uint64_t frame_upload_peak_ = 0;
+        std::uint64_t fence_wait_count_ = 0;
+        std::uint64_t fence_wait_nanoseconds_ = 0;
+        std::uint64_t pso_cache_hits_ = 0;
+        std::uint64_t pso_cache_misses_ = 0;
         std::uint32_t frame_index_ = 0;
         std::uint32_t width_ = 0;
         std::uint32_t height_ = 0;

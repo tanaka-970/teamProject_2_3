@@ -296,9 +296,7 @@ gltf_model* framework::resolve_object_gltf(const std::string& asset_guid)
         // 参考実装の Repository と同じく、モデル本体を Object ごとに複製しない。
         const auto loaded = gltf_model_cache.Load(source, [this, source]
         {
-            const bool cpu_only = dx12_framework_requested || dx12_framework_active;
-            return std::make_shared<gltf_model>(
-                cpu_only ? nullptr : device.Get(), source.string());
+            return std::make_shared<gltf_model>(source.string());
         });
         if (!loaded || !loaded->IsLoaded())
         {
@@ -356,10 +354,7 @@ skinned_mesh* framework::resolve_object_mesh(const std::string& asset_guid)
     std::unique_ptr<skinned_mesh> loaded;
     try
     {
-        const bool cpu_only = dx12_framework_requested || dx12_framework_active;
-        loaded = std::make_unique<skinned_mesh>(
-            cpu_only ? nullptr : device.Get(), source.string().c_str(),
-            false, 0.0f, !cpu_only);
+        loaded = std::make_unique<skinned_mesh>(source.string().c_str(), false, 0.0f);
     }
     catch (...)
     {
@@ -380,14 +375,14 @@ skinned_mesh* framework::resolve_object_mesh(const std::string& asset_guid)
 }
 static_mesh* framework::resolve_builtin_primitive_mesh(const std::string& builtin_id)
 {
-    if (!device || builtin_id.rfind("builtin:", 0) != 0) return nullptr;
+    if (builtin_id.rfind("builtin:", 0) != 0) return nullptr;
     const auto cached = builtin_primitive_mesh_cache.find(builtin_id);
     if (cached != builtin_primitive_mesh_cache.end()) return cached->second.get();
 
     std::vector<static_mesh::vertex> vertices;
     std::vector<std::uint32_t> indices;
     if (!BuildBuiltinPrimitive(builtin_id, vertices, indices)) return nullptr;
-    auto mesh = std::make_unique<static_mesh>(device.Get(), vertices, indices);
+    auto mesh = std::make_unique<static_mesh>(vertices, indices);
     if (!mesh || !mesh->is_loaded()) return nullptr;
     static_mesh* raw = mesh.get();
     builtin_primitive_mesh_cache.emplace(builtin_id, std::move(mesh));

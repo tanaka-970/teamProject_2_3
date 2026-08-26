@@ -380,6 +380,12 @@ namespace ReplayEngine::Scripting::CSharp::Detail
                 return FloatText(v.x) + "," + FloatText(v.y) + "," +
                     FloatText(v.z) + "," + FloatText(v.w);
             }
+            // Asset は GUID 文字列、Enum は内部 int をそのまま送る。
+            // 落ちると managed 側が既定値で埋まり、往復が静かに空になる。
+            case PropertyType::AssetReference:
+                return value.AsString();
+            case PropertyType::Enum:
+                return std::to_string(value.AsInt());
             case PropertyType::ObjectReference:
                 return std::to_string(value.AsObjectReference().Value());
             case PropertyType::ComponentReference:

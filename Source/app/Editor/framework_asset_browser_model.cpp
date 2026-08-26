@@ -1,4 +1,4 @@
-#include "framework.h"
+﻿#include "framework.h"
 #include "framework_asset_browserInternal.h"
 #include "gltf_model.h"
 #include "skinned_mesh.h"
@@ -99,7 +99,7 @@ bool framework::prewarm_model_asset(const std::filesystem::path& path)
         {
             const auto model = gltf_model_cache.Load(path, [this, path]
             {
-                return std::make_shared<gltf_model>(device.Get(), path.string());
+                return std::make_shared<gltf_model>(path.string());
             });
             return model && model->IsLoaded();
         }
@@ -111,10 +111,7 @@ bool framework::prewarm_model_asset(const std::filesystem::path& path)
             if (!std::filesystem::exists(cache, error)) return false;
             return skinned_mesh_cache.Load(path, [this, path]
             {
-                const bool cpu_only = dx12_framework_requested || dx12_framework_active;
-                return std::make_shared<skinned_mesh>(
-                    cpu_only ? nullptr : device.Get(), path.string().c_str(), false, 0.0f,
-                    !cpu_only);
+                return std::make_shared<skinned_mesh>(path.string().c_str(), false, 0.0f);
             }) != nullptr;
         }
     }
@@ -139,7 +136,7 @@ bool framework::load_model_asset_async(const std::wstring& filename)
             {
                 auto candidate = gltf_model_cache.Load(path, [this, path]
                 {
-                    return std::make_shared<gltf_model>(device.Get(), path.string());
+                    return std::make_shared<gltf_model>(path.string());
                 });
                 if (!candidate || !candidate->IsLoaded())
                     result.error = candidate ? candidate->Error() : "glTFモデルを生成できません";
@@ -156,7 +153,7 @@ bool framework::load_model_asset_async(const std::wstring& filename)
                 }
                 skinned_mesh_cache.Load(path, [this, path]
                 {
-                    return std::make_shared<skinned_mesh>(device.Get(), path.string().c_str());
+                    return std::make_shared<skinned_mesh>(path.string().c_str());
                 });
                 return;
             }
@@ -187,7 +184,7 @@ bool framework::load_model_asset_now(const std::wstring& filename)
         {
             auto candidate = gltf_model_cache.Load(path, [this, path]
             {
-                return std::make_shared<gltf_model>(device.Get(), path.string());
+                return std::make_shared<gltf_model>(path.string());
             });
             if (!candidate->IsLoaded())
             {
@@ -211,7 +208,7 @@ bool framework::load_model_asset_now(const std::wstring& filename)
 
             auto candidate = skinned_mesh_cache.Load(path, [this, path]
             {
-                return std::make_shared<skinned_mesh>(device.Get(), path.string().c_str());
+                return std::make_shared<skinned_mesh>(path.string().c_str());
             });
             skinned_meshes[1] = std::move(candidate);
             stage_gltf_model.reset();

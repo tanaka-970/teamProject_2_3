@@ -71,15 +71,6 @@ namespace ReplayEngine::UI
 
     }
 
-    bool FontAtlas::Initialize(ID3D11Device* device)
-    {
-        Release();
-        if (device == nullptr) return false;
-        device_ = device;
-        active_face_key_ = fallback_face_key;
-        return EnsureFallbackFace();
-    }
-
     bool FontAtlas::InitializeCpuOnly()
     {
         Release();
@@ -91,7 +82,6 @@ namespace ReplayEngine::UI
     {
         faces_.clear();
         active_face_key_.clear();
-        device_.Reset();
         baked_font_size_ = 128.0f;
     }
 
@@ -105,12 +95,6 @@ namespace ReplayEngine::UI
     {
         const auto found = faces_.find(active_face_key_);
         return found != faces_.end() ? &found->second : nullptr;
-    }
-
-    ID3D11ShaderResourceView* FontAtlas::Texture() const noexcept
-    {
-        const FaceAtlas* face = ActiveFace();
-        return face != nullptr ? face->texture.Get() : nullptr;
     }
 
     bool FontAtlas::CopyActiveAtlas(std::string& key, std::vector<std::uint8_t>& rgba,
@@ -128,32 +112,17 @@ namespace ReplayEngine::UI
 
     bool FontAtlas::EnsureWhiteTexture(FaceAtlas& face)
     {
-        if (face.texture) return true;
-        const std::uint32_t pixel = 0xFFFFFFFFu;
         face.rgba = { 0xFF, 0xFF, 0xFF, 0xFF };
         face.atlas_width = 1;
         face.atlas_height = 1;
         ++face.revision;
-        if (device_ == nullptr) return true;
-        D3D11_TEXTURE2D_DESC desc{};
-        desc.Width = 1; desc.Height = 1; desc.MipLevels = 1; desc.ArraySize = 1;
-        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-        desc.SampleDesc.Count = 1; desc.Usage = D3D11_USAGE_DEFAULT;
-        desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-        D3D11_SUBRESOURCE_DATA init{}; init.pSysMem = &pixel; init.SysMemPitch = sizeof(pixel);
-        Microsoft::WRL::ComPtr<ID3D11Texture2D> texture;
-        if (FAILED(device_->CreateTexture2D(&desc, &init, texture.GetAddressOf()))) return false;
-        D3D11_SHADER_RESOURCE_VIEW_DESC srv{};
-        srv.Format = desc.Format; srv.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-        srv.Texture2D.MipLevels = 1;
-        face.texture.Reset();
-        return SUCCEEDED(device_->CreateShaderResourceView(texture.Get(), &srv, face.texture.GetAddressOf()));
+        return true;
     }
 
     bool FontAtlas::EnsureFallbackFace()
     {
         FaceAtlas& face = faces_[fallback_face_key];
-        if (!face.font_data.empty() || face.texture) return true;
+        if (!face.font_data.empty() || !face.rgba.empty()) return true;
         const std::filesystem::path candidates[] =
         {
             L"C:\\Windows\\Fonts\\meiryo.ttc",
@@ -187,7 +156,7 @@ namespace ReplayEngine::UI
         if (found != faces_.end())
         {
             active_face_key_ = font_guid;
-            return found->second.texture != nullptr || found->second.valid_font;
+            return !found->second.rgba.empty() || found->second.valid_font;
         }
 
         FaceAtlas face;

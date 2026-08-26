@@ -1,5 +1,4 @@
 ﻿#include "framework.h"
-#include "texture.h"
 #include "../../RePlayEngine/Assets/AssetCache.h"
 #include "../../RePlayEngine/Localization/LocalizationTable.h"
 #include "../../RePlayEngine/Rendering/Effects/EffectPresetAsset.h"

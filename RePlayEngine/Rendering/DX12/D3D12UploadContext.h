@@ -47,6 +47,9 @@ namespace ReplayEngine::Rendering::DX12
         {
             return device_ != nullptr && queue_ != nullptr && command_list_ != nullptr;
         }
+        std::uint64_t WaitCount() const noexcept { return wait_count_; }
+        std::uint64_t WaitNanoseconds() const noexcept { return wait_nanoseconds_; }
+        std::uint64_t UploadCount() const noexcept { return upload_count_; }
 
     private:
         bool BeginSingleUploadIfNeeded(bool& opened_here) noexcept;
@@ -61,6 +64,9 @@ namespace ReplayEngine::Rendering::DX12
         std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> pending_upload_resources_;
         HANDLE fence_event_ = nullptr;
         std::uint64_t fence_value_ = 0;
+        std::uint64_t wait_count_ = 0;
+        std::uint64_t wait_nanoseconds_ = 0;
+        std::uint64_t upload_count_ = 0;
         bool batch_open_ = false;
         bool batch_has_commands_ = false;
     };

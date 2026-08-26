@@ -65,45 +65,13 @@
     // Canvas/RectTransform の解決結果を、GPU APIを呼ばないDX12 UIコマンドへ変換する。
     bool build_dx12_ui(
         ReplayEngine::Rendering::DX12::D3D12UIFrame& frame);
+    bool build_dx12_scene_effects(
+        ReplayEngine::Rendering::DX12::D3D12SceneEffectSubmission& submission);
     bool build_dx12_ui_for_scene(
         ReplayEngine::Rendering::DX12::D3D12UIFrame& frame,
         ReplayEngine::Scene::Scene& scene,
         std::uint32_t target_width, std::uint32_t target_height,
         const object_ui_viewport& viewport);
-    // LandscapeRendererComponent 用の procedural static mesh 描画。
-    // AssetGUIDを介さず、LandscapeData::Revision が変わったときだけGPU Meshを作り直す。
-    void draw_landscape_scene_meshes(bool gbuffer_pass, bool depth_only = false);
-    // Landscape の GPU Mesh キャッシュを引く共通入口。影パスと通常描画で共有する。
-    static_mesh* resolve_landscape_gpu_mesh(
-        const ReplayEngine::Core::GameObject& object);
-
-    // ライト視点の影深度パス専用の提出処理。volume_* は影マップに写り得る範囲を包む球。
-    void draw_shadow_caster_meshes(
-        ID3D11VertexShader* static_caster_vs,
-        ID3D11InputLayout* static_caster_il,
-        ID3D11VertexShader* skinned_caster_vs,
-        ID3D11InputLayout* skinned_caster_il,
-        const DirectX::XMFLOAT3& volume_center,
-        float volume_radius,
-        float volume_extrusion);
-    // 影パスが材質から必要とする値だけをまとめて引く。
-    struct shadow_material_state
-    {
-        bool double_sided = false;
-        // 0=抜かない 1=cutoffで抜く 2=Mesh内蔵材質のalpha_modeを見る
-        int alpha_mode = 0;
-        float alpha_cutoff = 0.5f;
-        // true なら BaseMap を t40 (Material Asset) から読む。false は t0。
-        bool uses_replay_base_map = false;
-    };
-    shadow_material_state resolve_shadow_material_state(
-        const ReplayEngine::Rendering::RenderItem& source);
-    // 影用のアルファ抜き定数 (b7) を積む。alpha_mode が 0 なら PS は貼らない。
-    void bind_shadow_alpha_constants(const shadow_material_state& state);
-    // world 行列が鏡像なら巻き順が反転するので、裏面ではなく表面を落とす。
-    void set_shadow_cull_state(bool double_sided, const DirectX::XMFLOAT4X4& world);
-    void update_line_trails(float elapsed_time);
-    void draw_line_strokes();
     void clear_object_mesh_cache() noexcept;
     void clear_object_material_cache() noexcept;
     bool object_runtime_active() const noexcept;
@@ -341,6 +309,9 @@ private:
     bool profile_benchmark_gpu_drain_timeout{ false };
     bool profile_benchmark_scene_ready{ false };
     bool profile_benchmark_startup_failed{ false };
+    bool profile_benchmark_startup_profile_ok{ false };
+    std::array<double, 5> profile_benchmark_initialize_stage_ms{};
+    double profile_benchmark_initialize_total_ms{ 0.0 };
     std::uint64_t profile_benchmark_max_draw_calls{ 0 };
     std::uint64_t profile_benchmark_max_objects{ 0 };
     std::uint64_t profile_benchmark_max_components{ 0 };

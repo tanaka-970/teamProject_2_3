@@ -63,6 +63,116 @@
         log << "[" << stamp << "] " << reason << '\n';
     }
 
+    bool export_dx12_startup_profile(double startup_total_ms)
+    {
+        const std::filesystem::path profile_folder = saved_path("Profile");
+        std::error_code error;
+        std::filesystem::create_directories(profile_folder, error);
+        if (error) return false;
+
+        const std::filesystem::path csv_path =
+            profile_folder / (profile_benchmark_output_name + ".startup.csv");
+        const std::filesystem::path trace_path =
+            profile_folder / (profile_benchmark_output_name + ".startup.trace.json");
+        std::ofstream csv(csv_path, std::ios::binary | std::ios::trunc);
+        std::ofstream trace(trace_path, std::ios::binary | std::ios::trunc);
+        if (!csv || !trace) return false;
+
+        static constexpr const char* initialize_stage_names[] =
+        {
+            "AssetDatabase",
+            "ProjectFonts",
+            "CpuUiSceneSetup",
+            "ObjectScene",
+            "DX12Initialize"
+        };
+        static_assert(std::size(initialize_stage_names) == 5,
+            "Startup profile stage table must match initialize stage storage.");
+
+        const double scene_ready_wait_ms = (std::max)(0.0,
+            startup_total_ms - profile_benchmark_initialize_total_ms);
+        const auto& gpu = dx12_device_context.GpuTiming();
+        const auto& stats = dx12_device_context.RuntimeStats();
+
+        csv << "category,name,milliseconds,value\r\n";
+        for (std::size_t index = 0; index < profile_benchmark_initialize_stage_ms.size(); ++index)
+        {
+            csv << "startup," << initialize_stage_names[index] << ','
+                << profile_benchmark_initialize_stage_ms[index] << ",\r\n";
+        }
+        csv << "startup,FrameworkInitializeTotal,"
+            << profile_benchmark_initialize_total_ms << ",\r\n";
+        csv << "startup,SceneReadyWait," << scene_ready_wait_ms << ",\r\n";
+        csv << "startup,StartupTotal," << startup_total_ms << ",\r\n";
+        for (std::size_t index = 0; index < ReplayEngine::Rendering::DX12::D3D12GpuPassCount; ++index)
+        {
+            if (!gpu.valid[index]) continue;
+            csv << "gpu,"
+                << ReplayEngine::Rendering::DX12::D3D12GpuPassName(
+                    static_cast<ReplayEngine::Rendering::DX12::D3D12GpuPass>(index))
+                << ',' << gpu.milliseconds[index] << ",\r\n";
+        }
+        csv << "dx12,ResourceDescriptorsUsed,," << stats.resource_descriptor_used << "\r\n";
+        csv << "dx12,ResourceDescriptorsPeak,," << stats.resource_descriptor_peak << "\r\n";
+        csv << "dx12,SamplerDescriptorsUsed,," << stats.sampler_descriptor_used << "\r\n";
+        csv << "dx12,FrameUploadUsedBytes,," << stats.frame_upload_used << "\r\n";
+        csv << "dx12,FrameUploadPeakBytes,," << stats.frame_upload_peak << "\r\n";
+        csv << "dx12,FenceWaitCount,," << stats.fence_wait_count << "\r\n";
+        csv << "dx12,FenceWaitNanoseconds,," << stats.fence_wait_nanoseconds << "\r\n";
+        csv << "dx12,MeshResident,," << stats.mesh_resident << "\r\n";
+        csv << "dx12,TextureResident,," << stats.texture_resident << "\r\n";
+        csv << "dx12,PsoCount,," << stats.pso_count << "\r\n";
+        csv << "dx12,PsoHits,," << stats.pso_hits << "\r\n";
+        csv << "dx12,PsoMisses,," << stats.pso_misses << "\r\n";
+        csv << "dx12,DxcCompileCount,," << stats.dxc_compile_count << "\r\n";
+        csv << "dx12,DxcFailureCount,," << stats.dxc_failure_count << "\r\n";
+        csv << "dx12,DxcTotalMilliseconds," << stats.dxc_total_milliseconds << ",\r\n";
+
+        trace << "{\"traceEvents\":[";
+        bool first_event = true;
+        double timeline_us = 0.0;
+        const auto write_duration = [&trace, &first_event, &timeline_us](
+            const char* category, const char* name, double milliseconds)
+        {
+            if (!first_event) trace << ',';
+            first_event = false;
+            trace << "{\"name\":\"" << name << "\",\"cat\":\"" << category
+                << "\",\"ph\":\"X\",\"pid\":1,\"tid\":1,\"ts\":"
+                << timeline_us << ",\"dur\":" << milliseconds * 1000.0 << '}';
+            timeline_us += milliseconds * 1000.0;
+        };
+        for (std::size_t index = 0; index < profile_benchmark_initialize_stage_ms.size(); ++index)
+        {
+            write_duration("startup", initialize_stage_names[index],
+                profile_benchmark_initialize_stage_ms[index]);
+        }
+        write_duration("startup", "SceneReadyWait", scene_ready_wait_ms);
+        for (std::size_t index = 0; index < ReplayEngine::Rendering::DX12::D3D12GpuPassCount; ++index)
+        {
+            if (!gpu.valid[index]) continue;
+            if (!first_event) trace << ',';
+            first_event = false;
+            trace << "{\"name\":\""
+                << ReplayEngine::Rendering::DX12::D3D12GpuPassName(
+                    static_cast<ReplayEngine::Rendering::DX12::D3D12GpuPass>(index))
+                << "\",\"cat\":\"gpu\",\"ph\":\"X\",\"pid\":1,\"tid\":2,\"ts\":0,\"dur\":"
+                << gpu.milliseconds[index] * 1000.0 << '}';
+        }
+        if (!first_event) trace << ',';
+        trace << "{\"name\":\"DX12StartupStats\",\"cat\":\"dx12\",\"ph\":\"C\","
+            "\"pid\":1,\"tid\":3,\"ts\":" << startup_total_ms * 1000.0
+            << ",\"args\":{\"descriptor_used\":" << stats.resource_descriptor_used
+            << ",\"upload_used\":" << stats.frame_upload_used
+            << ",\"mesh_resident\":" << stats.mesh_resident
+            << ",\"texture_resident\":" << stats.texture_resident
+            << ",\"pso_count\":" << stats.pso_count
+            << ",\"dxc_compile_count\":" << stats.dxc_compile_count << "}}]}";
+
+        csv.flush();
+        trace.flush();
+        return csv.good() && trace.good();
+    }
+
     int run(int show_command = SW_SHOWDEFAULT)
     {
         MSG msg{};
@@ -194,6 +304,17 @@
                             profile_benchmark_scene_ready = true;
                             profile_benchmark_frame_index = 0;
                             profile_benchmark_drain_frames = 0;
+                            const double startup_total_ms =
+                                std::chrono::duration<double, std::milli>(
+                                    std::chrono::steady_clock::now() -
+                                    profile_benchmark_startup_begin).count();
+                            profile_benchmark_startup_profile_ok =
+                                export_dx12_startup_profile(startup_total_ms);
+                            if (!profile_benchmark_startup_profile_ok)
+                            {
+                                log_shutdown_reason(
+                                    "Profiler benchmark: DX12 startup profile export failed");
+                            }
                             ReplayEngine::Rendering::Stats().SetPaused(true);
                             log_shutdown_reason(
                                 "Profiler benchmark: Startup Scene ready; warmup begins next frame");
@@ -291,7 +412,8 @@
                                 profile_benchmark_export_attempted = true;
                                 profile_benchmark_export_ok =
                                     ReplayEngine::Rendering::Stats().ExportCsvAndTrace(
-                                        profile_benchmark_output_name);
+                                        profile_benchmark_output_name) &&
+                                    profile_benchmark_startup_profile_ok;
 
                                 // 起動 Scene を測ったつもりで空 World の CSV を成功扱いにしない。
                                 // Export 自体は残すので、失敗時も外部から中身を診断できる。

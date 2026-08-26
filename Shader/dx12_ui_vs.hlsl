@@ -43,7 +43,7 @@ VSOutput main(VSInput input)
         const float2 safe_size = max(screen_size.xy, float2(1.0, 1.0));
         const float2 ndc = float2(input.position.x / safe_size.x * 2.0 - 1.0,
             1.0 - input.position.y / safe_size.y * 2.0);
-        output.position = float4(ndc, 0.0, 1.0);
+        output.position = float4(ndc, 1.0, 1.0);
     }
     output.uv = input.uv;
     output.color = input.color;

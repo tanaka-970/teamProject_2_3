@@ -1,9 +1,11 @@
-#include "../framework_class.h"
+﻿#include "../framework_class.h"
 
 #include "../../../RePlayEngine/Components/UI/CanvasComponent.h"
 #include "../../../RePlayEngine/Components/UI/RectTransformComponent.h"
 #include "../../../RePlayEngine/Components/UI/UIImageComponent.h"
 #include "../../../RePlayEngine/Components/UI/UIEffectStackComponent.h"
+#include "../../../RePlayEngine/Components/Rendering/ModelEffectStackComponent.h"
+#include "../../../RePlayEngine/Components/Rendering/ScreenEffectStackComponent.h"
 #include "../../../RePlayEngine/Components/UI/UIInputFieldComponent.h"
 #include "../../../RePlayEngine/Components/UI/UIMaskComponent.h"
 #include "../../../RePlayEngine/Components/UI/UIScrollViewComponent.h"
@@ -2294,3 +2296,205 @@ bool framework::build_dx12_ui_for_scene(
     frame.texture_count = static_cast<std::uint32_t>(texture_keys.size() + frame.font_atlases.size());
     return true;
 }
+
+bool framework::build_dx12_scene_effects(
+    ReplayEngine::Rendering::DX12::D3D12SceneEffectSubmission& submission)
+{
+    using namespace ReplayEngine;
+    using namespace ReplayEngine::Rendering::DX12;
+    using ReplayEngine::UI::UIEffectKind;
+    using ReplayEngine::UI::UIEffectRegionData;
+    using ReplayEngine::UI::UIEffectRegionScope;
+    using ReplayEngine::UI::UIEffectRegionShape;
+
+    submission.Clear();
+    std::unordered_set<std::string> texture_keys;
+    const auto register_effect_texture = [&](const Assets::AssetRecord* record)
+        -> std::string
+    {
+        if (record == nullptr || record->kind != AssetKind::Image) return {};
+        const std::filesystem::path path = content_path(record->cache_path.empty()
+            ? record->source_path : record->cache_path).lexically_normal();
+        const std::string key = path.generic_string();
+        if (!key.empty() && texture_keys.insert(key).second)
+        {
+            D3D12StaticTextureSource source;
+            source.key = key;
+            source.source_path = path;
+            submission.texture_sources.push_back(std::move(source));
+        }
+        return key;
+    };
+    const auto texture_for_guid = [&](const std::string& guid)
+    {
+        return guid.empty() || guid == "__runtime_ui_matte"
+            ? std::string{} : register_effect_texture(asset_database.FindByGuid(guid));
+    };
+    const auto fill_effects = [&](const std::vector<UI::UIEffect>& effects,
+        const UI::UIEffectRegion& region, std::uint64_t owner_id,
+        std::vector<D3D12UIEffectCommand>& output)
+    {
+        output.clear();
+        output.reserve((std::min)(effects.size(), static_cast<std::size_t>(32)));
+        for (const UI::UIEffect& effect : effects)
+        {
+            if (!effect.enabled || output.size() >= 32) continue;
+            const int kind = effect.kind;
+            if (kind < static_cast<int>(UIEffectKind::Blur) ||
+                kind >= static_cast<int>(UIEffectKind::Count))
+                continue;
+            D3D12UIEffectCommand command{};
+            command.kind = static_cast<std::uint32_t>(kind);
+            command.radius = (std::max)(0.0f, effect.radius);
+            command.intensity = (std::max)(0.0f, effect.intensity);
+            command.threshold = effect.threshold;
+            command.amount = effect.amount;
+            command.angle = effect.angle;
+            command.progress = effect.progress;
+            command.softness = effect.softness;
+            command.speed = effect.speed;
+            command.seed = effect.seed;
+            command.time = shader_composer_time;
+            command.waveform = effect.waveform;
+            command.direction = effect.direction;
+            command.color = effect.color;
+            command.color_2 = effect.color_2;
+            command.color_3 = effect.color_3;
+            command.color_4 = effect.color_4;
+            command.color_stops = { effect.color_stop_2,
+                effect.color_stop_3, effect.color_stop_4, 0.0f };
+            std::string mask_guid = effect.mask;
+            const UIEffectKind effect_kind = static_cast<UIEffectKind>(kind);
+            if (effect_kind == UIEffectKind::BrushStroke && effect.brush_atlas_enabled)
+            {
+                if (mask_guid.empty())
+                {
+                    const Assets::AssetRecord* atlas = asset_database.FindByPath(
+                        std::filesystem::path("resources") / "BrushMasks" /
+                        "brush_masks_atlas.png");
+                    if (atlas != nullptr) mask_guid = atlas->guid;
+                }
+                command.brush_atlas = true;
+                command.brush_pattern_settings = {
+                    static_cast<float>((std::max)(0, (std::min)(15,
+                        effect.brush_pattern_index))),
+                    static_cast<float>((std::max)(0, (std::min)(1,
+                        effect.brush_pattern_mode))), 0.0f, 0.0f };
+                for (std::size_t group = 0;
+                    group < command.brush_pattern_weights.size(); ++group)
+                {
+                    const std::size_t first = group * 4;
+                    command.brush_pattern_weights[group] = {
+                        (std::max)(0.0f, effect.brush_pattern_weights[first]),
+                        (std::max)(0.0f, effect.brush_pattern_weights[first + 1]),
+                        (std::max)(0.0f, effect.brush_pattern_weights[first + 2]),
+                        (std::max)(0.0f, effect.brush_pattern_weights[first + 3]) };
+                }
+            }
+            command.auxiliary_texture_key = texture_for_guid(mask_guid);
+            command.temporal = effect_kind == UIEffectKind::MotionBlur ||
+                effect_kind == UIEffectKind::Echo ||
+                effect_kind == UIEffectKind::FeedbackZoom;
+            if (command.temporal && owner_id != 0) command.history_key = owner_id;
+            command.region_enabled = region.enabled &&
+                (region.scope == static_cast<int>(UIEffectRegionScope::AllEffects) ||
+                    effect.region_enabled);
+            if (command.region_enabled)
+            {
+                const auto fill_region = [](const UIEffectRegionData& source,
+                    DirectX::XMFLOAT4& params, DirectX::XMFLOAT4& settings)
+                {
+                    const int shape = (std::max)(0, (std::min)(3, source.shape));
+                    params = { source.center.x, source.center.y,
+                        (std::max)(source.size.x, 0.0001f),
+                        (std::max)(source.size.y, 0.0001f) };
+                    settings = { source.rotation, (std::max)(0.0f, source.feather),
+                        Clamp01(source.strength),
+                        static_cast<float>(shape) + (source.invert ? 4.0f : 0.0f) };
+                };
+                const auto fill_path = [&](const UIEffectRegionData& source,
+                    std::size_t slot)
+                {
+                    if (source.shape != static_cast<int>(UIEffectRegionShape::Freeform) ||
+                        slot >= command.effect_region_path_points.size()) return;
+                    const std::size_t count = (std::min)(source.path_points.size(),
+                        command.effect_region_path_points[slot].size());
+                    command.effect_region_path_counts[slot].x =
+                        static_cast<float>(count);
+                    for (std::size_t point = 0; point < count; ++point)
+                    {
+                        command.effect_region_path_points[slot][point] = {
+                            source.path_points[point].x, source.path_points[point].y,
+                            0.0f, 0.0f };
+                    }
+                };
+                fill_region(region, command.effect_region_params,
+                    command.effect_region_settings);
+                fill_path(region, 0);
+                std::size_t region_count = 1;
+                for (const UIEffectRegionData& additional : region.additional)
+                {
+                    if (region_count > command.effect_region_extra_params.size() ||
+                        !additional.enabled ||
+                        (additional.scope == static_cast<int>(
+                            UIEffectRegionScope::SelectedEffects) && !effect.region_enabled))
+                        continue;
+                    const std::size_t extra_slot = region_count - 1;
+                    fill_region(additional,
+                        command.effect_region_extra_params[extra_slot],
+                        command.effect_region_extra_settings[extra_slot]);
+                    fill_path(additional, region_count);
+                    ++region_count;
+                }
+                command.effect_region_count.x = static_cast<float>(region_count);
+                if (region.shape == static_cast<int>(UIEffectRegionShape::TextureMask))
+                    command.region_mask_texture_key = texture_for_guid(region.mask);
+            }
+            output.push_back(std::move(command));
+        }
+        return !output.empty();
+    };
+
+    Scene::Scene& scene = active_object_scene();
+    for (std::size_t object_index = 0; object_index < scene.GameObjectCount(); ++object_index)
+    {
+        Core::GameObject* object = scene.GameObjectAt(object_index);
+        if (object == nullptr || object->PendingDestroy() || !object->ActiveInHierarchy())
+            continue;
+        if (auto* model = object->GetComponent<Components::ModelEffectStackComponent>())
+        {
+            if (model->ActiveInHierarchy() && model->enabled &&
+                model->HasActiveEffects(&asset_database))
+            {
+                D3D12ModelEffectStackSubmission stack{};
+                stack.owner_id = object->ID().Value();
+                stack.depth_mode = model->depth_mode;
+                stack.scissor = { 0, 0, static_cast<LONG>(dx12_device_context.Width()),
+                    static_cast<LONG>(dx12_device_context.Height()) };
+                stack.scissor_enabled = true;
+                if (fill_effects(model->EffectiveEffects(&asset_database),
+                    model->effect_region, stack.owner_id, stack.effects))
+                    submission.model_effects.push_back(std::move(stack));
+            }
+        }
+        if (auto* screen = object->GetComponent<Components::ScreenEffectStackComponent>())
+        {
+            if (screen->ActiveInHierarchy() && screen->enabled &&
+                screen->HasActiveEffects(&asset_database))
+            {
+                D3D12ScreenEffectStackSubmission stack{};
+                stack.owner_id = object->ID().Value();
+                stack.apply_stage = screen->apply_stage;
+                stack.target_mode = screen->target_mode;
+                const int layer = (std::max)(0, (std::min)(31,
+                    screen->target_rendering_layer));
+                stack.target_rendering_layer_mask = 1u << static_cast<std::uint32_t>(layer);
+                if (fill_effects(screen->EffectiveEffects(&asset_database),
+                    screen->effect_region, stack.owner_id, stack.effects))
+                    submission.screen_effects.push_back(std::move(stack));
+            }
+        }
+    }
+    return true;
+}
+

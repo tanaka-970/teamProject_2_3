@@ -1,4 +1,4 @@
-﻿#ifndef REPLAY_MATERIAL_SCHEMA_INJECTED
+#ifndef REPLAY_MATERIAL_SCHEMA_INJECTED
 cbuffer REPLAY_MATERIAL_CB : register(b9) { float4 PhaseColor; };
 Texture2D PhaseMap : register(t40);
 #endif

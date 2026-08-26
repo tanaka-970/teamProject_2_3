@@ -1,4 +1,4 @@
-#include "ShaderSource.h"
+﻿#include "ShaderSource.h"
 
 #include <algorithm>
 #include <cctype>
@@ -23,7 +23,7 @@ namespace ReplayEngine::Rendering
 
             // Visual Studio の「UTF-8 with signature」で保存された HLSL も受ける。
             // ShaderLibrary は generated cbuffer をソース先頭へ差し込むため、
-            // 元ファイルの BOM を残すと BOM がストリーム途中へ移動して D3DCompile が
+            // 元ファイルの BOM を残すと BOM がストリーム途中へ移動して DXC が
             // FbxDefault 等を失敗させる。Parser と Compiler の両方で正規化する。
             if (text.size() >= 3 &&
                 static_cast<unsigned char>(text[0]) == 0xEF &&

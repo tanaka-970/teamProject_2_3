@@ -3,9 +3,13 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
 #include <fstream>
 #include <iterator>
 #include <string_view>
+#include <chrono>
+#include <iomanip>
+#include <sstream>
 
 namespace ReplayEngine::Rendering::DX12
 {
@@ -31,6 +35,28 @@ namespace ReplayEngine::Rendering::DX12
             return text.find("Live") != std::string_view::npos ||
                 text.find("live") != std::string_view::npos;
         }
+
+        std::string JsonEscape(std::string_view text)
+        {
+            std::string result;
+            result.reserve(text.size() + 8);
+            for (char c : text)
+            {
+                switch (c)
+                {
+                case '\\': result += "\\\\"; break;
+                case '"': result += "\\\""; break;
+                case '\n': result += "\\n"; break;
+                case '\r': result += "\\r"; break;
+                case '\t': result += "\\t"; break;
+                default: result += c; break;
+                }
+            }
+            return result;
+        }
+
+        // PIX の Metadata 値。0=UNICODE / 1=ANSI / 2=PIX3BLOB。名前は char* なので ANSI。
+        constexpr UINT kPixAnsiEventMetadata = 1u;
     }
 
     const char* D3D12GpuPassName(D3D12GpuPass pass) noexcept
@@ -126,6 +152,10 @@ namespace ReplayEngine::Rendering::DX12
         device_.Reset();
         latest_timing_ = {};
         pending_messages_.clear();
+        current_draws_.clear();
+        current_barriers_.clear();
+        runtime_stats_ = {};
+        stats_csv_header_written_ = false;
         timestamp_frequency_ = 0;
         next_frame_id_ = 1;
         current_slot_ = 0;
@@ -135,6 +165,32 @@ namespace ReplayEngine::Rendering::DX12
     void D3D12Diagnostics::SetDebugLogPath(std::filesystem::path path)
     {
         if (!path.empty()) debug_log_path_ = std::move(path);
+    }
+
+    void D3D12Diagnostics::SetStatsCsvPath(std::filesystem::path path)
+    {
+        stats_csv_path_ = std::move(path);
+        stats_csv_header_written_ = false;
+    }
+
+    void D3D12Diagnostics::SetFrameDumpCount(std::uint32_t count) noexcept
+    {
+        frame_dump_remaining_ = count;
+    }
+
+    void D3D12Diagnostics::SetRuntimeStats(const D3D12RuntimeStats& stats) noexcept
+    {
+        const auto draw_calls = runtime_stats_.draw_calls;
+        const auto instances = runtime_stats_.instances;
+        const auto indices = runtime_stats_.indices;
+        const auto barriers = runtime_stats_.barriers;
+        const std::uint64_t frame_id = runtime_stats_.frame_id;
+        runtime_stats_ = stats;
+        runtime_stats_.draw_calls = draw_calls;
+        runtime_stats_.instances = instances;
+        runtime_stats_.indices = indices;
+        runtime_stats_.barriers = barriers;
+        runtime_stats_.frame_id = frame_id;
     }
 
     void D3D12Diagnostics::SetBreakOnError(bool enabled) noexcept
@@ -184,9 +240,19 @@ namespace ReplayEngine::Rendering::DX12
         ResolveFrame(frame, completed_fence);
         frame.began.fill(false);
         frame.ended.fill(false);
+        frame.event_list.fill(nullptr);
+        frame.sequence.fill(0);
+        frame.next_sequence = 1;
         frame.frame_id = next_frame_id_++;
         frame.fence_value = 0;
         frame.pending = false;
+        current_draws_.clear();
+        current_barriers_.clear();
+        runtime_stats_.draw_calls.fill(0);
+        runtime_stats_.instances.fill(0);
+        runtime_stats_.indices.fill(0);
+        runtime_stats_.barriers.fill(0);
+        runtime_stats_.frame_id = frame.frame_id;
     }
 
     void D3D12Diagnostics::BeginPass(ID3D12GraphicsCommandList* list,
@@ -197,9 +263,16 @@ namespace ReplayEngine::Rendering::DX12
         if (index >= D3D12GpuPassCount) return;
         TimestampFrame& frame = frames_[current_slot_];
         if (frame.began[index]) return;
+        const char* event_name = D3D12GpuPassName(pass);
+        list->BeginEvent(kPixAnsiEventMetadata, event_name,
+            static_cast<UINT>(std::strlen(event_name) + 1u));
         list->EndQuery(frame.heap.Get(), D3D12_QUERY_TYPE_TIMESTAMP,
             static_cast<UINT>(index * 2u));
         frame.began[index] = true;
+        frame.event_list[index] = list;
+        frame.sequence[index] = frame.next_sequence++;
+        active_pass_ = pass;
+        pass_active_ = true;
     }
 
     void D3D12Diagnostics::EndPass(ID3D12GraphicsCommandList* list,
@@ -212,15 +285,28 @@ namespace ReplayEngine::Rendering::DX12
         if (!frame.began[index] || frame.ended[index]) return;
         list->EndQuery(frame.heap.Get(), D3D12_QUERY_TYPE_TIMESTAMP,
             static_cast<UINT>(index * 2u + 1u));
+        // BeginEvent と同じ Command List のときだけ閉じる。
+        if (frame.event_list[index] == list) list->EndEvent();
+        frame.event_list[index] = nullptr;
         frame.ended[index] = true;
+        pass_active_ = false;
     }
 
     void D3D12Diagnostics::ResolveQueries(ID3D12GraphicsCommandList* list) noexcept
     {
         if (!initialized_ || list == nullptr) return;
         TimestampFrame& frame = frames_[current_slot_];
-        list->ResolveQueryData(frame.heap.Get(), D3D12_QUERY_TYPE_TIMESTAMP,
-            0, QueryCount, frame.readback.Get(), 0);
+        // 実行しなかったパスの Query を Resolve すると Debug Layer が
+        // Cannot Resolve query that has never been performed を出すため、
+        // Begin と End が揃ったパスだけを対象にする。
+        for (std::size_t index = 0; index < D3D12GpuPassCount; ++index)
+        {
+            if (!frame.began[index] || !frame.ended[index]) continue;
+            const UINT start = static_cast<UINT>(index * 2u);
+            list->ResolveQueryData(frame.heap.Get(), D3D12_QUERY_TYPE_TIMESTAMP,
+                start, 2u, frame.readback.Get(),
+                static_cast<UINT64>(start) * sizeof(std::uint64_t));
+        }
     }
 
     void D3D12Diagnostics::MarkSubmitted(std::uint32_t frame_slot,
@@ -230,6 +316,153 @@ namespace ReplayEngine::Rendering::DX12
         TimestampFrame& frame = frames_[frame_slot];
         frame.fence_value = fence_value;
         frame.pending = true;
+        AppendStatsCsv();
+        WriteFrameDump();
+    }
+
+    std::string D3D12Diagnostics::ObjectName(ID3D12Object* object) noexcept
+    {
+        if (object == nullptr) return "unnamed";
+        UINT bytes = 0;
+        if (FAILED(object->GetPrivateData(WKPDID_D3DDebugObjectName, &bytes, nullptr)) || bytes == 0)
+            return "unnamed";
+        try
+        {
+            std::string result(bytes, '\0');
+            if (FAILED(object->GetPrivateData(WKPDID_D3DDebugObjectName, &bytes, result.data())))
+                return "unnamed";
+            while (!result.empty() && result.back() == '\0') result.pop_back();
+            return result.empty() ? "unnamed" : result;
+        }
+        catch (...)
+        {
+            return "unnamed";
+        }
+    }
+
+    void D3D12Diagnostics::RecordDraw(D3D12GpuPass pass, std::uint64_t index_count,
+        std::uint64_t instance_count, std::string_view mesh_key,
+        std::string_view material_key, const DirectX::XMFLOAT4X4* world) noexcept
+    {
+        const std::size_t index = static_cast<std::size_t>(pass);
+        if (index >= D3D12GpuPassCount) return;
+        ++runtime_stats_.draw_calls[index];
+        runtime_stats_.instances[index] += instance_count;
+        runtime_stats_.indices[index] += index_count;
+        if (frame_dump_remaining_ == 0) return;
+        try
+        {
+            D3D12FrameDumpDraw draw{};
+            draw.pass = pass;
+            draw.mesh_key.assign(mesh_key.data(), mesh_key.size());
+            draw.material_key.assign(material_key.data(), material_key.size());
+            draw.index_count = index_count;
+            draw.instance_count = instance_count;
+            if (world != nullptr)
+                draw.world_summary = { world->_41, world->_42, world->_43, 1.0f };
+            current_draws_.push_back(std::move(draw));
+        }
+        catch (...) {}
+    }
+
+    void D3D12Diagnostics::RecordBarrier(ID3D12Resource* resource,
+        D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after) noexcept
+    {
+        if (pass_active_)
+        {
+            const std::size_t pass = static_cast<std::size_t>(active_pass_);
+            if (pass < D3D12GpuPassCount) ++runtime_stats_.barriers[pass];
+        }
+        if (frame_dump_remaining_ == 0) return;
+        try
+        {
+            D3D12FrameDumpBarrier barrier{};
+            barrier.resource_name = ObjectName(resource);
+            barrier.before = static_cast<std::uint32_t>(before);
+            barrier.after = static_cast<std::uint32_t>(after);
+            current_barriers_.push_back(std::move(barrier));
+        }
+        catch (...) {}
+    }
+
+    void D3D12Diagnostics::AppendStatsCsv() noexcept
+    {
+        if (stats_csv_path_.empty()) return;
+        std::error_code error;
+        std::filesystem::create_directories(stats_csv_path_.parent_path(), error);
+        std::ofstream output(stats_csv_path_, std::ios::binary | std::ios::app);
+        if (!output) return;
+        if (!stats_csv_header_written_)
+        {
+            output << "frame,descriptor_used,descriptor_peak,descriptor_fragmentation,descriptor_failures,"
+                "sampler_used,sampler_peak,upload_used,upload_peak,mesh_resident,texture_resident,pso_count,"
+                "dxc_count,dxc_failures,dxc_ms,fence_waits,fence_wait_ms";
+            for (std::size_t i = 0; i < D3D12GpuPassCount; ++i)
+                output << ',' << D3D12GpuPassName(static_cast<D3D12GpuPass>(i)) << "_draws";
+            output << "\r\n";
+            stats_csv_header_written_ = true;
+        }
+        output << runtime_stats_.frame_id << ',' << runtime_stats_.resource_descriptor_used << ','
+            << runtime_stats_.resource_descriptor_peak << ',' << runtime_stats_.resource_descriptor_fragmentation << ','
+            << runtime_stats_.resource_descriptor_failures << ',' << runtime_stats_.sampler_descriptor_used << ','
+            << runtime_stats_.sampler_descriptor_peak << ',' << runtime_stats_.frame_upload_used << ','
+            << runtime_stats_.frame_upload_peak << ',' << runtime_stats_.mesh_resident << ','
+            << runtime_stats_.texture_resident << ',' << runtime_stats_.pso_count << ','
+            << runtime_stats_.dxc_compile_count << ',' << runtime_stats_.dxc_failure_count << ','
+            << runtime_stats_.dxc_total_milliseconds << ',' << runtime_stats_.fence_wait_count << ','
+            << static_cast<double>(runtime_stats_.fence_wait_nanoseconds) / 1000000.0;
+        for (std::uint64_t value : runtime_stats_.draw_calls) output << ',' << value;
+        output << "\r\n";
+    }
+
+    void D3D12Diagnostics::WriteFrameDump() noexcept
+    {
+        if (frame_dump_remaining_ == 0) return;
+        const std::filesystem::path path = std::filesystem::path("Saved/Logs") /
+            (std::string("dx12_frame_") + std::to_string(runtime_stats_.frame_id) + ".json");
+        std::error_code error;
+        std::filesystem::create_directories(path.parent_path(), error);
+        std::ofstream output(path, std::ios::binary | std::ios::trunc);
+        if (!output) return;
+        output << "{\r\n  \"frame\": " << runtime_stats_.frame_id << ",\r\n  \"passes\": [";
+        bool first_pass = true;
+        for (std::size_t i = 0; i < D3D12GpuPassCount; ++i)
+        {
+            if (runtime_stats_.draw_calls[i] == 0 && runtime_stats_.barriers[i] == 0) continue;
+            if (!first_pass) output << ',';
+            first_pass = false;
+            output << "\r\n    {\"name\": \"" << D3D12GpuPassName(static_cast<D3D12GpuPass>(i))
+                << "\", \"draws\": " << runtime_stats_.draw_calls[i]
+                << ", \"instances\": " << runtime_stats_.instances[i]
+                << ", \"indices\": " << runtime_stats_.indices[i] << '}';
+        }
+        output << "\r\n  ],\r\n  \"draws\": [";
+        for (std::size_t i = 0; i < current_draws_.size(); ++i)
+        {
+            const auto& draw = current_draws_[i];
+            if (i != 0) output << ',';
+            output << "\r\n    {\"pass\": \"" << D3D12GpuPassName(draw.pass)
+                << "\", \"mesh\": \"" << JsonEscape(draw.mesh_key)
+                << "\", \"material\": \"" << JsonEscape(draw.material_key)
+                << "\", \"index_count\": " << draw.index_count
+                << ", \"instances\": " << draw.instance_count
+                << ", \"translation\": [" << draw.world_summary.x << ',' << draw.world_summary.y << ','
+                << draw.world_summary.z << "]}";
+        }
+        output << "\r\n  ],\r\n  \"barriers\": [";
+        for (std::size_t i = 0; i < current_barriers_.size(); ++i)
+        {
+            const auto& barrier = current_barriers_[i];
+            if (i != 0) output << ',';
+            output << "\r\n    {\"resource\": \"" << JsonEscape(barrier.resource_name)
+                << "\", \"before\": " << barrier.before << ", \"after\": " << barrier.after << '}';
+        }
+        output << "\r\n  ],\r\n  \"descriptors\": {\"used\": " << runtime_stats_.resource_descriptor_used
+            << ", \"capacity\": " << runtime_stats_.resource_descriptor_capacity << "},\r\n"
+            << "  \"upload\": {\"used\": " << runtime_stats_.frame_upload_used
+            << ", \"capacity\": " << runtime_stats_.frame_upload_capacity << "},\r\n"
+            << "  \"fence\": {\"wait_count\": " << runtime_stats_.fence_wait_count << "}\r\n}\r\n";
+        --frame_dump_remaining_;
     }
 
     void D3D12Diagnostics::AppendLog(const D3D12DebugMessage& message) noexcept
@@ -239,7 +472,8 @@ namespace ReplayEngine::Rendering::DX12
         std::filesystem::create_directories(debug_log_path_.parent_path(), error);
         std::ofstream output(debug_log_path_, std::ios::binary | std::ios::app);
         if (!output) return;
-        output << '[' << SeverityName(message.severity) << "] " << message.text;
+        output << '[' << SeverityName(message.severity) << "][id " << message.id << "] "
+            << message.text;
         if (message.repeat_count > 1) output << " (x" << message.repeat_count << ')';
         output << "\r\n";
     }
@@ -257,8 +491,16 @@ namespace ReplayEngine::Rendering::DX12
             std::vector<std::uint8_t> storage(bytes);
             auto* message = reinterpret_cast<D3D12_MESSAGE*>(storage.data());
             if (FAILED(info_queue_->GetMessage(index, message, &bytes))) continue;
+            // パスマーカーの BeginEvent/EndEvent は Debug Layer が毎回 CORRUPTION として
+            // 助言を出す。ID は汎用の CORRUPTED_PARAMETER1 なので ID では切れない。
+            // 本物の破損を消さないよう、この助言文だけを除外する。
+            if (message->pDescription != nullptr &&
+                std::strstr(message->pDescription,
+                    "is a diagnostic API used by debugging tools") != nullptr)
+                continue;
             D3D12DebugMessage next{};
             next.severity = message->Severity;
+            next.id = static_cast<std::uint32_t>(message->ID);
             if (message->pDescription != nullptr) next.text = message->pDescription;
             if (has_aggregate && aggregate.severity == next.severity && aggregate.text == next.text)
             {
@@ -286,6 +528,21 @@ namespace ReplayEngine::Rendering::DX12
         out.insert(out.end(), std::make_move_iterator(pending_messages_.begin()),
             std::make_move_iterator(pending_messages_.end()));
         pending_messages_.clear();
+    }
+
+    void D3D12Diagnostics::PushMessage(D3D12_MESSAGE_SEVERITY severity,
+        std::string text) noexcept
+    {
+        if (text.empty()) return;
+        try
+        {
+            D3D12DebugMessage message{};
+            message.severity = severity;
+            message.text = std::move(text);
+            AppendLog(message);
+            pending_messages_.push_back(std::move(message));
+        }
+        catch (...) {}
     }
 
     bool D3D12Diagnostics::ReportLiveObjects(std::uint32_t& live_lines,

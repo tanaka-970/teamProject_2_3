@@ -1,4 +1,4 @@
-﻿cbuffer REPLAY_MATERIAL_CB : register(b9)
+cbuffer REPLAY_MATERIAL_CB : register(b9)
 {
     float4 base_color;
     float4 emissive_strength;

@@ -72,20 +72,12 @@ void framework::tick_golden_capture()
     Capture::Image current;
     std::string error;
     bool capture_ok = false;
-    if (dx12_framework_active)
+    if (dx12_device_context.ConsumeBackBufferCapture(
+        current.rgba, current.width, current.height))
     {
-        if (dx12_device_context.ConsumeBackBufferCapture(
-            current.rgba, current.width, current.height))
-        {
-            capture_ok = current.Valid();
-        }
-        if (!capture_ok) error = u8"DX12 Readback から画面を取得できません";
+        capture_ok = current.Valid();
     }
-    else
-    {
-        capture_ok = Capture::GoldenImage::CaptureBackBuffer(device.Get(),
-            immediate_context.Get(), swap_chain.Get(), current, error);
-    }
+    if (!capture_ok) error = u8"DX12 Readback から画面を取得できません";
     if (!capture_ok)
     {
         golden_state_->golden_last_ok = false;

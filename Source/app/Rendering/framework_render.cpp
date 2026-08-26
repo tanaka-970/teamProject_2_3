@@ -1,6 +1,4 @@
 ﻿#include "framework.h"
-#include "shader.h"
-#include "texture.h"
 #include "skinned_mesh.h"
 #include "gltf_model.h"
 #include "../../../RePlayEngine/Components/Core/TransformComponent.h"
@@ -64,6 +62,38 @@ namespace
         DirectX::XMStoreFloat3(&normalized,
             DirectX::XMVector3Normalize(vector));
         return normalized;
+    }
+
+    ReplayEngine::Rendering::RenderStats::Phase profiler_phase_for_dx12_pass(
+        ReplayEngine::Rendering::DX12::D3D12GpuPass pass) noexcept
+    {
+        using Pass = ReplayEngine::Rendering::DX12::D3D12GpuPass;
+        using Phase = ReplayEngine::Rendering::RenderStats::Phase;
+        switch (pass)
+        {
+        case Pass::RuntimeUI:
+        case Pass::UIEffect:
+        case Pass::UIPreview:
+            return Phase::GameUI;
+        case Pass::ImGui:
+            return Phase::EditorUI;
+        default:
+            return Phase::Scene3D;
+        }
+    }
+
+    const char* editor_log_level_for_dx12_message(D3D12_MESSAGE_SEVERITY severity) noexcept
+    {
+        switch (severity)
+        {
+        case D3D12_MESSAGE_SEVERITY_CORRUPTION:
+        case D3D12_MESSAGE_SEVERITY_ERROR:
+            return "Error";
+        case D3D12_MESSAGE_SEVERITY_WARNING:
+            return "Warning";
+        default:
+            return "Info";
+        }
     }
 
     struct ParticleEmitterSelection
@@ -244,16 +274,16 @@ void framework::render(float elapsed_time)
                 0.138f, 0.0f, 1.0f);
             static_scene.post_process.fxaa_enable = clamp_finite(post_settings.fxaa_enable,
                 1.0f, 0.0f, 1.0f);
-            static_scene.post_process.taa_blend = 0.88f;
-            static_scene.post_process.ssao_strength = 1.0f;
-            static_scene.post_process.ssr_strength = 1.0f;
+            static_scene.post_process.taa_blend = clamp_finite(taa_pass.blend, 0.88f, 0.0f, 0.99f);
+            static_scene.post_process.ssao_strength = clamp_finite(ssao_pass.intensity, 1.0f, 0.0f, 4.0f);
+            static_scene.post_process.ssr_strength = clamp_finite(ssr_pass.intensity, 1.0f, 0.0f, 4.0f);
             static_scene.post_process.color_filter = clamp_color(post_settings.color_filter);
             static_scene.post_process.bloom_enabled = enable_bloom_shader;
             static_scene.post_process.vignette_enabled = enable_vignette_shader;
             static_scene.post_process.fxaa_enabled = enable_fxaa_shader;
-            static_scene.post_process.taa_enabled = enable_taa;
-            static_scene.post_process.ssao_enabled = enable_ssao;
-            static_scene.post_process.ssr_enabled = enable_ssr;
+            static_scene.post_process.taa_enabled = enable_taa && taa_pass.enabled;
+            static_scene.post_process.ssao_enabled = enable_ssao && ssao_pass.enabled;
+            static_scene.post_process.ssr_enabled = enable_ssr && ssr_pass.enabled;
             const auto volume_selection =
                 ReplayEngine::Components::ResolvePostProcessVolumeSelection(active_object_scene());
             if (volume_selection.Valid())
@@ -275,7 +305,10 @@ void framework::render(float elapsed_time)
             const bool upload_ok =
                 dx12_device_context.SubmitFrameConstants(constants) &&
                 dx12_device_context.SubmitRenderItems(object_render_items);
-            const bool static_scene_ok = upload_ok &&
+            ReplayEngine::Rendering::DX12::D3D12SceneEffectSubmission scene_effects;
+            const bool scene_effects_ok = build_dx12_scene_effects(scene_effects);
+            dx12_device_context.SetSceneEffects(std::move(scene_effects));
+            const bool static_scene_ok = upload_ok && scene_effects_ok &&
                 build_dx12_static_scene(static_scene, elapsed_time) &&
                 dx12_device_context.DrawScene3D(static_scene);
             ReplayEngine::Rendering::DX12::D3D12UIFrame ui_frame;
@@ -285,7 +318,7 @@ void framework::render(float elapsed_time)
                 // DX12でも既存ProfilerのCPUカウンタへRuntime UIの提出量を記録する。
                 // GPU timestampはD3D11専用のため、ここではDraw/Vertexだけを共有する。
                 ReplayEngine::Rendering::Stats().BeginPhase(
-                    ReplayEngine::Rendering::RenderStats::Phase::GameUI, nullptr);
+                    ReplayEngine::Rendering::RenderStats::Phase::GameUI);
                 ui_ok = build_dx12_ui(ui_frame);
                 if (ui_ok && scene_manager.IsExclusive())
                 {
@@ -332,7 +365,7 @@ void framework::render(float elapsed_time)
                     }
                 }
                 ReplayEngine::Rendering::Stats().EndPhase(
-                    ReplayEngine::Rendering::RenderStats::Phase::GameUI, nullptr);
+                    ReplayEngine::Rendering::RenderStats::Phase::GameUI);
             }
 #ifdef USE_IMGUI
             bool imgui_ok = true;
@@ -453,7 +486,31 @@ void framework::render(float elapsed_time)
             // Fence を打つ。次の BeginFrame に開いた Command List を持ち越さない。
             const bool end_ok = dx12_device_context.EndFrame();
             if (end_ok && dx12_capture_requested) tick_golden_capture();
-            ReplayEngine::Rendering::Stats().EndFrame(nullptr);
+            ReplayEngine::Rendering::Stats().EndFrame();
+            const auto& gpu_timing = dx12_device_context.GpuTiming();
+            std::vector<ReplayEngine::Rendering::RenderStats::ExternalGpuPassTiming> profiler_gpu_timings;
+            profiler_gpu_timings.reserve(ReplayEngine::Rendering::DX12::D3D12GpuPassCount);
+            for (std::size_t pass_index = 0;
+                pass_index < ReplayEngine::Rendering::DX12::D3D12GpuPassCount; ++pass_index)
+            {
+                const auto pass = static_cast<ReplayEngine::Rendering::DX12::D3D12GpuPass>(pass_index);
+                profiler_gpu_timings.push_back({
+                    ReplayEngine::Rendering::DX12::D3D12GpuPassName(pass),
+                    profiler_phase_for_dx12_pass(pass),
+                    gpu_timing.milliseconds[pass_index],
+                    gpu_timing.valid[pass_index] });
+            }
+            ReplayEngine::Rendering::Stats().ApplyExternalGpuTiming(
+                gpu_timing.frame_id, profiler_gpu_timings);
+            std::vector<ReplayEngine::Rendering::DX12::D3D12DebugMessage> dx12_messages;
+            dx12_device_context.ConsumeDebugMessages(dx12_messages);
+            for (const auto& message : dx12_messages)
+            {
+                std::string text = "DX12: " + message.text;
+                if (message.repeat_count > 1)
+                    text += " (x" + std::to_string(message.repeat_count) + ")";
+                push_editor_log(editor_log_level_for_dx12_message(message.severity), text);
+            }
             ok = upload_ok && static_scene_ok && ui_ok && imgui_ok && end_ok;
         }
 

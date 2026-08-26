@@ -1,4 +1,4 @@
-﻿struct VertexInput { float3 position : POSITION; };
+struct VertexInput { float3 position : POSITION; };
 struct VertexOutput { float4 position : SV_POSITION; };
 VertexOutput main(VertexInput input)
 {

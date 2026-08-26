@@ -60,6 +60,7 @@
     bool show_console_panel{ true };
     bool show_workspace_panel{ true };
     bool show_validation_panel{ true };
+    bool show_dx12_debug_panel{ false };
     bool show_scene_view{ true };
     bool show_scene_notes_panel{ false };
     bool show_scene_flow_panel{ false };
@@ -260,7 +261,6 @@
     // #pragma から宣言を読み、目録を作る。
     // まだ描画には使わない。接続はフェーズ 4 以降。
     ReplayEngine::Rendering::ShaderLibrary shader_library;
-    ReplayEngine::Rendering::MaterialGpuBinder material_gpu_binder;
     ReplayEngine::Editor::ShaderComposerEditor shader_composer_editor;
     bool show_shader_catalog_panel{ false };
 

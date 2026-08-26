@@ -224,13 +224,6 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
             application.request_shutdown_regression();
         }
 
-        if (shutdown_regression_requested &&
-        (!dx12_live_report_ok || dx12_live_object_lines != 0 ||
-            dx12_live_object_detail_lines != 0) && exit_code == 0)
-    {
-        exit_code = 75;
-    }
-
     if (capture_frame_requested)
         {
             // プロファイル撮影はプロファイル側で Runtime World の準備完了を
@@ -261,6 +254,13 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
         dx12_live_object_lines = application.dx12_shutdown_live_object_lines();
         dx12_live_object_detail_lines = application.dx12_shutdown_live_object_detail_lines();
         dx12_live_report_ok = application.dx12_shutdown_live_object_report_ok();
+    }
+
+    if (shutdown_regression_requested &&
+        (!dx12_live_report_ok || dx12_live_object_lines != 0 ||
+            dx12_live_object_detail_lines != 0) && exit_code == 0)
+    {
+        exit_code = 75;
     }
 
 #if defined(_DEBUG)

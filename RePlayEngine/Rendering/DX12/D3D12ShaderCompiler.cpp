@@ -3,6 +3,8 @@
 #include <windows.h>
 
 #include <fstream>
+#include <atomic>
+#include <chrono>
 #include <iterator>
 #include <utility>
 
@@ -10,6 +12,9 @@ namespace ReplayEngine::Rendering::DX12
 {
     namespace
     {
+        std::atomic<std::uint64_t> g_compile_count{ 0 };
+        std::atomic<std::uint64_t> g_failure_count{ 0 };
+        std::atomic<std::uint64_t> g_compile_nanoseconds{ 0 };
         std::string ReadBlobText(IDxcBlobEncoding* blob)
         {
             if (blob == nullptr || blob->GetBufferPointer() == nullptr ||
@@ -23,6 +28,16 @@ namespace ReplayEngine::Rendering::DX12
         {
             storage.push_back(std::move(value));
         }
+    }
+
+    D3D12ShaderCompilerStats GetD3D12ShaderCompilerStats() noexcept
+    {
+        D3D12ShaderCompilerStats result{};
+        result.compile_count = g_compile_count.load(std::memory_order_relaxed);
+        result.failure_count = g_failure_count.load(std::memory_order_relaxed);
+        result.total_milliseconds = static_cast<double>(
+            g_compile_nanoseconds.load(std::memory_order_relaxed)) / 1000000.0;
+        return result;
     }
 
     D3D12ShaderCompiler::~D3D12ShaderCompiler()
@@ -135,13 +150,20 @@ namespace ReplayEngine::Rendering::DX12
         }
 
         Microsoft::WRL::ComPtr<IDxcResult> compilation;
+        const auto compile_begin = std::chrono::steady_clock::now();
         const HRESULT compile_result = compiler_->Compile(&buffer, arguments.data(),
             static_cast<UINT32>(arguments.size()), include_handler.Get(),
             IID_PPV_ARGS(&compilation));
+        const auto compile_end = std::chrono::steady_clock::now();
+        g_compile_count.fetch_add(1, std::memory_order_relaxed);
+        g_compile_nanoseconds.fetch_add(static_cast<std::uint64_t>(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                compile_end - compile_begin).count()), std::memory_order_relaxed);
         if (FAILED(compile_result) || compilation == nullptr)
         {
             result.status = compile_result;
             result.diagnostics = "DXC Compile call failed";
+            g_failure_count.fetch_add(1, std::memory_order_relaxed);
             return result;
         }
 
@@ -150,7 +172,11 @@ namespace ReplayEngine::Rendering::DX12
             compilation->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&errors), nullptr);
         result.diagnostics = ReadBlobText(errors.Get());
         compilation->GetStatus(&result.status);
-        if (FAILED(result.status)) return result;
+        if (FAILED(result.status))
+        {
+            g_failure_count.fetch_add(1, std::memory_order_relaxed);
+            return result;
+        }
 
         Microsoft::WRL::ComPtr<IDxcBlob> object;
         if (FAILED(compilation->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&object), nullptr)) ||
@@ -158,6 +184,7 @@ namespace ReplayEngine::Rendering::DX12
         {
             result.status = E_FAIL;
             result.diagnostics += "DXC object output is missing";
+            g_failure_count.fetch_add(1, std::memory_order_relaxed);
             return result;
         }
         const auto* bytes = static_cast<const std::uint8_t*>(object->GetBufferPointer());

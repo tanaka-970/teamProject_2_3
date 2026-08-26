@@ -406,3 +406,91 @@ void framework::draw_render_stats_overlay()
     ImGui::End();
 #endif
 }
+
+
+void framework::draw_dx12_debug_panel()
+{
+#ifdef USE_IMGUI
+    if (!show_dx12_debug_panel || !dx12_framework_active) return;
+    if (!ImGui::Begin("DX12 Debug", &show_dx12_debug_panel))
+    {
+        ImGui::End();
+        return;
+    }
+
+    const auto& runtime = dx12_device_context.RuntimeStats();
+    const auto& timing = dx12_device_context.GpuTiming();
+    const auto mib = [](std::uint64_t bytes) noexcept
+    {
+        return static_cast<double>(bytes) / (1024.0 * 1024.0);
+    };
+
+    ImGui::Text("Frame %llu", static_cast<unsigned long long>(runtime.frame_id));
+    if (ImGui::CollapsingHeader("Descriptor Heaps", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        ImGui::Text("CBV/SRV/UAV %u / %u  peak %u", runtime.resource_descriptor_used,
+            runtime.resource_descriptor_capacity, runtime.resource_descriptor_peak);
+        ImGui::Text("fragmentation %.2f%%  allocation failures %llu",
+            runtime.resource_descriptor_fragmentation * 100.0f,
+            static_cast<unsigned long long>(runtime.resource_descriptor_failures));
+        ImGui::Text("Sampler %u / %u  peak %u", runtime.sampler_descriptor_used,
+            runtime.sampler_descriptor_capacity, runtime.sampler_descriptor_peak);
+        ImGui::Text("fragmentation %.2f%%  allocation failures %llu",
+            runtime.sampler_descriptor_fragmentation * 100.0f,
+            static_cast<unsigned long long>(runtime.sampler_descriptor_failures));
+    }
+    if (ImGui::CollapsingHeader("Upload / Fence", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        ImGui::Text("Frame Upload %.2f / %.2f MiB  peak %.2f MiB",
+            mib(runtime.frame_upload_used), mib(runtime.frame_upload_capacity),
+            mib(runtime.frame_upload_peak));
+        ImGui::Text("Upload waits %llu  %.3f ms",
+            static_cast<unsigned long long>(runtime.upload_wait_count),
+            static_cast<double>(runtime.upload_wait_nanoseconds) / 1000000.0);
+        ImGui::Text("Fence waits %llu  %.3f ms",
+            static_cast<unsigned long long>(runtime.fence_wait_count),
+            static_cast<double>(runtime.fence_wait_nanoseconds) / 1000000.0);
+    }
+    if (ImGui::CollapsingHeader("Caches / DXC", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        ImGui::Text("Mesh %llu  Texture %llu  PSO %llu",
+            static_cast<unsigned long long>(runtime.mesh_resident),
+            static_cast<unsigned long long>(runtime.texture_resident),
+            static_cast<unsigned long long>(runtime.pso_count));
+        ImGui::Text("PSO hit %llu  miss %llu",
+            static_cast<unsigned long long>(runtime.pso_hits),
+            static_cast<unsigned long long>(runtime.pso_misses));
+        ImGui::Text("DXC compile %llu  failures %llu  total %.3f ms",
+            static_cast<unsigned long long>(runtime.dxc_compile_count),
+            static_cast<unsigned long long>(runtime.dxc_failure_count),
+            runtime.dxc_total_milliseconds);
+    }
+    if (ImGui::CollapsingHeader("GPU Passes", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        for (std::size_t index = 0; index < ReplayEngine::Rendering::DX12::D3D12GpuPassCount; ++index)
+        {
+            const auto pass = static_cast<ReplayEngine::Rendering::DX12::D3D12GpuPass>(index);
+            if (timing.valid[index])
+            {
+                ImGui::Text("%-18s %7.3f ms  draw %llu  inst %llu  index %llu  barrier %llu",
+                    ReplayEngine::Rendering::DX12::D3D12GpuPassName(pass),
+                    timing.milliseconds[index],
+                    static_cast<unsigned long long>(runtime.draw_calls[index]),
+                    static_cast<unsigned long long>(runtime.instances[index]),
+                    static_cast<unsigned long long>(runtime.indices[index]),
+                    static_cast<unsigned long long>(runtime.barriers[index]));
+            }
+            else
+            {
+                ImGui::TextDisabled("%-18s --  draw %llu  inst %llu  index %llu  barrier %llu",
+                    ReplayEngine::Rendering::DX12::D3D12GpuPassName(pass),
+                    static_cast<unsigned long long>(runtime.draw_calls[index]),
+                    static_cast<unsigned long long>(runtime.instances[index]),
+                    static_cast<unsigned long long>(runtime.indices[index]),
+                    static_cast<unsigned long long>(runtime.barriers[index]));
+            }
+        }
+    }
+    ImGui::End();
+#endif
+}

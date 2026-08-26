@@ -227,17 +227,17 @@ namespace ReplayEngine::Rendering
         struct DomainEntryPoint final
         {
             const char* entry = "main";
-            const char* target = "ps_5_0";
+            const char* target = "ps_6_0";
         };
 
         DomainEntryPoint EntryPointFor(ShaderDomain domain) noexcept
         {
             switch (domain)
             {
-            case ShaderDomain::Surface:     return { "main", "ps_5_0" };
-            case ShaderDomain::Layer:       return { "main", "ps_5_0" };
-            case ShaderDomain::PostProcess: return { "main", "ps_5_0" };
-            default:                        return { "main", "ps_5_0" };
+            case ShaderDomain::Surface:     return { "main", "ps_6_0" };
+            case ShaderDomain::Layer:       return { "main", "ps_6_0" };
+            case ShaderDomain::PostProcess: return { "main", "ps_6_0" };
+            default:                        return { "main", "ps_6_0" };
             }
         }
 
@@ -250,7 +250,7 @@ namespace ReplayEngine::Rendering
 
             // Visual Studio の「UTF-8 with signature」で保存された HLSL も受ける。
             // ShaderLibrary は generated cbuffer をソース先頭へ差し込むため、
-            // 元ファイルの BOM を残すと BOM がストリーム途中へ移動して D3DCompile が
+            // 元ファイルの BOM を残すと BOM がストリーム途中へ移動して DXC が
             // FbxDefault 等を失敗させる。Parser と Compiler の両方で正規化する。
             if (text.size() >= 3 &&
                 static_cast<unsigned char>(text[0]) == 0xEF &&
@@ -335,7 +335,7 @@ namespace ReplayEngine::Rendering
             variant == ShaderVariant::Skinned ? "1" : "0");
 
         const DomainEntryPoint domain_entry = EntryPointFor(entry.info.domain);
-        Microsoft::WRL::ComPtr<ID3DBlob> bytecode;
+        ShaderBytecode bytecode;
         const ShaderCompileResult compiled = ShaderCompiler::CompileSource(
             combined.str(), entry.info.source_path,
             entry_point != nullptr && *entry_point != '\0' ? entry_point : domain_entry.entry,
@@ -351,14 +351,7 @@ namespace ReplayEngine::Rendering
 
         if (compiled.succeeded)
         {
-            auto copied_bytecode = std::make_shared<std::vector<std::uint8_t>>(
-                bytecode->GetBufferSize());
-            if (!copied_bytecode->empty())
-            {
-                std::memcpy(copied_bytecode->data(), bytecode->GetBufferPointer(),
-                    copied_bytecode->size());
-            }
-            result.bytecode = std::move(copied_bytecode);
+            result.bytecode = bytecode;
             result.compiled = true;
             result.ever_compiled = true;
             return true;

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "D3D12ResourceFactory.h"
 
@@ -6,6 +6,7 @@
 #include <wrl.h>
 
 #include <cstdint>
+#include <string_view>
 
 namespace ReplayEngine::Rendering::DX12
 {
@@ -23,6 +24,7 @@ namespace ReplayEngine::Rendering::DX12
             std::uint32_t vertex_stride, const void* indices,
             std::uint32_t index_size, DXGI_FORMAT index_format) noexcept;
         void Reset() noexcept;
+        void SetDebugName(std::string_view key) noexcept;
 
         bool IsValid() const noexcept
         {

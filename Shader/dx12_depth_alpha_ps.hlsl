@@ -1,4 +1,4 @@
-﻿cbuffer MaterialCB : register(b2)
+cbuffer MaterialCB : register(b2)
 {
     float4 baseColor;
     float4 emissiveStrength;
