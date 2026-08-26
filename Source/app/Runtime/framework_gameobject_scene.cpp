@@ -415,8 +415,8 @@ framework::object_ui_viewport framework::object_ui_viewport_target() const noexc
             const float zoom = (std::max)(0.10f, ui_preview_zoom);
             const float view_width = (std::max)(1.0f, target.logical_width * zoom);
             const float view_height = (std::max)(1.0f, target.logical_height * zoom);
-            target.left += (target.width - view_width) * 0.5f;
-            target.top += (target.height - view_height) * 0.5f;
+            target.left += (target.width - view_width) * 0.5f + ui_preview_pan_x;
+            target.top += (target.height - view_height) * 0.5f + ui_preview_pan_y;
             target.width = view_width;
             target.height = view_height;
         }
