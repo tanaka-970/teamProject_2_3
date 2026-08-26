@@ -107,6 +107,7 @@ void framework::draw_editor()
                 ImGui::DockBuilderDockWindow("Motion レイヤー", left);
                 ImGui::DockBuilderDockWindow("階層", left);
                 ImGui::DockBuilderDockWindow("Motion インスペクター", right);
+                ImGui::DockBuilderDockWindow(u8"イージングカーブ###EasingCurveEditor", right);
                 // Motion Workspace でも central node には Dock しない。
                 // 3D 表示は draw_scene_view_panel() がこの空き領域へ配置する。
                 ImGui::DockBuilderDockWindow("タイムライン", bottom);

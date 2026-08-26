@@ -349,6 +349,7 @@ void framework::draw_editor_main_menu()
         ImGui::MenuItem("Hierarchy", nullptr, &show_hierarchy_panel);
         ImGui::MenuItem("Inspector", nullptr, &show_inspector_panel);
         ImGui::MenuItem("Project / Assets", nullptr, &show_project_panel);
+        ImGui::MenuItem(u8"イージングカーブ", nullptr, &show_easing_editor_panel);
         ImGui::MenuItem("Console", nullptr, &show_console_panel);
         ImGui::MenuItem("Workspace", nullptr, &show_workspace_panel);
         ImGui::MenuItem("Validation / Diagnostics", nullptr, &show_validation_panel);
