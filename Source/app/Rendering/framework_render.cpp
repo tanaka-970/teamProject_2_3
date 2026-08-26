@@ -319,10 +319,14 @@ void framework::render(float elapsed_time)
                 // GPU timestampはD3D11専用のため、ここではDraw/Vertexだけを共有する。
                 ReplayEngine::Rendering::Stats().BeginPhase(
                     ReplayEngine::Rendering::RenderStats::Phase::GameUI);
-                ui_ok = build_dx12_ui(ui_frame);
+                {
+                    REPLAY_PROFILE_SCOPE("UI/BuildEditorFrame");
+                    ui_ok = build_dx12_ui(ui_frame);
+                }
                 if (ui_ok && scene_manager.IsExclusive())
                 {
                     ui_frame = {};
+                    REPLAY_PROFILE_SCOPE("UI/BuildRuntimeFrame");
                     ui_ok = scene_manager.BuildRuntimeUI(ui_frame, viewport_width, viewport_height);
                 }
                 if (ui_ok)
@@ -336,7 +340,10 @@ void framework::render(float elapsed_time)
                         ReplayEngine::Rendering::Stats().CountDraw(
                             static_cast<std::uint32_t>(batch.vertices.size()));
                     }
-                    ui_ok = dx12_device_context.DrawRuntimeUI(ui_frame);
+                    {
+                        REPLAY_PROFILE_SCOPE("UI/SubmitRuntimeFrame");
+                        ui_ok = dx12_device_context.DrawRuntimeUI(ui_frame);
+                    }
 
                     if (editor_mode && show_ui_preview_panel &&
                         ui_preview_runtime_requested &&

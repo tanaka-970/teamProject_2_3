@@ -110,6 +110,15 @@ namespace ReplayEngine::UI
         return width != 0 && height != 0;
     }
 
+    bool FontAtlas::ActiveAtlasRevision(std::string& key, std::uint64_t& revision) const
+    {
+        const FaceAtlas* face = ActiveFace();
+        if (face == nullptr || face->rgba.empty()) return false;
+        key = active_face_key_;
+        revision = face->revision;
+        return face->atlas_width != 0 && face->atlas_height != 0;
+    }
+
     bool FontAtlas::EnsureWhiteTexture(FaceAtlas& face)
     {
         face.rgba = { 0xFF, 0xFF, 0xFF, 0xFF };
