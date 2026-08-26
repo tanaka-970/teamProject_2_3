@@ -7,10 +7,15 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <iterator>
+#include <fstream>
+#include <iomanip>
+#include <sstream>
+#include <ctime>
 #include <limits>
 #include <vector>
 
@@ -416,7 +421,8 @@ namespace ReplayEngine::Rendering::DX12
 
     bool D3D12DeviceContext::Initialize(HWND window, std::uint32_t width,
         std::uint32_t height, bool enable_debug_layer, bool force_warp,
-        bool create_validation_resources, bool enable_gpu_validation) noexcept
+        bool create_validation_resources, bool enable_gpu_validation,
+        bool enable_dred) noexcept
     {
         last_initialization_stage_[0] = '\0';
         last_initialization_result_ = S_OK;
@@ -427,7 +433,8 @@ namespace ReplayEngine::Rendering::DX12
         }
         Shutdown();
         validation_resources_enabled_ = create_validation_resources;
-        if (!CreateDevice(enable_debug_layer, force_warp, enable_gpu_validation))
+        if (!CreateDevice(enable_debug_layer || enable_gpu_validation, force_warp,
+            enable_gpu_validation, enable_dred))
         {
             SetInitializationFailure("CreateDevice", E_FAIL);
             Shutdown();
@@ -519,6 +526,11 @@ namespace ReplayEngine::Rendering::DX12
 
         next_fence_value_ = 1;
         last_signaled_fence_value_ = 0;
+        frame_upload_peak_ = 0;
+        fence_wait_count_ = 0;
+        fence_wait_nanoseconds_ = 0;
+        pso_cache_hits_ = 0;
+        pso_cache_misses_ = 0;
         frame_index_ = 0;
         width_ = 0;
         height_ = 0;
@@ -534,15 +546,15 @@ namespace ReplayEngine::Rendering::DX12
     }
 
     bool D3D12DeviceContext::ConfigureDebug(bool enable_debug_layer,
-        bool enable_gpu_validation) noexcept
+        bool enable_gpu_validation, bool enable_dred) noexcept
     {
         debug_layer_enabled_ = false;
         gpu_validation_enabled_ = false;
         dred_enabled_ = false;
-        if (!enable_debug_layer) return true;
 
         Microsoft::WRL::ComPtr<ID3D12Debug> debug;
-        if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug))) && debug)
+        if (enable_debug_layer &&
+            SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug))) && debug)
         {
             debug->EnableDebugLayer();
             debug_layer_enabled_ = true;
@@ -556,20 +568,24 @@ namespace ReplayEngine::Rendering::DX12
             }
         }
 
-        Microsoft::WRL::ComPtr<ID3D12DeviceRemovedExtendedDataSettings> dred;
-        if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&dred))) && dred)
+        if (enable_dred)
         {
-            dred->SetAutoBreadcrumbsEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
-            dred->SetPageFaultEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
-            dred_enabled_ = true;
+            Microsoft::WRL::ComPtr<ID3D12DeviceRemovedExtendedDataSettings> dred;
+            if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&dred))) && dred)
+            {
+                dred->SetAutoBreadcrumbsEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
+                dred->SetPageFaultEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
+                dred_enabled_ = true;
+            }
         }
         return true;
     }
 
     bool D3D12DeviceContext::CreateDevice(bool enable_debug_layer,
-        bool force_warp, bool enable_gpu_validation) noexcept
+        bool force_warp, bool enable_gpu_validation, bool enable_dred) noexcept
     {
-        if (!ConfigureDebug(enable_debug_layer, enable_gpu_validation)) return false;
+        if (!ConfigureDebug(enable_debug_layer, enable_gpu_validation, enable_dred))
+            return false;
         const UINT factory_flags = debug_layer_enabled_ ? DXGI_CREATE_FACTORY_DEBUG : 0u;
         if (FAILED(CreateDXGIFactory2(factory_flags, IID_PPV_ARGS(&factory_))))
             return false;
@@ -640,9 +656,11 @@ namespace ReplayEngine::Rendering::DX12
                 D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, 128, true))
             return false;
 
-        for (auto& frame : frame_resources_)
+        for (std::uint32_t slot = 0; slot < FrameCount; ++slot)
         {
+            auto& frame = frame_resources_[slot];
             if (!frame.Initialize(device_.Get(), FrameUploadCapacity)) return false;
+            SetD3D12ObjectName(frame.command_allocator.Get(), L"Frame.CommandAllocator", L"Direct", slot);
         }
         if (FAILED(device_->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
             frame_resources_[0].command_allocator.Get(), nullptr,
@@ -655,6 +673,15 @@ namespace ReplayEngine::Rendering::DX12
             return false;
         SetD3D12ObjectName(fence_.Get(), L"Fence", L"Frame");
         if (!diagnostics_.Initialize(device_.Get(), command_queue_.Get())) return false;
+        resource_state_tracker_.SetBarrierCallback([this](ID3D12Resource* resource,
+            D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after)
+        {
+            diagnostics_.RecordBarrier(resource, before, after);
+        });
+        resource_state_tracker_.SetValidationCallback([this](const std::string& message)
+        {
+            diagnostics_.PushMessage(D3D12_MESSAGE_SEVERITY_ERROR, message);
+        });
         fence_event_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
         return fence_event_ != nullptr;
     }
@@ -706,11 +733,13 @@ namespace ReplayEngine::Rendering::DX12
 
     bool D3D12DeviceContext::CreateRenderTargets() noexcept
     {
+        // Scene/Game View、UI Effect、Scene Effect、UI Preview、GBuffer、Temporal 履歴が
+        // それぞれ RTV と DSV を 1 枚ずつ取るので、内訳ぶんの余裕を持たせる。
         if (!rtv_allocator_.Initialize(device_.Get(),
-            D3D12_DESCRIPTOR_HEAP_TYPE_RTV, FrameCount + 12u, false) ||
+            D3D12_DESCRIPTOR_HEAP_TYPE_RTV, FrameCount + 64u, false) ||
             !rtv_allocator_.Allocate(FrameCount, rtv_allocation_) ||
             !dsv_allocator_.Initialize(device_.Get(),
-                D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 32, false) ||
+                D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 128, false) ||
             !dsv_allocator_.Allocate(1, dsv_allocation_))
             return false;
 
@@ -721,6 +750,7 @@ namespace ReplayEngine::Rendering::DX12
                 return false;
             device_->CreateRenderTargetView(render_targets_[index].Get(), nullptr,
                 rtv_allocator_.CpuHandle(rtv_allocation_.index + index));
+            SetD3D12ObjectName(render_targets_[index].Get(), L"SwapChain.BackBuffer", L"Color", index);
             if (!resource_state_tracker_.Track(render_targets_[index].Get(),
                 D3D12_RESOURCE_STATE_PRESENT))
                 return false;
@@ -746,28 +776,40 @@ namespace ReplayEngine::Rendering::DX12
             &depth_description, D3D12_RESOURCE_STATE_DEPTH_WRITE, &clear_value,
             IID_PPV_ARGS(&depth_stencil_buffer_))))
             return false;
+        SetD3D12ObjectName(depth_stencil_buffer_.Get(), L"Scene.Depth", L"Main");
         device_->CreateDepthStencilView(depth_stencil_buffer_.Get(), nullptr,
             dsv_allocator_.CpuHandle(dsv_allocation_.index));
         if (!resource_state_tracker_.Track(depth_stencil_buffer_.Get(),
             D3D12_RESOURCE_STATE_DEPTH_WRITE))
             return false;
 
-        if (!CreateOffscreenTarget(scene_view_target_, width_, height_) ||
-            !CreateOffscreenTarget(game_view_target_, width_, height_) ||
+        if (!CreateOffscreenTarget(scene_view_target_, width_, height_,
+                DXGI_FORMAT_R16G16B16A16_FLOAT, L"SceneView") ||
+            !CreateOffscreenTarget(game_view_target_, width_, height_,
+                DXGI_FORMAT_R16G16B16A16_FLOAT, L"GameView") ||
             !CreateOffscreenTarget(ui_effect_targets_[0], width_, height_,
-                DXGI_FORMAT_R8G8B8A8_UNORM) ||
+                DXGI_FORMAT_R8G8B8A8_UNORM, L"UI.EffectRT0") ||
             !CreateOffscreenTarget(ui_effect_targets_[1], width_, height_,
-                DXGI_FORMAT_R8G8B8A8_UNORM) ||
+                DXGI_FORMAT_R8G8B8A8_UNORM, L"UI.EffectRT1") ||
             !CreateOffscreenTarget(ui_effect_targets_[2], width_, height_,
-                DXGI_FORMAT_R8G8B8A8_UNORM) ||
+                DXGI_FORMAT_R8G8B8A8_UNORM, L"UI.EffectRT2") ||
             !CreateOffscreenTarget(ui_effect_targets_[3], width_, height_,
-                DXGI_FORMAT_R8G8B8A8_UNORM))
+                DXGI_FORMAT_R8G8B8A8_UNORM, L"UI.BackdropRT") ||
+            !CreateOffscreenTarget(scene_effect_targets_[0], width_, height_,
+                DXGI_FORMAT_R16G16B16A16_FLOAT, L"SceneEffect.RT0") ||
+            !CreateOffscreenTarget(scene_effect_targets_[1], width_, height_,
+                DXGI_FORMAT_R16G16B16A16_FLOAT, L"SceneEffect.RT1") ||
+            !CreateOffscreenTarget(scene_effect_targets_[2], width_, height_,
+                DXGI_FORMAT_R16G16B16A16_FLOAT, L"SceneEffect.RT2") ||
+            !CreateOffscreenTarget(scene_effect_targets_[3], width_, height_,
+                DXGI_FORMAT_R16G16B16A16_FLOAT, L"SceneEffect.BackdropRT"))
             return false;
         return true;
     }
 
     bool D3D12DeviceContext::CreateOffscreenTarget(D3D12OffscreenTarget& target,
-        std::uint32_t width, std::uint32_t height, DXGI_FORMAT format) noexcept
+        std::uint32_t width, std::uint32_t height, DXGI_FORMAT format,
+        const wchar_t* debug_name) noexcept
     {
         if (!IsValidSize(width, height)) return false;
         ReleaseOffscreenTarget(target);
@@ -805,6 +847,7 @@ namespace ReplayEngine::Rendering::DX12
             ReleaseOffscreenTarget(target);
             return false;
         }
+        SetD3D12ObjectName(target.color.Get(), debug_name != nullptr ? debug_name : L"Offscreen", L"Color");
         device_->CreateRenderTargetView(target.color.Get(), nullptr, target.rtv.cpu);
         D3D12_SHADER_RESOURCE_VIEW_DESC srv{};
         srv.Format = color_description.Format;
@@ -899,6 +942,7 @@ namespace ReplayEngine::Rendering::DX12
             serialized_root_signature->GetBufferSize(),
             IID_PPV_ARGS(&validation_root_signature_))))
             return false;
+        SetD3D12ObjectName(validation_root_signature_.Get(), L"Validation.RootSignature", L"Triangle");
 
         D3D12_INPUT_ELEMENT_DESC input_elements[] =
         {
@@ -913,10 +957,11 @@ namespace ReplayEngine::Rendering::DX12
         rasterizer_desc.FillMode = D3D12_FILL_MODE_SOLID;
         rasterizer_desc.CullMode = D3D12_CULL_MODE_NONE;
         rasterizer_desc.DepthClipEnable = TRUE;
+        // 検証描画は DSV を張らずバックバッファへ直接出すため深度を持たない。
         D3D12_DEPTH_STENCIL_DESC depth_stencil_desc{};
-        depth_stencil_desc.DepthEnable = TRUE;
-        depth_stencil_desc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
-        depth_stencil_desc.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+        depth_stencil_desc.DepthEnable = FALSE;
+        depth_stencil_desc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+        depth_stencil_desc.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
         depth_stencil_desc.StencilEnable = FALSE;
 
         D3D12_GRAPHICS_PIPELINE_STATE_DESC pipeline_desc{};
@@ -931,15 +976,19 @@ namespace ReplayEngine::Rendering::DX12
         pipeline_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
         pipeline_desc.NumRenderTargets = 1;
         pipeline_desc.RTVFormats[0] = kBackBufferFormat;
-        pipeline_desc.DSVFormat = kDepthFormat;
+        pipeline_desc.DSVFormat = DXGI_FORMAT_UNKNOWN;
         pipeline_desc.SampleDesc.Count = 1;
         if (FAILED(device_->CreateGraphicsPipelineState(&pipeline_desc,
             IID_PPV_ARGS(&validation_pipeline_))))
             return false;
+        SetD3D12ObjectName(validation_pipeline_.Get(), L"Validation.PSO", L"Triangle");
 
-        return validation_mesh_.Upload(device_.Get(), upload_context_,
+        if (!validation_mesh_.Upload(device_.Get(), upload_context_,
             kValidationVertices, sizeof(kValidationVertices), sizeof(ValidationVertex),
-            kValidationIndices, sizeof(kValidationIndices), DXGI_FORMAT_R16_UINT);
+            kValidationIndices, sizeof(kValidationIndices), DXGI_FORMAT_R16_UINT))
+            return false;
+        validation_mesh_.SetDebugName("validation-triangle");
+        return true;
     }
 
 
@@ -1035,8 +1084,9 @@ namespace ReplayEngine::Rendering::DX12
         if (FAILED(device_->CreateRootSignature(0, serialized->GetBufferPointer(),
             serialized->GetBufferSize(), IID_PPV_ARGS(&static_root_signature_))))
             return false;
+        SetD3D12ObjectName(static_root_signature_.Get(), L"Static.RootSignature", L"MaterialBridge");
 
-        if (!CreateStaticPipelineSet(pixel_shader.bytecode, static_bridge_pipelines_))
+        if (!CreateStaticPipelineSet(pixel_shader.bytecode, static_bridge_pipelines_, "bridge"))
             return false;
 
         for (D3D12DescriptorAllocation& allocation : static_samplers_)
@@ -1080,7 +1130,7 @@ namespace ReplayEngine::Rendering::DX12
 
     bool D3D12DeviceContext::CreateStaticPipelineSet(
         const std::vector<std::uint8_t>& pixel_shader,
-        StaticPipelineSet& pipelines) noexcept
+        StaticPipelineSet& pipelines, std::string_view debug_key) noexcept
     {
         for (auto& pipeline : pipelines.pipelines) pipeline.Reset();
         if (static_root_signature_ == nullptr || static_vertex_shader_bytecode_.empty() ||
@@ -1161,6 +1211,10 @@ namespace ReplayEngine::Rendering::DX12
                     for (auto& pipeline : pipelines.pipelines) pipeline.Reset();
                     return false;
                 }
+                const std::string pso_key = (debug_key.empty() ? std::string("static") :
+                    std::string(debug_key)) + ":" + std::to_string(pipeline_index);
+                SetD3D12ObjectNameUtf8(pipelines.pipelines[pipeline_index].Get(),
+                    L"Static.PSO", pso_key);
             }
         }
         return true;
@@ -1197,6 +1251,7 @@ namespace ReplayEngine::Rendering::DX12
         if (!D3D12ResourceFactory::CreateTexture2DRgba8(device_.Get(), upload_context_,
             &rgba, 1, 1, 4, texture.resource))
             return false;
+        SetD3D12ObjectNameUtf8(texture.resource.Get(), L"Texture.Solid", key);
         if (!resource_descriptor_allocator_.Allocate(1, texture.srv)) return false;
         D3D12_SHADER_RESOURCE_VIEW_DESC srv{};
         srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
@@ -1250,6 +1305,7 @@ namespace ReplayEngine::Rendering::DX12
             source.indices.data(), static_cast<std::uint32_t>(index_bytes),
             DXGI_FORMAT_R32_UINT))
             return false;
+        mesh->SetDebugName(source.key);
         try
         {
             static_mesh_cache_.emplace(source.key, std::move(mesh));
@@ -1354,11 +1410,15 @@ namespace ReplayEngine::Rendering::DX12
     {
         if (source.key.empty()) return true;
         if (custom_static_pipelines_.find(source.key) != custom_static_pipelines_.end())
+        {
+            ++pso_cache_hits_;
             return true;
+        }
         if (custom_static_shader_failures_.find(source.key) !=
             custom_static_shader_failures_.end())
             return false;
         if (source.source_path.empty()) return false;
+        ++pso_cache_misses_;
 
         std::ifstream file(source.source_path, std::ios::binary);
         if (!file)
@@ -1415,7 +1475,7 @@ namespace ReplayEngine::Rendering::DX12
         }
 
         StaticPipelineSet pipelines;
-        if (!CreateStaticPipelineSet(compiled.bytecode, pipelines))
+        if (!CreateStaticPipelineSet(compiled.bytecode, pipelines, source.key))
         {
             DebugMessage("[DX12] Custom surface shader PSO creation failed; using bridge PS.\n");
             try { custom_static_shader_failures_.insert(source.key); }
@@ -1684,12 +1744,17 @@ namespace ReplayEngine::Rendering::DX12
         for (auto& target : ui_preview_effect_targets_)
             ReleaseOffscreenTarget(target);
         for (auto& target : ui_effect_targets_) ReleaseOffscreenTarget(target);
+        for (auto& target : scene_effect_targets_) ReleaseOffscreenTarget(target);
         for (auto& entry : ui_effect_history_targets_)
             ReleaseOffscreenTarget(entry.second.target);
         ui_effect_history_targets_.clear();
         for (auto& entry : ui_preview_effect_history_targets_)
             ReleaseOffscreenTarget(entry.second.target);
         ui_preview_effect_history_targets_.clear();
+        for (auto& entry : scene_effect_history_targets_)
+            ReleaseOffscreenTarget(entry.second.target);
+        scene_effect_history_targets_.clear();
+        scene_effect_submission_.Clear();
         for (auto& target : render_targets_)
         {
             if (target) resource_state_tracker_.Forget(target.Get());
@@ -1778,11 +1843,16 @@ namespace ReplayEngine::Rendering::DX12
             ReportDeviceRemoved(event_result);
             return false;
         }
+        const auto wait_begin = std::chrono::steady_clock::now();
         if (WaitForSingleObject(fence_event_, INFINITE) != WAIT_OBJECT_0)
         {
             ReportDeviceRemoved(E_FAIL);
             return false;
         }
+        const auto wait_end = std::chrono::steady_clock::now();
+        ++fence_wait_count_;
+        fence_wait_nanoseconds_ += static_cast<std::uint64_t>(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(wait_end - wait_begin).count());
         completed = fence_->GetCompletedValue();
         if (completed == (std::numeric_limits<std::uint64_t>::max)())
         {
@@ -2101,6 +2171,9 @@ namespace ReplayEngine::Rendering::DX12
             return false;
         }
         frame_resources_[submitted_frame].fence_value = signal_value;
+        frame_upload_peak_ = (std::max)(frame_upload_peak_,
+            frame_resources_[submitted_frame].upload_allocator.Used());
+        diagnostics_.SetRuntimeStats(BuildRuntimeStats());
         diagnostics_.MarkSubmitted(submitted_frame, signal_value);
         diagnostics_.DrainInfoQueue();
         frame_index_ = swap_chain_->GetCurrentBackBufferIndex();
@@ -2173,6 +2246,156 @@ namespace ReplayEngine::Rendering::DX12
         return completed >= value;
     }
 
+    D3D12RuntimeStats D3D12DeviceContext::BuildRuntimeStats() const noexcept
+    {
+        D3D12RuntimeStats stats{};
+        stats.resource_descriptor_capacity = resource_descriptor_allocator_.Capacity();
+        stats.resource_descriptor_used = resource_descriptor_allocator_.Used();
+        stats.resource_descriptor_peak = resource_descriptor_allocator_.PeakUsed();
+        stats.resource_descriptor_fragmentation = resource_descriptor_allocator_.FragmentationRatio();
+        stats.resource_descriptor_failures = resource_descriptor_allocator_.AllocationFailures();
+        stats.sampler_descriptor_capacity = sampler_descriptor_allocator_.Capacity();
+        stats.sampler_descriptor_used = sampler_descriptor_allocator_.Used();
+        stats.sampler_descriptor_peak = sampler_descriptor_allocator_.PeakUsed();
+        stats.sampler_descriptor_fragmentation = sampler_descriptor_allocator_.FragmentationRatio();
+        stats.sampler_descriptor_failures = sampler_descriptor_allocator_.AllocationFailures();
+        stats.frame_upload_used = frame_resources_[frame_index_].upload_allocator.Used();
+        stats.frame_upload_capacity = frame_resources_[frame_index_].upload_allocator.Capacity();
+        stats.frame_upload_peak = frame_upload_peak_;
+        stats.upload_wait_count = upload_context_.WaitCount();
+        stats.upload_wait_nanoseconds = upload_context_.WaitNanoseconds();
+        stats.fence_wait_count = fence_wait_count_;
+        stats.fence_wait_nanoseconds = fence_wait_nanoseconds_;
+        stats.mesh_resident = static_cast<std::uint64_t>(static_mesh_cache_.size() + skinned_mesh_cache_.size());
+        stats.texture_resident = static_cast<std::uint64_t>(texture_cache_.size() + ui_font_texture_cache_.size());
+        stats.pso_hits = pso_cache_hits_;
+        stats.pso_misses = pso_cache_misses_;
+        std::uint64_t pso_count = validation_pipeline_ ? 1ull : 0ull;
+        for (const auto& pipeline : static_bridge_pipelines_.pipelines) if (pipeline) ++pso_count;
+        for (const auto& entry : custom_static_pipelines_)
+            for (const auto& pipeline : entry.second.pipelines) if (pipeline) ++pso_count;
+        for (const auto& pipeline : scene3d_static_gbuffer_pipelines_) if (pipeline) ++pso_count;
+        for (const auto& pipeline : scene3d_skinned_gbuffer_pipelines_) if (pipeline) ++pso_count;
+        for (const auto& pipeline : scene3d_static_depth_pipelines_) if (pipeline) ++pso_count;
+        for (const auto& pipeline : scene3d_skinned_depth_pipelines_) if (pipeline) ++pso_count;
+        for (const auto& pipeline : scene3d_static_forward_blend_pipelines_) if (pipeline) ++pso_count;
+        for (const auto& pipeline : scene3d_skinned_forward_blend_pipelines_) if (pipeline) ++pso_count;
+        for (const auto& pipeline : scene3d_static_shadow_pipelines_) if (pipeline) ++pso_count;
+        for (const auto& pipeline : scene3d_skinned_shadow_pipelines_) if (pipeline) ++pso_count;
+        if (scene3d_lighting_pipeline_) ++pso_count;
+        if (scene3d_postprocess_pipeline_) ++pso_count;
+        for (const auto& pipeline : ui_pipelines_) if (pipeline) ++pso_count;
+        if (ui_hdr_composite_pipeline_) ++pso_count;
+        for (const auto& pipeline : ui_effect_pipelines_) if (pipeline) ++pso_count;
+        for (const auto& pipeline : ui_effect_hdr_pipelines_) if (pipeline) ++pso_count;
+        if (ui_effect_region_pipeline_) ++pso_count;
+        if (ui_effect_region_hdr_pipeline_) ++pso_count;
+#ifdef USE_IMGUI
+        if (imgui_pipeline_) ++pso_count;
+#endif
+        stats.pso_count = pso_count;
+        const D3D12ShaderCompilerStats shader_stats = GetD3D12ShaderCompilerStats();
+        stats.dxc_compile_count = shader_stats.compile_count;
+        stats.dxc_failure_count = shader_stats.failure_count;
+        stats.dxc_total_milliseconds = shader_stats.total_milliseconds;
+        return stats;
+    }
+
+    void D3D12DeviceContext::WriteDeviceRemovedReport(HRESULT trigger, HRESULT reason,
+        bool forced_validation) noexcept
+    {
+        try
+        {
+            std::filesystem::create_directories(std::filesystem::path(L"Saved") / L"Logs");
+            std::time_t now = std::time(nullptr);
+            std::tm local{};
+            localtime_s(&local, &now);
+            wchar_t file_name[128]{};
+            _snwprintf_s(file_name, _countof(file_name), _TRUNCATE,
+                L"dx12_device_removed_%04d%02d%02d_%02d%02d%02d.txt",
+                local.tm_year + 1900, local.tm_mon + 1, local.tm_mday,
+                local.tm_hour, local.tm_min, local.tm_sec);
+            std::ofstream out(std::filesystem::path(L"Saved") / L"Logs" / file_name,
+                std::ios::binary | std::ios::trunc);
+            if (!out) return;
+            out << "DX12_DEVICE_REMOVED_REPORT 1\n";
+            out << "FORCED_VALIDATION " << (forced_validation ? 1 : 0) << '\n';
+            out << "TRIGGER 0x" << std::hex << std::uppercase
+                << static_cast<unsigned long>(trigger) << '\n';
+            out << "REASON 0x" << static_cast<unsigned long>(reason) << std::dec << '\n';
+            const D3D12RuntimeStats stats = BuildRuntimeStats();
+            out << "FRAME_UPLOAD_USED " << stats.frame_upload_used << '\n';
+            out << "RESOURCE_DESCRIPTOR_USED " << stats.resource_descriptor_used << '\n';
+            out << "SAMPLER_DESCRIPTOR_USED " << stats.sampler_descriptor_used << '\n';
+            out << "MESH_RESIDENT " << stats.mesh_resident << '\n';
+            out << "TEXTURE_RESIDENT " << stats.texture_resident << '\n';
+            out << "PSO_COUNT " << stats.pso_count << '\n';
+            Microsoft::WRL::ComPtr<ID3D12DeviceRemovedExtendedData> dred;
+            if (device_ != nullptr && SUCCEEDED(device_.As(&dred)) && dred)
+            {
+                D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT breadcrumbs{};
+                if (SUCCEEDED(dred->GetAutoBreadcrumbsOutput(&breadcrumbs)))
+                {
+                    std::uint32_t node_index = 0;
+                    for (const D3D12_AUTO_BREADCRUMB_NODE* node = breadcrumbs.pHeadAutoBreadcrumbNode;
+                        node != nullptr; node = node->pNext, ++node_index)
+                    {
+                        out << "BREADCRUMB_NODE " << node_index << ' ';
+                        if (node->pCommandQueueDebugNameA) out << node->pCommandQueueDebugNameA;
+                        out << " / ";
+                        if (node->pCommandListDebugNameA) out << node->pCommandListDebugNameA;
+                        const UINT completed = node->pLastBreadcrumbValue ? *node->pLastBreadcrumbValue : 0;
+                        out << " completed=" << completed << " count=" << node->BreadcrumbCount << '\n';
+                        if (node->pCommandHistory != nullptr)
+                        {
+                            for (UINT op = 0; op < node->BreadcrumbCount; ++op)
+                            {
+                                out << "  OP " << op << " code="
+                                    << static_cast<unsigned int>(node->pCommandHistory[op])
+                                    << " executed=" << (op < completed ? 1 : 0) << '\n';
+                            }
+                        }
+                    }
+                }
+                D3D12_DRED_PAGE_FAULT_OUTPUT page_fault{};
+                if (SUCCEEDED(dred->GetPageFaultAllocationOutput(&page_fault)))
+                {
+                    out << "PAGE_FAULT_VA 0x" << std::hex << std::uppercase
+                        << static_cast<unsigned long long>(page_fault.PageFaultVA)
+                        << std::dec << '\n';
+                    auto dump_allocations = [&out](const char* label,
+                        const D3D12_DRED_ALLOCATION_NODE* head)
+                    {
+                        std::uint32_t index = 0;
+                        for (const D3D12_DRED_ALLOCATION_NODE* node = head;
+                            node != nullptr; node = node->pNext, ++index)
+                        {
+                            out << label << ' ' << index << " type="
+                                << static_cast<unsigned int>(node->AllocationType) << " name=";
+                            if (node->ObjectNameA) out << node->ObjectNameA;
+                            out << '\n';
+                        }
+                    };
+                    dump_allocations("EXISTING_ALLOCATION", page_fault.pHeadExistingAllocationNode);
+                    dump_allocations("RECENT_FREED_ALLOCATION", page_fault.pHeadRecentFreedAllocationNode);
+                }
+            }
+        }
+        catch (...)
+        {
+        }
+    }
+
+    bool D3D12DeviceContext::ForceDeviceRemovedDiagnostic() noexcept
+    {
+        if (device_ == nullptr) return false;
+        const HRESULT reason = DXGI_ERROR_DEVICE_REMOVED;
+        WriteDeviceRemovedReport(reason, reason, true);
+        diagnostics_.PushMessage(D3D12_MESSAGE_SEVERITY_WARNING,
+            "[DX12] forced device-removed diagnostic path executed");
+        return true;
+    }
+
     void D3D12DeviceContext::ReportDeviceRemoved(HRESULT trigger) noexcept
     {
         fatal_error_ = true;
@@ -2190,20 +2413,9 @@ namespace ReplayEngine::Rendering::DX12
             static_cast<unsigned long>(trigger),
             static_cast<unsigned long>(last_device_removed_reason_));
         DebugMessage(message);
-
-        Microsoft::WRL::ComPtr<ID3D12DeviceRemovedExtendedData> dred;
-        if (SUCCEEDED(device_.As(&dred)) && dred)
-        {
-            D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT breadcrumbs{};
-            if (SUCCEEDED(dred->GetAutoBreadcrumbsOutput(&breadcrumbs)) &&
-                breadcrumbs.pHeadAutoBreadcrumbNode != nullptr)
-                DebugMessage("[DX12][DRED] auto breadcrumbs are available.\n");
-
-            D3D12_DRED_PAGE_FAULT_OUTPUT page_fault{};
-            if (SUCCEEDED(dred->GetPageFaultAllocationOutput(&page_fault)) &&
-                page_fault.PageFaultVA != 0)
-                DebugMessage("[DX12][DRED] page-fault data is available.\n");
-        }
+        std::fprintf(stderr, "%s", message);
+        diagnostics_.PushMessage(D3D12_MESSAGE_SEVERITY_ERROR, message);
+        WriteDeviceRemovedReport(trigger, last_device_removed_reason_, false);
     }
 
     D3D12_CPU_DESCRIPTOR_HANDLE D3D12DeviceContext::CurrentRenderTargetView() const noexcept
@@ -2228,5 +2440,7 @@ namespace ReplayEngine::Rendering::DX12
             "[DX12] initialization failed at %s (hr=0x%08lx)\n",
             last_initialization_stage_, static_cast<unsigned long>(result));
         DebugMessage(message);
+        // GUI subsystem では OutputDebugString が読めないので stderr にも出す。
+        std::fprintf(stderr, "%s", message);
     }
 }

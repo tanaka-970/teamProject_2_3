@@ -1,4 +1,4 @@
-﻿#include "dx12_dxc_validation_common.hlsli"
+#include "dx12_dxc_validation_common.hlsli"
 #ifndef PHASE2_DXC_OPTIONS
 #error PHASE2_DXC_OPTIONS missing
 #endif

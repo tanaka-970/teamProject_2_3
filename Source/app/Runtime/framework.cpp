@@ -1,6 +1,4 @@
 ﻿#include "framework.h"
-#include "shader.h"
-#include "texture.h"
 #include "skinned_mesh.h"
 #include "gltf_model.h"
 #include "../Editor/GoldenImageState.h"
@@ -260,9 +258,7 @@ bool framework::uninitialize()
     // 4) 衝突用の Cook データ。参照が 0 になったものを表から外す。
     object_collision_cook_cache.Collect();
 
-    scene_effect_texture_refs.clear();
-    scene_effect_temporal_history.clear();
-    scene_effect_frame_serial = 0;
+    // Scene Effect の GPU 資源は DX12 側が持つため、Shutdown で一緒に解放される。
     ui_preview_runtime_width = 0;
     ui_preview_runtime_height = 0;
 

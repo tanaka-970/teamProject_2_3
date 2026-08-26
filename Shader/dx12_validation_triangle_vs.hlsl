@@ -1,4 +1,4 @@
-﻿struct RenderItemData
+struct RenderItemData
 {
     row_major float4x4 world;
     float4 tint;

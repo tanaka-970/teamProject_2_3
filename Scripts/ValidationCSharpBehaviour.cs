@@ -1,4 +1,4 @@
-using ReplayEngine;
+﻿using ReplayEngine;
 
 namespace ValidationScripts;
 
@@ -24,6 +24,7 @@ public sealed class ValidationCSharpBehaviour : ScriptBehaviour
     [Tooltip("説明文")] [Header("見出し")] public int Described = 3;
     [HideInInspector] public int Hidden = 5;
     [AssetType("Image")] public AssetReference Picture;
+    public AssetReference<SceneAsset> NextScene = new("typed-scene-guid");
     public ValidationMode Mode = ValidationMode.Second;
     public int[] Scores = new[] { 1, 2, 3 };
     public System.Collections.Generic.List<string> Tags = new() { "alpha", "日本語" };
@@ -62,6 +63,8 @@ public sealed class ValidationCSharpBehaviour : ScriptBehaviour
         if (!Input.GetKey(Key.A)) ++passed;
         if (!Input.GamepadConnected()) ++passed;
         if (Input.MouseScrollDelta == 0.0f) ++passed;
+        if (Runtime.InputHeld(InputActions.Jump).Status == RuntimeStatus.ServiceUnavailable) ++passed;
+        if (Input.GetAxis(new InputAxisId("")).Status == RuntimeStatus.InvalidArgument) ++passed;
         if (EngineEventIds.CollisionEnter.Length == 32) ++passed;
         if (EngineEventIds.ButtonClicked.Length == 32) ++passed;
         if (Vector3.Cross(Vector3.Right, Vector3.Up).Z > 0.99f) ++passed;
@@ -76,6 +79,9 @@ public sealed class ValidationCSharpBehaviour : ScriptBehaviour
             new Vector3(1.0f, 1.0f, 1.0f));
         if (!spawn.Succeeded) ++passed;
         if (!Runtime.TakeSpawnResult(0).Succeeded) ++passed;
+        var transition = Runtime.SceneTransition;
+        if (transition.Succeeded && !transition.Value.InProgress &&
+            transition.Value.Status == RuntimeStatus.ServiceUnavailable) ++passed;
         return passed;
     }
 
@@ -83,6 +89,8 @@ public sealed class ValidationCSharpBehaviour : ScriptBehaviour
     private int RunComponentApiChecks()
     {
         var passed = 0;
+        var ownBehaviour = GetBehaviour<ValidationCSharpBehaviour>();
+        if (ownBehaviour.Succeeded && object.ReferenceEquals(ownBehaviour.Value, this)) ++passed;
         if (Runtime.ComponentTypeId("CameraComponent").Value != 0) ++passed;
         var cameraType = Runtime.ComponentTypeInfo<CameraComponent>();
         if (cameraType.Succeeded && cameraType.Value.TypeId != 0 &&

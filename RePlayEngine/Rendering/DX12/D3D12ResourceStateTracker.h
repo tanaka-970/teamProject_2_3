@@ -3,6 +3,8 @@
 #include <d3d12.h>
 
 #include <unordered_map>
+#include <functional>
+#include <string>
 
 namespace ReplayEngine::Rendering::DX12
 {
@@ -14,7 +16,7 @@ namespace ReplayEngine::Rendering::DX12
     public:
         bool Track(ID3D12Resource* resource, D3D12_RESOURCE_STATES state) noexcept;
         void Forget(ID3D12Resource* resource) noexcept;
-        void Reset() noexcept { states_.clear(); }
+        void Reset() noexcept { states_.clear(); barrier_count_ = 0; validation_error_count_ = 0; }
 
         bool IsTracked(ID3D12Resource* resource) const noexcept;
         D3D12_RESOURCE_STATES StateOf(ID3D12Resource* resource,
@@ -24,8 +26,24 @@ namespace ReplayEngine::Rendering::DX12
             ID3D12Resource* resource, D3D12_RESOURCE_STATES after) noexcept;
         bool UavBarrier(ID3D12GraphicsCommandList* command_list,
             ID3D12Resource* resource) noexcept;
+        bool RequireState(ID3D12Resource* resource, D3D12_RESOURCE_STATES expected,
+            const char* usage) noexcept;
+        void SetBarrierCallback(std::function<void(ID3D12Resource*,
+            D3D12_RESOURCE_STATES, D3D12_RESOURCE_STATES)> callback)
+        { barrier_callback_ = std::move(callback); }
+        void SetValidationCallback(std::function<void(const std::string&)> callback)
+        { validation_callback_ = std::move(callback); }
+        void SetBreakOnError(bool enabled) noexcept { break_on_error_ = enabled; }
+        std::uint64_t BarrierCount() const noexcept { return barrier_count_; }
+        std::uint64_t ValidationErrorCount() const noexcept { return validation_error_count_; }
 
     private:
+        void ReportValidation(const std::string& message) noexcept;
         std::unordered_map<ID3D12Resource*, D3D12_RESOURCE_STATES> states_;
+        std::function<void(ID3D12Resource*, D3D12_RESOURCE_STATES, D3D12_RESOURCE_STATES)> barrier_callback_;
+        std::function<void(const std::string&)> validation_callback_;
+        std::uint64_t barrier_count_ = 0;
+        std::uint64_t validation_error_count_ = 0;
+        bool break_on_error_ = false;
     };
 }

@@ -1,4 +1,5 @@
 ﻿#include "D3D12DescriptorHeapAllocator.h"
+#include "D3D12ObjectName.h"
 
 #include <algorithm>
 
@@ -23,6 +24,16 @@ namespace ReplayEngine::Rendering::DX12
         if (FAILED(device->CreateDescriptorHeap(&description,
             IID_PPV_ARGS(&heap_))))
             return false;
+        const wchar_t* heap_name = L"DescriptorHeap.Unknown";
+        switch (type)
+        {
+        case D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV: heap_name = L"DescriptorHeap.Resource"; break;
+        case D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER: heap_name = L"DescriptorHeap.Sampler"; break;
+        case D3D12_DESCRIPTOR_HEAP_TYPE_RTV: heap_name = L"DescriptorHeap.RTV"; break;
+        case D3D12_DESCRIPTOR_HEAP_TYPE_DSV: heap_name = L"DescriptorHeap.DSV"; break;
+        default: break;
+        }
+        SetD3D12ObjectName(heap_.Get(), heap_name, shader_visible ? L"ShaderVisible" : L"CpuOnly");
 
         type_ = type;
         capacity_ = capacity;
@@ -60,6 +71,8 @@ namespace ReplayEngine::Rendering::DX12
         capacity_ = 0;
         used_ = 0;
         descriptor_size_ = 0;
+        peak_used_ = 0;
+        allocation_failures_ = 0;
         shader_visible_ = false;
     }
 
@@ -79,13 +92,29 @@ namespace ReplayEngine::Rendering::DX12
             std::fill(allocated_.begin() + index,
                 allocated_.begin() + index + count, static_cast<std::uint8_t>(1));
             used_ += count;
+            peak_used_ = (std::max)(peak_used_, used_);
             allocation.index = index;
             allocation.count = count;
             allocation.cpu = CpuHandle(index);
             allocation.gpu = GpuHandle(index);
             return true;
         }
+        ++allocation_failures_;
         return false;
+    }
+
+    float D3D12DescriptorHeapAllocator::FragmentationRatio() const noexcept
+    {
+        if (free_ranges_.size() <= 1 || capacity_ == used_) return 0.0f;
+        std::uint32_t free_total = 0;
+        std::uint32_t largest = 0;
+        for (const DescriptorFreeRange& range : free_ranges_)
+        {
+            free_total += range.count;
+            largest = (std::max)(largest, range.count);
+        }
+        if (free_total == 0) return 0.0f;
+        return 1.0f - static_cast<float>(largest) / static_cast<float>(free_total);
     }
 
     bool D3D12DescriptorHeapAllocator::IsAllocatedRange(

@@ -1,4 +1,4 @@
-﻿#include "dx12_lighting_common.hlsli"
+#include "dx12_lighting_common.hlsli"
 
 Texture2D gBase : register(t0);
 Texture2D gEmissive : register(t1);

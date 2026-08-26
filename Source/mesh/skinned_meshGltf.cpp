@@ -3,6 +3,9 @@
 #include "tinygltf-release/tiny_gltf.h"
 #include "../../RePlayEngine/Assets/TextureCompressor.h"
 
+// OutputDebugStringA の宣言。以前は d3d11.h 経由で入っていた。
+#include <windows.h>
+
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -496,8 +499,7 @@ bool skinned_mesh::HasAlphaMaskMaterials() const noexcept
     return false;
 }
 
-bool skinned_mesh::import_gltf(ID3D11Device*, const std::filesystem::path& filename,
-    float requested_sampling_rate)
+bool skinned_mesh::import_gltf(const std::filesystem::path& filename, float requested_sampling_rate)
 {
     tinygltf::TinyGLTF loader;
     GltfFileContext file_context{ filename.parent_path() };

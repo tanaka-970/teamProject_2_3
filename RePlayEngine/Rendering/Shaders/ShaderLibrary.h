@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "ShaderCatalog.h"
 #include "ShaderCompiler.h"
@@ -58,7 +58,7 @@ namespace ReplayEngine::Rendering
         // カタログ内の全シェーダをコンパイルする。
         //
         // #pragma property から cbuffer を自動生成してソースの先頭へ差し込み、
-        // D3DCompile へ渡す。人は cbuffer を書かない。
+        // DXC へ渡す。人は cbuffer を書かない。
         //
         // 失敗しても Entry は消さず、直前に成功したバイトコードを保持する。
         // 構文エラーを 1 つ書いただけで Material の設定が飛ぶのを避けるため。

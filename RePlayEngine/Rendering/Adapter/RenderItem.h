@@ -22,7 +22,7 @@ namespace ReplayEngine::Rendering
     //   既存のレンダラーがメインスレッド上で行う。
     //
     // この分離により、GameObject や Gameplay Component が
-    // ID3D11DeviceContext や Shader へ直接触る構造にならない。
+    // GPU command context や Shader へ直接触る構造にならない。
     struct RenderItem
     {
         // どの GameObject から出たか。ピッキングやデバッグ表示に使う。

@@ -1,8 +1,6 @@
 ﻿#pragma once
 
-#include <d3d11.h>
 #include <DirectXMath.h>
-#include <wrl.h>
 
 #include <cstdint>
 #include <string>
@@ -31,12 +29,8 @@ namespace ReplayEngine::UI
             float bake_scale = 1.0f;
         };
 
-        bool Initialize(ID3D11Device* device);
-        // DX12 RuntimeではCPUのAtlas生成だけを有効にし、D3D11 SRVを作らない。
         bool InitializeCpuOnly();
         void Release() noexcept;
-
-        ID3D11ShaderResourceView* Texture() const noexcept;
 
         // DX12 backend が同じCPU正本からAtlasをUploadするための読み取り専用スナップショット。
         // 呼び出し側は返されたRGBAをGPUへコピーするだけで、FontAtlasへGPU所有権を持ち込まない。
@@ -51,7 +45,6 @@ namespace ReplayEngine::UI
     private:
         struct FaceAtlas final
         {
-            Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> texture;
             std::vector<std::uint8_t> rgba;
             std::uint32_t atlas_width = 0;
             std::uint32_t atlas_height = 0;
@@ -72,7 +65,6 @@ namespace ReplayEngine::UI
         FaceAtlas* ActiveFace() noexcept;
         const FaceAtlas* ActiveFace() const noexcept;
 
-        Microsoft::WRL::ComPtr<ID3D11Device> device_;
         std::unordered_map<std::string, FaceAtlas> faces_;
         std::string active_face_key_;
         // SDF は焼いた解像度が輪郭の細かさの上限になる。64 だと 240px 表示で

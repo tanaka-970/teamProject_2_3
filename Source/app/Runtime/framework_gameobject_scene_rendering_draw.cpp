@@ -1008,6 +1008,9 @@ bool framework::build_dx12_static_scene(
                     D3D12SkinnedDrawItem skinned_draw;
                     D3D12StaticDrawItem& draw = skinned_draw.surface;
                     draw.mesh_key = mesh_key;
+                    draw.owner_id = source_item.owner.Value();
+                    draw.rendering_layer = static_cast<std::uint32_t>((std::max)(0,
+                        (std::min)(31, item.rendering_layer)));
                     draw.start_index = start;
                     draw.index_count = count;
                     draw.world = mesh_world;
@@ -1102,6 +1105,9 @@ bool framework::build_dx12_static_scene(
                 }
                 D3D12StaticDrawItem draw;
                 draw.mesh_key = item.mesh_asset;
+                draw.owner_id = source_item.owner.Value();
+                draw.rendering_layer = static_cast<std::uint32_t>((std::max)(0,
+                    (std::min)(31, item.rendering_layer)));
                 draw.motion_key = std::to_string(source_item.owner.Value()) + ":" + draw.mesh_key;
                 draw.world = item.world;
                 (void)fill_external_material(source_item, item, draw);
@@ -1118,6 +1124,9 @@ bool framework::build_dx12_static_scene(
 
             D3D12StaticDrawItem draw;
             draw.mesh_key = item.mesh_asset;
+            draw.owner_id = source_item.owner.Value();
+            draw.rendering_layer = static_cast<std::uint32_t>((std::max)(0,
+                (std::min)(31, item.rendering_layer)));
             draw.motion_key = std::to_string(source_item.owner.Value()) + ":" + draw.mesh_key;
             draw.world = item.world;
             (void)fill_external_material(source_item, item, draw);
@@ -1164,6 +1173,9 @@ bool framework::build_dx12_static_scene(
                 D3D12StaticDrawItem draw;
                 draw.mesh_key = item.mesh_asset + "#gltf:" +
                     std::to_string(primitive_index);
+                draw.owner_id = source_item.owner.Value();
+                draw.rendering_layer = static_cast<std::uint32_t>((std::max)(0,
+                    (std::min)(31, item.rendering_layer)));
                 draw.motion_key = std::to_string(source_item.owner.Value()) + ":" + draw.mesh_key;
                 draw.world = multiply_world(info.node_transform, item.world);
                 const bool external = fill_external_material(source_item, item, draw);
@@ -1217,6 +1229,9 @@ bool framework::build_dx12_static_scene(
             {
                 D3D12StaticDrawItem draw;
                 draw.mesh_key = mesh_key;
+                draw.owner_id = source_item.owner.Value();
+                draw.rendering_layer = static_cast<std::uint32_t>((std::max)(0,
+                    (std::min)(31, item.rendering_layer)));
                 draw.motion_key = std::to_string(source_item.owner.Value()) + ":" + mesh_key +
                     ":" + std::to_string(start);
                 draw.start_index = start;
@@ -1321,6 +1336,8 @@ bool framework::build_dx12_static_scene(
 
             D3D12StaticDrawItem draw;
             draw.mesh_key = mesh_key;
+            draw.owner_id = object->ID().Value();
+            draw.rendering_layer = 0;
             draw.motion_key = std::to_string(object->ID().Value()) + ":" + mesh_key;
             draw.world = object->GetTransform().WorldMatrixFloat4x4();
             draw.base_color = renderer->tint;

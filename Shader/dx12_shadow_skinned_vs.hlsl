@@ -1,4 +1,4 @@
-﻿cbuffer ShadowObjectCB : register(b0)
+cbuffer ShadowObjectCB : register(b0)
 {
     row_major float4x4 world;
     float4 morph;
@@ -28,6 +28,7 @@ struct VSOut
 {
     float4 position : SV_POSITION;
     float2 uv : TEXCOORD0;
+    float3 worldPosition : TEXCOORD1;
 };
 float4 SkinPosition(float3 position, float4 weights, uint4 indices)
 {
@@ -45,5 +46,6 @@ VSOut main(VSIn input)
     const float4 worldPosition = mul(skinnedPosition, world);
     output.position = mul(worldPosition, viewProjection);
     output.uv = input.uv;
+    output.worldPosition = worldPosition.xyz;
     return output;
 }

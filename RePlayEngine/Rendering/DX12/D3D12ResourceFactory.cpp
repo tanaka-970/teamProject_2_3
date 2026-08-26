@@ -1,4 +1,5 @@
 ﻿#include "D3D12ResourceFactory.h"
+#include "D3D12ObjectName.h"
 
 #include <cstring>
 #include <vector>
@@ -27,6 +28,7 @@ namespace ReplayEngine::Rendering::DX12::D3D12ResourceFactory
             D3D12_HEAP_FLAG_NONE, &description, D3D12_RESOURCE_STATE_COPY_DEST,
             nullptr, IID_PPV_ARGS(&resource))))
             return false;
+        SetD3D12ObjectName(resource.Get(), L"Resource.Buffer", L"Default");
         if (!uploader.UploadBuffer(resource.Get(), data, size, final_state))
         {
             resource.Reset();
@@ -116,6 +118,7 @@ namespace ReplayEngine::Rendering::DX12::D3D12ResourceFactory
             D3D12_HEAP_FLAG_NONE, &description, D3D12_RESOURCE_STATE_COPY_DEST,
             nullptr, IID_PPV_ARGS(&resource))))
             return false;
+        SetD3D12ObjectName(resource.Get(), L"Resource.Texture2D", L"Asset");
         if (!uploader.UploadTextureSubresources(resource.Get(), subresources,
             D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE))
         {
@@ -149,6 +152,7 @@ namespace ReplayEngine::Rendering::DX12::D3D12ResourceFactory
             D3D12_HEAP_FLAG_NONE, &description, D3D12_RESOURCE_STATE_COPY_DEST,
             nullptr, IID_PPV_ARGS(&resource))))
             return false;
+        SetD3D12ObjectName(resource.Get(), L"Resource.Texture2D", L"RGBA8");
 
         if (!uploader.UploadTexture2D(resource.Get(), rgba_data, width, height, row_pitch,
             D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE))

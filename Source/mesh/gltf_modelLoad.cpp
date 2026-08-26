@@ -5,12 +5,6 @@
 #define TINYGLTF_IMPLEMENTATION
 #include "tinygltf-release/tiny_gltf.h"
 
-#include "shader.h"
-#include "texture.h"
-#include "../render/motion_vector_context.h"
-#include "../../RePlayEngine/Rendering/RenderStats.h"
-#include "../../RePlayEngine/Rendering/Frustum.h"
-#include "../../RePlayEngine/Rendering/MeshSimplifier.h"
 #include "../../RePlayEngine/Assets/ParallelLoader.h"
 #include "../../RePlayEngine/Assets/TextureCompressor.h"
 
@@ -21,10 +15,8 @@
 #include <chrono>
 #include <functional>
 #include <utility>
-#include "gltf_modelInternal.h"
 
 using namespace DirectX;
-using namespace gltf_model_detail;
 
 namespace
 {
@@ -132,34 +124,7 @@ namespace
 
 // シェーダー・入力レイアウト・定数バッファ・ダミーテクスチャ。
 // glTF経路とメッシュキャッシュ経路の両方から呼ぶ。
-bool gltf_model::PrepareDeviceResources(ID3D11Device* device)
-{
-    if (!device) return false;
-
-    D3D11_INPUT_ELEMENT_DESC layout[] = {
-        { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Vertex, position), D3D11_INPUT_PER_VERTEX_DATA, 0 },
-        { "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Vertex, normal), D3D11_INPUT_PER_VERTEX_DATA, 0 },
-        { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(Vertex, texcoord), D3D11_INPUT_PER_VERTEX_DATA, 0 },
-    };
-    create_vs_from_cso(device, "static_mesh_vs.cso", vertex_shader_.GetAddressOf(),
-        input_layout_.GetAddressOf(), layout, _countof(layout));
-    create_ps_from_cso(device, "static_mesh_ps.cso", pixel_shader_.GetAddressOf());
-    D3D11_BUFFER_DESC constant_desc{};
-    constant_desc.ByteWidth = sizeof(Constants);
-    constant_desc.Usage = D3D11_USAGE_DEFAULT;
-    constant_desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-    if (FAILED(device->CreateBuffer(&constant_desc, nullptr, constant_buffer_.GetAddressOf()))) return false;
-    // TAAのモーションベクター用の定数バッファ(b6)。
-    constant_desc.ByteWidth = sizeof(motion_vectors::ObjectConstants);
-    if (FAILED(device->CreateBuffer(&constant_desc, nullptr,
-        motion_object_constant_buffer_.GetAddressOf()))) return false;
-    make_dummy_texture(device, white_texture_.GetAddressOf(), 0xffffffff, 4);
-    // 0xAABBGGRR = RGBA(128,128,255,255)。Normal Map未指定の正しい既定値。
-    make_dummy_texture(device, neutral_normal_texture_.GetAddressOf(), 0xffff8080, 4);
-    return vertex_shader_ && pixel_shader_ && input_layout_ && constant_buffer_;
-}
-
-bool gltf_model::Load(ID3D11Device* device, const std::string& filename)
+bool gltf_model::Load(const std::string& filename)
 {
     std::string extension = std::filesystem::path(filename).extension().string();
     std::transform(extension.begin(), extension.end(), extension.begin(),
@@ -200,7 +165,6 @@ bool gltf_model::Load(ID3D11Device* device, const std::string& filename)
     has_skins_ = !model.skins.empty();
     has_animations_ = !model.animations.empty();
 
-    if (device != nullptr && !PrepareDeviceResources(device)) return false;
 
     timings_.parse_ms = elapsed_ms(load_start);
     timings_.image_count = static_cast<int>(model.images.size());
@@ -242,11 +206,8 @@ bool gltf_model::Load(ID3D11Device* device, const std::string& filename)
     const std::filesystem::path texture_cache_directory =
         CacheRoot() / "textures" / MeshCachePath(filename).stem();
 
-    // 画像のデコード → ミップ生成 → GPUテクスチャ作成 を1枚単位で並列化する。
-    // 各画像は独立しており ID3D11Device::Create系はスレッドセーフなので、
-    // そのままワーカーへ分配できる。ロード時間の削減幅が最も大きい箇所。
+    // GLB 内蔵画像を DDS キャッシュへ変換する処理を画像単位で並列化する。
     const auto image_start = Clock::now();
-    std::vector<Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>> image_views(model.images.size());
     // ワーカー数を絞る。1枚あたりRGBA+ミップで数十MBの一時領域を使うため、
     // 全コアで走らせるとピークメモリが跳ね上がる。
     const int image_workers = (std::min)(4,
@@ -258,8 +219,8 @@ bool gltf_model::Load(ID3D11Device* device, const std::string& filename)
         if (image.image.empty()) return;
 
         std::vector<uint8_t> rgba;
-        UINT width = 0;
-        UINT height = 0;
+        std::uint32_t width = 0;
+        std::uint32_t height = 0;
 
         if (image.as_is)
         {
@@ -273,8 +234,8 @@ bool gltf_model::Load(ID3D11Device* device, const std::string& filename)
                 if (decoded) stbi_image_free(decoded);
                 return;
             }
-            width = static_cast<UINT>(decoded_width);
-            height = static_cast<UINT>(decoded_height);
+            width = static_cast<std::uint32_t>(decoded_width);
+            height = static_cast<std::uint32_t>(decoded_height);
             rgba.assign(decoded, decoded + static_cast<size_t>(width) * height * 4);
             stbi_image_free(decoded);
             // 圧縮データはもう不要。保持し続けるとピークメモリが1GB近く増える。
@@ -297,10 +258,6 @@ bool gltf_model::Load(ID3D11Device* device, const std::string& filename)
                 rgba[p * 4 + 3] = components > 3 ? image.image[p * components + 3] : 255;
             }
         }
-
-        if (device != nullptr)
-            CreateTextureWithMipChain(device, rgba, width, height,
-                image_views[i].GetAddressOf());
 
         // 外部URIは従来どおり元画像の隣にDDSを作る。ここではGLB内蔵画像だけを
         // 既存TextureCompressorへ渡し、デコード済みRGBAを再利用する。
@@ -342,18 +299,6 @@ bool gltf_model::Load(ID3D11Device* device, const std::string& filename)
         if (source.baseColorFactor.size() == 4)
             materials_[i].base_color = { static_cast<float>(source.baseColorFactor[0]), static_cast<float>(source.baseColorFactor[1]),
                 static_cast<float>(source.baseColorFactor[2]), static_cast<float>(source.baseColorFactor[3]) };
-        // テクスチャ番号 → 画像番号 → 生成済みSRV の解決。
-        const auto resolve = [&](int texture_index)
-            -> Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>
-        {
-            if (texture_index < 0 ||
-                texture_index >= static_cast<int>(model.textures.size())) return nullptr;
-            const int image_index = model.textures[texture_index].source;
-            if (image_index < 0 ||
-                image_index >= static_cast<int>(image_views.size())) return nullptr;
-            return image_views[image_index];
-        };
-
         // キャッシュ経路で再読み込みできるよう、画像ファイルの場所も残す。
         const auto resolve_uri = [&](int texture_index, const std::string& embedded_uri)
             -> std::string
@@ -385,16 +330,8 @@ bool gltf_model::Load(ID3D11Device* device, const std::string& filename)
                 cached_uri(model.materials[i].occlusionTexture.index,
                     &EmbeddedTextureCache::orm_uri));
 
-        materials_[i].base_color_texture = resolve(source.baseColorTexture.index);
-        materials_[i].normal_texture = resolve(model.materials[i].normalTexture.index);
-        // glTFのmetallicRoughnessTextureは B=Metalness, G=Roughness。
-        // occlusionTextureが別にある場合はRチャンネルにAOが入る想定で同じ扱いにする。
-        materials_[i].occlusion_roughness_metalness_texture =
-            resolve(source.metallicRoughnessTexture.index);
-        if (!materials_[i].occlusion_roughness_metalness_texture)
-            materials_[i].occlusion_roughness_metalness_texture =
-                resolve(model.materials[i].occlusionTexture.index);
     }
+
 
     std::vector<XMMATRIX> globals(model.nodes.size(), XMMatrixIdentity());
     std::vector<bool> visited(model.nodes.size(), false);
@@ -497,20 +434,6 @@ bool gltf_model::Load(ID3D11Device* device, const std::string& filename)
                 }
                 collision_triangles_.push_back(triangle);
             }
-            if (device != nullptr)
-            {
-                D3D11_BUFFER_DESC desc{};
-                desc.Usage = D3D11_USAGE_DEFAULT; desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-                desc.ByteWidth = static_cast<UINT>(vertices.size() * sizeof(Vertex));
-                D3D11_SUBRESOURCE_DATA initial{ vertices.data(), 0, 0 };
-                if (FAILED(device->CreateBuffer(&desc, &initial,
-                    primitive.vertex_buffer.GetAddressOf()))) continue;
-                desc.BindFlags = D3D11_BIND_INDEX_BUFFER;
-                desc.ByteWidth = static_cast<UINT>(indices.size() * sizeof(uint32_t));
-                initial.pSysMem = indices.data();
-                if (FAILED(device->CreateBuffer(&desc, &initial,
-                    primitive.index_buffer.GetAddressOf()))) continue;
-            }
             primitives_.push_back(std::move(primitive));
         }
     }
@@ -518,5 +441,5 @@ bool gltf_model::Load(ID3D11Device* device, const std::string& filename)
     timings_.total_ms = elapsed_ms(load_start);
 
     if (primitives_.empty()) { error_ = "glTF contains no supported triangle primitives"; return false; }
-    return device == nullptr || (vertex_shader_ && pixel_shader_ && input_layout_ && constant_buffer_);
+    return true;
 }

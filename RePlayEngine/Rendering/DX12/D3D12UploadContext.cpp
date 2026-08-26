@@ -1,6 +1,8 @@
 ﻿#include "D3D12UploadContext.h"
+#include "D3D12ObjectName.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstring>
 #include <limits>
 
@@ -21,13 +23,16 @@ namespace ReplayEngine::Rendering::DX12
         if (FAILED(device_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
             IID_PPV_ARGS(&command_allocator_))))
             return false;
+        SetD3D12ObjectName(command_allocator_.Get(), L"Upload.CommandAllocator", L"Direct");
         if (FAILED(device_->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
             command_allocator_.Get(), nullptr, IID_PPV_ARGS(&command_list_))))
             return false;
+        SetD3D12ObjectName(command_list_.Get(), L"Upload.CommandList", L"Direct");
         if (FAILED(command_list_->Close())) return false;
         if (FAILED(device_->CreateFence(0, D3D12_FENCE_FLAG_NONE,
             IID_PPV_ARGS(&fence_))))
             return false;
+        SetD3D12ObjectName(fence_.Get(), L"Upload.Fence", L"CopyComplete");
         fence_event_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
         if (fence_event_ == nullptr) return false;
         try
@@ -57,6 +62,9 @@ namespace ReplayEngine::Rendering::DX12
         queue_.Reset();
         device_.Reset();
         fence_value_ = 0;
+        wait_count_ = 0;
+        wait_nanoseconds_ = 0;
+        upload_count_ = 0;
         batch_open_ = false;
         batch_has_commands_ = false;
     }
@@ -127,6 +135,7 @@ namespace ReplayEngine::Rendering::DX12
     {
         if (!IsInitialized() || destination == nullptr || data == nullptr || size == 0)
             return false;
+        ++upload_count_;
 
         bool opened_here = false;
         if (!BeginSingleUploadIfNeeded(opened_here)) return false;
@@ -192,6 +201,7 @@ namespace ReplayEngine::Rendering::DX12
         if (!IsInitialized() || destination == nullptr || rgba_data == nullptr ||
             width == 0 || height == 0 || source_row_pitch < width * 4u)
             return false;
+        ++upload_count_;
 
         bool opened_here = false;
         if (!BeginSingleUploadIfNeeded(opened_here)) return false;
@@ -228,6 +238,7 @@ namespace ReplayEngine::Rendering::DX12
             if (opened_here) EndBatch();
             return false;
         }
+        SetD3D12ObjectName(upload_resource.Get(), L"Upload.Staging", L"Texture2D");
 
         std::uint8_t* mapped = nullptr;
         if (FAILED(upload_resource->Map(0, nullptr,
@@ -287,6 +298,7 @@ namespace ReplayEngine::Rendering::DX12
         D3D12_RESOURCE_STATES final_state) noexcept
     {
         if (!IsInitialized() || destination == nullptr || sources.empty()) return false;
+        ++upload_count_;
         for (const D3D12TextureSubresourceSource& source : sources)
         {
             if (source.data == nullptr || source.row_pitch == 0 || source.slice_pitch == 0)
@@ -340,6 +352,7 @@ namespace ReplayEngine::Rendering::DX12
             if (opened_here) EndBatch();
             return false;
         }
+        SetD3D12ObjectName(upload_resource.Get(), L"Upload.Staging", L"Subresources");
 
         std::uint8_t* mapped = nullptr;
         if (FAILED(upload_resource->Map(0, nullptr, reinterpret_cast<void**>(&mapped))))
@@ -431,7 +444,12 @@ namespace ReplayEngine::Rendering::DX12
         if (fence_->GetCompletedValue() < value)
         {
             if (FAILED(fence_->SetEventOnCompletion(value, fence_event_))) return false;
+            const auto wait_begin = std::chrono::steady_clock::now();
             if (WaitForSingleObject(fence_event_, INFINITE) != WAIT_OBJECT_0) return false;
+            const auto wait_end = std::chrono::steady_clock::now();
+            ++wait_count_;
+            wait_nanoseconds_ += static_cast<std::uint64_t>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(wait_end - wait_begin).count());
         }
         return true;
     }

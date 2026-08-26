@@ -56,6 +56,13 @@ namespace ReplayEngine::Rendering::DX12
             return static_cast<std::uint32_t>(retired_.size());
         }
         std::uint32_t DescriptorSize() const noexcept { return descriptor_size_; }
+        std::uint32_t PeakUsed() const noexcept { return peak_used_; }
+        std::uint64_t AllocationFailures() const noexcept { return allocation_failures_; }
+        std::uint32_t FreeRangeCount() const noexcept
+        {
+            return static_cast<std::uint32_t>(free_ranges_.size());
+        }
+        float FragmentationRatio() const noexcept;
         D3D12_DESCRIPTOR_HEAP_TYPE Type() const noexcept { return type_; }
         bool ShaderVisible() const noexcept { return shader_visible_; }
         ID3D12DescriptorHeap* Heap() const noexcept { return heap_.Get(); }
@@ -87,6 +94,8 @@ namespace ReplayEngine::Rendering::DX12
         std::uint32_t capacity_ = 0;
         std::uint32_t used_ = 0;
         std::uint32_t descriptor_size_ = 0;
+        std::uint32_t peak_used_ = 0;
+        std::uint64_t allocation_failures_ = 0;
         bool shader_visible_ = false;
     };
 }

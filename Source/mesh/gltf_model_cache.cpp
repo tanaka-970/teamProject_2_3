@@ -9,9 +9,6 @@
 
 #include "gltf_model.h"
 
-#include "../../RePlayEngine/Assets/ParallelLoader.h"
-#include "../../RePlayEngine/Assets/TextureCompressor.h"
-#include "texture.h"
 
 #include <atomic>
 #include <cmath>
@@ -23,9 +20,8 @@ using namespace DirectX;
 namespace
 {
     constexpr std::uint32_t kMeshCacheMagic = 0x48534D52u;  // 'RMSH'
-    // v3: v2のTexture URIに加え alphaMode / alphaCutoff を保存する。
-    // 派生キャッシュなので旧v2は安全に無効化され、元glTFから一度だけ再生成される。
-    constexpr std::uint32_t kMeshCacheVersion = 3;
+    // v4 は Skin と Animation の有無も保存して CPU キャッシュ経路の判定を一致させる。
+    constexpr std::uint32_t kMeshCacheVersion = 4;
 
     // 文字列は長さ+本体で書く。
     void WriteString(std::ofstream& stream, const std::string& text)
@@ -111,14 +107,6 @@ bool gltf_model::SaveMeshCache(const std::string& filename) const
     // 参照中のTextureに再読込URIが無い状態をキャッシュすると、次回起動だけ
     // 白Textureへ落ちる。DDS生成に失敗した場合はメッシュキャッシュ自体を作らず、
     // 次回もGLB本体から読み直して復旧を試みる。
-    for (const Material& material : materials_)
-    {
-        if ((material.base_color_texture && material.base_color_uri.empty()) ||
-            (material.normal_texture && material.normal_uri.empty()) ||
-            (material.occlusion_roughness_metalness_texture && material.orm_uri.empty()))
-            return false;
-    }
-
     std::error_code error;
     std::filesystem::create_directories(path.parent_path(), error);
     if (error) return false;
@@ -128,6 +116,9 @@ bool gltf_model::SaveMeshCache(const std::string& filename) const
 
     stream.write(reinterpret_cast<const char*>(&kMeshCacheMagic), sizeof(kMeshCacheMagic));
     stream.write(reinterpret_cast<const char*>(&kMeshCacheVersion), sizeof(kMeshCacheVersion));
+
+    stream.write(reinterpret_cast<const char*>(&has_skins_), sizeof(has_skins_));
+    stream.write(reinterpret_cast<const char*>(&has_animations_), sizeof(has_animations_));
 
     // --- マテリアル ---
     const std::uint32_t material_count = static_cast<std::uint32_t>(materials_.size());
@@ -168,7 +159,7 @@ bool gltf_model::SaveMeshCache(const std::string& filename) const
     return static_cast<bool>(stream);
 }
 
-bool gltf_model::LoadMeshCache(ID3D11Device* device, const std::string& filename)
+bool gltf_model::LoadMeshCache(const std::string& filename)
 {
     const auto path = MeshCachePath(filename);
     if (path.empty() || !std::filesystem::exists(path)) return false;
@@ -180,6 +171,10 @@ bool gltf_model::LoadMeshCache(ID3D11Device* device, const std::string& filename
     stream.read(reinterpret_cast<char*>(&magic), sizeof(magic));
     stream.read(reinterpret_cast<char*>(&version), sizeof(version));
     if (!stream || magic != kMeshCacheMagic || version != kMeshCacheVersion) return false;
+
+    stream.read(reinterpret_cast<char*>(&has_skins_), sizeof(has_skins_));
+    stream.read(reinterpret_cast<char*>(&has_animations_), sizeof(has_animations_));
+    if (!stream) return false;
 
     // --- マテリアル ---
     std::uint32_t material_count = 0;
@@ -228,54 +223,12 @@ bool gltf_model::LoadMeshCache(ID3D11Device* device, const std::string& filename
 
     if (!ReadVector(stream, collision_triangles_, 1u << 24)) return false;
 
-    // --- GPUバッファを作る。プリミティブ単位で並列化できる ---
-    if (device == nullptr)
+    for (Primitive& primitive : primitives_)
     {
-        for (Primitive& primitive : primitives_)
-        {
-            primitive.index_count = static_cast<uint32_t>(primitive.source_indices.size());
-            primitive.vertex_count = static_cast<uint32_t>(primitive.source_vertices.size());
-        }
-        return true;
-    }
-
-    std::atomic<bool> failed{ false };
-    ReplayEngine::Assets::ParallelLoader::Run(primitives_.size(), [&](std::size_t i)
-    {
-        Primitive& primitive = primitives_[i];
-        D3D11_BUFFER_DESC desc{};
-        desc.Usage = D3D11_USAGE_DEFAULT;
-        desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-        desc.ByteWidth = static_cast<UINT>(primitive.source_vertices.size() * sizeof(Vertex));
-        D3D11_SUBRESOURCE_DATA initial{ primitive.source_vertices.data(), 0, 0 };
-        if (FAILED(device->CreateBuffer(&desc, &initial,
-            primitive.vertex_buffer.GetAddressOf()))) { failed.store(true); return; }
-
-        desc.BindFlags = D3D11_BIND_INDEX_BUFFER;
-        desc.ByteWidth = static_cast<UINT>(primitive.source_indices.size() * sizeof(uint32_t));
-        initial.pSysMem = primitive.source_indices.data();
-        if (FAILED(device->CreateBuffer(&desc, &initial,
-            primitive.index_buffer.GetAddressOf()))) { failed.store(true); return; }
-
         primitive.index_count = static_cast<uint32_t>(primitive.source_indices.size());
         primitive.vertex_count = static_cast<uint32_t>(primitive.source_vertices.size());
-    });
-
-    // LODキャッシュが既にあるならQEMを回さないので、読み込んだCPU側コピー
-    // (Sponzaで約250MB)はここで返してしまう。物理メモリの空きが少ない環境で
-    // 落ちる原因になっていた。
-    if (std::filesystem::exists(LodCachePath()))
-    {
-        for (Primitive& primitive : primitives_)
-        {
-            primitive.source_vertices.clear();
-            primitive.source_vertices.shrink_to_fit();
-            primitive.source_indices.clear();
-            primitive.source_indices.shrink_to_fit();
-        }
     }
-
-    return !failed.load();
+    return true;
 }
 
 
@@ -385,6 +338,11 @@ bool gltf_model::ExportStaticPrimitives(
     stream.read(reinterpret_cast<char*>(&magic), sizeof(magic));
     stream.read(reinterpret_cast<char*>(&version), sizeof(version));
     if (!stream || magic != kMeshCacheMagic || version != kMeshCacheVersion) return false;
+    bool cached_has_skins = false;
+    bool cached_has_animations = false;
+    stream.read(reinterpret_cast<char*>(&cached_has_skins), sizeof(cached_has_skins));
+    stream.read(reinterpret_cast<char*>(&cached_has_animations), sizeof(cached_has_animations));
+    if (!stream || cached_has_skins || cached_has_animations) return false;
 
     std::uint32_t material_count = 0;
     stream.read(reinterpret_cast<char*>(&material_count), sizeof(material_count));
@@ -427,69 +385,4 @@ bool gltf_model::ExportStaticPrimitives(
         if (!ReadVector(stream, primitive.source_indices, 1u << 26)) return false;
     }
     return append_exports(primitives, materials);
-}
-
-void gltf_model::LoadTexturesFromUris(ID3D11Device* device, const std::string& gltf_filename)
-{
-    if (!device) return;
-
-    // URIはglTFファイルからの相対パス。実体を絶対パスへ直してから読む。
-    const auto base_directory = std::filesystem::path(gltf_filename).parent_path();
-
-    // 同じURIが複数マテリアルから参照されるので、一度読んだものは共有する。
-    std::map<std::string, Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>> loaded;
-    std::vector<std::string> unique_uris;
-    const auto collect = [&](const std::string& uri)
-    {
-        if (uri.empty() || loaded.count(uri)) return;
-        loaded.emplace(uri, nullptr);
-        unique_uris.push_back(uri);
-    };
-    for (const Material& material : materials_)
-    {
-        collect(material.base_color_uri);
-        collect(material.normal_uri);
-        collect(material.orm_uri);
-    }
-
-    // load_texture_from_file は内部でミューテックス保護され、
-    // 同名の .dds があればそちらを優先する(BC圧縮版を置ける)。
-    std::vector<Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>> views(unique_uris.size());
-    // 2Kテクスチャは1枚でRGBA+ミップに約21MB使う。並列度を上げると
-    // ピークメモリが跳ねるため2本に留める。
-    const int workers = (std::min)(2, ReplayEngine::Assets::ParallelLoader::DefaultWorkerCount());
-    ReplayEngine::Assets::ParallelLoader::Run(unique_uris.size(), workers, [&](std::size_t i)
-    {
-        const std::filesystem::path uri_path(unique_uris[i]);
-        const auto full_path = (uri_path.is_absolute()
-            ? uri_path : base_directory / uri_path).lexically_normal();
-        std::error_code error;
-        if (!std::filesystem::exists(full_path, error)) return;
-
-        // .dds が無ければ初回だけBC圧縮版を作る。以降はデコード不要になり、
-        // VRAMもBC1で1/8、BC5で1/4に収まる。
-        auto dds_path = full_path;
-        dds_path.replace_extension(".dds");
-        if (!std::filesystem::exists(dds_path, error))
-        {
-            ReplayEngine::Assets::TextureCompressor::Compress(full_path);
-        }
-
-        // load_texture_from_file は同名の .dds があればそちらを優先する。
-        D3D11_TEXTURE2D_DESC description{};
-        load_texture_from_file(device, full_path.wstring().c_str(),
-            views[i].GetAddressOf(), &description);
-    });
-
-    for (size_t i = 0; i < unique_uris.size(); ++i) loaded[unique_uris[i]] = views[i];
-
-    for (Material& material : materials_)
-    {
-        if (!material.base_color_uri.empty())
-            material.base_color_texture = loaded[material.base_color_uri];
-        if (!material.normal_uri.empty())
-            material.normal_texture = loaded[material.normal_uri];
-        if (!material.orm_uri.empty())
-            material.occlusion_roughness_metalness_texture = loaded[material.orm_uri];
-    }
 }

@@ -1,5 +1,8 @@
 ﻿#include "D3D12ResourceStateTracker.h"
 
+#include <cstdio>
+#include <windows.h>
+
 namespace ReplayEngine::Rendering::DX12
 {
     bool D3D12ResourceStateTracker::Track(ID3D12Resource* resource,
@@ -41,7 +44,11 @@ namespace ReplayEngine::Rendering::DX12
     {
         if (command_list == nullptr || resource == nullptr) return false;
         auto found = states_.find(resource);
-        if (found == states_.end()) return false;
+        if (found == states_.end())
+        {
+            ReportValidation("DX12 state tracker: 未追跡ResourceへTransitionが要求されました");
+            return false;
+        }
         const D3D12_RESOURCE_STATES before = found->second;
         if (before == after) return true;
 
@@ -52,6 +59,8 @@ namespace ReplayEngine::Rendering::DX12
         barrier.Transition.StateAfter = after;
         barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
         command_list->ResourceBarrier(1, &barrier);
+        ++barrier_count_;
+        if (barrier_callback_) barrier_callback_(resource, before, after);
         found->second = after;
         return true;
     }
@@ -64,6 +73,31 @@ namespace ReplayEngine::Rendering::DX12
         barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
         barrier.UAV.pResource = resource;
         command_list->ResourceBarrier(1, &barrier);
+        ++barrier_count_;
+        if (barrier_callback_) barrier_callback_(resource,
+            D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
         return true;
+    }
+
+    bool D3D12ResourceStateTracker::RequireState(ID3D12Resource* resource,
+        D3D12_RESOURCE_STATES expected, const char* usage) noexcept
+    {
+        if (resource == nullptr) return false;
+        const auto found = states_.find(resource);
+        if (found != states_.end() && found->second == expected) return true;
+        std::string message = "DX12 state tracker: ";
+        message += usage != nullptr ? usage : "resource use";
+        message += " の状態が記録と一致しません";
+        ReportValidation(message);
+        return false;
+    }
+
+    void D3D12ResourceStateTracker::ReportValidation(const std::string& message) noexcept
+    {
+        ++validation_error_count_;
+        if (validation_callback_) validation_callback_(message);
+        std::fprintf(stderr, "%s\n", message.c_str());
+        OutputDebugStringA((message + "\n").c_str());
+        if (break_on_error_ && ::IsDebuggerPresent()) __debugbreak();
     }
 }

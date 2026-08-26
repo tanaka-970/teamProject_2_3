@@ -165,6 +165,7 @@ void framework::draw_editor()
         draw_ui_focus_style_manager();
         if (active_editor_view == editor_view::scene) handle_viewport_selection();
         draw_collider_debug_overlay();
+        draw_dx12_debug_panel();
         return;
     }
 
@@ -183,6 +184,7 @@ void framework::draw_editor()
         draw_ui_focus_style_manager();
         if (active_editor_view == editor_view::scene) handle_viewport_selection();
         draw_collider_debug_overlay();
+        draw_dx12_debug_panel();
         return;
     }
 
@@ -205,6 +207,7 @@ void framework::draw_editor()
         object_validation_panel.Draw(object_editor_context, &asset_database,
             &object_collision_world, object_render_items.Size());
     draw_collision_diagnostics_panel();
+    draw_dx12_debug_panel();
     draw_search_results();
     if (active_editor_view == editor_view::scene) handle_viewport_selection();
 

@@ -1,7 +1,6 @@
 ﻿#pragma once
 
 #include "framework.h"
-#include "texture.h"
 #include "../../RePlayEngine/Assets/AssetCache.h"
 #include "../../RePlayEngine/Assets/AssetDatabase.h"
 #include "../../RePlayEngine/Localization/LocalizationTable.h"
@@ -33,7 +32,7 @@ namespace framework_project_browser::Detail
         {
             ".git", ".vs", ".vscode", ".github",
             "obj", "bin", "x64", "x86", "ipch",
-            "DirectXTK-main", "imgui", "cereal-master", "tinygltf-release",
+            "imgui", "cereal-master", "tinygltf-release",
             "Saved", "Tools", "node_modules",
         };
         for (const char* entry : hidden)

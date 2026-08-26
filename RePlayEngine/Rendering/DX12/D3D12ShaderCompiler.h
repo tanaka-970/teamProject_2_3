@@ -6,6 +6,7 @@
 #include <dxcapi.h>
 
 #include <cstdint>
+#include <atomic>
 #include <filesystem>
 #include <string>
 #include <string_view>
@@ -35,6 +36,15 @@ namespace ReplayEngine::Rendering::DX12
         std::vector<std::filesystem::path> include_directories;
         std::vector<D3D12ShaderDefine> defines;
     };
+
+    struct D3D12ShaderCompilerStats final
+    {
+        std::uint64_t compile_count = 0;
+        std::uint64_t failure_count = 0;
+        double total_milliseconds = 0.0;
+    };
+
+    D3D12ShaderCompilerStats GetD3D12ShaderCompilerStats() noexcept;
 
     class D3D12ShaderCompiler final
     {

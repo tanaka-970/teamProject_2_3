@@ -2,8 +2,7 @@
 
 void framework::update(float elapsed_time)
 {
-    ReplayEngine::Rendering::Stats().BeginFrame(
-        dx12_framework_active ? nullptr : immediate_context.Get());
+    ReplayEngine::Rendering::Stats().BeginFrame();
     REPLAY_PROFILE_SCOPE("Update");
     // 基準画像を撮る間はワールドを止める。
     //

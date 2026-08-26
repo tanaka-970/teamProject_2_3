@@ -434,6 +434,7 @@ private:
     void draw_screen_space_settings();
     // ポリゴン数・ドローコール数などの描画統計オーバーレイ。
     void draw_render_stats_overlay();
+    void draw_dx12_debug_panel();
     // draw_character_material_controls は draw_shader_inspector へ統合された。
     bool browse_model_asset();
     bool load_model_asset_async(const std::wstring& filename);

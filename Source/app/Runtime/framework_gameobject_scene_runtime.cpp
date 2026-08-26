@@ -341,11 +341,7 @@ void framework::sync_object_lights()
     // Point / Spot の影スライスは毎フレーム割り当て直す。
     local_shadow_requests.clear();
     local_shadows.BeginFrame();
-    // 影付きライトが現れたときだけ影マップを確保する。
-    const bool local_shadows_available = enable_dynamic_shadows &&
-        local_shadows.enabled &&
-        (dx12_framework_active ||
-            local_shadows.EnsureAtlas(device.Get(), local_shadows.resolution_setting));
+    const bool local_shadows_available = enable_dynamic_shadows && local_shadows.enabled;
 
     for (std::size_t index = 0; index < scene.GameObjectCount(); ++index)
     {

@@ -1,4 +1,5 @@
 ﻿#include "D3D12DeviceContext.h"
+#include "D3D12ObjectName.h"
 
 #include <algorithm>
 #include <array>
@@ -32,7 +33,10 @@ namespace ReplayEngine::Rendering::DX12
 
         void SceneDebugMessage(const char* message) noexcept
         {
-            if (message != nullptr) OutputDebugStringA(message);
+            if (message == nullptr) return;
+            OutputDebugStringA(message);
+            // GUI subsystem では OutputDebugString が読めないので stderr にも出す。
+            std::fprintf(stderr, "%s", message);
         }
 
         struct Scene3DObjectConstants final
@@ -111,6 +115,21 @@ namespace ReplayEngine::Rendering::DX12
             DirectX::XMFLOAT4X4 view_projection{};
         };
 
+        struct Scene3DShadowCoverageConstants final
+        {
+            DirectX::XMFLOAT4X4 view_projection{};
+            DirectX::XMFLOAT4 viewport{};
+            DirectX::XMFLOAT4 rect{};
+            DirectX::XMFLOAT4 control{};
+            DirectX::XMFLOAT4 params0[4]{};
+            DirectX::XMFLOAT4 params1[4]{};
+            DirectX::XMFLOAT4 params2[4]{};
+            DirectX::XMFLOAT4 params3[4]{};
+            DirectX::XMFLOAT4 meta[4]{};
+            DirectX::XMFLOAT4 region_params[4]{};
+            DirectX::XMFLOAT4 region_settings[4]{};
+        };
+
         struct Scene3DPostProcessConstants final
         {
             float exposure = 0.619f;
@@ -133,6 +152,7 @@ namespace ReplayEngine::Rendering::DX12
         static_assert(sizeof(Scene3DLightingConstants) % 16 == 0);
         static_assert(sizeof(Scene3DShadowObjectConstants) % 16 == 0);
         static_assert(sizeof(Scene3DShadowPassConstants) % 16 == 0);
+        static_assert(sizeof(Scene3DShadowCoverageConstants) % 16 == 0);
         static_assert(sizeof(Scene3DPostProcessConstants) % 16 == 0);
 
 
@@ -197,15 +217,17 @@ namespace ReplayEngine::Rendering::DX12
         }
 
         bool SerializeRoot(ID3D12Device* device, const D3D12_ROOT_SIGNATURE_DESC& desc,
-            Microsoft::WRL::ComPtr<ID3D12RootSignature>& root) noexcept
+            Microsoft::WRL::ComPtr<ID3D12RootSignature>& root, const wchar_t* name) noexcept
         {
             Microsoft::WRL::ComPtr<ID3DBlob> blob;
             Microsoft::WRL::ComPtr<ID3DBlob> errors;
             if (FAILED(D3D12SerializeRootSignature(&desc, D3D_ROOT_SIGNATURE_VERSION_1,
                 &blob, &errors)))
                 return false;
-            return SUCCEEDED(device->CreateRootSignature(0, blob->GetBufferPointer(),
-                blob->GetBufferSize(), IID_PPV_ARGS(&root)));
+            if (FAILED(device->CreateRootSignature(0, blob->GetBufferPointer(),
+                blob->GetBufferSize(), IID_PPV_ARGS(&root)))) return false;
+            SetD3D12ObjectName(root.Get(), name != nullptr ? name : L"RootSignature", L"Main");
+            return true;
         }
     }
 
@@ -368,7 +390,7 @@ namespace ReplayEngine::Rendering::DX12
         geometry_root.NumStaticSamplers = static_cast<UINT>(std::size(samplers));
         geometry_root.pStaticSamplers = samplers;
         geometry_root.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
-        if (!SerializeRoot(device_.Get(), geometry_root, scene3d_geometry_root_signature_))
+        if (!SerializeRoot(device_.Get(), geometry_root, scene3d_geometry_root_signature_, L"Scene3D.Geometry.RootSignature"))
             return fail("Scene3D.GeometryRootSignature");
 
         D3D12_DESCRIPTOR_RANGE lighting_ranges[8]{};
@@ -397,14 +419,18 @@ namespace ReplayEngine::Rendering::DX12
         lighting_root.NumStaticSamplers = static_cast<UINT>(std::size(lighting_samplers));
         lighting_root.pStaticSamplers = lighting_samplers;
         lighting_root.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
-        if (!SerializeRoot(device_.Get(), lighting_root, scene3d_lighting_root_signature_))
+        if (!SerializeRoot(device_.Get(), lighting_root, scene3d_lighting_root_signature_, L"Scene3D.Lighting.RootSignature"))
             return fail("Scene3D.LightingRootSignature");
 
         D3D12_DESCRIPTOR_RANGE shadow_texture_range{};
         shadow_texture_range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
         shadow_texture_range.NumDescriptors = 1;
         shadow_texture_range.BaseShaderRegister = 0;
-        D3D12_ROOT_PARAMETER shadow_parameters[4]{};
+        D3D12_DESCRIPTOR_RANGE shadow_coverage_texture_range{};
+        shadow_coverage_texture_range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+        shadow_coverage_texture_range.NumDescriptors = 1;
+        shadow_coverage_texture_range.BaseShaderRegister = 46;
+        D3D12_ROOT_PARAMETER shadow_parameters[6]{};
         shadow_parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
         shadow_parameters[0].Descriptor.ShaderRegister = 0;
         shadow_parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
@@ -418,13 +444,20 @@ namespace ReplayEngine::Rendering::DX12
         shadow_parameters[3].DescriptorTable.NumDescriptorRanges = 1;
         shadow_parameters[3].DescriptorTable.pDescriptorRanges = &shadow_texture_range;
         shadow_parameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+        shadow_parameters[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+        shadow_parameters[4].Descriptor.ShaderRegister = 8;
+        shadow_parameters[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+        shadow_parameters[5].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+        shadow_parameters[5].DescriptorTable.NumDescriptorRanges = 1;
+        shadow_parameters[5].DescriptorTable.pDescriptorRanges = &shadow_coverage_texture_range;
+        shadow_parameters[5].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
         D3D12_ROOT_SIGNATURE_DESC shadow_root{};
         shadow_root.NumParameters = static_cast<UINT>(std::size(shadow_parameters));
         shadow_root.pParameters = shadow_parameters;
         shadow_root.NumStaticSamplers = 1;
         shadow_root.pStaticSamplers = &samplers[0];
         shadow_root.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
-        if (!SerializeRoot(device_.Get(), shadow_root, scene3d_shadow_root_signature_))
+        if (!SerializeRoot(device_.Get(), shadow_root, scene3d_shadow_root_signature_, L"Scene3D.Shadow.RootSignature"))
             return fail("Scene3D.ShadowRootSignature");
 
         D3D12_INPUT_ELEMENT_DESC static_input[] =
@@ -482,6 +515,31 @@ namespace ReplayEngine::Rendering::DX12
         };
 
         HRESULT pipeline_hr = S_OK;
+        const auto create_model_effect_pso = [this, &pipeline_hr](bool skinned,
+            bool overlay, bool double_sided, const D3D12_INPUT_ELEMENT_DESC* input,
+            UINT input_count, ID3D12PipelineState** output) -> bool
+        {
+            D3D12_GRAPHICS_PIPELINE_STATE_DESC desc{};
+            desc.pRootSignature = scene3d_geometry_root_signature_.Get();
+            const auto& vs = skinned ? scene3d_skinned_vs_ : scene3d_static_vs_;
+            desc.VS = { vs.data(), vs.size() };
+            desc.PS = { scene3d_forward_ps_.data(), scene3d_forward_ps_.size() };
+            desc.BlendState = MakeBlend(true);
+            desc.SampleMask = UINT_MAX;
+            desc.RasterizerState = MakeRaster(double_sided);
+            desc.DepthStencilState = MakeDepth(!overlay);
+            if (overlay) desc.DepthStencilState.DepthEnable = FALSE;
+            desc.InputLayout = { input, input_count };
+            desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+            desc.NumRenderTargets = 1;
+            desc.RTVFormats[0] = kScene3DSceneTargetFormat;
+            desc.DSVFormat = kScene3DDepthDsvFormat;
+            desc.SampleDesc.Count = 1;
+            pipeline_hr = device_->CreateGraphicsPipelineState(&desc,
+                IID_PPV_ARGS(output));
+            return SUCCEEDED(pipeline_hr);
+        };
+
         const auto create_depth_pso = [this, &pipeline_hr](bool skinned, bool alpha_clip,
             bool double_sided, const D3D12_INPUT_ELEMENT_DESC* input, UINT input_count,
             ID3D12PipelineState** output) -> bool
@@ -556,6 +614,18 @@ namespace ReplayEngine::Rendering::DX12
                 static_cast<UINT>(std::size(skinned_input)),
                 scene3d_skinned_forward_blend_pipelines_[sided].ReleaseAndGetAddressOf()))
                 return fail("Scene3D.PSO.SkinnedForward");
+            for (UINT depth_mode = 0; depth_mode < 2; ++depth_mode)
+            {
+                const UINT model_index = sided * 2u + depth_mode;
+                if (!create_model_effect_pso(false, depth_mode != 0, sided != 0,
+                    static_input, static_cast<UINT>(std::size(static_input)),
+                    scene3d_static_model_effect_pipelines_[model_index].ReleaseAndGetAddressOf()))
+                    return fail("Scene3D.PSO.StaticModelEffect");
+                if (!create_model_effect_pso(true, depth_mode != 0, sided != 0,
+                    skinned_input, static_cast<UINT>(std::size(skinned_input)),
+                    scene3d_skinned_model_effect_pipelines_[model_index].ReleaseAndGetAddressOf()))
+                    return fail("Scene3D.PSO.SkinnedModelEffect");
+            }
             for (UINT alpha_clip = 0; alpha_clip < 2; ++alpha_clip)
             {
                 const UINT depth_index = sided * 2 + alpha_clip;
@@ -598,6 +668,37 @@ namespace ReplayEngine::Rendering::DX12
             }
         }
 
+        for (UINT index = 0; index < std::size(scene3d_static_gbuffer_pipelines_); ++index)
+            SetD3D12ObjectName(scene3d_static_gbuffer_pipelines_[index].Get(),
+                L"Scene3D.PSO.StaticGBuffer", L"Variant", index);
+        for (UINT index = 0; index < std::size(scene3d_skinned_gbuffer_pipelines_); ++index)
+            SetD3D12ObjectName(scene3d_skinned_gbuffer_pipelines_[index].Get(),
+                L"Scene3D.PSO.SkinnedGBuffer", L"Variant", index);
+        for (UINT index = 0; index < std::size(scene3d_static_forward_blend_pipelines_); ++index)
+            SetD3D12ObjectName(scene3d_static_forward_blend_pipelines_[index].Get(),
+                L"Scene3D.PSO.StaticForward", L"Variant", index);
+        for (UINT index = 0; index < std::size(scene3d_skinned_forward_blend_pipelines_); ++index)
+            SetD3D12ObjectName(scene3d_skinned_forward_blend_pipelines_[index].Get(),
+                L"Scene3D.PSO.SkinnedForward", L"Variant", index);
+        for (UINT index = 0; index < std::size(scene3d_static_model_effect_pipelines_); ++index)
+            SetD3D12ObjectName(scene3d_static_model_effect_pipelines_[index].Get(),
+                L"SceneEffect.PSO.StaticModel", L"Variant", index);
+        for (UINT index = 0; index < std::size(scene3d_skinned_model_effect_pipelines_); ++index)
+            SetD3D12ObjectName(scene3d_skinned_model_effect_pipelines_[index].Get(),
+                L"SceneEffect.PSO.SkinnedModel", L"Variant", index);
+        for (UINT index = 0; index < std::size(scene3d_static_depth_pipelines_); ++index)
+            SetD3D12ObjectName(scene3d_static_depth_pipelines_[index].Get(),
+                L"Scene3D.PSO.StaticDepth", L"Variant", index);
+        for (UINT index = 0; index < std::size(scene3d_skinned_depth_pipelines_); ++index)
+            SetD3D12ObjectName(scene3d_skinned_depth_pipelines_[index].Get(),
+                L"Scene3D.PSO.SkinnedDepth", L"Variant", index);
+        for (UINT index = 0; index < std::size(scene3d_static_shadow_pipelines_); ++index)
+            SetD3D12ObjectName(scene3d_static_shadow_pipelines_[index].Get(),
+                L"Scene3D.PSO.StaticShadow", L"Variant", index);
+        for (UINT index = 0; index < std::size(scene3d_skinned_shadow_pipelines_); ++index)
+            SetD3D12ObjectName(scene3d_skinned_shadow_pipelines_[index].Get(),
+                L"Scene3D.PSO.SkinnedShadow", L"Variant", index);
+
         D3D12_GRAPHICS_PIPELINE_STATE_DESC lighting{};
         lighting.pRootSignature = scene3d_lighting_root_signature_.Get();
         lighting.VS = { scene3d_fullscreen_vs_.data(), scene3d_fullscreen_vs_.size() };
@@ -614,6 +715,7 @@ namespace ReplayEngine::Rendering::DX12
         if (FAILED(device_->CreateGraphicsPipelineState(&lighting,
             IID_PPV_ARGS(&scene3d_lighting_pipeline_))))
             return fail("Scene3D.PSO.Lighting");
+        SetD3D12ObjectName(scene3d_lighting_pipeline_.Get(), L"Scene3D.PSO", L"Lighting");
 
         D3D12_DESCRIPTOR_RANGE postprocess_ranges[6]{};
         for (UINT index = 0; index < 6; ++index)
@@ -657,7 +759,7 @@ namespace ReplayEngine::Rendering::DX12
         postprocess_root.pStaticSamplers = postprocess_samplers;
         postprocess_root.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
         if (!SerializeRoot(device_.Get(), postprocess_root,
-            scene3d_postprocess_root_signature_))
+            scene3d_postprocess_root_signature_, L"Scene3D.PostProcess.RootSignature"))
             return fail("Scene3D.PostProcessRootSignature");
 
         D3D12_GRAPHICS_PIPELINE_STATE_DESC postprocess{};
@@ -676,6 +778,7 @@ namespace ReplayEngine::Rendering::DX12
         if (FAILED(device_->CreateGraphicsPipelineState(&postprocess,
             IID_PPV_ARGS(&scene3d_postprocess_pipeline_))))
             return fail("Scene3D.PSO.PostProcess");
+        SetD3D12ObjectName(scene3d_postprocess_pipeline_.Get(), L"Scene3D.PSO", L"PostProcess");
         return true;
     }
 
@@ -731,7 +834,7 @@ namespace ReplayEngine::Rendering::DX12
         root_desc.NumStaticSamplers = 1;
         root_desc.pStaticSamplers = &sampler;
         root_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
-        if (!SerializeRoot(device_.Get(), root_desc, imgui_root_signature_)) return false;
+        if (!SerializeRoot(device_.Get(), root_desc, imgui_root_signature_, L"ImGui.RootSignature")) return false;
 
         const D3D12_INPUT_ELEMENT_DESC input_layout[] =
         {
@@ -773,6 +876,7 @@ namespace ReplayEngine::Rendering::DX12
         if (FAILED(device_->CreateGraphicsPipelineState(&pipeline,
             IID_PPV_ARGS(&imgui_pipeline_))))
             return false;
+        SetD3D12ObjectName(imgui_pipeline_.Get(), L"ImGui.PSO", L"Main");
         return true;
     }
 
@@ -801,6 +905,7 @@ namespace ReplayEngine::Rendering::DX12
         if (FAILED(device_->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &texture,
             D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&imgui_font_texture_))))
             return false;
+        SetD3D12ObjectName(imgui_font_texture_.Get(), L"ImGui.Font", L"Atlas");
         if (!resource_descriptor_allocator_.Allocate(1, imgui_font_srv_) ||
             !upload_context_.UploadTexture2D(imgui_font_texture_.Get(), pixels,
                 static_cast<std::uint32_t>(texture_width),
@@ -833,10 +938,15 @@ namespace ReplayEngine::Rendering::DX12
     bool D3D12DeviceContext::DrawImGui(ImDrawData* draw_data) noexcept
     {
         BeginGpuPass(D3D12GpuPass::ImGui);
-        if (!imgui_ready_ || draw_data == nullptr || !frame_open_) return true;
+        const auto finish = [this](bool result) noexcept
+        {
+            EndGpuPass(D3D12GpuPass::ImGui);
+            return result;
+        };
+        if (!imgui_ready_ || draw_data == nullptr || !frame_open_) return finish(true);
         if (draw_data->DisplaySize.x <= 0.0f || draw_data->DisplaySize.y <= 0.0f ||
             draw_data->TotalVtxCount <= 0 || draw_data->TotalIdxCount <= 0)
-            return true;
+            return finish(true);
 
         D3D12LinearUploadAllocator& allocator = frame_resources_[frame_index_].upload_allocator;
         D3D12UploadAllocation vertex_upload{};
@@ -853,7 +963,7 @@ namespace ReplayEngine::Rendering::DX12
             sizeof(ImDrawIdx);
         if (!allocate(vertex_size, 16, vertex_upload) ||
             !allocate(index_size, 4, index_upload))
-            return false;
+            return finish(false);
 
         auto* vertex_destination = static_cast<std::uint8_t*>(vertex_upload.cpu);
         auto* index_destination = static_cast<std::uint8_t*>(index_upload.cpu);
@@ -887,7 +997,7 @@ namespace ReplayEngine::Rendering::DX12
         constants.projection[3][3] = 1.0f;
         if (!allocate(sizeof(constants), D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT,
             constant_upload))
-            return false;
+            return finish(false);
         std::memcpy(constant_upload.cpu, &constants, sizeof(constants));
 
         ID3D12DescriptorHeap* heaps[] = { resource_descriptor_allocator_.Heap() };
@@ -980,8 +1090,7 @@ namespace ReplayEngine::Rendering::DX12
             global_vertex_offset += list->VtxBuffer.Size;
             global_index_offset += list->IdxBuffer.Size;
         }
-        EndGpuPass(D3D12GpuPass::ImGui);
-        return true;
+        return finish(true);
     }
 
     void* D3D12DeviceContext::ImGuiTextureForPath(
@@ -1108,7 +1217,8 @@ namespace ReplayEngine::Rendering::DX12
         ReleaseScene3DShadowTargets();
 
         const auto create_target = [this](Scene3DShadowTarget& target,
-            std::uint32_t resolution, std::uint32_t array_size) noexcept -> bool
+            std::uint32_t resolution, std::uint32_t array_size,
+            const wchar_t* name) noexcept -> bool
         {
             D3D12_HEAP_PROPERTIES heap{};
             heap.Type = D3D12_HEAP_TYPE_DEFAULT;
@@ -1130,6 +1240,7 @@ namespace ReplayEngine::Rendering::DX12
                 &desc, D3D12_RESOURCE_STATE_DEPTH_WRITE, &clear,
                 IID_PPV_ARGS(&target.resource))))
                 return false;
+            SetD3D12ObjectName(target.resource.Get(), name != nullptr ? name : L"Scene3D.Shadow", L"DepthArray");
             if (!dsv_allocator_.Allocate(array_size, target.dsv) ||
                 !resource_descriptor_allocator_.Allocate(1, target.srv))
                 return false;
@@ -1162,13 +1273,14 @@ namespace ReplayEngine::Rendering::DX12
 
         if (need_directional && !create_target(scene3d_directional_shadow_,
             submission.directional_shadow.resolution,
-            D3D12DirectionalShadowSubmission::CascadeCount))
+            D3D12DirectionalShadowSubmission::CascadeCount, L"Scene3D.ShadowDirectional"))
         {
             ReleaseScene3DShadowTargets();
             return false;
         }
         if (need_local && !create_target(scene3d_local_shadow_,
-            submission.local_shadows.resolution, D3D12LocalShadowSubmission::SliceCount))
+            submission.local_shadows.resolution, D3D12LocalShadowSubmission::SliceCount,
+            L"Scene3D.ShadowLocal"))
         {
             ReleaseScene3DShadowTargets();
             return false;
@@ -1189,6 +1301,8 @@ namespace ReplayEngine::Rendering::DX12
         for (auto& pso : scene3d_skinned_depth_pipelines_) pso.Reset();
         for (auto& pso : scene3d_static_forward_blend_pipelines_) pso.Reset();
         for (auto& pso : scene3d_skinned_forward_blend_pipelines_) pso.Reset();
+        for (auto& pso : scene3d_static_model_effect_pipelines_) pso.Reset();
+        for (auto& pso : scene3d_skinned_model_effect_pipelines_) pso.Reset();
         for (auto& pso : scene3d_static_shadow_pipelines_) pso.Reset();
         for (auto& pso : scene3d_skinned_shadow_pipelines_) pso.Reset();
         scene3d_lighting_pipeline_.Reset();
@@ -1252,6 +1366,7 @@ namespace ReplayEngine::Rendering::DX12
                 ReleaseScene3DRenderTargets();
                 return false;
             }
+            SetD3D12ObjectName(target.resource.Get(), L"Scene3D.GBuffer", L"MRT", i);
             if (!rtv_allocator_.Allocate(1, target.rtv) ||
                 !resource_descriptor_allocator_.Allocate(1, target.srv))
             {
@@ -1285,6 +1400,7 @@ namespace ReplayEngine::Rendering::DX12
             ReleaseScene3DRenderTargets();
             return false;
         }
+        SetD3D12ObjectName(scene3d_history_.resource.Get(), L"Scene3D.History", L"HDR");
         D3D12_SHADER_RESOURCE_VIEW_DESC history_srv{};
         history_srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         history_srv.Format = kScene3DSceneTargetFormat;
@@ -1308,6 +1424,7 @@ namespace ReplayEngine::Rendering::DX12
             ReleaseScene3DRenderTargets();
             return false;
         }
+        SetD3D12ObjectName(scene3d_depth_.resource.Get(), L"Scene3D.Depth", L"Main");
         if (!dsv_allocator_.Allocate(1, scene3d_depth_.dsv) ||
             !resource_descriptor_allocator_.Allocate(1, scene3d_depth_.srv))
         {
@@ -1348,6 +1465,7 @@ namespace ReplayEngine::Rendering::DX12
         if (!mesh->Upload(device_.Get(), upload_context_, source.vertices.data(), vertex_bytes,
             sizeof(D3D12SkinnedVertex), source.indices.data(), index_bytes, DXGI_FORMAT_R32_UINT))
             return false;
+        mesh->SetDebugName(source.key);
         skinned_mesh_cache_.emplace(source.key, std::move(mesh));
         return true;
     }
@@ -1355,18 +1473,33 @@ namespace ReplayEngine::Rendering::DX12
     bool D3D12DeviceContext::DrawScene3D(
         const D3D12StaticSceneSubmission& submission) noexcept
     {
-        if (!frame_open_ || scene3d_geometry_root_signature_ == nullptr ||
+        last_model_effect_stack_count_ = 0;
+        last_screen_effect_stack_count_ = 0;
+        last_shadow_coverage_draw_count_ = 0;
+        // どの前提で落ちたかを stderr から特定できるようにする。
+        const auto scene3d_fail = [](const char* step) noexcept
+        {
+            char message[128]{};
+            std::snprintf(message, sizeof(message),
+                "[DX12] DrawScene3D aborted at %s\n", step);
+            SceneDebugMessage(message);
+            return false;
+        };
+        if (!frame_open_) return scene3d_fail("frame-not-open");
+        if (scene3d_geometry_root_signature_ == nullptr ||
             scene3d_lighting_root_signature_ == nullptr ||
             scene3d_shadow_root_signature_ == nullptr || scene3d_lighting_pipeline_ == nullptr ||
-            scene3d_postprocess_root_signature_ == nullptr || scene3d_postprocess_pipeline_ == nullptr ||
-            !scene3d_null_directional_shadow_srv_.IsValid() ||
+            scene3d_postprocess_root_signature_ == nullptr || scene3d_postprocess_pipeline_ == nullptr)
+            return scene3d_fail("root-signature-or-pipeline");
+        if (!scene3d_null_directional_shadow_srv_.IsValid() ||
             !scene3d_null_local_shadow_srv_.IsValid())
-            return false;
-        if (!EnsureScene3DRenderTargets() || !EnsureScene3DShadowTargets(submission)) return false;
+            return scene3d_fail("null-shadow-srv");
+        if (!EnsureScene3DRenderTargets()) return scene3d_fail("EnsureScene3DRenderTargets");
+        if (!EnsureScene3DShadowTargets(submission)) return scene3d_fail("EnsureScene3DShadowTargets");
 
         for (const D3D12StaticShaderSource& source : submission.shader_sources)
             EnsureStaticShader(source);
-        if (!upload_context_.BeginBatch()) return false;
+        if (!upload_context_.BeginBatch()) return scene3d_fail("upload BeginBatch");
         bool upload_ok = true;
         for (const D3D12StaticMeshSource& source : submission.mesh_sources)
         {
@@ -1396,6 +1529,16 @@ namespace ReplayEngine::Rendering::DX12
                     upload_ok = false;
             }
         }
+        for (const D3D12StaticTextureSource& source : scene_effect_submission_.texture_sources)
+        {
+            if (!source.key.empty() && texture_cache_.find(source.key) == texture_cache_.end() &&
+                static_texture_failures_.find(source.key) == static_texture_failures_.end())
+            {
+                if (!EnsureStaticTexture(source) &&
+                    static_texture_failures_.find(source.key) == static_texture_failures_.end())
+                    upload_ok = false;
+            }
+        }
 #ifdef USE_IMGUI
         for (const auto& request_entry : imgui_texture_requests_)
         {
@@ -1412,9 +1555,10 @@ namespace ReplayEngine::Rendering::DX12
         }
 #endif
         const bool batch_ok = upload_context_.EndBatch();
-        if (!upload_ok || !batch_ok) return false;
+        if (!upload_ok) return scene3d_fail("mesh/texture/shader upload");
+        if (!batch_ok) return scene3d_fail("upload EndBatch");
         const auto white = texture_cache_.find("__dx12_white");
-        if (white == texture_cache_.end()) return false;
+        if (white == texture_cache_.end()) return scene3d_fail("white texture missing");
 
         D3D12LinearUploadAllocator& allocator = frame_resources_[frame_index_].upload_allocator;
         const auto allocate_bytes = [&allocator](const void* data, std::size_t size,
@@ -1438,13 +1582,13 @@ namespace ReplayEngine::Rendering::DX12
             1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
         const std::vector<DirectX::XMFLOAT4X4> identity_palette{ identity };
         D3D12_GPU_VIRTUAL_ADDRESS identity_bone_gpu = 0;
-        if (!allocate_bytes(&identity, sizeof(identity), 16, identity_bone_gpu)) return false;
+        if (!allocate_bytes(&identity, sizeof(identity), 16, identity_bone_gpu)) return scene3d_fail("identity bone upload");
 
         Scene3DSceneConstants scene{};
         scene.view_projection = current_frame_constants_.view_projection;
         scene.previous_view_projection = current_frame_constants_.prev_view_projection;
         D3D12_GPU_VIRTUAL_ADDRESS scene_gpu = 0;
-        if (!allocate_cb(&scene, sizeof(scene), scene_gpu)) return false;
+        if (!allocate_cb(&scene, sizeof(scene), scene_gpu)) return scene3d_fail("scene constants upload");
 
         const bool directional_shadow_available = submission.directional_shadow.enabled &&
             scene3d_directional_shadow_.resource != nullptr &&
@@ -1673,7 +1817,28 @@ namespace ReplayEngine::Rendering::DX12
             command_list_->SetGraphicsRootDescriptorTable(13, local_shadow_srv);            // t7
             return true;
         };
-        const auto bind_shadow_surface = [this, &allocate_cb, identity_bone_gpu, &texture_for](
+        const auto model_effect_for_owner = [this](std::uint64_t owner_id)
+            -> const D3D12ModelEffectStackSubmission*
+        {
+            for (const D3D12ModelEffectStackSubmission& stack : scene_effect_submission_.model_effects)
+                if (stack.owner_id == owner_id) return &stack;
+            return nullptr;
+        };
+        const auto is_shadow_coverage_kind = [](std::uint32_t kind) noexcept
+        {
+            return kind == 5u || kind == 6u || kind == 7u || kind == 71u;
+        };
+        const auto has_shadow_coverage = [&model_effect_for_owner, &is_shadow_coverage_kind](
+            std::uint64_t owner_id) noexcept
+        {
+            const D3D12ModelEffectStackSubmission* stack = model_effect_for_owner(owner_id);
+            if (stack == nullptr) return false;
+            for (const D3D12UIEffectCommand& effect : stack->effects)
+                if (is_shadow_coverage_kind(effect.kind)) return true;
+            return false;
+        };
+        const auto bind_shadow_surface = [this, &allocate_cb, identity_bone_gpu, &texture_for,
+            &model_effect_for_owner, &is_shadow_coverage_kind, &white](
             const D3D12StaticDrawItem& draw, D3D12_GPU_VIRTUAL_ADDRESS current_bones,
             float morph_weight) noexcept -> bool
         {
@@ -1690,11 +1855,92 @@ namespace ReplayEngine::Rendering::DX12
             command_list_->SetGraphicsRootShaderResourceView(2,
                 current_bones ? current_bones : identity_bone_gpu);
             command_list_->SetGraphicsRootDescriptorTable(3, texture_for(draw)->srv.gpu);
+
+            Scene3DShadowCoverageConstants coverage{};
+            coverage.view_projection = current_frame_constants_.view_projection;
+            coverage.viewport = { 0.0f, 0.0f, static_cast<float>(width_),
+                static_cast<float>(height_) };
+            coverage.rect = coverage.viewport;
+            const StaticTextureResource* coverage_mask = &white->second;
+            int effect_count = 0;
+            int mask_index = -1;
+            int region_count = 0;
+            if (const D3D12ModelEffectStackSubmission* stack = model_effect_for_owner(draw.owner_id))
+            {
+                if (stack->scissor_enabled)
+                {
+                    coverage.rect = { static_cast<float>(stack->scissor.left),
+                        static_cast<float>(stack->scissor.top),
+                        static_cast<float>((std::max)(stack->scissor.right - stack->scissor.left, 1L)),
+                        static_cast<float>((std::max)(stack->scissor.bottom - stack->scissor.top, 1L)) };
+                }
+                for (const D3D12UIEffectCommand& effect : stack->effects)
+                {
+                    if (!is_shadow_coverage_kind(effect.kind) || effect_count >= 4) continue;
+                    const int index = effect_count;
+                    coverage.params0[index] = { effect.radius, effect.intensity,
+                        effect.threshold, effect.amount };
+                    coverage.params1[index] = { effect.angle, effect.progress,
+                        effect.softness, effect.speed };
+                    coverage.params2[index] = { effect.direction.x, effect.direction.y,
+                        effect.seed, effect.time };
+                    bool mask_bound = false;
+                    if (!effect.auxiliary_texture_key.empty() && mask_index < 0)
+                    {
+                        const auto found = texture_cache_.find(effect.auxiliary_texture_key);
+                        if (found != texture_cache_.end())
+                        {
+                            coverage_mask = &found->second;
+                            mask_index = index;
+                            mask_bound = true;
+                        }
+                    }
+                    coverage.params3[index] = { static_cast<float>(effect.waveform),
+                        mask_bound ? 1.0f : 0.0f, 0.0f, 0.0f };
+                    if (effect.kind == 5u)
+                    {
+                        const float center_x = effect.direction.x > 0.0f && effect.direction.x < 1.0f
+                            ? effect.direction.x : 0.5f;
+                        const float center_y = effect.direction.y > 0.0f && effect.direction.y < 1.0f
+                            ? effect.direction.y : 0.5f;
+                        const float half_width = effect.seed > 0.0f && effect.seed < 1.0f
+                            ? effect.seed : 0.5f;
+                        const float half_height = effect.speed > 0.0f && effect.speed < 1.0f
+                            ? effect.speed : 0.5f;
+                        coverage.params2[index] = { center_x, center_y, half_width, half_height };
+                        coverage.params1[index].w = mask_bound ? 1.0f : 0.0f;
+                    }
+                    coverage.meta[index] = { static_cast<float>(effect.kind),
+                        effect.region_enabled ? 1.0f : 0.0f, 0.0f, 0.0f };
+                    if (effect.region_enabled && region_count == 0)
+                    {
+                        const int requested = (std::max)(1, (std::min)(4,
+                            static_cast<int>(effect.effect_region_count.x + 0.5f)));
+                        coverage.region_params[0] = effect.effect_region_params;
+                        coverage.region_settings[0] = effect.effect_region_settings;
+                        region_count = 1;
+                        for (int extra = 1; extra < requested; ++extra)
+                        {
+                            coverage.region_params[extra] = effect.effect_region_extra_params[extra - 1];
+                            coverage.region_settings[extra] = effect.effect_region_extra_settings[extra - 1];
+                            region_count = extra + 1;
+                        }
+                    }
+                    ++effect_count;
+                }
+            }
+            coverage.control = { static_cast<float>(effect_count), static_cast<float>(mask_index),
+                static_cast<float>(region_count), 0.0f };
+            if (effect_count > 0) ++last_shadow_coverage_draw_count_;
+            D3D12_GPU_VIRTUAL_ADDRESS coverage_gpu = 0;
+            if (!allocate_cb(&coverage, sizeof(coverage), coverage_gpu)) return false;
+            command_list_->SetGraphicsRootConstantBufferView(4, coverage_gpu);
+            command_list_->SetGraphicsRootDescriptorTable(5, coverage_mask->srv.gpu);
             return true;
         };
 
         const auto render_shadow_casters = [this, &submission, &prepared_skinned,
-            &bind_shadow_surface, &draw_mesh, identity_bone_gpu](
+            &bind_shadow_surface, &draw_mesh, &has_shadow_coverage, identity_bone_gpu](
             D3D12_GPU_VIRTUAL_ADDRESS pass_gpu) noexcept -> bool
         {
             command_list_->SetGraphicsRootSignature(scene3d_shadow_root_signature_.Get());
@@ -1704,7 +1950,8 @@ namespace ReplayEngine::Rendering::DX12
                 if (!draw.cast_shadow) continue;
                 const auto it = static_mesh_cache_.find(draw.mesh_key);
                 if (it == static_mesh_cache_.end() || !it->second || !it->second->IsValid()) continue;
-                const UINT alpha_clip = draw.alpha_mode == D3D12StaticAlphaMode::Opaque ? 0u : 1u;
+                const UINT alpha_clip = (draw.alpha_mode != D3D12StaticAlphaMode::Opaque ||
+                    has_shadow_coverage(draw.owner_id)) ? 1u : 0u;
                 const UINT index = (draw.double_sided ? 2u : 0u) + alpha_clip;
                 command_list_->SetPipelineState(scene3d_static_shadow_pipelines_[index].Get());
                 if (!bind_shadow_surface(draw, identity_bone_gpu, 0.0f)) return false;
@@ -1716,7 +1963,8 @@ namespace ReplayEngine::Rendering::DX12
                 if (!draw.surface.cast_shadow) continue;
                 const auto it = skinned_mesh_cache_.find(draw.surface.mesh_key);
                 if (it == skinned_mesh_cache_.end() || !it->second || !it->second->IsValid()) continue;
-                const UINT alpha_clip = draw.surface.alpha_mode == D3D12StaticAlphaMode::Opaque ? 0u : 1u;
+                const UINT alpha_clip = (draw.surface.alpha_mode != D3D12StaticAlphaMode::Opaque ||
+                    has_shadow_coverage(draw.surface.owner_id)) ? 1u : 0u;
                 const UINT index = (draw.surface.double_sided ? 2u : 0u) + alpha_clip;
                 command_list_->SetPipelineState(scene3d_skinned_shadow_pipelines_[index].Get());
                 if (!bind_shadow_surface(draw.surface, prepared_skinned[i].current_bones,
@@ -1814,6 +2062,7 @@ namespace ReplayEngine::Rendering::DX12
         command_list_->SetGraphicsRootSignature(scene3d_geometry_root_signature_.Get());
         for (const D3D12StaticDrawItem& draw : submission.draws)
         {
+            if (model_effect_for_owner(draw.owner_id) != nullptr) continue;
             if (draw.alpha_mode == D3D12StaticAlphaMode::Blend) continue;
             const auto it = static_mesh_cache_.find(draw.mesh_key);
             if (it == static_mesh_cache_.end() || !it->second || !it->second->IsValid()) continue;
@@ -1834,6 +2083,7 @@ namespace ReplayEngine::Rendering::DX12
         for (std::size_t i = 0; i < submission.skinned_draws.size(); ++i)
         {
             const D3D12SkinnedDrawItem& draw = submission.skinned_draws[i];
+            if (model_effect_for_owner(draw.surface.owner_id) != nullptr) continue;
             if (draw.surface.alpha_mode == D3D12StaticAlphaMode::Blend) continue;
             const auto it = skinned_mesh_cache_.find(draw.surface.mesh_key);
             if (it == skinned_mesh_cache_.end() || !it->second || !it->second->IsValid()) continue;
@@ -1864,6 +2114,7 @@ namespace ReplayEngine::Rendering::DX12
 
         for (const D3D12StaticDrawItem& draw : submission.draws)
         {
+            if (model_effect_for_owner(draw.owner_id) != nullptr) continue;
             if (draw.alpha_mode == D3D12StaticAlphaMode::Blend) continue;
             const auto it = static_mesh_cache_.find(draw.mesh_key);
             if (it == static_mesh_cache_.end() || !it->second || !it->second->IsValid()) continue;
@@ -1884,6 +2135,7 @@ namespace ReplayEngine::Rendering::DX12
         for (std::size_t i = 0; i < submission.skinned_draws.size(); ++i)
         {
             const D3D12SkinnedDrawItem& draw = submission.skinned_draws[i];
+            if (model_effect_for_owner(draw.surface.owner_id) != nullptr) continue;
             if (draw.surface.alpha_mode == D3D12StaticAlphaMode::Blend) continue;
             const auto it = skinned_mesh_cache_.find(draw.surface.mesh_key);
             if (it == skinned_mesh_cache_.end() || !it->second || !it->second->IsValid()) continue;
@@ -1946,6 +2198,7 @@ namespace ReplayEngine::Rendering::DX12
         command_list_->SetGraphicsRootSignature(scene3d_geometry_root_signature_.Get());
         for (const D3D12StaticDrawItem& draw : submission.draws)
         {
+            if (model_effect_for_owner(draw.owner_id) != nullptr) continue;
             if (draw.alpha_mode != D3D12StaticAlphaMode::Blend) continue;
             const auto it = static_mesh_cache_.find(draw.mesh_key);
             if (it == static_mesh_cache_.end() || !it->second || !it->second->IsValid()) continue;
@@ -1965,6 +2218,7 @@ namespace ReplayEngine::Rendering::DX12
         for (std::size_t i = 0; i < submission.skinned_draws.size(); ++i)
         {
             const D3D12SkinnedDrawItem& draw = submission.skinned_draws[i];
+            if (model_effect_for_owner(draw.surface.owner_id) != nullptr) continue;
             if (draw.surface.alpha_mode != D3D12StaticAlphaMode::Blend) continue;
             const auto it = skinned_mesh_cache_.find(draw.surface.mesh_key);
             if (it == skinned_mesh_cache_.end() || !it->second || !it->second->IsValid()) continue;
@@ -1978,6 +2232,181 @@ namespace ReplayEngine::Rendering::DX12
         }
 
         EndGpuPass(D3D12GpuPass::Forward);
+
+        const auto draw_scene_effect_isolated = [this, &submission, &prepared_skinned,
+            &bind_surface, &draw_mesh, identity_bone_gpu](
+            D3D12OffscreenTarget& target, std::uint64_t owner_id,
+            std::uint32_t rendering_layer_mask, bool match_owner, bool preserve_depth) noexcept
+        {
+            if (!resource_state_tracker_.Transition(command_list_.Get(), target.color.Get(),
+                D3D12_RESOURCE_STATE_RENDER_TARGET))
+                return false;
+            const float transparent[4]{ 0, 0, 0, 0 };
+            command_list_->ClearRenderTargetView(target.rtv.cpu, transparent, 0, nullptr);
+            if (preserve_depth && !resource_state_tracker_.Transition(command_list_.Get(),
+                scene3d_depth_.resource.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE))
+                return false;
+            const D3D12_VIEWPORT effect_viewport{ 0.0f, 0.0f,
+                static_cast<float>(width_), static_cast<float>(height_), 0.0f, 1.0f };
+            const D3D12_RECT effect_scissor{ 0, 0, static_cast<LONG>(width_),
+                static_cast<LONG>(height_) };
+            command_list_->RSSetViewports(1, &effect_viewport);
+            command_list_->RSSetScissorRects(1, &effect_scissor);
+            D3D12_CPU_DESCRIPTOR_HANDLE target_rtv = target.rtv.cpu;
+            command_list_->OMSetRenderTargets(1, &target_rtv, FALSE,
+                preserve_depth ? &scene3d_depth_.dsv.cpu : nullptr);
+            command_list_->SetGraphicsRootSignature(scene3d_geometry_root_signature_.Get());
+            for (const D3D12StaticDrawItem& draw : submission.draws)
+            {
+                const bool selected = match_owner ? draw.owner_id == owner_id
+                    : (draw.rendering_layer < 32u &&
+                        (rendering_layer_mask & (1u << draw.rendering_layer)) != 0u);
+                if (!selected) continue;
+                const auto mesh = static_mesh_cache_.find(draw.mesh_key);
+                if (mesh == static_mesh_cache_.end() || !mesh->second || !mesh->second->IsValid())
+                    continue;
+                DirectX::XMFLOAT4X4 previous_world = draw.world;
+                if (!draw.motion_key.empty())
+                {
+                    const auto history = scene3d_motion_history_.find(draw.motion_key);
+                    if (history != scene3d_motion_history_.end() && history->second.valid)
+                        previous_world = history->second.world;
+                }
+                const UINT depth_mode = preserve_depth ? 0u : 1u;
+                const UINT pipeline_index = (draw.double_sided ? 2u : 0u) + depth_mode;
+                command_list_->SetPipelineState(
+                    scene3d_static_model_effect_pipelines_[pipeline_index].Get());
+                if (!bind_surface(draw, previous_world, identity_bone_gpu, identity_bone_gpu, 0.0f))
+                    return false;
+                draw_mesh(*mesh->second, draw);
+            }
+            for (std::size_t index = 0; index < submission.skinned_draws.size(); ++index)
+            {
+                const D3D12SkinnedDrawItem& draw = submission.skinned_draws[index];
+                const bool selected = match_owner ? draw.surface.owner_id == owner_id
+                    : (draw.surface.rendering_layer < 32u &&
+                        (rendering_layer_mask & (1u << draw.surface.rendering_layer)) != 0u);
+                if (!selected) continue;
+                const auto mesh = skinned_mesh_cache_.find(draw.surface.mesh_key);
+                if (mesh == skinned_mesh_cache_.end() || !mesh->second || !mesh->second->IsValid())
+                    continue;
+                const UINT depth_mode = preserve_depth ? 0u : 1u;
+                const UINT pipeline_index = (draw.surface.double_sided ? 2u : 0u) + depth_mode;
+                command_list_->SetPipelineState(
+                    scene3d_skinned_model_effect_pipelines_[pipeline_index].Get());
+                if (!bind_surface(draw.surface, prepared_skinned[index].previous_world,
+                    prepared_skinned[index].current_bones, prepared_skinned[index].previous_bones,
+                    draw.morph_weight))
+                    return false;
+                draw_mesh(*mesh->second, draw.surface);
+            }
+            return resource_state_tracker_.Transition(command_list_.Get(), target.color.Get(),
+                D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        };
+
+        for (const D3D12ModelEffectStackSubmission& stack : scene_effect_submission_.model_effects)
+        {
+            if (stack.effects.empty()) continue;
+            ++last_model_effect_stack_count_;
+            BeginGpuPass(D3D12GpuPass::ModelEffect);
+            const bool preserve_depth = stack.depth_mode == 0;
+            if (!draw_scene_effect_isolated(scene_effect_targets_[2], stack.owner_id, 0u,
+                true, preserve_depth))
+                return false;
+            D3D12UIFrame effect_frame{};
+            effect_frame.target_width = width_;
+            effect_frame.target_height = height_;
+            effect_frame.effects = stack.effects;
+            effect_frame.requires_offscreen = true;
+            effect_frame.capture_backdrop = true;
+            effect_frame.preserve_output = true;
+            if (!DrawRuntimeUIToTarget(effect_frame, &scene_effect_targets_[2],
+                scene_effect_targets_))
+                return false;
+            const D3D12_RECT* effect_scissor = stack.scissor_enabled ? &stack.scissor : nullptr;
+            if (!CompositeSceneEffectTarget(scene_effect_targets_[2], scene_view_target_,
+                effect_scissor))
+                return false;
+            EndGpuPass(D3D12GpuPass::ModelEffect);
+        }
+
+        const auto apply_screen_effects = [this, &draw_scene_effect_isolated](
+            std::int32_t stage) noexcept
+        {
+            for (const D3D12ScreenEffectStackSubmission& stack : scene_effect_submission_.screen_effects)
+            {
+                if (stack.apply_stage != stage || stack.effects.empty()) continue;
+                ++last_screen_effect_stack_count_;
+                BeginGpuPass(D3D12GpuPass::ScreenEffect);
+                if (stack.target_mode == 2)
+                {
+                    if (!draw_scene_effect_isolated(scene_effect_targets_[2], 0,
+                        stack.target_rendering_layer_mask, false, true))
+                        return false;
+                    D3D12UIFrame layer_frame{};
+                    layer_frame.target_width = width_;
+                    layer_frame.target_height = height_;
+                    layer_frame.effects = stack.effects;
+                    layer_frame.requires_offscreen = true;
+                    layer_frame.capture_backdrop = true;
+                    layer_frame.preserve_output = true;
+                    if (!DrawRuntimeUIToTarget(layer_frame, &scene_effect_targets_[2],
+                        scene_effect_targets_))
+                        return false;
+                    if (stage == 1)
+                    {
+                        if (!CompositeSceneEffectTarget(scene_effect_targets_[2],
+                            scene_view_target_, nullptr))
+                            return false;
+                    }
+                    else
+                    {
+                        if (!BuildRenderingLayerLdrSource(scene_effect_targets_[2],
+                            ui_effect_targets_[2]))
+                            return false;
+                        D3D12UIFrame ldr_layer_frame{};
+                        ldr_layer_frame.target_width = width_;
+                        ldr_layer_frame.target_height = height_;
+                        ldr_layer_frame.effects = stack.effects;
+                        ldr_layer_frame.requires_offscreen = true;
+                        ldr_layer_frame.capture_backdrop = true;
+                        ldr_layer_frame.preserve_output = true;
+                        if (!DrawRuntimeUIToTarget(ldr_layer_frame, &ui_effect_targets_[2],
+                            ui_effect_targets_))
+                            return false;
+                        if (!CompositeUIEffectTargetToCurrent(ui_effect_targets_[2]))
+                            return false;
+                    }
+                }
+                else
+                {
+                    D3D12UIFrame effect_frame{};
+                    effect_frame.target_width = width_;
+                    effect_frame.target_height = height_;
+                    effect_frame.effects = stack.effects;
+                    effect_frame.requires_offscreen = true;
+                    effect_frame.capture_backdrop = true;
+                    effect_frame.preserve_output = true;
+                    effect_frame.background_only = stack.target_mode == 1;
+                    effect_frame.scene_effect_history = true;
+                    if (stage == 1)
+                    {
+                        if (!DrawRuntimeUIToTarget(effect_frame, &scene_view_target_,
+                            scene_effect_targets_))
+                            return false;
+                    }
+                    else
+                    {
+                        if (!DrawRuntimeUIToTarget(effect_frame, nullptr, ui_effect_targets_))
+                            return false;
+                    }
+                }
+                EndGpuPass(D3D12GpuPass::ScreenEffect);
+            }
+            return true;
+        };
+
+        if (!apply_screen_effects(1)) return false;
         BeginGpuPass(D3D12GpuPass::PostProcess);
         // 最終表示パス。HDR Scene TargetをExposure/Tone Mapping/Bloom/Vignette/FXAAで
         // SwapChainのLDRへ変換する。Scene TargetをSRVへ戻してから参照する。
@@ -2037,6 +2466,7 @@ namespace ReplayEngine::Rendering::DX12
         command_list_->CopyResource(scene3d_history_.resource.Get(), scene_view_target_.color.Get());
         scene3d_history_valid_ = true;
         EndGpuPass(D3D12GpuPass::PostProcess);
+        if (!apply_screen_effects(0)) return false;
 
         ++scene3d_frame_serial_;
         for (const D3D12StaticDrawItem& draw : submission.draws)

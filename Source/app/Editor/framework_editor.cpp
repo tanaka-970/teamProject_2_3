@@ -352,6 +352,7 @@ void framework::draw_editor_main_menu()
         ImGui::MenuItem("Console", nullptr, &show_console_panel);
         ImGui::MenuItem("Workspace", nullptr, &show_workspace_panel);
         ImGui::MenuItem("Validation / Diagnostics", nullptr, &show_validation_panel);
+        ImGui::MenuItem("DX12 Debug", nullptr, &show_dx12_debug_panel);
         if (ImGui::MenuItem(u8"UI フォーカス表示..."))
             show_ui_focus_style_manager = true;
         ImGui::Separator();

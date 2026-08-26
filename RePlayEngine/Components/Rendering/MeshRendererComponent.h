@@ -16,7 +16,7 @@ namespace ReplayEngine::Components
     //
     // 重要な制約:
     //   このクラスは Direct3D に一切触れない。
-    //   ID3D11* を持たず、Draw も Map も定数バッファ更新も行わない。
+    //   GPU API オブジェクトを持たず、Draw も Map も定数バッファ更新も行わない。
     //   保持するのは「どの Asset を」「どんな見た目で」描くかという情報だけで、
     //   実際の GPU 操作は既存の Renderer がメインスレッド上で行う。
     //
