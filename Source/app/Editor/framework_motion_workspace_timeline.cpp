@@ -24,19 +24,6 @@ using namespace framework_motion_workspace::Detail;
 
 namespace
 {
-    float FrameStep(int fps) noexcept
-    {
-        return 1.0f / static_cast<float>((std::max)(1, fps));
-    }
-
-    float SnapMotionTime(float time, int fps, bool snap) noexcept
-    {
-        const float safe = (std::max)(0.0f, time);
-        if (!snap) return safe;
-        const float frame = FrameStep(fps);
-        return std::round(safe / frame) * frame;
-    }
-
     int MotionFrameAt(float time, int fps) noexcept
     {
         return static_cast<int>(std::round((std::max)(0.0f, time) *
@@ -185,6 +172,23 @@ void framework::draw_motion_timeline()
         return;
     }
 
+    if (ImGui::CollapsingHeader("コマンドガイド"))
+    {
+        ImGui::TextDisabled("文字入力中は Motion ショートカットを無効化します。");
+        ImGui::BulletText("S          Keyを追加");
+        ImGui::BulletText("Delete     選択Keyを削除");
+        ImGui::BulletText("Ctrl+D     選択Keyを複製");
+        ImGui::BulletText("Ctrl+C     選択Keyをコピー");
+        ImGui::BulletText("Ctrl+V     Keyを貼り付け");
+        ImGui::BulletText("Space      再生 / 停止");
+        ImGui::BulletText("Home       先頭へ移動");
+        ImGui::BulletText("End        末尾へ移動");
+        ImGui::BulletText("PageUp     1フレーム戻る");
+        ImGui::BulletText("PageDown   1フレーム進む");
+        ImGui::BulletText("F9         EaseInOutCubicを一括適用");
+        ImGui::Separator();
+    }
+
     if (!motion_editor_loaded && motion_composition_loaded)
     {
         ImGui::SetNextItemWidth(86.0f);
@@ -197,19 +201,9 @@ void framework::draw_motion_timeline()
         ImGui::SliderFloat("Zoom", &motion_timeline_zoom, 1.0f, 12.0f, "%.1fx");
 
         const float frame_step = FrameStep(motion_editor_fps);
-        if (ImGui::Button("|< 1F"))
-        {
-            motion_preview_time = SnapMotionTime(motion_preview_time - frame_step,
-                motion_editor_fps, true);
-            apply_motion_preview_time();
-        }
+        if (ImGui::Button("|< 1F")) step_motion_preview_frames(-1);
         ImGui::SameLine();
-        if (ImGui::Button("1F >|"))
-        {
-            motion_preview_time = (std::min)(motion_editor_composition.duration,
-                SnapMotionTime(motion_preview_time + frame_step, motion_editor_fps, true));
-            apply_motion_preview_time();
-        }
+        if (ImGui::Button("1F >|")) step_motion_preview_frames(1);
         ImGui::SameLine();
         if (motion_editor_display_frames)
             ImGui::Text("Playhead: %dF", MotionFrameAt(motion_preview_time, motion_editor_fps));
@@ -293,19 +287,9 @@ void framework::draw_motion_timeline()
         ImGui::SetTooltip("ON中はTrack上をドラッグして範囲内のKeyをまとめて選択します。");
 
     const float frame_step = FrameStep(motion_editor_fps);
-    if (ImGui::Button("|< 1F"))
-    {
-        motion_preview_time = SnapMotionTime(motion_preview_time - frame_step,
-            motion_editor_fps, true);
-        apply_motion_preview_time();
-    }
+    if (ImGui::Button("|< 1F")) step_motion_preview_frames(-1);
     ImGui::SameLine();
-    if (ImGui::Button("1F >|"))
-    {
-        motion_preview_time = (std::min)(motion_editor_asset.duration,
-            SnapMotionTime(motion_preview_time + frame_step, motion_editor_fps, true));
-        apply_motion_preview_time();
-    }
+    if (ImGui::Button("1F >|")) step_motion_preview_frames(1);
     ImGui::SameLine();
     if (motion_editor_display_frames)
         ImGui::Text("Playhead: %dF", MotionFrameAt(motion_preview_time, motion_editor_fps));
@@ -334,77 +318,13 @@ void framework::draw_motion_timeline()
             motion_selected_keys.clear();
         }
         ImGui::SameLine();
-        if (ImGui::Button("Copy") && !selected_track.keys.empty())
-        {
-            motion_key_clipboard.clear();
-            if (!motion_selected_keys.empty())
-            {
-                for (const int index : motion_selected_keys)
-                    if (index >= 0 && index < static_cast<int>(selected_track.keys.size()))
-                        motion_key_clipboard.push_back(selected_track.keys[index]);
-            }
-            else if (motion_selected_key >= 0 &&
-                motion_selected_key < static_cast<int>(selected_track.keys.size()))
-            {
-                motion_key_clipboard.push_back(selected_track.keys[motion_selected_key]);
-            }
-        }
+        if (ImGui::Button("Copy")) copy_motion_keys();
         ImGui::SameLine();
-        if (ImGui::Button("Paste") && !motion_key_clipboard.empty())
-        {
-            float first = motion_key_clipboard.front().time;
-            for (const MotionKeyframe& key : motion_key_clipboard) first = (std::min)(first, key.time);
-            motion_edit_history.Begin(motion_editor_asset, "Keyを貼り付け");
-            for (MotionKeyframe key : motion_key_clipboard)
-            {
-                key.time = SnapMotionTime(motion_preview_time + (key.time - first),
-                    motion_editor_fps, motion_editor_frame_snap);
-                selected_track.keys.push_back(std::move(key));
-            }
-            motion_editor_asset.SortKeys();
-            motion_edit_history.Commit(motion_editor_asset);
-            motion_editor_dirty = true;
-            motion_selected_key = -1;
-            motion_selected_keys.clear();
-        }
+        if (ImGui::Button("Paste")) paste_motion_keys();
         ImGui::SameLine();
-        if (ImGui::Button("Duplicate") &&
-            (motion_selected_key >= 0 || !motion_selected_keys.empty()))
-        {
-            std::vector<int> indices = motion_selected_keys;
-            if (indices.empty()) indices.push_back(motion_selected_key);
-            motion_edit_history.Begin(motion_editor_asset, "Keyを複製");
-            const std::size_t original_count = selected_track.keys.size();
-            for (const int index : indices)
-            {
-                if (index < 0 || index >= static_cast<int>(original_count)) continue;
-                MotionKeyframe copy = selected_track.keys[index];
-                copy.time = (std::min)(motion_editor_asset.duration,
-                    SnapMotionTime(copy.time + frame_step, motion_editor_fps, true));
-                selected_track.keys.push_back(std::move(copy));
-            }
-            motion_editor_asset.SortKeys();
-            motion_edit_history.Commit(motion_editor_asset);
-            motion_editor_dirty = true;
-            motion_selected_key = -1;
-            motion_selected_keys.clear();
-        }
+        if (ImGui::Button("Duplicate")) duplicate_motion_keys();
         ImGui::SameLine();
-        if (ImGui::Button("Delete") &&
-            (motion_selected_key >= 0 || !motion_selected_keys.empty()))
-        {
-            std::vector<int> indices = motion_selected_keys;
-            if (indices.empty()) indices.push_back(motion_selected_key);
-            std::sort(indices.rbegin(), indices.rend());
-            motion_edit_history.Begin(motion_editor_asset, "Keyを削除");
-            for (const int index : indices)
-                if (index >= 0 && index < static_cast<int>(selected_track.keys.size()))
-                    selected_track.keys.erase(selected_track.keys.begin() + index);
-            motion_edit_history.Commit(motion_editor_asset);
-            motion_editor_dirty = true;
-            motion_selected_key = -1;
-            motion_selected_keys.clear();
-        }
+        if (ImGui::Button("Delete")) delete_motion_keys();
     }
 
     ImGui::Separator();

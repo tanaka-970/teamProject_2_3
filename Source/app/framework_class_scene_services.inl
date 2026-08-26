@@ -271,6 +271,16 @@
     bool save_current_motion_asset();
     // S キーと Key追加 ボタンの共通経路。現在のプレビュー時刻へキーを打つ。
     bool add_motion_key_at_preview_time();
+    ReplayEngine::Motion::MotionTrack* selected_motion_track();
+    std::vector<int> selected_motion_key_indices() const;
+    bool copy_motion_keys();
+    bool paste_motion_keys();
+    bool duplicate_motion_keys();
+    bool delete_motion_keys();
+    bool apply_motion_easing_to_selection(ReplayEngine::Motion::MotionEasing easing);
+    void toggle_motion_preview_playback();
+    void step_motion_preview_frames(int frames);
+    void seek_motion_preview_time(float time);
     bool undo_motion_edit();
     bool redo_motion_edit();
     void draw_motion_layers();
