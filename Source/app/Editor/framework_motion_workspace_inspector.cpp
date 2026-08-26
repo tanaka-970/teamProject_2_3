@@ -267,31 +267,9 @@ void framework::draw_motion_inspector()
     if (bound_component == nullptr) ImGui::TextColored(
         ImVec4(1.0f, 0.55f, 0.35f, 1.0f), "Binding未解決");
 
-    if (ImGui::Button("Key追加"))
-    {
-        motion_edit_history.Begin(motion_editor_asset, "Keyを追加");
-        MotionKeyframe key;
-        key.time = motion_preview_time;
-        const PropertyDesc* bound_desc = bound_component != nullptr
-            ? FindPropertyForComponent(*bound_component, track.binding.property)
-            : nullptr;
-        key.value = bound_desc != nullptr
-            ? bound_desc->Capture(*bound_component) : DefaultValueFor(track.value_type);
-        key.easing = MotionEasing::Linear;
-        track.keys.push_back(key);
-        motion_editor_asset.SortKeys();
-        motion_selected_key = -1;
-        for (int i = 0; i < static_cast<int>(track.keys.size()); ++i)
-        {
-            if (track.keys[i].time == key.time)
-            {
-                motion_selected_key = i;
-                break;
-            }
-        }
-        motion_edit_history.Commit(motion_editor_asset);
-        motion_editor_dirty = true;
-    }
+    if (ImGui::Button("Key追加")) add_motion_key_at_preview_time();
+    ImGui::SameLine();
+    ImGui::TextDisabled("(S)");
     ImGui::SameLine();
     if (ImGui::Button("Track削除"))
     {
