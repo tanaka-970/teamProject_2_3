@@ -424,8 +424,13 @@ const ReplayEngine::Rendering::MaterialAsset* framework::resolve_object_material
     std::string error;
     if (!MaterialAsset::Load(material_path, loaded, error))
     {
+        // Editor Log へも出す。OutputDebugString だけだとデバッガ無しでは見えず、
+        // Material が当たらない原因を追えない。
         if (object_material_failures.insert(asset_guid).second)
+        {
             OutputDebugStringA(("[Material] " + error + " (GUID: " + asset_guid + ")\n").c_str());
+            push_editor_log("Warning", error + " (GUID: " + asset_guid + ")", material_path);
+        }
         return nullptr;
     }
 

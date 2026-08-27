@@ -20,22 +20,26 @@ namespace
 {
     std::vector<std::string> material_subset_names(const skinned_mesh& mesh_asset)
     {
-        std::size_t count = 0;
+        // Slot は Object 全体の通し番号。描画側の material_slot_cursor と同じ順序・
+        // 同じ個数で並べる。mesh 間の最大値にすると、glTF のように 1 primitive が
+        // 1 mesh + subset 1 個で入る形式で行が 1 つしか出ない。
+        const std::size_t limit =
+            static_cast<std::size_t>(ReplayEngine::Components::max_mesh_material_slots);
+        std::vector<std::string> names;
         for (const skinned_mesh::mesh& mesh : mesh_asset.meshes)
         {
-            const std::size_t mesh_count = mesh.subsets.empty() ? 1u : mesh.subsets.size();
-            count = (std::max)(count, mesh_count);
-        }
-        count = (std::min)(count,
-            static_cast<std::size_t>(ReplayEngine::Components::max_mesh_material_slots));
-        std::vector<std::string> names(count);
-        for (const skinned_mesh::mesh& mesh : mesh_asset.meshes)
-        {
-            for (std::size_t index = 0; index < mesh.subsets.size() && index < count; ++index)
+            if (mesh.subsets.empty())
             {
-                if (names[index].empty() && !mesh.subsets[index].material_name.empty())
-                    names[index] = mesh.subsets[index].material_name;
+                if (names.size() >= limit) break;
+                names.emplace_back();
+                continue;
             }
+            for (const skinned_mesh::mesh::subset& subset : mesh.subsets)
+            {
+                if (names.size() >= limit) break;
+                names.push_back(subset.material_name);
+            }
+            if (names.size() >= limit) break;
         }
         return names;
     }

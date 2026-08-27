@@ -68,15 +68,20 @@ def build_mesh(name, group, folder, bones, with_weights):
     verts = []
     faces = []
     uvs = []
+    normals = []
     weights = {}   # bone index -> [(vertex, weight), ...]
     base = 0
     for m in group:
         for p in m.positions:
             verts.append(conv(p))
         for f in m.faces:
-            faces.append((f[0] + base, f[1] + base, f[2] + base))
+            # XPS と Blender で面の巻き順が逆。戻さないと法線が内向きになり、
+            # 裏面カリングでモデルの内側が見える状態になる。
+            faces.append((f[0] + base, f[2] + base, f[1] + base))
         for u in m.uvs:
             uvs.append((u[0], 1.0 - u[1]))
+        for n in m.normals:
+            normals.append(conv(n))
         if with_weights:
             for vi in range(len(m.positions)):
                 idx = m.bone_indices[vi]
@@ -94,6 +99,12 @@ def build_mesh(name, group, folder, bones, with_weights):
     me.from_pydata(verts, [], faces)
     me.update()
 
+    # XPS の頂点法線をそのまま使う。面から計算し直すと陰影が変わる。
+    try:
+        me.normals_split_custom_set_from_vertices(normals)
+    except Exception as e:
+        print("    法線の適用に失敗（面法線で続行）: %s" % e)
+
     uv_layer = me.uv_layers.new(name="UVMap")
     for li, loop in enumerate(me.loops):
         uv_layer.data[li].uv = uvs[loop.vertex_index]
@@ -110,8 +121,10 @@ def build_mesh(name, group, folder, bones, with_weights):
         node = mat.node_tree.nodes.new("ShaderNodeTexImage")
         node.image = bpy.data.images.load(tex_path)
         mat.node_tree.links.new(bsdf.inputs["Base Color"], node.outputs["Color"])
-        mat.node_tree.links.new(bsdf.inputs["Alpha"], node.outputs["Alpha"])
-        mat.blend_method = "CLIP" if hasattr(mat, "blend_method") else mat.blend_method
+        # テクスチャのアルファを不透明度へ繋がない。XPS の PNG はアルファを
+        # 不透明度として持っていないことがあり、繋ぐと全体が透けてしまう。
+        if hasattr(mat, "blend_method"):
+            mat.blend_method = "OPAQUE"
     me.materials.append(mat)
 
     obj = bpy.data.objects.new(name, me)

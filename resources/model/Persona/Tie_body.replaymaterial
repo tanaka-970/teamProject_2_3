@@ -1,0 +1,38 @@
+REPLAY_MATERIAL 4
+BASE_COLOR 0.878542542 0.597551227 0.597551227 1
+BASE_COLOR_TEXTURE ""
+NORMAL_TEXTURE ""
+METALLIC 0
+METALLIC_TEXTURE ""
+ROUGHNESS 0.550000012
+ROUGHNESS_TEXTURE ""
+EMISSIVE 0 0 0 0
+EMISSIVE_TEXTURE ""
+AMBIENT_OCCLUSION 1
+AMBIENT_OCCLUSION_TEXTURE ""
+ALPHA 0 0.5
+DOUBLE_SIDED 1
+SHADING_MODEL 5
+SHADER_GUID "00000000000000000000000000000006"
+PROPERTY_COUNT 17
+PROPERTY "prop.BaseColor" color 0.878542542 0.597551227 0.597551227 1
+PROPERTY "prop.BaseMap" assetref ""
+PROPERTY "prop.NormalMap" assetref ""
+PROPERTY "prop.Metallic" float 0
+PROPERTY "prop.MetallicMap" assetref ""
+PROPERTY "prop.Roughness" float 0.550000012
+PROPERTY "prop.RoughnessMap" assetref ""
+PROPERTY "prop.Emissive" vec3 0 0 0
+PROPERTY "prop.EmissiveStrength" float 0
+PROPERTY "prop.EmissiveMap" assetref ""
+PROPERTY "prop.AmbientOcclusion" float 1
+PROPERTY "prop.OcclusionMap" assetref ""
+PROPERTY "prop.AlphaMode" enum 0
+PROPERTY "prop.AlphaCutoff" float 0.5
+PROPERTY "prop.DoubleSided" bool 1
+PROPERTY "prop.PixelSize" float 6
+PROPERTY "prop.PixelateStrength" float 1
+PIXELATE 6 1
+OUTLINE_PASS 0
+LAYER_COUNT 0
+END_MATERIAL
