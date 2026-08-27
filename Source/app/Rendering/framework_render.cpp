@@ -278,6 +278,10 @@ void framework::render(float elapsed_time)
             static_scene.post_process.ssao_strength = clamp_finite(ssao_pass.intensity, 1.0f, 0.0f, 4.0f);
             static_scene.post_process.ssr_strength = clamp_finite(ssr_pass.intensity, 1.0f, 0.0f, 4.0f);
             static_scene.post_process.color_filter = clamp_color(post_settings.color_filter);
+            static_scene.post_process.render_output = static_cast<std::uint32_t>(
+                render_graph.OutputIndex());
+            static_scene.post_process.deferred_debug_mode = static_cast<std::uint32_t>(
+                render_graph.DeferredDebugMode());
             static_scene.post_process.bloom_enabled = enable_bloom_shader;
             static_scene.post_process.vignette_enabled = enable_vignette_shader;
             static_scene.post_process.fxaa_enabled = enable_fxaa_shader;

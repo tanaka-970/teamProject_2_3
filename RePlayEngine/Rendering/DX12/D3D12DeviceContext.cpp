@@ -28,6 +28,34 @@ namespace ReplayEngine::Rendering::DX12
         constexpr DXGI_FORMAT kBackBufferFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
         constexpr DXGI_FORMAT kDepthFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
 
+        DXGI_FORMAT ToLinearTextureFormat(DXGI_FORMAT format) noexcept
+        {
+            switch (format)
+            {
+            case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB: return DXGI_FORMAT_R8G8B8A8_UNORM;
+            case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB: return DXGI_FORMAT_B8G8R8A8_UNORM;
+            case DXGI_FORMAT_BC1_UNORM_SRGB: return DXGI_FORMAT_BC1_UNORM;
+            case DXGI_FORMAT_BC2_UNORM_SRGB: return DXGI_FORMAT_BC2_UNORM;
+            case DXGI_FORMAT_BC3_UNORM_SRGB: return DXGI_FORMAT_BC3_UNORM;
+            case DXGI_FORMAT_BC7_UNORM_SRGB: return DXGI_FORMAT_BC7_UNORM;
+            default: return format;
+            }
+        }
+
+        DXGI_FORMAT ToSrgbTextureFormat(DXGI_FORMAT format) noexcept
+        {
+            switch (ToLinearTextureFormat(format))
+            {
+            case DXGI_FORMAT_R8G8B8A8_UNORM: return DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+            case DXGI_FORMAT_B8G8R8A8_UNORM: return DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
+            case DXGI_FORMAT_BC1_UNORM: return DXGI_FORMAT_BC1_UNORM_SRGB;
+            case DXGI_FORMAT_BC2_UNORM: return DXGI_FORMAT_BC2_UNORM_SRGB;
+            case DXGI_FORMAT_BC3_UNORM: return DXGI_FORMAT_BC3_UNORM_SRGB;
+            case DXGI_FORMAT_BC7_UNORM: return DXGI_FORMAT_BC7_UNORM_SRGB;
+            default: return DXGI_FORMAT_UNKNOWN;
+            }
+        }
+
         struct ValidationVertex
         {
             float position[3];
@@ -733,7 +761,7 @@ namespace ReplayEngine::Rendering::DX12
 
     bool D3D12DeviceContext::CreateRenderTargets() noexcept
     {
-        // Scene/Game View、UI Effect、Scene Effect、UI Preview、GBuffer、Temporal 履歴が
+        // Scene/Game View、Deferred Lit、UI Effect、Scene Effect、UI Preview、GBuffer、Temporal 履歴が
         // それぞれ RTV と DSV を 1 枚ずつ取るので、内訳ぶんの余裕を持たせる。
         if (!rtv_allocator_.Initialize(device_.Get(),
             D3D12_DESCRIPTOR_HEAP_TYPE_RTV, FrameCount + 64u, false) ||
@@ -785,6 +813,8 @@ namespace ReplayEngine::Rendering::DX12
 
         if (!CreateOffscreenTarget(scene_view_target_, width_, height_,
                 DXGI_FORMAT_R16G16B16A16_FLOAT, L"SceneView") ||
+            !CreateOffscreenTarget(scene3d_deferred_target_, width_, height_,
+                DXGI_FORMAT_R16G16B16A16_FLOAT, L"SceneDeferredLit") ||
             !CreateOffscreenTarget(game_view_target_, width_, height_,
                 DXGI_FORMAT_R16G16B16A16_FLOAT, L"GameView") ||
             !CreateOffscreenTarget(ui_effect_targets_[0], width_, height_,
@@ -1226,6 +1256,8 @@ namespace ReplayEngine::Rendering::DX12
         {
             if (entry.second.srv.IsValid())
                 resource_descriptor_allocator_.Free(entry.second.srv);
+            if (entry.second.srgb_srv.IsValid())
+                resource_descriptor_allocator_.Free(entry.second.srgb_srv);
         }
         texture_cache_.clear();
         static_texture_failures_.clear();
@@ -1255,10 +1287,21 @@ namespace ReplayEngine::Rendering::DX12
         if (!resource_descriptor_allocator_.Allocate(1, texture.srv)) return false;
         D3D12_SHADER_RESOURCE_VIEW_DESC srv{};
         srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        srv.Format = texture.format;
+        srv.Format = ToLinearTextureFormat(texture.format);
         srv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
         srv.Texture2D.MipLevels = texture.mip_levels;
         device_->CreateShaderResourceView(texture.resource.Get(), &srv, texture.srv.cpu);
+        const DXGI_FORMAT srgb_format = ToSrgbTextureFormat(texture.format);
+        if (srgb_format != DXGI_FORMAT_UNKNOWN)
+        {
+            if (!resource_descriptor_allocator_.Allocate(1, texture.srgb_srv))
+            {
+                resource_descriptor_allocator_.Free(texture.srv);
+                return false;
+            }
+            srv.Format = srgb_format;
+            device_->CreateShaderResourceView(texture.resource.Get(), &srv, texture.srgb_srv.cpu);
+        }
         texture.width = 1;
         texture.height = 1;
         try
@@ -1267,20 +1310,26 @@ namespace ReplayEngine::Rendering::DX12
             if (!result.second)
             {
                 resource_descriptor_allocator_.Free(texture.srv);
+                if (texture.srgb_srv.IsValid())
+                    resource_descriptor_allocator_.Free(texture.srgb_srv);
                 return true;
             }
             result.first->second.resource = std::move(texture.resource);
             result.first->second.srv = texture.srv;
+            result.first->second.srgb_srv = texture.srgb_srv;
             result.first->second.width = texture.width;
             result.first->second.height = texture.height;
             result.first->second.mip_levels = texture.mip_levels;
             result.first->second.format = texture.format;
             texture.srv = {};
+            texture.srgb_srv = {};
         }
         catch (...)
         {
             if (texture.srv.IsValid())
                 resource_descriptor_allocator_.Free(texture.srv);
+            if (texture.srgb_srv.IsValid())
+                resource_descriptor_allocator_.Free(texture.srgb_srv);
             return false;
         }
         return true;
@@ -1344,14 +1393,15 @@ namespace ReplayEngine::Rendering::DX12
                 remember_decode_failure();
                 return false;
             }
+            const DXGI_FORMAT resource_format = ToLinearTextureFormat(decoded.format);
             if (!D3D12ResourceFactory::CreateTexture2D(device_.Get(), upload_context_,
-                decoded.width, decoded.height, decoded.mip_levels, decoded.format,
+                decoded.width, decoded.height, decoded.mip_levels, resource_format,
                 decoded.subresources, texture.resource))
                 return false;
             texture.width = decoded.width;
             texture.height = decoded.height;
             texture.mip_levels = decoded.mip_levels;
-            texture.format = decoded.format;
+            texture.format = resource_format;
         }
         else
         {
@@ -1376,30 +1426,47 @@ namespace ReplayEngine::Rendering::DX12
         if (!resource_descriptor_allocator_.Allocate(1, texture.srv)) return false;
         D3D12_SHADER_RESOURCE_VIEW_DESC srv{};
         srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        srv.Format = texture.format;
+        srv.Format = ToLinearTextureFormat(texture.format);
         srv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
         srv.Texture2D.MipLevels = texture.mip_levels;
         device_->CreateShaderResourceView(texture.resource.Get(), &srv, texture.srv.cpu);
+        const DXGI_FORMAT srgb_format = ToSrgbTextureFormat(texture.format);
+        if (srgb_format != DXGI_FORMAT_UNKNOWN)
+        {
+            if (!resource_descriptor_allocator_.Allocate(1, texture.srgb_srv))
+            {
+                resource_descriptor_allocator_.Free(texture.srv);
+                return false;
+            }
+            srv.Format = srgb_format;
+            device_->CreateShaderResourceView(texture.resource.Get(), &srv, texture.srgb_srv.cpu);
+        }
         try
         {
             auto result = texture_cache_.try_emplace(source.key);
             if (!result.second)
             {
                 resource_descriptor_allocator_.Free(texture.srv);
+                if (texture.srgb_srv.IsValid())
+                    resource_descriptor_allocator_.Free(texture.srgb_srv);
                 return true;
             }
             result.first->second.resource = std::move(texture.resource);
             result.first->second.srv = texture.srv;
+            result.first->second.srgb_srv = texture.srgb_srv;
             result.first->second.width = texture.width;
             result.first->second.height = texture.height;
             result.first->second.mip_levels = texture.mip_levels;
             result.first->second.format = texture.format;
             texture.srv = {};
+            texture.srgb_srv = {};
         }
         catch (...)
         {
             if (texture.srv.IsValid())
                 resource_descriptor_allocator_.Free(texture.srv);
+            if (texture.srgb_srv.IsValid())
+                resource_descriptor_allocator_.Free(texture.srgb_srv);
             return false;
         }
         return true;
@@ -1699,10 +1766,17 @@ namespace ReplayEngine::Rendering::DX12
             command_list_->SetGraphicsRootConstantBufferView(1, scene_gpu);              // b1
             command_list_->SetGraphicsRootConstantBufferView(2, frame_compatibility_gpu);// b4
             command_list_->SetGraphicsRootConstantBufferView(3, material_gpu);           // b9
-            command_list_->SetGraphicsRootDescriptorTable(4, base_texture->srv.gpu);      // t0
+            command_list_->SetGraphicsRootDescriptorTable(4, base_texture->srgb_srv.IsValid()
+                ? base_texture->srgb_srv.gpu : base_texture->srv.gpu);                    // t0
             for (std::uint32_t i = 0; i < 8; ++i)
+            {
+                const StaticTextureResource* texture = material_textures[i];
+                const bool color_texture = i == 0u || i == 4u;
+                const D3D12_GPU_DESCRIPTOR_HANDLE texture_srv = color_texture &&
+                    texture->srgb_srv.IsValid() ? texture->srgb_srv.gpu : texture->srv.gpu;
                 command_list_->SetGraphicsRootDescriptorTable(5 + i,
-                    material_textures[i]->srv.gpu);                                       // t40..t47
+                    texture_srv);                                                        // t40..t47
+            }
             command_list_->SetGraphicsRootDescriptorTable(13, static_samplers_[0].gpu);   // s0
             command_list_->SetGraphicsRootDescriptorTable(14, static_samplers_[1].gpu);   // s1
             command_list_->SetGraphicsRootDescriptorTable(15, static_samplers_[2].gpu);   // s2
@@ -1739,6 +1813,7 @@ namespace ReplayEngine::Rendering::DX12
     void D3D12DeviceContext::ReleaseRenderTargets() noexcept
     {
         ReleaseOffscreenTarget(scene_view_target_);
+        ReleaseOffscreenTarget(scene3d_deferred_target_);
         ReleaseOffscreenTarget(game_view_target_);
         ReleaseOffscreenTarget(ui_preview_target_);
         for (auto& target : ui_preview_effect_targets_)

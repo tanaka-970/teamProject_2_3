@@ -8,6 +8,8 @@ Texture2D sceneDepth : register(t2);
 Texture2D sceneVelocity : register(t3);
 Texture2D sceneNormal : register(t4);
 Texture2D sceneMaterial : register(t5);
+Texture2D sceneBaseColor : register(t6);
+Texture2D deferredLitTexture : register(t7);
 SamplerState sceneSampler : register(s0);
 SamplerState pointSampler : register(s1);
 
@@ -25,6 +27,7 @@ cbuffer PostProcessConstants : register(b0)
     float2 padding;
     float4 colorFilter;
     float4 featureFlags; // x=TAA、y=SSAO、z=SSR
+    float4 debugOptions; // x=RenderOutput、y=DeferredDebugMode
     // SSR のレイマーチ用。GBuffer の法線と深度をビュー空間へ戻すのに使う。
     row_major float4x4 viewMatrix;
     row_major float4x4 projectionMatrix;
@@ -234,6 +237,49 @@ float3 acesToneMap(float3 color)
 
 float4 main(PixelInput input) : SV_TARGET
 {
+    const uint output = (uint)(debugOptions.x + 0.5f);
+    if (output != 0u)
+    {
+        float3 debugColor = 0.0f;
+        if (output == 1u)
+            debugColor = sceneTexture.SampleLevel(sceneSampler, saturate(input.uv), 0).rgb;
+        else if (output == 2u)
+        {
+            const float2 debugPixel = 1.0f / max(screenSize, float2(1.0f, 1.0f));
+            debugColor += max(sampleScene(input.uv + debugPixel * float2(-2.0f, 0.0f)) - 1.0f, 0.0f);
+            debugColor += max(sampleScene(input.uv + debugPixel * float2(2.0f, 0.0f)) - 1.0f, 0.0f);
+            debugColor += max(sampleScene(input.uv + debugPixel * float2(0.0f, -2.0f)) - 1.0f, 0.0f);
+            debugColor += max(sampleScene(input.uv + debugPixel * float2(0.0f, 2.0f)) - 1.0f, 0.0f);
+        }
+        else if (output == 3u)
+            debugColor = deferredLitTexture.SampleLevel(pointSampler, input.uv, 0).rgb;
+        else if (output == 4u)
+            debugColor = sceneBaseColor.SampleLevel(pointSampler, input.uv, 0).rgb;
+        else if (output == 5u)
+            debugColor = sceneNormal.SampleLevel(pointSampler, input.uv, 0).rgb;
+        else if (output == 6u)
+            debugColor = sceneMaterial.SampleLevel(pointSampler, input.uv, 0).rgb;
+        else if (output == 7u)
+            debugColor = (1.0f - sceneDepth.SampleLevel(pointSampler, input.uv, 0).r).xxx;
+        else if (output == 8u)
+            debugColor = featureFlags.y < 0.5f ? 0.5f.xxx : ssao(input.uv).xxx;
+        else if (output == 9u)
+            debugColor = historyValid < 0.5f || featureFlags.z < 0.5f
+                ? sampleScene(input.uv) * 0.25f
+                : screenSpaceReflection(input.uv, 0.0f.xxx);
+        else if (output == 10u)
+        {
+            debugColor = deferredLitTexture.SampleLevel(pointSampler, input.uv, 0).rgb;
+            if (sceneDepth.SampleLevel(pointSampler, input.uv, 0).r >= 0.999999f)
+                debugColor = 1.0f.xxx;
+        }
+
+        const bool hdrDebug = output == 1u || output == 2u || output == 3u || output == 9u;
+        const float3 displayColor = hdrDebug
+            ? acesToneMap(max(debugColor, 0.0f)) : saturate(max(debugColor, 0.0f));
+        return float4(pow(displayColor, 1.0f / 2.2f), 1.0f);
+    }
+
     float3 color = fxaaEnabled > 0.5f ? fxaa(input.uv) : sampleScene(input.uv);
     if (featureFlags.y > 0.5f)
         color *= ssao(input.uv);

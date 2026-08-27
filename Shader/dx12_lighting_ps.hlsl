@@ -44,6 +44,13 @@ float4 main(float4 position : SV_POSITION, float2 uv : TEXCOORD0) : SV_Target0
     const bool receiveShadow = normalValue.w >= 0.0f;
     const float4 material = gMaterial.SampleLevel(pointSampler, uv, 0);
     const float3 worldPosition = ReconstructWorld(uv, depth);
+    if (debugFlags.x == 7u)
+    {
+        const float3 normal = normalize(normalValue.xyz * 2.0f - 1.0f);
+        const float visibility = Dx12EvaluateShadowVisibility(worldPosition, normal,
+            normalValue.w >= 0.0f, position.xy);
+        return float4(visibility.xxx, 1.0f);
+    }
     const uint lightingModel = (uint)round(saturate(base.a) * 255.0f);
 
     const float ambientOcclusion = saturate(material.r);

@@ -49,6 +49,7 @@ cbuffer Dx12LightCB : register(DX12_LIGHT_CB_REGISTER)
     float4 csmTexelWorld;
     Dx12LocalShadowSlice localShadowSlices[DX12_LOCAL_SHADOW_SLICE_COUNT];
     uint4 shadowFlags; // x=CSM利用可能、y=Local Shadow利用可能
+    uint4 debugFlags; // x=DeferredDebugMode、y/z/w=予約
 };
 
 Texture2DArray<float> dx12CsmShadowArray : register(t6);
@@ -318,6 +319,38 @@ float Dx12SpotShadow(Dx12SpotLight light, float3 worldPosition,
 }
 
 // Toon 固有値の受け渡し。GBuffer の追加 RT から復号した値がそのまま入る。
+float Dx12EvaluateShadowVisibility(float3 worldPosition, float3 normal,
+    bool receiveShadow, float2 noiseCoord)
+{
+    if (!receiveShadow) return 1.0f;
+
+    const float3 N = normalize(normal);
+    float visibility = 1.0f;
+    if (directionalColorFlags.w > 0.5f)
+    {
+        const float3 L = normalize(-directionalDirectionIntensity.xyz);
+        visibility = min(visibility, Dx12SampleCsm(worldPosition, N,
+            saturate(dot(N, L)), noiseCoord));
+    }
+    [loop] for (uint i = 0; i < min(lightCounts.x, 8u); ++i)
+    {
+        const float3 delta = pointLights[i].positionRange.xyz - worldPosition;
+        const float distanceToLight = length(delta);
+        const float3 L = delta / max(distanceToLight, 1.0e-5f);
+        visibility = min(visibility, Dx12PointShadow(pointLights[i], worldPosition, N,
+            saturate(dot(N, L))));
+    }
+    [loop] for (uint i = 0; i < min(lightCounts.y, 4u); ++i)
+    {
+        const float3 delta = spotLights[i].positionRange.xyz - worldPosition;
+        const float distanceToLight = length(delta);
+        const float3 L = delta / max(distanceToLight, 1.0e-5f);
+        visibility = min(visibility, Dx12SpotShadow(spotLights[i], worldPosition, N,
+            distanceToLight, saturate(dot(N, L))));
+    }
+    return visibility;
+}
+
 struct Dx12ToonSurface
 {
     float3 shadowTint;
