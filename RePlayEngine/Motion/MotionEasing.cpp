@@ -1,4 +1,4 @@
-#include "MotionEasing.h"
+﻿#include "MotionEasing.h"
 
 #include <algorithm>
 #include <cmath>
@@ -70,6 +70,7 @@ namespace ReplayEngine::Motion
         case MotionEasing::EaseOutElastic: return "EaseOutElastic";
         case MotionEasing::EaseInOutElastic: return "EaseInOutElastic";
         case MotionEasing::CustomBezier: return "CustomBezier";
+        case MotionEasing::PresetCurve: return "PresetCurve";
         }
         return "Linear";
     }
@@ -93,6 +94,7 @@ namespace ReplayEngine::Motion
         else if (Equals(text, "EaseOutElastic")) out = MotionEasing::EaseOutElastic;
         else if (Equals(text, "EaseInOutElastic")) out = MotionEasing::EaseInOutElastic;
         else if (Equals(text, "CustomBezier")) out = MotionEasing::CustomBezier;
+        else if (Equals(text, "PresetCurve")) out = MotionEasing::PresetCurve;
         else return false;
 
         return true;
@@ -164,6 +166,8 @@ namespace ReplayEngine::Motion
                     std::sin((20.0f * t - 11.125f) * (2.0f * pi / 4.5f))) * 0.5f + 1.0f;
         case MotionEasing::CustomBezier:
             return EvaluateBezier(t, handles);
+        case MotionEasing::PresetCurve:
+            return t;
         case MotionEasing::Step:
             break;
         }

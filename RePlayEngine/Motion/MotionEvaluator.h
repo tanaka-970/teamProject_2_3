@@ -1,6 +1,10 @@
-#pragma once
+﻿#pragma once
 
 #include "MotionAsset.h"
+
+#include <string>
+
+namespace ReplayEngine::Assets { class AssetDatabase; }
 
 namespace ReplayEngine::Motion
 {
@@ -8,6 +12,8 @@ namespace ReplayEngine::Motion
     {
     public:
         static bool EvaluateTrack(const MotionTrack& track, float time,
-            Reflection::PropertyValue& out);
+            Reflection::PropertyValue& out,
+            const Assets::AssetDatabase* database = nullptr,
+            std::string* curve_error = nullptr);
     };
 }

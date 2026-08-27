@@ -721,6 +721,7 @@ bool framework::save_current_easing_curve()
         ReplayEngine::Assets::AssetKind::EasingCurve);
     easing_editor_guid = record.guid;
     ReplayEngine::Motion::EasingCurveAsset::Invalidate(record.guid);
+    motion_easing_curve_warning_guids.erase(record.guid);
     std::string db_error;
     if (!asset_database.Save(db_error))
     {

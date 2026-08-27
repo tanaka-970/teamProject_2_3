@@ -31,6 +31,7 @@ bool framework::open_motion_asset(const ReplayEngine::Assets::AssetRecord& asset
     if (asset.kind != AssetKind::Motion && asset.kind != AssetKind::Composition) return false;
 
     stop_motion_preview();
+    motion_easing_curve_warning_guids.clear();
     const std::string extension = Lower(asset.source_path.extension().u8string());
     std::string error;
     if (extension == ReplayEngine::Motion::CompositionAsset::file_extension)
@@ -349,7 +350,8 @@ bool framework::delete_motion_keys()
     return true;
 }
 
-bool framework::apply_motion_easing_to_selection(ReplayEngine::Motion::MotionEasing easing)
+bool framework::apply_motion_easing_to_selection(ReplayEngine::Motion::MotionEasing easing,
+    const ReplayEngine::Reflection::AssetReference* curve)
 {
     MotionTrack* track = selected_motion_track();
     if (track == nullptr)
@@ -378,13 +380,27 @@ bool framework::apply_motion_easing_to_selection(ReplayEngine::Motion::MotionEas
     for (const int index : indices)
     {
         if (index < 0 || index >= static_cast<int>(track->keys.size())) continue;
-        track->keys[static_cast<std::size_t>(index)].easing = easing;
+        MotionKeyframe& key = track->keys[static_cast<std::size_t>(index)];
+        key.easing = easing;
+        if (easing == ReplayEngine::Motion::MotionEasing::PresetCurve && curve != nullptr)
+            key.easing_curve = *curve;
     }
     motion_edit_history.Commit(motion_editor_asset);
     motion_editor_dirty = true;
     motion_editor_status = std::string("選択KeyへEasingを適用しました: ") +
         ReplayEngine::Motion::ToString(easing);
     return true;
+}
+
+void framework::push_motion_curve_warning_once(const std::string& curve_error)
+{
+    if (curve_error.empty()) return;
+    const std::string marker = "GUID: ";
+    const std::size_t marker_pos = curve_error.find(marker);
+    const std::string warning_key = marker_pos == std::string::npos
+        ? curve_error : curve_error.substr(marker_pos + marker.size());
+    if (!motion_easing_curve_warning_guids.insert(warning_key).second) return;
+    push_editor_log("Warning", curve_error, motion_editor_path);
 }
 
 void framework::toggle_motion_preview_playback()
@@ -562,7 +578,14 @@ void framework::apply_motion_preview_time()
         for (const MotionTrack& track : motion_editor_asset.tracks)
         {
             PropertyValue value;
-            if (!MotionEvaluator::EvaluateTrack(track, motion_preview_time, value)) continue;
+            std::string curve_error;
+            if (!MotionEvaluator::EvaluateTrack(track, motion_preview_time, value,
+                &asset_database, &curve_error))
+            {
+                push_motion_curve_warning_once(curve_error);
+                continue;
+            }
+            push_motion_curve_warning_once(curve_error);
             const ReplayEngine::Motion::ResolvedMotionBinding binding =
                 ReplayEngine::Motion::MotionBindingResolver::Resolve(*scene, track.binding);
             motion_mixer.Contribute(binding, value, 1.0f, track.blend_mode);
@@ -591,7 +614,14 @@ void framework::apply_motion_preview_time()
                 for (const MotionTrack& track : motion->tracks)
                 {
                     PropertyValue value;
-                    if (!MotionEvaluator::EvaluateTrack(track, t, value)) continue;
+                    std::string curve_error;
+                    if (!MotionEvaluator::EvaluateTrack(track, t, value,
+                        &asset_database, &curve_error))
+                    {
+                        push_motion_curve_warning_once(curve_error);
+                        continue;
+                    }
+                    push_motion_curve_warning_once(curve_error);
                     const auto binding = ReplayEngine::Motion::MotionBindingResolver::Resolve(
                         *scene, track.binding);
                     motion_mixer.Contribute(binding, value, weight, track.blend_mode);

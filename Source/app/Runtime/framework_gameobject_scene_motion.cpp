@@ -655,7 +655,7 @@ void framework::evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
                 for (const MotionTrack& track : motion->tracks)
                 {
                     PropertyValue value;
-                    if (!MotionEvaluator::EvaluateTrack(track, t, value)) continue;
+                    if (!MotionEvaluator::EvaluateTrack(track, t, value, &asset_database)) continue;
                     const ReplayEngine::Motion::ResolvedMotionBinding binding =
                         MotionBindingResolver::Resolve(scene, track.binding, owner);
                     if (!binding.Valid()) continue;
@@ -770,7 +770,7 @@ void framework::evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
             for (const MotionTrack& track : asset->tracks)
             {
                 PropertyValue value;
-                if (!MotionEvaluator::EvaluateTrack(track, player.time, value))
+                if (!MotionEvaluator::EvaluateTrack(track, player.time, value, &asset_database))
                     continue;
 
                 const ReplayEngine::Motion::ResolvedMotionBinding binding =

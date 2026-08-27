@@ -1,4 +1,4 @@
-#include "MotionAsset.h"
+﻿#include "MotionAsset.h"
 
 #include "../Object/Registry/ComponentRegistry.h"
 
@@ -77,6 +77,17 @@ namespace ReplayEngine::Motion
                 return true;
             }
             return false;
+        }
+
+        bool ParseTrackLoop(std::string token, MotionTrackLoop& out)
+        {
+            token = Upper(std::move(token));
+            if (token == "NONE") out = MotionTrackLoop::None;
+            else if (token == "REPEAT") out = MotionTrackLoop::Repeat;
+            else if (token == "PINGPONG") out = MotionTrackLoop::PingPong;
+            else if (token == "OFFSET") out = MotionTrackLoop::Offset;
+            else return false;
+            return true;
         }
 
         bool ReadValue(std::istream& in, Reflection::PropertyType type,
@@ -347,6 +358,33 @@ namespace ReplayEngine::Motion
                     return false;
                 }
             }
+            else if (head == "WIGGLE" && current_track != nullptr)
+            {
+                int enabled = 0;
+                MotionWiggle wiggle;
+                if (!(input >> enabled >> wiggle.amplitude >> wiggle.frequency >>
+                    wiggle.seed >> wiggle.octaves))
+                {
+                    error = std::string(u8"Motion AssetのWIGGLEが不正です: line ") +
+                        std::to_string(line_number);
+                    return false;
+                }
+                wiggle.enabled = enabled != 0;
+                wiggle.frequency = (std::max)(0.0f, wiggle.frequency);
+                wiggle.octaves = (std::max)(1, (std::min)(4, wiggle.octaves));
+                current_track->wiggle = wiggle;
+            }
+            else if (head == "LOOP" && current_track != nullptr)
+            {
+                std::string token;
+                input >> token;
+                if (!ParseTrackLoop(token, current_track->loop))
+                {
+                    error = std::string(u8"Motion AssetのLOOPが不正です: line ") +
+                        std::to_string(line_number);
+                    return false;
+                }
+            }
             else if (head == "KEY" && current_track != nullptr)
             {
                 MotionKeyframe key;
@@ -386,6 +424,10 @@ namespace ReplayEngine::Motion
                     else if (token == "IN")
                     {
                         input >> key.bezier.in_handle.x >> key.bezier.in_handle.y;
+                    }
+                    else if (token == "CURVE")
+                    {
+                        input >> std::quoted(key.easing_curve.guid);
                     }
                 }
 

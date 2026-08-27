@@ -210,8 +210,28 @@ void framework::draw_editor()
                 step_motion_preview_frames(-1);
             if (!motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
                 ImGui::IsKeyPressed(VK_F9, false))
-                apply_motion_easing_to_selection(
-                    ReplayEngine::Motion::MotionEasing::EaseInOutCubic);
+            {
+                const ReplayEngine::Assets::AssetRecord* preset_record =
+                    motion_selected_easing_curve.IsAssigned()
+                    ? asset_database.FindByGuid(motion_selected_easing_curve.guid) : nullptr;
+                const ReplayEngine::Motion::EasingCurveAsset* preset_curve =
+                    preset_record != nullptr &&
+                    preset_record->kind == ReplayEngine::Assets::AssetKind::EasingCurve
+                    ? ReplayEngine::Motion::EasingCurveAsset::Resolve(
+                        &asset_database, motion_selected_easing_curve)
+                    : nullptr;
+                if (preset_curve != nullptr)
+                {
+                    apply_motion_easing_to_selection(
+                        ReplayEngine::Motion::MotionEasing::PresetCurve,
+                        &motion_selected_easing_curve);
+                }
+                else
+                {
+                    apply_motion_easing_to_selection(
+                        ReplayEngine::Motion::MotionEasing::EaseInOutCubic);
+                }
+            }
         }
         draw_scene_view_panel();
         if (show_hierarchy_panel) draw_scene_hierarchy();

@@ -186,7 +186,7 @@ void framework::draw_motion_timeline()
         ImGui::BulletText(u8"End        末尾へ移動");
         ImGui::BulletText(u8"PageUp     1フレーム戻る");
         ImGui::BulletText(u8"PageDown   1フレーム進む");
-        ImGui::BulletText(u8"F9         EaseInOutCubicを一括適用");
+        ImGui::BulletText(u8"F9         選択中プリセットを一括適用（未選択はEaseInOutCubic）");
         ImGui::Separator();
     }
 
@@ -304,8 +304,12 @@ void framework::draw_motion_timeline()
         if (ImGui::Button(u8"再生位置にキーを追加"))
         {
             ReplayEngine::Reflection::PropertyValue value;
-            if (!MotionEvaluator::EvaluateTrack(selected_track, motion_preview_time, value) &&
-                !selected_track.keys.empty()) value = selected_track.keys.back().value;
+            std::string curve_error;
+            const bool evaluated_ok = MotionEvaluator::EvaluateTrack(selected_track,
+                motion_preview_time, value, &asset_database, &curve_error);
+            push_motion_curve_warning_once(curve_error);
+            if (!evaluated_ok && !selected_track.keys.empty())
+                value = selected_track.keys.back().value;
             motion_edit_history.Begin(motion_editor_asset, u8"キーを追加");
             MotionKeyframe key;
             key.time = SnapMotionTime(motion_preview_time, motion_editor_fps,
@@ -433,8 +437,11 @@ void framework::draw_motion_timeline()
             const float time = SnapMotionTime(normalized * motion_editor_asset.duration,
                 motion_editor_fps, motion_editor_frame_snap);
             ReplayEngine::Reflection::PropertyValue value;
-            if (!MotionEvaluator::EvaluateTrack(track, time, value) && !track.keys.empty())
-                value = track.keys.back().value;
+            std::string curve_error;
+            const bool evaluated_ok = MotionEvaluator::EvaluateTrack(track, time, value,
+                &asset_database, &curve_error);
+            push_motion_curve_warning_once(curve_error);
+            if (!evaluated_ok && !track.keys.empty()) value = track.keys.back().value;
             motion_edit_history.Begin(motion_editor_asset, u8"タイムラインでキーを追加");
             MotionKeyframe key; key.time = time; key.value = value;
             track.keys.push_back(std::move(key));
@@ -673,8 +680,30 @@ void framework::draw_motion_graph_editor()
                 const float normalized = static_cast<float>(sample) /
                     static_cast<float>(subdivisions);
                 const float sample_time = a.time + span * normalized;
-                const float eased = ReplayEngine::Motion::ApplyEasing(
-                    a.easing, normalized, a.bezier);
+                float eased = normalized;
+                if (a.easing == MotionEasing::PresetCurve)
+                {
+                    const ReplayEngine::Motion::EasingCurveAsset* curve =
+                        ReplayEngine::Motion::EasingCurveAsset::Resolve(
+                            &asset_database, a.easing_curve);
+                    if (curve != nullptr)
+                    {
+                        eased = curve->Evaluate(normalized);
+                    }
+                    else
+                    {
+                        const std::string curve_error = a.easing_curve.IsAssigned()
+                            ? std::string(u8"PresetCurve のカーブを解決できません。Linear で評価します。 GUID: ") +
+                                a.easing_curve.guid
+                            : std::string(u8"PresetCurve のカーブが未設定です。Linear で評価します。");
+                        push_motion_curve_warning_once(curve_error);
+                    }
+                }
+                else
+                {
+                    eased = ReplayEngine::Motion::ApplyEasing(
+                        a.easing, normalized, a.bezier);
+                }
                 if (!std::isfinite(eased))
                 {
                     points.push_back({ sample_time,
@@ -703,8 +732,10 @@ void framework::draw_motion_graph_editor()
     {
         const float t = duration * sample / static_cast<float>(sample_count - 1);
         float value = 0.0f;
-        if (MotionEvaluator::EvaluateTrack(track, t, evaluated))
+        std::string curve_error;
+        if (MotionEvaluator::EvaluateTrack(track, t, evaluated, &asset_database, &curve_error))
             value = ScalarChannel(evaluated, track.value_type, motion_graph_channel);
+        push_motion_curve_warning_once(curve_error);
         samples[static_cast<std::size_t>(sample)] = std::isfinite(value) ? value : 0.0f;
     }
     if (motion_graph_speed_mode)
@@ -750,8 +781,14 @@ void framework::draw_motion_graph_editor()
             {
                 const float t = duration * sample / static_cast<float>(sample_count - 1);
                 float value = 0.0f;
-                if (MotionEvaluator::EvaluateTrack(overlay_track, t, evaluated))
-                    value = ScalarChannel(evaluated, overlay_track.value_type, motion_graph_channel);
+                std::string curve_error;
+                if (MotionEvaluator::EvaluateTrack(overlay_track, t, evaluated,
+                    &asset_database, &curve_error))
+                {
+                    value = ScalarChannel(evaluated, overlay_track.value_type,
+                        motion_graph_channel);
+                }
+                push_motion_curve_warning_once(curve_error);
                 curve.values[static_cast<std::size_t>(sample)] =
                     std::isfinite(value) ? value : 0.0f;
             }
@@ -906,11 +943,14 @@ void framework::draw_motion_graph_editor()
     float playhead_value = 0.0f;
     if (!motion_graph_speed_mode)
     {
-        if (MotionEvaluator::EvaluateTrack(track, playhead_time, evaluated))
+        std::string curve_error;
+        if (MotionEvaluator::EvaluateTrack(track, playhead_time, evaluated,
+            &asset_database, &curve_error))
         {
             playhead_value = ScalarChannel(evaluated, track.value_type, motion_graph_channel);
             playhead_value_valid = std::isfinite(playhead_value);
         }
+        push_motion_curve_warning_once(curve_error);
     }
     else
     {
@@ -920,8 +960,23 @@ void framework::draw_motion_graph_editor()
         const float after_time = (std::min)(duration, playhead_time + delta);
         ReplayEngine::Reflection::PropertyValue before_value;
         ReplayEngine::Reflection::PropertyValue after_value;
-        if (after_time > before_time && MotionEvaluator::EvaluateTrack(track, before_time,
-            before_value) && MotionEvaluator::EvaluateTrack(track, after_time, after_value))
+        bool before_ok = false;
+        bool after_ok = false;
+        if (after_time > before_time)
+        {
+            std::string before_error;
+            before_ok = MotionEvaluator::EvaluateTrack(track, before_time, before_value,
+                &asset_database, &before_error);
+            push_motion_curve_warning_once(before_error);
+            if (before_ok)
+            {
+                std::string after_error;
+                after_ok = MotionEvaluator::EvaluateTrack(track, after_time, after_value,
+                    &asset_database, &after_error);
+                push_motion_curve_warning_once(after_error);
+            }
+        }
+        if (before_ok && after_ok)
         {
             const float before = ScalarChannel(before_value, track.value_type, motion_graph_channel);
             const float after = ScalarChannel(after_value, track.value_type, motion_graph_channel);
@@ -979,13 +1034,19 @@ void framework::draw_motion_graph_editor()
 
     MotionKeyframe& key = track.keys[motion_selected_key];
     ImGui::Separator();
+    if (key.easing == MotionEasing::PresetCurve && key.easing_curve.IsAssigned())
+        motion_selected_easing_curve = key.easing_curve;
     MotionEasing easing = key.easing;
-    if (DrawEasingCombo(u8"イージング", easing))
+    ReplayEngine::Reflection::AssetReference easing_curve = key.easing_curve;
+    if (DrawEasingCombo(u8"イージング", easing, &easing_curve, &asset_database))
     {
         motion_edit_history.Begin(motion_editor_asset, u8"イージングを変更");
         key.easing = easing;
+        key.easing_curve = easing_curve;
         motion_edit_history.Commit(motion_editor_asset);
         motion_editor_dirty = true;
+        if (easing == MotionEasing::PresetCurve && easing_curve.IsAssigned())
+            motion_selected_easing_curve = easing_curve;
     }
     if (ImGui::Button(u8"自動スムーズ"))
     {
