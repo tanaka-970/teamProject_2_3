@@ -641,8 +641,13 @@ void framework::apply_motion_preview_time()
         {
             PropertyValue value;
             std::string curve_error;
-            if (!MotionEvaluator::EvaluateTrack(track, evaluated_time, motion_preview_time, value,
-                &asset_database, &curve_error))
+            ReplayEngine::Motion::MotionTrackEvaluationContext evaluation_context;
+            evaluation_context.time = evaluated_time;
+            evaluation_context.raw_time = motion_preview_time;
+            evaluation_context.duration = motion_editor_asset.duration;
+            evaluation_context.database = &asset_database;
+            evaluation_context.error = &curve_error;
+            if (!MotionEvaluator::EvaluateTrackWithContext(track, evaluation_context, value))
             {
                 push_motion_curve_warning_once(curve_error);
                 continue;
@@ -682,8 +687,13 @@ void framework::apply_motion_preview_time()
                 {
                     PropertyValue value;
                     std::string curve_error;
-                    if (!MotionEvaluator::EvaluateTrack(track, evaluated_time, t, value,
-                        &asset_database, &curve_error))
+                    ReplayEngine::Motion::MotionTrackEvaluationContext evaluation_context;
+                    evaluation_context.time = evaluated_time;
+                    evaluation_context.raw_time = t;
+                    evaluation_context.duration = motion->duration;
+                    evaluation_context.database = &asset_database;
+                    evaluation_context.error = &curve_error;
+                    if (!MotionEvaluator::EvaluateTrackWithContext(track, evaluation_context, value))
                     {
                         push_motion_curve_warning_once(curve_error);
                         continue;

@@ -56,7 +56,9 @@
     const ReplayEngine::Rendering::MaterialAsset* resolve_object_material(
         const std::string& asset_guid);
     ReplayEngine::Rendering::RenderItem resolve_render_item_material(
-        const ReplayEngine::Rendering::RenderItem& item);
+        const ReplayEngine::Rendering::RenderItem& item,
+        const std::string* material_asset_override = nullptr,
+        bool apply_material_motion = true);
         // DX12 Phase 2 Bridge。Engine 所有の RenderItem List を Cache 可能な Static
         // Geometry/Material Submission へ変換する。実際の Skinned Animation は Phase 3 に残す。
     bool build_dx12_static_scene(

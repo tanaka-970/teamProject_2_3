@@ -279,8 +279,13 @@ void framework::draw_motion_timeline()
             raw_time, &asset_database, &remap_error);
         if (motion_editor_asset.time_remap.IsAssigned())
             push_motion_curve_warning_once(remap_error);
-        return MotionEvaluator::EvaluateTrack(track, evaluated_time, raw_time, value,
-            &asset_database, curve_error);
+        ReplayEngine::Motion::MotionTrackEvaluationContext evaluation_context;
+        evaluation_context.time = evaluated_time;
+        evaluation_context.raw_time = raw_time;
+        evaluation_context.duration = motion_editor_asset.duration;
+        evaluation_context.database = &asset_database;
+        evaluation_context.error = curve_error;
+        return MotionEvaluator::EvaluateTrackWithContext(track, evaluation_context, value);
     };
 
     // ---- AE style time controls --------------------------------------------
@@ -645,8 +650,13 @@ void framework::draw_motion_graph_editor()
             raw_time, &asset_database, &remap_error);
         if (motion_editor_asset.time_remap.IsAssigned())
             push_motion_curve_warning_once(remap_error);
-        return MotionEvaluator::EvaluateTrack(source, evaluated_time, raw_time, value,
-            &asset_database, curve_error);
+        ReplayEngine::Motion::MotionTrackEvaluationContext evaluation_context;
+        evaluation_context.time = evaluated_time;
+        evaluation_context.raw_time = raw_time;
+        evaluation_context.duration = motion_editor_asset.duration;
+        evaluation_context.database = &asset_database;
+        evaluation_context.error = curve_error;
+        return MotionEvaluator::EvaluateTrackWithContext(source, evaluation_context, value);
     };
     bool time_remap_active = false;
     if (motion_editor_asset.time_remap.IsAssigned() && motion_editor_asset.duration > 0.0f)
@@ -687,7 +697,7 @@ void framework::draw_motion_graph_editor()
     {
         points.clear();
         if (!source.enabled || source.keys.empty()) return;
-        if (time_remap_active)
+        if (time_remap_active || (source.expression.enabled && !source.expression.source.empty()))
         {
             constexpr int remap_samples = 256;
             for (int sample = 0; sample < remap_samples; ++sample)

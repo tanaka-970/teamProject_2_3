@@ -981,6 +981,9 @@
     <ClCompile Include="RePlayEngine\Motion\MotionEvaluator.cpp">
       <Filter>RePlayEngine\Motion</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Motion\MotionExpression.cpp">
+      <Filter>RePlayEngine\Motion</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Motion\MotionBindingResolver.cpp">
       <Filter>RePlayEngine\Motion</Filter>
     </ClCompile>
@@ -1637,6 +1640,9 @@
     <ClInclude Include="RePlayEngine\Motion\MotionEvaluator.h">
       <Filter>RePlayEngine\Motion</Filter>
     </ClInclude>
+    <ClInclude Include="RePlayEngine\Motion\MotionExpression.h">
+      <Filter>RePlayEngine\Motion</Filter>
+    </ClInclude>
     <ClInclude Include="RePlayEngine\Motion\MotionBindingResolver.h">
       <Filter>RePlayEngine\Motion</Filter>
     </ClInclude>
@@ -1710,6 +1716,9 @@
       <Filter>RePlayEngine\Components\Core</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Components\Rendering\MeshRendererComponent.h">
+      <Filter>RePlayEngine\Components\Rendering</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Rendering\MeshMaterialSlot.h">
       <Filter>RePlayEngine\Components\Rendering</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Components\Rendering\PrimitiveMeshRendererComponent.h">

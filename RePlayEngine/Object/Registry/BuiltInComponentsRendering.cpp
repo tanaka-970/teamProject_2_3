@@ -19,6 +19,14 @@ namespace ReplayEngine::Core::Detail
                     .Tooltip("Material AssetのGUID。Projectパネルから割り当てる。"));
 
             PropertyRegistry::Register<MeshRendererComponent>(
+                MakeAccessorProperty<MeshRendererComponent>("material_slot_count", PropertyType::Int,
+                    [](const MeshRendererComponent& component)
+                    { return PropertyValue::MakeInt(ClampedMaterialSlotCount(component)); },
+                    [](MeshRendererComponent& component, const PropertyValue& value)
+                    { SetMaterialSlotCount(component, value.AsInt()); })
+                    .HiddenInEditor().NotAnimatable());
+
+            PropertyRegistry::Register<MeshRendererComponent>(
                 MakeProperty("material_override", &MeshRendererComponent::material_override)
                     .Display("マテリアル上書き")
                     .Tooltip("色と描画方式にRenderer側の値を使う。"));
@@ -84,6 +92,14 @@ namespace ReplayEngine::Core::Detail
                     .Tooltip("Material AssetのGUID。Projectパネルから割り当てる。"));
 
             PropertyRegistry::Register<PrimitiveMeshRendererComponent>(
+                MakeAccessorProperty<PrimitiveMeshRendererComponent>("material_slot_count", PropertyType::Int,
+                    [](const PrimitiveMeshRendererComponent& component)
+                    { return PropertyValue::MakeInt(ClampedMaterialSlotCount(component)); },
+                    [](PrimitiveMeshRendererComponent& component, const PropertyValue& value)
+                    { SetMaterialSlotCount(component, value.AsInt()); })
+                    .HiddenInEditor().NotAnimatable());
+
+            PropertyRegistry::Register<PrimitiveMeshRendererComponent>(
                 MakeProperty("material_override", &PrimitiveMeshRendererComponent::material_override)
                     .Display("マテリアル上書き")
                     .Tooltip("色と描画方式にRenderer側の値を使う。"));
@@ -132,6 +148,14 @@ namespace ReplayEngine::Core::Detail
                 MakeProperty("material_asset", &SkinnedMeshRendererComponent::material_asset)
                     .Display("マテリアル").AsAssetPath()
                     .Tooltip("Material AssetのGUID。Projectパネルから割り当てる。"));
+
+            PropertyRegistry::Register<SkinnedMeshRendererComponent>(
+                MakeAccessorProperty<SkinnedMeshRendererComponent>("material_slot_count", PropertyType::Int,
+                    [](const SkinnedMeshRendererComponent& component)
+                    { return PropertyValue::MakeInt(ClampedMaterialSlotCount(component)); },
+                    [](SkinnedMeshRendererComponent& component, const PropertyValue& value)
+                    { SetMaterialSlotCount(component, value.AsInt()); })
+                    .HiddenInEditor().NotAnimatable());
 
             PropertyRegistry::Register<SkinnedMeshRendererComponent>(
                 MakeProperty("material_override", &SkinnedMeshRendererComponent::material_override)

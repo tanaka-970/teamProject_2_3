@@ -1,6 +1,7 @@
 ﻿#include "MotionEvaluator.h"
 
 #include "EasingCurveAsset.h"
+#include "MotionExpression.h"
 
 #include <algorithm>
 #include <cmath>
@@ -13,66 +14,6 @@ namespace ReplayEngine::Motion
 {
     namespace
     {
-        std::uint32_t Hash32(std::uint32_t value) noexcept
-        {
-            value ^= value >> 16u;
-            value *= 0x7feb352du;
-            value ^= value >> 15u;
-            value *= 0x846ca68bu;
-            value ^= value >> 16u;
-            return value;
-        }
-
-        std::uint32_t WrappedLattice(double lattice) noexcept
-        {
-            constexpr double range = 4294967296.0;
-            double wrapped = std::fmod(lattice, range);
-            if (wrapped < 0.0) wrapped += range;
-            return static_cast<std::uint32_t>(wrapped);
-        }
-
-        float HashSigned(int seed, std::uint32_t channel,
-            std::uint32_t lattice) noexcept
-        {
-            std::uint32_t value = static_cast<std::uint32_t>(seed);
-            value ^= 0x9e3779b9u + channel * 0x85ebca6bu;
-            value ^= lattice + 0xc2b2ae35u + (value << 6u) + (value >> 2u);
-            const std::uint32_t hashed = Hash32(value);
-            return static_cast<float>(hashed) / 4294967295.0f * 2.0f - 1.0f;
-        }
-
-        float ValueNoise(float time, float frequency, int seed,
-            std::uint32_t channel) noexcept
-        {
-            const double scaled = static_cast<double>(time) *
-                static_cast<double>(frequency);
-            if (!std::isfinite(scaled)) return 0.0f;
-            const double lattice = std::floor(scaled);
-            const float fraction = static_cast<float>(scaled - lattice);
-            const float smooth = fraction * fraction * (3.0f - 2.0f * fraction);
-            const float a = HashSigned(seed, channel, WrappedLattice(lattice));
-            const float b = HashSigned(seed, channel, WrappedLattice(lattice + 1.0));
-            return a + (b - a) * smooth;
-        }
-
-        float WiggleNoise(const MotionWiggle& wiggle, float time,
-            std::uint32_t channel) noexcept
-        {
-            const int octaves = (std::max)(1, (std::min)(4, wiggle.octaves));
-            float frequency = (std::max)(0.0f, wiggle.frequency);
-            float weight = 1.0f;
-            float total = 0.0f;
-            for (int octave = 0; octave < octaves; ++octave)
-            {
-                const std::uint32_t octave_channel = channel +
-                    static_cast<std::uint32_t>(octave) * 0x9e3779b9u;
-                total += ValueNoise(time, frequency, wiggle.seed, octave_channel) * weight;
-                frequency *= 2.0f;
-                weight *= 0.5f;
-            }
-            return total;
-        }
-
         void ApplyWiggle(const MotionTrack& track, float time,
             Reflection::PropertyValue& value)
         {
@@ -85,46 +26,46 @@ namespace ReplayEngine::Motion
             {
             case PropertyType::Float:
                 value = Reflection::PropertyValue::MakeFloat(value.AsFloat() +
-                    WiggleNoise(track.wiggle, time, 0u) * amplitude);
+                    MotionExpressionEvaluator::WiggleNoise(track.wiggle, time, 0u) * amplitude);
                 break;
             case PropertyType::Double:
                 value = Reflection::PropertyValue::MakeDouble(value.AsDouble() +
-                    static_cast<double>(WiggleNoise(track.wiggle, time, 0u) * amplitude));
+                    static_cast<double>(MotionExpressionEvaluator::WiggleNoise(track.wiggle, time, 0u) * amplitude));
                 break;
             case PropertyType::Vector2:
             {
                 DirectX::XMFLOAT2 v = value.AsVector2();
-                v.x += WiggleNoise(track.wiggle, time, 0u) * amplitude;
-                v.y += WiggleNoise(track.wiggle, time, 1u) * amplitude;
+                v.x += MotionExpressionEvaluator::WiggleNoise(track.wiggle, time, 0u) * amplitude;
+                v.y += MotionExpressionEvaluator::WiggleNoise(track.wiggle, time, 1u) * amplitude;
                 value = Reflection::PropertyValue::MakeVector2(v);
                 break;
             }
             case PropertyType::Vector3:
             {
                 DirectX::XMFLOAT3 v = value.AsVector3();
-                v.x += WiggleNoise(track.wiggle, time, 0u) * amplitude;
-                v.y += WiggleNoise(track.wiggle, time, 1u) * amplitude;
-                v.z += WiggleNoise(track.wiggle, time, 2u) * amplitude;
+                v.x += MotionExpressionEvaluator::WiggleNoise(track.wiggle, time, 0u) * amplitude;
+                v.y += MotionExpressionEvaluator::WiggleNoise(track.wiggle, time, 1u) * amplitude;
+                v.z += MotionExpressionEvaluator::WiggleNoise(track.wiggle, time, 2u) * amplitude;
                 value = Reflection::PropertyValue::MakeVector3(v);
                 break;
             }
             case PropertyType::Vector4:
             {
                 DirectX::XMFLOAT4 v = value.AsVector4();
-                v.x += WiggleNoise(track.wiggle, time, 0u) * amplitude;
-                v.y += WiggleNoise(track.wiggle, time, 1u) * amplitude;
-                v.z += WiggleNoise(track.wiggle, time, 2u) * amplitude;
-                v.w += WiggleNoise(track.wiggle, time, 3u) * amplitude;
+                v.x += MotionExpressionEvaluator::WiggleNoise(track.wiggle, time, 0u) * amplitude;
+                v.y += MotionExpressionEvaluator::WiggleNoise(track.wiggle, time, 1u) * amplitude;
+                v.z += MotionExpressionEvaluator::WiggleNoise(track.wiggle, time, 2u) * amplitude;
+                v.w += MotionExpressionEvaluator::WiggleNoise(track.wiggle, time, 3u) * amplitude;
                 value = Reflection::PropertyValue::MakeVector4(v);
                 break;
             }
             case PropertyType::Color:
             {
                 DirectX::XMFLOAT4 v = value.AsVector4();
-                v.x += WiggleNoise(track.wiggle, time, 0u) * amplitude;
-                v.y += WiggleNoise(track.wiggle, time, 1u) * amplitude;
-                v.z += WiggleNoise(track.wiggle, time, 2u) * amplitude;
-                v.w += WiggleNoise(track.wiggle, time, 3u) * amplitude;
+                v.x += MotionExpressionEvaluator::WiggleNoise(track.wiggle, time, 0u) * amplitude;
+                v.y += MotionExpressionEvaluator::WiggleNoise(track.wiggle, time, 1u) * amplitude;
+                v.z += MotionExpressionEvaluator::WiggleNoise(track.wiggle, time, 2u) * amplitude;
+                v.w += MotionExpressionEvaluator::WiggleNoise(track.wiggle, time, 3u) * amplitude;
                 value = Reflection::PropertyValue::MakeColor(v);
                 break;
             }
@@ -295,8 +236,8 @@ namespace ReplayEngine::Motion
     }
 
     bool EvaluateTrackInternal(const MotionTrack& track, float time, float wiggle_time,
-        Reflection::PropertyValue& out, const Assets::AssetDatabase* database,
-        std::string* curve_error)
+        float duration, Reflection::PropertyValue& out,
+        const Assets::AssetDatabase* database, std::string* curve_error)
     {
         if (curve_error != nullptr) curve_error->clear();
         if (!track.enabled || track.keys.empty()) return false;
@@ -308,6 +249,9 @@ namespace ReplayEngine::Motion
         {
             out = track.keys.front().value;
             if (track.loop == MotionTrackLoop::Offset) ApplyOffsetLoop(track, offset_cycles, out);
+            if (track.expression.enabled && !track.expression.source.empty())
+                MotionExpressionEvaluator::Apply(track.expression, out, evaluated_time,
+                    wiggle_time, duration, curve_error);
             ApplyWiggle(track, wiggle_time, out);
             return true;
         }
@@ -316,6 +260,9 @@ namespace ReplayEngine::Motion
         {
             out = track.keys.back().value;
             if (track.loop == MotionTrackLoop::Offset) ApplyOffsetLoop(track, offset_cycles, out);
+            if (track.expression.enabled && !track.expression.source.empty())
+                MotionExpressionEvaluator::Apply(track.expression, out, evaluated_time,
+                    wiggle_time, duration, curve_error);
             ApplyWiggle(track, wiggle_time, out);
             return true;
         }
@@ -333,6 +280,9 @@ namespace ReplayEngine::Motion
         {
             out = b.value;
             if (track.loop == MotionTrackLoop::Offset) ApplyOffsetLoop(track, offset_cycles, out);
+            if (track.expression.enabled && !track.expression.source.empty())
+                MotionExpressionEvaluator::Apply(track.expression, out, evaluated_time,
+                    wiggle_time, duration, curve_error);
             ApplyWiggle(track, wiggle_time, out);
             return true;
         }
@@ -341,6 +291,9 @@ namespace ReplayEngine::Motion
         {
             out = a.value;
             if (track.loop == MotionTrackLoop::Offset) ApplyOffsetLoop(track, offset_cycles, out);
+            if (track.expression.enabled && !track.expression.source.empty())
+                MotionExpressionEvaluator::Apply(track.expression, out, evaluated_time,
+                    wiggle_time, duration, curve_error);
             ApplyWiggle(track, wiggle_time, out);
             return true;
         }
@@ -359,6 +312,9 @@ namespace ReplayEngine::Motion
         }
         out = Reflection::PropertyValue::Lerp(a.value, b.value, eased);
         if (track.loop == MotionTrackLoop::Offset) ApplyOffsetLoop(track, offset_cycles, out);
+        if (track.expression.enabled && !track.expression.source.empty())
+            MotionExpressionEvaluator::Apply(track.expression, out, evaluated_time,
+                wiggle_time, duration, curve_error);
         ApplyWiggle(track, wiggle_time, out);
         return true;
     }
@@ -367,14 +323,25 @@ namespace ReplayEngine::Motion
         Reflection::PropertyValue& out, const Assets::AssetDatabase* database,
         std::string* curve_error)
     {
-        return EvaluateTrackInternal(track, time, time, out, database, curve_error);
+        const float fallback_duration = track.keys.empty() ? 0.0f :
+            (std::max)(0.0f, track.keys.back().time);
+        return EvaluateTrackInternal(track, time, time, fallback_duration, out, database, curve_error);
     }
 
     bool MotionEvaluator::EvaluateTrack(const MotionTrack& track, float time, float wiggle_time,
         Reflection::PropertyValue& out, const Assets::AssetDatabase* database,
         std::string* curve_error)
     {
-        return EvaluateTrackInternal(track, time, wiggle_time, out, database, curve_error);
+        const float fallback_duration = track.keys.empty() ? 0.0f :
+            (std::max)(0.0f, track.keys.back().time);
+        return EvaluateTrackInternal(track, time, wiggle_time, fallback_duration, out, database, curve_error);
+    }
+
+    bool MotionEvaluator::EvaluateTrackWithContext(const MotionTrack& track,
+        const MotionTrackEvaluationContext& context, Reflection::PropertyValue& out)
+    {
+        return EvaluateTrackInternal(track, context.time, context.raw_time,
+            context.duration, out, context.database, context.error);
     }
 
     float MotionEvaluator::RemapMotionTime(const MotionAsset& asset, float time,

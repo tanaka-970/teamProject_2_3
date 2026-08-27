@@ -1,4 +1,5 @@
 ﻿#include "MotionAsset.h"
+#include "MotionExpression.h"
 
 #include "../Object/Registry/ComponentRegistry.h"
 
@@ -7,6 +8,7 @@
 #include <fstream>
 #include <iomanip>
 #include <limits>
+#include <locale>
 #include <sstream>
 #include <system_error>
 #include <utility>
@@ -22,6 +24,31 @@ namespace ReplayEngine::Motion
                 c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
             }
             return value;
+        }
+
+
+        std::string DecodeExpressionSource(const std::string& encoded)
+        {
+            std::string source;
+            source.reserve(encoded.size());
+            for (std::size_t i = 0; i < encoded.size(); ++i)
+            {
+                if (encoded[i] != '\\' || i + 1 >= encoded.size())
+                {
+                    source.push_back(encoded[i]);
+                    continue;
+                }
+                const char next = encoded[++i];
+                if (next == 'n') source.push_back('\n');
+                else if (next == 'r') source.push_back('\r');
+                else if (next == '\\') source.push_back('\\');
+                else
+                {
+                    source.push_back('\\');
+                    source.push_back(next);
+                }
+            }
+            return source;
         }
 
         bool ParseMotionType(std::string token, Reflection::PropertyType& out)
@@ -237,6 +264,7 @@ namespace ReplayEngine::Motion
         {
             ++line_number;
             std::istringstream input(line);
+            input.imbue(std::locale::classic());
             std::string head;
             if (!(input >> head) || head.empty() || head[0] == '#') continue;
 
@@ -387,6 +415,25 @@ namespace ReplayEngine::Motion
                     error = std::string(u8"Motion AssetのLOOPが不正です: line ") +
                         std::to_string(line_number);
                     return false;
+                }
+            }
+            else if (head == "EXPRESSION" && current_track != nullptr)
+            {
+                int enabled = 0;
+                std::string encoded;
+                if (!(input >> enabled >> std::quoted(encoded)))
+                {
+                    error = std::string(u8"Motion AssetのEXPRESSIONが不正です: line ") +
+                        std::to_string(line_number);
+                    return false;
+                }
+                current_track->expression.enabled = enabled != 0;
+                current_track->expression.source = DecodeExpressionSource(encoded);
+                if (!current_track->expression.source.empty())
+                {
+                    std::string compile_error;
+                    MotionExpressionEvaluator::Validate(current_track->expression.source,
+                        compile_error);
                 }
             }
             else if (head == "KEY" && current_track != nullptr)

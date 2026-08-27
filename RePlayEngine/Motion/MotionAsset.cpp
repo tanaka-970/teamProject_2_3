@@ -12,6 +12,7 @@
 #include <fstream>
 #include <iomanip>
 #include <limits>
+#include <locale>
 #include <sstream>
 #include <system_error>
 #include <utility>
@@ -73,6 +74,21 @@ namespace ReplayEngine::Motion
             case MotionTrackLoop::Offset: return "Offset";
             }
             return "None";
+        }
+
+
+        std::string EncodeExpressionSource(const std::string& source)
+        {
+            std::string encoded;
+            encoded.reserve(source.size());
+            for (const char c : source)
+            {
+                if (c == '\\') encoded += "\\\\";
+                else if (c == '\n') encoded += "\\n";
+                else if (c == '\r') encoded += "\\r";
+                else encoded.push_back(c);
+            }
+            return encoded;
         }
 
         void WriteValue(std::ostream& out, const Reflection::PropertyValue& value)
@@ -179,6 +195,7 @@ namespace ReplayEngine::Motion
         }
 
         std::ofstream file(path);
+        file.imbue(std::locale::classic());
         if (!file)
         {
             error = "Motion Assetを書き込めません: " + path.string();
@@ -226,6 +243,11 @@ namespace ReplayEngine::Motion
             }
             if (track.loop != MotionTrackLoop::None)
                 file << "LOOP " << ToTrackLoopString(track.loop) << '\n';
+            if (track.expression.enabled || !track.expression.source.empty())
+            {
+                file << "EXPRESSION " << (track.expression.enabled ? 1 : 0) << ' '
+                    << std::quoted(EncodeExpressionSource(track.expression.source)) << '\n';
+            }
 
             for (const MotionKeyframe& key : track.keys)
             {

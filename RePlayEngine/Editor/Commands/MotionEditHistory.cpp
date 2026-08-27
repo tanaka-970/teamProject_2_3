@@ -48,6 +48,8 @@ namespace ReplayEngine::Editor
                 !NearlyEqual(a.wiggle.amplitude, b.wiggle.amplitude) ||
                 !NearlyEqual(a.wiggle.frequency, b.wiggle.frequency) ||
                 a.wiggle.seed != b.wiggle.seed || a.wiggle.octaves != b.wiggle.octaves ||
+                a.expression.enabled != b.expression.enabled ||
+                a.expression.source != b.expression.source ||
                 a.keys.size() != b.keys.size())
             {
                 return false;

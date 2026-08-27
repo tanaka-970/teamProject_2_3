@@ -61,15 +61,28 @@
 
 
 ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
-    const ReplayEngine::Rendering::RenderItem& source)
+    const ReplayEngine::Rendering::RenderItem& source,
+    const std::string* material_asset_override, bool apply_material_motion)
 {
     using namespace ReplayEngine::Rendering;
 
-    RenderItem item = source;
+    RenderItem item;
+    if (material_asset_override == nullptr)
+    {
+        item = source;
+    }
+    else
+    {
+        item.cast_shadow = source.cast_shadow;
+        item.receive_shadow = source.receive_shadow;
+    }
     item.legacy_tint = source.tint;
     item.lighting_model = deferred_lighting_model(source.shading_model);
 
-    const MaterialAsset* material = resolve_object_material(source.material_asset);
+    const std::string& material_asset = material_asset_override != nullptr
+        ? *material_asset_override : source.material_asset;
+    item.material_asset = material_asset;
+    const MaterialAsset* material = resolve_object_material(material_asset);
     const bool has_material_asset = material != nullptr;
     MaterialAsset fallback_material;
     if (!has_material_asset)
@@ -152,68 +165,72 @@ ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
     // Motion の material.* は Renderer の永続 material_override とは別物。
     // Asset を直接変更せず、この draw 用コピーにだけ重ねる。停止した次フレームには
     // PrepareMaterialMotionProperties が active mask / bag を消すため完全に元へ戻る。
-    using namespace ReplayEngine::Components;
-    const std::uint32_t motion_mask = source.material_motion_fixed_mask;
-    if ((motion_mask & MaterialMotionBaseColor) != 0)
+    if (apply_material_motion)
     {
-        item.material_base_color = source.override_material_base_color;
-        binding_material.base_color = source.override_material_base_color;
-        binding_material.properties.Set("prop.BaseColor",
-            ReplayEngine::Reflection::PropertyValue::MakeColor(
-                source.override_material_base_color));
-    }
-    if ((motion_mask & MaterialMotionMetallic) != 0)
-    {
-        item.metallic = source.override_material_metallic;
-        binding_material.metallic = source.override_material_metallic;
-        binding_material.properties.Set("prop.Metallic",
-            ReplayEngine::Reflection::PropertyValue::MakeFloat(
-                source.override_material_metallic));
-    }
-    if ((motion_mask & MaterialMotionRoughness) != 0)
-    {
-        item.roughness = source.override_material_roughness;
-        binding_material.roughness = source.override_material_roughness;
-        binding_material.properties.Set("prop.Roughness",
-            ReplayEngine::Reflection::PropertyValue::MakeFloat(
-                source.override_material_roughness));
-    }
-    if ((motion_mask & MaterialMotionAmbientOcclusion) != 0)
-    {
-        item.ambient_occlusion = source.override_material_ambient_occlusion;
-        binding_material.ambient_occlusion = source.override_material_ambient_occlusion;
-        binding_material.properties.Set("prop.AmbientOcclusion",
-            ReplayEngine::Reflection::PropertyValue::MakeFloat(
-                source.override_material_ambient_occlusion));
-    }
-    if ((motion_mask & MaterialMotionEmissiveColor) != 0)
-    {
-        item.emissive_color = source.override_material_emissive_color;
-        binding_material.emissive = source.override_material_emissive_color;
-        binding_material.properties.Set("prop.Emissive",
-            ReplayEngine::Reflection::PropertyValue::MakeVector3(
-                source.override_material_emissive_color));
-    }
-    if ((motion_mask & MaterialMotionEmissiveStrength) != 0)
-    {
-        item.emissive_strength = source.override_material_emissive_strength;
-        binding_material.emissive_strength = source.override_material_emissive_strength;
-        binding_material.properties.Set("prop.EmissiveStrength",
-            ReplayEngine::Reflection::PropertyValue::MakeFloat(
-                source.override_material_emissive_strength));
-    }
-    if ((motion_mask & MaterialMotionDoubleSided) != 0)
-    {
-        item.double_sided = source.double_sided || source.override_material_double_sided;
-        binding_material.double_sided = source.override_material_double_sided;
-        binding_material.properties.Set("prop.DoubleSided",
-            ReplayEngine::Reflection::PropertyValue::MakeBool(
-                source.override_material_double_sided));
-    }
-    for (const ReplayEngine::Reflection::PropertyBag::Entry& entry :
-        source.material_motion_properties.Entries())
-    {
-        binding_material.properties.Set(entry.name, entry.value);
+        using namespace ReplayEngine::Components;
+        const std::uint32_t motion_mask = source.material_motion_fixed_mask;
+        if ((motion_mask & MaterialMotionBaseColor) != 0)
+        {
+            item.material_base_color = source.override_material_base_color;
+            binding_material.base_color = source.override_material_base_color;
+            binding_material.properties.Set("prop.BaseColor",
+                ReplayEngine::Reflection::PropertyValue::MakeColor(
+                    source.override_material_base_color));
+        }
+        if ((motion_mask & MaterialMotionMetallic) != 0)
+        {
+            item.metallic = source.override_material_metallic;
+            binding_material.metallic = source.override_material_metallic;
+            binding_material.properties.Set("prop.Metallic",
+                ReplayEngine::Reflection::PropertyValue::MakeFloat(
+                    source.override_material_metallic));
+        }
+        if ((motion_mask & MaterialMotionRoughness) != 0)
+        {
+            item.roughness = source.override_material_roughness;
+            binding_material.roughness = source.override_material_roughness;
+            binding_material.properties.Set("prop.Roughness",
+                ReplayEngine::Reflection::PropertyValue::MakeFloat(
+                    source.override_material_roughness));
+        }
+        if ((motion_mask & MaterialMotionAmbientOcclusion) != 0)
+        {
+            item.ambient_occlusion = source.override_material_ambient_occlusion;
+            binding_material.ambient_occlusion = source.override_material_ambient_occlusion;
+            binding_material.properties.Set("prop.AmbientOcclusion",
+                ReplayEngine::Reflection::PropertyValue::MakeFloat(
+                    source.override_material_ambient_occlusion));
+        }
+        if ((motion_mask & MaterialMotionEmissiveColor) != 0)
+        {
+            item.emissive_color = source.override_material_emissive_color;
+            binding_material.emissive = source.override_material_emissive_color;
+            binding_material.properties.Set("prop.Emissive",
+                ReplayEngine::Reflection::PropertyValue::MakeVector3(
+                    source.override_material_emissive_color));
+        }
+        if ((motion_mask & MaterialMotionEmissiveStrength) != 0)
+        {
+            item.emissive_strength = source.override_material_emissive_strength;
+            binding_material.emissive_strength = source.override_material_emissive_strength;
+            binding_material.properties.Set("prop.EmissiveStrength",
+                ReplayEngine::Reflection::PropertyValue::MakeFloat(
+                    source.override_material_emissive_strength));
+        }
+        if ((motion_mask & MaterialMotionDoubleSided) != 0)
+        {
+            item.double_sided = source.double_sided || source.override_material_double_sided;
+            binding_material.double_sided = source.override_material_double_sided;
+            binding_material.properties.Set("prop.DoubleSided",
+                ReplayEngine::Reflection::PropertyValue::MakeBool(
+                    source.override_material_double_sided));
+        }
+        for (const ReplayEngine::Reflection::PropertyBag::Entry& entry :
+            source.material_motion_properties.Entries())
+        {
+            binding_material.properties.Set(entry.name, entry.value);
+        }
+
     }
 
     // Material Asset が無い場合は、Builtin Primitive の旧 shading_model を
@@ -413,9 +430,10 @@ bool framework::build_dx12_static_scene(
         &material_alpha_mode, &multiply_color, &add_asset_texture,
         &base_texture_binding, &fallback_texture_key](
         const RenderItem& source_item, const RenderItem& item,
-        D3D12StaticDrawItem& draw) -> bool
+        D3D12StaticDrawItem& draw, const MaterialAsset* resolved_material = nullptr) -> bool
     {
-        const MaterialAsset* material = resolve_object_material(source_item.material_asset);
+        const MaterialAsset* material = resolved_material != nullptr
+            ? resolved_material : resolve_object_material(source_item.material_asset);
         const bool external = material != nullptr;
         draw.base_color = multiply_color(item.material_base_color, item.tint);
         draw.vertex_tint = item.tint;
@@ -433,11 +451,20 @@ bool framework::build_dx12_static_scene(
         draw.alpha_mode = material_alpha_mode(material->alpha_mode);
         draw.alpha_cutoff = material->alpha_cutoff;
         const BaseTextureBinding binding = base_texture_binding(item);
-        std::string texture_guid = binding.asset_guid;
-        if (texture_guid.empty()) texture_guid = material->base_color_texture;
-        draw.base_color_texture_key = add_asset_texture(texture_guid);
-        if (draw.base_color_texture_key.empty())
-            draw.base_color_texture_key = binding.fallback_key;
+        const bool flat_fill = item.material_binding.shader == BuiltInShaders::FlatFill;
+        if (flat_fill)
+        {
+            // FlatFill だけ既存の 1x1 白テクスチャを使い、共用 Bridge は変更しない。
+            draw.base_color_texture_key = "__dx12_white";
+        }
+        else
+        {
+            std::string texture_guid = binding.asset_guid;
+            if (texture_guid.empty()) texture_guid = material->base_color_texture;
+            draw.base_color_texture_key = add_asset_texture(texture_guid);
+            if (draw.base_color_texture_key.empty())
+                draw.base_color_texture_key = binding.fallback_key;
+        }
 
         // 既存の MaterialBindingResolver を b9 の Byte と t40 以降の Slot の正本として使う。
         // DX12 Backend はこの解決済み Packet だけを利用する。
@@ -486,6 +513,21 @@ bool framework::build_dx12_static_scene(
             }
         }
         return true;
+    };
+
+    const auto resolve_material_slot = [this](const RenderItem& source_item,
+        std::size_t subset_index, const std::string*& out_asset) -> const MaterialAsset*
+    {
+        out_asset = nullptr;
+        if (source_item.material_slot_assets == nullptr ||
+            subset_index >= static_cast<std::size_t>(source_item.material_slot_count))
+            return nullptr;
+        const std::string* candidate = source_item.material_slot_assets[subset_index];
+        if (candidate == nullptr || candidate->empty()) return nullptr;
+        const MaterialAsset* material = resolve_object_material(*candidate);
+        if (material == nullptr) return nullptr;
+        out_asset = candidate;
+        return material;
     };
 
     const auto make_mesh_source = [&submission, &mesh_source_keys](
@@ -1003,8 +1045,18 @@ bool framework::build_dx12_static_scene(
                 }
 
                 const auto append_skinned_draw = [&](std::uint32_t start, std::uint32_t count,
-                    std::uint64_t material_id)
+                    std::uint64_t material_id, std::size_t subset_index)
                 {
+                    const std::string* slot_asset = nullptr;
+                    const MaterialAsset* slot_material =
+                        resolve_material_slot(source_item, subset_index, slot_asset);
+                    RenderItem slot_item;
+                    const RenderItem* material_item = &item;
+                    if (slot_material != nullptr && slot_asset != nullptr)
+                    {
+                        slot_item = resolve_render_item_material(source_item, slot_asset, false);
+                        material_item = &slot_item;
+                    }
                     D3D12SkinnedDrawItem skinned_draw;
                     D3D12StaticDrawItem& draw = skinned_draw.surface;
                     draw.mesh_key = mesh_key;
@@ -1014,7 +1066,8 @@ bool framework::build_dx12_static_scene(
                     draw.start_index = start;
                     draw.index_count = count;
                     draw.world = mesh_world;
-                    const bool external = fill_external_material(source_item, item, draw);
+                    const bool external = fill_external_material(
+                        source_item, *material_item, draw, slot_material);
                     if (!external)
                     {
                         const auto material_it = mesh_asset->materials.find(material_id);
@@ -1070,16 +1123,31 @@ bool framework::build_dx12_static_scene(
                 };
 
                 if (mesh.subsets.empty())
-                    append_skinned_draw(0, static_cast<std::uint32_t>(mesh.indices.size()), 0);
+                    append_skinned_draw(0, static_cast<std::uint32_t>(mesh.indices.size()), 0, 0);
                 else
-                    for (const skinned_mesh::mesh::subset& subset : mesh.subsets)
+                {
+                    for (std::size_t subset_index = 0; subset_index < mesh.subsets.size();
+                        ++subset_index)
+                    {
+                        const skinned_mesh::mesh::subset& subset = mesh.subsets[subset_index];
                         append_skinned_draw(subset.start_index_location, subset.index_count,
-                            subset.material_unique_id);
+                            subset.material_unique_id, subset_index);
+                    }
+                }
             }
             continue;
         }
         if (item.mesh_asset.rfind("builtin:", 0) == 0)
         {
+            const std::string* slot_asset = nullptr;
+            const MaterialAsset* slot_material = resolve_material_slot(source_item, 0, slot_asset);
+            RenderItem slot_item;
+            const RenderItem* material_item = &item;
+            if (slot_material != nullptr && slot_asset != nullptr)
+            {
+                slot_item = resolve_render_item_material(source_item, slot_asset, false);
+                material_item = &slot_item;
+            }
             if (dx12_framework_active)
             {
                 std::vector<static_mesh::vertex> cpu_vertices;
@@ -1110,7 +1178,7 @@ bool framework::build_dx12_static_scene(
                     (std::min)(31, item.rendering_layer)));
                 draw.motion_key = std::to_string(source_item.owner.Value()) + ":" + draw.mesh_key;
                 draw.world = item.world;
-                (void)fill_external_material(source_item, item, draw);
+                (void)fill_external_material(source_item, *material_item, draw, slot_material);
                 submission.draws.push_back(std::move(draw));
                 continue;
             }
@@ -1129,7 +1197,7 @@ bool framework::build_dx12_static_scene(
                 (std::min)(31, item.rendering_layer)));
             draw.motion_key = std::to_string(source_item.owner.Value()) + ":" + draw.mesh_key;
             draw.world = item.world;
-            (void)fill_external_material(source_item, item, draw);
+            (void)fill_external_material(source_item, *material_item, draw, slot_material);
             submission.draws.push_back(std::move(draw));
             continue;
         }
@@ -1225,8 +1293,18 @@ bool framework::build_dx12_static_scene(
             const DirectX::XMFLOAT4X4 mesh_world =
                 multiply_world(mesh.default_global_transform, item.world);
             const auto append_draw = [&](std::uint32_t start, std::uint32_t count,
-                std::uint64_t material_id)
+                std::uint64_t material_id, std::size_t subset_index)
             {
+                const std::string* slot_asset = nullptr;
+                const MaterialAsset* slot_material =
+                    resolve_material_slot(source_item, subset_index, slot_asset);
+                RenderItem slot_item;
+                const RenderItem* material_item = &item;
+                if (slot_material != nullptr && slot_asset != nullptr)
+                {
+                    slot_item = resolve_render_item_material(source_item, slot_asset, false);
+                    material_item = &slot_item;
+                }
                 D3D12StaticDrawItem draw;
                 draw.mesh_key = mesh_key;
                 draw.owner_id = source_item.owner.Value();
@@ -1237,7 +1315,8 @@ bool framework::build_dx12_static_scene(
                 draw.start_index = start;
                 draw.index_count = count;
                 draw.world = mesh_world;
-                const bool external = fill_external_material(source_item, item, draw);
+                const bool external = fill_external_material(
+                    source_item, *material_item, draw, slot_material);
                 if (!external)
                 {
                     const auto material_it = mesh_asset->materials.find(material_id);
@@ -1290,13 +1369,17 @@ bool framework::build_dx12_static_scene(
 
             if (mesh.subsets.empty())
             {
-                append_draw(0, static_cast<std::uint32_t>(mesh.indices.size()), 0);
+                append_draw(0, static_cast<std::uint32_t>(mesh.indices.size()), 0, 0);
             }
             else
             {
-                for (const skinned_mesh::mesh::subset& subset : mesh.subsets)
+                for (std::size_t subset_index = 0; subset_index < mesh.subsets.size();
+                    ++subset_index)
+                {
+                    const skinned_mesh::mesh::subset& subset = mesh.subsets[subset_index];
                     append_draw(subset.start_index_location, subset.index_count,
-                        subset.material_unique_id);
+                        subset.material_unique_id, subset_index);
+                }
             }
         }
     }

@@ -3,6 +3,7 @@
 #include "../../RePlayEngine/Components/UI/UIImageComponent.h"
 #include "../../RePlayEngine/Motion/MotionBindingResolver.h"
 #include "../../RePlayEngine/Motion/MotionEvaluator.h"
+#include "../../RePlayEngine/Motion/MotionExpression.h"
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
 #include "../../RePlayEngine/Object/Registry/ComponentRegistry.h"
 #include "../../RePlayEngine/Reflection/Registry/PropertyRegistry.h"
@@ -11,6 +12,7 @@
 #include "imgui/imgui_internal.h"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cstring>
 #include <filesystem>
@@ -317,6 +319,53 @@ void framework::draw_motion_inspector()
             track.loop = loop;
             motion_edit_history.Commit(motion_editor_asset);
             motion_editor_dirty = true;
+        }
+    }
+
+    if (ImGui::CollapsingHeader(u8"式 / エクスプレッション###MotionTrackExpression"))
+    {
+        bool expression_enabled = track.expression.enabled;
+        if (ImGui::Checkbox(u8"有効##MotionExpressionEnabled", &expression_enabled))
+        {
+            motion_edit_history.Begin(motion_editor_asset, u8"式の有効状態を変更");
+            track.expression.enabled = expression_enabled;
+            motion_edit_history.Commit(motion_editor_asset);
+            motion_editor_dirty = true;
+        }
+
+        std::array<char, 4096> expression_buffer{};
+        strncpy_s(expression_buffer.data(), expression_buffer.size(),
+            track.expression.source.c_str(), _TRUNCATE);
+        const bool expression_changed = ImGui::InputTextMultiline(
+            u8"式##MotionExpressionSource", expression_buffer.data(),
+            expression_buffer.size(), ImVec2(-1.0f, 96.0f));
+        if (expression_changed)
+        {
+            motion_edit_history.Begin(motion_editor_asset, u8"式を変更");
+            track.expression.source = expression_buffer.data();
+            motion_editor_dirty = true;
+            motion_easing_curve_warning_guids.clear();
+        }
+        if (ImGui::IsItemDeactivatedAfterEdit())
+            motion_edit_history.Commit(motion_editor_asset);
+
+        ImGui::TextDisabled(u8"変数: v, t, rt, d, i, n");
+        ImGui::TextDisabled(u8"関数: abs sign min max clamp floor ceil round sqrt pow exp log mod");
+        ImGui::TextDisabled(u8"      sin cos tan asin acos atan atan2 lerp step smoothstep noise wiggle");
+        if (track.expression.enabled &&
+            !ReplayEngine::Motion::MotionExpressionEvaluator::SupportsType(track.value_type))
+        {
+            ImGui::TextDisabled(u8"この型には式は適用されません。");
+        }
+        else if (track.expression.enabled)
+        {
+            std::string expression_error;
+            if (!ReplayEngine::Motion::MotionExpressionEvaluator::Validate(
+                track.expression.source, expression_error))
+            {
+                ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.35f, 1.0f),
+                    u8"式エラー: %s", expression_error.c_str());
+            }
         }
     }
 

@@ -80,6 +80,12 @@ namespace ReplayEngine::Motion
         int octaves = 1;
     };
 
+    struct MotionExpression
+    {
+        bool enabled = false;
+        std::string source;
+    };
+
     enum class MotionTrackLoop : int
     {
         None = 0,
@@ -98,6 +104,7 @@ namespace ReplayEngine::Motion
         std::vector<MotionKeyframe> keys;
         MotionWiggle wiggle;
         MotionTrackLoop loop = MotionTrackLoop::None;
+        MotionExpression expression;
     };
 
     struct MotionEvent
@@ -117,7 +124,7 @@ namespace ReplayEngine::Motion
     {
     public:
         static constexpr const char* file_extension = ".replaymotion";
-        static constexpr int current_version = 6;
+        static constexpr int current_version = 7;
 
         std::string name{ "Motion" };
         float duration = 1.0f;
