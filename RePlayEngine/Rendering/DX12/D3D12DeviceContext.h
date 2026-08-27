@@ -243,6 +243,8 @@ namespace ReplayEngine::Rendering::DX12
         float ssao_strength = 1.0f;
         float ssr_strength = 1.0f;
         DirectX::XMFLOAT4 color_filter{ 1, 1, 1, 1 };
+        std::uint32_t render_output = 0;
+        std::uint32_t deferred_debug_mode = 0;
         bool bloom_enabled = true;
         bool vignette_enabled = false;
         bool fxaa_enabled = true;
@@ -881,6 +883,7 @@ namespace ReplayEngine::Rendering::DX12
         {
             Microsoft::WRL::ComPtr<ID3D12Resource> resource;
             D3D12DescriptorAllocation srv{};
+            D3D12DescriptorAllocation srgb_srv{};
             std::uint32_t width = 0;
             std::uint32_t height = 0;
             std::uint16_t mip_levels = 1;
@@ -1058,6 +1061,7 @@ namespace ReplayEngine::Rendering::DX12
         D3D12RenderItemBatch render_item_batches_[FrameCount];
         D3D12FrameConstants current_frame_constants_{};
         D3D12OffscreenTarget scene_view_target_{};
+        D3D12OffscreenTarget scene3d_deferred_target_{};
         D3D12OffscreenTarget game_view_target_{};
         D3D12OffscreenTarget ui_preview_target_{};
         D3D12OffscreenTarget ui_preview_effect_targets_[4]{};

@@ -119,6 +119,7 @@ namespace ReplayEngine::Rendering::DX12
             DirectX::XMFLOAT4 csm_texel_world{};
             Scene3DLocalShadowSliceGpu local_shadow_slices[16]{};
             DirectX::XMUINT4 shadow_flags{}; // x=CSM有効、y=Local有効、z/w=予約
+            DirectX::XMUINT4 debug_flags{}; // x=DeferredDebugMode、y/z/w=予約
         };
 
         struct Scene3DShadowObjectConstants final
@@ -162,6 +163,7 @@ namespace ReplayEngine::Rendering::DX12
             DirectX::XMFLOAT2 padding{};
             DirectX::XMFLOAT4 color_filter{ 1, 1, 1, 1 };
             DirectX::XMFLOAT4 feature_flags{};
+            DirectX::XMFLOAT4 debug_options{};
             // SSR のレイマーチはビュー空間で行う。行列はここでだけ post 側へ渡す。
             DirectX::XMFLOAT4X4 view{};
             DirectX::XMFLOAT4X4 projection{};
@@ -743,18 +745,18 @@ namespace ReplayEngine::Rendering::DX12
             return fail("Scene3D.PSO.Lighting");
         SetD3D12ObjectName(scene3d_lighting_pipeline_.Get(), L"Scene3D.PSO", L"Lighting");
 
-        D3D12_DESCRIPTOR_RANGE postprocess_ranges[6]{};
-        for (UINT index = 0; index < 6; ++index)
+        D3D12_DESCRIPTOR_RANGE postprocess_ranges[8]{};
+        for (UINT index = 0; index < 8; ++index)
         {
             postprocess_ranges[index].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
             postprocess_ranges[index].NumDescriptors = 1;
             postprocess_ranges[index].BaseShaderRegister = index;
         }
-        D3D12_ROOT_PARAMETER postprocess_parameters[7]{};
+        D3D12_ROOT_PARAMETER postprocess_parameters[9]{};
         postprocess_parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
         postprocess_parameters[0].Descriptor.ShaderRegister = 0;
         postprocess_parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-        for (UINT index = 0; index < 6; ++index)
+        for (UINT index = 0; index < 8; ++index)
         {
             postprocess_parameters[index + 1].ParameterType =
                 D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
@@ -1701,6 +1703,7 @@ namespace ReplayEngine::Rendering::DX12
         light.shadow_flags = {
             directional_shadow_available ? 1u : 0u,
             local_shadow_available ? 1u : 0u, 0u, 0u };
+        light.debug_flags = { submission.post_process.deferred_debug_mode, 0u, 0u, 0u };
         D3D12_GPU_VIRTUAL_ADDRESS light_gpu = 0;
         if (!allocate_cb(&light, sizeof(light), light_gpu)) return false;
 
@@ -1838,11 +1841,14 @@ namespace ReplayEngine::Rendering::DX12
             if (normal == nullptr || metallic == nullptr || roughness == nullptr ||
                 emissive == nullptr || occlusion == nullptr || ramp == nullptr)
                 return false;
-            command_list_->SetGraphicsRootDescriptorTable(6, texture_for(draw)->srv.gpu); // t0
+            const StaticTextureResource* base = texture_for(draw);
+            command_list_->SetGraphicsRootDescriptorTable(6, base->srgb_srv.IsValid()
+                ? base->srgb_srv.gpu : base->srv.gpu);                                     // t0
             command_list_->SetGraphicsRootDescriptorTable(7, normal->srv.gpu);             // t1
             command_list_->SetGraphicsRootDescriptorTable(8, metallic->srv.gpu);           // t2
             command_list_->SetGraphicsRootDescriptorTable(9, roughness->srv.gpu);          // t3
-            command_list_->SetGraphicsRootDescriptorTable(10, emissive->srv.gpu);           // t4
+            command_list_->SetGraphicsRootDescriptorTable(10, emissive->srgb_srv.IsValid()
+                ? emissive->srgb_srv.gpu : emissive->srv.gpu);                              // t4
             command_list_->SetGraphicsRootDescriptorTable(11, occlusion->srv.gpu);          // t5
             command_list_->SetGraphicsRootDescriptorTable(12, directional_shadow_srv);      // t6
             command_list_->SetGraphicsRootDescriptorTable(13, local_shadow_srv);            // t7
@@ -2222,6 +2228,24 @@ namespace ReplayEngine::Rendering::DX12
         command_list_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         command_list_->DrawInstanced(3, 1, 0, 0);
 
+        const bool needs_deferred_debug_target =
+            submission.post_process.render_output == 3u ||
+            submission.post_process.render_output == 10u;
+        if (needs_deferred_debug_target)
+        {
+            if (!resource_state_tracker_.Transition(command_list_.Get(), scene_view_target_.color.Get(),
+                D3D12_RESOURCE_STATE_COPY_SOURCE) ||
+                !resource_state_tracker_.Transition(command_list_.Get(), scene3d_deferred_target_.color.Get(),
+                    D3D12_RESOURCE_STATE_COPY_DEST))
+                return false;
+            command_list_->CopyResource(scene3d_deferred_target_.color.Get(), scene_view_target_.color.Get());
+            if (!resource_state_tracker_.Transition(command_list_.Get(), scene_view_target_.color.Get(),
+                D3D12_RESOURCE_STATE_RENDER_TARGET) ||
+                !resource_state_tracker_.Transition(command_list_.Get(), scene3d_deferred_target_.color.Get(),
+                    D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE))
+                return false;
+        }
+
         EndGpuPass(D3D12GpuPass::Lighting);
         BeginGpuPass(D3D12GpuPass::Forward);
         // Transparent MaterialはForwardに残し、同じLight/Shadowデータを共有する。
@@ -2474,6 +2498,9 @@ namespace ReplayEngine::Rendering::DX12
             submission.post_process.ssao_enabled ? 1.0f : 0.0f,
             submission.post_process.ssr_enabled ? 1.0f : 0.0f,
             0.0f };
+        post.debug_options = {
+            static_cast<float>(submission.post_process.render_output),
+            static_cast<float>(submission.post_process.deferred_debug_mode), 0.0f, 0.0f };
         post.view = current_frame_constants_.view;
         post.projection = current_frame_constants_.projection;
         post.inverse_projection = current_frame_constants_.inv_projection;
@@ -2493,6 +2520,8 @@ namespace ReplayEngine::Rendering::DX12
         command_list_->SetGraphicsRootDescriptorTable(4, scene3d_gbuffer_[4].srv.gpu);
         command_list_->SetGraphicsRootDescriptorTable(5, scene3d_gbuffer_[2].srv.gpu);
         command_list_->SetGraphicsRootDescriptorTable(6, scene3d_gbuffer_[3].srv.gpu);
+        command_list_->SetGraphicsRootDescriptorTable(7, scene3d_gbuffer_[0].srv.gpu);
+        command_list_->SetGraphicsRootDescriptorTable(8, scene3d_deferred_target_.srv.gpu);
         command_list_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         command_list_->DrawInstanced(3, 1, 0, 0);
 
