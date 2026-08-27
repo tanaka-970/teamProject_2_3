@@ -1,4 +1,4 @@
-// Motion Asset のうち、キーの整列と replaymotion への保存だけを持つ。
+﻿// Motion Asset のうち、キーの整列と replaymotion への保存だけを持つ。
 //
 //   MotionAsset.cpp      ... キーの整列と保存（このファイル）
 //   MotionAssetLoad.cpp  ... replaymotion の読み込み
@@ -61,6 +61,18 @@ namespace ReplayEngine::Motion
             case MotionBlendMode::Blend: return "Blend";
             }
             return "Override";
+        }
+
+        const char* ToTrackLoopString(MotionTrackLoop loop) noexcept
+        {
+            switch (loop)
+            {
+            case MotionTrackLoop::None: return "None";
+            case MotionTrackLoop::Repeat: return "Repeat";
+            case MotionTrackLoop::PingPong: return "PingPong";
+            case MotionTrackLoop::Offset: return "Offset";
+            }
+            return "None";
         }
 
         void WriteValue(std::ostream& out, const Reflection::PropertyValue& value)
@@ -199,6 +211,19 @@ namespace ReplayEngine::Motion
             file << "VALUE_TYPE " << ToMotionTypeString(track.value_type) << '\n';
             file << "ENABLED " << (track.enabled ? 1 : 0) << '\n';
             file << "BLEND_MODE " << ToBlendModeString(track.blend_mode) << '\n';
+            const MotionWiggle default_wiggle{};
+            if (track.wiggle.enabled != default_wiggle.enabled ||
+                track.wiggle.amplitude != default_wiggle.amplitude ||
+                track.wiggle.frequency != default_wiggle.frequency ||
+                track.wiggle.seed != default_wiggle.seed ||
+                track.wiggle.octaves != default_wiggle.octaves)
+            {
+                file << "WIGGLE " << (track.wiggle.enabled ? 1 : 0) << ' '
+                    << track.wiggle.amplitude << ' ' << track.wiggle.frequency << ' '
+                    << track.wiggle.seed << ' ' << track.wiggle.octaves << '\n';
+            }
+            if (track.loop != MotionTrackLoop::None)
+                file << "LOOP " << ToTrackLoopString(track.loop) << '\n';
 
             for (const MotionKeyframe& key : track.keys)
             {
@@ -211,6 +236,10 @@ namespace ReplayEngine::Motion
                         key.bezier.out_handle.y;
                     file << " IN " << key.bezier.in_handle.x << ' ' <<
                         key.bezier.in_handle.y;
+                }
+                else if (key.easing == MotionEasing::PresetCurve)
+                {
+                    file << " CURVE " << std::quoted(key.easing_curve.guid);
                 }
                 file << '\n';
             }

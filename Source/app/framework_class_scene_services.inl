@@ -281,7 +281,9 @@
     bool paste_motion_keys();
     bool duplicate_motion_keys();
     bool delete_motion_keys();
-    bool apply_motion_easing_to_selection(ReplayEngine::Motion::MotionEasing easing);
+    bool apply_motion_easing_to_selection(ReplayEngine::Motion::MotionEasing easing,
+        const ReplayEngine::Reflection::AssetReference* curve = nullptr);
+    void push_motion_curve_warning_once(const std::string& curve_error);
     void toggle_motion_preview_playback();
     void step_motion_preview_frames(int frames);
     void seek_motion_preview_time(float time);

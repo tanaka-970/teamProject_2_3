@@ -236,6 +236,41 @@ void framework::draw_motion_inspector()
         motion_editor_dirty = true;
     }
 
+    if (ImGui::CollapsingHeader(u8"Wiggle（揺れ） / ループ###MotionTrackModifiers"))
+    {
+        ReplayEngine::Motion::MotionWiggle wiggle = track.wiggle;
+        bool wiggle_changed = false;
+        wiggle_changed |= ImGui::Checkbox(u8"有効##MotionWiggleEnabled", &wiggle.enabled);
+        wiggle_changed |= ImGui::DragFloat(u8"振幅##MotionWiggleAmplitude",
+            &wiggle.amplitude, 0.01f);
+        wiggle_changed |= ImGui::DragFloat(u8"周波数 (Hz)##MotionWiggleFrequency",
+            &wiggle.frequency, 0.05f);
+        wiggle_changed |= ImGui::DragInt(u8"シード##MotionWiggleSeed", &wiggle.seed, 1.0f);
+        wiggle_changed |= ImGui::DragInt(u8"オクターブ##MotionWiggleOctaves",
+            &wiggle.octaves, 1.0f, 1, 4);
+        wiggle.amplitude = (std::max)(0.0f, wiggle.amplitude);
+        wiggle.frequency = (std::max)(0.0f, wiggle.frequency);
+        wiggle.octaves = (std::max)(1, (std::min)(4, wiggle.octaves));
+        if (wiggle_changed)
+        {
+            motion_edit_history.Begin(motion_editor_asset, u8"Wiggleを変更");
+            track.wiggle = wiggle;
+            motion_edit_history.Commit(motion_editor_asset);
+            motion_editor_dirty = true;
+        }
+        if (track.wiggle.enabled && !SupportsMotionWiggle(track.value_type))
+            ImGui::TextDisabled(u8"この型には Wiggle は適用されません。");
+
+        ReplayEngine::Motion::MotionTrackLoop loop = track.loop;
+        if (DrawMotionTrackLoopCombo(u8"ループ##MotionTrackLoop", loop))
+        {
+            motion_edit_history.Begin(motion_editor_asset, u8"トラックのループを変更");
+            track.loop = loop;
+            motion_edit_history.Commit(motion_editor_asset);
+            motion_editor_dirty = true;
+        }
+    }
+
     int binding_origin = track.binding.origin;
     if (DrawMotionBindingOriginCombo(u8"バインド起点", binding_origin) &&
         binding_origin != track.binding.origin)
@@ -312,13 +347,19 @@ void framework::draw_motion_inspector()
             motion_edit_history.Commit(motion_editor_asset);
             motion_editor_dirty = true;
         }
+        if (key.easing == MotionEasing::PresetCurve && key.easing_curve.IsAssigned())
+            motion_selected_easing_curve = key.easing_curve;
         MotionEasing easing = key.easing;
-        if (DrawEasingCombo(u8"イージング", easing))
+        ReplayEngine::Reflection::AssetReference easing_curve = key.easing_curve;
+        if (DrawEasingCombo(u8"イージング", easing, &easing_curve, &asset_database))
         {
             motion_edit_history.Begin(motion_editor_asset, u8"イージングを変更");
             key.easing = easing;
+            key.easing_curve = easing_curve;
             motion_edit_history.Commit(motion_editor_asset);
             motion_editor_dirty = true;
+            if (easing == MotionEasing::PresetCurve && easing_curve.IsAssigned())
+                motion_selected_easing_curve = easing_curve;
         }
     }
 
