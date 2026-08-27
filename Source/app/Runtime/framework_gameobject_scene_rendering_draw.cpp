@@ -75,6 +75,8 @@ ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
     {
         item.cast_shadow = source.cast_shadow;
         item.receive_shadow = source.receive_shadow;
+        // Slot 経路は source 全体をコピーしないので、Object の tint だけ引き継ぐ。
+        item.tint = source.tint;
     }
     item.legacy_tint = source.tint;
     item.lighting_model = deferred_lighting_model(source.shading_model);
@@ -456,6 +458,9 @@ bool framework::build_dx12_static_scene(
         {
             // FlatFill だけ既存の 1x1 白テクスチャを使い、共用 Bridge は変更しない。
             draw.base_color_texture_key = "__dx12_white";
+            // BuiltIn は自前 PSO を持たず必ず Bridge を通るため、cbuffer の BaseColor が
+            // 効かない。Bridge が使う base_color へ Material の色を入れる。
+            draw.base_color = multiply_color(material->base_color, item.tint);
         }
         else
         {
@@ -997,6 +1002,9 @@ bool framework::build_dx12_static_scene(
             const skinned_mesh::animation::keyframe* keyframe =
                 resolve_render_item_keyframe(*mesh_asset, item, blended_keyframe);
 
+            // Slot 番号は Object 全体を通した番号にする。glTF は 1 primitive が
+            // 1 mesh + subset 1 個で入るため、mesh 内の subset 番号だと常に 0 になる。
+            std::size_t material_slot_cursor = 0;
             for (std::size_t mesh_index = 0; mesh_index < mesh_asset->meshes.size(); ++mesh_index)
             {
                 const skinned_mesh::mesh& mesh = mesh_asset->meshes[mesh_index];
@@ -1123,7 +1131,8 @@ bool framework::build_dx12_static_scene(
                 };
 
                 if (mesh.subsets.empty())
-                    append_skinned_draw(0, static_cast<std::uint32_t>(mesh.indices.size()), 0, 0);
+                    append_skinned_draw(0, static_cast<std::uint32_t>(mesh.indices.size()), 0,
+                        material_slot_cursor++);
                 else
                 {
                     for (std::size_t subset_index = 0; subset_index < mesh.subsets.size();
@@ -1131,7 +1140,7 @@ bool framework::build_dx12_static_scene(
                     {
                         const skinned_mesh::mesh::subset& subset = mesh.subsets[subset_index];
                         append_skinned_draw(subset.start_index_location, subset.index_count,
-                            subset.material_unique_id, subset_index);
+                            subset.material_unique_id, material_slot_cursor++);
                     }
                 }
             }
@@ -1280,6 +1289,8 @@ bool framework::build_dx12_static_scene(
         std::string model_reason;
         (void)resolve_model_source(item.mesh_asset, model_source, model_reason);
 
+        // Slot 番号は Object 全体を通した番号にする（skinned 側と同じ理由）。
+        std::size_t material_slot_cursor = 0;
         for (std::size_t mesh_index = 0; mesh_index < mesh_asset->meshes.size(); ++mesh_index)
         {
             const skinned_mesh::mesh& mesh = mesh_asset->meshes[mesh_index];
@@ -1369,7 +1380,8 @@ bool framework::build_dx12_static_scene(
 
             if (mesh.subsets.empty())
             {
-                append_draw(0, static_cast<std::uint32_t>(mesh.indices.size()), 0, 0);
+                append_draw(0, static_cast<std::uint32_t>(mesh.indices.size()), 0,
+                    material_slot_cursor++);
             }
             else
             {
@@ -1378,7 +1390,7 @@ bool framework::build_dx12_static_scene(
                 {
                     const skinned_mesh::mesh::subset& subset = mesh.subsets[subset_index];
                     append_draw(subset.start_index_location, subset.index_count,
-                        subset.material_unique_id, subset_index);
+                        subset.material_unique_id, material_slot_cursor++);
                 }
             }
         }

@@ -1,4 +1,4 @@
-REPLAY_ASSET_DB 2 180
+REPLAY_ASSET_DB 2 190
 "60412424bb1443240b2bf2160eee6923" 1 "ExampleStage" "resources/Stage/ExampleStage.cereal" "resources/.replay_cache/models/f9fffac39252a621_v0.replaycache"
 "1bd1358040255f5bd18f3be0d79fbe3c" 1 "AllAnimation1" "resources/AnimationModel/AllAnimation1.cereal" "resources/.replay_cache/models/6a20e727f78fb359_v0.replaycache"
 "e5c4168feb92f8fd7357f6cbc1f66e22" 1 "scene" "resources/Stage/city_3d_model_gltf/scene.gltf" "resources/.replay_cache/models/98fd72a862da8c8f_v0.replaycache"
@@ -179,3 +179,13 @@ REPLAY_ASSET_DB 2 180
 "777f3fb4b0b683275b999aa925214962" 10 "NewMotion (2)" "NewMotion (2).replaymotion" ""
 "0ce15761bf4a1146b2381753726bc67b" 16 "NewItem" "resources/EasingAsset/NewItem.replayeasing" ""
 "064cd8eb972ceb94d45fdc5804de1fc5" 16 "NewItem (1)" "resources/EasingAsset/NewItem (1).replayeasing" ""
+"c4e1fda14a724d6e191076c7f4472b47" 2 "brush_masks_atlas" "resources/BrushMasks/brush_masks_atlas.dds" ""
+"32c80cc5412c09957e17765551834854" 1 "satonaka_tie" "resources/model/Persona/satonaka_tie.fbx" ""
+"2b0cefc53d0ef76e853dab5555225f4f" 1 "satonaka_tie" "resources/model/Persona/satonaka_tie.glb" ""
+"19f34af131a0ba612c7205c5ceb7c0c0" 1 "satonaka_tie_dancing" "resources/model/Persona/satonaka_tie_dancing.glb" ""
+"39907f5ff90d9ea95a0ed923f7dfd43a" 1 "satonaka_tie_postgame" "resources/model/Persona/satonaka_tie_postgame.glb" ""
+"ff803d6e9d67c9d09261a11bb7209c03" 1 "satonaka_tie_swimsuit" "resources/model/Persona/satonaka_tie_swimsuit.glb" ""
+"b675b65214c312b2f1d8c5e538607623" 5 "materiaruTest" "resources/Scenes/materiaruTest.replayscene" ""
+"7793d161d0f3240d4879e94ba7ee1a9c" 6 "tieHair" "resources/model/Persona/tieHair.replaymaterial" ""
+"e7467c7d0020ea5b205b207ac11a0e76" 6 "Tie_body" "resources/model/Persona/Tie_body.replaymaterial" ""
+"df0db94217a39c4fdf73654b43eb782a" 6 "NewItem (1)" "resources/model/Persona/NewItem (1).replaymaterial" ""

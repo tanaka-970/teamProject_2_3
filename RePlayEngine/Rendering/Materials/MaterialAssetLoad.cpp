@@ -27,7 +27,9 @@ namespace ReplayEngine::Rendering
                 value.ambient_occlusion >= 0.0f && value.ambient_occlusion <= 1.0f &&
                 value.alpha_cutoff >= 0.0f && value.alpha_cutoff <= 1.0f &&
                 value.emissive_strength >= 0.0f &&
-                value.shading_model >= 0 && value.shading_model <= 4))
+                // 上限を直値で持つと組み込みシェーダを足すたびに読めなくなる。
+                // FlatFill(5) を足したときに実際に踏んだので表と連動させる。
+                BuiltInShaders::FromShadingModel(value.shading_model).IsValid()))
                 return false;
 
             for (const Reflection::PropertyBag::Entry& entry : value.properties.Entries())

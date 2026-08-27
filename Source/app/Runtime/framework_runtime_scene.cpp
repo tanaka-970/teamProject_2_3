@@ -207,10 +207,8 @@ void framework::initialize_runtime_services()
     //
     // ここへ置くのは、Console のログ経路が既に使える状態だから。
     // まだ描画には使わないので、失敗しても他へ影響しない。
-    if (!standalone_game_mode)
-    {
-        scan_shader_library();
-    }
+    // standalone を除外しない。Material Asset のシェーダ解決に Catalog が要る。
+    scan_shader_library();
 
     object_bound_world_instance = object_runtime_scenes.ActiveWorldID();
 }

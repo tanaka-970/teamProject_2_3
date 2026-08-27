@@ -12,7 +12,8 @@
 
 void framework::scan_shader_library()
 {
-    if (standalone_game_mode) return;
+    // standalone でも走査する。Catalog は Material Asset のシェーダ解決に使われるため、
+    // 飛ばすと書き出したゲームで Material が Unlit/Magenta へ落ちる。
 
     // ログをエディタの Console と Saved/Diagnostics へ流す。
     //
