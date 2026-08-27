@@ -92,8 +92,10 @@ float4 main(PSIn input) : SV_Target0
     const float3 worldNormal = ResolveNormal(input, semanticMask);
     const uint lightingModel = (uint)round(max(renderParams.y, 0.0f));
     const bool receiveShadow = renderParams.z >= 0.5f;
+    // Forward は追加GBufferを読めないので Toon 固有値はすべてオフで渡す。
     const float3 lit = Dx12EvaluateLighting(input.worldPosition, worldNormal, albedo.rgb,
-        metallic, roughness, ambientOcclusion, lightingModel, receiveShadow, input.position.xy);
+        metallic, roughness, ambientOcclusion, lightingModel, receiveShadow,
+        input.position.xy, Dx12DefaultToonSurface());
 
     float3 emissive = emissiveStrength.rgb * emissiveStrength.a;
     if ((semanticMask & MATERIAL_EMISSIVE_MAP) != 0u)

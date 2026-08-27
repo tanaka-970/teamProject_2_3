@@ -317,30 +317,85 @@ float Dx12SpotShadow(Dx12SpotLight light, float3 worldPosition,
     return lerp(1.0f, visibility, saturate(light.params.z));
 }
 
-float Dx12ToonNoL(float noL)
+// Toon 固有値の受け渡し。GBuffer の追加 RT から復号した値がそのまま入る。
+struct Dx12ToonSurface
 {
-    return noL > 0.5f ? 1.0f : (noL > 0.15f ? 0.45f : 0.08f);
+    float3 shadowTint;
+    float3 rimColor;
+    float rimPower;
+    float3 specularTint;
+    float specularPower;
+    float steps;
+};
+
+// 既定は全項目オフ。Toon 以外と Forward はこれを渡すので絵が変わらない。
+Dx12ToonSurface Dx12DefaultToonSurface()
+{
+    Dx12ToonSurface toon;
+    toon.shadowTint = float3(0.0f, 0.0f, 0.0f);
+    toon.rimColor = float3(0.0f, 0.0f, 0.0f);
+    toon.rimPower = 1.0f;
+    toon.specularTint = float3(0.0f, 0.0f, 0.0f);
+    toon.specularPower = 32.0f;
+    toon.steps = 0.0f;
+    return toon;
+}
+
+// トゥーンのハイライトは階調と同じく硬い境界にする。tint が黒なら消える。
+float3 Dx12ToonSpecular(Dx12ToonSurface toon, float3 N, float3 V, float3 L)
+{
+    const float3 H = normalize(L + V);
+    const float raw = pow(saturate(dot(N, H)), max(toon.specularPower, 1.0f));
+    return toon.specularTint * smoothstep(0.45f, 0.55f, raw);
+}
+
+// リムは視線と法線の角度だけで決まるので光源ループの外で 1 回だけ足す。
+float3 Dx12ToonRim(Dx12ToonSurface toon, float3 N, float3 V)
+{
+    return toon.rimColor * pow(saturate(1.0f - saturate(dot(N, V))),
+        max(toon.rimPower, 0.01f));
+}
+
+// steps <= 0 なら従来の 3 段固定。1 以上なら Material の階調数で量子化する。
+float Dx12ToonNoL(float noL, float steps)
+{
+    if (steps < 1.0f)
+        return noL > 0.5f ? 1.0f : (noL > 0.15f ? 0.45f : 0.08f);
+    const float levels = max(floor(steps + 0.5f), 1.0f);
+    if (levels < 2.0f) return noL > 0.5f ? 1.0f : 0.08f;
+    return saturate(floor(saturate(noL) * levels) / (levels - 1.0f));
 }
 
 float3 Dx12EvaluateLighting(float3 worldPosition, float3 normal, float3 albedo,
     float metallic, float roughness, float ambientOcclusion, uint lightingModel,
-    bool receiveShadow, float2 noiseCoord)
+    bool receiveShadow, float2 noiseCoord, Dx12ToonSurface toon)
 {
     if (lightingModel >= 2u) return albedo;
 
+    const bool isToon = lightingModel == 1u;
+    const float toonSteps = toon.steps;
     const float3 N = normalize(normal);
     const float3 V = normalize(cameraPosition.xyz - worldPosition);
     float3 result = albedo * 0.035f * saturate(ambientOcclusion);
+    // Toon の影側の色付けに使う。光が届いた度合いの最大値。
+    float toonLit = 0.0f;
 
     if (directionalColorFlags.w > 0.5f)
     {
         const float3 L = normalize(-directionalDirectionIntensity.xyz);
         const float physicalNoL = saturate(dot(N, L));
-        const float shadedNoL = lightingModel == 1u ? Dx12ToonNoL(physicalNoL) : physicalNoL;
+        const float shadedNoL = lightingModel == 1u ? Dx12ToonNoL(physicalNoL, toonSteps) : physicalNoL;
         const float visibility = receiveShadow ?
             Dx12SampleCsm(worldPosition, N, physicalNoL, noiseCoord) : 1.0f;
+        const float3 lightColor =
+            directionalColorFlags.rgb * directionalDirectionIntensity.w;
         result += Dx12EvaluatePbr(albedo, metallic, roughness, N, V, L,
-            directionalColorFlags.rgb * directionalDirectionIntensity.w, shadedNoL) * visibility;
+            lightColor, shadedNoL) * visibility;
+        if (isToon)
+        {
+            result += Dx12ToonSpecular(toon, N, V, L) * lightColor * visibility;
+            toonLit = max(toonLit, shadedNoL * visibility);
+        }
     }
 
     [loop] for (uint i = 0; i < min(lightCounts.x, 8u); ++i)
@@ -352,12 +407,18 @@ float3 Dx12EvaluateLighting(float3 worldPosition, float3 normal, float3 albedo,
         float attenuation = saturate(1.0f - distanceToLight / range);
         attenuation *= attenuation;
         const float physicalNoL = saturate(dot(N, L));
-        const float shadedNoL = lightingModel == 1u ? Dx12ToonNoL(physicalNoL) : physicalNoL;
+        const float shadedNoL = lightingModel == 1u ? Dx12ToonNoL(physicalNoL, toonSteps) : physicalNoL;
         const float visibility = receiveShadow ?
             Dx12PointShadow(pointLights[i], worldPosition, N, physicalNoL) : 1.0f;
+        const float3 lightColor =
+            pointLights[i].colorIntensity.rgb * pointLights[i].colorIntensity.w * attenuation;
         result += Dx12EvaluatePbr(albedo, metallic, roughness, N, V, L,
-            pointLights[i].colorIntensity.rgb * pointLights[i].colorIntensity.w * attenuation,
-            shadedNoL) * visibility;
+            lightColor, shadedNoL) * visibility;
+        if (isToon)
+        {
+            result += Dx12ToonSpecular(toon, N, V, L) * lightColor * visibility;
+            toonLit = max(toonLit, shadedNoL * visibility * attenuation);
+        }
     }
 
     [loop] for (uint i = 0; i < min(lightCounts.y, 4u); ++i)
@@ -372,12 +433,26 @@ float3 Dx12EvaluateLighting(float3 worldPosition, float3 normal, float3 albedo,
         float attenuation = saturate(1.0f - distanceToLight / range);
         attenuation *= attenuation * coneAttenuation;
         const float physicalNoL = saturate(dot(N, L));
-        const float shadedNoL = lightingModel == 1u ? Dx12ToonNoL(physicalNoL) : physicalNoL;
+        const float shadedNoL = lightingModel == 1u ? Dx12ToonNoL(physicalNoL, toonSteps) : physicalNoL;
         const float visibility = receiveShadow ?
             Dx12SpotShadow(spotLights[i], worldPosition, N, distanceToLight, physicalNoL) : 1.0f;
+        const float3 lightColor =
+            spotLights[i].colorOuter.rgb * spotLights[i].params.x * attenuation;
         result += Dx12EvaluatePbr(albedo, metallic, roughness, N, V, L,
-            spotLights[i].colorOuter.rgb * spotLights[i].params.x * attenuation,
-            shadedNoL) * visibility;
+            lightColor, shadedNoL) * visibility;
+        if (isToon)
+        {
+            result += Dx12ToonSpecular(toon, N, V, L) * lightColor * visibility;
+            toonLit = max(toonLit, shadedNoL * visibility * attenuation);
+        }
+    }
+
+    if (isToon)
+    {
+        // 影側の色。tint が黒なら 1 項も足されず従来の絵と一致する。
+        result += albedo * toon.shadowTint * saturate(1.0f - toonLit) *
+            saturate(ambientOcclusion);
+        result += Dx12ToonRim(toon, N, V);
     }
     return result;
 }

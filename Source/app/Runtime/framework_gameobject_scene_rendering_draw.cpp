@@ -126,6 +126,9 @@ ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
         ? material->layers.Contains(BuiltInShaderLayers::Outline) : source.outline;
     item.pixelate_size = material->pixelate_grid;
     item.pixelate_strength = material->pixelate_strength;
+    // 不透明度は legacy 欄が無いので Property から直接読む。
+    if (const auto* opacity = material->properties.Find("prop.PixelateOpacity"))
+        item.pixelate_opacity = opacity->AsFloat(item.pixelate_opacity);
 
     // 現在の GameObject mesh は静的提出も skinned_mesh renderer を通る。
     // Vertex Shader の VS_OUT と一致させるため Catalog 側も Skinned 変種を使う。
@@ -454,6 +457,48 @@ bool framework::build_dx12_static_scene(
         draw.alpha_cutoff = material->alpha_cutoff;
         const BaseTextureBinding binding = base_texture_binding(item);
         const bool flat_fill = item.material_binding.shader == BuiltInShaders::FlatFill;
+        // BuiltIn は自前 PSO を持てないので、固有表現は builtin_params で運ぶ。
+        // x=効果ID（1=Pixelate）、y/z/w=その効果の引数。増やすときは ID を足す。
+        const bool is_toon = item.material_binding.shader == BuiltInShaders::Toon;
+        if (is_toon)
+        {
+            const auto property_float = [material](const char* name, float fallback)
+            {
+                const auto* value = material->properties.Find(name);
+                return value != nullptr ? value->AsFloat(fallback) : fallback;
+            };
+            const auto property_color = [material](const char* name,
+                const DirectX::XMFLOAT4& fallback)
+            {
+                const auto* value = material->properties.Find(name);
+                return value != nullptr ? value->AsVector4() : fallback;
+            };
+            const float steps = property_float("prop.StepCount", 3.0f);
+            draw.builtin_params = { 2.0f, std::clamp(steps, 1.0f, 8.0f), 0.0f, 0.0f };
+            const DirectX::XMFLOAT4 shadow_tint =
+                property_color("prop.ShadowTint", { 0.0f, 0.0f, 0.0f, 1.0f });
+            const DirectX::XMFLOAT4 rim_color =
+                property_color("prop.RimColor", { 0.0f, 0.0f, 0.0f, 1.0f });
+            const DirectX::XMFLOAT4 specular_tint =
+                property_color("prop.SpecularTint", { 0.0f, 0.0f, 0.0f, 1.0f });
+            draw.builtin_params1 = { std::clamp(shadow_tint.x, 0.0f, 1.0f),
+                std::clamp(shadow_tint.y, 0.0f, 1.0f), std::clamp(shadow_tint.z, 0.0f, 1.0f),
+                std::clamp(property_float("prop.RimPower", 2.0f), 0.0f, 8.0f) };
+            draw.builtin_params2 = { std::clamp(rim_color.x, 0.0f, 1.0f),
+                std::clamp(rim_color.y, 0.0f, 1.0f), std::clamp(rim_color.z, 0.0f, 1.0f),
+                std::clamp(property_float("prop.SpecularPower", 32.0f), 1.0f, 128.0f) };
+            draw.builtin_params3 = { std::clamp(specular_tint.x, 0.0f, 1.0f),
+                std::clamp(specular_tint.y, 0.0f, 1.0f),
+                std::clamp(specular_tint.z, 0.0f, 1.0f), 0.0f };
+        }
+        else if (item.material_binding.shader == BuiltInShaders::Pixelate)
+        {
+            draw.builtin_params = { 1.0f,
+                (std::max)(1.0f, item.pixelate_size),
+                std::clamp(item.pixelate_strength, 0.0f, 1.0f),
+                std::clamp(item.pixelate_opacity, 0.0f, 1.0f) };
+        }
+
         if (flat_fill)
         {
             // FlatFill だけ既存の 1x1 白テクスチャを使い、共用 Bridge は変更しない。
@@ -479,6 +524,12 @@ bool framework::build_dx12_static_scene(
         {
             D3D12StaticMaterialTexture mapped;
             mapped.slot = texture.slot;
+            // BuiltIn Toon の RampMap だけ宣言順(t41)ではなく Bridge の固定 slot へ載せ替える。
+            std::uint32_t bridge_slot = 0;
+            if (is_toon && texture.property_name == "RampMap" &&
+                ResolvedMaterialBinding::TryGetGBufferBridgeSlot(
+                    texture.property_name, bridge_slot))
+                mapped.slot = bridge_slot;
             mapped.texture_key = add_asset_texture(texture.asset_guid);
             if (mapped.texture_key.empty())
                 mapped.texture_key = fallback_texture_key(texture.default_texture);

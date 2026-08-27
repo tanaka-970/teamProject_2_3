@@ -17,14 +17,23 @@ namespace ReplayEngine::Rendering::DX12
 {
     namespace
     {
-        constexpr DXGI_FORMAT kScene3DGBufferFormats[5] =
+        constexpr DXGI_FORMAT kScene3DGBufferFormats[kScene3DGBufferCount] =
         {
             DXGI_FORMAT_R16G16B16A16_FLOAT, // BaseColorとシェーディングモデル
             DXGI_FORMAT_R16G16B16A16_FLOAT, // Emissive
             DXGI_FORMAT_R16G16B16A16_FLOAT, // Normalと深度互換値
             DXGI_FORMAT_R8G8B8A8_UNORM,     // Metallic/Roughness/AO/モデル
-            DXGI_FORMAT_R16G16_FLOAT,        // モーションベクター
+            DXGI_FORMAT_R16G16_FLOAT,       // モーションベクター
+            DXGI_FORMAT_R16G16B16A16_UNORM, // Toonの色3つと指数2つをbit packして運ぶ
         };
+
+        // ライティングパスの root parameter 番号。GBuffer 0..4 は既存の t0..t4 を動かさず、
+        // 追加分は影配列の t6/t7 を避けて t8 以降へ置く。
+        constexpr UINT kScene3DLightingGBufferRootSlot[kScene3DGBufferCount] =
+        {
+            1, 2, 3, 4, 5, 9,
+        };
+        constexpr UINT kScene3DLightingSrvRangeCount = 9;
         constexpr DXGI_FORMAT kScene3DDepthResourceFormat = DXGI_FORMAT_R32_TYPELESS;
         constexpr DXGI_FORMAT kScene3DDepthDsvFormat = DXGI_FORMAT_D32_FLOAT;
         constexpr DXGI_FORMAT kScene3DDepthSrvFormat = DXGI_FORMAT_R32_FLOAT;
@@ -58,6 +67,15 @@ namespace ReplayEngine::Rendering::DX12
             DirectX::XMFLOAT4 emissive_strength{};
             DirectX::XMFLOAT4 surface_params{ 0, 0.55f, 1, 0.5f };
             DirectX::XMFLOAT4 render_params{};
+            // BuiltIn シェーダ用の汎用枠。x=効果ID、y/z/w はその効果の引数。
+            // BuiltIn は自前 PSO を持てないため、固有表現はここへ載せる。
+            DirectX::XMFLOAT4 builtin_params{};
+            // Toon の追加枠。rgb=ShadowTint、w=RimPower。既定は効果オフ。
+            DirectX::XMFLOAT4 builtin_params1{};
+            // Toon の追加枠。rgb=RimColor、w=SpecularPower。
+            DirectX::XMFLOAT4 builtin_params2{ 0, 0, 0, 1 };
+            // Toon の追加枠。rgb=SpecularTint、w=予約。
+            DirectX::XMFLOAT4 builtin_params3{};
         };
 
         struct Scene3DPointLightGpu final
@@ -144,6 +162,12 @@ namespace ReplayEngine::Rendering::DX12
             DirectX::XMFLOAT2 padding{};
             DirectX::XMFLOAT4 color_filter{ 1, 1, 1, 1 };
             DirectX::XMFLOAT4 feature_flags{};
+            // SSR のレイマーチはビュー空間で行う。行列はここでだけ post 側へ渡す。
+            DirectX::XMFLOAT4X4 view{};
+            DirectX::XMFLOAT4X4 projection{};
+            DirectX::XMFLOAT4X4 inverse_projection{};
+            // x=Near、y=Far、z/w=予約
+            DirectX::XMFLOAT4 camera_planes{ 0.1f, 10000.0f, 0, 0 };
         };
 
         static_assert(sizeof(Scene3DObjectConstants) % 16 == 0);
@@ -321,16 +345,17 @@ namespace ReplayEngine::Rendering::DX12
         device_->CreateShaderResourceView(nullptr, &null_shadow_srv,
             scene3d_null_local_shadow_srv_.cpu);
 
-        // t0..t5はMaterial Map、t6はCSM、t7はLocal Shadow Atlas。
+        // t0..t5はMaterial Map、t6はCSM、t7はLocal Shadow Atlas、t10はToon RampMap。
         // Slot番号ではなく draw.material_texture_semantic_mask で意味を判定する。
-        D3D12_DESCRIPTOR_RANGE geometry_ranges[8]{};
+        // t8/t9 は Bone Palette の root SRV が使うので RampMap は t10 へ置く。
+        D3D12_DESCRIPTOR_RANGE geometry_ranges[9]{};
         for (UINT i = 0; i < static_cast<UINT>(std::size(geometry_ranges)); ++i)
         {
             geometry_ranges[i].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
             geometry_ranges[i].NumDescriptors = 1;
-            geometry_ranges[i].BaseShaderRegister = i;
+            geometry_ranges[i].BaseShaderRegister = i < 8u ? i : i + 2u;
         }
-        D3D12_ROOT_PARAMETER geometry_parameters[14]{};
+        D3D12_ROOT_PARAMETER geometry_parameters[15]{};
         for (UINT i = 0; i < 4; ++i)
         {
             geometry_parameters[i].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
@@ -393,12 +418,12 @@ namespace ReplayEngine::Rendering::DX12
         if (!SerializeRoot(device_.Get(), geometry_root, scene3d_geometry_root_signature_, L"Scene3D.Geometry.RootSignature"))
             return fail("Scene3D.GeometryRootSignature");
 
-        D3D12_DESCRIPTOR_RANGE lighting_ranges[8]{};
-        D3D12_ROOT_PARAMETER lighting_parameters[9]{};
+        D3D12_DESCRIPTOR_RANGE lighting_ranges[kScene3DLightingSrvRangeCount]{};
+        D3D12_ROOT_PARAMETER lighting_parameters[kScene3DLightingSrvRangeCount + 1]{};
         lighting_parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
         lighting_parameters[0].Descriptor.ShaderRegister = 0;
         lighting_parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-        for (UINT i = 0; i < 8; ++i)
+        for (UINT i = 0; i < kScene3DLightingSrvRangeCount; ++i)
         {
             lighting_ranges[i].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
             lighting_ranges[i].NumDescriptors = 1;
@@ -505,8 +530,9 @@ namespace ReplayEngine::Rendering::DX12
             }
             else
             {
-                desc.NumRenderTargets = 5;
-                for (UINT i = 0; i < 5; ++i) desc.RTVFormats[i] = kScene3DGBufferFormats[i];
+                desc.NumRenderTargets = kScene3DGBufferCount;
+                for (UINT i = 0; i < kScene3DGBufferCount; ++i)
+                    desc.RTVFormats[i] = kScene3DGBufferFormats[i];
             }
             desc.DSVFormat = kScene3DDepthDsvFormat;
             desc.SampleDesc.Count = 1;
@@ -1351,7 +1377,7 @@ namespace ReplayEngine::Rendering::DX12
         texture.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
         texture.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
         const float clear_color[4] = { 0, 0, 0, 0 };
-        for (std::uint32_t i = 0; i < 5; ++i)
+        for (std::uint32_t i = 0; i < kScene3DGBufferCount; ++i)
         {
             Scene3DTarget& target = scene3d_gbuffer_[i];
             target.format = kScene3DGBufferFormats[i];
@@ -1781,6 +1807,10 @@ namespace ReplayEngine::Rendering::DX12
             if (!allocate_cb(&object, sizeof(object), object_gpu)) return false;
             Scene3DMaterialConstants material{};
             material.base_color = draw.base_color;
+            material.builtin_params = draw.builtin_params;
+            material.builtin_params1 = draw.builtin_params1;
+            material.builtin_params2 = draw.builtin_params2;
+            material.builtin_params3 = draw.builtin_params3;
             material.emissive_strength = {
                 draw.emissive.x, draw.emissive.y, draw.emissive.z, draw.emissive_strength };
             material.surface_params = {
@@ -1804,8 +1834,9 @@ namespace ReplayEngine::Rendering::DX12
             const StaticTextureResource* roughness = material_texture_for(draw, 43u, "__dx12_white");
             const StaticTextureResource* emissive = material_texture_for(draw, 44u, "__dx12_black");
             const StaticTextureResource* occlusion = material_texture_for(draw, 45u, "__dx12_white");
+            const StaticTextureResource* ramp = material_texture_for(draw, 46u, "__dx12_white");
             if (normal == nullptr || metallic == nullptr || roughness == nullptr ||
-                emissive == nullptr || occlusion == nullptr)
+                emissive == nullptr || occlusion == nullptr || ramp == nullptr)
                 return false;
             command_list_->SetGraphicsRootDescriptorTable(6, texture_for(draw)->srv.gpu); // t0
             command_list_->SetGraphicsRootDescriptorTable(7, normal->srv.gpu);             // t1
@@ -1815,6 +1846,7 @@ namespace ReplayEngine::Rendering::DX12
             command_list_->SetGraphicsRootDescriptorTable(11, occlusion->srv.gpu);          // t5
             command_list_->SetGraphicsRootDescriptorTable(12, directional_shadow_srv);      // t6
             command_list_->SetGraphicsRootDescriptorTable(13, local_shadow_srv);            // t7
+            command_list_->SetGraphicsRootDescriptorTable(14, ramp->srv.gpu);               // t10
             return true;
         };
         const auto model_effect_for_owner = [this](std::uint64_t owner_id)
@@ -2097,16 +2129,18 @@ namespace ReplayEngine::Rendering::DX12
             draw_mesh(*it->second, draw.surface);
         }
 
-        // 既存の5枚GBuffer契約へDeferred Geometryを書き込む。
+        // 既存のGBuffer契約へDeferred Geometryを書き込む。
         for (Scene3DTarget& target : scene3d_gbuffer_)
         {
             if (!resource_state_tracker_.Transition(command_list_.Get(), target.resource.Get(),
                 D3D12_RESOURCE_STATE_RENDER_TARGET))
                 return false;
         }
-        D3D12_CPU_DESCRIPTOR_HANDLE rtvs[5]{};
-        for (std::uint32_t i = 0; i < 5; ++i) rtvs[i] = scene3d_gbuffer_[i].rtv.cpu;
-        command_list_->OMSetRenderTargets(5, rtvs, FALSE, &scene3d_depth_.dsv.cpu);
+        D3D12_CPU_DESCRIPTOR_HANDLE rtvs[kScene3DGBufferCount]{};
+        for (std::uint32_t i = 0; i < kScene3DGBufferCount; ++i)
+            rtvs[i] = scene3d_gbuffer_[i].rtv.cpu;
+        command_list_->OMSetRenderTargets(kScene3DGBufferCount, rtvs, FALSE,
+            &scene3d_depth_.dsv.cpu);
         const float clear[4] = { 0,0,0,0 };
         for (const Scene3DTarget& target : scene3d_gbuffer_)
             command_list_->ClearRenderTargetView(target.rtv.cpu, clear, 0, nullptr);
@@ -2179,8 +2213,9 @@ namespace ReplayEngine::Rendering::DX12
         command_list_->SetGraphicsRootSignature(scene3d_lighting_root_signature_.Get());
         command_list_->SetPipelineState(scene3d_lighting_pipeline_.Get());
         command_list_->SetGraphicsRootConstantBufferView(0, light_gpu);
-        for (std::uint32_t i = 0; i < 5; ++i)
-            command_list_->SetGraphicsRootDescriptorTable(1 + i, scene3d_gbuffer_[i].srv.gpu);
+        for (std::uint32_t i = 0; i < kScene3DGBufferCount; ++i)
+            command_list_->SetGraphicsRootDescriptorTable(
+                kScene3DLightingGBufferRootSlot[i], scene3d_gbuffer_[i].srv.gpu);
         command_list_->SetGraphicsRootDescriptorTable(6, scene3d_depth_.srv.gpu);
         command_list_->SetGraphicsRootDescriptorTable(7, directional_shadow_srv);
         command_list_->SetGraphicsRootDescriptorTable(8, local_shadow_srv);
@@ -2439,6 +2474,10 @@ namespace ReplayEngine::Rendering::DX12
             submission.post_process.ssao_enabled ? 1.0f : 0.0f,
             submission.post_process.ssr_enabled ? 1.0f : 0.0f,
             0.0f };
+        post.view = current_frame_constants_.view;
+        post.projection = current_frame_constants_.projection;
+        post.inverse_projection = current_frame_constants_.inv_projection;
+        post.camera_planes = current_frame_constants_.camera_planes;
         D3D12_GPU_VIRTUAL_ADDRESS post_gpu = 0;
         if (!allocate_cb(&post, sizeof(post), post_gpu)) return false;
         if (!TransitionCurrentRenderTarget(D3D12_RESOURCE_STATE_RENDER_TARGET)) return false;

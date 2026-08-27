@@ -61,6 +61,8 @@ namespace ReplayEngine::Rendering
             RoughnessMapSemantic = 1u << 3,
             EmissiveMapSemantic  = 1u << 4,
             OcclusionMapSemantic = 1u << 5,
+            // 1u << 6 は glTF の packed ORM が描画側で使用中。
+            RampMapSemantic      = 1u << 7,
         };
 
         std::uint32_t TextureSemanticMask() const noexcept;

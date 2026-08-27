@@ -106,6 +106,7 @@ namespace ReplayEngine::Rendering
         bool pixelate_enabled = false;
         float pixelate_size = 6.0f;
         float pixelate_strength = 1.0f;
+        float pixelate_opacity = 1.0f;
 
         // ---- スキンメッシュ用 ----------------------------------------------
         //

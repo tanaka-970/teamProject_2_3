@@ -36,6 +36,9 @@ struct ImDrawData;
 
 namespace ReplayEngine::Rendering::DX12
 {
+    // Deferred GBuffer の枚数はここだけで決める。RT を足すときはこの値を増やす。
+    inline constexpr std::uint32_t kScene3DGBufferCount = 6;
+
     struct D3D12StaticVertex final
     {
         DirectX::XMFLOAT3 position{};
@@ -104,6 +107,14 @@ namespace ReplayEngine::Rendering::DX12
         // ResolvedMaterialBinding::TextureSemantic の bit mask。
         // slot番号だけで Toon RampMap 等を NormalMap と誤認しないために使う。
         std::uint32_t material_texture_semantic_mask = 0;
+        // BuiltIn シェーダの固有表現。x=効果ID、y/z/w=引数。0 なら何もしない。
+        DirectX::XMFLOAT4 builtin_params{ 0.0f, 0.0f, 0.0f, 0.0f };
+        // Toon の追加枠。rgb=ShadowTint、w=RimPower。既定は効果オフ。
+        DirectX::XMFLOAT4 builtin_params1{ 0.0f, 0.0f, 0.0f, 0.0f };
+        // Toon の追加枠。rgb=RimColor、w=SpecularPower。
+        DirectX::XMFLOAT4 builtin_params2{ 0.0f, 0.0f, 0.0f, 1.0f };
+        // Toon の追加枠。rgb=SpecularTint、w=予約。
+        DirectX::XMFLOAT4 builtin_params3{ 0.0f, 0.0f, 0.0f, 0.0f };
         std::uint32_t start_index = 0;
         std::uint32_t index_count = 0; // 0 は Cache 済み Index Buffer 全体を描画する。
         DirectX::XMFLOAT4X4 world{
@@ -997,7 +1008,7 @@ namespace ReplayEngine::Rendering::DX12
         std::vector<std::uint8_t> scene3d_shadow_static_vs_;
         std::vector<std::uint8_t> scene3d_shadow_skinned_vs_;
         std::vector<std::uint8_t> scene3d_shadow_alpha_ps_;
-        Scene3DTarget scene3d_gbuffer_[5];
+        Scene3DTarget scene3d_gbuffer_[kScene3DGBufferCount];
         Scene3DDepthTarget scene3d_depth_{};
         Scene3DHistoryTarget scene3d_history_{};
         bool scene3d_history_valid_ = false;
