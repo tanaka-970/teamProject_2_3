@@ -281,6 +281,7 @@
     bool paste_motion_keys();
     bool duplicate_motion_keys();
     bool delete_motion_keys();
+    bool scale_motion_key_times(float scale, int pivot_mode);
     bool apply_motion_easing_to_selection(ReplayEngine::Motion::MotionEasing easing,
         const ReplayEngine::Reflection::AssetReference* curve = nullptr);
     void push_motion_curve_warning_once(const std::string& curve_error);

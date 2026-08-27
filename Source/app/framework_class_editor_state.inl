@@ -161,6 +161,8 @@
     int motion_graph_channel{ 0 };
     std::vector<int> motion_selected_keys;
     std::vector<ReplayEngine::Motion::MotionKeyframe> motion_key_clipboard;
+    float motion_key_time_scale{ 1.0f };
+    int motion_key_time_scale_pivot{ 0 };
     ReplayEngine::Reflection::AssetReference motion_selected_easing_curve;
     std::unordered_set<std::string> motion_easing_curve_warning_guids;
     bool motion_box_select_mode{ false };

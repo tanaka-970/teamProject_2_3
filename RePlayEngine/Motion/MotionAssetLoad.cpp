@@ -252,6 +252,10 @@ namespace ReplayEngine::Motion
             {
                 input >> file_version;
             }
+            else if (head == "TIME_REMAP")
+            {
+                input >> std::quoted(asset.time_remap.guid);
+            }
             else if (head == "TRACK")
             {
                 MotionTrack track;

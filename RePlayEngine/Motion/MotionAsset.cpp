@@ -189,6 +189,8 @@ namespace ReplayEngine::Motion
         file << "MOTION " << std::quoted(asset.name) << '\n';
         file << "MOTION_VERSION " << MotionAsset::current_version << '\n';
         file << "DURATION " << asset.duration << '\n';
+        if (asset.time_remap.IsAssigned())
+            file << "TIME_REMAP " << std::quoted(asset.time_remap.guid) << '\n';
         file << '\n';
 
         for (const MotionTrack& track : asset.tracks)

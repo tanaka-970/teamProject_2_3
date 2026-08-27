@@ -1,6 +1,7 @@
 ﻿#include "AnimationUndoValidation.h"
 
 #include "../Commands/SceneEditHistory.h"
+#include "../Commands/MotionEditHistory.h"
 #include "../Core/EditorContext.h"
 #include "../../Object/Component/ComponentTypeID.h"
 #include "../../Object/GameObject/GameObject.h"
@@ -258,6 +259,96 @@ namespace ReplayEngine::Editor::Validation
                 check.Expect(idle_probe != nullptr && idle_probe->update_count == 0,
                     "未開始のままなので更新もされない");
             }
+        }
+
+        {
+            Motion::MotionAsset asset;
+            Motion::MotionTrack track;
+            Motion::MotionKeyframe key;
+            key.value = Reflection::PropertyValue::MakeFloat(1.0f);
+            track.keys.push_back(key);
+            asset.tracks.push_back(track);
+            MotionEditHistory history;
+            std::string label;
+
+            auto reset = [&]()
+            {
+                asset = Motion::MotionAsset{};
+                Motion::MotionTrack fresh_track;
+                Motion::MotionKeyframe fresh_key;
+                fresh_key.value = Reflection::PropertyValue::MakeFloat(1.0f);
+                fresh_track.keys.push_back(fresh_key);
+                asset.tracks.push_back(fresh_track);
+                history.Clear();
+                label.clear();
+            };
+
+            history.Begin(asset, u8"Wiggle有効を変更");
+            asset.tracks[0].wiggle.enabled = true;
+            history.Commit(asset);
+            check.Expect(history.Undo(asset, label), u8"Wiggle enabled だけの変更を Undo できる");
+            check.Expect(!asset.tracks[0].wiggle.enabled, u8"Wiggle enabled が Undo で元へ戻る");
+
+            reset();
+            history.Begin(asset, u8"Wiggle振幅を変更");
+            asset.tracks[0].wiggle.amplitude = 2.5f;
+            history.Commit(asset);
+            check.Expect(history.Undo(asset, label), u8"Wiggle amplitude だけの変更を Undo できる");
+            check.Expect(asset.tracks[0].wiggle.amplitude == 0.0f, u8"Wiggle amplitude が Undo で元へ戻る");
+
+            reset();
+            history.Begin(asset, u8"Wiggle周波数を変更");
+            asset.tracks[0].wiggle.frequency = 7.0f;
+            history.Commit(asset);
+            check.Expect(history.Undo(asset, label), u8"Wiggle frequency だけの変更を Undo できる");
+            check.Expect(asset.tracks[0].wiggle.frequency == 2.0f, u8"Wiggle frequency が Undo で元へ戻る");
+
+            reset();
+            history.Begin(asset, u8"Wiggleシードを変更");
+            asset.tracks[0].wiggle.seed = 91;
+            history.Commit(asset);
+            check.Expect(history.Undo(asset, label), u8"Wiggle seed だけの変更を Undo できる");
+            check.Expect(asset.tracks[0].wiggle.seed == 0, u8"Wiggle seed が Undo で元へ戻る");
+
+            reset();
+            history.Begin(asset, u8"Wiggleオクターブを変更");
+            asset.tracks[0].wiggle.octaves = 4;
+            history.Commit(asset);
+            check.Expect(history.Undo(asset, label), u8"Wiggle octaves だけの変更を Undo できる");
+            check.Expect(asset.tracks[0].wiggle.octaves == 1, u8"Wiggle octaves が Undo で元へ戻る");
+
+            reset();
+            history.Begin(asset, u8"トラックループを変更");
+            asset.tracks[0].loop = Motion::MotionTrackLoop::Repeat;
+            history.Commit(asset);
+            check.Expect(history.Undo(asset, label), u8"loop だけの変更を Undo できる");
+            check.Expect(asset.tracks[0].loop == Motion::MotionTrackLoop::None, u8"loop が Undo で元へ戻る");
+
+            reset();
+            history.Begin(asset, u8"カーブ参照を変更");
+            asset.tracks[0].keys[0].easing_curve.guid = "undo-easing-curve-guid";
+            history.Commit(asset);
+            check.Expect(history.Undo(asset, label), u8"easing_curve だけの変更を Undo できる");
+            check.Expect(asset.tracks[0].keys[0].easing_curve.guid.empty(), u8"easing_curve が Undo で元へ戻る");
+
+            reset();
+            history.Begin(asset, u8"ブレンドモードを変更");
+            asset.tracks[0].blend_mode = Motion::MotionBlendMode::Additive;
+            history.Commit(asset);
+            check.Expect(history.Undo(asset, label), u8"blend_mode だけの変更を Undo できる");
+            check.Expect(asset.tracks[0].blend_mode == Motion::MotionBlendMode::Override, u8"blend_mode が Undo で元へ戻る");
+
+            reset();
+            history.Begin(asset, u8"時間リマップを変更");
+            asset.time_remap.guid = "undo-time-remap-guid";
+            history.Commit(asset);
+            check.Expect(history.Undo(asset, label), u8"time_remap だけの変更を Undo できる");
+            check.Expect(asset.time_remap.guid.empty(), u8"time_remap が Undo で元へ戻る");
+
+            reset();
+            history.Begin(asset, u8"変更なし");
+            history.Commit(asset);
+            check.Expect(!history.CanUndo(), u8"変更なしの Begin/Commit は履歴を増やさない");
         }
 
         // ---- Play 中は Undo / Redo を実行しないこと -------------------------------

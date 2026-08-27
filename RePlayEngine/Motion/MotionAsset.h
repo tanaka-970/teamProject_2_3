@@ -117,10 +117,11 @@ namespace ReplayEngine::Motion
     {
     public:
         static constexpr const char* file_extension = ".replaymotion";
-        static constexpr int current_version = 5;
+        static constexpr int current_version = 6;
 
         std::string name{ "Motion" };
         float duration = 1.0f;
+        Reflection::AssetReference time_remap;
         std::vector<MotionTrack> tracks;
         std::vector<MotionEventTrack> event_tracks;
 
