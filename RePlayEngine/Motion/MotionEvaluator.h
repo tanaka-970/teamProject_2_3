@@ -15,5 +15,14 @@ namespace ReplayEngine::Motion
             Reflection::PropertyValue& out,
             const Assets::AssetDatabase* database = nullptr,
             std::string* curve_error = nullptr);
+
+        static bool EvaluateTrack(const MotionTrack& track, float time, float wiggle_time,
+            Reflection::PropertyValue& out,
+            const Assets::AssetDatabase* database = nullptr,
+            std::string* curve_error = nullptr);
+
+        static float RemapMotionTime(const MotionAsset& asset, float time,
+            const Assets::AssetDatabase* database = nullptr,
+            std::string* curve_error = nullptr);
     };
 }

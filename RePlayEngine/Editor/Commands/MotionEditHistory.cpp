@@ -1,4 +1,4 @@
-#include "MotionEditHistory.h"
+﻿#include "MotionEditHistory.h"
 
 #include "../../Reflection/Property/PropertyValue.h"
 
@@ -30,6 +30,7 @@ namespace ReplayEngine::Editor
         {
             return NearlyEqual(a.time, b.time) &&
                 a.easing == b.easing &&
+                a.easing_curve.guid == b.easing_curve.guid &&
                 NearlyEqual(a.bezier.out_handle.x, b.bezier.out_handle.x) &&
                 NearlyEqual(a.bezier.out_handle.y, b.bezier.out_handle.y) &&
                 NearlyEqual(a.bezier.in_handle.x, b.bezier.in_handle.x) &&
@@ -42,6 +43,11 @@ namespace ReplayEngine::Editor
         {
             if (a.name != b.name || !SameBinding(a.binding, b.binding) ||
                 a.value_type != b.value_type || a.enabled != b.enabled ||
+                a.blend_mode != b.blend_mode || a.loop != b.loop ||
+                a.wiggle.enabled != b.wiggle.enabled ||
+                !NearlyEqual(a.wiggle.amplitude, b.wiggle.amplitude) ||
+                !NearlyEqual(a.wiggle.frequency, b.wiggle.frequency) ||
+                a.wiggle.seed != b.wiggle.seed || a.wiggle.octaves != b.wiggle.octaves ||
                 a.keys.size() != b.keys.size())
             {
                 return false;
@@ -57,6 +63,7 @@ namespace ReplayEngine::Editor
             const Motion::MotionAsset& b) noexcept
         {
             if (a.name != b.name || !NearlyEqual(a.duration, b.duration) ||
+                a.time_remap.guid != b.time_remap.guid ||
                 a.tracks.size() != b.tracks.size())
             {
                 return false;

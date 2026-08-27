@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstring>
 #include <filesystem>
 #include <functional>
@@ -350,6 +351,62 @@ bool framework::delete_motion_keys()
     return true;
 }
 
+
+bool framework::scale_motion_key_times(float scale, int pivot_mode)
+{
+    MotionTrack* track = selected_motion_track();
+    if (track == nullptr)
+    {
+        motion_editor_status = u8"時間スケールを適用するトラックが選択されていません";
+        return false;
+    }
+
+    std::vector<int> indices = selected_motion_key_indices();
+    indices.erase(std::remove_if(indices.begin(), indices.end(),
+        [track](int index)
+        {
+            return index < 0 || index >= static_cast<int>(track->keys.size());
+        }), indices.end());
+    std::sort(indices.begin(), indices.end());
+    indices.erase(std::unique(indices.begin(), indices.end()), indices.end());
+    if (indices.empty())
+    {
+        motion_editor_status = u8"時間スケールを適用するキーが選択されていません";
+        return false;
+    }
+
+    float safe_scale = std::isfinite(scale) ? scale : 1.0f;
+    safe_scale = (std::max)(0.01f, (std::min)(100.0f, safe_scale));
+    const int safe_pivot_mode = (std::max)(0, (std::min)(2, pivot_mode));
+    float pivot = 0.0f;
+    if (safe_pivot_mode == 0)
+    {
+        pivot = track->keys[static_cast<std::size_t>(indices.front())].time;
+        for (const int index : indices)
+            pivot = (std::min)(pivot, track->keys[static_cast<std::size_t>(index)].time);
+    }
+    else if (safe_pivot_mode == 1)
+    {
+        pivot = motion_preview_time;
+    }
+
+    motion_edit_history.Begin(motion_editor_asset, u8"キー時刻をスケール");
+    for (const int index : indices)
+    {
+        MotionKeyframe& key = track->keys[static_cast<std::size_t>(index)];
+        const float scaled_time = pivot + (key.time - pivot) * safe_scale;
+        const float snapped_time = SnapMotionTime(scaled_time, motion_editor_fps, true);
+        key.time = (std::max)(0.0f, snapped_time);
+    }
+    motion_editor_asset.SortKeys();
+    motion_edit_history.Commit(motion_editor_asset);
+    motion_editor_dirty = true;
+    motion_selected_key = -1;
+    motion_selected_keys.clear();
+    motion_editor_status = u8"選択キーの時刻をスケールしました";
+    return true;
+}
+
 bool framework::apply_motion_easing_to_selection(ReplayEngine::Motion::MotionEasing easing,
     const ReplayEngine::Reflection::AssetReference* curve)
 {
@@ -575,11 +632,16 @@ void framework::apply_motion_preview_time()
     motion_mixer.BeginFrame();
     if (motion_editor_loaded)
     {
+        std::string remap_error;
+        const float evaluated_time = MotionEvaluator::RemapMotionTime(motion_editor_asset,
+            motion_preview_time, &asset_database, &remap_error);
+        if (motion_editor_asset.time_remap.IsAssigned())
+            push_motion_curve_warning_once(remap_error);
         for (const MotionTrack& track : motion_editor_asset.tracks)
         {
             PropertyValue value;
             std::string curve_error;
-            if (!MotionEvaluator::EvaluateTrack(track, motion_preview_time, value,
+            if (!MotionEvaluator::EvaluateTrack(track, evaluated_time, motion_preview_time, value,
                 &asset_database, &curve_error))
             {
                 push_motion_curve_warning_once(curve_error);
@@ -611,11 +673,16 @@ void framework::apply_motion_preview_time()
                 const auto* motion = resolve_motion_asset(layer.motion_guid);
                 if (motion == nullptr) continue;
                 const float t = (std::max)(0.0f, (std::min)(motion->duration, source_time));
+                std::string remap_error;
+                const float evaluated_time = MotionEvaluator::RemapMotionTime(*motion, t,
+                    &asset_database, &remap_error);
+                if (motion->time_remap.IsAssigned())
+                    push_motion_curve_warning_once(remap_error);
                 for (const MotionTrack& track : motion->tracks)
                 {
                     PropertyValue value;
                     std::string curve_error;
-                    if (!MotionEvaluator::EvaluateTrack(track, t, value,
+                    if (!MotionEvaluator::EvaluateTrack(track, evaluated_time, t, value,
                         &asset_database, &curve_error))
                     {
                         push_motion_curve_warning_once(curve_error);

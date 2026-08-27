@@ -57,6 +57,55 @@ void framework::draw_motion_inspector()
         motion_editor_dirty = true;
     }
 
+    ReplayEngine::Reflection::AssetReference time_remap = motion_editor_asset.time_remap;
+    const ReplayEngine::Assets::AssetRecord* time_remap_record = time_remap.IsAssigned()
+        ? asset_database.FindByGuid(time_remap.guid) : nullptr;
+    const bool time_remap_resolved = time_remap_record != nullptr &&
+        time_remap_record->kind == ReplayEngine::Assets::AssetKind::EasingCurve &&
+        ReplayEngine::Motion::EasingCurveAsset::Resolve(&asset_database, time_remap) != nullptr;
+    const char* time_remap_preview = !time_remap.IsAssigned() ? u8"未設定" :
+        (time_remap_resolved ? time_remap_record->display_name.c_str() : u8"見つかりません");
+    bool time_remap_changed = false;
+    if (ImGui::BeginCombo(u8"時間リマップ##MotionTimeRemapCurve", time_remap_preview))
+    {
+        const bool unset = !time_remap.IsAssigned();
+        if (ImGui::Selectable(u8"未設定", unset))
+        {
+            time_remap.Clear();
+            time_remap_changed = true;
+        }
+        if (unset) ImGui::SetItemDefaultFocus();
+        for (const ReplayEngine::Assets::AssetRecord& record : asset_database.Records())
+        {
+            if (record.kind != ReplayEngine::Assets::AssetKind::EasingCurve) continue;
+            ImGui::PushID(record.guid.c_str());
+            const bool selected = time_remap.guid == record.guid;
+            if (ImGui::Selectable(record.display_name.c_str(), selected))
+            {
+                time_remap.guid = record.guid;
+                time_remap_changed = true;
+            }
+            if (selected) ImGui::SetItemDefaultFocus();
+            ImGui::PopID();
+        }
+        ImGui::EndCombo();
+    }
+    if (time_remap_changed)
+    {
+        motion_edit_history.Begin(motion_editor_asset, u8"時間リマップを変更");
+        motion_editor_asset.time_remap = time_remap;
+        motion_edit_history.Commit(motion_editor_asset);
+        motion_editor_dirty = true;
+        motion_easing_curve_warning_guids.clear();
+    }
+    if (motion_editor_asset.time_remap.IsAssigned())
+    {
+        std::string remap_error;
+        MotionEvaluator::RemapMotionTime(motion_editor_asset, motion_preview_time,
+            &asset_database, &remap_error);
+        push_motion_curve_warning_once(remap_error);
+    }
+
     ImGui::Separator();
     if (ImGui::Button(u8"イベントトラックを追加"))
     {

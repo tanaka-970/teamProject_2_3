@@ -271,6 +271,18 @@ void framework::draw_motion_timeline()
         return;
     }
 
+    const auto evaluate_track_at_time = [&](const MotionTrack& track, float raw_time,
+        ReplayEngine::Reflection::PropertyValue& value, std::string* curve_error)
+    {
+        std::string remap_error;
+        const float evaluated_time = MotionEvaluator::RemapMotionTime(motion_editor_asset,
+            raw_time, &asset_database, &remap_error);
+        if (motion_editor_asset.time_remap.IsAssigned())
+            push_motion_curve_warning_once(remap_error);
+        return MotionEvaluator::EvaluateTrack(track, evaluated_time, raw_time, value,
+            &asset_database, curve_error);
+    };
+
     // ---- AE style time controls --------------------------------------------
     ImGui::SetNextItemWidth(86.0f);
     int fps = motion_editor_fps;
@@ -305,8 +317,8 @@ void framework::draw_motion_timeline()
         {
             ReplayEngine::Reflection::PropertyValue value;
             std::string curve_error;
-            const bool evaluated_ok = MotionEvaluator::EvaluateTrack(selected_track,
-                motion_preview_time, value, &asset_database, &curve_error);
+            const bool evaluated_ok = evaluate_track_at_time(selected_track,
+                motion_preview_time, value, &curve_error);
             push_motion_curve_warning_once(curve_error);
             if (!evaluated_ok && !selected_track.keys.empty())
                 value = selected_track.keys.back().value;
@@ -330,6 +342,28 @@ void framework::draw_motion_timeline()
         if (ImGui::Button(u8"複製")) duplicate_motion_keys();
         ImGui::SameLine();
         if (ImGui::Button(u8"削除")) delete_motion_keys();
+        ImGui::SetNextItemWidth(92.0f);
+        ImGui::DragFloat(u8"倍率##MotionKeyTimeScale", &motion_key_time_scale,
+            0.01f, 0.01f, 100.0f, "%.2fx");
+        ImGui::SameLine();
+        const char* pivot_labels[] = { u8"選択の先頭", u8"再生ヘッド", u8"モーション先頭" };
+        motion_key_time_scale_pivot = (std::max)(0, (std::min)(2, motion_key_time_scale_pivot));
+        ImGui::SetNextItemWidth(120.0f);
+        if (ImGui::BeginCombo(u8"基準点##MotionKeyTimeScalePivot",
+            pivot_labels[motion_key_time_scale_pivot]))
+        {
+            for (int pivot = 0; pivot < 3; ++pivot)
+            {
+                const bool selected = motion_key_time_scale_pivot == pivot;
+                if (ImGui::Selectable(pivot_labels[pivot], selected))
+                    motion_key_time_scale_pivot = pivot;
+                if (selected) ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button(u8"時間スケール適用##MotionKeyTimeScaleApply"))
+            scale_motion_key_times(motion_key_time_scale, motion_key_time_scale_pivot);
     }
 
     ImGui::Separator();
@@ -438,8 +472,8 @@ void framework::draw_motion_timeline()
                 motion_editor_fps, motion_editor_frame_snap);
             ReplayEngine::Reflection::PropertyValue value;
             std::string curve_error;
-            const bool evaluated_ok = MotionEvaluator::EvaluateTrack(track, time, value,
-                &asset_database, &curve_error);
+            const bool evaluated_ok = evaluate_track_at_time(track, time, value,
+                &curve_error);
             push_motion_curve_warning_once(curve_error);
             if (!evaluated_ok && !track.keys.empty()) value = track.keys.back().value;
             motion_edit_history.Begin(motion_editor_asset, u8"タイムラインでキーを追加");
@@ -603,6 +637,25 @@ void framework::draw_motion_graph_editor()
     }
 
     MotionTrack& track = motion_editor_asset.tracks[motion_selected_track];
+    const auto evaluate_track_at_time = [&](const MotionTrack& source, float raw_time,
+        ReplayEngine::Reflection::PropertyValue& value, std::string* curve_error)
+    {
+        std::string remap_error;
+        const float evaluated_time = MotionEvaluator::RemapMotionTime(motion_editor_asset,
+            raw_time, &asset_database, &remap_error);
+        if (motion_editor_asset.time_remap.IsAssigned())
+            push_motion_curve_warning_once(remap_error);
+        return MotionEvaluator::EvaluateTrack(source, evaluated_time, raw_time, value,
+            &asset_database, curve_error);
+    };
+    bool time_remap_active = false;
+    if (motion_editor_asset.time_remap.IsAssigned() && motion_editor_asset.duration > 0.0f)
+    {
+        std::string remap_error;
+        MotionEvaluator::RemapMotionTime(motion_editor_asset, 0.0f, &asset_database, &remap_error);
+        push_motion_curve_warning_once(remap_error);
+        time_remap_active = remap_error.empty();
+    }
     const int channel_count = ChannelCount(track.value_type);
     motion_graph_channel = (std::max)(0, (std::min)(channel_count - 1,
         motion_graph_channel));
@@ -634,6 +687,23 @@ void framework::draw_motion_graph_editor()
     {
         points.clear();
         if (!source.enabled || source.keys.empty()) return;
+        if (time_remap_active)
+        {
+            constexpr int remap_samples = 256;
+            for (int sample = 0; sample < remap_samples; ++sample)
+            {
+                const float raw_time = duration * static_cast<float>(sample) /
+                    static_cast<float>(remap_samples - 1);
+                ReplayEngine::Reflection::PropertyValue value;
+                std::string curve_error;
+                if (!evaluate_track_at_time(source, raw_time, value, &curve_error)) continue;
+                push_motion_curve_warning_once(curve_error);
+                const float scalar = ScalarChannel(value, source.value_type, channel);
+                points.push_back({ raw_time, std::isfinite(scalar) ? scalar :
+                    (std::numeric_limits<float>::quiet_NaN)() });
+            }
+            return;
+        }
         const auto push_value = [&](float time,
             const ReplayEngine::Reflection::PropertyValue& value)
         {
@@ -733,7 +803,7 @@ void framework::draw_motion_graph_editor()
         const float t = duration * sample / static_cast<float>(sample_count - 1);
         float value = 0.0f;
         std::string curve_error;
-        if (MotionEvaluator::EvaluateTrack(track, t, evaluated, &asset_database, &curve_error))
+        if (evaluate_track_at_time(track, t, evaluated, &curve_error))
             value = ScalarChannel(evaluated, track.value_type, motion_graph_channel);
         push_motion_curve_warning_once(curve_error);
         samples[static_cast<std::size_t>(sample)] = std::isfinite(value) ? value : 0.0f;
@@ -782,8 +852,7 @@ void framework::draw_motion_graph_editor()
                 const float t = duration * sample / static_cast<float>(sample_count - 1);
                 float value = 0.0f;
                 std::string curve_error;
-                if (MotionEvaluator::EvaluateTrack(overlay_track, t, evaluated,
-                    &asset_database, &curve_error))
+                if (evaluate_track_at_time(overlay_track, t, evaluated, &curve_error))
                 {
                     value = ScalarChannel(evaluated, overlay_track.value_type,
                         motion_graph_channel);
@@ -944,8 +1013,7 @@ void framework::draw_motion_graph_editor()
     if (!motion_graph_speed_mode)
     {
         std::string curve_error;
-        if (MotionEvaluator::EvaluateTrack(track, playhead_time, evaluated,
-            &asset_database, &curve_error))
+        if (evaluate_track_at_time(track, playhead_time, evaluated, &curve_error))
         {
             playhead_value = ScalarChannel(evaluated, track.value_type, motion_graph_channel);
             playhead_value_valid = std::isfinite(playhead_value);
@@ -965,14 +1033,14 @@ void framework::draw_motion_graph_editor()
         if (after_time > before_time)
         {
             std::string before_error;
-            before_ok = MotionEvaluator::EvaluateTrack(track, before_time, before_value,
-                &asset_database, &before_error);
+            before_ok = evaluate_track_at_time(track, before_time, before_value,
+                &before_error);
             push_motion_curve_warning_once(before_error);
             if (before_ok)
             {
                 std::string after_error;
-                after_ok = MotionEvaluator::EvaluateTrack(track, after_time, after_value,
-                    &asset_database, &after_error);
+                after_ok = evaluate_track_at_time(track, after_time, after_value,
+                    &after_error);
                 push_motion_curve_warning_once(after_error);
             }
         }

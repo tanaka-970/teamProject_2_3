@@ -294,7 +294,7 @@ namespace ReplayEngine::Motion
         }
     }
 
-    bool MotionEvaluator::EvaluateTrack(const MotionTrack& track, float time,
+    bool EvaluateTrackInternal(const MotionTrack& track, float time, float wiggle_time,
         Reflection::PropertyValue& out, const Assets::AssetDatabase* database,
         std::string* curve_error)
     {
@@ -308,7 +308,7 @@ namespace ReplayEngine::Motion
         {
             out = track.keys.front().value;
             if (track.loop == MotionTrackLoop::Offset) ApplyOffsetLoop(track, offset_cycles, out);
-            ApplyWiggle(track, evaluated_time, out);
+            ApplyWiggle(track, wiggle_time, out);
             return true;
         }
 
@@ -316,7 +316,7 @@ namespace ReplayEngine::Motion
         {
             out = track.keys.back().value;
             if (track.loop == MotionTrackLoop::Offset) ApplyOffsetLoop(track, offset_cycles, out);
-            ApplyWiggle(track, evaluated_time, out);
+            ApplyWiggle(track, wiggle_time, out);
             return true;
         }
 
@@ -333,7 +333,7 @@ namespace ReplayEngine::Motion
         {
             out = b.value;
             if (track.loop == MotionTrackLoop::Offset) ApplyOffsetLoop(track, offset_cycles, out);
-            ApplyWiggle(track, evaluated_time, out);
+            ApplyWiggle(track, wiggle_time, out);
             return true;
         }
 
@@ -341,7 +341,7 @@ namespace ReplayEngine::Motion
         {
             out = a.value;
             if (track.loop == MotionTrackLoop::Offset) ApplyOffsetLoop(track, offset_cycles, out);
-            ApplyWiggle(track, evaluated_time, out);
+            ApplyWiggle(track, wiggle_time, out);
             return true;
         }
 
@@ -359,7 +359,58 @@ namespace ReplayEngine::Motion
         }
         out = Reflection::PropertyValue::Lerp(a.value, b.value, eased);
         if (track.loop == MotionTrackLoop::Offset) ApplyOffsetLoop(track, offset_cycles, out);
-        ApplyWiggle(track, evaluated_time, out);
+        ApplyWiggle(track, wiggle_time, out);
         return true;
     }
+
+    bool MotionEvaluator::EvaluateTrack(const MotionTrack& track, float time,
+        Reflection::PropertyValue& out, const Assets::AssetDatabase* database,
+        std::string* curve_error)
+    {
+        return EvaluateTrackInternal(track, time, time, out, database, curve_error);
+    }
+
+    bool MotionEvaluator::EvaluateTrack(const MotionTrack& track, float time, float wiggle_time,
+        Reflection::PropertyValue& out, const Assets::AssetDatabase* database,
+        std::string* curve_error)
+    {
+        return EvaluateTrackInternal(track, time, wiggle_time, out, database, curve_error);
+    }
+
+    float MotionEvaluator::RemapMotionTime(const MotionAsset& asset, float time,
+        const Assets::AssetDatabase* database, std::string* curve_error)
+    {
+        if (curve_error != nullptr) curve_error->clear();
+        if (asset.duration <= 0.0f) return time;
+        if (!asset.time_remap.IsAssigned())
+        {
+            if (curve_error != nullptr)
+                *curve_error = u8"Time Remap が未設定です。等速で評価します。";
+            return time;
+        }
+
+        const EasingCurveAsset* curve = EasingCurveAsset::Resolve(database, asset.time_remap);
+        if (curve == nullptr)
+        {
+            if (curve_error != nullptr)
+            {
+                if (database == nullptr)
+                {
+                    *curve_error = u8"Time Remap を解決する AssetDatabase がありません。等速で評価します。 GUID: " +
+                        asset.time_remap.guid;
+                }
+                else
+                {
+                    *curve_error = u8"Time Remap のカーブを解決できません。等速で評価します。 GUID: " +
+                        asset.time_remap.guid;
+                }
+            }
+            return time;
+        }
+
+        const float normalized = time / asset.duration;
+        const float remapped = curve->Evaluate(normalized) * asset.duration;
+        return (std::max)(0.0f, (std::min)(asset.duration, remapped));
+    }
+
 }
