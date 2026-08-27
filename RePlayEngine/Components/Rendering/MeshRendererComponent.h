@@ -1,12 +1,14 @@
 ﻿#pragma once
 
 #include "MaterialOverrideDynamicProperties.h"
+#include "MeshMaterialSlot.h"
 #include "../../Object/Component/Component.h"
 #include "../../Reflection/Property/PropertyDesc.h"
 #include "../../Rendering/Adapter/IRenderSubmitter.h"
 
 #include <DirectXMath.h>
 
+#include <array>
 #include <string>
 #include <vector>
 
@@ -48,6 +50,8 @@ namespace ReplayEngine::Components
         void OnMotionPropertyApplied(const char* property_name) override;
         void PrepareMaterialMotion(const Rendering::MaterialAsset* material,
             const Rendering::ShaderPropertySchema* schema);
+        void OnSerialize(Reflection::PropertyBag& output) const override;
+        void OnDeserialize(const Reflection::PropertyBag& input) override;
 
         // 実際に描くべきか。Component の有効状態と visible の両方を見る。
         bool ShouldRender() const noexcept
@@ -59,6 +63,9 @@ namespace ReplayEngine::Components
         std::string mesh_asset;
 
         std::string material_asset;
+        int material_slot_count = 0;
+        std::vector<MeshMaterialSlot> material_slots;
+        mutable std::array<const std::string*, max_mesh_material_slots> material_slot_asset_view{};
 
         // trueならRenderer側の色・描画方式をMaterial Assetより優先する。
         bool material_override = false;

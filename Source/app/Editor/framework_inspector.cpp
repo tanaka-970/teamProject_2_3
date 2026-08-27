@@ -3,8 +3,217 @@
 #include "../../RePlayEngine/Components/Gameplay/CharacterMotorComponent.h"
 #include "../../RePlayEngine/Components/Gameplay/PlayerControllerComponent.h"
 #include "../../RePlayEngine/Components/Gameplay/PlayerInputComponent.h"
+#include "../../RePlayEngine/Components/Rendering/MaterialOverrideDynamicProperties.h"
+#include "../../RePlayEngine/Components/Rendering/MeshRendererComponent.h"
+#include "../../RePlayEngine/Components/Rendering/PrimitiveMeshRendererComponent.h"
+#include "../../RePlayEngine/Components/Rendering/SkinnedMeshRendererComponent.h"
+#include "../../RePlayEngine/Assets/AssetDatabase.h"
 
+#include <algorithm>
+#include <cstring>
 #include <string>
+#include <utility>
+#include <vector>
+
+
+namespace
+{
+    std::vector<std::string> material_subset_names(const skinned_mesh& mesh_asset)
+    {
+        std::size_t count = 0;
+        for (const skinned_mesh::mesh& mesh : mesh_asset.meshes)
+        {
+            const std::size_t mesh_count = mesh.subsets.empty() ? 1u : mesh.subsets.size();
+            count = (std::max)(count, mesh_count);
+        }
+        count = (std::min)(count,
+            static_cast<std::size_t>(ReplayEngine::Components::max_mesh_material_slots));
+        std::vector<std::string> names(count);
+        for (const skinned_mesh::mesh& mesh : mesh_asset.meshes)
+        {
+            for (std::size_t index = 0; index < mesh.subsets.size() && index < count; ++index)
+            {
+                if (names[index].empty() && !mesh.subsets[index].material_name.empty())
+                    names[index] = mesh.subsets[index].material_name;
+            }
+        }
+        return names;
+    }
+
+    template<class T>
+    void initialize_material_slots(T& renderer, const std::vector<std::string>& default_names)
+    {
+        using namespace ReplayEngine::Components;
+        const int old_count = ClampedMaterialSlotCount(renderer);
+        const std::size_t old_size = (std::min)(renderer.material_slots.size(),
+            static_cast<std::size_t>(old_count));
+        const int visible_count = static_cast<int>((std::min)(default_names.size(),
+            static_cast<std::size_t>(max_mesh_material_slots)));
+        const int required = (std::max)(old_count, visible_count);
+        EnsureMaterialSlotStorage(renderer, required);
+        for (std::size_t index = old_size;
+            index < renderer.material_slots.size() && index < default_names.size(); ++index)
+        {
+            renderer.material_slots[index].name = default_names[index];
+        }
+    }
+
+    bool draw_material_asset_slot(const char* label,
+        const ReplayEngine::Assets::AssetDatabase* database,
+        const std::string& current, std::string& selected, bool editable,
+        const char* empty_preview)
+    {
+        selected = current;
+        const ReplayEngine::Assets::AssetRecord* record = database != nullptr && !current.empty()
+            ? database->FindByGuid(current) : nullptr;
+        const char* preview = current.empty() ? empty_preview :
+            (record != nullptr ? record->display_name.c_str() : u8"Missing Asset");
+        if (!editable)
+        {
+            ImGui::TextUnformatted(preview);
+            return false;
+        }
+        bool changed = false;
+        if (ImGui::BeginCombo(label, preview))
+        {
+            if (ImGui::Selectable(empty_preview, current.empty()))
+            {
+                selected.clear();
+                changed = true;
+            }
+            if (database != nullptr)
+            {
+                for (const ReplayEngine::Assets::AssetRecord& candidate : database->Records())
+                {
+                    if (candidate.kind != ReplayEngine::Assets::AssetKind::Material) continue;
+                    const bool is_selected = candidate.guid == current;
+                    ImGui::PushID(candidate.guid.c_str());
+                    if (ImGui::Selectable(candidate.display_name.c_str(), is_selected))
+                    {
+                        selected = candidate.guid;
+                        changed = true;
+                    }
+                    if (is_selected) ImGui::SetItemDefaultFocus();
+                    ImGui::PopID();
+                }
+            }
+            ImGui::EndCombo();
+        }
+        return changed;
+    }
+
+    template<class T>
+    void draw_material_slot_rows(ReplayEngine::Editor::EditorContext& context,
+        T& renderer, const std::vector<std::string>& default_names,
+        const char* title, bool has_fbx_fallback)
+    {
+        using namespace ReplayEngine::Components;
+        if (default_names.empty()) return;
+        const bool editable = context.CanEdit();
+        const int stored_count = ClampedMaterialSlotCount(renderer);
+        ImGui::Separator();
+        ImGui::TextUnformatted(title);
+        ImGui::TextDisabled(u8"空スロットは既存の「マテリアル」へフォールバックします");
+        ImGui::PushID(&renderer);
+        ImGui::Columns(2, "##MaterialSlotColumns", false);
+        ImGui::TextDisabled(u8"名前");
+        ImGui::NextColumn();
+        ImGui::TextDisabled(u8"マテリアル");
+        ImGui::NextColumn();
+
+        const std::size_t row_count = (std::min)(default_names.size(),
+            static_cast<std::size_t>(max_mesh_material_slots));
+        for (std::size_t index = 0; index < row_count; ++index)
+        {
+            ImGui::PushID(static_cast<int>(index));
+            const bool stored = index < static_cast<std::size_t>(stored_count) &&
+                index < renderer.material_slots.size();
+            const std::string current_name = stored
+                ? renderer.material_slots[index].name : default_names[index];
+            const std::string current_asset = stored
+                ? renderer.material_slots[index].asset : std::string{};
+            const std::string hint = std::to_string(index) + u8" 番";
+
+            std::vector<char> name_buffer((std::max)(static_cast<std::size_t>(4096),
+                current_name.size() + static_cast<std::size_t>(4096)), '\0');
+            if (!current_name.empty())
+                std::memcpy(name_buffer.data(), current_name.data(), current_name.size());
+            ImGui::SetNextItemWidth(-1.0f);
+            ImGuiInputTextFlags name_flags = ImGuiInputTextFlags_EnterReturnsTrue;
+            if (!editable) name_flags |= ImGuiInputTextFlags_ReadOnly;
+            const bool enter_confirmed = ImGui::InputTextWithHint("##SlotName", hint.c_str(),
+                name_buffer.data(), name_buffer.size(), name_flags);
+            const bool focus_confirmed = ImGui::IsItemDeactivatedAfterEdit();
+            if (editable && (enter_confirmed || focus_confirmed))
+            {
+                context.BeginEdit(u8"マテリアルスロット名を変更");
+                initialize_material_slots(renderer, default_names);
+                renderer.material_slots[index].name.assign(name_buffer.data());
+                renderer.OnPropertyChanged(nullptr);
+                context.CommitEdit();
+            }
+
+            ImGui::NextColumn();
+            std::string selected_asset;
+            if (draw_material_asset_slot("##SlotMaterial", context.GetAssetDatabase(),
+                current_asset, selected_asset, editable, u8"(material_asset を使用)"))
+            {
+                context.BeginEdit(u8"マテリアルスロットを変更");
+                initialize_material_slots(renderer, default_names);
+                renderer.material_slots[index].asset = std::move(selected_asset);
+                renderer.OnPropertyChanged(nullptr);
+                context.CommitEdit();
+            }
+            if (current_asset.empty() && renderer.material_asset.empty() && has_fbx_fallback)
+                ImGui::TextDisabled(u8"共通も未設定なら FBX 材質");
+            ImGui::NextColumn();
+            ImGui::PopID();
+        }
+        ImGui::Columns(1);
+        ImGui::PopID();
+    }
+}
+
+void framework::draw_material_slot_inspector()
+{
+    using namespace ReplayEngine::Components;
+    ReplayEngine::Scene::Scene* scene = object_editor_context.GetScene();
+    if (scene == nullptr || object_editor_context.Selection().Count() != 1) return;
+    ReplayEngine::Core::GameObject* object =
+        object_editor_context.Selection().ResolvePrimary(*scene);
+    if (object == nullptr) return;
+
+    if (auto* renderer = object->GetComponent<MeshRendererComponent>())
+    {
+        if (!renderer->mesh_asset.empty())
+        {
+            if (skinned_mesh* mesh_asset = resolve_object_mesh(renderer->mesh_asset))
+            {
+                const std::vector<std::string> names = material_subset_names(*mesh_asset);
+                draw_material_slot_rows(object_editor_context, *renderer, names,
+                    u8"Mesh Renderer マテリアルスロット", true);
+            }
+        }
+    }
+    if (auto* renderer = object->GetComponent<SkinnedMeshRendererComponent>())
+    {
+        if (!renderer->mesh_asset.empty())
+        {
+            if (skinned_mesh* mesh_asset = resolve_object_mesh(renderer->mesh_asset))
+            {
+                const std::vector<std::string> names = material_subset_names(*mesh_asset);
+                draw_material_slot_rows(object_editor_context, *renderer, names,
+                    u8"Skinned Mesh Renderer マテリアルスロット", true);
+            }
+        }
+    }
+    if (auto* renderer = object->GetComponent<PrimitiveMeshRendererComponent>())
+    {
+        const std::vector<std::string> names(1);
+        draw_material_slot_rows(object_editor_context, *renderer, names,
+            u8"Primitive Mesh Renderer マテリアルスロット", false);
+    }
+}
 
 void framework::draw_shader_adjustment_workspace()
 {
@@ -141,6 +350,7 @@ void framework::draw_inspector()
                 show_game_template_components);
             save_project_settings();
         }
+        draw_material_slot_inspector();
         break;
     }
 

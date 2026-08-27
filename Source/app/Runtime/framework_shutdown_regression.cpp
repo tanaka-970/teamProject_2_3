@@ -112,7 +112,12 @@ namespace
         }
 
         Reflection::PropertyValue value;
-        if (!Motion::MotionEvaluator::EvaluateTrack(loaded.tracks.front(), 0.5f, value))
+        Motion::MotionTrackEvaluationContext evaluation_context;
+        evaluation_context.time = 0.5f;
+        evaluation_context.raw_time = 0.5f;
+        evaluation_context.duration = loaded.duration;
+        if (!Motion::MotionEvaluator::EvaluateTrackWithContext(loaded.tracks.front(),
+            evaluation_context, value))
         {
             error = "MotionEvaluator が opacity Track を評価できません。";
             return false;

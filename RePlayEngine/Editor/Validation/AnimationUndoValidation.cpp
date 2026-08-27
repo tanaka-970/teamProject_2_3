@@ -346,6 +346,20 @@ namespace ReplayEngine::Editor::Validation
             check.Expect(asset.time_remap.guid.empty(), u8"time_remap が Undo で元へ戻る");
 
             reset();
+            history.Begin(asset, u8"式の有効状態を変更");
+            asset.tracks[0].expression.enabled = true;
+            history.Commit(asset);
+            check.Expect(history.Undo(asset, label), u8"expression.enabled だけの変更を Undo できる");
+            check.Expect(!asset.tracks[0].expression.enabled, u8"expression.enabled が Undo で元へ戻る");
+
+            reset();
+            history.Begin(asset, u8"式を変更");
+            asset.tracks[0].expression.source = "v * 2";
+            history.Commit(asset);
+            check.Expect(history.Undo(asset, label), u8"expression.source だけの変更を Undo できる");
+            check.Expect(asset.tracks[0].expression.source.empty(), u8"expression.source が Undo で元へ戻る");
+
+            reset();
             history.Begin(asset, u8"変更なし");
             history.Commit(asset);
             check.Expect(!history.CanUndo(), u8"変更なしの Begin/Commit は履歴を増やさない");

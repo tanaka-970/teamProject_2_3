@@ -490,6 +490,7 @@
     <ClCompile Include="RePlayEngine\Motion\MotionAssetLoad.cpp" />
     <ClCompile Include="RePlayEngine\Motion\CompositionAsset.cpp" />
     <ClCompile Include="RePlayEngine\Motion\MotionEvaluator.cpp" />
+    <ClCompile Include="RePlayEngine\Motion\MotionExpression.cpp" />
     <ClCompile Include="RePlayEngine\Motion\MotionBindingResolver.cpp" />
     <ClCompile Include="RePlayEngine\Motion\MotionMixer.cpp" />
     <ClCompile Include="RePlayEngine\Components\Motion\MotionPlayerComponent.cpp" />
@@ -707,6 +708,7 @@
     <ClInclude Include="RePlayEngine\Motion\MotionAsset.h" />
     <ClInclude Include="RePlayEngine\Motion\CompositionAsset.h" />
     <ClInclude Include="RePlayEngine\Motion\MotionEvaluator.h" />
+    <ClInclude Include="RePlayEngine\Motion\MotionExpression.h" />
     <ClInclude Include="RePlayEngine\Motion\MotionBindingResolver.h" />
     <ClInclude Include="RePlayEngine\Motion\MotionMixer.h" />
     <ClInclude Include="RePlayEngine\Components\Motion\MotionPlayerComponent.h" />
@@ -759,6 +761,7 @@
     <ClInclude Include="RePlayEngine\Components\Core\TransformComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Core\PivotComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Rendering\MeshRendererComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Rendering\MeshMaterialSlot.h" />
     <ClInclude Include="RePlayEngine\Components\Rendering\PrimitiveMeshRendererComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Rendering\LineRendererComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Rendering\TrailComponent.h" />

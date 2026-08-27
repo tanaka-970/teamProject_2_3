@@ -423,6 +423,7 @@ private:
     void draw_search_results();
     void draw_scene_hierarchy();
     void draw_inspector();
+    void draw_material_slot_inspector();
     void draw_shader_adjustment_workspace();
     // シェーダ編集の唯一の入口（Source/app/Editor/framework_shader_stack.cpp）。
     //
