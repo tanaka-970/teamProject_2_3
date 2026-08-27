@@ -4,14 +4,64 @@ cbuffer MaterialCB : register(b2)
     float4 emissiveStrength;
     float4 surfaceParams; // metallic、roughness、AO、alpha cutoff
     float4 renderParams;  // alpha mode、lighting model、receive shadow、texture semantic mask
+    float4 builtinParams;  // BuiltIn固有表現。x=効果ID、y/z/w=引数
+    float4 builtinParams1; // Toon。rgb=ShadowTint、w=RimPower
+    float4 builtinParams2; // Toon。rgb=RimColor、w=SpecularPower
+    float4 builtinParams3; // Toon。rgb=SpecularTint、w=予約
 };
+
+// Ramp を階調で引くために Directional Light の向きが要る。
+#define DX12_LIGHT_CB_REGISTER b3
+#include "dx12_lighting_common.hlsli"
+
+// BuiltInは自前PSOを持てないため、固有表現をここで分岐して適用する。
+// 効果を足すときはIDを増やし、この関数へ分岐を1つ加える。
+static const uint BUILTIN_EFFECT_NONE = 0u;
+static const uint BUILTIN_EFFECT_PIXELATE = 1u;
+static const uint BUILTIN_EFFECT_TOON = 2u;
+
+float3 ApplyBuiltInEffect(float3 color, float4 screenPosition, float4 params)
+{
+    const uint effect = (uint)(params.x + 0.5f);
+    if (effect == BUILTIN_EFFECT_PIXELATE)
+    {
+        const float cell = max(params.y, 1.0f);
+        const float strength = saturate(params.z);
+        const float2 center = (floor(screenPosition.xy / cell) + 0.5f) * cell;
+        const float2 local = (screenPosition.xy - center) / cell;
+        const float distanceFromCenter = length(local);
+        const float softness = max(fwidth(distanceFromCenter), 0.015f);
+        const float dotMask = 1.0f - smoothstep(0.42f - softness,
+            0.42f + softness, distanceFromCenter);
+        return color * lerp(1.0f, dotMask, strength);
+    }
+    return color;
+}
 Texture2D baseTexture : register(t0);
 Texture2D normalTexture : register(t1);
 Texture2D metallicTexture : register(t2);
 Texture2D roughnessTexture : register(t3);
 Texture2D emissiveTexture : register(t4);
 Texture2D occlusionTexture : register(t5);
+// t8/t9 は Bone Palette の root SRV が使うので RampMap は t10 に置く。
+Texture2D rampTexture : register(t10);
 SamplerState materialSampler : register(s0);
+
+// 色を RGB565 へ詰めて UNORM16 の 1ch に載せる。復号は lighting pass 側。
+float Dx12PackColor565(float3 color)
+{
+    const float3 c = saturate(color);
+    const float code = floor(c.r * 31.0f + 0.5f) * 2048.0f +
+        floor(c.g * 63.0f + 0.5f) * 32.0f + floor(c.b * 31.0f + 0.5f);
+    return code / 65535.0f;
+}
+
+// 0..1 の値 2 つを 8bit ずつ UNORM16 の 1ch へ詰める。
+float Dx12PackTwoBytes(float high, float low)
+{
+    return (floor(saturate(high) * 255.0f + 0.5f) * 256.0f +
+        floor(saturate(low) * 255.0f + 0.5f)) / 65535.0f;
+}
 
 static const uint MATERIAL_BASE_MAP = 1u << 0;
 static const uint MATERIAL_NORMAL_MAP = 1u << 1;
@@ -20,6 +70,7 @@ static const uint MATERIAL_ROUGHNESS_MAP = 1u << 3;
 static const uint MATERIAL_EMISSIVE_MAP = 1u << 4;
 static const uint MATERIAL_OCCLUSION_MAP = 1u << 5;
 static const uint MATERIAL_PACKED_ORM_MAP = 1u << 6;
+static const uint MATERIAL_RAMP_MAP = 1u << 7;
 
 struct PSIn
 {
@@ -38,6 +89,8 @@ struct PSOut
     float4 normalDepth : SV_Target2;
     float4 material : SV_Target3;
     float2 velocity : SV_Target4;
+    // Toon の色3つと指数2つを bit pack して運ぶ。Toon 以外は 0。
+    float4 toon : SV_Target5;
 };
 
 float3 ResolveNormal(PSIn input, uint semanticMask)
@@ -100,11 +153,41 @@ PSOut main(PSIn input)
     PSOut output;
     // Shader/gbuffer_common.hlsliと一致させる。ModelはBase.a、ReceiveShadowはNormal.a、
     // MaterialはOcclusion/Roughness/Metalness/AO Strengthとして格納する。
+    // 判定は lighting model 基準。Material Asset 無しの「描画方式=トゥーン」も拾うため。
+    const bool isToon = (uint)round(renderParams.y) == 1u;
+    const bool hasToonParams = (uint)(builtinParams.x + 0.5f) == BUILTIN_EFFECT_TOON;
+    const float toonStepCount = hasToonParams ? builtinParams.y : 3.0f;
+    const float3 N = ResolveNormal(input, semanticMask);
+
+    // ランプは遅延ライティングでは1枚に絞れないのでGBufferで階調を引いて乗算する。
+    if (isToon && (semanticMask & MATERIAL_RAMP_MAP) != 0u)
+    {
+        const float3 L = normalize(-directionalDirectionIntensity.xyz);
+        const float noL = directionalColorFlags.w > 0.5f ? saturate(dot(N, L)) : 1.0f;
+        const float band = Dx12ToonNoL(noL, toonStepCount);
+        albedo.rgb *= rampTexture.Sample(materialSampler, float2(band, 0.5f)).rgb;
+    }
+
+    albedo.rgb = ApplyBuiltInEffect(albedo.rgb, input.position, builtinParams);
     output.base = float4(albedo.rgb, saturate(renderParams.y / 255.0f));
     output.emissive = float4(emissive, 1.0f);
-    output.normalDepth = float4(ResolveNormal(input, semanticMask) * 0.5f + 0.5f,
+    output.normalDepth = float4(N * 0.5f + 0.5f,
         renderParams.z >= 0.5f ? 1.0f : -1.0f);
-    output.material = float4(ao, roughness, metallic, ao);
+    // material.a は従来 ao の重複で誰も読んでいない。Toon のときだけ階調数を運ぶ。
+    // 他のシェーダでは今までどおり ao を入れるので既存の見た目は変わらない。
+    const float toonSteps = isToon ? saturate(toonStepCount / 16.0f) : ao;
+    output.material = float4(ao, roughness, metallic, toonSteps);
+
+    // 追加RTはToonのときだけ埋める。他は0で、lighting側もmodelで門を閉じている。
+    output.toon = 0.0f;
+    if (isToon && hasToonParams)
+    {
+        output.toon.x = Dx12PackColor565(builtinParams1.rgb);
+        output.toon.y = Dx12PackColor565(builtinParams2.rgb);
+        output.toon.z = Dx12PackColor565(builtinParams3.rgb);
+        output.toon.w = Dx12PackTwoBytes(builtinParams1.w / 8.0f,
+            (builtinParams2.w - 1.0f) / 127.0f);
+    }
 
     const float2 currentNdc = input.currentClip.xy / max(abs(input.currentClip.w), 1.0e-5f);
     const float2 previousNdc = input.previousClip.xy / max(abs(input.previousClip.w), 1.0e-5f);

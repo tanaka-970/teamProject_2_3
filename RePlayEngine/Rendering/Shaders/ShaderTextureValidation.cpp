@@ -113,9 +113,9 @@ namespace ReplayEngine::Rendering::Validation
         check.Expect(ResolvedMaterialBinding::TryGetGBufferBridgeSlot(
             "OcclusionMap", bridge_slot) && bridge_slot == 45,
             "OcclusionMapはGBuffer t45へ再配置される");
-        check.Expect(!ResolvedMaterialBinding::TryGetGBufferBridgeSlot(
-            "RampMap", bridge_slot),
-            "RampMapはGBuffer semantic bridgeへ入らない");
+        check.Expect(ResolvedMaterialBinding::TryGetGBufferBridgeSlot(
+            "RampMap", bridge_slot) && bridge_slot == 46,
+            "RampMapはGBuffer t46へ再配置される");
 
         MaterialAsset toon;
         toon.shader_guid = BuiltInShaders::Toon.ToString();
