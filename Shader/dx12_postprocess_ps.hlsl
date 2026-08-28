@@ -17,12 +17,14 @@ cbuffer PostProcessConstants : register(b0)
 {
     float exposure;
     float bloomIntensity;
+    float bloomThreshold;
     float vignetteStrength;
     float fxaaEnabled;
     float taaBlend;
     float ssaoStrength;
     float ssrStrength;
     float historyValid;
+    float3 alignmentPadding;
     float2 screenSize;
     float2 padding;
     float4 colorFilter;
@@ -35,6 +37,11 @@ cbuffer PostProcessConstants : register(b0)
     float4 cameraPlanes; // x=Near、y=Far
     float4 ssaoParams0; // x=半径、y=べき乗、z=薄物補正、w=法線バイアス
     float4 ssaoParams1; // x=スライス数、y=ステップ数、z=フェード開始、w=フェード終了
+    float4 ssaoParams2; // x=ブラー有効、y=ブラー鮮明度
+    float4 ssrParams0; // x=最大距離、y=厚み、z=ステップ幅、w=最大マーチ数
+    float4 ssrParams1; // x=絞り込み回数、y=最大ラフネス、z=端フェード、w=レイバイアス
+    float4 ssrParams2; // x=resolve半径、y=resolveタップ数
+    float4 taaParams0; // x=分散幅、y=シャープ化、z=速度上限
 };
 
 struct PixelInput
@@ -71,8 +78,8 @@ float3 fxaa(float2 uv)
 }
 
 // 全画面で走るので step 数は固定上限にする。理由は実装報告書へ書いた。
-static const int SSR_MAX_STEPS = 32;
-static const int SSR_REFINE_STEPS = 4;
+static const int SSR_MAX_STEPS = 64;
+static const int SSR_REFINE_STEPS = 8;
 // 交差とみなすカメラからの距離差。これを超える差は手前の別物として棄却する。
 static const float SSR_THICKNESS = 0.55f;
 
@@ -109,7 +116,7 @@ float linearViewDepth(float2 uv, float depth)
     return clamp((nearPlane * farPlane) / denominator, nearPlane, farPlane);
 }
 
-float ssao(float2 uv)
+float ssaoRaw(float2 uv)
 {
     const float hardwareDepth = sceneDepth.SampleLevel(pointSampler, uv, 0).r;
     if (hardwareDepth >= 0.999999f) return 1.0f;
@@ -182,6 +189,19 @@ float ssao(float2 uv)
     return lerp(1.0f, ambient, distanceFade);
 }
 
+float ssao(float2 uv)
+{
+    const float center = ssaoRaw(uv);
+    if (ssaoParams2.x < 0.5f) return center;
+    const float sharpness = saturate(ssaoParams2.y);
+    if (sharpness >= 0.9999f) return center;
+    const float2 pixel = 1.0f / max(screenSize, float2(1.0f, 1.0f));
+    const float blurred = (center + ssaoRaw(uv + float2(pixel.x, 0.0f)) +
+        ssaoRaw(uv - float2(pixel.x, 0.0f)) + ssaoRaw(uv + float2(0.0f, pixel.y)) +
+        ssaoRaw(uv - float2(0.0f, pixel.y))) * 0.2f;
+    return lerp(blurred, center, sharpness);
+}
+
 float3 screenSpaceReflection(float2 uv, float3 color)
 {
     if (historyValid < 0.5f || featureFlags.z < 0.5f) return color;
@@ -191,8 +211,14 @@ float3 screenSpaceReflection(float2 uv, float3 color)
     if (centerDepth >= 0.999999f) return color;
 
     const float roughness = saturate(sceneMaterial.SampleLevel(pointSampler, uv, 0).g);
+    const bool legacyDefaults = abs(ssrParams0.x - 40.0f) < 0.0001f &&
+        abs(ssrParams0.y - 0.4f) < 0.0001f && abs(ssrParams0.z - 3.0f) < 0.0001f &&
+        abs(ssrParams0.w - 48.0f) < 0.0001f && abs(ssrParams1.x - 5.0f) < 0.0001f &&
+        abs(ssrParams1.y - 0.65f) < 0.0001f && abs(ssrParams1.z - 0.12f) < 0.0001f &&
+        abs(ssrParams1.w - 1.0f) < 0.0001f && abs(ssrParams2.x - 12.0f) < 0.0001f &&
+        abs(ssrParams2.y - 8.0f) < 0.0001f;
     // 粗い面は反射がぼけて意味を持たないので早期に降りる。
-    if (roughness > 0.6f) return color;
+    if (roughness > (legacyDefaults ? 0.6f : saturate(ssrParams1.y))) return color;
 
     const float4 normalSample = sceneNormal.SampleLevel(pointSampler, uv, 0);
     const float3 worldNormal = normalSample.xyz * 2.0f - 1.0f;
@@ -203,12 +229,20 @@ float3 screenSpaceReflection(float2 uv, float3 color)
     const float3 V = normalize(origin);
     const float3 R = reflect(V, N);
 
-    // レイ長はカメラからの距離に比例させ、Far で頭を打たせる。
+    const int maxSteps = legacyDefaults ? 32 :
+        clamp((int)round(ssrParams0.w), 4, SSR_MAX_STEPS);
+    const int refineSteps = legacyDefaults ? 4 :
+        clamp((int)round(ssrParams1.x), 0, SSR_REFINE_STEPS);
     const float farPlane = max(cameraPlanes.y, cameraPlanes.x + 1.0e-3f);
-    const float rayLength = min(max(length(origin) * 1.5f, 1.0f), farPlane * 0.5f);
-    const float stepLength = rayLength / (float)SSR_MAX_STEPS;
-    // 自分自身に当たらないよう法線方向へ 1 step ぶん逃がす。
-    const float3 rayStart = origin + N * max(stepLength * 0.5f, 1.0e-3f);
+    const float rayLength = legacyDefaults
+        ? min(max(length(origin) * 1.5f, 1.0f), farPlane * 0.5f)
+        : min(max(ssrParams0.x, 1.0f), farPlane * 0.5f);
+    const float baseStepLength = rayLength / (float)maxSteps;
+    const float strideScale = legacyDefaults ? 1.0f : max(ssrParams0.z / 3.0f, 0.25f);
+    const float stepLength = baseStepLength * strideScale;
+    const float3 rayStart = legacyDefaults
+        ? origin + N * max(baseStepLength * 0.5f, 1.0e-3f)
+        : origin + N * max(ssrParams1.w, 1.0e-3f);
 
     float2 hitUv = 0.0f;
     float hitWeight = 0.0f;
@@ -216,7 +250,9 @@ float3 screenSpaceReflection(float2 uv, float3 color)
 
     [loop] for (int marchIndex = 1; marchIndex <= SSR_MAX_STEPS; ++marchIndex)
     {
-        const float3 rayPoint = rayStart + R * (stepLength * (float)marchIndex);
+        if (marchIndex > maxSteps) break;
+        const float3 rayPoint = rayStart + R * min(rayLength,
+            stepLength * (float)marchIndex);
         float2 sampleUv = 0.0f;
         float rayDepth = 0.0f;
         // カメラ後方へ回ったレイは打ち切る。
@@ -231,7 +267,8 @@ float3 screenSpaceReflection(float2 uv, float3 color)
         if (rayDepth <= sceneZ) { previousSample = rayPoint; continue; }
         // 面の裏へ深く回り込んだ場合は別の物体なので棄却する。
         const float3 scenePoint = viewPositionFromDepth(sampleUv, sceneZ);
-        if (abs(length(rayPoint) - length(scenePoint)) > SSR_THICKNESS)
+        const float thickness = legacyDefaults ? SSR_THICKNESS : max(ssrParams0.y, 0.001f);
+        if (abs(length(rayPoint) - length(scenePoint)) > thickness)
         {
             previousSample = rayPoint;
             continue;
@@ -240,8 +277,9 @@ float3 screenSpaceReflection(float2 uv, float3 color)
         // 二分探索で交点を詰める。step 幅ぶんの縞を消すため。
         float3 low = previousSample;
         float3 high = rayPoint;
-        [unroll] for (int refineIndex = 0; refineIndex < SSR_REFINE_STEPS; ++refineIndex)
+        [loop] for (int refineIndex = 0; refineIndex < SSR_REFINE_STEPS; ++refineIndex)
         {
+            if (refineIndex >= refineSteps) break;
             const float3 middle = (low + high) * 0.5f;
             float2 middleUv = 0.0f;
             float middleDepth = 0.0f;
@@ -261,17 +299,35 @@ float3 screenSpaceReflection(float2 uv, float3 color)
     if (hitWeight <= 0.0f) return color;
 
     // 画面端は情報が無いのでフェードさせ、不連続にしない。
-    const float2 edge = smoothstep(0.0f, 0.08f, hitUv) *
-        smoothstep(0.0f, 0.08f, 1.0f - hitUv);
+    const float edgeFade = legacyDefaults ? 0.08f : max(ssrParams1.z, 0.001f);
+    const float2 edge = smoothstep(0.0f, edgeFade, hitUv) *
+        smoothstep(0.0f, edgeFade, 1.0f - hitUv);
     float confidence = hitWeight * edge.x * edge.y;
     // 粗い面ほど反射を弱める。
-    confidence *= saturate(1.0f - roughness / 0.6f);
+    const float maxRoughness = legacyDefaults ? 0.6f : max(ssrParams1.y, 0.001f);
+    confidence *= saturate(1.0f - roughness / maxRoughness);
     // 斜め入射ほど強く映る Fresnel 近似。
     confidence *= saturate(0.25f + 0.75f * pow(saturate(1.0f + dot(V, N)), 2.0f));
     confidence = saturate(confidence * saturate(ssrStrength));
     if (confidence <= 0.0f) return color;
 
-    const float3 reflection = historyTexture.SampleLevel(sceneSampler, hitUv, 0).rgb;
+    float3 reflection = historyTexture.SampleLevel(sceneSampler, hitUv, 0).rgb;
+    if (!legacyDefaults)
+    {
+        const int tapCount = clamp((int)round(ssrParams2.y), 1, 16);
+        const float2 resolvePixel = ssrParams2.x / max(screenSize, float2(1.0f, 1.0f));
+        float3 resolveSum = reflection;
+        float resolveSamples = 1.0f;
+        [loop] for (int tap = 1; tap <= 16; ++tap)
+        {
+            if (tap >= tapCount) break;
+            const float angle = 2.39996323f * (float)tap;
+            const float2 offset = float2(cos(angle), sin(angle)) * resolvePixel;
+            resolveSum += historyTexture.SampleLevel(sceneSampler, hitUv + offset, 0).rgb;
+            resolveSamples += 1.0f;
+        }
+        reflection = resolveSum / resolveSamples;
+    }
     return lerp(color, reflection, confidence);
 }
 
@@ -282,17 +338,27 @@ float3 temporalResolve(float2 uv, float3 color)
     const float2 historyUv = uv - velocity;
     if (any(historyUv < 0.0f) || any(historyUv > 1.0f)) return color;
     const float motionPixels = length(velocity * screenSize);
-    const float motionWeight = saturate(1.0f - motionPixels / 48.0f);
+    const float motionWeight = saturate(1.0f - motionPixels / max(taaParams0.z, 0.001f));
     const float weight = saturate(taaBlend) * motionWeight;
     const float3 history = historyTexture.SampleLevel(sceneSampler, historyUv, 0).rgb;
     const float2 pixel = 1.0f / max(screenSize, float2(1.0f, 1.0f));
-    const float3 neighborhoodMin = min(color,
-        min(sampleScene(uv + float2(pixel.x, 0.0f)),
-            sampleScene(uv - float2(pixel.x, 0.0f))));
-    const float3 neighborhoodMax = max(color,
-        max(sampleScene(uv + float2(pixel.x, 0.0f)),
-            sampleScene(uv - float2(pixel.x, 0.0f))));
-    return lerp(color, clamp(history, neighborhoodMin, neighborhoodMax), weight);
+    const float3 neighborA = sampleScene(uv + float2(pixel.x, 0.0f));
+    const float3 neighborB = sampleScene(uv - float2(pixel.x, 0.0f));
+    const float3 neighborhoodMin = min(color, min(neighborA, neighborB));
+    const float3 neighborhoodMax = max(color, max(neighborA, neighborB));
+    const float gamma = max(taaParams0.x, 0.001f);
+    const bool legacyClamp = abs(gamma - 1.0f) < 0.0001f;
+    const float3 expandedMin = legacyClamp ? neighborhoodMin : color -
+        (color - neighborhoodMin) * gamma;
+    const float3 expandedMax = legacyClamp ? neighborhoodMax : color +
+        (neighborhoodMax - color) * gamma;
+    float3 resolved = lerp(color, clamp(history, expandedMin, expandedMax), weight);
+    if (abs(taaParams0.y - 0.35f) > 0.0001f && taaParams0.y > 0.0f)
+    {
+        const float3 neighborhood = (neighborA + neighborB) * 0.5f;
+        resolved = max(resolved + (resolved - neighborhood) * taaParams0.y * 3.0f, 0.0f);
+    }
+    return resolved;
 }
 
 float3 acesToneMap(float3 color)
@@ -314,10 +380,10 @@ float4 main(PixelInput input) : SV_TARGET
         else if (output == 2u)
         {
             const float2 debugPixel = 1.0f / max(screenSize, float2(1.0f, 1.0f));
-            debugColor += max(sampleScene(input.uv + debugPixel * float2(-2.0f, 0.0f)) - 1.0f, 0.0f);
-            debugColor += max(sampleScene(input.uv + debugPixel * float2(2.0f, 0.0f)) - 1.0f, 0.0f);
-            debugColor += max(sampleScene(input.uv + debugPixel * float2(0.0f, -2.0f)) - 1.0f, 0.0f);
-            debugColor += max(sampleScene(input.uv + debugPixel * float2(0.0f, 2.0f)) - 1.0f, 0.0f);
+            debugColor += max(sampleScene(input.uv + debugPixel * float2(-2.0f, 0.0f)) - bloomThreshold, 0.0f);
+            debugColor += max(sampleScene(input.uv + debugPixel * float2(2.0f, 0.0f)) - bloomThreshold, 0.0f);
+            debugColor += max(sampleScene(input.uv + debugPixel * float2(0.0f, -2.0f)) - bloomThreshold, 0.0f);
+            debugColor += max(sampleScene(input.uv + debugPixel * float2(0.0f, 2.0f)) - bloomThreshold, 0.0f);
         }
         else if (output == 3u)
             debugColor = deferredLitTexture.SampleLevel(pointSampler, input.uv, 0).rgb;
@@ -368,10 +434,10 @@ float4 main(PixelInput input) : SV_TARGET
     // 実SceneのHDR値からBloomを作る。固定の明るさを加算しない。
     const float2 pixel = 1.0f / max(screenSize, float2(1.0f, 1.0f));
     float3 bloom = 0.0f;
-    bloom += max(sampleScene(input.uv + pixel * float2(-2.0f, 0.0f)) - 1.0f, 0.0f);
-    bloom += max(sampleScene(input.uv + pixel * float2(2.0f, 0.0f)) - 1.0f, 0.0f);
-    bloom += max(sampleScene(input.uv + pixel * float2(0.0f, -2.0f)) - 1.0f, 0.0f);
-    bloom += max(sampleScene(input.uv + pixel * float2(0.0f, 2.0f)) - 1.0f, 0.0f);
+    bloom += max(sampleScene(input.uv + pixel * float2(-2.0f, 0.0f)) - bloomThreshold, 0.0f);
+    bloom += max(sampleScene(input.uv + pixel * float2(2.0f, 0.0f)) - bloomThreshold, 0.0f);
+    bloom += max(sampleScene(input.uv + pixel * float2(0.0f, -2.0f)) - bloomThreshold, 0.0f);
+    bloom += max(sampleScene(input.uv + pixel * float2(0.0f, 2.0f)) - bloomThreshold, 0.0f);
     color += bloom * (0.25f * bloomIntensity);
 
     color = acesToneMap(max(color, 0.0f));

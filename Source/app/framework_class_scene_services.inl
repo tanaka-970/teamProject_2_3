@@ -338,6 +338,7 @@ private:
     std::uint64_t profile_benchmark_max_objects{ 0 };
     std::uint64_t profile_benchmark_max_components{ 0 };
     std::chrono::steady_clock::time_point profile_benchmark_startup_begin{};
+    std::vector<std::string> screen_space_overrides;
     float shader_composer_time{ 0.0f }; // elapsed_time が 0 の Golden Capture 中は進めない
     uint32_t frames{ 0 };
     float elapsed_time{ 0.0f };

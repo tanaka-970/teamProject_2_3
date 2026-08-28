@@ -67,6 +67,35 @@ namespace ReplayEngine::Project
         stream << "RENDER_DEPTH_PREPASS "
             << (settings.DepthPrepassEnabled() ? 1 : 0) << '\n';
 
+        const ProjectSettings::ScreenSpaceSettings& screen = settings.ScreenSpace();
+        stream << std::setprecision(9);
+        stream << "RENDER_SSAO_RADIUS " << screen.ssao_radius << '\n';
+        stream << "RENDER_SSAO_INTENSITY " << screen.ssao_intensity << '\n';
+        stream << "RENDER_SSAO_POWER " << screen.ssao_power << '\n';
+        stream << "RENDER_SSAO_THIN_OCCLUDER " << screen.ssao_thin_occluder << '\n';
+        stream << "RENDER_SSAO_SLICE_COUNT " << screen.ssao_slice_count << '\n';
+        stream << "RENDER_SSAO_STEP_COUNT " << screen.ssao_step_count << '\n';
+        stream << "RENDER_SSAO_FADE_START " << screen.ssao_fade_start << '\n';
+        stream << "RENDER_SSAO_FADE_END " << screen.ssao_fade_end << '\n';
+        stream << "RENDER_SSAO_NORMAL_BIAS " << screen.ssao_normal_bias << '\n';
+        stream << "RENDER_SSAO_BLUR_SHARPNESS " << screen.ssao_blur_sharpness << '\n';
+        stream << "RENDER_SSAO_BLUR_ENABLED " << (screen.ssao_blur_enabled ? 1 : 0) << '\n';
+        stream << "RENDER_SSR_MAX_DISTANCE " << screen.ssr_max_distance << '\n';
+        stream << "RENDER_SSR_THICKNESS " << screen.ssr_thickness << '\n';
+        stream << "RENDER_SSR_STRIDE " << screen.ssr_stride << '\n';
+        stream << "RENDER_SSR_MAX_STEP " << screen.ssr_max_step << '\n';
+        stream << "RENDER_SSR_REFINE_STEP " << screen.ssr_refine_step << '\n';
+        stream << "RENDER_SSR_MAX_ROUGHNESS " << screen.ssr_max_roughness << '\n';
+        stream << "RENDER_SSR_INTENSITY " << screen.ssr_intensity << '\n';
+        stream << "RENDER_SSR_EDGE_FADE " << screen.ssr_edge_fade << '\n';
+        stream << "RENDER_SSR_RAY_BIAS " << screen.ssr_ray_bias << '\n';
+        stream << "RENDER_SSR_RESOLVE_RADIUS " << screen.ssr_resolve_radius << '\n';
+        stream << "RENDER_SSR_RESOLVE_TAP_COUNT " << screen.ssr_resolve_tap_count << '\n';
+        stream << "RENDER_TAA_BLEND " << screen.taa_blend << '\n';
+        stream << "RENDER_TAA_VARIANCE_GAMMA " << screen.taa_variance_gamma << '\n';
+        stream << "RENDER_TAA_SHARPNESS " << screen.taa_sharpness << '\n';
+        stream << "RENDER_TAA_MAX_VELOCITY " << screen.taa_max_velocity << '\n';
+
         if (!stream)
         {
             error = "プロジェクト設定の書き込みに失敗しました。";
@@ -107,6 +136,28 @@ namespace ReplayEngine::Project
         // 未知のキーワードは読み飛ばすので、新しい項目が増えた版で保存された
         // ファイルを古いビルドで開いても落ちない。
         std::string keyword;
+        ProjectSettings::ScreenSpaceSettings& screen = settings.MutableScreenSpace();
+        const auto parse_float = [](const std::string& line, float& value)
+        {
+            std::istringstream value_stream(line);
+            value_stream.imbue(std::locale::classic());
+            float parsed = value;
+            if (value_stream >> parsed) value = parsed;
+        };
+        const auto parse_int = [](const std::string& line, int& value)
+        {
+            std::istringstream value_stream(line);
+            value_stream.imbue(std::locale::classic());
+            int parsed = value;
+            if (value_stream >> parsed) value = parsed;
+        };
+        const auto parse_bool = [](const std::string& line, bool& value)
+        {
+            std::istringstream value_stream(line);
+            value_stream.imbue(std::locale::classic());
+            int parsed = value ? 1 : 0;
+            if (value_stream >> parsed) value = parsed != 0;
+        };
         while (stream >> keyword)
         {
             std::string line;
@@ -223,6 +274,32 @@ namespace ReplayEngine::Project
                 int enabled = settings.DepthPrepassEnabled() ? 1 : 0;
                 if (value_stream >> enabled) settings.SetDepthPrepassEnabled(enabled != 0);
             }
+            else if (keyword == "RENDER_SSAO_RADIUS") parse_float(line, screen.ssao_radius);
+            else if (keyword == "RENDER_SSAO_INTENSITY") parse_float(line, screen.ssao_intensity);
+            else if (keyword == "RENDER_SSAO_POWER") parse_float(line, screen.ssao_power);
+            else if (keyword == "RENDER_SSAO_THIN_OCCLUDER") parse_float(line, screen.ssao_thin_occluder);
+            else if (keyword == "RENDER_SSAO_SLICE_COUNT") parse_int(line, screen.ssao_slice_count);
+            else if (keyword == "RENDER_SSAO_STEP_COUNT") parse_int(line, screen.ssao_step_count);
+            else if (keyword == "RENDER_SSAO_FADE_START") parse_float(line, screen.ssao_fade_start);
+            else if (keyword == "RENDER_SSAO_FADE_END") parse_float(line, screen.ssao_fade_end);
+            else if (keyword == "RENDER_SSAO_NORMAL_BIAS") parse_float(line, screen.ssao_normal_bias);
+            else if (keyword == "RENDER_SSAO_BLUR_SHARPNESS") parse_float(line, screen.ssao_blur_sharpness);
+            else if (keyword == "RENDER_SSAO_BLUR_ENABLED") parse_bool(line, screen.ssao_blur_enabled);
+            else if (keyword == "RENDER_SSR_MAX_DISTANCE") parse_float(line, screen.ssr_max_distance);
+            else if (keyword == "RENDER_SSR_THICKNESS") parse_float(line, screen.ssr_thickness);
+            else if (keyword == "RENDER_SSR_STRIDE") parse_float(line, screen.ssr_stride);
+            else if (keyword == "RENDER_SSR_MAX_STEP") parse_int(line, screen.ssr_max_step);
+            else if (keyword == "RENDER_SSR_REFINE_STEP") parse_int(line, screen.ssr_refine_step);
+            else if (keyword == "RENDER_SSR_MAX_ROUGHNESS") parse_float(line, screen.ssr_max_roughness);
+            else if (keyword == "RENDER_SSR_INTENSITY") parse_float(line, screen.ssr_intensity);
+            else if (keyword == "RENDER_SSR_EDGE_FADE") parse_float(line, screen.ssr_edge_fade);
+            else if (keyword == "RENDER_SSR_RAY_BIAS") parse_float(line, screen.ssr_ray_bias);
+            else if (keyword == "RENDER_SSR_RESOLVE_RADIUS") parse_float(line, screen.ssr_resolve_radius);
+            else if (keyword == "RENDER_SSR_RESOLVE_TAP_COUNT") parse_int(line, screen.ssr_resolve_tap_count);
+            else if (keyword == "RENDER_TAA_BLEND") parse_float(line, screen.taa_blend);
+            else if (keyword == "RENDER_TAA_VARIANCE_GAMMA") parse_float(line, screen.taa_variance_gamma);
+            else if (keyword == "RENDER_TAA_SHARPNESS") parse_float(line, screen.taa_sharpness);
+            else if (keyword == "RENDER_TAA_MAX_VELOCITY") parse_float(line, screen.taa_max_velocity);
             // 未知のキーワードはここで捨てる。
         }
         return true;

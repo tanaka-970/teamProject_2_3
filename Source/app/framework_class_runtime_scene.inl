@@ -392,4 +392,5 @@
         ReplayEngine::Rendering::Stats().SetHistoryLimit(
             static_cast<std::size_t>(profile_benchmark_frames));
     }
+    void configure_screen_space_overrides(const std::vector<std::string>& overrides);
     void configure_content_root(std::filesystem::path content_root);

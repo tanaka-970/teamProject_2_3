@@ -153,12 +153,14 @@ namespace ReplayEngine::Rendering::DX12
         {
             float exposure = 0.619f;
             float bloom_intensity = 0.25f;
+            float bloom_threshold = 1.0f;
             float vignette_strength = 0.138f;
             float fxaa_enable = 1.0f;
             float taa_blend = 0.88f;
             float ssao_strength = 1.0f;
             float ssr_strength = 1.0f;
             float history_valid = 0.0f;
+            DirectX::XMFLOAT3 alignment_padding{};
             DirectX::XMFLOAT2 screen_size{};
             DirectX::XMFLOAT2 padding{};
             DirectX::XMFLOAT4 color_filter{ 1, 1, 1, 1 };
@@ -172,6 +174,11 @@ namespace ReplayEngine::Rendering::DX12
             DirectX::XMFLOAT4 camera_planes{ 0.1f, 10000.0f, 0, 0 };
             DirectX::XMFLOAT4 ssao_params0{ 0.75f, 1.6f, 1.0f, 0.35f };
             DirectX::XMFLOAT4 ssao_params1{ 4.0f, 8.0f, 60.0f, 140.0f };
+            DirectX::XMFLOAT4 ssao_params2{ 1.0f, 1.0f, 0.0f, 0.0f };
+            DirectX::XMFLOAT4 ssr_params0{ 40.0f, 0.4f, 3.0f, 48.0f };
+            DirectX::XMFLOAT4 ssr_params1{ 5.0f, 0.65f, 0.12f, 1.0f };
+            DirectX::XMFLOAT4 ssr_params2{ 12.0f, 8.0f, 0.0f, 0.0f };
+            DirectX::XMFLOAT4 taa_params0{ 1.0f, 0.35f, 48.0f, 0.0f };
         };
 
         static_assert(sizeof(Scene3DObjectConstants) % 16 == 0);
@@ -2485,6 +2492,7 @@ namespace ReplayEngine::Rendering::DX12
         post.exposure = submission.post_process.exposure;
         post.bloom_intensity = submission.post_process.bloom_enabled
             ? submission.post_process.bloom_intensity : 0.0f;
+        post.bloom_threshold = (std::max)(0.0f, submission.post_process.bloom_threshold);
         post.vignette_strength = submission.post_process.vignette_enabled
             ? submission.post_process.vignette_strength : 0.0f;
         post.fxaa_enable = submission.post_process.fxaa_enabled
@@ -2500,6 +2508,11 @@ namespace ReplayEngine::Rendering::DX12
         post.color_filter = submission.post_process.color_filter;
         post.ssao_params0 = submission.post_process.ssao_params0;
         post.ssao_params1 = submission.post_process.ssao_params1;
+        post.ssao_params2 = submission.post_process.ssao_params2;
+        post.ssr_params0 = submission.post_process.ssr_params0;
+        post.ssr_params1 = submission.post_process.ssr_params1;
+        post.ssr_params2 = submission.post_process.ssr_params2;
+        post.taa_params0 = submission.post_process.taa_params0;
         post.feature_flags = {
             submission.post_process.taa_enabled ? 1.0f : 0.0f,
             submission.post_process.ssao_enabled ? 1.0f : 0.0f,

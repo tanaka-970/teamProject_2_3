@@ -69,6 +69,43 @@ namespace ReplayEngine::Project
     public:
         ProjectSettings() = default;
 
+        struct ScreenSpaceSettings final
+        {
+            float ssao_radius = 0.75f;
+            float ssao_intensity = 1.0f;
+            float ssao_power = 1.6f;
+            float ssao_thin_occluder = 1.0f;
+            int ssao_slice_count = 4;
+            int ssao_step_count = 8;
+            float ssao_fade_start = 60.0f;
+            float ssao_fade_end = 140.0f;
+            float ssao_normal_bias = 0.35f;
+            float ssao_blur_sharpness = 1.0f;
+            bool ssao_blur_enabled = true;
+            float ssr_max_distance = 40.0f;
+            float ssr_thickness = 0.4f;
+            float ssr_stride = 3.0f;
+            int ssr_max_step = 48;
+            int ssr_refine_step = 5;
+            float ssr_max_roughness = 0.65f;
+            float ssr_intensity = 1.0f;
+            float ssr_edge_fade = 0.12f;
+            float ssr_ray_bias = 1.0f;
+            float ssr_resolve_radius = 12.0f;
+            int ssr_resolve_tap_count = 8;
+            float taa_blend = 0.88f;
+            float taa_variance_gamma = 1.0f;
+            float taa_sharpness = 0.35f;
+            float taa_max_velocity = 48.0f;
+        };
+
+        const ScreenSpaceSettings& ScreenSpace() const noexcept { return screen_space_; }
+        ScreenSpaceSettings& MutableScreenSpace() noexcept { return screen_space_; }
+        void SetScreenSpace(ScreenSpaceSettings settings) noexcept
+        {
+            screen_space_ = settings;
+        }
+
         // ---- Default Controlled Character Prefab ---------------------------
 
         const std::string& DefaultCharacterPrefabGuid() const noexcept
@@ -221,6 +258,7 @@ namespace ReplayEngine::Project
             focus_outline_width_ = 2.0f;
             focus_corner_radius_ = 4.0f;
             show_game_template_components_ = false;
+            screen_space_ = ScreenSpaceSettings{};
         }
 
     private:
@@ -241,5 +279,6 @@ namespace ReplayEngine::Project
         bool depth_prepass_enabled_ = false;
         // Game Template は汎用プロジェクトでは既定非表示。Registry からは消さない。
         bool show_game_template_components_ = false;
+        ScreenSpaceSettings screen_space_{};
     };
 }
