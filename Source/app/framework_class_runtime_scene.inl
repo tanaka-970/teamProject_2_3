@@ -354,12 +354,14 @@
     // Scene に保存された Runtime Camera と Motion/Script を固定 1/60 秒で進める。
     // 入力は完全抑制し、warmup 中と GPU query drain 中は履歴へ積まない。
     void configure_profile_benchmark(std::uint32_t frames,
-        std::uint32_t warmup_frames, std::string output_name)
+        std::uint32_t warmup_frames, std::string output_name,
+        std::uint32_t render_output)
     {
         profile_benchmark_mode = true;
         profile_benchmark_frames = (std::max)(1u, frames);
         profile_benchmark_warmup_frames = warmup_frames;
         profile_benchmark_output_name = std::move(output_name);
+        profile_benchmark_render_output = (std::min)(render_output, 10u);
         profile_benchmark_frame_index = 0;
         profile_benchmark_drain_frames = 0;
         profile_benchmark_export_attempted = false;

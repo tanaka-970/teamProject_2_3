@@ -418,6 +418,81 @@ bool framework::build_dx12_static_scene(
         if (fallback == "bump") return "__dx12_bump";
         return "__dx12_white";
     };
+    const auto has_material_texture = [](const RenderItem& item,
+        const MaterialAsset& material, const char* property_name,
+        const std::string& legacy_texture) noexcept
+    {
+        if (!legacy_texture.empty()) return true;
+        for (const ResolvedMaterialTexture& texture : item.material_binding.textures)
+            if (texture.property_name == property_name && !texture.asset_guid.empty())
+                return true;
+        return false;
+    };
+    const auto set_material_texture = [&add_texture](D3D12StaticDrawItem& draw,
+        std::uint32_t slot, const std::filesystem::path& path,
+        std::uint32_t semantic_bit) -> std::string
+    {
+        const std::string key = add_texture(path);
+        if (key.empty()) return {};
+        for (D3D12StaticMaterialTexture& mapped : draw.material_textures)
+        {
+            if (mapped.slot != slot) continue;
+            mapped.texture_key = key;
+            draw.material_texture_semantic_mask |= semantic_bit;
+            return key;
+        }
+        D3D12StaticMaterialTexture mapped;
+        mapped.slot = slot;
+        mapped.texture_key = key;
+        draw.material_textures.push_back(std::move(mapped));
+        draw.material_texture_semantic_mask |= semantic_bit;
+        return key;
+    };
+    const auto preserve_embedded_material_textures = [
+        &has_material_texture, &set_material_texture, &kPackedOrmMapSemantic](D3D12StaticDrawItem& draw,
+        const RenderItem& material_item, const MaterialAsset& material,
+        const std::filesystem::path& base_path,
+        const std::filesystem::path& normal_path,
+        const std::filesystem::path& orm_path,
+        const std::filesystem::path& emissive_path)
+    {
+        if (!has_material_texture(material_item, material, "BaseMap",
+            material.base_color_texture) && !base_path.empty())
+        {
+            const std::string key = set_material_texture(draw, 40u, base_path,
+                ResolvedMaterialBinding::BaseMapSemantic);
+            if (!key.empty()) draw.base_color_texture_key = key;
+        }
+
+        if (!has_material_texture(material_item, material, "NormalMap",
+            material.normal_texture) && !normal_path.empty())
+            set_material_texture(draw, 41u, normal_path,
+                ResolvedMaterialBinding::NormalMapSemantic);
+
+        const bool has_metallic = has_material_texture(material_item, material,
+            "MetallicMap", material.metallic_texture);
+        const bool has_roughness = has_material_texture(material_item, material,
+            "RoughnessMap", material.roughness_texture);
+        const bool has_occlusion = has_material_texture(material_item, material,
+            "OcclusionMap", material.ambient_occlusion_texture) ||
+            has_material_texture(material_item, material, "AmbientOcclusionMap",
+                material.ambient_occlusion_texture);
+        if (!has_metallic && !has_roughness && !has_occlusion && !orm_path.empty())
+        {
+            set_material_texture(draw, 42u, orm_path,
+                ResolvedMaterialBinding::MetallicMapSemantic);
+            draw.material_texture_semantic_mask &=
+                ~(ResolvedMaterialBinding::MetallicMapSemantic |
+                    ResolvedMaterialBinding::RoughnessMapSemantic |
+                    ResolvedMaterialBinding::OcclusionMapSemantic);
+            draw.material_texture_semantic_mask |= kPackedOrmMapSemantic;
+        }
+
+        if (!has_material_texture(material_item, material, "EmissiveMap",
+            material.emissive_texture) && !emissive_path.empty())
+            set_material_texture(draw, 44u, emissive_path,
+                ResolvedMaterialBinding::EmissiveMapSemantic);
+    };
     const auto base_texture_binding = [&fallback_texture_key](const RenderItem& item) -> BaseTextureBinding
     {
         for (const ResolvedMaterialTexture& texture : item.material_binding.textures)
@@ -1127,6 +1202,28 @@ bool framework::build_dx12_static_scene(
                     draw.world = mesh_world;
                     const bool external = fill_external_material(
                         source_item, *material_item, draw, slot_material);
+                    if (external)
+                    {
+                        const MaterialAsset* material = slot_material != nullptr
+                            ? slot_material : resolve_object_material(source_item.material_asset);
+                        if (material != nullptr)
+                        {
+                            const auto embedded_texture_path =
+                                [&mesh_asset, material_id, &model_source](std::size_t slot)
+                            {
+                                const auto embedded_material = mesh_asset->materials.find(material_id);
+                                if (embedded_material == mesh_asset->materials.end()) return std::filesystem::path{};
+                                std::filesystem::path path(embedded_material->second.texture_filenames[slot]);
+                                if (!path.empty() && path.is_relative() &&
+                                    !model_source.empty())
+                                    path = model_source.parent_path() / path;
+                                return path;
+                            };
+                            preserve_embedded_material_textures(draw, *material_item, *material,
+                                embedded_texture_path(0), embedded_texture_path(1),
+                                embedded_texture_path(2), embedded_texture_path(3));
+                        }
+                    }
                     if (!external)
                     {
                         const auto material_it = mesh_asset->materials.find(material_id);
@@ -1307,6 +1404,16 @@ bool framework::build_dx12_static_scene(
                 draw.motion_key = std::to_string(source_item.owner.Value()) + ":" + draw.mesh_key;
                 draw.world = multiply_world(info.node_transform, item.world);
                 const bool external = fill_external_material(source_item, item, draw);
+                if (external)
+                {
+                    const MaterialAsset* material = resolve_object_material(
+                        source_item.material_asset);
+                    if (material != nullptr)
+                        preserve_embedded_material_textures(draw, item, *material,
+                            info.embedded_base_color_texture,
+                            info.embedded_normal_texture,
+                            info.embedded_orm_texture, {});
+                }
                 if (!external)
                 {
                     draw.base_color = multiply_color(info.embedded_base_color,
@@ -1379,6 +1486,28 @@ bool framework::build_dx12_static_scene(
                 draw.world = mesh_world;
                 const bool external = fill_external_material(
                     source_item, *material_item, draw, slot_material);
+                if (external)
+                {
+                    const MaterialAsset* material = slot_material != nullptr
+                        ? slot_material : resolve_object_material(source_item.material_asset);
+                    if (material != nullptr)
+                    {
+                        const auto embedded_texture_path =
+                            [&mesh_asset, material_id, &model_source](std::size_t slot)
+                        {
+                            const auto embedded_material = mesh_asset->materials.find(material_id);
+                            if (embedded_material == mesh_asset->materials.end()) return std::filesystem::path{};
+                            std::filesystem::path path(embedded_material->second.texture_filenames[slot]);
+                            if (!path.empty() && path.is_relative() &&
+                                !model_source.empty())
+                                path = model_source.parent_path() / path;
+                            return path;
+                        };
+                        preserve_embedded_material_textures(draw, *material_item, *material,
+                            embedded_texture_path(0), embedded_texture_path(1),
+                            embedded_texture_path(2), embedded_texture_path(3));
+                    }
+                }
                 if (!external)
                 {
                     const auto material_it = mesh_asset->materials.find(material_id);

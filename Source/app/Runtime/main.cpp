@@ -382,6 +382,35 @@ namespace ReplayEngine::Runtime::Detail
                     config.warmup_frames = parse_u32(tokens[++i],
                         config.warmup_frames, 0u, 10000u);
             }
+            else if (token == "--render-output")
+            {
+                if (i + 1 >= tokens.size() || tokens[i + 1].rfind("--", 0) == 0)
+                {
+                    config.valid = false;
+                    config.error = "--render-output requires a value";
+                    continue;
+                }
+                const std::string& value_text = tokens[++i];
+                try
+                {
+                    std::size_t consumed = 0;
+                    const unsigned long value = std::stoul(value_text, &consumed, 10);
+                    if (consumed != value_text.size() || value > 10ul)
+                    {
+                        config.valid = false;
+                        config.error = "--render-output must be in range 0..10";
+                    }
+                    else
+                    {
+                        config.render_output = static_cast<std::uint32_t>(value);
+                    }
+                }
+                catch (...)
+                {
+                    config.valid = false;
+                    config.error = "--render-output must be in range 0..10";
+                }
+            }
             else if (token == "--out")
             {
                 if (i + 1 < tokens.size() && tokens[i + 1].rfind("--", 0) != 0)

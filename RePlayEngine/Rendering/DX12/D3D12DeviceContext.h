@@ -243,6 +243,8 @@ namespace ReplayEngine::Rendering::DX12
         float ssao_strength = 1.0f;
         float ssr_strength = 1.0f;
         DirectX::XMFLOAT4 color_filter{ 1, 1, 1, 1 };
+        DirectX::XMFLOAT4 ssao_params0{ 0.75f, 1.6f, 1.0f, 0.35f };
+        DirectX::XMFLOAT4 ssao_params1{ 4.0f, 8.0f, 60.0f, 140.0f };
         std::uint32_t render_output = 0;
         std::uint32_t deferred_debug_mode = 0;
         bool bloom_enabled = true;

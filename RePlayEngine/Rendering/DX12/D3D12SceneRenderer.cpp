@@ -170,6 +170,8 @@ namespace ReplayEngine::Rendering::DX12
             DirectX::XMFLOAT4X4 inverse_projection{};
             // x=Near、y=Far、z/w=予約
             DirectX::XMFLOAT4 camera_planes{ 0.1f, 10000.0f, 0, 0 };
+            DirectX::XMFLOAT4 ssao_params0{ 0.75f, 1.6f, 1.0f, 0.35f };
+            DirectX::XMFLOAT4 ssao_params1{ 4.0f, 8.0f, 60.0f, 140.0f };
         };
 
         static_assert(sizeof(Scene3DObjectConstants) % 16 == 0);
@@ -2472,6 +2474,9 @@ namespace ReplayEngine::Rendering::DX12
         if (!resource_state_tracker_.Transition(command_list_.Get(), scene_view_target_.color.Get(),
             D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE))
             return false;
+        if (!resource_state_tracker_.Transition(command_list_.Get(), scene3d_depth_.resource.Get(),
+            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE))
+            return false;
         if (scene3d_history_valid_ &&
             !resource_state_tracker_.Transition(command_list_.Get(), scene3d_history_.resource.Get(),
                 D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE))
@@ -2493,6 +2498,8 @@ namespace ReplayEngine::Rendering::DX12
         post.history_valid = scene3d_history_valid_ ? 1.0f : 0.0f;
         post.screen_size = { static_cast<float>(width_), static_cast<float>(height_) };
         post.color_filter = submission.post_process.color_filter;
+        post.ssao_params0 = submission.post_process.ssao_params0;
+        post.ssao_params1 = submission.post_process.ssao_params1;
         post.feature_flags = {
             submission.post_process.taa_enabled ? 1.0f : 0.0f,
             submission.post_process.ssao_enabled ? 1.0f : 0.0f,

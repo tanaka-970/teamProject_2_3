@@ -242,7 +242,7 @@ void framework::render(float elapsed_time)
             const float near_plane = projection_values._33 != 0.0f
                 ? -projection_values._43 / projection_values._33 : 0.1f;
             const float far_plane = (projection_values._33 - 1.0f) != 0.0f
-                ? projection_values._43 / (projection_values._33 - 1.0f) : 10000.0f;
+                ? -projection_values._43 / (projection_values._33 - 1.0f) : 10000.0f;
             constants.camera_planes = { near_plane, far_plane, tan_half_fov_y, aspect };
             constants.jitter = { taa_jitter_ndc.x, taa_jitter_ndc.y,
                 previous_taa_jitter_ndc.x, previous_taa_jitter_ndc.y };
@@ -277,9 +277,23 @@ void framework::render(float elapsed_time)
             static_scene.post_process.taa_blend = clamp_finite(taa_pass.blend, 0.88f, 0.0f, 0.99f);
             static_scene.post_process.ssao_strength = clamp_finite(ssao_pass.intensity, 1.0f, 0.0f, 4.0f);
             static_scene.post_process.ssr_strength = clamp_finite(ssr_pass.intensity, 1.0f, 0.0f, 4.0f);
+            const float ssao_fade_start = clamp_finite(ssao_pass.fade_start,
+                60.0f, 1.0f, 400.0f);
+            const float ssao_fade_end = (std::max)(ssao_fade_start + 0.001f,
+                clamp_finite(ssao_pass.fade_end, 140.0f, 2.0f, 800.0f));
+            static_scene.post_process.ssao_params0 = {
+                clamp_finite(ssao_pass.radius, 0.75f, 0.05f, 4.0f),
+                clamp_finite(ssao_pass.power, 1.6f, 0.5f, 4.0f),
+                clamp_finite(ssao_pass.thin_occluder, 1.0f, 0.0f, 1.0f),
+                clamp_finite(ssao_pass.normal_bias, 0.35f, 0.0f, 2.0f) };
+            static_scene.post_process.ssao_params1 = {
+                static_cast<float>((std::max)(1, (std::min)(8, ssao_pass.slice_count))),
+                static_cast<float>((std::max)(2, (std::min)(12, ssao_pass.step_count))),
+                ssao_fade_start, ssao_fade_end };
             static_scene.post_process.color_filter = clamp_color(post_settings.color_filter);
-            static_scene.post_process.render_output = static_cast<std::uint32_t>(
-                render_graph.OutputIndex());
+            static_scene.post_process.render_output = profile_benchmark_mode
+                ? profile_benchmark_render_output
+                : static_cast<std::uint32_t>(render_graph.OutputIndex());
             static_scene.post_process.deferred_debug_mode = static_cast<std::uint32_t>(
                 render_graph.DeferredDebugMode());
             static_scene.post_process.bloom_enabled = enable_bloom_shader;
