@@ -551,6 +551,7 @@ void framework::draw_project_panel()
             {
                 bool changed = false;
                 bool shader_schema_dirty = false;
+                bool structure_changed = false;
                 if (const auto* effect_count = PropertyRegistry::Find(
                     editing_effect_stack.TypeID(), "effect_count"))
                 {
@@ -560,33 +561,85 @@ void framework::draw_project_panel()
                     ImGui::PopID();
                 }
 
+                const bool effect_limit_reached = editing_effect_stack.effects.size() >= 16;
+                if (effect_limit_reached)
+                    ImGui::PushStyleVar(ImGuiStyleVar_Alpha,
+                        ImGui::GetStyle().Alpha * 0.5f);
+                if (effect_limit_reached)
+                    ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+                if (ImGui::Button(u8"エフェクトを追加##EffectPresetAddEffect"))
+                {
+                    editing_effect_stack.effects.emplace_back();
+                    editing_effect_stack.effect_count =
+                        static_cast<int>(editing_effect_stack.effects.size());
+                    editing_effect_stack.OnPropertyChanged("effect_count");
+                    refresh_effect_preset_schemas();
+                    changed = true;
+                    structure_changed = true;
+                }
+                if (effect_limit_reached)
+                    ImGui::PopItemFlag();
+                if (effect_limit_reached)
+                    ImGui::PopStyleVar();
+                if (effect_limit_reached &&
+                    ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                    ImGui::SetTooltip(u8"エフェクトは最大16件です。");
+
+                for (std::size_t effect_index = 0;
+                    effect_index < editing_effect_stack.effects.size(); ++effect_index)
+                {
+                    ImGui::PushID("EffectPresetDeleteEffect");
+                    ImGui::PushID(static_cast<int>(effect_index));
+                    ImGui::Text(u8"エフェクト %zu", effect_index + 1);
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton(u8"削除"))
+                    {
+                        editing_effect_stack.effects.erase(
+                            editing_effect_stack.effects.begin() + effect_index);
+                        editing_effect_stack.effect_count =
+                            static_cast<int>(editing_effect_stack.effects.size());
+                        editing_effect_stack.OnPropertyChanged("effect_count");
+                        refresh_effect_preset_schemas();
+                        changed = true;
+                        structure_changed = true;
+                        ImGui::PopID();
+                        ImGui::PopID();
+                        break;
+                    }
+                    ImGui::PopID();
+                    ImGui::PopID();
+                }
+
                 // effect_count / type の変更で DynamicProperties が再構築され得るため、
                 // count の描画後にポインタを取り直す。PropertyDrawer 自体が変更通知を
                 // Component::OnPropertyChanged へ集約するので、通常 Inspector と同じ経路になる。
-                if (const auto* dynamic = editing_effect_stack.DynamicProperties())
+                if (!structure_changed)
                 {
-                    for (std::size_t index = 0; index < dynamic->size(); ++index)
+                    if (const auto* dynamic = editing_effect_stack.DynamicProperties())
                     {
-                        // type の変更時には vector が再構築されるため、変更が起きたら
-                        // そのフレームの残りを描かず次フレームへ送る。古い参照を踏まない。
-                        const auto& desc = (*dynamic)[index];
-                        // Draw(type) は OnPropertyChanged 内で dynamic_properties_ を
-                        // 再構築するため、呼ぶ前に名前をコピーして参照寿命を切る。
-                        const std::string property_name = desc.name;
-                        ImGui::PushID(property_name.c_str());
-                        const bool property_changed = PropertyDrawer::Draw(desc,
-                            editing_effect_stack, &asset_database, &active_object_scene());
-                        ImGui::PopID();
-                        changed = property_changed || changed;
-                        if (property_changed && property_name.size() >= 14 &&
-                            property_name.compare(property_name.size() - 14, 14, ".custom_shader") == 0)
+                        for (std::size_t index = 0; index < dynamic->size(); ++index)
                         {
-                            shader_schema_dirty = true;
-                        }
-                        if (property_changed && property_name.size() >= 5 &&
-                            property_name.compare(property_name.size() - 5, 5, ".type") == 0)
-                        {
-                            break;
+                            // type の変更時には vector が再構築されるため、変更が起きたら
+                            // そのフレームの残りを描かず次フレームへ送る。古い参照を踏まない。
+                            const auto& desc = (*dynamic)[index];
+                            // Draw(type) は OnPropertyChanged 内で dynamic_properties_ を
+                            // 再構築するため、呼ぶ前に名前をコピーして参照寿命を切る。
+                            const std::string property_name = desc.name;
+                            ImGui::PushID(property_name.c_str());
+                            const bool property_changed = PropertyDrawer::Draw(desc,
+                                editing_effect_stack, &asset_database, &active_object_scene());
+                            ImGui::PopID();
+                            changed = property_changed || changed;
+                            if (property_changed && property_name.size() >= 14 &&
+                                property_name.compare(property_name.size() - 14, 14, ".custom_shader") == 0)
+                            {
+                                shader_schema_dirty = true;
+                            }
+                            if (property_changed && property_name.size() >= 5 &&
+                                property_name.compare(property_name.size() - 5, 5, ".type") == 0)
+                            {
+                                break;
+                            }
                         }
                     }
                 }
@@ -750,9 +803,7 @@ void framework::draw_console_panel()
     ImGui::Text("Editor入力: %s", edit_mode_active ? "編集操作" : "Game View入力キャプチャ");
     ImGui::Text("画面サイズ: %u x %u", client_width, client_height);
     ImGui::TextUnformatted("描画方式: Deferred（固定）");
-    const char* outputs[] = { "Final", "HDR Scene", "Bloom", "Deferred Lit",
-        "GBuffer Base Color", "GBuffer Normal", "GBuffer Material", "Depth" };
-    ImGui::Text("出力: %s", outputs[render_graph.OutputIndex()]);
+    ImGui::Text(u8"出力: %s", ReplayEngine::Rendering::RenderGraph::Name(render_graph.OutputIndex()));
     ImGui::TextDisabled("Ctrl+S: 保存  Ctrl+Z/Y: 元に戻す/やり直す  Ctrl+C/V: コピー/貼り付け  Ctrl+D: 複製");
     ImGui::TextDisabled("F1: エディタ表示  F2: 名前変更  Ctrl+F2: 出力  F3: 入力キャプチャ  F5: 実行  F11: 全画面");
     ImGui::End();
