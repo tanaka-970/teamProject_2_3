@@ -336,6 +336,12 @@ namespace ReplayEngine::Core::Detail
                 MakeProperty("bloom_intensity", &PostProcessVolumeComponent::bloom_intensity)
                     .Display("Bloom 強度").Range(0.0, 8.0).Step(0.01));
             PropertyRegistry::Register<PostProcessVolumeComponent>(
+                MakeProperty("luminance_enabled", &PostProcessVolumeComponent::luminance_enabled)
+                    .Display(u8"輝度抽出を使う").Animation(Animatable::Step));
+            PropertyRegistry::Register<PostProcessVolumeComponent>(
+                MakeProperty("final_pass_enabled", &PostProcessVolumeComponent::final_pass_enabled)
+                    .Display(u8"最終合成を使う").Animation(Animatable::Step));
+            PropertyRegistry::Register<PostProcessVolumeComponent>(
                 MakeProperty("vignette_enabled", &PostProcessVolumeComponent::vignette_enabled)
                     .Display("ビネットを使う").Animation(Animatable::Step));
             PropertyRegistry::Register<PostProcessVolumeComponent>(
@@ -699,7 +705,8 @@ namespace ReplayEngine::Core::Detail
                     .Animation(Animatable::Step));
             PropertyRegistry::Register<ModelEffectStackComponent>(
                 MakeProperty("max_bleed_pixels", &ModelEffectStackComponent::max_bleed_pixels)
-                    .Display("最大はみ出し (px)").Range(0.0, 1024.0).Step(1.0)
+                    .Display(u8"最大はみ出し (px) [未対応]").Range(0.0, 1024.0).Step(1.0)
+                    .Tooltip(u8"現在の描画経路では未対応。値は保存され、将来の実装で使用します。")
                     .Animation(Animatable::Interpolatable));
         }
 

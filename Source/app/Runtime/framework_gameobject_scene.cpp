@@ -218,6 +218,9 @@ void framework::load_project_settings()
     enable_ssr = project_settings.SsrEnabled();
     enable_taa = project_settings.TaaEnabled();
     enable_depth_prepass = project_settings.DepthPrepassEnabled();
+    enable_luminance_shader = project_settings.LuminanceEnabled();
+    luminance_threshold = project_settings.LuminanceThreshold();
+    enable_final_pass_shader = project_settings.FinalPassEnabled();
 
     const Project::ProjectSettings::ScreenSpaceSettings& screen =
         project_settings.ScreenSpace();
@@ -294,6 +297,12 @@ void framework::configure_screen_space_overrides(
             else if (key == "taa.variance_gamma") taa_pass.variance_gamma = std::stof(value);
             else if (key == "taa.sharpness") taa_pass.sharpness = std::stof(value);
             else if (key == "taa.max_velocity") taa_pass.max_velocity = std::stof(value);
+            else if (key == "post.luminance_enabled")
+                enable_luminance_shader = std::stoi(value) != 0;
+            else if (key == "post.luminance_threshold")
+                luminance_threshold = std::stof(value);
+            else if (key == "post.final_pass_enabled")
+                enable_final_pass_shader = std::stoi(value) != 0;
         }
         catch (...)
         {
@@ -308,6 +317,9 @@ bool framework::save_project_settings()
 
     std::string error;
     const auto path = Project::ProjectSettingsSerializer::DefaultPath();
+    project_settings.SetLuminanceEnabled(enable_luminance_shader);
+    project_settings.SetLuminanceThreshold(luminance_threshold);
+    project_settings.SetFinalPassEnabled(enable_final_pass_shader);
     Project::ProjectSettings::ScreenSpaceSettings& screen =
         project_settings.MutableScreenSpace();
     screen.ssao_radius = ssao_pass.radius;

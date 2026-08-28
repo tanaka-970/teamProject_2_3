@@ -162,7 +162,7 @@ namespace ReplayEngine::Rendering::DX12
             float history_valid = 0.0f;
             DirectX::XMFLOAT3 alignment_padding{};
             DirectX::XMFLOAT2 screen_size{};
-            DirectX::XMFLOAT2 padding{};
+            DirectX::XMFLOAT2 post_flags{ 1.0f, 1.0f };
             DirectX::XMFLOAT4 color_filter{ 1, 1, 1, 1 };
             DirectX::XMFLOAT4 feature_flags{};
             DirectX::XMFLOAT4 debug_options{};
@@ -2504,6 +2504,8 @@ namespace ReplayEngine::Rendering::DX12
         post.ssr_strength = (std::max)(0.0f, (std::min)(4.0f,
             submission.post_process.ssr_strength));
         post.history_valid = scene3d_history_valid_ ? 1.0f : 0.0f;
+        post.post_flags = { submission.post_process.luminance_enabled ? 1.0f : 0.0f,
+            submission.post_process.final_pass_enabled ? 1.0f : 0.0f };
         post.screen_size = { static_cast<float>(width_), static_cast<float>(height_) };
         post.color_filter = submission.post_process.color_filter;
         post.ssao_params0 = submission.post_process.ssao_params0;
