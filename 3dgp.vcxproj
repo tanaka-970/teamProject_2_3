@@ -483,6 +483,7 @@
     <ClCompile Include="RePlayEngine\Editor\Selection\EditorSelection.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Commands\SceneEditHistory.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Commands\FileEditHistory.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Help\EditorHelp.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Commands\MotionEditHistory.cpp" />
     <ClCompile Include="RePlayEngine\Motion\EasingCurveAsset.cpp" />
     <ClCompile Include="RePlayEngine\Motion\MotionEasing.cpp" />
@@ -783,6 +784,7 @@
     <ClInclude Include="RePlayEngine\Editor\Selection\EditorSelection.h" />
     <ClInclude Include="RePlayEngine\Editor\Commands\SceneEditHistory.h" />
     <ClInclude Include="RePlayEngine\Editor\Commands\FileEditHistory.h" />
+    <ClInclude Include="RePlayEngine\Editor\Help\EditorHelp.h" />
     <ClInclude Include="RePlayEngine\Editor\Commands\MotionEditHistory.h" />
     <ClInclude Include="RePlayEngine\Editor\Hierarchy\HierarchyPanel.h" />
     <ClInclude Include="RePlayEngine\Editor\Inspector\InspectorPanel.h" />

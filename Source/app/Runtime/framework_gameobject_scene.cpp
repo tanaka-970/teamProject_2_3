@@ -93,6 +93,16 @@ void framework::initialize_object_scene()
     // ただしここで Prefab を配置することはない。設定を持っているだけ。
     load_project_settings();
 
+    ReplayEngine::Editor::EditorHelp::Configure(
+        content_path(std::filesystem::path("resources") / "EditorHelp.replayhelp"),
+        &external_file_history);
+    std::string editor_help_error;
+    if (!ReplayEngine::Editor::EditorHelp::Load(editor_help_error) &&
+        !editor_help_error.empty())
+    {
+        object_editor_context.SetStatus("EditorHelp: " + editor_help_error);
+    }
+
     // Input の正本も ProjectSettings にぶら下がるため、設定を読み込んだ直後に適用する。
     // Asset 未設定だけ旧 InputBindings.ini を移行用 fallback として読む。
     if (!project_settings.InputActionAssetGuid().empty())

@@ -132,6 +132,7 @@ void framework::draw_motion_inspector()
         motion_edit_history.Commit(motion_editor_asset);
         motion_editor_dirty = true;
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.motion.event_track_add");
 
     if (motion_selected_event_track >= 0 &&
         motion_selected_event_track < static_cast<int>(motion_editor_asset.event_tracks.size()))
@@ -156,6 +157,7 @@ void framework::draw_motion_inspector()
                 motion_editor_dirty = true;
             }
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.motion.event_target_selected");
         ImGui::SameLine();
         if (ImGui::Button(u8"送信先なし"))
         {
@@ -164,6 +166,7 @@ void framework::draw_motion_inspector()
             motion_edit_history.Commit(motion_editor_asset);
             motion_editor_dirty = true;
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.motion.event_target_clear");
 
         if (ImGui::Button(u8"イベントを追加"))
         {
@@ -183,6 +186,7 @@ void framework::draw_motion_inspector()
             motion_edit_history.Commit(motion_editor_asset);
             motion_editor_dirty = true;
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.motion.event_add");
         ImGui::SameLine();
         if (ImGui::Button(u8"イベントトラックを削除"))
         {
@@ -197,6 +201,7 @@ void framework::draw_motion_inspector()
             ImGui::End();
             return;
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.motion.event_track_delete");
 
         if (motion_selected_event >= 0 &&
             motion_selected_event < static_cast<int>(event_track.events.size()))
@@ -246,6 +251,7 @@ void framework::draw_motion_inspector()
                 motion_edit_history.Commit(motion_editor_asset);
                 motion_editor_dirty = true;
             }
+            ReplayEngine::Editor::EditorHelp::Item("button.motion.event_delete");
         }
 
         ImGui::TextDisabled(u8"イベントトラックは値を持たないためグラフエディターには表示しません。");
@@ -401,6 +407,7 @@ void framework::draw_motion_inspector()
         ImVec4(1.0f, 0.55f, 0.35f, 1.0f), u8"バインド未解決");
 
     if (ImGui::Button(u8"キーを追加")) add_motion_key_at_preview_time();
+    ReplayEngine::Editor::EditorHelp::Item("button.motion.key_add");
     ImGui::SameLine();
     ImGui::TextDisabled("(S)");
     ImGui::SameLine();
@@ -417,6 +424,7 @@ void framework::draw_motion_inspector()
         ImGui::End();
         return;
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.motion.track_delete");
 
     if (motion_selected_key >= 0 &&
         motion_selected_key < static_cast<int>(track.keys.size()))

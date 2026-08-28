@@ -431,6 +431,8 @@ void framework::draw_inspector()
         ImGui::Checkbox("静的メッシュ", &enable_static_meshes);
         if (ImGui::Button("シェーダー調整テーブルを開く"))
             set_editor_workspace(editor_workspace::shader_adjustment);
+        ReplayEngine::Editor::EditorHelp::Item("button.inspector.open_shader_adjustments",
+            u8"マテリアルとシェーダーの調整テーブルを開きます。");
         // 【削除した項目について】
         //
         // ここには PBR / トゥーン / アンリット のチェックボックスがあったが、
@@ -453,11 +455,11 @@ void framework::draw_inspector()
             ImGui::TextDisabled("プロジェクト → Material を選ぶと編集できます。");
             ImGui::Separator();
             ImGui::Checkbox("輪郭線パス", &enable_outline_shader);
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("輪郭線レイヤを持つマテリアルの追加パスを描くか");
+            ReplayEngine::Editor::EditorHelp::Item("control.rendering.outline_pass",
+                u8"輪郭線レイヤを持つマテリアルの追加パスを描くか");
             ImGui::Checkbox("PBR影パス", &enable_pbr_shadow_shader);
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("PBR の影用の追加パスを描くか");
+            ReplayEngine::Editor::EditorHelp::Item("control.rendering.pbr_shadow_pass",
+                u8"PBR の影用の追加パスを描くか");
         }
         {
             int output = render_graph.OutputIndex();

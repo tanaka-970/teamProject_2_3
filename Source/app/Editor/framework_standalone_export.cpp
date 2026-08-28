@@ -445,6 +445,7 @@ void framework::draw_export_game_dialog()
             const std::filesystem::path selected = BrowseFolder(hwnd);
             if (!selected.empty()) CopyToBuffer(export_folder, selected.u8string());
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.standalone_export.select_folder");
 
         ImGui::InputText(u8"最初の Scene", export_startup_scene,
             sizeof(export_startup_scene));
@@ -455,6 +456,7 @@ void framework::draw_export_game_dialog()
                 hwnd, std::filesystem::u8path(export_startup_scene));
             if (!selected.empty()) CopyToBuffer(export_startup_scene, selected.u8string());
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.standalone_export.select_scene");
 
         if (!export_status.empty()) ImGui::TextWrapped("%s", export_status.c_str());
         for (const std::string& item : export_errors)
@@ -485,8 +487,10 @@ void framework::draw_export_game_dialog()
                 export_exporting = false;
             }
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.standalone_export.export");
         ImGui::SameLine();
         if (ImGui::Button(u8"閉じる")) export_game_dialog_open = false;
+        ReplayEngine::Editor::EditorHelp::Item("button.standalone_export.close");
 
         ImGui::EndPopup();
     }
@@ -510,12 +514,14 @@ void framework::draw_export_game_dialog()
             export_overwrite_prompt_open = false;
             ImGui::CloseCurrentPopup();
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.standalone_export.overwrite");
         ImGui::SameLine();
         if (ImGui::Button(u8"キャンセル"))
         {
             export_overwrite_prompt_open = false;
             ImGui::CloseCurrentPopup();
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.standalone_export.cancel_overwrite");
         ImGui::EndPopup();
     }
 }

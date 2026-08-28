@@ -68,6 +68,8 @@ void framework::draw_object_scene_recovery_prompt()
         object_recovery_available = false;
         ImGui::CloseCurrentPopup();
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.scene.recover_autosave",
+        u8"読み込んだ自動保存データで現在の Scene を復旧します。保存するまで元の Scene ファイルは変わりません。");
     ImGui::SameLine();
     if (ImGui::Button("Keep for later", ImVec2(110.0f, 0.0f)))
     {
@@ -75,6 +77,8 @@ void framework::draw_object_scene_recovery_prompt()
         object_editor_context.SetStatus("Autosaveを保持しました");
         ImGui::CloseCurrentPopup();
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.scene.keep_autosave",
+        u8"自動保存データを残してこの確認を閉じます。次回の復旧候補として保持されます。");
     ImGui::SameLine();
     if (ImGui::Button("Discard", ImVec2(110.0f, 0.0f)))
     {
@@ -84,6 +88,8 @@ void framework::draw_object_scene_recovery_prompt()
         object_editor_context.SetStatus(error ? "Autosaveを削除できませんでした" : "Autosaveを破棄しました");
         ImGui::CloseCurrentPopup();
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.scene.discard_autosave",
+        u8"自動保存データを削除して復旧候補から外します。");
     ImGui::EndPopup();
 }
 void framework::draw_unsaved_object_scene_prompt()
@@ -163,6 +169,8 @@ void framework::draw_unsaved_object_scene_prompt()
             }
         }
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.scene.save_pending",
+        u8"現在の Scene の変更を保存して、予約していた移動または終了を続けます。");
     ImGui::SameLine();
     if (ImGui::Button(u8"別名で保存", ImVec2(120.0f, 0.0f)))
     {
@@ -179,6 +187,8 @@ void framework::draw_unsaved_object_scene_prompt()
             object_scene_save_failure = object_editor_context.Status();
         }
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.scene.save_as_pending",
+        u8"現在の Scene を別のファイルへ保存して、予約していた移動または終了を続けます。");
     ImGui::SameLine();
     if (ImGui::Button(discard_label, ImVec2(140.0f, 0.0f)))
     {
@@ -191,6 +201,8 @@ void framework::draw_unsaved_object_scene_prompt()
         ImGui::CloseCurrentPopup();
         execute_pending_object_scene_action();
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.scene.discard_pending",
+        u8"現在の Scene の未保存変更を破棄して、予約していた移動または終了を続けます。");
     ImGui::SameLine();
     if (ImGui::Button(u8"キャンセル", ImVec2(100.0f, 0.0f)))
     {
@@ -200,6 +212,8 @@ void framework::draw_unsaved_object_scene_prompt()
         object_unsaved_prompt_open = false;
         ImGui::CloseCurrentPopup();
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.scene.cancel_pending",
+        u8"保存・破棄を行わず、現在の Scene 編集へ戻ります。");
     ImGui::EndPopup();
 }
 
@@ -233,7 +247,8 @@ void framework::draw_editor_toolbar()
         }
         if (ImGui::Button(label)) transform_gizmo.SetOperation(mode);
         if (active) ImGui::PopStyleColor();
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tooltip);
+        const std::string help_key = std::string("button.scene.gizmo.") + label;
+        ReplayEngine::Editor::EditorHelp::Item(help_key.c_str(), tooltip);
     };
 
     gizmo_mode_button("Move", ReplayEngine::Editor::GizmoOperation::Translate,
@@ -253,23 +268,17 @@ void framework::draw_editor_toolbar()
     ImGui::SameLine();
     bool snap = transform_gizmo.SnapEnabled();
     if (ImGui::Checkbox("Snap", &snap)) transform_gizmo.SetSnapEnabled(snap);
-    if (ImGui::IsItemHovered())
-    {
-        ImGui::SetTooltip(
-            u8"ドラッグ量を一定の刻みに丸める。\n"
-            u8"移動・回転・拡縮のどのモードにも効く。");
-    }
+    ReplayEngine::Editor::EditorHelp::Item("control.scene.gizmo_snap",
+        u8"ドラッグ量を一定の刻みに丸める。\n"
+        u8"移動・回転・拡縮のどのモードにも効く。");
     ImGui::SameLine();
     if (ImGui::Button(gizmo_local_space ? "Local" : "World"))
         gizmo_local_space = !gizmo_local_space;
-    if (ImGui::IsItemHovered())
-    {
-        ImGui::SetTooltip(
-            u8"ギズモの軸の向きを切り替える。\n"
-            u8"World … ワールド座標の軸に固定する。\n"
-            u8"Local … 選択しているオブジェクトの回転に追従する。\n"
-            u8"傾いた物を «その物にとっての前» へ動かしたいときは Local。");
-    }
+    ReplayEngine::Editor::EditorHelp::Item("button.scene.gizmo_space",
+        u8"ギズモの軸の向きを切り替える。\n"
+        u8"World … ワールド座標の軸に固定する。\n"
+        u8"Local … 選択しているオブジェクトの回転に追従する。\n"
+        u8"傾いた物を «その物にとっての前» へ動かしたいときは Local。");
 
     ReplayEngine::Core::GameObject* pivot_object =
         object_editor_context.Selection().ResolvePrimary(active_object_scene());
@@ -278,32 +287,33 @@ void framework::draw_editor_toolbar()
     ImGui::SameLine();
     if (ImGui::Button(pivot_edit_mode ? u8"Pivot:ON" : u8"Pivot"))
         pivot_edit_mode = has_pivot ? !pivot_edit_mode : false;
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip(has_pivot
+    ReplayEngine::Editor::EditorHelp::Item("button.scene.pivot_mode",
+        has_pivot
             ? u8"Pivot 編集補助。Transform は動かさず基準点だけを編集する。"
             : u8"選択オブジェクトへ Pivot Component を追加すると使える。");
     if (pivot_edit_mode && has_pivot)
     {
         ImGui::SameLine();
         if (ImGui::Button(u8"面Snap")) snap_primary_pivot_to_mesh(0);
+        ReplayEngine::Editor::EditorHelp::Item("button.scene.pivot_snap_face",
+            u8"Pivot を選択メッシュの面へ吸着します。");
         ImGui::SameLine();
         if (ImGui::Button(u8"頂点Snap")) snap_primary_pivot_to_mesh(1);
+        ReplayEngine::Editor::EditorHelp::Item("button.scene.pivot_snap_vertex",
+            u8"Pivot を選択メッシュの頂点へ吸着します。");
         ImGui::SameLine();
         if (ImGui::Button(u8"辺Snap")) snap_primary_pivot_to_mesh(2);
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip(u8"CookedMeshCollision の実三角形へ正確に吸着する。");
+        ReplayEngine::Editor::EditorHelp::Item("button.scene.pivot_snap_edge",
+            u8"CookedMeshCollision の実三角形へ正確に吸着する。");
     }
 
     ImGui::SameLine();
     bool auxiliary_views = editor_auxiliary_views;
     if (ImGui::Checkbox(u8"補助View", &auxiliary_views))
         editor_auxiliary_views = auxiliary_views;
-    if (ImGui::IsItemHovered())
-    {
-        ImGui::SetTooltip(
-            u8"Scene View の右側へ Front / Side / Top を重ねて表示する。\n"
-            u8"メイン View は全面のままなので Picking / Gizmo の座標は変わらない。");
-    }
+    ReplayEngine::Editor::EditorHelp::Item("control.scene.auxiliary_views",
+        u8"Scene View の右側へ Front / Side / Top を重ねて表示する。\n"
+        u8"メイン View は全面のままなので Picking / Gizmo の座標は変わらない。");
 
     ImGui::SameLine();
     ImGui::Separator();
@@ -322,12 +332,10 @@ void framework::draw_editor_toolbar()
         ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.12f, 0.50f, 0.22f, 1.0f));
         if (ImGui::Button(u8"▶ 実行 (F5)", transport_size)) enter_object_play_mode();
         ImGui::PopStyleColor(3);
-        if (ImGui::IsItemHovered())
-        {
-            ImGui::SetTooltip(u8"ゲームを実行します。\n"
-                u8"実行用のコピーが動くので、編集中のシーンは変わりません。\n"
-                u8"C# スクリプトの Update はここから先でしか動きません。");
-        }
+        ReplayEngine::Editor::EditorHelp::Item("button.scene.play",
+            u8"ゲームを実行します。\n"
+            u8"実行用のコピーが動くので、編集中のシーンは変わりません。\n"
+            u8"C# スクリプトの Update はここから先でしか動きません。");
     }
     else
     {
@@ -336,17 +344,17 @@ void framework::draw_editor_toolbar()
         if (ImGui::Button(object_scene_paused ? u8"▶ 再開" : u8"❚❚ 一時停止", transport_size))
             object_scene_paused = !object_scene_paused;
         ImGui::PopStyleColor(2);
+        ReplayEngine::Editor::EditorHelp::Item("button.scene.pause_resume",
+            u8"実行中のゲームを一時停止または再開します。Scene の編集モードには戻りません。");
 
         ImGui::SameLine();
         ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.72f, 0.22f, 0.20f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.86f, 0.30f, 0.26f, 1.0f));
         if (ImGui::Button(u8"■ 停止", transport_size)) exit_object_play_mode();
         ImGui::PopStyleColor(2);
-        if (ImGui::IsItemHovered())
-        {
-            ImGui::SetTooltip(u8"編集モードへ戻ります。\n"
-                u8"実行中に動いた位置や生成した物はすべて破棄されます。");
-        }
+        ReplayEngine::Editor::EditorHelp::Item("button.scene.stop",
+            u8"編集モードへ戻ります。\n"
+            u8"実行中に動いた位置や生成した物はすべて破棄されます。");
     }
 
     if (ImGui::GetContentRegionAvail().x > 280.0f)

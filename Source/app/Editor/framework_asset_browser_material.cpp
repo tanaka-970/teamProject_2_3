@@ -206,9 +206,13 @@ void framework::draw_material_asset_editor()
     ImGui::Separator();
     const char* save_label = material_editor_dirty ? "Save Material *" : "Save Material";
     if (ImGui::Button(save_label)) save_material_editor();
+    ReplayEngine::Editor::EditorHelp::Item("button.material.save",
+        u8"編集中の Material Asset を保存します。アスタリスクは未保存の変更を示します。");
     ImGui::SameLine();
     if (ImGui::Button("Assign to Selected Renderer"))
         place_asset_in_object_scene(*selected, false);
+    ReplayEngine::Editor::EditorHelp::Item("button.material.assign_renderer",
+        u8"編集中の Material Asset を選択中 Renderer へ割り当てます。");
     ImGui::SameLine();
     ImGui::TextDisabled(material_editor_dirty ? "未保存" : "保存済み");
 

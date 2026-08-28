@@ -234,8 +234,8 @@ void framework::draw_editor_main_menu()
                 label += "##RecentScene" + std::to_string(index);
                 if (ImGui::MenuItem(label.c_str(), nullptr, false, exists))
                     request_object_scene_action(object_scene_action::open_path, path);
-                if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("%s", path.generic_u8string().c_str());
+                ReplayEngine::Editor::EditorHelp::Item(
+                    "button.scene.recent_scene", path.generic_u8string().c_str());
             }
             ImGui::EndMenu();
         }
@@ -277,7 +277,8 @@ void framework::draw_editor_main_menu()
         }
         if (scene_edit_blocked)
         {
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("実行中は元に戻せません。Shift+F5 で停止してください。");
+            ReplayEngine::Editor::EditorHelp::Item("button.edit.undo_blocked",
+                u8"実行中は元に戻せません。Shift+F5 で停止してください。");
             ImGui::PopStyleVar();
         }
         const bool can_redo = atlas_context ? sprite_atlas_history_cursor < sprite_atlas_history.size()

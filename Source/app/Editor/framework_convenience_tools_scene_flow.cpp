@@ -1,4 +1,4 @@
-#include "framework.h"
+﻿#include "framework.h"
 
 #include "../../RePlayEngine/Components/Physics/ColliderComponent.h"
 #include "../../RePlayEngine/Components/Gameplay/StageGameplayComponents.h"
@@ -116,6 +116,7 @@ void framework::draw_scene_flow_panel()
         scene_flow_editor_dirty ? " *" : "");
     ImGui::SameLine();
     if (ImGui::Button("Save")) save_scene_flow_editor();
+    ReplayEngine::Editor::EditorHelp::Item("button.scene_flow.save");
     ImGui::SameLine();
     const bool is_active = project_settings.SceneFlowGuid() == scene_flow_editor_guid;
     if (!is_active)
@@ -126,6 +127,7 @@ void framework::draw_scene_flow_panel()
             save_project_settings();
             sync_runtime_scene_flow_asset();
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.scene_flow.set_active");
     }
     else ImGui::TextColored(ImVec4(0.4f, 0.95f, 0.55f, 1.0f), "ACTIVE");
 
@@ -137,6 +139,7 @@ void framework::draw_scene_flow_panel()
         scene_flow_editor_asset.AddTransition();
         scene_flow_editor_dirty = true;
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.scene_flow.add_transition");
 
     auto& transitions = scene_flow_editor_asset.transitions;
     for (std::size_t i = 0; i < transitions.size(); )
@@ -151,6 +154,7 @@ void framework::draw_scene_flow_panel()
             if (ImGui::Checkbox("Enabled", &transition.enabled)) scene_flow_editor_dirty = true;
             ImGui::SameLine();
             if (ImGui::Button("Delete")) remove = true;
+            ReplayEngine::Editor::EditorHelp::Item("button.scene_flow.delete_transition");
 
             std::array<char, 128> event{};
             CopyText(event, transition.event_name);
@@ -261,6 +265,7 @@ void framework::draw_scene_flow_panel()
                 }
                 ImGui::SameLine();
                 bool remove_condition = ImGui::SmallButton("X");
+                ReplayEngine::Editor::EditorHelp::Item("button.scene_flow.delete_condition");
                 ImGui::PopID();
                 if (remove_condition)
                 {
@@ -276,6 +281,7 @@ void framework::draw_scene_flow_panel()
                 transition.conditions.push_back(std::move(condition));
                 scene_flow_editor_dirty = true;
             }
+            ReplayEngine::Editor::EditorHelp::Item("button.scene_flow.add_condition");
         }
         ImGui::PopID();
         if (remove)

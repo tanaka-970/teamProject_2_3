@@ -283,16 +283,19 @@ void framework::draw_golden_panel()
         {
             request_golden(golden_request_kind::capture);
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.golden.capture");
         ImGui::SameLine();
         if (ImGui::Button(u8"基準と比べる", ImVec2(150.0f, 0.0f)))
         {
             request_golden(golden_request_kind::compare);
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.golden.compare");
         ImGui::SameLine();
         if (ImGui::Button(u8"自己診断", ImVec2(150.0f, 0.0f)))
         {
             request_golden(golden_request_kind::self_check);
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.golden.self_check");
     }
 
     ImGui::TextDisabled(u8"自己診断 = 同じ画面を 2 回撮って一致するか。"

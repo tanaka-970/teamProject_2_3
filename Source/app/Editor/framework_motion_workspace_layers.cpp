@@ -36,8 +36,12 @@ void framework::draw_motion_layers()
     {
         project_create_motion("NewMotion");
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.motion.new",
+        u8"新しい Motion Asset を作成して編集対象にします。");
     ImGui::SameLine();
     if (ImGui::Button(u8"保存")) save_current_motion_asset();
+    ReplayEngine::Editor::EditorHelp::Item("button.motion.save",
+        u8"編集中の Motion Asset を保存します。");
     ImGui::SameLine();
     // 選択中の GameObject から Track を作る。
     //
@@ -89,12 +93,9 @@ void framework::draw_motion_layers()
         motion_property_picker_filter.fill('\0');
         ImGui::OpenPopup("MotionPropertyPicker");
     }
-    if (ImGui::IsItemHovered())
-    {
-        ImGui::SetTooltip(
-            u8"選択中のゲームオブジェクトが持つ、動かせるプロパティの一覧から選びます。\n"
-            u8"先にシーン / UI ワークスペースで対象を選択しておいてください。");
-    }
+    ReplayEngine::Editor::EditorHelp::Item("button.motion.add_track",
+        u8"選択中のゲームオブジェクトが持つ、動かせるプロパティの一覧から選びます。\n"
+        u8"先にシーン / UI ワークスペースで対象を選択しておいてください。");
 
     if (ImGui::BeginPopup("MotionPropertyPicker"))
     {
@@ -232,6 +233,8 @@ void framework::draw_motion_layers()
             motion_editor_dirty = true;
         }
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.motion.opacity_fade",
+        u8"選択中の UI Image の不透明度を 0 から 1 へ変える Motion Track を作成します。");
 
     ImGui::Separator();
     ImGui::TextUnformatted(motion_editor_status.c_str());
@@ -280,6 +283,8 @@ void framework::draw_motion_layers()
             motion_editor_composition.layers.push_back(std::move(layer));
             motion_editor_dirty = true;
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.motion.add_layer",
+            u8"コンポジションへ Motion Asset を再生するレイヤーを追加します。");
         ImGui::SameLine();
         if (ImGui::Button(u8"+ プリコンポーズレイヤー"))
         {
@@ -290,6 +295,8 @@ void framework::draw_motion_layers()
             motion_editor_composition.layers.push_back(std::move(layer));
             motion_editor_dirty = true;
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.motion.add_precomp",
+            u8"コンポジションを入れ子にして再生するプリコンポーズレイヤーを追加します。");
         ImGui::SameLine();
         if (ImGui::Button(u8"+ マーカー"))
         {
@@ -299,6 +306,8 @@ void framework::draw_motion_layers()
             motion_editor_composition.markers.push_back(std::move(marker));
             motion_editor_dirty = true;
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.motion.add_marker",
+            u8"現在の再生位置へコンポジション用マーカーを追加します。");
 
         ImGui::Separator();
         ImGui::TextUnformatted(u8"レイヤー");
@@ -325,6 +334,8 @@ void framework::draw_motion_layers()
                 --i;
                 continue;
             }
+            ReplayEngine::Editor::EditorHelp::Item("button.motion.remove_layer",
+                u8"選択中のコンポジションレイヤーを削除します。");
 
             const std::string guid = !layer.motion_guid.empty()
                 ? layer.motion_guid : layer.composition_guid;
@@ -334,6 +345,8 @@ void framework::draw_motion_layers()
                 ? record->display_name.c_str() : (guid.empty() ? u8"モーション / コンポジションをここへドロップ" : u8"アセットが見つかりません");
             ImGui::SetNextItemWidth(360.0f);
             ImGui::Button(source_label, ImVec2(360.0f, 0.0f));
+            ReplayEngine::Editor::EditorHelp::Item("button.motion.asset_drop_target",
+                u8"Motion または Composition Asset をここへドロップしてレイヤーへ割り当てます。");
             if (ImGui::BeginDragDropTarget())
             {
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("REPLAY_ASSET_GUID"))
@@ -367,6 +380,8 @@ void framework::draw_motion_layers()
                 layer.composition_guid.clear();
                 motion_editor_dirty = true;
             }
+            ReplayEngine::Editor::EditorHelp::Item("button.motion.clear_layer_asset",
+                u8"レイヤーに割り当てた Motion または Composition Asset を外します。");
 
             float timing[3]{ layer.start_offset, layer.in_time, layer.out_time };
             ImGui::SetNextItemWidth(360.0f);
@@ -422,6 +437,8 @@ void framework::draw_motion_layers()
                 --i;
                 continue;
             }
+            ReplayEngine::Editor::EditorHelp::Item("button.motion.remove_marker",
+                u8"選択中のコンポジションマーカーを削除します。");
             ImGui::PopID();
         }
     }

@@ -207,6 +207,7 @@ void framework::draw_sprite_atlas_editor()
     }
 
     if (ImGui::Button("保存")) save_current_sprite_atlas();
+    ReplayEngine::Editor::EditorHelp::Item("button.sprite_atlas.save");
     ImGui::SameLine();
     ImGui::Text("%s%s", sprite_atlas_editor_asset.name.c_str(),
         sprite_atlas_editor_dirty ? " *" : "");
@@ -216,6 +217,7 @@ void framework::draw_sprite_atlas_editor()
     ImGui::SameLine();
     if (ImGui::Button(sprite_atlas_draw_region_mode ? "矩形作成: ON" : "矩形作成: OFF"))
         sprite_atlas_draw_region_mode = !sprite_atlas_draw_region_mode;
+    ReplayEngine::Editor::EditorHelp::Item("button.sprite_atlas.region_mode");
     ImGui::SameLine();
     ImGui::Checkbox("Pixel Snap", &sprite_atlas_pixel_snap);
 
@@ -232,6 +234,7 @@ void framework::draw_sprite_atlas_editor()
                 sprite_atlas_editor_asset.embedded_texture_path.clear();
                 commit_sprite_atlas_edit();
             }
+            ReplayEngine::Editor::EditorHelp::Item("button.sprite_atlas.set_image");
         }
     }
 
@@ -665,7 +668,11 @@ void framework::draw_sprite_atlas_editor()
                 (std::max)(0.0f, (std::min)(1.0f, u)) * image_width);
             const int py = static_cast<int>(
                 (std::max)(0.0f, (std::min)(1.0f, v)) * image_height);
-            ImGui::SetTooltip("Pixel: %d, %d / UV: %.4f, %.4f\nWheel: Zoom / MMB or Space+Drag: Pan / Ctrl+Click: Pivot", px,py,u,v);
+            char pixel_tooltip[256]{};
+            std::snprintf(pixel_tooltip, sizeof(pixel_tooltip),
+                "Pixel: %d, %d / UV: %.4f, %.4f\nWheel: Zoom / MMB or Space+Drag: Pan / Ctrl+Click: Pivot",
+                px, py, u, v);
+            ReplayEngine::Editor::EditorHelp::Item("control.atlas.image", pixel_tooltip);
         }
     }
     ImGui::EndChild();
@@ -685,6 +692,7 @@ void framework::draw_sprite_atlas_editor()
         sprite_atlas_active_point = -1;
         commit_sprite_atlas_edit();
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.sprite_atlas.region_add");
     ImGui::SameLine();
     if (ImGui::Button("削除") && sprite_atlas_selected_region >= 0 &&
         sprite_atlas_selected_region < static_cast<int>(sprite_atlas_editor_asset.regions.size()))
@@ -697,6 +705,7 @@ void framework::draw_sprite_atlas_editor()
         sprite_atlas_active_point = -1;
         commit_sprite_atlas_edit();
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.sprite_atlas.region_delete");
 
     for (int index = 0; index < static_cast<int>(sprite_atlas_editor_asset.regions.size()); ++index)
     {
