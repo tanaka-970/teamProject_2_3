@@ -259,6 +259,8 @@ namespace ReplayEngine::Rendering::DX12
         bool taa_enabled = true;
         bool ssao_enabled = true;
         bool ssr_enabled = true;
+        bool luminance_enabled = true;
+        bool final_pass_enabled = true;
     };
 
     struct D3D12StaticSceneSubmission final

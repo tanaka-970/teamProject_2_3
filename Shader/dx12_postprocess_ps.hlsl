@@ -26,7 +26,8 @@ cbuffer PostProcessConstants : register(b0)
     float historyValid;
     float3 alignmentPadding;
     float2 screenSize;
-    float2 padding;
+    float luminanceEnabled;
+    float finalPassEnabled;
     float4 colorFilter;
     float4 featureFlags; // x=TAA、y=SSAO、z=SSR
     float4 debugOptions; // x=RenderOutput、y=DeferredDebugMode
@@ -367,10 +368,13 @@ float4 main(PixelInput input) : SV_TARGET
         else if (output == 2u)
         {
             const float2 debugPixel = 1.0f / max(screenSize, float2(1.0f, 1.0f));
-            debugColor += max(sampleScene(input.uv + debugPixel * float2(-2.0f, 0.0f)) - bloomThreshold, 0.0f);
-            debugColor += max(sampleScene(input.uv + debugPixel * float2(2.0f, 0.0f)) - bloomThreshold, 0.0f);
-            debugColor += max(sampleScene(input.uv + debugPixel * float2(0.0f, -2.0f)) - bloomThreshold, 0.0f);
-            debugColor += max(sampleScene(input.uv + debugPixel * float2(0.0f, 2.0f)) - bloomThreshold, 0.0f);
+            if (luminanceEnabled > 0.5f)
+            {
+                debugColor += max(sampleScene(input.uv + debugPixel * float2(-2.0f, 0.0f)) - bloomThreshold, 0.0f);
+                debugColor += max(sampleScene(input.uv + debugPixel * float2(2.0f, 0.0f)) - bloomThreshold, 0.0f);
+                debugColor += max(sampleScene(input.uv + debugPixel * float2(0.0f, -2.0f)) - bloomThreshold, 0.0f);
+                debugColor += max(sampleScene(input.uv + debugPixel * float2(0.0f, 2.0f)) - bloomThreshold, 0.0f);
+            }
         }
         else if (output == 3u)
             debugColor = deferredLitTexture.SampleLevel(pointSampler, input.uv, 0).rgb;
@@ -412,27 +416,37 @@ float4 main(PixelInput input) : SV_TARGET
         return float4(pow(displayColor, 1.0f / 2.2f), 1.0f);
     }
 
-    float3 color = fxaaEnabled > 0.5f ? fxaa(input.uv) : sampleScene(input.uv);
-    if (featureFlags.y > 0.5f)
-        color *= ssao(input.uv);
-    color = screenSpaceReflection(input.uv, color);
-    color = temporalResolve(input.uv, color);
-
-    // 実SceneのHDR値からBloomを作る。固定の明るさを加算しない。
-    const float2 pixel = 1.0f / max(screenSize, float2(1.0f, 1.0f));
-    float3 bloom = 0.0f;
-    bloom += max(sampleScene(input.uv + pixel * float2(-2.0f, 0.0f)) - bloomThreshold, 0.0f);
-    bloom += max(sampleScene(input.uv + pixel * float2(2.0f, 0.0f)) - bloomThreshold, 0.0f);
-    bloom += max(sampleScene(input.uv + pixel * float2(0.0f, -2.0f)) - bloomThreshold, 0.0f);
-    bloom += max(sampleScene(input.uv + pixel * float2(0.0f, 2.0f)) - bloomThreshold, 0.0f);
-    color += bloom * (0.25f * bloomIntensity);
-
-    color = acesToneMap(max(color, 0.0f));
-    if (vignetteStrength > 0.0f)
+    float3 color = sampleScene(input.uv);
+    if (finalPassEnabled > 0.5f)
     {
-        const float2 centered = input.uv - 0.5f;
-        color *= saturate(1.0f - dot(centered, centered) * vignetteStrength * 4.0f);
+        color = fxaaEnabled > 0.5f ? fxaa(input.uv) : color;
+        if (featureFlags.y > 0.5f)
+            color *= ssao(input.uv);
+        color = screenSpaceReflection(input.uv, color);
+        color = temporalResolve(input.uv, color);
+
+        const float2 pixel = 1.0f / max(screenSize, float2(1.0f, 1.0f));
+        float3 bloom = 0.0f;
+        if (luminanceEnabled > 0.5f)
+        {
+            bloom += max(sampleScene(input.uv + pixel * float2(-2.0f, 0.0f)) - bloomThreshold, 0.0f);
+            bloom += max(sampleScene(input.uv + pixel * float2(2.0f, 0.0f)) - bloomThreshold, 0.0f);
+            bloom += max(sampleScene(input.uv + pixel * float2(0.0f, -2.0f)) - bloomThreshold, 0.0f);
+            bloom += max(sampleScene(input.uv + pixel * float2(0.0f, 2.0f)) - bloomThreshold, 0.0f);
+        }
+        color += bloom * (0.25f * bloomIntensity);
+
+        color = acesToneMap(max(color, 0.0f));
+        if (vignetteStrength > 0.0f)
+        {
+            const float2 centered = input.uv - 0.5f;
+            color *= saturate(1.0f - dot(centered, centered) * vignetteStrength * 4.0f);
+        }
+        color *= colorFilter.rgb;
     }
-    color *= colorFilter.rgb;
+    else
+    {
+        color = acesToneMap(max(color, 0.0f));
+    }
     return float4(pow(max(color, 0.0f), 1.0f / 2.2f), 1.0f);
 }

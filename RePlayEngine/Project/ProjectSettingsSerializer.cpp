@@ -66,9 +66,14 @@ namespace ReplayEngine::Project
         stream << "RENDER_TAA " << (settings.TaaEnabled() ? 1 : 0) << '\n';
         stream << "RENDER_DEPTH_PREPASS "
             << (settings.DepthPrepassEnabled() ? 1 : 0) << '\n';
+        stream << std::setprecision(9);
+        stream << "RENDER_LUMINANCE_ENABLED "
+            << (settings.LuminanceEnabled() ? 1 : 0) << '\n';
+        stream << "RENDER_LUMINANCE_THRESHOLD " << settings.LuminanceThreshold() << '\n';
+        stream << "RENDER_FINAL_PASS_ENABLED "
+            << (settings.FinalPassEnabled() ? 1 : 0) << '\n';
 
         const ProjectSettings::ScreenSpaceSettings& screen = settings.ScreenSpace();
-        stream << std::setprecision(9);
         stream << "RENDER_SSAO_RADIUS " << screen.ssao_radius << '\n';
         stream << "RENDER_SSAO_INTENSITY " << screen.ssao_intensity << '\n';
         stream << "RENDER_SSAO_POWER " << screen.ssao_power << '\n';
@@ -273,6 +278,24 @@ namespace ReplayEngine::Project
                 std::istringstream value_stream(line);
                 int enabled = settings.DepthPrepassEnabled() ? 1 : 0;
                 if (value_stream >> enabled) settings.SetDepthPrepassEnabled(enabled != 0);
+            }
+            else if (keyword == "RENDER_LUMINANCE_ENABLED")
+            {
+                std::istringstream value_stream(line);
+                int enabled = settings.LuminanceEnabled() ? 1 : 0;
+                if (value_stream >> enabled) settings.SetLuminanceEnabled(enabled != 0);
+            }
+            else if (keyword == "RENDER_LUMINANCE_THRESHOLD")
+            {
+                std::istringstream value_stream(line);
+                float value = settings.LuminanceThreshold();
+                if (value_stream >> value) settings.SetLuminanceThreshold(value);
+            }
+            else if (keyword == "RENDER_FINAL_PASS_ENABLED")
+            {
+                std::istringstream value_stream(line);
+                int enabled = settings.FinalPassEnabled() ? 1 : 0;
+                if (value_stream >> enabled) settings.SetFinalPassEnabled(enabled != 0);
             }
             else if (keyword == "RENDER_SSAO_RADIUS") parse_float(line, screen.ssao_radius);
             else if (keyword == "RENDER_SSAO_INTENSITY") parse_float(line, screen.ssao_intensity);

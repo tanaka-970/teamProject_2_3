@@ -272,6 +272,8 @@ void framework::render(float elapsed_time)
                 0.25f, 0.0f, 8.0f);
             static_scene.post_process.bloom_threshold = clamp_finite(luminance_threshold,
                 1.0f, 0.0f, 8.0f);
+            static_scene.post_process.luminance_enabled = enable_luminance_shader;
+            static_scene.post_process.final_pass_enabled = enable_final_pass_shader;
             static_scene.post_process.vignette_strength = clamp_finite(post_settings.vignette_strength,
                 0.138f, 0.0f, 1.0f);
             static_scene.post_process.fxaa_enable = clamp_finite(post_settings.fxaa_enable,
@@ -335,6 +337,8 @@ void framework::render(float elapsed_time)
                     static_scene.post_process.exposure, 0.01f, 8.0f);
                 static_scene.post_process.bloom_threshold = clamp_finite(volume.bloom_threshold,
                     static_scene.post_process.bloom_threshold, 0.0f, 8.0f);
+                static_scene.post_process.luminance_enabled = volume.luminance_enabled;
+                static_scene.post_process.final_pass_enabled = volume.final_pass_enabled;
                 static_scene.post_process.bloom_intensity = clamp_finite(volume.bloom_intensity,
                     static_scene.post_process.bloom_intensity, 0.0f, 8.0f);
                 static_scene.post_process.vignette_strength = clamp_finite(volume.vignette_intensity,

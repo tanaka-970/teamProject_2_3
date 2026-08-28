@@ -228,6 +228,12 @@ namespace ReplayEngine::Project
         void SetTaaEnabled(bool value) noexcept { taa_enabled_ = value; }
         bool DepthPrepassEnabled() const noexcept { return depth_prepass_enabled_; }
         void SetDepthPrepassEnabled(bool value) noexcept { depth_prepass_enabled_ = value; }
+        bool LuminanceEnabled() const noexcept { return luminance_enabled_; }
+        void SetLuminanceEnabled(bool value) noexcept { luminance_enabled_ = value; }
+        float LuminanceThreshold() const noexcept { return luminance_threshold_; }
+        void SetLuminanceThreshold(float value) noexcept { luminance_threshold_ = value; }
+        bool FinalPassEnabled() const noexcept { return final_pass_enabled_; }
+        void SetFinalPassEnabled(bool value) noexcept { final_pass_enabled_ = value; }
 
         // ---- Editor Component Visibility ----------------------------------
         bool ShowGameTemplateComponents() const noexcept
@@ -247,6 +253,9 @@ namespace ReplayEngine::Project
             ssr_enabled_ = true;
             taa_enabled_ = true;
             depth_prepass_enabled_ = false;
+            luminance_enabled_ = true;
+            luminance_threshold_ = 1.0f;
+            final_pass_enabled_ = true;
             default_character_prefab_guid_.clear();
             startup_scene_guid_.clear();
             scene_flow_guid_.clear();
@@ -277,6 +286,9 @@ namespace ReplayEngine::Project
         bool taa_enabled_ = true;
         // 既定 false は実測に基づく。Docs 参照。LOD 導入後は測り直すこと。
         bool depth_prepass_enabled_ = false;
+        bool luminance_enabled_ = true;
+        float luminance_threshold_ = 1.0f;
+        bool final_pass_enabled_ = true;
         // Game Template は汎用プロジェクトでは既定非表示。Registry からは消さない。
         bool show_game_template_components_ = false;
         ScreenSpaceSettings screen_space_{};

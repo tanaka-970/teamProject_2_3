@@ -95,6 +95,9 @@ namespace ReplayEngine::Runtime::Detail
             else if (key == "taa.variance_gamma") range = { ValueKind::Float, 0.25, 3.0 };
             else if (key == "taa.sharpness") range = { ValueKind::Float, 0.0, 1.0 };
             else if (key == "taa.max_velocity") range = { ValueKind::Float, 4.0, 200.0 };
+            else if (key == "post.luminance_threshold") range = { ValueKind::Float, 0.0, 8.0 };
+            else if (key == "post.luminance_enabled" || key == "post.final_pass_enabled")
+                range = { ValueKind::Boolean, 0.0, 1.0 };
             else if (key == "ssao.enabled" || key == "ssr.enabled" || key == "taa.enabled")
                 range = { ValueKind::Boolean, 0.0, 1.0 };
             else

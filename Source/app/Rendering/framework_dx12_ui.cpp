@@ -2479,9 +2479,6 @@ bool framework::build_dx12_scene_effects(
                 D3D12ModelEffectStackSubmission stack{};
                 stack.owner_id = object->ID().Value();
                 stack.depth_mode = model->depth_mode;
-                stack.scissor = { 0, 0, static_cast<LONG>(dx12_device_context.Width()),
-                    static_cast<LONG>(dx12_device_context.Height()) };
-                stack.scissor_enabled = true;
                 if (fill_effects(model->EffectiveEffects(&asset_database),
                     model->effect_region, stack.owner_id, stack.effects))
                     submission.model_effects.push_back(std::move(stack));
