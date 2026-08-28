@@ -85,12 +85,14 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
         ParseAutomatedSmokeTestFrames(cmd_line);
     const ProfileBenchmarkConfig profile_benchmark =
         ParseProfileBenchmark(cmd_line);
-    if (profile_benchmark.requested && !profile_benchmark.valid)
+    if (!profile_benchmark.valid)
     {
-        std::fprintf(stderr, "Profiler benchmark command error: %s\n",
+        std::fprintf(stderr, "Profiler/screen-space command error: %s\n",
             profile_benchmark.error.c_str());
         return 75;
     }
+    for (const std::string& warning : profile_benchmark.screen_space_warnings)
+        std::fprintf(stderr, "%s\n", warning.c_str());
     const bool shutdown_regression_requested = ParseShutdownRegression(cmd_line);
     // Renderer選択は製品仕様としてDX12に固定する。旧移行フラグは互換的に
     // 受け付けても意味を持たず、通常起動・Editor・Capture・Validationを同じ経路へ揃える。
@@ -183,9 +185,10 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
         AcquireDXGIDebugInterfaces(dxgi_debug, dxgi_info_queue, dxgi_debug_module);
 #endif
 	{
-	    framework application(hwnd);
+        framework application(hwnd);
         application.configure_content_root(executable_layout.content_root);
         application.request_dx12_framework();
+        application.configure_screen_space_overrides(profile_benchmark.screen_space_overrides);
         if (game_launch.file_found && !profile_benchmark.requested)
         {
             application.configure_standalone_game(

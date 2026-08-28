@@ -218,6 +218,88 @@ void framework::load_project_settings()
     enable_ssr = project_settings.SsrEnabled();
     enable_taa = project_settings.TaaEnabled();
     enable_depth_prepass = project_settings.DepthPrepassEnabled();
+
+    const Project::ProjectSettings::ScreenSpaceSettings& screen =
+        project_settings.ScreenSpace();
+    ssao_pass.radius = screen.ssao_radius;
+    ssao_pass.intensity = screen.ssao_intensity;
+    ssao_pass.power = screen.ssao_power;
+    ssao_pass.thin_occluder = screen.ssao_thin_occluder;
+    ssao_pass.slice_count = screen.ssao_slice_count;
+    ssao_pass.step_count = screen.ssao_step_count;
+    ssao_pass.fade_start = screen.ssao_fade_start;
+    ssao_pass.fade_end = screen.ssao_fade_end;
+    ssao_pass.normal_bias = screen.ssao_normal_bias;
+    ssao_pass.blur_sharpness = screen.ssao_blur_sharpness;
+    ssao_pass.blur_enabled = screen.ssao_blur_enabled;
+    ssr_pass.max_distance = screen.ssr_max_distance;
+    ssr_pass.thickness = screen.ssr_thickness;
+    ssr_pass.stride = screen.ssr_stride;
+    ssr_pass.max_step = screen.ssr_max_step;
+    ssr_pass.refine_step = screen.ssr_refine_step;
+    ssr_pass.max_roughness = screen.ssr_max_roughness;
+    ssr_pass.intensity = screen.ssr_intensity;
+    ssr_pass.edge_fade = screen.ssr_edge_fade;
+    ssr_pass.ray_bias = screen.ssr_ray_bias;
+    ssr_pass.resolve_radius = screen.ssr_resolve_radius;
+    ssr_pass.resolve_tap_count = screen.ssr_resolve_tap_count;
+    taa_pass.blend = screen.taa_blend;
+    taa_pass.variance_gamma = screen.taa_variance_gamma;
+    taa_pass.sharpness = screen.taa_sharpness;
+    taa_pass.max_velocity = screen.taa_max_velocity;
+    ssao_pass.enabled = enable_ssao;
+    ssr_pass.enabled = enable_ssr;
+    taa_pass.enabled = enable_taa;
+    configure_screen_space_overrides(screen_space_overrides);
+}
+
+void framework::configure_screen_space_overrides(
+    const std::vector<std::string>& overrides)
+{
+    screen_space_overrides = overrides;
+    for (const std::string& item : screen_space_overrides)
+    {
+        const std::size_t separator = item.find('=');
+        if (separator == std::string::npos) continue;
+        const std::string key = item.substr(0, separator);
+        const std::string value = item.substr(separator + 1);
+        try
+        {
+            if (key == "ssao.enabled") ssao_pass.enabled = std::stoi(value) != 0;
+            else if (key == "ssao.radius") ssao_pass.radius = std::stof(value);
+            else if (key == "ssao.intensity") ssao_pass.intensity = std::stof(value);
+            else if (key == "ssao.power") ssao_pass.power = std::stof(value);
+            else if (key == "ssao.thin_occluder") ssao_pass.thin_occluder = std::stof(value);
+            else if (key == "ssao.slice_count") ssao_pass.slice_count = std::stoi(value);
+            else if (key == "ssao.step_count") ssao_pass.step_count = std::stoi(value);
+            else if (key == "ssao.fade_start") ssao_pass.fade_start = std::stof(value);
+            else if (key == "ssao.fade_end") ssao_pass.fade_end = std::stof(value);
+            else if (key == "ssao.normal_bias") ssao_pass.normal_bias = std::stof(value);
+            else if (key == "ssao.blur_sharpness") ssao_pass.blur_sharpness = std::stof(value);
+            else if (key == "ssao.blur_enabled") ssao_pass.blur_enabled = std::stoi(value) != 0;
+            else if (key == "ssr.enabled") ssr_pass.enabled = std::stoi(value) != 0;
+            else if (key == "ssr.max_distance") ssr_pass.max_distance = std::stof(value);
+            else if (key == "ssr.thickness") ssr_pass.thickness = std::stof(value);
+            else if (key == "ssr.stride") ssr_pass.stride = std::stof(value);
+            else if (key == "ssr.max_step") ssr_pass.max_step = std::stoi(value);
+            else if (key == "ssr.refine_step") ssr_pass.refine_step = std::stoi(value);
+            else if (key == "ssr.max_roughness") ssr_pass.max_roughness = std::stof(value);
+            else if (key == "ssr.intensity") ssr_pass.intensity = std::stof(value);
+            else if (key == "ssr.edge_fade") ssr_pass.edge_fade = std::stof(value);
+            else if (key == "ssr.ray_bias") ssr_pass.ray_bias = std::stof(value);
+            else if (key == "ssr.resolve_radius") ssr_pass.resolve_radius = std::stof(value);
+            else if (key == "ssr.resolve_tap_count") ssr_pass.resolve_tap_count = std::stoi(value);
+            else if (key == "taa.enabled") taa_pass.enabled = std::stoi(value) != 0;
+            else if (key == "taa.blend") taa_pass.blend = std::stof(value);
+            else if (key == "taa.variance_gamma") taa_pass.variance_gamma = std::stof(value);
+            else if (key == "taa.sharpness") taa_pass.sharpness = std::stof(value);
+            else if (key == "taa.max_velocity") taa_pass.max_velocity = std::stof(value);
+        }
+        catch (...)
+        {
+            continue;
+        }
+    }
 }
 
 bool framework::save_project_settings()
@@ -226,6 +308,34 @@ bool framework::save_project_settings()
 
     std::string error;
     const auto path = Project::ProjectSettingsSerializer::DefaultPath();
+    Project::ProjectSettings::ScreenSpaceSettings& screen =
+        project_settings.MutableScreenSpace();
+    screen.ssao_radius = ssao_pass.radius;
+    screen.ssao_intensity = ssao_pass.intensity;
+    screen.ssao_power = ssao_pass.power;
+    screen.ssao_thin_occluder = ssao_pass.thin_occluder;
+    screen.ssao_slice_count = ssao_pass.slice_count;
+    screen.ssao_step_count = ssao_pass.step_count;
+    screen.ssao_fade_start = ssao_pass.fade_start;
+    screen.ssao_fade_end = ssao_pass.fade_end;
+    screen.ssao_normal_bias = ssao_pass.normal_bias;
+    screen.ssao_blur_sharpness = ssao_pass.blur_sharpness;
+    screen.ssao_blur_enabled = ssao_pass.blur_enabled;
+    screen.ssr_max_distance = ssr_pass.max_distance;
+    screen.ssr_thickness = ssr_pass.thickness;
+    screen.ssr_stride = ssr_pass.stride;
+    screen.ssr_max_step = ssr_pass.max_step;
+    screen.ssr_refine_step = ssr_pass.refine_step;
+    screen.ssr_max_roughness = ssr_pass.max_roughness;
+    screen.ssr_intensity = ssr_pass.intensity;
+    screen.ssr_edge_fade = ssr_pass.edge_fade;
+    screen.ssr_ray_bias = ssr_pass.ray_bias;
+    screen.ssr_resolve_radius = ssr_pass.resolve_radius;
+    screen.ssr_resolve_tap_count = ssr_pass.resolve_tap_count;
+    screen.taa_blend = taa_pass.blend;
+    screen.taa_variance_gamma = taa_pass.variance_gamma;
+    screen.taa_sharpness = taa_pass.sharpness;
+    screen.taa_max_velocity = taa_pass.max_velocity;
     bool started_file_undo = false;
     if (project_settings_file_undo_enabled && object_editor_context.CanEdit() &&
         !external_file_history.InTransaction())

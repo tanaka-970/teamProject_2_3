@@ -53,6 +53,8 @@ namespace ReplayEngine::Runtime::Detail
         std::uint32_t warmup_frames = 30;
         std::uint32_t render_output = 0;
         std::string output_name{ "benchmark" };
+        std::vector<std::string> screen_space_overrides;
+        std::vector<std::string> screen_space_warnings;
         std::string error;
     };
     ProfileBenchmarkConfig ParseProfileBenchmark(const char* command_line);

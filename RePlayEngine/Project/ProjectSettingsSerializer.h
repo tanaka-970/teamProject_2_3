@@ -29,13 +29,14 @@ namespace ReplayEngine::Project
         // v5 … Localization table / default language を追加
         // v6 … Input Action Asset GUID を追加
         // v7 … Game Template Component の Editor 表示方針を追加
+        // v8 … SSAO / SSR / TAA の調整値を追加
         //
         // Scene のファイル形式とは別のバージョン番号。
         // 片方を上げたらもう片方も上げる、という関係にはしない。
         // 保存する内容が別なので、揃えると意味の無い版番号が増える。
-        static constexpr int current_version = 7;
+        static constexpr int current_version = 8;
 
-        // v1〜v6 のファイルもそのまま読める。読み込み後に保存すると v7 になる。
+        // v1〜v7 のファイルもそのまま読める。読み込み後に保存すると v8 になる。
         static constexpr int minimum_supported_version = 1;
 
         // 読み込みに失敗したときに使う安全な既定値へ戻す。

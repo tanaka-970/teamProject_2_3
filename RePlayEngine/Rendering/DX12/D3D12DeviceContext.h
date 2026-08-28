@@ -237,6 +237,7 @@ namespace ReplayEngine::Rendering::DX12
     {
         float exposure = 0.619f;
         float bloom_intensity = 0.25f;
+        float bloom_threshold = 1.0f;
         float vignette_strength = 0.138f;
         float fxaa_enable = 1.0f;
         float taa_blend = 0.88f;
@@ -245,6 +246,11 @@ namespace ReplayEngine::Rendering::DX12
         DirectX::XMFLOAT4 color_filter{ 1, 1, 1, 1 };
         DirectX::XMFLOAT4 ssao_params0{ 0.75f, 1.6f, 1.0f, 0.35f };
         DirectX::XMFLOAT4 ssao_params1{ 4.0f, 8.0f, 60.0f, 140.0f };
+        DirectX::XMFLOAT4 ssao_params2{ 1.0f, 1.0f, 0.0f, 0.0f };
+        DirectX::XMFLOAT4 ssr_params0{ 40.0f, 0.4f, 3.0f, 48.0f };
+        DirectX::XMFLOAT4 ssr_params1{ 5.0f, 0.65f, 0.12f, 1.0f };
+        DirectX::XMFLOAT4 ssr_params2{ 12.0f, 8.0f, 0.0f, 0.0f };
+        DirectX::XMFLOAT4 taa_params0{ 1.0f, 0.35f, 48.0f, 0.0f };
         std::uint32_t render_output = 0;
         std::uint32_t deferred_debug_mode = 0;
         bool bloom_enabled = true;

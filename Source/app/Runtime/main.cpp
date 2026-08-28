@@ -19,6 +19,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstdint>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -47,6 +48,112 @@ using ReplayEngine::Runtime::Detail::RunHeadlessSerializationValidation;
 
 namespace ReplayEngine::Runtime::Detail
 {
+    bool NormalizeScreenSpaceOverride(const std::string& text,
+        std::string& normalized, std::string& warning, std::string& error)
+    {
+        const std::size_t separator = text.find('=');
+        if (separator == std::string::npos || separator == 0 || separator + 1 >= text.size())
+        {
+            error = "--screen-space requires key=value";
+            return false;
+        }
+
+        const std::string key = text.substr(0, separator);
+        const std::string value_text = text.substr(separator + 1);
+        enum class ValueKind { Float, Integer, Boolean };
+        struct Range final
+        {
+            ValueKind kind;
+            double minimum;
+            double maximum;
+        };
+        const auto range_for = [&key](Range& range) noexcept
+        {
+            if (key == "ssao.radius") range = { ValueKind::Float, 0.05, 4.0 };
+            else if (key == "ssao.intensity") range = { ValueKind::Float, 0.0, 1.0 };
+            else if (key == "ssao.power") range = { ValueKind::Float, 0.5, 4.0 };
+            else if (key == "ssao.thin_occluder") range = { ValueKind::Float, 0.0, 1.0 };
+            else if (key == "ssao.slice_count") range = { ValueKind::Integer, 1.0, 8.0 };
+            else if (key == "ssao.step_count") range = { ValueKind::Integer, 2.0, 12.0 };
+            else if (key == "ssao.fade_start") range = { ValueKind::Float, 1.0, 400.0 };
+            else if (key == "ssao.fade_end") range = { ValueKind::Float, 2.0, 800.0 };
+            else if (key == "ssao.normal_bias") range = { ValueKind::Float, 0.0, 2.0 };
+            else if (key == "ssao.blur_sharpness") range = { ValueKind::Float, 0.0, 1.0 };
+            else if (key == "ssao.blur_enabled") range = { ValueKind::Boolean, 0.0, 1.0 };
+            else if (key == "ssr.max_distance") range = { ValueKind::Float, 1.0, 200.0 };
+            else if (key == "ssr.thickness") range = { ValueKind::Float, 0.01, 2.0 };
+            else if (key == "ssr.stride") range = { ValueKind::Float, 1.0, 16.0 };
+            else if (key == "ssr.max_step") range = { ValueKind::Integer, 4.0, 64.0 };
+            else if (key == "ssr.refine_step") range = { ValueKind::Integer, 0.0, 8.0 };
+            else if (key == "ssr.max_roughness") range = { ValueKind::Float, 0.05, 1.0 };
+            else if (key == "ssr.intensity") range = { ValueKind::Float, 0.0, 2.0 };
+            else if (key == "ssr.edge_fade") range = { ValueKind::Float, 0.01, 0.4 };
+            else if (key == "ssr.ray_bias") range = { ValueKind::Float, 0.0, 4.0 };
+            else if (key == "ssr.resolve_radius") range = { ValueKind::Float, 0.0, 40.0 };
+            else if (key == "ssr.resolve_tap_count") range = { ValueKind::Integer, 1.0, 16.0 };
+            else if (key == "taa.blend") range = { ValueKind::Float, 0.0, 0.98 };
+            else if (key == "taa.variance_gamma") range = { ValueKind::Float, 0.25, 3.0 };
+            else if (key == "taa.sharpness") range = { ValueKind::Float, 0.0, 1.0 };
+            else if (key == "taa.max_velocity") range = { ValueKind::Float, 4.0, 200.0 };
+            else if (key == "ssao.enabled" || key == "ssr.enabled" || key == "taa.enabled")
+                range = { ValueKind::Boolean, 0.0, 1.0 };
+            else
+                return false;
+            return true;
+        };
+
+        Range range{};
+        if (!range_for(range))
+        {
+            error = "--screen-space の未知のキー: " + key;
+            return false;
+        }
+        if (range.kind == ValueKind::Boolean)
+        {
+            if (value_text != "0" && value_text != "1")
+            {
+                error = "--screen-space の bool 値は 0 または 1 です: " + key;
+                return false;
+            }
+            normalized = key + "=" + value_text;
+            return true;
+        }
+        try
+        {
+            std::size_t consumed = 0;
+            const double parsed = range.kind == ValueKind::Integer
+                ? static_cast<double>(std::stoll(value_text, &consumed, 10))
+                : std::stod(value_text, &consumed);
+            if (consumed != value_text.size() || !std::isfinite(parsed))
+            {
+                error = "--screen-space の数値が不正です: " + key;
+                return false;
+            }
+            const double clamped = (std::max)(range.minimum, (std::min)(range.maximum, parsed));
+            if (clamped != parsed)
+            {
+                std::ostringstream message;
+                message << "--screen-space " << key << " を " << range.minimum
+                    << ".." << range.maximum << " に clamp しました。";
+                warning = message.str();
+            }
+            if (range.kind == ValueKind::Integer)
+                normalized = key + "=" + std::to_string(static_cast<int>(clamped));
+            else
+            {
+                std::ostringstream value;
+                value << std::setprecision(9) << clamped;
+                normalized = key + "=" + value.str();
+            }
+            return true;
+        }
+        catch (...)
+        {
+            error = "--screen-space の数値が不正です: " + key;
+            return false;
+        }
+    }
+
     // --game が指定されたら、Startup Scene から Runtime を開始する。
     //
     // 既定（引数なし）は Editor 起動。
@@ -415,6 +522,26 @@ namespace ReplayEngine::Runtime::Detail
             {
                 if (i + 1 < tokens.size() && tokens[i + 1].rfind("--", 0) != 0)
                     config.output_name = tokens[++i];
+            }
+            else if (token == "--screen-space")
+            {
+                if (i + 1 >= tokens.size() || tokens[i + 1].rfind("--", 0) == 0)
+                {
+                    config.valid = false;
+                    config.error = "--screen-space requires key=value";
+                    continue;
+                }
+                std::string normalized;
+                std::string warning;
+                std::string error;
+                if (!NormalizeScreenSpaceOverride(tokens[++i], normalized, warning, error))
+                {
+                    config.valid = false;
+                    config.error = error;
+                    continue;
+                }
+                config.screen_space_overrides.push_back(std::move(normalized));
+                if (!warning.empty()) config.screen_space_warnings.push_back(std::move(warning));
             }
         }
 

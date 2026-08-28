@@ -270,6 +270,8 @@ void framework::render(float elapsed_time)
                 0.619f, 0.01f, 8.0f);
             static_scene.post_process.bloom_intensity = clamp_finite(post_settings.bloom_intensity,
                 0.25f, 0.0f, 8.0f);
+            static_scene.post_process.bloom_threshold = clamp_finite(luminance_threshold,
+                1.0f, 0.0f, 8.0f);
             static_scene.post_process.vignette_strength = clamp_finite(post_settings.vignette_strength,
                 0.138f, 0.0f, 1.0f);
             static_scene.post_process.fxaa_enable = clamp_finite(post_settings.fxaa_enable,
@@ -290,6 +292,28 @@ void framework::render(float elapsed_time)
                 static_cast<float>((std::max)(1, (std::min)(8, ssao_pass.slice_count))),
                 static_cast<float>((std::max)(2, (std::min)(12, ssao_pass.step_count))),
                 ssao_fade_start, ssao_fade_end };
+            static_scene.post_process.ssao_params2 = {
+                ssao_pass.blur_enabled ? 1.0f : 0.0f,
+                clamp_finite(ssao_pass.blur_sharpness, 1.0f, 0.0f, 1.0f), 0.0f, 0.0f };
+            static_scene.post_process.ssr_params0 = {
+                clamp_finite(ssr_pass.max_distance, 40.0f, 1.0f, 200.0f),
+                clamp_finite(ssr_pass.thickness, 0.4f, 0.01f, 2.0f),
+                clamp_finite(ssr_pass.stride, 3.0f, 1.0f, 16.0f),
+                static_cast<float>((std::max)(4, (std::min)(64, ssr_pass.max_step))) };
+            static_scene.post_process.ssr_params1 = {
+                static_cast<float>((std::max)(0, (std::min)(8, ssr_pass.refine_step))),
+                clamp_finite(ssr_pass.max_roughness, 0.65f, 0.05f, 1.0f),
+                clamp_finite(ssr_pass.edge_fade, 0.12f, 0.01f, 0.4f),
+                clamp_finite(ssr_pass.ray_bias, 1.0f, 0.0f, 4.0f) };
+            static_scene.post_process.ssr_params2 = {
+                clamp_finite(ssr_pass.resolve_radius, 12.0f, 0.0f, 40.0f),
+                static_cast<float>((std::max)(1, (std::min)(16, ssr_pass.resolve_tap_count))),
+                0.0f, 0.0f };
+            static_scene.post_process.taa_params0 = {
+                clamp_finite(taa_pass.variance_gamma, 1.0f, 0.25f, 3.0f),
+                clamp_finite(taa_pass.sharpness, 0.35f, 0.0f, 1.0f),
+                clamp_finite(taa_pass.max_velocity, 48.0f, 4.0f, 200.0f),
+                0.0f };
             static_scene.post_process.color_filter = clamp_color(post_settings.color_filter);
             static_scene.post_process.render_output = profile_benchmark_mode
                 ? profile_benchmark_render_output
@@ -309,6 +333,8 @@ void framework::render(float elapsed_time)
                 const PostProcessVolumeComponent& volume = *volume_selection.component;
                 static_scene.post_process.exposure = clamp_finite(volume.exposure,
                     static_scene.post_process.exposure, 0.01f, 8.0f);
+                static_scene.post_process.bloom_threshold = clamp_finite(volume.bloom_threshold,
+                    static_scene.post_process.bloom_threshold, 0.0f, 8.0f);
                 static_scene.post_process.bloom_intensity = clamp_finite(volume.bloom_intensity,
                     static_scene.post_process.bloom_intensity, 0.0f, 8.0f);
                 static_scene.post_process.vignette_strength = clamp_finite(volume.vignette_intensity,
@@ -316,7 +342,59 @@ void framework::render(float elapsed_time)
                 static_scene.post_process.color_filter = clamp_color(volume.color_filter);
                 static_scene.post_process.bloom_enabled = volume.bloom_enabled;
                 static_scene.post_process.vignette_enabled = volume.vignette_enabled;
+                static_scene.post_process.ssao_params0.x = clamp_finite(volume.ssao_radius,
+                    static_scene.post_process.ssao_params0.x, 0.05f, 4.0f);
+                static_scene.post_process.ssao_strength = clamp_finite(volume.ssao_intensity,
+                    static_scene.post_process.ssao_strength, 0.0f, 4.0f);
+                static_scene.post_process.ssr_strength = clamp_finite(volume.ssr_intensity,
+                    static_scene.post_process.ssr_strength, 0.0f, 4.0f);
+                static_scene.post_process.taa_enabled = volume.taa_enabled;
+                static_scene.post_process.ssao_enabled = volume.ssao_enabled;
+                static_scene.post_process.ssr_enabled = volume.ssr_enabled;
                 static_scene.post_process.fxaa_enabled = enable_fxaa_shader;
+            }
+            for (const std::string& item : screen_space_overrides)
+            {
+                const std::size_t separator = item.find('=');
+                if (separator == std::string::npos) continue;
+                const std::string key = item.substr(0, separator);
+                const std::string value = item.substr(separator + 1);
+                try
+                {
+                    if (key == "ssao.enabled") static_scene.post_process.ssao_enabled = std::stoi(value) != 0;
+                    else if (key == "ssao.radius") static_scene.post_process.ssao_params0.x = std::stof(value);
+                    else if (key == "ssao.intensity") static_scene.post_process.ssao_strength = std::stof(value);
+                    else if (key == "ssao.power") static_scene.post_process.ssao_params0.y = std::stof(value);
+                    else if (key == "ssao.thin_occluder") static_scene.post_process.ssao_params0.z = std::stof(value);
+                    else if (key == "ssao.slice_count") static_scene.post_process.ssao_params1.x = std::stof(value);
+                    else if (key == "ssao.step_count") static_scene.post_process.ssao_params1.y = std::stof(value);
+                    else if (key == "ssao.fade_start") static_scene.post_process.ssao_params1.z = std::stof(value);
+                    else if (key == "ssao.fade_end") static_scene.post_process.ssao_params1.w = (std::max)(
+                        static_scene.post_process.ssao_params1.z + 0.001f, std::stof(value));
+                    else if (key == "ssao.normal_bias") static_scene.post_process.ssao_params0.w = std::stof(value);
+                    else if (key == "ssao.blur_sharpness") static_scene.post_process.ssao_params2.y = std::stof(value);
+                    else if (key == "ssao.blur_enabled") static_scene.post_process.ssao_params2.x =
+                        std::stoi(value) != 0 ? 1.0f : 0.0f;
+                    else if (key == "ssr.enabled") static_scene.post_process.ssr_enabled = std::stoi(value) != 0;
+                    else if (key == "ssr.max_distance") static_scene.post_process.ssr_params0.x = std::stof(value);
+                    else if (key == "ssr.thickness") static_scene.post_process.ssr_params0.y = std::stof(value);
+                    else if (key == "ssr.stride") static_scene.post_process.ssr_params0.z = std::stof(value);
+                    else if (key == "ssr.max_step") static_scene.post_process.ssr_params0.w = std::stof(value);
+                    else if (key == "ssr.refine_step") static_scene.post_process.ssr_params1.x = std::stof(value);
+                    else if (key == "ssr.max_roughness") static_scene.post_process.ssr_params1.y = std::stof(value);
+                    else if (key == "ssr.edge_fade") static_scene.post_process.ssr_params1.z = std::stof(value);
+                    else if (key == "ssr.ray_bias") static_scene.post_process.ssr_params1.w = std::stof(value);
+                    else if (key == "ssr.resolve_radius") static_scene.post_process.ssr_params2.x = std::stof(value);
+                    else if (key == "ssr.resolve_tap_count") static_scene.post_process.ssr_params2.y = std::stof(value);
+                    else if (key == "taa.enabled") static_scene.post_process.taa_enabled = std::stoi(value) != 0;
+                    else if (key == "taa.blend") static_scene.post_process.taa_blend = std::stof(value);
+                    else if (key == "taa.variance_gamma") static_scene.post_process.taa_params0.x = std::stof(value);
+                    else if (key == "taa.sharpness") static_scene.post_process.taa_params0.y = std::stof(value);
+                    else if (key == "taa.max_velocity") static_scene.post_process.taa_params0.z = std::stof(value);
+                }
+                catch (...)
+                {
+                }
             }
             static_scene.background_color = {
                 clear_color[0], clear_color[1], clear_color[2], clear_color[3] };
