@@ -960,6 +960,9 @@
     <ClCompile Include="RePlayEngine\Editor\Commands\FileEditHistory.cpp">
       <Filter>RePlayEngine\Editor\Commands</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\Help\EditorHelp.cpp">
+      <Filter>RePlayEngine\Editor</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Editor\Commands\MotionEditHistory.cpp">
       <Filter>RePlayEngine\Editor\Commands</Filter>
     </ClCompile>
@@ -1783,6 +1786,9 @@
     </ClInclude>
     <ClInclude Include="RePlayEngine\Editor\Commands\FileEditHistory.h">
       <Filter>RePlayEngine\Editor\Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\Help\EditorHelp.h">
+      <Filter>RePlayEngine\Editor</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Editor\Commands\MotionEditHistory.h">
       <Filter>RePlayEngine\Editor\Commands</Filter>

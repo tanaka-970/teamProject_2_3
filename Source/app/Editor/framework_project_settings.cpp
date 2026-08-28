@@ -119,6 +119,8 @@ void framework::draw_project_settings_panel()
             project_settings.SetDefaultCharacterPrefabGuid(last_saved_prefab_guid);
             save_project_settings();
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.project.use_last_prefab",
+            u8"直前に保存した Prefab を Default Controlled Character に設定します。");
     }
 
     if (ImGui::TreeNode("詳細##DefaultCharacterPrefab"))
@@ -206,6 +208,8 @@ void framework::draw_project_settings_panel()
             project_settings.ClearStartupScene();
             save_project_settings();
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.project.clear_startup_scene",
+            u8"起動時に読み込む Startup Scene の指定を解除します。");
     }
 
     if (ImGui::TreeNode("詳細##StartupScene"))
@@ -268,10 +272,15 @@ void framework::draw_project_settings_panel()
     else
         ImGui::TextDisabled("未設定なら TriggerSceneFlow は遷移せず、既存 LoadScene はそのまま使えます");
 
-    if (flow.IsResolved() && ImGui::Button("Scene Flow を開く"))
+    if (flow.IsResolved())
     {
-        if (const auto* record = asset_database.FindByGuid(flow.guid))
-            load_scene_flow_editor(*record);
+        if (ImGui::Button("Scene Flow を開く"))
+        {
+            if (const auto* record = asset_database.FindByGuid(flow.guid))
+                load_scene_flow_editor(*record);
+        }
+        ReplayEngine::Editor::EditorHelp::Item("button.project.open_scene_flow",
+            u8"設定中の Scene Flow Asset を開いて編集します。");
     }
     if (project_settings.HasSceneFlow())
     {
@@ -282,6 +291,8 @@ void framework::draw_project_settings_panel()
             save_project_settings();
             sync_runtime_scene_flow_asset();
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.project.clear_scene_flow",
+            u8"Active Scene Flow の指定を解除します。");
     }
 
     ImGui::Separator();
@@ -422,6 +433,8 @@ void framework::draw_new_object_scene_controls()
 {
 #ifdef USE_IMGUI
     if (ImGui::Button("新しいシーンを作成...")) ImGui::OpenPopup("NewObjectScenePopup");
+    ReplayEngine::Editor::EditorHelp::Item("button.scene.new",
+        u8"新しい Scene の名前と初期内容を選ぶダイアログを開きます。");
 
     if (ImGui::BeginPopupModal("NewObjectScenePopup", nullptr,
         ImGuiWindowFlags_AlwaysAutoResize))
@@ -438,6 +451,8 @@ void framework::draw_new_object_scene_controls()
             create_object_scene(new_object_scene_name, false);
             ImGui::CloseCurrentPopup();
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.scene.create_empty",
+            u8"GameObject を持たない空の Scene を作成します。");
 
         ImGui::Separator();
 
@@ -465,9 +480,13 @@ void framework::draw_new_object_scene_controls()
             create_object_scene(new_object_scene_name, true);
             ImGui::CloseCurrentPopup();
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.scene.create_default",
+            u8"既定の Prefab を配置した Scene を作成します。未設定なら空の Scene になります。");
 
         ImGui::Separator();
         if (ImGui::Button("キャンセル", { 200.0f, 0.0f })) ImGui::CloseCurrentPopup();
+        ReplayEngine::Editor::EditorHelp::Item("button.scene.cancel_new",
+            u8"新しい Scene を作成せず、ダイアログを閉じます。");
         ImGui::EndPopup();
     }
 #endif

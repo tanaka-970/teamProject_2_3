@@ -203,8 +203,12 @@ void framework::draw_motion_timeline()
 
         const float frame_step = FrameStep(motion_editor_fps);
         if (ImGui::Button(u8"◀ 1F")) step_motion_preview_frames(-1);
+        ReplayEngine::Editor::EditorHelp::Item("button.timeline.step_previous_composition",
+            u8"コンポジションの再生位置を 1 フレーム戻します。");
         ImGui::SameLine();
         if (ImGui::Button(u8"1F ▶")) step_motion_preview_frames(1);
+        ReplayEngine::Editor::EditorHelp::Item("button.timeline.step_next_composition",
+            u8"コンポジションの再生位置を 1 フレーム進めます。");
         ImGui::SameLine();
         if (motion_editor_display_frames)
             ImGui::Text(u8"再生位置: %dF", MotionFrameAt(motion_preview_time, motion_editor_fps));
@@ -301,13 +305,17 @@ void framework::draw_motion_timeline()
     ImGui::SliderFloat(u8"拡大", &motion_timeline_zoom, 1.0f, 12.0f, "%.1fx");
     ImGui::SameLine();
     ImGui::Checkbox(u8"範囲選択", &motion_box_select_mode);
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip(u8"有効中はトラック上をドラッグして範囲内のキーをまとめて選択します。");
+    ReplayEngine::Editor::EditorHelp::Item("control.timeline.box_select",
+        u8"有効中はトラック上をドラッグして範囲内のキーをまとめて選択します。");
 
     const float frame_step = FrameStep(motion_editor_fps);
     if (ImGui::Button(u8"◀ 1F")) step_motion_preview_frames(-1);
+    ReplayEngine::Editor::EditorHelp::Item("button.timeline.step_previous",
+        u8"再生位置を 1 フレーム戻します。");
     ImGui::SameLine();
     if (ImGui::Button(u8"1F ▶")) step_motion_preview_frames(1);
+    ReplayEngine::Editor::EditorHelp::Item("button.timeline.step_next",
+        u8"再生位置を 1 フレーム進めます。");
     ImGui::SameLine();
     if (motion_editor_display_frames)
         ImGui::Text(u8"再生位置: %dF", MotionFrameAt(motion_preview_time, motion_editor_fps));
@@ -339,14 +347,24 @@ void framework::draw_motion_timeline()
             motion_selected_key = -1;
             motion_selected_keys.clear();
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.timeline.add_key",
+            u8"現在の再生位置の値を読み取り、選択中の Track にキーを追加します。");
         ImGui::SameLine();
         if (ImGui::Button(u8"コピー")) copy_motion_keys();
+        ReplayEngine::Editor::EditorHelp::Item("button.timeline.copy_keys",
+            u8"選択中のキーを内部クリップボードへコピーします。");
         ImGui::SameLine();
         if (ImGui::Button(u8"貼り付け")) paste_motion_keys();
+        ReplayEngine::Editor::EditorHelp::Item("button.timeline.paste_keys",
+            u8"内部クリップボードのキーを現在位置へ貼り付けます。");
         ImGui::SameLine();
         if (ImGui::Button(u8"複製")) duplicate_motion_keys();
+        ReplayEngine::Editor::EditorHelp::Item("button.timeline.duplicate_keys",
+            u8"選択中のキーを複製して同じ Track へ追加します。");
         ImGui::SameLine();
         if (ImGui::Button(u8"削除")) delete_motion_keys();
+        ReplayEngine::Editor::EditorHelp::Item("button.timeline.delete_keys",
+            u8"選択中のキーを Track から削除します。");
         ImGui::SetNextItemWidth(92.0f);
         ImGui::DragFloat(u8"倍率##MotionKeyTimeScale", &motion_key_time_scale,
             0.01f, 0.01f, 100.0f, "%.2fx");
@@ -369,6 +387,8 @@ void framework::draw_motion_timeline()
         ImGui::SameLine();
         if (ImGui::Button(u8"時間スケール適用##MotionKeyTimeScaleApply"))
             scale_motion_key_times(motion_key_time_scale, motion_key_time_scale_pivot);
+        ReplayEngine::Editor::EditorHelp::Item("button.timeline.scale_key_times",
+            u8"選択中のキーの時間間隔を倍率で伸縮します。");
     }
 
     ImGui::Separator();
@@ -500,6 +520,8 @@ void framework::draw_motion_timeline()
                 ContainsIndex(motion_selected_keys, key_index);
             ImGui::SmallButton(motion_selected_track == track_index &&
                 (motion_selected_key == key_index || multi_selected) ? "◆" : "◇");
+            ReplayEngine::Editor::EditorHelp::Item("button.timeline.key_marker",
+                u8"タイムラインのキーを選択します。ドラッグすると時間位置を移動できます。");
             if (!motion_box_select_mode && ImGui::IsItemClicked())
             {
                 if (motion_selected_track != track_index)
@@ -580,6 +602,8 @@ void framework::draw_motion_timeline()
             ImGui::PushID(event_index);
             ImGui::SmallButton(motion_selected_event_track == event_track_index &&
                 motion_selected_event == event_index ? "●" : "○");
+            ReplayEngine::Editor::EditorHelp::Item("button.timeline.event_marker",
+                u8"タイムラインのイベントを選択します。ドラッグすると発火時刻を移動できます。");
             if (ImGui::IsItemClicked())
             {
                 motion_selected_event_track = event_track_index;
@@ -1142,6 +1166,8 @@ void framework::draw_motion_graph_editor()
         motion_edit_history.Commit(motion_editor_asset);
         motion_editor_dirty = true;
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.timeline.auto_smooth",
+        u8"前後のキーからベジェハンドルを自動計算して、動きを滑らかにします。");
     ImGui::SameLine();
     if (ImGui::Button(u8"線形"))
     {
@@ -1150,6 +1176,8 @@ void framework::draw_motion_graph_editor()
         motion_edit_history.Commit(motion_editor_asset);
         motion_editor_dirty = true;
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.timeline.linear_easing",
+        u8"キー間の値を一定速度で補間します。");
     ImGui::SameLine();
     if (ImGui::Button(u8"イーズイン"))
     {
@@ -1159,6 +1187,8 @@ void framework::draw_motion_graph_editor()
         key.bezier.in_handle = { 1.0f, 1.0f };
         motion_edit_history.Commit(motion_editor_asset); motion_editor_dirty = true;
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.timeline.ease_in",
+        u8"開始時をゆっくり、終了時を速くするベジェ補間を設定します。");
     ImGui::SameLine();
     if (ImGui::Button(u8"イーズアウト"))
     {
@@ -1168,6 +1198,8 @@ void framework::draw_motion_graph_editor()
         key.bezier.in_handle = { 0.58f, 1.0f };
         motion_edit_history.Commit(motion_editor_asset); motion_editor_dirty = true;
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.timeline.ease_out",
+        u8"開始時を速く、終了時をゆっくりするベジェ補間を設定します。");
     ImGui::SameLine();
     if (ImGui::Button(u8"イーズインアウト"))
     {
@@ -1177,6 +1209,8 @@ void framework::draw_motion_graph_editor()
         key.bezier.in_handle = { 0.58f, 1.0f };
         motion_edit_history.Commit(motion_editor_asset); motion_editor_dirty = true;
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.timeline.ease_in_out",
+        u8"開始時と終了時をゆっくりするベジェ補間を設定します。");
     ImGui::SameLine();
     if (ImGui::Button(u8"保持"))
     {
@@ -1184,6 +1218,8 @@ void framework::draw_motion_graph_editor()
         key.easing = MotionEasing::Step;
         motion_edit_history.Commit(motion_editor_asset); motion_editor_dirty = true;
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.timeline.step_easing",
+        u8"次のキーまで値を変化させず、段階的に切り替える補間を設定します。");
 
     if (key.easing == MotionEasing::CustomBezier)
     {

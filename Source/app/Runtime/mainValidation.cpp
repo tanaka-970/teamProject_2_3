@@ -64,6 +64,21 @@ namespace ReplayEngine::Runtime::Detail
         report << "RESULT " << (ok ? "OK" : "NG") << '\n';
         for (const std::string& line : lines) report << line << '\n';
     }
+
+    int RunHeadlessEditorHelpValidation(const char* command_line)
+    {
+        std::istringstream arguments(command_line != nullptr ? command_line : "");
+        std::string command;
+        if (!(arguments >> command) || command != "--validate-editor-help") return -1;
+
+        std::string report;
+        const bool ok = ReplayEngine::Editor::EditorHelp::ValidateRoundTrip(report);
+        WriteValidationResultFile("EditorHelp.txt", "REPLAY_EDITOR_HELP_VALIDATION", ok,
+            { report });
+        std::fprintf(stderr, "EditorHelp validation: RESULT %s (%s)\n",
+            ok ? "OK" : "NG", report.c_str());
+        return ok ? 0 : 1800;
+    }
 }
 
 namespace

@@ -47,6 +47,7 @@ void framework::draw_project_browser()
         selected_asset_guid.clear();
         project_tree_reveal_selection_pending = true;
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.project.breadcrumb_root");
     std::filesystem::path walked;
     for (const std::filesystem::path& part : project_current_folder)
     {
@@ -63,6 +64,7 @@ void framework::draw_project_browser()
             selected_asset_guid.clear();
             project_tree_reveal_selection_pending = true;
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.project.breadcrumb_folder");
         ImGui::PopID();
     }
 
@@ -70,8 +72,8 @@ void framework::draw_project_browser()
     ImGui::SetNextItemWidth(220.0f);
     ImGui::InputTextWithHint("##ProjectSearch", "Search Project...",
         asset_search_text, IM_ARRAYSIZE(asset_search_text));
-    if (asset_search_text[0] != '\0' && ImGui::IsItemHovered())
-        ImGui::SetTooltip("Project 全体を再帰検索します");
+    ReplayEngine::Editor::EditorHelp::Item("control.project.search",
+        u8"Project 全体を再帰検索します");
     ImGui::SameLine();
     const char* filters[] =
         { "All", "Model", "Prefab", "Scene", "Material", "Script", "Shader", "Flow", "Motion", "Font", "Localization", "EffectPreset", "Input", "Other", "Easing" };

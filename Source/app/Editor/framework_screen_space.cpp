@@ -22,18 +22,38 @@ void framework::draw_screen_space_settings()
                 project_settings.SetSsaoEnabled(enable_ssao);
                 save_project_settings();
             }
+            ReplayEngine::Editor::EditorHelp::Item("screen_space.ssao.enabled",
+                u8"SSAO を有効にすると、接地部や隙間に環境遮蔽を加えます。");
             if (!ssao_pass.Initialized())
                 ImGui::TextColored(ImVec4(1, 0.4f, 0.4f, 1), "初期化に失敗しています");
 
             screen_space_settings_changed |= ImGui::SliderFloat("探索半径 (m)", &ssao_pass.radius, 0.05f, 4.0f, "%.2f");
+            ReplayEngine::Editor::EditorHelp::Item("screen_space.ssao.radius",
+                u8"探索半径 (m)。0.05〜4.00 m の範囲で、周囲の遮蔽を探す距離を指定します。");
             screen_space_settings_changed |= ImGui::SliderFloat("強さ", &ssao_pass.intensity, 0.0f, 1.0f, "%.2f");
+            ReplayEngine::Editor::EditorHelp::Item("screen_space.ssao.intensity",
+                u8"強さ (0〜1)。接地部や隙間へ加える暗さの量を指定します。");
             screen_space_settings_changed |= ImGui::SliderFloat("コントラスト", &ssao_pass.power, 0.5f, 4.0f, "%.2f");
+            ReplayEngine::Editor::EditorHelp::Item("screen_space.ssao.power",
+                u8"コントラスト (0.5〜4.0)。遮蔽の暗部をどれだけ強調するかを指定します。");
             screen_space_settings_changed |= ImGui::SliderInt("方向スライス数", &ssao_pass.slice_count, 1, 8);
+            ReplayEngine::Editor::EditorHelp::Item("screen_space.ssao.slice_count",
+                u8"方向スライス数 (1〜8)。周囲を調べる方向の本数で、多いほど輪郭を細かく調べます。");
             screen_space_settings_changed |= ImGui::SliderInt("探索ステップ数", &ssao_pass.step_count, 2, 12);
+            ReplayEngine::Editor::EditorHelp::Item("screen_space.ssao.step_count",
+                u8"探索ステップ数 (2〜12)。各方向で深度を調べる回数で、多いほど探索が細かくなります。");
             screen_space_settings_changed |= ImGui::SliderFloat("法線オフセット", &ssao_pass.normal_bias, 0.0f, 2.0f, "%.2f");
+            ReplayEngine::Editor::EditorHelp::Item("screen_space.ssao.normal_bias",
+                u8"法線オフセット (0〜2)。表面自身を遮蔽物として拾う量をずらします。");
             screen_space_settings_changed |= ImGui::SliderFloat("薄物補正", &ssao_pass.thin_occluder, 0.0f, 1.0f, "%.2f");
+            ReplayEngine::Editor::EditorHelp::Item("screen_space.ssao.thin_occluder",
+                u8"薄物補正 (0〜1)。薄い遮蔽物を遮蔽として反映する量を指定します。");
             screen_space_settings_changed |= ImGui::SliderFloat("フェード開始 (m)", &ssao_pass.fade_start, 1.0f, 400.0f, "%.0f");
+            ReplayEngine::Editor::EditorHelp::Item("screen_space.ssao.fade_start",
+                u8"フェード開始 (m)。この距離から SSAO を遠景で弱め始めます。");
             screen_space_settings_changed |= ImGui::SliderFloat("フェード終了 (m)", &ssao_pass.fade_end, 2.0f, 800.0f, "%.0f");
+            ReplayEngine::Editor::EditorHelp::Item("screen_space.ssao.fade_end",
+                u8"フェード終了 (m)。この距離で SSAO を遠景から無くします。");
             ImGui::TreePop();
         }
 
@@ -46,21 +66,45 @@ void framework::draw_screen_space_settings()
                 project_settings.SetSsrEnabled(enable_ssr);
                 save_project_settings();
             }
+            ReplayEngine::Editor::EditorHelp::Item("screen_space.ssr.enabled",
+                u8"SSR を有効にすると、画面内に映っている前フレームの照明結果を反射として使います。");
             if (!ssr_pass.Initialized())
                 ImGui::TextColored(ImVec4(1, 0.4f, 0.4f, 1), "初期化に失敗しています");
             ImGui::TextDisabled("反射源は前フレームの照明結果です。金属/低ラフネス面で効きます。");
 
             screen_space_settings_changed |= ImGui::SliderFloat("レイ長 (m)", &ssr_pass.max_distance, 1.0f, 200.0f, "%.0f");
+            ReplayEngine::Editor::EditorHelp::Item("screen_space.ssr.max_distance",
+                u8"レイ長 (m)。1〜200 m の範囲で、反射を探す最大距離を指定します。");
             screen_space_settings_changed |= ImGui::SliderFloat("交差の厚み", &ssr_pass.thickness, 0.01f, 2.0f, "%.2f");
+            ReplayEngine::Editor::EditorHelp::Item("screen_space.ssr.thickness",
+                u8"交差の厚み (m)。反射レイが深度へ交差したとみなす奥行き幅を指定します。");
             screen_space_settings_changed |= ImGui::SliderFloat("ステップ幅 (px)", &ssr_pass.stride, 1.0f, 16.0f, "%.1f");
+            ReplayEngine::Editor::EditorHelp::Item("screen_space.ssr.stride",
+                u8"ステップ幅 (px)。画面上で反射レイを進める画素間隔で、小さいほど交差を細かく探します。");
             screen_space_settings_changed |= ImGui::SliderInt("最大マーチ数", &ssr_pass.max_step, 4, 64);
+            ReplayEngine::Editor::EditorHelp::Item("screen_space.ssr.max_step",
+                u8"最大マーチ数 (4〜64)。反射レイを進める回数の上限で、多いほど遠くまで探せます。");
             screen_space_settings_changed |= ImGui::SliderInt("二分探索回数", &ssr_pass.refine_step, 0, 8);
+            ReplayEngine::Editor::EditorHelp::Item("screen_space.ssr.refine_step",
+                u8"二分探索回数 (0〜8)。交差位置を絞り込む回数で、多いほど境界を細かく求めます。");
             screen_space_settings_changed |= ImGui::SliderFloat("適用する最大ラフネス", &ssr_pass.max_roughness, 0.05f, 1.0f, "%.2f");
+            ReplayEngine::Editor::EditorHelp::Item("screen_space.ssr.max_roughness",
+                u8"適用する最大ラフネス (0.05〜1.0)。この値以下の粗さの面だけへ SSR を適用します。");
             screen_space_settings_changed |= ImGui::SliderFloat("強さ##ssr", &ssr_pass.intensity, 0.0f, 2.0f, "%.2f");
+            ReplayEngine::Editor::EditorHelp::Item("screen_space.ssr.intensity",
+                u8"強さ (0〜2)。画面へ混ぜる反射の量を指定します。");
             screen_space_settings_changed |= ImGui::SliderFloat("画面端フェード", &ssr_pass.edge_fade, 0.01f, 0.4f, "%.3f");
+            ReplayEngine::Editor::EditorHelp::Item("screen_space.ssr.edge_fade",
+                u8"画面端フェード (0.01〜0.4)。画面の端で反射を弱める幅を正規化座標で指定します。");
             screen_space_settings_changed |= ImGui::SliderFloat("レイ押し出し", &ssr_pass.ray_bias, 0.0f, 4.0f, "%.2f");
+            ReplayEngine::Editor::EditorHelp::Item("screen_space.ssr.ray_bias",
+                u8"レイ押し出し (0〜4)。反射レイの開始位置を表面からずらして自己交差を抑えます。");
             screen_space_settings_changed |= ImGui::SliderFloat("resolve半径 (px)", &ssr_pass.resolve_radius, 0.0f, 40.0f, "%.1f");
+            ReplayEngine::Editor::EditorHelp::Item("screen_space.ssr.resolve_radius",
+                u8"resolve 半径 (px)。反射を周囲から集める画面上の半径を指定します。");
             screen_space_settings_changed |= ImGui::SliderInt("resolveタップ数", &ssr_pass.resolve_tap_count, 1, 16);
+            ReplayEngine::Editor::EditorHelp::Item("screen_space.ssr.resolve_tap_count",
+                u8"resolve タップ数 (1〜16)。反射を集めるサンプル数で、多いほど滑らかになります。");
             ImGui::TreePop();
         }
 
@@ -75,14 +119,24 @@ void framework::draw_screen_space_settings()
                 project_settings.SetTaaEnabled(enable_taa);
                 save_project_settings();
             }
+            ReplayEngine::Editor::EditorHelp::Item("screen_space.taa.enabled",
+                u8"TAA を有効にすると、複数フレームの画像を使ってちらつきとギザギザを抑えます。");
             if (!taa_pass.Initialized())
                 ImGui::TextColored(ImVec4(1, 0.4f, 0.4f, 1), "初期化に失敗しています");
             ImGui::TextDisabled("履歴比率を上げるとエッジは滑らかに、下げると残像が減ります。");
 
             screen_space_settings_changed |= ImGui::SliderFloat("履歴比率", &taa_pass.blend, 0.0f, 0.98f, "%.2f");
+            ReplayEngine::Editor::EditorHelp::Item("screen_space.taa.blend",
+                u8"履歴比率 (0〜0.98)。過去フレームを混ぜる量で、大きいほど滑らかですが残像が増えます。");
             screen_space_settings_changed |= ImGui::SliderFloat("クリップ幅", &taa_pass.variance_gamma, 0.25f, 3.0f, "%.2f");
+            ReplayEngine::Editor::EditorHelp::Item("screen_space.taa.variance_gamma",
+                u8"クリップ幅 (0.25〜3.0)。履歴色を現在フレームへ合わせる許容幅を指定します。");
             screen_space_settings_changed |= ImGui::SliderFloat("シャープ化", &taa_pass.sharpness, 0.0f, 1.0f, "%.2f");
+            ReplayEngine::Editor::EditorHelp::Item("screen_space.taa.sharpness",
+                u8"シャープ化 (0〜1)。TAA 後の画像へ加える輪郭強調の量を指定します。");
             screen_space_settings_changed |= ImGui::SliderFloat("速度リジェクト (px)", &taa_pass.max_velocity, 4.0f, 200.0f, "%.0f");
+            ReplayEngine::Editor::EditorHelp::Item("screen_space.taa.max_velocity",
+                u8"速度リジェクト (px)。この画面速度を超える画素では履歴を捨てて残像を抑えます。");
             ImGui::TextDisabled("履歴: %s", taa_pass.HistoryValid() ? "有効" : "無効");
             ImGui::TreePop();
         }
@@ -285,6 +339,7 @@ void framework::draw_screen_space_settings()
             taa_pass.InvalidateHistory();
             save_project_settings();
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.screen_space.reset_defaults");
         if (screen_space_settings_changed) save_project_settings();
         if (external_file_history.InTransaction() && !ImGui::IsAnyItemActive())
         {

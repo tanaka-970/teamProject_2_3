@@ -6,6 +6,7 @@
 
 #include <array>
 #include <algorithm>
+#include <cstddef>
 #include <string>
 #include <vector>
 
@@ -93,6 +94,31 @@ namespace ReplayEngine::UI
 
         // 新規 kind は Count の直前へ追加する。既存 Scene の enum 値を変えない。
     };
+
+    inline const char* UIEffectKindName(UIEffectKind kind) noexcept
+    {
+        static constexpr std::array<const char*,
+            static_cast<std::size_t>(UIEffectKind::Count)> names{
+            "Blur", "Glow", "ColorAdjust", "Noise", "Shake", "Mask", "Wipe",
+            "Dissolve", "Distortion", "ChromaticAberration", "Kuwahara", "Halftone",
+            "DirectionalBlur", "RadialBlur", "RotationalBlur", "Vignette",
+            "LightStreaks", "LensDistortion", "Posterize", "Threshold", "ColorRamp",
+            "Levels", "Temperature", "EdgeDetect", "Outline", "LongShadow",
+            "CrossHatch", "BrushStroke", "Mosaic", "Crystallize", "StainedGlass",
+            "Twirl", "Spherize", "Ripple", "PolarCoordinates", "Scanlines", "CRT",
+            "Glitch", "Dither", "VHS", "Letterbox", "Waveform", "DisplacementMap",
+            "TurbulentDisplace", "FractalNoise", "MotionBlur", "Echo", "DropShadow",
+            "InnerShadow", "LUT", "ToneCurve", "MatteComposite", "MatteMorphology",
+            "BevelEmboss", "Kaleidoscope", "PageCurl", "AsciiLedMatrix", "FeedbackZoom",
+            "LiquidGlass", "LightSweep", "Shockwave", "PixelSort", "Hologram",
+            "IridescentFoil", "RadarSweep", "EnergyPulse", "CircuitFlow", "HeatHaze",
+            "WaterCaustics", "VoronoiShatter", "InkBleed", "BurnReveal", "PortalVortex",
+            "FrostCrack"
+        };
+        const int index = static_cast<int>(kind);
+        if (index < 0 || index >= static_cast<int>(names.size())) return "";
+        return names[static_cast<std::size_t>(index)];
+    }
 
     // Effect Stack 全体へ掛ける共通の適用範囲。
     // TextureMask は白黒画像を指定することで、矩形/円形では表せない

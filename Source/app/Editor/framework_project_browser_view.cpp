@@ -653,6 +653,7 @@ void framework::draw_project_folder_contents()
                 project_browser_focused = true;
                 project_tree_reveal_selection_pending = true;
             }
+            ReplayEngine::Editor::EditorHelp::Item("button.project.asset_easing_icon");
             ImGui::PopStyleColor(3);
             const ReplayEngine::Reflection::AssetReference reference(record->guid);
             const ReplayEngine::Motion::EasingCurveAsset* curve =
@@ -672,6 +673,7 @@ void framework::draw_project_folder_contents()
                 project_browser_focused = true;
                 project_tree_reveal_selection_pending = true;
             }
+            ReplayEngine::Editor::EditorHelp::Item("button.project.asset_kind_icon");
             ImGui::PopStyleColor();
         }
 
@@ -740,9 +742,8 @@ void framework::draw_project_folder_contents()
         }
 
         if (icon_hovered)
-        {
-            ImGui::SetTooltip("%s", entry.path.generic_u8string().c_str());
-        }
+            ReplayEngine::Editor::EditorHelp::Item(
+                "control.project.entry_path", entry.path.generic_u8string().c_str());
 
         // 名前。改名中はインライン入力に差し替える。
         ImGui::PushItemWidth(project_thumbnail_size);

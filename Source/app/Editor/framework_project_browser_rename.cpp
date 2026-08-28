@@ -984,12 +984,14 @@ void framework::draw_project_delete_popup()
         project_delete_confirmed();
         ImGui::CloseCurrentPopup();
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.project.delete_confirm");
     ImGui::SameLine();
     if (ImGui::Button("キャンセル"))
     {
         project_delete_target.clear();
         ImGui::CloseCurrentPopup();
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.project.delete_cancel");
     ImGui::EndPopup();
 }
 

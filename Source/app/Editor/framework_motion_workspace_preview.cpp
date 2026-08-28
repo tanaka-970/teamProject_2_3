@@ -41,8 +41,10 @@ void framework::draw_motion_preview()
 
     if (ImGui::Button(motion_preview_active ? u8"停止" : u8"再生"))
         toggle_motion_preview_playback();
+    ReplayEngine::Editor::EditorHelp::Item("button.motion.preview_playback");
     ImGui::SameLine();
     if (ImGui::Button(u8"復元")) stop_motion_preview();
+    ReplayEngine::Editor::EditorHelp::Item("button.motion.preview_restore");
     ImGui::SameLine();
     ImGui::Checkbox(u8"ループ", &motion_preview_loop);
     ImGui::SetNextItemWidth(140.0f);
