@@ -6,10 +6,11 @@
 void framework::draw_screen_space_settings()
 {
 #ifdef USE_IMGUI
+    project_settings_file_undo_enabled = object_editor_context.CanEdit();
     if (ImGui::CollapsingHeader("スクリーン空間パス (SSAO / SSR / TAA)"))
     {
         bool screen_space_settings_changed = false;
-        ImGui::TextDisabled("効果が見えないときは Render Output を SSAO / SSR に切り替えて");
+        ImGui::TextDisabled(u8"効果が見えないときは描画出力を SSAO / SSR に切り替えて");
         ImGui::TextDisabled("バッファそのものを確認してください。");
 
         // ---------------- SSAO ----------------
@@ -237,7 +238,7 @@ void framework::draw_screen_space_settings()
             ImGui::SliderFloat("赤になるライト数", &tiled_deferred.heatmap_scale, 1.0f, 128.0f, "%.0f");
             ImGui::Text("タイル数: %u x %u", tiled_deferred.TileCountX(), tiled_deferred.TileCountY());
             ImGui::Text("投入ライト数: %zu", tiled_deferred.LightCount());
-            ImGui::TextDisabled("※デバッグ表示(Render Output)中はPS版が使われます");
+            ImGui::TextDisabled(u8"※描画出力のデバッグ表示中はPS版が使われます");
             ImGui::TreePop();
         }
 
@@ -285,6 +286,12 @@ void framework::draw_screen_space_settings()
             save_project_settings();
         }
         if (screen_space_settings_changed) save_project_settings();
+        if (external_file_history.InTransaction() && !ImGui::IsAnyItemActive())
+        {
+            std::string undo_error;
+            external_file_history.Commit(undo_error);
+            if (!undo_error.empty()) project_settings_status = undo_error;
+        }
     }
 #endif
 }

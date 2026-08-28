@@ -258,7 +258,8 @@ void framework::draw_editor_main_menu()
         const bool motion_workspace = active_editor_workspace == editor_workspace::motion;
         const bool external_context = !atlas_context && !motion_workspace &&
             (project_browser_focused || selected_editor_object == editor_selection::asset ||
-                selected_editor_object == editor_selection::world);
+                selected_editor_object == editor_selection::world ||
+                selected_editor_object == editor_selection::rendering);
         const bool scene_context = !atlas_context && !motion_workspace && !external_context;
         const bool scene_edit_blocked = scene_context && !object_editor_context.CanEdit();
         const bool can_undo = atlas_context ? sprite_atlas_history_cursor > 0
