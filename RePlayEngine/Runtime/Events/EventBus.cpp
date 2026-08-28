@@ -102,9 +102,24 @@ namespace ReplayEngine::Runtime
             subscriptions_.end());
     }
 
+    bool EventBus::HasSubscribers(Reflection::TypeGUID type) const noexcept
+    {
+        if (!type.IsValid()) return false;
+        for (const Subscription& subscription : subscriptions_)
+        {
+            if (subscription.alive && subscription.type == type) return true;
+        }
+        return false;
+    }
+
     void EventBus::Publish(EventRecord record)
     {
         if (!record.type.IsValid()) return;
+        if (queue_.size() >= maximum_pending_events)
+        {
+            ++dropped_count_;
+            return;
+        }
         queue_.push_back(std::move(record));
     }
 

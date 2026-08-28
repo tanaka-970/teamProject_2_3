@@ -137,6 +137,31 @@ namespace ReplayEngine::Runtime
             Reflection::MakeTypeGUID("a1000000000000000000000000000012");
         inline constexpr Reflection::TypeGUID CompositionMarker =
             Reflection::MakeTypeGUID("a1000000000000000000000000000013");
+
+        // 接触。C++ の OnCollisionXxx / OnTriggerXxx と同じ瞬間に発行する。
+        // source が「受け取る側」、target が「相手」。
+        // payload: point_x/y/z, normal_x/y/z, hit_kind, other_collider, other_valid
+        inline constexpr Reflection::TypeGUID CollisionEnter =
+            Reflection::MakeTypeGUID("a1000000000000000000000000000014");
+        inline constexpr Reflection::TypeGUID CollisionStay =
+            Reflection::MakeTypeGUID("a1000000000000000000000000000015");
+        inline constexpr Reflection::TypeGUID CollisionExit =
+            Reflection::MakeTypeGUID("a1000000000000000000000000000016");
+        // payload: self_collider, other_collider, self_is_trigger
+        inline constexpr Reflection::TypeGUID TriggerEnter =
+            Reflection::MakeTypeGUID("a1000000000000000000000000000017");
+        inline constexpr Reflection::TypeGUID TriggerStay =
+            Reflection::MakeTypeGUID("a1000000000000000000000000000018");
+        inline constexpr Reflection::TypeGUID TriggerExit =
+            Reflection::MakeTypeGUID("a1000000000000000000000000000019");
+        inline constexpr Reflection::TypeGUID ButtonClicked =
+            Reflection::MakeTypeGUID("a1000000000000000000000000000020");
+        inline constexpr Reflection::TypeGUID InputFieldValueChanged =
+            Reflection::MakeTypeGUID("a1000000000000000000000000000021");
+        inline constexpr Reflection::TypeGUID AnimatorStateChanged =
+            Reflection::MakeTypeGUID("a1000000000000000000000000000022");
+        inline constexpr Reflection::TypeGUID SliderValueChanged =
+            Reflection::MakeTypeGUID("a1000000000000000000000000000023");
     }
 
     // イベントの発行と購読。
@@ -197,6 +222,13 @@ namespace ReplayEngine::Runtime
         // ---- 状態 --------------------------------------------------------------
 
         std::size_t SubscriberCount() const noexcept { return subscriptions_.size(); }
+
+        // この型に生きている購読があるか。
+        //
+        // Publish は購読者数を見ずに必ず積むので、毎フレーム発行する種類の
+        // イベントは「組む前に」ここで抜ける。組んでから捨てるのでは
+        // PropertyBag の確保が減らず、意味がない。
+        bool HasSubscribers(Reflection::TypeGUID type) const noexcept;
         std::size_t PendingEventCount() const noexcept { return queue_.size(); }
         std::uint64_t DispatchedEventCount() const noexcept { return dispatched_count_; }
         std::uint64_t DroppedEventCount() const noexcept { return dropped_count_; }
@@ -222,6 +254,7 @@ namespace ReplayEngine::Runtime
         // 配送の中から発行されたイベントを同じフレームで配り続けると、
         // 相互に発行し合う 2 つの Behaviour で止まらなくなる。
         static constexpr int maximum_dispatch_rounds = 8;
+        static constexpr std::size_t maximum_pending_events = 4096;
 
         std::vector<Subscription> subscriptions_;
         std::vector<EventRecord> queue_;

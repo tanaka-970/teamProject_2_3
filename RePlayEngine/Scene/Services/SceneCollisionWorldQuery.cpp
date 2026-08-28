@@ -15,14 +15,66 @@
 #include "../../Physics/CollisionLayers.h"
 #include "../../Physics/ShapeSweep.h"
 
+#include <DirectXCollision.h>
+
 #include <algorithm>
 #include <cmath>
+#include <unordered_set>
 
 using namespace DirectX;
 
 namespace ReplayEngine::Scene
 {
     namespace Layers = Physics::CollisionLayers;
+
+    namespace
+    {
+        XMFLOAT3 Add(const XMFLOAT3& a, const XMFLOAT3& b) noexcept
+        {
+            return { a.x + b.x, a.y + b.y, a.z + b.z };
+        }
+
+        XMFLOAT3 Scale(const XMFLOAT3& value, float factor) noexcept
+        {
+            return { value.x * factor, value.y * factor, value.z * factor };
+        }
+
+        XMFLOAT3 Normalize(const XMFLOAT3& value) noexcept
+        {
+            const float length = std::sqrt(value.x * value.x + value.y * value.y +
+                value.z * value.z);
+            return length > 1.0e-6f
+                ? XMFLOAT3{ value.x / length, value.y / length, value.z / length }
+                : XMFLOAT3{};
+        }
+
+        XMFLOAT4 NormalizeRotation(const XMFLOAT4& value) noexcept
+        {
+            XMFLOAT4 result{};
+            XMVECTOR quaternion = XMLoadFloat4(&value);
+            if (XMVectorGetX(XMVector4LengthSq(quaternion)) <= 1.0e-8f)
+                quaternion = XMQuaternionIdentity();
+            else quaternion = XMQuaternionNormalize(quaternion);
+            XMStoreFloat4(&result, quaternion);
+            return result;
+        }
+
+        PhysicsQueryHit MakeQueryHit(const SceneCollisionWorld::Registration& entry,
+            const XMFLOAT3& point, const XMFLOAT3& normal, float distance,
+            float fraction) noexcept
+        {
+            PhysicsQueryHit hit;
+            hit.point = point;
+            hit.normal = normal;
+            hit.distance = distance;
+            hit.fraction = fraction;
+            hit.source.backend = CollisionBackend::SceneCollider;
+            hit.source.object = entry.object;
+            hit.source.collider = entry.collider;
+            hit.valid = true;
+            return hit;
+        }
+    }
 
     bool SceneCollisionWorld::SweepLocalTriangles(const XMFLOAT4X4& world,
         const XMFLOAT4X4& inverse_world, bool negative_scale, float local_radius_scale,
@@ -372,6 +424,238 @@ namespace ReplayEngine::Scene
         hit.valid = true;
         last_ray_source_ = hit.source;
         return true;
+    }
+
+    bool SceneCollisionWorld::RaycastAllFiltered(const XMFLOAT3& origin,
+        const XMFLOAT3& direction, float max_distance,
+        const CollisionQueryFilter& filter, std::vector<PhysicsQueryHit>& hits) const
+    {
+        hits.clear();
+        if (scene_ == nullptr || max_distance <= 0.0f) return false;
+        const XMFLOAT3 normalized = Normalize(direction);
+        if (normalized.x == 0.0f && normalized.y == 0.0f && normalized.z == 0.0f)
+            return false;
+        const XMFLOAT3 end = Add(origin, Scale(normalized, max_distance));
+
+        for (const Registration& entry : entries_)
+        {
+            if (!entry.active || !entry.bounds_valid || entry.trigger) continue;
+            if (filter.ignore_object.Valid() && entry.object == filter.ignore_object) continue;
+            if (!Layers::Interact(filter.layer, filter.mask, entry.layer, entry.mask)) continue;
+            const Components::ColliderComponent* collider = Resolve(entry);
+            if (collider == nullptr || !collider->BlocksMovement()) continue;
+
+            Physics::SphereCastHit shape_hit{};
+            if (!SweepSingleCollider(*collider, origin, end, 0.0f, shape_hit)) continue;
+            const float fraction = (std::max)(0.0f, (std::min)(1.0f, shape_hit.fraction));
+            hits.push_back(MakeQueryHit(entry, shape_hit.position, shape_hit.normal,
+                fraction * max_distance, fraction));
+        }
+        std::sort(hits.begin(), hits.end(), [](const PhysicsQueryHit& a,
+            const PhysicsQueryHit& b) { return a.distance < b.distance; });
+        return !hits.empty();
+    }
+
+    bool SceneCollisionWorld::SphereCastAll(const XMFLOAT3& origin,
+        const XMFLOAT3& direction, float radius, float max_distance,
+        const CollisionQueryFilter& filter, std::vector<PhysicsQueryHit>& hits) const
+    {
+        hits.clear();
+        if (scene_ == nullptr || radius < 0.0f || max_distance < 0.0f) return false;
+        const XMFLOAT3 normalized = Normalize(direction);
+        if (max_distance > 0.0f && normalized.x == 0.0f &&
+            normalized.y == 0.0f && normalized.z == 0.0f) return false;
+        const XMFLOAT3 end = Add(origin, Scale(normalized, max_distance));
+
+        for (const Registration& entry : entries_)
+        {
+            if (!entry.active || !entry.bounds_valid || entry.trigger) continue;
+            if (filter.ignore_object.Valid() && entry.object == filter.ignore_object) continue;
+            if (!Layers::Interact(filter.layer, filter.mask, entry.layer, entry.mask)) continue;
+            const Components::ColliderComponent* collider = Resolve(entry);
+            if (collider == nullptr || !collider->BlocksMovement()) continue;
+
+            Physics::SphereCastHit shape_hit{};
+            if (!SweepSingleCollider(*collider, origin, end, radius, shape_hit)) continue;
+            const float fraction = (std::max)(0.0f, (std::min)(1.0f, shape_hit.fraction));
+            const XMFLOAT3 point = Add(shape_hit.center, Scale(shape_hit.normal, -radius));
+            hits.push_back(MakeQueryHit(entry, point, shape_hit.normal,
+                fraction * max_distance, fraction));
+        }
+        std::sort(hits.begin(), hits.end(), [](const PhysicsQueryHit& a,
+            const PhysicsQueryHit& b) { return a.distance < b.distance; });
+        return !hits.empty();
+    }
+
+    bool SceneCollisionWorld::OverlapSphere(const XMFLOAT3& center, float radius,
+        const CollisionQueryFilter& filter, std::vector<PhysicsQueryHit>& hits) const
+    {
+        hits.clear();
+        if (scene_ == nullptr || radius < 0.0f) return false;
+        for (const Registration& entry : entries_)
+        {
+            if (!entry.active || !entry.bounds_valid) continue;
+            if (filter.ignore_object.Valid() && entry.object == filter.ignore_object) continue;
+            if (!Layers::Interact(filter.layer, filter.mask, entry.layer, entry.mask)) continue;
+            const Components::ColliderComponent* collider = Resolve(entry);
+            if (collider == nullptr) continue;
+            Physics::SphereCastHit shape_hit{};
+            if (!SweepSingleCollider(*collider, center, center, radius, shape_hit)) continue;
+            hits.push_back(MakeQueryHit(entry, shape_hit.position, shape_hit.normal, 0.0f, 0.0f));
+        }
+        return !hits.empty();
+    }
+
+    bool SceneCollisionWorld::OverlapCapsule(const XMFLOAT3& point_a,
+        const XMFLOAT3& point_b, float radius, const CollisionQueryFilter& filter,
+        std::vector<PhysicsQueryHit>& hits) const
+    {
+        hits.clear();
+        if (scene_ == nullptr || radius < 0.0f) return false;
+        for (const Registration& entry : entries_)
+        {
+            if (!entry.active || !entry.bounds_valid) continue;
+            if (filter.ignore_object.Valid() && entry.object == filter.ignore_object) continue;
+            if (!Layers::Interact(filter.layer, filter.mask, entry.layer, entry.mask)) continue;
+            const Components::ColliderComponent* collider = Resolve(entry);
+            if (collider == nullptr) continue;
+            Physics::SphereCastHit shape_hit{};
+            // Capsule は線分上を移動する球の体積と同値。
+            if (!SweepSingleCollider(*collider, point_a, point_b, radius, shape_hit)) continue;
+            hits.push_back(MakeQueryHit(entry, shape_hit.position, shape_hit.normal, 0.0f, 0.0f));
+        }
+        return !hits.empty();
+    }
+
+    bool SceneCollisionWorld::OverlapBox(const XMFLOAT3& center,
+        const XMFLOAT3& half_extents, const XMFLOAT4& rotation,
+        const CollisionQueryFilter& filter, std::vector<PhysicsQueryHit>& hits) const
+    {
+        hits.clear();
+        if (scene_ == nullptr || half_extents.x <= 0.0f || half_extents.y <= 0.0f ||
+            half_extents.z <= 0.0f) return false;
+
+        BoundingOrientedBox query(center, half_extents, NormalizeRotation(rotation));
+        BoundingBox query_bounds{};
+        XMFLOAT3 query_corners[BoundingOrientedBox::CORNER_COUNT]{};
+        query.GetCorners(query_corners);
+        BoundingBox::CreateFromPoints(query_bounds, BoundingOrientedBox::CORNER_COUNT,
+            query_corners, sizeof(XMFLOAT3));
+
+        for (const Registration& entry : entries_)
+        {
+            if (!entry.active || !entry.bounds_valid) continue;
+            if (filter.ignore_object.Valid() && entry.object == filter.ignore_object) continue;
+            if (!Layers::Interact(filter.layer, filter.mask, entry.layer, entry.mask)) continue;
+            BoundingBox target_bounds{};
+            BoundingBox::CreateFromPoints(target_bounds, XMLoadFloat3(&entry.bounds_min),
+                XMLoadFloat3(&entry.bounds_max));
+            if (!query_bounds.Intersects(target_bounds)) continue;
+
+            const Components::ColliderComponent* collider = Resolve(entry);
+            if (collider == nullptr) continue;
+            bool overlap = false;
+            if (collider->Shape() == Components::ColliderShape::Sphere)
+            {
+                const auto& sphere = static_cast<const Components::SphereColliderComponent&>(*collider);
+                overlap = query.Intersects(BoundingSphere(sphere.WorldCenter(),
+                    sphere.EffectiveRadius()));
+            }
+            else if (collider->Shape() == Components::ColliderShape::Box)
+            {
+                const auto& box = static_cast<const Components::BoxColliderComponent&>(*collider);
+                XMFLOAT4 orientation{ 0.0f, 0.0f, 0.0f, 1.0f };
+                if (box.Owner() != nullptr)
+                    orientation = box.Owner()->GetTransform().WorldRotationQuaternion();
+                overlap = query.Intersects(BoundingOrientedBox(box.WorldCenter(),
+                    box.WorldHalfExtents(), NormalizeRotation(orientation)));
+            }
+            else
+            {
+                // Capsule / Mesh / Landscape は正確な world bounds を持つ。
+                // OBB 側との交差は bounds を使い、false negative を出さない。
+                overlap = query.Intersects(target_bounds);
+            }
+            if (!overlap) continue;
+
+            const XMFLOAT3 target_center{ (entry.bounds_min.x + entry.bounds_max.x) * 0.5f,
+                (entry.bounds_min.y + entry.bounds_max.y) * 0.5f,
+                (entry.bounds_min.z + entry.bounds_max.z) * 0.5f };
+            const XMFLOAT3 normal = Normalize(XMFLOAT3{ target_center.x - center.x,
+                target_center.y - center.y, target_center.z - center.z });
+            hits.push_back(MakeQueryHit(entry, target_center, normal, 0.0f, 0.0f));
+        }
+        return !hits.empty();
+    }
+
+    bool SceneCollisionWorld::BoxCastAll(const XMFLOAT3& center,
+        const XMFLOAT3& half_extents, const XMFLOAT4& rotation,
+        const XMFLOAT3& direction, float max_distance,
+        const CollisionQueryFilter& filter, std::vector<PhysicsQueryHit>& hits) const
+    {
+        hits.clear();
+        if (max_distance < 0.0f) return false;
+        const XMFLOAT3 normalized = Normalize(direction);
+        if (max_distance > 0.0f && normalized.x == 0.0f &&
+            normalized.y == 0.0f && normalized.z == 0.0f) return false;
+        const float feature = (std::max)(0.02f, (std::min)(half_extents.x,
+            (std::min)(half_extents.y, half_extents.z)) * 0.5f);
+        const int steps = std::clamp(
+            static_cast<int>(std::ceil(max_distance / feature)), 1, 512);
+        std::unordered_set<ColliderID> seen;
+        for (int step = 0; step <= steps; ++step)
+        {
+            const float fraction = static_cast<float>(step) / static_cast<float>(steps);
+            const float distance = max_distance * fraction;
+            std::vector<PhysicsQueryHit> overlaps;
+            OverlapBox(Add(center, Scale(normalized, distance)), half_extents,
+                rotation, filter, overlaps);
+            for (PhysicsQueryHit hit : overlaps)
+            {
+                if (!seen.insert(hit.source.collider).second) continue;
+                hit.distance = distance;
+                hit.fraction = fraction;
+                hits.push_back(hit);
+            }
+        }
+        std::sort(hits.begin(), hits.end(), [](const PhysicsQueryHit& a,
+            const PhysicsQueryHit& b) { return a.distance < b.distance; });
+        return !hits.empty();
+    }
+
+    bool SceneCollisionWorld::CapsuleCastAll(const XMFLOAT3& point_a,
+        const XMFLOAT3& point_b, float radius, const XMFLOAT3& direction,
+        float max_distance, const CollisionQueryFilter& filter,
+        std::vector<PhysicsQueryHit>& hits) const
+    {
+        hits.clear();
+        if (radius < 0.0f || max_distance < 0.0f) return false;
+        const XMFLOAT3 normalized = Normalize(direction);
+        if (max_distance > 0.0f && normalized.x == 0.0f &&
+            normalized.y == 0.0f && normalized.z == 0.0f) return false;
+        const float feature = (std::max)(0.02f, radius * 0.5f);
+        const int steps = std::clamp(
+            static_cast<int>(std::ceil(max_distance / feature)), 1, 512);
+        std::unordered_set<ColliderID> seen;
+        for (int step = 0; step <= steps; ++step)
+        {
+            const float fraction = static_cast<float>(step) / static_cast<float>(steps);
+            const float distance = max_distance * fraction;
+            const XMFLOAT3 offset = Scale(normalized, distance);
+            std::vector<PhysicsQueryHit> overlaps;
+            OverlapCapsule(Add(point_a, offset), Add(point_b, offset), radius,
+                filter, overlaps);
+            for (PhysicsQueryHit hit : overlaps)
+            {
+                if (!seen.insert(hit.source.collider).second) continue;
+                hit.distance = distance;
+                hit.fraction = fraction;
+                hits.push_back(hit);
+            }
+        }
+        std::sort(hits.begin(), hits.end(), [](const PhysicsQueryHit& a,
+            const PhysicsQueryHit& b) { return a.distance < b.distance; });
+        return !hits.empty();
     }
 
     bool SceneCollisionWorld::QueryGround(const XMFLOAT3& origin, float radius,

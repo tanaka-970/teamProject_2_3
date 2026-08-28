@@ -200,6 +200,8 @@ namespace ReplayEngine::Runtime
         RuntimeStatus RequestQuitApplication(const std::string& reason) override;
         bool SceneTransitionInProgress() const override;
         const std::string& CurrentSceneGuid() const override;
+        float SceneTransitionProgress() const override;
+        RuntimeStatus LastSceneTransitionStatus() const override;
 
     private:
         // 要求を受け付けてよいかを判定し、受け付けられない理由を返す。

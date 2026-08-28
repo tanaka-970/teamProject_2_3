@@ -51,8 +51,7 @@ namespace ReplayEngine::Scripting
         case PropertyType::ColliderReference: return ScriptValue::MakeColliderReference(0);
 
         case PropertyType::Array:
-            // 初期版では配列を受け付けない。Build がここへ来る前に弾く。
-            return ScriptValue{};
+            return ScriptValue::MakeArray(PropertyType::Bool, {});
         }
         return ScriptValue{};
     }
@@ -99,9 +98,9 @@ namespace ReplayEngine::Scripting
                 continue;
             }
 
-            if (Reflection::IsContainerType(definition.type))
+            if (Reflection::IsContainerType(definition.array_element_type))
             {
-                reject("配列型の Field は初期版では未対応です: " + definition.name);
+                reject("配列の要素へコンテナ型は使えません: " + definition.name);
                 continue;
             }
 
@@ -119,7 +118,16 @@ namespace ReplayEngine::Scripting
 
             // 既定値が未設定、または宣言した型と食い違う場合は型の既定値へ寄せる。
             // 型が違うまま持たせると、Inspector と保存で解釈が割れる。
-            if (definition.default_value.Type() != definition.type)
+            if (definition.type == PropertyType::Array)
+            {
+                if (definition.default_value.Type() != PropertyType::Array ||
+                    definition.default_value.ArrayElementType() != definition.array_element_type)
+                {
+                    definition.default_value = ScriptValue::MakeArray(
+                        definition.array_element_type, {});
+                }
+            }
+            else if (definition.default_value.Type() != definition.type)
             {
                 ScriptValue converted;
                 if (definition.default_value.ConvertTo(definition.type, converted))
@@ -163,6 +171,9 @@ namespace ReplayEngine::Scripting
             desc.editor_visible = definition.visible_in_inspector;
             desc.read_only = definition.read_only;
             desc.asset_type = definition.asset_type;
+            desc.category = definition.category;
+            desc.enum_labels = definition.enum_labels;
+            desc.array_element_type = definition.array_element_type;
 
             desc.getter = [saved_name](const Core::Component& component) -> ScriptValue
             {

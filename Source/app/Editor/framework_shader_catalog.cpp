@@ -27,6 +27,11 @@ void framework::scan_shader_library()
         });
 
     shader_library.ScanAll(content_root_path());
+    // DX12 は ShaderID 単位で Production Surface PSO を Cache する。手動再走査では
+    // 同じ GUID のまま Source/Schema が変わるため、この安全な Editor 境界で Backend
+    // Cache を無効化し、古い Bytecode を描画しないようにする。
+    if (dx12_framework_active && dx12_device_context.IsInitialized())
+        (void)dx12_device_context.ClearStaticAssetCaches();
 }
 
 void framework::poll_shader_source_changes(float elapsed_time)
@@ -44,7 +49,12 @@ void framework::poll_shader_source_changes(float elapsed_time)
     // 保存直後はエディタがまだ書き込み中のことがある。
     // ここで失敗しても直前のバイトコードは残るので、
     // 次の 1 秒でもう一度拾い直せばよい。握り潰さず理由はログへ出る。
-    shader_library.PollSourceChanges(false);
+    const std::size_t recompiled = shader_library.PollSourceChanges(false);
+    // ShaderLibrary は Hot Reload 前後で ShaderID を意図的に維持する。実際に再構築が
+    // 起きた場合だけ DX12 Static Cache を消す。これにより DXC Compile に失敗した Shader も
+    // ユーザーが修正した直後に再試行できる。
+    if (recompiled != 0 && dx12_framework_active && dx12_device_context.IsInitialized())
+        (void)dx12_device_context.ClearStaticAssetCaches();
 }
 
 namespace

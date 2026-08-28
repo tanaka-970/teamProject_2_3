@@ -1,5 +1,4 @@
 ﻿#include "framework.h"
-#include "texture.h"
 #include "../../RePlayEngine/Assets/AssetCache.h"
 #include "../../RePlayEngine/Localization/LocalizationTable.h"
 #include "../../RePlayEngine/Rendering/Effects/EffectPresetAsset.h"
@@ -75,7 +74,7 @@ void framework::draw_project_browser()
         ImGui::SetTooltip("Project 全体を再帰検索します");
     ImGui::SameLine();
     const char* filters[] =
-        { "All", "Model", "Prefab", "Scene", "Material", "Script", "Shader", "Flow", "Motion", "Font", "Localization", "EffectPreset", "Input", "Other" };
+        { "All", "Model", "Prefab", "Scene", "Material", "Script", "Shader", "Flow", "Motion", "Font", "Localization", "EffectPreset", "Input", "Other", "Easing" };
     ImGui::SetNextItemWidth(120.0f);
     ImGui::Combo("##ProjectFilter", &asset_type_filter, filters, IM_ARRAYSIZE(filters));
     ImGui::SameLine();

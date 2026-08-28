@@ -10,6 +10,7 @@
 #include "../../RePlayEngine/Components/UI/UITextComponent.h"
 #include "../../RePlayEngine/Components/UI/UIButtonComponent.h"
 #include "../../RePlayEngine/Components/UI/UIMaskComponent.h"
+#include "../../RePlayEngine/Assets/SpriteAtlasAsset.h"
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
 #include "../../RePlayEngine/Scene/Runtime/Scene.h"
 #include "../../RePlayEngine/UI/UILayout.h"
@@ -125,7 +126,7 @@
     void DrawPreviewObject(ImDrawList* draw_list, Core::GameObject& object,
         const ImVec2& origin, float canvas_height, float zoom,
         Core::ObjectID selected,
-        const std::function<ID3D11ShaderResourceView*(const UIImageComponent&)>& texture_for_image)
+        const std::function<ImTextureID(const UIImageComponent&)>& texture_for_image)
     {
         RectTransformComponent* rect = object.GetComponent<RectTransformComponent>();
         if (rect != nullptr && HasUIComponent(object))
@@ -148,7 +149,7 @@
                         PreviewQuad(*rect, draw_rect, origin, canvas_height, zoom,
                             image_points);
                         const ImU32 tint = ColorToU32(image->color, image->opacity);
-                        ID3D11ShaderResourceView* texture = texture_for_image(*image);
+                        const ImTextureID texture = texture_for_image(*image);
                         if (texture != nullptr)
                         {
                             const ImVec2 uv0(uv.x, uv.y + uv.w);
@@ -156,7 +157,7 @@
                             const ImVec2 uv2(uv.x + uv.z, uv.y);
                             const ImVec2 uv3(uv.x, uv.y);
                             draw_list->AddImageQuad(
-                                reinterpret_cast<ImTextureID>(texture),
+                                texture,
                                 image_points[0], image_points[1],
                                 image_points[2], image_points[3],
                                 uv0, uv1, uv2, uv3, tint);
@@ -201,118 +202,54 @@
         }
     }
 
-
-    }
-
-bool framework::ensure_ui_preview_render_target(int width, int height)
-{
-    width = (std::max)(1, width);
-    height = (std::max)(1, height);
-    if (ui_preview_runtime_texture && ui_preview_runtime_srv && ui_preview_runtime_rtv &&
-        ui_preview_runtime_width == width && ui_preview_runtime_height == height)
+    std::filesystem::path PreviewImagePath(const UIImageComponent& image,
+        const Assets::AssetDatabase& asset_database)
     {
-        return true;
+        std::filesystem::path image_path;
+        std::string image_guid = image.sprite.guid;
+        if (!image.atlas.guid.empty() && !image.atlas_region.empty())
+        {
+            const Assets::AssetRecord* atlas_record =
+                asset_database.FindByGuid(image.atlas.guid);
+            if (atlas_record != nullptr && atlas_record->kind == Assets::AssetKind::SpriteAtlas)
+            {
+                const std::filesystem::path atlas_path = atlas_record->cache_path.empty()
+                    ? atlas_record->source_path : atlas_record->cache_path;
+                Assets::SpriteAtlasAsset atlas;
+                std::string error;
+                if (Assets::SpriteAtlasAsset::LoadFromFile(atlas_path, atlas, error))
+                {
+                    const Assets::SpriteAtlasRegion* region =
+                        atlas.FindRegion(image.atlas_region);
+                    if (region != nullptr)
+                    {
+                        image_guid = atlas.image_guid;
+                        if (!atlas.embedded_texture_path.empty())
+                        {
+                            const std::filesystem::path embedded = atlas_path.parent_path() /
+                                std::filesystem::u8path(atlas.embedded_texture_path);
+                            std::error_code file_error;
+                            if (std::filesystem::is_regular_file(embedded, file_error) &&
+                                !file_error)
+                                image_path = embedded;
+                        }
+                    }
+                }
+            }
+        }
+        if (image_path.empty() && !image_guid.empty())
+        {
+            const Assets::AssetRecord* image_record =
+                asset_database.FindByGuid(image_guid);
+            if (image_record != nullptr && image_record->kind == Assets::AssetKind::Image)
+                image_path = image_record->cache_path.empty()
+                    ? image_record->source_path : image_record->cache_path;
+        }
+        return image_path;
     }
-    ui_preview_runtime_srv.Reset();
-    ui_preview_runtime_rtv.Reset();
-    ui_preview_runtime_texture.Reset();
-    ui_preview_runtime_width = 0;
-    ui_preview_runtime_height = 0;
-    if (!device) return false;
 
-    D3D11_TEXTURE2D_DESC desc{};
-    desc.Width = static_cast<UINT>(width);
-    desc.Height = static_cast<UINT>(height);
-    desc.MipLevels = 1;
-    desc.ArraySize = 1;
-    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    desc.SampleDesc.Count = 1;
-    desc.Usage = D3D11_USAGE_DEFAULT;
-    desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-    if (FAILED(device->CreateTexture2D(&desc, nullptr, ui_preview_runtime_texture.GetAddressOf())))
-        return false;
-    if (FAILED(device->CreateRenderTargetView(ui_preview_runtime_texture.Get(), nullptr,
-        ui_preview_runtime_rtv.GetAddressOf())))
-    {
-        ui_preview_runtime_texture.Reset();
-        return false;
+
     }
-    if (FAILED(device->CreateShaderResourceView(ui_preview_runtime_texture.Get(), nullptr,
-        ui_preview_runtime_srv.GetAddressOf())))
-    {
-        ui_preview_runtime_rtv.Reset();
-        ui_preview_runtime_texture.Reset();
-        return false;
-    }
-    ui_preview_runtime_width = width;
-    ui_preview_runtime_height = height;
-    return true;
-}
-
-void framework::render_ui_preview_target()
-{
-    if (!editor_mode || !show_ui_preview_panel || !ui_preview_runtime_requested ||
-        !ui_preview_runtime_rtv || immediate_context == nullptr)
-    {
-        return;
-    }
-    ReplayEngine::Scene::Scene* scene = object_editor_context.GetScene();
-    if (scene == nullptr) return;
-
-    Microsoft::WRL::ComPtr<ID3D11RenderTargetView> previous_rtv;
-    Microsoft::WRL::ComPtr<ID3D11DepthStencilView> previous_dsv;
-    immediate_context->OMGetRenderTargets(1, previous_rtv.GetAddressOf(),
-        previous_dsv.GetAddressOf());
-    D3D11_VIEWPORT previous_viewport{};
-    UINT viewport_count = 1;
-    immediate_context->RSGetViewports(&viewport_count, &previous_viewport);
-
-    ID3D11RenderTargetView* target = ui_preview_runtime_rtv.Get();
-    immediate_context->OMSetRenderTargets(1, &target, nullptr);
-    const float clear[4]{ 0.0f, 0.0f, 0.0f, 0.0f };
-    immediate_context->ClearRenderTargetView(target, clear);
-    D3D11_VIEWPORT viewport{};
-    viewport.Width = static_cast<float>(ui_preview_runtime_width);
-    viewport.Height = static_cast<float>(ui_preview_runtime_height);
-    viewport.MinDepth = 0.0f;
-    viewport.MaxDepth = 1.0f;
-    immediate_context->RSSetViewports(1, &viewport);
-
-    ReplayEngine::UI::UILayout::Resolve(*scene,
-        static_cast<float>(ui_preview_runtime_width),
-        static_cast<float>(ui_preview_runtime_height));
-    ReplayEngine::UI::UIRenderer::RenderStates states{};
-    states.depth_disabled = depth_stencil_states[(size_t)DEPTH_STATE::ZT_OFF_ZW_OFF].Get();
-    states.depth_enabled = depth_stencil_states[(size_t)DEPTH_STATE::ZT_ON_ZW_OFF].Get();
-    DirectX::XMStoreFloat4x4(&states.world_view_projection,
-        viewport_view_matrix() * viewport_projection_matrix());
-    states.rasterizer = rasterizer_states[(size_t)RASTER_STATE::CULL_NONE].Get();
-    states.rasterizer_scissor = rasterizer_states[(size_t)RASTER_STATE::SCISSOR].Get();
-    states.blend_none = blend_states[(size_t)BLEND_STATE::NONE].Get();
-    states.blend_alpha = blend_states[(size_t)BLEND_STATE::ALPHA].Get();
-    states.blend_add = blend_states[(size_t)BLEND_STATE::ADD].Get();
-    states.blend_multiply = blend_states[(size_t)BLEND_STATE::MULTIPLY].Get();
-    states.blend_screen = blend_states[(size_t)BLEND_STATE::SCREEN].Get();
-    states.blend_premultiplied = blend_states[(size_t)BLEND_STATE::PREMULTIPLIED].Get();
-    states.sampler = sampler_states[(size_t)SAMPLER_STATE::LINEAR].Get();
-    states.focus_outline_enabled = project_settings.FocusOutlineEnabled();
-    states.focus_outline_color = project_settings.FocusOutlineColor();
-    states.focus_outline_width = project_settings.FocusOutlineWidth();
-    states.focus_corner_radius = project_settings.FocusCornerRadius();
-    states.scissor_bounds_enabled = true;
-    states.scissor_bounds.left = 0;
-    states.scissor_bounds.top = 0;
-    states.scissor_bounds.right = ui_preview_runtime_width;
-    states.scissor_bounds.bottom = ui_preview_runtime_height;
-    ui_renderer.Render(immediate_context.Get(), *scene, &asset_database,
-        &shader_library.Catalog(), ui_font_atlas,
-        static_cast<float>(ui_preview_runtime_width),
-        static_cast<float>(ui_preview_runtime_height), shader_composer_time, states);
-
-    ID3D11RenderTargetView* restore = previous_rtv.Get();
-    immediate_context->OMSetRenderTargets(1, &restore, previous_dsv.Get());
-    if (viewport_count > 0) immediate_context->RSSetViewports(1, &previous_viewport);
-}
 
 void framework::draw_ui_preview()
 {
@@ -340,6 +277,10 @@ void framework::draw_ui_preview()
     ImGui::SliderFloat(u8"拡大", &ui_preview_zoom, 0.10f, 2.0f, "%.2f");
     ImGui::SameLine();
     ImGui::Checkbox(u8"グリッド", &ui_preview_grid);
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(120.0f);
+    ImGui::ColorEdit4(u8"Canvas 背景色", &ui_preview_background_color.x,
+        ImGuiColorEditFlags_NoInputs);
 
     int preview_width = 1920;
     int preview_height = 1080;
@@ -363,7 +304,8 @@ void framework::draw_ui_preview()
     // Runtime と同一の UIRenderer を使う Preview RT は描画フェーズで更新される。
     // この panel から必要解像度を要求しておき、次の render pass から同じ RT を使う。
     ui_preview_runtime_requested = true;
-    ensure_ui_preview_render_target(preview_width, preview_height);
+    ui_preview_runtime_width = preview_width;
+    ui_preview_runtime_height = preview_height;
 
     ImVec2 avail = ImGui::GetContentRegionAvail();
     avail.x = (std::max)(avail.x, 64.0f);
@@ -545,8 +487,11 @@ void framework::draw_ui_preview()
     const ImVec2 clip_max(cursor.x + avail.x, cursor.y + avail.y);
     draw_list->PushClipRect(clip_min, clip_max, true);
     draw_list->AddRectFilled(clip_min, clip_max, IM_COL32(23, 26, 30, 255));
+    const ImU32 canvas_background = ImGui::ColorConvertFloat4ToU32(ImVec4(
+        ui_preview_background_color.x, ui_preview_background_color.y,
+        ui_preview_background_color.z, ui_preview_background_color.w));
     draw_list->AddRectFilled(origin, ImVec2(origin.x + canvas_size.x, origin.y + canvas_size.y),
-        IM_COL32(36, 38, 42, 255));
+        canvas_background);
 
     if (ui_preview_grid && ui_preview_grid_size > 1.0f)
     {
@@ -559,19 +504,16 @@ void framework::draw_ui_preview()
                 IM_COL32(255, 255, 255, 24));
     }
 
-    // 実際の Runtime UIRenderer が出した RT をそのまま表示する。
-    // UIImage/UIText/UIShape/Mask/Effect/Puppet を ImGui で再実装しない。
-    if (ui_preview_runtime_srv)
-    {
-        draw_list->AddImage(reinterpret_cast<ImTextureID>(ui_preview_runtime_srv.Get()),
+    // Runtime と同じ CPU UI frame を DX12 Preview target へ描画し、その SRV を表示する。
+    void* preview_texture = dx12_device_context.ImGuiTextureForUIPreview();
+    if (preview_texture != nullptr)
+        draw_list->AddImage(reinterpret_cast<ImTextureID>(preview_texture),
             origin, ImVec2(origin.x + canvas_size.x, origin.y + canvas_size.y),
             ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f), IM_COL32_WHITE);
-    }
     else
-    {
         draw_list->AddText(ImVec2(origin.x + 12.0f, origin.y + 12.0f),
-            IM_COL32(255, 160, 100, 255), "Runtime UI Preview target unavailable");
-    }
+            IM_COL32(255, 160, 100, 255),
+            "DX12 UI Preview target unavailable");
     // Photoshop / Unity Rect Tool と同じく 4 corner + 4 edge handle。
     // DrawPreviewObject の selection outline より後に描くため、常に掴める位置が見える。
     selected = object_editor_context.Selection().ResolvePrimary(*scene);

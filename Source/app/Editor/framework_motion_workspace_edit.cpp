@@ -161,6 +161,278 @@ bool framework::save_current_motion_asset()
     return true;
 }
 
+bool framework::add_motion_key_at_preview_time()
+{
+    using namespace ReplayEngine::Motion;
+    using ReplayEngine::Reflection::PropertyDesc;
+    if (motion_selected_track < 0 ||
+        motion_selected_track >= static_cast<int>(motion_editor_asset.tracks.size()))
+        return false;
+
+    MotionTrack& track = motion_editor_asset.tracks[motion_selected_track];
+    motion_edit_history.Begin(motion_editor_asset, "Keyを追加");
+    MotionKeyframe key;
+    key.time = motion_preview_time;
+    ReplayEngine::Scene::Scene* scene = object_editor_context.GetScene();
+    ReplayEngine::Core::Component* bound_component = scene != nullptr
+        ? ResolveBindingComponent(*scene, track.binding) : nullptr;
+    const PropertyDesc* bound_desc = bound_component != nullptr
+        ? FindPropertyForComponent(*bound_component, track.binding.property)
+        : nullptr;
+    key.value = bound_desc != nullptr
+        ? bound_desc->Capture(*bound_component) : DefaultValueFor(track.value_type);
+    key.easing = MotionEasing::Linear;
+    track.keys.push_back(key);
+    motion_editor_asset.SortKeys();
+    motion_selected_key = -1;
+    for (int index = 0; index < static_cast<int>(track.keys.size()); ++index)
+    {
+        if (track.keys[index].time == key.time)
+        {
+            motion_selected_key = index;
+            break;
+        }
+    }
+    motion_edit_history.Commit(motion_editor_asset);
+    motion_editor_dirty = true;
+    motion_editor_status = "Keyを追加しました";
+    return true;
+}
+
+ReplayEngine::Motion::MotionTrack* framework::selected_motion_track()
+{
+    if (!motion_editor_loaded || motion_selected_track < 0 ||
+        motion_selected_track >= static_cast<int>(motion_editor_asset.tracks.size()))
+        return nullptr;
+    return &motion_editor_asset.tracks[static_cast<std::size_t>(motion_selected_track)];
+}
+
+std::vector<int> framework::selected_motion_key_indices() const
+{
+    std::vector<int> indices = motion_selected_keys;
+    if (indices.empty() && motion_selected_key >= 0) indices.push_back(motion_selected_key);
+    return indices;
+}
+
+bool framework::copy_motion_keys()
+{
+    MotionTrack* track = selected_motion_track();
+    if (track == nullptr)
+    {
+        motion_editor_status = "コピーするTrackが選択されていません";
+        return false;
+    }
+
+    motion_key_clipboard.clear();
+    const std::vector<int> indices = selected_motion_key_indices();
+    for (const int index : indices)
+    {
+        if (index >= 0 && index < static_cast<int>(track->keys.size()))
+            motion_key_clipboard.push_back(track->keys[static_cast<std::size_t>(index)]);
+    }
+    if (motion_key_clipboard.empty())
+    {
+        motion_editor_status = "コピーするKeyが選択されていません";
+        return false;
+    }
+
+    motion_editor_status = "選択Keyをコピーしました";
+    return true;
+}
+
+bool framework::paste_motion_keys()
+{
+    MotionTrack* track = selected_motion_track();
+    if (track == nullptr || motion_key_clipboard.empty())
+    {
+        motion_editor_status = "貼り付けるKeyまたはTrackがありません";
+        return false;
+    }
+
+    float first = motion_key_clipboard.front().time;
+    for (const MotionKeyframe& key : motion_key_clipboard)
+        first = (std::min)(first, key.time);
+
+    motion_edit_history.Begin(motion_editor_asset, "Keyを貼り付け");
+    for (MotionKeyframe key : motion_key_clipboard)
+    {
+        const float time = SnapMotionTime(motion_preview_time + (key.time - first),
+            motion_editor_fps, motion_editor_frame_snap);
+        key.time = (std::min)(motion_editor_asset.duration, (std::max)(0.0f, time));
+        track->keys.push_back(std::move(key));
+    }
+    motion_editor_asset.SortKeys();
+    motion_edit_history.Commit(motion_editor_asset);
+    motion_editor_dirty = true;
+    motion_selected_key = -1;
+    motion_selected_keys.clear();
+    motion_editor_status = "Keyを貼り付けました";
+    return true;
+}
+
+bool framework::duplicate_motion_keys()
+{
+    MotionTrack* track = selected_motion_track();
+    if (track == nullptr)
+    {
+        motion_editor_status = "複製するTrackが選択されていません";
+        return false;
+    }
+
+    const std::vector<int> indices = selected_motion_key_indices();
+    const std::size_t original_count = track->keys.size();
+    bool has_valid_key = false;
+    for (const int index : indices)
+    {
+        if (index >= 0 && index < static_cast<int>(original_count))
+        {
+            has_valid_key = true;
+            break;
+        }
+    }
+    if (!has_valid_key)
+    {
+        motion_editor_status = "複製するKeyが選択されていません";
+        return false;
+    }
+
+    motion_edit_history.Begin(motion_editor_asset, "Keyを複製");
+    const float frame_step = FrameStep(motion_editor_fps);
+    for (const int index : indices)
+    {
+        if (index < 0 || index >= static_cast<int>(original_count)) continue;
+        MotionKeyframe copy = track->keys[static_cast<std::size_t>(index)];
+        const float time = SnapMotionTime(copy.time + frame_step, motion_editor_fps, true);
+        copy.time = (std::min)(motion_editor_asset.duration, (std::max)(0.0f, time));
+        track->keys.push_back(std::move(copy));
+    }
+    motion_editor_asset.SortKeys();
+    motion_edit_history.Commit(motion_editor_asset);
+    motion_editor_dirty = true;
+    motion_selected_key = -1;
+    motion_selected_keys.clear();
+    motion_editor_status = "Keyを複製しました";
+    return true;
+}
+
+bool framework::delete_motion_keys()
+{
+    MotionTrack* track = selected_motion_track();
+    if (track == nullptr)
+    {
+        motion_editor_status = "削除するTrackが選択されていません";
+        return false;
+    }
+
+    std::vector<int> indices = selected_motion_key_indices();
+    indices.erase(std::remove_if(indices.begin(), indices.end(),
+        [track](int index)
+        {
+            return index < 0 || index >= static_cast<int>(track->keys.size());
+        }), indices.end());
+    if (indices.empty())
+    {
+        motion_editor_status = "削除するKeyが選択されていません";
+        return false;
+    }
+
+    std::sort(indices.rbegin(), indices.rend());
+    indices.erase(std::unique(indices.begin(), indices.end()), indices.end());
+    motion_edit_history.Begin(motion_editor_asset, "Keyを削除");
+    for (const int index : indices)
+        track->keys.erase(track->keys.begin() + index);
+    motion_edit_history.Commit(motion_editor_asset);
+    motion_editor_dirty = true;
+    motion_selected_key = -1;
+    motion_selected_keys.clear();
+    motion_editor_status = "Keyを削除しました";
+    return true;
+}
+
+bool framework::apply_motion_easing_to_selection(ReplayEngine::Motion::MotionEasing easing)
+{
+    MotionTrack* track = selected_motion_track();
+    if (track == nullptr)
+    {
+        motion_editor_status = "Easingを適用するTrackが選択されていません";
+        return false;
+    }
+
+    const std::vector<int> indices = selected_motion_key_indices();
+    bool has_valid_key = false;
+    for (const int index : indices)
+    {
+        if (index >= 0 && index < static_cast<int>(track->keys.size()))
+        {
+            has_valid_key = true;
+            break;
+        }
+    }
+    if (!has_valid_key)
+    {
+        motion_editor_status = "Easingを適用するKeyが選択されていません";
+        return false;
+    }
+
+    motion_edit_history.Begin(motion_editor_asset, "Easingを変更");
+    for (const int index : indices)
+    {
+        if (index < 0 || index >= static_cast<int>(track->keys.size())) continue;
+        track->keys[static_cast<std::size_t>(index)].easing = easing;
+    }
+    motion_edit_history.Commit(motion_editor_asset);
+    motion_editor_dirty = true;
+    motion_editor_status = std::string("選択KeyへEasingを適用しました: ") +
+        ReplayEngine::Motion::ToString(easing);
+    return true;
+}
+
+void framework::toggle_motion_preview_playback()
+{
+    if (!motion_editor_loaded)
+    {
+        motion_editor_status = "再生するMotion Assetがありません";
+        return;
+    }
+
+    if (motion_preview_active)
+    {
+        stop_motion_preview();
+        motion_editor_status = "Motionプレビューを停止しました";
+        return;
+    }
+
+    capture_motion_preview_targets();
+    motion_preview_active = true;
+    motion_editor_status = "Motionプレビューを再生しました";
+}
+
+void framework::seek_motion_preview_time(float time)
+{
+    if (!motion_editor_loaded && !motion_composition_loaded) return;
+    const float duration = motion_editor_loaded
+        ? motion_editor_asset.duration : motion_editor_composition.duration;
+    const float safe_time = SnapMotionTime(time, motion_editor_fps, false);
+    motion_preview_time = (std::min)((std::max)(0.0f, safe_time),
+        (std::max)(0.0f, duration));
+    apply_motion_preview_time();
+    motion_editor_status = "プレビュー時刻を移動しました";
+}
+
+void framework::step_motion_preview_frames(int frames)
+{
+    if (frames == 0 || (!motion_editor_loaded && !motion_composition_loaded)) return;
+    const float duration = motion_editor_loaded
+        ? motion_editor_asset.duration : motion_editor_composition.duration;
+    const float stepped = SnapMotionTime(
+        motion_preview_time + FrameStep(motion_editor_fps) * static_cast<float>(frames),
+        motion_editor_fps, true);
+    seek_motion_preview_time((std::min)((std::max)(0.0f, stepped),
+        (std::max)(0.0f, duration)));
+    motion_editor_status = frames > 0
+        ? "1フレーム進めました" : "1フレーム戻しました";
+}
+
 bool framework::undo_motion_edit()
 {
     stop_motion_preview();

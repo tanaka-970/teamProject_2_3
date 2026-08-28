@@ -41,7 +41,10 @@ bool framework::using_editor_camera() const noexcept
     // 将来 Scene View と Game View を分ける場合は、この関数の戻り値を
     // 「どちらの View を描いているか」で決めるだけでよい。
     // 呼び出し側はすべてこの関数を通っているため、他は変更不要になる。
-    if (!editor_mode) return false;
+    // プロファイル実行は Editor UI の状態に関係なく Runtime Camera を使う。
+    // 起動中の Editor セッション復元などで editor_mode が立っても、
+    // ベンチマークの描画視点が編集カメラへ戻らないようにする。
+    if (!editor_mode || profile_benchmark_mode) return false;
     return active_editor_view == editor_view::scene;
 }
 

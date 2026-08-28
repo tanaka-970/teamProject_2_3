@@ -139,6 +139,36 @@ namespace ReplayEngine::Scene
             const DirectX::XMFLOAT3& direction, float max_distance,
             const CollisionQueryFilter& filter, RaycastHit& hit) const override;
 
+        bool RaycastAllFiltered(const DirectX::XMFLOAT3& origin,
+            const DirectX::XMFLOAT3& direction, float max_distance,
+            const CollisionQueryFilter& filter,
+            std::vector<PhysicsQueryHit>& hits) const override;
+        bool OverlapSphere(const DirectX::XMFLOAT3& center, float radius,
+            const CollisionQueryFilter& filter,
+            std::vector<PhysicsQueryHit>& hits) const override;
+        bool OverlapBox(const DirectX::XMFLOAT3& center,
+            const DirectX::XMFLOAT3& half_extents,
+            const DirectX::XMFLOAT4& rotation, const CollisionQueryFilter& filter,
+            std::vector<PhysicsQueryHit>& hits) const override;
+        bool OverlapCapsule(const DirectX::XMFLOAT3& point_a,
+            const DirectX::XMFLOAT3& point_b, float radius,
+            const CollisionQueryFilter& filter,
+            std::vector<PhysicsQueryHit>& hits) const override;
+        bool SphereCastAll(const DirectX::XMFLOAT3& origin,
+            const DirectX::XMFLOAT3& direction, float radius, float max_distance,
+            const CollisionQueryFilter& filter,
+            std::vector<PhysicsQueryHit>& hits) const override;
+        bool BoxCastAll(const DirectX::XMFLOAT3& center,
+            const DirectX::XMFLOAT3& half_extents,
+            const DirectX::XMFLOAT4& rotation, const DirectX::XMFLOAT3& direction,
+            float max_distance, const CollisionQueryFilter& filter,
+            std::vector<PhysicsQueryHit>& hits) const override;
+        bool CapsuleCastAll(const DirectX::XMFLOAT3& point_a,
+            const DirectX::XMFLOAT3& point_b, float radius,
+            const DirectX::XMFLOAT3& direction, float max_distance,
+            const CollisionQueryFilter& filter,
+            std::vector<PhysicsQueryHit>& hits) const override;
+
     private:
         // Scene の構成世代が変わっていたら登録表を作り直す。
         void ReconcileRegistrations();

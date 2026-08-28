@@ -1,7 +1,8 @@
-#pragma once
+﻿#pragma once
 
-#include <d3d11.h>
 #include <windows.h>
+
+namespace ReplayEngine::Rendering::DX12 { struct D3D12UIFrame; }
 
 namespace ReplayEngine::Scene
 {
@@ -13,7 +14,6 @@ namespace ReplayEngine::Scene
 
     struct RenderContext
     {
-        ID3D11DeviceContext* device_context = nullptr;
         float width = 0.0f;
         float height = 0.0f;
     };
@@ -23,9 +23,10 @@ namespace ReplayEngine::Scene
     public:
         virtual ~IScene() = default;
 
-        virtual bool Initialize(ID3D11Device* device) = 0;
+        virtual bool Initialize() = 0;
         virtual void Update(float elapsed_time) = 0;
-        virtual void Render(const RenderContext& context) = 0;
+        virtual void Render(const RenderContext&) {}
+        virtual bool BuildRuntimeUI(Rendering::DX12::D3D12UIFrame&, float, float) { return true; }
         virtual bool OnKeyDown(WPARAM) { return false; }
         virtual bool IsFinished() const noexcept = 0;
         virtual SceneRenderMode RenderMode() const noexcept { return SceneRenderMode::World; }

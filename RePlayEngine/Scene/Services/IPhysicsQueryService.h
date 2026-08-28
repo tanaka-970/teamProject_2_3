@@ -5,6 +5,7 @@
 #include <DirectXMath.h>
 
 #include <cstdint>
+#include <vector>
 
 namespace ReplayEngine::Scene
 {
@@ -56,6 +57,16 @@ namespace ReplayEngine::Scene
         DirectX::XMFLOAT3 point{ 0.0f, 0.0f, 0.0f };
         DirectX::XMFLOAT3 normal{ 0.0f, 1.0f, 0.0f };
         float distance = 0.0f;
+        CollisionSourceInfo source;
+        bool valid = false;
+    };
+
+    struct PhysicsQueryHit
+    {
+        DirectX::XMFLOAT3 point{ 0.0f, 0.0f, 0.0f };
+        DirectX::XMFLOAT3 normal{ 0.0f, 1.0f, 0.0f };
+        float distance = 0.0f;
+        float fraction = 0.0f;
         CollisionSourceInfo source;
         bool valid = false;
     };
@@ -151,6 +162,61 @@ namespace ReplayEngine::Scene
             const CollisionQueryFilter& /*filter*/, RaycastHit& hit) const
         {
             return Raycast(origin, direction, max_distance, hit);
+        }
+
+        virtual bool RaycastAllFiltered(const DirectX::XMFLOAT3&,
+            const DirectX::XMFLOAT3&, float, const CollisionQueryFilter&,
+            std::vector<PhysicsQueryHit>& hits) const
+        {
+            hits.clear();
+            return false;
+        }
+
+        virtual bool OverlapSphere(const DirectX::XMFLOAT3&, float,
+            const CollisionQueryFilter&, std::vector<PhysicsQueryHit>& hits) const
+        {
+            hits.clear();
+            return false;
+        }
+
+        virtual bool OverlapBox(const DirectX::XMFLOAT3&, const DirectX::XMFLOAT3&,
+            const DirectX::XMFLOAT4&, const CollisionQueryFilter&,
+            std::vector<PhysicsQueryHit>& hits) const
+        {
+            hits.clear();
+            return false;
+        }
+
+        virtual bool OverlapCapsule(const DirectX::XMFLOAT3&,
+            const DirectX::XMFLOAT3&, float, const CollisionQueryFilter&,
+            std::vector<PhysicsQueryHit>& hits) const
+        {
+            hits.clear();
+            return false;
+        }
+
+        virtual bool SphereCastAll(const DirectX::XMFLOAT3&,
+            const DirectX::XMFLOAT3&, float, float, const CollisionQueryFilter&,
+            std::vector<PhysicsQueryHit>& hits) const
+        {
+            hits.clear();
+            return false;
+        }
+
+        virtual bool BoxCastAll(const DirectX::XMFLOAT3&, const DirectX::XMFLOAT3&,
+            const DirectX::XMFLOAT4&, const DirectX::XMFLOAT3&, float,
+            const CollisionQueryFilter&, std::vector<PhysicsQueryHit>& hits) const
+        {
+            hits.clear();
+            return false;
+        }
+
+        virtual bool CapsuleCastAll(const DirectX::XMFLOAT3&,
+            const DirectX::XMFLOAT3&, float, const DirectX::XMFLOAT3&, float,
+            const CollisionQueryFilter&, std::vector<PhysicsQueryHit>& hits) const
+        {
+            hits.clear();
+            return false;
         }
     };
 }

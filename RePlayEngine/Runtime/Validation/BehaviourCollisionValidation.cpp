@@ -86,6 +86,28 @@ namespace ReplayEngine::Runtime::Validation
             }
         };
 
+        class ScriptedDynamics final : public Scene::IPhysicsDynamicsService
+        {
+        public:
+            std::vector<Scene::PhysicsContact> contacts;
+
+            void AttachScene(Scene::Scene* scene) override { scene_ = scene; }
+            void DetachScene() override { scene_ = nullptr; contacts.clear(); }
+            const Scene::Scene* AttachedScene() const noexcept override { return scene_; }
+            void Step(float) override {}
+            std::size_t BodyCount() const noexcept override { return 0; }
+            std::size_t DynamicBodyCount() const noexcept override { return 0; }
+            std::size_t SleepingBodyCount() const noexcept override { return 0; }
+            int SolverIterations() const noexcept override { return 0; }
+            const std::vector<Scene::PhysicsContact>& Contacts() const noexcept override
+            {
+                return contacts;
+            }
+
+        private:
+            Scene::Scene* scene_ = nullptr;
+        };
+
         // 受け取った CollisionEvent を記録するだけの Behaviour。
         class CollisionProbeBehaviour final : public BehaviourComponent
         {
@@ -102,6 +124,10 @@ namespace ReplayEngine::Runtime::Validation
                 ContactPhase phase = ContactPhase::Enter;
                 CollisionHitKind kind = CollisionHitKind::Unknown;
                 Core::ObjectID other;
+                Scene::ColliderID self_collider = Scene::invalid_collider_id;
+                Scene::ColliderID other_collider = Scene::invalid_collider_id;
+                DirectX::XMFLOAT3 relative_velocity{ 0.0f, 0.0f, 0.0f };
+                float penetration = 0.0f;
                 bool other_valid = false;
                 bool self_valid = false;
             };
@@ -140,6 +166,10 @@ namespace ReplayEngine::Runtime::Validation
                 record.phase = event.phase;
                 record.kind = event.hit_kind;
                 record.other = event.other.object;
+                record.self_collider = event.self_collider;
+                record.other_collider = event.other_collider;
+                record.relative_velocity = event.relative_velocity;
+                record.penetration = event.penetration_depth;
                 record.other_valid = event.other_valid;
                 record.self_valid = !event.self.IsEmpty();
                 records.push_back(record);
@@ -373,16 +403,15 @@ namespace ReplayEngine::Runtime::Validation
         dispatcher.Reset();
         check.Expect(dispatcher.ActiveContactCount() == 0, "Reset で接触状態が空になる");
 
-        // ---- 一般 RigidBody 衝突は配れないことの確認 -----------------------------------
-        //
-        // Motor を持たない GameObject どうしを重ねても、
-        // CollisionEvent は 1 件も発生しないこと。
-        // 「実装したふり」になっていないかをここで固定する。
+        // ---- 一般 Rigidbody 衝突の Enter / Stay / Exit -------------------------------
         {
             Scene::Scene rigid_world("RigidBodyWorld");
             RuntimeContext rigid_runtime(rigid_world);
             rigid_world.Services().SetRuntime(&rigid_runtime);
             rigid_world.Services().SetPhysics(&physics);
+            ScriptedDynamics dynamics;
+            dynamics.AttachScene(&rigid_world);
+            rigid_world.Services().SetPhysicsDynamics(&dynamics);
 
             Core::GameObject* a = rigid_world.CreateGameObject("A");
             Core::GameObject* b = rigid_world.CreateGameObject("B");
@@ -391,21 +420,58 @@ namespace ReplayEngine::Runtime::Validation
             auto* probe_a = a->AddComponent<CollisionProbeBehaviour>();
             auto* probe_b = b->AddComponent<CollisionProbeBehaviour>();
 
+            Scene::PhysicsContact contact;
+            contact.object_a = a->ID();
+            contact.collider_a = 101;
+            contact.object_b = b->ID();
+            contact.collider_b = 202;
+            contact.point = { 1.0f, 2.0f, 3.0f };
+            contact.normal = { 1.0f, 0.0f, 0.0f };
+            contact.relative_velocity = { -4.0f, 0.0f, 0.0f };
+            contact.penetration = 0.25f;
+            dynamics.contacts.push_back(contact);
+
             rigid_world.Start();
 
             CollisionEventDispatcher rigid_dispatcher;
-            for (std::uint64_t frame = 0; frame < 3; ++frame)
-            {
-                rigid_world.FixedUpdate(1.0f / 60.0f);
-                rigid_dispatcher.Dispatch(rigid_world, frame);
-            }
+            rigid_dispatcher.Dispatch(rigid_world, 1);
+            check.Expect(probe_a != nullptr && probe_a->CountOf(ContactPhase::Enter,
+                CollisionHitKind::Rigidbody) == 1 && probe_b != nullptr &&
+                probe_b->CountOf(ContactPhase::Enter, CollisionHitKind::Rigidbody) == 1,
+                "一般 Rigidbody 接触が両方へ Enter を配る");
+            check.Expect(probe_a != nullptr && !probe_a->records.empty() &&
+                probe_a->records[0].self_collider == 101 &&
+                probe_a->records[0].other_collider == 202 &&
+                probe_a->records[0].relative_velocity.x == -4.0f &&
+                probe_a->records[0].penetration == 0.25f,
+                "Rigidbody 接触の Collider・相対速度・貫通量が保たれる");
+            check.Expect(probe_b != nullptr && !probe_b->records.empty() &&
+                probe_b->records[0].self_collider == 202 &&
+                probe_b->records[0].other_collider == 101 &&
+                probe_b->records[0].relative_velocity.x == 4.0f,
+                "反対側の Rigidbody 接触は向きと Collider が反転する");
 
-            check.Expect(probe_a != nullptr && probe_a->records.empty() &&
-                probe_b != nullptr && probe_b->records.empty(),
-                "CharacterMotor が無い Collider どうしには CollisionEvent が発生しない");
+            probe_a->Clear();
+            probe_b->Clear();
+            rigid_dispatcher.Dispatch(rigid_world, 2);
+            check.Expect(probe_a->CountOf(ContactPhase::Stay,
+                CollisionHitKind::Rigidbody) == 1 && probe_b->CountOf(ContactPhase::Stay,
+                CollisionHitKind::Rigidbody) == 1,
+                "一般 Rigidbody 接触が続けば Stay を配る");
+
+            dynamics.contacts.clear();
+            probe_a->Clear();
+            probe_b->Clear();
+            rigid_dispatcher.Dispatch(rigid_world, 3);
+            check.Expect(probe_a->CountOf(ContactPhase::Exit,
+                CollisionHitKind::Rigidbody) == 1 && probe_b->CountOf(ContactPhase::Exit,
+                CollisionHitKind::Rigidbody) == 1,
+                "一般 Rigidbody 接触が消えれば Exit を配る");
             check.Expect(rigid_dispatcher.ActiveContactCount() == 0,
-                "一般 Collider 対 Collider の接触状態は作られない");
+                "一般 Rigidbody 接触の状態が Exit 後に破棄される");
 
+            rigid_world.Services().SetPhysicsDynamics(nullptr);
+            dynamics.DetachScene();
             rigid_world.Services().SetRuntime(nullptr);
             rigid_world.Services().SetPhysics(nullptr);
         }

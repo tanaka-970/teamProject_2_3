@@ -1,4 +1,4 @@
-#include "ShaderComposerValidation.h"
+﻿#include "ShaderComposerValidation.h"
 
 #include "ShaderComposerAsset.h"
 #include "ShaderComposerGenerator.h"
@@ -54,9 +54,9 @@ namespace ReplayEngine::Rendering::Validation
             ShaderCompiler::Options options = ShaderCompiler::DefaultOptions(false);
             options.defines.emplace_back(shader_variant_define,
                 variant == ShaderVariant::Skinned ? "1" : "0");
-            Microsoft::WRL::ComPtr<ID3DBlob> bytecode;
+            ShaderBytecode bytecode;
             const ShaderCompileResult compiled = ShaderCompiler::CompileSource(
-                combined, graph.generated_hlsl, "main", "ps_5_0", options, bytecode);
+                combined, graph.generated_hlsl, "main", "ps_6_0", options, bytecode);
             if (!compiled.succeeded)
             {
                 error = compiled.Summary();
@@ -71,9 +71,9 @@ namespace ReplayEngine::Rendering::Validation
             ShaderCompiler::Options options = ShaderCompiler::DefaultOptions(false);
             options.defines.emplace_back(shader_variant_define,
                 variant == ShaderVariant::Skinned ? "1" : "0");
-            Microsoft::WRL::ComPtr<ID3DBlob> bytecode;
+            ShaderBytecode bytecode;
             const ShaderCompileResult compiled = ShaderCompiler::CompileSource(
-                source, graph.generated_hlsl, "main", "ps_5_0", options, bytecode);
+                source, graph.generated_hlsl, "main", "ps_6_0", options, bytecode);
             if (!compiled.succeeded)
             {
                 error = compiled.Summary();

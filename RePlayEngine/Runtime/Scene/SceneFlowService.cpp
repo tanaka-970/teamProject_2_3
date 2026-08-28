@@ -544,4 +544,14 @@ namespace ReplayEngine::Runtime
     {
         return CurrentSceneGUID();
     }
+
+    float SceneFlowService::SceneTransitionProgress() const
+    {
+        return scenes_ != nullptr ? scenes_->Progress() : 0.0f;
+    }
+
+    RuntimeStatus SceneFlowService::LastSceneTransitionStatus() const
+    {
+        return last_result_;
+    }
 }

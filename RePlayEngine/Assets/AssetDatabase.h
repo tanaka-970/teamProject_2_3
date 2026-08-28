@@ -37,6 +37,10 @@ namespace ReplayEngine::Assets
         std::size_t RelocateTree(const std::filesystem::path& old_root,
             const std::filesystem::path& new_root);
 
+        // source_path がファイルではなくフォルダになっている record を挙げる。
+        // 過去の RelocateTree が配下をまとめて潰した壊れ方を Editor から見えるようにする。
+        std::vector<const AssetRecord*> FindFolderSourcePaths() const;
+
         const AssetRecord* FindByGuid(const std::string& guid) const noexcept;
         const AssetRecord* FindByPath(const std::filesystem::path& path) const noexcept;
         const std::vector<AssetRecord>& Records() const noexcept { return records_; }

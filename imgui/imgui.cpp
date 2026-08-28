@@ -193,15 +193,15 @@ CODE
      // TODO: Fill optional fields of the io structure later.
      // TODO: Load TTF/OTF fonts if you don't want to use the default font.
 
-     // Initialize helper Platform and Renderer backends (here we are using imgui_impl_win32.cpp and imgui_impl_dx11.cpp)
+     // Initialize the Win32 platform backend and the application's DX12 renderer backend.
      ImGui_ImplWin32_Init(hwnd);
-     ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
+     ReplayEngine_DX12_ImGui_Init();
 
      // Application main loop
      while (true)
      {
          // Feed inputs to dear imgui, start new frame
-         ImGui_ImplDX11_NewFrame();
+         ReplayEngine_DX12_ImGui_NewFrame();
          ImGui_ImplWin32_NewFrame();
          ImGui::NewFrame();
 
@@ -210,12 +210,12 @@ CODE
 
          // Render dear imgui into screen
          ImGui::Render();
-         ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+         ReplayEngine_DX12_ImGui_RenderDrawData(ImGui::GetDrawData());
          g_pSwapChain->Present(1, 0);
      }
 
      // Shutdown
-     ImGui_ImplDX11_Shutdown();
+     ReplayEngine_DX12_ImGui_Shutdown();
      ImGui_ImplWin32_Shutdown();
      ImGui::DestroyContext();
 

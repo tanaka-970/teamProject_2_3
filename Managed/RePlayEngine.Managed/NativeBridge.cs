@@ -7,13 +7,21 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Loader;
 using System.Text;
+using System.Text.Json;
 
 namespace ReplayEngine;
 
 public static unsafe class NativeBridge
 {
+    private static readonly JsonSerializerOptions FieldJsonOptions = new()
+    {
+        IncludeFields = true,
+        PropertyNameCaseInsensitive = false,
+        IgnoreReadOnlyProperties = true,
+    };
     private static readonly ScriptRuntimeContext Context = new();
     private static readonly Dictionary<ulong, ManagedInstance> Instances = new();
+    private static readonly Dictionary<ComponentInstanceKey, ScriptBehaviour> InstancesByComponent = new();
     private static readonly Dictionary<TypeGuid, Type> Types = new();
     private static AssemblyLoadContext? scriptContext;
     private static Assembly? scriptAssembly;
@@ -42,9 +50,24 @@ public static unsafe class NativeBridge
         public override int GetHashCode() => HashCode.Combine(High, Low);
     }
 
+    // 関数ポインタ表の互換番号。C++ の Detail::kNativeApiAbiVersion と必ず一致させる。
+    public const uint NativeApiAbiVersion = 16;
+
+    // 表の先頭に必ず置く自己記述ヘッダー。C++ の Detail::NativeApiHeader と同じ並び。
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeApiHeader
+    {
+        public uint AbiVersion;
+        public uint StructSize;
+        public uint EntryCount;
+        public uint Reserved;
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     public struct NativeApi
     {
+        public NativeApiHeader Header;
+
         public delegate* unmanaged[Cdecl]<ulong, ObjectHandle*, int> FindGameObject;
         public delegate* unmanaged[Cdecl]<ObjectHandle, int> IsGameObjectValid;
         public delegate* unmanaged[Cdecl]<ObjectHandle, Vector3*, int> GetLocalPosition;
@@ -165,16 +188,136 @@ public static unsafe class NativeBridge
 
         // v9 追加。名前で GameObject を探す。C++ 側の表も同じ位置（末尾）。
         public delegate* unmanaged[Cdecl]<byte*, ObjectHandle*, int> FindGameObjectByName;
+
+        // v10 追加。Component 型・汎用プロパティ・World Transform・Rigidbody。
+        public delegate* unmanaged[Cdecl]<byte*, uint*, int> ComponentTypeId;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, int, int> GetComponentTypeName;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, int*, int> GetPropertyBool;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, int, int> SetPropertyBool;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, long*, int> GetPropertyInt;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, long, int> SetPropertyInt;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, double*, int> GetPropertyDouble;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, double, int> SetPropertyDouble;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, byte*, int, int> GetPropertyString;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, byte*, int> SetPropertyString;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, Vector2*, int> GetPropertyVector2;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, Vector2, int> SetPropertyVector2;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, Vector3*, int> GetPropertyVector3;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, Vector3, int> SetPropertyVector3;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, Vector4*, int> GetPropertyVector4;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, Vector4, int> SetPropertyVector4;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, Vector3, int> SetWorldPosition;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, Vector4*, int> GetWorldRotation;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, Vector4, int> SetWorldRotation;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, Vector3*, int> GetWorldScale;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, Vector3, int> SetWorldScale;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, Vector3*, Vector3*, Vector3*, int> GetWorldAxes;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, Vector3, Vector3, int> LookAt;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, Vector3, int> RigidbodyAddForce;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, Vector3, int> RigidbodyAddTorque;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, int> RigidbodyClearForces;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, Vector3, Vector3, int> RigidbodyTeleport;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, Vector3*, int> RigidbodyGetLinearVelocity;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, Vector3, int> RigidbodySetLinearVelocity;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, Vector3*, int> RigidbodyGetAngularVelocity;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, Vector3, int> RigidbodySetAngularVelocity;
+
+        // v11 追加。生デバイス入力 / Scene / 診断。
+        public delegate* unmanaged[Cdecl]<int, int*, int> InputKeyHeld;
+        public delegate* unmanaged[Cdecl]<int, int*, int> InputKeyPressed;
+        public delegate* unmanaged[Cdecl]<int, int*, int> InputKeyReleased;
+        public delegate* unmanaged[Cdecl]<int, int*, int> InputMouseHeld;
+        public delegate* unmanaged[Cdecl]<int, int*, int> InputMousePressed;
+        public delegate* unmanaged[Cdecl]<int, int*, int> InputMouseReleased;
+        public delegate* unmanaged[Cdecl]<float*, float*, int> InputPointerPosition;
+        public delegate* unmanaged[Cdecl]<float*, int> InputWheelDelta;
+        public delegate* unmanaged[Cdecl]<int, int*, int> InputPadConnected;
+        public delegate* unmanaged[Cdecl]<int, int, int*, int> InputPadButtonHeld;
+        public delegate* unmanaged[Cdecl]<int, int, int*, int> InputPadButtonPressed;
+        public delegate* unmanaged[Cdecl]<int, int, int*, int> InputPadButtonReleased;
+        public delegate* unmanaged[Cdecl]<int, int, float*, int> InputPadAxis;
+        public delegate* unmanaged[Cdecl]<int, float, float, int> InputSetVibration;
+        public delegate* unmanaged[Cdecl]<byte*, Vector3, Vector3, Vector3, ObjectHandle, ulong*, int> InstantiatePrefabTracked;
+        public delegate* unmanaged[Cdecl]<ulong, ObjectHandle*, int> TakeSpawnResult;
+        public delegate* unmanaged[Cdecl]<byte*, int, int> GetCurrentSceneGuid;
+        public delegate* unmanaged[Cdecl]<byte*, int> QuitApplication;
+        public delegate* unmanaged[Cdecl]<ulong, ulong*, int> EventDroppedCount;
+
+        // v12 複数 Hit Physics Query。
+        public delegate* unmanaged[Cdecl]<PhysicsQueryRequestNative, PhysicsHit*, int, int*, int> PhysicsQuery;
+
+        // v13 Global/Scene Event 購読と Component 実行命令。
+        public delegate* unmanaged[Cdecl]<ulong, ulong, ObjectHandle, int, ulong*, int> SubscribeEventScoped;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, int, byte*, float, float, int, int> ComponentCommand;
+
+        // v14 Component 型メタデータ。
+        public delegate* unmanaged[Cdecl]<byte*, byte*, int, int> ComponentTypeInfo;
+
+        // v15 Component プロパティの Object / Component 参照。
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, ulong*, int> GetPropertyObjectReference;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, ulong, int> SetPropertyObjectReference;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, ulong*, uint*, int> GetPropertyComponentReference;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, byte*, ulong, uint, int> SetPropertyComponentReference;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, ulong*, uint*, int> ComponentToReference;
+        public delegate* unmanaged[Cdecl]<ulong, uint, ComponentHandle*, int> ResolveComponentReference;
+
+        // v16 Scene 遷移の進捗・実行中・最終結果。
+        public delegate* unmanaged[Cdecl]<float*, int*, int*, int> GetSceneTransitionState;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct PhysicsQueryRequestNative
+    {
+        public PhysicsQueryKind Kind;
+        public Vector3 PointA;
+        public Vector3 PointB;
+        public Vector3 Direction;
+        public Quaternion Rotation;
+        public Vector3 HalfExtents;
+        public float Radius;
+        public float MaxDistance;
+        public int Layer;
+        public int Mask;
+        public ObjectHandle Ignore;
     }
 
     private sealed class ManagedInstance
     {
-        public ManagedInstance(ScriptBehaviour behaviour)
+        public ManagedInstance(ScriptBehaviour behaviour, ComponentHandle component)
         {
             Behaviour = behaviour;
+            Component = component;
         }
 
         public ScriptBehaviour Behaviour { get; }
+        public ComponentHandle Component { get; }
+    }
+
+    private readonly struct ComponentInstanceKey : IEquatable<ComponentInstanceKey>
+    {
+        internal ComponentInstanceKey(ComponentHandle handle)
+        {
+            World = handle.Owner.World;
+            Object = handle.Owner.Object;
+            Generation = handle.Owner.Generation;
+            Instance = handle.Instance;
+            TypeId = handle.TypeId;
+        }
+
+        private ulong World { get; }
+        private ulong Object { get; }
+        private uint Generation { get; }
+        private ulong Instance { get; }
+        private uint TypeId { get; }
+
+        public bool Equals(ComponentInstanceKey other) =>
+            World == other.World && Object == other.Object &&
+            Generation == other.Generation && Instance == other.Instance &&
+            TypeId == other.TypeId;
+        public override bool Equals(object? obj) =>
+            obj is ComponentInstanceKey other && Equals(other);
+        public override int GetHashCode() =>
+            HashCode.Combine(World, Object, Generation, Instance, TypeId);
     }
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
@@ -183,6 +326,27 @@ public static unsafe class NativeBridge
         if (table == null)
         {
             api = default;
+            return 0;
+        }
+
+        // 関数ポインタ表は順番で結びついている。1 つずれると別関数を呼ぶので、
+        // 受け取る前に「同じ版・同じ大きさ・同じ本数か」を必ず確かめる。
+        var header = table->Header;
+        var expectedSize = (uint)sizeof(NativeApi);
+        var expectedEntries =
+            (expectedSize - (uint)sizeof(NativeApiHeader)) / (uint)sizeof(void*);
+        if (header.AbiVersion != NativeApiAbiVersion ||
+            header.StructSize != expectedSize ||
+            header.EntryCount != expectedEntries)
+        {
+            api = default;
+            lastError =
+                $"Native API table mismatch: got abi={header.AbiVersion} size={header.StructSize} " +
+                $"entries={header.EntryCount}, expected abi={NativeApiAbiVersion} " +
+                $"size={expectedSize} entries={expectedEntries}. " +
+                "Rebuild RePlayEngine.Managed and the engine together.";
+            lastErrorFile = string.Empty;
+            lastErrorLine = 0;
             return 0;
         }
 
@@ -218,7 +382,9 @@ public static unsafe class NativeBridge
                     var guid = ReadGuid(type);
                     if (guid.HasValue)
                     {
-                        discovered[guid.Value] = type;
+                        if (!discovered.TryAdd(guid.Value, type))
+                            throw new InvalidOperationException(
+                                $"Duplicate ReplayGuid on C# Behaviour: {type.FullName}.");
                     }
                 }
             }
@@ -230,6 +396,7 @@ public static unsafe class NativeBridge
 
             var oldContext = scriptContext;
             Types.Clear();
+            InstancesByComponent.Clear();
             foreach (var pair in discovered)
             {
                 Types[pair.Key] = pair.Value;
@@ -264,6 +431,7 @@ public static unsafe class NativeBridge
 
         UnloadScriptContext();
         Types.Clear();
+        InstancesByComponent.Clear();
         WriteUtf8("Unloaded C# assembly.", output, outputCapacity);
         return 1;
     }
@@ -309,7 +477,8 @@ public static unsafe class NativeBridge
 
             behaviour.Attach(Context, owner, component);
             var handle = nextHandle++;
-            Instances[handle] = new ManagedInstance(behaviour);
+            Instances[handle] = new ManagedInstance(behaviour, component);
+            InstancesByComponent[new ComponentInstanceKey(component)] = behaviour;
             ClearLastError();
             return handle;
         }
@@ -324,6 +493,7 @@ public static unsafe class NativeBridge
     public static int DestroyInstance(ulong instance)
     {
         if (!Instances.Remove(instance, out var state)) return 0;
+        InstancesByComponent.Remove(new ComponentInstanceKey(state.Component));
         state.Behaviour.ReleaseManagedSubscriptions();
         return 1;
     }
@@ -341,7 +511,11 @@ public static unsafe class NativeBridge
                 case 1: state.Behaviour.OnEnable(); break;
                 case 2: state.Behaviour.Start(); break;
                 case 3: state.Behaviour.FixedUpdate(deltaTime); break;
-                case 4: state.Behaviour.Update(deltaTime); break;
+                case 4:
+                    // 接触イベントと Coroutine / Timer / Tween を Update の直前に進める。
+                    state.Behaviour.PumpFrame(deltaTime);
+                    state.Behaviour.Update(deltaTime);
+                    break;
                 case 5: state.Behaviour.LateUpdate(deltaTime); break;
                 case 6: state.Behaviour.OnDisable(); break;
                 case 7: state.Behaviour.OnDestroy(); break;
@@ -943,6 +1117,29 @@ public static unsafe class NativeBridge
         return new RuntimeResult<RaycastHit>(status, hit);
     }
 
+    internal static RuntimeResult<PhysicsHit[]> PhysicsQuery(PhysicsQueryRequestNative request)
+    {
+        if (api.PhysicsQuery == null)
+            return new RuntimeResult<PhysicsHit[]>(RuntimeStatus.ServiceUnavailable,
+                Array.Empty<PhysicsHit>());
+
+        int count = 0;
+        var status = (RuntimeStatus)api.PhysicsQuery(request, null, 0, &count);
+        if (status != RuntimeStatus.Ok || count <= 0)
+            return new RuntimeResult<PhysicsHit[]>(status, Array.Empty<PhysicsHit>());
+
+        var hits = new PhysicsHit[count];
+        fixed (PhysicsHit* output = hits)
+        {
+            int written = count;
+            status = (RuntimeStatus)api.PhysicsQuery(request, output, count, &written);
+            if (status != RuntimeStatus.Ok)
+                return new RuntimeResult<PhysicsHit[]>(status, Array.Empty<PhysicsHit>());
+            if (written < hits.Length) Array.Resize(ref hits, written);
+        }
+        return new RuntimeResult<PhysicsHit[]>(status, hits);
+    }
+
     internal static RuntimeResult<ComponentHandle> FindMotionPlayer(ObjectHandle owner, string key)
     {
         if (api.FindMotionPlayer == null) return new(RuntimeStatus.ServiceUnavailable);
@@ -1033,14 +1230,29 @@ public static unsafe class NativeBridge
             (RuntimeStatus)api.MotionGetDuration(player, &value), value);
     }
 
-    internal static RuntimeResult<EventSubscription> SubscribeEvent(string eventTypeGuid, ObjectHandle owner)
+    internal static RuntimeResult<EventSubscription> SubscribeEvent(string eventTypeGuid,
+        ObjectHandle owner, EventScope scope = EventScope.Scene)
     {
-        if (api.SubscribeEvent == null) return new(RuntimeStatus.ServiceUnavailable);
+        if (api.SubscribeEventScoped == null) return new(RuntimeStatus.ServiceUnavailable);
         if (!TryParseGuidText(eventTypeGuid, out var guid)) return new(RuntimeStatus.InvalidArgument);
 
         ulong id = 0;
-        var status = (RuntimeStatus)api.SubscribeEvent(guid.High, guid.Low, owner, &id);
+        var status = (RuntimeStatus)api.SubscribeEventScoped(guid.High, guid.Low,
+            owner, (int)scope, &id);
         return new RuntimeResult<EventSubscription>(status, new EventSubscription(id));
+    }
+
+    internal static RuntimeStatus InvokeComponentCommand(ComponentHandle handle,
+        ComponentCommand command, string text = "", float scalar = 0.0f,
+        float secondaryScalar = 0.0f, int integer = 0)
+    {
+        if (api.ComponentCommand == null) return RuntimeStatus.ServiceUnavailable;
+        if (text == null) return RuntimeStatus.InvalidArgument;
+        fixed (byte* pointer = Encoding.UTF8.GetBytes(text + "\0"))
+        {
+            return (RuntimeStatus)api.ComponentCommand(handle, (int)command, pointer,
+                scalar, secondaryScalar, integer);
+        }
     }
 
     internal static RuntimeStatus UnsubscribeEvent(EventSubscription subscription)
@@ -1351,20 +1563,64 @@ public static unsafe class NativeBridge
             if (mapped == null) continue;
 
             var defaultValue = DefaultValue(type, field);
+            var range = field.GetCustomAttribute<RangeAttribute>();
+            var tooltip = field.GetCustomAttribute<TooltipAttribute>();
+            var header = field.GetCustomAttribute<HeaderAttribute>();
+            var display = field.GetCustomAttribute<DisplayNameAttribute>();
+            var assetType = field.GetCustomAttribute<AssetTypeAttribute>();
+            var hidden = field.IsDefined(typeof(HideInInspectorAttribute), true);
+            var readOnly = field.IsDefined(typeof(ReadOnlyAttribute), true);
+
+            // 6 列目までは v1 と同じ並び。7 列目以降は読めない側が無視できる追加分。
             builder.Append("FIELD\t");
             builder.Append(Escape(field.Name));
             builder.Append('\t');
             builder.Append(mapped);
             builder.Append('\t');
-            builder.Append(Escape(Humanize(field.Name)));
+            builder.Append(Escape(display != null ? display.Text : Humanize(field.Name)));
             builder.Append('\t');
-            builder.Append(Escape(string.Empty));
+            builder.Append(Escape(tooltip != null ? tooltip.Text : string.Empty));
             builder.Append('\t');
             builder.Append(Escape(FormatValue(defaultValue, field.FieldType)));
+            builder.Append('\t');
+            // flags: h=Inspector非表示 r=読み取り専用
+            builder.Append(Escape((hidden ? "h" : string.Empty) + (readOnly ? "r" : string.Empty)));
+            builder.Append('\t');
+            builder.Append(range != null
+                ? range.Minimum.ToString(CultureInfo.InvariantCulture) : string.Empty);
+            builder.Append('\t');
+            builder.Append(range != null
+                ? range.Maximum.ToString(CultureInfo.InvariantCulture) : string.Empty);
+            builder.Append('\t');
+            builder.Append(Escape(assetType != null
+                ? assetType.Kind : TypedAssetKind(field.FieldType)));
+            builder.Append('\t');
+            builder.Append(Escape(header != null ? header.Text : string.Empty));
+            builder.Append('\t');
+            builder.Append(Escape(EnumLabels(field.FieldType)));
+            builder.Append('\t');
+            builder.Append(Escape(CollectionElementTypeName(field.FieldType)));
             builder.Append('\n');
         }
 
         return builder.ToString();
+    }
+
+    // enum のラベルを "," 区切りで並べる。値が 0..n-1 の連番でないときは空にする。
+    // Inspector は添字でラベルを引くので、飛び番だと別の名前が出てしまう。
+    private static string EnumLabels(Type type)
+    {
+        if (!type.IsEnum) return string.Empty;
+        var names = Enum.GetNames(type);
+        var values = Enum.GetValues(type);
+        var labels = new string[names.Length];
+        for (var index = 0; index < names.Length; ++index)
+        {
+            if (Convert.ToInt64(values.GetValue(index), CultureInfo.InvariantCulture) != index)
+                return string.Empty;
+            labels[index] = names[index].Replace(",", " ");
+        }
+        return string.Join(",", labels);
     }
 
     private static IEnumerable<FieldInfo> SerializableFields(Type type)
@@ -1413,7 +1669,61 @@ public static unsafe class NativeBridge
         if (type == typeof(Color)) return "color";
         if (type == typeof(ObjectReference)) return "object";
         if (type == typeof(ComponentReference)) return "component";
+        if (typeof(IAssetReference).IsAssignableFrom(type)) return "asset";
+        // enum は内部 int。ラベルは EnumLabels が別列で渡す。
+        if (type.IsEnum && Enum.GetUnderlyingType(type) == typeof(int)) return "enum";
+        if (TryGetCollectionElementType(type, out var elementType) &&
+            MapScalarFieldType(elementType) != null) return "array";
+        if (IsJsonFieldType(type)) return "json";
         return null;
+    }
+
+    private static string? MapScalarFieldType(Type type)
+    {
+        var mapped = MapFieldType(type);
+        return mapped is "array" or "json" ? null : mapped;
+    }
+
+    private static bool TryGetCollectionElementType(Type type, out Type elementType)
+    {
+        if (type.IsArray && type.GetArrayRank() == 1)
+        {
+            elementType = type.GetElementType()!;
+            return true;
+        }
+        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>))
+        {
+            elementType = type.GetGenericArguments()[0];
+            return true;
+        }
+        elementType = typeof(void);
+        return false;
+    }
+
+    private static string CollectionElementTypeName(Type type)
+    {
+        return TryGetCollectionElementType(type, out var elementType)
+            ? MapScalarFieldType(elementType) ?? string.Empty
+            : string.Empty;
+    }
+
+    private static string TypedAssetKind(Type type)
+    {
+        if (!type.IsGenericType ||
+            type.GetGenericTypeDefinition() != typeof(AssetReference<>))
+            return string.Empty;
+        var marker = type.GetGenericArguments()[0];
+        return marker.GetProperty("Kind", BindingFlags.Public | BindingFlags.Static)?
+            .GetValue(null) as string ?? string.Empty;
+    }
+
+    private static bool IsJsonFieldType(Type type)
+    {
+        if (type == typeof(AnimationCurve)) return true;
+        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>))
+            return type.GetGenericArguments()[0] == typeof(string);
+        return type.IsDefined(typeof(SerializableAttribute), true) &&
+            type != typeof(string) && !typeof(ScriptBehaviour).IsAssignableFrom(type);
     }
 
     private static object? ParseValue(Type type, string text)
@@ -1433,6 +1743,14 @@ public static unsafe class NativeBridge
         if (type == typeof(Color)) return new Color(ParseFloat(parts, 0), ParseFloat(parts, 1), ParseFloat(parts, 2), ParseFloat(parts, 3));
         if (type == typeof(ObjectReference)) return new ObjectReference { ObjectId = ParseULong(parts, 0) };
         if (type == typeof(ComponentReference)) return new ComponentReference { OwnerObjectId = ParseULong(parts, 0), ComponentStableId = (uint)ParseULong(parts, 1) };
+        if (typeof(IAssetReference).IsAssignableFrom(type))
+            return Activator.CreateInstance(type, text);
+        if (type.IsEnum) return Enum.ToObject(type, int.Parse(text, CultureInfo.InvariantCulture));
+        if (TryGetCollectionElementType(type, out var elementType))
+            return ParseCollection(type, elementType, text);
+        if (IsJsonFieldType(type))
+            return string.IsNullOrEmpty(text) ? Activator.CreateInstance(type) :
+                JsonSerializer.Deserialize(text, type, FieldJsonOptions);
         return type.IsValueType ? Activator.CreateInstance(type) : null;
     }
 
@@ -1477,8 +1795,51 @@ public static unsafe class NativeBridge
             var reference = (ComponentReference)value;
             return $"{reference.OwnerObjectId.ToString(CultureInfo.InvariantCulture)},{reference.ComponentStableId.ToString(CultureInfo.InvariantCulture)}";
         }
+        if (value is IAssetReference assetReference) return assetReference.AssetGuid;
+        if (type.IsEnum)
+            return Convert.ToInt32(value, CultureInfo.InvariantCulture)
+                .ToString(CultureInfo.InvariantCulture);
+        if (TryGetCollectionElementType(type, out var elementType))
+            return FormatCollection(value, elementType);
+        if (IsJsonFieldType(type))
+            return JsonSerializer.Serialize(value, type, FieldJsonOptions);
 
         return string.Empty;
+    }
+
+    private static string FormatCollection(object value, Type elementType)
+    {
+        if (value is not System.Collections.IEnumerable enumerable) return string.Empty;
+        var values = new List<string>();
+        foreach (var element in enumerable)
+        {
+            var text = FormatValue(element, elementType);
+            values.Add(Convert.ToHexString(Encoding.UTF8.GetBytes(text)));
+        }
+        return $"{MapScalarFieldType(elementType)}|{values.Count.ToString(CultureInfo.InvariantCulture)}|{string.Join(';', values)}";
+    }
+
+    private static object ParseCollection(Type collectionType, Type elementType, string text)
+    {
+        var fields = text.Split('|', 3);
+        var encoded = fields.Length == 3 && fields[2].Length != 0
+            ? fields[2].Split(';') : Array.Empty<string>();
+        var count = fields.Length > 1 && int.TryParse(fields[1], NumberStyles.None,
+            CultureInfo.InvariantCulture, out var parsedCount)
+            ? Math.Clamp(parsedCount, 0, 65536) : 0;
+        count = Math.Min(count, encoded.Length);
+
+        var array = Array.CreateInstance(elementType, count);
+        for (var index = 0; index < count; ++index)
+        {
+            var itemText = Encoding.UTF8.GetString(Convert.FromHexString(encoded[index]));
+            array.SetValue(ParseValue(elementType, itemText), index);
+        }
+        if (collectionType.IsArray) return array;
+
+        var list = (System.Collections.IList)Activator.CreateInstance(collectionType)!;
+        foreach (var item in array) list.Add(item);
+        return list;
     }
 
     private static string F(float value) => value.ToString("R", CultureInfo.InvariantCulture);
@@ -1803,4 +2164,497 @@ public static unsafe class NativeBridge
                 guid.High, guid.Low, name, source, target, encoded);
     }
 
+    // ---- v10 Component 型・汎用プロパティ・World Transform・Rigidbody ----------
+
+    internal static RuntimeResult<uint> ComponentTypeId(string typeName)
+    {
+        if (api.ComponentTypeId == null) return new(RuntimeStatus.ServiceUnavailable);
+        uint value = 0;
+        fixed (byte* text = Encoding.UTF8.GetBytes(typeName + "\0"))
+            return new RuntimeResult<uint>((RuntimeStatus)api.ComponentTypeId(text, &value), value);
+    }
+
+    internal static RuntimeResult<string> GetComponentTypeName(ComponentHandle handle)
+    {
+        if (api.GetComponentTypeName == null) return new(RuntimeStatus.ServiceUnavailable);
+        const int capacity = 256;
+        byte* output = stackalloc byte[capacity];
+        var status = (RuntimeStatus)api.GetComponentTypeName(handle, output, capacity);
+        return status == RuntimeStatus.Ok
+            ? new RuntimeResult<string>(status, FromUtf8(output))
+            : new RuntimeResult<string>(status);
+    }
+
+    internal static RuntimeResult<ComponentTypeMetadata> ComponentTypeInfo(string typeName)
+    {
+        if (api.ComponentTypeInfo == null) return new(RuntimeStatus.ServiceUnavailable);
+        const int capacity = 2048;
+        byte* output = stackalloc byte[capacity];
+        RuntimeStatus status;
+        fixed (byte* text = Encoding.UTF8.GetBytes(typeName + "\0"))
+            status = (RuntimeStatus)api.ComponentTypeInfo(text, output, capacity);
+        if (status != RuntimeStatus.Ok) return new(status);
+        var fields = FromUtf8(output).Split('\t');
+        if (fields.Length < 10 ||
+            !uint.TryParse(fields[1], NumberStyles.None, CultureInfo.InvariantCulture,
+                out var typeId) ||
+            !int.TryParse(fields[6], NumberStyles.Integer, CultureInfo.InvariantCulture,
+                out var version))
+        {
+            return new(RuntimeStatus.TypeMismatch);
+        }
+        return new(status, new ComponentTypeMetadata(fields[0], typeId, fields[2],
+            fields[3], fields[4], fields[5], version, fields[7] == "1",
+            fields[8] == "1", fields[9] == "1"));
+    }
+
+    internal static RuntimeResult<bool> GetPropertyBool(ComponentHandle handle, string name)
+    {
+        if (api.GetPropertyBool == null) return new(RuntimeStatus.ServiceUnavailable);
+        int value = 0;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            return new RuntimeResult<bool>(
+                (RuntimeStatus)api.GetPropertyBool(handle, text, &value), value != 0);
+    }
+
+    internal static RuntimeStatus SetPropertyBool(ComponentHandle handle, string name, bool value)
+    {
+        if (api.SetPropertyBool == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            return (RuntimeStatus)api.SetPropertyBool(handle, text, value ? 1 : 0);
+    }
+
+    internal static RuntimeResult<long> GetPropertyInt(ComponentHandle handle, string name)
+    {
+        if (api.GetPropertyInt == null) return new(RuntimeStatus.ServiceUnavailable);
+        long value = 0;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            return new RuntimeResult<long>(
+                (RuntimeStatus)api.GetPropertyInt(handle, text, &value), value);
+    }
+
+    internal static RuntimeStatus SetPropertyInt(ComponentHandle handle, string name, long value)
+    {
+        if (api.SetPropertyInt == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            return (RuntimeStatus)api.SetPropertyInt(handle, text, value);
+    }
+
+    internal static RuntimeResult<double> GetPropertyDouble(ComponentHandle handle, string name)
+    {
+        if (api.GetPropertyDouble == null) return new(RuntimeStatus.ServiceUnavailable);
+        double value = 0.0;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            return new RuntimeResult<double>(
+                (RuntimeStatus)api.GetPropertyDouble(handle, text, &value), value);
+    }
+
+    internal static RuntimeStatus SetPropertyDouble(ComponentHandle handle, string name, double value)
+    {
+        if (api.SetPropertyDouble == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            return (RuntimeStatus)api.SetPropertyDouble(handle, text, value);
+    }
+
+    internal static RuntimeResult<string> GetPropertyString(ComponentHandle handle, string name)
+    {
+        if (api.GetPropertyString == null) return new(RuntimeStatus.ServiceUnavailable);
+        const int capacity = 4096;
+        byte* output = stackalloc byte[capacity];
+        RuntimeStatus status;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            status = (RuntimeStatus)api.GetPropertyString(handle, text, output, capacity);
+        return status == RuntimeStatus.Ok
+            ? new RuntimeResult<string>(status, FromUtf8(output))
+            : new RuntimeResult<string>(status);
+    }
+
+    internal static RuntimeStatus SetPropertyString(ComponentHandle handle, string name, string value)
+    {
+        if (api.SetPropertyString == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+        fixed (byte* content = Encoding.UTF8.GetBytes(value + "\0"))
+            return (RuntimeStatus)api.SetPropertyString(handle, text, content);
+    }
+
+    internal static RuntimeResult<ObjectReference> GetPropertyObjectReference(
+        ComponentHandle handle, string name)
+    {
+        if (api.GetPropertyObjectReference == null)
+            return new(RuntimeStatus.ServiceUnavailable);
+        ulong owner = 0;
+        RuntimeStatus status;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            status = (RuntimeStatus)api.GetPropertyObjectReference(handle, text, &owner);
+        return new RuntimeResult<ObjectReference>(status,
+            new ObjectReference { ObjectId = owner });
+    }
+
+    internal static RuntimeStatus SetPropertyObjectReference(ComponentHandle handle,
+        string name, ObjectReference value)
+    {
+        if (api.SetPropertyObjectReference == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            return (RuntimeStatus)api.SetPropertyObjectReference(handle, text, value.ObjectId);
+    }
+
+    internal static RuntimeResult<ComponentReference> GetPropertyComponentReference(
+        ComponentHandle handle, string name)
+    {
+        if (api.GetPropertyComponentReference == null)
+            return new(RuntimeStatus.ServiceUnavailable);
+        ulong owner = 0;
+        uint component = 0;
+        RuntimeStatus status;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            status = (RuntimeStatus)api.GetPropertyComponentReference(
+                handle, text, &owner, &component);
+        return new RuntimeResult<ComponentReference>(status, new ComponentReference
+        {
+            OwnerObjectId = owner,
+            ComponentStableId = component,
+        });
+    }
+
+    internal static RuntimeStatus SetPropertyComponentReference(ComponentHandle handle,
+        string name, ComponentReference value)
+    {
+        if (api.SetPropertyComponentReference == null)
+            return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            return (RuntimeStatus)api.SetPropertyComponentReference(handle, text,
+                value.OwnerObjectId, value.ComponentStableId);
+    }
+
+    internal static RuntimeResult<ComponentReference> ComponentToReference(ComponentHandle handle)
+    {
+        if (api.ComponentToReference == null) return new(RuntimeStatus.ServiceUnavailable);
+        ulong owner = 0;
+        uint component = 0;
+        var status = (RuntimeStatus)api.ComponentToReference(handle, &owner, &component);
+        return new RuntimeResult<ComponentReference>(status, new ComponentReference
+        {
+            OwnerObjectId = owner,
+            ComponentStableId = component,
+        });
+    }
+
+    internal static RuntimeResult<ComponentHandle> ResolveComponentReference(
+        ComponentReference reference)
+    {
+        if (api.ResolveComponentReference == null)
+            return new(RuntimeStatus.ServiceUnavailable);
+        ComponentHandle handle = default;
+        var status = (RuntimeStatus)api.ResolveComponentReference(
+            reference.OwnerObjectId, reference.ComponentStableId, &handle);
+        return new RuntimeResult<ComponentHandle>(status, handle);
+    }
+
+    internal static RuntimeResult<Vector2> GetPropertyVector2(ComponentHandle handle, string name)
+    {
+        if (api.GetPropertyVector2 == null) return new(RuntimeStatus.ServiceUnavailable);
+        Vector2 value = default;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            return new RuntimeResult<Vector2>(
+                (RuntimeStatus)api.GetPropertyVector2(handle, text, &value), value);
+    }
+
+    internal static RuntimeStatus SetPropertyVector2(ComponentHandle handle, string name, Vector2 value)
+    {
+        if (api.SetPropertyVector2 == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            return (RuntimeStatus)api.SetPropertyVector2(handle, text, value);
+    }
+
+    internal static RuntimeResult<Vector3> GetPropertyVector3(ComponentHandle handle, string name)
+    {
+        if (api.GetPropertyVector3 == null) return new(RuntimeStatus.ServiceUnavailable);
+        Vector3 value = default;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            return new RuntimeResult<Vector3>(
+                (RuntimeStatus)api.GetPropertyVector3(handle, text, &value), value);
+    }
+
+    internal static RuntimeStatus SetPropertyVector3(ComponentHandle handle, string name, Vector3 value)
+    {
+        if (api.SetPropertyVector3 == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            return (RuntimeStatus)api.SetPropertyVector3(handle, text, value);
+    }
+
+    internal static RuntimeResult<Vector4> GetPropertyVector4(ComponentHandle handle, string name)
+    {
+        if (api.GetPropertyVector4 == null) return new(RuntimeStatus.ServiceUnavailable);
+        Vector4 value = default;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            return new RuntimeResult<Vector4>(
+                (RuntimeStatus)api.GetPropertyVector4(handle, text, &value), value);
+    }
+
+    internal static RuntimeStatus SetPropertyVector4(ComponentHandle handle, string name, Vector4 value)
+    {
+        if (api.SetPropertyVector4 == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            return (RuntimeStatus)api.SetPropertyVector4(handle, text, value);
+    }
+
+    internal static RuntimeStatus SetWorldPosition(ObjectHandle handle, Vector3 value)
+    {
+        if (api.SetWorldPosition == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.SetWorldPosition(handle, value);
+    }
+
+    internal static RuntimeResult<Quaternion> GetWorldRotation(ObjectHandle handle)
+    {
+        if (api.GetWorldRotation == null) return new(RuntimeStatus.ServiceUnavailable);
+        Vector4 value = default;
+        var status = (RuntimeStatus)api.GetWorldRotation(handle, &value);
+        return new RuntimeResult<Quaternion>(status,
+            new Quaternion(value.X, value.Y, value.Z, value.W));
+    }
+
+    internal static RuntimeStatus SetWorldRotation(ObjectHandle handle, Quaternion value)
+    {
+        if (api.SetWorldRotation == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.SetWorldRotation(handle,
+            new Vector4(value.X, value.Y, value.Z, value.W));
+    }
+
+    internal static RuntimeResult<Vector3> GetWorldScale(ObjectHandle handle)
+    {
+        if (api.GetWorldScale == null) return new(RuntimeStatus.ServiceUnavailable);
+        Vector3 value = default;
+        return new RuntimeResult<Vector3>((RuntimeStatus)api.GetWorldScale(handle, &value), value);
+    }
+
+    internal static RuntimeStatus SetWorldScale(ObjectHandle handle, Vector3 value)
+    {
+        if (api.SetWorldScale == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.SetWorldScale(handle, value);
+    }
+
+    internal static RuntimeStatus GetWorldAxes(ObjectHandle handle,
+        out Vector3 forward, out Vector3 right, out Vector3 up)
+    {
+        forward = new Vector3(0.0f, 0.0f, 1.0f);
+        right = new Vector3(1.0f, 0.0f, 0.0f);
+        up = new Vector3(0.0f, 1.0f, 0.0f);
+        if (api.GetWorldAxes == null) return RuntimeStatus.ServiceUnavailable;
+        Vector3 f = default, r = default, u = default;
+        var status = (RuntimeStatus)api.GetWorldAxes(handle, &f, &r, &u);
+        if (status != RuntimeStatus.Ok) return status;
+        forward = f;
+        right = r;
+        up = u;
+        return status;
+    }
+
+    internal static RuntimeStatus LookAt(ObjectHandle handle, Vector3 target, Vector3 worldUp)
+    {
+        if (api.LookAt == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.LookAt(handle, target, worldUp);
+    }
+
+    internal static RuntimeStatus RigidbodyAddForce(ComponentHandle handle, Vector3 force)
+    {
+        if (api.RigidbodyAddForce == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.RigidbodyAddForce(handle, force);
+    }
+
+    internal static RuntimeStatus RigidbodyAddTorque(ComponentHandle handle, Vector3 torque)
+    {
+        if (api.RigidbodyAddTorque == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.RigidbodyAddTorque(handle, torque);
+    }
+
+    internal static RuntimeStatus RigidbodyClearForces(ComponentHandle handle)
+    {
+        if (api.RigidbodyClearForces == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.RigidbodyClearForces(handle);
+    }
+
+    internal static RuntimeStatus RigidbodyTeleport(ComponentHandle handle,
+        Vector3 position, Vector3 rotationEuler)
+    {
+        if (api.RigidbodyTeleport == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.RigidbodyTeleport(handle, position, rotationEuler);
+    }
+
+    internal static RuntimeResult<Vector3> RigidbodyGetLinearVelocity(ComponentHandle handle)
+    {
+        if (api.RigidbodyGetLinearVelocity == null) return new(RuntimeStatus.ServiceUnavailable);
+        Vector3 value = default;
+        return new RuntimeResult<Vector3>(
+            (RuntimeStatus)api.RigidbodyGetLinearVelocity(handle, &value), value);
+    }
+
+    internal static RuntimeStatus RigidbodySetLinearVelocity(ComponentHandle handle, Vector3 value)
+    {
+        if (api.RigidbodySetLinearVelocity == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.RigidbodySetLinearVelocity(handle, value);
+    }
+
+    internal static RuntimeResult<Vector3> RigidbodyGetAngularVelocity(ComponentHandle handle)
+    {
+        if (api.RigidbodyGetAngularVelocity == null) return new(RuntimeStatus.ServiceUnavailable);
+        Vector3 value = default;
+        return new RuntimeResult<Vector3>(
+            (RuntimeStatus)api.RigidbodyGetAngularVelocity(handle, &value), value);
+    }
+
+    internal static RuntimeStatus RigidbodySetAngularVelocity(ComponentHandle handle, Vector3 value)
+    {
+        if (api.RigidbodySetAngularVelocity == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.RigidbodySetAngularVelocity(handle, value);
+    }
+
+    // ---- v11 生デバイス入力 / Scene / 診断 ------------------------------------
+
+    private static RuntimeResult<bool> IntFlag(
+        delegate* unmanaged[Cdecl]<int, int*, int> call, int argument)
+    {
+        if (call == null) return new(RuntimeStatus.ServiceUnavailable);
+        int value = 0;
+        return new RuntimeResult<bool>((RuntimeStatus)call(argument, &value), value != 0);
+    }
+
+    private static RuntimeResult<bool> IntFlag2(
+        delegate* unmanaged[Cdecl]<int, int, int*, int> call, int a, int b)
+    {
+        if (call == null) return new(RuntimeStatus.ServiceUnavailable);
+        int value = 0;
+        return new RuntimeResult<bool>((RuntimeStatus)call(a, b, &value), value != 0);
+    }
+
+    internal static RuntimeResult<bool> InputKeyHeld(int key) => IntFlag(api.InputKeyHeld, key);
+    internal static RuntimeResult<bool> InputKeyPressed(int key) => IntFlag(api.InputKeyPressed, key);
+    internal static RuntimeResult<bool> InputKeyReleased(int key) => IntFlag(api.InputKeyReleased, key);
+    internal static RuntimeResult<bool> InputMouseHeld(int button) => IntFlag(api.InputMouseHeld, button);
+    internal static RuntimeResult<bool> InputMousePressed(int button) => IntFlag(api.InputMousePressed, button);
+    internal static RuntimeResult<bool> InputMouseReleased(int button) => IntFlag(api.InputMouseReleased, button);
+
+    internal static RuntimeResult<Vector2> InputPointerPosition()
+    {
+        if (api.InputPointerPosition == null) return new(RuntimeStatus.ServiceUnavailable);
+        float x = 0.0f, y = 0.0f;
+        var status = (RuntimeStatus)api.InputPointerPosition(&x, &y);
+        return new RuntimeResult<Vector2>(status, new Vector2(x, y));
+    }
+
+    internal static RuntimeResult<float> InputWheelDelta()
+    {
+        if (api.InputWheelDelta == null) return new(RuntimeStatus.ServiceUnavailable);
+        float value = 0.0f;
+        return new RuntimeResult<float>((RuntimeStatus)api.InputWheelDelta(&value), value);
+    }
+
+    internal static RuntimeResult<bool> InputPadConnected(int slot)
+        => IntFlag(api.InputPadConnected, slot);
+    internal static RuntimeResult<bool> InputPadButtonHeld(int slot, int button)
+        => IntFlag2(api.InputPadButtonHeld, slot, button);
+    internal static RuntimeResult<bool> InputPadButtonPressed(int slot, int button)
+        => IntFlag2(api.InputPadButtonPressed, slot, button);
+    internal static RuntimeResult<bool> InputPadButtonReleased(int slot, int button)
+        => IntFlag2(api.InputPadButtonReleased, slot, button);
+
+    internal static RuntimeResult<float> InputPadAxis(int slot, int axis)
+    {
+        if (api.InputPadAxis == null) return new(RuntimeStatus.ServiceUnavailable);
+        float value = 0.0f;
+        return new RuntimeResult<float>((RuntimeStatus)api.InputPadAxis(slot, axis, &value), value);
+    }
+
+    internal static RuntimeStatus InputSetVibration(int slot, float low, float high)
+    {
+        if (api.InputSetVibration == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.InputSetVibration(slot, low, high);
+    }
+
+    internal static RuntimeResult<ulong> InstantiatePrefabTracked(string prefabAssetGuid,
+        Vector3 position, Vector3 rotationEuler, Vector3 scale, ObjectHandle parent)
+    {
+        if (api.InstantiatePrefabTracked == null) return new(RuntimeStatus.ServiceUnavailable);
+        ulong request = 0;
+        fixed (byte* guid = Encoding.UTF8.GetBytes(prefabAssetGuid + "\0"))
+            return new RuntimeResult<ulong>((RuntimeStatus)api.InstantiatePrefabTracked(
+                guid, position, rotationEuler, scale, parent, &request), request);
+    }
+
+    internal static RuntimeResult<ObjectHandle> TakeSpawnResult(ulong request)
+    {
+        if (api.TakeSpawnResult == null) return new(RuntimeStatus.ServiceUnavailable);
+        ObjectHandle value = default;
+        return new RuntimeResult<ObjectHandle>(
+            (RuntimeStatus)api.TakeSpawnResult(request, &value), value);
+    }
+
+    internal static RuntimeResult<string> GetCurrentSceneGuid()
+    {
+        if (api.GetCurrentSceneGuid == null) return new(RuntimeStatus.ServiceUnavailable);
+        const int capacity = 256;
+        byte* output = stackalloc byte[capacity];
+        var status = (RuntimeStatus)api.GetCurrentSceneGuid(output, capacity);
+        return status == RuntimeStatus.Ok
+            ? new RuntimeResult<string>(status, FromUtf8(output))
+            : new RuntimeResult<string>(status);
+    }
+
+    internal static RuntimeStatus QuitApplication(string reason)
+    {
+        if (api.QuitApplication == null) return RuntimeStatus.ServiceUnavailable;
+        fixed (byte* text = Encoding.UTF8.GetBytes(reason + "\0"))
+            return (RuntimeStatus)api.QuitApplication(text);
+    }
+
+    internal static RuntimeResult<SceneTransitionInfo> GetSceneTransitionState()
+    {
+        if (api.GetSceneTransitionState == null)
+            return new(RuntimeStatus.ServiceUnavailable);
+        float progress = 0.0f;
+        int inProgress = 0;
+        int transitionStatus = (int)RuntimeStatus.ServiceUnavailable;
+        var status = (RuntimeStatus)api.GetSceneTransitionState(
+            &progress, &inProgress, &transitionStatus);
+        return new RuntimeResult<SceneTransitionInfo>(status,
+            new SceneTransitionInfo(progress, inProgress != 0,
+                (RuntimeStatus)transitionStatus));
+    }
+
+    internal static RuntimeResult<T> GetBehaviour<T>(ComponentHandle component)
+        where T : ScriptBehaviour
+    {
+        if (component.IsEmpty) return new(RuntimeStatus.InvalidHandle);
+        if (!InstancesByComponent.TryGetValue(new ComponentInstanceKey(component),
+            out var behaviour))
+            return new(RuntimeStatus.ComponentNotFound);
+        return behaviour is T typed
+            ? new RuntimeResult<T>(RuntimeStatus.Ok, typed)
+            : new RuntimeResult<T>(RuntimeStatus.TypeMismatch);
+    }
+
+    internal static RuntimeResult<T[]> GetBehaviours<T>(ObjectHandle owner)
+        where T : ScriptBehaviour
+    {
+        if (owner.IsEmpty) return new(RuntimeStatus.InvalidHandle, Array.Empty<T>());
+        var found = new List<T>();
+        foreach (var pair in InstancesByComponent)
+        {
+            var behaviour = pair.Value;
+            var candidate = behaviour.GameObject;
+            if (candidate.World == owner.World && candidate.Object == owner.Object &&
+                candidate.Generation == owner.Generation && behaviour is T typed)
+                found.Add(typed);
+        }
+        return found.Count == 0
+            ? new RuntimeResult<T[]>(RuntimeStatus.ComponentNotFound, Array.Empty<T>())
+            : new RuntimeResult<T[]>(RuntimeStatus.Ok, found.ToArray());
+    }
+
+    internal static RuntimeResult<ulong> EventDroppedCount(EventSubscription subscription)
+    {
+        if (api.EventDroppedCount == null) return new(RuntimeStatus.ServiceUnavailable);
+        ulong value = 0;
+        return new RuntimeResult<ulong>(
+            (RuntimeStatus)api.EventDroppedCount(subscription.Id, &value), value);
+    }
 }

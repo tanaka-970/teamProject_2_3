@@ -243,6 +243,31 @@ namespace ReplayEngine::Core::Detail
             PropertyRegistry::Register<AnimatorComponent>(
                 MakeProperty("playing", &AnimatorComponent::playing).Display("再生"));
 
+            PropertyRegistry::Register<AnimatorComponent>(
+                MakeAccessorProperty<AnimatorComponent>("current_state", PropertyType::String,
+                    [](const AnimatorComponent& component)
+                    { return PropertyValue::MakeString(component.CurrentStateName()); },
+                    [](AnimatorComponent&, const PropertyValue&) {})
+                .Display("現在の State").RuntimeOnly().ReadOnly().NotSerializable());
+            PropertyRegistry::Register<AnimatorComponent>(
+                MakeAccessorProperty<AnimatorComponent>("current_clip", PropertyType::Int,
+                    [](const AnimatorComponent& component)
+                    { return PropertyValue::MakeInt(component.CurrentClip()); },
+                    [](AnimatorComponent&, const PropertyValue&) {})
+                .Display("現在のクリップ").RuntimeOnly().ReadOnly().NotSerializable());
+            PropertyRegistry::Register<AnimatorComponent>(
+                MakeAccessorProperty<AnimatorComponent>("animation_time", PropertyType::Float,
+                    [](const AnimatorComponent& component)
+                    { return PropertyValue::MakeFloat(component.AnimationTime()); },
+                    [](AnimatorComponent&, const PropertyValue&) {})
+                .Display("再生時間").RuntimeOnly().ReadOnly().NotSerializable());
+            PropertyRegistry::Register<AnimatorComponent>(
+                MakeAccessorProperty<AnimatorComponent>("blend_factor", PropertyType::Float,
+                    [](const AnimatorComponent& component)
+                    { return PropertyValue::MakeFloat(component.BlendFactor()); },
+                    [](AnimatorComponent&, const PropertyValue&) {})
+                .Display("ブレンド率").RuntimeOnly().ReadOnly().NotSerializable());
+
             // 旧 Scene の保存名は絶対に消さない。State Machine を使う Scene では
             // advanced な互換値として残り、states が空なら従来どおり実処理にも使われる。
             PropertyRegistry::Register<AnimatorComponent>(
@@ -507,7 +532,8 @@ namespace ReplayEngine::Core::Detail
         {
             ComponentRegistry::Register<DirectionalLightComponent>(
                 ComponentTypeInfo::Describe("Directional Light", "Lighting")
-                    .WithTooltip("GameObjectの回転方向から照らす平行光源。Scene内の先頭1つを使用。"));
+                    .WithTooltip("GameObjectの回転方向から照らす平行光源。Scene内の先頭1つを使用。")
+                    .WithVersion(2));
             PropertyRegistry::Register<DirectionalLightComponent>(
                 MakeProperty("color", &DirectionalLightComponent::color).Display("色").AsColor());
             PropertyRegistry::Register<DirectionalLightComponent>(
@@ -532,7 +558,8 @@ namespace ReplayEngine::Core::Detail
 
             ComponentRegistry::Register<PointLightComponent>(
                 ComponentTypeInfo::Describe("Point Light", "Lighting")
-                    .WithTooltip("Transform位置を中心に全方向へ照らす。"));
+                    .WithTooltip("Transform位置を中心に全方向へ照らす。")
+                    .WithVersion(2));
             PropertyRegistry::Register<PointLightComponent>(
                 MakeProperty("color", &PointLightComponent::color).Display("色").AsColor());
             PropertyRegistry::Register<PointLightComponent>(
@@ -557,7 +584,8 @@ namespace ReplayEngine::Core::Detail
 
             ComponentRegistry::Register<SpotLightComponent>(
                 ComponentTypeInfo::Describe("Spot Light", "Lighting")
-                    .WithTooltip("Transform位置と回転で円錐状に照らす。"));
+                    .WithTooltip("Transform位置と回転で円錐状に照らす。")
+                    .WithVersion(2));
             PropertyRegistry::Register<SpotLightComponent>(
                 MakeProperty("color", &SpotLightComponent::color).Display("色").AsColor());
             PropertyRegistry::Register<SpotLightComponent>(

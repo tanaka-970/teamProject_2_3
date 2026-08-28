@@ -89,8 +89,9 @@ namespace ReplayEngine::UI
         BurnReveal = 71,
         PortalVortex = 72,
         FrostCrack = 73,
+        Count = 74,
 
-        // 新規 kind は必ず末尾へ追加する。既存 Scene の enum 値を変えない。
+        // 新規 kind は Count の直前へ追加する。既存 Scene の enum 値を変えない。
     };
 
     // Effect Stack 全体へ掛ける共通の適用範囲。

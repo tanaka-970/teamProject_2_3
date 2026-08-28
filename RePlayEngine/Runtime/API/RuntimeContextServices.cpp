@@ -438,6 +438,62 @@ namespace ReplayEngine::Runtime
         return RuntimeStatus::Ok;
     }
 
+    RuntimeStatus RuntimeContext::PhysicsQuery(const PhysicsQueryRequest& request,
+        std::vector<Scene::PhysicsQueryHit>& out) const
+    {
+        out.clear();
+        const Scene::IPhysicsQueryService* physics = world_->Services().Physics();
+        if (physics == nullptr || !physics->CollisionAvailable())
+            return RuntimeStatus::ServiceUnavailable;
+
+        Scene::CollisionQueryFilter filter;
+        filter.layer = request.layer;
+        filter.mask = request.mask;
+        if (!request.ignore.IsEmpty())
+        {
+            RuntimeStatus status = RuntimeStatus::Ok;
+            if (ResolveObject(request.ignore, status) == nullptr) return status;
+            filter.ignore_object = request.ignore.object;
+        }
+
+        switch (request.kind)
+        {
+        case PhysicsQueryKind::RaycastAll:
+            if (request.max_distance <= 0.0f) return RuntimeStatus::InvalidArgument;
+            physics->RaycastAllFiltered(request.point_a, request.direction,
+                request.max_distance, filter, out);
+            break;
+        case PhysicsQueryKind::OverlapSphere:
+            if (request.radius < 0.0f) return RuntimeStatus::InvalidArgument;
+            physics->OverlapSphere(request.point_a, request.radius, filter, out);
+            break;
+        case PhysicsQueryKind::OverlapBox:
+            physics->OverlapBox(request.point_a, request.half_extents,
+                request.rotation, filter, out);
+            break;
+        case PhysicsQueryKind::OverlapCapsule:
+            if (request.radius < 0.0f) return RuntimeStatus::InvalidArgument;
+            physics->OverlapCapsule(request.point_a, request.point_b,
+                request.radius, filter, out);
+            break;
+        case PhysicsQueryKind::SphereCast:
+            physics->SphereCastAll(request.point_a, request.direction,
+                request.radius, request.max_distance, filter, out);
+            break;
+        case PhysicsQueryKind::BoxCast:
+            physics->BoxCastAll(request.point_a, request.half_extents,
+                request.rotation, request.direction, request.max_distance, filter, out);
+            break;
+        case PhysicsQueryKind::CapsuleCast:
+            physics->CapsuleCastAll(request.point_a, request.point_b, request.radius,
+                request.direction, request.max_distance, filter, out);
+            break;
+        default:
+            return RuntimeStatus::InvalidArgument;
+        }
+        return RuntimeStatus::Ok;
+    }
+
     // ---- Log ----------------------------------------------------------------
 
     void RuntimeContext::Log(LogLevel level, const std::string& message,
@@ -463,5 +519,142 @@ namespace ReplayEngine::Runtime
         const ObjectHandle& source) const
     {
         Log(LogLevel::Error, message, source);
+    }
+
+    // ---- 生デバイス入力 --------------------------------------------------------
+
+    RuntimeStatus RuntimeContext::InputKeyHeld(int key, bool& out) const
+    {
+        out = false;
+        if (input_service_ == nullptr) return RuntimeStatus::ServiceUnavailable;
+        if (key <= 0 || key > 255) return RuntimeStatus::InvalidArgument;
+        out = input_service_->KeyHeld(key);
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus RuntimeContext::InputKeyPressed(int key, bool& out) const
+    {
+        out = false;
+        if (input_service_ == nullptr) return RuntimeStatus::ServiceUnavailable;
+        if (key <= 0 || key > 255) return RuntimeStatus::InvalidArgument;
+        out = input_service_->KeyPressed(key);
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus RuntimeContext::InputKeyReleased(int key, bool& out) const
+    {
+        out = false;
+        if (input_service_ == nullptr) return RuntimeStatus::ServiceUnavailable;
+        if (key <= 0 || key > 255) return RuntimeStatus::InvalidArgument;
+        out = input_service_->KeyReleased(key);
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus RuntimeContext::InputMouseButtonHeld(int button, bool& out) const
+    {
+        out = false;
+        if (input_service_ == nullptr) return RuntimeStatus::ServiceUnavailable;
+        if (button < 0 || button > 4) return RuntimeStatus::InvalidArgument;
+        out = input_service_->MouseButtonHeld(button);
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus RuntimeContext::InputMouseButtonPressed(int button, bool& out) const
+    {
+        out = false;
+        if (input_service_ == nullptr) return RuntimeStatus::ServiceUnavailable;
+        if (button < 0 || button > 4) return RuntimeStatus::InvalidArgument;
+        out = input_service_->MouseButtonPressed(button);
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus RuntimeContext::InputMouseButtonReleased(int button, bool& out) const
+    {
+        out = false;
+        if (input_service_ == nullptr) return RuntimeStatus::ServiceUnavailable;
+        if (button < 0 || button > 4) return RuntimeStatus::InvalidArgument;
+        out = input_service_->MouseButtonReleased(button);
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus RuntimeContext::InputPointerPosition(float& out_x, float& out_y) const
+    {
+        out_x = 0.0f;
+        out_y = 0.0f;
+        if (input_service_ == nullptr) return RuntimeStatus::ServiceUnavailable;
+        out_x = input_service_->PointerX();
+        out_y = input_service_->PointerY();
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus RuntimeContext::InputWheelDelta(float& out) const
+    {
+        out = 0.0f;
+        if (input_service_ == nullptr) return RuntimeStatus::ServiceUnavailable;
+        out = input_service_->WheelDelta();
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus RuntimeContext::InputGamepadConnected(int player_slot, bool& out) const
+    {
+        out = false;
+        if (input_service_ == nullptr) return RuntimeStatus::ServiceUnavailable;
+        if (player_slot < 0) return RuntimeStatus::InvalidArgument;
+        out = input_service_->GamepadConnected(player_slot);
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus RuntimeContext::InputGamepadButtonHeld(int player_slot, int button,
+        bool& out) const
+    {
+        out = false;
+        if (input_service_ == nullptr) return RuntimeStatus::ServiceUnavailable;
+        if (player_slot < 0 || button == 0) return RuntimeStatus::InvalidArgument;
+        out = input_service_->GamepadButtonHeld(player_slot, button);
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus RuntimeContext::InputGamepadButtonPressed(int player_slot, int button,
+        bool& out) const
+    {
+        out = false;
+        if (input_service_ == nullptr) return RuntimeStatus::ServiceUnavailable;
+        if (player_slot < 0 || button == 0) return RuntimeStatus::InvalidArgument;
+        out = input_service_->GamepadButtonPressed(player_slot, button);
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus RuntimeContext::InputGamepadButtonReleased(int player_slot, int button,
+        bool& out) const
+    {
+        out = false;
+        if (input_service_ == nullptr) return RuntimeStatus::ServiceUnavailable;
+        if (player_slot < 0 || button == 0) return RuntimeStatus::InvalidArgument;
+        out = input_service_->GamepadButtonReleased(player_slot, button);
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus RuntimeContext::InputGamepadAxis(int player_slot, int axis,
+        float& out) const
+    {
+        out = 0.0f;
+        if (input_service_ == nullptr) return RuntimeStatus::ServiceUnavailable;
+        if (player_slot < 0 || axis < 0 || axis > 5) return RuntimeStatus::InvalidArgument;
+        out = input_service_->GamepadAxisValue(player_slot, axis);
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus RuntimeContext::InputSetGamepadVibration(int player_slot,
+        float low, float high)
+    {
+        if (input_service_ == nullptr) return RuntimeStatus::ServiceUnavailable;
+        if (player_slot < 0) return RuntimeStatus::InvalidArgument;
+        if (!std::isfinite(low) || !std::isfinite(high))
+            return RuntimeStatus::InvalidArgument;
+        // 振動は const な問い合わせではないので、接続された実体側へ書き込む。
+        Scene::IInputService* service =
+            const_cast<Scene::IInputService*>(input_service_);
+        return service->SetGamepadVibration(player_slot, low, high)
+            ? RuntimeStatus::Ok : RuntimeStatus::UnsupportedOperation;
     }
 }

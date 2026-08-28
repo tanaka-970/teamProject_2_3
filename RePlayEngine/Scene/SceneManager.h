@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "IScene.h"
 
@@ -11,19 +11,17 @@ namespace ReplayEngine::Scene
     class SceneManager final
     {
     public:
-        bool SetScene(std::unique_ptr<IScene> scene, ID3D11Device* device)
+        bool SetScene(std::unique_ptr<IScene> scene)
         {
-            if (!scene || !scene->Initialize(device)) return false;
+            if (!scene || !scene->Initialize()) return false;
             current_scene_ = std::move(scene);
-            device_ = device;
             return true;
         }
 
-        bool QueueScene(std::unique_ptr<IScene> scene, ID3D11Device* device)
+        bool QueueScene(std::unique_ptr<IScene> scene)
         {
-            if (!scene || !scene->Initialize(device)) return false;
+            if (!scene || !scene->Initialize()) return false;
             queued_scene_ = std::move(scene);
-            device_ = device;
             return true;
         }
 
@@ -35,17 +33,18 @@ namespace ReplayEngine::Scene
         void Clear() noexcept
         {
             current_scene_.reset();
-            // Queue済みLoadingSceneはバックグラウンドTaskを所有する。
-            // Cacheやframeworkメンバーより先に破棄し、Taskのjoinを完了させる。
             queued_scene_.reset();
             queued_factories_.clear();
-            device_ = nullptr;
         }
+
         bool HasScene() const noexcept { return current_scene_ != nullptr; }
         bool IsExclusive() const noexcept
         {
             return current_scene_ && current_scene_->RenderMode() == SceneRenderMode::Exclusive;
         }
+
+        IScene* CurrentScene() noexcept { return current_scene_.get(); }
+        const IScene* CurrentScene() const noexcept { return current_scene_.get(); }
 
         void Update(float elapsed_time)
         {
@@ -59,7 +58,7 @@ namespace ReplayEngine::Scene
                     auto factory = std::move(queued_factories_.front());
                     queued_factories_.pop_front();
                     auto next = factory();
-                    if (next && next->Initialize(device_)) current_scene_ = std::move(next);
+                    if (next && next->Initialize()) current_scene_ = std::move(next);
                 }
             }
         }
@@ -69,13 +68,18 @@ namespace ReplayEngine::Scene
             if (current_scene_) current_scene_->Render(context);
         }
 
+        bool BuildRuntimeUI(Rendering::DX12::D3D12UIFrame& frame,
+            float width, float height)
+        {
+            return current_scene_ ? current_scene_->BuildRuntimeUI(frame, width, height) : true;
+        }
+
         bool OnKeyDown(WPARAM key)
         {
             return current_scene_ && current_scene_->OnKeyDown(key);
         }
 
     private:
-        ID3D11Device* device_ = nullptr;
         std::unique_ptr<IScene> current_scene_;
         std::unique_ptr<IScene> queued_scene_;
         std::deque<std::function<std::unique_ptr<IScene>()>> queued_factories_;

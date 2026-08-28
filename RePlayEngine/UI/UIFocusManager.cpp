@@ -5,6 +5,7 @@
 #include "../Components/UI/UIButtonComponent.h"
 #include "../Components/UI/UIInputFieldComponent.h"
 #include "../Components/UI/UISelectableComponent.h"
+#include "../Components/UI/UISliderComponent.h"
 #include "../Object/GameObject/GameObject.h"
 #include "../Scene/Runtime/Scene.h"
 #include "../Scene/Services/IInputService.h"
@@ -23,6 +24,7 @@ namespace ReplayEngine::UI
         using Components::UIButtonComponent;
         using Components::UIInputFieldComponent;
         using Components::UISelectableComponent;
+        using Components::UISliderComponent;
 
         Core::GameObject* CanvasRoot(Core::GameObject* object) noexcept
         {
@@ -190,13 +192,21 @@ namespace ReplayEngine::UI
         // InputField は左右キーを文字カーソルに使う。上下は UI Navigation に残す。
         const bool text_editing = current->Owner() != nullptr &&
             current->Owner()->GetComponent<UIInputFieldComponent>() != nullptr;
+        const UISliderComponent* slider = current->Owner() != nullptr
+            ? current->Owner()->GetComponent<UISliderComponent>() : nullptr;
+        const bool horizontal_slider = slider != nullptr &&
+            (slider->direction == UISliderComponent::LeftToRight ||
+                slider->direction == UISliderComponent::RightToLeft);
+        const bool vertical_slider = slider != nullptr && !horizontal_slider;
         Direction direction = Direction::Down;
         bool move = false;
-        if (input.Pressed("NavigateUp")) { direction = Direction::Up; move = true; }
-        else if (input.Pressed("NavigateDown")) { direction = Direction::Down; move = true; }
-        else if (!text_editing && input.Pressed("NavigateLeft"))
+        if (!vertical_slider && input.Pressed("NavigateUp"))
+            { direction = Direction::Up; move = true; }
+        else if (!vertical_slider && input.Pressed("NavigateDown"))
+            { direction = Direction::Down; move = true; }
+        else if (!text_editing && !horizontal_slider && input.Pressed("NavigateLeft"))
             { direction = Direction::Left; move = true; }
-        else if (!text_editing && input.Pressed("NavigateRight"))
+        else if (!text_editing && !horizontal_slider && input.Pressed("NavigateRight"))
             { direction = Direction::Right; move = true; }
         if (!move) return;
         if (UISelectableComponent* next = FindInDirection(scene, *current, direction))

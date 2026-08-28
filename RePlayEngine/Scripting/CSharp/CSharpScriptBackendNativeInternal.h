@@ -30,14 +30,35 @@
 
 namespace ReplayEngine::Scripting::CSharp::Detail
 {
+        // 1 購読あたりの未 Poll イベント上限。超えたら古いものから捨てる。
+        // Poll を忘れた Behaviour が 1 つあるだけでメモリが伸び続けるのを防ぐ。
+        inline constexpr std::size_t kMaxPendingEventsPerSubscription = 256;
+
         struct NativeEventSubscription final
         {
             Runtime::ScopedSubscription token;
             std::deque<std::string> pending;
+            std::uint64_t dropped = 0;
+        };
+
+        // 関数ポインタ表の互換番号。**末尾へ関数を足したら必ず 1 上げる。**
+        // C# 側の NativeBridge.NativeApiAbiVersion と一致していないと表を拒否する。
+        inline constexpr std::uint32_t kNativeApiAbiVersion = 16;
+
+        // 表の先頭に必ず置く自己記述ヘッダー。
+        // 順番が 1 つずれても別関数を呼ばずに、その場で不一致として弾くために使う。
+        struct NativeApiHeader final
+        {
+            std::uint32_t abi_version = kNativeApiAbiVersion;
+            std::uint32_t struct_size = 0;
+            std::uint32_t entry_count = 0;
+            std::uint32_t reserved = 0;
         };
 
         struct NativeApiTable final
         {
+            NativeApiHeader header{};
+
             find_game_object_callback find_game_object = nullptr;
             is_game_object_valid_callback is_game_object_valid = nullptr;
             get_vec3_callback get_local_position = nullptr;
@@ -163,7 +184,86 @@ namespace ReplayEngine::Scripting::CSharp::Detail
 
             // v9 addition. Name lookup. Mirrored at C# tail.
             find_by_name_callback find_game_object_by_name = nullptr;
+
+            // v10 additions. Component 型・汎用プロパティ・World Transform・Rigidbody。
+            component_type_id_callback component_type_id = nullptr;
+            component_type_name_callback get_component_type_name = nullptr;
+            get_property_bool_callback get_component_property_bool = nullptr;
+            set_property_bool_callback set_component_property_bool = nullptr;
+            get_property_int_callback get_component_property_int = nullptr;
+            set_property_int_callback set_component_property_int = nullptr;
+            get_property_double_callback get_component_property_double = nullptr;
+            set_property_double_callback set_component_property_double = nullptr;
+            get_property_string_callback get_component_property_string = nullptr;
+            set_property_string_callback set_component_property_string = nullptr;
+            get_property_vec2_callback get_component_property_vec2 = nullptr;
+            set_property_vec2_callback set_component_property_vec2 = nullptr;
+            get_property_vec3_callback get_component_property_vec3 = nullptr;
+            set_property_vec3_callback set_component_property_vec3 = nullptr;
+            get_property_vec4_callback get_component_property_vec4 = nullptr;
+            set_property_vec4_callback set_component_property_vec4 = nullptr;
+            set_vec3_callback set_world_position = nullptr;
+            get_vec4_callback get_world_rotation = nullptr;
+            set_vec4_callback set_world_rotation = nullptr;
+            get_vec3_callback get_world_scale = nullptr;
+            set_vec3_callback set_world_scale = nullptr;
+            get_world_axes_callback get_world_axes = nullptr;
+            look_at_callback look_at = nullptr;
+            rigidbody_vec3_callback rigidbody_add_force = nullptr;
+            rigidbody_vec3_callback rigidbody_add_torque = nullptr;
+            rigidbody_void_callback rigidbody_clear_forces = nullptr;
+            rigidbody_teleport_callback rigidbody_teleport = nullptr;
+            rigidbody_get_vec3_callback rigidbody_get_linear_velocity = nullptr;
+            rigidbody_vec3_callback rigidbody_set_linear_velocity = nullptr;
+            rigidbody_get_vec3_callback rigidbody_get_angular_velocity = nullptr;
+            rigidbody_vec3_callback rigidbody_set_angular_velocity = nullptr;
+
+            // v11 additions. 生デバイス入力 / Scene / 診断。
+            input_key_callback input_key_held = nullptr;
+            input_key_callback input_key_pressed = nullptr;
+            input_key_callback input_key_released = nullptr;
+            input_key_callback input_mouse_held = nullptr;
+            input_key_callback input_mouse_pressed = nullptr;
+            input_key_callback input_mouse_released = nullptr;
+            input_pointer_position_callback input_pointer_position = nullptr;
+            input_pointer_callback input_wheel_delta = nullptr;
+            input_pad_connected_callback input_pad_connected = nullptr;
+            input_pad_button_callback input_pad_button_held = nullptr;
+            input_pad_button_callback input_pad_button_pressed = nullptr;
+            input_pad_button_callback input_pad_button_released = nullptr;
+            input_pad_axis_callback input_pad_axis = nullptr;
+            input_vibration_callback input_set_vibration = nullptr;
+            spawn_tracked_callback instantiate_prefab_tracked = nullptr;
+            spawn_take_callback take_spawn_result = nullptr;
+            get_text_callback get_current_scene_guid = nullptr;
+            quit_callback quit_application = nullptr;
+            event_dropped_callback event_dropped_count = nullptr;
+
+            // v12 additions. 複数 Hit Physics Query。
+            physics_query_callback physics_query = nullptr;
+
+            // v13 additions. Global/Scene 購読と Component 実行命令。
+            subscribe_event_scoped_callback subscribe_event_scoped = nullptr;
+            component_command_callback component_command = nullptr;
+
+            // v14 Component 型メタデータ。
+            component_type_info_callback component_type_info = nullptr;
+
+            // v15 Component プロパティの Object / Component 参照。
+            get_property_object_reference_callback get_component_property_object_reference = nullptr;
+            set_property_object_reference_callback set_component_property_object_reference = nullptr;
+            get_property_component_reference_callback get_component_property_component_reference = nullptr;
+            set_property_component_reference_callback set_component_property_component_reference = nullptr;
+            component_to_reference_callback component_to_reference = nullptr;
+            resolve_component_reference_callback resolve_component_reference = nullptr;
+
+            // v16 Scene 遷移状態。
+            scene_transition_state_callback get_scene_transition_state = nullptr;
         };
+
+        // ヘッダー以降がすべて関数ポインタであることを、表を作る側で必ず確かめる。
+        static_assert((sizeof(NativeApiTable) - sizeof(NativeApiHeader)) %
+            sizeof(void*) == 0, "NativeApiTable must hold only function pointers");
     inline int StatusCode(RuntimeStatus status) noexcept
     {
         return Runtime::ToErrorCode(status);
@@ -342,6 +442,8 @@ namespace ReplayEngine::Scripting::CSharp::Detail
     int NativeSweepSphere(DirectX::XMFLOAT3 start, DirectX::XMFLOAT3 end, float radius,
         float maximum_normal_y, Runtime::ObjectHandle ignore,
         NativeSphereSweepHit* out) noexcept;
+    int NativePhysicsQuery(NativePhysicsQueryRequest request,
+        NativePhysicsQueryHit* output, int capacity, int* count) noexcept;
     int NativeInstantiatePrefabDeferred(const char* asset_guid, DirectX::XMFLOAT3 position,
         DirectX::XMFLOAT3 rotation_euler, DirectX::XMFLOAT3 scale,
         Runtime::ObjectHandle parent) noexcept;
@@ -359,6 +461,106 @@ namespace ReplayEngine::Scripting::CSharp::Detail
     int NativePublishEventWithPayload(std::uint64_t high, std::uint64_t low,
         const char* type_name, Runtime::ObjectHandle source, Runtime::ObjectHandle target,
         const char* payload_text) noexcept;
+    int NativeSubscribeEventScoped(std::uint64_t high, std::uint64_t low,
+        Runtime::ObjectHandle owner, int scope, std::uint64_t* out) noexcept;
+
+    // v10 Component 型・汎用プロパティ・World Transform・Rigidbody。
+    int NativeComponentTypeId(const char* type_name, std::uint32_t* out) noexcept;
+    int NativeGetComponentTypeName(Runtime::ComponentHandle handle, char* output,
+        int output_capacity) noexcept;
+    int NativeComponentTypeInfo(const char* type_name, char* output,
+        int output_capacity) noexcept;
+    int NativeGetComponentPropertyObjectReference(Runtime::ComponentHandle handle,
+        const char* name, std::uint64_t* owner) noexcept;
+    int NativeSetComponentPropertyObjectReference(Runtime::ComponentHandle handle,
+        const char* name, std::uint64_t owner) noexcept;
+    int NativeGetComponentPropertyComponentReference(Runtime::ComponentHandle handle,
+        const char* name, std::uint64_t* owner, std::uint32_t* component) noexcept;
+    int NativeSetComponentPropertyComponentReference(Runtime::ComponentHandle handle,
+        const char* name, std::uint64_t owner, std::uint32_t component) noexcept;
+    int NativeComponentToReference(Runtime::ComponentHandle handle,
+        std::uint64_t* owner, std::uint32_t* component) noexcept;
+    int NativeResolveComponentReference(std::uint64_t owner, std::uint32_t component,
+        Runtime::ComponentHandle* out) noexcept;
+    int NativeGetComponentPropertyBool(Runtime::ComponentHandle handle,
+        const char* name, int* out) noexcept;
+    int NativeSetComponentPropertyBool(Runtime::ComponentHandle handle,
+        const char* name, int value) noexcept;
+    int NativeGetComponentPropertyInt(Runtime::ComponentHandle handle,
+        const char* name, std::int64_t* out) noexcept;
+    int NativeSetComponentPropertyInt(Runtime::ComponentHandle handle,
+        const char* name, std::int64_t value) noexcept;
+    int NativeGetComponentPropertyDouble(Runtime::ComponentHandle handle,
+        const char* name, double* out) noexcept;
+    int NativeSetComponentPropertyDouble(Runtime::ComponentHandle handle,
+        const char* name, double value) noexcept;
+    int NativeGetComponentPropertyString(Runtime::ComponentHandle handle,
+        const char* name, char* output, int output_capacity) noexcept;
+    int NativeSetComponentPropertyString(Runtime::ComponentHandle handle,
+        const char* name, const char* value) noexcept;
+    int NativeGetComponentPropertyVec2(Runtime::ComponentHandle handle,
+        const char* name, DirectX::XMFLOAT2* out) noexcept;
+    int NativeSetComponentPropertyVec2(Runtime::ComponentHandle handle,
+        const char* name, DirectX::XMFLOAT2 value) noexcept;
+    int NativeGetComponentPropertyVec3(Runtime::ComponentHandle handle,
+        const char* name, DirectX::XMFLOAT3* out) noexcept;
+    int NativeSetComponentPropertyVec3(Runtime::ComponentHandle handle,
+        const char* name, DirectX::XMFLOAT3 value) noexcept;
+    int NativeGetComponentPropertyVec4(Runtime::ComponentHandle handle,
+        const char* name, DirectX::XMFLOAT4* out) noexcept;
+    int NativeSetComponentPropertyVec4(Runtime::ComponentHandle handle,
+        const char* name, DirectX::XMFLOAT4 value) noexcept;
+
+    int NativeSetWorldPosition(Runtime::ObjectHandle handle, DirectX::XMFLOAT3 value) noexcept;
+    int NativeGetWorldRotation(Runtime::ObjectHandle handle, DirectX::XMFLOAT4* out) noexcept;
+    int NativeSetWorldRotation(Runtime::ObjectHandle handle, DirectX::XMFLOAT4 value) noexcept;
+    int NativeGetWorldScale(Runtime::ObjectHandle handle, DirectX::XMFLOAT3* out) noexcept;
+    int NativeSetWorldScale(Runtime::ObjectHandle handle, DirectX::XMFLOAT3 value) noexcept;
+    int NativeGetWorldAxes(Runtime::ObjectHandle handle, DirectX::XMFLOAT3* forward,
+        DirectX::XMFLOAT3* right, DirectX::XMFLOAT3* up) noexcept;
+    int NativeLookAt(Runtime::ObjectHandle handle, DirectX::XMFLOAT3 target,
+        DirectX::XMFLOAT3 world_up) noexcept;
+
+    int NativeRigidbodyAddForce(Runtime::ComponentHandle handle, DirectX::XMFLOAT3 force) noexcept;
+    int NativeRigidbodyAddTorque(Runtime::ComponentHandle handle, DirectX::XMFLOAT3 torque) noexcept;
+    int NativeRigidbodyClearForces(Runtime::ComponentHandle handle) noexcept;
+    int NativeRigidbodyTeleport(Runtime::ComponentHandle handle, DirectX::XMFLOAT3 position,
+        DirectX::XMFLOAT3 rotation_euler) noexcept;
+    int NativeRigidbodyGetLinearVelocity(Runtime::ComponentHandle handle,
+        DirectX::XMFLOAT3* out) noexcept;
+    int NativeRigidbodySetLinearVelocity(Runtime::ComponentHandle handle,
+        DirectX::XMFLOAT3 value) noexcept;
+    int NativeRigidbodyGetAngularVelocity(Runtime::ComponentHandle handle,
+        DirectX::XMFLOAT3* out) noexcept;
+    int NativeRigidbodySetAngularVelocity(Runtime::ComponentHandle handle,
+        DirectX::XMFLOAT3 value) noexcept;
+    int NativeComponentCommand(Runtime::ComponentHandle handle, int command,
+        const char* text, float scalar, float secondary_scalar, int integer) noexcept;
+
+    // v11 生デバイス入力 / Scene / 診断。
+    int NativeInputKeyHeld(int key, int* out) noexcept;
+    int NativeInputKeyPressed(int key, int* out) noexcept;
+    int NativeInputKeyReleased(int key, int* out) noexcept;
+    int NativeInputMouseHeld(int button, int* out) noexcept;
+    int NativeInputMousePressed(int button, int* out) noexcept;
+    int NativeInputMouseReleased(int button, int* out) noexcept;
+    int NativeInputPointerPosition(float* out_x, float* out_y) noexcept;
+    int NativeInputWheelDelta(float* out) noexcept;
+    int NativeInputPadConnected(int player_slot, int* out) noexcept;
+    int NativeInputPadButtonHeld(int player_slot, int button, int* out) noexcept;
+    int NativeInputPadButtonPressed(int player_slot, int button, int* out) noexcept;
+    int NativeInputPadButtonReleased(int player_slot, int button, int* out) noexcept;
+    int NativeInputPadAxis(int player_slot, int axis, float* out) noexcept;
+    int NativeInputSetVibration(int player_slot, float low, float high) noexcept;
+    int NativeInstantiatePrefabTracked(const char* asset_guid, DirectX::XMFLOAT3 position,
+        DirectX::XMFLOAT3 rotation_euler, DirectX::XMFLOAT3 scale,
+        Runtime::ObjectHandle parent, std::uint64_t* out_request) noexcept;
+    int NativeTakeSpawnResult(std::uint64_t request, Runtime::ObjectHandle* out) noexcept;
+    int NativeGetCurrentSceneGuid(char* output, int output_capacity) noexcept;
+    int NativeQuitApplication(const char* reason) noexcept;
+    int NativeEventDroppedCount(std::uint64_t subscription, std::uint64_t* out) noexcept;
+    int NativeGetSceneTransitionState(float* progress, int* in_progress,
+        int* transition_status) noexcept;
 
     NativeApiTable MakeNativeApiTable() noexcept;
 }

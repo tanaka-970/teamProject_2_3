@@ -73,6 +73,7 @@ namespace ReplayEngine::Scripting
             ScriptStatus status, std::string last_error = std::string());
 
         bool Remove(ScriptTypeID type_id) noexcept;
+        std::size_t RemoveLanguage(ScriptLanguage language) noexcept;
         void Clear() noexcept;
 
         const ScriptTypeDescriptor* Find(ScriptTypeID type_id) const noexcept;

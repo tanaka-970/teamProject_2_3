@@ -184,6 +184,8 @@ void framework::draw_ui_scene_overlay()
     Scene::Scene* scene = object_editor_context.GetScene();
     if (scene == nullptr) return;
 
+    // ImGuiとDX12は同じクライアント座標を使う。ここで画面座標へ変換すると、
+    // ウィンドウ位置の分だけ選択枠と素材がずれるため変換を挟まない。
     const object_ui_viewport target = object_ui_viewport_target();
     const float target_width = (std::max)(1.0f, target.width);
     const float target_height = (std::max)(1.0f, target.height);
@@ -202,10 +204,43 @@ void framework::draw_ui_scene_overlay()
     const float logical_mouse_y = logical_height -
         local_y * (logical_height / target_height);
 
-    if (target_hovered && ImGui::GetIO().MouseWheel != 0.0f)
+    // カメラ移動。ホイール長押しドラッグ、または Shift + ドラッグ。
+    // 掴む場所は Canvas の外でもよいので scene_view_hovered で判定する。
     {
-        ui_preview_zoom = (std::min)(2.0f, (std::max)(0.10f,
-            ui_preview_zoom + ImGui::GetIO().MouseWheel * 0.05f));
+        ImGuiIO& io = ImGui::GetIO();
+        const bool pan_held = ImGui::IsMouseDown(ImGuiMouseButton_Middle) ||
+            (io.KeyShift && ImGui::IsMouseDown(ImGuiMouseButton_Left));
+        if (!ui_preview_panning && scene_view_hovered && pan_held &&
+            (ImGui::IsMouseClicked(ImGuiMouseButton_Middle) ||
+                ImGui::IsMouseClicked(ImGuiMouseButton_Left)))
+            ui_preview_panning = true;
+        if (ui_preview_panning && !pan_held) ui_preview_panning = false;
+        if (ui_preview_panning)
+        {
+            ui_preview_pan_x += io.MouseDelta.x;
+            ui_preview_pan_y += io.MouseDelta.y;
+            ui_scene_view_input_consumed = true;
+            viewport_drag_selecting = false;
+        }
+    }
+
+    // ホイールはカーソル下の点を固定したまま拡大縮小する。
+    // 中心固定だと目的の要素が画面外へ逃げて追いかける操作が増える。
+    if (scene_view_hovered && !ui_preview_panning && ImGui::GetIO().MouseWheel != 0.0f)
+    {
+        const float previous_zoom = (std::max)(0.10f, ui_preview_zoom);
+        const float next_zoom = (std::min)(2.0f, (std::max)(0.10f,
+            previous_zoom + ImGui::GetIO().MouseWheel * 0.05f));
+        if (next_zoom != previous_zoom)
+        {
+            const float canvas_x = (mouse.x - target.left) / previous_zoom;
+            const float canvas_y = (mouse.y - target.top) / previous_zoom;
+            ui_preview_pan_x += mouse.x - canvas_x * next_zoom - target.left -
+                logical_width * (previous_zoom - next_zoom) * 0.5f;
+            ui_preview_pan_y += mouse.y - canvas_y * next_zoom - target.top -
+                logical_height * (previous_zoom - next_zoom) * 0.5f;
+            ui_preview_zoom = next_zoom;
+        }
         ui_scene_view_input_consumed = true;
     }
 
@@ -374,7 +409,8 @@ void framework::draw_ui_scene_overlay()
         if (scene_view_hovered)
             hovered_effect_region_handle = hit_effect_region_handle(mouse,
                 hovered_effect_region_index);
-        if (input.MouseDown[ImGuiMouseButton_Left])
+        // 移動ドラッグ中は範囲ハンドルの座標も動くため、押した瞬間の判定だけを使う。
+        if (input.MouseDown[ImGuiMouseButton_Left] && !ui_preview_drag_object.Valid())
             pressed_effect_region_handle = hit_effect_region_handle(press_position,
                 pressed_effect_region_index);
 
@@ -445,7 +481,7 @@ void framework::draw_ui_scene_overlay()
                     freeform_handle < 1000 ? freeform_handle - 9 : -1;
             }
         }
-        if (input.MouseDown[ImGuiMouseButton_Left])
+        if (input.MouseDown[ImGuiMouseButton_Left] && !ui_preview_drag_object.Valid())
         {
             int freeform_handle = -1;
             int freeform_region = -1;
@@ -541,7 +577,10 @@ void framework::draw_ui_scene_overlay()
             resize_handle_points[ResizeTopLeft] };
         if (target_hovered)
             hovered_resize_handle = HitResizeBorder(resize_corners, mouse);
-        if (input.MouseDown[ImGuiMouseButton_Left] && press_inside_target)
+        // 判定はボタンを押した瞬間だけ行う。ドラッグ中は矩形が動くので角ハンドルの
+        // 座標も動き、押した位置へ後から重なった時点でリサイズへ乗り換えてしまう。
+        if (input.MouseDown[ImGuiMouseButton_Left] && press_inside_target && !ui_preview_panning &&
+            !ui_preview_drag_object.Valid())
             pressed_resize_handle = HitResizeBorder(resize_corners, press_position);
     }
 
@@ -604,7 +643,7 @@ void framework::draw_ui_scene_overlay()
         return dx * dx + dy * dy;
     };
 
-    if (!effect_region_click && !resize_handle_click && target_hovered &&
+    if (!effect_region_click && !resize_handle_click && !ui_preview_panning && target_hovered &&
         control_selected != nullptr && control_rect != nullptr &&
         ImGui::IsMouseClicked(ImGuiMouseButton_Left))
     {
@@ -935,7 +974,7 @@ void framework::draw_ui_scene_overlay()
         ui_shape_active_handle = 0;
     }
 
-    if (!resize_handle_click && !subcontrol_click && target_hovered &&
+    if (!resize_handle_click && !subcontrol_click && !ui_preview_panning && target_hovered &&
         ImGui::IsMouseClicked(ImGuiMouseButton_Left))
     {
         Core::GameObject* picked = nullptr;

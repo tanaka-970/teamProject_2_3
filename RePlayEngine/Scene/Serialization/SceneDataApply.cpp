@@ -1,4 +1,4 @@
-#include "SceneData.h"
+﻿#include "SceneData.h"
 #include "SceneDataInternal.h"
 
 #include "../Runtime/Scene.h"
@@ -7,6 +7,7 @@
 #include "../../Object/Registry/ComponentRegistry.h"
 #include "../../Reflection/Registry/PropertyRegistry.h"
 
+#include <algorithm>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -41,6 +42,31 @@ namespace ReplayEngine::Scene::Serialization
                 result.Set(renamed != nullptr ? *renamed : entry.name, entry.value);
             }
             return result;
+        }
+
+        // 影の深度バイアスは type_version 2 で NDC からワールドメートルへ単位を変えた。
+        // 旧既定値が新既定値へ乗るよう比率で移行し、手で詰めた相対値も保つ。
+        float LegacyShadowDepthBiasScale(const std::string& type_name) noexcept
+        {
+            if (type_name == "DirectionalLightComponent") return 0.02f / 0.0016f;
+            if (type_name == "PointLightComponent") return 0.02f / 0.0025f;
+            if (type_name == "SpotLightComponent") return 0.02f / 0.0018f;
+            return 0.0f;
+        }
+
+        // 保存データの型バージョンを見て、現在の型が期待する形へ揃える。
+        void MigrateSavedProperties(const ComponentTypeInfo& info,
+            int saved_type_version, Reflection::PropertyBag& properties)
+        {
+            if (saved_type_version >= 2) return;
+            const float scale = LegacyShadowDepthBiasScale(info.type_name);
+            if (scale <= 0.0f) return;
+            const Reflection::PropertyValue* saved = properties.Find("shadow_depth_bias");
+            if (saved == nullptr) return;
+
+            const float migrated = saved->AsFloat(0.0f) * scale;
+            properties.Set("shadow_depth_bias", Reflection::PropertyValue::MakeFloat(
+                (std::max)(0.0f, (std::min)(0.5f, migrated))));
         }
         }
 
@@ -223,8 +249,10 @@ namespace ReplayEngine::Scene::Serialization
                 component->SetEnabled(component_data.enabled);
 
                 std::vector<std::string> unknown;
-                PropertyRegistry::Apply(*component,
-                    ApplyPropertyAliases(*info, remapped_properties), &unknown);
+                Reflection::PropertyBag saved_properties =
+                    ApplyPropertyAliases(*info, remapped_properties);
+                MigrateSavedProperties(*info, component_data.type_version, saved_properties);
+                PropertyRegistry::Apply(*component, saved_properties, &unknown);
                 for (const std::string& name : unknown)
                 {
                     ++report.unknown_properties;

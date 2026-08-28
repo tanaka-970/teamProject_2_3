@@ -26,18 +26,18 @@ using namespace framework_motion_workspace::Detail;
 void framework::draw_motion_layers()
 {
     if (!show_motion_layers_panel) return;
-    if (!ImGui::Begin("Motion レイヤー", &show_motion_layers_panel))
+    if (!ImGui::Begin(u8"Motion レイヤー", &show_motion_layers_panel))
     {
         ImGui::End();
         return;
     }
 
-    if (ImGui::Button("新規"))
+    if (ImGui::Button(u8"新規"))
     {
         project_create_motion("NewMotion");
     }
     ImGui::SameLine();
-    if (ImGui::Button("保存")) save_current_motion_asset();
+    if (ImGui::Button(u8"保存")) save_current_motion_asset();
     ImGui::SameLine();
     // 選択中の GameObject から Track を作る。
     //
@@ -59,7 +59,7 @@ void framework::draw_motion_layers()
         }
 
         stop_motion_preview();
-        motion_edit_history.Begin(motion_editor_asset, "Trackを追加");
+        motion_edit_history.Begin(motion_editor_asset, u8"トラックを追加");
         MotionTrack track;
         track.name = object.Name() + "." + desc.DisplayName();
         track.binding.object = object.ID();
@@ -84,7 +84,7 @@ void framework::draw_motion_layers()
         motion_editor_dirty = true;
     };
 
-    if (ImGui::Button("選択からTrack追加"))
+    if (ImGui::Button(u8"選択からトラックを追加"))
     {
         motion_property_picker_filter.fill('\0');
         ImGui::OpenPopup("MotionPropertyPicker");
@@ -92,8 +92,8 @@ void framework::draw_motion_layers()
     if (ImGui::IsItemHovered())
     {
         ImGui::SetTooltip(
-            u8"選択中の GameObject が持つ、動かせるプロパティの一覧から選びます。\n"
-            u8"先に Scene / UI Workspace で対象を選択しておいてください。");
+            u8"選択中のゲームオブジェクトが持つ、動かせるプロパティの一覧から選びます。\n"
+            u8"先にシーン / UI ワークスペースで対象を選択しておいてください。");
     }
 
     if (ImGui::BeginPopup("MotionPropertyPicker"))
@@ -104,8 +104,8 @@ void framework::draw_motion_layers()
 
         if (object == nullptr)
         {
-            ImGui::TextDisabled(u8"GameObject が選択されていません。");
-            ImGui::TextDisabled(u8"Scene / UI Workspace で対象をクリックしてから、もう一度押してください。");
+            ImGui::TextDisabled(u8"ゲームオブジェクトが選択されていません。");
+            ImGui::TextDisabled(u8"シーン / UI ワークスペースで対象をクリックしてから、もう一度押してください。");
         }
         else if (!object_editor_context.CanEdit())
         {
@@ -189,7 +189,7 @@ void framework::draw_motion_layers()
         ImGui::EndPopup();
     }
 
-    if (ImGui::Button("Opacity Fadeを作成") && object_editor_context.CanEdit())
+    if (ImGui::Button(u8"不透明度フェードを作成") && object_editor_context.CanEdit())
     {
         ReplayEngine::Scene::Scene* scene = object_editor_context.GetScene();
         ReplayEngine::Core::GameObject* object = scene != nullptr
@@ -204,7 +204,7 @@ void framework::draw_motion_layers()
                 return;
             }
             stop_motion_preview();
-            motion_edit_history.Begin(motion_editor_asset, "Opacity Fadeを作成");
+            motion_edit_history.Begin(motion_editor_asset, u8"不透明度フェードを作成");
             motion_editor_asset.duration = (std::max)(motion_editor_asset.duration, 1.0f);
             MotionTrack track;
             track.name = object->Name() + ".Opacity Fade";
@@ -237,7 +237,7 @@ void framework::draw_motion_layers()
     ImGui::TextUnformatted(motion_editor_status.c_str());
     if (motion_editor_loaded)
     {
-        ImGui::Text("Asset: %s%s", motion_editor_asset.name.c_str(),
+        ImGui::Text(u8"アセット: %s%s", motion_editor_asset.name.c_str(),
             motion_editor_dirty ? " *" : "");
         for (int i = 0; i < static_cast<int>(motion_editor_asset.tracks.size()); ++i)
         {
@@ -259,11 +259,11 @@ void framework::draw_motion_layers()
         using ReplayEngine::Motion::CompositionMarker;
         using ReplayEngine::Motion::CompositionMotionLayer;
 
-        ImGui::Text("Composition: %s%s", motion_editor_composition.name.c_str(),
+        ImGui::Text(u8"コンポジション: %s%s", motion_editor_composition.name.c_str(),
             motion_editor_dirty ? " *" : "");
         float duration = motion_editor_composition.duration;
         ImGui::SetNextItemWidth(120.0f);
-        if (ImGui::DragFloat("Duration", &duration, 0.033333f, 0.0f, 3600.0f, "%.3fs"))
+        if (ImGui::DragFloat(u8"長さ", &duration, 0.033333f, 0.0f, 3600.0f, "%.3fs"))
         {
             motion_editor_composition.duration = (std::max)(0.0f, duration);
             motion_preview_time = (std::min)(motion_preview_time,
@@ -271,7 +271,7 @@ void framework::draw_motion_layers()
             motion_editor_dirty = true;
         }
 
-        if (ImGui::Button("+ Motion Layer"))
+        if (ImGui::Button(u8"+ モーションレイヤー"))
         {
             CompositionMotionLayer layer;
             layer.name = "Motion Layer " + std::to_string(motion_editor_composition.layers.size() + 1);
@@ -281,7 +281,7 @@ void framework::draw_motion_layers()
             motion_editor_dirty = true;
         }
         ImGui::SameLine();
-        if (ImGui::Button("+ Precomp Layer"))
+        if (ImGui::Button(u8"+ プリコンポーズレイヤー"))
         {
             CompositionMotionLayer layer;
             layer.name = "Precomp " + std::to_string(motion_editor_composition.layers.size() + 1);
@@ -291,7 +291,7 @@ void framework::draw_motion_layers()
             motion_editor_dirty = true;
         }
         ImGui::SameLine();
-        if (ImGui::Button("+ Marker"))
+        if (ImGui::Button(u8"+ マーカー"))
         {
             CompositionMarker marker;
             marker.name = "Marker " + std::to_string(motion_editor_composition.markers.size() + 1);
@@ -301,7 +301,7 @@ void framework::draw_motion_layers()
         }
 
         ImGui::Separator();
-        ImGui::TextUnformatted("Layers");
+        ImGui::TextUnformatted(u8"レイヤー");
         for (int i = 0; i < static_cast<int>(motion_editor_composition.layers.size()); ++i)
         {
             CompositionMotionLayer& layer = motion_editor_composition.layers[i];
@@ -317,7 +317,7 @@ void framework::draw_motion_layers()
                 motion_editor_dirty = true;
             }
             ImGui::SameLine();
-            if (ImGui::SmallButton("Delete"))
+            if (ImGui::SmallButton(u8"削除"))
             {
                 motion_editor_composition.layers.erase(motion_editor_composition.layers.begin() + i);
                 motion_editor_dirty = true;
@@ -331,7 +331,7 @@ void framework::draw_motion_layers()
             const ReplayEngine::Assets::AssetRecord* record = guid.empty()
                 ? nullptr : asset_database.FindByGuid(guid);
             const char* source_label = record != nullptr
-                ? record->display_name.c_str() : (guid.empty() ? "Drop Motion / Composition here" : "Missing Asset");
+                ? record->display_name.c_str() : (guid.empty() ? u8"モーション / コンポジションをここへドロップ" : u8"アセットが見つかりません");
             ImGui::SetNextItemWidth(360.0f);
             ImGui::Button(source_label, ImVec2(360.0f, 0.0f));
             if (ImGui::BeginDragDropTarget())
@@ -361,7 +361,7 @@ void framework::draw_motion_layers()
                 ImGui::EndDragDropTarget();
             }
             ImGui::SameLine();
-            if (ImGui::SmallButton("Clear"))
+            if (ImGui::SmallButton(u8"クリア"))
             {
                 layer.motion_guid.clear();
                 layer.composition_guid.clear();
@@ -370,7 +370,7 @@ void framework::draw_motion_layers()
 
             float timing[3]{ layer.start_offset, layer.in_time, layer.out_time };
             ImGui::SetNextItemWidth(360.0f);
-            if (ImGui::DragFloat3("Start / In / Out", timing, 0.01f, -3600.0f, 3600.0f, "%.3f"))
+            if (ImGui::DragFloat3(u8"開始 / 入点 / 出点", timing, 0.01f, -3600.0f, 3600.0f, "%.3f"))
             {
                 layer.start_offset = timing[0];
                 layer.in_time = (std::max)(0.0f, timing[1]);
@@ -379,7 +379,7 @@ void framework::draw_motion_layers()
             }
             float playback[2]{ layer.time_scale, layer.weight };
             ImGui::SetNextItemWidth(260.0f);
-            if (ImGui::DragFloat2("Time Scale / Weight", playback, 0.01f, -16.0f, 16.0f, "%.3f"))
+            if (ImGui::DragFloat2(u8"時間倍率 / ウェイト", playback, 0.01f, -16.0f, 16.0f, "%.3f"))
             {
                 layer.time_scale = playback[0] == 0.0f ? 0.0001f : playback[0];
                 layer.weight = (std::max)(0.0f, playback[1]);
@@ -390,7 +390,7 @@ void framework::draw_motion_layers()
         }
 
         ImGui::Separator();
-        ImGui::TextUnformatted("Markers");
+        ImGui::TextUnformatted(u8"マーカー");
         for (int i = 0; i < static_cast<int>(motion_editor_composition.markers.size()); ++i)
         {
             CompositionMarker& marker = motion_editor_composition.markers[i];
@@ -427,7 +427,7 @@ void framework::draw_motion_layers()
     }
     else
     {
-        ImGui::TextDisabled("Project Browserで .replaymotion を開くか、新規作成してください。");
+        ImGui::TextDisabled(u8"プロジェクトブラウザーで .replaymotion を開くか、新規作成してください。");
     }
 
     ImGui::End();

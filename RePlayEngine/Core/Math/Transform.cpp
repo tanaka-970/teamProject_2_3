@@ -10,6 +10,12 @@ namespace ReplayEngine::Core
     {
         // 行列から Pitch/Yaw/Roll (XMMatrixRotationRollPitchYaw と同じ順序) を取り出す。
         // ジンバル特異点 (Pitch が ±90 度付近) では Roll を 0 に倒して Yaw へ寄せる。
+        //
+        // XMMatrixRotationRollPitchYaw(p, y, r) を展開すると各成分はこうなる。
+        //   _31 = cos(p)sin(y)   _32 = -sin(p)   _33 = cos(p)cos(y)
+        //   _12 = sin(r)cos(p)   _22 = cos(r)cos(p)
+        // 取り出す式はこれを逆に解いたもの。符号を反転させると LocalMatrix と
+        // 往復せず、SetFromWorldMatrix が回転を裏返す。
         XMFLOAT3 ExtractEulerFromRotationMatrix(const XMFLOAT4X4& m) noexcept
         {
             XMFLOAT3 euler{ 0.0f, 0.0f, 0.0f };
@@ -17,21 +23,21 @@ namespace ReplayEngine::Core
             const float sin_pitch = -m._32;
             if (sin_pitch >= 1.0f - 1.0e-6f)
             {
-                euler.x = -XM_PIDIV2;
+                euler.x = XM_PIDIV2;
                 euler.y = std::atan2(-m._13, m._11);
                 euler.z = 0.0f;
             }
             else if (sin_pitch <= -1.0f + 1.0e-6f)
             {
-                euler.x = XM_PIDIV2;
+                euler.x = -XM_PIDIV2;
                 euler.y = std::atan2(-m._13, m._11);
                 euler.z = 0.0f;
             }
             else
             {
-                euler.x = std::asin(m._32);
-                euler.y = std::atan2(-m._31, m._33);
-                euler.z = std::atan2(-m._12, m._22);
+                euler.x = std::asin(sin_pitch);
+                euler.y = std::atan2(m._31, m._33);
+                euler.z = std::atan2(m._12, m._22);
             }
             return euler;
         }

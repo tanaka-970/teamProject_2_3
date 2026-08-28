@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "root": "ThirdParty",
+  "source": [
+    {
+      "name": "DirectXTK12",
+      "url": "https://github.com/microsoft/DirectXTK12.git",
+      "commit": "8b9fe6db93758e54894d0f7dc5f95745cd1451d6",
+      "path": "ThirdParty/DirectXTK12",
+      "license": "MIT"
+    },
+    {
+      "name": "DirectX-Headers",
+      "url": "https://github.com/microsoft/DirectX-Headers.git",
+      "commit": "ee479f0bd5f7b884f202bcf0c3f076cc050dd256",
+      "path": "ThirdParty/DirectX-Headers",
+      "license": "MIT"
+    },
+    {
+      "name": "D3D12MemoryAllocator",
+      "url": "https://github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator.git",
+      "commit": "1d86c1130f61453634b1df85782e1fecfd59a525",
+      "path": "ThirdParty/D3D12MemoryAllocator",
+      "license": "MIT"
+    }
+  ],
+  "dxc": {
+    "version": "v1.10.2605.37",
+    "archive": "https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.10.2605.37/dxc_2026_08_11.zip",
+    "archive_sha256": "18DA85CCAC4D1736209BAD960F0A124928A5C5A6046882E331C605D66744A889",
+    "path": "ThirdParty/DXC",
+    "x64": {
+      "dxc.exe": "01C6EA34554C3A48A808ED7A55E87B3D19B388EAE8C1AF0B82AFF7C7B837ED76",
+      "dxcompiler.dll": "BA03E9B2CCB4BF3C357B0BC013498BF648E71A610621BC23C18D5DB1B7DCEF3B",
+      "dxil.dll": "5D12E4C30E79FF27C93F49FA9AF0852B3F5595DD8F453DD7387BB5FC029E10CE"
+    }
+  }
+}

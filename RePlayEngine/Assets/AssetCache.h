@@ -47,7 +47,10 @@ namespace ReplayEngine::Assets
         SpriteAtlas,
 
         // .replaycomp。Motion と分けて Inspector の候補を正確にする。必ず末尾。
-        Composition
+        Composition,
+
+        // .replayeasing。Motion のイージング素材。既存値を壊さないよう必ず末尾。
+        EasingCurve
     };
 
     struct AssetCacheEntry

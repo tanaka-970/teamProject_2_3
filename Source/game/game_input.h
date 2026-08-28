@@ -76,6 +76,30 @@ namespace GameInput
         long PointerScreenX() const noexcept { return mouse_x_; }
         long PointerScreenY() const noexcept { return mouse_y_; }
 
+        // ---- 生デバイス（Action / Axis を定義せずに読む窓口） -----------------
+
+        bool KeyHeld(int key) const noexcept override;
+        bool KeyPressed(int key) const noexcept override;
+        bool KeyReleased(int key) const noexcept override;
+        bool MouseButtonHeld(int button) const noexcept override;
+        bool MouseButtonPressed(int button) const noexcept override;
+        bool MouseButtonReleased(int button) const noexcept override;
+        float PointerX() const noexcept override { return static_cast<float>(mouse_x_); }
+        float PointerY() const noexcept override { return static_cast<float>(mouse_y_); }
+        float WheelDelta() const noexcept override
+        {
+            return mouse_captured_ ? 0.0f : wheel_delta_;
+        }
+        bool GamepadConnected(int player_slot) const noexcept override;
+        bool GamepadButtonHeld(int player_slot, int button) const noexcept override;
+        bool GamepadButtonPressed(int player_slot, int button) const noexcept override;
+        bool GamepadButtonReleased(int player_slot, int button) const noexcept override;
+        float GamepadAxisValue(int player_slot, int axis) const noexcept override;
+        bool SetGamepadVibration(int player_slot, float low, float high) noexcept override;
+
+        // ホイールは WM_MOUSEWHEEL でしか来ないので、外から積んでもらう。
+        void AccumulateWheel(float delta) noexcept { pending_wheel_ += delta; }
+
         // Saved/Editor/InputBindings.ini。壊れた行は無視し、既定値を残して続行する。
         bool LoadBindings(const std::filesystem::path& path, std::string& error);
         bool SaveBindings(const std::filesystem::path& path, std::string& error) const;
@@ -135,5 +159,7 @@ namespace GameInput
         long mouse_y_ = 0;
         float mouse_delta_x_ = 0.0f;
         float mouse_delta_y_ = 0.0f;
+        float wheel_delta_ = 0.0f;
+        float pending_wheel_ = 0.0f;
     };
 }

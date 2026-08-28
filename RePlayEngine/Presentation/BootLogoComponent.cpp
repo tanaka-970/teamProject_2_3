@@ -1,8 +1,7 @@
 ﻿#include "BootLogoComponent.h"
 
-#include "../../Source/mesh/sprite.h"
-
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 namespace
@@ -13,13 +12,11 @@ namespace
     constexpr float kSlideOutEnd = 2.97f;
     constexpr float kStarFillTime = 3.87f;
     constexpr float kSkipEnableTime = 0.20f;
-
     constexpr float kAxisAngle = -45.0f;
     constexpr float kDirX = 0.70711f;
     constexpr float kDirY = -0.70711f;
     constexpr float kPerpX = 0.70711f;
     constexpr float kPerpY = 0.70711f;
-
     constexpr float kBgR = 1.0f, kBgG = 1.0f, kBgB = 1.0f;
     constexpr float kNavyR = 0.016f, kNavyG = 0.077f, kNavyB = 0.180f;
     constexpr float kPaleR = 0.472f, kPaleG = 0.678f, kPaleB = 0.763f;
@@ -64,6 +61,50 @@ namespace
         if (tone == 1) { r = kNavyR; g = kNavyG; b = kNavyB; }
         if (tone == 2) { r = kBlueR; g = kBlueG; b = kBlueB; }
     }
+
+    void EnsureTexture(ReplayEngine::Rendering::DX12::D3D12UIFrame& frame,
+        const char* key, const wchar_t* path)
+    {
+        for (const auto& source : frame.texture_sources)
+            if (source.key == key) return;
+        ReplayEngine::Rendering::DX12::D3D12StaticTextureSource source{};
+        source.key = key;
+        source.source_path = path;
+        frame.texture_sources.push_back(std::move(source));
+    }
+
+    void AddQuad(ReplayEngine::Rendering::DX12::D3D12UIFrame& frame,
+        float center_x, float center_y, float width, float height, float angle_degrees,
+        const DirectX::XMFLOAT4& color, const char* texture_key = nullptr)
+    {
+        if (width <= 0.0f || height <= 0.0f || color.w <= 0.003f) return;
+        const float half_w = width * 0.5f;
+        const float half_h = height * 0.5f;
+        const float radians = DirectX::XMConvertToRadians(angle_degrees);
+        const float c = std::cos(radians);
+        const float s = std::sin(radians);
+        const auto point = [&](float x, float y)
+        {
+            return DirectX::XMFLOAT2{
+                center_x + x * c - y * s,
+                center_y + x * s + y * c };
+        };
+        const DirectX::XMFLOAT2 p0 = point(-half_w, -half_h);
+        const DirectX::XMFLOAT2 p1 = point(-half_w,  half_h);
+        const DirectX::XMFLOAT2 p2 = point( half_w,  half_h);
+        const DirectX::XMFLOAT2 p3 = point( half_w, -half_h);
+        ReplayEngine::Rendering::DX12::D3D12UIBatch batch{};
+        if (texture_key != nullptr) batch.texture_key = texture_key;
+        batch.vertices = {
+            { p0, {0,0}, color, {0,0,1,1} }, { p1, {0,1}, color, {0,0,1,1} },
+            { p2, {1,1}, color, {0,0,1,1} }, { p0, {0,0}, color, {0,0,1,1} },
+            { p2, {1,1}, color, {0,0,1,1} }, { p3, {1,0}, color, {0,0,1,1} } };
+        batch.constants.screen_size = { static_cast<float>(frame.target_width),
+            static_cast<float>(frame.target_height), 0.0f, 0.0f };
+        frame.vertex_count += static_cast<std::uint32_t>(batch.vertices.size());
+        ++frame.draw_commands;
+        frame.batches.push_back(std::move(batch));
+    }
 }
 
 namespace ReplayEngine::Presentation
@@ -71,24 +112,11 @@ namespace ReplayEngine::Presentation
     BootLogoComponent::BootLogoComponent() = default;
     BootLogoComponent::~BootLogoComponent() = default;
 
-    bool BootLogoComponent::Initialize(ID3D11Device* device)
+    bool BootLogoComponent::Initialize()
     {
-        if (!device) return false;
-
-        solid_ = std::make_unique<sprite>(device, nullptr, "sprite_solid_ps.cso");
-        constexpr const char* masked_shader = "sprite_masked_ps.cso";
-        star_ = std::make_unique<sprite>(device,
-            L"resources\\RePlayEngine\\BootLogo\\BootStar.png", masked_shader);
-        note_ = std::make_unique<sprite>(device,
-            L"resources\\RePlayEngine\\BootLogo\\BootNote.png", masked_shader);
-        mark_ = std::make_unique<sprite>(device,
-            L"resources\\RePlayEngine\\BootLogo\\EngineLogoMark.png", masked_shader);
-        word_ = std::make_unique<sprite>(device,
-            L"resources\\RePlayEngine\\BootLogo\\EngineLogoText.png", masked_shader);
-        initialized_ = solid_->valid() && star_->valid() && note_->valid()
-            && mark_->valid() && word_->valid();
+        initialized_ = true;
         Reset();
-        return initialized_;
+        return true;
     }
 
     void BootLogoComponent::Reset() noexcept
@@ -102,27 +130,22 @@ namespace ReplayEngine::Presentation
         if (!initialized_ || IsFinished()) return;
         const float safe_step = (std::min)(1.0f / 20.0f, (std::max)(0.0f, elapsed_time));
         time_ += safe_step;
-        if (skip_requested_ && time_ >= kSkipEnableTime && time_ < kHoldEnd)
-        {
-            time_ = kHoldEnd;
-        }
+        if (skip_requested_ && time_ >= kSkipEnableTime && time_ < kHoldEnd) time_ = kHoldEnd;
         time_ = (std::min)(time_, kDuration);
         skip_requested_ = false;
     }
 
-    void BootLogoComponent::DrawBar(ID3D11DeviceContext* context,
-        float center_x, float center_y, float width, float height, float angle_degrees,
-        float r, float g, float b, float a) const
-    {
-        if (!solid_ || a <= 0.003f) return;
-        solid_->render(context, center_x - width * 0.5f, center_y - height * 0.5f,
-            width, height, r, g, b, a, angle_degrees);
-    }
-
-    void BootLogoComponent::Render(ID3D11DeviceContext* context,
+    bool BootLogoComponent::BuildRuntimeUI(Rendering::DX12::D3D12UIFrame& frame,
         float screen_width, float screen_height) const
     {
-        if (!IsActive() || !context || screen_width <= 0.0f || screen_height <= 0.0f) return;
+        if (!IsActive() || screen_width <= 0.0f || screen_height <= 0.0f) return true;
+        frame.target_width = static_cast<std::uint32_t>((std::max)(1.0f, screen_width));
+        frame.target_height = static_cast<std::uint32_t>((std::max)(1.0f, screen_height));
+        EnsureTexture(frame, "boot:star", L"resources\\RePlayEngine\\BootLogo\\BootStar.png");
+        EnsureTexture(frame, "boot:note", L"resources\\RePlayEngine\\BootLogo\\BootNote.png");
+        EnsureTexture(frame, "boot:mark", L"resources\\RePlayEngine\\BootLogo\\EngineLogoMark.png");
+        EnsureTexture(frame, "boot:word", L"resources\\RePlayEngine\\BootLogo\\EngineLogoText.png");
+        frame.texture_count = static_cast<std::uint32_t>(frame.texture_sources.size());
 
         const float scale_x = screen_width / 1920.0f;
         const float scale_y = screen_height / 1080.0f;
@@ -138,15 +161,13 @@ namespace ReplayEngine::Presentation
             y = center_y + (kPerpY * lane + kDirY * along) * scale;
         };
 
-        DrawBar(context, center_x, center_y, screen_width, screen_height, 0.0f,
-            kBgR, kBgG, kBgB, 1.0f);
-
+        AddQuad(frame, center_x, center_y, screen_width, screen_height, 0.0f,
+            { kBgR, kBgG, kBgB, 1.0f });
         if (time_ <= kFlowEnd)
         {
             const float progress = Segment(time_, 0.0f, kFlowEnd);
             const float zoom = time_ < kCutTime
-                ? 1.0f + 7.0f * std::pow(Segment(time_, 0.22f, kCutTime), 2.6f)
-                : 1.0f;
+                ? 1.0f + 7.0f * std::pow(Segment(time_, 0.22f, kCutTime), 2.6f) : 1.0f;
             for (const auto& streak : kFlowStreaks)
             {
                 const float along = streak.start + (2600.0f - streak.start) * progress;
@@ -156,8 +177,8 @@ namespace ReplayEngine::Presentation
                 AxisPoint(lane, zoomed_along, x, y);
                 float r = 0.0f, g = 0.0f, b = 0.0f;
                 ToneColor(streak.tone, r, g, b);
-                DrawBar(context, x, y, S(streak.length * zoom), S(streak.thickness * zoom),
-                    kAxisAngle, r, g, b, streak.alpha);
+                AddQuad(frame, x, y, S(streak.length * zoom), S(streak.thickness * zoom),
+                    kAxisAngle, { r, g, b, streak.alpha });
             }
         }
 
@@ -167,30 +188,24 @@ namespace ReplayEngine::Presentation
             const float slide = -slide_progress * slide_progress * 3000.0f;
             const float slide_x = kDirX * slide * scale;
             const float slide_y = kDirY * slide * scale;
-
             if (slide_progress < 1.0f)
             {
                 const float mark_size = S(380.0f);
-                mark_->render(context, X(505.0f) - mark_size * 0.5f + slide_x,
-                    Y(520.0f) - mark_size * 0.5f + slide_y, mark_size, mark_size,
-                    1, 1, 1, 1, 0);
-
+                AddQuad(frame, X(505.0f) + slide_x, Y(520.0f) + slide_y,
+                    mark_size, mark_size, 0.0f, {1,1,1,1}, "boot:mark");
                 const float word_width = X(880.0f);
-                const float aspect = word_->texture_height() > 0.0f
-                    ? word_->texture_width() / word_->texture_height() : 7.3f;
-                const float word_height = word_width / aspect;
-                word_->render(context, X(725.0f) + slide_x, Y(520.0f) - word_height * 0.5f + slide_y,
-                    word_width, word_height, 1, 1, 1, 1, 0);
-
-                const float decoration_alpha = Segment(time_, 0.95f, 1.17f);
+                const float word_height = word_width / 7.3f;
+                AddQuad(frame, X(725.0f) + word_width * 0.5f + slide_x,
+                    Y(520.0f) + slide_y, word_width, word_height, 0.0f,
+                    {1,1,1,1}, "boot:word");
+                const float alpha = Segment(time_, 0.95f, 1.17f) * 0.8f;
                 const float note_size = S(110.0f);
-                note_->render(context, X(1435.0f) + slide_x, Y(190.0f) + slide_y,
-                    note_size, note_size, kPaleR, kPaleG, kPaleB, 0.8f * decoration_alpha, -14.0f);
+                AddQuad(frame, X(1435.0f) + note_size * 0.5f + slide_x,
+                    Y(190.0f) + note_size * 0.5f + slide_y, note_size, note_size, -14.0f,
+                    {kPaleR,kPaleG,kPaleB,alpha}, "boot:note");
             }
         }
 
-    // 右上の星を中央へ移動して拡大し、そのままワイプとして使う。
-    // 白背景でも見えるようチーム版の淡い青を保ち、黒フェードは挟まない。
         if (time_ >= 0.95f && time_ <= kStarFillTime)
         {
             const float decoration_alpha = Segment(time_, 0.95f, 1.17f);
@@ -198,12 +213,11 @@ namespace ReplayEngine::Presentation
             const float grow = std::pow(Segment(time_, kSlideOutEnd, kStarFillTime), 6.0f);
             const float star_x = X(1517.0f) + (center_x - X(1517.0f)) * to_center;
             const float star_y = Y(255.0f) + (center_y - Y(255.0f)) * to_center;
-            const float base_size = S(150.0f + 150.0f * to_center);
-            const float size = base_size + S(4900.0f) * grow;
+            const float size = S(150.0f + 150.0f * to_center) + S(4900.0f) * grow;
             const float alpha = decoration_alpha * (0.85f + 0.15f * to_center);
-            star_->render(context, star_x - size * 0.5f, star_y - size * 0.5f,
-                size, size, kPaleR, kPaleG, kPaleB, alpha, 0);
+            AddQuad(frame, star_x, star_y, size, size, 0.0f,
+                {kPaleR,kPaleG,kPaleB,alpha}, "boot:star");
         }
-
+        return true;
     }
 }

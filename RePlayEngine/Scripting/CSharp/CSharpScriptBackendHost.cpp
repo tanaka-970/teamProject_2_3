@@ -75,7 +75,6 @@ namespace ReplayEngine::Scripting::CSharp
             SetLastError(error);
             return false;
         }
-
         if (CSharpProject::ManagedApiBuildRequired(project_root_))
         {
             const CSharpBuildResult managed_build =
@@ -88,7 +87,6 @@ namespace ReplayEngine::Scripting::CSharp
                 return false;
             }
         }
-
         if (!LoadHost()) return false;
         if (!LoadManagedApi()) return false;
         if (!ResolveManagedEntryPoints()) return false;

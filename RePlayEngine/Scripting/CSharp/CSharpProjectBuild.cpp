@@ -29,13 +29,34 @@ namespace ReplayEngine::Scripting::CSharp
 {
     using namespace Detail;
 
+    namespace
+    {
+        bool RestoreRequired(const CSharpBuildResult& result)
+        {
+            return result.output_text.find("NETSDK1004") != std::string::npos ||
+                result.output_text.find("NU1100") != std::string::npos ||
+                result.output_text.find("project.assets.json") != std::string::npos;
+        }
+
+        CSharpBuildResult BuildWithExistingRestore(const std::filesystem::path& project,
+            const std::string& configuration, const std::filesystem::path& assembly)
+        {
+            const std::wstring base = L"build " + Quote(project) + L" -c " +
+                QuoteText(ToWide(configuration)) + L" --nologo";
+            CSharpBuildResult result = RunDotnet(base + L" --no-restore", assembly);
+            if (!result.succeeded && RestoreRequired(result))
+                result = RunDotnet(base, assembly);
+            return result;
+        }
+    }
+
     CSharpBuildResult CSharpProject::BuildManagedApi(
         const std::filesystem::path& project_root, const std::string& configuration)
     {
         const std::filesystem::path root = NormalizeRoot(project_root);
-        CSharpBuildResult result = RunDotnet(L"build " +
-            Quote(ManagedApiProjectPath(root)) + L" -c " + QuoteText(ToWide(configuration)) +
-            L" --nologo", ManagedApiAssemblyPath(root, configuration));
+        CSharpBuildResult result = BuildWithExistingRestore(
+            ManagedApiProjectPath(root), configuration,
+            ManagedApiAssemblyPath(root, configuration));
         ParseDiagnostics(result);
         return result;
     }
@@ -58,9 +79,8 @@ namespace ReplayEngine::Scripting::CSharp
             if (!api.succeeded) return api;
         }
 
-        CSharpBuildResult result = RunDotnet(L"build " +
-            Quote(GameScriptsProjectPath(root)) + L" -c " +
-            QuoteText(ToWide(configuration)) + L" --nologo",
+        CSharpBuildResult result = BuildWithExistingRestore(
+            GameScriptsProjectPath(root), configuration,
             GameScriptsAssemblyPath(root, configuration));
         ParseDiagnostics(result);
         return result;

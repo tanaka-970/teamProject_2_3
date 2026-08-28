@@ -44,6 +44,10 @@ namespace ReplayEngine::Scene
         std::size_t DynamicBodyCount() const noexcept { return dynamic_body_count_; }
         std::size_t SleepingBodyCount() const noexcept { return sleeping_body_count_; }
         int SolverIterations() const noexcept { return solver_iterations_; }
+        const std::vector<PhysicsContact>& Contacts() const noexcept override
+        {
+            return contacts_;
+        }
 
         // 調整可能な設定。Solver の品質をビルドごとの定数へ閉じ込めない。
         void SetSolverIterations(int value) noexcept;
@@ -108,7 +112,7 @@ namespace ReplayEngine::Scene
         bool BuildShapeAt(const BodyState& body, ShapeProxy& out) const;
 
         void SweepAgainstStaticGeometry(BodyState& body,
-            const std::vector<Core::ObjectID>& excluded_objects) const;
+            const std::vector<Core::ObjectID>& excluded_objects);
         void SolveContact(BodyState* body_a, BodyState* body_b,
             const ShapeProxy& shape_a, const ShapeProxy& shape_b,
             const Contact& contact);
@@ -117,6 +121,11 @@ namespace ReplayEngine::Scene
         void SyncTransforms(std::vector<BodyState>& states, float fixed_delta_time);
         static bool DetectContact(const ShapeProxy& shape_a,
             const ShapeProxy& shape_b, Contact& out) noexcept;
+        void RecordContact(const BodyState* body_a, const BodyState* body_b,
+            const ShapeProxy& shape_a, const ShapeProxy& shape_b,
+            const Contact& contact);
+        void RecordQueryContact(const BodyState& body,
+            const SphereSweepHit& hit);
 
         static bool SphereSphere(const ShapeProxy& a, const ShapeProxy& b,
             Contact& out) noexcept;
@@ -157,5 +166,6 @@ namespace ReplayEngine::Scene
         int solver_iterations_ = 8;
         std::size_t dynamic_body_count_ = 0;
         std::size_t sleeping_body_count_ = 0;
+        std::vector<PhysicsContact> contacts_;
     };
 }

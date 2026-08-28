@@ -50,85 +50,28 @@
         std::string& out_reason) const;
     skinned_mesh* resolve_object_mesh(const std::string& asset_guid);
     static_mesh* resolve_builtin_primitive_mesh(const std::string& builtin_id);
+    bool build_builtin_primitive_cpu(const std::string& builtin_id,
+        std::vector<static_mesh::vertex>& vertices,
+        std::vector<std::uint32_t>& indices) const;
     const ReplayEngine::Rendering::MaterialAsset* resolve_object_material(
         const std::string& asset_guid);
     ReplayEngine::Rendering::RenderItem resolve_render_item_material(
         const ReplayEngine::Rendering::RenderItem& item);
-    // depth_only = true で深度プリパス用の描画になる。
-    // 深度プリパスを使う構成では、GBuffer へ出すものを必ずここでも描くこと。
-    // 描き漏らすと DepthFunc=EQUAL に落とされて画面から消える。
-    void draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shader,
-        bool gbuffer_pass, bool depth_only = false,
-        ReplayEngine::Core::ObjectID only_owner = ReplayEngine::Core::ObjectID::Invalid(),
-        bool skip_model_effect_owners = false,
-        std::uint32_t rendering_layer_mask = 0xFFFFFFFFu);
-    ID3D11ShaderResourceView* resolve_scene_effect_texture(const std::string& asset_guid);
-    ReplayEngine::UI::UIRenderTarget* apply_scene_effect_chain(
-        ID3D11ShaderResourceView* source,
-        const std::vector<ReplayEngine::UI::UIEffect>& effects,
-        std::uint32_t width, std::uint32_t height, DXGI_FORMAT format,
-        float effect_time, std::uint64_t temporal_owner_key = 0,
-        const ReplayEngine::UI::UIEffectRegion* effect_region = nullptr);
-    void begin_scene_effect_frame() noexcept;
-    void draw_model_effect_stacks(const D3D11_VIEWPORT& camera_viewport);
-    // Model Effect Stack が使う画面上の矩形。影パスと Effect 本体で同じ値を使う。
-    struct model_effect_screen_rect
-    {
-        long left = 0;
-        long top = 0;
-        long right = 0;
-        long bottom = 0;
-        bool Valid() const noexcept { return right > left && bottom > top; }
-        std::uint32_t Width() const noexcept
-        {
-            return Valid() ? static_cast<std::uint32_t>(right - left) : 0u;
-        }
-        std::uint32_t Height() const noexcept
-        {
-            return Valid() ? static_cast<std::uint32_t>(bottom - top) : 0u;
-        }
-    };
-    bool compute_model_effect_screen_rect(ReplayEngine::Core::ObjectID owner,
-        const D3D11_VIEWPORT& camera_viewport, model_effect_screen_rect& out_base,
-        model_effect_screen_rect& out_expanded);
-    // 面を消す Effect を持つ Object の影用パラメータを毎フレーム作り直す。
-    void collect_shadow_coverage(const D3D11_VIEWPORT& camera_viewport);
-    // 影パスで使う面消し定数 (b8) を積む。持たない Object では 0 件を積む。
-    bool bind_shadow_coverage_constants(ReplayEngine::Core::ObjectID owner);
-    // LandscapeRendererComponent 用の procedural static mesh 描画。
-    // AssetGUIDを介さず、LandscapeData::Revision が変わったときだけGPU Meshを作り直す。
-    void draw_landscape_scene_meshes(bool gbuffer_pass, bool depth_only = false);
-    // Landscape の GPU Mesh キャッシュを引く共通入口。影パスと通常描画で共有する。
-    static_mesh* resolve_landscape_gpu_mesh(
-        const ReplayEngine::Core::GameObject& object);
-
-    // ライト視点の影深度パス専用の提出処理。volume_* は影マップに写り得る範囲を包む球。
-    void draw_shadow_caster_meshes(
-        ID3D11VertexShader* static_caster_vs,
-        ID3D11InputLayout* static_caster_il,
-        ID3D11VertexShader* skinned_caster_vs,
-        ID3D11InputLayout* skinned_caster_il,
-        const DirectX::XMFLOAT3& volume_center,
-        float volume_radius,
-        float volume_extrusion);
-    // 影パスが材質から必要とする値だけをまとめて引く。
-    struct shadow_material_state
-    {
-        bool double_sided = false;
-        // 0=抜かない 1=cutoffで抜く 2=Mesh内蔵材質のalpha_modeを見る
-        int alpha_mode = 0;
-        float alpha_cutoff = 0.5f;
-        // true なら BaseMap を t40 (Material Asset) から読む。false は t0。
-        bool uses_replay_base_map = false;
-    };
-    shadow_material_state resolve_shadow_material_state(
-        const ReplayEngine::Rendering::RenderItem& source);
-    // 影用のアルファ抜き定数 (b7) を積む。alpha_mode が 0 なら PS は貼らない。
-    void bind_shadow_alpha_constants(const shadow_material_state& state);
-    // world 行列が鏡像なら巻き順が反転するので、裏面ではなく表面を落とす。
-    void set_shadow_cull_state(bool double_sided, const DirectX::XMFLOAT4X4& world);
-    void update_line_trails(float elapsed_time);
-    void draw_line_strokes();
+        // DX12 Phase 2 Bridge。Engine 所有の RenderItem List を Cache 可能な Static
+        // Geometry/Material Submission へ変換する。実際の Skinned Animation は Phase 3 に残す。
+    bool build_dx12_static_scene(
+        ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission& submission,
+        float elapsed_time);
+    // Canvas/RectTransform の解決結果を、GPU APIを呼ばないDX12 UIコマンドへ変換する。
+    bool build_dx12_ui(
+        ReplayEngine::Rendering::DX12::D3D12UIFrame& frame);
+    bool build_dx12_scene_effects(
+        ReplayEngine::Rendering::DX12::D3D12SceneEffectSubmission& submission);
+    bool build_dx12_ui_for_scene(
+        ReplayEngine::Rendering::DX12::D3D12UIFrame& frame,
+        ReplayEngine::Scene::Scene& scene,
+        std::uint32_t target_width, std::uint32_t target_height,
+        const object_ui_viewport& viewport);
     void clear_object_mesh_cache() noexcept;
     void clear_object_material_cache() noexcept;
     bool object_runtime_active() const noexcept;
@@ -263,8 +206,6 @@
         skinned_mesh& mesh, const ReplayEngine::Rendering::RenderItem& item,
         skinned_mesh::animation::keyframe& blended_keyframe) const;
     void draw_project_panel();
-    bool ensure_ui_preview_render_target(int width, int height);
-    void render_ui_preview_target();
 
     // --- Project ブラウザ (Unity 型 2 ペイン) ------------------------------
     // 左にフォルダツリー、右にそのフォルダの中身。
@@ -293,6 +234,10 @@
     bool project_create_scene_flow(const std::string& name);
     bool project_create_localization(const std::string& name);
     bool project_create_effect_preset(const std::string& name);
+    bool project_create_easing_curve(const std::string& name);
+    bool open_easing_curve_asset(const ReplayEngine::Assets::AssetRecord& asset);
+    bool save_current_easing_curve();
+    void draw_easing_editor();
     bool project_create_input_action_asset(const std::string& name);
     bool load_active_input_action_asset();
     bool project_create_surface_shader(const std::string& name);
@@ -315,8 +260,6 @@
     void draw_project_delete_popup();
     bool project_delete_confirmed();
     void project_begin_rename_selected();
-    ID3D11ShaderResourceView* project_thumbnail_for(
-        const std::filesystem::path& path);
     ReplayEngine::Assets::AssetKind project_kind_for(
         const std::filesystem::path& path) const;
 
@@ -330,6 +273,18 @@
     void ui_preview_resolution_size(int& width, int& height) const noexcept;
     bool open_motion_asset(const ReplayEngine::Assets::AssetRecord& asset);
     bool save_current_motion_asset();
+    // S キーと Key追加 ボタンの共通経路。現在のプレビュー時刻へキーを打つ。
+    bool add_motion_key_at_preview_time();
+    ReplayEngine::Motion::MotionTrack* selected_motion_track();
+    std::vector<int> selected_motion_key_indices() const;
+    bool copy_motion_keys();
+    bool paste_motion_keys();
+    bool duplicate_motion_keys();
+    bool delete_motion_keys();
+    bool apply_motion_easing_to_selection(ReplayEngine::Motion::MotionEasing easing);
+    void toggle_motion_preview_playback();
+    void step_motion_preview_frames(int frames);
+    void seek_motion_preview_time(float time);
     bool undo_motion_edit();
     bool redo_motion_edit();
     void draw_motion_layers();
@@ -370,6 +325,9 @@ private:
     bool profile_benchmark_gpu_drain_timeout{ false };
     bool profile_benchmark_scene_ready{ false };
     bool profile_benchmark_startup_failed{ false };
+    bool profile_benchmark_startup_profile_ok{ false };
+    std::array<double, 5> profile_benchmark_initialize_stage_ms{};
+    double profile_benchmark_initialize_total_ms{ 0.0 };
     std::uint64_t profile_benchmark_max_draw_calls{ 0 };
     std::uint64_t profile_benchmark_max_objects{ 0 };
     std::uint64_t profile_benchmark_max_components{ 0 };

@@ -2,6 +2,7 @@
 
 #include "ScriptValue.h"
 
+#include <algorithm>
 #include <utility>
 
 namespace ReplayEngine::Scripting
@@ -75,6 +76,17 @@ namespace ReplayEngine::Scripting
             return true;
         }
         return false;
+    }
+
+    std::size_t ScriptTypeCatalog::RemoveLanguage(ScriptLanguage language) noexcept
+    {
+        const std::size_t before = entries_.size();
+        entries_.erase(std::remove_if(entries_.begin(), entries_.end(),
+            [language](const ScriptTypeDescriptor& entry)
+            {
+                return entry.language == language;
+            }), entries_.end());
+        return before - entries_.size();
     }
 
     void ScriptTypeCatalog::Clear() noexcept

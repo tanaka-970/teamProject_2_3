@@ -1,4 +1,4 @@
-#include "CSharpScriptValidation.h"
+﻿#include "CSharpScriptValidation.h"
 
 #include "../CSharp/CSharpProject.h"
 #include "../CSharp/CSharpScriptBackend.h"
@@ -8,6 +8,8 @@
 #include "../../Object/GameObject/GameObject.h"
 #include "../../Object/Registry/BuiltInComponents.h"
 #include "../../Reflection/Registry/PropertyRegistry.h"
+#include "../../Runtime/API/RuntimeContext.h"
+#include "../../Runtime/Events/EventBus.h"
 #include "../../Scene/Runtime/Scene.h"
 #include "../../Scene/Serialization/PrefabSerializer.h"
 #include "../../Scene/Serialization/SceneData.h"
@@ -18,6 +20,7 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <limits>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -28,6 +31,8 @@ namespace ReplayEngine::Scripting::Validation
     {
         constexpr const char* validation_guid_text =
             "c5a9c4a3d7914bb5a0b64b68de81d7f1";
+        constexpr const char* secondary_validation_guid_text =
+            "d6b0d5b4e8024cc6b1c75c79ef92e802";
         constexpr const char* validation_class_name = "ValidationCSharpBehaviour";
         constexpr const char* validation_namespace = "ValidationScripts";
 
@@ -118,6 +123,13 @@ namespace ReplayEngine::Scripting::Validation
                 "\n"
                 "namespace ") + validation_namespace + ";\n"
                 "\n"
+                "public enum ValidationMode { First = 0, Second = 1, Third = 2 }\n"
+                "[System.Serializable] public struct ValidationSettings\n"
+                "{\n"
+                "    public int Lives;\n"
+                "    public Vector3 Spawn;\n"
+                "}\n"
+                "\n"
                 "[ReplayGuid(\"" + validation_guid_text + "\")]\n"
                 "public sealed class " + class_name + " : ScriptBehaviour\n"
                 "{\n"
@@ -126,6 +138,20 @@ namespace ReplayEngine::Scripting::Validation
                 "    public ObjectReference Target;\n"
                 "    public ComponentReference TargetComponent;\n"
                 "    public string LastEventType = string.Empty;\n"
+                "    public int ApiChecks = 0;\n"
+                "    public int RuntimeChecks = 0;\n"
+                "    public int TypedEventChecks = 0;\n"
+                "    [Range(0.0, 10.0)] public float RangedValue = 1.0f;\n"
+                "    [Tooltip(\"説明文\")] [Header(\"見出し\")] public int Described = 3;\n"
+                "    [HideInInspector] public int Hidden = 5;\n"
+                "    [AssetType(\"Image\")] public AssetReference Picture;\n"
+                "    public AssetReference<SceneAsset> NextScene = new(\"typed-scene-guid\");\n"
+                "    public ValidationMode Mode = ValidationMode.Second;\n"
+                "    public int[] Scores = new[] { 1, 2, 3 };\n"
+                "    public System.Collections.Generic.List<string> Tags = new() { \"alpha\", \"日本語\" };\n"
+                "    public System.Collections.Generic.Dictionary<string, float> Tuning = new() { [\"speed\"] = 2.5f };\n"
+                "    public ValidationSettings Settings = new() { Lives = 3, Spawn = new Vector3(1, 2, 3) };\n"
+                "    public AnimationCurve Curve = AnimationCurve.Linear(0, 0, 1, 1);\n"
                 "    private EventSubscription subscription;\n"
                 "\n"
                 "    public override void Awake()\n"
@@ -137,6 +163,113 @@ namespace ReplayEngine::Scripting::Validation
                 "        if (Runtime.AudioUnavailable() != RuntimeStatus.ServiceUnavailable) Counter = -101;\n"
                 "        if (Runtime.RuntimeUIUnavailable() != RuntimeStatus.ServiceUnavailable) Counter = -102;\n"
                 "        if (Runtime.SaveGameUnavailable() != RuntimeStatus.ServiceUnavailable) Counter = -103;\n"
+                "        ApiChecks = RunComponentApiChecks();\n"
+                "        StartCoroutine(CountUp());\n"
+                "        After(0.0f, () => { RuntimeChecks += 1; });\n"
+                "        TweenValue(0.0f, 10.0f, 0.0f, v => { if (v >= 10.0f) RuntimeChecks += 1; });\n"
+                "        RuntimeChecks += RunRuntimeApiChecks();\n"
+                "    }\n"
+                "\n"
+                "    private System.Collections.IEnumerator CountUp()\n"
+                "    {\n"
+                "        RuntimeChecks += 1;\n"
+                "        yield return null;\n"
+                "    }\n"
+                "\n"
+                "    // v11 で足した入力 / Scene / イベント定数を確かめる。\n"
+                "    private int RunRuntimeApiChecks()\n"
+                "    {\n"
+                "        var passed = 0;\n"
+                "        // Input Service 未接続でも例外にならず false を返す。\n"
+                "        if (!Input.GetKey(Key.A)) ++passed;\n"
+                "        if (!Input.GamepadConnected()) ++passed;\n"
+                "        if (Input.MouseScrollDelta == 0.0f) ++passed;\n"
+                "        if (Runtime.InputHeld(InputActions.Jump).Status == RuntimeStatus.ServiceUnavailable) ++passed;\n"
+                "        if (Input.GetAxis(new InputAxisId(\"\")).Status == RuntimeStatus.InvalidArgument) ++passed;\n"
+                "        if (EngineEventIds.CollisionEnter.Length == 32) ++passed;\n"
+                "        if (EngineEventIds.ButtonClicked.Length == 32) ++passed;\n"
+                "        if (Vector3.Cross(Vector3.Right, Vector3.Up).Z > 0.99f) ++passed;\n"
+                "        var turned = Quaternion.AngleAxis(MathF.PI * 0.5f, Vector3.Up) * Vector3.Forward;\n"
+                "        if (turned.X > 0.99f) ++passed;\n"
+                "        if (Runtime.OverlapSphere(Vector3.Zero, 1.0f).Status ==\n"
+                "            RuntimeStatus.ServiceUnavailable) ++passed;\n"
+                "        if (Runtime.CurrentSceneGuid().Status != RuntimeStatus.Ok ||\n"
+                "            Runtime.CurrentSceneGuid().Value != null) ++passed;\n"
+                "        var spawn = Runtime.InstantiateDeferred(\"missing\",\n"
+                "            new Vector3(0.0f, 0.0f, 0.0f), new Vector3(0.0f, 0.0f, 0.0f),\n"
+                "            new Vector3(1.0f, 1.0f, 1.0f));\n"
+                "        if (!spawn.Succeeded) ++passed;\n"
+                "        if (!Runtime.TakeSpawnResult(0).Succeeded) ++passed;\n"
+                "        var transition = Runtime.SceneTransition;\n"
+                "        if (transition.Succeeded && !transition.Value.InProgress &&\n"
+                "            transition.Value.Status == RuntimeStatus.ServiceUnavailable) ++passed;\n"
+                "        return passed;\n"
+                "    }\n"
+                "\n"
+                "    // v10 で足した型付き Component API を実行時に確かめる。\n"
+                "    private int RunComponentApiChecks()\n"
+                "    {\n"
+                "        var passed = 0;\n"
+                "        var ownBehaviour = GetBehaviour<ValidationCSharpBehaviour>();\n"
+                "        if (ownBehaviour.Succeeded && object.ReferenceEquals(ownBehaviour.Value, this)) ++passed;\n"
+                "        if (Runtime.ComponentTypeId(\"CameraComponent\").Value != 0) ++passed;\n"
+                "        var cameraType = Runtime.ComponentTypeInfo<CameraComponent>();\n"
+                "        if (cameraType.Succeeded && cameraType.Value.TypeId != 0 &&\n"
+                "            cameraType.Value.NativeTypeName == \"CameraComponent\") ++passed;\n"
+                "        Transform.LocalPosition = new Vector3(1.0f, 2.0f, 3.0f);\n"
+                "        if (Transform.LocalPosition.Y == 2.0f) ++passed;\n"
+                "        var axes = Transform.Forward;\n"
+                "        if (axes.Z > 0.99f) ++passed;\n"
+                "        var made = Runtime.CreateGameObject(\"ApiProbe\");\n"
+                "        if (!made.Succeeded) return passed;\n"
+                "        var addedCamera = Runtime.AddComponent<CameraComponent>(made.Value);\n"
+                "        if (addedCamera.Succeeded) ++passed;\n"
+                "        var camera = addedCamera.Value;\n"
+                "        camera.FieldOfView = 42.0f;\n"
+                "        if (camera.FieldOfView == 42.0f) ++passed;\n"
+                "        if (Runtime.TryGetComponent<CameraComponent>(made.Value, out var found) &&\n"
+                "            found.FieldOfView == 42.0f) ++passed;\n"
+                "        if (!Runtime.HasComponent<RigidbodyComponent>(made.Value)) ++passed;\n"
+                "        var body = Runtime.AddComponentOrDefault<RigidbodyComponent>(made.Value);\n"
+                "        if (body.IsValid && body.SetVelocity(new Vector3(0.0f, 5.0f, 0.0f)) ==\n"
+                "            RuntimeStatus.Ok && body.Velocity.Y == 5.0f) ++passed;\n"
+                "        if (body.IsValid && body.AddForce(new Vector3(0.0f, 1.0f, 0.0f)) ==\n"
+                "            RuntimeStatus.Ok) ++passed;\n"
+                "        var runtimeTransform = Runtime.Transform(made.Value);\n"
+                "        runtimeTransform.Position = new Vector3(4.0f, 5.0f, 6.0f);\n"
+                "        if (runtimeTransform.Position.Z == 6.0f) ++passed;\n"
+                "        var animator = Runtime.AddComponentOrDefault<AnimatorComponent>(made.Value);\n"
+                "        if (animator.IsValid) ++passed;\n"
+                "        if (animator.IsValid && animator.Pause() == RuntimeStatus.Ok &&\n"
+                "            animator.Resume() == RuntimeStatus.Ok && animator.Stop() == RuntimeStatus.Ok) ++passed;\n"
+                "        var particles = Runtime.AddComponentOrDefault<ParticleEmitterComponent>(made.Value);\n"
+                "        if (particles.IsValid) ++passed;\n"
+                "        if (particles.IsValid && particles.Emit(32) == RuntimeStatus.Ok &&\n"
+                "            particles.Stop() == RuntimeStatus.Ok && particles.Play() == RuntimeStatus.Ok &&\n"
+                "            particles.Clear() == RuntimeStatus.Ok) ++passed;\n"
+                "        var audio = Runtime.AddComponentOrDefault<AudioSourceComponent>(made.Value);\n"
+                "        if (audio.IsValid) ++passed;\n"
+                "        if (audio.IsValid && audio.Play() == RuntimeStatus.ServiceUnavailable &&\n"
+                "            audio.Stop() == RuntimeStatus.Ok) ++passed;\n"
+                "        var image = Runtime.AddComponentOrDefault<UIImageComponent>(made.Value);\n"
+                "        if (image.IsValid) ++passed;\n"
+                "        image.Sprite = \"validation-image-guid\";\n"
+                "        if (image.Sprite == \"validation-image-guid\") ++passed;\n"
+                "        var slider = Runtime.AddComponentOrDefault<UISliderComponent>(made.Value);\n"
+                "        if (slider.IsValid) ++passed;\n"
+                "        slider.Minimum = 0.0f; slider.Maximum = 10.0f; slider.Value = 25.0f;\n"
+                "        if (slider.Value == 10.0f && slider.NormalizedValue == 1.0f) ++passed;\n"
+                "        var imageReference = image.Accessor.Reference();\n"
+                "        if (imageReference.Succeeded) slider.FillImage = imageReference.Value;\n"
+                "        var resolvedImage = slider.FillImage.Resolve();\n"
+                "        if (resolvedImage.Succeeded && resolvedImage.Value.TypeId == image.Handle.TypeId) ++passed;\n"
+                "        return passed;\n"
+                "    }\n"
+                "\n"
+                "    public override void OnWorldChanged(SceneEventInfo scene)\n"
+                "    {\n"
+                "        if (scene.SceneAssetGuid == \"typed-event\" &&\n"
+                "            scene.WorldInstance == ulong.MaxValue - 7) ++TypedEventChecks;\n"
                 "    }\n"
                 "\n"
                 "    public override void Update(float deltaTime)\n"
@@ -147,6 +280,16 @@ namespace ReplayEngine::Scripting::Validation
                 "            LastEventType = result.Value.TypeGuid;\n"
                 "        }\n"
                 "    }\n"
+                "}\n";
+        }
+
+        std::string MultipleBehaviourSource()
+        {
+            return ValidBehaviourSource() +
+                "\n[ReplayGuid(\"" + std::string(secondary_validation_guid_text) + "\")]\n"
+                "public sealed class SecondaryValidationBehaviour : ScriptBehaviour\n"
+                "{\n"
+                "    public int Value = 2;\n"
                 "}\n";
         }
 
@@ -165,7 +308,14 @@ namespace ReplayEngine::Scripting::Validation
         {
             runtime.RequestSchemaReload(type_id);
             runtime.ApplyPendingSchemaSwaps(0.0f);
-            return static_cast<bool>(runtime.Catalog().FindSchema(type_id));
+            const bool loaded = static_cast<bool>(runtime.Catalog().FindSchema(type_id));
+            if (!loaded)
+            {
+                const ScriptErrorRecord* error = runtime.Errors().Latest();
+                if (error != nullptr)
+                    std::fprintf(stderr, "  schema reload: %s\n", error->message.c_str());
+            }
+            return loaded;
         }
 
         ScriptComponent* AddManagedScript(Core::GameObject& object,
@@ -265,6 +415,23 @@ namespace ReplayEngine::Scripting::Validation
         check.Expect(CSharp::CSharpProject::TryReadBehaviourInfo(validation_source, renamed) &&
             renamed.type_guid == validation_guid_text,
             "class rename does not regenerate Type GUID");
+
+        check.Expect(WriteText(validation_source, MultipleBehaviourSource()),
+            "multiple C# Behaviours can share one source file");
+        const std::vector<CSharp::CSharpBehaviourInfo> multiple_entries =
+            CSharp::CSharpProject::DiscoverBehaviours(root);
+        std::size_t same_file_entries = 0;
+        bool secondary_found = false;
+        for (const CSharp::CSharpBehaviourInfo& entry : multiple_entries)
+        {
+            if (entry.source_path != validation_source) continue;
+            ++same_file_entries;
+            if (entry.type_guid == secondary_validation_guid_text &&
+                entry.class_name == "SecondaryValidationBehaviour")
+                secondary_found = true;
+        }
+        check.Expect(same_file_entries == 2 && secondary_found,
+            "all ReplayGuid Behaviours in one C# file are discovered");
         check.Expect(WriteText(validation_source, ValidBehaviourSource()),
             "validation C# Behaviour source is restored after rename test");
 
@@ -322,6 +489,80 @@ namespace ReplayEngine::Scripting::Validation
         check.Expect(schema && schema->FindBySavedName("field.TargetComponent") != nullptr,
             "ComponentReference field appears in Inspector schema");
 
+        // ---- Inspector 属性と追加した Field 型 -------------------------------
+        {
+            const ScriptFieldDefinition* ranged =
+                schema ? schema->FindBySavedName("field.RangedValue") : nullptr;
+            check.Expect(ranged != nullptr && ranged->has_range &&
+                ranged->minimum == 0.0 && ranged->maximum == 10.0,
+                "[Range] が編集範囲として schema へ載る");
+
+            const ScriptFieldDefinition* described =
+                schema ? schema->FindBySavedName("field.Described") : nullptr;
+            check.Expect(described != nullptr && !described->tooltip.empty(),
+                "[Tooltip] が schema へ載る");
+            check.Expect(described != nullptr && !described->category.empty(),
+                "[Header] が折り畳み見出しとして schema へ載る");
+
+            const ScriptFieldDefinition* hidden =
+                schema ? schema->FindBySavedName("field.Hidden") : nullptr;
+            check.Expect(hidden != nullptr && !hidden->visible_in_inspector,
+                "[HideInInspector] が Inspector 非表示として載る");
+            check.Expect(hidden != nullptr && hidden->serializable,
+                "[HideInInspector] でも保存対象は維持する");
+
+            const ScriptFieldDefinition* picture =
+                schema ? schema->FindBySavedName("field.Picture") : nullptr;
+            check.Expect(picture != nullptr &&
+                picture->type == Reflection::PropertyType::AssetReference,
+                "AssetReference フィールドが Asset 型として載る");
+            check.Expect(picture != nullptr && picture->asset_type == "Image",
+                "[AssetType] が Picker の絞り込みとして載る");
+
+            const ScriptFieldDefinition* next_scene =
+                schema ? schema->FindBySavedName("field.NextScene") : nullptr;
+            check.Expect(next_scene != nullptr &&
+                next_scene->type == Reflection::PropertyType::AssetReference &&
+                next_scene->asset_type == "Scene" &&
+                next_scene->default_value.AsString() == "typed-scene-guid",
+                "型付きAssetReferenceが種別と既定GUIDをschemaへ載せる");
+
+            const ScriptFieldDefinition* mode =
+                schema ? schema->FindBySavedName("field.Mode") : nullptr;
+            check.Expect(mode != nullptr && mode->type == Reflection::PropertyType::Enum,
+                "enum フィールドが Enum 型として載る");
+            check.Expect(mode != nullptr && mode->enum_labels.size() == 3 &&
+                mode->enum_labels[1] == "Second",
+                "enum のラベルが並び順どおりに載る");
+            check.Expect(mode != nullptr && mode->default_value.AsInt() == 1,
+                "enum の既定値が数値として載る");
+
+            const ScriptFieldDefinition* scores =
+                schema ? schema->FindBySavedName("field.Scores") : nullptr;
+            check.Expect(scores != nullptr && scores->type == Reflection::PropertyType::Array &&
+                scores->array_element_type == Reflection::PropertyType::Int &&
+                scores->default_value.ArrayElements().size() == 3,
+                "配列フィールドが要素型と既定値を保って schema へ載る");
+            const ScriptFieldDefinition* tags =
+                schema ? schema->FindBySavedName("field.Tags") : nullptr;
+            check.Expect(tags != nullptr && tags->type == Reflection::PropertyType::Array &&
+                tags->array_element_type == Reflection::PropertyType::String &&
+                tags->default_value.ArrayElements().size() == 2 &&
+                tags->default_value.ArrayElements()[1].AsString() == "日本語",
+                "List と UTF-8 文字列が配列として schema へ載る");
+            const ScriptFieldDefinition* tuning =
+                schema ? schema->FindBySavedName("field.Tuning") : nullptr;
+            const ScriptFieldDefinition* settings =
+                schema ? schema->FindBySavedName("field.Settings") : nullptr;
+            const ScriptFieldDefinition* curve =
+                schema ? schema->FindBySavedName("field.Curve") : nullptr;
+            check.Expect(tuning != nullptr && settings != nullptr && curve != nullptr &&
+                tuning->type == Reflection::PropertyType::String &&
+                settings->type == Reflection::PropertyType::String &&
+                curve->type == Reflection::PropertyType::String,
+                "Dictionary・Serializable struct・AnimationCurve が JSON 保存型として載る");
+        }
+
         if (backend != nullptr && schema)
         {
             ScriptInstanceRequest request;
@@ -357,6 +598,47 @@ namespace ReplayEngine::Scripting::Validation
             check.Expect(set_component && got_component &&
                 pulled_component.AsComponentReference() == component_reference,
                 "ComponentReference field can be pushed and pulled");
+
+            const bool set_scene_reference = backend->SetField(instance,
+                "field.NextScene", ScriptValue::MakeAssetReference("scene-guid-updated"));
+            ScriptValue pulled_scene_reference;
+            const bool got_scene_reference = backend->GetField(instance,
+                "field.NextScene", pulled_scene_reference);
+            const bool scene_reference_ok = set_scene_reference && got_scene_reference &&
+                pulled_scene_reference.AsString() == "scene-guid-updated";
+            if (!scene_reference_ok)
+            {
+                // 失敗時だけ実値を出す。set/get のどちらで落ちたかを切り分ける。
+                std::fprintf(stderr, "  [DIAG] NextScene set=%d get=%d value=%s\n",
+                    set_scene_reference ? 1 : 0, got_scene_reference ? 1 : 0,
+                    pulled_scene_reference.AsString().c_str());
+            }
+            check.Expect(scene_reference_ok,
+                "型付きAssetReferenceをmanaged instanceと双方向に同期できる");
+
+            std::vector<ScriptValue> score_values;
+            score_values.push_back(ScriptValue::MakeInt(7));
+            score_values.push_back(ScriptValue::MakeInt(9));
+            const bool set_scores = backend->SetField(instance, "field.Scores",
+                ScriptValue::MakeArray(Reflection::PropertyType::Int,
+                    std::move(score_values)));
+            ScriptValue pulled_scores;
+            const bool got_scores = backend->GetField(instance, "field.Scores", pulled_scores);
+            check.Expect(set_scores && got_scores && pulled_scores.IsArray() &&
+                pulled_scores.ArrayElements().size() == 2 &&
+                pulled_scores.ArrayElements()[1].AsInt() == 9,
+                "配列フィールドを managed instance と双方向に同期できる");
+
+            const std::string settings_json =
+                "{\"Lives\":8,\"Spawn\":{\"X\":4,\"Y\":5,\"Z\":6}}";
+            const bool set_settings = backend->SetField(instance, "field.Settings",
+                ScriptValue::MakeString(settings_json));
+            ScriptValue pulled_settings;
+            const bool got_settings = backend->GetField(instance,
+                "field.Settings", pulled_settings);
+            check.Expect(set_settings && got_settings &&
+                pulled_settings.AsString().find("\"Lives\":8") != std::string::npos,
+                "Serializable struct の JSON を managed instance と双方向に同期できる");
 
             backend->DestroyInstance(instance);
             check.Expect(backend->LiveInstanceCount() == 0,
@@ -424,6 +706,13 @@ namespace ReplayEngine::Scripting::Validation
             reference.component = script->StableID();
             script->WriteField("field.TargetComponent",
                 ScriptValue::MakeComponentReference(reference));
+            std::vector<ScriptValue> scores;
+            scores.push_back(ScriptValue::MakeInt(11));
+            scores.push_back(ScriptValue::MakeInt(22));
+            script->WriteField("field.Scores", ScriptValue::MakeArray(
+                Reflection::PropertyType::Int, std::move(scores)));
+            script->WriteField("field.Settings", ScriptValue::MakeString(
+                "{\"Lives\":6,\"Spawn\":{\"X\":7,\"Y\":8,\"Z\":9}}"));
         }
 
         Serialization::SceneData data;
@@ -458,6 +747,14 @@ namespace ReplayEngine::Scripting::Validation
             restored_script->ReadField("field.TargetComponent")
                 .AsComponentReference().IsAssigned(),
             "restored Scene keeps ComponentReference value");
+        check.Expect(restored_script != nullptr &&
+            restored_script->ReadField("field.Scores").ArrayElements().size() == 2 &&
+            restored_script->ReadField("field.Scores").ArrayElements()[1].AsInt() == 22,
+            "restored Scene keeps array field values");
+        check.Expect(restored_script != nullptr &&
+            restored_script->ReadField("field.Settings").AsString().find("\"Lives\":6") !=
+                std::string::npos,
+            "restored Scene keeps structured JSON field values");
 
         if (carrier != nullptr)
         {
@@ -480,6 +777,9 @@ namespace ReplayEngine::Scripting::Validation
             check.Expect(prefab_script != nullptr &&
                 Close(prefab_script->ReadField("field.Speed").AsFloat(), 4.5f),
                 "Prefab Instantiate keeps C# field values");
+            check.Expect(prefab_script != nullptr &&
+                prefab_script->ReadField("field.Scores").ArrayElements().size() == 2,
+                "Prefab Instantiate keeps C# array field values");
         }
 
         ReplayEngine::Scene::Scene missing_world("CSharpMissingScene");
@@ -519,11 +819,59 @@ namespace ReplayEngine::Scripting::Validation
             check.Expect(false, "Missing C# Behaviour keeps serialized field data");
         }
 
+        // Behaviour から Runtime API を触れるよう、Play の直前だけ Context を繋ぐ。
+        // ここより前で繋ぐと EditorOnly Component が Scene 復元から外れ、
+        // 上の直列化チェックの前提が変わってしまう。
+        ReplayEngine::Runtime::RuntimeContext runtime_context(world);
+        world.Services().SetRuntime(&runtime_context);
+
         runtime->OnWorldActivating(world);
         world.Start();
         world.Update(0.016f);
         check.Expect(script == nullptr || script->HasInstance(),
             "Play start creates managed instance through Behaviour lifecycle");
+
+        // v10 の型付き Component API を、実際に動いている managed インスタンスから確かめる。
+        // ReadField は Play 中なら managed 側の今の値を返す。
+        if (script != nullptr && script->HasInstance())
+        {
+            const ScriptValue api_checks =
+                script->ReadField(ScriptNames::MakeFieldSavedName("ApiChecks"));
+            if (api_checks.AsInt() != 23)
+            {
+                // 失敗時だけ実値を出す。何個目で止まったかの手がかりにする。
+                std::fprintf(stderr, "  [DIAG] ApiChecks=%lld (expected 23)\n",
+                    static_cast<long long>(api_checks.AsInt()));
+            }
+            check.Expect(api_checks.AsInt() == 23,
+                "typed Component API works from a running C# behaviour");
+
+            // Coroutine 1 + Timer 1 + Tween 1 + 生入力/Scene/Math/Physics 14 = 17。
+            const ScriptValue runtime_checks =
+                script->ReadField(ScriptNames::MakeFieldSavedName("RuntimeChecks"));
+            check.Expect(runtime_checks.AsInt() == 17,
+                "coroutine / timer / tween / input / scene API run from C#");
+
+            Runtime::EventRecord typed_event;
+            typed_event.type = Runtime::EngineEvents::WorldChanged;
+            typed_event.type_name = "WorldChanged";
+            typed_event.payload.Set("scene_guid",
+                Reflection::PropertyValue::MakeString("typed-event"));
+            typed_event.payload.Set("world_instance",
+                Reflection::PropertyValue::MakeUInt64(
+                    (std::numeric_limits<std::uint64_t>::max)() - 7));
+            Runtime::EventBus::Global().Publish(std::move(typed_event));
+            Runtime::EventBus::Global().Dispatch(nullptr);
+            world.Update(0.016f);
+            const ScriptValue typed_event_checks =
+                script->ReadField(ScriptNames::MakeFieldSavedName("TypedEventChecks"));
+            check.Expect(typed_event_checks.AsInt() == 1,
+                "Global Event と UInt64 payload が型付き C# callback へ届く");
+        }
+        else
+        {
+            check.Expect(false, "typed Component API works from a running C# behaviour");
+        }
         runtime->OnWorldUnloading(world);
         world.Clear();
         runtime->OnWorldUnloaded(world);

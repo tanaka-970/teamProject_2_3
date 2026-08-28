@@ -1,8 +1,8 @@
 ﻿#include "framework.h"
-#include "texture.h"
 #include "../../RePlayEngine/Assets/AssetCache.h"
 #include "../../RePlayEngine/Editor/Style/EditorStyle.h"
 #include "../../RePlayEngine/Motion/CompositionAsset.h"
+#include "../../RePlayEngine/Motion/EasingCurveAsset.h"
 #include "../../RePlayEngine/Motion/MotionAsset.h"
 #include "../../RePlayEngine/Rendering/Materials/MaterialAsset.h"
 #include "../../RePlayEngine/Rendering/Shaders/ShaderAssetFactory.h"
@@ -13,12 +13,65 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <filesystem>
 #include <string>
 #include <system_error>
 #include <vector>
 #include "framework_project_browserInternal.h"
 using namespace framework_project_browser::Detail;
+
+namespace
+{
+    void DrawEasingCurveProjectIcon(ImDrawList* draw_list, const ImVec2& min,
+        const ImVec2& max, const ReplayEngine::Motion::EasingCurveAsset* curve)
+    {
+        const float width = (std::max)(1.0f, max.x - min.x);
+        const ImVec2 inner_min(min.x + 7.0f, min.y + 7.0f);
+        const ImVec2 inner_max(max.x - 7.0f, max.y - 7.0f);
+        draw_list->AddRectFilled(inner_min, inner_max, IM_COL32(27, 30, 34, 245), 4.0f);
+        float min_y = 0.0f;
+        float max_y = 1.0f;
+        if (curve != nullptr)
+        {
+            for (const float value : curve->samples)
+            {
+                if (!std::isfinite(value)) continue;
+                min_y = (std::min)(min_y, value);
+                max_y = (std::max)(max_y, value);
+            }
+        }
+        float span = max_y - min_y;
+        if (!std::isfinite(span) || span < 0.001f) span = 1.0f;
+        const float padding = (std::max)(0.06f, span * 0.10f);
+        min_y -= padding;
+        max_y += padding;
+        span = max_y - min_y;
+        const auto point = [&](float t, float value)
+        {
+            const float x = inner_min.x + (inner_max.x - inner_min.x) * t;
+            const float normalized = (value - min_y) / span;
+            const float y = inner_max.y - (inner_max.y - inner_min.y) * normalized;
+            return ImVec2(x, y);
+        };
+        draw_list->AddLine(point(0.0f, 0.0f), point(1.0f, 1.0f),
+            IM_COL32(120, 125, 130, 90), 1.0f);
+        ImVec2 previous = point(0.0f, curve != nullptr ? curve->Evaluate(0.0f) : 0.0f);
+        constexpr int divisions = 28;
+        for (int index = 1; index <= divisions; ++index)
+        {
+            const float t = static_cast<float>(index) / static_cast<float>(divisions);
+            float value = curve != nullptr ? curve->Evaluate(t) : t;
+            if (!std::isfinite(value)) value = t;
+            const ImVec2 current = point(t, value);
+            draw_list->AddLine(previous, current, IM_COL32(120, 235, 145, 255),
+                (std::max)(1.5f, (std::min)(2.5f, width / 52.0f)));
+            previous = current;
+        }
+        draw_list->AddCircleFilled(point(0.0f, 0.0f), 2.5f, IM_COL32(235, 240, 240, 230));
+        draw_list->AddCircleFilled(point(1.0f, 1.0f), 2.5f, IM_COL32(235, 240, 240, 230));
+    }
+}
 
 // フォルダツリーとフォルダ内容表示の関数本体
 
@@ -289,6 +342,8 @@ bool framework::project_open_entry(const std::filesystem::path& path)
         return open_motion_asset(*record);
     if (kind == AssetKind::SpriteAtlas && record != nullptr)
         return open_sprite_atlas_asset(*record);
+    if (kind == AssetKind::EasingCurve && record != nullptr)
+        return open_easing_curve_asset(*record);
     if (kind == AssetKind::Shader)
     {
         std::string open_error;
@@ -376,6 +431,11 @@ void framework::draw_project_create_submenu(const std::filesystem::path& target_
         {
             select_target();
             project_create_effect_preset(project_new_item_name);
+        }
+        if (ImGui::MenuItem(u8"イージングカーブ"))
+        {
+            select_target();
+            project_create_easing_curve(project_new_item_name);
         }
         ImGui::EndMenu();
     }
@@ -530,6 +590,7 @@ void framework::draw_project_folder_contents()
             else if (kind == AssetKind::Localization) filter_type = 10;
             else if (kind == AssetKind::EffectPreset) filter_type = 11;
             else if (kind == AssetKind::InputAction) filter_type = 12;
+            else if (kind == AssetKind::EasingCurve) filter_type = 14;
             else filter_type = 13;
             if (asset_type_filter != filter_type) continue;
         }
@@ -559,13 +620,16 @@ void framework::draw_project_folder_contents()
         const bool renaming = !project_rename_target.empty() &&
             project_rename_target == entry.path;
 
-        ID3D11ShaderResourceView* thumbnail =
-            entry.is_directory ? nullptr : project_thumbnail_for(entry.path);
+        const bool has_thumbnail = !entry.is_directory &&
+            IsImageExtension(ToLowerCopy(entry.path.extension().u8string()));
+        const ImTextureID thumbnail_id = has_thumbnail
+            ? reinterpret_cast<ImTextureID>(dx12_device_context.ImGuiTextureForPath(entry.path))
+            : nullptr;
 
         const ImVec2 icon_size(project_thumbnail_size, project_thumbnail_size);
-        if (thumbnail != nullptr)
+        if (thumbnail_id != nullptr)
         {
-            if (ImGui::ImageButton(reinterpret_cast<ImTextureID>(thumbnail),
+            if (ImGui::ImageButton(thumbnail_id,
                 icon_size, ImVec2(0, 0), ImVec2(1, 1), 2))
             {
                 project_selected_entry_path = entry.path;
@@ -575,6 +639,26 @@ void framework::draw_project_folder_contents()
                 project_browser_focused = true;
                 project_tree_reveal_selection_pending = true;
             }
+        }
+        else if (kind == AssetKind::EasingCurve && record != nullptr)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.14f, 0.16f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.16f, 0.20f, 0.18f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.18f, 0.24f, 0.20f, 1.0f));
+            if (ImGui::Button("##EasingCurveAssetIcon", icon_size))
+            {
+                project_selected_entry_path = entry.path;
+                selected_editor_object = editor_selection::asset;
+                selected_asset_guid = record->guid;
+                project_browser_focused = true;
+                project_tree_reveal_selection_pending = true;
+            }
+            ImGui::PopStyleColor(3);
+            const ReplayEngine::Reflection::AssetReference reference(record->guid);
+            const ReplayEngine::Motion::EasingCurveAsset* curve =
+                ReplayEngine::Motion::EasingCurveAsset::Resolve(&asset_database, reference);
+            DrawEasingCurveProjectIcon(ImGui::GetWindowDrawList(), ImGui::GetItemRectMin(),
+                ImGui::GetItemRectMax(), curve);
         }
         else
         {

@@ -1,39 +1,23 @@
-﻿// skinned_mesh の責務を、生成・FBX取込・アニメーション・GPU資源・描画へ分ける。
-//
-//   skinned_mesh.cpp          … モデル生成と破棄（このファイル）
-//   skinned_meshImport.cpp    … FBXメッシュ・骨格・マテリアルの取込
-//   skinned_meshAnimation.cpp … FBXアニメーション取込と再生補助
-//   skinned_meshDevice.cpp    … スキニング用GPU資源の作成と解放
-//   skinned_meshRender.cpp    … スキニングメッシュ描画（モーションベクターを含む）
-//   skinned_meshInternal.h    … FBX変換ヘルパの分割内部宣言
-
+﻿// スキンメッシュの CPU データとアニメーションを読み込む。
 #include "misc.h"
 #include "skinned_mesh.h"
 #include<fstream>
 #include <sstream>
 #include <functional>
 #include <algorithm>
-#include"shader.h"
-#include"static_mesh.h"
-#include"sprite_batch.h"
 
-#include"texture.h"
-#include"../render/motion_vector_context.h"
-#include"../../RePlayEngine/Rendering/RenderStats.h"
 #include <cstring>
 #include <filesystem>
 #include <stdexcept>
 using namespace DirectX;
 
-skinned_mesh::skinned_mesh(ID3D11Device* device, const char* fbx_filename, bool triangulate,
-    float sampling_rate, bool create_device_resources)
-    : skinned_mesh(device, std::filesystem::path(fbx_filename ? fbx_filename : ""),
-        triangulate, sampling_rate, create_device_resources)
+skinned_mesh::skinned_mesh(const char* fbx_filename, bool triangulate, float sampling_rate)
+    : skinned_mesh(std::filesystem::path(fbx_filename ? fbx_filename : ""), triangulate, sampling_rate)
 {
 }
 
-skinned_mesh::skinned_mesh(ID3D11Device* device, const std::filesystem::path& source_filename,
-    bool triangulate, float sampling_rate, bool create_device_resources)
+skinned_mesh::skinned_mesh(const std::filesystem::path& source_filename,
+    bool triangulate, float sampling_rate)
 {
     std::string source_extension = source_filename.extension().string();
     std::transform(source_extension.begin(), source_extension.end(), source_extension.begin(),
@@ -42,11 +26,9 @@ skinned_mesh::skinned_mesh(ID3D11Device* device, const std::filesystem::path& so
     {
         // glTF を別 Renderer へ再実装せず、既存の骨・Animator・影・TAA 経路が
         // 読める skinned_mesh の CPU 表現へ一度だけ変換する。
-        if (!import_gltf(device, source_filename, sampling_rate))
+        if (!import_gltf(source_filename, sampling_rate))
             throw std::runtime_error("glTFモデルをスキンメッシュへ変換できません: " +
                 source_filename.string());
-        const std::string narrow_source = source_filename.string();
-        if (create_device_resources) create_com_objects(device, narrow_source.c_str());
         return;
     }
 
@@ -120,6 +102,4 @@ skinned_mesh::skinned_mesh(ID3D11Device* device, const std::filesystem::path& so
 #endif
     }
 
-    // Direct3Dリソース（バッファ・シェーダー）の作成（共通処理） [cite: 350]
-    if (create_device_resources) create_com_objects(device, fbx_filename);
 }

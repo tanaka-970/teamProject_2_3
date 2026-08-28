@@ -75,6 +75,23 @@ namespace ReplayEngine::Runtime
         return scene_flow_ != nullptr && scene_flow_->SceneTransitionInProgress();
     }
 
+    float RuntimeContext::SceneTransitionProgress() const noexcept
+    {
+        if (scene_flow_ == nullptr) return 0.0f;
+        const float value = scene_flow_->SceneTransitionProgress();
+        if (value < 0.0f) return 0.0f;
+        if (value > 1.0f) return 1.0f;
+        return value;
+    }
+
+    RuntimeStatus RuntimeContext::SceneTransitionStatus() const noexcept
+    {
+        if (scene_flow_ == nullptr) return RuntimeStatus::ServiceUnavailable;
+        if (scene_flow_->SceneTransitionInProgress())
+            return RuntimeStatus::TransitionInProgress;
+        return scene_flow_->LastSceneTransitionStatus();
+    }
+
     const std::string& RuntimeContext::CurrentSceneGuid() const noexcept
     {
         // 未接続でも参照を返せるようにするための空文字列。
@@ -166,6 +183,65 @@ namespace ReplayEngine::Runtime
                 LogWarning(std::string("Prefab の生成に失敗しました: ") +
                     ToString(status) + " (" + pending.asset_guid + ")");
             }
+
+            // 番号付きで積まれた要求だけ、結果を引き取れるように残す。
+            if (pending.request == 0) continue;
+            if (spawn_results_.size() >= maximum_spawn_results)
+            {
+                spawn_results_.erase(spawn_results_.begin());
+                LogWarning("引き取られない Spawn 結果が上限を超えたため古いものを捨てました。");
+            }
+            SpawnResult result;
+            result.request = pending.request;
+            result.created = created;
+            result.status = status;
+            spawn_results_.push_back(result);
         }
+    }
+
+    RuntimeStatus RuntimeContext::InstantiatePrefabDeferredTracked(
+        const std::string& asset_guid, const DirectX::XMFLOAT3& position,
+        const DirectX::XMFLOAT3& rotation_euler, const DirectX::XMFLOAT3& scale,
+        const ObjectHandle& parent, SpawnRequestID& out_request)
+    {
+        out_request = 0;
+        const RuntimeStatus status = InstantiatePrefabDeferred(
+            asset_guid, position, rotation_euler, scale, parent);
+        if (Failed(status)) return status;
+
+        // 直前に積んだ要求へ番号を付ける。積めていれば必ず末尾にある。
+        if (pending_instantiations_.empty()) return RuntimeStatus::UnsupportedOperation;
+        out_request = next_spawn_request_++;
+        pending_instantiations_.back().request = out_request;
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus RuntimeContext::TryTakeSpawnResult(SpawnRequestID request,
+        ObjectHandle& out)
+    {
+        out = ObjectHandle::None();
+        if (request == 0) return RuntimeStatus::InvalidArgument;
+
+        for (std::size_t index = 0; index < spawn_results_.size(); ++index)
+        {
+            if (spawn_results_[index].request != request) continue;
+
+            const SpawnResult result = spawn_results_[index];
+            spawn_results_.erase(spawn_results_.begin() +
+                static_cast<std::ptrdiff_t>(index));
+            if (Failed(result.status)) return result.status;
+
+            GameObject* created = world_->FindGameObjectByID(result.created);
+            if (created == nullptr) return RuntimeStatus::ObjectDestroyed;
+            out = resolver_.MakeHandle(created);
+            return RuntimeStatus::Ok;
+        }
+
+        // まだ Flush されていないか、既に引き取り済み。
+        for (const PendingInstantiation& pending : pending_instantiations_)
+        {
+            if (pending.request == request) return RuntimeStatus::TransitionInProgress;
+        }
+        return RuntimeStatus::ComponentNotFound;
     }
 }

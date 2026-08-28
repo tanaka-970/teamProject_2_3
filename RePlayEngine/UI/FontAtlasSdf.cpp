@@ -2,6 +2,9 @@
 
 #include "../Assets/AssetDatabase.h"
 #include "../Components/UI/UITextComponent.h"
+
+// OutputDebugStringA の宣言。以前は d3d11.h 経由で入っていた。
+#include <windows.h>
 #define STBTT_STATIC
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "ThirdParty/stb_truetype.h"
@@ -9,6 +12,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <limits>
@@ -180,7 +184,7 @@ namespace ReplayEngine::UI
 
     bool FontAtlas::RebuildFace(FaceAtlas& face)
     {
-        if (device_ == nullptr || !face.valid_font || face.font_data.empty()) return false;
+        if (!face.valid_font || face.font_data.empty()) return false;
         stbtt_fontinfo info{};
         const int offset = stbtt_GetFontOffsetForIndex(face.font_data.data(), 0);
         if (!stbtt_InitFont(&info, face.font_data.data(), offset >= 0 ? offset : 0)) return false;
@@ -279,20 +283,11 @@ namespace ReplayEngine::UI
             const std::uint32_t a = static_cast<std::uint32_t>(sdf_alpha[index]);
             rgba[index] = (a << 24) | 0x00FFFFFFu;
         }
-        D3D11_TEXTURE2D_DESC desc{};
-        desc.Width = atlas_width; desc.Height = atlas_height; desc.MipLevels = 1; desc.ArraySize = 1;
-        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM; desc.SampleDesc.Count = 1;
-        desc.Usage = D3D11_USAGE_DEFAULT; desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-        D3D11_SUBRESOURCE_DATA init{}; init.pSysMem = rgba.data();
-        init.SysMemPitch = atlas_width * sizeof(std::uint32_t);
-        Microsoft::WRL::ComPtr<ID3D11Texture2D> texture;
-        if (FAILED(device_->CreateTexture2D(&desc, &init, texture.GetAddressOf()))) return false;
-        D3D11_SHADER_RESOURCE_VIEW_DESC srv{};
-        srv.Format = desc.Format; srv.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-        srv.Texture2D.MipLevels = 1;
-        face.texture.Reset();
-        if (FAILED(device_->CreateShaderResourceView(texture.Get(), &srv, face.texture.GetAddressOf())))
-            return false;
+        face.rgba.resize(rgba.size() * sizeof(std::uint32_t));
+        std::memcpy(face.rgba.data(), rgba.data(), face.rgba.size());
+        face.atlas_width = atlas_width;
+        face.atlas_height = atlas_height;
+        ++face.revision;
         face.baked_glyphs = std::move(baked);
         face.scaled_glyphs.clear();
         return true;

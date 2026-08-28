@@ -110,20 +110,32 @@ public sealed class ScriptRuntimeContext
         return NativeBridge.InputHeld(action, playerSlot);
     }
 
+    public RuntimeResult<bool> InputHeld(InputActionId action, int playerSlot = 0)
+        => Input.GetAction(action, playerSlot);
+
     public RuntimeResult<bool> InputPressed(string action, int playerSlot = 0)
     {
         return NativeBridge.InputPressed(action, playerSlot);
     }
+
+    public RuntimeResult<bool> InputPressed(InputActionId action, int playerSlot = 0)
+        => Input.GetActionDown(action, playerSlot);
 
     public RuntimeResult<bool> InputReleased(string action, int playerSlot = 0)
     {
         return NativeBridge.InputReleased(action, playerSlot);
     }
 
+    public RuntimeResult<bool> InputReleased(InputActionId action, int playerSlot = 0)
+        => Input.GetActionUp(action, playerSlot);
+
     public RuntimeResult<float> InputAxis(string axis, int playerSlot = 0)
     {
         return NativeBridge.InputAxis(axis, playerSlot);
     }
+
+    public RuntimeResult<float> InputAxis(InputAxisId axis, int playerSlot = 0)
+        => Input.GetAxis(axis, playerSlot);
 
     public RuntimeResult<float> PointerDeltaX() => NativeBridge.InputPointerDeltaX();
     public RuntimeResult<float> PointerDeltaY() => NativeBridge.InputPointerDeltaY();
@@ -195,20 +207,40 @@ public sealed class ScriptRuntimeContext
         return NativeBridge.Instantiate(prefabAssetGuid, position, rotationEuler, scale, parent);
     }
 
+    public RuntimeResult<ObjectHandle> Instantiate(AssetReference<PrefabAsset> prefab,
+        Vector3 position, Vector3 rotationEuler, Vector3 scale,
+        ObjectHandle parent = default)
+        => Instantiate(prefab.AssetGuid, position, rotationEuler, scale, parent);
+
     public RuntimeStatus LoadScene(string sceneAssetGuid)
     {
         return NativeBridge.LoadScene(sceneAssetGuid);
     }
+
+    public RuntimeStatus LoadScene(AssetReference<SceneAsset> scene)
+        => LoadScene(scene.AssetGuid);
+
+    public SceneLoadOperation LoadSceneAsync(string sceneAssetGuid)
+        => new(this, LoadScene(sceneAssetGuid));
+
+    public SceneLoadOperation LoadSceneAsync(AssetReference<SceneAsset> scene)
+        => LoadSceneAsync(scene.AssetGuid);
 
     public RuntimeStatus ReloadScene()
     {
         return NativeBridge.ReloadScene();
     }
 
+    public SceneLoadOperation ReloadSceneAsync()
+        => new(this, ReloadScene());
+
     public RuntimeStatus ReturnToPreviousScene()
     {
         return NativeBridge.ReturnToPreviousScene();
     }
+
+    public SceneLoadOperation ReturnToPreviousSceneAsync()
+        => new(this, ReturnToPreviousScene());
 
     /// <summary>Fires an event in the active Scene Flow asset.</summary>
     public RuntimeStatus TriggerSceneFlow(string eventName)
@@ -238,9 +270,104 @@ public sealed class ScriptRuntimeContext
         return NativeBridge.Raycast(origin, direction, maxDistance, layer, mask, ignore);
     }
 
-    public RuntimeResult<EventSubscription> SubscribeEvent(string eventTypeGuid, ObjectHandle owner = default)
+    public RuntimeResult<PhysicsHit[]> RaycastAll(Vector3 origin, Vector3 direction,
+        float maxDistance = 1000.0f, int layer = 0, int mask = -1,
+        ObjectHandle ignore = default) => Query(new NativeBridge.PhysicsQueryRequestNative
+        {
+            Kind = PhysicsQueryKind.RaycastAll, PointA = origin, Direction = direction,
+            Rotation = Quaternion.Identity, MaxDistance = maxDistance,
+            Layer = layer, Mask = mask, Ignore = ignore,
+        });
+
+    public RuntimeResult<PhysicsHit[]> OverlapSphere(Vector3 center, float radius,
+        int layer = 0, int mask = -1, ObjectHandle ignore = default)
+        => Query(new NativeBridge.PhysicsQueryRequestNative
+        {
+            Kind = PhysicsQueryKind.OverlapSphere, PointA = center,
+            Rotation = Quaternion.Identity, Radius = radius,
+            Layer = layer, Mask = mask, Ignore = ignore,
+        });
+
+    public RuntimeResult<PhysicsHit[]> OverlapBox(Vector3 center, Vector3 halfExtents,
+        Quaternion rotation = default, int layer = 0, int mask = -1,
+        ObjectHandle ignore = default) => Query(new NativeBridge.PhysicsQueryRequestNative
+        {
+            Kind = PhysicsQueryKind.OverlapBox, PointA = center, HalfExtents = halfExtents,
+            Rotation = rotation.IsZero ? Quaternion.Identity : rotation,
+            Layer = layer, Mask = mask, Ignore = ignore,
+        });
+
+    public RuntimeResult<PhysicsHit[]> OverlapCapsule(Vector3 pointA, Vector3 pointB,
+        float radius, int layer = 0, int mask = -1, ObjectHandle ignore = default)
+        => Query(new NativeBridge.PhysicsQueryRequestNative
+        {
+            Kind = PhysicsQueryKind.OverlapCapsule, PointA = pointA, PointB = pointB,
+            Rotation = Quaternion.Identity, Radius = radius,
+            Layer = layer, Mask = mask, Ignore = ignore,
+        });
+
+    public RuntimeResult<PhysicsHit> SphereCast(Vector3 origin, float radius,
+        Vector3 direction, float maxDistance, int layer = 0, int mask = -1,
+        ObjectHandle ignore = default)
+        => First(SphereCastAll(origin, radius, direction, maxDistance, layer, mask, ignore));
+
+    public RuntimeResult<PhysicsHit[]> SphereCastAll(Vector3 origin, float radius,
+        Vector3 direction, float maxDistance, int layer = 0, int mask = -1,
+        ObjectHandle ignore = default) => Query(new NativeBridge.PhysicsQueryRequestNative
+        {
+            Kind = PhysicsQueryKind.SphereCast, PointA = origin, Direction = direction,
+            Rotation = Quaternion.Identity, Radius = radius, MaxDistance = maxDistance,
+            Layer = layer, Mask = mask, Ignore = ignore,
+        });
+
+    public RuntimeResult<PhysicsHit> BoxCast(Vector3 center, Vector3 halfExtents,
+        Quaternion rotation, Vector3 direction, float maxDistance, int layer = 0,
+        int mask = -1, ObjectHandle ignore = default)
+        => First(BoxCastAll(center, halfExtents, rotation, direction, maxDistance,
+            layer, mask, ignore));
+
+    public RuntimeResult<PhysicsHit[]> BoxCastAll(Vector3 center, Vector3 halfExtents,
+        Quaternion rotation, Vector3 direction, float maxDistance, int layer = 0,
+        int mask = -1, ObjectHandle ignore = default)
+        => Query(new NativeBridge.PhysicsQueryRequestNative
+        {
+            Kind = PhysicsQueryKind.BoxCast, PointA = center, Direction = direction,
+            HalfExtents = halfExtents,
+            Rotation = rotation.IsZero ? Quaternion.Identity : rotation,
+            MaxDistance = maxDistance, Layer = layer, Mask = mask, Ignore = ignore,
+        });
+
+    public RuntimeResult<PhysicsHit> CapsuleCast(Vector3 pointA, Vector3 pointB,
+        float radius, Vector3 direction, float maxDistance, int layer = 0,
+        int mask = -1, ObjectHandle ignore = default)
+        => First(CapsuleCastAll(pointA, pointB, radius, direction, maxDistance,
+            layer, mask, ignore));
+
+    public RuntimeResult<PhysicsHit[]> CapsuleCastAll(Vector3 pointA, Vector3 pointB,
+        float radius, Vector3 direction, float maxDistance, int layer = 0,
+        int mask = -1, ObjectHandle ignore = default)
+        => Query(new NativeBridge.PhysicsQueryRequestNative
+        {
+            Kind = PhysicsQueryKind.CapsuleCast, PointA = pointA, PointB = pointB,
+            Direction = direction, Rotation = Quaternion.Identity, Radius = radius,
+            MaxDistance = maxDistance, Layer = layer, Mask = mask, Ignore = ignore,
+        });
+
+    private static RuntimeResult<PhysicsHit[]> Query(
+        NativeBridge.PhysicsQueryRequestNative request) => NativeBridge.PhysicsQuery(request);
+
+    private static RuntimeResult<PhysicsHit> First(RuntimeResult<PhysicsHit[]> result)
     {
-        return NativeBridge.SubscribeEvent(eventTypeGuid, owner);
+        if (!result.Succeeded) return new RuntimeResult<PhysicsHit>(result.Status);
+        return result.Value.Length == 0
+            ? new RuntimeResult<PhysicsHit>(RuntimeStatus.Ok)
+            : new RuntimeResult<PhysicsHit>(RuntimeStatus.Ok, result.Value[0]);
+    }
+
+    public RuntimeResult<EventSubscription> SubscribeEvent(string eventTypeGuid,
+        ObjectHandle owner = default, EventScope scope = EventScope.Scene)
+    {
+        return NativeBridge.SubscribeEvent(eventTypeGuid, owner, scope);
     }
 
     public RuntimeStatus UnsubscribeEvent(EventSubscription subscription)
@@ -342,6 +469,11 @@ public sealed class ScriptRuntimeContext
         => NativeBridge.InstantiatePrefabDeferred(
             prefabAssetGuid, position, rotationEuler, scale, parent);
 
+    public RuntimeStatus InstantiatePrefabDeferred(AssetReference<PrefabAsset> prefab,
+        Vector3 position, Vector3 rotationEuler, Vector3 scale,
+        ObjectHandle parent = default)
+        => InstantiatePrefabDeferred(prefab.AssetGuid, position, rotationEuler, scale, parent);
+
     public RuntimeStatus FlushDeferredOperations()
         => NativeBridge.FlushDeferredOperations();
 
@@ -354,6 +486,8 @@ public sealed class ScriptRuntimeContext
     public RuntimeResult<float> TimeScale => NativeBridge.TimeScale();
     public RuntimeResult<bool> SceneTransitionInProgress
         => NativeBridge.SceneTransitionInProgress();
+    public RuntimeResult<SceneTransitionInfo> SceneTransition
+        => NativeBridge.GetSceneTransitionState();
     public bool PhysicsAvailable => NativeBridge.PhysicsAvailable();
     public bool SceneFlowAvailable => NativeBridge.SceneFlowAvailable();
 
@@ -364,4 +498,198 @@ public sealed class ScriptRuntimeContext
         string typeName = "", ObjectHandle source = default, ObjectHandle target = default)
         => NativeBridge.PublishEvent(eventTypeGuid, payload, typeName, source, target);
 
+    // ---- v10 型付き Component API ------------------------------------------
+    //
+    // uint の Component Type ID を手で書かなくて済むようにする。
+    // 型名から引いた ID は ComponentTypes が覚えるので、毎フレーム引き直さない。
+
+    public RuntimeResult<T> GetComponent<T>(ObjectHandle handle)
+        where T : IComponentBinding<T>
+    {
+        var typeId = ComponentTypes.IdOf<T>();
+        if (typeId == 0) return new RuntimeResult<T>(RuntimeStatus.ComponentNotFound);
+        var result = NativeBridge.GetComponent(handle, typeId);
+        return new RuntimeResult<T>(result.Status, T.FromHandle(result.Value));
+    }
+
+    public bool TryGetComponent<T>(ObjectHandle handle, out T component)
+        where T : IComponentBinding<T>
+    {
+        var result = GetComponent<T>(handle);
+        component = result.Value;
+        return result.Succeeded;
+    }
+
+    // 値をそのまま返す入口。戻り値を変数へ受ければプロパティへ代入できる。
+    public T GetComponentOrDefault<T>(ObjectHandle handle) where T : IComponentBinding<T>
+        => GetComponent<T>(handle).Value;
+
+    public T AddComponentOrDefault<T>(ObjectHandle handle) where T : IComponentBinding<T>
+        => AddComponent<T>(handle).Value;
+
+    public RuntimeResult<T> AddComponent<T>(ObjectHandle handle)
+        where T : IComponentBinding<T>
+    {
+        var typeId = ComponentTypes.IdOf<T>();
+        if (typeId == 0) return new RuntimeResult<T>(RuntimeStatus.ComponentNotFound);
+        var result = NativeBridge.AddComponent(handle, typeId);
+        return new RuntimeResult<T>(result.Status, T.FromHandle(result.Value));
+    }
+
+    public bool HasComponent<T>(ObjectHandle handle) where T : IComponentBinding<T>
+    {
+        var typeId = ComponentTypes.IdOf<T>();
+        if (typeId == 0) return false;
+        var result = NativeBridge.HasComponent(handle, typeId);
+        return result.Succeeded && result.Value;
+    }
+
+    public RuntimeResult<T[]> GetComponents<T>(ObjectHandle handle)
+        where T : IComponentBinding<T>
+    {
+        var typeId = ComponentTypes.IdOf<T>();
+        if (typeId == 0) return new RuntimeResult<T[]>(RuntimeStatus.ComponentNotFound, Array.Empty<T>());
+        var result = NativeBridge.GetComponents(handle, typeId);
+        if (!result.Succeeded || result.Value == null)
+            return new RuntimeResult<T[]>(result.Status, Array.Empty<T>());
+
+        var typed = new T[result.Value.Length];
+        for (var index = 0; index < result.Value.Length; ++index)
+            typed[index] = T.FromHandle(result.Value[index]);
+        return new RuntimeResult<T[]>(result.Status, typed);
+    }
+
+    // 型付きの入口がまだ無い Component を、C++ の型名で直接触る。
+    public RuntimeResult<GenericComponent> GetComponent(ObjectHandle handle, string nativeTypeName)
+    {
+        var typeId = ComponentTypes.IdOf(nativeTypeName);
+        if (typeId == 0) return new RuntimeResult<GenericComponent>(RuntimeStatus.ComponentNotFound);
+        var result = NativeBridge.GetComponent(handle, typeId);
+        return new RuntimeResult<GenericComponent>(result.Status, new GenericComponent(result.Value));
+    }
+
+    public RuntimeResult<uint> ComponentTypeId(string nativeTypeName)
+        => NativeBridge.ComponentTypeId(nativeTypeName);
+
+    public RuntimeResult<ComponentTypeMetadata> ComponentTypeInfo(string nativeTypeName)
+        => NativeBridge.ComponentTypeInfo(nativeTypeName);
+
+    public RuntimeResult<ComponentTypeMetadata> ComponentTypeInfo<T>()
+        where T : IComponentBinding<T> => ComponentTypes.InfoOf<T>();
+    public RuntimeResult<string> GetComponentTypeName(ComponentHandle handle)
+        => NativeBridge.GetComponentTypeName(handle);
+
+    // 実行中のC# Behaviourを型で取得する。公開フィールドやメソッドを直接扱える。
+    public RuntimeResult<T> GetBehaviour<T>(ComponentHandle component)
+        where T : ScriptBehaviour => NativeBridge.GetBehaviour<T>(component);
+
+    public RuntimeResult<T> GetBehaviour<T>(ObjectHandle owner)
+        where T : ScriptBehaviour
+    {
+        var result = NativeBridge.GetBehaviours<T>(owner);
+        return result.Succeeded && result.Value.Length != 0
+            ? new RuntimeResult<T>(RuntimeStatus.Ok, result.Value[0])
+            : new RuntimeResult<T>(result.Status);
+    }
+
+    public RuntimeResult<T[]> GetBehaviours<T>(ObjectHandle owner)
+        where T : ScriptBehaviour => NativeBridge.GetBehaviours<T>(owner);
+
+    public bool TryGetBehaviour<T>(ObjectHandle owner, out T behaviour)
+        where T : ScriptBehaviour
+    {
+        var result = GetBehaviour<T>(owner);
+        behaviour = result.Value;
+        return result.Succeeded;
+    }
+
+    // ---- v10 Component プロパティ（型付きの入口が無い値へ直接触る） -------------
+
+    public RuntimeResult<bool> GetComponentBool(ComponentHandle handle, string name)
+        => NativeBridge.GetPropertyBool(handle, name);
+    public RuntimeStatus SetComponentBool(ComponentHandle handle, string name, bool value)
+        => NativeBridge.SetPropertyBool(handle, name, value);
+    public RuntimeResult<long> GetComponentInt(ComponentHandle handle, string name)
+        => NativeBridge.GetPropertyInt(handle, name);
+    public RuntimeStatus SetComponentInt(ComponentHandle handle, string name, long value)
+        => NativeBridge.SetPropertyInt(handle, name, value);
+    public RuntimeResult<double> GetComponentFloat(ComponentHandle handle, string name)
+        => NativeBridge.GetPropertyDouble(handle, name);
+    public RuntimeStatus SetComponentFloat(ComponentHandle handle, string name, double value)
+        => NativeBridge.SetPropertyDouble(handle, name, value);
+    public RuntimeResult<string> GetComponentString(ComponentHandle handle, string name)
+        => NativeBridge.GetPropertyString(handle, name);
+    public RuntimeStatus SetComponentString(ComponentHandle handle, string name, string value)
+        => NativeBridge.SetPropertyString(handle, name, value);
+    public RuntimeResult<Vector3> GetComponentVector3(ComponentHandle handle, string name)
+        => NativeBridge.GetPropertyVector3(handle, name);
+    public RuntimeStatus SetComponentVector3(ComponentHandle handle, string name, Vector3 value)
+        => NativeBridge.SetPropertyVector3(handle, name, value);
+    public RuntimeResult<Vector4> GetComponentVector4(ComponentHandle handle, string name)
+        => NativeBridge.GetPropertyVector4(handle, name);
+    public RuntimeStatus SetComponentVector4(ComponentHandle handle, string name, Vector4 value)
+        => NativeBridge.SetPropertyVector4(handle, name, value);
+
+    // ---- v10 Transform ------------------------------------------------------
+
+    public TransformAccess Transform(ObjectHandle handle) => new(handle);
+
+    public RuntimeStatus SetWorldPosition(ObjectHandle handle, Vector3 value)
+        => NativeBridge.SetWorldPosition(handle, value);
+    public RuntimeResult<Quaternion> GetWorldRotation(ObjectHandle handle)
+        => NativeBridge.GetWorldRotation(handle);
+    public RuntimeStatus SetWorldRotation(ObjectHandle handle, Quaternion value)
+        => NativeBridge.SetWorldRotation(handle, value);
+    public RuntimeResult<Vector3> GetWorldScale(ObjectHandle handle)
+        => NativeBridge.GetWorldScale(handle);
+    public RuntimeStatus SetWorldScale(ObjectHandle handle, Vector3 value)
+        => NativeBridge.SetWorldScale(handle, value);
+    public RuntimeStatus LookAt(ObjectHandle handle, Vector3 target)
+        => NativeBridge.LookAt(handle, target, new Vector3(0.0f, 1.0f, 0.0f));
+
+    // ---- v11 Scene / 生成 ----------------------------------------------------
+
+    // 現在の Runtime Scene の Asset GUID。未接続なら空。
+    public RuntimeResult<string> CurrentSceneGuid() => NativeBridge.GetCurrentSceneGuid();
+
+    // プロセスは落とさない。要求として記録するだけ。
+    public RuntimeStatus QuitApplication(string reason = "") =>
+        NativeBridge.QuitApplication(reason ?? string.Empty);
+
+    // 遅延生成を積み、要求番号を返す。Flush 後に TakeSpawnResult で引き取る。
+    public RuntimeResult<ulong> InstantiateDeferred(string prefabAssetGuid,
+        Vector3 position, Vector3 rotationEuler, Vector3 scale, ObjectHandle parent = default)
+        => NativeBridge.InstantiatePrefabTracked(
+            prefabAssetGuid, position, rotationEuler, scale, parent);
+
+    public RuntimeResult<ulong> InstantiateDeferred(AssetReference<PrefabAsset> prefab,
+        Vector3 position, Vector3 rotationEuler, Vector3 scale,
+        ObjectHandle parent = default)
+        => InstantiateDeferred(prefab.AssetGuid, position, rotationEuler, scale, parent);
+
+    // 完了した遅延生成を 1 件引き取る。
+    // まだ Flush されていなければ Status が TransitionInProgress になる。
+    public RuntimeResult<ObjectHandle> TakeSpawnResult(ulong request)
+        => NativeBridge.TakeSpawnResult(request);
+
+    // Scene 遷移で破棄されないようにする。PersistentComponent を付けるだけ。
+    public RuntimeStatus DontDestroyOnLoad(ObjectHandle handle)
+    {
+        var result = AddComponent<PersistentComponent>(handle);
+        return result.Status;
+    }
+
+    // 取りこぼして捨てられたイベント数。Poll 忘れの検出に使う。
+    public RuntimeResult<ulong> EventDroppedCount(EventSubscription subscription)
+        => NativeBridge.EventDroppedCount(subscription);
+
+    // ---- v11 生デバイス入力 --------------------------------------------------
+    //
+    // 実体は静的な Input クラス。Behaviour から Runtime 経由でも呼べるようにしておく。
+
+    public bool GetKey(Key key) => Input.GetKey(key);
+    public bool GetKeyDown(Key key) => Input.GetKeyDown(key);
+    public bool GetKeyUp(Key key) => Input.GetKeyUp(key);
+    public Vector2 MousePosition => Input.MousePosition;
+    public float MouseScrollDelta => Input.MouseScrollDelta;
 }

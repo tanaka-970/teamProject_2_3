@@ -60,18 +60,19 @@
     bool show_console_panel{ true };
     bool show_workspace_panel{ true };
     bool show_validation_panel{ true };
+    bool show_dx12_debug_panel{ false };
     bool show_scene_view{ true };
     bool show_scene_notes_panel{ false };
     bool show_scene_flow_panel{ false };
     bool show_ui_hierarchy_panel{ true };
     bool show_ui_preview_panel{ false };
     // Canvas Preview は ImGui の近似描画ではなく Runtime UIRenderer の出力を表示する。
-    Microsoft::WRL::ComPtr<ID3D11Texture2D> ui_preview_runtime_texture;
-    Microsoft::WRL::ComPtr<ID3D11RenderTargetView> ui_preview_runtime_rtv;
-    Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> ui_preview_runtime_srv;
     int ui_preview_runtime_width{ 0 };
     int ui_preview_runtime_height{ 0 };
     bool ui_preview_runtime_requested{ false };
+    // Scene背景とは別に、透明なCanvas Previewの下地色を選べるようにする。
+    DirectX::XMFLOAT4 ui_preview_background_color{
+        36.0f / 255.0f, 38.0f / 255.0f, 42.0f / 255.0f, 1.0f };
     bool show_ui_inspector_panel{ true };
     bool show_motion_layers_panel{ true };
     bool show_motion_preview_panel{ true };
@@ -79,6 +80,23 @@
     bool show_motion_timeline_panel{ true };
     bool show_motion_graph_panel{ true };
     bool show_sprite_atlas_editor_panel{ false };
+    bool show_easing_editor_panel{ false };
+    ReplayEngine::Motion::EasingCurveAsset easing_editor_asset;
+    std::filesystem::path easing_editor_path;
+    std::string easing_editor_guid;
+    std::string easing_editor_status{ u8"イージングカーブが未選択です" };
+    bool easing_editor_loaded{ false };
+    bool easing_editor_dirty{ false };
+    char easing_editor_name_buffer[128]{};
+    int easing_editor_preset_index{ 0 };
+    int easing_editor_formula_preset_index{ -1 };
+    bool easing_editor_drawing{ false };
+    std::vector<DirectX::XMFLOAT2> easing_editor_freehand_points;
+    int easing_editor_active_control_point{ -1 };
+    int easing_editor_active_sample{ -1 };
+    int easing_editor_context_control_point{ -1 };
+    DirectX::XMFLOAT2 easing_editor_context_point{ 0.5f, 0.5f };
+
     ReplayEngine::Assets::SpriteAtlasAsset sprite_atlas_editor_asset;
     std::filesystem::path sprite_atlas_editor_path;
     std::string sprite_atlas_editor_guid;
@@ -164,6 +182,11 @@
     int ui_preview_custom_width{ 1920 };
     int ui_preview_custom_height{ 1080 };
     float ui_preview_zoom{ 0.5f };
+    // UI Scene View のカメラ移動量。描画・選択枠・入力判定が同じ矩形を使うよう
+    // object_ui_viewport_target() の一箇所だけで足す。
+    float ui_preview_pan_x{ 0.0f };
+    float ui_preview_pan_y{ 0.0f };
+    bool ui_preview_panning{ false };
     bool ui_preview_grid{ true };
     float ui_preview_grid_size{ 100.0f };
     ImVec2 ui_preview_pan{ 0.0f, 0.0f };
@@ -260,7 +283,6 @@
     // #pragma から宣言を読み、目録を作る。
     // まだ描画には使わない。接続はフェーズ 4 以降。
     ReplayEngine::Rendering::ShaderLibrary shader_library;
-    ReplayEngine::Rendering::MaterialGpuBinder material_gpu_binder;
     ReplayEngine::Editor::ShaderComposerEditor shader_composer_editor;
     bool show_shader_catalog_panel{ false };
 
@@ -306,6 +328,8 @@ private:
 
     // Present の直前に呼ぶ。Present のあとはバックバッファの中身が保証されない。
     void tick_golden_capture();
+    // DX12 は Present 前に GPU Readback を記録し、Present 後に回収する。
+    bool prepare_dx12_golden_capture() noexcept;
 
     void draw_golden_panel();
 

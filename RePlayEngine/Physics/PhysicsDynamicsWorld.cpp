@@ -131,6 +131,7 @@ namespace ReplayEngine::Scene
         has_generation_ = false;
         dynamic_body_count_ = 0;
         sleeping_body_count_ = 0;
+        contacts_.clear();
     }
 
     void PhysicsDynamicsWorld::DetachScene()
@@ -392,7 +393,7 @@ namespace ReplayEngine::Scene
     }
 
     void PhysicsDynamicsWorld::SweepAgainstStaticGeometry(BodyState& body,
-        const std::vector<Core::ObjectID>& excluded_objects) const
+        const std::vector<Core::ObjectID>& excluded_objects)
     {
         if (scene_ == nullptr || !body.dynamic || !body.has_shape || body.shape_source == nullptr)
             return;
@@ -440,6 +441,8 @@ namespace ReplayEngine::Scene
             if (excluded == hit.source.object) return;
         }
 
+        RecordQueryContact(body, hit);
+
         const XMFLOAT3 movement = Subtract(hit.center, start_shape.center);
         body.position = Add(body.initial_position, movement);
 
@@ -456,6 +459,25 @@ namespace ReplayEngine::Scene
                 Scale(tangent, (std::max)(0.0f, (std::min)(1.0f,
                     body.rigidbody->friction * 8.0f * 1.0f / 60.0f))));
         }
+    }
+
+    void PhysicsDynamicsWorld::RecordQueryContact(const BodyState& body,
+        const SphereSweepHit& hit)
+    {
+        if (!hit.valid || !body.object.Valid() || !hit.source.object.Valid()) return;
+
+        PhysicsContact value;
+        value.object_a = body.object;
+        value.collider_a = body.collider;
+        value.object_b = hit.source.object;
+        value.collider_b = hit.source.collider;
+        value.point = hit.center;
+        // Query hit normals face out of the obstacle (B -> A), whereas
+        // PhysicsContact consistently stores the direction from A to B.
+        value.normal = Scale(hit.normal, -1.0f);
+        value.relative_velocity = Scale(body.rigidbody != nullptr
+            ? body.rigidbody->linear_velocity : XMFLOAT3{}, -1.0f);
+        contacts_.push_back(value);
     }
 
 

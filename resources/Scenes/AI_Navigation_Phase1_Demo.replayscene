@@ -2,7 +2,7 @@ REPLAY_SCENE 11
 SCENE "AI Navigation Phase1 Demo"
 SCENE_STATE 1
 COLLISION_STATE 2 0
-OBJECT_COUNT 8
+OBJECT_COUNT 12
 OBJECT
   ID 1
   NAME "Player"
@@ -16,7 +16,7 @@ OBJECT
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
-    PROPERTY_COUNT 17
+    PROPERTY_COUNT 19
     PROPERTY "primitive_type" enum 3
     PROPERTY "material_asset" asset ""
     PROPERTY "material_override" bool 0
@@ -25,6 +25,8 @@ OBJECT
     PROPERTY "outline" bool 0
     PROPERTY "cast_shadow" bool 1
     PROPERTY "receive_shadow" bool 1
+    PROPERTY "shadow_alpha_clip" bool 0
+    PROPERTY "shadow_alpha_cutoff" float 0.5
     PROPERTY "rendering_layer" int 0
     PROPERTY "visible" bool 1
     PROPERTY "material.base_color" color 1 1 1 1
@@ -140,7 +142,7 @@ OBJECT
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
-    PROPERTY_COUNT 17
+    PROPERTY_COUNT 19
     PROPERTY "primitive_type" enum 3
     PROPERTY "material_asset" asset ""
     PROPERTY "material_override" bool 0
@@ -149,6 +151,8 @@ OBJECT
     PROPERTY "outline" bool 0
     PROPERTY "cast_shadow" bool 1
     PROPERTY "receive_shadow" bool 1
+    PROPERTY "shadow_alpha_clip" bool 0
+    PROPERTY "shadow_alpha_cutoff" float 0.5
     PROPERTY "rendering_layer" int 0
     PROPERTY "visible" bool 1
     PROPERTY "material.base_color" color 1 1 1 1
@@ -269,7 +273,7 @@ OBJECT
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
-    PROPERTY_COUNT 17
+    PROPERTY_COUNT 19
     PROPERTY "primitive_type" enum 3
     PROPERTY "material_asset" asset ""
     PROPERTY "material_override" bool 0
@@ -278,6 +282,8 @@ OBJECT
     PROPERTY "outline" bool 0
     PROPERTY "cast_shadow" bool 1
     PROPERTY "receive_shadow" bool 1
+    PROPERTY "shadow_alpha_clip" bool 0
+    PROPERTY "shadow_alpha_cutoff" float 0.5
     PROPERTY "rendering_layer" int 0
     PROPERTY "visible" bool 1
     PROPERTY "material.base_color" color 1 1 1 1
@@ -398,7 +404,7 @@ OBJECT
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
-    PROPERTY_COUNT 17
+    PROPERTY_COUNT 19
     PROPERTY "primitive_type" enum 1
     PROPERTY "material_asset" asset ""
     PROPERTY "material_override" bool 0
@@ -407,6 +413,8 @@ OBJECT
     PROPERTY "outline" bool 0
     PROPERTY "cast_shadow" bool 1
     PROPERTY "receive_shadow" bool 1
+    PROPERTY "shadow_alpha_clip" bool 0
+    PROPERTY "shadow_alpha_cutoff" float 0.5
     PROPERTY "rendering_layer" int 0
     PROPERTY "visible" bool 1
     PROPERTY "material.base_color" color 1 1 1 1
@@ -445,7 +453,7 @@ OBJECT
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
-    PROPERTY_COUNT 17
+    PROPERTY_COUNT 19
     PROPERTY "primitive_type" enum 0
     PROPERTY "material_asset" asset ""
     PROPERTY "material_override" bool 0
@@ -454,6 +462,8 @@ OBJECT
     PROPERTY "outline" bool 0
     PROPERTY "cast_shadow" bool 1
     PROPERTY "receive_shadow" bool 1
+    PROPERTY "shadow_alpha_clip" bool 0
+    PROPERTY "shadow_alpha_cutoff" float 0.5
     PROPERTY "rendering_layer" int 0
     PROPERTY "visible" bool 1
     PROPERTY "material.base_color" color 1 1 1 1
@@ -477,5 +487,179 @@ OBJECT
     PROPERTY "is_trigger" bool 0
     PROPERTY "debug_draw" bool 1
     PROPERTY "size" vec3 1 0.059999998658895493 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 9
+  NAME "Canvas"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "CanvasComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 6
+    PROPERTY "reference_resolution" vec2 1920 1080
+    PROPERTY "render_mode" enum 0
+    PROPERTY "scale_mode" enum 1
+    PROPERTY "match_width_or_height" float 0.5
+    PROPERTY "sort_order" int 0
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0 0
+    PROPERTY "anchor_max" vec2 1 1
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 0 0
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 11
+  NAME "Canvas (1)"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "CanvasComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 6
+    PROPERTY "reference_resolution" vec2 1920 1080
+    PROPERTY "render_mode" enum 0
+    PROPERTY "scale_mode" enum 1
+    PROPERTY "match_width_or_height" float 0.5
+    PROPERTY "sort_order" int 0
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0 0
+    PROPERTY "anchor_max" vec2 1 1
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 0 0
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 12
+  NAME "Image"
+  ENABLED 1
+  PARENT 11
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 25.45452880859375 -45.454559326171875
+    PROPERTY "size_delta" vec2 241.8182373046875 210.90911865234375
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 19
+    PROPERTY "sprite" assetref ""
+    PROPERTY "atlas" assetref ""
+    PROPERTY "atlas_region" string ""
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "fill_color_2" color 1 1 1 1
+    PROPERTY "fill_mode" enum 0
+    PROPERTY "fill_angle" float 0
+    PROPERTY "fill_center" vec2 0.5 0.5
+    PROPERTY "stroke_mode" enum 0
+    PROPERTY "stroke_color_2" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "fill_amount" float 1
+    PROPERTY "fill_method" enum 0
+    PROPERTY "fill_reverse" bool 0
+    PROPERTY "blend_mode" enum 0
+    PROPERTY "uv_offset" vec2 0 0
+    PROPERTY "uv_scale" vec2 1 1
+    PROPERTY "nine_slice" vec4 0 0 0 0
+    PROPERTY "preserve_aspect" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 13
+  NAME "Image (1)"
+  ENABLED 1
+  PARENT 11
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -252.72727966308594 27.272735595703125
+    PROPERTY "size_delta" vec2 470.90914916992188 159.99993896484375
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 19
+    PROPERTY "sprite" assetref ""
+    PROPERTY "atlas" assetref ""
+    PROPERTY "atlas_region" string ""
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "fill_color_2" color 1 1 1 1
+    PROPERTY "fill_mode" enum 0
+    PROPERTY "fill_angle" float 0
+    PROPERTY "fill_center" vec2 0.5 0.5
+    PROPERTY "stroke_mode" enum 0
+    PROPERTY "stroke_color_2" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "fill_amount" float 1
+    PROPERTY "fill_method" enum 0
+    PROPERTY "fill_reverse" bool 0
+    PROPERTY "blend_mode" enum 0
+    PROPERTY "uv_offset" vec2 0 0
+    PROPERTY "uv_scale" vec2 1 1
+    PROPERTY "nine_slice" vec4 0 0 0 0
+    PROPERTY "preserve_aspect" bool 0
   END_COMPONENT
 END_OBJECT

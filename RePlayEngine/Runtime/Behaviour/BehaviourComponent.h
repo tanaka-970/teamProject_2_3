@@ -104,8 +104,7 @@ namespace ReplayEngine::Runtime
 
         // ---- Collision --------------------------------------------------------
         //
-        // 届く範囲は CharacterMotor の接地・壁接触だけ。
-        // 一般の Collider どうしの衝突は取得手段が存在しないため届かない。
+        // CharacterMotor の接地・壁接触と Rigidbody の一般接触が届く。
         // 詳細は BehaviourEvents.h の CollisionHitKind を参照。
 
         virtual void OnCollisionEnter(const CollisionEvent& /*event*/) {}

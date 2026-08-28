@@ -27,6 +27,7 @@ namespace ReplayEngine::Runtime
         case CollisionHitKind::Unknown:         return "Unknown";
         case CollisionHitKind::CharacterGround: return "CharacterGround";
         case CollisionHitKind::CharacterWall:   return "CharacterWall";
+        case CollisionHitKind::Rigidbody:       return "Rigidbody";
         }
         return "Unknown";
     }
