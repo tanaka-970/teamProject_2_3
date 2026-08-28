@@ -416,8 +416,8 @@
             push(MakeEffectProperty(i, "custom_shader",
                 Reflection::PropertyType::AssetReference,
                 Reflection::Animatable::Step)
-                .Display("カスタムシェーダー")
-                .Tooltip("Shader Composer の PostProcess 出力を UI Effect として使う。")
+                .Display(u8"カスタムシェーダー [未対応]")
+                .Tooltip(u8"DX12 の UI Effect 描画では未対応です。設定値は保存されます。")
                 .OfAssetType("Shader"));
 
             if (index < custom_schemas_.size() && custom_schemas_[index])
