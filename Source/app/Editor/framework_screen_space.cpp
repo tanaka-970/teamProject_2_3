@@ -26,11 +26,9 @@ void framework::draw_screen_space_settings()
             ImGui::SliderFloat("強さ", &ssao_pass.intensity, 0.0f, 1.0f, "%.2f");
             ImGui::SliderFloat("コントラスト", &ssao_pass.power, 0.5f, 4.0f, "%.2f");
             ImGui::SliderInt("方向スライス数", &ssao_pass.slice_count, 1, 8);
-            ImGui::SliderInt("探索ステップ数", &ssao_pass.step_count, 2, 24);
+            ImGui::SliderInt("探索ステップ数", &ssao_pass.step_count, 2, 12);
             ImGui::SliderFloat("法線オフセット", &ssao_pass.normal_bias, 0.0f, 2.0f, "%.2f");
             ImGui::SliderFloat("薄物補正", &ssao_pass.thin_occluder, 0.0f, 1.0f, "%.2f");
-            ImGui::Checkbox("バイラテラルブラー", &ssao_pass.blur_enabled);
-            ImGui::SliderFloat("ブラーの輪郭保持", &ssao_pass.blur_sharpness, 0.1f, 4.0f, "%.2f");
             ImGui::SliderFloat("フェード開始 (m)", &ssao_pass.fade_start, 1.0f, 400.0f, "%.0f");
             ImGui::SliderFloat("フェード終了 (m)", &ssao_pass.fade_end, 2.0f, 800.0f, "%.0f");
             ImGui::TreePop();

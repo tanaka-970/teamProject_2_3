@@ -51,6 +51,7 @@ namespace ReplayEngine::Runtime::Detail
         std::filesystem::path scene;
         std::uint32_t frames = 300;
         std::uint32_t warmup_frames = 30;
+        std::uint32_t render_output = 0;
         std::string output_name{ "benchmark" };
         std::string error;
     };

@@ -322,6 +322,7 @@ private:
     bool profile_benchmark_mode{ false };
     std::uint32_t profile_benchmark_frames{ 300 };
     std::uint32_t profile_benchmark_warmup_frames{ 30 };
+    std::uint32_t profile_benchmark_render_output{ 0 };
     std::uint32_t profile_benchmark_frame_index{ 0 };
     std::uint32_t profile_benchmark_drain_frames{ 0 };
     std::string profile_benchmark_output_name{ "benchmark" };

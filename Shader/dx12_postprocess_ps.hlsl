@@ -33,6 +33,8 @@ cbuffer PostProcessConstants : register(b0)
     row_major float4x4 projectionMatrix;
     row_major float4x4 inverseProjection;
     float4 cameraPlanes; // x=Near、y=Far
+    float4 ssaoParams0; // x=半径、y=べき乗、z=薄物補正、w=法線バイアス
+    float4 ssaoParams1; // x=スライス数、y=ステップ数、z=フェード開始、w=フェード終了
 };
 
 struct PixelInput
@@ -68,26 +70,6 @@ float3 fxaa(float2 uv)
     return averageLuma < lumaMin || averageLuma > lumaMax ? center : average;
 }
 
-float ssao(float2 uv)
-{
-    const float centerDepth = sceneDepth.SampleLevel(pointSampler, uv, 0).r;
-    if (centerDepth >= 0.999999f) return 1.0f;
-    const float2 pixel = 1.0f / max(screenSize, float2(1.0f, 1.0f));
-    const float neighborDepth[4] = {
-        sceneDepth.SampleLevel(pointSampler, uv + float2(pixel.x, 0.0f), 0).r,
-        sceneDepth.SampleLevel(pointSampler, uv - float2(pixel.x, 0.0f), 0).r,
-        sceneDepth.SampleLevel(pointSampler, uv + float2(0.0f, pixel.y), 0).r,
-        sceneDepth.SampleLevel(pointSampler, uv - float2(0.0f, pixel.y), 0).r };
-    float occlusion = 0.0f;
-    [unroll] for (int index = 0; index < 4; ++index)
-    {
-        const float difference = centerDepth - neighborDepth[index];
-        occlusion += saturate(difference * 32.0f) *
-            saturate(1.0f - abs(difference) * 48.0f);
-    }
-    return saturate(1.0f - occlusion * 0.2f * ssaoStrength);
-}
-
 // 全画面で走るので step 数は固定上限にする。理由は実装報告書へ書いた。
 static const int SSR_MAX_STEPS = 32;
 static const int SSR_REFINE_STEPS = 4;
@@ -112,6 +94,92 @@ bool projectToScreen(float3 viewPosition, out float2 uv, out float depth)
     uv = float2(ndc.x * 0.5f + 0.5f, 0.5f - ndc.y * 0.5f);
     depth = ndc.z;
     return true;
+}
+
+static const int SSAO_MAX_SLICES = 8;
+static const int SSAO_MAX_STEPS = 12;
+static const float SSAO_PI = 3.14159265f;
+
+float linearViewDepth(float2 uv, float depth)
+{
+    const float nearPlane = max(cameraPlanes.x, 0.001f);
+    const float farPlane = max(cameraPlanes.y, nearPlane + 0.001f);
+    if (depth >= 0.999999f) return farPlane;
+    const float denominator = max(farPlane - depth * (farPlane - nearPlane), 0.001f);
+    return clamp((nearPlane * farPlane) / denominator, nearPlane, farPlane);
+}
+
+float ssao(float2 uv)
+{
+    const float hardwareDepth = sceneDepth.SampleLevel(pointSampler, uv, 0).r;
+    if (hardwareDepth >= 0.999999f) return 1.0f;
+
+    const float3 centerPosition = viewPositionFromDepth(uv, hardwareDepth);
+    const float3 worldNormal = sceneNormal.SampleLevel(pointSampler, uv, 0).xyz * 2.0f - 1.0f;
+    if (dot(worldNormal, worldNormal) < 1.0e-4f) return 1.0f;
+    const float3 normal = normalize(mul(float4(normalize(worldNormal), 0.0f), viewMatrix).xyz);
+
+    const float radius = max(ssaoParams0.x, 0.001f);
+    const float power = max(ssaoParams0.y, 0.01f);
+    const float thinOccluder = saturate(ssaoParams0.z);
+    const float normalBias = max(ssaoParams0.w, 0.0f) * radius * 0.1f;
+    const int sliceCount = clamp((int)round(ssaoParams1.x), 1, SSAO_MAX_SLICES);
+    const int stepCount = clamp((int)round(ssaoParams1.y), 2, SSAO_MAX_STEPS);
+    const float fadeStart = max(ssaoParams1.z, 0.0f);
+    const float fadeEnd = max(ssaoParams1.w, fadeStart + 0.001f);
+    const float centerDistance = length(centerPosition);
+    const float distanceFade = 1.0f - saturate(
+        (centerDistance - fadeStart) / (fadeEnd - fadeStart));
+    const float occluderThickness = lerp(0.5f, 0.05f, thinOccluder);
+    const float3 tangent = normalize(abs(normal.y) < 0.99f
+        ? cross(normal, float3(0.0f, 1.0f, 0.0f))
+        : cross(normal, float3(1.0f, 0.0f, 0.0f)));
+    const float3 bitangent = normalize(cross(normal, tangent));
+
+    float occlusion = 0.0f;
+    float sampleCount = 0.0f;
+    [loop] for (int slice = 0; slice < SSAO_MAX_SLICES; ++slice)
+    {
+        if (slice >= sliceCount) break;
+        const float angle = (2.0f * SSAO_PI * ((float)slice + 0.5f)) /
+            (float)sliceCount;
+        [loop] for (int step = 1; step <= SSAO_MAX_STEPS; ++step)
+        {
+            if (step > stepCount) break;
+            const float sampleScale = (float)step / (float)stepCount;
+            const float sampleAngle = angle + SSAO_PI * sampleScale;
+            const float3 sampleOffsetDirection = normalize(tangent * cos(sampleAngle) +
+                bitangent * sin(sampleAngle));
+            const float3 samplePosition = centerPosition +
+                sampleOffsetDirection * radius * sampleScale;
+            float2 sampleUv = 0.0f;
+            float projectedDepth = 0.0f;
+            if (!projectToScreen(samplePosition, sampleUv, projectedDepth) ||
+                any(sampleUv < 0.0f) || any(sampleUv > 1.0f))
+                continue;
+            const float sampleHardwareDepth =
+                sceneDepth.SampleLevel(pointSampler, sampleUv, 0).r;
+            if (sampleHardwareDepth >= 0.999999f) continue;
+            const float3 actualSamplePosition =
+                viewPositionFromDepth(sampleUv, sampleHardwareDepth);
+            const float sampleDepth = linearViewDepth(sampleUv, sampleHardwareDepth);
+            const float expectedDepth = linearViewDepth(sampleUv, projectedDepth);
+            const float depthDelta = expectedDepth - sampleDepth - normalBias;
+            const float depthContribution = saturate(depthDelta / occluderThickness);
+            const float distanceWeight = saturate(1.0f -
+                distance(centerPosition, actualSamplePosition) / radius);
+            const float3 sampleDirection = normalize(actualSamplePosition - centerPosition);
+            const float normalWeight = saturate(0.35f + 0.65f *
+                abs(dot(normal, sampleDirection)));
+            occlusion += depthContribution * distanceWeight * normalWeight;
+            sampleCount += 1.0f;
+        }
+    }
+
+    const float averageOcclusion = occlusion / max(sampleCount, 1.0f);
+    const float ambient = pow(saturate(1.0f - averageOcclusion *
+        48.0f * saturate(ssaoStrength)), power);
+    return lerp(1.0f, ambient, distanceFade);
 }
 
 float3 screenSpaceReflection(float2 uv, float3 color)
@@ -260,7 +328,16 @@ float4 main(PixelInput input) : SV_TARGET
         else if (output == 6u)
             debugColor = sceneMaterial.SampleLevel(pointSampler, input.uv, 0).rgb;
         else if (output == 7u)
-            debugColor = (1.0f - sceneDepth.SampleLevel(pointSampler, input.uv, 0).r).xxx;
+        {
+            const float hardwareDepth = sceneDepth.SampleLevel(sceneSampler, input.uv, 0).r;
+            const float nearPlane = max(cameraPlanes.x, 0.001f);
+            const float farPlane = max(cameraPlanes.y, nearPlane + 0.001f);
+            const float linearDepth = linearViewDepth(input.uv, hardwareDepth);
+            const float normalizedDepth = saturate(log2(max(linearDepth, nearPlane) /
+                nearPlane) / max(log2(farPlane / nearPlane), 0.001f));
+            const float displayDepth = saturate((1.0f - normalizedDepth - 0.3f) * 2.5f);
+            debugColor = (hardwareDepth >= 0.999999f ? 0.0f : displayDepth).xxx;
+        }
         else if (output == 8u)
             debugColor = featureFlags.y < 0.5f ? 0.5f.xxx : ssao(input.uv).xxx;
         else if (output == 9u)
@@ -274,9 +351,11 @@ float4 main(PixelInput input) : SV_TARGET
                 debugColor = 1.0f.xxx;
         }
 
+        const float debugDisplayScale = output == 3u ? 0.5f : 1.0f;
         const bool hdrDebug = output == 1u || output == 2u || output == 3u || output == 9u;
         const float3 displayColor = hdrDebug
-            ? acesToneMap(max(debugColor, 0.0f)) : saturate(max(debugColor, 0.0f));
+            ? acesToneMap(max(debugColor * debugDisplayScale, 0.0f))
+            : saturate(max(debugColor * debugDisplayScale, 0.0f));
         return float4(pow(displayColor, 1.0f / 2.2f), 1.0f);
     }
 

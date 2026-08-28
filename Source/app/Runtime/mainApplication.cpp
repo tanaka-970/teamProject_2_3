@@ -199,7 +199,8 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
             // CWD / AssetDatabase の相対パス表現に benchmark の正否を依存させない。
             application.set_startup_scene_path(resolved_profile_scene_path);
             application.configure_profile_benchmark(profile_benchmark.frames,
-                profile_benchmark.warmup_frames, profile_benchmark.output_name);
+                profile_benchmark.warmup_frames, profile_benchmark.output_name,
+                profile_benchmark.render_output);
         }
         application.set_startup_window_size(
             game_launch.window_width, game_launch.window_height);
