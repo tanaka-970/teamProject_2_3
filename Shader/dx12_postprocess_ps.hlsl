@@ -81,7 +81,6 @@ float3 fxaa(float2 uv)
 static const int SSR_MAX_STEPS = 64;
 static const int SSR_REFINE_STEPS = 8;
 // 交差とみなすカメラからの距離差。これを超える差は手前の別物として棄却する。
-static const float SSR_THICKNESS = 0.55f;
 
 float3 viewPositionFromDepth(float2 uv, float depth)
 {
@@ -211,14 +210,8 @@ float3 screenSpaceReflection(float2 uv, float3 color)
     if (centerDepth >= 0.999999f) return color;
 
     const float roughness = saturate(sceneMaterial.SampleLevel(pointSampler, uv, 0).g);
-    const bool legacyDefaults = abs(ssrParams0.x - 40.0f) < 0.0001f &&
-        abs(ssrParams0.y - 0.4f) < 0.0001f && abs(ssrParams0.z - 3.0f) < 0.0001f &&
-        abs(ssrParams0.w - 48.0f) < 0.0001f && abs(ssrParams1.x - 5.0f) < 0.0001f &&
-        abs(ssrParams1.y - 0.65f) < 0.0001f && abs(ssrParams1.z - 0.12f) < 0.0001f &&
-        abs(ssrParams1.w - 1.0f) < 0.0001f && abs(ssrParams2.x - 12.0f) < 0.0001f &&
-        abs(ssrParams2.y - 8.0f) < 0.0001f;
     // 粗い面は反射がぼけて意味を持たないので早期に降りる。
-    if (roughness > (legacyDefaults ? 0.6f : saturate(ssrParams1.y))) return color;
+    if (roughness > saturate(ssrParams1.y)) return color;
 
     const float4 normalSample = sceneNormal.SampleLevel(pointSampler, uv, 0);
     const float3 worldNormal = normalSample.xyz * 2.0f - 1.0f;
@@ -229,20 +222,16 @@ float3 screenSpaceReflection(float2 uv, float3 color)
     const float3 V = normalize(origin);
     const float3 R = reflect(V, N);
 
-    const int maxSteps = legacyDefaults ? 32 :
-        clamp((int)round(ssrParams0.w), 4, SSR_MAX_STEPS);
-    const int refineSteps = legacyDefaults ? 4 :
-        clamp((int)round(ssrParams1.x), 0, SSR_REFINE_STEPS);
+    const int maxSteps = clamp((int)round(ssrParams0.w), 4, SSR_MAX_STEPS);
+    const int refineSteps = clamp((int)round(ssrParams1.x), 0, SSR_REFINE_STEPS);
     const float farPlane = max(cameraPlanes.y, cameraPlanes.x + 1.0e-3f);
-    const float rayLength = legacyDefaults
-        ? min(max(length(origin) * 1.5f, 1.0f), farPlane * 0.5f)
-        : min(max(ssrParams0.x, 1.0f), farPlane * 0.5f);
+    const float rayLength = min(min(max(length(origin) * 1.5f, 1.0f),
+        max(ssrParams0.x, 1.0f)), farPlane * 0.5f);
     const float baseStepLength = rayLength / (float)maxSteps;
-    const float strideScale = legacyDefaults ? 1.0f : max(ssrParams0.z / 3.0f, 0.25f);
+    const float strideScale = max(ssrParams0.z / 3.0f, 0.25f);
     const float stepLength = baseStepLength * strideScale;
-    const float3 rayStart = legacyDefaults
-        ? origin + N * max(baseStepLength * 0.5f, 1.0e-3f)
-        : origin + N * max(ssrParams1.w, 1.0e-3f);
+    const float3 rayStart = origin + N * max(baseStepLength * 0.5f,
+        ssrParams1.w);
 
     float2 hitUv = 0.0f;
     float hitWeight = 0.0f;
@@ -267,7 +256,7 @@ float3 screenSpaceReflection(float2 uv, float3 color)
         if (rayDepth <= sceneZ) { previousSample = rayPoint; continue; }
         // 面の裏へ深く回り込んだ場合は別の物体なので棄却する。
         const float3 scenePoint = viewPositionFromDepth(sampleUv, sceneZ);
-        const float thickness = legacyDefaults ? SSR_THICKNESS : max(ssrParams0.y, 0.001f);
+        const float thickness = max(ssrParams0.y, 0.001f);
         if (abs(length(rayPoint) - length(scenePoint)) > thickness)
         {
             previousSample = rayPoint;
@@ -299,12 +288,12 @@ float3 screenSpaceReflection(float2 uv, float3 color)
     if (hitWeight <= 0.0f) return color;
 
     // 画面端は情報が無いのでフェードさせ、不連続にしない。
-    const float edgeFade = legacyDefaults ? 0.08f : max(ssrParams1.z, 0.001f);
+    const float edgeFade = max(ssrParams1.z, 0.001f);
     const float2 edge = smoothstep(0.0f, edgeFade, hitUv) *
         smoothstep(0.0f, edgeFade, 1.0f - hitUv);
     float confidence = hitWeight * edge.x * edge.y;
     // 粗い面ほど反射を弱める。
-    const float maxRoughness = legacyDefaults ? 0.6f : max(ssrParams1.y, 0.001f);
+    const float maxRoughness = max(ssrParams1.y, 0.001f);
     confidence *= saturate(1.0f - roughness / maxRoughness);
     // 斜め入射ほど強く映る Fresnel 近似。
     confidence *= saturate(0.25f + 0.75f * pow(saturate(1.0f + dot(V, N)), 2.0f));
@@ -312,22 +301,23 @@ float3 screenSpaceReflection(float2 uv, float3 color)
     if (confidence <= 0.0f) return color;
 
     float3 reflection = historyTexture.SampleLevel(sceneSampler, hitUv, 0).rgb;
-    if (!legacyDefaults)
+    const int requestedTapCount = clamp((int)round(ssrParams2.y), 1, 16);
+    const int tapCount = min(16, max(requestedTapCount,
+        ssrParams2.x > 0.0f ? 2 : 1));
+    const float resolveRadius = max(ssrParams2.x,
+        requestedTapCount > 1 ? 1.0f : 0.0f);
+    const float2 resolvePixel = resolveRadius / max(screenSize, float2(1.0f, 1.0f));
+    float3 resolveSum = reflection;
+    float resolveSamples = 1.0f;
+    [loop] for (int tap = 1; tap <= 16; ++tap)
     {
-        const int tapCount = clamp((int)round(ssrParams2.y), 1, 16);
-        const float2 resolvePixel = ssrParams2.x / max(screenSize, float2(1.0f, 1.0f));
-        float3 resolveSum = reflection;
-        float resolveSamples = 1.0f;
-        [loop] for (int tap = 1; tap <= 16; ++tap)
-        {
-            if (tap >= tapCount) break;
-            const float angle = 2.39996323f * (float)tap;
-            const float2 offset = float2(cos(angle), sin(angle)) * resolvePixel;
-            resolveSum += historyTexture.SampleLevel(sceneSampler, hitUv + offset, 0).rgb;
-            resolveSamples += 1.0f;
-        }
-        reflection = resolveSum / resolveSamples;
+        if (tap >= tapCount) break;
+        const float angle = 2.39996323f * (float)tap;
+        const float2 offset = float2(cos(angle), sin(angle)) * resolvePixel;
+        resolveSum += historyTexture.SampleLevel(sceneSampler, hitUv + offset, 0).rgb;
+        resolveSamples += 1.0f;
     }
+    reflection = resolveSum / resolveSamples;
     return lerp(color, reflection, confidence);
 }
 
@@ -347,16 +337,13 @@ float3 temporalResolve(float2 uv, float3 color)
     const float3 neighborhoodMin = min(color, min(neighborA, neighborB));
     const float3 neighborhoodMax = max(color, max(neighborA, neighborB));
     const float gamma = max(taaParams0.x, 0.001f);
-    const bool legacyClamp = abs(gamma - 1.0f) < 0.0001f;
-    const float3 expandedMin = legacyClamp ? neighborhoodMin : color -
-        (color - neighborhoodMin) * gamma;
-    const float3 expandedMax = legacyClamp ? neighborhoodMax : color +
-        (neighborhoodMax - color) * gamma;
+    const float3 expandedMin = color - (color - neighborhoodMin) * gamma;
+    const float3 expandedMax = color + (neighborhoodMax - color) * gamma;
     float3 resolved = lerp(color, clamp(history, expandedMin, expandedMax), weight);
-    if (abs(taaParams0.y - 0.35f) > 0.0001f && taaParams0.y > 0.0f)
+    if (taaParams0.y > 0.0f)
     {
         const float3 neighborhood = (neighborA + neighborB) * 0.5f;
-        resolved = max(resolved + (resolved - neighborhood) * taaParams0.y * 3.0f, 0.0f);
+        resolved = max(resolved + (resolved - neighborhood) * taaParams0.y * 2.0f, 0.0f);
     }
     return resolved;
 }

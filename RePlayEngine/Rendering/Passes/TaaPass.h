@@ -38,7 +38,7 @@ namespace ReplayEngine::Rendering
         void MarkHistoryValid() noexcept { history_valid_ = true; }
         float blend = 0.88f;
         float variance_gamma = 1.0f;
-        float sharpness = 0.35f;
+        float sharpness = 0.0f;
         float max_velocity = 48.0f;
         bool enabled = true;
     private:

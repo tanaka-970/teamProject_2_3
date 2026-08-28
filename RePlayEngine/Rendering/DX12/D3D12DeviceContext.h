@@ -247,10 +247,10 @@ namespace ReplayEngine::Rendering::DX12
         DirectX::XMFLOAT4 ssao_params0{ 0.75f, 1.6f, 1.0f, 0.35f };
         DirectX::XMFLOAT4 ssao_params1{ 4.0f, 8.0f, 60.0f, 140.0f };
         DirectX::XMFLOAT4 ssao_params2{ 1.0f, 1.0f, 0.0f, 0.0f };
-        DirectX::XMFLOAT4 ssr_params0{ 40.0f, 0.4f, 3.0f, 48.0f };
-        DirectX::XMFLOAT4 ssr_params1{ 5.0f, 0.65f, 0.12f, 1.0f };
-        DirectX::XMFLOAT4 ssr_params2{ 12.0f, 8.0f, 0.0f, 0.0f };
-        DirectX::XMFLOAT4 taa_params0{ 1.0f, 0.35f, 48.0f, 0.0f };
+        DirectX::XMFLOAT4 ssr_params0{ 40.0f, 0.55f, 3.0f, 32.0f };
+        DirectX::XMFLOAT4 ssr_params1{ 4.0f, 0.6f, 0.08f, 0.001f };
+        DirectX::XMFLOAT4 ssr_params2{ 0.0f, 1.0f, 0.0f, 0.0f };
+        DirectX::XMFLOAT4 taa_params0{ 1.0f, 0.0f, 48.0f, 0.0f };
         std::uint32_t render_output = 0;
         std::uint32_t deferred_debug_mode = 0;
         bool bloom_enabled = true;
