@@ -1,39 +1,13 @@
-﻿// framework の D3D11 描画状態・レンダラ・プロジェクト/Scene 基本状態。
+﻿// framework の DX12 描画状態・レンダラ・プロジェクト/Scene 基本状態。
 // framework_class.h の class framework 内部からのみ include する。
 
 public:
     CONST HWND hwnd;
 
-    Microsoft::WRL::ComPtr<ID3D11Device> device;
-    Microsoft::WRL::ComPtr<ID3D11DeviceContext> immediate_context;
-    Microsoft::WRL::ComPtr<IDXGISwapChain> swap_chain;
-    Microsoft::WRL::ComPtr<ID3D11RenderTargetView> render_target_view;
-    Microsoft::WRL::ComPtr<ID3D11DepthStencilView> depth_stencil_view;
-
-    std::unique_ptr<sprite_batch> sprite_batches[8];
-    std::unique_ptr<framebuffer> framebuffers[8];
-    std::unique_ptr<fullscreen_quad> bit_block_transfer;
-
-    enum class SAMPLER_STATE { POINT, LINEAR, ANISOTROPIC, ANISOTROPIC_CLAMP };
-    Microsoft::WRL::ComPtr<ID3D11SamplerState> sampler_states[4];
-
-    enum class DEPTH_STATE { ZT_ON_ZW_ON, ZT_ON_ZW_OFF, ZT_OFF_ZW_ON, ZT_OFF_ZW_OFF };
-    Microsoft::WRL::ComPtr<ID3D11DepthStencilState> depth_stencil_states[4];
-
-    enum class BLEND_STATE { NONE, ALPHA, ADD, MULTIPLY, SCREEN, PREMULTIPLIED };
-    Microsoft::WRL::ComPtr<ID3D11BlendState> blend_states[6];
-
-    // CULL_FRONT は world 行列の行列式が負（鏡像）のときに使う。
-    enum class RASTER_STATE { SOLID, WIREFRAME, CULL_NONE, WIREFRAME_CULL_NONE, SCISSOR, CULL_FRONT };
-    Microsoft::WRL::ComPtr<ID3D11RasterizerState> rasterizer_states[6];
-
-    struct scene_constants
-    {
-        DirectX::XMFLOAT4X4 view_projection;
-        DirectX::XMFLOAT4 light_direction;
-        DirectX::XMFLOAT4 camera_position;
-    };
-    Microsoft::WRL::ComPtr<ID3D11Buffer> constant_buffers[8];
+    ReplayEngine::Rendering::DX12::D3D12DeviceContext dx12_device_context;
+    bool dx12_framework_requested{ true };
+    bool dx12_framework_active{ false };
+    bool dx12_framework_render_error_reported{ false };
 
     DirectX::XMFLOAT4 camera_position{ 0.0f, 4.0f, -10.0f, 1.0f };
     DirectX::XMFLOAT4 light_direction{ 0.300f, 0.000f, 0.500f, 0.0f };
@@ -65,34 +39,6 @@ public:
     std::shared_ptr<static_mesh> static_meshes[8];
     std::shared_ptr<skinned_mesh> skinned_meshes[8];
     std::shared_ptr<gltf_model> stage_gltf_model;
-    Microsoft::WRL::ComPtr<ID3D11PixelShader> static_mesh_unlit_ps;
-    Microsoft::WRL::ComPtr<ID3D11PixelShader> skinned_mesh_unlit_ps;
-    Microsoft::WRL::ComPtr<ID3D11PixelShader> static_mesh_gbuffer_ps;
-    Microsoft::WRL::ComPtr<ID3D11PixelShader> skinned_mesh_gbuffer_ps;
-    Microsoft::WRL::ComPtr<ID3D11PixelShader> object_pixelate_ps;
-    Microsoft::WRL::ComPtr<ID3D11PixelShader> skinned_stylized_character_ps;
-    Microsoft::WRL::ComPtr<ID3D11PixelShader> static_stylized_character_ps;
-
-    struct material_override_constants
-    {
-        DirectX::XMFLOAT4 base_color_factor{ 1.0f, 1.0f, 1.0f, 1.0f };
-        DirectX::XMFLOAT4 emissive_factor{ 0.0f, 0.0f, 0.0f, 0.0f };
-        DirectX::XMFLOAT4 mat_params{ 0.0f, 0.55f, 1.0f, 0.0f };
-        unsigned int lighting_model{ 0 };
-        float texture_contrast{ 1.0f };
-        float pixelate_size{ 0.0f };
-        float pixelate_strength{ 0.0f };
-        unsigned int texture_mask{ 0 };
-        // Mesh Renderer の Receive Shadow。0 で影を受けない。
-        float receive_shadow{ 1.0f };
-        DirectX::XMFLOAT2 padding{ 0.0f, 0.0f };
-    };
-    static_assert(sizeof(material_override_constants) == 80,
-        "GBUFFER_MATERIAL_CONSTANTS must stay byte-identical to HLSL");
-    Microsoft::WRL::ComPtr<ID3D11Buffer> material_override_cb;
-
-    Microsoft::WRL::ComPtr<ID3D11Buffer> shader_layer_cb;
-    Microsoft::WRL::ComPtr<ID3D11Buffer> character_material_cb;
 
     // デバッグ用静的メッシュとステージのシェーディング設定 (static_meshes[i] と対応)
     // 0=FBX標準、1=PBR、2=トゥーン、3=アンリット、4=ピクセレーション
@@ -113,42 +59,6 @@ public:
     toon_renderer    toon;
     csm_renderer     csm;
 
-    // Shader\shadow_alpha_common.hlsli の SHADOW_ALPHA_CONSTANTS(b7) と一致させる。
-    struct shadow_alpha_constants
-    {
-        // x=抜き方(0/1/2) y=cutoff z=BaseMapの出所(0:t0 1:t40) w=予約
-        DirectX::XMFLOAT4 params{ 0.0f, 0.5f, 0.0f, 0.0f };
-    };
-    Microsoft::WRL::ComPtr<ID3D11Buffer> shadow_alpha_cb;
-    Microsoft::WRL::ComPtr<ID3D11PixelShader> shadow_caster_alpha_ps;
-    Microsoft::WRL::ComPtr<ID3D11PixelShader> shadow_caster_alpha_skinned_ps;
-
-    // Shader\shadow_coverage_common.hlsli の SHADOW_COVERAGE_CONSTANTS(b8) と一致させる。
-    static constexpr int shadow_coverage_max_effects = 4;
-    static constexpr int shadow_coverage_max_regions = 4;
-    struct shadow_coverage_constants
-    {
-        DirectX::XMFLOAT4X4 view_projection{};
-        DirectX::XMFLOAT4 viewport{ 0.0f, 0.0f, 1.0f, 1.0f };
-        DirectX::XMFLOAT4 rect{ 0.0f, 0.0f, 1.0f, 1.0f };
-        // x=Effect数 y=マスク画像を貼ったEffectの番号(-1で無し) z=範囲数 w=予約
-        DirectX::XMFLOAT4 control{ 0.0f, -1.0f, 0.0f, 0.0f };
-        DirectX::XMFLOAT4 params0[shadow_coverage_max_effects]{};
-        DirectX::XMFLOAT4 params1[shadow_coverage_max_effects]{};
-        DirectX::XMFLOAT4 params2[shadow_coverage_max_effects]{};
-        DirectX::XMFLOAT4 params3[shadow_coverage_max_effects]{};
-        DirectX::XMFLOAT4 meta[shadow_coverage_max_effects]{};
-        DirectX::XMFLOAT4 region_params[shadow_coverage_max_regions]{};
-        DirectX::XMFLOAT4 region_settings[shadow_coverage_max_regions]{};
-    };
-    Microsoft::WRL::ComPtr<ID3D11Buffer> shadow_coverage_cb;
-    // 面消し Effect を持つ GameObject ごとの影用パラメータ。毎フレーム作り直す。
-    struct shadow_coverage_entry
-    {
-        shadow_coverage_constants constants{};
-        ID3D11ShaderResourceView* mask = nullptr;
-    };
-    std::unordered_map<std::uint64_t, shadow_coverage_entry> shadow_coverage_entries;
     // Point / Spot の動的シャドウマップ。CSM とは投影方法が違うので別リソース。
     ReplayEngine::Rendering::LocalShadowAtlas local_shadows;
 
@@ -209,9 +119,22 @@ public:
         }
     };
     shadow_frame_stats shadow_stats{};
-    trail            test_trail;
-    particle_system  particles;
-    deferred_renderer deferred;
+    // DX12用パーティクルの実行状態。Emitter Componentが設定と要求の正本で、
+    // ここはフレームをまたぐ寿命・速度だけを保持する。
+    struct dx12_particle_instance final
+    {
+        DirectX::XMFLOAT3 position{};
+        DirectX::XMFLOAT3 velocity{};
+        DirectX::XMFLOAT4 color{};
+        float age = 0.0f;
+        float life = 1.0f;
+        float size = 0.1f;
+        float rotation = 0.0f;
+    };
+    std::unordered_map<ReplayEngine::Core::ObjectID,
+        std::vector<dx12_particle_instance>> dx12_particle_states;
+    std::unordered_map<ReplayEngine::Core::ObjectID, float> dx12_particle_spawn_remainders;
+
     lights_manager   lights;
     ReplayEngine::Scene::SceneManager scene_manager;
     ReplayEngine::Rendering::RenderGraph render_graph;
@@ -224,7 +147,6 @@ public:
 
     // SSAO/SSR/TAAが共有するフレーム定数。b9へ載せる。
     ReplayEngine::Rendering::FrameConstants frame_constants{};
-    Microsoft::WRL::ComPtr<ID3D11Buffer> frame_constants_cb;
     // TAAの再投影に使う前フレームのビュー射影行列。初回は今フレームで埋める。
     DirectX::XMFLOAT4X4 previous_view_projection{};
     bool previous_view_projection_valid{ false };
@@ -246,7 +168,6 @@ public:
     bool stats_window_placed_{ false };
 
     GameScene*       game_scene{ nullptr };
-    UIManager        uiManager;
     bool             enable_scene_game{ true };
     bool             editor_mode{ false };
 

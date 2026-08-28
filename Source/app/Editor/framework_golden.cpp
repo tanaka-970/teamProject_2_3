@@ -39,6 +39,18 @@ void framework::request_golden(golden_request_kind kind)
     golden_state_->golden_last_ok = false;
 }
 
+bool framework::prepare_dx12_golden_capture() noexcept
+{
+    if (golden_state_->golden_request == golden_request_kind::none)
+        return false;
+    if (golden_state_->golden_countdown > 0)
+    {
+        --golden_state_->golden_countdown;
+        return false;
+    }
+    return dx12_device_context.RequestBackBufferCapture();
+}
+
 void framework::tick_golden_capture()
 {
     if (golden_state_->golden_request == golden_request_kind::none) return;
@@ -59,8 +71,14 @@ void framework::tick_golden_capture()
 
     Capture::Image current;
     std::string error;
-    if (!Capture::GoldenImage::CaptureBackBuffer(device.Get(),
-        immediate_context.Get(), swap_chain.Get(), current, error))
+    bool capture_ok = false;
+    if (dx12_device_context.ConsumeBackBufferCapture(
+        current.rgba, current.width, current.height))
+    {
+        capture_ok = current.Valid();
+    }
+    if (!capture_ok) error = u8"DX12 Readback から画面を取得できません";
+    if (!capture_ok)
     {
         golden_state_->golden_last_ok = false;
         golden_state_->golden_last_summary = u8"撮影に失敗しました: " + error;
@@ -83,6 +101,24 @@ void framework::tick_golden_capture()
         golden_state_->golden_last_summary = u8"基準画像を保存しました: " +
             path.generic_u8string();
         push_editor_log("Info", golden_state_->golden_last_summary, path);
+        // 影の内訳は Editor のパネルからしか見えないので、撮影時は stderr へも出す。
+        std::fprintf(stderr,
+            "shadow stats: directional=%d preview=%d rendered=%d "
+            "casters(prim=%d static=%d skinned=%d landscape=%d) "
+            "skipped=%d culled=%d unresolved=%d draws=%d spot=%d point=%d "
+            "coverage=%d coverage_unsupported=%d "
+            "missing_bounds(prim=%d static=%d landscape=%d)\n",
+            shadow_stats.directional_light_present ? 1 : 0,
+            shadow_stats.directional_preview_light ? 1 : 0,
+            shadow_stats.directional_shadow_rendered ? 1 : 0,
+            shadow_stats.primitive_casters, shadow_stats.static_casters,
+            shadow_stats.skinned_casters, shadow_stats.landscape_casters,
+            shadow_stats.skipped_cast_shadow, shadow_stats.culled_casters,
+            shadow_stats.skinned_unresolved, shadow_stats.shadow_draw_calls,
+            shadow_stats.spot_shadow_lights, shadow_stats.point_shadow_lights,
+            shadow_stats.coverage_casters, shadow_stats.coverage_unsupported,
+            shadow_stats.missing_bounds_primitive, shadow_stats.missing_bounds_static,
+            shadow_stats.missing_bounds_landscape);
         return;
     }
 

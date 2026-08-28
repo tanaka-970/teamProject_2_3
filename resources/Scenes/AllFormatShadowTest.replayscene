@@ -69,7 +69,7 @@ OBJECT
     TYPE_MODULE ""
     TYPE_VERSION 1
     PROPERTY_COUNT 13
-    PROPERTY "mesh_asset" asset "ec24e9cfab50d6a6324f279c4d0064a5"
+    PROPERTY "mesh_asset" asset "1bd1358040255f5bd18f3be0d79fbe3c"
     PROPERTY "material_asset" asset ""
     PROPERTY "material_override" bool 0
     PROPERTY "tint" color 1 1 1 1
@@ -98,7 +98,7 @@ OBJECT
     TYPE_MODULE ""
     TYPE_VERSION 1
     PROPERTY_COUNT 13
-    PROPERTY "mesh_asset" asset "8e4a78f8f70a2435fb69a97850c856fa"
+    PROPERTY "mesh_asset" asset "76abb1ee55c90de38180cdb98643c6ee"
     PROPERTY "material_asset" asset ""
     PROPERTY "material_override" bool 0
     PROPERTY "tint" color 1 1 1 1
@@ -127,7 +127,7 @@ OBJECT
     TYPE_MODULE ""
     TYPE_VERSION 1
     PROPERTY_COUNT 13
-    PROPERTY "mesh_asset" asset "8e4a78f8f70a2435fb69a97850c856fa"
+    PROPERTY "mesh_asset" asset "76abb1ee55c90de38180cdb98643c6ee"
     PROPERTY "material_asset" asset ""
     PROPERTY "material_override" bool 0
     PROPERTY "tint" color 1 1 1 1
@@ -168,7 +168,7 @@ OBJECT
     TYPE_MODULE ""
     TYPE_VERSION 1
     PROPERTY_COUNT 9
-    PROPERTY "mesh_asset" asset "e8d87d3b54628df5b57d23f02b07b992"
+    PROPERTY "mesh_asset" asset "60412424bb1443240b2bf2160eee6923"
     PROPERTY "material_asset" asset ""
     PROPERTY "material_override" bool 1
     PROPERTY "tint" color 1 1 1 1

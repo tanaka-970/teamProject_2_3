@@ -357,12 +357,50 @@ namespace ReplayEngine::Scene
         return false;
     }
 
+    void PhysicsDynamicsWorld::RecordContact(const BodyState* body_a,
+        const BodyState* body_b, const ShapeProxy& shape_a,
+        const ShapeProxy& shape_b, const Contact& contact)
+    {
+        if (!contact.valid || !shape_a.object.Valid() || !shape_b.object.Valid()) return;
+
+        const auto same_pair = [&shape_a, &shape_b](const PhysicsContact& value)
+        {
+            return value.object_a == shape_a.object && value.collider_a == shape_a.collider &&
+                value.object_b == shape_b.object && value.collider_b == shape_b.collider;
+        };
+        auto found = std::find_if(contacts_.begin(), contacts_.end(), same_pair);
+
+        const XMFLOAT3 arm_a = Subtract(contact.point, shape_a.center);
+        const XMFLOAT3 arm_b = Subtract(contact.point, shape_b.center);
+        const XMFLOAT3 linear_a = body_a != nullptr && body_a->rigidbody != nullptr
+            ? body_a->rigidbody->linear_velocity : XMFLOAT3{};
+        const XMFLOAT3 linear_b = body_b != nullptr && body_b->rigidbody != nullptr
+            ? body_b->rigidbody->linear_velocity : XMFLOAT3{};
+        const XMFLOAT3 angular_a = body_a != nullptr && body_a->rigidbody != nullptr
+            ? Cross(body_a->rigidbody->angular_velocity, arm_a) : XMFLOAT3{};
+        const XMFLOAT3 angular_b = body_b != nullptr && body_b->rigidbody != nullptr
+            ? Cross(body_b->rigidbody->angular_velocity, arm_b) : XMFLOAT3{};
+
+        PhysicsContact value;
+        value.object_a = shape_a.object;
+        value.collider_a = shape_a.collider;
+        value.object_b = shape_b.object;
+        value.collider_b = shape_b.collider;
+        value.point = contact.point;
+        value.normal = contact.normal;
+        value.relative_velocity = Subtract(Add(linear_b, angular_b), Add(linear_a, angular_a));
+        value.penetration = contact.penetration;
+        if (found == contacts_.end()) contacts_.push_back(value);
+        else *found = value;
+    }
+
     void PhysicsDynamicsWorld::Step(float fixed_delta_time)
     {
         // Body カウンタは BuildBodyStates() の先頭でリセットしてから実際に集計する。
         // ここで重複して 0 にすると、timeScale 0 で走らなかった step の直後に
         // 最後に実行された step 時点の Body 表が空に見える。表を空にするのは
         // AttachScene()/DetachScene() の責務なので、ここではカウンタを保持する。
+        contacts_.clear();
         if (scene_ == nullptr || fixed_delta_time <= 0.0f) return;
 
         const std::uint32_t generation = scene_->StructureGeneration();
@@ -429,6 +467,7 @@ namespace ReplayEngine::Scene
                     Contact contact;
                     if (DetectContact(dynamic_shape, static_shape, contact))
                     {
+                        RecordContact(&body, nullptr, dynamic_shape, static_shape, contact);
                         SolveContact(&body, nullptr, dynamic_shape, static_shape, contact);
                     }
                 }
@@ -451,6 +490,7 @@ namespace ReplayEngine::Scene
                     Contact contact;
                     if (DetectContact(shape_a, shape_b, contact))
                     {
+                        RecordContact(&body_a, &body_b, shape_a, shape_b, contact);
                         if (body_a.dynamic && body_b.dynamic)
                             union_islands(first, second);
                         SolveContact(&body_a, &body_b, shape_a, shape_b, contact);

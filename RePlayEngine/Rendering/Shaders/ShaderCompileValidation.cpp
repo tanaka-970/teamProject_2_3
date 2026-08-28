@@ -1,4 +1,4 @@
-#include "ShaderCompileValidation.h"
+﻿#include "ShaderCompileValidation.h"
 
 #include "ShaderCompiler.h"
 
@@ -138,13 +138,13 @@ namespace ReplayEngine::Rendering::Validation
         check.Expect(WriteText(valid_path, ValidPixelShader()),
             "検証用シェーダを書き出せる");
 
-        Microsoft::WRL::ComPtr<ID3DBlob> valid_bytecode;
+        ShaderBytecode valid_bytecode;
         const ShaderCompileResult valid = ShaderCompiler::CompileFile(
-            valid_path, "main", "ps_5_0", options, valid_bytecode);
+            valid_path, "main", "ps_6_0", options, valid_bytecode);
 
         check.Expect(valid.succeeded, "正常なシェーダをコンパイルできる");
         check.Expect(valid_bytecode != nullptr, "バイトコードが得られる");
-        check.Expect(valid_bytecode == nullptr || valid_bytecode->GetBufferSize() > 0,
+        check.Expect(valid_bytecode == nullptr || !valid_bytecode->empty(),
             "バイトコードが空でない");
         check.Expect(valid.ErrorCount() == 0, "正常なシェーダでエラーが出ない");
 
@@ -153,9 +153,9 @@ namespace ReplayEngine::Rendering::Validation
         check.Expect(WriteText(broken_path, BrokenPixelShader()),
             "壊れたシェーダを書き出せる");
 
-        Microsoft::WRL::ComPtr<ID3DBlob> broken_bytecode;
+        ShaderBytecode broken_bytecode;
         const ShaderCompileResult broken = ShaderCompiler::CompileFile(
-            broken_path, "main", "ps_5_0", options, broken_bytecode);
+            broken_path, "main", "ps_6_0", options, broken_bytecode);
 
         check.Expect(!broken.succeeded, "構文エラーを検出する");
         check.Expect(broken.ErrorCount() > 0, "エラー診断が 1 件以上ある");
@@ -181,11 +181,11 @@ namespace ReplayEngine::Rendering::Validation
             "失敗時に出力バイトコードを触らない");
 
         // 直前に成功したバイトコードを渡して失敗させ、維持されるか見る。
-        Microsoft::WRL::ComPtr<ID3DBlob> kept_bytecode = valid_bytecode;
+        ShaderBytecode kept_bytecode = valid_bytecode;
         const ShaderCompileResult kept = ShaderCompiler::CompileFile(
-            broken_path, "main", "ps_5_0", options, kept_bytecode);
+            broken_path, "main", "ps_6_0", options, kept_bytecode);
         check.Expect(!kept.succeeded, "2 回目も失敗する");
-        check.Expect(kept_bytecode.Get() == valid_bytecode.Get(),
+        check.Expect(kept_bytecode.get() == valid_bytecode.get(),
             "失敗しても直前に成功したバイトコードが維持される");
 
         // ---- 3. 警告だけなら成功扱い -------------------------------------
@@ -193,9 +193,9 @@ namespace ReplayEngine::Rendering::Validation
         check.Expect(WriteText(warning_path, WarningPixelShader()),
             "警告シェーダを書き出せる");
 
-        Microsoft::WRL::ComPtr<ID3DBlob> warning_bytecode;
+        ShaderBytecode warning_bytecode;
         const ShaderCompileResult warning = ShaderCompiler::CompileFile(
-            warning_path, "main", "ps_5_0", options, warning_bytecode);
+            warning_path, "main", "ps_6_0", options, warning_bytecode);
         check.Expect(warning.succeeded, "警告だけなら成功する");
         check.Expect(warning_bytecode != nullptr, "警告時もバイトコードが得られる");
 
@@ -206,9 +206,9 @@ namespace ReplayEngine::Rendering::Validation
         check.Expect(WriteText(including_path, IncludingPixelShader()),
             "include するシェーダを書き出せる");
 
-        Microsoft::WRL::ComPtr<ID3DBlob> including_bytecode;
+        ShaderBytecode including_bytecode;
         const ShaderCompileResult including = ShaderCompiler::CompileFile(
-            including_path, "main", "ps_5_0", options, including_bytecode);
+            including_path, "main", "ps_6_0", options, including_bytecode);
         check.Expect(including.succeeded,
             "同じフォルダの #include を解決できる");
 
@@ -217,16 +217,16 @@ namespace ReplayEngine::Rendering::Validation
         check.Expect(WriteText(missing_path, MissingIncludeShader()),
             "壊れた include のシェーダを書き出せる");
 
-        Microsoft::WRL::ComPtr<ID3DBlob> missing_bytecode;
+        ShaderBytecode missing_bytecode;
         const ShaderCompileResult missing = ShaderCompiler::CompileFile(
-            missing_path, "main", "ps_5_0", options, missing_bytecode);
+            missing_path, "main", "ps_6_0", options, missing_bytecode);
         check.Expect(!missing.succeeded, "見つからない #include を検出する");
         check.Expect(missing.ErrorCount() > 0, "include エラーの診断が出る");
 
         // ---- 6. 存在しないファイル ---------------------------------------
-        Microsoft::WRL::ComPtr<ID3DBlob> absent_bytecode;
+        ShaderBytecode absent_bytecode;
         const ShaderCompileResult absent = ShaderCompiler::CompileFile(
-            folder / "ThisFileDoesNotExist.hlsl", "main", "ps_5_0",
+            folder / "ThisFileDoesNotExist.hlsl", "main", "ps_6_0",
             options, absent_bytecode);
         check.Expect(!absent.succeeded, "存在しないファイルで失敗する");
         check.Expect(absent.ErrorCount() > 0,
@@ -270,9 +270,9 @@ namespace ReplayEngine::Rendering::Validation
         bool repeated_ok = true;
         for (int index = 0; index < 100; ++index)
         {
-            Microsoft::WRL::ComPtr<ID3DBlob> bytecode;
+            ShaderBytecode bytecode;
             const ShaderCompileResult repeat = ShaderCompiler::CompileFile(
-                valid_path, "main", "ps_5_0", options, bytecode);
+                valid_path, "main", "ps_6_0", options, bytecode);
             if (!repeat.succeeded || bytecode == nullptr)
             {
                 repeated_ok = false;
@@ -283,9 +283,9 @@ namespace ReplayEngine::Rendering::Validation
 
         // ---- 9. 文字列からのコンパイル -----------------------------------
         {
-            Microsoft::WRL::ComPtr<ID3DBlob> bytecode;
+            ShaderBytecode bytecode;
             const ShaderCompileResult from_text = ShaderCompiler::CompileSource(
-                ValidPixelShader(), "InMemory.hlsl", "main", "ps_5_0",
+                ValidPixelShader(), "InMemory.hlsl", "main", "ps_6_0",
                 options, bytecode);
             check.Expect(from_text.succeeded, "文字列から直接コンパイルできる");
             check.Expect(bytecode != nullptr, "文字列からバイトコードが得られる");
@@ -298,9 +298,9 @@ namespace ReplayEngine::Rendering::Validation
                 "{\n"
                 "    return float4(position, 1.0f);\n"
                 "}\n";
-            Microsoft::WRL::ComPtr<ID3DBlob> bytecode;
+            ShaderBytecode bytecode;
             const ShaderCompileResult vertex = ShaderCompiler::CompileSource(
-                vertex_source, "InMemoryVS.hlsl", "main", "vs_5_0",
+                vertex_source, "InMemoryVS.hlsl", "main", "vs_6_0",
                 options, bytecode);
             check.Expect(vertex.succeeded, "頂点シェーダをコンパイルできる");
         }

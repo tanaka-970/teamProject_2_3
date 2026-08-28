@@ -6,6 +6,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -31,8 +32,6 @@ using ReplayEngine::Runtime::Detail::GameLaunchConfig;
 using ReplayEngine::Runtime::Detail::ParseAutomatedSmokeTestFrames;
 using ReplayEngine::Runtime::Detail::ParseProfileBenchmark;
 using ReplayEngine::Runtime::Detail::ProfileBenchmarkConfig;
-using ReplayEngine::Runtime::Detail::D3D11LiveObjectFileSummary;
-using ReplayEngine::Runtime::Detail::WriteD3D11LiveObjectReportFile;
 using ReplayEngine::Runtime::Detail::ValidationFolder;
 using ReplayEngine::Runtime::Detail::RunHeadlessLargeSceneValidation;
 using ReplayEngine::Runtime::Detail::RunHeadlessSceneValidation;
@@ -43,6 +42,8 @@ using ReplayEngine::Runtime::Detail::RunHeadlessHandleValidation;
 using ReplayEngine::Runtime::Detail::RunHeadlessCameraComponentValidation;
 using ReplayEngine::Runtime::Detail::RunHeadlessPlayerSpeedValidation;
 using ReplayEngine::Runtime::Detail::RunHeadlessSerializationValidation;
+using ReplayEngine::Runtime::Detail::RunHeadlessDX12Validation;
+using ReplayEngine::Runtime::Detail::RunHeadlessDXCValidation;
 #if defined(_DEBUG)
 using ReplayEngine::Runtime::Detail::DXGILiveObjectFileSummary;
 using ReplayEngine::Runtime::Detail::AcquireDXGIDebugInterfaces;
@@ -57,6 +58,10 @@ LRESULT CALLBACK window_procedure(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpa
 
 int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _In_ LPSTR cmd_line, _In_ int cmd_show)
 {
+    const int dx12_validation_result = RunHeadlessDX12Validation(cmd_line);
+    if (dx12_validation_result >= 0) return dx12_validation_result;
+    const int dxc_validation_result = RunHeadlessDXCValidation(cmd_line);
+    if (dxc_validation_result >= 0) return dxc_validation_result;
     const int large_scene_validation_result = RunHeadlessLargeSceneValidation(cmd_line);
     if (large_scene_validation_result >= 0) return large_scene_validation_result;
     const int validation_result = RunHeadlessSceneValidation(cmd_line);
@@ -87,6 +92,9 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
         return 75;
     }
     const bool shutdown_regression_requested = ParseShutdownRegression(cmd_line);
+    // Renderer選択は製品仕様としてDX12に固定する。旧移行フラグは互換的に
+    // 受け付けても意味を持たず、通常起動・Editor・Capture・Validationを同じ経路へ揃える。
+    const bool dx12_framework_requested = true;
     std::string capture_frame_name;
     const bool capture_frame_requested =
         ParseCaptureFrame(cmd_line, capture_frame_name);
@@ -152,18 +160,19 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
         static_cast<LONG>(game_launch.window_width),
         static_cast<LONG>(game_launch.window_height) };
 	AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, FALSE);
-	HWND hwnd = CreateWindowExW(0, APPLICATION_NAME, L"", WS_OVERLAPPEDWINDOW,
+	const wchar_t* window_title = dx12_framework_requested
+		? L"3dgp - DX12" : APPLICATION_NAME;
+	HWND hwnd = CreateWindowExW(0, APPLICATION_NAME, window_title,
+		WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT, CW_USEDEFAULT, rc.right - rc.left, rc.bottom - rc.top,
 		NULL, NULL, instance, NULL);
 
     int exit_code = 0;
     bool capture_frame_ok = false;
     std::string capture_frame_summary;
-    Microsoft::WRL::ComPtr<ID3D11Debug> d3d11_debug;
-    Microsoft::WRL::ComPtr<ID3D11InfoQueue> d3d11_info_queue;
-    D3D11LiveObjectFileSummary d3d11_live_report_summary{};
-    HRESULT d3d11_live_report_result = E_NOINTERFACE;
-    bool d3d11_live_report_available = false;
+    std::uint32_t dx12_live_object_lines = 0;
+    std::uint32_t dx12_live_object_detail_lines = 0;
+    bool dx12_live_report_ok = true;
 #if defined(_DEBUG)
     Microsoft::WRL::ComPtr<IDXGIDebug1> dxgi_debug;
     Microsoft::WRL::ComPtr<IDXGIInfoQueue> dxgi_info_queue;
@@ -173,9 +182,10 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
     const bool dxgi_live_report_available =
         AcquireDXGIDebugInterfaces(dxgi_debug, dxgi_info_queue, dxgi_debug_module);
 #endif
-    {
+	{
 	    framework application(hwnd);
         application.configure_content_root(executable_layout.content_root);
+        application.request_dx12_framework();
         if (game_launch.file_found && !profile_benchmark.requested)
         {
             application.configure_standalone_game(
@@ -204,15 +214,25 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
         {
             // 数フレーム描画してから終了させる。
             // 一度も描画せずに終わると、描画経路で作られるリソースを通らない。
-            application.set_automated_smoke_test_frames(
-                automated_smoke_test_frames > 0 ? automated_smoke_test_frames : 60u);
+            // Profile benchmarkと同時指定した場合は、Profile側の終了条件を優先し、
+            // 終了シナリオだけを同じメッセージループの後段で実行する。
+            if (!profile_benchmark.requested)
+            {
+                application.set_automated_smoke_test_frames(
+                    automated_smoke_test_frames > 0 ? automated_smoke_test_frames : 60u);
+            }
             application.request_shutdown_regression();
         }
 
-        if (capture_frame_requested)
+    if (capture_frame_requested)
         {
-            application.set_automated_smoke_test_frames(
-                automated_smoke_test_frames > 0 ? automated_smoke_test_frames : 240u);
+            // プロファイル撮影はプロファイル側で Runtime World の準備完了を
+            // 起点に予約する。別の Smoke Test の終了時刻へ混ぜない。
+            if (!profile_benchmark.requested)
+            {
+                application.set_automated_smoke_test_frames(
+                    automated_smoke_test_frames > 0 ? automated_smoke_test_frames : 240u);
+            }
             application.request_automated_frame_capture(capture_frame_name);
         }
 	    SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&application));
@@ -221,63 +241,30 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
         const bool hide_automated_window = !capture_frame_requested &&
             (automated_smoke_test_frames > 0 || shutdown_regression_requested ||
                 profile_benchmark.requested);
+	    // DX12フレームワークの実機確認は明示的な起動要求なので、起動元が
+	    // SW_HIDEを渡しても画面を表示し、実描画を確認できるようにする。
+        const int requested_show_command = SW_SHOWNORMAL;
 	    exit_code = application.run(
-            hide_automated_window ? SW_HIDE : cmd_show);
+            hide_automated_window ? SW_HIDE : requested_show_command);
         if (capture_frame_requested)
         {
             capture_frame_ok = application.golden_last_capture_ok();
             capture_frame_summary = application.golden_last_capture_summary();
         }
-        d3d11_debug = application.acquire_d3d11_debug();
-        d3d11_info_queue = application.acquire_d3d11_info_queue();
+        dx12_live_object_lines = application.dx12_shutdown_live_object_lines();
+        dx12_live_object_detail_lines = application.dx12_shutdown_live_object_detail_lines();
+        dx12_live_report_ok = application.dx12_shutdown_live_object_report_ok();
     }
 
-    // ReportLiveDeviceObjects が出す行だけを測りたいので、直前に古い警告を捨てる。
-    // 出力後は WriteD3D11LiveObjectReportFile が全件を書いてから Clear する。
-    if (d3d11_info_queue) d3d11_info_queue->ClearStoredMessages();
-    if (d3d11_debug)
+    if (shutdown_regression_requested &&
+        (!dx12_live_report_ok || dx12_live_object_lines != 0 ||
+            dx12_live_object_detail_lines != 0) && exit_code == 0)
     {
-        d3d11_live_report_available = true;
-        d3d11_live_report_result = d3d11_debug->ReportLiveDeviceObjects(
-            D3D11_RLDO_SUMMARY | D3D11_RLDO_DETAIL | D3D11_RLDO_IGNORE_INTERNAL);
-        d3d11_live_report_summary = WriteD3D11LiveObjectReportFile(
-            d3d11_info_queue.Get(), d3d11_live_report_available,
-            d3d11_live_report_result);
-        std::fprintf(stderr, "D3D11 Live Object Report: %s (0x%08lx)\n",
-            SUCCEEDED(d3d11_live_report_result) ? "completed" : "failed",
-            static_cast<unsigned long>(d3d11_live_report_result));
-        std::fprintf(stderr,
-            "D3D11 Live Object Details: %llu lines, summary ",
-            static_cast<unsigned long long>(
-                d3d11_live_report_summary.live_object_detail_lines));
-        if (d3d11_live_report_summary.live_object_summary_found)
-        {
-            std::fprintf(stderr, "%llu",
-                static_cast<unsigned long long>(
-                    d3d11_live_report_summary.live_object_summary_count));
-        }
-        else
-        {
-            std::fprintf(stderr, "unknown");
-        }
-        std::fprintf(stderr,
-            " (%llu info queue messages, Saved/Validation/D3D11LiveObjects.txt)\n",
-            static_cast<unsigned long long>(
-                d3d11_live_report_summary.readable_messages));
-        if (FAILED(d3d11_live_report_result) && exit_code == 0) exit_code = 73;
+        exit_code = 75;
     }
-    else
-    {
-        d3d11_live_report_summary = WriteD3D11LiveObjectReportFile(
-            d3d11_info_queue.Get(), d3d11_live_report_available,
-            d3d11_live_report_result);
-    }
-    d3d11_info_queue.Reset();
-    d3d11_debug.Reset();
 
 #if defined(_DEBUG)
-    // D3D11 Debug 自身が Device を生かす参照を手放したあとで、
-    // プロセス全体を追跡する DXGI から最終確認する。
+    // DX12 Device の解放後にプロセス全体を追跡する DXGI から最終確認する。
     if (dxgi_live_report_available && dxgi_debug && dxgi_info_queue)
     {
         dxgi_info_queue->ClearStoredMessages(DXGI_DEBUG_ALL);
@@ -334,23 +321,10 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
             report << "REPLAY_RUNTIME_SMOKE 1\n";
             report << "RENDERED_FRAMES " << automated_smoke_test_frames << '\n';
             report << "EXIT_CODE " << exit_code << '\n';
-            report << "D3D11_DEBUG_AVAILABLE " << (d3d11_live_report_available ? 1 : 0) << '\n';
-            report << "D3D11_LIVE_REPORT_HRESULT 0x" << std::hex << std::setw(8)
-                << std::setfill('0') << static_cast<unsigned long>(
-                    d3d11_live_report_result) << '\n';
-            report << std::dec << std::setfill(' ');
-            report << "D3D11_LIVE_OBJECT_DETAIL_LINES "
-                << d3d11_live_report_summary.live_object_detail_lines << '\n';
-            report << "D3D11_LIVE_OBJECT_SUMMARY_COUNT ";
-            if (d3d11_live_report_summary.live_object_summary_found)
-            {
-                report << d3d11_live_report_summary.live_object_summary_count;
-            }
-            else
-            {
-                report << "UNKNOWN";
-            }
-            report << '\n';
+            report << "DX12_LIVE_REPORT_OK " << (dx12_live_report_ok ? 1 : 0) << '\n';
+            report << "D3D12_LIVE_OBJECT_LINES " << dx12_live_object_lines << '\n';
+            report << "D3D12_LIVE_OBJECT_DETAIL_LINES "
+                << dx12_live_object_detail_lines << '\n';
         }
     }
 	if (SUCCEEDED(com_result)) CoUninitialize();

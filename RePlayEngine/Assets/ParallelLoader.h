@@ -11,8 +11,8 @@
 // ロード専用の小さな並列実行ヘルパー。
 // job_count 個の仕事を worker_count 本のスレッドへ動的に分配し、全完了を待つ。
 // - 各ワーカーはテクスチャ読込(WIC/DDS=COM)に備えて CoInitializeEx を呼ぶ。
-// - ID3D11Device::Create系はスレッドセーフなのでモデル/テクスチャ生成に使える。
-//   即時コンテキスト(ID3D11DeviceContext)は絶対に触らないこと。
+// - GPU resource upload は描画スレッド側へ集約し、ここでは CPU ロードだけを並列化する。
+//   GPU command list はワーカーから触らないこと。
 // - job 内の例外は呼び出し側で吸収しておくこと(ここでは捕捉しない。)。
 namespace ReplayEngine::Assets
 {

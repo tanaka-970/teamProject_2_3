@@ -198,13 +198,19 @@ void framework::initialize_runtime_services()
     object_scene.Services().SetSceneFlow(nullptr);
     object_scene.Services().SetAudio(&object_audio_system);
 
-    if (!standalone_game_mode) refresh_csharp_scripts();
+    if (!standalone_game_mode)
+    {
+        refresh_csharp_scripts();
+    }
 
     // シェーダ資産の走査。
     //
     // ここへ置くのは、Console のログ経路が既に使える状態だから。
     // まだ描画には使わないので、失敗しても他へ影響しない。
-    if (!standalone_game_mode) scan_shader_library();
+    if (!standalone_game_mode)
+    {
+        scan_shader_library();
+    }
 
     object_bound_world_instance = object_runtime_scenes.ActiveWorldID();
 }

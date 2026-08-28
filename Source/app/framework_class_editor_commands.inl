@@ -76,6 +76,8 @@
             }
             if (shortcut_pressed && wparam == 'D')
             {
+                // Motion Workspace の Ctrl+D は Key 複製が持つ。GameObject を巻き添えにしない。
+                if (active_editor_workspace == editor_workspace::motion) return 0;
                 if (project_browser_focused && !project_selected_entry_path.empty())
                     project_duplicate_entry(project_selected_entry_path);
                 else
@@ -93,6 +95,8 @@
                 // Project WindowにFocusがある時、SceneのGameObject Copy/Pasteへ
                 // 誤爆させない。Project AssetはCtrl+D/Drag Moveを使う。
                 if (project_browser_focused) return 0;
+                // Motion Workspace の Ctrl+C / Ctrl+V は Key の複写が持つ。
+                if (active_editor_workspace == editor_workspace::motion) return 0;
                 std::string clipboard_error;
                 if (wparam == 'C')
                 {
@@ -121,6 +125,8 @@
             {
                 // Atlas Editor 内の Delete/Backspace は Region 削除へ渡す。
                 if (sprite_atlas_editor_loaded && sprite_atlas_editor_keyboard_focus) return 0;
+                // Motion Workspace の Delete は Key 削除が持つ。GameObject を消さない。
+                if (active_editor_workspace == editor_workspace::motion) return 0;
                 if (project_browser_focused &&
                     selected_editor_object == editor_selection::asset &&
                     !project_selected_entry_path.empty())
@@ -311,9 +317,15 @@
             }
             break;
         case WM_MOUSEWHEEL:
-            ui_mouse_wheel_delta += static_cast<float>(GET_WHEEL_DELTA_WPARAM(wparam)) /
+        {
+            const float wheel_notches =
+                static_cast<float>(GET_WHEEL_DELTA_WPARAM(wparam)) /
                 static_cast<float>(WHEEL_DELTA);
+            ui_mouse_wheel_delta += wheel_notches;
+            // Script から読めるよう InputState 側にも積む。次の BeginFrame で確定する。
+            game_input.AccumulateWheel(wheel_notches);
             break;
+        }
         case WM_KEYDOWN:
             if (scene_manager.OnKeyDown(wparam))
             {
@@ -361,11 +373,6 @@ private:
     void store_debug_mesh_world(DirectX::XMFLOAT4X4& world) const;
 
     // SSAO/SSR/TAAが共有するフレーム定数を作ってb9へ載せる。
-    void update_frame_constants(const DirectX::XMMATRIX& view,
-        const DirectX::XMMATRIX& projection, float elapsed_time,
-        bool advance_effect_time = true);
-    ID3D11PixelShader* skinned_forward_shader(int shading) const;
-    ID3D11PixelShader* static_forward_shader(int shading) const;
     ReplayEngine::Rendering::ShaderLightingModel deferred_lighting_model(
         int shading) const;
     void bind_gbuffer_material(
@@ -433,6 +440,7 @@ private:
     void draw_screen_space_settings();
     // ポリゴン数・ドローコール数などの描画統計オーバーレイ。
     void draw_render_stats_overlay();
+    void draw_dx12_debug_panel();
     // draw_character_material_controls は draw_shader_inspector へ統合された。
     bool browse_model_asset();
     bool load_model_asset_async(const std::wstring& filename);

@@ -54,17 +54,11 @@ namespace framework_ui_workspace_detail
         return false;
     }
 
-    // 図形マスクの子 Image を選択していても、移動・拡縮は組になったマスク全体へ適用する。
+    // 選択枠は実際に選んだObjectのRectTransformへ一致させる。
+    // 親の図形マスクを動かす場合は親を選び、子Imageを選んだ場合は
+    // 切り抜き内の素材位置・サイズだけを編集する。
     inline Core::GameObject* UITransformEditTarget(Core::GameObject* object) noexcept
     {
-        if (object == nullptr) return nullptr;
-        for (Core::GameObject* parent = object->Parent(); parent != nullptr;
-            parent = parent->Parent())
-        {
-            const UIMaskComponent* mask = parent->GetComponent<UIMaskComponent>();
-            if (mask != nullptr && mask->mask_mode == UIMaskComponent::Shape)
-                return parent;
-        }
         return object;
     }
 
@@ -163,6 +157,20 @@ namespace framework_ui_workspace_detail
     inline int HitResizeBorder(const ImVec2 corners[4], const ImVec2& mouse,
         float handle_radius = 14.0f, float edge_radius = 9.0f) noexcept
     {
+        // 小さい要素では角と辺のハンドルが矩形を覆い尽くし、移動のために
+        // 掴める内側が無くなる。短辺に対する割合で上限を掛けて内側を残す。
+        const auto segment_length = [](const ImVec2& a, const ImVec2& b) noexcept
+        {
+            const float dx = b.x - a.x;
+            const float dy = b.y - a.y;
+            return std::sqrt(dx * dx + dy * dy);
+        };
+        const float shorter_side = (std::min)(
+            segment_length(corners[0], corners[1]),
+            segment_length(corners[1], corners[2]));
+        handle_radius = (std::min)(handle_radius, (std::max)(3.0f, shorter_side * 0.25f));
+        edge_radius = (std::min)(edge_radius, (std::max)(2.0f, shorter_side * 0.2f));
+
         ImVec2 handles[8]{};
         ResizeHandlePoints(corners, handles);
         const int point_handle = HitResizeHandle(handles, mouse, handle_radius);

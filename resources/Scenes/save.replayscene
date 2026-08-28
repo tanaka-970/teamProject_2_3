@@ -25,7 +25,7 @@ OBJECT
     PROPERTY "opacity" float 1
   END_COMPONENT
   COMPONENT "RectTransformComponent" 1
-    STABLE_ID 17
+    STABLE_ID 19
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
@@ -114,7 +114,7 @@ OBJECT
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
-    PROPERTY_COUNT 18
+    PROPERTY_COUNT 19
     PROPERTY "sprite" assetref ""
     PROPERTY "atlas" assetref ""
     PROPERTY "atlas_region" string ""
@@ -128,6 +128,7 @@ OBJECT
     PROPERTY "opacity" float 1
     PROPERTY "fill_amount" float 1
     PROPERTY "fill_method" enum 0
+    PROPERTY "fill_reverse" bool 0
     PROPERTY "blend_mode" enum 0
     PROPERTY "uv_offset" vec2 0 0
     PROPERTY "uv_scale" vec2 1 1
@@ -163,7 +164,7 @@ OBJECT
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
-    PROPERTY_COUNT 18
+    PROPERTY_COUNT 19
     PROPERTY "sprite" assetref ""
     PROPERTY "atlas" assetref "75051fcd391be0ead908e411240f6955"
     PROPERTY "atlas_region" string "hontai"
@@ -177,6 +178,7 @@ OBJECT
     PROPERTY "opacity" float 1
     PROPERTY "fill_amount" float 1
     PROPERTY "fill_method" enum 0
+    PROPERTY "fill_reverse" bool 0
     PROPERTY "blend_mode" enum 0
     PROPERTY "uv_offset" vec2 0 0
     PROPERTY "uv_scale" vec2 1 1
@@ -212,7 +214,7 @@ OBJECT
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
-    PROPERTY_COUNT 18
+    PROPERTY_COUNT 19
     PROPERTY "sprite" assetref ""
     PROPERTY "atlas" assetref "75051fcd391be0ead908e411240f6955"
     PROPERTY "atlas_region" string "ude"
@@ -226,6 +228,7 @@ OBJECT
     PROPERTY "opacity" float 1
     PROPERTY "fill_amount" float 1
     PROPERTY "fill_method" enum 0
+    PROPERTY "fill_reverse" bool 0
     PROPERTY "blend_mode" enum 0
     PROPERTY "uv_offset" vec2 0 0
     PROPERTY "uv_scale" vec2 1 1
@@ -261,7 +264,7 @@ OBJECT
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
-    PROPERTY_COUNT 18
+    PROPERTY_COUNT 19
     PROPERTY "sprite" assetref ""
     PROPERTY "atlas" assetref ""
     PROPERTY "atlas_region" string ""
@@ -275,6 +278,7 @@ OBJECT
     PROPERTY "opacity" float 1
     PROPERTY "fill_amount" float 1
     PROPERTY "fill_method" enum 0
+    PROPERTY "fill_reverse" bool 0
     PROPERTY "blend_mode" enum 0
     PROPERTY "uv_offset" vec2 0 0
     PROPERTY "uv_scale" vec2 1 1
@@ -310,7 +314,7 @@ OBJECT
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
-    PROPERTY_COUNT 18
+    PROPERTY_COUNT 19
     PROPERTY "sprite" assetref ""
     PROPERTY "atlas" assetref ""
     PROPERTY "atlas_region" string ""
@@ -324,6 +328,7 @@ OBJECT
     PROPERTY "opacity" float 1
     PROPERTY "fill_amount" float 1
     PROPERTY "fill_method" enum 0
+    PROPERTY "fill_reverse" bool 0
     PROPERTY "blend_mode" enum 0
     PROPERTY "uv_offset" vec2 0 0
     PROPERTY "uv_scale" vec2 1 1
@@ -359,8 +364,8 @@ OBJECT
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
-    PROPERTY_COUNT 18
-    PROPERTY "sprite" assetref "26a27438bd1c1ae6f32d64fb6d88b607"
+    PROPERTY_COUNT 19
+    PROPERTY "sprite" assetref "4895d90a3b03c22cfcbbc684c56f9431"
     PROPERTY "atlas" assetref ""
     PROPERTY "atlas_region" string ""
     PROPERTY "color" color 1 1 1 1
@@ -373,6 +378,7 @@ OBJECT
     PROPERTY "opacity" float 1
     PROPERTY "fill_amount" float 1
     PROPERTY "fill_method" enum 0
+    PROPERTY "fill_reverse" bool 0
     PROPERTY "blend_mode" enum 0
     PROPERTY "uv_offset" vec2 0 0
     PROPERTY "uv_scale" vec2 1 1

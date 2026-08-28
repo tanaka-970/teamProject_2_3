@@ -271,7 +271,7 @@ framework::model_source_format framework::resolve_model_source(
 
 gltf_model* framework::resolve_object_gltf(const std::string& asset_guid)
 {
-    if (asset_guid.empty() || !device) return nullptr;
+    if (asset_guid.empty()) return nullptr;
     if (object_mesh_failures.find(asset_guid) != object_mesh_failures.end()) return nullptr;
 
     std::filesystem::path source;
@@ -296,7 +296,7 @@ gltf_model* framework::resolve_object_gltf(const std::string& asset_guid)
         // 参考実装の Repository と同じく、モデル本体を Object ごとに複製しない。
         const auto loaded = gltf_model_cache.Load(source, [this, source]
         {
-            return std::make_shared<gltf_model>(device.Get(), source.string());
+            return std::make_shared<gltf_model>(source.string());
         });
         if (!loaded || !loaded->IsLoaded())
         {
@@ -323,8 +323,6 @@ skinned_mesh* framework::resolve_object_mesh(const std::string& asset_guid)
     // 1) Asset 未指定。Editor で MeshRenderer を付けただけの状態はこれになる。
     //    正常な状態なので警告も出さず、静かに描画対象から外す。
     if (asset_guid.empty()) return nullptr;
-    if (!device) return nullptr;
-
     // 2) 読み込み済みならそれを返す。キャッシュには有効なメッシュしか入らない。
     const auto cached = object_mesh_cache.find(asset_guid);
     if (cached != object_mesh_cache.end()) return cached->second.get();
@@ -356,7 +354,7 @@ skinned_mesh* framework::resolve_object_mesh(const std::string& asset_guid)
     std::unique_ptr<skinned_mesh> loaded;
     try
     {
-        loaded = std::make_unique<skinned_mesh>(device.Get(), source.string().c_str());
+        loaded = std::make_unique<skinned_mesh>(source.string().c_str(), false, 0.0f);
     }
     catch (...)
     {
@@ -377,18 +375,25 @@ skinned_mesh* framework::resolve_object_mesh(const std::string& asset_guid)
 }
 static_mesh* framework::resolve_builtin_primitive_mesh(const std::string& builtin_id)
 {
-    if (!device || builtin_id.rfind("builtin:", 0) != 0) return nullptr;
+    if (builtin_id.rfind("builtin:", 0) != 0) return nullptr;
     const auto cached = builtin_primitive_mesh_cache.find(builtin_id);
     if (cached != builtin_primitive_mesh_cache.end()) return cached->second.get();
 
     std::vector<static_mesh::vertex> vertices;
     std::vector<std::uint32_t> indices;
     if (!BuildBuiltinPrimitive(builtin_id, vertices, indices)) return nullptr;
-    auto mesh = std::make_unique<static_mesh>(device.Get(), vertices, indices);
+    auto mesh = std::make_unique<static_mesh>(vertices, indices);
     if (!mesh || !mesh->is_loaded()) return nullptr;
     static_mesh* raw = mesh.get();
     builtin_primitive_mesh_cache.emplace(builtin_id, std::move(mesh));
     return raw;
+}
+
+bool framework::build_builtin_primitive_cpu(const std::string& builtin_id,
+    std::vector<static_mesh::vertex>& vertices,
+    std::vector<std::uint32_t>& indices) const
+{
+    return BuildBuiltinPrimitive(builtin_id, vertices, indices);
 }
 
 const ReplayEngine::Rendering::MaterialAsset* framework::resolve_object_material(

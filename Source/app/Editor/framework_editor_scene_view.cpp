@@ -14,8 +14,6 @@
 #include "../../RePlayEngine/Scripting/Core/ScriptRuntime.h"
 #include "../../RePlayEngine/Scene/Serialization/SceneData.h"
 #include "../../RePlayEngine/Scene/Serialization/SceneSerializer.h"
-#include "shader.h"
-#include "texture.h"
 #include "skinned_mesh.h"
 
 #include <algorithm>

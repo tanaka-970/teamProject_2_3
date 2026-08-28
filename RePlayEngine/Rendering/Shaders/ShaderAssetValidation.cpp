@@ -620,7 +620,7 @@ namespace ReplayEngine::Rendering::Validation
             check.Expect(all_unique, "200 回連続で一意な ID を作れる");
         }
 
-        // ---- 14. 走査から D3DCompile まで通す --------------------------------
+        // ---- 14. 走査から DXC まで通す --------------------------------
         //
         // ここが今回の本題。
         // 「#pragma property を書くと、それが cbuffer になって、

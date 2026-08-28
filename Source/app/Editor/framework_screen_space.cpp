@@ -138,10 +138,42 @@ void framework::draw_screen_space_settings()
             ImGui::Text("影の描画コール: %d", shadow_stats.shadow_draw_calls);
             ImGui::Text("影付き Spot %d / Point %d",
                 shadow_stats.spot_shadow_lights, shadow_stats.point_shadow_lights);
+            ImGui::Text("Effect Stack の面消しを反映: %d", shadow_stats.coverage_casters);
+            if (shadow_stats.coverage_unsupported > 0)
+            {
+                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f),
+                    "影で再現できない面消し Effect: %d", shadow_stats.coverage_unsupported);
+                ImGui::TextDisabled("投げ縄/画像マスクの範囲、5個目以降、別々のマスク画像が対象です");
+            }
+            const int missing_bounds = shadow_stats.missing_bounds_primitive +
+                shadow_stats.missing_bounds_static + shadow_stats.missing_bounds_landscape;
+            ImGui::Text("bounding_box 未設定: Primitive %d / 静的 %d / Landscape %d",
+                shadow_stats.missing_bounds_primitive,
+                shadow_stats.missing_bounds_static,
+                shadow_stats.missing_bounds_landscape);
+            if (missing_bounds > 0)
+                ImGui::TextDisabled("影ボリュームの選別を掛けずに必ず描きます (影は正しく出ます)");
             if (shadow_stats.TotalCasters() == 0 && shadow_stats.directional_shadow_rendered)
             {
                 ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f),
                     "キャスターが 0 件です (Cast Shadow か影の最遠距離を確認)");
+            }
+
+            // source_path がフォルダのままの Asset は影以前に通常描画へも出ない。
+            const std::vector<const ReplayEngine::Assets::AssetRecord*> folder_assets =
+                asset_database.FindFolderSourcePaths();
+            if (!folder_assets.empty())
+            {
+                ImGui::Separator();
+                ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.4f, 1.0f),
+                    "source が ファイルではない Asset: %d 件",
+                    static_cast<int>(folder_assets.size()));
+                ImGui::TextDisabled("拡張子が無いのでファイル名を復元できません。登録し直してください");
+                for (const ReplayEngine::Assets::AssetRecord* record : folder_assets)
+                {
+                    ImGui::BulletText("%s  (%s)", record->display_name.c_str(),
+                        record->source_path.generic_u8string().c_str());
+                }
             }
             ImGui::TreePop();
         }

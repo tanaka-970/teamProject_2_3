@@ -95,7 +95,7 @@ namespace ReplayEngine::Rendering
             const int destination = Components(target);
             if (source == 1 && destination > 1)
             {
-                // FXC (D3DCompile / Shader Model 5) では float4(x) のような
+                // 旧 Shader Model 5 コンパイラ では float4(x) のような
                 // 1 引数 vector constructor を scalar splat として扱えない。
                 // 明示的に必要な成分数だけ複製して、DX11/FXC でも確実に通す。
                 std::ostringstream stream;

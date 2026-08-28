@@ -130,6 +130,10 @@ namespace ReplayEngine::Core::Detail
                     .AsEnum({ "水平", "垂直", "円形 360" })
                     .Animation(Animatable::Step));
             PropertyRegistry::Register<UIImageComponent>(
+                MakeProperty("fill_reverse", &UIImageComponent::fill_reverse)
+                    .Display("塗りを反転")
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<UIImageComponent>(
                 MakeProperty("blend_mode", &UIImageComponent::blend_mode)
                     .Display("ブレンド")
                     .AsEnum({ "通常", "加算", "乗算", "スクリーン" })
@@ -637,6 +641,51 @@ namespace ReplayEngine::Core::Detail
             PropertyRegistry::Register<UIScrollViewComponent>(MakeProperty("scrollbar_track_color", &UIScrollViewComponent::scrollbar_track_color).Display("トラック色").AsColor());
             PropertyRegistry::Register<UIScrollViewComponent>(MakeProperty("scrollbar_thumb_color", &UIScrollViewComponent::scrollbar_thumb_color).Display("つまみ色").AsColor());
             PropertyRegistry::Register<UIScrollViewComponent>(MakeProperty("scrollbar_corner_radius", &UIScrollViewComponent::scrollbar_corner_radius).Display("角丸").Range(0.0, 32.0).Step(0.5));
+            PropertyRegistry::Register<UIScrollViewComponent>(
+                MakeAccessorProperty<UIScrollViewComponent>("horizontal_overflow", PropertyType::Bool,
+                    [](const UIScrollViewComponent& component) { return PropertyValue::MakeBool(component.horizontal_overflow); },
+                    [](UIScrollViewComponent&, const PropertyValue&) {})
+                .Display("横 Overflow").ReadOnly().RuntimeOnly().NotSerializable().Advanced());
+            PropertyRegistry::Register<UIScrollViewComponent>(
+                MakeAccessorProperty<UIScrollViewComponent>("vertical_overflow", PropertyType::Bool,
+                    [](const UIScrollViewComponent& component) { return PropertyValue::MakeBool(component.vertical_overflow); },
+                    [](UIScrollViewComponent&, const PropertyValue&) {})
+                .Display("縦 Overflow").ReadOnly().RuntimeOnly().NotSerializable().Advanced());
+            PropertyRegistry::Register<UIScrollViewComponent>(
+                MakeAccessorProperty<UIScrollViewComponent>("horizontal_normalized", PropertyType::Float,
+                    [](const UIScrollViewComponent& component) { return PropertyValue::MakeFloat(component.horizontal_normalized); },
+                    [](UIScrollViewComponent&, const PropertyValue&) {})
+                .Display("横 Normalized").ReadOnly().RuntimeOnly().NotSerializable().Advanced());
+            PropertyRegistry::Register<UIScrollViewComponent>(
+                MakeAccessorProperty<UIScrollViewComponent>("vertical_normalized", PropertyType::Float,
+                    [](const UIScrollViewComponent& component) { return PropertyValue::MakeFloat(component.vertical_normalized); },
+                    [](UIScrollViewComponent&, const PropertyValue&) {})
+                .Display("縦 Normalized").ReadOnly().RuntimeOnly().NotSerializable().Advanced());
+
+            ComponentRegistry::Register<UISliderComponent>(
+                ComponentTypeInfo::Describe("Slider", "UI")
+                    .WithTooltip("Pointer drag と UI navigation に対応する値入力です。")
+                    .Requires<RectTransformComponent>()
+                    .Recommends<UISelectableComponent>());
+            PropertyRegistry::Register<UISliderComponent>(MakeProperty("minimum", &UISliderComponent::minimum).Display("最小値"));
+            PropertyRegistry::Register<UISliderComponent>(MakeProperty("maximum", &UISliderComponent::maximum).Display("最大値"));
+            // 生メンバーへ直接書くと範囲外の値が残るため、必ず SetValue を通す。
+            PropertyRegistry::Register<UISliderComponent>(
+                MakeAccessorProperty<UISliderComponent>("value", PropertyType::Float,
+                    [](const UISliderComponent& c) { return PropertyValue::MakeFloat(c.value); },
+                    [](UISliderComponent& c, const PropertyValue& v) { c.SetValue(v.AsFloat(c.value)); })
+                .Display("値"));
+            PropertyRegistry::Register<UISliderComponent>(MakeProperty("whole_numbers", &UISliderComponent::whole_numbers).Display("整数のみ"));
+            PropertyRegistry::Register<UISliderComponent>(MakeProperty("direction", &UISliderComponent::direction).Display("方向").AsEnum({ "左から右", "右から左", "下から上", "上から下" }));
+            PropertyRegistry::Register<UISliderComponent>(MakeProperty("interactable", &UISliderComponent::interactable).Display("操作可能"));
+            PropertyRegistry::Register<UISliderComponent>(MakeProperty("fill_image", &UISliderComponent::fill_image).Display("Fill Image"));
+            PropertyRegistry::Register<UISliderComponent>(MakeProperty("handle_rect", &UISliderComponent::handle_rect).Display("Handle Rect"));
+            PropertyRegistry::Register<UISliderComponent>(MakeProperty("keyboard_step", &UISliderComponent::keyboard_step).Display("キー操作量").Range(0.0001, 1000000.0));
+            PropertyRegistry::Register<UISliderComponent>(
+                MakeAccessorProperty<UISliderComponent>("normalized_value", PropertyType::Float,
+                    [](const UISliderComponent& component) { return PropertyValue::MakeFloat(component.NormalizedValue()); },
+                    [](UISliderComponent&, const PropertyValue&) {})
+                .Display("Normalized 値").ReadOnly().RuntimeOnly().NotSerializable().Advanced());
 
             ComponentRegistry::Register<UIInputFieldComponent>(
                 ComponentTypeInfo::Describe("Input Field", "UI")
@@ -654,6 +703,26 @@ namespace ReplayEngine::Core::Detail
             PropertyRegistry::Register<UIInputFieldComponent>(MakeProperty("max_characters", &UIInputFieldComponent::max_characters).Display("Max Characters").Range(0.0, 65535.0).Step(1.0));
             PropertyRegistry::Register<UIInputFieldComponent>(MakeProperty("password", &UIInputFieldComponent::password).Display("Password"));
             PropertyRegistry::Register<UIInputFieldComponent>(MakeProperty("read_only", &UIInputFieldComponent::read_only).Display("Read Only"));
+            PropertyRegistry::Register<UIInputFieldComponent>(
+                MakeAccessorProperty<UIInputFieldComponent>("caret_index", PropertyType::Int,
+                    [](const UIInputFieldComponent& component) { return PropertyValue::MakeInt(component.caret_index); },
+                    [](UIInputFieldComponent&, const PropertyValue&) {})
+                .Display("Caret Index").ReadOnly().RuntimeOnly().NotSerializable().Advanced());
+            PropertyRegistry::Register<UIInputFieldComponent>(
+                MakeAccessorProperty<UIInputFieldComponent>("selection_start", PropertyType::Int,
+                    [](const UIInputFieldComponent& component) { return PropertyValue::MakeInt(component.SelectionStart()); },
+                    [](UIInputFieldComponent&, const PropertyValue&) {})
+                .Display("Selection Start").ReadOnly().RuntimeOnly().NotSerializable().Advanced());
+            PropertyRegistry::Register<UIInputFieldComponent>(
+                MakeAccessorProperty<UIInputFieldComponent>("selection_end", PropertyType::Int,
+                    [](const UIInputFieldComponent& component) { return PropertyValue::MakeInt(component.SelectionEnd()); },
+                    [](UIInputFieldComponent&, const PropertyValue&) {})
+                .Display("Selection End").ReadOnly().RuntimeOnly().NotSerializable().Advanced());
+            PropertyRegistry::Register<UIInputFieldComponent>(
+                MakeAccessorProperty<UIInputFieldComponent>("ime_composing", PropertyType::Bool,
+                    [](const UIInputFieldComponent& component) { return PropertyValue::MakeBool(component.ime_composing); },
+                    [](UIInputFieldComponent&, const PropertyValue&) {})
+                .Display("IME Composition").ReadOnly().RuntimeOnly().NotSerializable().Advanced());
 
             ComponentRegistry::Register<UIMaskComponent>(
                 ComponentTypeInfo::Describe("Mask", "UI")

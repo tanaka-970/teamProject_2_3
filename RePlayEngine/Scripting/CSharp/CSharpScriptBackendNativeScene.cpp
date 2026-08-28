@@ -430,4 +430,62 @@ namespace ReplayEngine::Scripting::CSharp::Detail
     {
         return g_runtime_context != nullptr && g_runtime_context->SceneFlowAvailable() ? 1 : 0;
     }
+
+    int NativePhysicsQuery(NativePhysicsQueryRequest request,
+        NativePhysicsQueryHit* output, int capacity, int* count) noexcept
+    {
+        if (count == nullptr || capacity < 0 || (capacity > 0 && output == nullptr))
+            return StatusCode(RuntimeStatus::InvalidArgument);
+        *count = 0;
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+
+        Runtime::PhysicsQueryRequest native_request;
+        native_request.kind = static_cast<Runtime::PhysicsQueryKind>(request.kind);
+        native_request.point_a = request.point_a;
+        native_request.point_b = request.point_b;
+        native_request.direction = request.direction;
+        native_request.rotation = request.rotation;
+        native_request.half_extents = request.half_extents;
+        native_request.radius = request.radius;
+        native_request.max_distance = request.max_distance;
+        native_request.layer = request.layer;
+        native_request.mask = request.mask;
+        native_request.ignore = request.ignore;
+
+        std::vector<Scene::PhysicsQueryHit> hits;
+        const RuntimeStatus status = g_runtime_context->PhysicsQuery(native_request, hits);
+        if (status != RuntimeStatus::Ok) return StatusCode(status);
+        *count = static_cast<int>(hits.size());
+        const int written = (std::min)(capacity, *count);
+        for (int index = 0; index < written; ++index)
+        {
+            const Scene::PhysicsQueryHit& source = hits[static_cast<std::size_t>(index)];
+            NativePhysicsQueryHit& target = output[index];
+            target.point = source.point;
+            target.normal = source.normal;
+            target.distance = source.distance;
+            target.fraction = source.fraction;
+            target.collider_id = source.source.collider;
+            target.valid = source.valid ? 1 : 0;
+            if (source.source.object.Valid())
+                target.object = g_runtime_context->FindByObjectID(source.source.object);
+        }
+        return StatusCode(RuntimeStatus::Ok);
+    }
+
+    int NativeGetSceneTransitionState(float* progress, int* in_progress,
+        int* transition_status) noexcept
+    {
+        if (progress == nullptr || in_progress == nullptr || transition_status == nullptr)
+            return StatusCode(RuntimeStatus::InvalidArgument);
+        *progress = 0.0f;
+        *in_progress = 0;
+        *transition_status = StatusCode(RuntimeStatus::ServiceUnavailable);
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+
+        *progress = g_runtime_context->SceneTransitionProgress();
+        *in_progress = g_runtime_context->SceneTransitionInProgress() ? 1 : 0;
+        *transition_status = StatusCode(g_runtime_context->SceneTransitionStatus());
+        return StatusCode(RuntimeStatus::Ok);
+    }
 }

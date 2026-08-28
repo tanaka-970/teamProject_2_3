@@ -1,4 +1,4 @@
-#include "ShaderConstantPacker.h"
+﻿#include "ShaderConstantPacker.h"
 
 #include <cstring>
 #include <sstream>
@@ -119,7 +119,7 @@ namespace ReplayEngine::Rendering
         // X3568 "unknown pragma ignored" を黙らせる。
         //
         // replay_guid / replay_name / property … は全部こちらの拡張なので、
-        // fxc から見れば当然「知らない pragma」で、1 行ごとに警告が出る。
+        // DXC から見れば「知らない pragma」なので、1 行ごとに警告が出る。
         // 放っておくと診断欄がこれだけで埋まり、本当のエラーが埋もれる。
         // 警告を消すこと自体が目的ではなく、見るべきものを見えるようにするため。
         //
