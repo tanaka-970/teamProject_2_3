@@ -83,19 +83,19 @@ namespace ReplayEngine::Project
             float ssao_blur_sharpness = 1.0f;
             bool ssao_blur_enabled = true;
             float ssr_max_distance = 40.0f;
-            float ssr_thickness = 0.4f;
+            float ssr_thickness = 0.55f;
             float ssr_stride = 3.0f;
-            int ssr_max_step = 48;
-            int ssr_refine_step = 5;
-            float ssr_max_roughness = 0.65f;
+            int ssr_max_step = 32;
+            int ssr_refine_step = 4;
+            float ssr_max_roughness = 0.6f;
             float ssr_intensity = 1.0f;
-            float ssr_edge_fade = 0.12f;
-            float ssr_ray_bias = 1.0f;
-            float ssr_resolve_radius = 12.0f;
-            int ssr_resolve_tap_count = 8;
+            float ssr_edge_fade = 0.08f;
+            float ssr_ray_bias = 0.001f;
+            float ssr_resolve_radius = 0.0f;
+            int ssr_resolve_tap_count = 1;
             float taa_blend = 0.88f;
             float taa_variance_gamma = 1.0f;
-            float taa_sharpness = 0.35f;
+            float taa_sharpness = 0.0f;
             float taa_max_velocity = 48.0f;
         };
 

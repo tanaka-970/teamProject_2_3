@@ -297,21 +297,21 @@ void framework::render(float elapsed_time)
                 clamp_finite(ssao_pass.blur_sharpness, 1.0f, 0.0f, 1.0f), 0.0f, 0.0f };
             static_scene.post_process.ssr_params0 = {
                 clamp_finite(ssr_pass.max_distance, 40.0f, 1.0f, 200.0f),
-                clamp_finite(ssr_pass.thickness, 0.4f, 0.01f, 2.0f),
+                clamp_finite(ssr_pass.thickness, 0.55f, 0.01f, 2.0f),
                 clamp_finite(ssr_pass.stride, 3.0f, 1.0f, 16.0f),
                 static_cast<float>((std::max)(4, (std::min)(64, ssr_pass.max_step))) };
             static_scene.post_process.ssr_params1 = {
                 static_cast<float>((std::max)(0, (std::min)(8, ssr_pass.refine_step))),
-                clamp_finite(ssr_pass.max_roughness, 0.65f, 0.05f, 1.0f),
-                clamp_finite(ssr_pass.edge_fade, 0.12f, 0.01f, 0.4f),
-                clamp_finite(ssr_pass.ray_bias, 1.0f, 0.0f, 4.0f) };
+                clamp_finite(ssr_pass.max_roughness, 0.6f, 0.05f, 1.0f),
+                clamp_finite(ssr_pass.edge_fade, 0.08f, 0.01f, 0.4f),
+                clamp_finite(ssr_pass.ray_bias, 0.001f, 0.0f, 4.0f) };
             static_scene.post_process.ssr_params2 = {
-                clamp_finite(ssr_pass.resolve_radius, 12.0f, 0.0f, 40.0f),
+                clamp_finite(ssr_pass.resolve_radius, 0.0f, 0.0f, 40.0f),
                 static_cast<float>((std::max)(1, (std::min)(16, ssr_pass.resolve_tap_count))),
                 0.0f, 0.0f };
             static_scene.post_process.taa_params0 = {
                 clamp_finite(taa_pass.variance_gamma, 1.0f, 0.25f, 3.0f),
-                clamp_finite(taa_pass.sharpness, 0.35f, 0.0f, 1.0f),
+                clamp_finite(taa_pass.sharpness, 0.0f, 0.0f, 1.0f),
                 clamp_finite(taa_pass.max_velocity, 48.0f, 4.0f, 200.0f),
                 0.0f };
             static_scene.post_process.color_filter = clamp_color(post_settings.color_filter);
