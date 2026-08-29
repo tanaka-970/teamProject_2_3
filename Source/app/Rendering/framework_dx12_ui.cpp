@@ -2308,7 +2308,8 @@ bool framework::build_dx12_ui_for_scene(
 }
 
 bool framework::build_dx12_scene_effects(
-    ReplayEngine::Rendering::DX12::D3D12SceneEffectSubmission& submission)
+    ReplayEngine::Rendering::DX12::D3D12SceneEffectSubmission& submission,
+    const ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission& static_scene)
 {
     using namespace ReplayEngine;
     using namespace ReplayEngine::Rendering::DX12;
@@ -2317,6 +2318,7 @@ bool framework::build_dx12_scene_effects(
     using ReplayEngine::UI::UIEffectRegionScope;
     using ReplayEngine::UI::UIEffectRegionShape;
 
+    if (!dx12_device_context.CacheMeshLocalBounds(static_scene)) return false;
     submission.Clear();
     std::unordered_set<std::string> texture_keys;
     const auto register_effect_texture = [&](const Assets::AssetRecord* record)
@@ -2465,6 +2467,44 @@ bool framework::build_dx12_scene_effects(
         return !output.empty();
     };
 
+    const D3D12_VIEWPORT model_viewport{
+        0.0f, 0.0f, static_cast<float>(dx12_device_context.Width()),
+        static_cast<float>(dx12_device_context.Height()), 0.0f, 1.0f };
+    const auto model_screen_rect = [&](std::uint64_t owner_id,
+        D3D12_RECT& result) noexcept
+    {
+        bool found = false;
+        const auto accumulate = [&](const D3D12StaticDrawItem& draw, bool skinned)
+        {
+            if (draw.owner_id != owner_id) return;
+            D3D12MeshLocalBounds bounds;
+            const bool has_bounds = skinned
+                ? dx12_device_context.GetSkinnedMeshLocalBounds(draw.mesh_key, bounds)
+                : dx12_device_context.GetStaticMeshLocalBounds(draw.mesh_key, bounds);
+            if (!has_bounds) return;
+            D3D12_RECT projected{};
+            if (!CalculateD3D12ScreenRect(bounds, draw.world,
+                frame_constants.view_projection, model_viewport, projected) ||
+                RectIsEmpty(projected))
+                return;
+            if (!found)
+            {
+                result = projected;
+                found = true;
+                return;
+            }
+            result.left = (std::min)(result.left, projected.left);
+            result.top = (std::min)(result.top, projected.top);
+            result.right = (std::max)(result.right, projected.right);
+            result.bottom = (std::max)(result.bottom, projected.bottom);
+        };
+        for (const D3D12StaticDrawItem& draw : static_scene.draws)
+            accumulate(draw, false);
+        for (const D3D12SkinnedDrawItem& draw : static_scene.skinned_draws)
+            accumulate(draw.surface, true);
+        return found;
+    };
+
     Scene::Scene& scene = active_object_scene();
     for (std::size_t object_index = 0; object_index < scene.GameObjectCount(); ++object_index)
     {
@@ -2481,7 +2521,38 @@ bool framework::build_dx12_scene_effects(
                 stack.depth_mode = model->depth_mode;
                 if (fill_effects(model->EffectiveEffects(&asset_database),
                     model->effect_region, stack.owner_id, stack.effects))
+                {
+                    D3D12_RECT model_rect{};
+                    if (model_screen_rect(stack.owner_id, model_rect))
+                    {
+                        const float bleed_limit = std::isfinite(model->max_bleed_pixels)
+                            ? (std::max)(0.0f, model->max_bleed_pixels) : 0.0f;
+                        const DirectX::XMFLOAT4 expansion =
+                            model->ExpandBounds(static_cast<float>(dx12_device_context.Width()),
+                                static_cast<float>(dx12_device_context.Height()), &asset_database);
+                        const DirectX::XMFLOAT4 clamped_expansion{
+                            (std::min)((std::max)(0.0f, expansion.x), bleed_limit),
+                            (std::min)((std::max)(0.0f, expansion.y), bleed_limit),
+                            (std::min)((std::max)(0.0f, expansion.z), bleed_limit),
+                            (std::min)((std::max)(0.0f, expansion.w), bleed_limit) };
+                        stack.scissor = ClampRect({
+                            static_cast<LONG>(std::floor(static_cast<float>(model_rect.left) -
+                                clamped_expansion.x)),
+                            static_cast<LONG>(std::floor(static_cast<float>(model_rect.top) -
+                                clamped_expansion.y)),
+                            static_cast<LONG>(std::ceil(static_cast<float>(model_rect.right) +
+                                clamped_expansion.z)),
+                            static_cast<LONG>(std::ceil(static_cast<float>(model_rect.bottom) +
+                                clamped_expansion.w)) },
+                            dx12_device_context.Width(), dx12_device_context.Height());
+                        const bool full_screen = stack.scissor.left == 0 &&
+                            stack.scissor.top == 0 &&
+                            stack.scissor.right == static_cast<LONG>(dx12_device_context.Width()) &&
+                            stack.scissor.bottom == static_cast<LONG>(dx12_device_context.Height());
+                        stack.scissor_enabled = !RectIsEmpty(stack.scissor) && !full_screen;
+                    }
                     submission.model_effects.push_back(std::move(stack));
+                }
             }
         }
         if (auto* screen = object->GetComponent<Components::ScreenEffectStackComponent>())

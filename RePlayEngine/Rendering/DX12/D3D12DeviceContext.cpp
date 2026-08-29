@@ -71,6 +71,29 @@ namespace ReplayEngine::Rendering::DX12
 
         constexpr std::uint16_t kValidationIndices[] = { 0, 1, 2 };
 
+        template <typename Vertex>
+        D3D12MeshLocalBounds MakeMeshLocalBounds(const std::vector<Vertex>& vertices) noexcept
+        {
+            D3D12MeshLocalBounds result;
+            if (vertices.empty()) return result;
+            result.minimum = vertices.front().position;
+            result.maximum = vertices.front().position;
+            for (const Vertex& vertex : vertices)
+            {
+                result.minimum.x = (std::min)(result.minimum.x, vertex.position.x);
+                result.minimum.y = (std::min)(result.minimum.y, vertex.position.y);
+                result.minimum.z = (std::min)(result.minimum.z, vertex.position.z);
+                result.maximum.x = (std::max)(result.maximum.x, vertex.position.x);
+                result.maximum.y = (std::max)(result.maximum.y, vertex.position.y);
+                result.maximum.z = (std::max)(result.maximum.z, vertex.position.z);
+            }
+            result.valid = std::isfinite(result.minimum.x) &&
+                std::isfinite(result.minimum.y) && std::isfinite(result.minimum.z) &&
+                std::isfinite(result.maximum.x) &&
+                std::isfinite(result.maximum.y) && std::isfinite(result.maximum.z);
+            return result;
+        }
+
         struct DecodedRgbaImage final
         {
             std::vector<std::uint8_t> pixels;
@@ -1262,6 +1285,7 @@ namespace ReplayEngine::Rendering::DX12
         texture_cache_.clear();
         static_texture_failures_.clear();
         static_mesh_cache_.clear();
+        static_mesh_bounds_cache_.clear();
         for (D3D12DescriptorAllocation& sampler : static_samplers_)
         {
             if (sampler.IsValid()) sampler_descriptor_allocator_.Free(sampler);
@@ -1335,12 +1359,75 @@ namespace ReplayEngine::Rendering::DX12
         return true;
     }
 
+    bool D3D12DeviceContext::CacheMeshLocalBounds(
+        const D3D12StaticSceneSubmission& submission) noexcept
+    {
+        try
+        {
+            for (const D3D12StaticMeshSource& source : submission.mesh_sources)
+            {
+                if (source.key.empty()) continue;
+                if (source.replace_existing) static_mesh_bounds_cache_.erase(source.key);
+                if (static_mesh_bounds_cache_.find(source.key) == static_mesh_bounds_cache_.end())
+                {
+                    const D3D12MeshLocalBounds bounds = MakeMeshLocalBounds(source.vertices);
+                    if (bounds.valid) static_mesh_bounds_cache_.emplace(source.key, bounds);
+                }
+            }
+            for (const D3D12SkinnedMeshSource& source : submission.skinned_mesh_sources)
+            {
+                if (source.key.empty()) continue;
+                if (skinned_mesh_bounds_cache_.find(source.key) == skinned_mesh_bounds_cache_.end())
+                {
+                    const D3D12MeshLocalBounds bounds = MakeMeshLocalBounds(source.vertices);
+                    if (bounds.valid) skinned_mesh_bounds_cache_.emplace(source.key, bounds);
+                }
+            }
+        }
+        catch (...)
+        {
+            return false;
+        }
+        return true;
+    }
+
+    bool D3D12DeviceContext::GetStaticMeshLocalBounds(
+        const std::string& key, D3D12MeshLocalBounds& bounds) const noexcept
+    {
+        const auto found = static_mesh_bounds_cache_.find(key);
+        if (found == static_mesh_bounds_cache_.end()) return false;
+        bounds = found->second;
+        return bounds.valid;
+    }
+
+    bool D3D12DeviceContext::GetSkinnedMeshLocalBounds(
+        const std::string& key, D3D12MeshLocalBounds& bounds) const noexcept
+    {
+        const auto found = skinned_mesh_bounds_cache_.find(key);
+        if (found == skinned_mesh_bounds_cache_.end()) return false;
+        bounds = found->second;
+        return bounds.valid;
+    }
+
     bool D3D12DeviceContext::EnsureStaticMesh(
         const D3D12StaticMeshSource& source) noexcept
     {
         if (source.key.empty()) return false;
         if (static_mesh_cache_.find(source.key) != static_mesh_cache_.end()) return true;
         if (source.vertices.empty() || source.indices.empty()) return false;
+        if (static_mesh_bounds_cache_.find(source.key) == static_mesh_bounds_cache_.end())
+        {
+            const D3D12MeshLocalBounds bounds = MakeMeshLocalBounds(source.vertices);
+            if (!bounds.valid) return false;
+            try
+            {
+                static_mesh_bounds_cache_.emplace(source.key, bounds);
+            }
+            catch (...)
+            {
+                return false;
+            }
+        }
         const std::uint64_t vertex_bytes = static_cast<std::uint64_t>(source.vertices.size()) *
             sizeof(D3D12StaticVertex);
         const std::uint64_t index_bytes = static_cast<std::uint64_t>(source.indices.size()) *
@@ -1567,6 +1654,7 @@ namespace ReplayEngine::Rendering::DX12
         for (const auto& entry : texture_cache_)
             if (entry.first.rfind("__dx12_", 0) == 0) ++persistent_textures;
         if (static_mesh_cache_.empty() && skinned_mesh_cache_.empty() &&
+            static_mesh_bounds_cache_.empty() && skinned_mesh_bounds_cache_.empty() &&
             texture_cache_.size() <= persistent_textures && static_texture_failures_.empty() &&
             custom_static_pipelines_.empty() && custom_static_shader_failures_.empty() &&
             scene3d_motion_history_.empty())
@@ -1575,6 +1663,8 @@ namespace ReplayEngine::Rendering::DX12
 
         static_mesh_cache_.clear();
         skinned_mesh_cache_.clear();
+        static_mesh_bounds_cache_.clear();
+        skinned_mesh_bounds_cache_.clear();
         scene3d_motion_history_.clear();
         static_texture_failures_.clear();
         custom_static_pipelines_.clear();
@@ -1616,6 +1706,7 @@ namespace ReplayEngine::Rendering::DX12
             !static_samplers_[0].IsValid() || !static_samplers_[1].IsValid() ||
             !static_samplers_[2].IsValid())
             return false;
+        if (!CacheMeshLocalBounds(submission)) return false;
 
         // Custom ShaderAsset の PSO は遅延コンパイルし、Shader GUID 単位で Cache する。
         // Phase 2 Static ABI に合わずコンパイルできない Shader は失敗として記録し、

@@ -13,6 +13,7 @@ cbuffer MaterialCB : register(b2)
 // Ramp を階調で引くために Directional Light の向きが要る。
 #define DX12_LIGHT_CB_REGISTER b3
 #include "dx12_lighting_common.hlsli"
+#include "gbuffer_common.hlsli"
 
 // BuiltInは自前PSOを持てないため、固有表現をここで分岐して適用する。
 // 効果を足すときはIDを増やし、この関数へ分岐を1つ加える。
@@ -20,23 +21,6 @@ static const uint BUILTIN_EFFECT_NONE = 0u;
 static const uint BUILTIN_EFFECT_PIXELATE = 1u;
 static const uint BUILTIN_EFFECT_TOON = 2u;
 
-float3 ApplyBuiltInEffect(float3 color, float4 screenPosition, float4 params)
-{
-    const uint effect = (uint)(params.x + 0.5f);
-    if (effect == BUILTIN_EFFECT_PIXELATE)
-    {
-        const float cell = max(params.y, 1.0f);
-        const float strength = saturate(params.z);
-        const float2 center = (floor(screenPosition.xy / cell) + 0.5f) * cell;
-        const float2 local = (screenPosition.xy - center) / cell;
-        const float distanceFromCenter = length(local);
-        const float softness = max(fwidth(distanceFromCenter), 0.015f);
-        const float dotMask = 1.0f - smoothstep(0.42f - softness,
-            0.42f + softness, distanceFromCenter);
-        return color * lerp(1.0f, dotMask, strength);
-    }
-    return color;
-}
 Texture2D baseTexture : register(t0);
 Texture2D normalTexture : register(t1);
 Texture2D metallicTexture : register(t2);
@@ -168,7 +152,8 @@ PSOut main(PSIn input)
         albedo.rgb *= rampTexture.Sample(materialSampler, float2(band, 0.5f)).rgb;
     }
 
-    albedo.rgb = ApplyBuiltInEffect(albedo.rgb, input.position, builtinParams);
+    const bool isPixelate = (uint)(builtinParams.x + 0.5f) == BUILTIN_EFFECT_PIXELATE &&
+        builtinParams.z > 0.0f;
     output.base = float4(albedo.rgb, saturate(renderParams.y / 255.0f));
     output.emissive = float4(emissive, 1.0f);
     output.normalDepth = float4(N * 0.5f + 0.5f,
@@ -180,6 +165,17 @@ PSOut main(PSIn input)
 
     // 追加RTはToonのときだけ埋める。他は0で、lighting側もmodelで門を閉じている。
     output.toon = 0.0f;
+    if (isPixelate)
+    {
+        GBufferOut pixelate_output = (GBufferOut)0;
+        pixelate_output.emissive = output.emissive;
+        pixelate_output.normal = output.normalDepth;
+        EncodePixelateSettings(pixelate_output, builtinParams.y, builtinParams.z);
+        output.emissive.a = pixelate_output.emissive.a;
+        output.normalDepth.a = pixelate_output.normal.a;
+        output.toon = float4(saturate(builtinParams.w),
+            builtinParams1.x >= 0.5f ? 1.0f : 0.0f, 0.0f, 0.0f);
+    }
     if (isToon && hasToonParams)
     {
         output.toon.x = Dx12PackColor565(builtinParams1.rgb);
