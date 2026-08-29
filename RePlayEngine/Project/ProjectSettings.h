@@ -169,6 +169,24 @@ namespace ReplayEngine::Project
         AssetReferenceStatus ResolveStartupScene(
             const Assets::AssetDatabase& database) const;
 
+        // ---- Loading Screen Scene --------------------------------------------
+        const std::string& LoadingSceneGuid() const noexcept
+        {
+            return loading_scene_guid_;
+        }
+
+        void SetLoadingSceneGuid(std::string guid)
+        {
+            loading_scene_guid_ = std::move(guid);
+        }
+
+        void ClearLoadingScene() noexcept { loading_scene_guid_.clear(); }
+
+        bool HasLoadingScene() const noexcept { return !loading_scene_guid_.empty(); }
+
+        AssetReferenceStatus ResolveLoadingScene(
+            const Assets::AssetDatabase& database) const;
+
         // ---- Active Scene Flow ----------------------------------------------
         const std::string& SceneFlowGuid() const noexcept { return scene_flow_guid_; }
         void SetSceneFlowGuid(std::string guid) { scene_flow_guid_ = std::move(guid); }
@@ -258,6 +276,7 @@ namespace ReplayEngine::Project
             final_pass_enabled_ = true;
             default_character_prefab_guid_.clear();
             startup_scene_guid_.clear();
+            loading_scene_guid_.clear();
             scene_flow_guid_.clear();
             localization_table_guid_.clear();
             input_action_asset_guid_.clear();
@@ -273,6 +292,7 @@ namespace ReplayEngine::Project
     private:
         std::string default_character_prefab_guid_;
         std::string startup_scene_guid_;
+        std::string loading_scene_guid_;
         std::string scene_flow_guid_;
         std::string localization_table_guid_;
         std::string input_action_asset_guid_;

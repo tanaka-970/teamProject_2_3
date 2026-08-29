@@ -191,6 +191,18 @@ void framework::initialize_object_scene()
     // World の所有者はここで確定し、以降 framework が Scene を値で持つことはない。
     initialize_runtime_services();
 
+    const ReplayEngine::Project::AssetReferenceStatus loading_scene =
+        project_settings.ResolveLoadingScene(asset_database);
+    if (loading_scene.IsResolved())
+    {
+        if (!load_exclusive_scene_from_path(loading_scene.path))
+            push_editor_log("Warning", "Loading Screen Scene の読み込みに失敗しました");
+    }
+    else if (loading_scene.IsMissing())
+    {
+        push_editor_log("Warning", "Loading Screen Scene の Asset が見つかりません");
+    }
+
     //   Editor として起動している間、編集対象は必ず object_scene。
     //   Runtime World が有効になるのは Play (F5) か、--game 起動のときだけ。
     if (object_boot_from_startup_scene) begin_startup_scene();

@@ -221,6 +221,77 @@ void framework::draw_project_settings_panel()
 
     ImGui::Separator();
 
+    // ---- Loading Screen Scene -----------------------------------------------
+    ImGui::TextUnformatted("Loading Screen Scene（ロード画面）");
+    const Project::AssetReferenceStatus loading =
+        project_settings.ResolveLoadingScene(asset_database);
+    const std::string loading_preview = loading.IsMissing()
+        ? std::string("[ Missing Scene ]") : loading.DisplayLabel();
+
+    if (loading.IsMissing())
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.45f, 0.35f, 1.0f));
+    ImGui::SetNextItemWidth(-1.0f);
+    if (ImGui::BeginCombo("##LoadingScene", loading_preview.c_str()))
+    {
+        if (ImGui::Selectable("（未設定）", loading.IsUnset()))
+        {
+            project_settings.ClearLoadingScene();
+            save_project_settings();
+        }
+
+        for (const auto& record : asset_database.Records())
+        {
+            if (record.kind != ReplayEngine::Assets::AssetKind::Scene) continue;
+
+            const bool selected = record.guid == project_settings.LoadingSceneGuid();
+            const std::string label = record.display_name.empty()
+                ? record.source_path.filename().generic_string()
+                : record.display_name;
+            ImGui::PushID(record.guid.c_str());
+            if (ImGui::Selectable(label.c_str(), selected))
+            {
+                project_settings.SetLoadingSceneGuid(record.guid);
+                save_project_settings();
+            }
+            if (selected) ImGui::SetItemDefaultFocus();
+            ImGui::PopID();
+        }
+        ImGui::EndCombo();
+    }
+    if (loading.IsMissing()) ImGui::PopStyleColor();
+
+    if (loading.IsResolved())
+    {
+        ImGui::TextDisabled("Path: %s", loading.path.generic_u8string().c_str());
+    }
+    else if (loading.IsMissing())
+    {
+        ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.35f, 1.0f),
+            "この Loading Screen Scene はプロジェクトに見つかりません（参照は保持）");
+    }
+    else
+    {
+        ImGui::TextDisabled("未指定なら従来の LoadingScene を使用します");
+    }
+
+    if (project_settings.HasLoadingScene())
+    {
+        if (ImGui::Button("Loading Screen Scene を解除##ClearLoadingScene"))
+        {
+            project_settings.ClearLoadingScene();
+            save_project_settings();
+        }
+    }
+
+    if (ImGui::TreeNode("詳細##LoadingScene"))
+    {
+        ImGui::TextDisabled("AssetGUID: %s",
+            loading.guid.empty() ? "(なし)" : loading.guid.c_str());
+        ImGui::TreePop();
+    }
+
+    ImGui::Separator();
+
     // ---- Active Scene Flow --------------------------------------------------
     // Scene 遷移条件そのものは .replaysceneflow Asset に保存し、
     // ProjectSettings は「どの Flow を使うか」だけを GUID で持つ。
