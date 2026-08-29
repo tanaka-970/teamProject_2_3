@@ -430,7 +430,19 @@ void framework::render(float elapsed_time)
                 {
                     ui_frame = {};
                     REPLAY_PROFILE_SCOPE("UI/BuildRuntimeFrame");
-                    ui_ok = scene_manager.BuildRuntimeUI(ui_frame, viewport_width, viewport_height);
+                    ReplayEngine::Scene::Scene* exclusive_scene =
+                        exclusive_scene_for_render();
+                    if (exclusive_scene != nullptr)
+                    {
+                        const object_ui_viewport ui_viewport = object_ui_viewport_target();
+                        ui_ok = build_dx12_ui_for_scene(ui_frame, *exclusive_scene,
+                            dx12_device_context.Width(), dx12_device_context.Height(),
+                            ui_viewport);
+                    }
+                    else
+                    {
+                        ui_ok = scene_manager.BuildRuntimeUI(ui_frame, viewport_width, viewport_height);
+                    }
                 }
                 if (ui_ok)
                 {

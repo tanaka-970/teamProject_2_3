@@ -46,6 +46,26 @@ namespace
     namespace SceneSerialization = ReplayEngine::Scene::Serialization;
 }
 
+void framework::update_exclusive_scene(float elapsed_time)
+{
+    if (object_loading_scene == nullptr) return;
+
+    ReplayEngine::Scene::Scene& scene = *object_loading_scene;
+    const float safe_delta_time = (std::max)(0.0f, elapsed_time);
+    scene.Update(safe_delta_time);
+
+    const object_ui_viewport ui_viewport = object_ui_viewport_target();
+    const float ui_logical_width = (std::max)(1.0f, ui_viewport.logical_width);
+    const float ui_logical_height = (std::max)(1.0f, ui_viewport.logical_height);
+    ReplayEngine::UI::UILayout::Resolve(scene,
+        ui_logical_width, ui_logical_height);
+    ReplayEngine::Components::PropertyLinkComponent::EvaluateAll(
+        scene, safe_delta_time);
+    update_ui_number_displays(scene);
+    ReplayEngine::UI::UILayout::Resolve(scene,
+        ui_logical_width, ui_logical_height);
+}
+
 void framework::update_object_scene(float elapsed_time)
 {
     // Scene 遷移はフレームの先頭で進める。

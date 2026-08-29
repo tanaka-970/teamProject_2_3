@@ -77,6 +77,7 @@ namespace
 framework::framework(HWND hwnd) : hwnd(hwnd)
 {
     golden_state_ = std::make_unique<ReplayEngine::Editor::GoldenImageState>();
+    object_loading_progress_provider.Bind(&scene_manager);
     std::error_code error;
     configure_content_root(std::filesystem::current_path(error));
 }
@@ -250,6 +251,14 @@ bool framework::uninitialize()
     // 2) LoadingScene の Task はモデル Cache へ書き込むため、
     //    Cache 解放より先に停止・join する。
     scene_manager.Clear();
+    if (object_loading_scene)
+    {
+        object_loading_scene->Services().SetRuntime(nullptr);
+        object_loading_scene->Services().SetRuntimeScene(nullptr);
+        object_loading_scene->Services().SetSceneFlow(nullptr);
+        object_loading_scene->Services().SetLoadingProgress(nullptr);
+        object_loading_scene.reset();
+    }
 
     // 3) GameObject シーンが抱えているメッシュ / マテリアルを手放す。
     clear_object_mesh_cache();
