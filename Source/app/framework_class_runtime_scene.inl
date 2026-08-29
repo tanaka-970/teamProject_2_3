@@ -364,6 +364,7 @@
         profile_benchmark_render_output = (std::min)(render_output, 10u);
         profile_benchmark_frame_index = 0;
         profile_benchmark_drain_frames = 0;
+        profile_model_screen_bounds_diagnostic_emitted = false;
         profile_benchmark_export_attempted = false;
         profile_benchmark_export_ok = false;
         profile_benchmark_gpu_drain_timeout = false;

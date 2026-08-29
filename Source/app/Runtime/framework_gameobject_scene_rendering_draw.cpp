@@ -1140,7 +1140,9 @@ bool framework::build_dx12_static_scene(
                 if (mesh.vertices.empty() || mesh.indices.empty()) continue;
                 const std::string mesh_key = item.mesh_asset + "#skinned:" +
                     std::to_string(mesh_index);
-                if (!dx12_device_context.HasSkinnedMesh(mesh_key))
+                D3D12MeshLocalBounds cached_bounds;
+                if (!dx12_device_context.HasSkinnedMesh(mesh_key) ||
+                    !dx12_device_context.GetSkinnedMeshLocalBounds(mesh_key, cached_bounds))
                     make_skinned_mesh_source(mesh_key, mesh);
 
                 DirectX::XMFLOAT4X4 mesh_world =

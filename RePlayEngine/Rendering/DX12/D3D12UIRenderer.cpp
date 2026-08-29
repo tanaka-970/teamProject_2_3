@@ -1506,6 +1506,7 @@ namespace ReplayEngine::Rendering::DX12
         view.StrideInBytes = sizeof(D3D12UIVertex);
         command_list_->IASetVertexBuffers(0, 1, &view);
         command_list_->DrawInstanced(static_cast<UINT>(vertices.size()), 1, 0, 0);
+        command_list_->RSSetScissorRects(1, &full);
         return true;
     }
 
