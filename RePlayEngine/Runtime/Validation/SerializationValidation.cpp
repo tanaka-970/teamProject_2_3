@@ -243,6 +243,55 @@ namespace ReplayEngine::Runtime::Validation
             }
         }
 
+        {
+            RuntimeSceneService service;
+            RuntimeContext runtime(service.ActiveWorld());
+            SceneFlowService scene_flow(service);
+            service.SetRuntimeContext(&runtime);
+            service.SetSceneFlowService(&scene_flow);
+            service.ActiveWorld().Services().SetRuntime(&runtime);
+            service.ActiveWorld().CreateGameObject("ActiveWorldSentinel");
+
+            const Core::WorldInstanceID active_world_id = service.ActiveWorldID();
+            const std::size_t active_object_count = service.ActiveWorld().GameObjectCount();
+            const SceneLoadState active_state = service.State();
+
+            Serialization::SceneLoadReport report;
+            std::string error;
+            const std::filesystem::path path = std::filesystem::path("Saved") /
+                "Validation" / "RuntimeScene" / "SceneB.replayscene";
+            std::unique_ptr<ReplayEngine::Scene::Scene> standalone =
+                service.LoadStandaloneScene(path, report, error);
+
+            check.Expect(standalone != nullptr, "既存の検証用 Scene を独立 Scene へ読み込める");
+            check.Expect(standalone != nullptr && standalone->GameObjectCount() == 1,
+                "独立 Scene の GameObject 数が期待値 1 になる");
+
+            std::size_t standalone_component_count = 0;
+            if (standalone != nullptr)
+            {
+                for (std::size_t index = 0; index < standalone->GameObjectCount(); ++index)
+                {
+                    Core::GameObject* object = standalone->GameObjectAt(index);
+                    if (object != nullptr) standalone_component_count += object->ComponentCount();
+                }
+            }
+            check.Expect(standalone_component_count == 2,
+                "独立 Scene の Component 数が期待値 2 になる");
+            check.Expect(standalone != nullptr && standalone->Started(),
+                "独立 Scene が Start 済みになる");
+            check.Expect(standalone != nullptr &&
+                standalone->Services().Runtime() == &runtime &&
+                standalone->Services().RuntimeScene() == &service &&
+                standalone->Services().SceneFlow() == &scene_flow,
+                "独立 Scene へ Runtime 系 Services が張られる");
+            check.Expect(service.State() == active_state &&
+                service.ActiveWorldID() == active_world_id &&
+                service.ActiveWorld().GameObjectCount() == active_object_count &&
+                service.StagingObjectCount() == 0 && service.PendingSceneGUID().empty(),
+                "独立 Scene の読み込みで Runtime World の active/staging を変更しない");
+        }
+
         // ---- StableID が衝突した場合の救済 ---------------------------------
         //
         // GameObject を作った時点で組み込みの TransformComponent が自動で付き、
