@@ -31,6 +31,7 @@
 #include "../../../RePlayEngine/Runtime/Validation/SceneFlowValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/SerializationValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/StressValidation.h"
+#include "../../../RePlayEngine/Project/ProjectSettingsSerializer.h"
 #include "../../../RePlayEngine/Scene/LoadingScene.h"
 #include "../../../RePlayEngine/Scene/Serialization/SceneData.h"
 #include "../../../RePlayEngine/Scene/Serialization/SceneSerializer.h"
@@ -106,6 +107,34 @@ namespace ReplayEngine::Runtime::Detail
             std::fprintf(stderr, "  [FAIL %d] %s\n", checks, label);
         };
 
+        ReplayEngine::Project::ProjectSettings loading_settings;
+        loading_settings.SetLoadingSceneGuid("loading-scene-validation-guid");
+        std::ostringstream loading_settings_text;
+        std::string loading_settings_error;
+        const bool loading_settings_written =
+            ReplayEngine::Project::ProjectSettingsSerializer::WriteText(
+                loading_settings, loading_settings_text, loading_settings_error);
+        ReplayEngine::Project::ProjectSettings restored_loading_settings;
+        std::istringstream loading_settings_input(loading_settings_text.str());
+        const bool loading_settings_read =
+            ReplayEngine::Project::ProjectSettingsSerializer::ReadText(
+                restored_loading_settings, loading_settings_input, loading_settings_error);
+        Check(loading_settings_written && loading_settings_read &&
+            restored_loading_settings.LoadingSceneGuid() ==
+                loading_settings.LoadingSceneGuid(),
+            "Loading Screen Scene の GUID が設定ファイル往復する");
+
+        ReplayEngine::Project::ProjectSettings legacy_settings;
+        std::istringstream legacy_settings_input(
+            "REPLAY_PROJECT 9\nSTARTUP_SCENE \"legacy-startup-guid\"\n");
+        std::string legacy_settings_error;
+        const bool legacy_settings_read =
+            ReplayEngine::Project::ProjectSettingsSerializer::ReadText(
+                legacy_settings, legacy_settings_input, legacy_settings_error);
+        Check(legacy_settings_read && legacy_settings.LoadingSceneGuid().empty() &&
+            legacy_settings.StartupSceneGuid() == "legacy-startup-guid",
+            "Loading Screen Scene 行が無い旧形式を未指定として読める");
+
         ReplayEngine::Core::RegisterBuiltInComponents();
         framework host(nullptr);
         auto active_runtime = std::make_unique<ReplayEngine::Runtime::RuntimeContext>(
@@ -123,7 +152,8 @@ namespace ReplayEngine::Runtime::Detail
         Check(host.scene_manager.SetScene(std::move(loading_scene)) &&
             host.scene_manager.IsExclusive(),
             "検証用 LoadingScene が Exclusive として設定される");
-        Check(host.exclusive_scene_for_render() == nullptr,
+        Check(host.project_settings.LoadingSceneGuid().empty() &&
+            host.exclusive_scene_for_render() == nullptr,
             "専用 Scene 未読込時は既存の SceneManager 経路へ落ちる");
 
         const std::filesystem::path path = ValidationFolder() /

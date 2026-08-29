@@ -44,6 +44,9 @@ namespace ReplayEngine::Project
         // 「明示的に未設定へ戻したファイル」を区別できなくなる。
         stream << "STARTUP_SCENE " << std::quoted(settings.StartupSceneGuid()) << '\n';
 
+        // v10 で追加。空 GUID は「未設定」として書き出す。
+        stream << "LOADING_SCENE " << std::quoted(settings.LoadingSceneGuid()) << '\n';
+
         // v3 で追加。Active Scene Flow も GUID だけを保存する。
         stream << "SCENE_FLOW " << std::quoted(settings.SceneFlowGuid()) << '\n';
         stream << "LOCALIZATION_TABLE " << std::quoted(settings.LocalizationTableGuid()) << '\n';
@@ -187,6 +190,17 @@ namespace ReplayEngine::Project
                 if (value_stream >> std::quoted(guid))
                 {
                     settings.SetStartupSceneGuid(std::move(guid));
+                }
+            }
+            else if (keyword == "LOADING_SCENE")
+            {
+                // v10 で追加。旧ファイルにはこの行が無いので、空のままになる。
+                std::istringstream value_stream(line);
+                value_stream.imbue(std::locale::classic());
+                std::string guid;
+                if (value_stream >> std::quoted(guid))
+                {
+                    settings.SetLoadingSceneGuid(std::move(guid));
                 }
             }
             else if (keyword == "SCENE_FLOW")

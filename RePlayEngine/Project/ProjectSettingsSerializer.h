@@ -30,13 +30,15 @@ namespace ReplayEngine::Project
         // v6 … Input Action Asset GUID を追加
         // v7 … Game Template Component の Editor 表示方針を追加
         // v8 … SSAO / SSR / TAA の調整値を追加
+        // v9 … Screen Space の追加調整値を追加
+        // v10 … Loading Screen Scene (AssetGUID) を追加
         //
         // Scene のファイル形式とは別のバージョン番号。
         // 片方を上げたらもう片方も上げる、という関係にはしない。
         // 保存する内容が別なので、揃えると意味の無い版番号が増える。
-        static constexpr int current_version = 9;
+        static constexpr int current_version = 10;
 
-        // v1〜v8 のファイルもそのまま読める。読み込み後に保存すると v9 になる。
+        // v1〜v9 のファイルもそのまま読める。読み込み後に保存すると v10 になる。
         static constexpr int minimum_supported_version = 1;
 
         // 読み込みに失敗したときに使う安全な既定値へ戻す。
