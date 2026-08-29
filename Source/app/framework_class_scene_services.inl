@@ -70,6 +70,8 @@ private:
         // Geometry/Material Submission へ変換する。実際の Skinned Animation は Phase 3 に残す。
     bool build_dx12_static_scene(
         ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission& submission,
+        const ReplayEngine::Scene::Scene& scene,
+        const ReplayEngine::Rendering::RenderItemList& render_items,
         float elapsed_time);
     // Canvas/RectTransform の解決結果を、GPU APIを呼ばないDX12 UIコマンドへ変換する。
     bool build_dx12_ui(
