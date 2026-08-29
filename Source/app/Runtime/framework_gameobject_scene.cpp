@@ -666,7 +666,7 @@ void framework::update_object_fixed_step(float elapsed_time)
 }
 
 void framework::update_ui_sprite_animators(ReplayEngine::Scene::Scene& scene,
-    float elapsed_time)
+    float elapsed_time, const ReplayEngine::Motion::MotionMixer* mixer)
 {
     using ReplayEngine::Components::UISpriteAnimatorComponent;
 
@@ -693,7 +693,7 @@ void framework::update_ui_sprite_animators(ReplayEngine::Scene::Scene& scene,
             }
 
             static_cast<UISpriteAnimatorComponent*>(component)->UpdateSprite(
-                elapsed_time, &motion_mixer);
+                elapsed_time, mixer);
         }
     }
 }

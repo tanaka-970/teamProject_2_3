@@ -19,6 +19,9 @@
 
 #include "../../../RePlayEngine/Components/Motion/MotionPlayerComponent.h"
 #include "../../../RePlayEngine/Components/Core/SceneLoaderComponent.h"
+#include "../../../RePlayEngine/Components/UI/RectTransformComponent.h"
+#include "../../../RePlayEngine/Components/UI/UIImageComponent.h"
+#include "../../../RePlayEngine/Components/UI/UISpriteAnimatorComponent.h"
 #include "../../../RePlayEngine/Object/Registry/BuiltInComponents.h"
 #include "../../../RePlayEngine/Editor/Validation/AnimationUndoValidation.h"
 #include "../../../RePlayEngine/Editor/Validation/EditorIntegrationValidation.h"
@@ -29,7 +32,10 @@
 #include "../../../RePlayEngine/Runtime/Validation/SerializationValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/StressValidation.h"
 #include "../../../RePlayEngine/Scene/LoadingScene.h"
+#include "../../../RePlayEngine/Scene/Serialization/SceneData.h"
 #include "../../../RePlayEngine/Scene/Serialization/SceneSerializer.h"
+#include "../../../RePlayEngine/Motion/MotionAsset.h"
+#include "../../../RePlayEngine/Motion/MotionBindingResolver.h"
 #include "../../../RePlayEngine/Scripting/Validation/CSharpScriptValidation.h"
 #include "../../../RePlayEngine/Scripting/Validation/ScriptCoreValidation.h"
 #include "../../../RePlayEngine/Rendering/Shaders/ShaderAssetValidation.h"
@@ -102,6 +108,10 @@ namespace ReplayEngine::Runtime::Detail
 
         ReplayEngine::Core::RegisterBuiltInComponents();
         framework host(nullptr);
+        auto active_runtime = std::make_unique<ReplayEngine::Runtime::RuntimeContext>(
+            host.object_runtime_scenes.ActiveWorld());
+        host.object_runtime_scenes.SetRuntimeContext(active_runtime.get());
+        host.object_runtime_scenes.ActiveWorld().Services().SetRuntime(active_runtime.get());
         const auto gate = std::make_shared<std::atomic<bool>>(false);
         auto loading_scene = std::make_unique<ReplayEngine::Scene::LoadingScene>();
         loading_scene->AddTask("LoadingBridge", [gate]()
@@ -116,28 +126,116 @@ namespace ReplayEngine::Runtime::Detail
         Check(host.exclusive_scene_for_render() == nullptr,
             "専用 Scene 未読込時は既存の SceneManager 経路へ落ちる");
 
-        ReplayEngine::Scene::Serialization::SceneData data;
-        data.scene_name = "LoadingBridge";
-        ReplayEngine::Scene::Serialization::GameObjectData object;
-        object.id = ReplayEngine::Core::ObjectID{ 1 };
-        object.name = "Loader";
-        ReplayEngine::Scene::Serialization::ComponentData component;
-        component.type_name =
-            ReplayEngine::Components::SceneLoaderComponent::StaticTypeName();
-        component.type_id =
-            ReplayEngine::Components::SceneLoaderComponent::StaticTypeID();
-        object.components.push_back(std::move(component));
-        data.objects.push_back(std::move(object));
-
         const std::filesystem::path path = ValidationFolder() /
             "LoadingBridge.replayscene";
         std::error_code directory_error;
         std::filesystem::create_directories(path.parent_path(), directory_error);
         std::string error;
-        const bool written = !directory_error &&
+        ReplayEngine::Motion::MotionAsset motion_asset;
+        motion_asset.name = "LoadingBridgeMotion";
+        motion_asset.duration = 1.0f;
+        ReplayEngine::Motion::MotionTrack motion_track;
+        motion_track.name = "MoveRect";
+        motion_track.binding.origin = static_cast<int>(
+            ReplayEngine::Motion::MotionBindingOrigin::Self);
+        motion_track.binding.component_type =
+            ReplayEngine::Components::RectTransformComponent::StaticTypeID();
+        motion_track.binding.property = "anchored_position";
+        motion_track.value_type = ReplayEngine::Reflection::PropertyType::Vector2;
+        motion_track.keys.push_back({ 0.0f,
+            ReplayEngine::Reflection::PropertyValue::MakeVector2({ 0.0f, 0.0f }) });
+        motion_track.keys.push_back({ 1.0f,
+            ReplayEngine::Reflection::PropertyValue::MakeVector2({ 100.0f, 0.0f }) });
+        motion_asset.tracks.push_back(std::move(motion_track));
+        ReplayEngine::Motion::MotionEventTrack event_track;
+        event_track.events.push_back({ 0.25f, "LoadingMotionEvent", "validation" });
+        motion_asset.event_tracks.push_back(std::move(event_track));
+        const std::filesystem::path motion_path = ValidationFolder() /
+            "LoadingBridgeMotion.replaymotion";
+        std::string motion_error;
+        const bool motion_written = !directory_error &&
+            ReplayEngine::Motion::MotionAsset::SaveToFile(
+                motion_path, motion_asset, motion_error);
+        Check(motion_written, "専用 Motion Asset の検証ファイルを書き出せる");
+        const std::string motion_guid = motion_written
+            ? host.asset_database.Register(motion_path,
+                ReplayEngine::Assets::AssetKind::Motion).guid : std::string();
+
+        ReplayEngine::Scene::Scene source_scene("LoadingBridge");
+        ReplayEngine::Core::GameObject* source_loader =
+            source_scene.CreateGameObject("Loader");
+        ReplayEngine::Core::GameObject* source_animated =
+            source_scene.CreateGameObject("Animated");
+        ReplayEngine::Components::SceneLoaderComponent* source_loader_component =
+            source_loader != nullptr
+            ? source_loader->AddComponent<
+                ReplayEngine::Components::SceneLoaderComponent>() : nullptr;
+        ReplayEngine::Components::UISpriteAnimatorComponent* source_animator =
+            source_animated != nullptr
+            ? source_animated->AddComponent<
+                ReplayEngine::Components::UISpriteAnimatorComponent>() : nullptr;
+        ReplayEngine::Components::MotionPlayerComponent* source_motion =
+            source_animated != nullptr
+            ? source_animated->AddComponent<
+                ReplayEngine::Components::MotionPlayerComponent>() : nullptr;
+        ReplayEngine::Components::RectTransformComponent* source_rect =
+            source_animated != nullptr
+            ? source_animated->GetComponent<
+                ReplayEngine::Components::RectTransformComponent>() : nullptr;
+        const bool fixture_created = source_loader_component != nullptr &&
+            source_animated != nullptr && source_animator != nullptr &&
+            source_motion != nullptr && source_rect != nullptr;
+        if (source_animator != nullptr)
+        {
+            source_animator->columns = 2;
+            source_animator->rows = 2;
+            source_animator->start_frame = 0;
+            source_animator->end_frame = 3;
+            source_animator->frames_per_second = 2.0f;
+            source_animator->play_mode =
+                ReplayEngine::Components::UISpriteAnimatorComponent::Loop;
+            source_animator->playing = true;
+            source_animator->frame = 0.0f;
+        }
+        if (source_motion != nullptr)
+        {
+            source_motion->motion.guid = motion_guid;
+            source_motion->play_on_start = true;
+            source_motion->trigger =
+                ReplayEngine::Components::MotionPlayerComponent::TriggerStart;
+            source_motion->speed = 1.0f;
+        }
+        ReplayEngine::Scene::Serialization::SceneData data;
+        if (fixture_created)
+            ReplayEngine::Scene::Serialization::CaptureScene(source_scene, data);
+        const bool written = fixture_created && !directory_error &&
             ReplayEngine::Scene::Serialization::SceneSerializer::SaveToFile(
                 data, path, error);
         Check(written, "専用 Scene の検証ファイルを書き出せる");
+
+        ReplayEngine::Core::GameObject* runtime_probe =
+            host.object_runtime_scenes.ActiveWorld().CreateGameObject("RuntimeProbe");
+        ReplayEngine::Components::UIImageComponent* runtime_probe_image =
+            runtime_probe != nullptr
+            ? runtime_probe->AddComponent<ReplayEngine::Components::UIImageComponent>()
+            : nullptr;
+        ReplayEngine::Motion::MotionBinding runtime_probe_binding;
+        runtime_probe_binding.origin = static_cast<int>(
+            ReplayEngine::Motion::MotionBindingOrigin::Self);
+        runtime_probe_binding.component_type =
+            ReplayEngine::Components::UIImageComponent::StaticTypeID();
+        runtime_probe_binding.property = "fill_color_2";
+        const ReplayEngine::Motion::ResolvedMotionBinding resolved_probe_binding =
+            runtime_probe != nullptr
+            ? ReplayEngine::Motion::MotionBindingResolver::Resolve(
+                host.object_runtime_scenes.ActiveWorld(), runtime_probe_binding,
+                runtime_probe) : ReplayEngine::Motion::ResolvedMotionBinding{};
+        host.motion_mixer.BeginFrame();
+        host.motion_mixer.Contribute(resolved_probe_binding,
+            ReplayEngine::Reflection::PropertyValue::MakeVector4(
+                { 0.5f, 0.5f, 0.5f, 1.0f }), 1.0f);
+        const bool runtime_mixer_before = runtime_probe_image != nullptr &&
+            host.motion_mixer.WasDriven(*runtime_probe_image, "fill_color_2");
 
         const bool loaded = host.load_exclusive_scene_from_path(path);
         Check(loaded && host.exclusive_scene_for_render() != nullptr,
@@ -156,6 +254,11 @@ namespace ReplayEngine::Runtime::Detail
         }
         Check(loader != nullptr, "専用 Scene の SceneLoaderComponent を取得できる");
 
+        ReplayEngine::Runtime::RuntimeContext* exclusive_runtime =
+            exclusive_scene != nullptr ? exclusive_scene->Services().Runtime() : nullptr;
+        Check(exclusive_runtime != nullptr && exclusive_runtime != active_runtime.get(),
+            "専用 Scene が active World と分離した RuntimeContext を持つ");
+
         const ReplayEngine::Scene::ILoadingProgressProvider* provider =
             exclusive_scene != nullptr
             ? exclusive_scene->Services().LoadingProgress() : nullptr;
@@ -163,13 +266,54 @@ namespace ReplayEngine::Runtime::Detail
             provider->IsLoading(),
             "LoadingScene の Progress を provider 経由で取得できる");
 
-        host.update_exclusive_scene(1.0f / 60.0f);
+        const std::size_t active_pending_before =
+            active_runtime->Events().PendingEventCount();
+        const std::uint64_t active_dispatched_before =
+            active_runtime->Events().DispatchedEventCount();
+        const std::uint64_t active_dropped_before =
+            active_runtime->Events().DroppedEventCount();
+        const std::uint64_t exclusive_dispatched_before = exclusive_runtime != nullptr
+            ? exclusive_runtime->Events().DispatchedEventCount() : 0;
+        host.update_exclusive_scene(0.5f);
         Check(loader != nullptr && loader->progress == 0.0f && loader->is_loading &&
             loader->state == static_cast<int>(ReplayEngine::Runtime::SceneLoadState::Loading),
             "Exclusive 中の Component 更新が LoadingScene provider の値を反映する");
 
+        ReplayEngine::Core::GameObject* loaded_animated = exclusive_scene != nullptr
+            ? exclusive_scene->FindGameObjectByName("Animated") : nullptr;
+        ReplayEngine::Components::RectTransformComponent* loaded_rect =
+            loaded_animated != nullptr
+            ? loaded_animated->GetComponent<
+                ReplayEngine::Components::RectTransformComponent>() : nullptr;
+        ReplayEngine::Components::UISpriteAnimatorComponent* loaded_animator =
+            loaded_animated != nullptr
+            ? loaded_animated->GetComponent<
+                ReplayEngine::Components::UISpriteAnimatorComponent>() : nullptr;
+        ReplayEngine::Components::UIImageComponent* loaded_image =
+            loaded_animated != nullptr
+            ? loaded_animated->GetComponent<
+                ReplayEngine::Components::UIImageComponent>() : nullptr;
+        Check(loaded_rect != nullptr && loaded_rect->anchored_position.x > 1.0f,
+            "Exclusive 中に専用 Scene の Motion が評価される");
+        Check(loaded_animator != nullptr && loaded_image != nullptr &&
+            loaded_animator->frame > 0.5f && loaded_image->uv_offset.x > 0.25f,
+            "Exclusive 中に専用 Scene の UI sprite animation が進む");
+        Check(exclusive_runtime != nullptr &&
+            exclusive_runtime->Events().DispatchedEventCount() > exclusive_dispatched_before,
+            "専用 Scene の MotionEvent が専用 EventBus で処理される");
+        Check(runtime_mixer_before && runtime_probe_image != nullptr &&
+            host.motion_mixer.WasDriven(*runtime_probe_image, "fill_color_2"),
+            "専用 Scene の更新前後で Runtime World の MotionMixer が不変である");
+        Check(active_runtime->Events().PendingEventCount() == active_pending_before &&
+            active_runtime->Events().DispatchedEventCount() == active_dispatched_before &&
+            active_runtime->Events().DroppedEventCount() == active_dropped_before,
+            "専用 Scene の更新前後で Runtime World の MotionEvent 状態が不変である");
+
         gate->store(true, std::memory_order_release);
         host.scene_manager.Clear();
+        host.object_runtime_scenes.ActiveWorld().Services().SetRuntime(nullptr);
+        host.object_runtime_scenes.SetRuntimeContext(nullptr);
+        active_runtime.reset();
         std::fprintf(stderr, "loading-bridge validation: %s (%d checks)\n",
             first_failure == 0 ? "OK" : "FAILED", checks);
         return first_failure;

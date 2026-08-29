@@ -61,6 +61,8 @@
     };
     loading_progress_provider object_loading_progress_provider;
     std::unique_ptr<ReplayEngine::Scene::Scene> object_loading_scene;
+    std::unique_ptr<ReplayEngine::Runtime::RuntimeContext> object_loading_runtime_context;
+    std::uint64_t object_loading_frame_index{ 0 };
 
     // AssetGUID -> Scene ファイルのパス。Runtime 層が AssetDatabase を
     // 直接 include しないための実装側。framework が所有する。

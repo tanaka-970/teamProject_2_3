@@ -235,8 +235,14 @@ void framework::prepare_ui_effect_shader_schemas(ReplayEngine::Scene::Scene& sce
 }
 
 void framework::evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
-    float scaled_delta_time, float unscaled_delta_time)
+    float scaled_delta_time, float unscaled_delta_time,
+    ReplayEngine::Motion::MotionMixer& mixer,
+    ReplayEngine::Runtime::RuntimeContext* runtime_context,
+    std::uint64_t frame_index)
 {
+    ReplayEngine::Motion::MotionMixer& motion_mixer = mixer;
+    ReplayEngine::Runtime::RuntimeContext* object_runtime_context = runtime_context;
+    const std::uint64_t object_runtime_frame_index = frame_index;
     using ReplayEngine::Components::MotionPlayerComponent;
     using ReplayEngine::Components::CompositionPlayerComponent;
     using ReplayEngine::Motion::MotionBindingResolver;
