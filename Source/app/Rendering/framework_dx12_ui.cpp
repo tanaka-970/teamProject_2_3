@@ -23,6 +23,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <filesystem>
 #include <functional>
 #include <unordered_map>
@@ -471,6 +472,8 @@ bool framework::build_dx12_ui_for_scene(
             command.seed = effect.seed;
             command.time = shader_composer_time;
             command.waveform = effect.waveform;
+            command.custom_shader = effect.custom_shader;
+            command.custom_parameters = effect.custom_parameters;
             command.direction = effect.direction;
             command.color = effect.color;
             command.color_2 = effect.color_2;
@@ -2309,7 +2312,8 @@ bool framework::build_dx12_ui_for_scene(
 
 bool framework::build_dx12_scene_effects(
     ReplayEngine::Rendering::DX12::D3D12SceneEffectSubmission& submission,
-    const ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission& static_scene)
+    const ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission& static_scene,
+    const DirectX::XMFLOAT4X4& view_projection)
 {
     using namespace ReplayEngine;
     using namespace ReplayEngine::Rendering::DX12;
@@ -2368,6 +2372,8 @@ bool framework::build_dx12_scene_effects(
             command.seed = effect.seed;
             command.time = shader_composer_time;
             command.waveform = effect.waveform;
+            command.custom_shader = effect.custom_shader;
+            command.custom_parameters = effect.custom_parameters;
             command.direction = effect.direction;
             command.color = effect.color;
             command.color_2 = effect.color_2;
@@ -2471,9 +2477,23 @@ bool framework::build_dx12_scene_effects(
         0.0f, 0.0f, static_cast<float>(dx12_device_context.Width()),
         static_cast<float>(dx12_device_context.Height()), 0.0f, 1.0f };
     const auto model_screen_rect = [&](std::uint64_t owner_id,
-        D3D12_RECT& result) noexcept
+        D3D12_RECT& result, bool& static_bounds_found,
+        bool& skinned_bounds_found, std::size_t& static_owner_draw_count,
+        std::size_t& skinned_owner_draw_count, const char*& first_static_mesh_key,
+        const char*& first_skinned_mesh_key,
+        bool& first_skinned_bounds_lookup_attempted,
+        bool& first_skinned_bounds_lookup_succeeded) noexcept
     {
         bool found = false;
+        static_bounds_found = false;
+        skinned_bounds_found = false;
+        static_owner_draw_count = 0;
+        skinned_owner_draw_count = 0;
+        first_static_mesh_key = nullptr;
+        first_skinned_mesh_key = nullptr;
+        first_skinned_bounds_lookup_attempted = false;
+        first_skinned_bounds_lookup_succeeded = false;
+        bool first_static_mesh_key_recorded = false;
         const auto accumulate = [&](const D3D12StaticDrawItem& draw, bool skinned)
         {
             if (draw.owner_id != owner_id) return;
@@ -2481,10 +2501,31 @@ bool framework::build_dx12_scene_effects(
             const bool has_bounds = skinned
                 ? dx12_device_context.GetSkinnedMeshLocalBounds(draw.mesh_key, bounds)
                 : dx12_device_context.GetStaticMeshLocalBounds(draw.mesh_key, bounds);
+            if (skinned)
+            {
+                ++skinned_owner_draw_count;
+                skinned_bounds_found = skinned_bounds_found || has_bounds;
+                if (!first_skinned_bounds_lookup_attempted)
+                {
+                    first_skinned_mesh_key = draw.mesh_key.c_str();
+                    first_skinned_bounds_lookup_attempted = true;
+                    first_skinned_bounds_lookup_succeeded = has_bounds;
+                }
+            }
+            else
+            {
+                ++static_owner_draw_count;
+                static_bounds_found = static_bounds_found || has_bounds;
+                if (!first_static_mesh_key_recorded)
+                {
+                    first_static_mesh_key = draw.mesh_key.c_str();
+                    first_static_mesh_key_recorded = true;
+                }
+            }
             if (!has_bounds) return;
             D3D12_RECT projected{};
             if (!CalculateD3D12ScreenRect(bounds, draw.world,
-                frame_constants.view_projection, model_viewport, projected) ||
+                view_projection, model_viewport, projected) ||
                 RectIsEmpty(projected))
                 return;
             if (!found)
@@ -2506,6 +2547,7 @@ bool framework::build_dx12_scene_effects(
     };
 
     Scene::Scene& scene = active_object_scene();
+    bool profile_model_screen_bounds_diagnostic_written = false;
     for (std::size_t object_index = 0; object_index < scene.GameObjectCount(); ++object_index)
     {
         Core::GameObject* object = scene.GameObjectAt(object_index);
@@ -2523,18 +2565,32 @@ bool framework::build_dx12_scene_effects(
                     model->effect_region, stack.owner_id, stack.effects))
                 {
                     D3D12_RECT model_rect{};
-                    if (model_screen_rect(stack.owner_id, model_rect))
+                    bool static_bounds_found = false;
+                    bool skinned_bounds_found = false;
+                    std::size_t static_owner_draw_count = 0;
+                    std::size_t skinned_owner_draw_count = 0;
+                    const char* first_static_mesh_key = nullptr;
+                    const char* first_skinned_mesh_key = nullptr;
+                    bool first_skinned_bounds_lookup_attempted = false;
+                    bool first_skinned_bounds_lookup_succeeded = false;
+                    const bool model_rect_found = model_screen_rect(stack.owner_id,
+                        model_rect, static_bounds_found, skinned_bounds_found,
+                        static_owner_draw_count, skinned_owner_draw_count,
+                        first_static_mesh_key, first_skinned_mesh_key,
+                        first_skinned_bounds_lookup_attempted,
+                        first_skinned_bounds_lookup_succeeded);
+                    const float bleed_limit = std::isfinite(model->max_bleed_pixels)
+                        ? (std::max)(0.0f, model->max_bleed_pixels) : 0.0f;
+                    const DirectX::XMFLOAT4 expansion =
+                        model->ExpandBounds(static_cast<float>(dx12_device_context.Width()),
+                            static_cast<float>(dx12_device_context.Height()), &asset_database);
+                    const DirectX::XMFLOAT4 clamped_expansion{
+                        (std::min)((std::max)(0.0f, expansion.x), bleed_limit),
+                        (std::min)((std::max)(0.0f, expansion.y), bleed_limit),
+                        (std::min)((std::max)(0.0f, expansion.z), bleed_limit),
+                        (std::min)((std::max)(0.0f, expansion.w), bleed_limit) };
+                    if (model_rect_found)
                     {
-                        const float bleed_limit = std::isfinite(model->max_bleed_pixels)
-                            ? (std::max)(0.0f, model->max_bleed_pixels) : 0.0f;
-                        const DirectX::XMFLOAT4 expansion =
-                            model->ExpandBounds(static_cast<float>(dx12_device_context.Width()),
-                                static_cast<float>(dx12_device_context.Height()), &asset_database);
-                        const DirectX::XMFLOAT4 clamped_expansion{
-                            (std::min)((std::max)(0.0f, expansion.x), bleed_limit),
-                            (std::min)((std::max)(0.0f, expansion.y), bleed_limit),
-                            (std::min)((std::max)(0.0f, expansion.z), bleed_limit),
-                            (std::min)((std::max)(0.0f, expansion.w), bleed_limit) };
                         stack.scissor = ClampRect({
                             static_cast<LONG>(std::floor(static_cast<float>(model_rect.left) -
                                 clamped_expansion.x)),
@@ -2545,11 +2601,68 @@ bool framework::build_dx12_scene_effects(
                             static_cast<LONG>(std::ceil(static_cast<float>(model_rect.bottom) +
                                 clamped_expansion.w)) },
                             dx12_device_context.Width(), dx12_device_context.Height());
-                        const bool full_screen = stack.scissor.left == 0 &&
-                            stack.scissor.top == 0 &&
-                            stack.scissor.right == static_cast<LONG>(dx12_device_context.Width()) &&
-                            stack.scissor.bottom == static_cast<LONG>(dx12_device_context.Height());
-                        stack.scissor_enabled = !RectIsEmpty(stack.scissor) && !full_screen;
+                    }
+                    const bool full_screen = stack.scissor.left == 0 &&
+                        stack.scissor.top == 0 &&
+                        stack.scissor.right == static_cast<LONG>(dx12_device_context.Width()) &&
+                        stack.scissor.bottom == static_cast<LONG>(dx12_device_context.Height());
+                    stack.scissor_enabled = model_rect_found &&
+                        !RectIsEmpty(stack.scissor) && !full_screen;
+                    const std::uint64_t profile_capture_end =
+                        static_cast<std::uint64_t>(profile_benchmark_warmup_frames) +
+                        static_cast<std::uint64_t>(profile_benchmark_frames);
+                    const std::uint64_t profile_frame_index =
+                        static_cast<std::uint64_t>(profile_benchmark_frame_index);
+                    const bool profile_first_frame = profile_benchmark_mode &&
+                        profile_benchmark_scene_ready &&
+                        !profile_model_screen_bounds_diagnostic_emitted &&
+                        !profile_model_screen_bounds_diagnostic_written &&
+                        profile_frame_index == 0;
+                    const bool profile_last_frame = profile_benchmark_mode &&
+                        profile_benchmark_scene_ready &&
+                        !profile_model_screen_bounds_diagnostic_written &&
+                        profile_capture_end > 0 &&
+                        profile_frame_index == profile_capture_end - 1;
+                    if (profile_first_frame || profile_last_frame)
+                    {
+                        const char* diagnostic_phase = profile_first_frame && profile_last_frame
+                            ? "first,last" : (profile_first_frame ? "first" : "last");
+                        const char* skinned_bounds_lookup =
+                            !first_skinned_bounds_lookup_attempted ? "not_attempted" :
+                            (first_skinned_bounds_lookup_succeeded ? "success" : "failure");
+                        std::fprintf(stderr,
+                            "model screen bounds: frame=%llu phase=%s owner_id=%llu "
+                            "static_scene.draws.size=%zu "
+                            "static_scene.skinned_draws.size=%zu "
+                            "owner_match_static=%zu owner_match_skinned=%zu "
+                            "first_static_mesh_key=\"%s\" "
+                            "first_skinned_mesh_key=\"%s\" "
+                            "GetSkinnedMeshLocalBounds=%s "
+                            "skinned_mesh_bounds_cache_.size=%zu "
+                            "static_mesh_bounds_cache_.size=%zu "
+                            "bounds_found_static=%d bounds_found_skinned=%d "
+                            "projected_found=%d projected=(%ld,%ld,%ld,%ld) "
+                            "clamped_expansion=(%.3f,%.3f,%.3f,%.3f) "
+                            "scissor=(%ld,%ld,%ld,%ld) scissor_enabled=%d full_screen=%d\n",
+                            static_cast<unsigned long long>(profile_frame_index),
+                            diagnostic_phase,
+                            static_cast<unsigned long long>(stack.owner_id),
+                            static_scene.draws.size(), static_scene.skinned_draws.size(),
+                            static_owner_draw_count, skinned_owner_draw_count,
+                            first_static_mesh_key != nullptr ? first_static_mesh_key : "",
+                            first_skinned_mesh_key != nullptr ? first_skinned_mesh_key : "",
+                            skinned_bounds_lookup,
+                            dx12_device_context.SkinnedMeshBoundsCacheSize(),
+                            dx12_device_context.StaticMeshBoundsCacheSize(),
+                            static_bounds_found ? 1 : 0, skinned_bounds_found ? 1 : 0,
+                            model_rect_found ? 1 : 0,
+                            model_rect.left, model_rect.top, model_rect.right, model_rect.bottom,
+                            clamped_expansion.x, clamped_expansion.y,
+                            clamped_expansion.z, clamped_expansion.w,
+                            stack.scissor.left, stack.scissor.top,
+                            stack.scissor.right, stack.scissor.bottom,
+                            stack.scissor_enabled ? 1 : 0, full_screen ? 1 : 0);
+                        profile_model_screen_bounds_diagnostic_written = true;
                     }
                     submission.model_effects.push_back(std::move(stack));
                 }
@@ -2573,6 +2686,8 @@ bool framework::build_dx12_scene_effects(
             }
         }
     }
+    if (profile_model_screen_bounds_diagnostic_written)
+        profile_model_screen_bounds_diagnostic_emitted = true;
     return true;
 }
 

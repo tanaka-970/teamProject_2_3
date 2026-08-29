@@ -419,6 +419,8 @@ namespace ReplayEngine::Rendering::DX12
         float seed = 0.0f;
         float time = 0.0f;
         std::int32_t waveform = 0;
+        std::string custom_shader;
+        Reflection::PropertyBag custom_parameters;
         DirectX::XMFLOAT2 direction{ 0.0f, 0.0f };
         DirectX::XMFLOAT4 color{ 1, 1, 1, 1 };
         DirectX::XMFLOAT4 color_2{ 1, 1, 1, 1 };
@@ -584,6 +586,14 @@ namespace ReplayEngine::Rendering::DX12
             D3D12MeshLocalBounds& bounds) const noexcept;
         bool GetSkinnedMeshLocalBounds(const std::string& key,
             D3D12MeshLocalBounds& bounds) const noexcept;
+        std::size_t StaticMeshBoundsCacheSize() const noexcept
+        {
+            return static_mesh_bounds_cache_.size();
+        }
+        std::size_t SkinnedMeshBoundsCacheSize() const noexcept
+        {
+            return skinned_mesh_bounds_cache_.size();
+        }
         // Runtime Canvas のCPUコマンドを、Scene3D/PostProcess後の同じBack Bufferへ記録する。
         bool DrawRuntimeUI(const D3D12UIFrame& frame) noexcept;
         void SetSceneEffects(D3D12SceneEffectSubmission submission)
@@ -861,6 +871,7 @@ namespace ReplayEngine::Rendering::DX12
         void ReleaseScene3DRenderTargets() noexcept;
         bool EnsureScene3DShadowTargets(const D3D12StaticSceneSubmission& submission) noexcept;
         void ReleaseScene3DShadowTargets() noexcept;
+        bool CacheSkinnedMeshLocalBounds(const D3D12SkinnedMeshSource& source) noexcept;
         bool EnsureStaticMesh(const D3D12StaticMeshSource& source) noexcept;
         bool EnsureSkinnedMesh(const D3D12SkinnedMeshSource& source) noexcept;
         bool EnsureStaticTexture(const D3D12StaticTextureSource& source) noexcept;

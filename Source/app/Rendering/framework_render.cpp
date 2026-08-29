@@ -409,7 +409,8 @@ void framework::render(float elapsed_time)
                 build_dx12_static_scene(static_scene, elapsed_time);
             ReplayEngine::Rendering::DX12::D3D12SceneEffectSubmission scene_effects;
             const bool scene_effects_ok = static_scene_built &&
-                build_dx12_scene_effects(scene_effects, static_scene);
+                build_dx12_scene_effects(scene_effects, static_scene,
+                    constants.view_projection);
             dx12_device_context.SetSceneEffects(std::move(scene_effects));
             const bool static_scene_ok = static_scene_built && scene_effects_ok &&
                 dx12_device_context.DrawScene3D(static_scene);

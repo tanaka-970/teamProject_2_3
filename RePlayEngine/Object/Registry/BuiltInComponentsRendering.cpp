@@ -705,8 +705,8 @@ namespace ReplayEngine::Core::Detail
                     .Animation(Animatable::Step));
             PropertyRegistry::Register<ModelEffectStackComponent>(
                 MakeProperty("max_bleed_pixels", &ModelEffectStackComponent::max_bleed_pixels)
-                    .Display(u8"最大はみ出し (px) [未対応]").Range(0.0, 1024.0).Step(1.0)
-                    .Tooltip(u8"現在の描画経路では未対応。値は保存され、将来の実装で使用します。")
+                    .Display(u8"最大はみ出し (px)").Range(0.0, 1024.0).Step(1.0)
+                    .Tooltip(u8"エフェクトがモデルの画面矩形から各辺へはみ出せる上限 (px)。")
                     .Animation(Animatable::Interpolatable));
         }
 

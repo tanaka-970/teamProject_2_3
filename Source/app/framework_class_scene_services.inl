@@ -69,7 +69,8 @@
         ReplayEngine::Rendering::DX12::D3D12UIFrame& frame);
     bool build_dx12_scene_effects(
         ReplayEngine::Rendering::DX12::D3D12SceneEffectSubmission& submission,
-        const ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission& static_scene);
+        const ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission& static_scene,
+        const DirectX::XMFLOAT4X4& view_projection);
     bool build_dx12_ui_for_scene(
         ReplayEngine::Rendering::DX12::D3D12UIFrame& frame,
         ReplayEngine::Scene::Scene& scene,
@@ -327,6 +328,7 @@ private:
     std::uint32_t profile_benchmark_frame_index{ 0 };
     std::uint32_t profile_benchmark_drain_frames{ 0 };
     std::string profile_benchmark_output_name{ "benchmark" };
+    bool profile_model_screen_bounds_diagnostic_emitted{ false };
     bool profile_benchmark_export_attempted{ false };
     bool profile_benchmark_export_ok{ false };
     bool profile_benchmark_gpu_drain_timeout{ false };

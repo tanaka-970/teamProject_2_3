@@ -1489,6 +1489,7 @@ namespace ReplayEngine::Rendering::DX12
     bool D3D12DeviceContext::EnsureSkinnedMesh(const D3D12SkinnedMeshSource& source) noexcept
     {
         if (source.key.empty() || source.vertices.empty() || source.indices.empty()) return false;
+        if (!CacheSkinnedMeshLocalBounds(source)) return false;
         if (skinned_mesh_cache_.find(source.key) != skinned_mesh_cache_.end()) return true;
         if (source.vertices.size() > ((std::numeric_limits<std::uint32_t>::max)() /
             sizeof(D3D12SkinnedVertex)) ||
@@ -1554,8 +1555,7 @@ namespace ReplayEngine::Rendering::DX12
         }
         for (const D3D12SkinnedMeshSource& source : submission.skinned_mesh_sources)
         {
-            if (skinned_mesh_cache_.find(source.key) == skinned_mesh_cache_.end() &&
-                !EnsureSkinnedMesh(source))
+            if (!EnsureSkinnedMesh(source))
                 upload_ok = false;
         }
         for (const D3D12StaticTextureSource& source : submission.texture_sources)

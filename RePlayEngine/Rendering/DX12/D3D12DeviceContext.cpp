@@ -1409,6 +1409,25 @@ namespace ReplayEngine::Rendering::DX12
         return bounds.valid;
     }
 
+    bool D3D12DeviceContext::CacheSkinnedMeshLocalBounds(
+        const D3D12SkinnedMeshSource& source) noexcept
+    {
+        if (source.key.empty()) return false;
+        if (skinned_mesh_bounds_cache_.find(source.key) != skinned_mesh_bounds_cache_.end())
+            return true;
+        const D3D12MeshLocalBounds bounds = MakeMeshLocalBounds(source.vertices);
+        if (!bounds.valid) return false;
+        try
+        {
+            skinned_mesh_bounds_cache_.emplace(source.key, bounds);
+        }
+        catch (...)
+        {
+            return false;
+        }
+        return true;
+    }
+
     bool D3D12DeviceContext::EnsureStaticMesh(
         const D3D12StaticMeshSource& source) noexcept
     {
