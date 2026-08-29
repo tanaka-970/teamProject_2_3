@@ -174,19 +174,37 @@ void main(uint3 group_id : SV_GroupID,
     }
 
     // --- 4. シェーディング --------------------------------------------------
-    const float4 base = gb_base.Load(int3(pixel, 0));
-    const float4 emissive_sample = gb_emi.Load(int3(pixel, 0));
-    const float4 normal_sample = gb_normal.Load(int3(pixel, 0));
-    const float4 param_sample = gb_param.Load(int3(pixel, 0));
+    float4 base = gb_base.Load(int3(pixel, 0));
+    float4 emissive_sample = gb_emi.Load(int3(pixel, 0));
+    float4 normal_sample = gb_normal.Load(int3(pixel, 0));
+    float4 param_sample = gb_param.Load(int3(pixel, 0));
+    float2 sampled_uv = (float2(pixel) + 0.5f) * frame_screen_size.zw;
+    bool shading_background = is_background;
+    if (!is_background && HasPixelateSettings(emissive_sample))
+    {
+        const float pixel_size = DecodePixelateSize(emissive_sample);
+        const float strength = DecodePixelateStrength(normal_sample);
+        const float2 cell_center = (floor(float2(pixel) / pixel_size) + 0.5f) * pixel_size;
+        const int2 sampled_position = clamp(int2(lerp(float2(pixel), cell_center, strength)),
+            int2(0, 0), screen_size - 1);
+        base = gb_base.Load(int3(sampled_position, 0));
+        emissive_sample = gb_emi.Load(int3(sampled_position, 0));
+        normal_sample = gb_normal.Load(int3(sampled_position, 0));
+        param_sample = gb_param.Load(int3(sampled_position, 0));
+        device_z = gb_depth.Load(int3(sampled_position, 0)).r;
+        sampled_uv = (float2(sampled_position) + 0.5f) * frame_screen_size.zw;
+        view_z = view_position_from_depth(sampled_uv, device_z).z;
+        shading_background = device_z >= 0.999999f;
+    }
 
-    if (is_background)
+    if (shading_background)
     {
         output_color[pixel] = float4(base.rgb, 1.0f);
         return;
     }
 
     const GBufferData g = DecodeGBuffer(base, emissive_sample, normal_sample, param_sample);
-    const float2 uv = (float2(pixel) + 0.5f) * frame_screen_size.zw;
+    const float2 uv = sampled_uv;
     const float3 world_position = world_position_from_depth(uv, device_z);
 
     const float3 N = g.world_normal;

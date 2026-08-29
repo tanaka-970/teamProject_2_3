@@ -1330,6 +1330,7 @@ namespace ReplayEngine::Rendering::DX12
         ReleaseScene3DRenderTargets();
         ReleaseScene3DShadowTargets();
         skinned_mesh_cache_.clear();
+        skinned_mesh_bounds_cache_.clear();
         scene3d_motion_history_.clear();
         scene3d_frame_serial_ = 0;
         for (auto& pso : scene3d_static_gbuffer_pipelines_) pso.Reset();
@@ -1531,6 +1532,7 @@ namespace ReplayEngine::Rendering::DX12
         if (!scene3d_null_directional_shadow_srv_.IsValid() ||
             !scene3d_null_local_shadow_srv_.IsValid())
             return scene3d_fail("null-shadow-srv");
+        if (!CacheMeshLocalBounds(submission)) return scene3d_fail("mesh-local-bounds");
         if (!EnsureScene3DRenderTargets()) return scene3d_fail("EnsureScene3DRenderTargets");
         if (!EnsureScene3DShadowTargets(submission)) return scene3d_fail("EnsureScene3DShadowTargets");
 

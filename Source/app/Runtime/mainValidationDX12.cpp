@@ -96,6 +96,69 @@ namespace ReplayEngine::Runtime::Detail
             return false;
         }
 
+        bool RunModelScreenBoundsValidation(
+            Rendering::DX12::D3D12DeviceContext& context, int& checks)
+        {
+            constexpr std::uint64_t owner_id = 0xB1E00001ull;
+            Rendering::DX12::D3D12StaticSceneSubmission submission;
+            Rendering::DX12::D3D12StaticMeshSource source;
+            source.key = "validation:model-screen-bounds";
+            source.vertices =
+            {
+                { { -0.5f, -0.25f, 0.2f }, { 0, 0, -1 }, { 0, 1 } },
+                { { -0.5f,  0.5f, 0.2f }, { 0, 0, -1 }, { 0, 0 } },
+                { {  0.5f, -0.25f, 0.2f }, { 0, 0, -1 }, { 1, 1 } }
+            };
+            submission.mesh_sources.push_back(std::move(source));
+            if (!Check(context.CacheMeshLocalBounds(submission),
+                "model local bounds cache", checks))
+                return false;
+
+            Rendering::DX12::D3D12MeshLocalBounds bounds;
+            if (!Check(context.GetStaticMeshLocalBounds(
+                "validation:model-screen-bounds", bounds) && bounds.valid &&
+                bounds.minimum.x == -0.5f && bounds.minimum.y == -0.25f &&
+                bounds.maximum.x == 0.5f && bounds.maximum.y == 0.5f,
+                "model local bounds values", checks))
+                return false;
+
+            const DirectX::XMFLOAT4X4 identity{
+                1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
+            DirectX::XMFLOAT4X4 world = identity;
+            world._41 = 0.25f;
+            const D3D12_VIEWPORT viewport{ 0, 0, 64, 64, 0, 1 };
+            D3D12_RECT rect{};
+            const bool projected = Rendering::DX12::CalculateD3D12ScreenRect(
+                bounds, world, identity, viewport, rect);
+            if (projected)
+            {
+                std::fprintf(stderr,
+                    "DX12 model screen rect owner=%llu left=%ld top=%ld right=%ld bottom=%ld\n",
+                    static_cast<unsigned long long>(owner_id),
+                    static_cast<long>(rect.left), static_cast<long>(rect.top),
+                    static_cast<long>(rect.right), static_cast<long>(rect.bottom));
+            }
+            if (!Check(projected && rect.left == 24 && rect.top == 16 &&
+                rect.right == 56 && rect.bottom == 40,
+                "model screen rect projection", checks))
+                return false;
+
+            world._41 = 2.0f;
+            if (!Check(!Rendering::DX12::CalculateD3D12ScreenRect(
+                bounds, world, identity, viewport, rect),
+                "model screen rect offscreen is empty", checks))
+                return false;
+
+            DirectX::XMFLOAT4X4 behind_view_projection = identity;
+            behind_view_projection._34 = 1.0f;
+            behind_view_projection._44 = 0.0f;
+            world = identity;
+            world._43 = -1.0f;
+            return Check(!Rendering::DX12::CalculateD3D12ScreenRect(
+                bounds, world, behind_view_projection, viewport, rect),
+                "model screen rect behind camera is empty", checks);
+        }
+
         // 失敗したときだけ Debug Layer の蓄積メッセージを stderr へ流す。
         void DumpDebugMessages(Rendering::DX12::D3D12DeviceContext& context)
         {
@@ -1566,6 +1629,8 @@ namespace ReplayEngine::Runtime::Detail
                 context.GpuValidationEnabled() ? 1 : 0,
                 context.DredEnabled() ? 1 : 0);
         }
+        if (ok)
+            ok = RunModelScreenBoundsValidation(context, checks);
 
         const std::uint32_t persistent_resource_descriptors =
             context.ResourceDescriptorAllocator().Used();

@@ -572,6 +572,9 @@ bool framework::build_dx12_static_scene(
                 (std::max)(1.0f, item.pixelate_size),
                 std::clamp(item.pixelate_strength, 0.0f, 1.0f),
                 std::clamp(item.pixelate_opacity, 0.0f, 1.0f) };
+            const auto* use_gbuffer = material->properties.Find("prop.UseGBufferColor");
+            draw.builtin_params1.x = use_gbuffer != nullptr && use_gbuffer->AsBool(false)
+                ? 1.0f : 0.0f;
         }
 
         if (flat_fill)

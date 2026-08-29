@@ -68,7 +68,8 @@
     bool build_dx12_ui(
         ReplayEngine::Rendering::DX12::D3D12UIFrame& frame);
     bool build_dx12_scene_effects(
-        ReplayEngine::Rendering::DX12::D3D12SceneEffectSubmission& submission);
+        ReplayEngine::Rendering::DX12::D3D12SceneEffectSubmission& submission,
+        const ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission& static_scene);
     bool build_dx12_ui_for_scene(
         ReplayEngine::Rendering::DX12::D3D12UIFrame& frame,
         ReplayEngine::Scene::Scene& scene,

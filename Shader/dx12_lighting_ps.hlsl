@@ -1,4 +1,5 @@
 #include "dx12_lighting_common.hlsli"
+#include "gbuffer_common.hlsli"
 
 Texture2D gBase : register(t0);
 Texture2D gEmissive : register(t1);
@@ -35,14 +36,42 @@ float3 ReconstructWorld(float2 uv, float depth)
 
 float4 main(float4 position : SV_POSITION, float2 uv : TEXCOORD0) : SV_Target0
 {
-    const float depth = gDepth.SampleLevel(pointSampler, uv, 0).r;
+    float depth = gDepth.SampleLevel(pointSampler, uv, 0).r;
     clip(0.999999f - depth);
-    const float4 base = gBase.SampleLevel(pointSampler, uv, 0);
-    const float3 emissive = gEmissive.SampleLevel(pointSampler, uv, 0).rgb;
-    const float4 normalValue = gNormalDepth.SampleLevel(pointSampler, uv, 0);
+    float4 base = gBase.SampleLevel(pointSampler, uv, 0);
+    const float4 emissiveValue = gEmissive.SampleLevel(pointSampler, uv, 0);
+    float3 emissive = emissiveValue.rgb;
+    float4 normalValue = gNormalDepth.SampleLevel(pointSampler, uv, 0);
+    float4 material = gMaterial.SampleLevel(pointSampler, uv, 0);
+    float4 pixelateSettings = gToon.SampleLevel(pointSampler, uv, 0);
+    if (HasPixelateSettings(emissiveValue))
+    {
+        uint gbufferWidth;
+        uint gbufferHeight;
+        gBase.GetDimensions(gbufferWidth, gbufferHeight);
+        const int2 renderSize = max(int2(gbufferWidth, gbufferHeight), int2(1, 1));
+        const float pixelSize = DecodePixelateSize(emissiveValue);
+        const float strength = DecodePixelateStrength(normalValue);
+        const float opacity = saturate(pixelateSettings.x);
+        const float effectStrength = strength * opacity;
+        const float2 cellCenter = (floor(position.xy / pixelSize) + 0.5f) * pixelSize;
+        const int2 sampledPosition = clamp(int2(lerp(position.xy, cellCenter, effectStrength)),
+            int2(0, 0), renderSize - 1);
+        const float3 originalBase = base.rgb;
+        base = gBase.Load(int3(sampledPosition, 0));
+        emissive = gEmissive.Load(int3(sampledPosition, 0)).rgb;
+        normalValue = gNormalDepth.Load(int3(sampledPosition, 0));
+        material = gMaterial.Load(int3(sampledPosition, 0));
+        depth = gDepth.Load(int3(sampledPosition, 0)).r;
+        pixelateSettings = gToon.Load(int3(sampledPosition, 0));
+        uv = (float2(sampledPosition) + 0.5f) / float2(renderSize);
+        if (pixelateSettings.y < 0.5f)
+            base.rgb = originalBase;
+        else
+            base.rgb = lerp(originalBase, base.rgb, opacity);
+    }
     const float3 normal = normalize(normalValue.xyz * 2.0f - 1.0f);
     const bool receiveShadow = normalValue.w >= 0.0f;
-    const float4 material = gMaterial.SampleLevel(pointSampler, uv, 0);
     const float3 worldPosition = ReconstructWorld(uv, depth);
     if (debugFlags.x == 7u)
     {

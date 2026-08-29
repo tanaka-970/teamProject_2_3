@@ -405,11 +405,13 @@ void framework::render(float elapsed_time)
             const bool upload_ok =
                 dx12_device_context.SubmitFrameConstants(constants) &&
                 dx12_device_context.SubmitRenderItems(object_render_items);
+            const bool static_scene_built = upload_ok &&
+                build_dx12_static_scene(static_scene, elapsed_time);
             ReplayEngine::Rendering::DX12::D3D12SceneEffectSubmission scene_effects;
-            const bool scene_effects_ok = build_dx12_scene_effects(scene_effects);
+            const bool scene_effects_ok = static_scene_built &&
+                build_dx12_scene_effects(scene_effects, static_scene);
             dx12_device_context.SetSceneEffects(std::move(scene_effects));
-            const bool static_scene_ok = upload_ok && scene_effects_ok &&
-                build_dx12_static_scene(static_scene, elapsed_time) &&
+            const bool static_scene_ok = static_scene_built && scene_effects_ok &&
                 dx12_device_context.DrawScene3D(static_scene);
             ReplayEngine::Rendering::DX12::D3D12UIFrame ui_frame;
             bool ui_ok = false;

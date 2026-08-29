@@ -12,6 +12,7 @@
 #include "D3D12MeshBuffer.h"
 #include "D3D12RenderItemBatch.h"
 #include "D3D12ResourceStateTracker.h"
+#include "D3D12ScreenBounds.h"
 #include "D3D12ShaderCompiler.h"
 #include "D3D12UploadContext.h"
 #include "../../UI/Effects/UIEffect.h"
@@ -578,6 +579,11 @@ namespace ReplayEngine::Rendering::DX12
         bool DrawStaticScene(const D3D12StaticSceneSubmission& submission) noexcept;
         // Scene 3D: Static + Skinned + GBuffer + Deferred + Forward Transparent。
         bool DrawScene3D(const D3D12StaticSceneSubmission& submission) noexcept;
+        bool CacheMeshLocalBounds(const D3D12StaticSceneSubmission& submission) noexcept;
+        bool GetStaticMeshLocalBounds(const std::string& key,
+            D3D12MeshLocalBounds& bounds) const noexcept;
+        bool GetSkinnedMeshLocalBounds(const std::string& key,
+            D3D12MeshLocalBounds& bounds) const noexcept;
         // Runtime Canvas のCPUコマンドを、Scene3D/PostProcess後の同じBack Bufferへ記録する。
         bool DrawRuntimeUI(const D3D12UIFrame& frame) noexcept;
         void SetSceneEffects(D3D12SceneEffectSubmission submission)
@@ -1032,10 +1038,12 @@ namespace ReplayEngine::Rendering::DX12
         std::uint32_t scene3d_width_ = 0;
         std::uint32_t scene3d_height_ = 0;
         std::unordered_map<std::string, std::unique_ptr<D3D12MeshBuffer>> skinned_mesh_cache_;
+        std::unordered_map<std::string, D3D12MeshLocalBounds> skinned_mesh_bounds_cache_;
         std::unordered_map<std::string, Scene3DMotionHistory> scene3d_motion_history_;
         std::uint64_t scene3d_frame_serial_ = 0;
         D3D12DescriptorAllocation static_samplers_[3]{};
         std::unordered_map<std::string, std::unique_ptr<D3D12MeshBuffer>> static_mesh_cache_;
+        std::unordered_map<std::string, D3D12MeshLocalBounds> static_mesh_bounds_cache_;
         std::unordered_map<std::string, StaticTextureResource> texture_cache_;
         std::unordered_map<std::string, StaticTextureResource> ui_font_texture_cache_;
         std::unordered_map<std::string, std::uint64_t> ui_font_texture_revisions_;
