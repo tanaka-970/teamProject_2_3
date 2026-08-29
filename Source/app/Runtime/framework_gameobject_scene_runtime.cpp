@@ -52,7 +52,27 @@ void framework::update_exclusive_scene(float elapsed_time)
 
     ReplayEngine::Scene::Scene& scene = *object_loading_scene;
     const float safe_delta_time = (std::max)(0.0f, elapsed_time);
+    ReplayEngine::Runtime::RuntimeContext* runtime_context =
+        object_loading_runtime_context.get();
+    const std::uint64_t frame_index = object_loading_frame_index++;
+    if (runtime_context != nullptr)
+    {
+        ReplayEngine::Runtime::RuntimeTime runtime_time;
+        runtime_time.delta_time = safe_delta_time;
+        runtime_time.unscaled_delta_time = safe_delta_time;
+        runtime_time.fixed_delta_time = object_fixed_time_step;
+        runtime_time.frame_index = frame_index;
+        runtime_context->SetTime(runtime_time);
+    }
     scene.Update(safe_delta_time);
+    if (runtime_context != nullptr)
+    {
+        runtime_context->Events().Dispatch(&runtime_context->Resolver());
+    }
+
+    ReplayEngine::Motion::MotionMixer exclusive_motion_mixer;
+    evaluate_motion_players(scene, safe_delta_time, safe_delta_time,
+        exclusive_motion_mixer, runtime_context, frame_index);
 
     const object_ui_viewport ui_viewport = object_ui_viewport_target();
     const float ui_logical_width = (std::max)(1.0f, ui_viewport.logical_width);
@@ -62,6 +82,11 @@ void framework::update_exclusive_scene(float elapsed_time)
     ReplayEngine::Components::PropertyLinkComponent::EvaluateAll(
         scene, safe_delta_time);
     update_ui_number_displays(scene);
+    update_ui_sprite_animators(scene, safe_delta_time, &exclusive_motion_mixer);
+    if (runtime_context != nullptr)
+    {
+        runtime_context->Events().Dispatch(&runtime_context->Resolver());
+    }
     ReplayEngine::UI::UILayout::Resolve(scene,
         ui_logical_width, ui_logical_height);
 }
@@ -273,7 +298,8 @@ void framework::update_object_scene(float elapsed_time)
         // 同じ property へ setter を 1 フレーム 1 回だけ呼ぶため、この外部フェーズで扱う。
         {
             REPLAY_PROFILE_SCOPE("Motion/Evaluate");
-            evaluate_motion_players(scene, scaled_delta_time, unscaled_delta_time);
+            evaluate_motion_players(scene, scaled_delta_time, unscaled_delta_time,
+                motion_mixer, object_runtime_context.get(), object_runtime_frame_index);
         }
         {
             REPLAY_PROFILE_SCOPE("PropertyLink");
@@ -287,7 +313,7 @@ void framework::update_object_scene(float elapsed_time)
         // UI sprite animation は Pause Menu / Loading 表示を止めないため実時間。
         {
             REPLAY_PROFILE_SCOPE("UI/SpriteAnimation");
-            update_ui_sprite_animators(scene, unscaled_delta_time);
+            update_ui_sprite_animators(scene, unscaled_delta_time, &motion_mixer);
         }
         if (object_runtime_context)
         {

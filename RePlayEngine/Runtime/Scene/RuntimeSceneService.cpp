@@ -66,7 +66,7 @@ namespace ReplayEngine::Runtime
 
     std::unique_ptr<Scene::Scene> RuntimeSceneService::LoadStandaloneScene(
         const std::filesystem::path& path, Serialization::SceneLoadReport& report,
-        std::string& error)
+        std::string& error, std::unique_ptr<RuntimeContext>* standalone_runtime)
     {
         report.Clear();
         error.clear();
@@ -75,7 +75,14 @@ namespace ReplayEngine::Runtime
         if (!Serialization::SceneSerializer::LoadFromFile(data, path, error)) return nullptr;
 
         auto scene = std::make_unique<Scene::Scene>(data.scene_name);
-        if (runtime_ != nullptr) scene->Services().SetRuntime(runtime_);
+        std::unique_ptr<RuntimeContext> standalone_context;
+        RuntimeContext* scene_runtime = runtime_;
+        if (standalone_runtime != nullptr)
+        {
+            standalone_context = std::make_unique<RuntimeContext>(*scene);
+            scene_runtime = standalone_context.get();
+        }
+        if (scene_runtime != nullptr) scene->Services().SetRuntime(scene_runtime);
         scene->Services().SetRuntimeScene(this);
         scene->Services().SetSceneFlow(scene_flow_);
 
@@ -85,6 +92,8 @@ namespace ReplayEngine::Runtime
             return nullptr;
         }
 
+        if (standalone_runtime != nullptr)
+            *standalone_runtime = std::move(standalone_context);
         scene->Start();
         return scene;
     }

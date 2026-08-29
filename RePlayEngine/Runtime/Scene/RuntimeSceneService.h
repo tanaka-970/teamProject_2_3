@@ -151,7 +151,8 @@ namespace ReplayEngine::Runtime
 
         std::unique_ptr<Scene::Scene> LoadStandaloneScene(
             const std::filesystem::path& path,
-            Scene::Serialization::SceneLoadReport& report, std::string& error);
+            Scene::Serialization::SceneLoadReport& report, std::string& error,
+            std::unique_ptr<RuntimeContext>* standalone_runtime = nullptr);
 
         // World の実体が常にあるかの確認。設計上ここは必ず true になるが、
         // 利用側が「World がある前提」を明示できるよう用意してある。

@@ -259,6 +259,7 @@ bool framework::uninitialize()
         object_loading_scene->Services().SetLoadingProgress(nullptr);
         object_loading_scene.reset();
     }
+    object_loading_runtime_context.reset();
 
     // 3) GameObject シーンが抱えているメッシュ / マテリアルを手放す。
     clear_object_mesh_cache();

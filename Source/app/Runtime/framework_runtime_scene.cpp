@@ -162,11 +162,17 @@ bool framework::load_exclusive_scene_from_path(const std::filesystem::path& path
 
     ReplayEngine::Scene::Serialization::SceneLoadReport report;
     std::string error;
+    std::unique_ptr<ReplayEngine::Runtime::RuntimeContext> loading_runtime_context;
     std::unique_ptr<ReplayEngine::Scene::Scene> scene =
-        object_runtime_scenes.LoadStandaloneScene(content_path(path), report, error);
+        object_runtime_scenes.LoadStandaloneScene(content_path(path), report, error,
+            &loading_runtime_context);
     if (scene == nullptr) return false;
 
     scene->Services().SetLoadingProgress(&object_loading_progress_provider);
+    object_loading_scene.reset();
+    object_loading_runtime_context.reset();
+    object_loading_runtime_context = std::move(loading_runtime_context);
+    object_loading_frame_index = 0;
     object_loading_scene = std::move(scene);
     return true;
 }
