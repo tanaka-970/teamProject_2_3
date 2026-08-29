@@ -307,6 +307,8 @@ ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
 }
 bool framework::build_dx12_static_scene(
     ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission& submission,
+    const ReplayEngine::Scene::Scene& scene,
+    const ReplayEngine::Rendering::RenderItemList& render_items,
     float elapsed_time)
 {
     using namespace ReplayEngine::Rendering;
@@ -830,7 +832,6 @@ bool framework::build_dx12_static_scene(
     // LineRenderer/TrailもCPU側の点列を正本にし、DX12では一時Ribbon Meshへ変換する。
     // Frame slotごとに置換するので、毎フレームの軌跡更新で古いGPU Resourceを蓄積しない。
     {
-        ReplayEngine::Scene::Scene& scene = active_object_scene();
         std::vector<DirectX::XMFLOAT3> path;
         std::vector<float> alpha;
         for (std::size_t object_index = 0; object_index < scene.GameObjectCount(); ++object_index)
@@ -890,7 +891,6 @@ bool framework::build_dx12_static_scene(
     {
         using ReplayEngine::Components::ParticleEmitterComponent;
         using Particle = framework::dx12_particle_instance;
-        ReplayEngine::Scene::Scene& scene = active_object_scene();
         const float delta = (std::max)(0.0f, (std::min)(elapsed_time, 0.1f));
         const DirectX::XMVECTOR world_up = DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
         const DirectX::XMVECTOR camera_forward_world =
@@ -1114,7 +1114,7 @@ bool framework::build_dx12_static_scene(
         }
     }
 
-    for (const RenderItem& source_item : object_render_items.Items())
+    for (const RenderItem& source_item : render_items.Items())
     {
         if (source_item.mesh_asset.empty()) continue;
 
@@ -1584,7 +1584,6 @@ bool framework::build_dx12_static_scene(
     // Landscapeは既存LandscapeDataの頂点/Indexを正本として、そのままStatic Mesh提出へ変換する。
     // D3D11専用のstatic_meshキャッシュをDX12から参照しないため、編集後のRevisionもキーへ含める。
     {
-        ReplayEngine::Scene::Scene& scene = active_object_scene();
         for (std::size_t object_index = 0; object_index < scene.GameObjectCount(); ++object_index)
         {
             const ReplayEngine::Core::GameObject* object = scene.GameObjectAt(object_index);
