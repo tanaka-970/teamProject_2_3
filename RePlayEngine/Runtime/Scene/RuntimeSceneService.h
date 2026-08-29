@@ -5,6 +5,7 @@
 #include "../../Scene/Serialization/SceneData.h"
 
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <string>
 
@@ -147,6 +148,10 @@ namespace ReplayEngine::Runtime
         //   使うたびにここから取り直し、跨いで持つのは ObjectHandle だけにする。
         Scene::Scene& ActiveWorld() noexcept { return *active_; }
         const Scene::Scene& ActiveWorld() const noexcept { return *active_; }
+
+        std::unique_ptr<Scene::Scene> LoadStandaloneScene(
+            const std::filesystem::path& path,
+            Scene::Serialization::SceneLoadReport& report, std::string& error);
 
         // World の実体が常にあるかの確認。設計上ここは必ず true になるが、
         // 利用側が「World がある前提」を明示できるよう用意してある。

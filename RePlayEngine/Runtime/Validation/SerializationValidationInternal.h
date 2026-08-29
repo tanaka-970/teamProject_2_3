@@ -6,12 +6,16 @@
 #include "../../Object/Registry/BuiltInComponents.h"
 #include "../../Object/Registry/ComponentRegistry.h"
 #include "../../Reflection/Registry/PropertyRegistry.h"
+#include "../../Runtime/API/RuntimeContext.h"
+#include "../../Runtime/Scene/RuntimeSceneService.h"
+#include "../../Runtime/Scene/SceneFlowService.h"
 #include "../../Scene/Runtime/Scene.h"
 #include "../../Scene/Serialization/SceneData.h"
 #include "../../Scene/Serialization/SceneSerializer.h"
 
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
 #include <limits>
 #include <locale>
 #include <sstream>
