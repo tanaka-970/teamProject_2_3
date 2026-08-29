@@ -44,6 +44,24 @@
     std::unique_ptr<ReplayEngine::Runtime::SceneFlowService> object_scene_flow;
     ReplayEngine::Runtime::CollisionEventDispatcher object_collision_events;
 
+    class loading_progress_provider final
+        : public ReplayEngine::Scene::ILoadingProgressProvider
+    {
+    public:
+        void Bind(const ReplayEngine::Scene::SceneManager* manager) noexcept
+        {
+            scene_manager_ = manager;
+        }
+
+        float Progress() const noexcept override;
+        bool IsLoading() const noexcept override;
+
+    private:
+        const ReplayEngine::Scene::SceneManager* scene_manager_ = nullptr;
+    };
+    loading_progress_provider object_loading_progress_provider;
+    std::unique_ptr<ReplayEngine::Scene::Scene> object_loading_scene;
+
     // AssetGUID -> Scene ファイルのパス。Runtime 層が AssetDatabase を
     // 直接 include しないための実装側。framework が所有する。
     // 結線は initialize_runtime_services() で行う。

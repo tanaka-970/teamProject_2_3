@@ -31,6 +31,8 @@
 
 #include "framework.h"
 
+#include "../../RePlayEngine/Scene/LoadingScene.h"
+
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
 #include "../../RePlayEngine/Runtime/Behaviour/BehaviourRegistry.h"
 #include "../../RePlayEngine/Scripting/CSharp/CSharpProject.h"
@@ -137,6 +139,42 @@ framework::runtime_prefab_instantiator::InstantiatePrefab(
 // ---------------------------------------------------------------------------
 // Runtime サービスの初期化
 // ---------------------------------------------------------------------------
+
+float framework::loading_progress_provider::Progress() const noexcept
+{
+    if (scene_manager_ == nullptr) return 1.0f;
+    const auto* loading_scene = dynamic_cast<const ReplayEngine::Scene::LoadingScene*>(
+        scene_manager_->CurrentScene());
+    return loading_scene != nullptr ? loading_scene->Progress() : 1.0f;
+}
+
+bool framework::loading_progress_provider::IsLoading() const noexcept
+{
+    if (scene_manager_ == nullptr) return false;
+    const auto* loading_scene = dynamic_cast<const ReplayEngine::Scene::LoadingScene*>(
+        scene_manager_->CurrentScene());
+    return loading_scene != nullptr && !loading_scene->IsFinished();
+}
+
+bool framework::load_exclusive_scene_from_path(const std::filesystem::path& path)
+{
+    if (path.empty()) return false;
+
+    ReplayEngine::Scene::Serialization::SceneLoadReport report;
+    std::string error;
+    std::unique_ptr<ReplayEngine::Scene::Scene> scene =
+        object_runtime_scenes.LoadStandaloneScene(content_path(path), report, error);
+    if (scene == nullptr) return false;
+
+    scene->Services().SetLoadingProgress(&object_loading_progress_provider);
+    object_loading_scene = std::move(scene);
+    return true;
+}
+
+ReplayEngine::Scene::Scene* framework::exclusive_scene_for_render() noexcept
+{
+    return scene_manager.IsExclusive() ? object_loading_scene.get() : nullptr;
+}
 
 void framework::initialize_runtime_services()
 {

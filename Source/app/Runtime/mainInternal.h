@@ -95,5 +95,6 @@ namespace ReplayEngine::Runtime::Detail
     int RunHeadlessPropertyLinkValidation(const char* command_line);
     int RunHeadlessScenePersistenceValidation(const char* command_line);
     int RunHeadlessSerializationValidation(const char* command_line);
+    int RunHeadlessLoadingBridgeValidation(const char* command_line);
     int RunHeadlessEditorHelpValidation(const char* command_line);
 }

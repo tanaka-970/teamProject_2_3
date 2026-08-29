@@ -33,6 +33,13 @@
     void tick_runtime_scene_flow();
     void rebind_runtime_world_if_changed();
 
+public:
+    bool load_exclusive_scene_from_path(const std::filesystem::path& path);
+    ReplayEngine::Scene::Scene* exclusive_scene_for_render() noexcept;
+    void update_exclusive_scene(float elapsed_time);
+
+private:
+
     // Startup Scene からの起動。空・無効・失敗はすべて診断状態にする。
     void begin_startup_scene();
     void set_runtime_blocked(const std::string& reason);

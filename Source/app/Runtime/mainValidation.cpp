@@ -5,6 +5,7 @@
 #include "framework.h"
 #include "mainInternal.h"
 
+#include <atomic>
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -17,6 +18,7 @@
 #include <vector>
 
 #include "../../../RePlayEngine/Components/Motion/MotionPlayerComponent.h"
+#include "../../../RePlayEngine/Components/Core/SceneLoaderComponent.h"
 #include "../../../RePlayEngine/Object/Registry/BuiltInComponents.h"
 #include "../../../RePlayEngine/Editor/Validation/AnimationUndoValidation.h"
 #include "../../../RePlayEngine/Editor/Validation/EditorIntegrationValidation.h"
@@ -26,6 +28,8 @@
 #include "../../../RePlayEngine/Runtime/Validation/SceneFlowValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/SerializationValidation.h"
 #include "../../../RePlayEngine/Runtime/Validation/StressValidation.h"
+#include "../../../RePlayEngine/Scene/LoadingScene.h"
+#include "../../../RePlayEngine/Scene/Serialization/SceneSerializer.h"
 #include "../../../RePlayEngine/Scripting/Validation/CSharpScriptValidation.h"
 #include "../../../RePlayEngine/Scripting/Validation/ScriptCoreValidation.h"
 #include "../../../RePlayEngine/Rendering/Shaders/ShaderAssetValidation.h"
@@ -78,6 +82,97 @@ namespace ReplayEngine::Runtime::Detail
         std::fprintf(stderr, "EditorHelp validation: RESULT %s (%s)\n",
             ok ? "OK" : "NG", report.c_str());
         return ok ? 0 : 1800;
+    }
+
+    int RunHeadlessLoadingBridgeValidation(const char* command_line)
+    {
+        std::istringstream arguments(command_line != nullptr ? command_line : "");
+        std::string command;
+        if (!(arguments >> command) || command != "--validate-loading-bridge") return -1;
+
+        int checks = 0;
+        int first_failure = 0;
+        const auto Check = [&checks, &first_failure](bool condition, const char* label)
+        {
+            ++checks;
+            if (condition) return;
+            if (first_failure == 0) first_failure = checks;
+            std::fprintf(stderr, "  [FAIL %d] %s\n", checks, label);
+        };
+
+        ReplayEngine::Core::RegisterBuiltInComponents();
+        framework host(nullptr);
+        const auto gate = std::make_shared<std::atomic<bool>>(false);
+        auto loading_scene = std::make_unique<ReplayEngine::Scene::LoadingScene>();
+        loading_scene->AddTask("LoadingBridge", [gate]()
+        {
+            while (!gate->load(std::memory_order_acquire)) Sleep(1);
+            return true;
+        });
+
+        Check(host.scene_manager.SetScene(std::move(loading_scene)) &&
+            host.scene_manager.IsExclusive(),
+            "検証用 LoadingScene が Exclusive として設定される");
+        Check(host.exclusive_scene_for_render() == nullptr,
+            "専用 Scene 未読込時は既存の SceneManager 経路へ落ちる");
+
+        ReplayEngine::Scene::Serialization::SceneData data;
+        data.scene_name = "LoadingBridge";
+        ReplayEngine::Scene::Serialization::GameObjectData object;
+        object.id = ReplayEngine::Core::ObjectID{ 1 };
+        object.name = "Loader";
+        ReplayEngine::Scene::Serialization::ComponentData component;
+        component.type_name =
+            ReplayEngine::Components::SceneLoaderComponent::StaticTypeName();
+        component.type_id =
+            ReplayEngine::Components::SceneLoaderComponent::StaticTypeID();
+        object.components.push_back(std::move(component));
+        data.objects.push_back(std::move(object));
+
+        const std::filesystem::path path = ValidationFolder() /
+            "LoadingBridge.replayscene";
+        std::error_code directory_error;
+        std::filesystem::create_directories(path.parent_path(), directory_error);
+        std::string error;
+        const bool written = !directory_error &&
+            ReplayEngine::Scene::Serialization::SceneSerializer::SaveToFile(
+                data, path, error);
+        Check(written, "専用 Scene の検証ファイルを書き出せる");
+
+        const bool loaded = host.load_exclusive_scene_from_path(path);
+        Check(loaded && host.exclusive_scene_for_render() != nullptr,
+            "専用 Scene 読込後は専用 Scene 経路が選ばれる");
+
+        ReplayEngine::Scene::Scene* exclusive_scene = host.exclusive_scene_for_render();
+        ReplayEngine::Components::SceneLoaderComponent* loader = nullptr;
+        if (exclusive_scene != nullptr && exclusive_scene->GameObjectCount() > 0)
+        {
+            ReplayEngine::Core::GameObject* owner = exclusive_scene->GameObjectAt(0);
+            if (owner != nullptr)
+            {
+                loader = owner->GetComponent<
+                    ReplayEngine::Components::SceneLoaderComponent>();
+            }
+        }
+        Check(loader != nullptr, "専用 Scene の SceneLoaderComponent を取得できる");
+
+        const ReplayEngine::Scene::ILoadingProgressProvider* provider =
+            exclusive_scene != nullptr
+            ? exclusive_scene->Services().LoadingProgress() : nullptr;
+        Check(provider != nullptr && provider->Progress() == 0.0f &&
+            provider->IsLoading(),
+            "LoadingScene の Progress を provider 経由で取得できる");
+
+        host.update_exclusive_scene(1.0f / 60.0f);
+        Check(loader != nullptr && loader->progress == 0.0f && loader->is_loading &&
+            loader->state == static_cast<int>(ReplayEngine::Runtime::SceneLoadState::Loading),
+            "Exclusive 中の Component 更新が LoadingScene provider の値を反映する");
+
+        gate->store(true, std::memory_order_release);
+        host.scene_manager.Clear();
+        std::fprintf(stderr, "loading-bridge validation: %s (%d checks)\n",
+            first_failure == 0 ? "OK" : "FAILED", checks);
+        return first_failure;
     }
 }
 
@@ -347,6 +442,9 @@ namespace ReplayEngine::Runtime::Detail
 
         if (command == "--validate-gltf-import")
             return RunHeadlessGltfImportValidation(command_line);
+
+        if (command == "--validate-loading-bridge")
+            return RunHeadlessLoadingBridgeValidation(command_line);
 
         namespace Validation = ReplayEngine::Runtime::Validation;
         if (command == "--validate-serialization")

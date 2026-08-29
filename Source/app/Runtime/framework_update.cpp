@@ -48,6 +48,7 @@ void framework::update(float elapsed_time)
             REPLAY_PROFILE_SCOPE("SceneManagerExclusive");
             scene_manager.Update(elapsed_time);
         }
+        if (scene_manager.IsExclusive()) update_exclusive_scene(elapsed_time);
         return;
     }
 
