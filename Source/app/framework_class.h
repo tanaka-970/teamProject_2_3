@@ -89,8 +89,9 @@
 // 推移的な include に頼ると、上流のヘッダーを整理した瞬間に壊れる。
 #include <chrono>
 #include <cstdint>
-#include <atomic>
+#include <condition_variable>
 #include <memory>
+#include <mutex>
 #include <string>
 
 

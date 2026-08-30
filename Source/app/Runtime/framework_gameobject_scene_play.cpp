@@ -39,7 +39,6 @@
 #include <cstdint>
 #include <filesystem>
 #include <string>
-#include <thread>
 #include <utility>
 #include <vector>
 
@@ -48,7 +47,7 @@ namespace
     namespace SceneSerialization = ReplayEngine::Scene::Serialization;
 }
 
-void framework::enter_object_play_mode()
+void framework::enter_object_play_mode(bool show_loading_screen)
 {
     // 呼ばれたこと自体を必ず残す。
     // 「Play を押しても何も起きない」ときに、ボタンが繋がっていないのか
@@ -113,19 +112,17 @@ void framework::enter_object_play_mode()
     // Runtime World の構築はメインスレッドの安全点で 1 段ずつ進め、
     // その間だけ SceneManager を排他 LoadingScene にする。
     // これにより、編集 Scene は保存されず、ロード画面だけが先に描画される。
-    if (!standalone_game_mode)
+    if (!standalone_game_mode && show_loading_screen)
     {
-        auto loading_stage = std::make_shared<std::atomic<int>>(0);
+        auto loading_gate = std::make_shared<editor_play_loading_gate>();
         auto loading_scene = std::make_unique<ReplayEngine::Scene::LoadingScene>();
-        loading_scene->AddTask("Editor Play Scene", [loading_stage]()
+        loading_scene->AddTask("Build Editor Play Scene", [loading_gate]()
         {
-            for (;;)
-            {
-                const int stage = loading_stage->load(std::memory_order_acquire);
-                if (stage >= 2) return true;
-                if (stage < 0) return false;
-                std::this_thread::yield();
-            }
+            return loading_gate->WaitFor(1);
+        });
+        loading_scene->AddTask("Activate Editor Play Scene", [loading_gate]()
+        {
+            return loading_gate->WaitFor(2);
         });
 
         // 初期起動時に残っている queued factory を捨てる。
@@ -135,6 +132,7 @@ void framework::enter_object_play_mode()
         game_scene = nullptr;
         if (!scene_manager.SetScene(std::move(loading_scene)))
         {
+            loading_gate->Cancel();
             object_editor_context.SetStatus(
                 "Play 用 Loading Scene を開始できませんでした");
             push_editor_log("Error", "Play 用 Loading Scene の初期化に失敗しました");
@@ -151,19 +149,27 @@ void framework::enter_object_play_mode()
             return next_scene;
         });
 
-        object_editor_play_loading_stage = std::move(loading_stage);
+        object_editor_play_loading_gate = std::move(loading_gate);
         object_editor_play_loading = true;
         object_loading_progress_provider.SetEditorPlayLoading(true);
         object_editor_context.SetStatus("Play 用 Scene を読み込み中…");
+
+        // Loading Scene は初回起動の完了値を保持していることがある。
+        // F5 を押した同じフレームから今回の 0..1 を反映し、古い 100% を描かない。
+        update_exclusive_scene(0.0f);
         return;
     }
 
-    // 構築と入れ替えをその場で済ませる。
-    // Play 開始はフレーム境界を挟む必要がないうえ、
-    // ここで済ませないと 1 フレームだけ「Play 中なのに空の World」になる。
+    // 描画フレームが無い終了回帰テストでは、構築と入れ替えをその場で済ませる。
+    // 通常の Editor F5 は上の Loading Screen 経路から別フレームで進む。
     object_runtime_scenes.Tick();   // Staging World の構築
     object_runtime_scenes.Tick();   // 入れ替えと Scene::Start()
 
+    complete_object_play_mode_start();
+}
+
+bool framework::complete_object_play_mode_start()
+{
     if (object_runtime_scenes.State() != ReplayEngine::Runtime::SceneLoadState::Completed)
     {
         // 失敗しても編集 Scene には一切触れていない。そのまま Edit Mode を続ける。
@@ -176,8 +182,15 @@ void framework::enter_object_play_mode()
             std::to_string(static_cast<int>(object_runtime_scenes.State()));
         object_editor_context.SetStatus(reason);
         push_editor_log("Error", reason);
+        object_runtime_scenes.ResetToEmptyWorld();
+        object_runtime_world_active = false;
+        object_scene_play_mode = false;
+        object_scene_paused = false;
+        object_editor_context.SetPlayMode(false);
+        object_editor_context.AttachScene(&object_scene);
+        object_editor_context.ResetSceneState();
         play_spawn_override.active = false;
-        return;
+        return false;
     }
 
     ReplayEngine::Scene::Scene& runtime_world = object_runtime_scenes.ActiveWorld();
@@ -296,6 +309,7 @@ void framework::enter_object_play_mode()
 
         push_editor_log("Info", "===== Play 診断 終了 =====");
     }
+    return true;
 }
 
 void framework::update_editor_play_loading()
@@ -312,76 +326,40 @@ void framework::update_editor_play_loading()
         object_runtime_scenes.Tick();
     }
 
-    if (object_editor_play_loading_stage == nullptr) return;
+    if (object_editor_play_loading_gate == nullptr) return;
     const ReplayEngine::Runtime::SceneLoadState after = object_runtime_scenes.State();
-    if (after == ReplayEngine::Runtime::SceneLoadState::Completed)
-        object_editor_play_loading_stage->store(2, std::memory_order_release);
+    if (after == ReplayEngine::Runtime::SceneLoadState::ReadyToSwap)
+        object_editor_play_loading_gate->AdvanceTo(1);
+    else if (after == ReplayEngine::Runtime::SceneLoadState::Completed)
+        object_editor_play_loading_gate->AdvanceTo(2);
     else if (after == ReplayEngine::Runtime::SceneLoadState::Failed)
-        object_editor_play_loading_stage->store(-1, std::memory_order_release);
+        object_editor_play_loading_gate->Cancel();
 }
 
 void framework::finish_editor_play_loading()
 {
     if (!object_editor_play_loading) return;
 
-    const bool succeeded = object_runtime_scenes.State() ==
-        ReplayEngine::Runtime::SceneLoadState::Completed;
     object_editor_play_loading = false;
     object_loading_progress_provider.SetEditorPlayLoading(false);
-    if (object_editor_play_loading_stage != nullptr)
-        object_editor_play_loading_stage->store(2, std::memory_order_release);
-    object_editor_play_loading_stage.reset();
+    if (object_editor_play_loading_gate != nullptr)
+        object_editor_play_loading_gate->AdvanceTo(2);
+    object_editor_play_loading_gate.reset();
 
-    if (!succeeded)
-    {
-        const std::string reason =
-            "実行用 Scene を構築できませんでした: " + object_runtime_scenes.LastError();
-        object_runtime_scenes.ResetToEmptyWorld();
-        object_runtime_world_active = false;
-        object_scene_play_mode = false;
-        object_scene_paused = false;
-        play_spawn_override.active = false;
-        object_editor_context.SetPlayMode(false);
-        object_editor_context.AttachScene(&object_scene);
-        object_editor_context.ResetSceneState();
-        object_editor_context.SetStatus(reason);
-        push_editor_log("Error", reason);
-        return;
-    }
-
-    ReplayEngine::Scene::Scene& runtime_world = object_runtime_scenes.ActiveWorld();
-    attach_collision_world(runtime_world);
-    object_collision_world.Refresh();
-    if (play_spawn_override.active)
-    {
-        push_editor_log("Info", play_spawn_override.label + " から Play を開始しました");
-        play_spawn_override.active = false;
-    }
-
-    object_fixed_accumulator = 0.0f;
-    object_time_scale = 1.0f;
-    object_collision_events.Reset();
-    object_scene_play_mode = true;
-    object_scene_paused = false;
-    object_runtime_world_active = true;
-    object_bound_world_instance = object_runtime_scenes.ActiveWorldID();
-    object_editor_context.SetPlayMode(true);
-    object_editor_context.AttachScene(&runtime_world);
-    object_editor_context.ResetSceneState();
-    object_editor_context.SetStatus("実行中（編集シーンは保持されています）");
-    push_editor_log("Info", "Editor F5 の Loading Screen を完了しました");
+    if (complete_object_play_mode_start())
+        push_editor_log("Info", "Editor F5 の Loading Screen を完了しました");
 }
 
 void framework::cancel_editor_play_loading()
 {
     if (!object_editor_play_loading) return;
 
-    if (object_editor_play_loading_stage != nullptr)
-        object_editor_play_loading_stage->store(-1, std::memory_order_release);
+    if (object_editor_play_loading_gate != nullptr)
+        object_editor_play_loading_gate->Cancel();
     object_runtime_scenes.CancelPending();
     object_editor_play_loading = false;
     object_loading_progress_provider.SetEditorPlayLoading(false);
-    object_editor_play_loading_stage.reset();
+    object_editor_play_loading_gate.reset();
     scene_manager.Clear();
     game_scene = nullptr;
     object_editor_context.SetStatus("Play 用 Scene の読み込みを中止しました");

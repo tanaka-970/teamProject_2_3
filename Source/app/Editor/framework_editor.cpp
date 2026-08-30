@@ -463,11 +463,13 @@ void framework::draw_editor_main_menu()
     // 実際にそれで迷子になった。
     if (ImGui::BeginMenu(u8"実行"))
     {
-        if (ImGui::MenuItem(u8"▶ 実行", "F5", false, !object_scene_play_mode))
+        if (ImGui::MenuItem(u8"▶ 実行", "F5", false,
+            !object_scene_play_mode && !object_editor_play_loading))
             enter_object_play_mode();
         if (ImGui::MenuItem(object_scene_paused ? u8"▶ 再開" : u8"❚❚ 一時停止", nullptr,
             false, object_scene_play_mode)) object_scene_paused = !object_scene_paused;
-        if (ImGui::MenuItem(u8"■ 停止", "Shift+F5", false, object_scene_play_mode))
+        if (ImGui::MenuItem(u8"■ 停止", "Shift+F5", false,
+            object_scene_play_mode || object_editor_play_loading))
             exit_object_play_mode();
         ImGui::EndMenu();
     }

@@ -20,8 +20,9 @@
     void add_recent_object_scene(const std::filesystem::path& path);
     void register_object_scene_asset();
     void discard_object_scene_autosave();
-    void enter_object_play_mode();
+    void enter_object_play_mode(bool show_loading_screen = true);
     void exit_object_play_mode();
+    bool complete_object_play_mode_start();
     ReplayEngine::Scene::Scene& active_object_scene() noexcept;
     const ReplayEngine::Scene::Scene& active_object_scene() const noexcept;
 
