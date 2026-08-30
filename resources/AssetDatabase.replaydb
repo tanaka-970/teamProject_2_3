@@ -1,4 +1,4 @@
-REPLAY_ASSET_DB 2 187
+REPLAY_ASSET_DB 2 191
 "60412424bb1443240b2bf2160eee6923" 1 "ExampleStage" "resources/Stage/ExampleStage.cereal" "resources/.replay_cache/models/f9fffac39252a621_v0.replaycache"
 "1bd1358040255f5bd18f3be0d79fbe3c" 1 "AllAnimation1" "resources/AnimationModel/AllAnimation1.cereal" "resources/.replay_cache/models/6a20e727f78fb359_v0.replaycache"
 "e5c4168feb92f8fd7357f6cbc1f66e22" 1 "scene" "resources/Stage/city_3d_model_gltf/scene.gltf" "resources/.replay_cache/models/98fd72a862da8c8f_v0.replaycache"
@@ -186,3 +186,7 @@ REPLAY_ASSET_DB 2 187
 "39907f5ff90d9ea95a0ed923f7dfd43a" 1 "satonaka_tie_postgame" "resources/model/Persona/satonaka_tie_postgame.glb" ""
 "ff803d6e9d67c9d09261a11bb7209c03" 1 "satonaka_tie_swimsuit" "resources/model/Persona/satonaka_tie_swimsuit.glb" ""
 "b675b65214c312b2f1d8c5e538607623" 5 "materiaruTest" "resources/Scenes/materiaruTest.replayscene" ""
+"df0db94217a39c4fdf73654b43eb782a" 6 "NewItem (1)" "resources/model/Persona/NewItem (1).replaymaterial" ""
+"9986ef1876783e6b1b0fe5c1d03c6358" 6 "Tie_body" "resources/model/Persona/Tie_body.replaymaterial" ""
+"927091246a96137c747680ccaa609f99" 6 "tieHair" "resources/model/Persona/tieHair.replaymaterial" ""
+"eef076566bc1404d5b097647055c195a" 5 "Test12" "resources/Scenes/Test12.replayscene" ""
