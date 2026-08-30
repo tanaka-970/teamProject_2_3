@@ -129,3 +129,4 @@ imgui.ini
 *.markdown
 /*.txt
 /Tools/codex_replay_operation_profile.json
+/.codex_tmp
