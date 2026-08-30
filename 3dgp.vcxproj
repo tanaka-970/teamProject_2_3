@@ -959,6 +959,7 @@
     <None Include="Shader\dx12_forward_ps.hlsl" />
     <None Include="Shader\dx12_fullscreen_vs.hlsl" />
     <None Include="Shader\dx12_gbuffer_ps.hlsl" />
+    <None Include="Shader\dx12_model_effect_extract_ps.hlsl" />
     <None Include="Shader\dx12_imgui_ps.hlsl" />
     <None Include="Shader\dx12_imgui_vs.hlsl" />
     <None Include="Shader\dx12_ui_ps.hlsl" />

@@ -2047,6 +2047,9 @@
     <None Include="Shader\dx12_gbuffer_ps.hlsl">
       <Filter>Shader</Filter>
     </None>
+    <None Include="Shader\dx12_model_effect_extract_ps.hlsl">
+      <Filter>Shader</Filter>
+    </None>
     <None Include="Shader\dx12_imgui_ps.hlsl">
       <Filter>Shader</Filter>
     </None>

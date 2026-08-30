@@ -55,7 +55,15 @@ namespace ReplayEngine::Components
             Overlay = 1,
         };
 
+        enum ExtractMode : int
+        {
+            Automatic = 0,
+            InPlace = 1,
+            Isolate = 2,
+        };
+
         int depth_mode = PreserveDepth;
+        int extract_mode = Automatic;
         float max_bleed_pixels = 128.0f;
 
     private:

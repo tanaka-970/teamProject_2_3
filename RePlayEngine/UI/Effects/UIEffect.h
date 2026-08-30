@@ -214,6 +214,72 @@ namespace ReplayEngine::UI
         }
     }
 
+    inline bool EffectSpreadsPixels(UIEffectKind kind) noexcept
+    {
+        switch (kind)
+        {
+        case UIEffectKind::Blur:
+        case UIEffectKind::Glow:
+        case UIEffectKind::Shake:
+        case UIEffectKind::Mask:
+        case UIEffectKind::Wipe:
+        case UIEffectKind::Dissolve:
+        case UIEffectKind::Distortion:
+        case UIEffectKind::ChromaticAberration:
+        case UIEffectKind::Kuwahara:
+        case UIEffectKind::Halftone:
+        case UIEffectKind::DirectionalBlur:
+        case UIEffectKind::RadialBlur:
+        case UIEffectKind::RotationalBlur:
+        case UIEffectKind::LightStreaks:
+        case UIEffectKind::LensDistortion:
+        case UIEffectKind::EdgeDetect:
+        case UIEffectKind::Outline:
+        case UIEffectKind::LongShadow:
+        case UIEffectKind::BrushStroke:
+        case UIEffectKind::Mosaic:
+        case UIEffectKind::Crystallize:
+        case UIEffectKind::StainedGlass:
+        case UIEffectKind::Twirl:
+        case UIEffectKind::Spherize:
+        case UIEffectKind::Ripple:
+        case UIEffectKind::PolarCoordinates:
+        case UIEffectKind::CRT:
+        case UIEffectKind::Glitch:
+        case UIEffectKind::VHS:
+        case UIEffectKind::Waveform:
+        case UIEffectKind::DisplacementMap:
+        case UIEffectKind::TurbulentDisplace:
+        case UIEffectKind::MotionBlur:
+        case UIEffectKind::Echo:
+        case UIEffectKind::DropShadow:
+        case UIEffectKind::InnerShadow:
+        case UIEffectKind::MatteComposite:
+        case UIEffectKind::MatteMorphology:
+        case UIEffectKind::BevelEmboss:
+        case UIEffectKind::Kaleidoscope:
+        case UIEffectKind::PageCurl:
+        case UIEffectKind::AsciiLedMatrix:
+        case UIEffectKind::FeedbackZoom:
+        case UIEffectKind::LiquidGlass:
+        case UIEffectKind::Shockwave:
+        case UIEffectKind::PixelSort:
+        case UIEffectKind::Hologram:
+        case UIEffectKind::IridescentFoil:
+        case UIEffectKind::EnergyPulse:
+        case UIEffectKind::HeatHaze:
+        case UIEffectKind::WaterCaustics:
+        case UIEffectKind::VoronoiShatter:
+        case UIEffectKind::InkBleed:
+        case UIEffectKind::BurnReveal:
+        case UIEffectKind::PortalVortex:
+        case UIEffectKind::FrostCrack:
+            return true;
+        default:
+            return false;
+        }
+    }
+
     class UIEffect final
     {
     public:
