@@ -537,7 +537,8 @@ framework::object_ui_viewport framework::object_ui_viewport_target() const noexc
     target.logical_height = target.height;
 
 #ifdef USE_IMGUI
-    if (editor_mode && !object_scene_play_mode && scene_view_overlay_valid)
+    if (editor_mode && !object_scene_play_mode && !object_editor_play_loading &&
+        scene_view_overlay_valid)
     {
         // このアプリはImGuiのマルチビューポートを有効にしていないため、
         // Scene View・MousePos・DX12バックバッファは全てクライアント座標になる。

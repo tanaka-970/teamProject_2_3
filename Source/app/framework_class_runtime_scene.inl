@@ -77,8 +77,40 @@
     std::uint64_t object_loading_frame_index{ 0 };
     // Editor の F5 も Loading Screen Scene を通すための一時状態。
     // SceneData と進行値はメモリ上だけに置き、Project/Scene は保存しない。
+    struct editor_play_loading_gate final
+    {
+        void AdvanceTo(int target)
+        {
+            {
+                std::lock_guard<std::mutex> lock(mutex);
+                if (stage < 0 || target <= stage) return;
+                stage = target;
+            }
+            changed.notify_all();
+        }
+
+        void Cancel()
+        {
+            {
+                std::lock_guard<std::mutex> lock(mutex);
+                stage = -1;
+            }
+            changed.notify_all();
+        }
+
+        bool WaitFor(int target)
+        {
+            std::unique_lock<std::mutex> lock(mutex);
+            changed.wait(lock, [this, target]() { return stage < 0 || stage >= target; });
+            return stage >= target;
+        }
+
+        std::mutex mutex;
+        std::condition_variable changed;
+        int stage{ 0 };
+    };
     bool object_editor_play_loading{ false };
-    std::shared_ptr<std::atomic<int>> object_editor_play_loading_stage;
+    std::shared_ptr<editor_play_loading_gate> object_editor_play_loading_gate;
 
     // AssetGUID -> Scene ファイルのパス。Runtime 層が AssetDatabase を
     // 直接 include しないための実装側。framework が所有する。
