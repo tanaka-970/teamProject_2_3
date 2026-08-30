@@ -25,6 +25,7 @@
 using ReplayEngine::Runtime::Detail::ParseShutdownRegression;
 using ReplayEngine::Runtime::Detail::ParseStartupSceneBoot;
 using ReplayEngine::Runtime::Detail::ParseCaptureFrame;
+using ReplayEngine::Runtime::Detail::ParseCaptureExclusiveFrame;
 using ReplayEngine::Runtime::Detail::ResolveExecutableLayout;
 using ReplayEngine::Runtime::Detail::ExecutableLayout;
 using ReplayEngine::Runtime::Detail::LoadGameLaunchConfig;
@@ -103,6 +104,9 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
     std::string capture_frame_name;
     const bool capture_frame_requested =
         ParseCaptureFrame(cmd_line, capture_frame_name);
+    std::string capture_exclusive_frame_name;
+    const bool capture_exclusive_frame_requested = !capture_frame_requested &&
+        ParseCaptureExclusiveFrame(cmd_line, capture_exclusive_frame_name);
 
     // WICの画像読み込みはCOMを使うため、エンジンの生存期間中は初期化状態を維持する。
     // シーン切り替え後もWICファクトリを確実に利用できるようにする。
@@ -174,6 +178,7 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
 
     int exit_code = 0;
     bool capture_frame_ok = false;
+    bool capture_exclusive_frame_attempted = false;
     std::string capture_frame_summary;
     std::uint32_t dx12_live_object_lines = 0;
     std::uint32_t dx12_live_object_detail_lines = 0;
@@ -242,10 +247,22 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
             }
             application.request_automated_frame_capture(capture_frame_name);
         }
+
+        if (capture_exclusive_frame_requested)
+        {
+            if (!profile_benchmark.requested)
+            {
+                application.set_automated_smoke_test_frames(
+                    automated_smoke_test_frames > 0 ? automated_smoke_test_frames : 240u);
+            }
+            application.request_automated_exclusive_frame_capture(
+                capture_exclusive_frame_name);
+        }
 	    SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&application));
 
 	    // 通常の自動検証は従来どおり隠すが、撮影は実際に人が見る表示経路を通す。
-        const bool hide_automated_window = !capture_frame_requested &&
+	    const bool hide_automated_window = !capture_frame_requested &&
+            !capture_exclusive_frame_requested &&
             (automated_smoke_test_frames > 0 || shutdown_regression_requested ||
                 profile_benchmark.requested);
 	    // DX12フレームワークの実機確認は明示的な起動要求なので、起動元が
@@ -256,6 +273,14 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
         if (capture_frame_requested)
         {
             capture_frame_ok = application.golden_last_capture_ok();
+            capture_frame_summary = application.golden_last_capture_summary();
+        }
+        else if (capture_exclusive_frame_requested)
+        {
+            capture_exclusive_frame_attempted =
+                application.automated_exclusive_frame_capture_attempted();
+            capture_frame_ok = !capture_exclusive_frame_attempted ||
+                application.golden_last_capture_ok();
             capture_frame_summary = application.golden_last_capture_summary();
         }
         dx12_live_object_lines = application.dx12_shutdown_live_object_lines();
@@ -313,6 +338,23 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
         std::fprintf(stderr, "frame capture: RESULT %s (%s)\n",
             capture_frame_ok ? "OK" : "NG", summary);
         if (!capture_frame_ok && exit_code == 0) exit_code = 1470;
+    }
+	if (capture_exclusive_frame_requested)
+    {
+        if (!capture_exclusive_frame_attempted)
+        {
+            std::fprintf(stderr,
+                "exclusive frame capture: RESULT SKIPPED (exclusive Scene was not rendered)\n");
+        }
+        else
+        {
+            const char* summary = capture_frame_summary.empty()
+                ? u8"撮影結果を取得できませんでした"
+                : capture_frame_summary.c_str();
+            std::fprintf(stderr, "exclusive frame capture: RESULT %s (%s)\n",
+                capture_frame_ok ? "OK" : "NG", summary);
+            if (!capture_frame_ok && exit_code == 0) exit_code = 1470;
+        }
     }
 	if (automated_smoke_test_frames > 0)
     {
