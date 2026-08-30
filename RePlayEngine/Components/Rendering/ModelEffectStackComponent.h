@@ -62,8 +62,16 @@ namespace ReplayEngine::Components
             Isolate = 2,
         };
 
+        enum TargetSlotMode : int
+        {
+            WholeModel = 0,
+            MaterialSlot = 1,
+        };
+
         int depth_mode = PreserveDepth;
         int extract_mode = Automatic;
+        int target_slot_mode = WholeModel;
+        int target_slot_index = 0;
         float max_bleed_pixels = 128.0f;
 
     private:

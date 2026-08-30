@@ -1127,6 +1127,41 @@ bool framework::build_dx12_static_scene(
 
     }
 
+    const auto material_subset_bounds = [](const skinned_mesh::mesh& mesh,
+        std::uint32_t start, std::uint32_t count) noexcept
+    {
+        D3D12MeshLocalBounds bounds;
+        const std::size_t begin = (std::min)(static_cast<std::size_t>(start),
+            mesh.indices.size());
+        const std::size_t available = mesh.indices.size() - begin;
+        const std::size_t end = begin + (std::min)(static_cast<std::size_t>(count), available);
+        bool initialized = false;
+        for (std::size_t index = begin; index < end; ++index)
+        {
+            const std::uint32_t vertex_index = mesh.indices[index];
+            if (vertex_index >= mesh.vertices.size()) continue;
+            const DirectX::XMFLOAT3& position = mesh.vertices[vertex_index].position;
+            if (!std::isfinite(position.x) || !std::isfinite(position.y) ||
+                !std::isfinite(position.z))
+                continue;
+            if (!initialized)
+            {
+                bounds.minimum = position;
+                bounds.maximum = position;
+                initialized = true;
+                continue;
+            }
+            bounds.minimum.x = (std::min)(bounds.minimum.x, position.x);
+            bounds.minimum.y = (std::min)(bounds.minimum.y, position.y);
+            bounds.minimum.z = (std::min)(bounds.minimum.z, position.z);
+            bounds.maximum.x = (std::max)(bounds.maximum.x, position.x);
+            bounds.maximum.y = (std::max)(bounds.maximum.y, position.y);
+            bounds.maximum.z = (std::max)(bounds.maximum.z, position.z);
+        }
+        bounds.valid = initialized;
+        return bounds;
+    };
+
     for (const RenderItem& source_item : render_items.Items())
     {
         if (source_item.mesh_asset.empty()) continue;
@@ -1213,6 +1248,8 @@ bool framework::build_dx12_static_scene(
                     D3D12StaticDrawItem& draw = skinned_draw.surface;
                     draw.mesh_key = mesh_key;
                     draw.owner_id = source_item.owner.Value();
+                    draw.material_slot = static_cast<std::uint32_t>(subset_index);
+                    draw.material_bounds = material_subset_bounds(mesh, start, count);
                     draw.rendering_layer = static_cast<std::uint32_t>((std::max)(0,
                         (std::min)(31, item.rendering_layer)));
                     draw.start_index = start;
@@ -1495,6 +1532,8 @@ bool framework::build_dx12_static_scene(
                 D3D12StaticDrawItem draw;
                 draw.mesh_key = mesh_key;
                 draw.owner_id = source_item.owner.Value();
+                draw.material_slot = static_cast<std::uint32_t>(subset_index);
+                draw.material_bounds = material_subset_bounds(mesh, start, count);
                 draw.rendering_layer = static_cast<std::uint32_t>((std::max)(0,
                     (std::min)(31, item.rendering_layer)));
                 draw.motion_key = std::to_string(source_item.owner.Value()) + ":" + mesh_key +

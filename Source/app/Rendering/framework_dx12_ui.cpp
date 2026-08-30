@@ -2476,7 +2476,15 @@ bool framework::build_dx12_scene_effects(
     const D3D12_VIEWPORT model_viewport{
         0.0f, 0.0f, static_cast<float>(dx12_device_context.Width()),
         static_cast<float>(dx12_device_context.Height()), 0.0f, 1.0f };
+    const auto material_slot_selected = [](std::uint32_t target_slot_mask,
+        std::uint32_t material_slot) noexcept
+    {
+        return target_slot_mask == 0xFFFFFFFFu ||
+            (material_slot < 32u &&
+                (target_slot_mask & (1u << material_slot)) != 0u);
+    };
     const auto model_screen_rect = [&](std::uint64_t owner_id,
+        std::uint32_t target_slot_mask,
         D3D12_RECT& result, bool& static_bounds_found,
         bool& skinned_bounds_found, std::size_t& static_owner_draw_count,
         std::size_t& skinned_owner_draw_count, const char*& first_static_mesh_key,
@@ -2496,7 +2504,9 @@ bool framework::build_dx12_scene_effects(
         bool first_static_mesh_key_recorded = false;
         const auto accumulate = [&](const D3D12StaticDrawItem& draw, bool skinned)
         {
-            if (draw.owner_id != owner_id) return;
+            if (draw.owner_id != owner_id ||
+                !material_slot_selected(target_slot_mask, draw.material_slot))
+                return;
             D3D12MeshLocalBounds bounds;
             const bool has_bounds = skinned
                 ? dx12_device_context.GetSkinnedMeshLocalBounds(draw.mesh_key, bounds)
@@ -2553,13 +2563,22 @@ bool framework::build_dx12_scene_effects(
         Core::GameObject* object = scene.GameObjectAt(object_index);
         if (object == nullptr || object->PendingDestroy() || !object->ActiveInHierarchy())
             continue;
-        if (auto* model = object->GetComponent<Components::ModelEffectStackComponent>())
+        for (Components::ModelEffectStackComponent* model :
+            object->GetComponents<Components::ModelEffectStackComponent>())
         {
             if (model->ActiveInHierarchy() && model->enabled &&
                 model->HasActiveEffects(&asset_database))
             {
                 D3D12ModelEffectStackSubmission stack{};
                 stack.owner_id = object->ID().Value();
+                if (model->target_slot_mode ==
+                    Components::ModelEffectStackComponent::MaterialSlot)
+                {
+                    if (model->target_slot_index < 0 || model->target_slot_index >= 32)
+                        continue;
+                    stack.target_slot_mask = 1u << static_cast<std::uint32_t>(
+                        model->target_slot_index);
+                }
                 stack.depth_mode = model->depth_mode;
                 const std::vector<UI::UIEffect>& effective_effects =
                     model->EffectiveEffects(&asset_database);
@@ -2567,11 +2586,15 @@ bool framework::build_dx12_scene_effects(
                     static_scene.draws.end(), [&](const D3D12StaticDrawItem& draw)
                     {
                         return draw.owner_id == stack.owner_id &&
+                            material_slot_selected(stack.target_slot_mask,
+                                draw.material_slot) &&
                             draw.alpha_mode == D3D12StaticAlphaMode::Blend;
                     }) || std::any_of(static_scene.skinned_draws.begin(),
                     static_scene.skinned_draws.end(), [&](const D3D12SkinnedDrawItem& draw)
                     {
                         return draw.surface.owner_id == stack.owner_id &&
+                            material_slot_selected(stack.target_slot_mask,
+                                draw.surface.material_slot) &&
                             draw.surface.alpha_mode == D3D12StaticAlphaMode::Blend;
                     });
                 const bool automatic_isolation = std::any_of(effective_effects.begin(),
@@ -2590,8 +2613,11 @@ bool framework::build_dx12_scene_effects(
                     model->extract_mode == Components::ModelEffectStackComponent::Isolate ||
                     (model->extract_mode != Components::ModelEffectStackComponent::InPlace &&
                         automatic_isolation);
+                std::uint64_t model_history_key = stack.owner_id ^
+                    (static_cast<std::uint64_t>(model->StableID()) * 0x9E3779B185EBCA87ull);
+                if (model_history_key == 0) model_history_key = stack.owner_id;
                 if (fill_effects(effective_effects,
-                    model->effect_region, stack.owner_id, stack.effects))
+                    model->effect_region, model_history_key, stack.effects))
                 {
                     D3D12_RECT model_rect{};
                     bool static_bounds_found = false;
@@ -2603,11 +2629,14 @@ bool framework::build_dx12_scene_effects(
                     bool first_skinned_bounds_lookup_attempted = false;
                     bool first_skinned_bounds_lookup_succeeded = false;
                     const bool model_rect_found = model_screen_rect(stack.owner_id,
+                        stack.target_slot_mask,
                         model_rect, static_bounds_found, skinned_bounds_found,
                         static_owner_draw_count, skinned_owner_draw_count,
                         first_static_mesh_key, first_skinned_mesh_key,
                         first_skinned_bounds_lookup_attempted,
                         first_skinned_bounds_lookup_succeeded);
+                    if (static_owner_draw_count == 0 && skinned_owner_draw_count == 0)
+                        continue;
                     const float bleed_limit = std::isfinite(model->max_bleed_pixels)
                         ? (std::max)(0.0f, model->max_bleed_pixels) : 0.0f;
                     const DirectX::XMFLOAT4 expansion =

@@ -685,7 +685,8 @@ namespace ReplayEngine::Core::Detail
             ComponentRegistry::Register<ModelEffectStackComponent>(
                 ComponentTypeInfo::Describe("Model Effect Stack", "Rendering")
                     .WithTooltip("この GameObject のモデルだけへ Effect Chain を適用します。")
-                    .InModule("RePlayEngine.Optional.Effects"));
+                    .InModule("RePlayEngine.Optional.Effects")
+                    .AllowMultipleInstances());
             PropertyRegistry::Register<ModelEffectStackComponent>(
                 MakeProperty("enabled", &ModelEffectStackComponent::enabled)
                     .Display(u8"効果を適用")
@@ -701,6 +702,11 @@ namespace ReplayEngine::Core::Detail
             PropertyRegistry::Register<ModelEffectStackComponent>(
                 MakeProperty("effect_count", &ModelEffectStackComponent::effect_count)
                     .Display("Effect 数").Range(0.0, 16.0).Step(1.0)
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<ModelEffectStackComponent>(
+                MakeProperty("target_slot_mode", &ModelEffectStackComponent::target_slot_mode)
+                    .Display(u8"対象")
+                    .AsEnum({ u8"モデル全体", u8"マテリアルスロット" })
                     .Animation(Animatable::Step));
             PropertyRegistry::Register<ModelEffectStackComponent>(
                 MakeProperty("depth_mode", &ModelEffectStackComponent::depth_mode)

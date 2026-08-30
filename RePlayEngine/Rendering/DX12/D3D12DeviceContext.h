@@ -98,6 +98,8 @@ namespace ReplayEngine::Rendering::DX12
     {
         std::string mesh_key;
         std::uint64_t owner_id = 0;
+        std::uint32_t material_slot = 0;
+        D3D12MeshLocalBounds material_bounds;
         std::uint32_t rendering_layer = 0;
         // Object + mesh/subset の安定キー。Static Transform の motion vector 履歴に使う。
         std::string motion_key;
@@ -566,6 +568,7 @@ namespace ReplayEngine::Rendering::DX12
     struct D3D12ModelEffectStackSubmission final
     {
         std::uint64_t owner_id = 0;
+        std::uint32_t target_slot_mask = 0xFFFFFFFFu;
         std::int32_t depth_mode = 0;
         bool isolate_from_scene = true;
         D3D12_RECT scissor{ 0, 0, 0, 0 };
