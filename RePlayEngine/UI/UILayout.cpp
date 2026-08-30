@@ -641,6 +641,20 @@ namespace ReplayEngine::UI
             }
         }
 
+        void ApplyAllSliderVisuals(Scene::Scene& scene)
+        {
+            // PropertyLink や Motion が value を変更した場合も、入力経路を
+            // 通らずに見た目へ反映する。Loading Scene は入力を受け付けないため、
+            // ここを正本にして標準 UI の値と描画を常に同期させる。
+            for (std::size_t index = 0; index < scene.GameObjectCount(); ++index)
+            {
+                Core::GameObject* object = scene.GameObjectAt(index);
+                if (object == nullptr || object->PendingDestroy()) continue;
+                if (UISliderComponent* slider = object->GetComponent<UISliderComponent>())
+                    ApplySliderVisual(*object, *slider);
+            }
+        }
+
         void PublishSliderChange(UISliderComponent& slider)
         {
             if (std::fabs(slider.value - slider.last_emitted_value) <= 0.000001f) return;
@@ -918,6 +932,8 @@ namespace ReplayEngine::UI
         GatherCanvases(scene, canvases);
         for (Core::GameObject* canvas : canvases)
             if (canvas != nullptr) ResolveCanvas(*canvas, screen_width, screen_height);
+
+        ApplyAllSliderVisuals(scene);
     }
 
     void UILayout::ResolveCanvas(Core::GameObject& canvas_object,

@@ -355,10 +355,35 @@ bool framework::export_standalone_game(const std::filesystem::path& export_root,
         },
         export_errors);
 
+    // Standalone は起動時に DX12 の組み込みシェーダを Shader/*.hlsl から
+    // コンパイルし、ShaderLibrary も Materials/Layers を走査する。
+    // compiled だけを配ると、編集環境では動くのに書き出し先で
+    // 「シェーダ 0 枚」「CreateStaticRendererResources 失敗」になる。
+    // ソース一式を配り、生成済み bytecode は従来どおり compiled へ分けて置く。
+    CopyDirectoryFiltered(
+        content_path("Shader"), destination / "Shader",
+        [](const std::filesystem::path& relative)
+        {
+            for (const std::filesystem::path& part : relative)
+            {
+                if (LowerCopy(part.generic_u8string()) == "compiled") return true;
+            }
+            return false;
+        },
+        export_errors);
+
     CopyDirectoryFiltered(
         content_path(std::filesystem::path("Shader") / "compiled"),
         destination / "Shader" / "compiled",
         [](const std::filesystem::path&) { return false; },
+        export_errors);
+
+    // DX12 の組み込みシェーダと ShaderLibrary は配布先でも DXC を使う。
+    // 開発環境の ThirdParty/DXC をそのまま同じ相対パスへ置き、
+    // FindDefaultLibraryPath() が standalone から解決できるようにする。
+    CopyDirectoryIfExists(
+        content_path(std::filesystem::path("ThirdParty") / "DXC" / "bin" / "x64"),
+        destination / "ThirdParty" / "DXC" / "bin" / "x64",
         export_errors);
 
     namespace CSharp = ReplayEngine::Scripting::CSharp;
