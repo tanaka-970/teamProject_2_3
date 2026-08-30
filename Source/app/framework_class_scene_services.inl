@@ -32,6 +32,9 @@
     void initialize_runtime_services();
     void tick_runtime_scene_flow();
     void rebind_runtime_world_if_changed();
+    void update_editor_play_loading();
+    void finish_editor_play_loading();
+    void cancel_editor_play_loading();
 
 public:
     bool load_exclusive_scene_from_path(const std::filesystem::path& path);

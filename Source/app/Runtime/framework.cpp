@@ -78,6 +78,7 @@ framework::framework(HWND hwnd) : hwnd(hwnd)
 {
     golden_state_ = std::make_unique<ReplayEngine::Editor::GoldenImageState>();
     object_loading_progress_provider.Bind(&scene_manager);
+    object_loading_progress_provider.BindRuntime(&object_runtime_scenes);
     std::error_code error;
     configure_content_root(std::filesystem::current_path(error));
 }
@@ -241,6 +242,8 @@ bool framework::uninitialize()
 
     // 1) Scene を止めて GameObject / Component / Behaviour を破棄する。
     //    Renderer Component が握っているメッシュ参照はここで切れる。
+    //    Editor F5 の LoadingScene worker が待機中なら、先に待機を解除する。
+    cancel_editor_play_loading();
     object_runtime_scenes.ResetToEmptyWorld();
     object_runtime_scenes.ActiveWorld().Services().SetRuntimeScene(nullptr);
     object_runtime_scenes.ActiveWorld().Services().SetSceneFlow(nullptr);
