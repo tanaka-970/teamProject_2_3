@@ -782,6 +782,8 @@ namespace ReplayEngine::Rendering::DX12
                 command_list_->IASetVertexBuffers(0, 1, &view);
                 command_list_->DrawInstanced(static_cast<UINT>(batch.vertices.size()), 1, 0, 0);
             }
+            // バッチ固有の clip を次の UI サブパスへ持ち越さない。
+            command_list_->RSSetScissorRects(1, &full_scissor);
             return true;
         };
 
@@ -858,6 +860,8 @@ namespace ReplayEngine::Rendering::DX12
             view.StrideInBytes = sizeof(D3D12UIVertex);
             command_list_->IASetVertexBuffers(0, 1, &view);
             command_list_->DrawInstanced(static_cast<UINT>(vertices.size()), 1, 0, 0);
+            // グループ固有の composite clip を後続の UI 描画へ持ち越さない。
+            command_list_->RSSetScissorRects(1, &full_scissor);
             return true;
         };
 
