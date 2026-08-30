@@ -708,6 +708,12 @@ namespace ReplayEngine::Core::Detail
                     .AsEnum({ "Preserve Depth", "Overlay" })
                     .Animation(Animatable::Step));
             PropertyRegistry::Register<ModelEffectStackComponent>(
+                MakeProperty("extract_mode", &ModelEffectStackComponent::extract_mode)
+                    .Display(u8"合成方法")
+                    .AsEnum({ u8"自動", u8"その場", u8"切り抜き" })
+                    .Tooltip(u8"切り抜きは GBuffer から除外するため SSAO・SSR などの照明結果が変わります。")
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<ModelEffectStackComponent>(
                 MakeProperty("max_bleed_pixels", &ModelEffectStackComponent::max_bleed_pixels)
                     .Display(u8"最大はみ出し (px)").Range(0.0, 1024.0).Step(1.0)
                     .Tooltip(u8"エフェクトがモデルの画面矩形から各辺へはみ出せる上限 (px)。")

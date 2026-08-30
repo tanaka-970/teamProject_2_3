@@ -2561,7 +2561,36 @@ bool framework::build_dx12_scene_effects(
                 D3D12ModelEffectStackSubmission stack{};
                 stack.owner_id = object->ID().Value();
                 stack.depth_mode = model->depth_mode;
-                if (fill_effects(model->EffectiveEffects(&asset_database),
+                const std::vector<UI::UIEffect>& effective_effects =
+                    model->EffectiveEffects(&asset_database);
+                const bool has_blended_surface = std::any_of(static_scene.draws.begin(),
+                    static_scene.draws.end(), [&](const D3D12StaticDrawItem& draw)
+                    {
+                        return draw.owner_id == stack.owner_id &&
+                            draw.alpha_mode == D3D12StaticAlphaMode::Blend;
+                    }) || std::any_of(static_scene.skinned_draws.begin(),
+                    static_scene.skinned_draws.end(), [&](const D3D12SkinnedDrawItem& draw)
+                    {
+                        return draw.surface.owner_id == stack.owner_id &&
+                            draw.surface.alpha_mode == D3D12StaticAlphaMode::Blend;
+                    });
+                const bool automatic_isolation = std::any_of(effective_effects.begin(),
+                    effective_effects.end(), [](const UI::UIEffect& effect)
+                    {
+                        if (!effect.enabled) return false;
+                        const int kind = effect.kind;
+                        if (kind < static_cast<int>(UIEffectKind::Blur) ||
+                            kind >= static_cast<int>(UIEffectKind::Count))
+                            return true;
+                        return !effect.custom_shader.empty() || UI::EffectSpreadsPixels(
+                            static_cast<UIEffectKind>(kind));
+                    });
+                stack.isolate_from_scene = model->depth_mode !=
+                    Components::ModelEffectStackComponent::PreserveDepth || has_blended_surface ||
+                    model->extract_mode == Components::ModelEffectStackComponent::Isolate ||
+                    (model->extract_mode != Components::ModelEffectStackComponent::InPlace &&
+                        automatic_isolation);
+                if (fill_effects(effective_effects,
                     model->effect_region, stack.owner_id, stack.effects))
                 {
                     D3D12_RECT model_rect{};

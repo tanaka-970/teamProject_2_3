@@ -567,6 +567,7 @@ namespace ReplayEngine::Rendering::DX12
     {
         std::uint64_t owner_id = 0;
         std::int32_t depth_mode = 0;
+        bool isolate_from_scene = true;
         D3D12_RECT scissor{ 0, 0, 0, 0 };
         bool scissor_enabled = false;
         std::vector<D3D12UIEffectCommand> effects;
@@ -1071,6 +1072,8 @@ namespace ReplayEngine::Rendering::DX12
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_skinned_forward_blend_pipelines_[2];
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_static_model_effect_pipelines_[4];
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_skinned_model_effect_pipelines_[4];
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_static_model_effect_extract_pipelines_[2];
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_skinned_model_effect_extract_pipelines_[2];
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_static_shadow_pipelines_[4];
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_skinned_shadow_pipelines_[4];
         std::vector<std::uint8_t> scene3d_static_vs_;
@@ -1078,6 +1081,7 @@ namespace ReplayEngine::Rendering::DX12
         std::vector<std::uint8_t> scene3d_gbuffer_ps_;
         std::vector<std::uint8_t> scene3d_depth_alpha_ps_;
         std::vector<std::uint8_t> scene3d_forward_ps_;
+        std::vector<std::uint8_t> scene3d_model_effect_extract_ps_;
         std::vector<std::uint8_t> scene3d_fullscreen_vs_;
         std::vector<std::uint8_t> scene3d_lighting_ps_;
         std::vector<std::uint8_t> scene3d_postprocess_ps_;
