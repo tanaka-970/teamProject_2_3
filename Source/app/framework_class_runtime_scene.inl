@@ -53,16 +53,32 @@
             scene_manager_ = manager;
         }
 
+        void BindRuntime(const ReplayEngine::Runtime::RuntimeSceneService* service) noexcept
+        {
+            runtime_scene_ = service;
+        }
+
+        void SetEditorPlayLoading(bool loading) noexcept
+        {
+            editor_play_loading_ = loading;
+        }
+
         float Progress() const noexcept override;
         bool IsLoading() const noexcept override;
 
     private:
         const ReplayEngine::Scene::SceneManager* scene_manager_ = nullptr;
+        const ReplayEngine::Runtime::RuntimeSceneService* runtime_scene_ = nullptr;
+        bool editor_play_loading_ = false;
     };
     loading_progress_provider object_loading_progress_provider;
     std::unique_ptr<ReplayEngine::Scene::Scene> object_loading_scene;
     std::unique_ptr<ReplayEngine::Runtime::RuntimeContext> object_loading_runtime_context;
     std::uint64_t object_loading_frame_index{ 0 };
+    // Editor の F5 も Loading Screen Scene を通すための一時状態。
+    // SceneData と進行値はメモリ上だけに置き、Project/Scene は保存しない。
+    bool object_editor_play_loading{ false };
+    std::shared_ptr<std::atomic<int>> object_editor_play_loading_stage;
 
     // AssetGUID -> Scene ファイルのパス。Runtime 層が AssetDatabase を
     // 直接 include しないための実装側。framework が所有する。
