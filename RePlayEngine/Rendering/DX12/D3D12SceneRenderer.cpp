@@ -1046,6 +1046,8 @@ namespace ReplayEngine::Rendering::DX12
         command_list_->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
         const D3D12_VIEWPORT viewport{ 0.0f, 0.0f,
             static_cast<float>(width_), static_cast<float>(height_), 0.0f, 1.0f };
+        const D3D12_RECT full_scissor{ 0, 0,
+            static_cast<LONG>(width_), static_cast<LONG>(height_) };
         command_list_->RSSetViewports(1, &viewport);
         command_list_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         D3D12_VERTEX_BUFFER_VIEW vertex_view{};
@@ -1127,6 +1129,8 @@ namespace ReplayEngine::Rendering::DX12
             global_vertex_offset += list->VtxBuffer.Size;
             global_index_offset += list->IdxBuffer.Size;
         }
+        // ImGui の clip rect を後続の描画パスへ持ち越さない。
+        command_list_->RSSetScissorRects(1, &full_scissor);
         return finish(true);
     }
 
