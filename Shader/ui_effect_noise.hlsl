@@ -61,5 +61,6 @@ float4 main(VSOutput input) : SV_TARGET
             2.0 - 1.0;
     }
     color.rgb += n * effect_params0.y * effect_color.rgb;
-    return saturate(color);
+    // Scene Effect の RT は HDR なので 1.0 で丸めず、負値だけ止める。
+    return float4(max(color.rgb, 0.0f), saturate(color.a));
 }
