@@ -13,6 +13,8 @@
                     0.0, 1.0, 0.01);
                 add_float("speed", "流れる速度", "走査線が縦へ動く速度。",
                     -512.0, 512.0, 0.1);
+                add_float("angle", "方向", "",
+                    -360.0, 360.0, 0.1);
                 add_color("線の色", "走査線へ重ねる色。");
                 break;
             case UI::UIEffectKind::CRT:
