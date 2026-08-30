@@ -49,6 +49,8 @@
 #include <algorithm>
 #include <cctype>
 #include <cfloat>
+#include <chrono>
+#include <cstdio>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
@@ -309,7 +311,7 @@ bool framework::build_dx12_static_scene(
     ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission& submission,
     const ReplayEngine::Scene::Scene& scene,
     const ReplayEngine::Rendering::RenderItemList& render_items,
-    float elapsed_time)
+    float elapsed_time, dx12_scene_build_options options)
 {
     using namespace ReplayEngine::Rendering;
     using namespace ReplayEngine::Rendering::DX12;
@@ -728,6 +730,8 @@ bool framework::build_dx12_static_scene(
         }
     };
 
+    if (options.include_auxiliary_geometry)
+    {
     const auto normalize_or_fallback = [](const DirectX::XMVECTOR& value,
         const DirectX::XMVECTOR& fallback) noexcept
     {
@@ -1112,6 +1116,8 @@ bool framework::build_dx12_static_scene(
                 submission.draws.push_back(std::move(draw));
             }
         }
+    }
+
     }
 
     for (const RenderItem& source_item : render_items.Items())
@@ -1583,6 +1589,7 @@ bool framework::build_dx12_static_scene(
 
     // Landscapeは既存LandscapeDataの頂点/Indexを正本として、そのままStatic Mesh提出へ変換する。
     // D3D11専用のstatic_meshキャッシュをDX12から参照しないため、編集後のRevisionもキーへ含める。
+    if (options.include_auxiliary_geometry)
     {
         for (std::size_t object_index = 0; object_index < scene.GameObjectCount(); ++object_index)
         {
@@ -1628,76 +1635,220 @@ bool framework::build_dx12_static_scene(
         }
     }
 
-    submission.directional_light.enabled = directional_light_present;
-    submission.directional_light.direction = { light_direction.x, light_direction.y, light_direction.z };
-    submission.directional_light.color = { pbr.light.directional_color.x,
-        pbr.light.directional_color.y, pbr.light.directional_color.z };
-    submission.directional_light.intensity = pbr.light.directional_color.w;
-    submission.directional_light.cast_shadows = directional_shadow_enabled;
-    submission.directional_light.shadow_strength = pbr.light.shadow_params.x;
-
-    const int point_count = (std::max)(0, (std::min)(lights_manager::POINT_LIGHT_MAX,
-        lights.data.light_counts.x));
-    submission.point_lights.reserve(static_cast<std::size_t>(point_count));
-    for (int index = 0; index < point_count; ++index)
+    if (options.include_active_lighting)
     {
-        const lights_manager::point_light& source = lights.data.point_lights[index];
-        D3D12PointLightSubmission light;
-        light.position = { source.position.x, source.position.y, source.position.z };
-        light.range = source.position.w;
-        light.color = { source.color.x, source.color.y, source.color.z };
-        light.intensity = source.color.w;
-        light.cast_shadows = source.shadow.x >= 0.0f;
-        light.shadow_strength = source.shadow.y;
-        light.shadow_slice = static_cast<std::int32_t>(source.shadow.x);
-        submission.point_lights.push_back(light);
-    }
+        submission.directional_light.enabled = directional_light_present;
+        submission.directional_light.direction = { light_direction.x, light_direction.y, light_direction.z };
+        submission.directional_light.color = { pbr.light.directional_color.x,
+            pbr.light.directional_color.y, pbr.light.directional_color.z };
+        submission.directional_light.intensity = pbr.light.directional_color.w;
+        submission.directional_light.cast_shadows = directional_shadow_enabled;
+        submission.directional_light.shadow_strength = pbr.light.shadow_params.x;
 
-    const int spot_count = (std::max)(0, (std::min)(lights_manager::SPOT_LIGHT_MAX,
-        lights.data.light_counts.y));
-    submission.spot_lights.reserve(static_cast<std::size_t>(spot_count));
-    for (int index = 0; index < spot_count; ++index)
-    {
-        const lights_manager::spot_light& source = lights.data.spot_lights[index];
-        D3D12SpotLightSubmission light;
-        light.position = { source.position.x, source.position.y, source.position.z };
-        light.range = source.position.w;
-        light.direction = { source.direction.x, source.direction.y, source.direction.z };
-        light.inner_cos = source.direction.w;
-        light.color = { source.color.x, source.color.y, source.color.z };
-        light.outer_cos = source.color.w;
-        light.intensity = source.params.x;
-        light.cast_shadows = source.params.y >= 0.0f;
-        light.shadow_strength = source.params.z;
-        light.shadow_slice = static_cast<std::int32_t>(source.params.y);
-        submission.spot_lights.push_back(light);
-    }
+        const int point_count = (std::max)(0, (std::min)(lights_manager::POINT_LIGHT_MAX,
+            lights.data.light_counts.x));
+        submission.point_lights.reserve(static_cast<std::size_t>(point_count));
+        for (int index = 0; index < point_count; ++index)
+        {
+            const lights_manager::point_light& source = lights.data.point_lights[index];
+            D3D12PointLightSubmission light;
+            light.position = { source.position.x, source.position.y, source.position.z };
+            light.range = source.position.w;
+            light.color = { source.color.x, source.color.y, source.color.z };
+            light.intensity = source.color.w;
+            light.cast_shadows = source.shadow.x >= 0.0f;
+            light.shadow_strength = source.shadow.y;
+            light.shadow_slice = static_cast<std::int32_t>(source.shadow.x);
+            submission.point_lights.push_back(light);
+        }
 
-    // ShadowのProjection/AllocationにおけるCPU正本は既存CSM/LocalShadowAtlas。
-    // DX12側で別のCascade分割やPoint Face選択を作らず、確定済み値だけを提出する。
-    submission.directional_shadow.enabled =
-        csm.constants.params.w > 0.5f && submission.directional_light.cast_shadows;
-    submission.directional_shadow.resolution = csm_renderer::SHADOW_MAP_SIZE;
-    for (std::uint32_t cascade = 0;
-        cascade < D3D12DirectionalShadowSubmission::CascadeCount; ++cascade)
-        submission.directional_shadow.view_projection[cascade] =
-            csm.constants.view_projection[cascade];
-    submission.directional_shadow.split_distances = csm.constants.split_distances;
-    submission.directional_shadow.params = csm.constants.params;
-    submission.directional_shadow.params2 = csm.constants.params2;
-    submission.directional_shadow.params3 = csm.constants.params3;
-    submission.directional_shadow.texel_world = csm.constants.texel_world;
+        const int spot_count = (std::max)(0, (std::min)(lights_manager::SPOT_LIGHT_MAX,
+            lights.data.light_counts.y));
+        submission.spot_lights.reserve(static_cast<std::size_t>(spot_count));
+        for (int index = 0; index < spot_count; ++index)
+        {
+            const lights_manager::spot_light& source = lights.data.spot_lights[index];
+            D3D12SpotLightSubmission light;
+            light.position = { source.position.x, source.position.y, source.position.z };
+            light.range = source.position.w;
+            light.direction = { source.direction.x, source.direction.y, source.direction.z };
+            light.inner_cos = source.direction.w;
+            light.color = { source.color.x, source.color.y, source.color.z };
+            light.outer_cos = source.color.w;
+            light.intensity = source.params.x;
+            light.cast_shadows = source.params.y >= 0.0f;
+            light.shadow_strength = source.params.z;
+            light.shadow_slice = static_cast<std::int32_t>(source.params.y);
+            submission.spot_lights.push_back(light);
+        }
 
-    submission.local_shadows.enabled = enable_dynamic_shadows && local_shadows.enabled;
-    submission.local_shadows.resolution = local_shadows.resolution_setting;
-    for (std::uint32_t slice = 0;
-        slice < D3D12LocalShadowSubmission::SliceCount; ++slice)
-    {
-        ReplayEngine::Rendering::LocalShadowAtlas::Slice source{};
-        if (!local_shadows.TryGetSlice(slice, source)) continue;
-        submission.local_shadows.slices[slice].view_projection = source.view_projection;
-        submission.local_shadows.slices[slice].params = source.params;
-        submission.local_shadows.used_slice_mask |= (1u << slice);
+        // ShadowのProjection/AllocationにおけるCPU正本は既存CSM/LocalShadowAtlas。
+        // DX12側で別のCascade分割やPoint Face選択を作らず、確定済み値だけを提出する。
+        submission.directional_shadow.enabled =
+            csm.constants.params.w > 0.5f && submission.directional_light.cast_shadows;
+        submission.directional_shadow.resolution = csm_renderer::SHADOW_MAP_SIZE;
+        for (std::uint32_t cascade = 0;
+            cascade < D3D12DirectionalShadowSubmission::CascadeCount; ++cascade)
+            submission.directional_shadow.view_projection[cascade] =
+                csm.constants.view_projection[cascade];
+        submission.directional_shadow.split_distances = csm.constants.split_distances;
+        submission.directional_shadow.params = csm.constants.params;
+        submission.directional_shadow.params2 = csm.constants.params2;
+        submission.directional_shadow.params3 = csm.constants.params3;
+        submission.directional_shadow.texel_world = csm.constants.texel_world;
+
+        submission.local_shadows.enabled = enable_dynamic_shadows && local_shadows.enabled;
+        submission.local_shadows.resolution = local_shadows.resolution_setting;
+        for (std::uint32_t slice = 0;
+            slice < D3D12LocalShadowSubmission::SliceCount; ++slice)
+        {
+            ReplayEngine::Rendering::LocalShadowAtlas::Slice source{};
+            if (!local_shadows.TryGetSlice(slice, source)) continue;
+            submission.local_shadows.slices[slice].view_projection = source.view_projection;
+            submission.local_shadows.slices[slice].params = source.params;
+            submission.local_shadows.used_slice_mask |= (1u << slice);
+        }
     }
     return true;
+}
+
+bool framework::build_dx12_lighting_for_scene(
+    ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission& submission,
+    const ReplayEngine::Scene::Scene& scene) const
+{
+    using ReplayEngine::Components::DirectionalLightComponent;
+    using ReplayEngine::Components::PointLightComponent;
+    using ReplayEngine::Components::SpotLightComponent;
+    using namespace ReplayEngine::Rendering::DX12;
+    using namespace DirectX;
+
+    submission.directional_light = {};
+    submission.point_lights.clear();
+    submission.spot_lights.clear();
+    submission.directional_shadow = {};
+    submission.local_shadows = {};
+    bool directional_found = false;
+    submission.point_lights.reserve(lights_manager::POINT_LIGHT_MAX);
+    submission.spot_lights.reserve(lights_manager::SPOT_LIGHT_MAX);
+
+    for (std::size_t index = 0; index < scene.GameObjectCount(); ++index)
+    {
+        const ReplayEngine::Core::GameObject* object = scene.GameObjectAt(index);
+        if (object == nullptr || object->PendingDestroy() || !object->ActiveInHierarchy()) continue;
+
+        if (!directional_found)
+        {
+            const DirectionalLightComponent* light = object->GetComponent<DirectionalLightComponent>();
+            if (light != nullptr && light->ActiveInHierarchy())
+            {
+                const XMFLOAT4 rotation = object->GetTransform().WorldRotationQuaternion();
+                XMVECTOR direction = XMVector3Rotate(XMVectorSet(0.0f, -1.0f, 0.0f, 0.0f),
+                    XMLoadFloat4(&rotation));
+                direction = XMVector3Normalize(direction);
+                XMStoreFloat3(&submission.directional_light.direction, direction);
+                submission.directional_light.enabled = true;
+                submission.directional_light.color = {
+                    light->color.x, light->color.y, light->color.z };
+                submission.directional_light.intensity = (std::max)(0.0f, light->intensity);
+                submission.directional_light.cast_shadows = false;
+                submission.directional_light.shadow_strength =
+                    (std::max)(0.0f, (std::min)(1.0f, light->shadow_strength));
+                directional_found = true;
+            }
+        }
+
+        if (submission.point_lights.size() <
+            static_cast<std::size_t>(lights_manager::POINT_LIGHT_MAX))
+        {
+            const PointLightComponent* light = object->GetComponent<PointLightComponent>();
+            if (light != nullptr && light->ActiveInHierarchy())
+            {
+                D3D12PointLightSubmission output{};
+                output.position = object->GetTransform().WorldPosition();
+                output.range = (std::max)(0.01f, light->range);
+                output.color = { light->color.x, light->color.y, light->color.z };
+                output.intensity = (std::max)(0.0f, light->intensity);
+                output.cast_shadows = false;
+                output.shadow_strength =
+                    (std::max)(0.0f, (std::min)(1.0f, light->shadow_strength));
+                output.shadow_slice = -1;
+                submission.point_lights.push_back(output);
+            }
+        }
+
+        if (submission.spot_lights.size() <
+            static_cast<std::size_t>(lights_manager::SPOT_LIGHT_MAX))
+        {
+            const SpotLightComponent* light = object->GetComponent<SpotLightComponent>();
+            if (light != nullptr && light->ActiveInHierarchy())
+            {
+                const XMFLOAT4 rotation = object->GetTransform().WorldRotationQuaternion();
+                XMVECTOR direction = XMVector3Rotate(XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f),
+                    XMLoadFloat4(&rotation));
+                direction = XMVector3Normalize(direction);
+                D3D12SpotLightSubmission output{};
+                output.position = object->GetTransform().WorldPosition();
+                output.range = (std::max)(0.01f, light->range);
+                XMStoreFloat3(&output.direction, direction);
+                const float outer = (std::max)(0.1f,
+                    (std::min)(179.0f, light->outer_angle_degrees));
+                const float inner = (std::max)(0.1f,
+                    (std::min)(outer, light->inner_angle_degrees));
+                output.inner_cos = std::cos(XMConvertToRadians(inner));
+                output.outer_cos = std::cos(XMConvertToRadians(outer));
+                output.color = { light->color.x, light->color.y, light->color.z };
+                output.intensity = (std::max)(0.0f, light->intensity);
+                output.cast_shadows = false;
+                output.shadow_strength =
+                    (std::max)(0.0f, (std::min)(1.0f, light->shadow_strength));
+                output.shadow_slice = -1;
+                submission.spot_lights.push_back(output);
+            }
+        }
+    }
+    return true;
+}
+
+bool framework::prewarm_loading_scene_gpu_resources()
+{
+    if (!dx12_device_context.IsInitialized() || object_loading_scene == nullptr) return true;
+
+    ReplayEngine::Rendering::RenderItemList render_items;
+    ReplayEngine::Rendering::SceneRenderCollector::Collect(*object_loading_scene, render_items);
+    ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission submission;
+    dx12_scene_build_options options;
+    options.include_auxiliary_geometry = false;
+    options.include_active_lighting = false;
+    if (!build_dx12_static_scene(submission, *object_loading_scene, render_items, 0.0f, options))
+        return false;
+
+    const std::size_t skinned_render_item_count = static_cast<std::size_t>(std::count_if(
+        render_items.Items().begin(), render_items.Items().end(),
+        [](const ReplayEngine::Rendering::RenderItem& item) noexcept { return item.skinned; }));
+    const std::size_t static_source_count = submission.mesh_sources.size();
+    const std::size_t skinned_source_count = submission.skinned_mesh_sources.size();
+    const std::size_t static_draw_count = submission.draws.size();
+    const std::size_t skinned_draw_count = submission.skinned_draws.size();
+    const std::size_t texture_candidate_count = submission.texture_sources.size();
+    submission.texture_sources.clear();
+    submission.shader_sources.clear();
+    const auto before = dx12_device_context.CaptureScene3DState();
+    const auto begin = std::chrono::steady_clock::now();
+    const bool ok = dx12_device_context.PreloadScene3DResources(submission, false);
+    const double elapsed_ms = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - begin).count();
+    const auto after = dx12_device_context.CaptureScene3DState();
+    std::fprintf(stderr,
+        "[Loading3D] GPU preload %s: %.3f ms, static +%zu, skinned +%zu, texture +%zu\n",
+        ok ? "OK" : "FAILED", elapsed_ms,
+        after.static_mesh_cache_size - before.static_mesh_cache_size,
+        after.skinned_mesh_cache_size - before.skinned_mesh_cache_size,
+        after.texture_cache_size - before.texture_cache_size);
+    std::fprintf(stderr,
+        "[Loading3D] preload inputs: items %zu (skinned %zu), sources static %zu skinned %zu, "
+        "draws static %zu skinned %zu, texture candidates %zu (disabled)\n",
+        render_items.Size(), skinned_render_item_count, static_source_count,
+        skinned_source_count, static_draw_count, skinned_draw_count,
+        texture_candidate_count);
+    return ok;
 }

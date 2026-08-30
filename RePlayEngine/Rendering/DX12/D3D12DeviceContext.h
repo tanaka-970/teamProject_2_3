@@ -281,6 +281,44 @@ namespace ReplayEngine::Rendering::DX12
         DirectX::XMFLOAT4 background_color{ 0, 0, 0, 1 };
     };
 
+    struct D3D12Scene3DDrawOptions final
+    {
+        bool manage_shadow_targets = true;
+        bool allow_static_mesh_cache_replacement = true;
+        bool read_motion_history = true;
+        bool write_motion_history = true;
+        bool read_scene_history = true;
+        bool write_scene_history = true;
+    };
+
+    struct D3D12Scene3DStateSnapshot final
+    {
+        std::size_t static_mesh_cache_size = 0;
+        std::size_t skinned_mesh_cache_size = 0;
+        std::size_t texture_cache_size = 0;
+        std::size_t static_mesh_bounds_cache_size = 0;
+        std::size_t skinned_mesh_bounds_cache_size = 0;
+        std::size_t motion_history_size = 0;
+        std::uint64_t motion_frame_serial = 0;
+        std::uint64_t scene_history_write_serial = 0;
+        std::uint64_t scene_effect_history_write_serial = 0;
+        std::size_t scene_effect_history_size = 0;
+        bool scene_history_valid = false;
+        std::uintptr_t gbuffer_resources[kScene3DGBufferCount]{};
+        std::uintptr_t depth_resource = 0;
+        std::uintptr_t history_resource = 0;
+        std::uintptr_t directional_shadow_resource = 0;
+        std::uintptr_t local_shadow_resource = 0;
+        D3D12_RESOURCE_STATES gbuffer_states[kScene3DGBufferCount]{};
+        D3D12_RESOURCE_STATES depth_state = D3D12_RESOURCE_STATE_COMMON;
+        D3D12_RESOURCE_STATES history_state = D3D12_RESOURCE_STATE_COMMON;
+        D3D12_RESOURCE_STATES directional_shadow_state = D3D12_RESOURCE_STATE_COMMON;
+        D3D12_RESOURCE_STATES local_shadow_state = D3D12_RESOURCE_STATE_COMMON;
+        std::uint32_t directional_shadow_resolution = 0;
+        std::uint32_t local_shadow_resolution = 0;
+        D3D12FrameConstants frame_constants{};
+    };
+
     enum class D3D12UIBlendMode : std::uint32_t
     {
         Alpha = 0,
@@ -580,8 +618,13 @@ namespace ReplayEngine::Rendering::DX12
             const ::ReplayEngine::Rendering::RenderItemList& items) noexcept;
         bool DrawStaticScene(const D3D12StaticSceneSubmission& submission) noexcept;
         // Scene 3D: Static + Skinned + GBuffer + Deferred + Forward Transparent。
-        bool DrawScene3D(const D3D12StaticSceneSubmission& submission) noexcept;
-        bool CacheMeshLocalBounds(const D3D12StaticSceneSubmission& submission) noexcept;
+        bool DrawScene3D(const D3D12StaticSceneSubmission& submission,
+            D3D12Scene3DDrawOptions options = {}) noexcept;
+        bool PreloadScene3DResources(const D3D12StaticSceneSubmission& submission,
+            bool allow_static_mesh_cache_replacement = false) noexcept;
+        D3D12Scene3DStateSnapshot CaptureScene3DState() const noexcept;
+        bool CacheMeshLocalBounds(const D3D12StaticSceneSubmission& submission,
+            bool allow_static_mesh_cache_replacement = true) noexcept;
         bool GetStaticMeshLocalBounds(const std::string& key,
             D3D12MeshLocalBounds& bounds) const noexcept;
         bool GetSkinnedMeshLocalBounds(const std::string& key,
@@ -1052,6 +1095,7 @@ namespace ReplayEngine::Rendering::DX12
         std::unordered_map<std::string, D3D12MeshLocalBounds> skinned_mesh_bounds_cache_;
         std::unordered_map<std::string, Scene3DMotionHistory> scene3d_motion_history_;
         std::uint64_t scene3d_frame_serial_ = 0;
+        std::uint64_t scene3d_history_write_serial_ = 0;
         D3D12DescriptorAllocation static_samplers_[3]{};
         std::unordered_map<std::string, std::unique_ptr<D3D12MeshBuffer>> static_mesh_cache_;
         std::unordered_map<std::string, D3D12MeshLocalBounds> static_mesh_bounds_cache_;
@@ -1113,6 +1157,7 @@ namespace ReplayEngine::Rendering::DX12
             ui_preview_effect_history_targets_;
         std::unordered_map<std::uint64_t, UIEffectHistoryEntry>
             scene_effect_history_targets_;
+        std::uint64_t scene_effect_history_write_serial_ = 0;
         Microsoft::WRL::ComPtr<ID3D12RootSignature> ui_root_signature_;
         Microsoft::WRL::ComPtr<ID3D12PipelineState> ui_pipelines_[5];
         Microsoft::WRL::ComPtr<ID3D12PipelineState> ui_hdr_composite_pipeline_;

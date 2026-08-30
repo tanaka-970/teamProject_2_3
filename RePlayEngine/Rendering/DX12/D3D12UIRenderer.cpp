@@ -894,7 +894,8 @@ namespace ReplayEngine::Rendering::DX12
             return draw_batches(output_rtv, -1, 0, frame.batches.size()) && finish_output();
         }
 
-        auto& history_targets = (hdr_effect || frame.scene_effect_history)
+        const bool uses_scene_effect_history = hdr_effect || frame.scene_effect_history;
+        auto& history_targets = uses_scene_effect_history
             ? scene_effect_history_targets_
             : (output_target != nullptr
                 ? ui_preview_effect_history_targets_ : ui_effect_history_targets_);
@@ -1120,6 +1121,7 @@ namespace ReplayEngine::Rendering::DX12
                         D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE))
                     return false;
                 history->valid = true;
+                if (uses_scene_effect_history) ++scene_effect_history_write_serial_;
             }
             return true;
         };
