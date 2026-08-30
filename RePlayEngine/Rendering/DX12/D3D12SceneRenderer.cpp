@@ -2014,18 +2014,36 @@ namespace ReplayEngine::Rendering::DX12
             command_list_->SetGraphicsRootDescriptorTable(14, ramp->srv.gpu);               // t10
             return true;
         };
-        const auto model_effect_for_owner = [this](std::uint64_t owner_id)
+        const auto material_slot_selected = [](std::uint32_t target_slot_mask,
+            std::uint32_t material_slot) noexcept
+        {
+            return target_slot_mask == 0xFFFFFFFFu ||
+                (material_slot < 32u &&
+                    (target_slot_mask & (1u << material_slot)) != 0u);
+        };
+        const auto model_effect_for_draw = [this, &material_slot_selected](
+            const D3D12StaticDrawItem& draw)
             -> const D3D12ModelEffectStackSubmission*
         {
             for (const D3D12ModelEffectStackSubmission& stack : scene_effect_submission_.model_effects)
-                if (stack.owner_id == owner_id) return &stack;
+            {
+                if (stack.owner_id == draw.owner_id &&
+                    material_slot_selected(stack.target_slot_mask, draw.material_slot))
+                    return &stack;
+            }
             return nullptr;
         };
-        const auto model_effect_isolated_from_scene = [&model_effect_for_owner](
-            std::uint64_t owner_id) noexcept
+        const auto model_effect_isolated_from_scene = [this, &material_slot_selected](
+            const D3D12StaticDrawItem& draw) noexcept
         {
-            const D3D12ModelEffectStackSubmission* stack = model_effect_for_owner(owner_id);
-            return stack != nullptr && (stack->isolate_from_scene || stack->depth_mode != 0);
+            for (const D3D12ModelEffectStackSubmission& stack : scene_effect_submission_.model_effects)
+            {
+                if (stack.owner_id == draw.owner_id &&
+                    material_slot_selected(stack.target_slot_mask, draw.material_slot) &&
+                    (stack.isolate_from_scene || stack.depth_mode != 0))
+                    return true;
+            }
+            return false;
         };
         if (LightingTraceEnabled())
         {
@@ -2062,7 +2080,7 @@ namespace ReplayEngine::Rendering::DX12
                     << gpu.color_intensity.w << ") shadow=(" << gpu.shadow.x << ','
                     << gpu.shadow.y << ',' << gpu.shadow.z << ',' << gpu.shadow.w << ")\n";
             }
-            const auto append_draw = [&trace, &model_effect_for_owner](
+            const auto append_draw = [&trace, &model_effect_for_draw](
                 const D3D12StaticDrawItem& draw, const char* kind, std::size_t index)
             {
                 trace << "[LightingTrace] draw kind=" << kind << " index=" << index
@@ -2076,7 +2094,7 @@ namespace ReplayEngine::Rendering::DX12
                     << draw.base_color.z << ',' << draw.base_color.w << ") metallic="
                     << draw.metallic << " roughness=" << draw.roughness << " ao="
                     << draw.ambient_occlusion << " model_effect="
-                    << (model_effect_for_owner(draw.owner_id) != nullptr ? 1 : 0) << '\n';
+                    << (model_effect_for_draw(draw) != nullptr ? 1 : 0) << '\n';
             };
             for (std::size_t index = 0; index < submission.draws.size(); ++index)
                 append_draw(submission.draws[index], "static", index);
@@ -2090,9 +2108,14 @@ namespace ReplayEngine::Rendering::DX12
                 std::size_t matched_static = 0;
                 std::size_t matched_skinned = 0;
                 for (const D3D12StaticDrawItem& draw : submission.draws)
-                    if (draw.owner_id == stack.owner_id) ++matched_static;
+                    if (draw.owner_id == stack.owner_id &&
+                        material_slot_selected(stack.target_slot_mask, draw.material_slot))
+                        ++matched_static;
                 for (const D3D12SkinnedDrawItem& draw : submission.skinned_draws)
-                    if (draw.surface.owner_id == stack.owner_id) ++matched_skinned;
+                    if (draw.surface.owner_id == stack.owner_id &&
+                        material_slot_selected(stack.target_slot_mask,
+                            draw.surface.material_slot))
+                        ++matched_skinned;
                 trace << "[LightingTrace] model_effect[" << index << "] owner="
                     << stack.owner_id << " effects=" << stack.effects.size()
                     << " matched_static=" << matched_static
@@ -2118,17 +2141,27 @@ namespace ReplayEngine::Rendering::DX12
         {
             return kind == 5u || kind == 6u || kind == 7u || kind == 71u;
         };
-        const auto has_shadow_coverage = [&model_effect_for_owner, &is_shadow_coverage_kind](
-            std::uint64_t owner_id) noexcept
+        const auto shadow_coverage_stack_for_draw = [this, &material_slot_selected,
+            &is_shadow_coverage_kind](const D3D12StaticDrawItem& draw) noexcept
+            -> const D3D12ModelEffectStackSubmission*
         {
-            const D3D12ModelEffectStackSubmission* stack = model_effect_for_owner(owner_id);
-            if (stack == nullptr) return false;
-            for (const D3D12UIEffectCommand& effect : stack->effects)
-                if (is_shadow_coverage_kind(effect.kind)) return true;
-            return false;
+            for (const D3D12ModelEffectStackSubmission& stack : scene_effect_submission_.model_effects)
+            {
+                if (stack.owner_id != draw.owner_id ||
+                    !material_slot_selected(stack.target_slot_mask, draw.material_slot))
+                    continue;
+                for (const D3D12UIEffectCommand& effect : stack.effects)
+                    if (is_shadow_coverage_kind(effect.kind)) return &stack;
+            }
+            return nullptr;
+        };
+        const auto has_shadow_coverage = [&shadow_coverage_stack_for_draw](
+            const D3D12StaticDrawItem& draw) noexcept
+        {
+            return shadow_coverage_stack_for_draw(draw) != nullptr;
         };
         const auto bind_shadow_surface = [this, &allocate_cb, identity_bone_gpu, &texture_for,
-            &model_effect_for_owner, &is_shadow_coverage_kind, &white](
+            &shadow_coverage_stack_for_draw, &is_shadow_coverage_kind, &white](
             const D3D12StaticDrawItem& draw, D3D12_GPU_VIRTUAL_ADDRESS current_bones,
             float morph_weight) noexcept -> bool
         {
@@ -2155,7 +2188,8 @@ namespace ReplayEngine::Rendering::DX12
             int effect_count = 0;
             int mask_index = -1;
             int region_count = 0;
-            if (const D3D12ModelEffectStackSubmission* stack = model_effect_for_owner(draw.owner_id))
+            if (const D3D12ModelEffectStackSubmission* stack =
+                shadow_coverage_stack_for_draw(draw))
             {
                 if (stack->scissor_enabled)
                 {
@@ -2241,7 +2275,7 @@ namespace ReplayEngine::Rendering::DX12
                 const auto it = static_mesh_cache_.find(draw.mesh_key);
                 if (it == static_mesh_cache_.end() || !it->second || !it->second->IsValid()) continue;
                 const UINT alpha_clip = (draw.alpha_mode != D3D12StaticAlphaMode::Opaque ||
-                    has_shadow_coverage(draw.owner_id)) ? 1u : 0u;
+                    has_shadow_coverage(draw)) ? 1u : 0u;
                 const UINT index = (draw.double_sided ? 2u : 0u) + alpha_clip;
                 command_list_->SetPipelineState(scene3d_static_shadow_pipelines_[index].Get());
                 if (!bind_shadow_surface(draw, identity_bone_gpu, 0.0f)) return false;
@@ -2254,7 +2288,7 @@ namespace ReplayEngine::Rendering::DX12
                 const auto it = skinned_mesh_cache_.find(draw.surface.mesh_key);
                 if (it == skinned_mesh_cache_.end() || !it->second || !it->second->IsValid()) continue;
                 const UINT alpha_clip = (draw.surface.alpha_mode != D3D12StaticAlphaMode::Opaque ||
-                    has_shadow_coverage(draw.surface.owner_id)) ? 1u : 0u;
+                    has_shadow_coverage(draw.surface)) ? 1u : 0u;
                 const UINT index = (draw.surface.double_sided ? 2u : 0u) + alpha_clip;
                 command_list_->SetPipelineState(scene3d_skinned_shadow_pipelines_[index].Get());
                 if (!bind_shadow_surface(draw.surface, prepared_skinned[i].current_bones,
@@ -2352,7 +2386,7 @@ namespace ReplayEngine::Rendering::DX12
         command_list_->SetGraphicsRootSignature(scene3d_geometry_root_signature_.Get());
         for (const D3D12StaticDrawItem& draw : submission.draws)
         {
-            if (model_effect_isolated_from_scene(draw.owner_id)) continue;
+            if (model_effect_isolated_from_scene(draw)) continue;
             if (draw.alpha_mode == D3D12StaticAlphaMode::Blend) continue;
             const auto it = static_mesh_cache_.find(draw.mesh_key);
             if (it == static_mesh_cache_.end() || !it->second || !it->second->IsValid()) continue;
@@ -2374,7 +2408,7 @@ namespace ReplayEngine::Rendering::DX12
         for (std::size_t i = 0; i < submission.skinned_draws.size(); ++i)
         {
             const D3D12SkinnedDrawItem& draw = submission.skinned_draws[i];
-            if (model_effect_isolated_from_scene(draw.surface.owner_id)) continue;
+            if (model_effect_isolated_from_scene(draw.surface)) continue;
             if (draw.surface.alpha_mode == D3D12StaticAlphaMode::Blend) continue;
             const auto it = skinned_mesh_cache_.find(draw.surface.mesh_key);
             if (it == skinned_mesh_cache_.end() || !it->second || !it->second->IsValid()) continue;
@@ -2407,7 +2441,7 @@ namespace ReplayEngine::Rendering::DX12
 
         for (const D3D12StaticDrawItem& draw : submission.draws)
         {
-            if (model_effect_isolated_from_scene(draw.owner_id)) continue;
+            if (model_effect_isolated_from_scene(draw)) continue;
             if (draw.alpha_mode == D3D12StaticAlphaMode::Blend) continue;
             const auto it = static_mesh_cache_.find(draw.mesh_key);
             if (it == static_mesh_cache_.end() || !it->second || !it->second->IsValid()) continue;
@@ -2429,7 +2463,7 @@ namespace ReplayEngine::Rendering::DX12
         for (std::size_t i = 0; i < submission.skinned_draws.size(); ++i)
         {
             const D3D12SkinnedDrawItem& draw = submission.skinned_draws[i];
-            if (model_effect_isolated_from_scene(draw.surface.owner_id)) continue;
+            if (model_effect_isolated_from_scene(draw.surface)) continue;
             if (draw.surface.alpha_mode == D3D12StaticAlphaMode::Blend) continue;
             const auto it = skinned_mesh_cache_.find(draw.surface.mesh_key);
             if (it == skinned_mesh_cache_.end() || !it->second || !it->second->IsValid()) continue;
@@ -2511,7 +2545,7 @@ namespace ReplayEngine::Rendering::DX12
         command_list_->SetGraphicsRootSignature(scene3d_geometry_root_signature_.Get());
         for (const D3D12StaticDrawItem& draw : submission.draws)
         {
-            if (model_effect_isolated_from_scene(draw.owner_id)) continue;
+            if (model_effect_isolated_from_scene(draw)) continue;
             if (draw.alpha_mode != D3D12StaticAlphaMode::Blend) continue;
             const auto it = static_mesh_cache_.find(draw.mesh_key);
             if (it == static_mesh_cache_.end() || !it->second || !it->second->IsValid()) continue;
@@ -2532,7 +2566,7 @@ namespace ReplayEngine::Rendering::DX12
         for (std::size_t i = 0; i < submission.skinned_draws.size(); ++i)
         {
             const D3D12SkinnedDrawItem& draw = submission.skinned_draws[i];
-            if (model_effect_isolated_from_scene(draw.surface.owner_id)) continue;
+            if (model_effect_isolated_from_scene(draw.surface)) continue;
             if (draw.surface.alpha_mode != D3D12StaticAlphaMode::Blend) continue;
             const auto it = skinned_mesh_cache_.find(draw.surface.mesh_key);
             if (it == skinned_mesh_cache_.end() || !it->second || !it->second->IsValid()) continue;
@@ -2548,9 +2582,10 @@ namespace ReplayEngine::Rendering::DX12
         EndGpuPass(D3D12GpuPass::Forward);
 
         const auto draw_scene_effect_isolated = [this, &submission, &prepared_skinned,
-            &bind_surface, &draw_mesh, &options, identity_bone_gpu](
+            &bind_surface, &draw_mesh, &options, &material_slot_selected, identity_bone_gpu](
             D3D12OffscreenTarget& target, std::uint64_t owner_id,
-            std::uint32_t rendering_layer_mask, bool match_owner, bool preserve_depth) noexcept
+            std::uint32_t rendering_layer_mask, std::uint32_t target_slot_mask,
+            bool match_owner, bool preserve_depth) noexcept
         {
             if (!resource_state_tracker_.Transition(command_list_.Get(), target.color.Get(),
                 D3D12_RESOURCE_STATE_RENDER_TARGET))
@@ -2572,7 +2607,8 @@ namespace ReplayEngine::Rendering::DX12
             command_list_->SetGraphicsRootSignature(scene3d_geometry_root_signature_.Get());
             for (const D3D12StaticDrawItem& draw : submission.draws)
             {
-                const bool selected = match_owner ? draw.owner_id == owner_id
+                const bool selected = match_owner ? draw.owner_id == owner_id &&
+                    material_slot_selected(target_slot_mask, draw.material_slot)
                     : (draw.rendering_layer < 32u &&
                         (rendering_layer_mask & (1u << draw.rendering_layer)) != 0u);
                 if (!selected) continue;
@@ -2598,7 +2634,8 @@ namespace ReplayEngine::Rendering::DX12
             for (std::size_t index = 0; index < submission.skinned_draws.size(); ++index)
             {
                 const D3D12SkinnedDrawItem& draw = submission.skinned_draws[index];
-                const bool selected = match_owner ? draw.surface.owner_id == owner_id
+                const bool selected = match_owner ? draw.surface.owner_id == owner_id &&
+                    material_slot_selected(target_slot_mask, draw.surface.material_slot)
                     : (draw.surface.rendering_layer < 32u &&
                         (rendering_layer_mask & (1u << draw.surface.rendering_layer)) != 0u);
                 if (!selected) continue;
@@ -2631,9 +2668,10 @@ namespace ReplayEngine::Rendering::DX12
         };
 
         const auto draw_scene_effect_extracted = [this, &submission, &prepared_skinned,
-            &bind_surface, &draw_mesh, &options, identity_bone_gpu](
+            &bind_surface, &draw_mesh, &options, &material_slot_selected, identity_bone_gpu](
             D3D12OffscreenTarget& target, std::uint64_t owner_id,
-            std::uint32_t rendering_layer_mask, bool match_owner) noexcept
+            std::uint32_t rendering_layer_mask, std::uint32_t target_slot_mask,
+            bool match_owner) noexcept
         {
             if (!resource_state_tracker_.Transition(command_list_.Get(),
                 scene_view_target_.color.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE) ||
@@ -2653,10 +2691,12 @@ namespace ReplayEngine::Rendering::DX12
             command_list_->OMSetRenderTargets(1, &target.rtv.cpu, FALSE,
                 &scene3d_depth_.dsv.cpu);
             command_list_->SetGraphicsRootSignature(scene3d_geometry_root_signature_.Get());
-            const auto selected = [owner_id, rendering_layer_mask, match_owner](
+            const auto selected = [owner_id, rendering_layer_mask, target_slot_mask,
+                match_owner, &material_slot_selected](
                 const D3D12StaticDrawItem& draw) noexcept
             {
-                return match_owner ? draw.owner_id == owner_id :
+                return match_owner ? draw.owner_id == owner_id &&
+                    material_slot_selected(target_slot_mask, draw.material_slot) :
                     (draw.rendering_layer < 32u &&
                         (rendering_layer_mask & (1u << draw.rendering_layer)) != 0u);
             };
@@ -2754,11 +2794,11 @@ namespace ReplayEngine::Rendering::DX12
             {
                 const bool preserve_depth = stack.depth_mode == 0;
                 if (!draw_scene_effect_isolated(scene_effect_targets_[2], stack.owner_id, 0u,
-                    true, preserve_depth))
+                    stack.target_slot_mask, true, preserve_depth))
                     return false;
             }
             else if (!draw_scene_effect_extracted(scene_effect_targets_[2], stack.owner_id,
-                0u, true))
+                0u, stack.target_slot_mask, true))
                 return false;
             D3D12UIFrame effect_frame{};
             effect_frame.target_width = width_;
@@ -2788,7 +2828,7 @@ namespace ReplayEngine::Rendering::DX12
                 if (stack.target_mode == 2)
                 {
                     if (!draw_scene_effect_extracted(scene_effect_targets_[2], 0,
-                        stack.target_rendering_layer_mask, false))
+                        stack.target_rendering_layer_mask, 0xFFFFFFFFu, false))
                         return false;
                     D3D12UIFrame layer_frame{};
                     layer_frame.target_width = width_;

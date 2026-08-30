@@ -230,7 +230,8 @@ void framework::prepare_ui_effect_shader_schemas(ReplayEngine::Scene::Scene& sce
         if (object == nullptr || object->PendingDestroy()) continue;
         prepare_stack(object->GetComponent<UIEffectStackComponent>());
         prepare_stack(object->GetComponent<ScreenEffectStackComponent>());
-        prepare_stack(object->GetComponent<ModelEffectStackComponent>());
+        for (ModelEffectStackComponent* stack : object->GetComponents<ModelEffectStackComponent>())
+            prepare_stack(stack);
     }
 }
 
