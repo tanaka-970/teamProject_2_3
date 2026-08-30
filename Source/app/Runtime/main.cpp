@@ -224,6 +224,36 @@ namespace ReplayEngine::Runtime::Detail
         return false;
     }
 
+    bool ParseCaptureExclusiveFrame(const char* command_line, std::string& capture_name)
+    {
+        capture_name = "exclusive";
+
+        std::istringstream arguments(command_line != nullptr ? command_line : "");
+        std::string token;
+        while (arguments >> token)
+        {
+            if (token != "--capture-exclusive-frame") continue;
+
+            std::string candidate;
+            if (!(arguments >> candidate) || candidate.rfind("--", 0) == 0)
+                return true;
+
+            const bool contains_control_character = std::any_of(
+                candidate.begin(), candidate.end(), [](unsigned char character) noexcept
+                {
+                    return std::iscntrl(character) != 0;
+                });
+            const bool contains_invalid_path =
+                candidate.find("..") != std::string::npos ||
+                candidate.find_first_of("\\/:*?\"<>|") != std::string::npos;
+            if (contains_control_character || contains_invalid_path) return true;
+
+            capture_name = candidate;
+            return true;
+        }
+        return false;
+    }
+
     std::string TrimCopy(std::string text)
     {
         const auto is_space = [](unsigned char c) noexcept

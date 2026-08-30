@@ -321,10 +321,14 @@
 
 public:
     void request_automated_frame_capture(const std::string& name);
+    void request_automated_exclusive_frame_capture(const std::string& name);
+    bool automated_exclusive_frame_capture_attempted() const noexcept;
     bool golden_last_capture_ok() const noexcept;
     const std::string& golden_last_capture_summary() const noexcept;
 
 private:
+    bool begin_automated_exclusive_frame_capture();
+    void cancel_automated_exclusive_frame_capture();
     // 撮影待ちの間はワールドを止める。update / render から見る。
     bool golden_capture_pending() const noexcept;
 

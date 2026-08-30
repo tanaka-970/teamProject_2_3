@@ -12,6 +12,38 @@ void framework::request_automated_frame_capture(const std::string& name)
     automated_frame_capture_pending = true;
 }
 
+void framework::request_automated_exclusive_frame_capture(const std::string& name)
+{
+    golden_state_->golden_name = name;
+    automated_exclusive_frame_capture_pending = true;
+    automated_exclusive_frame_capture_attempted_ = false;
+}
+
+bool framework::automated_exclusive_frame_capture_attempted() const noexcept
+{
+    return automated_exclusive_frame_capture_attempted_;
+}
+
+bool framework::begin_automated_exclusive_frame_capture()
+{
+    if (!automated_exclusive_frame_capture_pending || !scene_manager.IsExclusive())
+        return false;
+
+    automated_exclusive_frame_capture_pending = false;
+    automated_exclusive_frame_capture_attempted_ = true;
+    request_golden(golden_request_kind::capture);
+    golden_state_->golden_countdown = 0;
+    return true;
+}
+
+void framework::cancel_automated_exclusive_frame_capture()
+{
+    golden_state_->golden_request = golden_request_kind::none;
+    golden_state_->golden_last_ok = false;
+    golden_state_->golden_last_summary =
+        u8"排他 Scene のフレーム内で DX12 Readback を要求できませんでした";
+}
+
 bool framework::golden_last_capture_ok() const noexcept
 {
     return golden_state_->golden_last_ok;

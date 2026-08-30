@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <shellapi.h>
 #include <filesystem>
 #include <fstream>
@@ -18,6 +19,8 @@
 #include <vector>
 
 #include "../../../RePlayEngine/Components/Motion/MotionPlayerComponent.h"
+#include "../../../RePlayEngine/Components/Camera/CameraComponent.h"
+#include "../../../RePlayEngine/Components/Rendering/LightComponents.h"
 #include "../../../RePlayEngine/Components/Core/SceneLoaderComponent.h"
 #include "../../../RePlayEngine/Components/UI/RectTransformComponent.h"
 #include "../../../RePlayEngine/Components/UI/UIImageComponent.h"
@@ -107,6 +110,20 @@ namespace ReplayEngine::Runtime::Detail
             std::fprintf(stderr, "  [FAIL %d] %s\n", checks, label);
         };
 
+        std::string exclusive_capture_name;
+        Check(ParseCaptureExclusiveFrame(
+            "--capture-exclusive-frame loading_first", exclusive_capture_name) &&
+            exclusive_capture_name == "loading_first",
+            "排他 Scene 撮影オプションと撮影名を解釈できる");
+        Check(ParseCaptureExclusiveFrame(
+            "--capture-exclusive-frame ../invalid", exclusive_capture_name) &&
+            exclusive_capture_name == "exclusive",
+            "排他 Scene 撮影名の不正なパスを既定名へ戻す");
+        std::string ordinary_capture_name;
+        Check(!ParseCaptureFrame(
+            "--capture-exclusive-frame loading_first", ordinary_capture_name),
+            "排他 Scene 撮影オプションは既存 capture-frame を有効にしない");
+
         ReplayEngine::Project::ProjectSettings loading_settings;
         loading_settings.SetLoadingSceneGuid("loading-scene-validation-guid");
         std::ostringstream loading_settings_text;
@@ -155,6 +172,178 @@ namespace ReplayEngine::Runtime::Detail
         Check(host.project_settings.LoadingSceneGuid().empty() &&
             host.exclusive_scene_for_render() == nullptr,
             "専用 Scene 未読込時は既存の SceneManager 経路へ落ちる");
+
+        const auto MatrixClose = [](const DirectX::XMFLOAT4X4& a,
+            const DirectX::XMFLOAT4X4& b) noexcept
+        {
+            const float* left = &a._11;
+            const float* right = &b._11;
+            for (int index = 0; index < 16; ++index)
+            {
+                if (std::fabs(left[index] - right[index]) > 1.0e-4f) return false;
+            }
+            return true;
+        };
+
+        ReplayEngine::Scene::Scene camera_scene("LoadingCameraValidation");
+        ReplayEngine::Core::GameObject* low_camera_object =
+            camera_scene.CreateGameObject("LowCamera");
+        ReplayEngine::Core::GameObject* high_camera_object =
+            camera_scene.CreateGameObject("HighCamera");
+        ReplayEngine::Components::CameraComponent* low_camera = low_camera_object != nullptr
+            ? low_camera_object->AddComponent<ReplayEngine::Components::CameraComponent>() : nullptr;
+        ReplayEngine::Components::CameraComponent* high_camera = high_camera_object != nullptr
+            ? high_camera_object->AddComponent<ReplayEngine::Components::CameraComponent>() : nullptr;
+        if (low_camera != nullptr) low_camera->priority = 1;
+        if (high_camera != nullptr)
+        {
+            high_camera->priority = 9;
+            high_camera->field_of_view_degrees = 60.0f;
+            high_camera->near_clip = 0.25f;
+            high_camera->far_clip = 500.0f;
+            high_camera_object->GetTransform().SetLocalPosition({ 3.0f, 4.0f, -7.0f });
+        }
+
+        framework::dx12_scene_frame_history loading_history{};
+        ReplayEngine::Rendering::DX12::D3D12FrameConstants loading_constants{};
+        DirectX::XMFLOAT4X4 loading_current_view_projection{};
+        bool used_fallback_camera = true;
+        host.build_dx12_frame_constants_for_scene(camera_scene, 1920, 1080,
+            loading_history, loading_constants, loading_current_view_projection,
+            used_fallback_camera);
+        Check(high_camera != nullptr && !used_fallback_camera &&
+            std::fabs(loading_constants.camera_position.x - 3.0f) < 1.0e-4f &&
+            std::fabs(loading_constants.camera_position.y - 4.0f) < 1.0e-4f &&
+            std::fabs(loading_constants.camera_position.z + 7.0f) < 1.0e-4f,
+            "専用 Scene の最高 priority Camera から Frame Constants を組み立てる");
+
+        DirectX::XMFLOAT4X4 expected_view{};
+        DirectX::XMFLOAT4X4 expected_projection{};
+        if (high_camera != nullptr)
+        {
+            DirectX::XMStoreFloat4x4(&expected_view, high_camera->ViewMatrix());
+            DirectX::XMStoreFloat4x4(&expected_projection,
+                high_camera->ProjectionMatrix(1920.0f / 1080.0f));
+        }
+        Check(high_camera != nullptr && MatrixClose(loading_constants.view, expected_view) &&
+            MatrixClose(loading_constants.projection, expected_projection),
+            "専用 Scene の CameraComponent View/Projection 実装をそのまま再利用する");
+        Check(MatrixClose(loading_constants.prev_view_projection,
+            loading_current_view_projection),
+            "専用 Scene history 初回は previous view-projection を current で初期化する");
+
+        const DirectX::XMFLOAT4X4 first_loading_view_projection =
+            loading_current_view_projection;
+        framework::commit_dx12_scene_frame_history(loading_history, camera_scene,
+            first_loading_view_projection);
+        if (high_camera_object != nullptr)
+            high_camera_object->GetTransform().SetLocalPosition({ 8.0f, 2.0f, -3.0f });
+        host.build_dx12_frame_constants_for_scene(camera_scene, 1920, 1080,
+            loading_history, loading_constants, loading_current_view_projection,
+            used_fallback_camera);
+        Check(MatrixClose(loading_constants.prev_view_projection,
+            first_loading_view_projection) &&
+            !MatrixClose(loading_constants.prev_view_projection,
+                loading_current_view_projection),
+            "専用 Scene history は明示 commit 済みの前フレームだけを参照する");
+
+        ReplayEngine::Scene::Scene another_camera_scene("AnotherLoadingCameraValidation");
+        host.build_dx12_frame_constants_for_scene(another_camera_scene, 1920, 1080,
+            loading_history, loading_constants, loading_current_view_projection,
+            used_fallback_camera);
+        Check(used_fallback_camera && MatrixClose(loading_constants.prev_view_projection,
+            loading_current_view_projection),
+            "別 Scene へ history を持ち越さず Camera 無し Scene は初回扱いになる");
+        Check(used_fallback_camera &&
+            std::fabs(loading_constants.camera_position.x) < 1.0e-4f &&
+            std::fabs(loading_constants.camera_position.y) < 1.0e-4f &&
+            std::fabs(loading_constants.camera_position.z) < 1.0e-4f &&
+            std::fabs(loading_constants.camera_planes.x - 0.1f) < 1.0e-4f &&
+            std::fabs(loading_constants.camera_planes.y - 10000.0f) < 1.0f,
+            "Camera 無し専用 Scene は CameraComponent の既定値へフォールバックする");
+
+        const DirectX::XMFLOAT4X4 active_previous_before = host.previous_view_projection;
+        const bool active_previous_valid_before = host.previous_view_projection_valid;
+        framework::commit_dx12_scene_frame_history(host.object_loading_scene_frame_history,
+            camera_scene, first_loading_view_projection);
+        Check(MatrixClose(host.previous_view_projection, active_previous_before) &&
+            host.previous_view_projection_valid == active_previous_valid_before,
+            "専用 Scene history の commit は active World の previous view-projection を変更しない");
+
+
+        ReplayEngine::Scene::Scene lighting_scene("LoadingLightingValidation");
+        ReplayEngine::Core::GameObject* directional_object =
+            lighting_scene.CreateGameObject("LoadingSun");
+        ReplayEngine::Core::GameObject* point_object =
+            lighting_scene.CreateGameObject("LoadingPoint");
+        ReplayEngine::Core::GameObject* spot_object =
+            lighting_scene.CreateGameObject("LoadingSpot");
+        auto* directional = directional_object != nullptr
+            ? directional_object->AddComponent<ReplayEngine::Components::DirectionalLightComponent>()
+            : nullptr;
+        auto* point = point_object != nullptr
+            ? point_object->AddComponent<ReplayEngine::Components::PointLightComponent>() : nullptr;
+        auto* spot = spot_object != nullptr
+            ? spot_object->AddComponent<ReplayEngine::Components::SpotLightComponent>() : nullptr;
+        if (directional != nullptr)
+        {
+            directional->color = { 0.8f, 0.7f, 0.6f, 1.0f };
+            directional->intensity = 2.5f;
+            directional->cast_shadows = true;
+        }
+        if (point != nullptr && point_object != nullptr)
+        {
+            point->color = { 0.2f, 0.4f, 0.9f, 1.0f };
+            point->intensity = 3.0f;
+            point->range = 7.0f;
+            point->cast_shadows = true;
+            point_object->GetTransform().SetLocalPosition({ 2.0f, 3.0f, 4.0f });
+        }
+        if (spot != nullptr && spot_object != nullptr)
+        {
+            spot->color = { 0.9f, 0.3f, 0.1f, 1.0f };
+            spot->intensity = 4.0f;
+            spot->range = 11.0f;
+            spot->inner_angle_degrees = 20.0f;
+            spot->outer_angle_degrees = 35.0f;
+            spot->cast_shadows = true;
+            spot_object->GetTransform().SetLocalPosition({ -2.0f, 5.0f, 1.0f });
+        }
+        const DirectX::XMFLOAT4 active_light_direction_before = host.light_direction;
+        const auto active_pbr_light_before = host.pbr.light;
+        const auto active_light_buffer_before = host.lights.data;
+        const auto active_csm_constants_before = host.csm.constants;
+        const std::size_t active_shadow_requests_before = host.local_shadow_requests.size();
+        const std::uint32_t active_local_shadow_slices_before = host.local_shadows.UsedSliceCount();
+        ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission loading_lighting;
+        const bool loading_lighting_ok = host.build_dx12_lighting_for_scene(
+            loading_lighting, lighting_scene);
+        Check(loading_lighting_ok && loading_lighting.directional_light.enabled &&
+            loading_lighting.point_lights.size() == 1 &&
+            loading_lighting.spot_lights.size() == 1 &&
+            std::fabs(loading_lighting.directional_light.direction.y + 1.0f) < 1.0e-4f &&
+            std::fabs(loading_lighting.directional_light.intensity - 2.5f) < 1.0e-4f &&
+            std::fabs(loading_lighting.point_lights[0].position.x - 2.0f) < 1.0e-4f &&
+            std::fabs(loading_lighting.point_lights[0].range - 7.0f) < 1.0e-4f &&
+            std::fabs(loading_lighting.spot_lights[0].position.x + 2.0f) < 1.0e-4f &&
+            std::fabs(loading_lighting.spot_lights[0].intensity - 4.0f) < 1.0e-4f &&
+            !loading_lighting.directional_light.cast_shadows &&
+            !loading_lighting.point_lights[0].cast_shadows &&
+            !loading_lighting.spot_lights[0].cast_shadows &&
+            !loading_lighting.directional_shadow.enabled &&
+            !loading_lighting.local_shadows.enabled,
+            "専用 Scene の Light 値を直接 Submission 化し Shadow は無効化する");
+        Check(std::memcmp(&host.light_direction, &active_light_direction_before,
+                sizeof(active_light_direction_before)) == 0 &&
+            std::memcmp(&host.pbr.light, &active_pbr_light_before,
+                sizeof(active_pbr_light_before)) == 0 &&
+            std::memcmp(&host.lights.data, &active_light_buffer_before,
+                sizeof(active_light_buffer_before)) == 0 &&
+            std::memcmp(&host.csm.constants, &active_csm_constants_before,
+                sizeof(active_csm_constants_before)) == 0 &&
+            host.local_shadow_requests.size() == active_shadow_requests_before &&
+            host.local_shadows.UsedSliceCount() == active_local_shadow_slices_before,
+            "専用 Scene の Light 抽出は active World の Light/CSM/LocalShadow を変更しない");
 
         const std::filesystem::path path = ValidationFolder() /
             "LoadingBridge.replayscene";
