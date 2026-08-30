@@ -399,11 +399,15 @@ void framework::render(float elapsed_time)
                 clamp_finite(taa_pass.max_velocity, 48.0f, 4.0f, 200.0f),
                 0.0f };
             static_scene.post_process.color_filter = clamp_color(post_settings.color_filter);
-            static_scene.post_process.render_output = profile_benchmark_mode
+            const std::uint32_t effective_render_output = profile_benchmark_mode
                 ? profile_benchmark_render_output
                 : static_cast<std::uint32_t>(render_graph.OutputIndex());
+            // ベンチマークの --render-output でも Deferred の debug mode を合わせる。
+            ReplayEngine::Rendering::RenderGraph effective_render_graph;
+            effective_render_graph.SetOutput(static_cast<int>(effective_render_output));
+            static_scene.post_process.render_output = effective_render_output;
             static_scene.post_process.deferred_debug_mode = static_cast<std::uint32_t>(
-                render_graph.DeferredDebugMode());
+                effective_render_graph.DeferredDebugMode());
             static_scene.post_process.bloom_enabled = enable_bloom_shader;
             static_scene.post_process.vignette_enabled = enable_vignette_shader;
             static_scene.post_process.fxaa_enabled = enable_fxaa_shader;
