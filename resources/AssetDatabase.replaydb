@@ -1,4 +1,4 @@
-REPLAY_ASSET_DB 2 191
+REPLAY_ASSET_DB 2 202
 "60412424bb1443240b2bf2160eee6923" 1 "ExampleStage" "resources/Stage/ExampleStage.cereal" "resources/.replay_cache/models/f9fffac39252a621_v0.replaycache"
 "1bd1358040255f5bd18f3be0d79fbe3c" 1 "AllAnimation1" "resources/AnimationModel/AllAnimation1.cereal" "resources/.replay_cache/models/6a20e727f78fb359_v0.replaycache"
 "e5c4168feb92f8fd7357f6cbc1f66e22" 1 "scene" "resources/Stage/city_3d_model_gltf/scene.gltf" "resources/.replay_cache/models/98fd72a862da8c8f_v0.replaycache"
@@ -190,3 +190,14 @@ REPLAY_ASSET_DB 2 191
 "9986ef1876783e6b1b0fe5c1d03c6358" 6 "Tie_body" "resources/model/Persona/Tie_body.replaymaterial" ""
 "927091246a96137c747680ccaa609f99" 6 "tieHair" "resources/model/Persona/tieHair.replaymaterial" ""
 "eef076566bc1404d5b097647055c195a" 5 "Test12" "resources/Scenes/Test12.replayscene" ""
+"c15a2b78416244fcb2b604093991db41" 5 "TiltStrikeTitle" "resources/Game/TiltStrike/Scenes/TiltStrikeTitle.replayscene" ""
+"b73f4d98626743b58d60d5c9473907e2" 5 "TiltStrikeGame" "resources/Game/TiltStrike/Scenes/TiltStrikeGame.replayscene" ""
+"e24be3d5d0614f2d9935bb42a5897780" 5 "TiltStrikeLoading" "resources/Game/TiltStrike/Scenes/TiltStrikeLoading.replayscene" ""
+"6c2a9f3ab5bc4e03ab12865d17de4087" 1 "TiltStrikeTrayCollision" "resources/Game/TiltStrike/Models/TiltStrikeTrayCollision.glb" ""
+"1c831293a8d84429afc87f4acaa50c2d" 7 "TiltStrikeTitleController" "Scripts/TiltStrike/Core/TiltStrikeTitleController.cs" ""
+"fb533c4782f8413b83998bf72e28c8cf" 7 "TiltBoardController" "Scripts/TiltStrike/Gameplay/TiltBoardController.cs" ""
+"3ae743b427d14e87a071e8a2486ce925" 7 "TiltStrikeGameDirector" "Scripts/TiltStrike/Core/TiltStrikeGameDirector.cs" ""
+"5d6748be2b0b4e2cb3dd969143b462a0" 3 "TiltStrikeStart" "resources/Game/TiltStrike/Audio/start.wav" ""
+"8aa571c0d56c47b8b8ef480530a88e85" 3 "TiltStrikePin" "resources/Game/TiltStrike/Audio/pin.wav" ""
+"4a244e96b6874a92a57b45ca54725e46" 3 "TiltStrikeVictory" "resources/Game/TiltStrike/Audio/victory.wav" ""
+"cc8d258ab6f14467a8713e377050ca80" 3 "TiltStrikeTimeUp" "resources/Game/TiltStrike/Audio/time_up.wav" ""
