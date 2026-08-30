@@ -141,6 +141,7 @@ PSOut main(PSIn input)
     const bool isToon = (uint)round(renderParams.y) == 1u;
     const bool hasToonParams = (uint)(builtinParams.x + 0.5f) == BUILTIN_EFFECT_TOON;
     const float toonStepCount = hasToonParams ? builtinParams.y : 3.0f;
+    const bool normalizedRamp = hasToonParams && builtinParams.w >= 0.5f;
     const float3 N = ResolveNormal(input, semanticMask);
 
     // ランプは遅延ライティングでは1枚に絞れないのでGBufferで階調を引いて乗算する。
@@ -148,7 +149,10 @@ PSOut main(PSIn input)
     {
         const float3 L = normalize(-directionalDirectionIntensity.xyz);
         const float noL = directionalColorFlags.w > 0.5f ? saturate(dot(N, L)) : 1.0f;
-        const float band = Dx12ToonNoL(noL, toonStepCount);
+        const float levels = max(floor(toonStepCount + 0.5f), 1.0f);
+        const float aa = fwidth(saturate(noL) * levels);
+        const float band = normalizedRamp ? Dx12ToonBand(noL, toonStepCount, aa) :
+            Dx12ToonNoL(noL, toonStepCount);
         albedo.rgb *= rampTexture.Sample(materialSampler, float2(band, 0.5f)).rgb;
     }
 
@@ -160,7 +164,8 @@ PSOut main(PSIn input)
         renderParams.z >= 0.5f ? 1.0f : -1.0f);
     // material.a は従来 ao の重複で誰も読んでいない。Toon のときだけ階調数を運ぶ。
     // 他のシェーダでは今までどおり ao を入れるので既存の見た目は変わらない。
-    const float toonSteps = isToon ? saturate(toonStepCount / 16.0f) : ao;
+    const float toonSteps = isToon ? saturate(toonStepCount / 16.0f +
+        (normalizedRamp ? 0.5f : 0.0f)) : ao;
     output.material = float4(ao, roughness, metallic, toonSteps);
 
     // 追加RTはToonのときだけ埋める。他は0で、lighting側もmodelで門を閉じている。

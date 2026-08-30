@@ -1,4 +1,4 @@
-﻿#ifndef __DX12_LIGHTING_COMMON_HLSLI__
+#ifndef __DX12_LIGHTING_COMMON_HLSLI__
 #define __DX12_LIGHTING_COMMON_HLSLI__
 
 #ifndef DX12_LIGHT_CB_REGISTER
@@ -359,6 +359,7 @@ struct Dx12ToonSurface
     float3 specularTint;
     float specularPower;
     float steps;
+    float normalizedRamp;
 };
 
 // 既定は全項目オフ。Toon 以外と Forward はこれを渡すので絵が変わらない。
@@ -371,6 +372,7 @@ Dx12ToonSurface Dx12DefaultToonSurface()
     toon.specularTint = float3(0.0f, 0.0f, 0.0f);
     toon.specularPower = 32.0f;
     toon.steps = 0.0f;
+    toon.normalizedRamp = 0.0f;
     return toon;
 }
 
@@ -399,11 +401,148 @@ float Dx12ToonNoL(float noL, float steps)
     return saturate(floor(saturate(noL) * levels) / (levels - 1.0f));
 }
 
+static const float DX12_TOON_SHADOW_FLOOR = 0.12f;
+static const float DX12_TOON_BAND_GAMMA = 2.2f;
+
+float Dx12Luminance(float3 value)
+{
+    return dot(value, float3(0.2126f, 0.7152f, 0.0722f));
+}
+
+float Dx12ToonBand(float shade, float steps, float aaWidth)
+{
+    const float levels = max(floor(steps + 0.5f), 1.0f);
+    if (levels < 2.0f) return pow(DX12_TOON_SHADOW_FLOOR +
+        (1.0f - DX12_TOON_SHADOW_FLOOR) * (shade > 0.5f ? 1.0f : 0.0f),
+        DX12_TOON_BAND_GAMMA);
+    const float x = saturate(shade) * levels;
+    const float w = clamp(aaWidth, 1.0e-4f, 1.0f);
+    const float level = saturate((floor(x) +
+        smoothstep(1.0f - w, 1.0f, frac(x))) / (levels - 1.0f));
+    return pow(DX12_TOON_SHADOW_FLOOR +
+        (1.0f - DX12_TOON_SHADOW_FLOOR) * level, DX12_TOON_BAND_GAMMA);
+}
+
+float3 Dx12EvaluatePbrSpecular(float3 albedo, float metallic, float roughness,
+    float3 normal, float3 viewDirection, float3 lightDirection,
+    float3 radiance, float noL)
+{
+    const float3 halfVector = normalize(viewDirection + lightDirection);
+    const float noV = max(saturate(dot(normal, viewDirection)), 1.0e-4f);
+    const float3 f0 = lerp(0.04f.xxx, albedo, saturate(metallic));
+    const float3 fresnel = Dx12FresnelSchlick(saturate(dot(halfVector, viewDirection)), f0);
+    const float distribution = Dx12DistributionGgx(normal, halfVector, roughness);
+    const float geometry = Dx12GeometrySchlickGgx(noV, roughness) *
+        Dx12GeometrySchlickGgx(max(noL, 1.0e-4f), roughness);
+    const float3 specular = (distribution * geometry * fresnel) /
+        max(4.0f * noV * max(noL, 1.0e-4f), 1.0e-4f);
+    return specular * radiance * noL;
+}
+
+float3 Dx12EvaluateLightingToonNormalized(float3 worldPosition, float3 normal,
+    float3 albedo, float metallic, float roughness, float ambientOcclusion,
+    bool receiveShadow, float2 noiseCoord, Dx12ToonSurface toon)
+{
+    const float3 N = normalize(normal);
+    const float3 V = normalize(cameraPosition.xyz - worldPosition);
+    float3 result = albedo * 0.035f * saturate(ambientOcclusion);
+    float3 W = 0.0f;
+    float3 Wl = 0.0f;
+
+    if (directionalColorFlags.w > 0.5f)
+    {
+        const float3 L = normalize(-directionalDirectionIntensity.xyz);
+        const float physicalNoL = saturate(dot(N, L));
+        const float visibility = receiveShadow ?
+            Dx12SampleCsm(worldPosition, N, physicalNoL, noiseCoord) : 1.0f;
+        const float3 lightColor =
+            directionalColorFlags.rgb * directionalDirectionIntensity.w;
+        const float3 lightTint = lightColor /
+            max(max(lightColor.x, max(lightColor.y, lightColor.z)), 1.0e-4f);
+        const float toonGain = 1.0f - exp(-Dx12Luminance(lightColor));
+        const float shade = physicalNoL * visibility;
+        W += lightTint * toonGain;
+        Wl += lightTint * toonGain * shade;
+        result += Dx12EvaluatePbrSpecular(albedo, metallic, roughness, N, V, L,
+            lightColor, physicalNoL) * visibility;
+        result += Dx12ToonSpecular(toon, N, V, L) * lightColor * visibility;
+    }
+
+    [loop] for (uint i = 0; i < min(lightCounts.x, 8u); ++i)
+    {
+        const float3 delta = pointLights[i].positionRange.xyz - worldPosition;
+        const float distanceToLight = length(delta);
+        const float range = max(pointLights[i].positionRange.w, 1.0e-3f);
+        const float3 L = delta / max(distanceToLight, 1.0e-5f);
+        float attenuation = saturate(1.0f - distanceToLight / range);
+        attenuation *= attenuation;
+        const float physicalNoL = saturate(dot(N, L));
+        const float visibility = receiveShadow ?
+            Dx12PointShadow(pointLights[i], worldPosition, N, physicalNoL) : 1.0f;
+        const float3 lightColor =
+            pointLights[i].colorIntensity.rgb * pointLights[i].colorIntensity.w * attenuation;
+        const float3 lightTint = lightColor /
+            max(max(lightColor.x, max(lightColor.y, lightColor.z)), 1.0e-4f);
+        const float toonGain = 1.0f - exp(-Dx12Luminance(lightColor));
+        const float shade = physicalNoL * visibility;
+        W += lightTint * toonGain;
+        Wl += lightTint * toonGain * shade;
+        result += Dx12EvaluatePbrSpecular(albedo, metallic, roughness, N, V, L,
+            lightColor, physicalNoL) * visibility;
+        result += Dx12ToonSpecular(toon, N, V, L) * lightColor * visibility;
+    }
+
+    [loop] for (uint i = 0; i < min(lightCounts.y, 4u); ++i)
+    {
+        const float3 delta = spotLights[i].positionRange.xyz - worldPosition;
+        const float distanceToLight = length(delta);
+        const float range = max(spotLights[i].positionRange.w, 1.0e-3f);
+        const float3 L = delta / max(distanceToLight, 1.0e-5f);
+        const float cone = dot(normalize(-spotLights[i].directionInner.xyz), L);
+        const float coneAttenuation = saturate((cone - spotLights[i].colorOuter.w) /
+            max(spotLights[i].directionInner.w - spotLights[i].colorOuter.w, 1.0e-4f));
+        float attenuation = saturate(1.0f - distanceToLight / range);
+        attenuation *= attenuation * coneAttenuation;
+        const float physicalNoL = saturate(dot(N, L));
+        const float visibility = receiveShadow ?
+            Dx12SpotShadow(spotLights[i], worldPosition, N, distanceToLight, physicalNoL) : 1.0f;
+        const float3 lightColor =
+            spotLights[i].colorOuter.rgb * spotLights[i].params.x * attenuation;
+        const float3 lightTint = lightColor /
+            max(max(lightColor.x, max(lightColor.y, lightColor.z)), 1.0e-4f);
+        const float toonGain = 1.0f - exp(-Dx12Luminance(lightColor));
+        const float shade = physicalNoL * visibility;
+        W += lightTint * toonGain;
+        Wl += lightTint * toonGain * shade;
+        result += Dx12EvaluatePbrSpecular(albedo, metallic, roughness, N, V, L,
+            lightColor, physicalNoL) * visibility;
+        result += Dx12ToonSpecular(toon, N, V, L) * lightColor * visibility;
+    }
+
+    const float Lw = Dx12Luminance(W);
+    const float Ll = Dx12Luminance(Wl);
+    const float t = saturate(Ll / max(Lw, 1.0e-4f));
+    const float levels = max(floor(toon.steps + 0.5f), 1.0f);
+    const float aa = fwidth(saturate(t) * levels);
+    const float band = Dx12ToonBand(t, toon.steps, aa);
+    const float3 hue = (Ll > 1.0e-4f) ? (Wl / Ll) :
+        ((Lw > 1.0e-4f) ? (W / Lw) : float3(0.0f, 0.0f, 0.0f));
+    const float3 diffuse = albedo * hue * (Lw * band);
+    result += diffuse;
+    result += albedo * toon.shadowTint * saturate(1.0f - t) *
+        saturate(ambientOcclusion);
+    result += Dx12ToonRim(toon, N, V);
+    return result;
+}
+
 float3 Dx12EvaluateLighting(float3 worldPosition, float3 normal, float3 albedo,
     float metallic, float roughness, float ambientOcclusion, uint lightingModel,
     bool receiveShadow, float2 noiseCoord, Dx12ToonSurface toon)
 {
     if (lightingModel >= 2u) return albedo;
+    if (lightingModel == 1u && toon.normalizedRamp >= 0.5f)
+        return Dx12EvaluateLightingToonNormalized(worldPosition, normal, albedo,
+            metallic, roughness, ambientOcclusion, receiveShadow, noiseCoord, toon);
 
     const bool isToon = lightingModel == 1u;
     const float toonSteps = toon.steps;

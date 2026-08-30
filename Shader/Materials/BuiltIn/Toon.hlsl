@@ -26,6 +26,7 @@
 #pragma property range   StepCount     "階調数"     1..8 = 3.0 category "Toon"
 #pragma property range   AlphaCutoff   "アルファ閾値" 0..1 = 0.5 category "Rendering"
 #pragma property toggle  DoubleSided   "両面を描く"       = false category "Rendering"
+#pragma property toggle  NormalizedRamp "光の強さに依らない階調" = true category "Toon"
 
 #define REPLAY_MATERIAL_PROPERTIES 1
 #if REPLAY_SKINNED

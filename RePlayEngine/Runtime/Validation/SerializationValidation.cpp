@@ -7,6 +7,11 @@
 //   SerializationValidationInternal.h           … 分割内部の Checker と共有宣言
 
 #include "SerializationValidationInternal.h"
+#include "../../Rendering/Materials/MaterialAsset.h"
+#include "../../Rendering/Shaders/BuiltInShaders.h"
+
+#include <fstream>
+#include <iterator>
 
 namespace ReplayEngine::Runtime::Validation
 {
@@ -514,6 +519,130 @@ namespace ReplayEngine::Runtime::Validation
                     }
                 }
             }
+        }
+
+        // ---- Material v5 の NormalizedRamp 互換性 ------------------------
+        {
+            namespace fs = std::filesystem;
+            using Rendering::MaterialAsset;
+            const fs::path directory = fs::temp_directory_path() /
+                "replay_material_v5_serialization_validation";
+            std::error_code filesystem_error;
+            fs::remove_all(directory, filesystem_error);
+            fs::create_directories(directory, filesystem_error);
+
+            const auto normalized_ramp = [](const MaterialAsset& material)
+            {
+                const Reflection::PropertyValue* value =
+                    material.properties.Find("prop.NormalizedRamp");
+                return value != nullptr && value->AsBool(false);
+            };
+            const auto material_text = [](int version)
+            {
+                std::ostringstream stream;
+                stream << "REPLAY_MATERIAL " << version << '\n'
+                    << "BASE_COLOR 1 1 1 1\n"
+                    << "BASE_COLOR_TEXTURE \"\"\n"
+                    << "NORMAL_TEXTURE \"\"\n"
+                    << "METALLIC 0\n"
+                    << "METALLIC_TEXTURE \"\"\n"
+                    << "ROUGHNESS 0.55\n"
+                    << "ROUGHNESS_TEXTURE \"\"\n"
+                    << "EMISSIVE 0 0 0 0\n"
+                    << "EMISSIVE_TEXTURE \"\"\n"
+                    << "AMBIENT_OCCLUSION 1\n"
+                    << "AMBIENT_OCCLUSION_TEXTURE \"\"\n"
+                    << "ALPHA 0 0.5\n"
+                    << "DOUBLE_SIDED 0\n"
+                    << "SHADING_MODEL 2\n"
+                    << "SHADER_GUID \"" << Rendering::BuiltInShaders::Toon.ToString()
+                    << "\"\nPROPERTY_COUNT 0\n"
+                    << "PIXELATE 6 1\n"
+                    << "OUTLINE_PASS 0\n"
+                    << "LAYER_COUNT 0\n"
+                    << "END_MATERIAL\n";
+                return stream.str();
+            };
+            const auto write_text = [](const fs::path& path, const std::string& text)
+            {
+                std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+                stream << text;
+                return static_cast<bool>(stream);
+            };
+
+            std::string material_error;
+            MaterialAsset source;
+            source.shading_model = 2;
+            source.shader_guid = Rendering::BuiltInShaders::Toon.ToString();
+            source.properties.Set("prop.NormalizedRamp",
+                Reflection::PropertyValue::MakeBool(true));
+            const fs::path true_path = directory / "true.replaymaterial";
+            MaterialAsset true_restored;
+            check.Expect(MaterialAsset::Save(source, true_path, material_error) &&
+                MaterialAsset::Load(true_path, true_restored, material_error) &&
+                normalized_ramp(true_restored),
+                "Material v5 で NormalizedRamp=true が往復する");
+
+            source.properties.Set("prop.NormalizedRamp",
+                Reflection::PropertyValue::MakeBool(false));
+            const fs::path false_path = directory / "false.replaymaterial";
+            MaterialAsset false_restored;
+            check.Expect(MaterialAsset::Save(source, false_path, material_error) &&
+                MaterialAsset::Load(false_path, false_restored, material_error) &&
+                !normalized_ramp(false_restored),
+                "Material v5 で NormalizedRamp=false が往復する");
+
+            const fs::path v4_path = directory / "legacy-v4.replaymaterial";
+            MaterialAsset v4_restored;
+            check.Expect(write_text(v4_path, material_text(4)) &&
+                MaterialAsset::Load(v4_path, v4_restored, material_error) &&
+                !normalized_ramp(v4_restored),
+                "NormalizedRamp 行の無い Material v4 は false へ移行する");
+
+            const fs::path v4_saved_path = directory / "legacy-v4-saved.replaymaterial";
+            MaterialAsset v4_saved_restored;
+            bool v4_resave_ok = MaterialAsset::Load(v4_path, v4_restored, material_error) &&
+                MaterialAsset::Save(v4_restored, v4_saved_path, material_error) &&
+                MaterialAsset::Load(v4_saved_path, v4_saved_restored, material_error) &&
+                !normalized_ramp(v4_saved_restored);
+            std::ifstream v4_saved_stream(v4_saved_path, std::ios::binary);
+            const std::string v4_saved_text((std::istreambuf_iterator<char>(v4_saved_stream)),
+                std::istreambuf_iterator<char>());
+            v4_resave_ok = v4_resave_ok &&
+                v4_saved_text.find("REPLAY_MATERIAL 5") != std::string::npos;
+            check.Expect(v4_resave_ok,
+                "Material v4 を v5 保存して再読込しても NormalizedRamp=false を保つ");
+
+            const fs::path v5_missing_path = directory / "missing-v5.replaymaterial";
+            MaterialAsset v5_missing_restored;
+            check.Expect(write_text(v5_missing_path, material_text(5)) &&
+                MaterialAsset::Load(v5_missing_path, v5_missing_restored, material_error) &&
+                !normalized_ramp(v5_missing_restored),
+                "NormalizedRamp 行の無い Material v5 は false として扱う");
+
+            const fs::path v4_enabled_path = directory / "legacy-v4-enabled.replaymaterial";
+            MaterialAsset v4_enabled;
+            MaterialAsset v4_enabled_restored;
+            const bool v4_enable_loaded =
+                MaterialAsset::Load(v4_path, v4_enabled, material_error);
+            if (v4_enable_loaded)
+                v4_enabled.properties.Set("prop.NormalizedRamp",
+                    Reflection::PropertyValue::MakeBool(true));
+            const bool v4_enabled_ok = v4_enable_loaded &&
+                MaterialAsset::Save(v4_enabled, v4_enabled_path, material_error) &&
+                MaterialAsset::Load(v4_enabled_path, v4_enabled_restored, material_error) &&
+                normalized_ramp(v4_enabled_restored);
+            check.Expect(v4_enabled_ok,
+                "Material v4 を Inspector 相当で true に変更して v5 往復できる");
+
+            const fs::path future_path = directory / "future.replaymaterial";
+            MaterialAsset future_restored;
+            check.Expect(write_text(future_path,
+                material_text(MaterialAsset::current_version + 1)) &&
+                !MaterialAsset::Load(future_path, future_restored, material_error),
+                "current_version より新しい Material は読み込みに失敗する");
+
+            fs::remove_all(directory, filesystem_error);
         }
 
         return check.Report("Serialization validation", 140);
