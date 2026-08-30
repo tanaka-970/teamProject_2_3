@@ -72,11 +72,16 @@ private:
         bool apply_material_motion = true);
         // DX12 Phase 2 Bridge。Engine 所有の RenderItem List を Cache 可能な Static
         // Geometry/Material Submission へ変換する。実際の Skinned Animation は Phase 3 に残す。
+    struct dx12_scene_build_options final
+    {
+        bool include_auxiliary_geometry = true;
+        bool include_active_lighting = true;
+    };
     bool build_dx12_static_scene(
         ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission& submission,
         const ReplayEngine::Scene::Scene& scene,
         const ReplayEngine::Rendering::RenderItemList& render_items,
-        float elapsed_time);
+        float elapsed_time, dx12_scene_build_options options = {});
     // Canvas/RectTransform の解決結果を、GPU APIを呼ばないDX12 UIコマンドへ変換する。
     bool build_dx12_ui(
         ReplayEngine::Rendering::DX12::D3D12UIFrame& frame);
@@ -337,6 +342,8 @@ private:
     std::uint32_t automated_smoke_test_frames{ 0 };
     std::uint32_t automated_smoke_test_frames_rendered{ 0 };
     bool automated_frame_capture_pending{ false };
+    bool automated_exclusive_frame_capture_pending{ false };
+    bool automated_exclusive_frame_capture_attempted_{ false };
 
     bool profile_benchmark_mode{ false };
     std::uint32_t profile_benchmark_frames{ 300 };

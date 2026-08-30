@@ -298,6 +298,8 @@ bool framework::initialize()
     }
     dx12_framework_active = true;
     dx12_framework_render_error_reported = false;
+    if (!prewarm_loading_scene_gpu_resources())
+        push_editor_log("Warning", "Loading Screen Scene のGPU先読みに失敗しました。通常の遅延Uploadで続行します");
     std::fprintf(stderr,
         "[DX12] runtime options: debug=%d gpu_validation=%d warp=%d break_on_error=%d dred=%d force_device_removed=%d frame_dump=%u\n",
         dx12_options.debug_layer ? 1 : 0, dx12_options.gpu_validation ? 1 : 0,

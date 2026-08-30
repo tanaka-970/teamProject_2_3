@@ -1360,14 +1360,16 @@ namespace ReplayEngine::Rendering::DX12
     }
 
     bool D3D12DeviceContext::CacheMeshLocalBounds(
-        const D3D12StaticSceneSubmission& submission) noexcept
+        const D3D12StaticSceneSubmission& submission,
+        bool allow_static_mesh_cache_replacement) noexcept
     {
         try
         {
             for (const D3D12StaticMeshSource& source : submission.mesh_sources)
             {
                 if (source.key.empty()) continue;
-                if (source.replace_existing) static_mesh_bounds_cache_.erase(source.key);
+                if (source.replace_existing && allow_static_mesh_cache_replacement)
+                    static_mesh_bounds_cache_.erase(source.key);
                 if (static_mesh_bounds_cache_.find(source.key) == static_mesh_bounds_cache_.end())
                 {
                     const D3D12MeshLocalBounds bounds = MakeMeshLocalBounds(source.vertices);
@@ -1939,6 +1941,7 @@ namespace ReplayEngine::Rendering::DX12
         for (auto& entry : scene_effect_history_targets_)
             ReleaseOffscreenTarget(entry.second.target);
         scene_effect_history_targets_.clear();
+        scene_effect_history_write_serial_ = 0;
         scene_effect_submission_.Clear();
         for (auto& target : render_targets_)
         {

@@ -179,6 +179,7 @@ bool framework::load_exclusive_scene_from_path(const std::filesystem::path& path
     object_loading_runtime_context.reset();
     object_loading_runtime_context = std::move(loading_runtime_context);
     object_loading_frame_index = 0;
+    object_loading_scene_frame_history = {};
     object_loading_scene = std::move(scene);
     return true;
 }
