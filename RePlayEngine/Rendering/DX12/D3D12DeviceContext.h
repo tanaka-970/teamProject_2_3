@@ -66,6 +66,9 @@ namespace ReplayEngine::Rendering::DX12
     {
         std::string key;
         std::filesystem::path source_path;
+        std::vector<std::uint8_t> rgba;
+        std::uint32_t width = 0;
+        std::uint32_t height = 0;
     };
 
     // Custom Surface Shader の正本は既存の ShaderCatalog/PropertySchema とする。
@@ -1142,6 +1145,7 @@ namespace ReplayEngine::Rendering::DX12
         D3D12OffscreenTarget ui_effect_targets_[4]{};
         D3D12OffscreenTarget scene_effect_targets_[4]{};
         D3D12SceneEffectSubmission scene_effect_submission_{};
+        std::string scene3d_lighting_trace_signature_;
         std::uint32_t last_model_effect_stack_count_ = 0;
         std::uint32_t last_screen_effect_stack_count_ = 0;
         std::uint32_t last_shadow_coverage_draw_count_ = 0;

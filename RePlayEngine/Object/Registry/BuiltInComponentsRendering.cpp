@@ -652,7 +652,9 @@ namespace ReplayEngine::Core::Detail
                     .InModule("RePlayEngine.Optional.Effects"));
             PropertyRegistry::Register<ScreenEffectStackComponent>(
                 MakeProperty("enabled", &ScreenEffectStackComponent::enabled)
-                    .Display("有効").Animation(Animatable::Step));
+                    .Display(u8"効果を適用")
+                    .Tooltip(u8"ヘッダー左のチェックとは別。両方が入っていないと効果は出ません。")
+                    .Animation(Animatable::Step));
             PropertyRegistry::Register<ScreenEffectStackComponent>(
                 MakeProperty("use_preset", &ScreenEffectStackComponent::use_preset)
                     .Display("Preset を使用").Animation(Animatable::Step));
@@ -686,7 +688,9 @@ namespace ReplayEngine::Core::Detail
                     .InModule("RePlayEngine.Optional.Effects"));
             PropertyRegistry::Register<ModelEffectStackComponent>(
                 MakeProperty("enabled", &ModelEffectStackComponent::enabled)
-                    .Display("有効").Animation(Animatable::Step));
+                    .Display(u8"効果を適用")
+                    .Tooltip(u8"ヘッダー左のチェックとは別。両方が入っていないと効果は出ません。")
+                    .Animation(Animatable::Step));
             PropertyRegistry::Register<ModelEffectStackComponent>(
                 MakeProperty("use_preset", &ModelEffectStackComponent::use_preset)
                     .Display("Preset を使用").Animation(Animatable::Step));

@@ -150,11 +150,10 @@ namespace ReplayEngine::Core::Detail
                     .Tooltip("Sprite Sheet の1フレーム範囲を Motion から変更できます。"));
             PropertyRegistry::Register<UIImageComponent>(
                 MakeProperty("nine_slice", &UIImageComponent::nine_slice)
-                    .Display("9 スライス").Step(1.0).Advanced()
-                    .Tooltip("Phase 1 では保存だけ行います。描画分割は Sprite Editor 後に接続します。"));
+                    .Display("9 スライス").Step(1.0).Advanced());
             PropertyRegistry::Register<UIImageComponent>(
                 MakeProperty("preserve_aspect", &UIImageComponent::preserve_aspect)
-                    .Tooltip(u8"画像の縦横比を維持するか指定します。").Display("比率を維持"));
+                    .Display("比率を維持（未対応）"));
 
             ComponentRegistry::Register<UIShapeImageComponent>(
                 ComponentTypeInfo::Describe("Shape Image", "UI")

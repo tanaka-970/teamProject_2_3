@@ -4,10 +4,13 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <iomanip>
 #include <iterator>
 #include <limits>
+#include <sstream>
 
 #ifdef USE_IMGUI
 #include "imgui/imgui.h"
@@ -46,6 +49,23 @@ namespace ReplayEngine::Rendering::DX12
             OutputDebugStringA(message);
             // GUI subsystem では OutputDebugString が読めないので stderr にも出す。
             std::fprintf(stderr, "%s", message);
+        }
+
+        bool LightingTraceEnabled() noexcept
+        {
+            static const bool enabled = []
+            {
+                // MSVC は getenv を C4996 で拒否するため _dupenv_s を使う。
+                char* value = nullptr;
+                std::size_t length = 0;
+                if (_dupenv_s(&value, &length, "REPLAY_LIGHTING_TRACE") != 0 ||
+                    value == nullptr)
+                    return false;
+                const bool on = value[0] != '\0' && std::strcmp(value, "0") != 0;
+                std::free(value);
+                return on;
+            }();
+            return enabled;
         }
 
         struct Scene3DObjectConstants final
@@ -1957,6 +1977,93 @@ namespace ReplayEngine::Rendering::DX12
                 if (stack.owner_id == owner_id) return &stack;
             return nullptr;
         };
+        if (LightingTraceEnabled())
+        {
+            try
+            {
+            std::ostringstream trace;
+            trace << std::fixed << std::setprecision(6);
+            trace << "[LightingTrace] submission directional="
+                << (submission.directional_light.enabled ? 1 : 0)
+                << " points=" << submission.point_lights.size()
+                << " spots=" << submission.spot_lights.size()
+                << " static_draws=" << submission.draws.size()
+                << " skinned_draws=" << submission.skinned_draws.size()
+                << " model_effects=" << scene_effect_submission_.model_effects.size() << '\n';
+            for (std::size_t index = 0; index < submission.point_lights.size(); ++index)
+            {
+                const D3D12PointLightSubmission& source = submission.point_lights[index];
+                trace << "[LightingTrace] point[" << index << "] position=("
+                    << source.position.x << ',' << source.position.y << ',' << source.position.z
+                    << ") color=(" << source.color.x << ',' << source.color.y << ','
+                    << source.color.z << ") intensity=" << source.intensity
+                    << " range=" << source.range << " cast_shadows="
+                    << (source.cast_shadows ? 1 : 0) << " shadow_slice="
+                    << source.shadow_slice << '\n';
+            }
+            for (std::uint32_t index = 0; index < point_count; ++index)
+            {
+                const Scene3DPointLightGpu& gpu = light.point_lights[index];
+                trace << "[LightingTrace] gpu_point[" << index << "] position_range=("
+                    << gpu.position_range.x << ',' << gpu.position_range.y << ','
+                    << gpu.position_range.z << ',' << gpu.position_range.w
+                    << ") color_intensity=(" << gpu.color_intensity.x << ','
+                    << gpu.color_intensity.y << ',' << gpu.color_intensity.z << ','
+                    << gpu.color_intensity.w << ") shadow=(" << gpu.shadow.x << ','
+                    << gpu.shadow.y << ',' << gpu.shadow.z << ',' << gpu.shadow.w << ")\n";
+            }
+            const auto append_draw = [&trace, &model_effect_for_owner](
+                const D3D12StaticDrawItem& draw, const char* kind, std::size_t index)
+            {
+                trace << "[LightingTrace] draw kind=" << kind << " index=" << index
+                    << " owner=" << draw.owner_id << " mesh=\"" << draw.mesh_key
+                    << "\" lighting_model=" << draw.lighting_model
+                    << " receive_shadow=" << (draw.receive_shadow ? 1 : 0)
+                    << " normal_map="
+                    << ((draw.material_texture_semantic_mask & (1u << 1)) != 0u ? 1 : 0)
+                    << " alpha_mode=" << static_cast<std::uint32_t>(draw.alpha_mode)
+                    << " base=(" << draw.base_color.x << ',' << draw.base_color.y << ','
+                    << draw.base_color.z << ',' << draw.base_color.w << ") metallic="
+                    << draw.metallic << " roughness=" << draw.roughness << " ao="
+                    << draw.ambient_occlusion << " model_effect="
+                    << (model_effect_for_owner(draw.owner_id) != nullptr ? 1 : 0) << '\n';
+            };
+            for (std::size_t index = 0; index < submission.draws.size(); ++index)
+                append_draw(submission.draws[index], "static", index);
+            for (std::size_t index = 0; index < submission.skinned_draws.size(); ++index)
+                append_draw(submission.skinned_draws[index].surface, "skinned", index);
+            for (std::size_t index = 0; index < scene_effect_submission_.model_effects.size();
+                ++index)
+            {
+                const D3D12ModelEffectStackSubmission& stack =
+                    scene_effect_submission_.model_effects[index];
+                std::size_t matched_static = 0;
+                std::size_t matched_skinned = 0;
+                for (const D3D12StaticDrawItem& draw : submission.draws)
+                    if (draw.owner_id == stack.owner_id) ++matched_static;
+                for (const D3D12SkinnedDrawItem& draw : submission.skinned_draws)
+                    if (draw.surface.owner_id == stack.owner_id) ++matched_skinned;
+                trace << "[LightingTrace] model_effect[" << index << "] owner="
+                    << stack.owner_id << " effects=" << stack.effects.size()
+                    << " matched_static=" << matched_static
+                    << " matched_skinned=" << matched_skinned
+                    << " isolated_draw_scheduled=" << (stack.effects.empty() ? 0 : 1)
+                    << " bind_surface_match_deferred_scheduled="
+                    << (stack.effects.empty() ? 0 : 1)
+                    << '\n';
+            }
+            const std::string signature = trace.str();
+            if (signature != scene3d_lighting_trace_signature_)
+            {
+                scene3d_lighting_trace_signature_ = signature;
+                SceneDebugMessage(signature.c_str());
+            }
+            }
+            catch (...)
+            {
+                SceneDebugMessage("[LightingTrace] unavailable\n");
+            }
+        }
         const auto is_shadow_coverage_kind = [](std::uint32_t kind) noexcept
         {
             return kind == 5u || kind == 6u || kind == 7u || kind == 71u;
@@ -2458,8 +2565,19 @@ namespace ReplayEngine::Rendering::DX12
                     return false;
                 draw_mesh(*mesh->second, draw.surface);
             }
-            return resource_state_tracker_.Transition(command_list_.Get(), target.color.Get(),
-                D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            const bool completed = resource_state_tracker_.Transition(command_list_.Get(),
+                target.color.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            if (LightingTraceEnabled())
+            {
+                char message[256]{};
+                std::snprintf(message, sizeof(message),
+                    "[LightingTrace] isolated_draw owner=%llu match_owner=%d "
+                    "preserve_depth=%d completed=%d bind_surface_match_deferred=%d\n",
+                    static_cast<unsigned long long>(owner_id), match_owner ? 1 : 0,
+                    preserve_depth ? 1 : 0, completed ? 1 : 0, match_owner ? 1 : 0);
+                SceneDebugMessage(message);
+            }
+            return completed;
         };
 
         for (const D3D12ModelEffectStackSubmission& stack : scene_effect_submission_.model_effects)

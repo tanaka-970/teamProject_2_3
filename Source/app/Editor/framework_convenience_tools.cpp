@@ -149,6 +149,7 @@ void framework::draw_scene_note_overlay()
         {
             if (note == nullptr || !note->Enabled() || !note->show_in_viewport) continue;
             if (note->completed && note->hide_when_completed) continue;
+            if (note->mode != EditorNoteComponent::Overlay) continue;
 
             const XMFLOAT3 world{ base.x + note->offset.x,
                 base.y + note->offset.y, base.z + note->offset.z };

@@ -1488,47 +1488,64 @@ namespace ReplayEngine::Rendering::DX12
             catch (...) {}
         };
         StaticTextureResource texture;
-        std::string extension = source.source_path.extension().string();
-        std::transform(extension.begin(), extension.end(), extension.begin(),
-            [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
-
-        if (extension == ".dds")
+        if (!source.rgba.empty())
         {
-            DecodedDdsImage decoded;
-            if (!DecodeDds2D(source.source_path, decoded))
-            {
-                DebugMessage("[DX12] DDS texture decode failed; using white fallback.\n");
-                remember_decode_failure();
+            const std::uint64_t expected = static_cast<std::uint64_t>(source.width) *
+                static_cast<std::uint64_t>(source.height) * 4ull;
+            if (source.width == 0 || source.height == 0 || expected != source.rgba.size() ||
+                !D3D12ResourceFactory::CreateTexture2DRgba8(device_.Get(), upload_context_,
+                    source.rgba.data(), source.width, source.height, source.width * 4u,
+                    texture.resource))
                 return false;
-            }
-            const DXGI_FORMAT resource_format = ToLinearTextureFormat(decoded.format);
-            if (!D3D12ResourceFactory::CreateTexture2D(device_.Get(), upload_context_,
-                decoded.width, decoded.height, decoded.mip_levels, resource_format,
-                decoded.subresources, texture.resource))
-                return false;
-            texture.width = decoded.width;
-            texture.height = decoded.height;
-            texture.mip_levels = decoded.mip_levels;
-            texture.format = resource_format;
+            texture.width = source.width;
+            texture.height = source.height;
+            texture.mip_levels = 1;
+            texture.format = DXGI_FORMAT_R8G8B8A8_UNORM;
         }
         else
         {
-            DecodedRgbaImage decoded;
-            if (!DecodeWicRgba8(source.source_path, decoded))
+            std::string extension = source.source_path.extension().string();
+            std::transform(extension.begin(), extension.end(), extension.begin(),
+                [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
+
+            if (extension == ".dds")
             {
-                DebugMessage("[DX12] WIC texture decode failed; using white fallback.\n");
-                remember_decode_failure();
-                return false;
+                DecodedDdsImage decoded;
+                if (!DecodeDds2D(source.source_path, decoded))
+                {
+                    DebugMessage("[DX12] DDS texture decode failed; using white fallback.\n");
+                    remember_decode_failure();
+                    return false;
+                }
+                const DXGI_FORMAT resource_format = ToLinearTextureFormat(decoded.format);
+                if (!D3D12ResourceFactory::CreateTexture2D(device_.Get(), upload_context_,
+                    decoded.width, decoded.height, decoded.mip_levels, resource_format,
+                    decoded.subresources, texture.resource))
+                    return false;
+                texture.width = decoded.width;
+                texture.height = decoded.height;
+                texture.mip_levels = decoded.mip_levels;
+                texture.format = resource_format;
             }
-            const std::uint32_t row_pitch = decoded.width * 4u;
-            if (!D3D12ResourceFactory::CreateTexture2DRgba8(device_.Get(), upload_context_,
-                decoded.pixels.data(), decoded.width, decoded.height, row_pitch,
-                texture.resource))
-                return false;
-            texture.width = decoded.width;
-            texture.height = decoded.height;
-            texture.mip_levels = 1;
-            texture.format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            else
+            {
+                DecodedRgbaImage decoded;
+                if (!DecodeWicRgba8(source.source_path, decoded))
+                {
+                    DebugMessage("[DX12] WIC texture decode failed; using white fallback.\n");
+                    remember_decode_failure();
+                    return false;
+                }
+                const std::uint32_t row_pitch = decoded.width * 4u;
+                if (!D3D12ResourceFactory::CreateTexture2DRgba8(device_.Get(), upload_context_,
+                    decoded.pixels.data(), decoded.width, decoded.height, row_pitch,
+                    texture.resource))
+                    return false;
+                texture.width = decoded.width;
+                texture.height = decoded.height;
+                texture.mip_levels = 1;
+                texture.format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            }
         }
 
         if (!resource_descriptor_allocator_.Allocate(1, texture.srv)) return false;
@@ -2209,10 +2226,20 @@ namespace ReplayEngine::Rendering::DX12
             back_buffer_capture_footprint_.Offset;
         const std::size_t source_row_pitch =
             back_buffer_capture_footprint_.Footprint.RowPitch;
+        // 実測: Editor 画面が青のとき撮影 PNG が黄色になる。読み戻しは BGRA 並びで届く。
         for (std::uint32_t row = 0; row < back_buffer_capture_height_; ++row)
         {
-            std::memcpy(rgba.data() + static_cast<std::size_t>(row) * tight_row,
-                source + static_cast<std::size_t>(row) * source_row_pitch, tight_row);
+            std::uint8_t* destination = rgba.data() +
+                static_cast<std::size_t>(row) * tight_row;
+            const std::uint8_t* source_row =
+                source + static_cast<std::size_t>(row) * source_row_pitch;
+            for (std::size_t offset = 0; offset + 3 < tight_row; offset += 4)
+            {
+                destination[offset + 0] = source_row[offset + 2];
+                destination[offset + 1] = source_row[offset + 1];
+                destination[offset + 2] = source_row[offset + 0];
+                destination[offset + 3] = source_row[offset + 3];
+            }
         }
         back_buffer_capture_readback_->Unmap(0, nullptr);
         width = back_buffer_capture_width_;
