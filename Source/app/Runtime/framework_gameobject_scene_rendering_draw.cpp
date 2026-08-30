@@ -556,7 +556,11 @@ bool framework::build_dx12_static_scene(
                 return value != nullptr ? value->AsVector4() : fallback;
             };
             const float steps = property_float("prop.StepCount", 3.0f);
-            draw.builtin_params = { 2.0f, std::clamp(steps, 1.0f, 8.0f), 0.0f, 0.0f };
+            const auto* normalized_ramp = material->properties.Find("prop.NormalizedRamp");
+            const bool use_normalized_ramp = normalized_ramp != nullptr &&
+                normalized_ramp->AsBool(false);
+            draw.builtin_params = { 2.0f, std::clamp(steps, 1.0f, 8.0f), 0.0f,
+                use_normalized_ramp ? 1.0f : 0.0f };
             const DirectX::XMFLOAT4 shadow_tint =
                 property_color("prop.ShadowTint", { 0.0f, 0.0f, 0.0f, 1.0f });
             const DirectX::XMFLOAT4 rim_color =

@@ -61,6 +61,7 @@ Dx12ToonSurface ResolveDeferredToonSurface()
     toon.steps = QuantizeUnorm8(stepCount / 16.0f) * 16.0f;
     if (!hasToonParams) return toon;
 
+    toon.normalizedRamp = builtinParams.w >= 0.5f ? 1.0f : 0.0f;
     toon.shadowTint = QuantizeColor565(builtinParams1.rgb);
     toon.rimColor = QuantizeColor565(builtinParams2.rgb);
     toon.specularTint = QuantizeColor565(builtinParams3.rgb);
@@ -135,7 +136,11 @@ float4 main(PSIn input) : SV_Target0
         const float3 lightDirection = normalize(-directionalDirectionIntensity.xyz);
         const float noL = directionalColorFlags.w > 0.5f ?
             saturate(dot(worldNormal, lightDirection)) : 1.0f;
-        const float band = Dx12ToonNoL(noL, stepCount);
+        const float levels = max(floor(stepCount + 0.5f), 1.0f);
+        const float aa = fwidth(saturate(noL) * levels);
+        const bool normalizedRamp = builtinParams.w >= 0.5f;
+        const float band = normalizedRamp ? Dx12ToonBand(noL, stepCount, aa) :
+            Dx12ToonNoL(noL, stepCount);
         albedo.rgb *= rampTexture.Sample(materialSampler, float2(band, 0.5f)).rgb;
     }
     Dx12ToonSurface toon = Dx12DefaultToonSurface();
