@@ -11,6 +11,7 @@
 #include "../../RePlayEngine/Components/Camera/FollowTargetComponent.h"
 #include "../../RePlayEngine/Components/Motion/MotionPlayerComponent.h"
 #include "../../RePlayEngine/Components/Core/PropertyLinkComponent.h"
+#include "../../RePlayEngine/Components/Editor/EditorNoteComponent.h"
 #include "../../RePlayEngine/Components/UI/UIEffectStackComponent.h"
 #include "../../RePlayEngine/Components/UI/UISpriteAnimatorComponent.h"
 #include "../../RePlayEngine/Components/UI/UITextComponent.h"
@@ -54,7 +55,9 @@
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <string>
 #include <utility>
@@ -1587,6 +1590,147 @@ bool framework::build_dx12_static_scene(
         }
     }
 
+    if (options.include_auxiliary_geometry && editor_mode && !object_scene_play_mode)
+    {
+        using ReplayEngine::Components::EditorNoteComponent;
+        using ReplayEngine::Components::UITextComponent;
+        constexpr float world_units_per_pixel = 0.01f;
+        for (std::size_t object_index = 0; object_index < scene.GameObjectCount(); ++object_index)
+        {
+            const ReplayEngine::Core::GameObject* object = scene.GameObjectAt(object_index);
+            if (object == nullptr || object->PendingDestroy() || !object->ActiveInHierarchy())
+                continue;
+            for (const EditorNoteComponent* note : object->GetComponents<EditorNoteComponent>())
+            {
+                if (note == nullptr || !note->ActiveInHierarchy() || !note->show_in_viewport ||
+                    note->mode != EditorNoteComponent::World || note->text.empty() ||
+                    (note->completed && note->hide_when_completed))
+                    continue;
+
+                UITextComponent layout;
+                layout.text = note->text;
+                layout.font_size = 64.0f;
+                layout.horizontal_align = UITextComponent::Left;
+                layout.vertical_align = UITextComponent::Top;
+                layout.word_wrap = false;
+                ui_font_atlas.BuildGlyphs(layout, 16384.0f, 4096.0f, &asset_database);
+                if (layout.Glyphs().empty()) continue;
+
+                std::string atlas_face_key;
+                std::uint64_t atlas_revision = 0;
+                if (!ui_font_atlas.ActiveAtlasRevision(atlas_face_key, atlas_revision)) continue;
+                const std::string texture_key = "editor-note-font:" + atlas_face_key + ":" +
+                    std::to_string(atlas_revision);
+                if (!dx12_device_context.HasStaticTexture(texture_key) &&
+                    texture_source_keys.insert(texture_key).second)
+                {
+                    D3D12StaticTextureSource texture;
+                    texture.key = texture_key;
+                    std::string copied_face_key;
+                    std::uint64_t copied_revision = 0;
+                    if (!ui_font_atlas.CopyActiveAtlas(copied_face_key, texture.rgba,
+                        texture.width, texture.height, copied_revision) ||
+                        copied_face_key != atlas_face_key || copied_revision != atlas_revision)
+                        continue;
+                    submission.texture_sources.push_back(std::move(texture));
+                }
+
+                float minimum_x = (std::numeric_limits<float>::max)();
+                float minimum_y = (std::numeric_limits<float>::max)();
+                float maximum_x = (std::numeric_limits<float>::lowest)();
+                float maximum_y = (std::numeric_limits<float>::lowest)();
+                for (const UITextComponent::GlyphQuad& glyph : layout.Glyphs())
+                {
+                    minimum_x = (std::min)(minimum_x, glyph.position.x);
+                    maximum_x = (std::max)(maximum_x, glyph.position.x + glyph.size.x);
+                    minimum_y = (std::min)(minimum_y, -glyph.position.y - glyph.size.y);
+                    maximum_y = (std::max)(maximum_y, -glyph.position.y);
+                }
+                float align_x = -minimum_x;
+                if (note->horizontal_align == EditorNoteComponent::Center)
+                    align_x = -(minimum_x + maximum_x) * 0.5f;
+                else if (note->horizontal_align == EditorNoteComponent::Right)
+                    align_x = -maximum_x;
+                float align_y = -maximum_y;
+                if (note->vertical_align == EditorNoteComponent::Middle)
+                    align_y = -(minimum_y + maximum_y) * 0.5f;
+                else if (note->vertical_align == EditorNoteComponent::Bottom)
+                    align_y = -minimum_y;
+
+                std::size_t mesh_signature = std::hash<std::string>{}(note->text);
+                mesh_signature ^= static_cast<std::size_t>(note->horizontal_align + 17) +
+                    (mesh_signature << 6) + (mesh_signature >> 2);
+                mesh_signature ^= static_cast<std::size_t>(note->vertical_align + 31) +
+                    (mesh_signature << 6) + (mesh_signature >> 2);
+                mesh_signature ^= static_cast<std::size_t>(atlas_revision) +
+                    (mesh_signature << 6) + (mesh_signature >> 2);
+                const std::string mesh_key = "editor-note:" +
+                    std::to_string(object->ID().Value()) + ":" +
+                    std::to_string(note->StableID()) + ":" + std::to_string(mesh_signature);
+                if (!dx12_device_context.HasStaticMesh(mesh_key) &&
+                    mesh_source_keys.insert(mesh_key).second)
+                {
+                    D3D12StaticMeshSource mesh;
+                    mesh.key = mesh_key;
+                    mesh.vertices.reserve(layout.Glyphs().size() * 4);
+                    mesh.indices.reserve(layout.Glyphs().size() * 6);
+                    for (const UITextComponent::GlyphQuad& glyph : layout.Glyphs())
+                    {
+                        const float left = (glyph.position.x + align_x) * world_units_per_pixel;
+                        const float right = (glyph.position.x + glyph.size.x + align_x) *
+                            world_units_per_pixel;
+                        const float top = (-glyph.position.y + align_y) * world_units_per_pixel;
+                        const float bottom = (-glyph.position.y - glyph.size.y + align_y) *
+                            world_units_per_pixel;
+                        const float uv_left = glyph.uv.x;
+                        const float uv_top = glyph.uv.y;
+                        const float uv_right = glyph.uv.x + glyph.uv.z;
+                        const float uv_bottom = glyph.uv.y + glyph.uv.w;
+                        const std::uint32_t base = static_cast<std::uint32_t>(
+                            mesh.vertices.size());
+                        D3D12StaticVertex vertices[4]{};
+                        vertices[0].position = { left, top, 0.0f };
+                        vertices[1].position = { right, top, 0.0f };
+                        vertices[2].position = { right, bottom, 0.0f };
+                        vertices[3].position = { left, bottom, 0.0f };
+                        vertices[0].texcoord = { uv_left, uv_top };
+                        vertices[1].texcoord = { uv_right, uv_top };
+                        vertices[2].texcoord = { uv_right, uv_bottom };
+                        vertices[3].texcoord = { uv_left, uv_bottom };
+                        for (D3D12StaticVertex& vertex : vertices)
+                            vertex.normal = { 0.0f, 0.0f, 1.0f };
+                        mesh.vertices.insert(mesh.vertices.end(), std::begin(vertices),
+                            std::end(vertices));
+                        mesh.indices.insert(mesh.indices.end(),
+                            { base, base + 1, base + 2, base, base + 2, base + 3 });
+                    }
+                    submission.mesh_sources.push_back(std::move(mesh));
+                }
+
+                D3D12StaticDrawItem draw;
+                draw.mesh_key = mesh_key;
+                draw.owner_id = object->ID().Value();
+                draw.motion_key = mesh_key;
+                const DirectX::XMFLOAT4X4 owner_world =
+                    object->GetTransform().WorldMatrixFloat4x4();
+                const float note_scale = (std::max)(0.01f, note->text_scale);
+                DirectX::XMStoreFloat4x4(&draw.world,
+                    DirectX::XMMatrixScaling(note_scale, note_scale, note_scale) *
+                    DirectX::XMMatrixTranslation(note->offset.x, note->offset.y, note->offset.z) *
+                    DirectX::XMLoadFloat4x4(&owner_world));
+                draw.base_color = note->color;
+                if (note->completed) draw.base_color.w *= 0.45f;
+                draw.base_color_texture_key = texture_key;
+                draw.alpha_mode = D3D12StaticAlphaMode::Blend;
+                draw.lighting_model = static_cast<std::int32_t>(ShaderLightingModel::Unlit);
+                draw.double_sided = true;
+                draw.cast_shadow = false;
+                draw.receive_shadow = false;
+                submission.draws.push_back(std::move(draw));
+            }
+        }
+    }
+
     // Landscapeは既存LandscapeDataの頂点/Indexを正本として、そのままStatic Mesh提出へ変換する。
     // D3D11専用のstatic_meshキャッシュをDX12から参照しないため、編集後のRevisionもキーへ含める。
     if (options.include_auxiliary_geometry)
@@ -1830,6 +1974,37 @@ bool framework::prewarm_loading_scene_gpu_resources()
     const std::size_t static_draw_count = submission.draws.size();
     const std::size_t skinned_draw_count = submission.skinned_draws.size();
     const std::size_t texture_candidate_count = submission.texture_sources.size();
+    std::size_t skinned_component_count = 0;
+    for (std::size_t object_index = 0; object_index < object_loading_scene->GameObjectCount();
+        ++object_index)
+    {
+        const ReplayEngine::Core::GameObject* object =
+            object_loading_scene->GameObjectAt(object_index);
+        if (object == nullptr) continue;
+        for (std::size_t component_index = 0; component_index < object->ComponentCount();
+            ++component_index)
+        {
+            const ReplayEngine::Core::Component* component = object->ComponentAt(component_index);
+            if (component == nullptr) continue;
+            const bool is_skinned = dynamic_cast<const
+                ReplayEngine::Components::SkinnedMeshRendererComponent*>(component) != nullptr;
+            if (is_skinned) ++skinned_component_count;
+            std::fprintf(stderr,
+                "[Loading3D] component: object=%llu component=%zu type=\"%s\" "
+                "is_skinned_renderer=%d active=%d\n",
+                static_cast<unsigned long long>(object->ID().Value()), component_index,
+                component->TypeName(), is_skinned ? 1 : 0,
+                component->ActiveInHierarchy() ? 1 : 0);
+        }
+    }
+    for (std::size_t index = 0; index < render_items.Items().size(); ++index)
+    {
+        const ReplayEngine::Rendering::RenderItem& item = render_items.Items()[index];
+        std::fprintf(stderr,
+            "[Loading3D] item[%zu]: owner=%llu skinned=%d mesh=\"%s\"\n",
+            index, static_cast<unsigned long long>(item.owner.Value()),
+            item.skinned ? 1 : 0, item.mesh_asset.c_str());
+    }
     submission.texture_sources.clear();
     submission.shader_sources.clear();
     const auto before = dx12_device_context.CaptureScene3DState();
@@ -1845,9 +2020,10 @@ bool framework::prewarm_loading_scene_gpu_resources()
         after.skinned_mesh_cache_size - before.skinned_mesh_cache_size,
         after.texture_cache_size - before.texture_cache_size);
     std::fprintf(stderr,
-        "[Loading3D] preload inputs: items %zu (skinned %zu), sources static %zu skinned %zu, "
+        "[Loading3D] preload inputs: items %zu (skinned %zu), components skinned %zu, "
+        "sources static %zu skinned %zu, "
         "draws static %zu skinned %zu, texture candidates %zu (disabled)\n",
-        render_items.Size(), skinned_render_item_count, static_source_count,
+        render_items.Size(), skinned_render_item_count, skinned_component_count, static_source_count,
         skinned_source_count, static_draw_count, skinned_draw_count,
         texture_candidate_count);
     return ok;

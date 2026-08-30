@@ -8,7 +8,7 @@ OBJECT
   NAME "GameObject"
   ENABLED 1
   PARENT 0
-  TRANSFORM 0.31690001487731934 11.422800064086914 -0.52102196216583252 0 0 0 1 1 1
+  TRANSFORM 4.7168998718261719 18.722799301147461 -10.770999908447266 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 1
   COMPONENT "PointLightComponent" 1
@@ -17,9 +17,9 @@ OBJECT
     TYPE_MODULE ""
     TYPE_VERSION 2
     PROPERTY_COUNT 7
-    PROPERTY "color" color 0.55465590953826904 0.033683549612760544 0.033683549612760544 1
-    PROPERTY "intensity" float 87.662498474121094
-    PROPERTY "range" float 99.699996948242188
+    PROPERTY "color" color 0.0078021329827606678 0.30188232660293579 0.9635627269744873 1
+    PROPERTY "intensity" float 76.75
+    PROPERTY "range" float 73.300003051757812
     PROPERTY "cast_shadows" bool 1
     PROPERTY "shadow_strength" float 1
     PROPERTY "shadow_depth_bias" float 0.019999999552965164
@@ -67,7 +67,7 @@ OBJECT
   NAME "Tie_Demo"
   ENABLED 1
   PARENT 0
-  TRANSFORM 0.082400001585483551 -1.1734000444412231 -3.3901000022888184 0 3.2637796401977539 0 1 1.0800000429153442 1
+  TRANSFORM 0.082400001585483551 -1.4549000263214111 -3.3901000022888184 0 3.2637796401977539 0 1 1.0800000429153442 1
   PREFAB "" 0 0
   COMPONENT_COUNT 2
   COMPONENT "SkinnedMeshRendererComponent" 1
@@ -103,17 +103,17 @@ OBJECT
     PROPERTY "material_slots[0].name" string "pc003_face1"
     PROPERTY "material_slots[0].asset" asset "927091246a96137c747680ccaa609f99"
     PROPERTY "material_slots[1].name" string "pc003_28_body02"
-    PROPERTY "material_slots[1].asset" asset "9986ef1876783e6b1b0fe5c1d03c6358"
+    PROPERTY "material_slots[1].asset" asset "927091246a96137c747680ccaa609f99"
     PROPERTY "material_slots[2].name" string "pc003_28_skin"
-    PROPERTY "material_slots[2].asset" asset "9986ef1876783e6b1b0fe5c1d03c6358"
+    PROPERTY "material_slots[2].asset" asset "927091246a96137c747680ccaa609f99"
     PROPERTY "material_slots[3].name" string "pc003_28_hair00"
-    PROPERTY "material_slots[3].asset" asset "9986ef1876783e6b1b0fe5c1d03c6358"
+    PROPERTY "material_slots[3].asset" asset "927091246a96137c747680ccaa609f99"
     PROPERTY "material_slots[4].name" string "pc003_28_body00"
-    PROPERTY "material_slots[4].asset" asset "9986ef1876783e6b1b0fe5c1d03c6358"
+    PROPERTY "material_slots[4].asset" asset "927091246a96137c747680ccaa609f99"
     PROPERTY "material_slots[5].name" string "pc003_28_body01"
-    PROPERTY "material_slots[5].asset" asset "9986ef1876783e6b1b0fe5c1d03c6358"
+    PROPERTY "material_slots[5].asset" asset "927091246a96137c747680ccaa609f99"
   END_COMPONENT
-  COMPONENT "ModelEffectStackComponent" 0
+  COMPONENT "ModelEffectStackComponent" 1
     STABLE_ID 4
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE "RePlayEngine.Optional.Effects"
@@ -131,30 +131,30 @@ OBJECT
     PROPERTY "effect_region_invert" bool 0
     PROPERTY "effect_region_center" vec2 0.5 0.5
     PROPERTY "effect_region_size" vec2 0.5 0.5
-    PROPERTY "effect_region_rotation" float 0
+    PROPERTY "effect_region_rotation" float 24.600000381469727
     PROPERTY "effect_region_feather" float 0
     PROPERTY "effect_region_strength" float 1
     PROPERTY "effect_region_mask" assetref ""
     PROPERTY "effect_region_additional_count" int 0
     PROPERTY "effects[0].enabled" bool 1
     PROPERTY "effects[0].region_enabled" bool 1
-    PROPERTY "effects[0].type" enum 0
-    PROPERTY "effects[0].radius" float 8
+    PROPERTY "effects[0].type" enum 22
+    PROPERTY "effects[0].angle" float 0.34999999403953552
+    PROPERTY "effects[0].progress" float 0.05000000074505806
     PROPERTY "effects[0].intensity" float 1
     PROPERTY "effects[0].custom_shader" assetref ""
     PROPERTY "effect_region_path_count" int 0
-    PROPERTY "effects[0].threshold" float 0
+    PROPERTY "effects[0].radius" float 5
+    PROPERTY "effects[0].threshold" float 0.052000001072883606
     PROPERTY "effects[0].amount" float 1
-    PROPERTY "effects[0].angle" float 0
-    PROPERTY "effects[0].progress" float 0
-    PROPERTY "effects[0].softness" float 0
-    PROPERTY "effects[0].speed" float 0
+    PROPERTY "effects[0].softness" float 0.20200000703334808
+    PROPERTY "effects[0].speed" float 1
     PROPERTY "effects[0].seed" float 0
-    PROPERTY "effects[0].direction" vec2 1 -1
-    PROPERTY "effects[0].color" color 1 1 1 1
-    PROPERTY "effects[0].color_2" color 1 1 1 1
-    PROPERTY "effects[0].color_3" color 1 1 1 1
-    PROPERTY "effects[0].color_4" color 1 1 1 1
+    PROPERTY "effects[0].direction" vec2 0 1
+    PROPERTY "effects[0].color" color 0.019999999552965164 0.019999999552965164 0.079999998211860657 1
+    PROPERTY "effects[0].color_2" color 0.11999999731779099 0.18000000715255737 0.55000001192092896 1
+    PROPERTY "effects[0].color_3" color 0.94999998807907104 0.31999999284744263 0.11999999731779099 1
+    PROPERTY "effects[0].color_4" color 1 0.94999998807907104 0.55000001192092896 1
     PROPERTY "effects[0].color_stop_2" float 0.33333298563957214
     PROPERTY "effects[0].color_stop_3" float 0.66666698455810547
     PROPERTY "effects[0].color_stop_4" float 1

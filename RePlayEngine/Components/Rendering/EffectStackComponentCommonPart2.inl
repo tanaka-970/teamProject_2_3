@@ -523,6 +523,11 @@
             capture_backdrop = backdrop->AsBool(false);
         }
 #endif
+        // 旧 Scene はヘッダーの有効チェックが外れたまま保存されていることがある。
+        if (const Reflection::PropertyValue* value = input.Find("enabled"))
+        {
+            if (value->AsBool(enabled)) SetEnabled(true);
+        }
         if (const Reflection::PropertyValue* value = input.Find("effect_region_enabled"))
             effect_region.enabled = value->AsBool(effect_region.enabled);
         if (const Reflection::PropertyValue* value = input.Find("effect_region_shape"))
@@ -660,6 +665,8 @@
         }
 
         const std::string changed_property(property_name);
+        // 「効果を適用」とヘッダーの有効チェックの二重管理をやめる。
+        if (changed_property == "enabled" && enabled) SetEnabled(true);
         if (changed_property == "effect_count")
         {
             ResizeEffects();

@@ -35,8 +35,8 @@ PROPERTY "prop.PixelateStrength" float 1
 PROPERTY "prop.PixelateOpacity" float 1
 PROPERTY "prop.UseGBufferColor" bool 0
 PROPERTY "prop.RampMap" assetref ""
-PROPERTY "prop.ShadowTint" color 0.898785412 0.892907739 0.82237047 1
-PROPERTY "prop.RimColor" color 0.536334574 0.854251027 0.02766807 1
+PROPERTY "prop.ShadowTint" color 0.263157904 0.261518806 0.241849571 1
+PROPERTY "prop.RimColor" color 9.58930741e-07 9.99999997e-07 8.78542551e-07 1
 PROPERTY "prop.RimPower" float 1.67900002
 PROPERTY "prop.SpecularTint" color 0.971659899 0.641216874 0.641216874 1
 PROPERTY "prop.SpecularPower" float 127.57

@@ -1,4 +1,4 @@
-REPLAY_ASSET_DB 2 202
+REPLAY_ASSET_DB 2 204
 "60412424bb1443240b2bf2160eee6923" 1 "ExampleStage" "resources/Stage/ExampleStage.cereal" "resources/.replay_cache/models/f9fffac39252a621_v0.replaycache"
 "1bd1358040255f5bd18f3be0d79fbe3c" 1 "AllAnimation1" "resources/AnimationModel/AllAnimation1.cereal" "resources/.replay_cache/models/6a20e727f78fb359_v0.replaycache"
 "e5c4168feb92f8fd7357f6cbc1f66e22" 1 "scene" "resources/Stage/city_3d_model_gltf/scene.gltf" "resources/.replay_cache/models/98fd72a862da8c8f_v0.replaycache"
@@ -201,3 +201,5 @@ REPLAY_ASSET_DB 2 202
 "8aa571c0d56c47b8b8ef480530a88e85" 3 "TiltStrikePin" "resources/Game/TiltStrike/Audio/pin.wav" ""
 "4a244e96b6874a92a57b45ca54725e46" 3 "TiltStrikeVictory" "resources/Game/TiltStrike/Audio/victory.wav" ""
 "cc8d258ab6f14467a8713e377050ca80" 3 "TiltStrikeTimeUp" "resources/Game/TiltStrike/Audio/time_up.wav" ""
+"7c3f1a92b45d4e6a8f20d1c7e93b5a48" 5 "LoadingScene3DDemo" "resources/Scenes/LoadingScene3DDemo.replayscene" ""
+"7a813cc6f965ec2312567c53daf4f272" 5 "LoadingHeavyProbe" "resources/Scenes/LoadingHeavyProbe.replayscene" ""

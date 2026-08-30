@@ -357,8 +357,11 @@ void framework::draw_ui_preview()
             resize_handle_points);
         hovered_resize_handle = HitResizeHandle(resize_handle_points, mouse);
     }
+    const bool handle_interaction_hovered = hovered_resize_handle >= 0 &&
+        ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
 
-    if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+    if ((hovered || handle_interaction_hovered) &&
+        ImGui::IsMouseClicked(ImGuiMouseButton_Left))
     {
         // Rect handle は Object pick より優先する。小さい UI の corner を掴んだ時に
         // 背後の UI へ選択が飛ぶのを防ぐ。
@@ -409,7 +412,7 @@ void framework::draw_ui_preview()
     selected_rect = selected_transform_target != nullptr
         ? selected_transform_target->GetComponent<RectTransformComponent>() : nullptr;
 
-    if (active && selected_rect != nullptr && ui_preview_resize_candidate &&
+    if (selected_rect != nullptr && ui_preview_resize_candidate &&
         selected_transform_target != nullptr &&
         ui_preview_resize_object == selected_transform_target->ID() &&
         ImGui::IsMouseDragging(ImGuiMouseButton_Left, 2.0f))
@@ -514,6 +517,7 @@ void framework::draw_ui_preview()
         draw_list->AddText(ImVec2(origin.x + 12.0f, origin.y + 12.0f),
             IM_COL32(255, 160, 100, 255),
             "DX12 UI Preview target unavailable");
+    draw_list->PopClipRect();
     // Photoshop / Unity Rect Tool と同じく 4 corner + 4 edge handle。
     // DrawPreviewObject の selection outline より後に描くため、常に掴める位置が見える。
     selected = object_editor_context.Selection().ResolvePrimary(*scene);
@@ -541,7 +545,8 @@ void framework::draw_ui_preview()
             draw_list->AddCircle(handles[index], 5.0f,
                 IM_COL32(35, 38, 44, 255), 12, 1.0f);
         }
-        if (hot >= 0 && hovered)
+        if (hot >= 0 && (hovered ||
+            ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem)))
         {
             ImGui::SetMouseCursor((hot == ResizeLeft || hot == ResizeRight)
                 ? ImGuiMouseCursor_ResizeEW
@@ -551,6 +556,7 @@ void framework::draw_ui_preview()
         }
     }
 
+    draw_list->PushClipRect(clip_min, clip_max, true);
     draw_list->AddRect(origin, ImVec2(origin.x + canvas_size.x, origin.y + canvas_size.y),
         IM_COL32(230, 230, 235, 180), 0.0f, 0, 1.5f);
     draw_list->PopClipRect();
