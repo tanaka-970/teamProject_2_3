@@ -7,6 +7,7 @@
 #include "../../Assets/AssetDatabase.h"
 #include "../../Localization/LocalizationService.h"
 #include "../../Components/Physics/ColliderComponent.h"
+#include "../../Components/UI/UIImageComponent.h"
 #include "../../Object/Component/Component.h"
 #include "../../Object/GameObject/GameObject.h"
 #include "../../Object/Registry/ComponentRegistry.h"
@@ -43,7 +44,11 @@ namespace ReplayEngine::Editor
     {
         if (!desc.editor_visible || !desc.getter) return false;
 
-        const DisabledScope disabled(desc.read_only);
+        const bool ui_image_fill_direction_disabled =
+            component.TypeID() == Components::UIImageComponent::StaticTypeID() &&
+            (desc.name == "fill_method" || desc.name == "fill_reverse") &&
+            static_cast<const Components::UIImageComponent&>(component).fill_amount >= 1.0f;
+        const DisabledScope disabled(desc.read_only || ui_image_fill_direction_disabled);
         const std::string label = "##" + desc.name;
 
         const std::string display_label = desc.DisplayName() + (mixed ? " [Mixed]" : "");
