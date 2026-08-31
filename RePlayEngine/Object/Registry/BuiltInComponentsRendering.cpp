@@ -609,6 +609,9 @@ namespace ReplayEngine::Core::Detail
                 MakeProperty("shadow_depth_bias", &PointLightComponent::shadow_depth_bias)
                     .Display("深度バイアス (m)").Range(0.0, 0.5).Step(0.001));
             PropertyRegistry::Register<PointLightComponent>(
+                MakeProperty("shadow_normal_bias", &PointLightComponent::shadow_normal_bias)
+                    .Display("法線バイアス").Range(0.0, 6.0).Step(0.05));
+            PropertyRegistry::Register<PointLightComponent>(
                 MakeProperty("shadow_near_plane", &PointLightComponent::shadow_near_plane)
                     .Display("影のニア").Range(0.01, 10.0).Step(0.01));
 
@@ -640,6 +643,9 @@ namespace ReplayEngine::Core::Detail
             PropertyRegistry::Register<SpotLightComponent>(
                 MakeProperty("shadow_depth_bias", &SpotLightComponent::shadow_depth_bias)
                     .Display("深度バイアス (m)").Range(0.0, 0.5).Step(0.001));
+            PropertyRegistry::Register<SpotLightComponent>(
+                MakeProperty("shadow_normal_bias", &SpotLightComponent::shadow_normal_bias)
+                    .Display("法線バイアス").Range(0.0, 6.0).Step(0.05));
             PropertyRegistry::Register<SpotLightComponent>(
                 MakeProperty("shadow_near_plane", &SpotLightComponent::shadow_near_plane)
                     .Display("影のニア").Range(0.01, 10.0).Step(0.01));

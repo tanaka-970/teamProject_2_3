@@ -23,7 +23,7 @@
 #pragma property range   RimPower      "リムの強さ"  0..8 = 2.0 category "Rim"
 #pragma property color   SpecularTint  "ハイライトの色"   = (0, 0, 0, 1) category "Highlight"
 #pragma property range   SpecularPower "ハイライトの鋭さ" 1..128 = 32.0 category "Highlight"
-#pragma property range   StepCount     "階調数"     1..8 = 3.0 category "Toon"
+#pragma property range   StepCount     "階調数"     1..31 = 3.0 category "Toon"
 #pragma property range   AlphaCutoff   "アルファ閾値" 0..1 = 0.5 category "Rendering"
 #pragma property toggle  DoubleSided   "両面を描く"       = false category "Rendering"
 #pragma property toggle  NormalizedRamp "光の強さに依らない階調" = true category "Toon"
