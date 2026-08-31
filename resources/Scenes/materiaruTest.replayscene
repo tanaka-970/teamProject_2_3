@@ -8,7 +8,7 @@ OBJECT
   NAME "GameObject"
   ENABLED 1
   PARENT 0
-  TRANSFORM -1.0830999612808228 4.7727999687194824 -10.770999908447266 0 0 0 1 1 1
+  TRANSFORM -33.383098602294922 3.2228000164031982 -7.9210000038146973 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 3
   COMPONENT "PointLightComponent" 1
@@ -17,8 +17,8 @@ OBJECT
     TYPE_MODULE ""
     TYPE_VERSION 2
     PROPERTY_COUNT 8
-    PROPERTY "color" color 0.0078021329827606678 0.30188232660293579 0.9635627269744873 1
-    PROPERTY "intensity" float 76.75
+    PROPERTY "color" color 0.71828413009643555 0.65636217594146729 0.76113361120223999 1
+    PROPERTY "intensity" float 58.599998474121094
     PROPERTY "range" float 73.300003051757812
     PROPERTY "cast_shadows" bool 1
     PROPERTY "shadow_strength" float 1
@@ -101,7 +101,7 @@ OBJECT
   PARENT 0
   TRANSFORM 0.082400001585483551 0.034237146377563477 -3.3901000022888184 0 3.2637796401977539 0 1 1.0800000429153442 1
   PREFAB "" 0 0
-  COMPONENT_COUNT 2
+  COMPONENT_COUNT 1
   COMPONENT "SkinnedMeshRendererComponent" 1
     STABLE_ID 3
     TYPE_GUID "00000000000000000000000000000000"
@@ -144,74 +144,5 @@ OBJECT
     PROPERTY "material_slots[4].asset" asset "927091246a96137c747680ccaa609f99"
     PROPERTY "material_slots[5].name" string "pc003_28_body01"
     PROPERTY "material_slots[5].asset" asset "927091246a96137c747680ccaa609f99"
-  END_COMPONENT
-  COMPONENT "ScreenEffectStackComponent" 1
-    STABLE_ID 5
-    TYPE_GUID "00000000000000000000000000000000"
-    TYPE_MODULE "RePlayEngine.Optional.Effects"
-    TYPE_VERSION 1
-    PROPERTY_COUNT 62
-    PROPERTY "enabled" bool 1
-    PROPERTY "use_preset" bool 0
-    PROPERTY "effect_preset" assetref ""
-    PROPERTY "effect_count" int 1
-    PROPERTY "apply_stage" enum 0
-    PROPERTY "target_mode" enum 0
-    PROPERTY "target_rendering_layer" int 0
-    PROPERTY "effect_region_enabled" bool 0
-    PROPERTY "effect_region_shape" enum 0
-    PROPERTY "effect_region_scope" enum 0
-    PROPERTY "effect_region_invert" bool 0
-    PROPERTY "effect_region_center" vec2 0.5 0.5
-    PROPERTY "effect_region_size" vec2 0.5 0.5
-    PROPERTY "effect_region_rotation" float 0
-    PROPERTY "effect_region_feather" float 0
-    PROPERTY "effect_region_strength" float 1
-    PROPERTY "effect_region_mask" assetref ""
-    PROPERTY "effect_region_additional_count" int 0
-    PROPERTY "effects[0].enabled" bool 1
-    PROPERTY "effects[0].region_enabled" bool 1
-    PROPERTY "effects[0].type" enum 3
-    PROPERTY "effects[0].mask" assetref ""
-    PROPERTY "effects[0].radius" float 32
-    PROPERTY "effects[0].angle" float 0
-    PROPERTY "effects[0].intensity" float 0.079999998211860657
-    PROPERTY "effects[0].amount" float 2
-    PROPERTY "effects[0].speed" float 1
-    PROPERTY "effects[0].seed" float 0
-    PROPERTY "effects[0].color" color 1 1 1 1
-    PROPERTY "effects[0].custom_shader" assetref ""
-    PROPERTY "effect_region_path_count" int 0
-    PROPERTY "effects[0].threshold" float 0
-    PROPERTY "effects[0].progress" float 0
-    PROPERTY "effects[0].softness" float 0
-    PROPERTY "effects[0].direction" vec2 1 -1
-    PROPERTY "effects[0].color_2" color 1 1 1 1
-    PROPERTY "effects[0].color_3" color 1 1 1 1
-    PROPERTY "effects[0].color_4" color 1 1 1 1
-    PROPERTY "effects[0].color_stop_2" float 0.33333298563957214
-    PROPERTY "effects[0].color_stop_3" float 0.66666698455810547
-    PROPERTY "effects[0].color_stop_4" float 1
-    PROPERTY "effects[0].brush_atlas_enabled" bool 0
-    PROPERTY "effects[0].brush_instanced_renderer_enabled" bool 0
-    PROPERTY "effects[0].brush_pattern_mode" enum 0
-    PROPERTY "effects[0].brush_pattern_index" enum 0
-    PROPERTY "effects[0].brush_pattern_weight_0" float 0
-    PROPERTY "effects[0].brush_pattern_weight_1" float 0
-    PROPERTY "effects[0].brush_pattern_weight_2" float 0
-    PROPERTY "effects[0].brush_pattern_weight_3" float 0
-    PROPERTY "effects[0].brush_pattern_weight_4" float 0
-    PROPERTY "effects[0].brush_pattern_weight_5" float 0
-    PROPERTY "effects[0].brush_pattern_weight_6" float 0
-    PROPERTY "effects[0].brush_pattern_weight_7" float 0
-    PROPERTY "effects[0].brush_pattern_weight_8" float 0
-    PROPERTY "effects[0].brush_pattern_weight_9" float 0
-    PROPERTY "effects[0].brush_pattern_weight_10" float 0
-    PROPERTY "effects[0].brush_pattern_weight_11" float 0
-    PROPERTY "effects[0].brush_pattern_weight_12" float 0
-    PROPERTY "effects[0].brush_pattern_weight_13" float 0
-    PROPERTY "effects[0].brush_pattern_weight_14" float 0
-    PROPERTY "effects[0].brush_pattern_weight_15" float 0
-    PROPERTY "effects[0].waveform" enum 0
   END_COMPONENT
 END_OBJECT

@@ -317,6 +317,12 @@ namespace ReplayEngine::Rendering::DX12
             L"main", L"vs_6_0", debug_layer_enabled_);
         const auto lighting_ps = compiler.CompileFile(shader_directory / "dx12_lighting_ps.hlsl",
             L"main", L"ps_6_0", debug_layer_enabled_);
+        const auto temporal_input_ps = compiler.CompileFile(
+            shader_directory / "dx12_postprocess_ps.hlsl",
+            L"temporal_input_main", L"ps_6_0", debug_layer_enabled_);
+        const auto taa_resolve_ps = compiler.CompileFile(
+            shader_directory / "dx12_postprocess_ps.hlsl",
+            L"taa_resolve_main", L"ps_6_0", debug_layer_enabled_);
         const auto postprocess_ps = compiler.CompileFile(
             shader_directory / "dx12_postprocess_ps.hlsl",
             L"main", L"ps_6_0", debug_layer_enabled_);
@@ -333,7 +339,8 @@ namespace ReplayEngine::Rendering::DX12
         if (!static_vs.succeeded || !skinned_vs.succeeded || !gbuffer_ps.succeeded ||
             !depth_alpha_ps.succeeded || !forward_ps.succeeded ||
             !model_effect_extract_ps.succeeded || !fullscreen_vs.succeeded ||
-            !lighting_ps.succeeded || !postprocess_ps.succeeded ||
+            !lighting_ps.succeeded || !temporal_input_ps.succeeded ||
+            !taa_resolve_ps.succeeded || !postprocess_ps.succeeded ||
             !shadow_static_vs.succeeded || !shadow_skinned_vs.succeeded ||
             !shadow_alpha_ps.succeeded)
         {
@@ -346,6 +353,9 @@ namespace ReplayEngine::Rendering::DX12
                 SceneDebugMessage(model_effect_extract_ps.diagnostics.c_str());
             if (!fullscreen_vs.diagnostics.empty()) SceneDebugMessage(fullscreen_vs.diagnostics.c_str());
             if (!lighting_ps.diagnostics.empty()) SceneDebugMessage(lighting_ps.diagnostics.c_str());
+            if (!temporal_input_ps.diagnostics.empty())
+                SceneDebugMessage(temporal_input_ps.diagnostics.c_str());
+            if (!taa_resolve_ps.diagnostics.empty()) SceneDebugMessage(taa_resolve_ps.diagnostics.c_str());
             if (!postprocess_ps.diagnostics.empty()) SceneDebugMessage(postprocess_ps.diagnostics.c_str());
             if (!shadow_static_vs.diagnostics.empty()) SceneDebugMessage(shadow_static_vs.diagnostics.c_str());
             if (!shadow_skinned_vs.diagnostics.empty()) SceneDebugMessage(shadow_skinned_vs.diagnostics.c_str());
@@ -361,6 +371,8 @@ namespace ReplayEngine::Rendering::DX12
         scene3d_model_effect_extract_ps_ = model_effect_extract_ps.bytecode;
         scene3d_fullscreen_vs_ = fullscreen_vs.bytecode;
         scene3d_lighting_ps_ = lighting_ps.bytecode;
+        scene3d_temporal_input_ps_ = temporal_input_ps.bytecode;
+        scene3d_taa_resolve_ps_ = taa_resolve_ps.bytecode;
         scene3d_postprocess_ps_ = postprocess_ps.bytecode;
         scene3d_shadow_static_vs_ = shadow_static_vs.bytecode;
         scene3d_shadow_skinned_vs_ = shadow_skinned_vs.bytecode;
@@ -815,18 +827,18 @@ namespace ReplayEngine::Rendering::DX12
             return fail("Scene3D.PSO.Lighting");
         SetD3D12ObjectName(scene3d_lighting_pipeline_.Get(), L"Scene3D.PSO", L"Lighting");
 
-        D3D12_DESCRIPTOR_RANGE postprocess_ranges[8]{};
-        for (UINT index = 0; index < 8; ++index)
+        D3D12_DESCRIPTOR_RANGE postprocess_ranges[10]{};
+        for (UINT index = 0; index < 10; ++index)
         {
             postprocess_ranges[index].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
             postprocess_ranges[index].NumDescriptors = 1;
             postprocess_ranges[index].BaseShaderRegister = index;
         }
-        D3D12_ROOT_PARAMETER postprocess_parameters[9]{};
+        D3D12_ROOT_PARAMETER postprocess_parameters[11]{};
         postprocess_parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
         postprocess_parameters[0].Descriptor.ShaderRegister = 0;
         postprocess_parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-        for (UINT index = 0; index < 8; ++index)
+        for (UINT index = 0; index < 10; ++index)
         {
             postprocess_parameters[index + 1].ParameterType =
                 D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
@@ -860,19 +872,34 @@ namespace ReplayEngine::Rendering::DX12
             scene3d_postprocess_root_signature_, L"Scene3D.PostProcess.RootSignature"))
             return fail("Scene3D.PostProcessRootSignature");
 
-        D3D12_GRAPHICS_PIPELINE_STATE_DESC postprocess{};
-        postprocess.pRootSignature = scene3d_postprocess_root_signature_.Get();
-        postprocess.VS = { scene3d_fullscreen_vs_.data(), scene3d_fullscreen_vs_.size() };
+        D3D12_GRAPHICS_PIPELINE_STATE_DESC temporal_input{};
+        temporal_input.pRootSignature = scene3d_postprocess_root_signature_.Get();
+        temporal_input.VS = { scene3d_fullscreen_vs_.data(), scene3d_fullscreen_vs_.size() };
+        temporal_input.PS = { scene3d_temporal_input_ps_.data(), scene3d_temporal_input_ps_.size() };
+        temporal_input.BlendState = MakeBlend(false);
+        temporal_input.SampleMask = UINT_MAX;
+        temporal_input.RasterizerState = MakeRaster(true);
+        temporal_input.DepthStencilState.DepthEnable = FALSE;
+        temporal_input.DepthStencilState.StencilEnable = FALSE;
+        temporal_input.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        temporal_input.NumRenderTargets = 1;
+        temporal_input.RTVFormats[0] = kScene3DSceneTargetFormat;
+        temporal_input.SampleDesc.Count = 1;
+        if (FAILED(device_->CreateGraphicsPipelineState(&temporal_input,
+            IID_PPV_ARGS(&scene3d_temporal_input_pipeline_))))
+            return fail("Scene3D.PSO.TemporalInput");
+        SetD3D12ObjectName(scene3d_temporal_input_pipeline_.Get(), L"Scene3D.PSO", L"TemporalInput");
+
+        D3D12_GRAPHICS_PIPELINE_STATE_DESC taa_resolve = temporal_input;
+        taa_resolve.PS = { scene3d_taa_resolve_ps_.data(), scene3d_taa_resolve_ps_.size() };
+        if (FAILED(device_->CreateGraphicsPipelineState(&taa_resolve,
+            IID_PPV_ARGS(&scene3d_taa_resolve_pipeline_))))
+            return fail("Scene3D.PSO.TaaResolve");
+        SetD3D12ObjectName(scene3d_taa_resolve_pipeline_.Get(), L"Scene3D.PSO", L"TaaResolve");
+
+        D3D12_GRAPHICS_PIPELINE_STATE_DESC postprocess = taa_resolve;
         postprocess.PS = { scene3d_postprocess_ps_.data(), scene3d_postprocess_ps_.size() };
-        postprocess.BlendState = MakeBlend(false);
-        postprocess.SampleMask = UINT_MAX;
-        postprocess.RasterizerState = MakeRaster(true);
-        postprocess.DepthStencilState.DepthEnable = FALSE;
-        postprocess.DepthStencilState.StencilEnable = FALSE;
-        postprocess.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-        postprocess.NumRenderTargets = 1;
         postprocess.RTVFormats[0] = kScene3DBackBufferFormat;
-        postprocess.SampleDesc.Count = 1;
         if (FAILED(device_->CreateGraphicsPipelineState(&postprocess,
             IID_PPV_ARGS(&scene3d_postprocess_pipeline_))))
             return fail("Scene3D.PSO.PostProcess");
@@ -1264,12 +1291,38 @@ namespace ReplayEngine::Rendering::DX12
         if (scene3d_depth_.dsv.IsValid()) dsv_allocator_.Free(scene3d_depth_.dsv);
         if (scene3d_depth_.srv.IsValid()) resource_descriptor_allocator_.Free(scene3d_depth_.srv);
         scene3d_depth_ = {};
+        if (scene3d_temporal_input_.resource)
+            resource_state_tracker_.Forget(scene3d_temporal_input_.resource.Get());
+        scene3d_temporal_input_.resource.Reset();
+        if (scene3d_temporal_input_.rtv.IsValid()) rtv_allocator_.Free(scene3d_temporal_input_.rtv);
+        if (scene3d_temporal_input_.srv.IsValid())
+            resource_descriptor_allocator_.Free(scene3d_temporal_input_.srv);
+        scene3d_temporal_input_ = {};
+        if (scene3d_taa_resolved_.resource)
+            resource_state_tracker_.Forget(scene3d_taa_resolved_.resource.Get());
+        scene3d_taa_resolved_.resource.Reset();
+        if (scene3d_taa_resolved_.rtv.IsValid()) rtv_allocator_.Free(scene3d_taa_resolved_.rtv);
+        if (scene3d_taa_resolved_.srv.IsValid())
+            resource_descriptor_allocator_.Free(scene3d_taa_resolved_.srv);
+        scene3d_taa_resolved_ = {};
         if (scene3d_history_.resource)
             resource_state_tracker_.Forget(scene3d_history_.resource.Get());
         scene3d_history_.resource.Reset();
         if (scene3d_history_.srv.IsValid())
             resource_descriptor_allocator_.Free(scene3d_history_.srv);
         scene3d_history_ = {};
+        if (scene3d_ssr_history_.resource)
+            resource_state_tracker_.Forget(scene3d_ssr_history_.resource.Get());
+        scene3d_ssr_history_.resource.Reset();
+        if (scene3d_ssr_history_.srv.IsValid())
+            resource_descriptor_allocator_.Free(scene3d_ssr_history_.srv);
+        scene3d_ssr_history_ = {};
+        if (scene3d_depth_history_.resource)
+            resource_state_tracker_.Forget(scene3d_depth_history_.resource.Get());
+        scene3d_depth_history_.resource.Reset();
+        if (scene3d_depth_history_.srv.IsValid())
+            resource_descriptor_allocator_.Free(scene3d_depth_history_.srv);
+        scene3d_depth_history_ = {};
         scene3d_history_valid_ = false;
         scene3d_width_ = 0;
         scene3d_height_ = 0;
@@ -1412,6 +1465,8 @@ namespace ReplayEngine::Rendering::DX12
         for (auto& pso : scene3d_static_shadow_pipelines_) pso.Reset();
         for (auto& pso : scene3d_skinned_shadow_pipelines_) pso.Reset();
         scene3d_lighting_pipeline_.Reset();
+        scene3d_temporal_input_pipeline_.Reset();
+        scene3d_taa_resolve_pipeline_.Reset();
         scene3d_postprocess_pipeline_.Reset();
         scene3d_geometry_root_signature_.Reset();
         scene3d_lighting_root_signature_.Reset();
@@ -1425,6 +1480,8 @@ namespace ReplayEngine::Rendering::DX12
         scene3d_model_effect_extract_ps_.clear();
         scene3d_fullscreen_vs_.clear();
         scene3d_lighting_ps_.clear();
+        scene3d_temporal_input_ps_.clear();
+        scene3d_taa_resolve_ps_.clear();
         scene3d_postprocess_ps_.clear();
         scene3d_shadow_static_vs_.clear();
         scene3d_shadow_skinned_vs_.clear();
@@ -1442,7 +1499,9 @@ namespace ReplayEngine::Rendering::DX12
         if (device_ == nullptr || width_ == 0 || height_ == 0) return false;
         if (scene3d_width_ == width_ && scene3d_height_ == height_ &&
             scene3d_gbuffer_[0].resource && scene3d_depth_.resource &&
-            scene3d_history_.resource)
+            scene3d_temporal_input_.resource && scene3d_taa_resolved_.resource &&
+            scene3d_history_.resource &&
+            scene3d_ssr_history_.resource && scene3d_depth_history_.resource)
             return true;
         ReleaseScene3DRenderTargets();
 
@@ -1493,7 +1552,67 @@ namespace ReplayEngine::Rendering::DX12
             resource_state_tracker_.Track(target.resource.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
         }
 
-        // 前フレームHDRを保持し、TAA/SSRの履歴として次フレームの最終表示で読む。
+        Scene3DTarget& temporal_input = scene3d_temporal_input_;
+        temporal_input.format = kScene3DSceneTargetFormat;
+        texture.Format = temporal_input.format;
+        D3D12_CLEAR_VALUE temporal_input_clear{};
+        temporal_input_clear.Format = temporal_input.format;
+        std::memcpy(temporal_input_clear.Color, clear_color, sizeof(clear_color));
+        if (FAILED(device_->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE,
+            &texture, D3D12_RESOURCE_STATE_RENDER_TARGET, &temporal_input_clear,
+            IID_PPV_ARGS(&temporal_input.resource))) ||
+            !rtv_allocator_.Allocate(1, temporal_input.rtv) ||
+            !resource_descriptor_allocator_.Allocate(1, temporal_input.srv))
+        {
+            ReleaseScene3DRenderTargets();
+            return false;
+        }
+        SetD3D12ObjectName(temporal_input.resource.Get(), L"Scene3D.TemporalInput", L"HDR");
+        D3D12_RENDER_TARGET_VIEW_DESC temporal_input_rtv{};
+        temporal_input_rtv.Format = temporal_input.format;
+        temporal_input_rtv.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+        device_->CreateRenderTargetView(temporal_input.resource.Get(), &temporal_input_rtv,
+            temporal_input.rtv.cpu);
+        D3D12_SHADER_RESOURCE_VIEW_DESC temporal_input_srv{};
+        temporal_input_srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+        temporal_input_srv.Format = temporal_input.format;
+        temporal_input_srv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+        temporal_input_srv.Texture2D.MipLevels = 1;
+        device_->CreateShaderResourceView(temporal_input.resource.Get(), &temporal_input_srv,
+            temporal_input.srv.cpu);
+        resource_state_tracker_.Track(temporal_input.resource.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+        Scene3DTarget& taa_resolved = scene3d_taa_resolved_;
+        taa_resolved.format = kScene3DSceneTargetFormat;
+        texture.Format = taa_resolved.format;
+        D3D12_CLEAR_VALUE taa_resolved_clear{};
+        taa_resolved_clear.Format = taa_resolved.format;
+        std::memcpy(taa_resolved_clear.Color, clear_color, sizeof(clear_color));
+        if (FAILED(device_->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE,
+            &texture, D3D12_RESOURCE_STATE_RENDER_TARGET, &taa_resolved_clear,
+            IID_PPV_ARGS(&taa_resolved.resource))) ||
+            !rtv_allocator_.Allocate(1, taa_resolved.rtv) ||
+            !resource_descriptor_allocator_.Allocate(1, taa_resolved.srv))
+        {
+            ReleaseScene3DRenderTargets();
+            return false;
+        }
+        SetD3D12ObjectName(taa_resolved.resource.Get(), L"Scene3D.TaaResolved", L"HDR");
+        D3D12_RENDER_TARGET_VIEW_DESC taa_resolved_rtv{};
+        taa_resolved_rtv.Format = taa_resolved.format;
+        taa_resolved_rtv.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+        device_->CreateRenderTargetView(taa_resolved.resource.Get(), &taa_resolved_rtv,
+            taa_resolved.rtv.cpu);
+        D3D12_SHADER_RESOURCE_VIEW_DESC taa_resolved_srv{};
+        taa_resolved_srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+        taa_resolved_srv.Format = taa_resolved.format;
+        taa_resolved_srv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+        taa_resolved_srv.Texture2D.MipLevels = 1;
+        device_->CreateShaderResourceView(taa_resolved.resource.Get(), &taa_resolved_srv,
+            taa_resolved.srv.cpu);
+        resource_state_tracker_.Track(taa_resolved.resource.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+        // TAA用の前フレームHDR履歴。
         D3D12_RESOURCE_DESC history_desc = texture;
         history_desc.Format = kScene3DSceneTargetFormat;
         D3D12_CLEAR_VALUE history_clear{};
@@ -1516,6 +1635,20 @@ namespace ReplayEngine::Rendering::DX12
         device_->CreateShaderResourceView(scene3d_history_.resource.Get(), &history_srv,
             scene3d_history_.srv.cpu);
         resource_state_tracker_.Track(scene3d_history_.resource.Get(),
+            D3D12_RESOURCE_STATE_COPY_DEST);
+
+        if (FAILED(device_->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE,
+            &history_desc, D3D12_RESOURCE_STATE_COPY_DEST, &history_clear,
+            IID_PPV_ARGS(&scene3d_ssr_history_.resource))) ||
+            !resource_descriptor_allocator_.Allocate(1, scene3d_ssr_history_.srv))
+        {
+            ReleaseScene3DRenderTargets();
+            return false;
+        }
+        SetD3D12ObjectName(scene3d_ssr_history_.resource.Get(), L"Scene3D.History", L"SSR");
+        device_->CreateShaderResourceView(scene3d_ssr_history_.resource.Get(), &history_srv,
+            scene3d_ssr_history_.srv.cpu);
+        resource_state_tracker_.Track(scene3d_ssr_history_.resource.Get(),
             D3D12_RESOURCE_STATE_COPY_DEST);
 
         D3D12_RESOURCE_DESC depth_desc = texture;
@@ -1550,6 +1683,19 @@ namespace ReplayEngine::Rendering::DX12
         device_->CreateShaderResourceView(scene3d_depth_.resource.Get(), &depth_srv,
             scene3d_depth_.srv.cpu);
         resource_state_tracker_.Track(scene3d_depth_.resource.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE);
+        if (FAILED(device_->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE,
+            &depth_desc, D3D12_RESOURCE_STATE_COPY_DEST, &depth_clear,
+            IID_PPV_ARGS(&scene3d_depth_history_.resource))) ||
+            !resource_descriptor_allocator_.Allocate(1, scene3d_depth_history_.srv))
+        {
+            ReleaseScene3DRenderTargets();
+            return false;
+        }
+        SetD3D12ObjectName(scene3d_depth_history_.resource.Get(), L"Scene3D.History", L"Depth");
+        device_->CreateShaderResourceView(scene3d_depth_history_.resource.Get(), &depth_srv,
+            scene3d_depth_history_.srv.cpu);
+        resource_state_tracker_.Track(scene3d_depth_history_.resource.Get(),
+            D3D12_RESOURCE_STATE_COPY_DEST);
         scene3d_width_ = width_;
         scene3d_height_ = height_;
         return true;
@@ -1675,7 +1821,9 @@ namespace ReplayEngine::Rendering::DX12
         if (scene3d_geometry_root_signature_ == nullptr ||
             scene3d_lighting_root_signature_ == nullptr ||
             scene3d_shadow_root_signature_ == nullptr || scene3d_lighting_pipeline_ == nullptr ||
-            scene3d_postprocess_root_signature_ == nullptr || scene3d_postprocess_pipeline_ == nullptr)
+            scene3d_postprocess_root_signature_ == nullptr ||
+            scene3d_temporal_input_pipeline_ == nullptr || scene3d_taa_resolve_pipeline_ == nullptr ||
+            scene3d_postprocess_pipeline_ == nullptr)
             return scene3d_fail("root-signature-or-pipeline");
         if (!scene3d_null_directional_shadow_srv_.IsValid() ||
             !scene3d_null_local_shadow_srv_.IsValid())
@@ -2895,19 +3043,20 @@ namespace ReplayEngine::Rendering::DX12
 
         if (!apply_screen_effects(1)) return false;
         BeginGpuPass(D3D12GpuPass::PostProcess);
-        // 最終表示パス。HDR Scene TargetをExposure/Tone Mapping/Bloom/Vignette/FXAAで
-        // SwapChainのLDRへ変換する。Scene TargetをSRVへ戻してから参照する。
         if (!resource_state_tracker_.Transition(command_list_.Get(), scene_view_target_.color.Get(),
-            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE))
-            return false;
-        if (!resource_state_tracker_.Transition(command_list_.Get(), scene3d_depth_.resource.Get(),
-            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE))
+            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE) ||
+            !resource_state_tracker_.Transition(command_list_.Get(), scene3d_depth_.resource.Get(),
+                D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE))
             return false;
         const bool scene_history_available = options.read_scene_history &&
             scene3d_history_valid_;
         if (scene_history_available &&
-            !resource_state_tracker_.Transition(command_list_.Get(), scene3d_history_.resource.Get(),
-                D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE))
+            (!resource_state_tracker_.Transition(command_list_.Get(), scene3d_history_.resource.Get(),
+                D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE) ||
+             !resource_state_tracker_.Transition(command_list_.Get(), scene3d_ssr_history_.resource.Get(),
+                D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE) ||
+             !resource_state_tracker_.Transition(command_list_.Get(), scene3d_depth_history_.resource.Get(),
+                D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE)))
             return false;
         Scene3DPostProcessConstants post{};
         post.exposure = submission.post_process.exposure;
@@ -2950,33 +3099,84 @@ namespace ReplayEngine::Rendering::DX12
         post.camera_planes = current_frame_constants_.camera_planes;
         D3D12_GPU_VIRTUAL_ADDRESS post_gpu = 0;
         if (!allocate_cb(&post, sizeof(post), post_gpu)) return false;
+
+        const auto bind_postprocess_inputs = [this, scene_history_available](
+            D3D12_GPU_DESCRIPTOR_HANDLE scene_color) noexcept
+        {
+            command_list_->SetGraphicsRootDescriptorTable(1, scene_color);
+            command_list_->SetGraphicsRootDescriptorTable(2,
+                scene_history_available ? scene3d_history_.srv.gpu : scene_view_target_.srv.gpu);
+            command_list_->SetGraphicsRootDescriptorTable(3, scene3d_depth_.srv.gpu);
+            command_list_->SetGraphicsRootDescriptorTable(4, scene3d_gbuffer_[4].srv.gpu);
+            command_list_->SetGraphicsRootDescriptorTable(5, scene3d_gbuffer_[2].srv.gpu);
+            command_list_->SetGraphicsRootDescriptorTable(6, scene3d_gbuffer_[3].srv.gpu);
+            command_list_->SetGraphicsRootDescriptorTable(7, scene3d_gbuffer_[0].srv.gpu);
+            command_list_->SetGraphicsRootDescriptorTable(8, scene3d_deferred_target_.srv.gpu);
+            command_list_->SetGraphicsRootDescriptorTable(9, scene_history_available
+                ? scene3d_depth_history_.srv.gpu : scene3d_depth_.srv.gpu);
+            command_list_->SetGraphicsRootDescriptorTable(10, scene_history_available
+                ? scene3d_ssr_history_.srv.gpu : scene_view_target_.srv.gpu);
+        };
+
+        if (!resource_state_tracker_.Transition(command_list_.Get(), scene3d_temporal_input_.resource.Get(),
+            D3D12_RESOURCE_STATE_RENDER_TARGET))
+            return false;
+        command_list_->OMSetRenderTargets(1, &scene3d_temporal_input_.rtv.cpu, FALSE, nullptr);
+        command_list_->SetGraphicsRootSignature(scene3d_postprocess_root_signature_.Get());
+        command_list_->SetPipelineState(scene3d_temporal_input_pipeline_.Get());
+        command_list_->SetGraphicsRootConstantBufferView(0, post_gpu);
+        bind_postprocess_inputs(scene_view_target_.srv.gpu);
+        command_list_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        command_list_->DrawInstanced(3, 1, 0, 0);
+        if (!resource_state_tracker_.Transition(command_list_.Get(), scene3d_temporal_input_.resource.Get(),
+            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE) ||
+            !resource_state_tracker_.Transition(command_list_.Get(), scene3d_taa_resolved_.resource.Get(),
+                D3D12_RESOURCE_STATE_RENDER_TARGET))
+            return false;
+
+        // TAAのHDR境界はFXAA/SSAO/SSR後・Bloom/ToneMap前に固定し、履歴もこの境界のResolve結果だけを戻す。
+        command_list_->OMSetRenderTargets(1, &scene3d_taa_resolved_.rtv.cpu, FALSE, nullptr);
+        command_list_->SetPipelineState(scene3d_taa_resolve_pipeline_.Get());
+        command_list_->SetGraphicsRootConstantBufferView(0, post_gpu);
+        bind_postprocess_inputs(scene3d_temporal_input_.srv.gpu);
+        command_list_->DrawInstanced(3, 1, 0, 0);
+        if (!resource_state_tracker_.Transition(command_list_.Get(), scene3d_taa_resolved_.resource.Get(),
+            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE))
+            return false;
+
         if (!TransitionCurrentRenderTarget(D3D12_RESOURCE_STATE_RENDER_TARGET)) return false;
         D3D12_CPU_DESCRIPTOR_HANDLE back_buffer_rtv = CurrentRenderTargetView();
         command_list_->OMSetRenderTargets(1, &back_buffer_rtv, FALSE, nullptr);
-        command_list_->SetGraphicsRootSignature(scene3d_postprocess_root_signature_.Get());
         command_list_->SetPipelineState(scene3d_postprocess_pipeline_.Get());
         command_list_->SetGraphicsRootConstantBufferView(0, post_gpu);
-        command_list_->SetGraphicsRootDescriptorTable(1, scene_view_target_.srv.gpu);
-        command_list_->SetGraphicsRootDescriptorTable(2,
-            scene_history_available ? scene3d_history_.srv.gpu : scene_view_target_.srv.gpu);
-        command_list_->SetGraphicsRootDescriptorTable(3, scene3d_depth_.srv.gpu);
-        command_list_->SetGraphicsRootDescriptorTable(4, scene3d_gbuffer_[4].srv.gpu);
-        command_list_->SetGraphicsRootDescriptorTable(5, scene3d_gbuffer_[2].srv.gpu);
-        command_list_->SetGraphicsRootDescriptorTable(6, scene3d_gbuffer_[3].srv.gpu);
-        command_list_->SetGraphicsRootDescriptorTable(7, scene3d_gbuffer_[0].srv.gpu);
-        command_list_->SetGraphicsRootDescriptorTable(8, scene3d_deferred_target_.srv.gpu);
-        command_list_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        bind_postprocess_inputs(submission.post_process.render_output == 0u
+            ? scene3d_taa_resolved_.srv.gpu : scene_view_target_.srv.gpu);
         command_list_->DrawInstanced(3, 1, 0, 0);
 
-        // Loading Scene の分離描画では active World の TAA/SSR 履歴を書き換えない。
         if (options.write_scene_history)
         {
-            if (!resource_state_tracker_.Transition(command_list_.Get(), scene_view_target_.color.Get(),
+            if (!resource_state_tracker_.Transition(command_list_.Get(), scene3d_taa_resolved_.resource.Get(),
                 D3D12_RESOURCE_STATE_COPY_SOURCE) ||
                 !resource_state_tracker_.Transition(command_list_.Get(), scene3d_history_.resource.Get(),
+                    D3D12_RESOURCE_STATE_COPY_DEST) ||
+                !resource_state_tracker_.Transition(command_list_.Get(), scene_view_target_.color.Get(),
+                    D3D12_RESOURCE_STATE_COPY_SOURCE) ||
+                !resource_state_tracker_.Transition(command_list_.Get(), scene3d_ssr_history_.resource.Get(),
+                    D3D12_RESOURCE_STATE_COPY_DEST) ||
+                !resource_state_tracker_.Transition(command_list_.Get(), scene3d_depth_.resource.Get(),
+                    D3D12_RESOURCE_STATE_COPY_SOURCE) ||
+                !resource_state_tracker_.Transition(command_list_.Get(), scene3d_depth_history_.resource.Get(),
                     D3D12_RESOURCE_STATE_COPY_DEST))
                 return false;
-            command_list_->CopyResource(scene3d_history_.resource.Get(), scene_view_target_.color.Get());
+            command_list_->CopyResource(scene3d_history_.resource.Get(),
+                scene3d_taa_resolved_.resource.Get());
+            command_list_->CopyResource(scene3d_ssr_history_.resource.Get(),
+                scene_view_target_.color.Get());
+            command_list_->CopyResource(scene3d_depth_history_.resource.Get(),
+                scene3d_depth_.resource.Get());
+            if (!resource_state_tracker_.Transition(command_list_.Get(), scene3d_depth_.resource.Get(),
+                D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE))
+                return false;
             scene3d_history_valid_ = true;
             ++scene3d_history_write_serial_;
         }

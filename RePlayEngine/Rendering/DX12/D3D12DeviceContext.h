@@ -1068,6 +1068,8 @@ namespace ReplayEngine::Rendering::DX12
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_skinned_gbuffer_pipelines_[6];
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_lighting_pipeline_;
         Microsoft::WRL::ComPtr<ID3D12RootSignature> scene3d_postprocess_root_signature_;
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_temporal_input_pipeline_;
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_taa_resolve_pipeline_;
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_postprocess_pipeline_;
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_static_depth_pipelines_[4];
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_skinned_depth_pipelines_[4];
@@ -1087,13 +1089,19 @@ namespace ReplayEngine::Rendering::DX12
         std::vector<std::uint8_t> scene3d_model_effect_extract_ps_;
         std::vector<std::uint8_t> scene3d_fullscreen_vs_;
         std::vector<std::uint8_t> scene3d_lighting_ps_;
+        std::vector<std::uint8_t> scene3d_temporal_input_ps_;
+        std::vector<std::uint8_t> scene3d_taa_resolve_ps_;
         std::vector<std::uint8_t> scene3d_postprocess_ps_;
         std::vector<std::uint8_t> scene3d_shadow_static_vs_;
         std::vector<std::uint8_t> scene3d_shadow_skinned_vs_;
         std::vector<std::uint8_t> scene3d_shadow_alpha_ps_;
         Scene3DTarget scene3d_gbuffer_[kScene3DGBufferCount];
         Scene3DDepthTarget scene3d_depth_{};
+        Scene3DTarget scene3d_temporal_input_{};
+        Scene3DTarget scene3d_taa_resolved_{};
         Scene3DHistoryTarget scene3d_history_{};
+        Scene3DHistoryTarget scene3d_ssr_history_{};
+        Scene3DHistoryTarget scene3d_depth_history_{};
         bool scene3d_history_valid_ = false;
         Scene3DShadowTarget scene3d_directional_shadow_{};
         Scene3DShadowTarget scene3d_local_shadow_{};

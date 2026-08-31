@@ -175,7 +175,7 @@ public:
         ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission& submission,
         const ReplayEngine::Scene::Scene& scene) const;
     bool prewarm_loading_scene_gpu_resources();
-    // 射影行列へ加算したTAAジッター(NDC)。モーションベクターで打ち消すのに使う。
+    // TAAジッターは現行DX12では未接続で、投影行列へはまだ適用していない。
     DirectX::XMFLOAT2 taa_jitter_ndc{ 0.0f, 0.0f };
     DirectX::XMFLOAT2 previous_taa_jitter_ndc{ 0.0f, 0.0f };
     unsigned int frame_index{ 0 };
