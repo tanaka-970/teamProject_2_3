@@ -1,4 +1,5 @@
 @echo off
-rem XPS / XNALara ã® Generic_Item.mesh ã‚’ GLB ã¸å¤‰æ›ã™ã‚‹è–„ã„ãƒ©ãƒƒãƒ‘ãƒ¼ã€‚
-rem   convert.bat <å…¥åŠ›.mesh ã‹ ãƒ•ã‚©ãƒ«ãƒ€> [å‡ºåŠ›ãƒ•ã‚©ãƒ«ãƒ€] [--fbx] [--no-armature]
+rem XPS / XNALara / PMX ‚ğ GLB ‚Ö•ÏŠ·‚·‚é”–‚¢ƒ‰ƒbƒp[B
+rem   convert.bat “ü—ÍƒpƒX [o—ÍƒtƒHƒ‹ƒ_] [--fbx] [--no-armature]
+rem RŠ‡ŒÊ‚Í cmd ‚ªƒŠƒ_ƒCƒŒƒNƒg‚Æ‚µ‚Ä‰ğß‚·‚é‚½‚ß rem s‚É‚à‘‚©‚È‚¢B
 python "%~dp0convert.py" %*

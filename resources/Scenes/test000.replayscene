@@ -1,0 +1,45 @@
+REPLAY_SCENE 11
+SCENE "新しいシーン"
+SCENE_STATE 0
+COLLISION_STATE 2 0
+OBJECT_COUNT 1
+OBJECT
+  ID 3
+  NAME "GameObject"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "SkinnedMeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 24
+    PROPERTY "mesh_asset" asset "19f1ae02d6550ac597d93442b1c750a6"
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_slot_count" int 0
+    PROPERTY "material_override" bool 0
+    PROPERTY "tint" color 1 1 1 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "shadow_alpha_clip" bool 0
+    PROPERTY "shadow_alpha_cutoff" float 0.5
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+    PROPERTY "visual_rotation_offset" vec3 90 188.5 180
+    PROPERTY "local_position_offset" vec3 0 0 0
+    PROPERTY "local_scale_multiplier" vec3 1 1 1
+    PROPERTY "apply_fbx_coordinate_transform" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0
+    PROPERTY "material.roughness" float 0.55000001192092896
+    PROPERTY "material.ambient_occlusion" float 1
+    PROPERTY "material.emissive_color" vec3 0 0 0
+    PROPERTY "material.emissive_strength" float 0
+    PROPERTY "material.double_sided" bool 0
+  END_COMPONENT
+END_OBJECT

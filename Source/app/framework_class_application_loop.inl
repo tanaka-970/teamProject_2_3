@@ -81,7 +81,7 @@
         static constexpr const char* initialize_stage_names[] =
         {
             "AssetDatabase",
-            "ProjectFonts",
+            "ProjectAssets",
             "CpuUiSceneSetup",
             "ObjectScene",
             "DX12Initialize"

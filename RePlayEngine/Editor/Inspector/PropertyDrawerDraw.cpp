@@ -150,8 +150,11 @@ namespace ReplayEngine::Editor
         }
         case PropertyType::AssetPath:
         {
+            // AssetReference と同じく asset_type で候補を絞る。メッシュ欄に
+            // テクスチャが並んでいたのは、ここへ渡し忘れていたため。
             std::string value = current.AsString();
-            if (DrawAssetReference(label.c_str(), assets, value, desc.read_only))
+            if (DrawAssetReference(label.c_str(), assets, value, desc.read_only,
+                AssetKindFromTypeName(desc.asset_type)))
             {
                 desc.Apply(component, PropertyValue::MakeAssetPath(std::move(value)));
                 changed = true;
