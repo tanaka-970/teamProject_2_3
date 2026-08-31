@@ -164,8 +164,9 @@ PSOut main(PSIn input)
         renderParams.z >= 0.5f ? 1.0f : -1.0f);
     // material.a は従来 ao の重複で誰も読んでいない。Toon のときだけ階調数を運ぶ。
     // 他のシェーダでは今までどおり ao を入れるので既存の見た目は変わらない。
-    const float toonSteps = isToon ? saturate(toonStepCount / 16.0f +
-        (normalizedRamp ? 0.5f : 0.0f)) : ao;
+    const uint toonCode = (normalizedRamp ? 128u : 0u) +
+        (uint)clamp(round(toonStepCount), 1.0f, 31.0f) * 4u;
+    const float toonSteps = isToon ? (float)toonCode / 255.0f : ao;
     output.material = float4(ao, roughness, metallic, toonSteps);
 
     // 追加RTはToonのときだけ埋める。他は0で、lighting側もmodelで門を閉じている。

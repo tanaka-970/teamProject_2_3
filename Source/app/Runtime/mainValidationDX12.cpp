@@ -500,7 +500,7 @@ namespace ReplayEngine::Runtime::Detail
             {
                 static_scene.local_shadows.slices[slice].view_projection = DirectX::XMFLOAT4X4{
                     1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
-                static_scene.local_shadows.slices[slice].params = { 0.05f, 10.0f, 0.002f, 0.0f };
+                static_scene.local_shadows.slices[slice].params = { 0.05f, 10.0f, 0.002f, 1.5f };
             }
 
             if (!Check(context.DrawStaticScene(static_scene),

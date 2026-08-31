@@ -452,13 +452,15 @@ void framework::sync_object_lights()
                     const float near_plane = (std::max)(0.01f, light->shadow_near_plane);
                     const float bias = (std::max)(0.0f,
                         (std::min)(0.05f, light->shadow_depth_bias));
+                    const float normal_bias = (std::max)(0.0f,
+                        (std::min)(6.0f, light->shadow_normal_bias));
                     for (int face = 0; face < 6; ++face)
                     {
                         local_shadows.SetSlice(base_slice + face,
                             ReplayEngine::Rendering::LocalShadowAtlas::
                                 MakePointFaceViewProjection(position, face,
                                     near_plane, range),
-                            near_plane, range, bias);
+                            near_plane, range, bias, normal_bias);
                     }
                     local_shadow_request request{};
                     request.point = true;
@@ -510,10 +512,12 @@ void framework::sync_object_lights()
                     const float near_plane = (std::max)(0.01f, light->shadow_near_plane);
                     const float bias = (std::max)(0.0f,
                         (std::min)(0.05f, light->shadow_depth_bias));
+                    const float normal_bias = (std::max)(0.0f,
+                        (std::min)(6.0f, light->shadow_normal_bias));
                     local_shadows.SetSlice(slice,
                         ReplayEngine::Rendering::LocalShadowAtlas::MakeSpotViewProjection(
                             position, direction_value, outer, near_plane, range),
-                        near_plane, range, bias);
+                        near_plane, range, bias, normal_bias);
 
                     local_shadow_request request{};
                     request.point = false;

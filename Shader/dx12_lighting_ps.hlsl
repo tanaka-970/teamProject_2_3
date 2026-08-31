@@ -96,8 +96,9 @@ float4 main(float4 position : SV_POSITION, float2 uv : TEXCOORD0) : SV_Target0
         toon.specularTint = Dx12UnpackColor565(packed.z);
         toon.rimPower = powers.x * 8.0f;
         toon.specularPower = 1.0f + powers.y * 127.0f;
-        const bool normalized = material.a > 0.53f;
-        toon.steps = (material.a - (normalized ? 0.5f : 0.0f)) * 16.0f;
+        const uint toonCode = (uint)round(material.a * 255.0f);
+        const bool normalized = toonCode >= 128u;
+        toon.steps = (float)((toonCode - (normalized ? 128u : 0u)) / 4u);
         toon.normalizedRamp = normalized ? 1.0f : 0.0f;
     }
     const float3 lit = Dx12EvaluateLighting(worldPosition, normal, base.rgb,

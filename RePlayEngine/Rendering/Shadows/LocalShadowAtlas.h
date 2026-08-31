@@ -12,7 +12,7 @@ namespace ReplayEngine::Rendering
         {
             DirectX::XMFLOAT4X4 view_projection{
                 1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
-            DirectX::XMFLOAT4 params{ 0.1f, 50.0f, 0.0015f, 0.0f };
+            DirectX::XMFLOAT4 params{ 0.1f, 50.0f, 0.0015f, 1.5f };
         };
 
         static constexpr std::uint32_t kMaxSpotShadows = 4;
@@ -25,7 +25,7 @@ namespace ReplayEngine::Rendering
         int AllocateSpotSlice() noexcept;
         int AllocatePointSlices() noexcept;
         void SetSlice(int slice, const DirectX::XMFLOAT4X4& view_projection,
-            float near_plane, float far_plane, float depth_bias) noexcept;
+            float near_plane, float far_plane, float depth_bias, float normal_bias) noexcept;
         std::uint32_t UsedSliceCount() const noexcept
         {
             return next_spot_slice_ + (next_point_base_ - kMaxSpotShadows);

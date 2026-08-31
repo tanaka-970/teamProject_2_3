@@ -28,7 +28,7 @@ struct Dx12SpotLight
 struct Dx12LocalShadowSlice
 {
     row_major float4x4 viewProjection;
-    float4 params; // x=Near、y=Far、z=Depth Bias、w=予約
+    float4 params; // x=Near、y=Far、z=Depth Bias、w=Normal Bias
 };
 
 cbuffer Dx12LightCB : register(DX12_LIGHT_CB_REGISTER)
@@ -274,7 +274,8 @@ float Dx12SampleLocalSlice(int slice, float3 worldPosition, float3 worldNormal,
     const float3 lightForward = normalize(float3(source.viewProjection[0][2],
         source.viewProjection[1][2], source.viewProjection[2][2]));
     const float3 biasedPosition = worldPosition + worldNormal * texelWorld *
-        (1.5f + slope * 3.0f) - lightForward * source.params.z * (1.0f + slope * 2.0f);
+        (source.params.w + slope * 3.0f) - lightForward * source.params.z *
+        (1.0f + slope * 2.0f);
 
     const float4 lightPosition = mul(float4(biasedPosition, 1.0f), source.viewProjection);
     if (lightPosition.w <= 0.0f) return 1.0f;

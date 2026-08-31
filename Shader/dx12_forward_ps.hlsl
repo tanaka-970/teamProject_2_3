@@ -58,10 +58,13 @@ Dx12ToonSurface ResolveDeferredToonSurface()
     Dx12ToonSurface toon = Dx12DefaultToonSurface();
     const bool hasToonParams = (uint)(builtinParams.x + 0.5f) == BUILTIN_EFFECT_TOON;
     const float stepCount = hasToonParams ? builtinParams.y : 3.0f;
-    toon.steps = QuantizeUnorm8(stepCount / 16.0f) * 16.0f;
+    const uint toonCode = (hasToonParams && builtinParams.w >= 0.5f ? 128u : 0u) +
+        (uint)clamp(round(stepCount), 1.0f, 31.0f) * 4u;
+    const bool normalized = toonCode >= 128u;
+    toon.steps = (float)((toonCode - (normalized ? 128u : 0u)) / 4u);
     if (!hasToonParams) return toon;
 
-    toon.normalizedRamp = builtinParams.w >= 0.5f ? 1.0f : 0.0f;
+    toon.normalizedRamp = normalized ? 1.0f : 0.0f;
     toon.shadowTint = QuantizeColor565(builtinParams1.rgb);
     toon.rimColor = QuantizeColor565(builtinParams2.rgb);
     toon.specularTint = QuantizeColor565(builtinParams3.rgb);
