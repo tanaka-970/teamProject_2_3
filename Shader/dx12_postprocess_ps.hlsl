@@ -1,6 +1,5 @@
 // HDR Sceneを最終表示へ変換する共通パス。
-// 現フレームのGBufferと前フレームHDR履歴をここで使い、TAA/SSAO/SSRを
-// 照明ゲインで代用せず、実際の画面空間入力として合成する。
+// 現フレームGBuffer、TAA履歴、SSR用Scene履歴を別入力として扱う。
 
 Texture2D sceneTexture : register(t0);
 Texture2D historyTexture : register(t1);
@@ -10,6 +9,8 @@ Texture2D sceneNormal : register(t4);
 Texture2D sceneMaterial : register(t5);
 Texture2D sceneBaseColor : register(t6);
 Texture2D deferredLitTexture : register(t7);
+Texture2D previousSceneDepth : register(t8);
+Texture2D ssrHistoryTexture : register(t9);
 SamplerState sceneSampler : register(s0);
 SamplerState pointSampler : register(s1);
 
@@ -301,7 +302,7 @@ float3 screenSpaceReflection(float2 uv, float3 color)
     confidence = saturate(confidence * saturate(ssrStrength));
     if (confidence <= 0.0f) return color;
 
-    float3 reflection = historyTexture.SampleLevel(sceneSampler, hitUv, 0).rgb;
+    float3 reflection = ssrHistoryTexture.SampleLevel(sceneSampler, hitUv, 0).rgb;
     const int requestedTapCount = clamp((int)round(ssrParams2.y), 1, 16);
     const int tapCount = min(16, max(requestedTapCount,
         ssrParams2.x > 0.0f ? 2 : 1));
@@ -315,38 +316,125 @@ float3 screenSpaceReflection(float2 uv, float3 color)
         if (tap >= tapCount) break;
         const float angle = 2.39996323f * (float)tap;
         const float2 offset = float2(cos(angle), sin(angle)) * resolvePixel;
-        resolveSum += historyTexture.SampleLevel(sceneSampler, hitUv + offset, 0).rgb;
+        resolveSum += ssrHistoryTexture.SampleLevel(sceneSampler, hitUv + offset, 0).rgb;
         resolveSamples += 1.0f;
     }
     reflection = resolveSum / resolveSamples;
     return lerp(color, reflection, confidence);
 }
 
+float3 rgbToYCoCg(float3 color)
+{
+    return float3(
+        0.25f * color.r + 0.5f * color.g + 0.25f * color.b,
+        0.5f * color.r - 0.5f * color.b,
+        -0.25f * color.r + 0.5f * color.g - 0.25f * color.b);
+}
+
+float3 yCoCgToRgb(float3 color)
+{
+    const float y = color.x;
+    const float co = color.y;
+    const float cg = color.z;
+    return float3(y + co - cg, y + cg, y - co - cg);
+}
+
 float3 temporalResolve(float2 uv, float3 color)
 {
     if (historyValid < 0.5f || featureFlags.x < 0.5f) return color;
-    const float2 velocity = sceneVelocity.SampleLevel(pointSampler, uv, 0).rg;
+    const int2 maxPixel = max(int2(screenSize) - 1, int2(0, 0));
+    const int2 pixel = clamp(int2(uv * screenSize), int2(0, 0), maxPixel);
+    float closestDepth = sceneDepth.Load(int3(pixel, 0)).r;
+    int2 velocityPixel = pixel;
+    [unroll] for (int oy = -1; oy <= 1; ++oy)
+    {
+        [unroll] for (int ox = -1; ox <= 1; ++ox)
+        {
+            const int2 tapPixel = clamp(pixel + int2(ox, oy), int2(0, 0), maxPixel);
+            const float tapDepth = sceneDepth.Load(int3(tapPixel, 0)).r;
+            if (tapDepth < closestDepth)
+            {
+                closestDepth = tapDepth;
+                velocityPixel = tapPixel;
+            }
+        }
+    }
+
+    const float2 velocity = sceneVelocity.Load(int3(velocityPixel, 0)).rg;
     const float2 historyUv = uv - velocity;
     if (any(historyUv < 0.0f) || any(historyUv > 1.0f)) return color;
+
+    const float currentDepth = sceneDepth.Load(int3(pixel, 0)).r;
+    const float previousDepth = previousSceneDepth.SampleLevel(pointSampler, historyUv, 0).r;
+    const bool currentBackground = currentDepth >= 0.999999f;
+    const bool previousBackground = previousDepth >= 0.999999f;
+    if (currentBackground != previousBackground) return color;
+    if (!currentBackground)
+    {
+        const float currentLinearDepth = linearViewDepth(uv, currentDepth);
+        const float previousLinearDepth = linearViewDepth(historyUv, previousDepth);
+        const float disocclusionThreshold = max(0.05f, currentLinearDepth * 0.05f);
+        if (abs(previousLinearDepth - currentLinearDepth) > disocclusionThreshold) return color;
+    }
+
     const float motionPixels = length(velocity * screenSize);
     const float motionWeight = saturate(1.0f - motionPixels / max(taaParams0.z, 0.001f));
     const float weight = saturate(taaBlend) * motionWeight;
-    const float3 history = historyTexture.SampleLevel(sceneSampler, historyUv, 0).rgb;
-    const float2 pixel = 1.0f / max(screenSize, float2(1.0f, 1.0f));
-    const float3 neighborA = sampleScene(uv + float2(pixel.x, 0.0f));
-    const float3 neighborB = sampleScene(uv - float2(pixel.x, 0.0f));
-    const float3 neighborhoodMin = min(color, min(neighborA, neighborB));
-    const float3 neighborhoodMax = max(color, max(neighborA, neighborB));
-    const float gamma = max(taaParams0.x, 0.001f);
-    const float3 expandedMin = color - (color - neighborhoodMin) * gamma;
-    const float3 expandedMax = color + (neighborhoodMax - color) * gamma;
-    float3 resolved = lerp(color, clamp(history, expandedMin, expandedMax), weight);
+    float3 moment1 = 0.0f;
+    float3 moment2 = 0.0f;
+    float3 neighborhoodMin = 1.0e30f;
+    float3 neighborhoodMax = -1.0e30f;
+    [unroll] for (int ny = -1; ny <= 1; ++ny)
+    {
+        [unroll] for (int nx = -1; nx <= 1; ++nx)
+        {
+            const int2 tapPixel = clamp(pixel + int2(nx, ny), int2(0, 0), maxPixel);
+            const float3 tapColor = rgbToYCoCg(sceneTexture.Load(int3(tapPixel, 0)).rgb);
+            moment1 += tapColor;
+            moment2 += tapColor * tapColor;
+            neighborhoodMin = min(neighborhoodMin, tapColor);
+            neighborhoodMax = max(neighborhoodMax, tapColor);
+        }
+    }
+    const float3 mean = moment1 / 9.0f;
+    const float3 variance = max(moment2 / 9.0f - mean * mean, 0.0f);
+    const float3 deviation = sqrt(variance) * max(taaParams0.x, 0.001f);
+    const float3 clipMin = max(mean - deviation, neighborhoodMin);
+    const float3 clipMax = min(mean + deviation, neighborhoodMax);
+    float3 history = rgbToYCoCg(historyTexture.SampleLevel(sceneSampler, historyUv, 0).rgb);
+    const float3 clipCenter = 0.5f * (clipMax + clipMin);
+    const float3 clipExtent = 0.5f * (clipMax - clipMin) + 1.0e-6f;
+    const float3 clipOffset = history - clipCenter;
+    const float3 clipUnit = clipOffset / clipExtent;
+    const float maximumUnit = max(abs(clipUnit.x), max(abs(clipUnit.y), abs(clipUnit.z)));
+    if (maximumUnit > 1.0f) history = clipCenter + clipOffset / maximumUnit;
+
+    float3 resolved = yCoCgToRgb(lerp(rgbToYCoCg(color), history, weight));
     if (taaParams0.y > 0.0f)
     {
-        const float3 neighborhood = (neighborA + neighborB) * 0.5f;
+        const float3 neighborhood = yCoCgToRgb(mean);
         resolved = max(resolved + (resolved - neighborhood) * taaParams0.y * 2.0f, 0.0f);
     }
-    return resolved;
+    return max(resolved, 0.0f);
+}
+
+float4 temporal_input_main(PixelInput input) : SV_TARGET
+{
+    float3 color = sampleScene(input.uv);
+    if (finalPassEnabled > 0.5f)
+    {
+        color = fxaaEnabled > 0.5f ? fxaa(input.uv) : color;
+        if (featureFlags.y > 0.5f) color *= ssao(input.uv);
+        color = screenSpaceReflection(input.uv, color);
+    }
+    return float4(max(color, 0.0f), 1.0f);
+}
+
+float4 taa_resolve_main(PixelInput input) : SV_TARGET
+{
+    float3 color = sampleScene(input.uv);
+    if (finalPassEnabled > 0.5f) color = temporalResolve(input.uv, color);
+    return float4(max(color, 0.0f), 1.0f);
 }
 
 float3 acesToneMap(float3 color)
@@ -419,12 +507,6 @@ float4 main(PixelInput input) : SV_TARGET
     float3 color = sampleScene(input.uv);
     if (finalPassEnabled > 0.5f)
     {
-        color = fxaaEnabled > 0.5f ? fxaa(input.uv) : color;
-        if (featureFlags.y > 0.5f)
-            color *= ssao(input.uv);
-        color = screenSpaceReflection(input.uv, color);
-        color = temporalResolve(input.uv, color);
-
         const float2 pixel = 1.0f / max(screenSize, float2(1.0f, 1.0f));
         float3 bloom = 0.0f;
         if (luminanceEnabled > 0.5f)
