@@ -2,6 +2,7 @@
 // Prefab は v7 の SceneData 方式へ移行済み。
 #include "../../RePlayEngine/Scene/Serialization/PrefabSerializer.h"
 #include "../../RePlayEngine/Editor/Viewport/EditorSelectionBounds.h"
+#include "../../RePlayEngine/Editor/Style/EditorStyle.h"
 
 #include <commdlg.h>
 #include <algorithm>
@@ -10,10 +11,11 @@
 #include <iomanip>
 #include <cmath>
 #include <limits>
+#include <sstream>
 
 namespace
 {
-    constexpr int EditorSessionVersion = 3;
+    constexpr int EditorSessionVersion = 4;
 
     std::filesystem::path EditorSessionFolder()
     {
@@ -229,6 +231,12 @@ void framework::save_editor_session()
     for (std::size_t index = 0; index < editor_view_by_workspace.size(); ++index)
         state << "WORKSPACE_VIEW " << index << ' ' <<
             static_cast<int>(editor_view_by_workspace[index]) << '\n';
+    state << "UI_STYLE " << (ui_style_overridden ? 1 : 0) << ' '
+        << ui_button_scale << ' ' << ui_font_scale << ' '
+        << ui_text_color[0] << ' ' << ui_text_color[1] << ' ' << ui_text_color[2] << '\n';
+    for (const auto& entry : ReplayEngine::Editor::EditorStyle::ComponentCategoryColors())
+        state << "COMPONENT_CATEGORY_COLOR " << std::quoted(entry.first) << ' '
+            << entry.second.x << ' ' << entry.second.y << ' ' << entry.second.z << '\n';
 }
 
 void framework::restore_editor_session()
@@ -252,6 +260,9 @@ void framework::restore_editor_session()
             EditorSessionStatePath());
         return;
     }
+
+    ReplayEngine::Editor::EditorStyle::ResetComponentCategoryColors();
+    editor_style_history.Clear();
 
     std::string scene_path;
     int workspace = static_cast<int>(editor_workspace::general);
@@ -303,6 +314,37 @@ void framework::restore_editor_session()
                 editor_view_by_workspace[
                     static_cast<std::size_t>(saved_workspace)] =
                     static_cast<editor_view>(saved_view);
+            }
+        }
+        else if (key == "COMPONENT_CATEGORY_COLOR")
+        {
+            std::string category;
+            float red = 0.0f;
+            float green = 0.0f;
+            float blue = 0.0f;
+            if (state >> std::quoted(category) >> red >> green >> blue &&
+                !category.empty())
+            {
+                ReplayEngine::Editor::EditorStyle::SetComponentCategoryColor(
+                    category, ImVec4(red, green, blue, 1.0f));
+            }
+        }
+        else if (key == "UI_STYLE")
+        {
+            int overridden = 0;
+            float button_scale = 1.0f;
+            float font_scale = 1.0f;
+            float red = 1.0f;
+            float green = 1.0f;
+            float blue = 1.0f;
+            if (state >> overridden >> button_scale >> font_scale >> red >> green >> blue)
+            {
+                ui_style_overridden = overridden != 0;
+                ui_button_scale = std::clamp(button_scale, 0.6f, 3.0f);
+                ui_font_scale = std::clamp(font_scale, 0.7f, 2.5f);
+                ui_text_color[0] = std::clamp(red, 0.0f, 1.0f);
+                ui_text_color[1] = std::clamp(green, 0.0f, 1.0f);
+                ui_text_color[2] = std::clamp(blue, 0.0f, 1.0f);
             }
         }
         else

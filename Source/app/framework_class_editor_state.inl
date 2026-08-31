@@ -398,10 +398,21 @@ private:
     std::string material_editor_status;
     bool material_editor_loaded{ false };
     bool material_editor_dirty{ false };
+    std::filesystem::file_time_type material_editor_write_time{};
+    bool material_editor_write_time_valid{ false };
+    ReplayEngine::Editor::MaterialEditHistory material_editor_history;
+    ReplayEngine::Editor::EditorStyleEditHistory editor_style_history;
 
     bool create_material_asset();
     bool load_material_editor(const ReplayEngine::Assets::AssetRecord& asset);
     bool save_material_editor();
+    void refresh_material_editor_preview();
+    void begin_material_reorder_history();
+    static void capture_material_reorder_history(void* owner);
+    bool undo_material_editor();
+    bool redo_material_editor();
+    bool undo_editor_style();
+    bool redo_editor_style();
     void draw_material_asset_editor();
     bool gizmo_local_space{ false };
     bool show_scene_grid{ true };

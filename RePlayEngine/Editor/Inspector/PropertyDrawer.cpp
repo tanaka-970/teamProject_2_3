@@ -117,18 +117,60 @@ namespace ReplayEngine::Editor
         const Assets::AssetDatabase* assets, const Scene::Scene* scene)
     {
         bool changed = false;
-        for (const PropertyDesc& desc : PropertyRegistry::PropertiesOf(component.TypeID()))
+        const auto draw_properties = [&](const std::vector<PropertyDesc>& properties,
+                                         bool dynamic_properties)
         {
-            ImGui::PushID(desc.name.c_str());
-            const bool shadow_toggle_disabled =
-                ShouldDisableShadowToggles(component, desc, assets);
-            PropertyDesc draw_desc = desc;
-            draw_desc.read_only = draw_desc.read_only || shadow_toggle_disabled;
-            if (Draw(draw_desc, component, assets, scene)) changed = true;
-            if (shadow_toggle_disabled && desc.name == "receive_shadow")
-                ImGui::TextDisabled(u8"Unlit / Flat Fill は照明と影を使わないため編集できません");
-            ImGui::PopID();
-        }
+            const bool material_dynamic_disabled = dynamic_properties &&
+                MaterialDynamicPropertiesDisabled(component);
+            std::string active_category;
+            bool category_open = false;
+            bool category_pushed = false;
+            const auto close_category = [&]()
+            {
+                if (category_open) ImGui::TreePop();
+                category_open = false;
+                if (category_pushed) ImGui::PopID();
+                category_pushed = false;
+            };
+
+            for (const PropertyDesc& desc : properties)
+            {
+                if (desc.category != active_category)
+                {
+                    close_category();
+                    active_category = desc.category;
+                    if (!active_category.empty())
+                    {
+                        ImGui::PushID(active_category.c_str());
+                        category_pushed = true;
+                        category_open = ImGui::TreeNodeEx(active_category.c_str(), 0);
+                    }
+                }
+                if (!active_category.empty() && !category_open) continue;
+
+                ImGui::PushID(desc.name.c_str());
+                if (dynamic_properties)
+                {
+                    const DisabledScope disabled(material_dynamic_disabled &&
+                        IsMaterialDynamicProperty(desc));
+                    if (Draw(desc, component, assets, scene)) changed = true;
+                }
+                else
+                {
+                    const bool shadow_toggle_disabled =
+                        ShouldDisableShadowToggles(component, desc, assets);
+                    PropertyDesc draw_desc = desc;
+                    draw_desc.read_only = draw_desc.read_only || shadow_toggle_disabled;
+                    if (Draw(draw_desc, component, assets, scene)) changed = true;
+                    if (shadow_toggle_disabled && desc.name == "receive_shadow")
+                        ImGui::TextDisabled(u8"Unlit / Flat Fill は照明と影を使わないため編集できません");
+                }
+                ImGui::PopID();
+            }
+            close_category();
+        };
+
+        draw_properties(PropertyRegistry::PropertiesOf(component.TypeID()), false);
 
         // インスタンスごとに変わるプロパティ（Script の公開変数など）。
         //
@@ -140,16 +182,7 @@ namespace ReplayEngine::Editor
         // 呼ばれる側の約束（Component::DynamicProperties のコメントを参照）。
         if (const std::vector<PropertyDesc>* dynamic = component.DynamicProperties())
         {
-            const bool material_dynamic_disabled =
-                MaterialDynamicPropertiesDisabled(component);
-            for (const PropertyDesc& desc : *dynamic)
-            {
-                ImGui::PushID(desc.name.c_str());
-                const DisabledScope disabled(material_dynamic_disabled &&
-                    IsMaterialDynamicProperty(desc));
-                if (Draw(desc, component, assets, scene)) changed = true;
-                ImGui::PopID();
-            }
+            draw_properties(*dynamic, true);
         }
         return changed;
     }

@@ -1,9 +1,39 @@
-#include "EditorStyle.h"
+﻿#include "EditorStyle.h"
 
 #include <algorithm>
+#include <unordered_map>
 
 namespace ReplayEngine::Editor
 {
+    namespace
+    {
+        ImVec4 DefaultComponentCategoryColor(const std::string& category) noexcept
+        {
+            if (category == "Rendering") return ImVec4(0.30f, 0.52f, 0.78f, 1.0f);
+            if (category == "Lighting") return ImVec4(0.52f, 0.48f, 0.24f, 1.0f);
+            if (category == "Camera") return ImVec4(0.32f, 0.48f, 0.62f, 1.0f);
+            if (category == "Landscape") return ImVec4(0.30f, 0.55f, 0.40f, 1.0f);
+            if (category == "Scripting") return ImVec4(0.30f, 0.62f, 0.40f, 1.0f);
+            if (category == "Gameplay") return ImVec4(0.35f, 0.58f, 0.42f, 1.0f);
+            if (category == "Motion") return ImVec4(0.48f, 0.42f, 0.68f, 1.0f);
+            if (category == "Physics") return ImVec4(0.60f, 0.42f, 0.32f, 1.0f);
+            if (category == "Navigation") return ImVec4(0.34f, 0.58f, 0.56f, 1.0f);
+            if (category == "Audio") return ImVec4(0.58f, 0.40f, 0.56f, 1.0f);
+            if (category == "UI") return ImVec4(0.50f, 0.42f, 0.62f, 1.0f);
+            if (category == "Scene") return ImVec4(0.42f, 0.50f, 0.58f, 1.0f);
+            if (category == "Core") return ImVec4(0.40f, 0.44f, 0.50f, 1.0f);
+            if (category == "Editor") return ImVec4(0.45f, 0.45f, 0.45f, 1.0f);
+            if (category == "Internal") return ImVec4(0.36f, 0.38f, 0.42f, 1.0f);
+            return ImVec4(0.38f, 0.46f, 0.56f, 1.0f);
+        }
+
+        std::unordered_map<std::string, ImVec4>& MutableComponentCategoryColors()
+        {
+            static std::unordered_map<std::string, ImVec4> colors;
+            return colors;
+        }
+    }
+
     const EditorStyleTokens& EditorStyle::Tokens() noexcept
     {
         static const EditorStyleTokens tokens{
@@ -91,5 +121,38 @@ namespace ReplayEngine::Editor
         colors[ImGuiCol_DockingPreview] = ImVec4(token.accent.x, token.accent.y, token.accent.z, 0.70f);
         colors[ImGuiCol_DockingEmptyBg] = token.main_background;
         colors[ImGuiCol_NavHighlight] = token.accent;
+    }
+
+    ImVec4 EditorStyle::ComponentCategoryColor(const std::string& category) noexcept
+    {
+        const auto& colors = MutableComponentCategoryColors();
+        const auto found = colors.find(category);
+        return found != colors.end() ? found->second : DefaultComponentCategoryColor(category);
+    }
+
+    const std::unordered_map<std::string, ImVec4>&
+        EditorStyle::ComponentCategoryColors() noexcept
+    {
+        return MutableComponentCategoryColors();
+    }
+
+    void EditorStyle::SetComponentCategoryColor(const std::string& category,
+        const ImVec4& color)
+    {
+        MutableComponentCategoryColors()[category] = ImVec4(
+            std::clamp(color.x, 0.0f, 1.0f),
+            std::clamp(color.y, 0.0f, 1.0f),
+            std::clamp(color.z, 0.0f, 1.0f), 1.0f);
+    }
+
+    void EditorStyle::ReplaceComponentCategoryColors(
+        const std::unordered_map<std::string, ImVec4>& colors)
+    {
+        MutableComponentCategoryColors() = colors;
+    }
+
+    void EditorStyle::ResetComponentCategoryColors() noexcept
+    {
+        MutableComponentCategoryColors().clear();
     }
 }

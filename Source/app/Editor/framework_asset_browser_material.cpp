@@ -34,6 +34,49 @@ namespace
     }
 }
 
+void framework::begin_material_reorder_history()
+{
+    if (material_editor_loaded)
+        material_editor_history.Begin(material_editor_asset, "Shader Layer を並べ替え");
+}
+
+void framework::capture_material_reorder_history(void* owner)
+{
+    if (owner != nullptr)
+        static_cast<framework*>(owner)->begin_material_reorder_history();
+}
+
+void framework::refresh_material_editor_preview()
+{
+    if (!material_editor_loaded || material_editor_guid.empty() ||
+        !material_editor_write_time_valid) return;
+    cached_material_asset preview;
+    preview.material = material_editor_asset;
+    preview.write_time = material_editor_write_time;
+    object_material_cache.insert_or_assign(material_editor_guid, std::move(preview));
+    object_material_failures.erase(material_editor_guid);
+}
+
+bool framework::undo_material_editor()
+{
+    std::string label;
+    if (!material_editor_history.Undo(material_editor_asset, label)) return false;
+    material_editor_dirty = true;
+    refresh_material_editor_preview();
+    material_editor_status = "Undo: " + label;
+    return true;
+}
+
+bool framework::redo_material_editor()
+{
+    std::string label;
+    if (!material_editor_history.Redo(material_editor_asset, label)) return false;
+    material_editor_dirty = true;
+    refresh_material_editor_preview();
+    material_editor_status = "Redo: " + label;
+    return true;
+}
+
 bool framework::create_material_asset()
 {
     using ReplayEngine::Assets::AssetKind;
@@ -79,6 +122,11 @@ bool framework::load_material_editor(const ReplayEngine::Assets::AssetRecord& as
     material_editor_guid = asset.guid;
     material_editor_loaded = true;
     material_editor_dirty = false;
+    std::error_code write_time_error;
+    material_editor_write_time = std::filesystem::last_write_time(
+        asset.source_path, write_time_error);
+    material_editor_write_time_valid = !write_time_error;
+    material_editor_history.Clear();
     material_editor_status = "Materialを読み込みました: " + asset.display_name;
     return true;
 }
@@ -108,6 +156,10 @@ bool framework::save_material_editor()
     }
     object_material_cache.erase(material_editor_guid);
     object_material_failures.erase(material_editor_guid);
+    std::error_code write_time_error;
+    material_editor_write_time = std::filesystem::last_write_time(
+        asset->source_path, write_time_error);
+    material_editor_write_time_valid = !write_time_error;
     material_editor_status = "MaterialをAtomic Saveしました: " +
         asset->source_path.generic_u8string();
     material_editor_dirty = false;
@@ -150,23 +202,7 @@ void framework::draw_material_asset_editor()
     if (inspector.changed)
     {
         material_editor_dirty = true;
-
-        // Disk Save を待たず Scene 上へ即時プレビューする。
-        // resolve_object_material() は disk write_time と cache write_time が同じなら
-        // cache を返すため、現在ファイルの時刻を付けた編集コピーを差し込めば
-        // Slider / Shader Picker の結果が次フレームからそのまま見える。
-        std::error_code preview_error;
-        const auto write_time = std::filesystem::last_write_time(
-            selected->source_path, preview_error);
-        if (!preview_error)
-        {
-            cached_material_asset preview;
-            preview.material = material_editor_asset;
-            preview.write_time = write_time;
-            object_material_cache.insert_or_assign(
-                material_editor_guid, std::move(preview));
-            object_material_failures.erase(material_editor_guid);
-        }
+        refresh_material_editor_preview();
     }
 
     // ---------------------------------------------------------------------
@@ -174,7 +210,7 @@ void framework::draw_material_asset_editor()
     // Base Shader の選択欄だけ隠し、上の GUID Picker と二重管理しない。
     // ---------------------------------------------------------------------
     ImGui::Separator();
-    if (ImGui::TreeNodeEx("Shader Stack", ImGuiTreeNodeFlags_DefaultOpen))
+    if (ImGui::TreeNodeEx("Shader Stack", 0))
     {
         const bool was_active = ImGui::IsAnyItemActive();
         bool material_outline_bridge = material_editor_asset.layers.Contains(
@@ -189,7 +225,8 @@ void framework::draw_material_asset_editor()
             toon.outline.outline_params,
             material_editor_asset.pixelate_grid,
             material_editor_asset.pixelate_strength,
-            false, &shader_library.Catalog(), &asset_database);
+            false, &shader_library.Catalog(), &asset_database,
+            &framework::capture_material_reorder_history, this);
 
         if (stack.requires_pbr)     use_pbr_skin = true;
         if (stack.requires_toon)    enable_toon_shader = true;
@@ -200,6 +237,15 @@ void framework::draw_material_asset_editor()
         // 古い ImGui の操作中判定も fallback として残す。
         if (stack.changed || ImGui::IsAnyItemActive() || was_active)
             material_editor_dirty = true;
+        if (stack.reordered && material_editor_history.InTransaction())
+        {
+            material_editor_history.Commit(material_editor_asset);
+            refresh_material_editor_preview();
+        }
+        else if (stack.changed)
+        {
+            refresh_material_editor_preview();
+        }
         ImGui::TreePop();
     }
 

@@ -4,6 +4,8 @@
 #include "../../Object/Component/ComponentTypeID.h"
 #include "../../Object/Component/MissingComponent.h"
 
+#include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -51,7 +53,9 @@ namespace ReplayEngine::Editor
         // 型ごとの専用 Editor ではなく、PlayerCompositionValidator の表を描くだけ。
         void DrawPlayerComposition(EditorContext& context, Core::GameObject& object,
             bool show_game_template_components);
-        void DrawComponent(EditorContext& context, Core::Component& component);
+        void DrawComponent(EditorContext& context, Core::Component& component,
+            std::size_t component_index, std::size_t component_count,
+            const void* component_list_identity);
 
         // 読み込めなかった Component の預かり内容を読み取り専用で表示する。
         // 値は一切書き換えない。消えるのは明示的な削除操作のときだけ。
@@ -67,6 +71,25 @@ namespace ReplayEngine::Editor
         // 削除予約は押した瞬間に立つので、この時点で既に一覧からは消えて見える。
         Core::Component* pending_removal_ = nullptr;
         std::string pending_removal_label_;
+
+        std::size_t pending_component_move_source_ = static_cast<std::size_t>(-1);
+        std::size_t pending_component_move_destination_ = static_cast<std::size_t>(-1);
+        std::vector<std::string> component_category_order_;
+        bool component_category_order_initialized_ = false;
+
+        struct ComponentCategorySummary final
+        {
+            std::string category;
+            std::size_t count = 0;
+            std::string names;
+            std::string display_label;
+        };
+        const void* component_summary_scene_ = nullptr;
+        unsigned long long component_summary_owner_ = 0;
+        std::uint32_t component_summary_generation_ = 0;
+        std::size_t component_summary_count_ = 0;
+        std::vector<std::string> component_category_by_index_;
+        std::vector<ComponentCategorySummary> component_category_summaries_;
 
         // Component header を選択して Backspace で削除するための安定参照。
         // 生ポインタは Undo/Redo や Component コンテナ再配置で無効化され得るので保持しない。

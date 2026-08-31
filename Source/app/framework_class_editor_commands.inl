@@ -54,6 +54,11 @@
                     else redo_motion_edit();
                     handled = true;
                 }
+                else if (!project_browser_focused && material_editor_loaded &&
+                    selected_editor_object == editor_selection::asset)
+                {
+                    handled = (wparam == 'Z') ? undo_material_editor() : redo_material_editor();
+                }
                 else
                 {
                     const bool external_context = project_browser_focused;

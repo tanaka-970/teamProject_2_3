@@ -44,7 +44,7 @@ bool framework::using_editor_camera() const noexcept
     // プロファイル実行は Editor UI の状態に関係なく Runtime Camera を使う。
     // 起動中の Editor セッション復元などで editor_mode が立っても、
     // ベンチマークの描画視点が編集カメラへ戻らないようにする。
-    if (!editor_mode || profile_benchmark_mode) return false;
+    if (!editor_mode || object_scene_play_mode || profile_benchmark_mode) return false;
     return active_editor_view == editor_view::scene;
 }
 
