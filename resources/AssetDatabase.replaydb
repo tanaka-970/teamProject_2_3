@@ -1,4 +1,4 @@
-REPLAY_ASSET_DB 2 269
+REPLAY_ASSET_DB 2 270
 "60412424bb1443240b2bf2160eee6923" 1 "ExampleStage" "resources/Stage/ExampleStage.cereal" "resources/.replay_cache/models/f9fffac39252a621_v0.replaycache"
 "1bd1358040255f5bd18f3be0d79fbe3c" 1 "AllAnimation1" "resources/AnimationModel/AllAnimation1.cereal" "resources/.replay_cache/models/6a20e727f78fb359_v0.replaycache"
 "e5c4168feb92f8fd7357f6cbc1f66e22" 1 "scene" "resources/Stage/city_3d_model_gltf/scene.gltf" "resources/.replay_cache/models/98fd72a862da8c8f_v0.replaycache"
@@ -268,3 +268,4 @@ REPLAY_ASSET_DB 2 269
 "db15a3cfe37665454e2653a04aae6a7c" 2 "PersonaMenu_BrushAtlas" "resources/UI/PersonaMenu/FX/PersonaMenu_BrushAtlas.png" ""
 "48eabb248bf38ed39f4d3dd4d060c1c8" 2 "PersonaMenu_DisplacementNoise" "resources/UI/PersonaMenu/FX/PersonaMenu_DisplacementNoise.png" ""
 "c5309e158f21b7fb9dba8f1074e5a7dc" 2 "PersonaMenu_OrganicAccent" "resources/UI/PersonaMenu/FX/PersonaMenu_OrganicAccent.png" ""
+"c8e395b312df7c84d7941ba4b85ffeb9" 6 "TestMat" "resources/TestModel/TestMat.replaymaterial" ""
