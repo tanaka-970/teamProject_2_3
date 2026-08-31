@@ -40,7 +40,7 @@ def collect(target):
     found = []
     for root, _dirs, files in os.walk(target):
         for f in files:
-            if f.lower().endswith((".mesh", ".xps")):
+            if f.lower().endswith((".mesh", ".xps", ".pmx")):
                 found.append(os.path.join(root, f))
     return sorted(found)
 
@@ -48,6 +48,9 @@ def collect(target):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("input")
+    # 出力フォルダは 2 番目の位置引数でも受ける。README と convert.bat の
+    # 書き方に合わせるため。-o は従来どおり使える。
+    ap.add_argument("out_positional", nargs="?", default=None)
     ap.add_argument("-o", "--out", default=None)
     ap.add_argument("--fbx", action="store_true")
     ap.add_argument("--no-armature", action="store_true")
@@ -63,7 +66,7 @@ def main():
         print(".mesh / .xps が見つかりません: %s" % args.input)
         return 1
 
-    out_dir = args.out or (args.input if os.path.isdir(args.input)
+    out_dir = args.out or args.out_positional or (args.input if os.path.isdir(args.input)
                            else os.path.dirname(args.input))
     os.makedirs(out_dir, exist_ok=True)
     ext = "fbx" if args.fbx else "glb"
@@ -73,13 +76,21 @@ def main():
 
     failed = 0
     for src in sources:
-        name = os.path.basename(os.path.dirname(src)).replace(" ", "_")
+        # PMX はファイル名に意味があるのでそちらを使う。XPS は必ず Generic_Item.mesh
+        # なので、従来どおり置いてあるフォルダ名を採る。
+        if src.lower().endswith(".pmx"):
+            name = os.path.splitext(os.path.basename(src))[0].replace(" ", "_")
+        else:
+            name = os.path.basename(os.path.dirname(src)).replace(" ", "_")
         same_dir_mesh = os.path.join(os.path.dirname(src), "Generic_Item.mesh")
         if src.lower().endswith(".xps") and os.path.exists(same_dir_mesh):
             continue   # 同じフォルダに .mesh があるならそちらを優先する
         dst = os.path.join(out_dir, "%s.%s" % (name, ext))
+        # Blender は別の作業ディレクトリで動くので、相対パスのままだと
+        # テクスチャを見つけられない。ここで絶対パスへ直す。
         cmd = [blender, "--background", "--factory-startup",
-               "--python", SCRIPT, "--", src, dst]
+               "--python", SCRIPT, "--",
+               os.path.abspath(src), os.path.abspath(dst)]
         if args.fbx:
             cmd.append("--fbx")
         if args.no_armature:

@@ -237,6 +237,7 @@ private:
     // 左にフォルダツリー、右にそのフォルダの中身。
     // 実装は Source/app/Editor/framework_project_browser.cpp。
     void draw_project_browser();
+    std::size_t register_resource_assets(std::string& error);
     void draw_project_folder_tree(const std::filesystem::path& folder, int depth);
     void draw_project_folder_contents();
     void draw_project_create_submenu(const std::filesystem::path& target_folder);

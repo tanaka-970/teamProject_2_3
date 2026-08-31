@@ -389,6 +389,9 @@ private:
     float project_tree_width{ 210.0f };
     bool project_grid_view{ true };
     std::string project_browser_status;
+    // 欠損アセットの判定はファイルシステムへ問い合わせるので毎フレームやらない。
+    std::vector<std::array<std::string, 3>> project_missing_assets;
+    std::size_t project_missing_assets_source_count = static_cast<std::size_t>(-1);
 
     ReplayEngine::Rendering::MaterialAsset material_editor_asset;
     std::string material_editor_guid;

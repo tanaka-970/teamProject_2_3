@@ -12,10 +12,18 @@ import importlib.util
 from mathutils import Vector
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-spec = importlib.util.spec_from_file_location(
-    "xps_parse", os.path.join(HERE, "xps_parse.py"))
-xps_parse = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(xps_parse)
+
+
+def load_module(module_name):
+    spec = importlib.util.spec_from_file_location(
+        module_name, os.path.join(HERE, module_name + ".py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+xps_parse = load_module("xps_parse")
+pmx_parse = load_module("pmx_parse")
 
 
 # XPS は Y-up、Blender は Z-up。
@@ -145,7 +153,9 @@ def main():
     use_fbx = "--fbx" in argv
     with_armature = "--no-armature" not in argv
 
-    bones, meshes = xps_parse.parse(src)
+    # PMX は自前で XPS と同じ形へ変換して返すので、この先は共通で通る。
+    reader = pmx_parse if src.lower().endswith(".pmx") else xps_parse
+    bones, meshes = reader.parse(src)
     folder = os.path.dirname(src)
     name = os.path.splitext(os.path.basename(out))[0]
 
@@ -165,7 +175,7 @@ def main():
 
     objs = []
     for key in order:
-        objs.append(build_mesh(os.path.splitext(key)[0], groups[key],
+        objs.append(build_mesh(os.path.splitext(os.path.basename(key))[0], groups[key],
                                folder, bones, with_armature))
 
     # 1 オブジェクトへ統合する。エンジンは 1 メッシュの材質数をサブセット数にするため、

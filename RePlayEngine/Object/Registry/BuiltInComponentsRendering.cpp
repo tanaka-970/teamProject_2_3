@@ -10,12 +10,12 @@ namespace ReplayEngine::Core::Detail
 
             PropertyRegistry::Register<MeshRendererComponent>(
                 MakeProperty("mesh_asset", &MeshRendererComponent::mesh_asset)
-                    .Display("メッシュ").AsAssetPath()
+                    .Display("メッシュ").AsAssetPath().OfAssetType("Model")
                     .Tooltip("AssetDatabase の GUID。プロジェクトパネルから指定する。"));
 
             PropertyRegistry::Register<MeshRendererComponent>(
                 MakeProperty("material_asset", &MeshRendererComponent::material_asset)
-                    .Display("マテリアル").AsAssetPath()
+                    .Display("マテリアル").AsAssetPath().OfAssetType("Material")
                     .Tooltip("Material AssetのGUID。Projectパネルから割り当てる。"));
 
             PropertyRegistry::Register<MeshRendererComponent>(
@@ -88,7 +88,7 @@ namespace ReplayEngine::Core::Detail
 
             PropertyRegistry::Register<PrimitiveMeshRendererComponent>(
                 MakeProperty("material_asset", &PrimitiveMeshRendererComponent::material_asset)
-                    .Display("マテリアル").AsAssetPath()
+                    .Display("マテリアル").AsAssetPath().OfAssetType("Material")
                     .Tooltip("Material AssetのGUID。Projectパネルから割り当てる。"));
 
             PropertyRegistry::Register<PrimitiveMeshRendererComponent>(
@@ -141,12 +141,12 @@ namespace ReplayEngine::Core::Detail
 
             PropertyRegistry::Register<SkinnedMeshRendererComponent>(
                 MakeProperty("mesh_asset", &SkinnedMeshRendererComponent::mesh_asset)
-                    .Display("メッシュ").AsAssetPath()
+                    .Display("メッシュ").AsAssetPath().OfAssetType("Model")
                     .Tooltip("AssetDatabase の GUID。空なら描画しない。"));
 
             PropertyRegistry::Register<SkinnedMeshRendererComponent>(
                 MakeProperty("material_asset", &SkinnedMeshRendererComponent::material_asset)
-                    .Display("マテリアル").AsAssetPath()
+                    .Display("マテリアル").AsAssetPath().OfAssetType("Material")
                     .Tooltip("Material AssetのGUID。Projectパネルから割り当てる。"));
 
             PropertyRegistry::Register<SkinnedMeshRendererComponent>(
