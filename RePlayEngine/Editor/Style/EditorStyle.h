@@ -1,6 +1,9 @@
-#pragma once
+﻿#pragma once
 
 #include "imgui/imgui.h"
+
+#include <string>
+#include <unordered_map>
 
 namespace ReplayEngine::Editor
 {
@@ -47,5 +50,11 @@ namespace ReplayEngine::Editor
 
         static const EditorStyleTokens& Tokens() noexcept;
         static void Apply(float dpi_scale = 1.0f);
+        static ImVec4 ComponentCategoryColor(const std::string& category) noexcept;
+        static const std::unordered_map<std::string, ImVec4>& ComponentCategoryColors() noexcept;
+        static void SetComponentCategoryColor(const std::string& category, const ImVec4& color);
+        static void ReplaceComponentCategoryColors(
+            const std::unordered_map<std::string, ImVec4>& colors);
+        static void ResetComponentCategoryColors() noexcept;
     };
 }

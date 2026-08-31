@@ -11,12 +11,14 @@
 // 関数本体は分割前のまま移動し、Workspace の既存分岐と呼び出し順は変更しない。
 #include "framework.h"
 #include "../../RePlayEngine/Editor/Style/EditorStyle.h"
+#include "../../RePlayEngine/Object/Registry/ComponentRegistry.h"
 
 #include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <filesystem>
 #include <string>
+#include <vector>
 
 void framework::apply_toon_preset(int preset)
 {
@@ -111,6 +113,26 @@ void framework::reset_editor_values()
     shader_preset_status.clear();
     lights.data.light_counts = { 0, 0, 0, 0 };
     apply_toon_preset(0);
+}
+
+bool framework::undo_editor_style()
+{
+    auto colors = ReplayEngine::Editor::EditorStyle::ComponentCategoryColors();
+    std::string label;
+    if (!editor_style_history.Undo(colors, label)) return false;
+    ReplayEngine::Editor::EditorStyle::ReplaceComponentCategoryColors(colors);
+    configure_editor_style();
+    return true;
+}
+
+bool framework::redo_editor_style()
+{
+    auto colors = ReplayEngine::Editor::EditorStyle::ComponentCategoryColors();
+    std::string label;
+    if (!editor_style_history.Redo(colors, label)) return false;
+    ReplayEngine::Editor::EditorStyle::ReplaceComponentCategoryColors(colors);
+    configure_editor_style();
+    return true;
 }
 
 void framework::configure_editor_style()
@@ -216,6 +238,11 @@ void framework::set_edit_mode(bool enabled)
 
 void framework::draw_editor_main_menu()
 {
+    if (editor_style_history.InTransaction() && !ImGui::IsAnyItemActive())
+    {
+        editor_style_history.Commit(
+            ReplayEngine::Editor::EditorStyle::ComponentCategoryColors());
+    }
     if (ImGui::BeginMenu("File"))
     {
         if (ImGui::MenuItem("New Empty Scene")) create_object_scene(u8"新しいシーン", false);
@@ -256,14 +283,20 @@ void framework::draw_editor_main_menu()
     {
         const bool atlas_context = sprite_atlas_editor_loaded && sprite_atlas_editor_keyboard_focus;
         const bool motion_workspace = active_editor_workspace == editor_workspace::motion;
+        const bool material_context = !project_browser_focused && !atlas_context &&
+            !motion_workspace && material_editor_loaded &&
+            selected_editor_object == editor_selection::asset;
         const bool external_context = !atlas_context && !motion_workspace &&
+            !material_context &&
             (project_browser_focused || selected_editor_object == editor_selection::asset ||
                 selected_editor_object == editor_selection::world ||
                 selected_editor_object == editor_selection::rendering);
-        const bool scene_context = !atlas_context && !motion_workspace && !external_context;
+        const bool scene_context = !atlas_context && !motion_workspace &&
+            !material_context && !external_context;
         const bool scene_edit_blocked = scene_context && !object_editor_context.CanEdit();
         const bool can_undo = atlas_context ? sprite_atlas_history_cursor > 0
             : motion_workspace ? motion_edit_history.CanUndo()
+            : material_context ? material_editor_history.CanUndo()
             : external_context ? external_file_history.CanUndo()
             : object_editor_context.History().CanUndo();
         if (scene_edit_blocked) ImGui::PushStyleVar(ImGuiStyleVar_Alpha,
@@ -272,6 +305,7 @@ void framework::draw_editor_main_menu()
         {
             if (atlas_context) undo_sprite_atlas_edit();
             else if (motion_workspace) undo_motion_edit();
+            else if (material_context) undo_material_editor();
             else if (external_context) undo_external_file_edit();
             else object_editor_context.Undo();
         }
@@ -283,6 +317,7 @@ void framework::draw_editor_main_menu()
         }
         const bool can_redo = atlas_context ? sprite_atlas_history_cursor < sprite_atlas_history.size()
             : motion_workspace ? motion_edit_history.CanRedo()
+            : material_context ? material_editor_history.CanRedo()
             : external_context ? external_file_history.CanRedo()
             : object_editor_context.History().CanRedo();
         if (scene_edit_blocked) ImGui::PushStyleVar(ImGuiStyleVar_Alpha,
@@ -291,6 +326,7 @@ void framework::draw_editor_main_menu()
         {
             if (atlas_context) redo_sprite_atlas_edit();
             else if (motion_workspace) redo_motion_edit();
+            else if (material_context) redo_material_editor();
             else if (external_context) redo_external_file_edit();
             else object_editor_context.Redo();
         }
@@ -430,6 +466,63 @@ void framework::draw_editor_main_menu()
             style_changed |= ImGui::ColorEdit3(u8"##UITextColor", ui_text_color);
 
             ImGui::Separator();
+            ImGui::TextDisabled(u8"Component カテゴリ色");
+            ImGui::TextDisabled(u8"見出しと仕切りのアクセント色を設定できます");
+            if (ImGui::TreeNodeEx(u8"カテゴリごとの色", 0))
+            {
+                static const std::vector<std::string> categories =
+                    ReplayEngine::Core::ComponentRegistry::Categories();
+                for (const std::string& category : categories)
+                {
+                    ImGui::PushID(category.c_str());
+                    ImVec4 color = ReplayEngine::Editor::EditorStyle::ComponentCategoryColor(category);
+                    ImGui::SetNextItemWidth(200.0f);
+                    const bool color_changed = ImGui::ColorEdit3(category.c_str(), &color.x,
+                        ImGuiColorEditFlags_NoAlpha);
+                    if (color_changed && !editor_style_history.InTransaction())
+                    {
+                        editor_style_history.Begin(
+                            ReplayEngine::Editor::EditorStyle::ComponentCategoryColors(),
+                            "Component カテゴリ色を変更");
+                    }
+                    if (color_changed)
+                    {
+                        ReplayEngine::Editor::EditorStyle::SetComponentCategoryColor(
+                            category, color);
+                        style_changed = true;
+                    }
+                    if (ImGui::IsItemDeactivatedAfterEdit() &&
+                        editor_style_history.InTransaction())
+                    {
+                        editor_style_history.Commit(
+                            ReplayEngine::Editor::EditorStyle::ComponentCategoryColors());
+                    }
+                    ImGui::PopID();
+                }
+                if (ImGui::SmallButton(u8"カテゴリ色を既定へ戻す"))
+                {
+                    editor_style_history.Begin(
+                        ReplayEngine::Editor::EditorStyle::ComponentCategoryColors(),
+                        "Component カテゴリ色を既定へ戻す");
+                    ReplayEngine::Editor::EditorStyle::ResetComponentCategoryColors();
+                    editor_style_history.Commit(
+                        ReplayEngine::Editor::EditorStyle::ComponentCategoryColors());
+                    style_changed = true;
+                }
+                ImGui::TreePop();
+            }
+
+            ImGui::Separator();
+            if (ImGui::MenuItem(u8"カテゴリ色を元に戻す", nullptr, false,
+                editor_style_history.CanUndo()))
+            {
+                undo_editor_style();
+            }
+            if (ImGui::MenuItem(u8"カテゴリ色をやり直す", nullptr, false,
+                editor_style_history.CanRedo()))
+            {
+                redo_editor_style();
+            }
             if (ImGui::MenuItem(u8"大きめにする"))
             {
                 ui_button_scale = 1.8f;

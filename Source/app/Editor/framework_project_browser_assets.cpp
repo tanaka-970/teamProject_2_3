@@ -118,9 +118,10 @@ ReplayEngine::Assets::AssetKind framework::project_kind_for(
         return AssetKind::InputAction;
     if (extension == ReplayEngine::Assets::SpriteAtlasAsset::file_extension)
         return AssetKind::SpriteAtlas;
+    // .obj は外す。MSVC のオブジェクトファイルと拡張子が同じで、
+    // しかも resolve_model_source() は FBX/cereal/GLB/glTF しか読めない。
     if (extension == ".fbx" || extension == ".glb" ||
-        extension == ".gltf" ||
-        extension == ".obj") return AssetKind::Model;
+        extension == ".gltf") return AssetKind::Model;
     if (IsImageExtension(extension)) return AssetKind::Image;
     if (extension == ".wav" || extension == ".mp3" || extension == ".ogg")
         return AssetKind::Audio;

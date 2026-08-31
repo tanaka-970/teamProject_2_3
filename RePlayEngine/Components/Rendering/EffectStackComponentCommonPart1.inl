@@ -6,6 +6,7 @@
 #include "../../Reflection/Property/PropertyValue.h"
 #include "../../Rendering/Materials/MaterialSchema.h"
 #include "../../UI/Effects/UIEffect.h"
+#include "../../UI/Effects/EffectKindLabels.h"
 #include "../../Rendering/Effects/EffectPresetAsset.h"
 #include "../../Rendering/Effects/EffectChain.h"
 

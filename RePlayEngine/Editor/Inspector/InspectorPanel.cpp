@@ -6,6 +6,7 @@
 // PropertyRegistry を通る描画経路は PropertyDrawer に委譲し、ここでは
 // 選択状態と Component の入口だけを担当する。
 
+#include "../ReorderableList.h"
 #include "InspectorPanel.h"
 
 #include "PropertyDrawer.h"
@@ -139,20 +140,192 @@ namespace ReplayEngine::Editor
         DrawPlayerComposition(context, *object, show_game_template_components);
         ImGui::Separator();
 
-        // 添字で回す。描画中に Component が追加されても、この回の走査は
-        // 開始時点の個数で終わるため範囲外へ出ない。
         const std::size_t count = object->ComponentCount();
-        for (std::size_t index = 0; index < count && index < object->ComponentCount(); ++index)
+        pending_component_move_source_ = static_cast<std::size_t>(-1);
+        pending_component_move_destination_ = static_cast<std::size_t>(-1);
+        if (!component_category_order_initialized_)
         {
-            Core::Component* component = object->ComponentAt(index);
-            if (component == nullptr) continue;
+            component_category_order_ = Core::ComponentRegistry::Categories();
+            component_category_order_.push_back("未分類");
+            component_category_order_initialized_ = true;
+        }
 
-            // 削除予約済みのものは、その瞬間から表示しない。
-            if (component->PendingDestroy()) continue;
+        const auto component_group = [](const std::string& category)
+        {
+            if (category == "Rendering" || category == "Lighting" ||
+                category == "Camera" || category == "Landscape" ||
+                category == "UI")
+                return 1;
+            if (category == "Scripting" || category == "Gameplay" ||
+                category == "Motion" || category == "Physics" ||
+                category == "Navigation" || category == "Audio")
+                return 2;
+            return 3;
+        };
+        const auto component_category = [](const Core::Component* component) -> std::string
+        {
+            if (component == nullptr) return std::string("未分類");
+            const Core::ComponentTypeInfo* info =
+                Core::ComponentRegistry::Find(component->TypeID());
+            if (info == nullptr) return "未分類";
+            return info->category.empty() ? std::string("Gameplay") : info->category;
+        };
 
-            ImGui::PushID(static_cast<int>(index));
-            DrawComponent(context, *component);
-            ImGui::PopID();
+        const void* summary_scene = context.GetScene();
+        const std::uint32_t summary_generation = context.GetScene() != nullptr
+            ? context.GetScene()->StructureGeneration() : 0;
+        if (component_summary_scene_ != summary_scene ||
+            component_summary_owner_ != object->ID().Value() ||
+            component_summary_generation_ != summary_generation ||
+            component_summary_count_ != count)
+        {
+            component_category_by_index_.assign(count, "未分類");
+            component_category_summaries_.clear();
+            component_category_summaries_.reserve(component_category_order_.size());
+            for (const std::string& category : component_category_order_)
+                component_category_summaries_.push_back({ category });
+
+            for (std::size_t index = 0; index < count; ++index)
+            {
+                Core::Component* component = object->ComponentAt(index);
+                const std::string category = component_category(component);
+                component_category_by_index_[index] = category;
+                if (component == nullptr || component->PendingDestroy()) continue;
+                const auto found = std::find_if(component_category_summaries_.begin(),
+                    component_category_summaries_.end(),
+                    [&category](const ComponentCategorySummary& summary)
+                    { return summary.category == category; });
+                ComponentCategorySummary* summary = nullptr;
+                if (found == component_category_summaries_.end())
+                {
+                    component_category_summaries_.push_back({ category });
+                    summary = &component_category_summaries_.back();
+                }
+                else
+                {
+                    summary = &*found;
+                }
+                ++summary->count;
+                const Core::ComponentTypeInfo* info =
+                    Core::ComponentRegistry::Find(component->TypeID());
+                const std::string name = info != nullptr
+                    ? info->DisplayName() : component->TypeName();
+                if (summary->names.size() < 96)
+                {
+                    if (!summary->names.empty()) summary->names += " / ";
+                    summary->names += name;
+                }
+            }
+            for (ComponentCategorySummary& summary : component_category_summaries_)
+            {
+                if (summary.count == 0) continue;
+                if (summary.names.size() >= 96) summary.names += " / ...";
+                const int group = component_group(summary.category);
+                summary.display_label = summary.category + "  (" +
+                    std::to_string(summary.count) + ")  " + summary.names +
+                    "##InspectorComponentCategory_" + std::to_string(group) +
+                    "_" + summary.category;
+            }
+            component_summary_scene_ = summary_scene;
+            component_summary_owner_ = object->ID().Value();
+            component_summary_generation_ = summary_generation;
+            component_summary_count_ = count;
+        }
+
+        // 掴んでいる対象を一覧の外にも出す。行が動くと見失うため。
+        if (const char* dragging = ActiveReorderLabel(object))
+        {
+            ImGui::PushStyleColor(ImGuiCol_Text,
+                ImGui::GetStyle().Colors[ImGuiCol_DragDropTarget]);
+            ImGui::Text("移動中: %s   落としたい行の上下へ", dragging);
+            ImGui::PopStyleColor();
+        }
+
+        const auto draw_component_group = [&](int group)
+        {
+            // 「すべて」は追加順の一列にする。分類で束ねると並べ替えても動いて見えない。
+            if (group == 0)
+            {
+                for (std::size_t index = 0; index < count &&
+                    index < object->ComponentCount(); ++index)
+                {
+                    Core::Component* component = object->ComponentAt(index);
+                    if (component == nullptr || component->PendingDestroy()) continue;
+                    DrawComponent(context, *component, index, count, object);
+                    if (pending_component_move_source_ != static_cast<std::size_t>(-1))
+                        break;
+                }
+                return;
+            }
+            bool drew_category = false;
+            for (const ComponentCategorySummary& summary : component_category_summaries_)
+            {
+                if (summary.count == 0 || (group != 0 &&
+                    component_group(summary.category) != group)) continue;
+                drew_category = true;
+                if (!ImGui::CollapsingHeader(summary.display_label.c_str())) continue;
+                ImGui::Indent();
+                for (std::size_t index = 0; index < count &&
+                    index < object->ComponentCount(); ++index)
+                {
+                    Core::Component* component = object->ComponentAt(index);
+                    if (component == nullptr || component->PendingDestroy() ||
+                        index >= component_category_by_index_.size() ||
+                        component_category_by_index_[index] != summary.category)
+                        continue;
+                    DrawComponent(context, *component, index, count, object);
+                    if (pending_component_move_source_ != static_cast<std::size_t>(-1))
+                        break;
+                }
+                ImGui::Unindent();
+                if (pending_component_move_source_ != static_cast<std::size_t>(-1))
+                    break;
+            }
+            if (!drew_category)
+                ImGui::TextDisabled("この分類にはコンポーネントがありません");
+        };
+
+        ImGui::TextDisabled("分類を開くと設定を表示します。順序は ☷ / ボタン / ドラッグで変更できます");
+        if (ImGui::BeginTabBar("InspectorComponentGroups"))
+        {
+            if (ImGui::BeginTabItem("すべて"))
+            {
+                draw_component_group(0);
+                ImGui::EndTabItem();
+            }
+            if (ImGui::BeginTabItem("レンダー"))
+            {
+                draw_component_group(1);
+                ImGui::EndTabItem();
+            }
+            if (ImGui::BeginTabItem("スクリプト / 動作"))
+            {
+                draw_component_group(2);
+                ImGui::EndTabItem();
+            }
+            if (ImGui::BeginTabItem("その他"))
+            {
+                draw_component_group(3);
+                ImGui::EndTabItem();
+            }
+            ImGui::EndTabBar();
+        }
+
+        if (pending_component_move_source_ != static_cast<std::size_t>(-1) &&
+            pending_removal_ == nullptr)
+        {
+            context.BeginEdit("コンポーネントを並べ替え");
+            if (object->MoveComponent(pending_component_move_source_,
+                pending_component_move_destination_))
+            {
+                context.CommitEdit();
+                context.SetStatus("コンポーネントの順序を変更しました");
+            }
+            else
+            {
+                context.CancelEdit();
+                context.SetStatus("コンポーネントの順序を変更できませんでした");
+            }
         }
 
         // Inspector がキーボード所有者のときだけ Backspace を Component 削除へ使う。
