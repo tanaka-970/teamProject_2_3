@@ -91,6 +91,8 @@ namespace ReplayEngine::Rendering::DX12
         {
             DirectX::XMFLOAT4 base_color{ 1, 1, 1, 1 };
             DirectX::XMFLOAT4 emissive_strength{};
+            DirectX::XMFLOAT4 normal_adjust_center{};
+            DirectX::XMFLOAT4 normal_adjust_params{};
             DirectX::XMFLOAT4 surface_params{ 0, 0.55f, 1, 0.5f };
             DirectX::XMFLOAT4 render_params{};
             // BuiltIn シェーダ用の汎用枠。x=効果ID、y/z/w はその効果の引数。
@@ -227,6 +229,7 @@ namespace ReplayEngine::Rendering::DX12
         static_assert(sizeof(Scene3DSceneConstants) % 16 == 0);
         static_assert(sizeof(Scene3DLayerConstants) % 16 == 0);
         static_assert(sizeof(Scene3DMaterialConstants) % 16 == 0);
+        static_assert(sizeof(Scene3DMaterialConstants) == sizeof(DirectX::XMFLOAT4) * 10);
         static_assert(sizeof(Scene3DLightingConstants) % 16 == 0);
         static_assert(sizeof(Scene3DShadowObjectConstants) % 16 == 0);
         static_assert(sizeof(Scene3DShadowPassConstants) % 16 == 0);
@@ -2436,6 +2439,8 @@ namespace ReplayEngine::Rendering::DX12
             material.builtin_params2 = draw.builtin_params2;
             material.builtin_params3 = draw.builtin_params3;
             material.builtin_params3.w = match_deferred_material ? 1.0f : 0.0f;
+            material.normal_adjust_center = draw.normal_adjust_center;
+            material.normal_adjust_params = draw.normal_adjust_params;
             material.emissive_strength = {
                 draw.emissive.x, draw.emissive.y, draw.emissive.z, draw.emissive_strength };
             material.surface_params = {

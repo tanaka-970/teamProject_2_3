@@ -39,6 +39,7 @@ namespace ReplayEngine::Core
         RegisterPostProcessVolume();
         RegisterSkybox();
         RegisterEffectStacks();
+        RegisterNormalAdjust();
         RegisterParticleEmitter();
         RegisterLineRenderers();
         RegisterLights();

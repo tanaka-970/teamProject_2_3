@@ -11,6 +11,7 @@
 #include "../../RePlayEngine/Components/Navigation/NavAgentComponent.h"
 #include "../../RePlayEngine/Components/Physics/ColliderComponent.h"
 #include "../../RePlayEngine/Components/Rendering/LightComponents.h"
+#include "../../RePlayEngine/Components/Rendering/NormalAdjustComponent.h"
 #include "../../RePlayEngine/Editor/Debug/AINavigationDebugDraw.h"
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
 #include "../../RePlayEngine/Physics/CollisionLayers.h"
@@ -120,6 +121,7 @@ void framework::draw_collider_debug_overlay()
     }
 
     const ReplayEngine::Core::GameObject* light_range_object = nullptr;
+    const ReplayEngine::Core::GameObject* normal_adjust_object = nullptr;
     if (show_light_range_debug_draw && active_editor_view == editor_view::scene)
     {
         const ReplayEngine::Core::ObjectID selected =
@@ -137,9 +139,19 @@ void framework::draw_collider_debug_overlay()
         }
     }
 
+    if (show_normal_adjust_debug_draw && active_editor_view == editor_view::scene)
+    {
+        const ReplayEngine::Core::GameObject* selected_object =
+            active_object_scene().FindGameObjectByID(object_editor_context.Selection().Primary());
+        if (selected_object != nullptr && !selected_object->PendingDestroy() &&
+            selected_object->ActiveInHierarchy() && selected_object->GetComponent<
+                ReplayEngine::Components::NormalAdjustComponent>() != nullptr)
+            normal_adjust_object = selected_object;
+    }
+
     if (object_collider_debug_lines.empty() && ai_frame.lines.empty() &&
         ai_frame.fills.empty() && ai_frame.labels.empty() && !has_stage_markers &&
-        light_range_object == nullptr) return;
+        light_range_object == nullptr && normal_adjust_object == nullptr) return;
 
     const DirectX::XMMATRIX view_projection =
         viewport_view_matrix() * viewport_projection_matrix();
@@ -238,6 +250,46 @@ void framework::draw_collider_debug_overlay()
                 draw_projected_line(previous, current, IM_COL32(255, 150, 80, 220));
                 draw_projected_line(center, current, IM_COL32(255, 150, 80, 180));
                 previous = current;
+            }
+        }
+    }
+
+    if (normal_adjust_object != nullptr)
+    {
+        constexpr int sphere_segments = 32;
+        const auto draw_projected_line = [&](const DirectX::XMFLOAT3& start,
+                                             const DirectX::XMFLOAT3& end)
+        {
+            ImVec2 screen_start{};
+            ImVec2 screen_end{};
+            if (ProjectToScreen(view_projection, start, main_origin, main_size, screen_start) &&
+                ProjectToScreen(view_projection, end, main_origin, main_size, screen_end))
+                draw_list->AddLine(screen_start, screen_end, IM_COL32(80, 225, 240, 220), 1.5f);
+        };
+        for (const ReplayEngine::Components::NormalAdjustComponent* adjust :
+            normal_adjust_object->GetComponents<
+                ReplayEngine::Components::NormalAdjustComponent>())
+        {
+            if (!adjust->ActiveInHierarchy() || !adjust->resolved_center_valid ||
+                adjust->resolved_radius_world <= 0.0f) continue;
+            const DirectX::XMFLOAT3 center = adjust->resolved_center_world;
+            const float radius = adjust->resolved_radius_world;
+            for (int axis = 0; axis < 3; ++axis)
+            {
+                DirectX::XMFLOAT3 previous{};
+                for (int segment = 0; segment <= sphere_segments; ++segment)
+                {
+                    const float angle = DirectX::XM_2PI * static_cast<float>(segment) /
+                        static_cast<float>(sphere_segments);
+                    DirectX::XMFLOAT3 current = center;
+                    const float first = std::cos(angle) * radius;
+                    const float second = std::sin(angle) * radius;
+                    if (axis == 0) { current.y += first; current.z += second; }
+                    if (axis == 1) { current.x += first; current.z += second; }
+                    if (axis == 2) { current.x += first; current.y += second; }
+                    if (segment != 0) draw_projected_line(previous, current);
+                    previous = current;
+                }
             }
         }
     }
@@ -580,6 +632,7 @@ void framework::draw_collision_diagnostics_panel()
     ImGui::Checkbox(u8"境界ボックスを描く", &show_collider_debug_bounds);
     ImGui::Checkbox(u8"Mesh の三角形を描く", &show_collider_debug_wireframe);
     ImGui::Checkbox(u8"ライトの範囲を描く", &show_light_range_debug_draw);
+    ImGui::Checkbox("Normal Adjust の範囲を描く", &show_normal_adjust_debug_draw);
     ImGui::TextDisabled(u8"選択中の Point / Spot Light の範囲だけを表示します。");
     ImGui::TextDisabled(u8"Mesh は既定で境界ボックスのみです。"
         u8"三角形は Collider 側の「三角形を表示」も有効にしたものだけ描かれます。");

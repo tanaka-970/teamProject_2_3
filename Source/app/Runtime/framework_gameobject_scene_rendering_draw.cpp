@@ -2,6 +2,7 @@
 // 描画パス、Material binding、Depth/GBuffer 分岐は関数本体のまま移動している。
 #include "framework.h"
 #include "../../../RePlayEngine/Components/Rendering/ModelEffectStackComponent.h"
+#include "../../../RePlayEngine/Components/Rendering/NormalAdjustComponent.h"
 
 #include "gltf_model.h"
 #include "skinned_mesh.h"
@@ -394,6 +395,83 @@ bool framework::build_dx12_static_scene(
             DirectX::XMLoadFloat4x4(&local) * DirectX::XMLoadFloat4x4(&world));
         return result;
     };
+    const auto maximum_world_scale = [](const DirectX::XMFLOAT4X4& world) noexcept
+    {
+        const DirectX::XMVECTOR axes[] = {
+            DirectX::XMVectorSet(world._11, world._12, world._13, 0.0f),
+            DirectX::XMVectorSet(world._21, world._22, world._23, 0.0f),
+            DirectX::XMVectorSet(world._31, world._32, world._33, 0.0f) };
+        float scale = 0.0f;
+        for (const DirectX::XMVECTOR axis : axes)
+            scale = (std::max)(scale, DirectX::XMVectorGetX(DirectX::XMVector3Length(axis)));
+        return std::isfinite(scale) ? scale : 0.0f;
+    };
+    const auto resolve_normal_adjust = [&scene, &maximum_world_scale](
+        const RenderItem& source_item, D3D12StaticDrawItem& draw,
+        const skinned_mesh::mesh* mesh,
+        const skinned_mesh::animation::keyframe* keyframe)
+    {
+        using ReplayEngine::Components::NormalAdjustComponent;
+        ReplayEngine::Core::GameObject* object = scene.FindGameObjectByID(source_item.owner);
+        if (object == nullptr) return;
+        const DirectX::XMFLOAT4X4 object_world = object->GetTransform().WorldMatrixFloat4x4();
+        for (NormalAdjustComponent* adjust : object->GetComponents<NormalAdjustComponent>())
+        {
+            if (!adjust->ActiveInHierarchy()) continue;
+            if (adjust->target_slot_mode == NormalAdjustComponent::MaterialSlot &&
+                (adjust->target_slot_index < 0 ||
+                    draw.material_slot != static_cast<std::uint32_t>(adjust->target_slot_index)))
+                continue;
+            DirectX::XMFLOAT4X4 center_world = object_world;
+            bool center_valid = true;
+            if (!adjust->bone.empty())
+            {
+                center_valid = false;
+                if (mesh != nullptr && keyframe != nullptr)
+                {
+                    for (const skeleton::bone& bone : mesh->bind_pose.bones)
+                    {
+                        if (bone.name != adjust->bone || bone.node_index < 0 ||
+                            static_cast<std::size_t>(bone.node_index) >= keyframe->nodes.size())
+                            continue;
+                        DirectX::XMStoreFloat4x4(&center_world,
+                            DirectX::XMLoadFloat4x4(&keyframe->nodes[
+                                static_cast<std::size_t>(bone.node_index)].global_transform) *
+                            DirectX::XMLoadFloat4x4(&object_world));
+                        center_valid = true;
+                        break;
+                    }
+                }
+            }
+            if (!center_valid) continue;
+            adjust->resolved_center_matrix = center_world;
+            DirectX::XMStoreFloat3(&adjust->resolved_center_world,
+                DirectX::XMVector3TransformCoord(DirectX::XMLoadFloat3(&adjust->center),
+                    DirectX::XMLoadFloat4x4(&center_world)));
+            adjust->resolved_radius_world = (std::max)(0.0f, adjust->radius) *
+                maximum_world_scale(center_world);
+            adjust->resolved_center_valid = true;
+            const float blend = std::clamp(adjust->blend, 0.0f, 1.0f);
+            if (blend <= 0.0f || adjust->resolved_radius_world <= 0.0f) continue;
+            draw.normal_adjust_center = { adjust->resolved_center_world.x,
+                adjust->resolved_center_world.y, adjust->resolved_center_world.z, blend };
+            draw.normal_adjust_params = { adjust->resolved_radius_world,
+                std::clamp(adjust->falloff, 0.0f, 1.0f), 0.0f, 0.0f };
+            break;
+        }
+    };
+    for (std::size_t object_index = 0; object_index < scene.GameObjectCount(); ++object_index)
+    {
+        ReplayEngine::Core::GameObject* object = scene.GameObjectAt(object_index);
+        if (object == nullptr) continue;
+        for (ReplayEngine::Components::NormalAdjustComponent* adjust :
+            object->GetComponents<ReplayEngine::Components::NormalAdjustComponent>())
+        {
+            adjust->resolved_center_valid = false;
+            adjust->resolved_radius_world = 0.0f;
+            adjust->resolved_center_matrix = {};
+        }
+    }
     const auto alpha_mode = [](int mode) noexcept
     {
         if (mode == 1) return D3D12StaticAlphaMode::Mask;
@@ -1468,6 +1546,7 @@ bool framework::build_dx12_static_scene(
                     }
                     skinned_draw.motion_key = std::to_string(source_item.owner.Value()) + ":" +
                         mesh_key + ":" + std::to_string(start);
+                    resolve_normal_adjust(source_item, draw, &mesh, keyframe);
                     skinned_draw.bone_palette = palette;
                     skinned_draw.morph_weight = morph_weight;
                     submission.skinned_draws.push_back(std::move(skinned_draw));
@@ -1531,6 +1610,7 @@ bool framework::build_dx12_static_scene(
                 draw.motion_key = std::to_string(source_item.owner.Value()) + ":" + draw.mesh_key;
                 draw.world = item.world;
                 (void)fill_external_material(source_item, *material_item, draw, slot_material);
+                resolve_normal_adjust(source_item, draw, nullptr, nullptr);
                 submission.draws.push_back(std::move(draw));
                 continue;
             }
@@ -1550,6 +1630,7 @@ bool framework::build_dx12_static_scene(
             draw.motion_key = std::to_string(source_item.owner.Value()) + ":" + draw.mesh_key;
             draw.world = item.world;
             (void)fill_external_material(source_item, *material_item, draw, slot_material);
+            resolve_normal_adjust(source_item, draw, nullptr, nullptr);
             submission.draws.push_back(std::move(draw));
             continue;
         }
@@ -1629,6 +1710,7 @@ bool framework::build_dx12_static_scene(
                     draw.alpha_cutoff = info.alpha_cutoff;
                     draw.double_sided = item.double_sided;
                 }
+                resolve_normal_adjust(source_item, draw, nullptr, nullptr);
                 submission.draws.push_back(std::move(draw));
             }
             continue;
@@ -1752,6 +1834,7 @@ bool framework::build_dx12_static_scene(
                         draw.double_sided = item.double_sided;
                     }
                 }
+                resolve_normal_adjust(source_item, draw, nullptr, nullptr);
                 submission.draws.push_back(std::move(draw));
             };
 

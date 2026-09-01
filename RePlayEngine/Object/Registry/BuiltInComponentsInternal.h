@@ -61,6 +61,7 @@
 #include "../../Components/Rendering/MeshRendererComponent.h"
 #include "../../Components/Rendering/ScreenEffectStackComponent.h"
 #include "../../Components/Rendering/ModelEffectStackComponent.h"
+#include "../../Components/Rendering/NormalAdjustComponent.h"
 #include "../../Components/Rendering/ParticleEmitterComponent.h"
 #include "../../Components/Rendering/PostProcessVolumeComponent.h"
 #include "../../Components/Rendering/PrimitiveMeshRendererComponent.h"
@@ -95,6 +96,7 @@ namespace ReplayEngine::Core::Detail
         using Components::CompositionPlayerComponent;
         using Components::MeshRendererComponent;
         using Components::ModelEffectStackComponent;
+        using Components::NormalAdjustComponent;
         using Components::ScreenEffectStackComponent;
         using Components::ParticleEmitterComponent;
         using Components::PostProcessVolumeComponent;
@@ -174,6 +176,7 @@ namespace ReplayEngine::Core::Detail
     void RegisterCamera();
     void RegisterPostProcessVolume();
     void RegisterEffectStacks();
+    void RegisterNormalAdjust();
     void RegisterParticleEmitter();
     void RegisterLineRenderers();
     void RegisterFollowTarget();

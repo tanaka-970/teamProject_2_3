@@ -176,6 +176,8 @@ namespace ReplayEngine::Rendering::DX12
         DirectX::XMFLOAT4 builtin_params2{ 0.0f, 0.0f, 0.0f, 1.0f };
         // Toon の追加枠。rgb=SpecularTint、w=予約。
         DirectX::XMFLOAT4 builtin_params3{ 0.0f, 0.0f, 0.0f, 0.0f };
+        DirectX::XMFLOAT4 normal_adjust_center{ 0.0f, 0.0f, 0.0f, 0.0f };
+        DirectX::XMFLOAT4 normal_adjust_params{ 0.0f, 0.0f, 0.0f, 0.0f };
         std::uint32_t start_index = 0;
         std::uint32_t index_count = 0; // 0 は Cache 済み Index Buffer 全体を描画する。
         DirectX::XMFLOAT4X4 world{

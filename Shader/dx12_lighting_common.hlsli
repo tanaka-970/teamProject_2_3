@@ -98,6 +98,23 @@ float Dx12InterleavedGradientNoise(float2 pixelPosition)
     return frac(magic.z * frac(dot(pixelPosition, magic.xy)));
 }
 
+float3 Dx12ApplyNormalAdjust(float3 normal, float3 worldPosition,
+    float4 normalAdjustCenter, float4 normalAdjustParams)
+{
+    if (normalAdjustCenter.w <= 0.0f) return normal;
+    const float radius = normalAdjustParams.x;
+    if (radius <= 0.0f) return normal;
+    const float3 offset = worldPosition - normalAdjustCenter.xyz;
+    const float distanceToCenter = length(offset);
+    if (distanceToCenter >= radius) return normal;
+    const float falloff = saturate(normalAdjustParams.y);
+    const float innerRadius = radius * (1.0f - falloff);
+    const float blend = normalAdjustCenter.w *
+        (1.0f - smoothstep(innerRadius, radius, distanceToCenter));
+    if (blend <= 0.0f || distanceToCenter <= 1.0e-6f) return normal;
+    return normalize(lerp(normal, offset / distanceToCenter, saturate(blend)));
+}
+
 float3 Dx12FresnelSchlick(float cosTheta, float3 f0)
 {
     return f0 + (1.0f - f0) * pow(saturate(1.0f - cosTheta), 5.0f);
