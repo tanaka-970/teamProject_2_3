@@ -150,7 +150,8 @@ public:
     ReplayEngine::Rendering::TiledDeferredPass tiled_deferred;
 
     // SSAO/SSR/TAAが共有するフレーム定数。b9へ載せる。
-    ReplayEngine::Rendering::FrameConstants frame_constants{};
+    ReplayEngine::Rendering::DX12::D3D12FrameConstants frame_constants{};
+    std::unordered_set<ReplayEngine::Core::ObjectID> world_canvas_camera_diagnostics_reported;
     // TAAの再投影に使う前フレームのビュー射影行列。初回は今フレームで埋める。
     DirectX::XMFLOAT4X4 previous_view_projection{};
     bool previous_view_projection_valid{ false };
