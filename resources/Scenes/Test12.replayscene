@@ -1,0 +1,335 @@
+REPLAY_SCENE 11
+SCENE "新しいシーン"
+SCENE_STATE 0
+COLLISION_STATE 2 0
+OBJECT_COUNT 4
+OBJECT
+  ID 634
+  NAME "Canvas"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "CanvasComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 6
+    PROPERTY "reference_resolution" vec2 1920 1080
+    PROPERTY "render_mode" enum 0
+    PROPERTY "scale_mode" enum 1
+    PROPERTY "match_width_or_height" float 0.5
+    PROPERTY "sort_order" int 0
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 6
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0 0
+    PROPERTY "anchor_max" vec2 1 1
+    PROPERTY "anchored_position" vec2 0 -178.3658447265625
+    PROPERTY "size_delta" vec2 0 356.731689453125
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 19
+    PROPERTY "sprite" assetref ""
+    PROPERTY "atlas" assetref ""
+    PROPERTY "atlas_region" string ""
+    PROPERTY "color" color 0.91497975587844849 0.06667868047952652 0.06667868047952652 1
+    PROPERTY "fill_color_2" color 1 1 1 1
+    PROPERTY "fill_mode" enum 0
+    PROPERTY "fill_angle" float 0
+    PROPERTY "fill_center" vec2 0.5 0.5
+    PROPERTY "stroke_mode" enum 0
+    PROPERTY "stroke_color_2" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "fill_amount" float 1
+    PROPERTY "fill_method" enum 0
+    PROPERTY "fill_reverse" bool 0
+    PROPERTY "blend_mode" enum 0
+    PROPERTY "uv_offset" vec2 0 0
+    PROPERTY "uv_scale" vec2 1 1
+    PROPERTY "nine_slice" vec4 0 0 0 0
+    PROPERTY "preserve_aspect" bool 0
+  END_COMPONENT
+  COMPONENT "SceneLoaderComponent" 1
+    STABLE_ID 7
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 0
+  END_COMPONENT
+  COMPONENT "PropertyLinkComponent" 1
+    STABLE_ID 8
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "source_object" compref 634 7
+    PROPERTY "source_property" string "progress"
+    PROPERTY "target_object" compref 637 4
+    PROPERTY "target_property" string "value"
+    PROPERTY "source_min" float 0
+    PROPERTY "source_max" float 1
+    PROPERTY "target_min" float 0
+    PROPERTY "target_max" float 1
+    PROPERTY "invert" bool 0
+    PROPERTY "clamp" bool 1
+    PROPERTY "easing" enum 0
+    PROPERTY "smoothing" float 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 635
+  NAME "Image"
+  ENABLED 1
+  PARENT 634
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 291.45138549804688 120.16175842285156
+    PROPERTY "size_delta" vec2 2039.7015380859375 687.820068359375
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 19
+    PROPERTY "sprite" assetref "4895d90a3b03c22cfcbbc684c56f9431"
+    PROPERTY "atlas" assetref ""
+    PROPERTY "atlas_region" string ""
+    PROPERTY "color" color 0.69230771064758301 0.68670195341110229 0.68670195341110229 1
+    PROPERTY "fill_color_2" color 1 1 1 1
+    PROPERTY "fill_mode" enum 0
+    PROPERTY "fill_angle" float 157
+    PROPERTY "fill_center" vec2 0.5 0.5
+    PROPERTY "stroke_mode" enum 0
+    PROPERTY "stroke_color_2" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "fill_amount" float 1
+    PROPERTY "fill_method" enum 0
+    PROPERTY "fill_reverse" bool 1
+    PROPERTY "blend_mode" enum 0
+    PROPERTY "uv_offset" vec2 0 0
+    PROPERTY "uv_scale" vec2 1 1
+    PROPERTY "nine_slice" vec4 0 0 0 0
+    PROPERTY "preserve_aspect" bool 0
+  END_COMPONENT
+  COMPONENT "UIEffectStackComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE "RePlayEngine.Optional.Effects"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 104
+    PROPERTY "enabled" bool 1
+    PROPERTY "target_scope" enum 0
+    PROPERTY "capture_backdrop" bool 0
+    PROPERTY "use_preset" bool 0
+    PROPERTY "effect_preset" assetref ""
+    PROPERTY "effect_count" int 2
+    PROPERTY "effect_region_enabled" bool 0
+    PROPERTY "effect_region_shape" enum 0
+    PROPERTY "effect_region_scope" enum 0
+    PROPERTY "effect_region_invert" bool 0
+    PROPERTY "effect_region_center" vec2 0.5 0.5
+    PROPERTY "effect_region_size" vec2 0.5 0.5
+    PROPERTY "effect_region_rotation" float 0
+    PROPERTY "effect_region_feather" float 0
+    PROPERTY "effect_region_strength" float 1
+    PROPERTY "effect_region_mask" assetref ""
+    PROPERTY "effect_region_additional_count" int 0
+    PROPERTY "effects[0].enabled" bool 1
+    PROPERTY "effects[0].region_enabled" bool 1
+    PROPERTY "effects[0].type" enum 10
+    PROPERTY "effects[0].radius" float 0
+    PROPERTY "effects[0].intensity" float 1
+    PROPERTY "effects[0].softness" float 0.60000002384185791
+    PROPERTY "effects[0].custom_shader" assetref ""
+    PROPERTY "effects[1].enabled" bool 1
+    PROPERTY "effects[1].region_enabled" bool 1
+    PROPERTY "effects[1].type" enum 42
+    PROPERTY "effects[1].mask" assetref "4895d90a3b03c22cfcbbc684c56f9431"
+    PROPERTY "effects[1].amount" float 13.5
+    PROPERTY "effects[1].intensity" float 1
+    PROPERTY "effects[1].direction" vec2 1.6399999856948853 1
+    PROPERTY "effects[1].custom_shader" assetref ""
+    PROPERTY "effect_region_path_count" int 0
+    PROPERTY "effects[0].threshold" float 2.5199999809265137
+    PROPERTY "effects[0].amount" float 18.399999618530273
+    PROPERTY "effects[0].angle" float 0
+    PROPERTY "effects[0].progress" float 0
+    PROPERTY "effects[0].speed" float 0.72000002861022949
+    PROPERTY "effects[0].seed" float 0
+    PROPERTY "effects[0].direction" vec2 1 -1
+    PROPERTY "effects[0].color" color 1 1 1 1
+    PROPERTY "effects[0].color_2" color 1 1 1 1
+    PROPERTY "effects[0].color_3" color 1 1 1 1
+    PROPERTY "effects[0].color_4" color 1 1 1 1
+    PROPERTY "effects[0].color_stop_2" float 0.33333298563957214
+    PROPERTY "effects[0].color_stop_3" float 0.66666698455810547
+    PROPERTY "effects[0].color_stop_4" float 1
+    PROPERTY "effects[0].mask" assetref ""
+    PROPERTY "effects[0].brush_atlas_enabled" bool 0
+    PROPERTY "effects[0].brush_instanced_renderer_enabled" bool 0
+    PROPERTY "effects[0].brush_pattern_mode" enum 0
+    PROPERTY "effects[0].brush_pattern_index" enum 0
+    PROPERTY "effects[0].brush_pattern_weight_0" float 0
+    PROPERTY "effects[0].brush_pattern_weight_1" float 0
+    PROPERTY "effects[0].brush_pattern_weight_2" float 0
+    PROPERTY "effects[0].brush_pattern_weight_3" float 0
+    PROPERTY "effects[0].brush_pattern_weight_4" float 0
+    PROPERTY "effects[0].brush_pattern_weight_5" float 0
+    PROPERTY "effects[0].brush_pattern_weight_6" float 0
+    PROPERTY "effects[0].brush_pattern_weight_7" float 0
+    PROPERTY "effects[0].brush_pattern_weight_8" float 0
+    PROPERTY "effects[0].brush_pattern_weight_9" float 0
+    PROPERTY "effects[0].brush_pattern_weight_10" float 0
+    PROPERTY "effects[0].brush_pattern_weight_11" float 0
+    PROPERTY "effects[0].brush_pattern_weight_12" float 0
+    PROPERTY "effects[0].brush_pattern_weight_13" float 0
+    PROPERTY "effects[0].brush_pattern_weight_14" float 0
+    PROPERTY "effects[0].brush_pattern_weight_15" float 0
+    PROPERTY "effects[0].waveform" enum 0
+    PROPERTY "effects[1].radius" float 420
+    PROPERTY "effects[1].threshold" float 0.15000000596046448
+    PROPERTY "effects[1].angle" float 42.5
+    PROPERTY "effects[1].progress" float 0.25
+    PROPERTY "effects[1].softness" float 0
+    PROPERTY "effects[1].speed" float 2
+    PROPERTY "effects[1].seed" float 0
+    PROPERTY "effects[1].color" color 1 1 1 1
+    PROPERTY "effects[1].color_2" color 1 1 1 1
+    PROPERTY "effects[1].color_3" color 1 1 1 1
+    PROPERTY "effects[1].color_4" color 1 1 1 1
+    PROPERTY "effects[1].color_stop_2" float 0.33333298563957214
+    PROPERTY "effects[1].color_stop_3" float 0.66666698455810547
+    PROPERTY "effects[1].color_stop_4" float 1
+    PROPERTY "effects[1].brush_atlas_enabled" bool 0
+    PROPERTY "effects[1].brush_instanced_renderer_enabled" bool 0
+    PROPERTY "effects[1].brush_pattern_mode" enum 0
+    PROPERTY "effects[1].brush_pattern_index" enum 0
+    PROPERTY "effects[1].brush_pattern_weight_0" float 0
+    PROPERTY "effects[1].brush_pattern_weight_1" float 0
+    PROPERTY "effects[1].brush_pattern_weight_2" float 0
+    PROPERTY "effects[1].brush_pattern_weight_3" float 0
+    PROPERTY "effects[1].brush_pattern_weight_4" float 0
+    PROPERTY "effects[1].brush_pattern_weight_5" float 0
+    PROPERTY "effects[1].brush_pattern_weight_6" float 0
+    PROPERTY "effects[1].brush_pattern_weight_7" float 0
+    PROPERTY "effects[1].brush_pattern_weight_8" float 0
+    PROPERTY "effects[1].brush_pattern_weight_9" float 0
+    PROPERTY "effects[1].brush_pattern_weight_10" float 0
+    PROPERTY "effects[1].brush_pattern_weight_11" float 0
+    PROPERTY "effects[1].brush_pattern_weight_12" float 0
+    PROPERTY "effects[1].brush_pattern_weight_13" float 0
+    PROPERTY "effects[1].brush_pattern_weight_14" float 0
+    PROPERTY "effects[1].brush_pattern_weight_15" float 0
+    PROPERTY "effects[1].waveform" enum 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 636
+  NAME "LoadingProgressTrack"
+  ENABLED 1
+  PARENT 634
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 6
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 900 42
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "sort_order" int 100
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "color" color 0.10 0.14 0.20 1
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 637
+  NAME "LoadingProgressFill"
+  ENABLED 1
+  PARENT 634
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 6
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 900 42
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "sort_order" int 101
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "color" color 0.10 0.75 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "fill_amount" float 0
+    PROPERTY "fill_method" enum 0
+  END_COMPONENT
+  COMPONENT "UISliderComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "minimum" float 0
+    PROPERTY "maximum" float 1
+    PROPERTY "value" float 0
+    PROPERTY "whole_numbers" bool 0
+    PROPERTY "direction" enum 0
+    PROPERTY "interactable" bool 0
+    PROPERTY "fill_image" compref 637 3
+    PROPERTY "handle_rect" compref 0 0
+    PROPERTY "keyboard_step" float 0.1
+  END_COMPONENT
+END_OBJECT

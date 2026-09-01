@@ -93,6 +93,7 @@ namespace GameInput
 
         actions_["Jump"] = { VK_SPACE, 0, XINPUT_GAMEPAD_A };
         actions_["Dash"] = { VK_SHIFT, 0, XINPUT_GAMEPAD_LEFT_SHOULDER };
+        actions_["Menu"] = { 'P', 0, XINPUT_GAMEPAD_START };
         actions_["UISubmit"] = { VK_RETURN, VK_SPACE, XINPUT_GAMEPAD_A };
         actions_["UICancel"] = { VK_ESCAPE, 0, XINPUT_GAMEPAD_B };
         actions_["NavigateUp"] = { VK_UP, 0, XINPUT_GAMEPAD_DPAD_UP };
@@ -116,7 +117,7 @@ namespace GameInput
         axes_["MoveY"] = { 'S', VK_DOWN, 'W', VK_UP,
             GamepadAxis::LeftY, 0.18f };
 
-        for (const char* name : { "UISubmit", "UICancel", "NavigateUp",
+        for (const char* name : { "Menu", "UISubmit", "UICancel", "NavigateUp",
             "NavigateDown", "NavigateLeft", "NavigateRight" })
         {
             auto found = actions_.find(name);
@@ -136,6 +137,8 @@ namespace GameInput
             mouse_captured_ = true;
             mouse_delta_x_ = 0.0f;
             mouse_delta_y_ = 0.0f;
+            wheel_delta_ = 0.0f;
+            pending_wheel_ = 0.0f;
             for (PadSnapshot& pad : pads_)
             {
                 pad.current = {};
@@ -153,6 +156,9 @@ namespace GameInput
         mouse_captured_ = mouse_captured;
         mouse_delta_x_ = 0.0f;
         mouse_delta_y_ = 0.0f;
+        // ホイールは前フレームに積まれたぶんをこのフレームの値として確定させる。
+        wheel_delta_ = pending_wheel_;
+        pending_wheel_ = 0.0f;
 
         // マウス座標もフレーム先頭で 1 回だけ採取する。
         // Game/Camera が個別に GetCursorPos を呼ぶと、Play 再開や複数Cameraで
@@ -649,5 +655,131 @@ namespace GameInput
                 << static_cast<int>(b.gamepad_axis) << ' ' << b.dead_zone << '\n';
         }
         return static_cast<bool>(stream);
+    }
+
+    // ---- 生デバイス --------------------------------------------------------
+
+    namespace
+    {
+        constexpr int MouseVirtualKey(int button) noexcept
+        {
+            switch (button)
+            {
+            case 0: return VK_LBUTTON;
+            case 1: return VK_RBUTTON;
+            case 2: return VK_MBUTTON;
+            case 3: return VK_XBUTTON1;
+            case 4: return VK_XBUTTON2;
+            default: return 0;
+            }
+        }
+    }
+
+    bool InputState::KeyHeld(int key) const noexcept
+    {
+        if (keyboard_captured_ || IsMouseVirtualKey(key)) return false;
+        return KeyDown(keyboard_current_, key);
+    }
+
+    bool InputState::KeyPressed(int key) const noexcept
+    {
+        if (keyboard_captured_ || previous_keyboard_captured_) return false;
+        if (IsMouseVirtualKey(key)) return false;
+        return KeyDown(keyboard_current_, key) && !KeyDown(keyboard_previous_, key);
+    }
+
+    bool InputState::KeyReleased(int key) const noexcept
+    {
+        if (keyboard_captured_ || previous_keyboard_captured_) return false;
+        if (IsMouseVirtualKey(key)) return false;
+        return !KeyDown(keyboard_current_, key) && KeyDown(keyboard_previous_, key);
+    }
+
+    bool InputState::MouseButtonHeld(int button) const noexcept
+    {
+        const int key = MouseVirtualKey(button);
+        if (key == 0 || mouse_captured_) return false;
+        return KeyDown(keyboard_current_, key);
+    }
+
+    bool InputState::MouseButtonPressed(int button) const noexcept
+    {
+        const int key = MouseVirtualKey(button);
+        if (key == 0 || mouse_captured_ || previous_mouse_captured_) return false;
+        return KeyDown(keyboard_current_, key) && !KeyDown(keyboard_previous_, key);
+    }
+
+    bool InputState::MouseButtonReleased(int button) const noexcept
+    {
+        const int key = MouseVirtualKey(button);
+        if (key == 0 || mouse_captured_ || previous_mouse_captured_) return false;
+        return !KeyDown(keyboard_current_, key) && KeyDown(keyboard_previous_, key);
+    }
+
+    bool InputState::GamepadConnected(int player_slot) const noexcept
+    {
+        const PadSnapshot* pad = Pad(player_slot);
+        return pad != nullptr && pad->connected;
+    }
+
+    bool InputState::GamepadButtonHeld(int player_slot, int button) const noexcept
+    {
+        const PadSnapshot* pad = Pad(player_slot);
+        if (pad == nullptr || !pad->connected || button == 0) return false;
+        return (pad->current.Gamepad.wButtons & static_cast<WORD>(button)) != 0;
+    }
+
+    bool InputState::GamepadButtonPressed(int player_slot, int button) const noexcept
+    {
+        const PadSnapshot* pad = Pad(player_slot);
+        if (pad == nullptr || !pad->connected || button == 0) return false;
+        const WORD mask = static_cast<WORD>(button);
+        return (pad->current.Gamepad.wButtons & mask) != 0 &&
+            (!pad->previous_connected || (pad->previous.Gamepad.wButtons & mask) == 0);
+    }
+
+    bool InputState::GamepadButtonReleased(int player_slot, int button) const noexcept
+    {
+        const PadSnapshot* pad = Pad(player_slot);
+        if (pad == nullptr || !pad->connected || !pad->previous_connected) return false;
+        const WORD mask = static_cast<WORD>(button);
+        return (pad->current.Gamepad.wButtons & mask) == 0 &&
+            (pad->previous.Gamepad.wButtons & mask) != 0;
+    }
+
+    float InputState::GamepadAxisValue(int player_slot, int axis) const noexcept
+    {
+        const PadSnapshot* pad = Pad(player_slot);
+        if (pad == nullptr || !pad->connected) return 0.0f;
+
+        // IInputService::GamepadAxisId と同じ並び。C# 側の enum とも一致させる。
+        switch (axis)
+        {
+        case 0: return PadAxis(pad->current.Gamepad, GamepadAxis::LeftX, 0.18f);
+        case 1: return PadAxis(pad->current.Gamepad, GamepadAxis::LeftY, 0.18f);
+        case 2: return PadAxis(pad->current.Gamepad, GamepadAxis::RightX, 0.18f);
+        case 3: return PadAxis(pad->current.Gamepad, GamepadAxis::RightY, 0.18f);
+        case 4: return PadAxis(pad->current.Gamepad, GamepadAxis::LeftTrigger, 0.05f);
+        case 5: return PadAxis(pad->current.Gamepad, GamepadAxis::RightTrigger, 0.05f);
+        default: return 0.0f;
+        }
+    }
+
+    bool InputState::SetGamepadVibration(int player_slot, float low, float high) noexcept
+    {
+        if (player_slot < 0 || player_slot >= static_cast<int>(pads_.size())) return false;
+        if (!pads_[static_cast<std::size_t>(player_slot)].connected) return false;
+
+        const auto scale = [](float value) noexcept -> WORD
+        {
+            if (!(value > 0.0f)) return 0;
+            if (value > 1.0f) value = 1.0f;
+            return static_cast<WORD>(value * 65535.0f);
+        };
+        XINPUT_VIBRATION vibration{};
+        vibration.wLeftMotorSpeed = scale(low);
+        vibration.wRightMotorSpeed = scale(high);
+        return ::XInputSetState(static_cast<DWORD>(player_slot), &vibration) ==
+            ERROR_SUCCESS;
     }
 }

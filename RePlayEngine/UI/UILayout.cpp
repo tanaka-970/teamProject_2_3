@@ -11,6 +11,7 @@
 #include "../Components/UI/UIMaskComponent.h"
 #include "../Components/UI/UIScrollViewComponent.h"
 #include "../Components/UI/UISelectableComponent.h"
+#include "../Components/UI/UISliderComponent.h"
 #include "../Components/Motion/MotionPlayerComponent.h"
 #include "../Object/GameObject/GameObject.h"
 #include "../Runtime/API/RuntimeContext.h"
@@ -39,6 +40,7 @@ namespace ReplayEngine::UI
         using Components::UIMaskComponent;
         using Components::UIScrollViewComponent;
         using Components::UISelectableComponent;
+        using Components::UISliderComponent;
 
         constexpr int maximum_ui_depth = 64;
 
@@ -283,6 +285,16 @@ namespace ReplayEngine::UI
             if (target == nullptr) return nullptr;
             Core::Component* component = target->FindComponentByStableID(reference.component);
             return dynamic_cast<RectTransformComponent*>(component);
+        }
+
+        UIImageComponent* ResolveReferencedImage(Core::GameObject& owner,
+            const Reflection::ComponentReference& reference) noexcept
+        {
+            if (!reference.IsAssigned() || owner.GetScene() == nullptr) return nullptr;
+            Core::GameObject* target = owner.GetScene()->FindGameObjectByID(reference.owner);
+            if (target == nullptr) return nullptr;
+            Core::Component* component = target->FindComponentByStableID(reference.component);
+            return dynamic_cast<UIImageComponent*>(component);
         }
 
         void ApplyScrollToChild(Core::GameObject& object, Core::GameObject& child,
@@ -594,6 +606,145 @@ namespace ReplayEngine::UI
             }
         }
 
+        void ApplySliderVisual(Core::GameObject& object, UISliderComponent& slider)
+        {
+            const float normalized = slider.NormalizedValue();
+            UIImageComponent* fill = ResolveReferencedImage(object, slider.fill_image);
+            if (fill == nullptr && !slider.fill_image.IsAssigned())
+                fill = object.GetComponent<UIImageComponent>();
+            if (fill != nullptr)
+            {
+                fill->fill_amount = normalized;
+                fill->fill_method = slider.direction == UISliderComponent::LeftToRight ||
+                    slider.direction == UISliderComponent::RightToLeft
+                    ? UIImageComponent::Horizontal : UIImageComponent::Vertical;
+                fill->fill_reverse = slider.direction == UISliderComponent::RightToLeft ||
+                    slider.direction == UISliderComponent::TopToBottom;
+            }
+
+            RectTransformComponent* handle = ResolveReferencedRect(object, slider.handle_rect);
+            if (handle == nullptr) return;
+            float position = normalized;
+            if (slider.direction == UISliderComponent::RightToLeft ||
+                slider.direction == UISliderComponent::TopToBottom)
+                position = 1.0f - position;
+            if (slider.direction == UISliderComponent::LeftToRight ||
+                slider.direction == UISliderComponent::RightToLeft)
+            {
+                handle->anchor_min.x = position;
+                handle->anchor_max.x = position;
+            }
+            else
+            {
+                handle->anchor_min.y = position;
+                handle->anchor_max.y = position;
+            }
+        }
+
+        void ApplyAllSliderVisuals(Scene::Scene& scene)
+        {
+            // PropertyLink や Motion が value を変更した場合も、入力経路を
+            // 通らずに見た目へ反映する。Loading Scene は入力を受け付けないため、
+            // ここを正本にして標準 UI の値と描画を常に同期させる。
+            for (std::size_t index = 0; index < scene.GameObjectCount(); ++index)
+            {
+                Core::GameObject* object = scene.GameObjectAt(index);
+                if (object == nullptr || object->PendingDestroy()) continue;
+                if (UISliderComponent* slider = object->GetComponent<UISliderComponent>())
+                    ApplySliderVisual(*object, *slider);
+            }
+        }
+
+        void PublishSliderChange(UISliderComponent& slider)
+        {
+            if (std::fabs(slider.value - slider.last_emitted_value) <= 0.000001f) return;
+            slider.last_emitted_value = slider.value;
+            Runtime::RuntimeContext* runtime = slider.GetScene() != nullptr
+                ? slider.GetScene()->Services().Runtime() : nullptr;
+            Core::GameObject* owner = slider.Owner();
+            if (runtime == nullptr || owner == nullptr) return;
+
+            Runtime::EventRecord record;
+            record.type = Runtime::EngineEvents::SliderValueChanged;
+            record.type_name = "SliderValueChanged";
+            record.source = runtime->Resolver().MakeHandle(owner);
+            record.frame_index = runtime->FrameIndex();
+            record.payload.Set("value", Reflection::PropertyValue::MakeFloat(slider.value));
+            record.payload.Set("normalized",
+                Reflection::PropertyValue::MakeFloat(slider.NormalizedValue()));
+            record.payload.Set("slider_component",
+                Reflection::PropertyValue::MakeUInt64(slider.StableID()));
+            runtime->Events().Publish(std::move(record));
+        }
+
+        void UpdateSliderInput(Core::GameObject& object, float mouse_x, float mouse_y,
+            bool mouse_down, bool mouse_pressed, bool mouse_released, bool input_captured)
+        {
+            UISliderComponent* slider = object.GetComponent<UISliderComponent>();
+            RectTransformComponent* rect = object.GetComponent<RectTransformComponent>();
+            if (slider == nullptr || rect == nullptr) return;
+
+            UISelectableComponent* selectable = object.GetComponent<UISelectableComponent>();
+            if (selectable != nullptr) selectable->interactable = slider->interactable;
+            const bool active = slider->interactable && slider->ActiveInHierarchy();
+            const bool hovered = active && HitTest(*rect, mouse_x, mouse_y) &&
+                VisibleThroughAncestorMasks(object, mouse_x, mouse_y);
+            if (!input_captured && hovered && mouse_pressed)
+            {
+                if (selectable != nullptr && object.GetScene() != nullptr)
+                    UIFocusManager::SetFocus(*object.GetScene(), selectable);
+                slider->dragging = true;
+            }
+
+            // 押下開始時に所有権を得たdragは、ポインターが矩形外へ出ても継続する。
+            // 毎フレームのhover/captureで止めるとSliderだけ操作感が途切れる。
+            if (active && slider->dragging && mouse_down)
+            {
+                const DirectX::XMFLOAT4 bounds = rect->ResolvedRect();
+                float normalized = 0.0f;
+                if (slider->direction == UISliderComponent::LeftToRight ||
+                    slider->direction == UISliderComponent::RightToLeft)
+                    normalized = (mouse_x - bounds.x) / (std::max)(bounds.z, 0.0001f);
+                else
+                    normalized = (mouse_y - bounds.y) / (std::max)(bounds.w, 0.0001f);
+                normalized = (std::min)((std::max)(normalized, 0.0f), 1.0f);
+                if (slider->direction == UISliderComponent::RightToLeft ||
+                    slider->direction == UISliderComponent::TopToBottom)
+                    normalized = 1.0f - normalized;
+                const float low = (std::min)(slider->minimum, slider->maximum);
+                const float high = (std::max)(slider->minimum, slider->maximum);
+                slider->SetValue(low + normalized * (high - low));
+            }
+
+            const Scene::IInputService* input = object.GetScene() != nullptr
+                ? object.GetScene()->Services().Input() : nullptr;
+            if (!input_captured && active && selectable != nullptr && selectable->focused &&
+                input != nullptr)
+            {
+                int direction = 0;
+                if (slider->direction == UISliderComponent::LeftToRight ||
+                    slider->direction == UISliderComponent::RightToLeft)
+                {
+                    if (input->Pressed("NavigateLeft")) direction = -1;
+                    else if (input->Pressed("NavigateRight")) direction = 1;
+                    if (slider->direction == UISliderComponent::RightToLeft) direction = -direction;
+                }
+                else
+                {
+                    if (input->Pressed("NavigateDown")) direction = -1;
+                    else if (input->Pressed("NavigateUp")) direction = 1;
+                    if (slider->direction == UISliderComponent::TopToBottom) direction = -direction;
+                }
+                if (direction != 0)
+                    slider->SetValue(slider->value +
+                        static_cast<float>(direction) * slider->keyboard_step);
+            }
+
+            if (mouse_released || !mouse_down) slider->dragging = false;
+            ApplySliderVisual(object, *slider);
+            PublishSliderChange(*slider);
+        }
+
         void UpdateInteractiveTree(Core::GameObject& object, float mouse_x, float mouse_y,
             bool mouse_down, bool mouse_pressed, bool mouse_released, float mouse_wheel,
             bool input_captured, bool play_state_motions, int depth)
@@ -602,6 +753,8 @@ namespace ReplayEngine::UI
 
             UpdateScrollInput(object, mouse_x, mouse_y, mouse_down, mouse_pressed,
                 mouse_released, mouse_wheel, input_captured);
+            UpdateSliderInput(object, mouse_x, mouse_y, mouse_down, mouse_pressed,
+                mouse_released, input_captured);
 
             if (!input_captured && mouse_pressed)
             {
@@ -631,7 +784,9 @@ namespace ReplayEngine::UI
                     selectable->navigation_enabled = button->navigation_enabled;
                     selectable->navigation_order = button->navigation_order;
                 }
+                const int previous_state = button->state;
                 int next_state = UIButtonComponent::Normal;
+                bool activated = false;
                 if (!button->interactable || !button->ActiveInHierarchy())
                     next_state = UIButtonComponent::Disabled;
                 else if (!input_captured)
@@ -647,12 +802,15 @@ namespace ReplayEngine::UI
                             UIFocusManager::SetFocus(*scene, selectable);
                         button->focused = selectable != nullptr && selectable->focused;
                         const bool submit_down = button->focused && input != nullptr && input->Held("UISubmit");
+                        const bool submit_released = button->focused && input != nullptr &&
+                            input->Released("UISubmit");
                         if ((hovered && mouse_down) || submit_down) next_state = UIButtonComponent::Pressed;
                         else if (hovered || button->focused) next_state = UIButtonComponent::Hover;
+                        activated = previous_state == UIButtonComponent::Pressed &&
+                            ((hovered && mouse_released) || submit_released);
                     }
                 }
 
-                const int previous_state = button->state;
                 button->state = next_state;
                 ApplyButtonVisual(*button);
                 if (previous_state != next_state)
@@ -670,6 +828,24 @@ namespace ReplayEngine::UI
                             record.payload.Set("previous_state", Reflection::PropertyValue::MakeInt(previous_state));
                             record.payload.Set("state", Reflection::PropertyValue::MakeInt(next_state));
                             record.payload.Set("button_component", Reflection::PropertyValue::MakeUInt64(button->StableID()));
+                            runtime->Events().Publish(std::move(record));
+                        }
+                    }
+                }
+                if (activated)
+                {
+                    if (Runtime::RuntimeContext* runtime = button->GetScene() != nullptr
+                        ? button->GetScene()->Services().Runtime() : nullptr)
+                    {
+                        if (Core::GameObject* owner = button->Owner())
+                        {
+                            Runtime::EventRecord record;
+                            record.type = Runtime::EngineEvents::ButtonClicked;
+                            record.type_name = "ButtonClicked";
+                            record.source = runtime->Resolver().MakeHandle(owner);
+                            record.frame_index = runtime->FrameIndex();
+                            record.payload.Set("button_component",
+                                Reflection::PropertyValue::MakeUInt64(button->StableID()));
                             runtime->Events().Publish(std::move(record));
                         }
                     }
@@ -756,6 +932,8 @@ namespace ReplayEngine::UI
         GatherCanvases(scene, canvases);
         for (Core::GameObject* canvas : canvases)
             if (canvas != nullptr) ResolveCanvas(*canvas, screen_width, screen_height);
+
+        ApplyAllSliderVisuals(scene);
     }
 
     void UILayout::ResolveCanvas(Core::GameObject& canvas_object,

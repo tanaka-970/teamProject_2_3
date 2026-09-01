@@ -1,12 +1,14 @@
 ﻿#pragma once
 
 #include "MaterialOverrideDynamicProperties.h"
+#include "MeshMaterialSlot.h"
 #include "../../Object/Component/Component.h"
 #include "../../Reflection/Property/PropertyDesc.h"
 #include "../../Rendering/Adapter/IRenderSubmitter.h"
 
 #include <DirectXMath.h>
 
+#include <array>
 #include <string>
 #include <vector>
 
@@ -16,7 +18,7 @@ namespace ReplayEngine::Components
     //
     // 重要な制約:
     //   このクラスは Direct3D に一切触れない。
-    //   ID3D11* を持たず、Draw も Map も定数バッファ更新も行わない。
+    //   GPU API オブジェクトを持たず、Draw も Map も定数バッファ更新も行わない。
     //   保持するのは「どの Asset を」「どんな見た目で」描くかという情報だけで、
     //   実際の GPU 操作は既存の Renderer がメインスレッド上で行う。
     //
@@ -48,6 +50,8 @@ namespace ReplayEngine::Components
         void OnMotionPropertyApplied(const char* property_name) override;
         void PrepareMaterialMotion(const Rendering::MaterialAsset* material,
             const Rendering::ShaderPropertySchema* schema);
+        void OnSerialize(Reflection::PropertyBag& output) const override;
+        void OnDeserialize(const Reflection::PropertyBag& input) override;
 
         // 実際に描くべきか。Component の有効状態と visible の両方を見る。
         bool ShouldRender() const noexcept
@@ -59,6 +63,9 @@ namespace ReplayEngine::Components
         std::string mesh_asset;
 
         std::string material_asset;
+        int material_slot_count = 0;
+        std::vector<MeshMaterialSlot> material_slots;
+        mutable std::array<const std::string*, max_mesh_material_slots> material_slot_asset_view{};
 
         // trueならRenderer側の色・描画方式をMaterial Assetより優先する。
         bool material_override = false;
@@ -82,6 +89,9 @@ namespace ReplayEngine::Components
         bool outline = false;
         bool cast_shadow = true;
         bool receive_shadow = true;
+        // Material Asset を使わない形式でも影をアルファで抜くか。既定は抜かない。
+        bool shadow_alpha_clip = false;
+        float shadow_alpha_cutoff = 0.5f;
         // Screen Effect Stack の Rendering Layer mask。0..31。
         int rendering_layer = 0;
         bool visible = true;

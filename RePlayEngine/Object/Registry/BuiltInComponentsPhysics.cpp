@@ -94,8 +94,7 @@ namespace ReplayEngine::Core::Detail
                     .Display("停止状態で開始"));
             PropertyRegistry::Register<RigidbodyComponent>(
                 MakeProperty("use_ccd", &RigidbodyComponent::use_ccd)
-                    .Display("高速移動の貫通対策")
-                    .Tooltip("CCD は Phase 3 で有効化する。設定値は先に保存できる。"));
+                    .Display("高速移動の貫通対策（未対応）"));
 
             PropertyRegistry::Register<RigidbodyComponent>(
                 MakeProperty("linear_velocity", &RigidbodyComponent::linear_velocity)
@@ -195,7 +194,7 @@ namespace ReplayEngine::Core::Detail
 
             PropertyRegistry::Register<MeshColliderComponent>(
                 MakeProperty("mesh_asset", &MeshColliderComponent::mesh_asset)
-                    .Display("衝突専用メッシュ").AsAssetPath()
+                    .Display("衝突専用メッシュ").AsAssetPath().OfAssetType("Model")
                     .Tooltip("「衝突専用メッシュ」を選んだときだけ使う AssetGUID。"));
 
             PropertyRegistry::Register<MeshColliderComponent>(

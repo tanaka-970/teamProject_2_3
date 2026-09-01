@@ -164,7 +164,12 @@ namespace ReplayEngine::Editor::Detail
             if (!guid.empty())
             {
                 if (builtin_name != nullptr) preview = builtin_name;
-                else preview = current != nullptr ? current->display_name.c_str() : "Missing Asset";
+                else if (current != nullptr &&
+                    (database == nullptr || !database->IsMissing(guid)))
+                {
+                    preview = current->display_name.c_str();
+                }
+                else preview = u8"ファイルが見つかりません";
             }
 
             if (database != nullptr)
@@ -179,6 +184,7 @@ namespace ReplayEngine::Editor::Detail
                     }
                     for (const Assets::AssetRecord& record : database->Records())
                     {
+                        if (database->IsMissing(record.guid)) continue;
                         // 種類が指定されていれば、それ以外は候補に出さない。
                         // 出さないだけで、既に保存されている値は消さない。
                         if (kind_filter != Assets::AssetKind::Unknown &&
@@ -214,6 +220,11 @@ namespace ReplayEngine::Editor::Detail
             else if (builtin_name != nullptr)
             {
                 ImGui::TextDisabled("  Engine Built-in Primitive");
+            }
+            else if (current != nullptr && database != nullptr && database->IsMissing(guid))
+            {
+                ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.35f, 1.0f),
+                    u8"  ファイルが見つかりません: %s", current->source_path.generic_string().c_str());
             }
             else if (current != nullptr)
             {
@@ -322,8 +333,11 @@ namespace ReplayEngine::Editor::Detail
             if (name == "SceneFlow") return Assets::AssetKind::SceneFlow;
             if (name == "Font") return Assets::AssetKind::Font;
             if (name == "Motion") return Assets::AssetKind::Motion;
+            if (name == "Composition") return Assets::AssetKind::Composition;
+            if (name == "SpriteAtlas") return Assets::AssetKind::SpriteAtlas;
             if (name == "Localization") return Assets::AssetKind::Localization;
             if (name == "EffectPreset") return Assets::AssetKind::EffectPreset;
+            if (name == "EasingCurve") return Assets::AssetKind::EasingCurve;
             return Assets::AssetKind::Unknown;
         }
 

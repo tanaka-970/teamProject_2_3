@@ -61,8 +61,21 @@ namespace ReplayEngine::Rendering
 
         static constexpr const char* Names() noexcept
         {
-            return "Final\0HDR Scene\0Bloom\0Deferred Lit\0GBuffer Base Color\0GBuffer Normal\0"
-                   "GBuffer Material\0Depth\0SSAO\0SSR\0Shadow Visibility\0";
+            return u8"最終合成\0HDRシーン\0ブルーム\0Deferred照明\0GBuffer ベースカラー\0GBuffer 法線\0"
+                   u8"GBuffer マテリアル\0深度\0SSAO\0SSR\0影の可視性\0";
+        }
+
+        static const char* Name(int index) noexcept
+        {
+            const int count = static_cast<int>(RenderOutput::Count);
+            if (index < 0 || index >= count) return Names();
+            const char* name = Names();
+            for (int i = 0; i < index; ++i)
+            {
+                while (*name != '\0') ++name;
+                ++name;
+            }
+            return name;
         }
 
     private:

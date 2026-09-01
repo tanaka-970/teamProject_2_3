@@ -31,6 +31,8 @@
 
 #include "framework.h"
 
+#include "../../RePlayEngine/Scene/LoadingScene.h"
+
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
 #include "../../RePlayEngine/Runtime/Behaviour/BehaviourRegistry.h"
 #include "../../RePlayEngine/Scripting/CSharp/CSharpProject.h"
@@ -138,6 +140,55 @@ framework::runtime_prefab_instantiator::InstantiatePrefab(
 // Runtime サービスの初期化
 // ---------------------------------------------------------------------------
 
+float framework::loading_progress_provider::Progress() const noexcept
+{
+    if (editor_play_loading_ && runtime_scene_ != nullptr)
+        return runtime_scene_->Progress();
+
+    if (scene_manager_ == nullptr) return 1.0f;
+    const auto* loading_scene = dynamic_cast<const ReplayEngine::Scene::LoadingScene*>(
+        scene_manager_->CurrentScene());
+    return loading_scene != nullptr ? loading_scene->Progress() : 1.0f;
+}
+
+bool framework::loading_progress_provider::IsLoading() const noexcept
+{
+    if (editor_play_loading_ && runtime_scene_ != nullptr)
+        return runtime_scene_->IsBusy();
+
+    if (scene_manager_ == nullptr) return false;
+    const auto* loading_scene = dynamic_cast<const ReplayEngine::Scene::LoadingScene*>(
+        scene_manager_->CurrentScene());
+    return loading_scene != nullptr && !loading_scene->IsFinished();
+}
+
+bool framework::load_exclusive_scene_from_path(const std::filesystem::path& path)
+{
+    if (path.empty()) return false;
+
+    ReplayEngine::Scene::Serialization::SceneLoadReport report;
+    std::string error;
+    std::unique_ptr<ReplayEngine::Runtime::RuntimeContext> loading_runtime_context;
+    std::unique_ptr<ReplayEngine::Scene::Scene> scene =
+        object_runtime_scenes.LoadStandaloneScene(content_path(path), report, error,
+            &loading_runtime_context);
+    if (scene == nullptr) return false;
+
+    scene->Services().SetLoadingProgress(&object_loading_progress_provider);
+    object_loading_scene.reset();
+    object_loading_runtime_context.reset();
+    object_loading_runtime_context = std::move(loading_runtime_context);
+    object_loading_frame_index = 0;
+    object_loading_scene_frame_history = {};
+    object_loading_scene = std::move(scene);
+    return true;
+}
+
+ReplayEngine::Scene::Scene* framework::exclusive_scene_for_render() noexcept
+{
+    return scene_manager.IsExclusive() ? object_loading_scene.get() : nullptr;
+}
+
 void framework::initialize_runtime_services()
 {
     if (object_runtime_context) return;
@@ -198,13 +249,17 @@ void framework::initialize_runtime_services()
     object_scene.Services().SetSceneFlow(nullptr);
     object_scene.Services().SetAudio(&object_audio_system);
 
-    if (!standalone_game_mode) refresh_csharp_scripts();
+    if (!standalone_game_mode)
+    {
+        refresh_csharp_scripts();
+    }
 
     // シェーダ資産の走査。
     //
     // ここへ置くのは、Console のログ経路が既に使える状態だから。
     // まだ描画には使わないので、失敗しても他へ影響しない。
-    if (!standalone_game_mode) scan_shader_library();
+    // standalone を除外しない。Material Asset のシェーダ解決に Catalog が要る。
+    scan_shader_library();
 
     object_bound_world_instance = object_runtime_scenes.ActiveWorldID();
 }

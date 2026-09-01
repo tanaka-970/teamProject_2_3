@@ -58,14 +58,12 @@ namespace ReplayEngine::Core::Detail
 
             PropertyRegistry::Register<CameraComponent>(
                 MakeProperty("viewport_enabled", &CameraComponent::viewport_enabled)
-                    .Display("分割 Viewport を使う")
-                    .Animation(Animatable::Step)
-                    .Tooltip("有効な Camera が 1 台でもあれば、各 Camera を viewport_rect へ合成する。"));
+                    .Display("分割 Viewport を使う（未対応）")
+                    .Animation(Animatable::Step));
 
             PropertyRegistry::Register<CameraComponent>(
                 MakeProperty("viewport_rect", &CameraComponent::viewport_rect)
-                    .Display("Viewport (x y w h)").Range(0.0, 1.0).Step(0.01)
-                    .Tooltip("画面左上を (0,0)、右下を (1,1) とする正規化矩形。"));
+                    .Display("Viewport (x y w h)（未対応）").Range(0.0, 1.0).Step(0.01));
         }
 
         void RegisterFollowTarget()
@@ -157,5 +155,11 @@ namespace ReplayEngine::Core::Detail
             PropertyRegistry::Register<AudioSourceComponent>(
                 MakeProperty("max_distance", &AudioSourceComponent::max_distance)
                     .Display("Max Distance").Range(0.001, 100000.0).Step(0.1));
+            PropertyRegistry::Register<AudioSourceComponent>(
+                MakeAccessorProperty<AudioSourceComponent>("is_playing", PropertyType::Bool,
+                    [](const AudioSourceComponent& component)
+                    { return PropertyValue::MakeBool(component.IsPlaying()); },
+                    [](AudioSourceComponent&, const PropertyValue&) {})
+                .Display("再生中").RuntimeOnly().ReadOnly().NotSerializable());
         }
 }

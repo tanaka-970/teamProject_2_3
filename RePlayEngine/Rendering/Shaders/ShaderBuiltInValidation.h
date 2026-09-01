@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 namespace ReplayEngine::Rendering::Validation
 {
@@ -10,6 +10,6 @@ namespace ReplayEngine::Rendering::Validation
     // 実行時のカレントディレクトリがプロジェクト直下であること。
     //
     // 終了コードは 1200 から連番。
-    // D3D デバイスは不要。d3dcompiler.dll だけ使う。
+    // D3D デバイスは不要。DXC のコンパイラ DLL だけを使う。
     int RunShaderBuiltInValidation();
 }

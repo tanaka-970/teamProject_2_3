@@ -1,16 +1,15 @@
 ﻿#pragma once
-#include <d3d11.h>
 #include <cereal/archives/binary.hpp>
 #include <cereal/types/memory.hpp>
 #include <cereal/types/vector.hpp>
 #include <cereal/types/set.hpp>
 #include <cereal/types/unordered_map.hpp>
 #include <cereal/types/string.hpp>
-#include <wrl.h>
 #include <directxmath.h>
 #include <vector>
 #include <string>
 #include <filesystem>
+#include <cfloat>
 #ifndef REPLAY_ENABLE_FBX_IMPORTER
 #define REPLAY_ENABLE_FBX_IMPORTER 0
 #endif
@@ -255,8 +254,8 @@ public:
 
         DirectX::XMFLOAT3 bounding_box[2]
         {
-            { +D3D11_FLOAT32_MAX, +D3D11_FLOAT32_MAX, +D3D11_FLOAT32_MAX },
-            { -D3D11_FLOAT32_MAX, -D3D11_FLOAT32_MAX, -D3D11_FLOAT32_MAX }
+            { +FLT_MAX, +FLT_MAX, +FLT_MAX },
+            { -FLT_MAX, -FLT_MAX, -FLT_MAX }
         };
 
         struct subset
@@ -289,11 +288,6 @@ public:
             archive(unique_id, name, node_index, subsets, default_global_transform,
                 bind_pose, bounding_box, vertices, indices);
         }
-    private:
-        Microsoft::WRL::ComPtr<ID3D11Buffer> vertex_buffer;
-        Microsoft::WRL::ComPtr<ID3D11Buffer> index_buffer;
-        friend class skinned_mesh;
-
     };
 
     std::vector<mesh> meshes;
@@ -308,7 +302,6 @@ public:
         DirectX::XMFLOAT4 Ks{ 1.0f, 1.0f, 1.0f, 1.0f };
 
         std::string texture_filenames[4];
-        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> shader_resource_views[4];
         template<class T>
         void serialize(T& archive)
         {
@@ -338,27 +331,17 @@ public:
     bool IsGltf() const noexcept { return imported_gltf_; }
     bool HasAnimations() const noexcept { return !animation_clips.empty(); }
     bool HasDoubleSidedMaterials() const noexcept;
+    // アルファ抜きを宣言した GLB 内蔵材質が 1 つでもあるか。影パスの判定に使う。
+    bool HasAlphaMaskMaterials() const noexcept;
 
 #if REPLAY_ENABLE_FBX_IMPORTER
     void fetch_materials(FbxScene* fbx_scene, std::unordered_map<uint64_t, material>& materials);
 #endif
 
-private:
-    Microsoft::WRL::ComPtr<ID3D11VertexShader> vertex_shader;
-    Microsoft::WRL::ComPtr<ID3D11PixelShader> pixel_shader;
-    Microsoft::WRL::ComPtr<ID3D11InputLayout> input_layout;
-    Microsoft::WRL::ComPtr<ID3D11Buffer> constant_buffer;
-    // モーションベクター用: b6=前フレームのワールド/ビュー射影、b8=前フレームのボーン。
-    Microsoft::WRL::ComPtr<ID3D11Buffer> motion_object_constant_buffer;
-    Microsoft::WRL::ComPtr<ID3D11Buffer> motion_bone_constant_buffer;
-
 public:
-    skinned_mesh(ID3D11Device* device, const char* fbx_filename,
-       bool triangulate = false, float sampling_rate = 0,
-       bool create_device_resources = true);
-    skinned_mesh(ID3D11Device* device, const std::filesystem::path& filename,
-       bool triangulate = false, float sampling_rate = 0,
-       bool create_device_resources = true);
+    skinned_mesh(const char* fbx_filename, bool triangulate = false, float sampling_rate = 0);
+    skinned_mesh(const std::filesystem::path& filename, bool triangulate = false,
+        float sampling_rate = 0);
     virtual ~skinned_mesh() = default;
 
     // UNIT24 手順4: skeleton 情報を抽出する関数 [cite: 145-146]
@@ -376,28 +359,10 @@ public:
         float factor, animation::keyframe& keyframe);
     //U27
     void update_animation(animation::keyframe& keyframe);
-    void create_com_objects(ID3D11Device* device, const char* fbx_filename);
-    void render(ID3D11DeviceContext* immediate_context,
-        const DirectX::XMFLOAT4X4& world, const DirectX::XMFLOAT4& material_color,
-        const animation::keyframe* keyframe,
-        ID3D11PixelShader* alternative_pixel_shader = nullptr,
-        ID3D11VertexShader* alternative_vertex_shader = nullptr,
-        ID3D11InputLayout* alternative_input_layout = nullptr,
-        bool bind_pixel_shader = true, // 引数追加
-        // trueのときだけ前フレーム姿勢をVSへ載せ、履歴を更新する。
-        // G-Bufferパスで1回だけ渡すこと(複数回渡すと前フレーム姿勢が壊れる)。
-        bool write_motion_vectors = false,
-        // Material Asset が明示されていない GLB だけ true。
-        // false は従来 FBX と完全に同じ Shader 経路を保つ。
-        bool use_embedded_gltf_materials = false);
 protected:
     scene scene_view;
 private:
-    bool import_gltf(ID3D11Device* device, const std::filesystem::path& filename,
-        float sampling_rate);
+    bool import_gltf(const std::filesystem::path& filename, float sampling_rate);
     std::unordered_map<uint64_t, gltf_material_info> gltf_materials_;
     bool imported_gltf_ = false;
-public:
-	// 追加: デバイスリソースの明示解放
-	void release_device_resources();
 };

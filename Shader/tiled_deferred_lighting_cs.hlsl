@@ -174,19 +174,37 @@ void main(uint3 group_id : SV_GroupID,
     }
 
     // --- 4. シェーディング --------------------------------------------------
-    const float4 base = gb_base.Load(int3(pixel, 0));
-    const float4 emissive_sample = gb_emi.Load(int3(pixel, 0));
-    const float4 normal_sample = gb_normal.Load(int3(pixel, 0));
-    const float4 param_sample = gb_param.Load(int3(pixel, 0));
+    float4 base = gb_base.Load(int3(pixel, 0));
+    float4 emissive_sample = gb_emi.Load(int3(pixel, 0));
+    float4 normal_sample = gb_normal.Load(int3(pixel, 0));
+    float4 param_sample = gb_param.Load(int3(pixel, 0));
+    float2 sampled_uv = (float2(pixel) + 0.5f) * frame_screen_size.zw;
+    bool shading_background = is_background;
+    if (!is_background && HasPixelateSettings(emissive_sample))
+    {
+        const float pixel_size = DecodePixelateSize(emissive_sample);
+        const float strength = DecodePixelateStrength(normal_sample);
+        const float2 cell_center = (floor(float2(pixel) / pixel_size) + 0.5f) * pixel_size;
+        const int2 sampled_position = clamp(int2(lerp(float2(pixel), cell_center, strength)),
+            int2(0, 0), screen_size - 1);
+        base = gb_base.Load(int3(sampled_position, 0));
+        emissive_sample = gb_emi.Load(int3(sampled_position, 0));
+        normal_sample = gb_normal.Load(int3(sampled_position, 0));
+        param_sample = gb_param.Load(int3(sampled_position, 0));
+        device_z = gb_depth.Load(int3(sampled_position, 0)).r;
+        sampled_uv = (float2(sampled_position) + 0.5f) * frame_screen_size.zw;
+        view_z = view_position_from_depth(sampled_uv, device_z).z;
+        shading_background = device_z >= 0.999999f;
+    }
 
-    if (is_background)
+    if (shading_background)
     {
         output_color[pixel] = float4(base.rgb, 1.0f);
         return;
     }
 
     const GBufferData g = DecodeGBuffer(base, emissive_sample, normal_sample, param_sample);
-    const float2 uv = (float2(pixel) + 0.5f) * frame_screen_size.zw;
+    const float2 uv = sampled_uv;
     const float3 world_position = world_position_from_depth(uv, device_z);
 
     const float3 N = g.world_normal;
@@ -211,16 +229,23 @@ void main(uint3 group_id : SV_GroupID,
     // 影はCSMを優先し、無効時のみ従来の単一シャドウマップへ落とす。
     const float shadow_rotation_seed =
         interleaved_gradient_noise(float2(pixel), frame_params.x);
-    const float shadow_visibility = csm_params.w >= 0.5f
-        ? csm_sample_shadow_hq(world_position, N, view_z,
-            saturate(dot(N, L)), shadow_rotation_seed)
-        : sample_shadow(world_position);
+    // PS 版と同じ判定。片方だけ見るとタイルド ON/OFF で影が変わる。
+    float shadow_visibility = 1.0f;
+    if (g.receive_shadow)
+    {
+        shadow_visibility = csm_params.w >= 0.5f
+            ? csm_sample_shadow_hq(world_position, N, view_z,
+                saturate(dot(N, L)), shadow_rotation_seed)
+            : sample_shadow(world_position);
+    }
 
     // 平行光源 + IBL + SSAO/SSR は共通のPBR評価を使う。
     // (evaluate_pbr_ex内の点光源/スポットはCB配列版なので、ここでは使わない)
+    // ここでの点光源/スポットは 0 灯。タイル内のライトは下のループで評価する。
     float3 color = evaluate_pbr_ex(g.base_color, g.emissive,
         g.metalness, g.roughness, g.occlusion,
-        N, V, world_position, shadow_visibility, screen);
+        N, V, world_position, shadow_visibility, screen,
+        g.receive_shadow ? 1.0f : 0.0f);
 
     // タイル内のライトだけを評価する。
     const float alpha_roughness = max(g.roughness * g.roughness, 0.0025f);
@@ -253,6 +278,19 @@ void main(uint3 group_id : SV_GroupID,
         }
         if (attenuation <= 0.0f) continue;
 
+        // 影は PS 版 (lights_common.hlsli) と同じ関数を使う。
+        const int shadow_slice = (int) light.params.z;
+        float local_shadow = 1.0f;
+        if (shadow_slice >= 0 && g.receive_shadow)
+        {
+            local_shadow = ((int) light.params.y == TILED_LIGHT_TYPE_SPOT)
+                ? local_shadow_spot(shadow_slice, light.params.w,
+                    world_position, N, sqrt(max(distance_squared, 1.0e-8f)), NoL)
+                : local_shadow_point(shadow_slice, light.params.w,
+                    light.position_radius.xyz, world_position, N, NoL);
+            if (local_shadow <= 0.0f) continue;
+        }
+
         // 平行光源と同じBRDFを使い、点光源だけ簡易式になる不整合を避ける。
         const float3 H = normalize(light_dir + V);
         const float NoH = saturate(dot(N, H));
@@ -262,7 +300,7 @@ void main(uint3 group_id : SV_GroupID,
             VoH, NoL, NoV, NoH) * energy_compensation;
 
         local_lighting += (diffuse + specular) * NoL * attenuation *
-            light.color_intensity.rgb * light.color_intensity.a;
+            light.color_intensity.rgb * light.color_intensity.a * local_shadow;
     }
 
     color += local_lighting * max(ibl_params.w, 0.0f);

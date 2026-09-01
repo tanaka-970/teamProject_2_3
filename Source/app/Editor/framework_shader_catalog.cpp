@@ -12,7 +12,8 @@
 
 void framework::scan_shader_library()
 {
-    if (standalone_game_mode) return;
+    // standalone でも走査する。Catalog は Material Asset のシェーダ解決に使われるため、
+    // 飛ばすと書き出したゲームで Material が Unlit/Magenta へ落ちる。
 
     // ログをエディタの Console と Saved/Diagnostics へ流す。
     //
@@ -27,10 +28,16 @@ void framework::scan_shader_library()
         });
 
     shader_library.ScanAll(content_root_path());
+    // DX12 は ShaderID 単位で Production Surface PSO を Cache する。手動再走査では
+    // 同じ GUID のまま Source/Schema が変わるため、この安全な Editor 境界で Backend
+    // Cache を無効化し、古い Bytecode を描画しないようにする。
+    if (dx12_framework_active && dx12_device_context.IsInitialized())
+        (void)dx12_device_context.ClearStaticAssetCaches();
 }
 
 void framework::poll_shader_source_changes(float elapsed_time)
 {
+    compile_pending_dx12_custom_effects();
     if (standalone_game_mode) return;
     if (!shader_auto_recompile) return;
 
@@ -44,7 +51,13 @@ void framework::poll_shader_source_changes(float elapsed_time)
     // 保存直後はエディタがまだ書き込み中のことがある。
     // ここで失敗しても直前のバイトコードは残るので、
     // 次の 1 秒でもう一度拾い直せばよい。握り潰さず理由はログへ出る。
-    shader_library.PollSourceChanges(false);
+    const std::size_t recompiled = shader_library.PollSourceChanges(false);
+    // ShaderLibrary は Hot Reload 前後で ShaderID を意図的に維持する。実際に再構築が
+    // 起きた場合だけ DX12 Static Cache を消す。これにより DXC Compile に失敗した Shader も
+    // ユーザーが修正した直後に再試行できる。
+    if (recompiled != 0 && dx12_framework_active && dx12_device_context.IsInitialized())
+        (void)dx12_device_context.ClearStaticAssetCaches();
+    if (recompiled != 0) compile_pending_dx12_custom_effects();
 }
 
 namespace
@@ -93,6 +106,7 @@ void framework::draw_shader_catalog_panel()
     {
         scan_shader_library();
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.shader_catalog.rescan");
     ImGui::SameLine();
     if (ImGui::Button(u8"全部コンパイル", ImVec2(140.0f, 0.0f)))
     {
@@ -104,6 +118,7 @@ void framework::draw_shader_catalog_panel()
             u8"コンパイル成功 " + std::to_string(compiled.compiled) +
             u8" 枚 / 失敗 " + std::to_string(compiled.compile_failed) + u8" 枚");
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.shader_catalog.compile_all");
     ImGui::SameLine();
     ImGui::Checkbox(u8"保存で自動コンパイル", &shader_auto_recompile);
 
@@ -176,11 +191,13 @@ void framework::draw_shader_catalog_panel()
                     push_editor_log("Warning", error, entry.info.source_path);
                 }
             }
+            ReplayEngine::Editor::EditorHelp::Item("button.shader_catalog.open_visual_studio");
             ImGui::SameLine();
             if (ImGui::SmallButton(u8"このシェーダを再コンパイル"))
             {
                 shader_library.CompileOne(entry.info.id, false);
             }
+            ReplayEngine::Editor::EditorHelp::Item("button.shader_catalog.compile_one");
 
             // 変種ごとの状態と診断。
             //
@@ -335,6 +352,7 @@ void framework::draw_shader_catalog_panel()
                 {
                     ImGui::SetClipboardText(hlsl.c_str());
                 }
+                ReplayEngine::Editor::EditorHelp::Item("button.shader_catalog.copy_source");
                 ImGui::TreePop();
             }
         }

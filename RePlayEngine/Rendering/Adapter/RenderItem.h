@@ -22,7 +22,7 @@ namespace ReplayEngine::Rendering
     //   既存のレンダラーがメインスレッド上で行う。
     //
     // この分離により、GameObject や Gameplay Component が
-    // ID3D11DeviceContext や Shader へ直接触る構造にならない。
+    // GPU command context や Shader へ直接触る構造にならない。
     struct RenderItem
     {
         // どの GameObject から出たか。ピッキングやデバッグ表示に使う。
@@ -33,6 +33,10 @@ namespace ReplayEngine::Rendering
 
         // MaterialAssetのAssetGUID。空ならRendererのプロパティだけを使う。
         std::string material_asset;
+
+        // サブセット別 Material は Component 内の文字列を借用し、名前は描画へ運ばない。
+        const std::string* const* material_slot_assets = nullptr;
+        std::uint8_t material_slot_count = 0;
 
         // 旧 Scene 互換。Material が割り当てられているときは Shader と値を
         // MaterialAsset から解決し、この値は追加 tint の有無だけに使う。
@@ -80,6 +84,11 @@ namespace ReplayEngine::Rendering
         bool cast_shadow = true;
         bool receive_shadow = true;
 
+        // Material Asset を持たない形式 (FBX/cereal など) で影のアルファ抜きを使うか。
+        // 既定は false。diffuse の alpha を勝手に使うと意図しない穴が空くため明示指定にする。
+        bool shadow_alpha_clip = false;
+        float shadow_alpha_cutoff = 0.5f;
+
         // Screen Effect Stack の layer mask 用。0..31。
         // 名前やObjectIDとは独立した描画選別値で、既存Sceneの既定は0。
         int rendering_layer = 0;
@@ -97,6 +106,7 @@ namespace ReplayEngine::Rendering
         bool pixelate_enabled = false;
         float pixelate_size = 6.0f;
         float pixelate_strength = 1.0f;
+        float pixelate_opacity = 1.0f;
 
         // ---- スキンメッシュ用 ----------------------------------------------
         //

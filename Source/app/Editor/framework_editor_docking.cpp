@@ -12,6 +12,17 @@
 void framework::draw_editor()
 {
     editor_session_active = true;
+
+    // 検索欄の状態はここで毎フレーム倒し、実際に描かれたときだけ立て直す。
+    //
+    // 立てたまま欄が描かれなくなると二度と更新されず、
+    // EditorCameraController の ui_text_input_active が立ちっぱなしになって
+    // ズーム / Pan / Orbit / Fly がすべて効かなくなる。
+    // 欄が消える経路は 2 つあり、どちらも実際に起きる:
+    //   ・ツールバーの幅が足りず検索欄自体を描かない
+    //   ・メニューバーが出ずツールバーごと呼ばれない
+    // draw_scene_view_panel() が scene_view_hovered でやっているのと同じ作法。
+    search_input_active = false;
     ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->Pos);
     ImGui::SetNextWindowSize(viewport->Size);
@@ -96,6 +107,7 @@ void framework::draw_editor()
                 ImGui::DockBuilderDockWindow("Motion レイヤー", left);
                 ImGui::DockBuilderDockWindow("階層", left);
                 ImGui::DockBuilderDockWindow("Motion インスペクター", right);
+                ImGui::DockBuilderDockWindow(u8"イージングカーブ###EasingCurveEditor", right);
                 // Motion Workspace でも central node には Dock しない。
                 // 3D 表示は draw_scene_view_panel() がこの空き領域へ配置する。
                 ImGui::DockBuilderDockWindow("タイムライン", bottom);
@@ -141,6 +153,8 @@ void framework::draw_editor()
     draw_object_scene_recovery_prompt();
     draw_unsaved_object_scene_prompt();
     draw_export_game_dialog();
+    draw_sprite_atlas_editor();
+    draw_easing_editor();
 
     if (active_editor_workspace == editor_workspace::ui)
     {
@@ -153,11 +167,72 @@ void framework::draw_editor()
         draw_ui_focus_style_manager();
         if (active_editor_view == editor_view::scene) handle_viewport_selection();
         draw_collider_debug_overlay();
+        draw_dx12_debug_panel();
         return;
     }
 
     if (active_editor_workspace == editor_workspace::motion)
     {
+        // Motionショートカットは文字入力中に発火させない。
+        const ImGuiIO& motion_io = ImGui::GetIO();
+        if (!motion_io.WantTextInput)
+        {
+            if (!motion_io.KeyCtrl && !motion_io.KeyAlt &&
+                ImGui::IsKeyPressed('S', false))
+                add_motion_key_at_preview_time();
+            if (!motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
+                ImGui::IsKeyPressed(VK_DELETE, false))
+                delete_motion_keys();
+            if (motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
+                ImGui::IsKeyPressed('D', false))
+                duplicate_motion_keys();
+            if (motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
+                ImGui::IsKeyPressed('C', false))
+                copy_motion_keys();
+            if (motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
+                ImGui::IsKeyPressed('V', false))
+                paste_motion_keys();
+            if (!motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
+                ImGui::IsKeyPressed(VK_SPACE, false))
+                toggle_motion_preview_playback();
+            if (!motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
+                ImGui::IsKeyPressed(VK_HOME, false))
+                seek_motion_preview_time(0.0f);
+            if (!motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
+                ImGui::IsKeyPressed(VK_END, false))
+                seek_motion_preview_time(motion_editor_loaded
+                    ? motion_editor_asset.duration : motion_editor_composition.duration);
+            if (!motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
+                ImGui::IsKeyPressed(VK_NEXT, false))
+                step_motion_preview_frames(1);
+            if (!motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
+                ImGui::IsKeyPressed(VK_PRIOR, false))
+                step_motion_preview_frames(-1);
+            if (!motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
+                ImGui::IsKeyPressed(VK_F9, false))
+            {
+                const ReplayEngine::Assets::AssetRecord* preset_record =
+                    motion_selected_easing_curve.IsAssigned()
+                    ? asset_database.FindByGuid(motion_selected_easing_curve.guid) : nullptr;
+                const ReplayEngine::Motion::EasingCurveAsset* preset_curve =
+                    preset_record != nullptr &&
+                    preset_record->kind == ReplayEngine::Assets::AssetKind::EasingCurve
+                    ? ReplayEngine::Motion::EasingCurveAsset::Resolve(
+                        &asset_database, motion_selected_easing_curve)
+                    : nullptr;
+                if (preset_curve != nullptr)
+                {
+                    apply_motion_easing_to_selection(
+                        ReplayEngine::Motion::MotionEasing::PresetCurve,
+                        &motion_selected_easing_curve);
+                }
+                else
+                {
+                    apply_motion_easing_to_selection(
+                        ReplayEngine::Motion::MotionEasing::EaseInOutCubic);
+                }
+            }
+        }
         draw_scene_view_panel();
         if (show_hierarchy_panel) draw_scene_hierarchy();
         draw_motion_layers();
@@ -171,6 +246,7 @@ void framework::draw_editor()
         draw_ui_focus_style_manager();
         if (active_editor_view == editor_view::scene) handle_viewport_selection();
         draw_collider_debug_overlay();
+        draw_dx12_debug_panel();
         return;
     }
 
@@ -193,6 +269,7 @@ void framework::draw_editor()
         object_validation_panel.Draw(object_editor_context, &asset_database,
             &object_collision_world, object_render_items.Size());
     draw_collision_diagnostics_panel();
+    draw_dx12_debug_panel();
     draw_search_results();
     if (active_editor_view == editor_view::scene) handle_viewport_selection();
 

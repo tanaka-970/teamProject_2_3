@@ -23,6 +23,16 @@ namespace ReplayEngine::Components
         MarkMaterialMotionProperty(*this, property_name);
     }
 
+    void MeshRendererComponent::OnSerialize(Reflection::PropertyBag& output) const
+    {
+        SerializeMaterialSlots(*this, output);
+    }
+
+    void MeshRendererComponent::OnDeserialize(const Reflection::PropertyBag& input)
+    {
+        DeserializeMaterialSlots(*this, input);
+    }
+
     bool MeshRendererComponent::BuildRenderItem(const Core::GameObject& owner,
         Rendering::RenderItem& out) const
     {
@@ -31,6 +41,20 @@ namespace ReplayEngine::Components
         out.owner = owner.ID();
         out.mesh_asset = mesh_asset;
         out.material_asset = material_asset;
+        out.material_slot_assets = nullptr;
+        out.material_slot_count = 0;
+        const int slot_count = ClampedMaterialSlotCount(*this);
+        if (slot_count > 0)
+        {
+            for (int index = 0; index < slot_count; ++index)
+            {
+                material_slot_asset_view[static_cast<std::size_t>(index)] =
+                    static_cast<std::size_t>(index) < material_slots.size()
+                    ? &material_slots[static_cast<std::size_t>(index)].asset : nullptr;
+            }
+            out.material_slot_assets = material_slot_asset_view.data();
+            out.material_slot_count = static_cast<std::uint8_t>(slot_count);
+        }
         constexpr float radians_per_degree = DirectX::XM_PI / 180.0f;
         const DirectX::XMMATRIX adjustment = DirectX::XMMatrixScaling(
             local_scale_multiplier.x, local_scale_multiplier.y, local_scale_multiplier.z) *
@@ -72,6 +96,8 @@ namespace ReplayEngine::Components
         out.outline = outline;
         out.cast_shadow = cast_shadow;
         out.receive_shadow = receive_shadow;
+        out.shadow_alpha_clip = shadow_alpha_clip;
+        out.shadow_alpha_cutoff = shadow_alpha_cutoff;
         out.rendering_layer = (std::max)(0, (std::min)(31, rendering_layer));
 
         // 静的メッシュなのでアニメーション情報は運ばない。

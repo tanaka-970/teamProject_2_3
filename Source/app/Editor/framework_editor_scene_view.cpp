@@ -14,8 +14,6 @@
 #include "../../RePlayEngine/Scripting/Core/ScriptRuntime.h"
 #include "../../RePlayEngine/Scene/Serialization/SceneData.h"
 #include "../../RePlayEngine/Scene/Serialization/SceneSerializer.h"
-#include "shader.h"
-#include "texture.h"
 #include "skinned_mesh.h"
 
 #include <algorithm>
@@ -42,6 +40,7 @@ void framework::draw_scene_view_panel()
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoSavedSettings;
+    ReplayEngine::Editor::PanelTabColorScope panel_tab_color("Scene");
     if (!ImGui::Begin("Scene View", &show_scene_view, scene_view_flags))
     {
         ImGui::End();
@@ -109,6 +108,8 @@ void framework::draw_scene_view_panel()
             ImGui::Combo("##SceneDrawMode", &scene_view_draw_mode, modes, IM_ARRAYSIZE(modes));
             ImGui::SameLine();
             ImGui::Checkbox(u8"コライダー", &show_collider_debug_draw);
+            ImGui::SameLine();
+            ImGui::Checkbox(u8"ライト範囲", &show_light_range_debug_draw);
             ImGui::SameLine();
             ImGui::Checkbox(u8"グリッド", &show_scene_grid);
             ImGui::SameLine();
@@ -308,6 +309,7 @@ void framework::draw_search_results()
 
 void framework::draw_scene_hierarchy()
 {
+    ReplayEngine::Editor::PanelTabColorScope panel_tab_color("Scene");
     ImGui::Begin("階層");
     const auto item = [this](const char* label, editor_selection value)
     {

@@ -1,5 +1,6 @@
 ﻿#include "framework.h"
 
+#include "../../RePlayEngine/Editor/Style/EditorStyle.h"
 #include "../../RePlayEngine/Components/UI/UIImageComponent.h"
 #include "../../RePlayEngine/Motion/MotionBindingResolver.h"
 #include "../../RePlayEngine/Motion/MotionEvaluator.h"
@@ -26,7 +27,8 @@ using namespace framework_motion_workspace::Detail;
 void framework::draw_motion_preview()
 {
     if (!show_motion_preview_panel) return;
-    if (!ImGui::Begin("Motion プレビュー", &show_motion_preview_panel))
+    ReplayEngine::Editor::PanelTabColorScope panel_tab_color("Motion");
+    if (!ImGui::Begin(u8"Motion プレビュー", &show_motion_preview_panel))
     {
         ImGui::End();
         return;
@@ -34,26 +36,21 @@ void framework::draw_motion_preview()
 
     if (!motion_editor_loaded)
     {
-        ImGui::TextDisabled("Motion Asset が未選択です。");
+        ImGui::TextDisabled(u8"モーションアセットが未選択です。");
         ImGui::End();
         return;
     }
 
-    if (ImGui::Button(motion_preview_active ? "停止" : "再生"))
-    {
-        if (motion_preview_active) stop_motion_preview();
-        else
-        {
-            capture_motion_preview_targets();
-            motion_preview_active = true;
-        }
-    }
+    if (ImGui::Button(motion_preview_active ? u8"停止" : u8"再生"))
+        toggle_motion_preview_playback();
+    ReplayEngine::Editor::EditorHelp::Item("button.motion.preview_playback");
     ImGui::SameLine();
-    if (ImGui::Button("復元")) stop_motion_preview();
+    if (ImGui::Button(u8"復元")) stop_motion_preview();
+    ReplayEngine::Editor::EditorHelp::Item("button.motion.preview_restore");
     ImGui::SameLine();
-    ImGui::Checkbox("Loop", &motion_preview_loop);
+    ImGui::Checkbox(u8"ループ", &motion_preview_loop);
     ImGui::SetNextItemWidth(140.0f);
-    ImGui::DragFloat("Speed", &motion_preview_speed, 0.01f, -8.0f, 8.0f);
+    ImGui::DragFloat(u8"速度", &motion_preview_speed, 0.01f, -8.0f, 8.0f);
 
     if (motion_preview_active)
     {
@@ -78,14 +75,14 @@ void framework::draw_motion_preview()
     }
 
     ImGui::SetNextItemWidth(-1.0f);
-    if (ImGui::SliderFloat("Time", &motion_preview_time, 0.0f,
+    if (ImGui::SliderFloat(u8"時間", &motion_preview_time, 0.0f,
         (std::max)(0.001f, motion_editor_asset.duration)))
     {
         apply_motion_preview_time();
     }
 
     ImGui::Separator();
-    ImGui::Text("Tracks: %d", static_cast<int>(motion_editor_asset.tracks.size()));
-    ImGui::TextDisabled("PreviewはPropertyRegistry::Capture/Applyで復元します。");
+    ImGui::Text(u8"トラック数: %d", static_cast<int>(motion_editor_asset.tracks.size()));
+    ImGui::TextDisabled(u8"プレビューは PropertyRegistry::Capture/Apply で復元します。");
     ImGui::End();
 }

@@ -93,6 +93,16 @@ void framework::initialize_object_scene()
     // ただしここで Prefab を配置することはない。設定を持っているだけ。
     load_project_settings();
 
+    ReplayEngine::Editor::EditorHelp::Configure(
+        content_path(std::filesystem::path("resources") / "EditorHelp.replayhelp"),
+        &external_file_history);
+    std::string editor_help_error;
+    if (!ReplayEngine::Editor::EditorHelp::Load(editor_help_error) &&
+        !editor_help_error.empty())
+    {
+        object_editor_context.SetStatus("EditorHelp: " + editor_help_error);
+    }
+
     // Input の正本も ProjectSettings にぶら下がるため、設定を読み込んだ直後に適用する。
     // Asset 未設定だけ旧 InputBindings.ini を移行用 fallback として読む。
     if (!project_settings.InputActionAssetGuid().empty())
@@ -181,6 +191,18 @@ void framework::initialize_object_scene()
     // World の所有者はここで確定し、以降 framework が Scene を値で持つことはない。
     initialize_runtime_services();
 
+    const ReplayEngine::Project::AssetReferenceStatus loading_scene =
+        project_settings.ResolveLoadingScene(asset_database);
+    if (loading_scene.IsResolved())
+    {
+        if (!load_exclusive_scene_from_path(loading_scene.path))
+            push_editor_log("Warning", "Loading Screen Scene の読み込みに失敗しました");
+    }
+    else if (loading_scene.IsMissing())
+    {
+        push_editor_log("Warning", "Loading Screen Scene の Asset が見つかりません");
+    }
+
     //   Editor として起動している間、編集対象は必ず object_scene。
     //   Runtime World が有効になるのは Play (F5) か、--game 起動のときだけ。
     if (object_boot_from_startup_scene) begin_startup_scene();
@@ -218,6 +240,97 @@ void framework::load_project_settings()
     enable_ssr = project_settings.SsrEnabled();
     enable_taa = project_settings.TaaEnabled();
     enable_depth_prepass = project_settings.DepthPrepassEnabled();
+    enable_luminance_shader = project_settings.LuminanceEnabled();
+    luminance_threshold = project_settings.LuminanceThreshold();
+    enable_final_pass_shader = project_settings.FinalPassEnabled();
+
+    const Project::ProjectSettings::ScreenSpaceSettings& screen =
+        project_settings.ScreenSpace();
+    ssao_pass.radius = screen.ssao_radius;
+    ssao_pass.intensity = screen.ssao_intensity;
+    ssao_pass.power = screen.ssao_power;
+    ssao_pass.thin_occluder = screen.ssao_thin_occluder;
+    ssao_pass.slice_count = screen.ssao_slice_count;
+    ssao_pass.step_count = screen.ssao_step_count;
+    ssao_pass.fade_start = screen.ssao_fade_start;
+    ssao_pass.fade_end = screen.ssao_fade_end;
+    ssao_pass.normal_bias = screen.ssao_normal_bias;
+    ssao_pass.blur_sharpness = screen.ssao_blur_sharpness;
+    ssao_pass.blur_enabled = screen.ssao_blur_enabled;
+    ssr_pass.max_distance = screen.ssr_max_distance;
+    ssr_pass.thickness = screen.ssr_thickness;
+    ssr_pass.stride = screen.ssr_stride;
+    ssr_pass.max_step = screen.ssr_max_step;
+    ssr_pass.refine_step = screen.ssr_refine_step;
+    ssr_pass.max_roughness = screen.ssr_max_roughness;
+    ssr_pass.intensity = screen.ssr_intensity;
+    ssr_pass.edge_fade = screen.ssr_edge_fade;
+    ssr_pass.ray_bias = screen.ssr_ray_bias;
+    ssr_pass.resolve_radius = screen.ssr_resolve_radius;
+    ssr_pass.resolve_tap_count = screen.ssr_resolve_tap_count;
+    taa_pass.blend = screen.taa_blend;
+    taa_pass.variance_gamma = screen.taa_variance_gamma;
+    taa_pass.sharpness = screen.taa_sharpness;
+    taa_pass.max_velocity = screen.taa_max_velocity;
+    ssao_pass.enabled = enable_ssao;
+    ssr_pass.enabled = enable_ssr;
+    taa_pass.enabled = enable_taa;
+    configure_screen_space_overrides(screen_space_overrides);
+}
+
+void framework::configure_screen_space_overrides(
+    const std::vector<std::string>& overrides)
+{
+    screen_space_overrides = overrides;
+    for (const std::string& item : screen_space_overrides)
+    {
+        const std::size_t separator = item.find('=');
+        if (separator == std::string::npos) continue;
+        const std::string key = item.substr(0, separator);
+        const std::string value = item.substr(separator + 1);
+        try
+        {
+            if (key == "ssao.enabled") ssao_pass.enabled = std::stoi(value) != 0;
+            else if (key == "ssao.radius") ssao_pass.radius = std::stof(value);
+            else if (key == "ssao.intensity") ssao_pass.intensity = std::stof(value);
+            else if (key == "ssao.power") ssao_pass.power = std::stof(value);
+            else if (key == "ssao.thin_occluder") ssao_pass.thin_occluder = std::stof(value);
+            else if (key == "ssao.slice_count") ssao_pass.slice_count = std::stoi(value);
+            else if (key == "ssao.step_count") ssao_pass.step_count = std::stoi(value);
+            else if (key == "ssao.fade_start") ssao_pass.fade_start = std::stof(value);
+            else if (key == "ssao.fade_end") ssao_pass.fade_end = std::stof(value);
+            else if (key == "ssao.normal_bias") ssao_pass.normal_bias = std::stof(value);
+            else if (key == "ssao.blur_sharpness") ssao_pass.blur_sharpness = std::stof(value);
+            else if (key == "ssao.blur_enabled") ssao_pass.blur_enabled = std::stoi(value) != 0;
+            else if (key == "ssr.enabled") ssr_pass.enabled = std::stoi(value) != 0;
+            else if (key == "ssr.max_distance") ssr_pass.max_distance = std::stof(value);
+            else if (key == "ssr.thickness") ssr_pass.thickness = std::stof(value);
+            else if (key == "ssr.stride") ssr_pass.stride = std::stof(value);
+            else if (key == "ssr.max_step") ssr_pass.max_step = std::stoi(value);
+            else if (key == "ssr.refine_step") ssr_pass.refine_step = std::stoi(value);
+            else if (key == "ssr.max_roughness") ssr_pass.max_roughness = std::stof(value);
+            else if (key == "ssr.intensity") ssr_pass.intensity = std::stof(value);
+            else if (key == "ssr.edge_fade") ssr_pass.edge_fade = std::stof(value);
+            else if (key == "ssr.ray_bias") ssr_pass.ray_bias = std::stof(value);
+            else if (key == "ssr.resolve_radius") ssr_pass.resolve_radius = std::stof(value);
+            else if (key == "ssr.resolve_tap_count") ssr_pass.resolve_tap_count = std::stoi(value);
+            else if (key == "taa.enabled") taa_pass.enabled = std::stoi(value) != 0;
+            else if (key == "taa.blend") taa_pass.blend = std::stof(value);
+            else if (key == "taa.variance_gamma") taa_pass.variance_gamma = std::stof(value);
+            else if (key == "taa.sharpness") taa_pass.sharpness = std::stof(value);
+            else if (key == "taa.max_velocity") taa_pass.max_velocity = std::stof(value);
+            else if (key == "post.luminance_enabled")
+                enable_luminance_shader = std::stoi(value) != 0;
+            else if (key == "post.luminance_threshold")
+                luminance_threshold = std::stof(value);
+            else if (key == "post.final_pass_enabled")
+                enable_final_pass_shader = std::stoi(value) != 0;
+        }
+        catch (...)
+        {
+            continue;
+        }
+    }
 }
 
 bool framework::save_project_settings()
@@ -226,6 +339,37 @@ bool framework::save_project_settings()
 
     std::string error;
     const auto path = Project::ProjectSettingsSerializer::DefaultPath();
+    project_settings.SetLuminanceEnabled(enable_luminance_shader);
+    project_settings.SetLuminanceThreshold(luminance_threshold);
+    project_settings.SetFinalPassEnabled(enable_final_pass_shader);
+    Project::ProjectSettings::ScreenSpaceSettings& screen =
+        project_settings.MutableScreenSpace();
+    screen.ssao_radius = ssao_pass.radius;
+    screen.ssao_intensity = ssao_pass.intensity;
+    screen.ssao_power = ssao_pass.power;
+    screen.ssao_thin_occluder = ssao_pass.thin_occluder;
+    screen.ssao_slice_count = ssao_pass.slice_count;
+    screen.ssao_step_count = ssao_pass.step_count;
+    screen.ssao_fade_start = ssao_pass.fade_start;
+    screen.ssao_fade_end = ssao_pass.fade_end;
+    screen.ssao_normal_bias = ssao_pass.normal_bias;
+    screen.ssao_blur_sharpness = ssao_pass.blur_sharpness;
+    screen.ssao_blur_enabled = ssao_pass.blur_enabled;
+    screen.ssr_max_distance = ssr_pass.max_distance;
+    screen.ssr_thickness = ssr_pass.thickness;
+    screen.ssr_stride = ssr_pass.stride;
+    screen.ssr_max_step = ssr_pass.max_step;
+    screen.ssr_refine_step = ssr_pass.refine_step;
+    screen.ssr_max_roughness = ssr_pass.max_roughness;
+    screen.ssr_intensity = ssr_pass.intensity;
+    screen.ssr_edge_fade = ssr_pass.edge_fade;
+    screen.ssr_ray_bias = ssr_pass.ray_bias;
+    screen.ssr_resolve_radius = ssr_pass.resolve_radius;
+    screen.ssr_resolve_tap_count = ssr_pass.resolve_tap_count;
+    screen.taa_blend = taa_pass.blend;
+    screen.taa_variance_gamma = taa_pass.variance_gamma;
+    screen.taa_sharpness = taa_pass.sharpness;
+    screen.taa_max_velocity = taa_pass.max_velocity;
     bool started_file_undo = false;
     if (project_settings_file_undo_enabled && object_editor_context.CanEdit() &&
         !external_file_history.InTransaction())
@@ -261,7 +405,7 @@ bool framework::undo_external_file_edit()
         if (!error.empty()) project_browser_status = error;
         return false;
     }
-    reload_external_file_edit_target(restored);
+    project_apply_external_history_change();
     project_browser_status = "Undo: " + label;
     return true;
 }
@@ -276,7 +420,7 @@ bool framework::redo_external_file_edit()
         if (!error.empty()) project_browser_status = error;
         return false;
     }
-    reload_external_file_edit_target(restored);
+    project_apply_external_history_change();
     project_browser_status = "Redo: " + label;
     return true;
 }
@@ -303,6 +447,26 @@ void framework::reload_external_file_edit_target(const std::filesystem::path& re
         load_active_input_action_asset();
         sync_runtime_scene_flow_asset();
         return;
+    }
+
+    if (sprite_atlas_editor_loaded && !sprite_atlas_editor_path.empty() &&
+        normalize(sprite_atlas_editor_path) == target)
+    {
+        ReplayEngine::Assets::SpriteAtlasAsset restored_atlas;
+        std::string atlas_error;
+        if (ReplayEngine::Assets::SpriteAtlasAsset::LoadFromFile(
+            sprite_atlas_editor_path, restored_atlas, atlas_error))
+        {
+            sprite_atlas_editor_asset = std::move(restored_atlas);
+            sprite_atlas_selected_region = (std::min)(sprite_atlas_selected_region,
+                static_cast<int>(sprite_atlas_editor_asset.regions.size()) - 1);
+            sprite_atlas_editor_dirty = false;
+            sprite_atlas_editor_status = "Undo/RedoでAtlasを再読込しました";
+        }
+        else
+        {
+            sprite_atlas_editor_status = "Atlas再読込失敗: " + atlas_error;
+        }
     }
 
     for (const auto& record : asset_database.Records())
@@ -373,9 +537,12 @@ framework::object_ui_viewport framework::object_ui_viewport_target() const noexc
     target.logical_height = target.height;
 
 #ifdef USE_IMGUI
-    if (editor_mode && !object_scene_play_mode && scene_view_overlay_valid)
+    if (editor_mode && !object_scene_play_mode && !object_editor_play_loading &&
+        scene_view_overlay_valid)
     {
-        // Editor では Scene View の矩形へ、実行時は従来どおりウィンドウ全体へ描く。
+        // このアプリはImGuiのマルチビューポートを有効にしていないため、
+        // Scene View・MousePos・DX12バックバッファは全てクライアント座標になる。
+        // 移行前どおり同じ矩形を描画・選択枠・入力判定で共有する。
         target.left = scene_view_overlay_position.x;
         target.top = scene_view_overlay_position.y;
         target.width = (std::max)(1.0f, scene_view_overlay_size.x);
@@ -393,8 +560,8 @@ framework::object_ui_viewport framework::object_ui_viewport_target() const noexc
             const float zoom = (std::max)(0.10f, ui_preview_zoom);
             const float view_width = (std::max)(1.0f, target.logical_width * zoom);
             const float view_height = (std::max)(1.0f, target.logical_height * zoom);
-            target.left += (target.width - view_width) * 0.5f;
-            target.top += (target.height - view_height) * 0.5f;
+            target.left += (target.width - view_width) * 0.5f + ui_preview_pan_x;
+            target.top += (target.height - view_height) * 0.5f + ui_preview_pan_y;
             target.width = view_width;
             target.height = view_height;
         }
@@ -512,7 +679,7 @@ void framework::update_object_fixed_step(float elapsed_time)
 }
 
 void framework::update_ui_sprite_animators(ReplayEngine::Scene::Scene& scene,
-    float elapsed_time)
+    float elapsed_time, const ReplayEngine::Motion::MotionMixer* mixer)
 {
     using ReplayEngine::Components::UISpriteAnimatorComponent;
 
@@ -539,7 +706,7 @@ void framework::update_ui_sprite_animators(ReplayEngine::Scene::Scene& scene,
             }
 
             static_cast<UISpriteAnimatorComponent*>(component)->UpdateSprite(
-                elapsed_time, &motion_mixer);
+                elapsed_time, mixer);
         }
     }
 }

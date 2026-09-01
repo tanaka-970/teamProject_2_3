@@ -1,5 +1,6 @@
-#include "ShaderStackEditor.h"
+﻿#include "ShaderStackEditor.h"
 #include "ShaderPropertyInspector.h"
+#include "../ReorderableList.h"
 #include "../../Rendering/Materials/MaterialSchema.h"
 #include "../../Rendering/Shaders/ShaderCatalog.h"
 #include "../../Assets/AssetDatabase.h"
@@ -34,11 +35,6 @@ namespace ReplayEngine::Editor
             }
         }
 
-        struct DraggedLayer
-        {
-            std::uintptr_t stack = 0;
-            std::size_t index = 0;
-        };
     }
 
     ShaderStackEditorResult ShaderStackEditor::Draw(const char* id, int& base_shader,
@@ -47,7 +43,9 @@ namespace ReplayEngine::Editor
         DirectX::XMFLOAT4& outline_parameters, float& pixel_grid,
         float& pixelate_strength, bool show_surface_controls,
         const Rendering::ShaderCatalog* catalog,
-        const Assets::AssetDatabase* assets)
+        const Assets::AssetDatabase* assets,
+        ShaderStackEditor::BeforeReorderCallback before_reorder,
+        void* before_reorder_owner)
     {
         using namespace Rendering;
         const char* shading_names[] = { "FBX標準", "PBR", "トゥーン", "アンリット", "ピクセレーション" };
@@ -180,82 +178,50 @@ namespace ReplayEngine::Editor
         }
 
         std::size_t remove_index = static_cast<std::size_t>(-1);
-        std::size_t move_source = static_cast<std::size_t>(-1);
-        std::size_t move_destination = static_cast<std::size_t>(-1);
+        ReorderRequest move_request{};
+        if (const char* dragging = ActiveReorderLabel(&layers))
+        {
+            ImGui::TextColored(ImGui::GetStyle().Colors[ImGuiCol_DragDropTarget],
+                "移動中: %s", dragging);
+        }
         for (std::size_t index = 0; index < layers.Layers().size(); ++index)
         {
             ShaderLayer& layer = layers.Layers()[index];
-            ImGui::PushID(static_cast<int>(layer.id));
             const ShaderID layer_shader = layer.EffectiveShader();
             const ShaderCatalog::Entry* layer_entry =
                 catalog != nullptr && layer_shader.IsValid() ? catalog->Find(layer_shader) : nullptr;
             const std::string layer_name = layer_entry != nullptr
                 ? layer_entry->info.DisplayName()
                 : (layer.type != ShaderLayerType::Custom ? std::string(LayerName(layer.type))
-                    : std::string("Missing Layer Shader"));
-            const std::string title = "Layer " + std::to_string(index + 1) + "  " + layer_name;
-            ImGui::Selectable(title.c_str(), false, ImGuiSelectableFlags_AllowItemOverlap);
-            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
-            {
-                const DraggedLayer payload{ reinterpret_cast<std::uintptr_t>(&layers), index };
-                ImGui::SetDragDropPayload("REPLAY_SHADER_LAYER", &payload, sizeof(payload));
-                ImGui::Text("移動: %s", layer_name.c_str());
-                ImGui::EndDragDropSource();
-            }
-            if (ImGui::BeginDragDropTarget())
-            {
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("REPLAY_SHADER_LAYER"))
+                    : std::string(u8"レイヤーシェーダーが見つかりません"));
+            const bool unsupported_builtin = BuiltInShaderLayers::IsBuiltIn(layer_shader);
+            const std::string title = "Layer " + std::to_string(index + 1) + "  " +
+                layer_name + (unsupported_builtin
+                    ? u8" [保存されますが、DX12 描画には反映されません]" : "");
+            const std::string layer_id = "layer_" + std::to_string(layer.id);
+            ImGui::PushID(layer_id.c_str());
+            if (ImGui::Checkbox("有効", &layer.enabled)) changed = true;
+            ImGui::SameLine();
+            const ReorderableItemResult item = DrawReorderableItem(
+                &layers, layer_id.c_str(), index, layers.Layers().size(),
+                title.c_str(), false, false, true,
+                [&]()
                 {
-                    const auto dragged = *static_cast<const DraggedLayer*>(payload->Data);
-                    if (dragged.stack == reinterpret_cast<std::uintptr_t>(&layers))
+                    if (ImGui::MenuItem("Layer を削除"))
                     {
-                        move_source = dragged.index;
-                        move_destination = index;
+                        remove_index = index;
                         changed = true;
                     }
-                }
-                ImGui::EndDragDropTarget();
-            }
-            ImGui::SameLine();
-            if (ImGui::Checkbox("有効", &layer.enabled)) changed = true;
-
-            // 並べ替えのボタン。
-            //
-            // ドラッグ&ドロップだけだと、並べ替えられること自体に
-            // 気付けない。上下ボタンを出して発見できるようにする。
-            // ドラッグは残すので、慣れたらそちらの方が速い。
-            ImGui::SameLine();
-            if (index == 0) ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
-            if (ImGui::ArrowButton("##MoveUp", ImGuiDir_Up) && index > 0)
+                });
+            if (item.request.Valid() && !move_request.Valid())
             {
-                move_source = index;
-                move_destination = index - 1;
-                changed = true;
-            }
-            if (index == 0) ImGui::PopItemFlag();
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("1つ手前へ（先に描く）");
-
-            ImGui::SameLine();
-            const bool is_last = index + 1 >= layers.Layers().size();
-            if (is_last) ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
-            if (ImGui::ArrowButton("##MoveDown", ImGuiDir_Down) && !is_last)
-            {
-                move_source = index;
-                move_destination = index + 1;
-                changed = true;
-            }
-            if (is_last) ImGui::PopItemFlag();
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("1つ後ろへ（後に描く）");
-
-            ImGui::SameLine();
-            if (ImGui::SmallButton("削除"))
-            {
-                remove_index = index;
+                move_request = item.request;
                 changed = true;
             }
 
-            if (layer.enabled && ImGui::TreeNodeEx("調整", ImGuiTreeNodeFlags_DefaultOpen))
+            if (item.opened && layer.enabled)
             {
+                ImGui::Indent();
                 int blend = static_cast<int>(layer.blend);
                 if (ImGui::Combo("合成方式", &blend, blend_names, IM_ARRAYSIZE(blend_names)))
                 {
@@ -275,8 +241,8 @@ namespace ReplayEngine::Editor
                     if (!layer_entry->AllCompiled())
                         ImGui::TextColored(ImVec4(1.0f, 0.72f, 0.30f, 1.0f),
                             layer_entry->EverCompiled()
-                                ? "Compile error - last successful bytecode is retained"
-                                : "Layer Shader has no successful bytecode");
+                                ? "コンパイル失敗: 前回成功した bytecode を使用中"
+                                : "未対応: 成功した bytecode がなく、この Layer は描画されません");
 
                     if (advanced_mode)
                     {
@@ -299,7 +265,7 @@ namespace ReplayEngine::Editor
                 {
                     // Missing Shader でも保存済み PropertyBag は捨てない。
                     ImGui::TextColored(ImVec4(1.0f, 0.38f, 0.38f, 1.0f),
-                        "Missing Layer Shader - PropertyBag retained");
+                        "未対応: この Layer Shader は現行 DX12 では描画されません。設定値は保存されます");
                     if (layer_shader.IsValid())
                         ImGui::TextDisabled("GUID  %s", layer_shader.ToString().c_str());
                 }
@@ -341,18 +307,31 @@ namespace ReplayEngine::Editor
                     pixel_grid = layer.parameter;
                     pixelate_strength = layer.strength;
                 }
-                ImGui::TreePop();
+                ImGui::Unindent();
+            }
+            else if (item.opened)
+            {
+                ImGui::Indent();
+                ImGui::TextDisabled("この Layer は無効です");
+                ImGui::Unindent();
             }
             ImGui::Separator();
             ImGui::PopID();
         }
-        if (move_source != static_cast<std::size_t>(-1)) layers.Move(move_source, move_destination);
+        bool reordered = false;
+        if (move_request.Valid() && remove_index == static_cast<std::size_t>(-1))
+        {
+            if (before_reorder != nullptr) before_reorder(before_reorder_owner);
+            layers.Move(move_request.source, move_request.destination);
+            reordered = true;
+        }
         if (remove_index != static_cast<std::size_t>(-1)) layers.Remove(remove_index);
         outline_pass = layers.Contains(BuiltInShaderLayers::Outline);
         ImGui::PopID();
 
         ShaderStackEditorResult result{};
         result.changed = changed;
+        result.reordered = reordered;
         result.requires_pbr = base_shader == 1 || layers.Contains(ShaderLayerType::Pbr);
         result.requires_toon = base_shader == 2 || layers.Contains(ShaderLayerType::Toon);
         result.requires_unlit = base_shader == 3 || base_shader == 4 ||

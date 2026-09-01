@@ -41,7 +41,10 @@ bool framework::using_editor_camera() const noexcept
     // 将来 Scene View と Game View を分ける場合は、この関数の戻り値を
     // 「どちらの View を描いているか」で決めるだけでよい。
     // 呼び出し側はすべてこの関数を通っているため、他は変更不要になる。
-    if (!editor_mode) return false;
+    // プロファイル実行は Editor UI の状態に関係なく Runtime Camera を使う。
+    // 起動中の Editor セッション復元などで editor_mode が立っても、
+    // ベンチマークの描画視点が編集カメラへ戻らないようにする。
+    if (!editor_mode || object_scene_play_mode || profile_benchmark_mode) return false;
     return active_editor_view == editor_view::scene;
 }
 
@@ -436,10 +439,12 @@ void framework::draw_editor_camera_settings()
     ImGui::SameLine();
     ImGui::TextDisabled(preset.Editable() ? "[Personal]" : "[Shared]");
     if (ImGui::Button(u8"プリセット管理を開く")) show_camera_preset_manager = true;
+    ReplayEngine::Editor::EditorHelp::Item("button.camera.open_preset_manager");
     if (!preset.Editable())
     {
         ImGui::SameLine();
         if (ImGui::Button(u8"自分用に複製")) make_active_editor_camera_preset_personal_copy();
+        ReplayEngine::Editor::EditorHelp::Item("button.camera.duplicate_preset");
     }
 
     bool changed = false;
@@ -464,6 +469,7 @@ void framework::draw_editor_camera_settings()
 
     ImGui::Spacing();
     if (ImGui::Button(u8"選択対象へフォーカス")) focus_editor_camera_on_selection();
+    ReplayEngine::Editor::EditorHelp::Item("button.camera.focus_selection");
 
     const auto& position = editor_camera.Position();
     ImGui::TextDisabled(u8"位置   %.2f  %.2f  %.2f", position.x, position.y, position.z);

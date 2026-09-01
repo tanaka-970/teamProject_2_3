@@ -2,7 +2,7 @@
 
 void framework::update(float elapsed_time)
 {
-    ReplayEngine::Rendering::Stats().BeginFrame(immediate_context.Get());
+    ReplayEngine::Rendering::Stats().BeginFrame();
     REPLAY_PROFILE_SCOPE("Update");
     // 基準画像を撮る間はワールドを止める。
     //
@@ -20,7 +20,13 @@ void framework::update(float elapsed_time)
     if (ImGui::GetCurrentContext() &&
         (editor_mode || (standalone_game_mode && show_render_stats)))
     {
-        keyboard_captured = ImGui::GetIO().WantCaptureKeyboard;
+        // Play中にGame/Scene Viewをフォーカスしている場合は、
+        // ImGuiのWindowフォーカスだけを理由にGameplayキーボードを遮断しない。
+        // InputTextなど他のEditor UIにフォーカスがある場合は従来どおり捕捉する。
+        const bool game_view_owns_keyboard =
+            editor_mode && object_scene_play_mode && scene_view_focused;
+        keyboard_captured = ImGui::GetIO().WantCaptureKeyboard &&
+            !game_view_owns_keyboard;
         // Standalone Profiler を開いている間は Profiler がマウスを所有する。
         // Editor だけは従来どおり Scene View 上の操作を通す。
         mouse_captured = ImGui::GetIO().WantCaptureMouse &&
@@ -42,6 +48,16 @@ void framework::update(float elapsed_time)
             REPLAY_PROFILE_SCOPE("SceneManagerExclusive");
             scene_manager.Update(elapsed_time);
         }
+        if (scene_manager.IsExclusive())
+        {
+            if (object_editor_play_loading)
+                update_editor_play_loading();
+            update_exclusive_scene(elapsed_time);
+        }
+        else if (object_editor_play_loading)
+        {
+            finish_editor_play_loading();
+        }
         return;
     }
 
@@ -59,46 +75,40 @@ void framework::update(float elapsed_time)
         update_object_scene(elapsed_time);
     }
 
-#ifdef USE_IMGUI
-    // Standalone でも F4 Profiler だけは描画できるようにする。
-    // Editor 全体を起動せず、Profiler が表示されているフレームだけ
-    // ImGui の NewFrame を作るため、非表示時の追加 UI コストは発生しない。
-    if (!editor_mode)
+    // Win32入力とEditor UIはDX12 ImGui Rendererへ統一する。
+    if (dx12_framework_active)
     {
-        if (show_render_stats)
+#ifdef USE_IMGUI
+        if (!editor_mode)
         {
-            ImGui_ImplDX11_NewFrame();
+            if (show_render_stats && ImGui::GetCurrentContext() &&
+                dx12_device_context.ImGuiReady())
+            {
+                ImGui_ImplWin32_NewFrame();
+                ImGui::NewFrame();
+                imgui_frame_active = true;
+                REPLAY_PROFILE_SCOPE("ProfilerBuildUI");
+                draw_render_stats_overlay();
+            }
+            return;
+        }
+        if (ImGui::GetCurrentContext())
+        {
+            configure_editor_style();
             ImGui_ImplWin32_NewFrame();
             ImGui::NewFrame();
             imgui_frame_active = true;
-            REPLAY_PROFILE_SCOPE("ProfilerBuildUI");
-            draw_render_stats_overlay();
+            {
+                REPLAY_PROFILE_SCOPE("EditorCamera");
+                update_editor_camera(elapsed_time);
+            }
+            {
+                REPLAY_PROFILE_SCOPE("EditorBuildUI");
+                draw_editor();
+                draw_render_stats_overlay();
+            }
         }
+#endif
         return;
     }
-    ImGui_ImplDX11_NewFrame();
-    ImGui_ImplWin32_NewFrame();
-    ImGui::NewFrame();
-    imgui_frame_active = true;
-
-    // Scene View の編集カメラ。
-    //
-    // draw_editor() より先に呼ぶ理由:
-    //   カメラがこのフレームでマウス／キーを消費したかを
-    //   editor_camera_consumed_input で先に確定させる必要がある。
-    //   Gizmo と矩形選択（draw_editor から呼ばれる）はその結果を見て、
-    //   カメラ操作中は動かないようにしている。
-    //
-    // Runtime Camera へは一切書き込まない。読むのは描画行列を返すときだけ。
-    {
-        REPLAY_PROFILE_SCOPE("EditorCamera");
-        update_editor_camera(elapsed_time);
-    }
-
-    {
-        REPLAY_PROFILE_SCOPE("EditorBuildUI");
-        draw_editor();
-        draw_render_stats_overlay();
-    }
-#endif
 }

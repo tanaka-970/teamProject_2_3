@@ -3,8 +3,269 @@
 #include "../../RePlayEngine/Components/Gameplay/CharacterMotorComponent.h"
 #include "../../RePlayEngine/Components/Gameplay/PlayerControllerComponent.h"
 #include "../../RePlayEngine/Components/Gameplay/PlayerInputComponent.h"
+#include "../../RePlayEngine/Components/Rendering/MaterialOverrideDynamicProperties.h"
+#include "../../RePlayEngine/Components/Rendering/MeshRendererComponent.h"
+#include "../../RePlayEngine/Components/Rendering/PrimitiveMeshRendererComponent.h"
+#include "../../RePlayEngine/Components/Rendering/SkinnedMeshRendererComponent.h"
+#include "../../RePlayEngine/Assets/AssetDatabase.h"
+#include "../../RePlayEngine/Editor/ReorderableList.h"
+#include "../../RePlayEngine/Editor/Style/EditorStyle.h"
 
+#include <algorithm>
+#include <cstddef>
+#include <cstring>
 #include <string>
+#include <utility>
+#include <vector>
+
+
+namespace
+{
+    std::vector<std::string> material_subset_names(const skinned_mesh& mesh_asset)
+    {
+        // Slot は Object 全体の通し番号。描画側の material_slot_cursor と同じ順序・
+        // 同じ個数で並べる。mesh 間の最大値にすると、glTF のように 1 primitive が
+        // 1 mesh + subset 1 個で入る形式で行が 1 つしか出ない。
+        const std::size_t limit =
+            static_cast<std::size_t>(ReplayEngine::Components::max_mesh_material_slots);
+        std::vector<std::string> names;
+        for (const skinned_mesh::mesh& mesh : mesh_asset.meshes)
+        {
+            if (mesh.subsets.empty())
+            {
+                if (names.size() >= limit) break;
+                names.emplace_back();
+                continue;
+            }
+            for (const skinned_mesh::mesh::subset& subset : mesh.subsets)
+            {
+                if (names.size() >= limit) break;
+                names.push_back(subset.material_name);
+            }
+            if (names.size() >= limit) break;
+        }
+        return names;
+    }
+
+    template<class T>
+    void initialize_material_slots(T& renderer, const std::vector<std::string>& default_names)
+    {
+        using namespace ReplayEngine::Components;
+        const int old_count = ClampedMaterialSlotCount(renderer);
+        const std::size_t old_size = (std::min)(renderer.material_slots.size(),
+            static_cast<std::size_t>(old_count));
+        const int visible_count = static_cast<int>((std::min)(default_names.size(),
+            static_cast<std::size_t>(max_mesh_material_slots)));
+        const int required = (std::max)(old_count, visible_count);
+        EnsureMaterialSlotStorage(renderer, required);
+        for (std::size_t index = old_size;
+            index < renderer.material_slots.size() && index < default_names.size(); ++index)
+        {
+            renderer.material_slots[index].name = default_names[index];
+        }
+    }
+
+    bool draw_material_asset_slot(const char* label,
+        const ReplayEngine::Assets::AssetDatabase* database,
+        const std::string& current, std::string& selected, bool editable,
+        const char* empty_preview)
+    {
+        selected = current;
+        const ReplayEngine::Assets::AssetRecord* record = database != nullptr && !current.empty()
+            ? database->FindByGuid(current) : nullptr;
+        const char* preview = current.empty() ? empty_preview :
+            (record != nullptr && (database == nullptr || !database->IsMissing(current))
+                ? record->display_name.c_str() : u8"Missing Asset");
+        if (!editable)
+        {
+            ImGui::TextUnformatted(preview);
+            return false;
+        }
+        bool changed = false;
+        if (ImGui::BeginCombo(label, preview))
+        {
+            if (ImGui::Selectable(empty_preview, current.empty()))
+            {
+                selected.clear();
+                changed = true;
+            }
+            if (database != nullptr)
+            {
+                for (const ReplayEngine::Assets::AssetRecord& candidate : database->Records())
+                {
+                    if (candidate.kind != ReplayEngine::Assets::AssetKind::Material) continue;
+                    if (database->IsMissing(candidate.guid)) continue;
+                    const bool is_selected = candidate.guid == current;
+                    ImGui::PushID(candidate.guid.c_str());
+                    if (ImGui::Selectable(candidate.display_name.c_str(), is_selected))
+                    {
+                        selected = candidate.guid;
+                        changed = true;
+                    }
+                    if (is_selected) ImGui::SetItemDefaultFocus();
+                    ImGui::PopID();
+                }
+            }
+            ImGui::EndCombo();
+        }
+        return changed;
+    }
+
+    template<class T>
+    void draw_material_slot_rows(ReplayEngine::Editor::EditorContext& context,
+        T& renderer, const std::vector<std::string>& default_names,
+        const char* title, bool has_fbx_fallback)
+    {
+        using namespace ReplayEngine::Components;
+        if (default_names.empty()) return;
+        const bool editable = context.CanEdit();
+        const int stored_count = ClampedMaterialSlotCount(renderer);
+        ImGui::Separator();
+        ImGui::TextUnformatted(title);
+        ImGui::TextDisabled(u8"空スロットは既存の「マテリアル」へフォールバックします");
+        ImGui::PushID(&renderer);
+        const std::size_t row_count = (std::min)(default_names.size(),
+            static_cast<std::size_t>(max_mesh_material_slots));
+        ReplayEngine::Editor::ReorderRequest move_request{};
+        for (std::size_t index = 0; index < row_count; ++index)
+        {
+            const bool stored = index < static_cast<std::size_t>(stored_count) &&
+                index < renderer.material_slots.size();
+            const std::string current_name = stored
+                ? renderer.material_slots[index].name : default_names[index];
+            const std::string current_asset = stored
+                ? renderer.material_slots[index].asset : std::string{};
+            const std::string item_id = "MaterialSlot" + std::to_string(index);
+            const std::string item_title = "Slot " + std::to_string(index + 1) +
+                (current_name.empty() ? std::string() : "  " + current_name);
+            const ReplayEngine::Editor::ReorderableItemResult reorder =
+                ReplayEngine::Editor::DrawReorderableItem(
+                    &renderer, item_id.c_str(), index, row_count, item_title.c_str(),
+                    false, true, editable, [] {});
+            if (reorder.request.Valid() && !move_request.Valid())
+                move_request = reorder.request;
+            if (!reorder.opened) continue;
+
+            ImGui::PushID(item_id.c_str());
+            ImGui::Indent();
+            ImGui::TextDisabled(u8"名前");
+            const std::string hint = std::to_string(index) + u8" 番";
+
+            std::vector<char> name_buffer((std::max)(static_cast<std::size_t>(4096),
+                current_name.size() + static_cast<std::size_t>(4096)), '\0');
+            if (!current_name.empty())
+                std::memcpy(name_buffer.data(), current_name.data(), current_name.size());
+            ImGui::SetNextItemWidth(-1.0f);
+            ImGuiInputTextFlags name_flags = ImGuiInputTextFlags_EnterReturnsTrue;
+            if (!editable) name_flags |= ImGuiInputTextFlags_ReadOnly;
+            const bool enter_confirmed = ImGui::InputTextWithHint("##SlotName", hint.c_str(),
+                name_buffer.data(), name_buffer.size(), name_flags);
+            const bool focus_confirmed = ImGui::IsItemDeactivatedAfterEdit();
+            if (editable && (enter_confirmed || focus_confirmed))
+            {
+                context.BeginEdit(u8"マテリアルスロット名を変更");
+                initialize_material_slots(renderer, default_names);
+                renderer.material_slots[index].name.assign(name_buffer.data());
+                renderer.OnPropertyChanged(nullptr);
+                context.CommitEdit();
+            }
+
+            ImGui::TextDisabled(u8"マテリアル");
+            std::string selected_asset;
+            if (draw_material_asset_slot("##SlotMaterial", context.GetAssetDatabase(),
+                current_asset, selected_asset, editable, u8"(material_asset を使用)"))
+            {
+                context.BeginEdit(u8"マテリアルスロットを変更");
+                initialize_material_slots(renderer, default_names);
+                renderer.material_slots[index].asset = std::move(selected_asset);
+                renderer.OnPropertyChanged(nullptr);
+                context.CommitEdit();
+            }
+            if (current_asset.empty() && renderer.material_asset.empty() && has_fbx_fallback)
+                ImGui::TextDisabled(u8"共通も未設定なら FBX 材質");
+            ImGui::Unindent();
+            ImGui::PopID();
+        }
+        if (const char* dragging = ReplayEngine::Editor::ActiveReorderLabel(&renderer))
+        {
+            ImGui::TextColored(ImGui::GetStyle().Colors[ImGuiCol_DragDropTarget],
+                u8"移動中: %s", dragging);
+        }
+        if (move_request.Valid() && editable)
+        {
+            context.BeginEdit(u8"マテリアルスロットを並べ替え");
+            initialize_material_slots(renderer, default_names);
+            if (move_request.source < renderer.material_slots.size() &&
+                move_request.destination < renderer.material_slots.size())
+            {
+                if (move_request.source < move_request.destination)
+                {
+                    std::rotate(renderer.material_slots.begin() +
+                        static_cast<std::ptrdiff_t>(move_request.source),
+                        renderer.material_slots.begin() +
+                        static_cast<std::ptrdiff_t>(move_request.source + 1),
+                        renderer.material_slots.begin() +
+                        static_cast<std::ptrdiff_t>(move_request.destination + 1));
+                }
+                else
+                {
+                    std::rotate(renderer.material_slots.begin() +
+                        static_cast<std::ptrdiff_t>(move_request.destination),
+                        renderer.material_slots.begin() +
+                        static_cast<std::ptrdiff_t>(move_request.source),
+                        renderer.material_slots.begin() +
+                        static_cast<std::ptrdiff_t>(move_request.source + 1));
+                }
+                renderer.OnPropertyChanged(nullptr);
+                context.CommitEdit();
+                context.SetStatus("マテリアルスロットの順序を変更しました");
+            }
+            else context.CancelEdit();
+        }
+        ImGui::PopID();
+    }
+}
+
+void framework::draw_material_slot_inspector()
+{
+    using namespace ReplayEngine::Components;
+    ReplayEngine::Scene::Scene* scene = object_editor_context.GetScene();
+    if (scene == nullptr || object_editor_context.Selection().Count() != 1) return;
+    ReplayEngine::Core::GameObject* object =
+        object_editor_context.Selection().ResolvePrimary(*scene);
+    if (object == nullptr) return;
+
+    if (auto* renderer = object->GetComponent<MeshRendererComponent>())
+    {
+        if (!renderer->mesh_asset.empty())
+        {
+            if (skinned_mesh* mesh_asset = resolve_object_mesh(renderer->mesh_asset))
+            {
+                const std::vector<std::string> names = material_subset_names(*mesh_asset);
+                draw_material_slot_rows(object_editor_context, *renderer, names,
+                    u8"Mesh Renderer マテリアルスロット", true);
+            }
+        }
+    }
+    if (auto* renderer = object->GetComponent<SkinnedMeshRendererComponent>())
+    {
+        if (!renderer->mesh_asset.empty())
+        {
+            if (skinned_mesh* mesh_asset = resolve_object_mesh(renderer->mesh_asset))
+            {
+                const std::vector<std::string> names = material_subset_names(*mesh_asset);
+                draw_material_slot_rows(object_editor_context, *renderer, names,
+                    u8"Skinned Mesh Renderer マテリアルスロット", true);
+            }
+        }
+    }
+    if (auto* renderer = object->GetComponent<PrimitiveMeshRendererComponent>())
+    {
+        const std::vector<std::string> names(1);
+        draw_material_slot_rows(object_editor_context, *renderer, names,
+            u8"Primitive Mesh Renderer マテリアルスロット", false);
+    }
+}
 
 void framework::draw_shader_adjustment_workspace()
 {
@@ -57,9 +318,6 @@ void framework::draw_shader_adjustment_workspace()
             ImGui::Separator();
             ImGui::Checkbox("輪郭線パス", &enable_outline_shader);
             ImGui::Checkbox("PBR影パス", &enable_pbr_shadow_shader);
-            int output = render_graph.OutputIndex();
-            if (ImGui::Combo("描画出力 (Ctrl+F2)", &output, ReplayEngine::Rendering::RenderGraph::Names()))
-                render_graph.SetOutput(output);
             ImGui::EndTabItem();
         }
         ImGui::EndTabBar();
@@ -68,7 +326,9 @@ void framework::draw_shader_adjustment_workspace()
 
 void framework::draw_inspector()
 {
+    ReplayEngine::Editor::PanelTabColorScope panel_tab_color("Editor");
     ImGui::Begin("インスペクター");
+    project_settings_file_undo_enabled = false;
 
     const char* tables[] = {
         "基本", "配置", "モデリング", "アニメーション", "レンダリング", "シェーダー調整"
@@ -91,7 +351,7 @@ void framework::draw_inspector()
     case editor_selection::world:
         ImGui::TextUnformatted("ワールド");
         ImGui::Separator();
-        ImGui::ColorEdit4("背景色", &background_color.x);
+        ImGui::ColorEdit4("Scene / Game 背景色", &background_color.x);
         ImGui::Checkbox("背景画像", &draw_background_image);
         ImGui::Checkbox("ゲームシーン", &enable_scene_game);
         ImGui::Checkbox("パーティクル", &enable_particles);
@@ -141,6 +401,7 @@ void framework::draw_inspector()
                 show_game_template_components);
             save_project_settings();
         }
+        draw_material_slot_inspector();
         break;
     }
 
@@ -164,11 +425,17 @@ void framework::draw_inspector()
         if (ImGui::CollapsingHeader("Cascaded Shadow Map"))
         {
             ImGui::DragFloat4("Splits", &csm.constants.split_distances.x, 0.5f, 1, 500);
-            ImGui::DragFloat("CSM Bias", &csm.constants.params.x, 0.0005f, 0, 0.05f, "%.5f");
+            ImGui::DragFloat("CSM Bias (m)", &csm.constants.params.x, 0.002f, 0, 0.5f, "%.3f");
             ImGui::DragFloat("Normal Bias", &csm.constants.params.y, 0.005f, 0, 1);
             ImGui::DragFloat("Filter", &csm.constants.params.z, 0.05f, 0, 8);
-            bool enabled = csm.constants.params.w > 0.5f;
-            if (ImGui::Checkbox("Enable CSM", &enabled)) csm.constants.params.w = enabled ? 1.0f : 0.0f;
+            // params.w は毎フレーム作り直されるので、UI はユーザー設定側を触る。
+            ImGui::Checkbox("Enable CSM", &csm_enabled_setting);
+            if (!(csm.constants.params.w > 0.5f) && csm_enabled_setting)
+            {
+                ImGui::TextDisabled("影を落とす Directional Light が無いため停止中");
+            }
+            ImGui::TextDisabled("バイアス・濃さ・最遠距離は Directional Light の");
+            ImGui::TextDisabled("Inspector が正本です (Light がある間は上書きされます)");
         }
         break;
 
@@ -213,6 +480,8 @@ void framework::draw_inspector()
         ImGui::Checkbox("静的メッシュ", &enable_static_meshes);
         if (ImGui::Button("シェーダー調整テーブルを開く"))
             set_editor_workspace(editor_workspace::shader_adjustment);
+        ReplayEngine::Editor::EditorHelp::Item("button.inspector.open_shader_adjustments",
+            u8"マテリアルとシェーダーの調整テーブルを開きます。");
         // 【削除した項目について】
         //
         // ここには PBR / トゥーン / アンリット のチェックボックスがあったが、
@@ -235,15 +504,15 @@ void framework::draw_inspector()
             ImGui::TextDisabled("プロジェクト → Material を選ぶと編集できます。");
             ImGui::Separator();
             ImGui::Checkbox("輪郭線パス", &enable_outline_shader);
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("輪郭線レイヤを持つマテリアルの追加パスを描くか");
+            ReplayEngine::Editor::EditorHelp::Item("control.rendering.outline_pass",
+                u8"輪郭線レイヤを持つマテリアルの追加パスを描くか");
             ImGui::Checkbox("PBR影パス", &enable_pbr_shadow_shader);
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("PBR の影用の追加パスを描くか");
+            ReplayEngine::Editor::EditorHelp::Item("control.rendering.pbr_shadow_pass",
+                u8"PBR の影用の追加パスを描くか");
         }
         {
             int output = render_graph.OutputIndex();
-            if (ImGui::Combo("Render Output (Ctrl+F2)", &output, ReplayEngine::Rendering::RenderGraph::Names()))
+            if (ImGui::Combo(u8"描画出力 (Ctrl+F2)", &output, ReplayEngine::Rendering::RenderGraph::Names()))
             {
                 render_graph.SetOutput(output);
                 if (render_graph.RequiresDeferred()) enable_deferred = true;

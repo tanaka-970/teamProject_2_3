@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../ShaderStack/ShaderLayerStack.h"
 #include "../../Reflection/Property/PropertyBag.h"
@@ -22,8 +22,9 @@ namespace ReplayEngine::Rendering
     struct MaterialAsset final
     {
         // v2: layer stack / v3: shader_guid + PropertyBag / v4: Layer ShaderGUID + Layer PropertyBag。
-        // v1〜v3 は読み込み時に移行し、保存は常に v4。
-        static constexpr int current_version = 4;
+        // v5: prop.NormalizedRamp の有無と値を PropertyBag の正本として扱う。
+        // v1〜v4 は読み込み時に移行し、保存は常に v5。
+        static constexpr int current_version = 5;
         static constexpr const char* file_extension = ".replaymaterial";
 
         DirectX::XMFLOAT4 base_color{ 1.0f, 1.0f, 1.0f, 1.0f };

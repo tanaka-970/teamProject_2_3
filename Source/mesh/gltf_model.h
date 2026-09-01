@@ -1,14 +1,11 @@
 ﻿#pragma once
 
-#include <d3d11.h>
-#include <wrl.h>
 #include <DirectXMath.h>
 
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
 #include <string>
-#include <thread>
 #include <vector>
 #include "../../RePlayEngine/Physics/SphereCast.h"
 
@@ -17,9 +14,8 @@
 class gltf_model
 {
 public:
-    explicit gltf_model(ID3D11Device* device, const std::string& filename);
+    explicit gltf_model(const std::string& filename);
     static void SetCacheRoot(std::filesystem::path root);
-    // LOD生成スレッドを回収してから破棄する。
     ~gltf_model();
     gltf_model(const gltf_model&) = delete;
     gltf_model& operator=(const gltf_model&) = delete;
@@ -56,46 +52,46 @@ public:
         return collision_triangles_;
     }
 
-    // write_motion_vectors ��G-Buffer�p�X�ł̂� true �ɂ���B
-    // �O�t���[���̃��[���h�s���VS(b6)�֍ڂ��A������1�t���[���i�߂�B
-    void render(ID3D11DeviceContext* context,
-        const DirectX::XMFLOAT4X4& world,
-        const DirectX::XMFLOAT4& tint = { 1, 1, 1, 1 },
-        ID3D11PixelShader* alternative_pixel_shader = nullptr,
-        bool write_motion_vectors = false,
-        // 深度プリパス用。ピクセルシェーダーとテクスチャを外して深度だけ描く。
-        bool depth_only = false);
-
-private:
-    static const std::filesystem::path& CacheRoot();
-
-    struct Vertex
+    // API に依存しない Static Geometry の Export。DX12 移行 Backend が利用する。
+    // CPU Geometry が解放済みの場合は .replaymesh Cache から同じデータを読む。
+    struct StaticVertex
     {
         DirectX::XMFLOAT3 position{};
         DirectX::XMFLOAT3 normal{ 0, 1, 0 };
         DirectX::XMFLOAT2 texcoord{};
     };
-
-    // ディスクキャッシュ用のCPU側データ。保存が済んだら捨てる。
-    struct LodCacheEntry
+    struct StaticPrimitiveInfo
     {
-        std::vector<Vertex> vertices;
-        std::vector<uint32_t> indices;
+        DirectX::XMFLOAT4X4 node_transform{};
+        DirectX::XMFLOAT4 embedded_base_color{ 1, 1, 1, 1 };
+        std::filesystem::path embedded_base_color_texture;
+        std::filesystem::path embedded_normal_texture;
+        std::filesystem::path embedded_orm_texture;
+        int material = -1;
+        int alpha_mode = 0;
+        float alpha_cutoff = 0.5f;
     };
-
-    // 自動LODの1段分。LOD0が原型で、番号が上がるほど粗い。
-    struct LodLevel
+    struct StaticPrimitiveExport : StaticPrimitiveInfo
     {
-        Microsoft::WRL::ComPtr<ID3D11Buffer> vertex_buffer;
-        Microsoft::WRL::ComPtr<ID3D11Buffer> index_buffer;
-        uint32_t index_count = 0;
-        uint32_t vertex_count = 0;
+        std::vector<StaticVertex> vertices;
+        std::vector<std::uint32_t> indices;
     };
+    std::size_t StaticPrimitiveCount() const noexcept { return primitives_.size(); }
+    bool StaticPrimitiveInfoAt(std::size_t index, StaticPrimitiveInfo& out) const;
+    bool ExportStaticPrimitives(std::vector<StaticPrimitiveExport>& out) const;
+
+    // write_motion_vectors ��G-Buffer�p�X�ł̂� true �ɂ���B
+    // �O�t���[���̃��[���h�s���VS(b6)�֍ڂ��A������1�t���[���i�߂�B
+    // アルファ抜きを宣言した Material が 1 つでもあるか。
+    bool HasAlphaMaskMaterials() const noexcept;
+
+private:
+    static const std::filesystem::path& CacheRoot();
+
+    using Vertex = StaticVertex;
 
     struct Primitive
     {
-        Microsoft::WRL::ComPtr<ID3D11Buffer> vertex_buffer;
-        Microsoft::WRL::ComPtr<ID3D11Buffer> index_buffer;
         DirectX::XMFLOAT4X4 node_transform{};
         uint32_t index_count = 0;
         uint32_t vertex_count = 0;
@@ -103,80 +99,42 @@ private:
         // 視錐台カリング用のAABB。node_transform適用後(モデル空間)で保持する。
         DirectX::XMFLOAT3 bounds_minimum{ 0.0f, 0.0f, 0.0f };
         DirectX::XMFLOAT3 bounds_maximum{ 0.0f, 0.0f, 0.0f };
-        // LOD1以降。空ならLOD0のみ。
-        std::vector<LodLevel> lods;
         // LOD生成用に保持する原型データ。生成後に解放する。
         std::vector<Vertex> source_vertices;
         std::vector<uint32_t> source_indices;
-        // ディスクキャッシュへ書き出すためのCPU側コピー。保存後に解放する。
-        std::vector<LodCacheEntry> lod_cache;
     };
 
     struct Material
     {
         DirectX::XMFLOAT4 base_color{ 1, 1, 1, 1 };
-        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> base_color_texture;
         // 法線マップと glTF の ORM (R=Occlusion, G=Roughness, B=Metalness)。
         // G-Bufferのピクセルシェーダーが t1 / t2 で受け取る。
-        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> normal_texture;
-        Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> occlusion_roughness_metalness_texture;
         // キャッシュ経路ではglTFを読まないため、画像ファイルの場所を持っておく。
         // 空文字なら「テクスチャ無し」。
         std::string base_color_uri;
         std::string normal_uri;
         std::string orm_uri;
+        // glTF の alphaMode。0=OPAQUE 1=MASK 2=BLEND。影のアルファ抜きに使う。
+        int alpha_mode = 0;
+        float alpha_cutoff = 0.5f;
     };
 
-    struct Constants
-    {
-        DirectX::XMFLOAT4X4 world;
-        DirectX::XMFLOAT4 material_color;
-    };
-
-    bool Load(ID3D11Device* device, const std::string& filename);
-    // シェーダー/入力レイアウト/定数バッファ。glTF経路とキャッシュ経路で共有。
-    bool PrepareDeviceResources(ID3D11Device* device);
-    // 各プリミティブのLODをQEMで生成する。プリミティブ単位で並列に走らせる。
-    // ロードを止めないよう、キャッシュが無い初回はバックグラウンドで実行する。
-    void BuildLods(ID3D11Device* device);
+    bool Load(const std::string& filename);
     // メッシュのディスクキャッシュ。glTF解析(3.4秒)とジオメトリ構築を丸ごと飛ばす。
     // 頂点・インデックス・AABB・マテリアル参照・LODを1ファイルにまとめる。
     std::filesystem::path MeshCachePath(const std::string& filename) const;
-    bool LoadMeshCache(ID3D11Device* device, const std::string& filename);
+    bool LoadMeshCache(const std::string& filename);
     bool SaveMeshCache(const std::string& filename) const;
-    // キャッシュ経路でテクスチャを読む。URIはglTFからの相対パス。
-    void LoadTexturesFromUris(ID3D11Device* device, const std::string& gltf_filename);
 
-    // LODのディスクキャッシュ。QEMは重いので2回目以降は読むだけにする。
-    std::filesystem::path LodCachePath() const;
-    bool LoadLodCache(ID3D11Device* device);
-    bool SaveLodCache() const;
-    // 生成した頂点/インデックスからGPUバッファを作る。
-    bool CreateLodBuffers(ID3D11Device* device, LodLevel& level,
-        const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices);
 
     std::vector<Primitive> primitives_;
     std::vector<Material> materials_;
     std::vector<ReplayEngine::Physics::Triangle> collision_triangles_;
-    Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> white_texture_;
-    // Normal未指定時にnullをSampleすると(-1,-1,-1)として扱われ、
-    // モデル全体の法線が壊れるため、接空間の無変形Normalを共有する。
-    Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> neutral_normal_texture_;
-    Microsoft::WRL::ComPtr<ID3D11VertexShader> vertex_shader_;
-    Microsoft::WRL::ComPtr<ID3D11PixelShader> pixel_shader_;
-    Microsoft::WRL::ComPtr<ID3D11InputLayout> input_layout_;
-    Microsoft::WRL::ComPtr<ID3D11Buffer> constant_buffer_;
-    // TAA�̃��[�V�����x�N�^�[�p: b6=�O�t���[���̃��[���h/�r���[�ˉe�B
-    Microsoft::WRL::ComPtr<ID3D11Buffer> motion_object_constant_buffer_;
-    std::vector<DirectX::XMFLOAT4X4> previous_primitive_worlds_;
-    unsigned long long motion_frame_id_{ 0 };
-    bool motion_history_valid_{ false };
     // --- 自動LODの生成状態 -------------------------------------------------
     // LODが揃うまではLOD0で描く。lods_ready_ が true になった後は
     // primitives_[].lods は変更されないため、読み取り側はロック不要。
     LoadTimings timings_{};
     std::atomic<bool> lods_ready_{ false };
-    std::thread lod_thread_;
     std::string source_filename_;
     std::string error_;
     bool loaded_ = false;

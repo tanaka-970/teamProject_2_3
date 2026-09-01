@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstring>
 #include <filesystem>
 #include <string>
@@ -46,6 +47,19 @@ namespace framework_motion_workspace::Detail
         std::transform(value.begin(), value.end(), value.begin(),
             [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
         return value;
+    }
+
+    inline float FrameStep(int fps) noexcept
+    {
+        return 1.0f / static_cast<float>((std::max)(1, fps));
+    }
+
+    inline float SnapMotionTime(float time, int fps, bool snap) noexcept
+    {
+        const float safe = (std::max)(0.0f, time);
+        if (!snap) return safe;
+        const float frame = FrameStep(fps);
+        return std::round(safe / frame) * frame;
     }
 
     inline const char* PropertyTypeLabel(PropertyType type) noexcept
@@ -249,7 +263,9 @@ namespace framework_motion_workspace::Detail
         return changed;
     }
 
-    inline bool DrawEasingCombo(const char* label, MotionEasing& easing)
+    inline bool DrawEasingCombo(const char* label, MotionEasing& easing,
+        ReplayEngine::Reflection::AssetReference* curve = nullptr,
+        const ReplayEngine::Assets::AssetDatabase* database = nullptr)
     {
         constexpr MotionEasing easings[] = {
             MotionEasing::Linear,
@@ -267,6 +283,7 @@ namespace framework_motion_workspace::Detail
             MotionEasing::EaseOutElastic,
             MotionEasing::EaseInOutElastic,
             MotionEasing::CustomBezier,
+            MotionEasing::PresetCurve,
         };
 
         bool changed = false;
@@ -280,6 +297,108 @@ namespace framework_motion_workspace::Detail
                     selected))
                 {
                     easing = candidate;
+                    changed = true;
+                }
+                if (selected) ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+
+        if (easing == MotionEasing::PresetCurve && curve != nullptr)
+        {
+            const ReplayEngine::Assets::AssetRecord* selected_record = nullptr;
+            const ReplayEngine::Motion::EasingCurveAsset* resolved = nullptr;
+            if (database != nullptr && curve->IsAssigned())
+            {
+                selected_record = database->FindByGuid(curve->guid);
+                if (selected_record != nullptr &&
+                    selected_record->kind == ReplayEngine::Assets::AssetKind::EasingCurve)
+                {
+                    resolved = ReplayEngine::Motion::EasingCurveAsset::Resolve(database, *curve);
+                }
+            }
+
+            const char* curve_preview = u8"未設定";
+            if (curve->IsAssigned())
+            {
+                curve_preview = selected_record != nullptr && resolved != nullptr
+                    ? selected_record->display_name.c_str() : u8"見つかりません";
+            }
+
+            ImGui::PushID(label);
+            if (ImGui::BeginCombo(u8"カーブ##PresetCurveAsset", curve_preview))
+            {
+                const bool unset = !curve->IsAssigned();
+                if (ImGui::Selectable(u8"未設定", unset))
+                {
+                    curve->Clear();
+                    changed = true;
+                }
+                if (unset) ImGui::SetItemDefaultFocus();
+
+                if (database != nullptr)
+                {
+                    for (const ReplayEngine::Assets::AssetRecord& record : database->Records())
+                    {
+                        if (record.kind != ReplayEngine::Assets::AssetKind::EasingCurve ||
+                            database->IsMissing(record.guid)) continue;
+                        ImGui::PushID(record.guid.c_str());
+                        const bool selected = curve->guid == record.guid;
+                        if (ImGui::Selectable(record.display_name.c_str(), selected))
+                        {
+                            curve->guid = record.guid;
+                            changed = true;
+                        }
+                        if (selected) ImGui::SetItemDefaultFocus();
+                        ImGui::PopID();
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::PopID();
+        }
+        return changed;
+    }
+
+    inline bool SupportsMotionWiggle(PropertyType type) noexcept
+    {
+        return type == PropertyType::Float || type == PropertyType::Double ||
+            type == PropertyType::Vector2 || type == PropertyType::Vector3 ||
+            type == PropertyType::Vector4 || type == PropertyType::Color;
+    }
+
+    inline const char* MotionTrackLoopLabel(ReplayEngine::Motion::MotionTrackLoop loop) noexcept
+    {
+        using ReplayEngine::Motion::MotionTrackLoop;
+        switch (loop)
+        {
+        case MotionTrackLoop::None: return u8"なし";
+        case MotionTrackLoop::Repeat: return u8"繰り返し";
+        case MotionTrackLoop::PingPong: return u8"往復";
+        case MotionTrackLoop::Offset: return u8"オフセット継続";
+        }
+        return u8"なし";
+    }
+
+    inline bool DrawMotionTrackLoopCombo(const char* label,
+        ReplayEngine::Motion::MotionTrackLoop& loop)
+    {
+        using ReplayEngine::Motion::MotionTrackLoop;
+        constexpr MotionTrackLoop loops[] = {
+            MotionTrackLoop::None,
+            MotionTrackLoop::Repeat,
+            MotionTrackLoop::PingPong,
+            MotionTrackLoop::Offset,
+        };
+        bool changed = false;
+        if (ImGui::BeginCombo(label, MotionTrackLoopLabel(loop)))
+        {
+            for (MotionTrackLoop candidate : loops)
+            {
+                const bool selected = candidate == loop;
+                if (ImGui::Selectable(MotionTrackLoopLabel(candidate), selected))
+                {
+                    loop = candidate;
                     changed = true;
                 }
                 if (selected) ImGui::SetItemDefaultFocus();

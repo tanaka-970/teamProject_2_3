@@ -1,9 +1,11 @@
-#pragma once
+﻿#pragma once
 
 #include "../../Object/Component/Component.h"
 #include "../../Reflection/Property/References.h"
 
 #include <DirectXMath.h>
+
+#include <string>
 
 namespace ReplayEngine::Components
 {
@@ -45,6 +47,10 @@ namespace ReplayEngine::Components
         void OnAttach() override;
 
         Reflection::AssetReference sprite;
+        // Atlas が指定され region が見つかる場合は、sprite/uv の代わりに
+        // Atlas の元画像と名前付き UV を使う。未指定時は従来経路そのまま。
+        Reflection::AssetReference atlas;
+        std::string atlas_region;
         DirectX::XMFLOAT4 color{ 1.0f, 1.0f, 1.0f, 1.0f };
         DirectX::XMFLOAT4 fill_color_2{ 1.0f, 1.0f, 1.0f, 1.0f };
         int fill_mode = Solid;
@@ -55,6 +61,7 @@ namespace ReplayEngine::Components
         float opacity = 1.0f;
         float fill_amount = 1.0f;
         int fill_method = Horizontal;
+        bool fill_reverse = false;
         DirectX::XMFLOAT2 uv_offset{ 0.0f, 0.0f };
         DirectX::XMFLOAT2 uv_scale{ 1.0f, 1.0f };
         int blend_mode = Normal;

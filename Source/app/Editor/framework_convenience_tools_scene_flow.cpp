@@ -1,4 +1,4 @@
-#include "framework.h"
+﻿#include "framework.h"
 
 #include "../../RePlayEngine/Components/Physics/ColliderComponent.h"
 #include "../../RePlayEngine/Components/Gameplay/StageGameplayComponents.h"
@@ -6,13 +6,17 @@
 #include "../../RePlayEngine/Project/ProjectSettingsSerializer.h"
 #include "../../RePlayEngine/Runtime/Scene/SceneFlowAsset.h"
 #include "../../RePlayEngine/Scene/Serialization/SceneData.h"
+#include "../../RePlayEngine/Editor/ReorderableList.h"
 
 #include <DirectXMath.h>
 
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
+#include <cstddef>
+#include <utility>
 namespace
 {
     using ReplayEngine::Runtime::SceneFlowCompareOp;
@@ -50,6 +54,7 @@ bool framework::load_scene_flow_editor(const ReplayEngine::Assets::AssetRecord& 
     scene_flow_editor_guid = record.guid;
     scene_flow_editor_loaded = true;
     scene_flow_editor_dirty = false;
+    scene_flow_edit_history.Clear();
     scene_flow_editor_status = "Scene Flow を開きました: " + record.display_name;
     show_scene_flow_panel = true;
     return true;
@@ -69,6 +74,26 @@ bool framework::save_scene_flow_editor()
     scene_flow_editor_status = "保存しました: " + scene_flow_editor_path.filename().u8string();
     if (project_settings.SceneFlowGuid() == scene_flow_editor_guid)
         sync_runtime_scene_flow_asset();
+    return true;
+}
+
+bool framework::undo_scene_flow_edit()
+{
+    if (!scene_flow_editor_loaded) return false;
+    std::string label;
+    if (!scene_flow_edit_history.Undo(scene_flow_editor_asset, label)) return false;
+    scene_flow_editor_dirty = true;
+    scene_flow_editor_status = "Undo: " + label;
+    return true;
+}
+
+bool framework::redo_scene_flow_edit()
+{
+    if (!scene_flow_editor_loaded) return false;
+    std::string label;
+    if (!scene_flow_edit_history.Redo(scene_flow_editor_asset, label)) return false;
+    scene_flow_editor_dirty = true;
+    scene_flow_editor_status = "Redo: " + label;
     return true;
 }
 
@@ -116,6 +141,7 @@ void framework::draw_scene_flow_panel()
         scene_flow_editor_dirty ? " *" : "");
     ImGui::SameLine();
     if (ImGui::Button("Save")) save_scene_flow_editor();
+    ReplayEngine::Editor::EditorHelp::Item("button.scene_flow.save");
     ImGui::SameLine();
     const bool is_active = project_settings.SceneFlowGuid() == scene_flow_editor_guid;
     if (!is_active)
@@ -126,6 +152,7 @@ void framework::draw_scene_flow_panel()
             save_project_settings();
             sync_runtime_scene_flow_asset();
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.scene_flow.set_active");
     }
     else ImGui::TextColored(ImVec4(0.4f, 0.95f, 0.55f, 1.0f), "ACTIVE");
 
@@ -134,23 +161,41 @@ void framework::draw_scene_flow_panel()
 
     if (ImGui::Button("+ Transition"))
     {
+        scene_flow_edit_history.Begin(scene_flow_editor_asset, "Transition を追加");
         scene_flow_editor_asset.AddTransition();
+        scene_flow_edit_history.Commit(scene_flow_editor_asset);
         scene_flow_editor_dirty = true;
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.scene_flow.add_transition");
 
     auto& transitions = scene_flow_editor_asset.transitions;
+    ReplayEngine::Editor::ReorderRequest transition_move{};
+    const bool can_edit_scene_flow = object_editor_context.CanEdit();
     for (std::size_t i = 0; i < transitions.size(); )
     {
         auto& transition = transitions[i];
-        ImGui::PushID(static_cast<int>(transition.id));
         const std::string header = "Transition #" + std::to_string(transition.id) +
             "  " + transition.event_name;
         bool remove = false;
-        if (ImGui::CollapsingHeader(header.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+        const std::string item_id = "SceneFlowTransition" + std::to_string(transition.id);
+        const ReplayEngine::Editor::ReorderableItemResult reorder =
+            ReplayEngine::Editor::DrawReorderableItem(
+                &transitions, item_id.c_str(), i, transitions.size(), header.c_str(),
+                false, true, can_edit_scene_flow,
+                [&remove, can_edit_scene_flow](void)
+                {
+                    if (ImGui::MenuItem("Delete", nullptr, false, can_edit_scene_flow))
+                     remove = true;
+                });
+        if (reorder.request.Valid() && !transition_move.Valid())
+            transition_move = reorder.request;
+        ImGui::PushID(item_id.c_str());
+        if (reorder.opened)
         {
             if (ImGui::Checkbox("Enabled", &transition.enabled)) scene_flow_editor_dirty = true;
             ImGui::SameLine();
             if (ImGui::Button("Delete")) remove = true;
+            ReplayEngine::Editor::EditorHelp::Item("button.scene_flow.delete_transition");
 
             std::array<char, 128> event{};
             CopyText(event, transition.event_name);
@@ -180,6 +225,7 @@ void framework::draw_scene_flow_panel()
                 for (const auto& record : asset_database.Records())
                 {
                     if (record.kind != ReplayEngine::Assets::AssetKind::Scene) continue;
+                    if (asset_database.IsMissing(record.guid)) continue;
                     const std::string label = record.display_name.empty()
                         ? record.source_path.filename().u8string() : record.display_name;
                     if (ImGui::Selectable(label.c_str(), transition.from_scene_guid == record.guid))
@@ -196,6 +242,7 @@ void framework::draw_scene_flow_panel()
                 for (const auto& record : asset_database.Records())
                 {
                     if (record.kind != ReplayEngine::Assets::AssetKind::Scene) continue;
+                    if (asset_database.IsMissing(record.guid)) continue;
                     const std::string label = record.display_name.empty()
                         ? record.source_path.filename().u8string() : record.display_name;
                     if (ImGui::Selectable(label.c_str(), transition.to_scene_guid == record.guid))
@@ -261,6 +308,7 @@ void framework::draw_scene_flow_panel()
                 }
                 ImGui::SameLine();
                 bool remove_condition = ImGui::SmallButton("X");
+                ReplayEngine::Editor::EditorHelp::Item("button.scene_flow.delete_condition");
                 ImGui::PopID();
                 if (remove_condition)
                 {
@@ -276,15 +324,38 @@ void framework::draw_scene_flow_panel()
                 transition.conditions.push_back(std::move(condition));
                 scene_flow_editor_dirty = true;
             }
+            ReplayEngine::Editor::EditorHelp::Item("button.scene_flow.add_condition");
         }
         ImGui::PopID();
         if (remove)
         {
             const std::uint64_t id = transition.id;
+            scene_flow_edit_history.Begin(scene_flow_editor_asset, "Transition を削除");
             scene_flow_editor_asset.RemoveTransition(id);
+            scene_flow_edit_history.Commit(scene_flow_editor_asset);
             scene_flow_editor_dirty = true;
+            transition_move = {};
         }
         else ++i;
+    }
+
+    if (transition_move.Valid() && transition_move.source < transitions.size() &&
+        transition_move.destination < transitions.size())
+    {
+        scene_flow_edit_history.Begin(scene_flow_editor_asset, "Transition の順序を変更");
+        auto moved = std::move(transitions[transition_move.source]);
+        transitions.erase(transitions.begin() +
+            static_cast<std::ptrdiff_t>(transition_move.source));
+        transitions.insert(transitions.begin() +
+            static_cast<std::ptrdiff_t>(transition_move.destination), std::move(moved));
+        scene_flow_edit_history.Commit(scene_flow_editor_asset);
+        scene_flow_editor_dirty = true;
+    }
+    if (const char* active_label = ReplayEngine::Editor::ActiveReorderLabel();
+        active_label != nullptr)
+    {
+        ImGui::TextColored(ImGui::GetStyle().Colors[ImGuiCol_DragDropTarget],
+            "移動中: %s", active_label);
     }
 
     ImGui::Separator();

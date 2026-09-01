@@ -4,13 +4,9 @@
 #include <sstream>
 #include <functional>
 #include <algorithm>
-#include"shader.h"
 #include"static_mesh.h"
-#include"sprite_batch.h"
 
-#include"texture.h"
 #include"../render/motion_vector_context.h"
-#include"../../RePlayEngine/Rendering/RenderStats.h"
 #include <cstring>
 #include <filesystem>
 #include <stdexcept>

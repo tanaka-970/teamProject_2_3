@@ -139,5 +139,162 @@ namespace ReplayEngine::Scripting::CSharp::Detail
             Runtime::ComponentHandle*, int, int*);
         using set_component_enabled_callback = int(__cdecl*)(Runtime::ComponentHandle, int);
         using get_component_enabled_callback = int(__cdecl*)(Runtime::ComponentHandle, int*);
+
+        // v5 Script field / UI focus / Event publish callbacks.
+        using get_script_bool_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, int*);
+        using set_script_bool_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, int);
+        using get_script_int_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, int*);
+        using set_script_int_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, int);
+        using get_script_double_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, double*);
+        using set_script_double_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, double);
+        using get_script_string_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, char*, int);
+        using set_script_string_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, const char*);
+        using ui_get_focus_callback = int(__cdecl*)(Runtime::ObjectHandle*);
+        using ui_set_focus_callback = int(__cdecl*)(Runtime::ObjectHandle);
+        using ui_find_focus_callback = int(__cdecl*)(Runtime::ObjectHandle, int, Runtime::ObjectHandle*);
+        using publish_event_callback = int(__cdecl*)(std::uint64_t, std::uint64_t, const char*,
+            Runtime::ObjectHandle, Runtime::ObjectHandle);
+
+        // v6 Object / hierarchy / log callbacks. Tail-only ABI additions.
+        using log_callback = int(__cdecl*)(const char*, Runtime::ObjectHandle);
+        using create_game_object_callback = int(__cdecl*)(const char*, Runtime::ObjectHandle*);
+        using set_parent_callback = int(__cdecl*)(Runtime::ObjectHandle, Runtime::ObjectHandle, int);
+        using get_parent_callback = int(__cdecl*)(Runtime::ObjectHandle, Runtime::ObjectHandle*);
+        using get_children_callback = int(__cdecl*)(Runtime::ObjectHandle,
+            Runtime::ObjectHandle*, int, int*);
+        using get_name_callback = int(__cdecl*)(Runtime::ObjectHandle, char*, int);
+        using set_name_callback = int(__cdecl*)(Runtime::ObjectHandle, const char*);
+        using set_object_enabled_callback = int(__cdecl*)(Runtime::ObjectHandle, int);
+        using get_object_enabled_callback = int(__cdecl*)(Runtime::ObjectHandle, int*);
+
+        // v7 Physics / deferred / runtime-state callbacks. Tail-only ABI additions.
+        struct NativeGroundHit final
+        {
+            DirectX::XMFLOAT3 position{};
+            DirectX::XMFLOAT3 normal{ 0.0f, 1.0f, 0.0f };
+            Runtime::ObjectHandle object{};
+            std::uint32_t collider_id = 0;
+            std::int32_t valid = 0;
+        };
+        struct NativeSphereSweepHit final
+        {
+            DirectX::XMFLOAT3 center{};
+            DirectX::XMFLOAT3 normal{ 0.0f, 1.0f, 0.0f };
+            float fraction = 1.0f;
+            Runtime::ObjectHandle object{};
+            std::uint32_t collider_id = 0;
+            std::int32_t valid = 0;
+        };
+        using query_ground_callback = int(__cdecl*)(DirectX::XMFLOAT3, float, float,
+            float, float, Runtime::ObjectHandle, NativeGroundHit*);
+        using sweep_sphere_callback = int(__cdecl*)(DirectX::XMFLOAT3, DirectX::XMFLOAT3,
+            float, float, Runtime::ObjectHandle, NativeSphereSweepHit*);
+        using instantiate_deferred_callback = int(__cdecl*)(const char*, DirectX::XMFLOAT3,
+            DirectX::XMFLOAT3, DirectX::XMFLOAT3, Runtime::ObjectHandle);
+        using pending_deferred_count_callback = int(__cdecl*)(std::uint64_t*);
+        using has_component_callback = int(__cdecl*)(Runtime::ObjectHandle, std::uint32_t, int*);
+        using get_float_value_callback = int(__cdecl*)(float*);
+        using get_bool_value_callback = int(__cdecl*)(int*);
+
+        // v8 Event payload callbacks. Poll v8 keeps the old poll ABI as fallback.
+        using poll_event_payload_callback = int(__cdecl*)(std::uint64_t, char*, int, int*);
+        using publish_event_payload_callback = int(__cdecl*)(std::uint64_t, std::uint64_t,
+            const char*, Runtime::ObjectHandle, Runtime::ObjectHandle, const char*);
+
+        // v9 Name lookup.
+        using find_by_name_callback = int(__cdecl*)(const char*, Runtime::ObjectHandle*);
+
+        // v10 Component 型・汎用プロパティ・World Transform・Rigidbody。
+        using component_type_id_callback = int(__cdecl*)(const char*, std::uint32_t*);
+        using component_type_name_callback = int(__cdecl*)(Runtime::ComponentHandle, char*, int);
+        using get_property_bool_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, int*);
+        using set_property_bool_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, int);
+        using get_property_int_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, std::int64_t*);
+        using set_property_int_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, std::int64_t);
+        using get_property_double_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, double*);
+        using set_property_double_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, double);
+        using get_property_string_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, char*, int);
+        using set_property_string_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, const char*);
+        using get_property_vec2_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, DirectX::XMFLOAT2*);
+        using set_property_vec2_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, DirectX::XMFLOAT2);
+        using get_property_vec3_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, DirectX::XMFLOAT3*);
+        using set_property_vec3_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, DirectX::XMFLOAT3);
+        using get_property_vec4_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, DirectX::XMFLOAT4*);
+        using set_property_vec4_callback = int(__cdecl*)(Runtime::ComponentHandle, const char*, DirectX::XMFLOAT4);
+        using get_vec4_callback = int(__cdecl*)(Runtime::ObjectHandle, DirectX::XMFLOAT4*);
+        using set_vec4_callback = int(__cdecl*)(Runtime::ObjectHandle, DirectX::XMFLOAT4);
+        using get_world_axes_callback = int(__cdecl*)(Runtime::ObjectHandle,
+            DirectX::XMFLOAT3*, DirectX::XMFLOAT3*, DirectX::XMFLOAT3*);
+        using look_at_callback = int(__cdecl*)(Runtime::ObjectHandle,
+            DirectX::XMFLOAT3, DirectX::XMFLOAT3);
+        using rigidbody_vec3_callback = int(__cdecl*)(Runtime::ComponentHandle, DirectX::XMFLOAT3);
+        using rigidbody_get_vec3_callback = int(__cdecl*)(Runtime::ComponentHandle, DirectX::XMFLOAT3*);
+        using rigidbody_void_callback = int(__cdecl*)(Runtime::ComponentHandle);
+        using rigidbody_teleport_callback = int(__cdecl*)(Runtime::ComponentHandle,
+            DirectX::XMFLOAT3, DirectX::XMFLOAT3);
+
+        // v11 生デバイス入力 / Scene / 診断。
+        using input_key_callback = int(__cdecl*)(int, int*);
+        using input_pad_button_callback = int(__cdecl*)(int, int, int*);
+        using input_pad_axis_callback = int(__cdecl*)(int, int, float*);
+        using input_pad_connected_callback = int(__cdecl*)(int, int*);
+        using input_vibration_callback = int(__cdecl*)(int, float, float);
+        using input_pointer_position_callback = int(__cdecl*)(float*, float*);
+        using spawn_tracked_callback = int(__cdecl*)(const char*, DirectX::XMFLOAT3,
+            DirectX::XMFLOAT3, DirectX::XMFLOAT3, Runtime::ObjectHandle, std::uint64_t*);
+        using spawn_take_callback = int(__cdecl*)(std::uint64_t, Runtime::ObjectHandle*);
+        using get_text_callback = int(__cdecl*)(char*, int);
+        using quit_callback = int(__cdecl*)(const char*);
+        using event_dropped_callback = int(__cdecl*)(std::uint64_t, std::uint64_t*);
+
+        // v12 複数 Hit Physics Query。
+        struct NativePhysicsQueryRequest final
+        {
+            std::int32_t kind = 0;
+            DirectX::XMFLOAT3 point_a{};
+            DirectX::XMFLOAT3 point_b{};
+            DirectX::XMFLOAT3 direction{ 0.0f, 0.0f, 1.0f };
+            DirectX::XMFLOAT4 rotation{ 0.0f, 0.0f, 0.0f, 1.0f };
+            DirectX::XMFLOAT3 half_extents{ 0.5f, 0.5f, 0.5f };
+            float radius = 0.5f;
+            float max_distance = 0.0f;
+            std::int32_t layer = 0;
+            std::int32_t mask = -1;
+            Runtime::ObjectHandle ignore{};
+        };
+        struct NativePhysicsQueryHit final
+        {
+            DirectX::XMFLOAT3 point{};
+            DirectX::XMFLOAT3 normal{ 0.0f, 1.0f, 0.0f };
+            float distance = 0.0f;
+            float fraction = 0.0f;
+            Runtime::ObjectHandle object{};
+            std::uint32_t collider_id = 0;
+            std::int32_t valid = 0;
+        };
+        using physics_query_callback = int(__cdecl*)(NativePhysicsQueryRequest,
+            NativePhysicsQueryHit*, int, int*);
+
+        // v13 型付きイベントと実行時 Component 操作。
+        using subscribe_event_scoped_callback = int(__cdecl*)(std::uint64_t, std::uint64_t,
+            Runtime::ObjectHandle, int, std::uint64_t*);
+        using component_command_callback = int(__cdecl*)(Runtime::ComponentHandle, int,
+            const char*, float, float, int);
+        using component_type_info_callback = int(__cdecl*)(const char*, char*, int);
+        using get_property_object_reference_callback = int(__cdecl*)(
+            Runtime::ComponentHandle, const char*, std::uint64_t*);
+        using set_property_object_reference_callback = int(__cdecl*)(
+            Runtime::ComponentHandle, const char*, std::uint64_t);
+        using get_property_component_reference_callback = int(__cdecl*)(
+            Runtime::ComponentHandle, const char*, std::uint64_t*, std::uint32_t*);
+        using set_property_component_reference_callback = int(__cdecl*)(
+            Runtime::ComponentHandle, const char*, std::uint64_t, std::uint32_t);
+        using component_to_reference_callback = int(__cdecl*)(Runtime::ComponentHandle,
+            std::uint64_t*, std::uint32_t*);
+        using resolve_component_reference_callback = int(__cdecl*)(std::uint64_t,
+            std::uint32_t, Runtime::ComponentHandle*);
+
+        // v16 Scene 遷移の進捗・実行中・最終結果。
+        using scene_transition_state_callback = int(__cdecl*)(float*, int*, int*);
 #endif
 }

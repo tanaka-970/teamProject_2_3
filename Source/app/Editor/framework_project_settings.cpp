@@ -74,7 +74,7 @@ void framework::draw_project_settings_panel()
 
         for (const auto& record : asset_database.Records())
         {
-            if (!IsPrefabAsset(record)) continue;
+            if (!IsPrefabAsset(record) || asset_database.IsMissing(record.guid)) continue;
 
             const bool selected = record.guid == project_settings.DefaultCharacterPrefabGuid();
             const std::string label = record.display_name.empty()
@@ -119,6 +119,8 @@ void framework::draw_project_settings_panel()
             project_settings.SetDefaultCharacterPrefabGuid(last_saved_prefab_guid);
             save_project_settings();
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.project.use_last_prefab",
+            u8"直前に保存した Prefab を Default Controlled Character に設定します。");
     }
 
     if (ImGui::TreeNode("詳細##DefaultCharacterPrefab"))
@@ -163,6 +165,7 @@ void framework::draw_project_settings_panel()
             // .replayscene として登録された Asset だけを候補に出す。
             // 種類で絞らないと、Texture を起動先に指定できてしまう。
             if (record.kind != ReplayEngine::Assets::AssetKind::Scene) continue;
+            if (asset_database.IsMissing(record.guid)) continue;
 
             const bool selected = record.guid == project_settings.StartupSceneGuid();
             const std::string label = record.display_name.empty()
@@ -206,12 +209,86 @@ void framework::draw_project_settings_panel()
             project_settings.ClearStartupScene();
             save_project_settings();
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.project.clear_startup_scene",
+            u8"起動時に読み込む Startup Scene の指定を解除します。");
     }
 
     if (ImGui::TreeNode("詳細##StartupScene"))
     {
         ImGui::TextDisabled("AssetGUID: %s",
             startup.guid.empty() ? "(なし)" : startup.guid.c_str());
+        ImGui::TreePop();
+    }
+
+    ImGui::Separator();
+
+    // ---- Loading Screen Scene -----------------------------------------------
+    ImGui::TextUnformatted("Loading Screen Scene（ロード画面）");
+    const Project::AssetReferenceStatus loading =
+        project_settings.ResolveLoadingScene(asset_database);
+    const std::string loading_preview = loading.IsMissing()
+        ? std::string("[ Missing Scene ]") : loading.DisplayLabel();
+
+    if (loading.IsMissing())
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.45f, 0.35f, 1.0f));
+    ImGui::SetNextItemWidth(-1.0f);
+    if (ImGui::BeginCombo("##LoadingScene", loading_preview.c_str()))
+    {
+        if (ImGui::Selectable("（未設定）", loading.IsUnset()))
+        {
+            project_settings.ClearLoadingScene();
+            save_project_settings();
+        }
+
+        for (const auto& record : asset_database.Records())
+        {
+            if (record.kind != ReplayEngine::Assets::AssetKind::Scene) continue;
+            if (asset_database.IsMissing(record.guid)) continue;
+
+            const bool selected = record.guid == project_settings.LoadingSceneGuid();
+            const std::string label = record.display_name.empty()
+                ? record.source_path.filename().generic_string()
+                : record.display_name;
+            ImGui::PushID(record.guid.c_str());
+            if (ImGui::Selectable(label.c_str(), selected))
+            {
+                project_settings.SetLoadingSceneGuid(record.guid);
+                save_project_settings();
+            }
+            if (selected) ImGui::SetItemDefaultFocus();
+            ImGui::PopID();
+        }
+        ImGui::EndCombo();
+    }
+    if (loading.IsMissing()) ImGui::PopStyleColor();
+
+    if (loading.IsResolved())
+    {
+        ImGui::TextDisabled("Path: %s", loading.path.generic_u8string().c_str());
+    }
+    else if (loading.IsMissing())
+    {
+        ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.35f, 1.0f),
+            "この Loading Screen Scene はプロジェクトに見つかりません（参照は保持）");
+    }
+    else
+    {
+        ImGui::TextDisabled("未指定なら従来の LoadingScene を使用します");
+    }
+
+    if (project_settings.HasLoadingScene())
+    {
+        if (ImGui::Button("Loading Screen Scene を解除##ClearLoadingScene"))
+        {
+            project_settings.ClearLoadingScene();
+            save_project_settings();
+        }
+    }
+
+    if (ImGui::TreeNode("詳細##LoadingScene"))
+    {
+        ImGui::TextDisabled("AssetGUID: %s",
+            loading.guid.empty() ? "(なし)" : loading.guid.c_str());
         ImGui::TreePop();
     }
 
@@ -243,6 +320,7 @@ void framework::draw_project_settings_panel()
         for (const auto& record : asset_database.Records())
         {
             if (record.kind != ReplayEngine::Assets::AssetKind::SceneFlow) continue;
+            if (asset_database.IsMissing(record.guid)) continue;
             const bool selected = record.guid == project_settings.SceneFlowGuid();
             const std::string label = record.display_name.empty()
                 ? record.source_path.filename().u8string() : record.display_name;
@@ -268,10 +346,15 @@ void framework::draw_project_settings_panel()
     else
         ImGui::TextDisabled("未設定なら TriggerSceneFlow は遷移せず、既存 LoadScene はそのまま使えます");
 
-    if (flow.IsResolved() && ImGui::Button("Scene Flow を開く"))
+    if (flow.IsResolved())
     {
-        if (const auto* record = asset_database.FindByGuid(flow.guid))
-            load_scene_flow_editor(*record);
+        if (ImGui::Button("Scene Flow を開く"))
+        {
+            if (const auto* record = asset_database.FindByGuid(flow.guid))
+                load_scene_flow_editor(*record);
+        }
+        ReplayEngine::Editor::EditorHelp::Item("button.project.open_scene_flow",
+            u8"設定中の Scene Flow Asset を開いて編集します。");
     }
     if (project_settings.HasSceneFlow())
     {
@@ -282,6 +365,8 @@ void framework::draw_project_settings_panel()
             save_project_settings();
             sync_runtime_scene_flow_asset();
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.project.clear_scene_flow",
+            u8"Active Scene Flow の指定を解除します。");
     }
 
     ImGui::Separator();
@@ -311,6 +396,7 @@ void framework::draw_project_settings_panel()
         for (const auto& record : asset_database.Records())
         {
             if (record.kind != ReplayEngine::Assets::AssetKind::InputAction) continue;
+            if (asset_database.IsMissing(record.guid)) continue;
             const bool selected = record.guid == project_settings.InputActionAssetGuid();
             const std::string label = record.display_name.empty()
                 ? record.source_path.filename().u8string() : record.display_name;
@@ -356,6 +442,7 @@ void framework::draw_project_settings_panel()
         for (const auto& record : asset_database.Records())
         {
             if (record.kind != ReplayEngine::Assets::AssetKind::Localization) continue;
+            if (asset_database.IsMissing(record.guid)) continue;
             const bool selected = record.guid == project_settings.LocalizationTableGuid();
             const std::string label = record.display_name.empty()
                 ? record.source_path.filename().u8string() : record.display_name;
@@ -422,6 +509,8 @@ void framework::draw_new_object_scene_controls()
 {
 #ifdef USE_IMGUI
     if (ImGui::Button("新しいシーンを作成...")) ImGui::OpenPopup("NewObjectScenePopup");
+    ReplayEngine::Editor::EditorHelp::Item("button.scene.new",
+        u8"新しい Scene の名前と初期内容を選ぶダイアログを開きます。");
 
     if (ImGui::BeginPopupModal("NewObjectScenePopup", nullptr,
         ImGuiWindowFlags_AlwaysAutoResize))
@@ -438,6 +527,8 @@ void framework::draw_new_object_scene_controls()
             create_object_scene(new_object_scene_name, false);
             ImGui::CloseCurrentPopup();
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.scene.create_empty",
+            u8"GameObject を持たない空の Scene を作成します。");
 
         ImGui::Separator();
 
@@ -465,9 +556,13 @@ void framework::draw_new_object_scene_controls()
             create_object_scene(new_object_scene_name, true);
             ImGui::CloseCurrentPopup();
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.scene.create_default",
+            u8"既定の Prefab を配置した Scene を作成します。未設定なら空の Scene になります。");
 
         ImGui::Separator();
         if (ImGui::Button("キャンセル", { 200.0f, 0.0f })) ImGui::CloseCurrentPopup();
+        ReplayEngine::Editor::EditorHelp::Item("button.scene.cancel_new",
+            u8"新しい Scene を作成せず、ダイアログを閉じます。");
         ImGui::EndPopup();
     }
 #endif

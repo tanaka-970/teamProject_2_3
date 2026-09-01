@@ -202,12 +202,23 @@ namespace
 // ---------------------------------------------------------------------------
 
 
-gltf_model* framework::resolve_object_gltf(const std::string& asset_guid)
+// Model Asset の実ファイルと形式を決める唯一の入口。
+// glTF 側と skinned 側が別々に拡張子判定を持つと、片方だけ通る形式が生まれる。
+framework::model_source_format framework::resolve_model_source(
+    const std::string& asset_guid,
+    std::filesystem::path& out_source,
+    std::string& out_reason) const
 {
-    if (asset_guid.empty() || !device) return nullptr;
+    out_source.clear();
+    out_reason.clear();
+    if (asset_guid.empty()) return model_source_format::unsupported;
 
     const ReplayEngine::Assets::AssetRecord* record = asset_database.FindByGuid(asset_guid);
-    if (record == nullptr) return nullptr;
+    if (record == nullptr)
+    {
+        out_reason = "Asset がプロジェクトに登録されていません";
+        return model_source_format::unsupported;
+    }
 
     const std::filesystem::path source = content_path(record->source_path);
     std::string extension = source.extension().string();
@@ -215,8 +226,60 @@ gltf_model* framework::resolve_object_gltf(const std::string& asset_guid)
     {
         character = static_cast<char>(::tolower(static_cast<unsigned char>(character)));
     }
-    if (extension != ".glb" && extension != ".gltf") return nullptr;
+
+    if (extension.empty())
+    {
+        // AssetDatabase の source_path がファイル名を失っている記録。
+        // どのファイルを指すか推測できないので、ここで原因を明示して止める。
+        out_reason = "Asset の source がファイルではありません（拡張子なし）: " +
+            source.generic_string();
+        return model_source_format::unsupported;
+    }
+
+    const bool gltf_source = extension == ".glb" || extension == ".gltf";
+    const bool fbx_source = extension == ".fbx" || extension == ".cereal";
+    if (!gltf_source && !fbx_source)
+    {
+        out_reason = "この形式は GameObject の描画へ接続していません（" +
+            extension + "）: " + source.generic_string();
+        return model_source_format::unsupported;
+    }
+
+    std::error_code filesystem_error;
+    if (!std::filesystem::exists(source, filesystem_error) || filesystem_error)
+    {
+        out_reason = "モデルファイルが見つかりません: " + source.generic_string();
+        return model_source_format::unsupported;
+    }
+
+    if (fbx_source)
+    {
+        // FBX は実行用の .cereal キャッシュ経由でしか読めない。
+        std::filesystem::path cache = source;
+        cache.replace_extension(L".cereal");
+        if (!std::filesystem::exists(cache, filesystem_error) || filesystem_error)
+        {
+            out_reason = "実行用の .cereal キャッシュが見つかりません: " +
+                cache.generic_string();
+            return model_source_format::unsupported;
+        }
+    }
+
+    out_source = source;
+    return gltf_source ? model_source_format::gltf : model_source_format::fbx_cereal;
+}
+
+gltf_model* framework::resolve_object_gltf(const std::string& asset_guid)
+{
+    if (asset_guid.empty()) return nullptr;
     if (object_mesh_failures.find(asset_guid) != object_mesh_failures.end()) return nullptr;
+
+    std::filesystem::path source;
+    std::string reason;
+    // glTF/GLB 以外はここでは扱わない。失敗記録も残さない
+    // （skinned 側が同じ Asset を FBX/cereal として処理する）。
+    if (resolve_model_source(asset_guid, source, reason) != model_source_format::gltf)
+        return nullptr;
 
     const auto give_up = [this, &asset_guid](const std::string& reason) -> gltf_model*
     {
@@ -227,19 +290,13 @@ gltf_model* framework::resolve_object_gltf(const std::string& asset_guid)
         return nullptr;
     };
 
-    std::error_code filesystem_error;
-    if (!std::filesystem::exists(source, filesystem_error) || filesystem_error)
-    {
-        return give_up("glTF/GLB ファイルが見つかりません: " + source.generic_string());
-    }
-
     try
     {
         // Asset Browser のプレビューと GameObject は同じキャッシュを共有する。
         // 参考実装の Repository と同じく、モデル本体を Object ごとに複製しない。
         const auto loaded = gltf_model_cache.Load(source, [this, source]
         {
-            return std::make_shared<gltf_model>(device.Get(), source.string());
+            return std::make_shared<gltf_model>(source.string());
         });
         if (!loaded || !loaded->IsLoaded())
         {
@@ -266,8 +323,6 @@ skinned_mesh* framework::resolve_object_mesh(const std::string& asset_guid)
     // 1) Asset 未指定。Editor で MeshRenderer を付けただけの状態はこれになる。
     //    正常な状態なので警告も出さず、静かに描画対象から外す。
     if (asset_guid.empty()) return nullptr;
-    if (!device) return nullptr;
-
     // 2) 読み込み済みならそれを返す。キャッシュには有効なメッシュしか入らない。
     const auto cached = object_mesh_cache.find(asset_guid);
     if (cached != object_mesh_cache.end()) return cached->second.get();
@@ -286,45 +341,20 @@ skinned_mesh* framework::resolve_object_mesh(const std::string& asset_guid)
         return nullptr;
     };
 
-    // 4) GUID が AssetDatabase で解決できるか。
-    //    古い Scene ファイルや EditorSession に残った GUID はここで弾かれる。
-    const ReplayEngine::Assets::AssetRecord* record = asset_database.FindByGuid(asset_guid);
-    if (record == nullptr)
+    // 4) Model Asset の実ファイルと形式は resolve_model_source() が唯一の判定元。
+    //    FBX / cereal / GLB / glTF のどれでもここを通る。
+    std::filesystem::path source;
+    std::string reason;
+    if (resolve_model_source(asset_guid, source, reason) == model_source_format::unsupported)
     {
-        return give_up("Asset がプロジェクトに登録されていません");
-    }
-
-    // 5) 対応拡張子かどうか。GLB/glTF は内容に Skin がある場合だけ
-    //    skinned_mesh 表現へ変換し、既存 Animator/影/TAA を再利用する。
-    const std::filesystem::path source = content_path(record->source_path);
-    std::string extension = source.extension().string();
-    for (char& character : extension)
-    {
-        character = static_cast<char>(::tolower(static_cast<unsigned char>(character)));
-    }
-    const bool gltf_source = extension == ".glb" || extension == ".gltf";
-    if (!gltf_source && extension != ".fbx" && extension != ".cereal")
-    {
-        return give_up("この形式は GameObject の描画へ接続していません（" +
-            (extension.empty() ? std::string("拡張子なし") : extension) + "）: " +
-            source.generic_string());
-    }
-
-    // FBXだけは従来どおり隣接.cereal必須。GLB/glTFは本体から直接変換する。
-    if (!gltf_source)
-    {
-        std::filesystem::path cache = source;
-        cache.replace_extension(L".cereal");
-        std::error_code filesystem_error;
-        if (!std::filesystem::exists(cache, filesystem_error) || filesystem_error)
-            return give_up("実行用の .cereal キャッシュが見つかりません: " + cache.generic_string());
+        return give_up(reason.empty() ? std::string("Model Asset を解決できません") : reason);
     }
 
     // 7) ここまで通ってから構築する。
     std::unique_ptr<skinned_mesh> loaded;
     try
     {
-        loaded = std::make_unique<skinned_mesh>(device.Get(), source.string().c_str());
+        loaded = std::make_unique<skinned_mesh>(source.string().c_str(), false, 0.0f);
     }
     catch (...)
     {
@@ -345,18 +375,25 @@ skinned_mesh* framework::resolve_object_mesh(const std::string& asset_guid)
 }
 static_mesh* framework::resolve_builtin_primitive_mesh(const std::string& builtin_id)
 {
-    if (!device || builtin_id.rfind("builtin:", 0) != 0) return nullptr;
+    if (builtin_id.rfind("builtin:", 0) != 0) return nullptr;
     const auto cached = builtin_primitive_mesh_cache.find(builtin_id);
     if (cached != builtin_primitive_mesh_cache.end()) return cached->second.get();
 
     std::vector<static_mesh::vertex> vertices;
     std::vector<std::uint32_t> indices;
     if (!BuildBuiltinPrimitive(builtin_id, vertices, indices)) return nullptr;
-    auto mesh = std::make_unique<static_mesh>(device.Get(), vertices, indices);
+    auto mesh = std::make_unique<static_mesh>(vertices, indices);
     if (!mesh || !mesh->is_loaded()) return nullptr;
     static_mesh* raw = mesh.get();
     builtin_primitive_mesh_cache.emplace(builtin_id, std::move(mesh));
     return raw;
+}
+
+bool framework::build_builtin_primitive_cpu(const std::string& builtin_id,
+    std::vector<static_mesh::vertex>& vertices,
+    std::vector<std::uint32_t>& indices) const
+{
+    return BuildBuiltinPrimitive(builtin_id, vertices, indices);
 }
 
 const ReplayEngine::Rendering::MaterialAsset* framework::resolve_object_material(
@@ -387,8 +424,13 @@ const ReplayEngine::Rendering::MaterialAsset* framework::resolve_object_material
     std::string error;
     if (!MaterialAsset::Load(material_path, loaded, error))
     {
+        // Editor Log へも出す。OutputDebugString だけだとデバッガ無しでは見えず、
+        // Material が当たらない原因を追えない。
         if (object_material_failures.insert(asset_guid).second)
+        {
             OutputDebugStringA(("[Material] " + error + " (GUID: " + asset_guid + ")\n").c_str());
+            push_editor_log("Warning", error + " (GUID: " + asset_guid + ")", material_path);
+        }
         return nullptr;
     }
 

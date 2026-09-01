@@ -1,4 +1,4 @@
-#include "ShaderComposerEditor.h"
+﻿#include "ShaderComposerEditor.h"
 
 #include "../../Assets/AssetDatabase.h"
 #include "../../Rendering/ShaderComposer/ShaderComposerGenerator.h"
@@ -47,6 +47,25 @@ namespace ReplayEngine::Editor
             case K::Dissolve: return "Dissolve";
             case K::SurfaceOutput: return "Surface Output";
             case K::LayerOutput: return "Layer Output";
+            case K::PixelSize: return "Pixel Size";
+            case K::AspectRatio: return "Aspect Ratio";
+            case K::Sin: return "Sin";
+            case K::Cos: return "Cos";
+            case K::Abs: return "Abs";
+            case K::Step: return "Step";
+            case K::Smoothstep: return "Smoothstep";
+            case K::Minimum: return "Min";
+            case K::Maximum: return "Max";
+            case K::Clamp: return "Clamp";
+            case K::Dot: return "Dot";
+            case K::Length: return "Length";
+            case K::OneMinus: return "One Minus";
+            case K::Remap: return "Remap";
+            case K::RotateUV: return "Rotate UV";
+            case K::PolarUV: return "Polar UV";
+            case K::Component: return "Split Component";
+            case K::Combine4: return "Combine RGBA";
+            case K::Gradient: return "Gradient / Ramp";
             default: return "Node";
             }
         }
@@ -58,7 +77,7 @@ namespace ReplayEngine::Editor
             {
             case K::TextureProperty: return 1;
             case K::Add: case K::Subtract: case K::Multiply: case K::Divide: return 2;
-            case K::Lerp: return 3;
+            case K::Lerp: case K::Gradient: return 3;
             case K::Saturate: return 1;
             case K::Power: return 2;
             case K::Fresnel: return 3;
@@ -67,6 +86,15 @@ namespace ReplayEngine::Editor
             case K::Dissolve: return 3;
             case K::SurfaceOutput: return 3;
             case K::LayerOutput: return 1;
+            case K::Sin: case K::Cos: case K::Abs: case K::Length:
+            case K::OneMinus: case K::PolarUV: case K::Component:
+                return 1;
+            case K::Step: case K::Minimum: case K::Maximum: case K::Dot:
+                return 2;
+            case K::Smoothstep: case K::Clamp: case K::RotateUV:
+                return 3;
+            case K::Remap: return 5;
+            case K::Combine4: return 4;
             default: return 0;
             }
         }
@@ -80,6 +108,7 @@ namespace ReplayEngine::Editor
             case K::Add: case K::Subtract: case K::Multiply: case K::Divide:
                 return pin == 0 ? "A" : "B";
             case K::Lerp: return pin == 0 ? "A" : pin == 1 ? "B" : "T";
+            case K::Gradient: return pin == 0 ? "Color A" : pin == 1 ? "Color B" : "Position";
             case K::Saturate: return "In";
             case K::Power: return pin == 0 ? "Base" : "Power";
             case K::Fresnel: return pin == 0 ? "Normal" : pin == 1 ? "View" : "Power";
@@ -88,6 +117,20 @@ namespace ReplayEngine::Editor
             case K::Dissolve: return pin == 0 ? "Value" : pin == 1 ? "Threshold" : "Edge";
             case K::SurfaceOutput: return pin == 0 ? "Base Color" : pin == 1 ? "Emission" : "Opacity";
             case K::LayerOutput: return "Color";
+            case K::Sin: case K::Cos: case K::Abs: case K::Length:
+            case K::OneMinus: case K::PolarUV: case K::Component:
+                return "In";
+            case K::Step: return pin == 0 ? "Edge" : "X";
+            case K::Minimum: case K::Maximum: case K::Dot:
+                return pin == 0 ? "A" : "B";
+            case K::Smoothstep: return pin == 0 ? "Edge 0" : pin == 1 ? "Edge 1" : "X";
+            case K::Clamp: return pin == 0 ? "Value" : pin == 1 ? "Min" : "Max";
+            case K::RotateUV: return pin == 0 ? "UV" : pin == 1 ? "Angle(rad)" : "Center";
+            case K::Remap:
+                return pin == 0 ? "Value" : pin == 1 ? "In Min" : pin == 2 ? "In Max" :
+                    pin == 3 ? "Out Min" : "Out Max";
+            case K::Combine4:
+                return pin == 0 ? "R/X" : pin == 1 ? "G/Y" : pin == 2 ? "B/Z" : "A/W";
             default: return "In";
             }
         }
@@ -255,10 +298,18 @@ namespace ReplayEngine::Editor
             {
                 if (ImGui::MenuItem("UV")) AddNode(K::UV, x, y);
                 if (ImGui::MenuItem("Time")) AddNode(K::Time, x, y);
-                if (ImGui::MenuItem("Normal")) AddNode(K::Normal, x, y);
-                if (ImGui::MenuItem("View Direction")) AddNode(K::ViewDirection, x, y);
+                if (asset_.domain != Rendering::ShaderDomain::PostProcess)
+                {
+                    if (ImGui::MenuItem("Normal")) AddNode(K::Normal, x, y);
+                    if (ImGui::MenuItem("View Direction")) AddNode(K::ViewDirection, x, y);
+                }
                 if (ImGui::MenuItem("Float")) AddNode(K::Float, x, y);
                 if (ImGui::MenuItem("Color")) AddNode(K::Color, x, y);
+                if (asset_.domain == Rendering::ShaderDomain::PostProcess)
+                {
+                    if (ImGui::MenuItem("Pixel Size")) AddNode(K::PixelSize, x, y);
+                    if (ImGui::MenuItem("Aspect Ratio")) AddNode(K::AspectRatio, x, y);
+                }
                 ImGui::EndMenu();
             }
             if (ImGui::BeginMenu("Material Property"))
@@ -277,14 +328,32 @@ namespace ReplayEngine::Editor
                 if (ImGui::MenuItem("Lerp")) AddNode(K::Lerp, x, y);
                 if (ImGui::MenuItem("Saturate")) AddNode(K::Saturate, x, y);
                 if (ImGui::MenuItem("Power")) AddNode(K::Power, x, y);
+                if (ImGui::MenuItem("Sin")) AddNode(K::Sin, x, y);
+                if (ImGui::MenuItem("Cos")) AddNode(K::Cos, x, y);
+                if (ImGui::MenuItem("Abs")) AddNode(K::Abs, x, y);
+                if (ImGui::MenuItem("Step")) AddNode(K::Step, x, y);
+                if (ImGui::MenuItem("Smoothstep")) AddNode(K::Smoothstep, x, y);
+                if (ImGui::MenuItem("Min")) AddNode(K::Minimum, x, y);
+                if (ImGui::MenuItem("Max")) AddNode(K::Maximum, x, y);
+                if (ImGui::MenuItem("Clamp")) AddNode(K::Clamp, x, y);
+                if (ImGui::MenuItem("Dot")) AddNode(K::Dot, x, y);
+                if (ImGui::MenuItem("Length")) AddNode(K::Length, x, y);
+                if (ImGui::MenuItem("One Minus")) AddNode(K::OneMinus, x, y);
+                if (ImGui::MenuItem("Remap")) AddNode(K::Remap, x, y);
+                if (ImGui::MenuItem("Split Component")) AddNode(K::Component, x, y);
+                if (ImGui::MenuItem("Combine RGBA")) AddNode(K::Combine4, x, y);
+                if (ImGui::MenuItem("Gradient / Ramp")) AddNode(K::Gradient, x, y);
                 ImGui::EndMenu();
             }
             if (ImGui::BeginMenu("Effect"))
             {
-                if (ImGui::MenuItem("Fresnel")) AddNode(K::Fresnel, x, y);
+                if (asset_.domain != Rendering::ShaderDomain::PostProcess &&
+                    ImGui::MenuItem("Fresnel")) AddNode(K::Fresnel, x, y);
                 if (ImGui::MenuItem("UV Scroll")) AddNode(K::UVScroll, x, y);
                 if (ImGui::MenuItem("Noise")) AddNode(K::Noise, x, y);
                 if (ImGui::MenuItem("Dissolve")) AddNode(K::Dissolve, x, y);
+                if (ImGui::MenuItem("Rotate UV")) AddNode(K::RotateUV, x, y);
+                if (ImGui::MenuItem("Polar UV")) AddNode(K::PolarUV, x, y);
                 ImGui::EndMenu();
             }
             if (ImGui::BeginMenu("Output"))
@@ -295,7 +364,9 @@ namespace ReplayEngine::Editor
                 }
                 else
                 {
-                    if (ImGui::MenuItem("Surface Output")) AddNode(K::SurfaceOutput, x, y);
+                    if (ImGui::MenuItem(asset_.domain == Rendering::ShaderDomain::PostProcess
+                        ? "PostProcess Output" : "Surface Output"))
+                        AddNode(K::SurfaceOutput, x, y);
                 }
                 ImGui::EndMenu();
             }
@@ -459,6 +530,18 @@ namespace ReplayEngine::Editor
             changed |= ImGui::SliderFloat("Fallback Threshold", &node->value, 0.0f, 1.0f);
             changed |= ImGui::SliderFloat("Fallback Edge", &node->minimum, 0.001f, 0.5f);
         }
+        else if (node->kind == K::Component)
+        {
+            int channel = static_cast<int>(node->value);
+            const char* channels[] = { "R / X", "G / Y", "B / Z", "A / W" };
+            if (ImGui::Combo("Channel", &channel, channels, 4))
+            {
+                node->value = static_cast<float>(channel);
+                changed = true;
+            }
+        }
+        else if (node->kind == K::RotateUV)
+            changed |= ImGui::DragFloat2("Fallback Center", &node->vector2.x, 0.005f, -4.0f, 4.0f);
         if (changed) dirty_ = true;
     }
 

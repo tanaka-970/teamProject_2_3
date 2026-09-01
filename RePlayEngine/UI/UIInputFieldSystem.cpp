@@ -236,6 +236,7 @@ namespace ReplayEngine::UI
         UIInputFieldComponent* input = FocusedInput(scene);
         if (input == nullptr || !input->ActiveInHierarchy()) return false;
 
+        const std::string text_before = input->text;
         const bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
         const bool control = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
         bool handled = false;
@@ -391,6 +392,11 @@ namespace ReplayEngine::UI
         {
             ClampCaret(*input);
             input->RefreshVisual();
+            if (input->text != text_before)
+            {
+                Publish(scene, *input, Runtime::EngineEvents::InputFieldValueChanged,
+                    "InputFieldValueChanged");
+            }
         }
         return handled;
     }

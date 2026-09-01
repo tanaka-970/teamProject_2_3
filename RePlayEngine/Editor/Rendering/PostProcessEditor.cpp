@@ -25,7 +25,7 @@ namespace ReplayEngine::Editor
         ImGui::Checkbox("5. 最終合成", &final_pass_enabled);
 
         ImGui::Separator();
-        ImGui::SliderFloat("輝度しきい値", &luminance_threshold, 0.0f, 1.0f);
+        ImGui::SliderFloat("輝度しきい値", &luminance_threshold, 0.0f, 8.0f);
         ImGui::SliderFloat("露出", &settings.exposure, 0.0f, 4.0f);
         ImGui::SliderFloat("Bloom強度", &settings.bloom_intensity, 0.0f, 4.0f);
         ImGui::SliderFloat("ビネット強度", &settings.vignette_strength, 0.0f, 1.0f);

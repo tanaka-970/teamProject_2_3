@@ -46,5 +46,9 @@ namespace ReplayEngine::Audio
         virtual void Stop(AudioVoiceHandle handle) noexcept = 0;
         virtual void UpdateVoice(AudioVoiceHandle handle,
             const AudioPlaybackParams& params) noexcept = 0;
+        virtual bool IsPlaying(AudioVoiceHandle handle) const noexcept
+        {
+            return handle.Valid();
+        }
     };
 }

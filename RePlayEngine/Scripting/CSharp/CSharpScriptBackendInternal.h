@@ -162,7 +162,46 @@ namespace ReplayEngine::Scripting::CSharp::Detail
             if (text == "color") { out = PropertyType::Color; return true; }
             if (text == "object") { out = PropertyType::ObjectReference; return true; }
             if (text == "component") { out = PropertyType::ComponentReference; return true; }
+            if (text == "asset") { out = PropertyType::AssetReference; return true; }
+            if (text == "enum") { out = PropertyType::Enum; return true; }
+            if (text == "array") { out = PropertyType::Array; return true; }
+            if (text == "json") { out = PropertyType::String; return true; }
             return false;
+        }
+
+        inline std::string HexEncode(std::string_view text)
+        {
+            static constexpr char digits[] = "0123456789ABCDEF";
+            std::string result;
+            result.reserve(text.size() * 2);
+            for (const unsigned char value : text)
+            {
+                result.push_back(digits[(value >> 4) & 0x0f]);
+                result.push_back(digits[value & 0x0f]);
+            }
+            return result;
+        }
+
+        inline bool HexDecode(std::string_view text, std::string& out)
+        {
+            const auto digit = [](char value) noexcept -> int
+            {
+                if (value >= '0' && value <= '9') return value - '0';
+                if (value >= 'a' && value <= 'f') return 10 + value - 'a';
+                if (value >= 'A' && value <= 'F') return 10 + value - 'A';
+                return -1;
+            };
+            out.clear();
+            if ((text.size() % 2) != 0) return false;
+            out.reserve(text.size() / 2);
+            for (std::size_t index = 0; index < text.size(); index += 2)
+            {
+                const int high = digit(text[index]);
+                const int low = digit(text[index + 1]);
+                if (high < 0 || low < 0) return false;
+                out.push_back(static_cast<char>((high << 4) | low));
+            }
+            return true;
         }
 
         inline double ParseDouble(const std::string& text, double fallback = 0.0)
@@ -234,6 +273,10 @@ namespace ReplayEngine::Scripting::CSharp::Detail
                 return ScriptValue::MakeQuaternion({ f(0), f(1), f(2), f(3) });
             case PropertyType::Color:
                 return ScriptValue::MakeColor({ f(0), f(1), f(2), f(3) });
+            case PropertyType::Enum:
+                return ScriptValue::MakeEnum(static_cast<int>(ParseInt64(text)));
+            case PropertyType::AssetReference:
+                return ScriptValue::MakeAssetReference(text);
             case PropertyType::ObjectReference:
                 return ScriptValue::MakeObjectReference(Core::ObjectID(ParseUInt64(text)));
             case PropertyType::ComponentReference:
@@ -243,6 +286,40 @@ namespace ReplayEngine::Scripting::CSharp::Detail
                 reference.component =
                     static_cast<Core::ComponentStableID>(ParseUInt64(part(1)));
                 return ScriptValue::MakeComponentReference(reference);
+            }
+            case PropertyType::Array:
+            {
+                const std::size_t first = text.find('|');
+                const std::size_t second = first == std::string::npos
+                    ? std::string::npos : text.find('|', first + 1);
+                Reflection::PropertyType element_type = PropertyType::Bool;
+                if (first == std::string::npos || second == std::string::npos ||
+                    !MapManagedFieldType(text.substr(0, first), element_type) ||
+                    Reflection::IsContainerType(element_type))
+                {
+                    return ScriptValue::MakeArray(PropertyType::Bool, {});
+                }
+                const std::uint64_t count = ParseUInt64(
+                    text.substr(first + 1, second - first - 1));
+                if (count > 65536)
+                    return ScriptValue::MakeArray(element_type, {});
+                const std::vector<std::string> encoded = Split(
+                    std::string_view(text).substr(second + 1), ';');
+                if (count > encoded.size() || (count == 0 &&
+                    second + 1 != text.size()))
+                {
+                    return ScriptValue::MakeArray(element_type, {});
+                }
+                std::vector<ScriptValue> elements;
+                elements.reserve(static_cast<std::size_t>(count));
+                for (std::uint64_t index = 0; index < count; ++index)
+                {
+                    std::string decoded;
+                    if (!HexDecode(encoded[static_cast<std::size_t>(index)], decoded))
+                        return ScriptValue::MakeArray(element_type, {});
+                    elements.push_back(ParseValue(element_type, decoded));
+                }
+                return ScriptValue::MakeArray(element_type, std::move(elements));
             }
             default:
                 return ScriptFieldSchema::MakeTypeDefault(type);
@@ -303,6 +380,12 @@ namespace ReplayEngine::Scripting::CSharp::Detail
                 return FloatText(v.x) + "," + FloatText(v.y) + "," +
                     FloatText(v.z) + "," + FloatText(v.w);
             }
+            // Asset は GUID 文字列、Enum は内部 int をそのまま送る。
+            // 落ちると managed 側が既定値で埋まり、往復が静かに空になる。
+            case PropertyType::AssetReference:
+                return value.AsString();
+            case PropertyType::Enum:
+                return std::to_string(value.AsInt());
             case PropertyType::ObjectReference:
                 return std::to_string(value.AsObjectReference().Value());
             case PropertyType::ComponentReference:
@@ -311,6 +394,19 @@ namespace ReplayEngine::Scripting::CSharp::Detail
                     value.AsComponentReference();
                 return std::to_string(reference.owner.Value()) + "," +
                     std::to_string(reference.component);
+            }
+            case PropertyType::Array:
+            {
+                std::string result = Reflection::ToString(value.ArrayElementType());
+                result += "|" + std::to_string(value.ArrayElements().size()) + "|";
+                bool first = true;
+                for (const ScriptValue& element : value.ArrayElements())
+                {
+                    if (!first) result.push_back(';');
+                    first = false;
+                    result += HexEncode(ValueToText(element));
+                }
+                return result;
             }
             default:
                 return std::string();
@@ -343,6 +439,47 @@ namespace ReplayEngine::Scripting::CSharp::Detail
                 definition.display_name = Unescape(parts[3]);
                 definition.tooltip = Unescape(parts[4]);
                 definition.default_value = ParseValue(type, Unescape(parts[5]));
+
+                // 7 列目以降は後から足した追加情報。無い古い形式でもそのまま読める。
+                if (parts.size() > 6)
+                {
+                    const std::string flags = Unescape(parts[6]);
+                    if (flags.find('h') != std::string::npos)
+                        definition.visible_in_inspector = false;
+                    if (flags.find('r') != std::string::npos)
+                        definition.read_only = true;
+                }
+                if (parts.size() > 8 && !parts[7].empty() && !parts[8].empty())
+                {
+                    definition.has_range = true;
+                    definition.minimum = ParseDouble(parts[7]);
+                    definition.maximum = ParseDouble(parts[8]);
+                }
+                if (parts.size() > 9) definition.asset_type = Unescape(parts[9]);
+                if (parts.size() > 10) definition.category = Unescape(parts[10]);
+                if (parts.size() > 11)
+                {
+                    const std::string labels = Unescape(parts[11]);
+                    if (!labels.empty()) definition.enum_labels = Split(labels, ',');
+                }
+                if (definition.type == Reflection::PropertyType::Array)
+                {
+                    ScriptValueType element_type = Reflection::PropertyType::Bool;
+                    if (parts.size() <= 12 ||
+                        !MapManagedFieldType(Unescape(parts[12]), element_type) ||
+                        Reflection::IsContainerType(element_type))
+                    {
+                        error = "Unsupported C# array element type: " +
+                            (parts.size() > 12 ? Unescape(parts[12]) : std::string());
+                        return false;
+                    }
+                    definition.array_element_type = element_type;
+                    if (definition.default_value.Type() != Reflection::PropertyType::Array ||
+                        definition.default_value.ArrayElementType() != element_type)
+                    {
+                        definition.default_value = ScriptValue::MakeArray(element_type, {});
+                    }
+                }
 
                 out_field_types[definition.SavedName()] = type;
                 fields.push_back(std::move(definition));

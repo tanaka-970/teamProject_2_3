@@ -1,4 +1,4 @@
-// Editor の補助機能のうち「Scene Note」だけを持つ。
+﻿// Editor の補助機能のうち「Scene Note」だけを持つ。
 //
 //   framework_convenience_tools.cpp             … Scene View 座標と Scene Note（このファイル）
 //   framework_convenience_tools_play.cpp        … Play From Here
@@ -149,6 +149,7 @@ void framework::draw_scene_note_overlay()
         {
             if (note == nullptr || !note->Enabled() || !note->show_in_viewport) continue;
             if (note->completed && note->hide_when_completed) continue;
+            if (note->mode != EditorNoteComponent::Overlay) continue;
 
             const XMFLOAT3 world{ base.x + note->offset.x,
                 base.y + note->offset.y, base.z + note->offset.z };
@@ -223,6 +224,8 @@ void framework::draw_scene_notes_panel()
         DirectX::XMFLOAT3 position = editor_camera.OrbitPivot();
         create_scene_note_at(position);
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.note.create_at_camera",
+        u8"Scene View の選択位置へ新しい Editor Note を作成します。");
     ImGui::SameLine();
     const ReplayEngine::Core::ObjectID selected_note_target =
         object_editor_context.Selection().Primary();
@@ -243,6 +246,8 @@ void framework::draw_scene_notes_panel()
                 else object_editor_context.CancelEdit();
             }
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.note.attach_to_object",
+            u8"選択中の GameObject へ Editor Note を追加します。");
     }
     else
     {

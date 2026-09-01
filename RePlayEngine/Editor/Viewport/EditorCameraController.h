@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "EditorCameraPreset.h"
 #include "EditorViewportCamera.h"
@@ -78,12 +78,15 @@ namespace ReplayEngine::Editor
 
         static constexpr float maximum_delta_time = 1.0f / 15.0f;
 
+        // ImGui / framework に依存しない開始関門。
+        // framework とヘッドレス検証が同じ判定そのものを使うため公開する。
+        static bool CanBeginInteraction(const EditorCameraInput& input) noexcept;
+
         // framework 側の Gizmo shortcut 抑止にも同じ判定を使えるよう公開。
         static bool KeyChordHeld(const EditorCameraKeyChord& chord,
             const EditorCameraInput& input, bool allow_speed_modifiers = false) noexcept;
 
     private:
-        static bool CanBeginInteraction(const EditorCameraInput& input) noexcept;
         static bool MouseGestureHeld(const EditorCameraMouseGesture& gesture,
             const EditorCameraInput& input) noexcept;
         static bool ModifierDown(EditorCameraModifier modifier,

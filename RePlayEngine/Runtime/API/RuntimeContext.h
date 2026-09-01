@@ -17,10 +17,12 @@
 
 namespace ReplayEngine::Core { class Component; class GameObject; }
 namespace ReplayEngine::Scene { class Scene; }
+namespace ReplayEngine::Reflection { class PropertyValue; }
 
 namespace ReplayEngine::Runtime
 {
     class EventBus;
+    struct EventRecord;
 
     // 時間の情報。framework が毎フレーム更新する。
     struct RuntimeTime final
@@ -39,6 +41,50 @@ namespace ReplayEngine::Runtime
 
     // ログの重要度。
     enum class LogLevel : std::int32_t { Info = 0, Warning = 1, Error = 2 };
+
+    enum class PhysicsQueryKind : std::int32_t
+    {
+        RaycastAll = 0,
+        OverlapSphere = 1,
+        OverlapBox = 2,
+        OverlapCapsule = 3,
+        SphereCast = 4,
+        BoxCast = 5,
+        CapsuleCast = 6,
+    };
+
+    enum class ComponentCommand : std::int32_t
+    {
+        AnimatorPlayState = 0,
+        AnimatorPause = 1,
+        AnimatorResume = 2,
+        AnimatorStop = 3,
+        AnimatorSetBool = 4,
+        AnimatorSetFloat = 5,
+        AnimatorSetTrigger = 6,
+        AnimatorResetTrigger = 7,
+        AudioPlay = 8,
+        AudioStop = 9,
+        ParticlePlay = 10,
+        ParticleStop = 11,
+        ParticleEmit = 12,
+        ParticleClear = 13,
+    };
+
+    struct PhysicsQueryRequest final
+    {
+        PhysicsQueryKind kind = PhysicsQueryKind::RaycastAll;
+        DirectX::XMFLOAT3 point_a{ 0.0f, 0.0f, 0.0f };
+        DirectX::XMFLOAT3 point_b{ 0.0f, 0.0f, 0.0f };
+        DirectX::XMFLOAT3 direction{ 0.0f, 0.0f, 1.0f };
+        DirectX::XMFLOAT4 rotation{ 0.0f, 0.0f, 0.0f, 1.0f };
+        DirectX::XMFLOAT3 half_extents{ 0.5f, 0.5f, 0.5f };
+        float radius = 0.5f;
+        float max_distance = 0.0f;
+        int layer = 0;
+        int mask = -1;
+        ObjectHandle ignore;
+    };
 
     // Prefab を Runtime から生成するための窓口。
     //
@@ -110,6 +156,16 @@ namespace ReplayEngine::Runtime
 
         virtual bool SceneTransitionInProgress() const = 0;
         virtual const std::string& CurrentSceneGuid() const = 0;
+
+        // 非同期ロードUIとScript待機用。既存の差し替え実装は安全な既定値を使える。
+        virtual float SceneTransitionProgress() const
+        {
+            return SceneTransitionInProgress() ? 0.0f : 1.0f;
+        }
+        virtual RuntimeStatus LastSceneTransitionStatus() const
+        {
+            return RuntimeStatus::Ok;
+        }
     };
 
     // ログの出力先。framework / Editor が実装する。
@@ -213,6 +269,15 @@ namespace ReplayEngine::Runtime
 
         bool IsValid(const ObjectHandle& handle) const noexcept;
         ObjectHandle FindByObjectID(Core::ObjectID id) const noexcept;
+
+        // 名前で探す。見つからなければ空 Handle。
+        //
+        // 同じ名前が複数あるときは Scene の並び順で最初のものを返す
+        // （Scene::FindGameObjectByName の挙動をそのまま使う）。
+        // 破棄予定のものは飛ばす。
+        // 名前を一意にするのは呼び出し側の責任。
+        ObjectHandle FindByName(const std::string& name) const noexcept;
+
         ObjectHandle ControlledObject() const noexcept;
 
         RuntimeStatus GetName(const ObjectHandle& handle, std::string& out) const;
@@ -243,6 +308,25 @@ namespace ReplayEngine::Runtime
             const DirectX::XMFLOAT3& value);
         RuntimeStatus GetWorldPosition(const ObjectHandle& handle,
             DirectX::XMFLOAT3& out) const;
+        RuntimeStatus SetWorldPosition(const ObjectHandle& handle,
+            const DirectX::XMFLOAT3& value);
+        RuntimeStatus GetWorldRotationQuaternion(const ObjectHandle& handle,
+            DirectX::XMFLOAT4& out) const;
+        RuntimeStatus SetWorldRotationQuaternion(const ObjectHandle& handle,
+            const DirectX::XMFLOAT4& value);
+        RuntimeStatus GetWorldScale(const ObjectHandle& handle,
+            DirectX::XMFLOAT3& out) const;
+        RuntimeStatus SetWorldScale(const ObjectHandle& handle,
+            const DirectX::XMFLOAT3& value);
+
+        // 前後左右上のワールド方向。回転から作るので Transform の正本は増えない。
+        RuntimeStatus GetWorldAxes(const ObjectHandle& handle,
+            DirectX::XMFLOAT3& forward, DirectX::XMFLOAT3& right,
+            DirectX::XMFLOAT3& up) const;
+
+        // ローカル前方をワールドの target 方向へ向ける。up が縮退なら失敗を返す。
+        RuntimeStatus LookAt(const ObjectHandle& handle,
+            const DirectX::XMFLOAT3& target, const DirectX::XMFLOAT3& world_up);
 
         // ---- Component ---------------------------------------------------------
 
@@ -257,6 +341,53 @@ namespace ReplayEngine::Runtime
             Core::ComponentTypeID type_id, ComponentHandle& out);
         RuntimeStatus SetComponentEnabled(const ComponentHandle& handle, bool enabled);
         RuntimeStatus IsComponentEnabled(const ComponentHandle& handle, bool& out) const;
+        RuntimeStatus GetScriptField(const ComponentHandle& handle,
+            const std::string& field_name, Reflection::PropertyValue& out) const;
+        RuntimeStatus SetScriptField(const ComponentHandle& handle,
+            const std::string& field_name, const Reflection::PropertyValue& value);
+
+        // ---- Component の型とプロパティ ------------------------------------------
+        //
+        // Inspector と同じ PropertyRegistry を読む。Component 型ごとの専用 API を
+        // 増やさずに、登録済みのプロパティを名前で読み書きするための唯一の入口。
+
+        // 型名（"CameraComponent" など）から ComponentTypeID を引く。
+        // 未登録なら Core::invalid_component_type_id を返す。
+        Core::ComponentTypeID FindComponentTypeId(
+            const std::string& type_name) const noexcept;
+        RuntimeStatus GetComponentTypeName(const ComponentHandle& handle,
+            std::string& out) const;
+        RuntimeStatus GetComponentProperty(const ComponentHandle& handle,
+            const std::string& property_name, Reflection::PropertyValue& out) const;
+        RuntimeStatus SetComponentProperty(const ComponentHandle& handle,
+            const std::string& property_name, const Reflection::PropertyValue& value);
+        RuntimeStatus InvokeComponentCommand(const ComponentHandle& handle,
+            ComponentCommand command, const std::string& text = std::string(),
+            float scalar = 0.0f, float secondary_scalar = 0.0f, int integer = 0);
+
+        // ---- Rigidbody -----------------------------------------------------------
+        //
+        // 力は必ず Component の公開 API を通す。
+        // PhysicsDynamicsWorld の内部 Body や Solver はスクリプトへ出さない。
+
+        RuntimeStatus RigidbodyAddForce(const ComponentHandle& handle,
+            const DirectX::XMFLOAT3& force);
+        RuntimeStatus RigidbodyAddTorque(const ComponentHandle& handle,
+            const DirectX::XMFLOAT3& torque);
+        RuntimeStatus RigidbodyClearForces(const ComponentHandle& handle);
+        RuntimeStatus RigidbodyTeleport(const ComponentHandle& handle,
+            const DirectX::XMFLOAT3& position, const DirectX::XMFLOAT3& rotation_euler);
+
+        // 速度は Inspector 上は読み取り専用なので、汎用プロパティ API では書けない。
+        // Script から積む入口だけをここへ出す。
+        RuntimeStatus RigidbodyGetLinearVelocity(const ComponentHandle& handle,
+            DirectX::XMFLOAT3& out) const;
+        RuntimeStatus RigidbodySetLinearVelocity(const ComponentHandle& handle,
+            const DirectX::XMFLOAT3& value);
+        RuntimeStatus RigidbodyGetAngularVelocity(const ComponentHandle& handle,
+            DirectX::XMFLOAT3& out) const;
+        RuntimeStatus RigidbodySetAngularVelocity(const ComponentHandle& handle,
+            const DirectX::XMFLOAT3& value);
 
         // ---- Motion Player -----------------------------------------------------
 
@@ -302,6 +433,26 @@ namespace ReplayEngine::Runtime
 
         // Update / Trigger の最中に呼んでも安全なように、
         // 生成要求だけ積んで次の同期点で実行する。
+        // 遅延生成の 1 件を識別する番号。0 は無効。
+        using SpawnRequestID = std::uint64_t;
+
+        // 遅延生成を積み、その要求番号を返す。
+        // Flush 後に TryTakeSpawnResult() で出来た GameObject を引き取れる。
+        RuntimeStatus InstantiatePrefabDeferredTracked(const std::string& asset_guid,
+            const DirectX::XMFLOAT3& position, const DirectX::XMFLOAT3& rotation_euler,
+            const DirectX::XMFLOAT3& scale, const ObjectHandle& parent,
+            SpawnRequestID& out_request);
+
+        // 完了した遅延生成の結果を 1 件引き取る。引き取ると表から消える。
+        // まだ Flush されていなければ TransitionInProgress を返す。
+        RuntimeStatus TryTakeSpawnResult(SpawnRequestID request, ObjectHandle& out);
+
+        // 引き取られないまま溜まった結果の件数。診断用。
+        std::size_t PendingSpawnResultCount() const noexcept
+        {
+            return spawn_results_.size();
+        }
+
         RuntimeStatus InstantiatePrefabDeferred(const std::string& asset_guid,
             const DirectX::XMFLOAT3& position, const DirectX::XMFLOAT3& rotation_euler,
             const DirectX::XMFLOAT3& scale, const ObjectHandle& parent);
@@ -337,6 +488,10 @@ namespace ReplayEngine::Runtime
         // 遷移中か。要求の二重発行を避けたい Behaviour が見る。
         bool SceneTransitionInProgress() const noexcept;
 
+        // 0..1 の進捗と、直近に完了した遷移の成否。
+        float SceneTransitionProgress() const noexcept;
+        RuntimeStatus SceneTransitionStatus() const noexcept;
+
         // 現在の Runtime Scene の AssetGUID。未接続なら空。
         const std::string& CurrentSceneGuid() const noexcept;
 
@@ -357,6 +512,8 @@ namespace ReplayEngine::Runtime
             const DirectX::XMFLOAT3& direction, float max_distance,
             int layer, int mask, const ObjectHandle& ignore,
             Scene::RaycastHit& out) const;
+        RuntimeStatus PhysicsQuery(const PhysicsQueryRequest& request,
+            std::vector<Scene::PhysicsQueryHit>& out) const;
 
         // ---- Log ----------------------------------------------------------------
 
@@ -378,6 +535,26 @@ namespace ReplayEngine::Runtime
         RuntimeStatus InputAxis(const std::string& axis, int player_slot, float& out) const;
         RuntimeStatus InputPointerDeltaX(float& out) const;
         RuntimeStatus InputPointerDeltaY(float& out) const;
+
+        // ---- 生デバイス入力 -------------------------------------------------
+        //
+        // Action / Axis で足りるならそちらを使う。ここはキーコンフィグ画面や
+        // 一時的な入力のための窓口。key は仮想キーコード。
+
+        RuntimeStatus InputKeyHeld(int key, bool& out) const;
+        RuntimeStatus InputKeyPressed(int key, bool& out) const;
+        RuntimeStatus InputKeyReleased(int key, bool& out) const;
+        RuntimeStatus InputMouseButtonHeld(int button, bool& out) const;
+        RuntimeStatus InputMouseButtonPressed(int button, bool& out) const;
+        RuntimeStatus InputMouseButtonReleased(int button, bool& out) const;
+        RuntimeStatus InputPointerPosition(float& out_x, float& out_y) const;
+        RuntimeStatus InputWheelDelta(float& out) const;
+        RuntimeStatus InputGamepadConnected(int player_slot, bool& out) const;
+        RuntimeStatus InputGamepadButtonHeld(int player_slot, int button, bool& out) const;
+        RuntimeStatus InputGamepadButtonPressed(int player_slot, int button, bool& out) const;
+        RuntimeStatus InputGamepadButtonReleased(int player_slot, int button, bool& out) const;
+        RuntimeStatus InputGamepadAxis(int player_slot, int axis, float& out) const;
+        RuntimeStatus InputSetGamepadVibration(int player_slot, float low, float high);
 
         // ---- Audio --------------------------------------------------------------
 
@@ -429,6 +606,14 @@ namespace ReplayEngine::Runtime
             const DirectX::XMFLOAT2& position, const DirectX::XMFLOAT2& size,
             const DirectX::XMFLOAT2& scale, float rotation, int sort_order);
         RuntimeStatus SetUIButtonInteractable(const ObjectHandle& object, bool interactable);
+        RuntimeStatus GetUIFocus(ObjectHandle& out);
+        RuntimeStatus SetUIFocus(const ObjectHandle& object);
+        RuntimeStatus FindUIFocusInDirection(const ObjectHandle& from, int direction,
+            ObjectHandle& out);
+
+        // ---- Event --------------------------------------------------------------
+
+        RuntimeStatus PublishEvent(EventRecord record);
 
     private:
         struct PendingInstantiation
@@ -438,7 +623,21 @@ namespace ReplayEngine::Runtime
             DirectX::XMFLOAT3 rotation{ 0.0f, 0.0f, 0.0f };
             DirectX::XMFLOAT3 scale{ 1.0f, 1.0f, 1.0f };
             Core::ObjectID parent;
+            SpawnRequestID request = 0;
         };
+
+        struct SpawnResult
+        {
+            SpawnRequestID request = 0;
+            Core::ObjectID created;
+            RuntimeStatus status = RuntimeStatus::Ok;
+        };
+
+        // 引き取られない結果が無限に溜まらないよう上限を設ける。
+        // 超えたら古いものから捨てる。捨てた件数はログへ残す。
+        static constexpr std::size_t maximum_spawn_results = 256;
+        std::vector<SpawnResult> spawn_results_;
+        SpawnRequestID next_spawn_request_ = 1;
 
         Core::GameObject* ResolveObject(const ObjectHandle& handle,
             RuntimeStatus& status) const;

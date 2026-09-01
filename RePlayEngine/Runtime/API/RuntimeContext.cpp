@@ -13,10 +13,14 @@
 #include "../../Object/GameObject/GameObject.h"
 #include "../../Object/Registry/ComponentRegistry.h"
 #include "../../Scene/Runtime/Scene.h"
+#include "../../Scripting/Core/ScriptComponent.h"
+#include "../../Components/UI/UISelectableComponent.h"
+#include "../../UI/UIFocusManager.h"
 
 #include <algorithm>
 #include <functional>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace ReplayEngine::Runtime
@@ -102,6 +106,11 @@ namespace ReplayEngine::Runtime
     ObjectHandle RuntimeContext::FindByObjectID(ObjectID id) const noexcept
     {
         return resolver_.FindByObjectID(id);
+    }
+
+    ObjectHandle RuntimeContext::FindByName(const std::string& name) const noexcept
+    {
+        return resolver_.FindByName(name);
     }
 
     ObjectHandle RuntimeContext::ControlledObject() const noexcept
@@ -355,6 +364,54 @@ namespace ReplayEngine::Runtime
         out = component->Enabled();
         return RuntimeStatus::Ok;
     }
+    RuntimeStatus RuntimeContext::GetScriptField(const ComponentHandle& handle,
+        const std::string& field_name, Reflection::PropertyValue& out) const
+    {
+        out = Reflection::PropertyValue{};
+        if (field_name.empty()) return RuntimeStatus::InvalidArgument;
+
+        Component* component = nullptr;
+        const RuntimeStatus status = resolver_.TryResolve(handle, component);
+        if (status != RuntimeStatus::Ok) return status;
+
+        const Scripting::ScriptComponent* script =
+            component != nullptr ? Scripting::ScriptComponent::From(*component) : nullptr;
+        if (script == nullptr) return RuntimeStatus::TypeMismatch;
+        if (!script->Schema()) return RuntimeStatus::ServiceUnavailable;
+
+        const std::string saved_name = Scripting::ScriptNames::IsFieldSavedName(field_name)
+            ? field_name : Scripting::ScriptNames::MakeFieldSavedName(field_name);
+        if (script->Schema()->FindBySavedName(saved_name) == nullptr)
+            return RuntimeStatus::InvalidArgument;
+
+        out = script->ReadField(saved_name);
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus RuntimeContext::SetScriptField(const ComponentHandle& handle,
+        const std::string& field_name, const Reflection::PropertyValue& value)
+    {
+        if (field_name.empty() || !value.IsFinite()) return RuntimeStatus::InvalidArgument;
+
+        Component* component = nullptr;
+        const RuntimeStatus status = resolver_.TryResolve(handle, component);
+        if (status != RuntimeStatus::Ok) return status;
+
+        Scripting::ScriptComponent* script =
+            component != nullptr ? Scripting::ScriptComponent::From(*component) : nullptr;
+        if (script == nullptr) return RuntimeStatus::TypeMismatch;
+        if (!script->Schema()) return RuntimeStatus::ServiceUnavailable;
+
+        const std::string saved_name = Scripting::ScriptNames::IsFieldSavedName(field_name)
+            ? field_name : Scripting::ScriptNames::MakeFieldSavedName(field_name);
+        if (script->Schema()->FindBySavedName(saved_name) == nullptr)
+            return RuntimeStatus::InvalidArgument;
+        if (script->Schema()->FindBySavedName(saved_name)->read_only)
+            return RuntimeStatus::UnsupportedOperation;
+        return script->TryWriteRuntimeField(saved_name, value)
+            ? RuntimeStatus::Ok : RuntimeStatus::TypeMismatch;
+    }
+
     // ---- 生成・破棄 ---------------------------------------------------------
 
     RuntimeStatus RuntimeContext::CreateGameObject(const std::string& name,
@@ -410,4 +467,61 @@ namespace ReplayEngine::Runtime
         return owner->RemoveComponent(component)
             ? RuntimeStatus::Ok : RuntimeStatus::UnsupportedOperation;
     }
+    RuntimeStatus RuntimeContext::GetUIFocus(ObjectHandle& out)
+    {
+        out = ObjectHandle::None();
+        if (world_ == nullptr) return RuntimeStatus::ServiceUnavailable;
+        Components::UISelectableComponent* current = UI::UIFocusManager::Current(*world_);
+        if (current == nullptr || current->Owner() == nullptr) return RuntimeStatus::Ok;
+        out = resolver_.MakeHandle(current->Owner());
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus RuntimeContext::SetUIFocus(const ObjectHandle& object)
+    {
+        if (world_ == nullptr) return RuntimeStatus::ServiceUnavailable;
+        if (object.IsEmpty())
+        {
+            UI::UIFocusManager::SetFocus(*world_, nullptr);
+            return RuntimeStatus::Ok;
+        }
+
+        RuntimeStatus status = RuntimeStatus::Ok;
+        GameObject* owner = ResolveObject(object, status);
+        if (owner == nullptr) return status;
+        Components::UISelectableComponent* selectable =
+            owner->GetComponent<Components::UISelectableComponent>();
+        if (selectable == nullptr) return RuntimeStatus::ComponentNotFound;
+        UI::UIFocusManager::SetFocus(*world_, selectable);
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus RuntimeContext::FindUIFocusInDirection(const ObjectHandle& from,
+        int direction, ObjectHandle& out)
+    {
+        out = ObjectHandle::None();
+        if (world_ == nullptr) return RuntimeStatus::ServiceUnavailable;
+        if (direction < 0 || direction > 3) return RuntimeStatus::InvalidArgument;
+
+        RuntimeStatus status = RuntimeStatus::Ok;
+        GameObject* owner = ResolveObject(from, status);
+        if (owner == nullptr) return status;
+        Components::UISelectableComponent* selectable =
+            owner->GetComponent<Components::UISelectableComponent>();
+        if (selectable == nullptr) return RuntimeStatus::ComponentNotFound;
+
+        Components::UISelectableComponent* next = UI::UIFocusManager::FindInDirection(
+            *world_, *selectable, static_cast<UI::UIFocusManager::Direction>(direction));
+        if (next != nullptr && next->Owner() != nullptr) out = resolver_.MakeHandle(next->Owner());
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus RuntimeContext::PublishEvent(EventRecord record)
+    {
+        if (!record.type.IsValid()) return RuntimeStatus::InvalidArgument;
+        record.frame_index = time_.frame_index;
+        events_->Publish(std::move(record));
+        return RuntimeStatus::Ok;
+    }
+
 }

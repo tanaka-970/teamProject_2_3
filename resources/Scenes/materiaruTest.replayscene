@@ -1,0 +1,148 @@
+REPLAY_SCENE 11
+SCENE "新しいシーン"
+SCENE_STATE 0
+COLLISION_STATE 2 0
+OBJECT_COUNT 3
+OBJECT
+  ID 632
+  NAME "GameObject"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -33.383098602294922 3.2228000164031982 -7.9210000038146973 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "PointLightComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 2
+    PROPERTY_COUNT 8
+    PROPERTY "color" color 0.71828413009643555 0.65636217594146729 0.76113361120223999 1
+    PROPERTY "intensity" float 58.599998474121094
+    PROPERTY "range" float 73.300003051757812
+    PROPERTY "cast_shadows" bool 1
+    PROPERTY "shadow_strength" float 1
+    PROPERTY "shadow_depth_bias" float 0.0020000000949949026
+    PROPERTY "shadow_normal_bias" float 1.5
+    PROPERTY "shadow_near_plane" float 0.36000001430511475
+  END_COMPONENT
+  COMPONENT "DirectionalLightComponent" 0
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 2
+    PROPERTY_COUNT 7
+    PROPERTY "color" color 0.68825912475585938 0.33159041404724121 0.33159041404724121 1
+    PROPERTY "intensity" float 22.549999237060547
+    PROPERTY "cast_shadows" bool 1
+    PROPERTY "shadow_strength" float 1
+    PROPERTY "shadow_depth_bias" float 2
+    PROPERTY "shadow_normal_bias" float 40
+    PROPERTY "shadow_distance" float 120
+  END_COMPONENT
+  COMPONENT "SpotLightComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 2
+    PROPERTY_COUNT 10
+    PROPERTY "color" color 1 0.94999998807907104 0.85000002384185791 1
+    PROPERTY "intensity" float 2.9000000953674316
+    PROPERTY "range" float 66.510002136230469
+    PROPERTY "inner_angle_degrees" float 25
+    PROPERTY "outer_angle_degrees" float 40
+    PROPERTY "cast_shadows" bool 0
+    PROPERTY "shadow_strength" float 1
+    PROPERTY "shadow_depth_bias" float 0
+    PROPERTY "shadow_normal_bias" float 1.5
+    PROPERTY "shadow_near_plane" float 0.15000000596046448
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 629
+  NAME "Plane"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0.043631486594676971 0 200 1 200
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 20
+    PROPERTY "primitive_type" enum 0
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_slot_count" int 0
+    PROPERTY "material_override" bool 0
+    PROPERTY "tint" color 1 1 1 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "shadow_alpha_clip" bool 1
+    PROPERTY "shadow_alpha_cutoff" float 0
+    PROPERTY "rendering_layer" int 31
+    PROPERTY "visible" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0
+    PROPERTY "material.roughness" float 0.55000001192092896
+    PROPERTY "material.ambient_occlusion" float 1
+    PROPERTY "material.emissive_color" vec3 0 0 0
+    PROPERTY "material.emissive_strength" float 0
+    PROPERTY "material.double_sided" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 630
+  NAME "Tie_Demo"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0.082400001585483551 0.034237146377563477 -3.3901000022888184 0 3.2637796401977539 0 1 1.0800000429153442 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "SkinnedMeshRendererComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 36
+    PROPERTY "mesh_asset" asset "39907f5ff90d9ea95a0ed923f7dfd43a"
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_slot_count" int 6
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 1 1 1 1
+    PROPERTY "shading_model" enum 3
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "shadow_alpha_clip" bool 0
+    PROPERTY "shadow_alpha_cutoff" float 0.5
+    PROPERTY "rendering_layer" int 20
+    PROPERTY "visible" bool 1
+    PROPERTY "visual_rotation_offset" vec3 90 188.5 180
+    PROPERTY "local_position_offset" vec3 0 0 0
+    PROPERTY "local_scale_multiplier" vec3 1 1 1
+    PROPERTY "apply_fbx_coordinate_transform" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0
+    PROPERTY "material.roughness" float 0.55000001192092896
+    PROPERTY "material.ambient_occlusion" float 1
+    PROPERTY "material.emissive_color" vec3 0 0 0
+    PROPERTY "material.emissive_strength" float 0
+    PROPERTY "material.double_sided" bool 0
+    PROPERTY "material_slots[0].name" string "pc003_face1"
+    PROPERTY "material_slots[0].asset" asset "927091246a96137c747680ccaa609f99"
+    PROPERTY "material_slots[1].name" string "pc003_28_body02"
+    PROPERTY "material_slots[1].asset" asset "927091246a96137c747680ccaa609f99"
+    PROPERTY "material_slots[2].name" string "pc003_28_skin"
+    PROPERTY "material_slots[2].asset" asset "927091246a96137c747680ccaa609f99"
+    PROPERTY "material_slots[3].name" string "pc003_28_hair00"
+    PROPERTY "material_slots[3].asset" asset "927091246a96137c747680ccaa609f99"
+    PROPERTY "material_slots[4].name" string "pc003_28_body00"
+    PROPERTY "material_slots[4].asset" asset "927091246a96137c747680ccaa609f99"
+    PROPERTY "material_slots[5].name" string "pc003_28_body01"
+    PROPERTY "material_slots[5].asset" asset "927091246a96137c747680ccaa609f99"
+  END_COMPONENT
+END_OBJECT

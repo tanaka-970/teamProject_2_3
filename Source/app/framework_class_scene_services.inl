@@ -20,8 +20,9 @@
     void add_recent_object_scene(const std::filesystem::path& path);
     void register_object_scene_asset();
     void discard_object_scene_autosave();
-    void enter_object_play_mode();
+    void enter_object_play_mode(bool show_loading_screen = true);
     void exit_object_play_mode();
+    bool complete_object_play_mode_start();
     ReplayEngine::Scene::Scene& active_object_scene() noexcept;
     const ReplayEngine::Scene::Scene& active_object_scene() const noexcept;
 
@@ -32,6 +33,16 @@
     void initialize_runtime_services();
     void tick_runtime_scene_flow();
     void rebind_runtime_world_if_changed();
+    void update_editor_play_loading();
+    void finish_editor_play_loading();
+    void cancel_editor_play_loading();
+
+public:
+    bool load_exclusive_scene_from_path(const std::filesystem::path& path);
+    ReplayEngine::Scene::Scene* exclusive_scene_for_render() noexcept;
+    void update_exclusive_scene(float elapsed_time);
+
+private:
 
     // Startup Scene からの起動。空・無効・失敗はすべて診断状態にする。
     void begin_startup_scene();
@@ -42,33 +53,50 @@
     // Editor の Runtime 診断パネル。読み取り専用。
     void draw_runtime_diagnostics_panel();
     gltf_model* resolve_object_gltf(const std::string& asset_guid);
+    // Model Asset の実ファイルを引く共通処理。形式ごとの分岐をここへ集約する。
+    enum class model_source_format { unsupported, fbx_cereal, gltf };
+    model_source_format resolve_model_source(
+        const std::string& asset_guid,
+        std::filesystem::path& out_source,
+        std::string& out_reason) const;
     skinned_mesh* resolve_object_mesh(const std::string& asset_guid);
     static_mesh* resolve_builtin_primitive_mesh(const std::string& builtin_id);
+    bool build_builtin_primitive_cpu(const std::string& builtin_id,
+        std::vector<static_mesh::vertex>& vertices,
+        std::vector<std::uint32_t>& indices) const;
     const ReplayEngine::Rendering::MaterialAsset* resolve_object_material(
         const std::string& asset_guid);
     ReplayEngine::Rendering::RenderItem resolve_render_item_material(
-        const ReplayEngine::Rendering::RenderItem& item);
-    // depth_only = true で深度プリパス用の描画になる。
-    // 深度プリパスを使う構成では、GBuffer へ出すものを必ずここでも描くこと。
-    // 描き漏らすと DepthFunc=EQUAL に落とされて画面から消える。
-    void draw_object_scene_meshes(ID3D11PixelShader* override_pixel_shader,
-        bool gbuffer_pass, bool depth_only = false,
-        ReplayEngine::Core::ObjectID only_owner = ReplayEngine::Core::ObjectID::Invalid(),
-        bool skip_model_effect_owners = false,
-        std::uint32_t rendering_layer_mask = 0xFFFFFFFFu);
-    ID3D11ShaderResourceView* resolve_scene_effect_texture(const std::string& asset_guid);
-    ReplayEngine::UI::UIRenderTarget* apply_scene_effect_chain(
-        ID3D11ShaderResourceView* source,
-        const std::vector<ReplayEngine::UI::UIEffect>& effects,
-        std::uint32_t width, std::uint32_t height, DXGI_FORMAT format,
-        float effect_time);
-    void begin_scene_effect_frame() noexcept;
-    void draw_model_effect_stacks(const D3D11_VIEWPORT& camera_viewport);
-    // LandscapeRendererComponent 用の procedural static mesh 描画。
-    // AssetGUIDを介さず、LandscapeData::Revision が変わったときだけGPU Meshを作り直す。
-    void draw_landscape_scene_meshes(bool gbuffer_pass, bool depth_only = false);
-    void update_line_trails(float elapsed_time);
-    void draw_line_strokes();
+        const ReplayEngine::Rendering::RenderItem& item,
+        const std::string* material_asset_override = nullptr,
+        bool apply_material_motion = true);
+        // DX12 Phase 2 Bridge。Engine 所有の RenderItem List を Cache 可能な Static
+        // Geometry/Material Submission へ変換する。実際の Skinned Animation は Phase 3 に残す。
+    struct dx12_scene_build_options final
+    {
+        bool include_auxiliary_geometry = true;
+        bool include_active_lighting = true;
+    };
+    bool build_dx12_static_scene(
+        ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission& submission,
+        const ReplayEngine::Scene::Scene& scene,
+        const ReplayEngine::Rendering::RenderItemList& render_items,
+        float elapsed_time, dx12_scene_build_options options = {});
+    // Canvas/RectTransform の解決結果を、GPU APIを呼ばないDX12 UIコマンドへ変換する。
+    bool build_dx12_ui(
+        ReplayEngine::Rendering::DX12::D3D12UIFrame& frame);
+    bool build_dx12_scene_effects(
+        ReplayEngine::Rendering::DX12::D3D12SceneEffectSubmission& submission,
+        const ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission& static_scene,
+        const DirectX::XMFLOAT4X4& view_projection);
+    bool build_dx12_ui_for_scene(
+        ReplayEngine::Rendering::DX12::D3D12UIFrame& frame,
+        ReplayEngine::Scene::Scene& scene,
+        std::uint32_t target_width, std::uint32_t target_height,
+        const object_ui_viewport& viewport);
+    bool prepare_dx12_custom_effect(
+        ReplayEngine::Rendering::DX12::D3D12UIEffectCommand& command);
+    void compile_pending_dx12_custom_effects();
     void clear_object_mesh_cache() noexcept;
     void clear_object_material_cache() noexcept;
     bool object_runtime_active() const noexcept;
@@ -77,11 +105,17 @@
     void refresh_object_scene_services();
     const ReplayEngine::Motion::MotionAsset* resolve_motion_asset(
         const std::string& asset_guid);
+    const ReplayEngine::Motion::CompositionAsset* resolve_composition_asset(
+        const std::string& asset_guid);
     void prepare_material_motion_bindings(ReplayEngine::Scene::Scene& scene);
     void prepare_ui_effect_shader_schemas(ReplayEngine::Scene::Scene& scene);
     void evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
-        float scaled_delta_time, float unscaled_delta_time);
-    void update_ui_sprite_animators(ReplayEngine::Scene::Scene& scene, float elapsed_time);
+        float scaled_delta_time, float unscaled_delta_time,
+        ReplayEngine::Motion::MotionMixer& mixer,
+        ReplayEngine::Runtime::RuntimeContext* runtime_context,
+        std::uint64_t frame_index);
+    void update_ui_sprite_animators(ReplayEngine::Scene::Scene& scene, float elapsed_time,
+        const ReplayEngine::Motion::MotionMixer* mixer);
     void update_ui_number_displays(ReplayEngine::Scene::Scene& scene);
     void sync_object_lights();
 
@@ -206,16 +240,34 @@
     // 左にフォルダツリー、右にそのフォルダの中身。
     // 実装は Source/app/Editor/framework_project_browser.cpp。
     void draw_project_browser();
+    std::size_t register_resource_assets(std::string& error);
     void draw_project_folder_tree(const std::filesystem::path& folder, int depth);
     void draw_project_folder_contents();
+    void draw_project_create_submenu(const std::filesystem::path& target_folder);
+    void draw_project_entry_context_items(const std::filesystem::path& path);
+    bool project_open_entry(const std::filesystem::path& path);
     void set_project_folder(const std::filesystem::path& folder);
     bool project_create_folder(const std::string& name);
     bool project_create_csharp_behaviour(const std::string& class_name);
     bool project_create_material(const std::string& name);
     bool project_create_motion(const std::string& name);
+    bool project_create_composition(const std::string& name);
+    bool project_create_sprite_atlas(const std::string& name);
+    bool open_sprite_atlas_asset(const ReplayEngine::Assets::AssetRecord& asset);
+    bool save_current_sprite_atlas();
+    void draw_sprite_atlas_editor();
+    void begin_sprite_atlas_edit(const std::string& label);
+    void commit_sprite_atlas_edit();
+    void cancel_sprite_atlas_edit();
+    bool undo_sprite_atlas_edit();
+    bool redo_sprite_atlas_edit();
     bool project_create_scene_flow(const std::string& name);
     bool project_create_localization(const std::string& name);
     bool project_create_effect_preset(const std::string& name);
+    bool project_create_easing_curve(const std::string& name);
+    bool open_easing_curve_asset(const ReplayEngine::Assets::AssetRecord& asset);
+    bool save_current_easing_curve();
+    void draw_easing_editor();
     bool project_create_input_action_asset(const std::string& name);
     bool load_active_input_action_asset();
     bool project_create_surface_shader(const std::string& name);
@@ -224,12 +276,20 @@
         ReplayEngine::Rendering::ShaderDomain domain);
     bool project_rename_entry(const std::filesystem::path& path,
         const std::string& new_name);
+    bool project_move_entry(const std::filesystem::path& path,
+        const std::filesystem::path& destination_folder);
+    bool project_duplicate_entry(const std::filesystem::path& path);
+    void project_show_in_explorer(const std::filesystem::path& path);
+    void project_copy_path(const std::filesystem::path& path, bool absolute);
+    void project_record_created_path(const std::filesystem::path& path,
+        const std::string& label);
+    void project_apply_external_history_change();
+    void project_notify_path_relocated(const std::filesystem::path& from,
+        const std::filesystem::path& to);
     void project_request_delete(const std::filesystem::path& path);
     void draw_project_delete_popup();
     bool project_delete_confirmed();
     void project_begin_rename_selected();
-    ID3D11ShaderResourceView* project_thumbnail_for(
-        const std::filesystem::path& path);
     ReplayEngine::Assets::AssetKind project_kind_for(
         const std::filesystem::path& path) const;
 
@@ -243,6 +303,21 @@
     void ui_preview_resolution_size(int& width, int& height) const noexcept;
     bool open_motion_asset(const ReplayEngine::Assets::AssetRecord& asset);
     bool save_current_motion_asset();
+    // S キーと Key追加 ボタンの共通経路。現在のプレビュー時刻へキーを打つ。
+    bool add_motion_key_at_preview_time();
+    ReplayEngine::Motion::MotionTrack* selected_motion_track();
+    std::vector<int> selected_motion_key_indices() const;
+    bool copy_motion_keys();
+    bool paste_motion_keys();
+    bool duplicate_motion_keys();
+    bool delete_motion_keys();
+    bool scale_motion_key_times(float scale, int pivot_mode);
+    bool apply_motion_easing_to_selection(ReplayEngine::Motion::MotionEasing easing,
+        const ReplayEngine::Reflection::AssetReference* curve = nullptr);
+    void push_motion_curve_warning_once(const std::string& curve_error);
+    void toggle_motion_preview_playback();
+    void step_motion_preview_frames(int frames);
+    void seek_motion_preview_time(float time);
     bool undo_motion_edit();
     bool redo_motion_edit();
     void draw_motion_layers();
@@ -271,22 +346,30 @@ private:
     std::uint32_t automated_smoke_test_frames{ 0 };
     std::uint32_t automated_smoke_test_frames_rendered{ 0 };
     bool automated_frame_capture_pending{ false };
+    bool automated_exclusive_frame_capture_pending{ false };
+    bool automated_exclusive_frame_capture_attempted_{ false };
 
     bool profile_benchmark_mode{ false };
     std::uint32_t profile_benchmark_frames{ 300 };
     std::uint32_t profile_benchmark_warmup_frames{ 30 };
+    std::uint32_t profile_benchmark_render_output{ 0 };
     std::uint32_t profile_benchmark_frame_index{ 0 };
     std::uint32_t profile_benchmark_drain_frames{ 0 };
     std::string profile_benchmark_output_name{ "benchmark" };
+    bool profile_model_screen_bounds_diagnostic_emitted{ false };
     bool profile_benchmark_export_attempted{ false };
     bool profile_benchmark_export_ok{ false };
     bool profile_benchmark_gpu_drain_timeout{ false };
     bool profile_benchmark_scene_ready{ false };
     bool profile_benchmark_startup_failed{ false };
+    bool profile_benchmark_startup_profile_ok{ false };
+    std::array<double, 5> profile_benchmark_initialize_stage_ms{};
+    double profile_benchmark_initialize_total_ms{ 0.0 };
     std::uint64_t profile_benchmark_max_draw_calls{ 0 };
     std::uint64_t profile_benchmark_max_objects{ 0 };
     std::uint64_t profile_benchmark_max_components{ 0 };
     std::chrono::steady_clock::time_point profile_benchmark_startup_begin{};
+    std::vector<std::string> screen_space_overrides;
     float shader_composer_time{ 0.0f }; // elapsed_time が 0 の Golden Capture 中は進めない
     uint32_t frames{ 0 };
     float elapsed_time{ 0.0f };

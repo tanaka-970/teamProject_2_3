@@ -97,7 +97,7 @@ namespace ReplayEngine::Rendering::Validation
         //
         // 「.hlsl 側を書き換えたが C++ 側を直し忘れた」を検出する。
         // 崩れると全マテリアルの参照が切れるので、必ずここで止める。
-        check.Expect(BuiltInShaders::All().size() == 5, "組み込みは 5 種");
+        check.Expect(BuiltInShaders::All().size() == 6, "組み込みは 6 種");
         check.Expect(BuiltInShaders::FbxDefault.ToString() ==
             "00000000000000000000000000000001", "FbxDefault の GUID が固定値");
         check.Expect(BuiltInShaders::Pbr.ToString() ==
@@ -108,6 +108,8 @@ namespace ReplayEngine::Rendering::Validation
             "00000000000000000000000000000004", "Unlit の GUID が固定値");
         check.Expect(BuiltInShaders::Pixelate.ToString() ==
             "00000000000000000000000000000005", "Pixelate の GUID が固定値");
+        check.Expect(BuiltInShaders::FlatFill.ToString() ==
+            "00000000000000000000000000000006", "FlatFill の GUID が固定値");
 
         // ---- 3. shading_model の番号 → GUID -------------------------------
         check.Expect(BuiltInShaders::FromShadingModel(0) ==
@@ -118,6 +120,8 @@ namespace ReplayEngine::Rendering::Validation
             BuiltInShaders::Toon, "shading_model 2 は Toon");
         check.Expect(BuiltInShaders::FromShadingModel(3) ==
             BuiltInShaders::Unlit, "shading_model 3 は Unlit");
+        check.Expect(BuiltInShaders::FromShadingModel(5) ==
+            BuiltInShaders::FlatFill, "shading_model 5 は FlatFill");
         check.Expect(BuiltInShaders::FromShadingModel(4) ==
             BuiltInShaders::Pixelate, "shading_model 4 は Pixelate");
 

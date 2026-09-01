@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../Shaders/ShaderAsset.h"
 
@@ -35,6 +35,27 @@ namespace ReplayEngine::Rendering
         Dissolve,
         SurfaceOutput,
         LayerOutput,
+
+        // 既存Asset互換のため追加Nodeは末尾へ置く。
+        PixelSize,
+        AspectRatio,
+        Sin,
+        Cos,
+        Abs,
+        Step,
+        Smoothstep,
+        Minimum,
+        Maximum,
+        Clamp,
+        Dot,
+        Length,
+        OneMinus,
+        Remap,
+        RotateUV,
+        PolarUV,
+        Component,
+        Combine4,
+        Gradient,
     };
 
     const char* ToString(ShaderComposerNodeKind kind) noexcept;

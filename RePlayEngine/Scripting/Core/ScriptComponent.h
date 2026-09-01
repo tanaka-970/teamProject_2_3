@@ -117,6 +117,7 @@ namespace ReplayEngine::Scripting
 
         ScriptValue ReadField(const std::string& saved_name) const;
         void WriteField(const std::string& saved_name, const ScriptValue& value);
+        bool TryWriteRuntimeField(const std::string& saved_name, const ScriptValue& value);
 
         const ScriptFieldStorage& FieldValues() const noexcept { return field_values_; }
         const ScriptFieldStorage& PendingValues() const noexcept { return pending_values_; }

@@ -1,4 +1,7 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Text;
 
 namespace ReplayEngine;
 
@@ -101,6 +104,23 @@ public struct ComponentReference
     public uint ComponentStableId;
 
     public bool IsAssigned => OwnerObjectId != 0 && ComponentStableId != 0;
+
+    public RuntimeResult<ComponentHandle> Resolve()
+        => NativeBridge.ResolveComponentReference(this);
+}
+
+public readonly struct SceneTransitionInfo
+{
+    internal SceneTransitionInfo(float progress, bool inProgress, RuntimeStatus status)
+    {
+        Progress = progress;
+        InProgress = inProgress;
+        Status = status;
+    }
+
+    public float Progress { get; }
+    public bool InProgress { get; }
+    public RuntimeStatus Status { get; }
 }
 
 
@@ -115,6 +135,95 @@ public struct RaycastHit
     private int valid;
 
     public bool Valid => valid != 0;
+}
+
+public readonly struct ComponentTypeMetadata
+{
+    internal ComponentTypeMetadata(string nativeTypeName, uint typeId, string typeGuid,
+        string displayName, string category, string moduleId, int version,
+        bool allowsMultiple, bool serializable, bool runtimeAvailable)
+    {
+        NativeTypeName = nativeTypeName;
+        TypeId = typeId;
+        TypeGuid = typeGuid;
+        DisplayName = displayName;
+        Category = category;
+        ModuleId = moduleId;
+        Version = version;
+        AllowsMultiple = allowsMultiple;
+        Serializable = serializable;
+        RuntimeAvailable = runtimeAvailable;
+    }
+
+    public string NativeTypeName { get; }
+    public uint TypeId { get; }
+    public string TypeGuid { get; }
+    public bool HasPersistentGuid => TypeGuid.Length == 32 &&
+        TypeGuid != "00000000000000000000000000000000";
+    public string DisplayName { get; }
+    public string Category { get; }
+    public string ModuleId { get; }
+    public int Version { get; }
+    public bool AllowsMultiple { get; }
+    public bool Serializable { get; }
+    public bool RuntimeAvailable { get; }
+}
+
+public enum PhysicsQueryKind : int
+{
+    RaycastAll = 0,
+    OverlapSphere = 1,
+    OverlapBox = 2,
+    OverlapCapsule = 3,
+    SphereCast = 4,
+    BoxCast = 5,
+    CapsuleCast = 6,
+}
+
+public enum EventScope : int
+{
+    Scene = 0,
+    Global = 1,
+}
+
+internal enum ComponentCommand : int
+{
+    AnimatorPlayState = 0,
+    AnimatorPause = 1,
+    AnimatorResume = 2,
+    AnimatorStop = 3,
+    AnimatorSetBool = 4,
+    AnimatorSetFloat = 5,
+    AnimatorSetTrigger = 6,
+    AnimatorResetTrigger = 7,
+    AudioPlay = 8,
+    AudioStop = 9,
+    ParticlePlay = 10,
+    ParticleStop = 11,
+    ParticleEmit = 12,
+    ParticleClear = 13,
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PhysicsHit
+{
+    public Vector3 Point;
+    public Vector3 Normal;
+    public float Distance;
+    public float Fraction;
+    public ObjectHandle Object;
+    public uint ColliderId;
+    private int valid;
+
+    public bool Valid => valid != 0;
+}
+
+public enum UIFocusDirection : int
+{
+    Up = 0,
+    Down = 1,
+    Left = 2,
+    Right = 3,
 }
 
 public readonly struct RuntimeResult<T>
@@ -150,6 +259,8 @@ public readonly struct RuntimeEvent
         Source = source;
         Target = target;
         FrameIndex = frameIndex;
+
+        Payload = NativeBridge.ConsumeParsedEventPayload();
     }
 
     public string TypeGuid { get; }
@@ -157,4 +268,273 @@ public readonly struct RuntimeEvent
     public ObjectHandle Source { get; }
     public ObjectHandle Target { get; }
     public ulong FrameIndex { get; }
+
+    public RuntimeEventPayload Payload { get; }
+
+    public bool TryGetBool(string key, out bool value)
+    {
+        if (Payload != null) return Payload.TryGetBool(key, out value);
+        value = false;
+        return false;
+    }
+
+    public bool TryGetInt(string key, out int value)
+    {
+        if (Payload != null) return Payload.TryGetInt(key, out value);
+        value = 0;
+        return false;
+    }
+
+    public bool TryGetDouble(string key, out double value)
+    {
+        if (Payload != null) return Payload.TryGetDouble(key, out value);
+        value = 0.0;
+        return false;
+    }
+    public bool TryGetUInt64(string key, out ulong value)
+    {
+        if (Payload != null) return Payload.TryGetUInt64(key, out value);
+        value = 0;
+        return false;
+    }
+    public bool TryGetString(string key, out string value)
+    {
+        if (Payload != null) return Payload.TryGetString(key, out value);
+        value = string.Empty;
+        return false;
+    }
+}
+
+
+[StructLayout(LayoutKind.Sequential)]
+public struct GroundHit
+{
+    public Vector3 Position;
+    public Vector3 Normal;
+    public ObjectHandle Object;
+    public uint ColliderId;
+    private int valid;
+
+    public bool Valid => valid != 0;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct SphereSweepHit
+{
+    public Vector3 Center;
+    public Vector3 Normal;
+    public float Fraction;
+    public ObjectHandle Object;
+    public uint ColliderId;
+    private int valid;
+
+    public bool Valid => valid != 0;
+}
+
+
+public sealed class RuntimeEventPayload
+{
+    private enum ValueKind
+    {
+        Bool,
+        Int,
+        UInt64,
+        Double,
+        String,
+    }
+
+    private readonly struct ValueEntry
+    {
+        internal ValueEntry(ValueKind kind, object value)
+        {
+            Kind = kind;
+            Value = value;
+        }
+
+        internal ValueKind Kind { get; }
+        internal object Value { get; }
+    }
+
+    private readonly Dictionary<string, ValueEntry> values =
+        new(StringComparer.Ordinal);
+
+    public RuntimeEventPayload SetBool(string key, bool value)
+    {
+        values[key ?? string.Empty] = new ValueEntry(ValueKind.Bool, value);
+        return this;
+    }
+
+    public RuntimeEventPayload SetInt(string key, int value)
+    {
+        values[key ?? string.Empty] = new ValueEntry(ValueKind.Int, value);
+        return this;
+    }
+
+    public RuntimeEventPayload SetUInt64(string key, ulong value)
+    {
+        values[key ?? string.Empty] = new ValueEntry(ValueKind.UInt64, value);
+        return this;
+    }
+
+    public RuntimeEventPayload SetDouble(string key, double value)
+    {
+        values[key ?? string.Empty] = new ValueEntry(ValueKind.Double, value);
+        return this;
+    }
+
+    public RuntimeEventPayload SetString(string key, string value)
+    {
+        values[key ?? string.Empty] = new ValueEntry(ValueKind.String, value ?? string.Empty);
+        return this;
+    }
+
+    public bool TryGetBool(string key, out bool value)
+    {
+        if (values.TryGetValue(key ?? string.Empty, out var entry) &&
+            entry.Kind == ValueKind.Bool)
+        {
+            value = (bool)entry.Value;
+            return true;
+        }
+        value = false;
+        return false;
+    }
+
+    public bool TryGetInt(string key, out int value)
+    {
+        if (values.TryGetValue(key ?? string.Empty, out var entry) &&
+            entry.Kind == ValueKind.Int)
+        {
+            value = (int)entry.Value;
+            return true;
+        }
+        value = 0;
+        return false;
+    }
+
+    public bool TryGetDouble(string key, out double value)
+    {
+        if (values.TryGetValue(key ?? string.Empty, out var entry) &&
+            entry.Kind == ValueKind.Double)
+        {
+            value = (double)entry.Value;
+            return true;
+        }
+        value = 0.0;
+        return false;
+    }
+
+    public bool TryGetUInt64(string key, out ulong value)
+    {
+        if (values.TryGetValue(key ?? string.Empty, out var entry) &&
+            entry.Kind == ValueKind.UInt64)
+        {
+            value = (ulong)entry.Value;
+            return true;
+        }
+        value = 0;
+        return false;
+    }
+
+    public bool TryGetString(string key, out string value)
+    {
+        if (values.TryGetValue(key ?? string.Empty, out var entry) &&
+            entry.Kind == ValueKind.String)
+        {
+            value = (string)entry.Value;
+            return true;
+        }
+        value = string.Empty;
+        return false;
+    }
+
+    internal string Serialize()
+    {
+        var builder = new StringBuilder();
+        foreach (var pair in values)
+        {
+            var key = Hex(pair.Key);
+            switch (pair.Value.Kind)
+            {
+                case ValueKind.Bool:
+                    builder.Append("b:").Append(key).Append(':')
+                        .Append((bool)pair.Value.Value ? '1' : '0').Append('\n');
+                    break;
+                case ValueKind.Int:
+                    builder.Append("i:").Append(key).Append(':')
+                        .Append(((int)pair.Value.Value).ToString(CultureInfo.InvariantCulture))
+                        .Append('\n');
+                    break;
+                case ValueKind.UInt64:
+                    builder.Append("u:").Append(key).Append(':')
+                        .Append(((ulong)pair.Value.Value).ToString(CultureInfo.InvariantCulture))
+                        .Append('\n');
+                    break;
+                case ValueKind.Double:
+                    builder.Append("d:").Append(key).Append(':')
+                        .Append(((double)pair.Value.Value).ToString("R", CultureInfo.InvariantCulture))
+                        .Append('\n');
+                    break;
+                case ValueKind.String:
+                    builder.Append("s:").Append(key).Append(':')
+                        .Append(Hex((string)pair.Value.Value)).Append('\n');
+                    break;
+            }
+        }
+        return builder.ToString();
+    }
+
+    internal bool TryAddEncoded(string text)
+    {
+        var parts = text.Split(':', 3, StringSplitOptions.None);
+        if (parts.Length != 3 || parts[0].Length != 1) return false;
+        if (!TryUnhex(parts[1], out var key)) return false;
+
+        switch (parts[0][0])
+        {
+            case 'b':
+                if (parts[2] == "1") { SetBool(key, true); return true; }
+                if (parts[2] == "0") { SetBool(key, false); return true; }
+                return false;
+            case 'i':
+                if (!int.TryParse(parts[2], NumberStyles.Integer,
+                    CultureInfo.InvariantCulture, out var intValue)) return false;
+                SetInt(key, intValue);
+                return true;
+            case 'u':
+                if (!ulong.TryParse(parts[2], NumberStyles.None,
+                    CultureInfo.InvariantCulture, out var uint64Value)) return false;
+                SetUInt64(key, uint64Value);
+                return true;
+            case 'd':
+                if (!double.TryParse(parts[2], NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out var doubleValue) ||
+                    double.IsNaN(doubleValue) || double.IsInfinity(doubleValue)) return false;
+                SetDouble(key, doubleValue);
+                return true;
+            case 's':
+                if (!TryUnhex(parts[2], out var stringValue)) return false;
+                SetString(key, stringValue);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private static string Hex(string text)
+        => Convert.ToHexString(Encoding.UTF8.GetBytes(text));
+
+    private static bool TryUnhex(string text, out string value)
+    {
+        try
+        {
+            value = Encoding.UTF8.GetString(Convert.FromHexString(text));
+            return true;
+        }
+        catch (FormatException)
+        {
+            value = string.Empty;
+            return false;
+        }
+    }
 }

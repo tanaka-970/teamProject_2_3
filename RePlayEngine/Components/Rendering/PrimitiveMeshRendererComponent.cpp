@@ -23,6 +23,16 @@ namespace ReplayEngine::Components
         MarkMaterialMotionProperty(*this, property_name);
     }
 
+    void PrimitiveMeshRendererComponent::OnSerialize(Reflection::PropertyBag& output) const
+    {
+        SerializeMaterialSlots(*this, output);
+    }
+
+    void PrimitiveMeshRendererComponent::OnDeserialize(const Reflection::PropertyBag& input)
+    {
+        DeserializeMaterialSlots(*this, input);
+    }
+
     const char* PrimitiveMeshRendererComponent::BuiltinAssetId() const noexcept
     {
         switch (static_cast<PrimitiveType>(primitive_type))
@@ -48,6 +58,20 @@ namespace ReplayEngine::Components
         out.owner = owner.ID();
         out.mesh_asset = builtin_id;
         out.material_asset = material_asset;
+        out.material_slot_assets = nullptr;
+        out.material_slot_count = 0;
+        const int slot_count = ClampedMaterialSlotCount(*this);
+        if (slot_count > 0)
+        {
+            for (int index = 0; index < slot_count; ++index)
+            {
+                material_slot_asset_view[static_cast<std::size_t>(index)] =
+                    static_cast<std::size_t>(index) < material_slots.size()
+                    ? &material_slots[static_cast<std::size_t>(index)].asset : nullptr;
+            }
+            out.material_slot_assets = material_slot_asset_view.data();
+            out.material_slot_count = static_cast<std::uint8_t>(slot_count);
+        }
         out.world = owner.GetTransform().WorldMatrixFloat4x4();
         out.tint = tint;
         out.material_override = material_override;
@@ -78,6 +102,8 @@ namespace ReplayEngine::Components
         out.outline = outline;
         out.cast_shadow = cast_shadow;
         out.receive_shadow = receive_shadow;
+        out.shadow_alpha_clip = shadow_alpha_clip;
+        out.shadow_alpha_cutoff = shadow_alpha_cutoff;
         out.rendering_layer = (std::max)(0, (std::min)(31, rendering_layer));
         out.double_sided =
             primitive_type == static_cast<int>(Plane) ||

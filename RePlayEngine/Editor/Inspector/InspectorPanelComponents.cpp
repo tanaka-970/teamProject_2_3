@@ -5,6 +5,8 @@
 #include "InspectorPanel.h"
 
 #include "PropertyDrawer.h"
+#include "../ReorderableList.h"
+#include "../Style/EditorStyle.h"
 #include "../Validation/SceneValidator.h"
 #include "PlayerCompositionValidator.h"
 #include "../../Assets/AssetDatabase.h"
@@ -27,11 +29,13 @@
 #include "../../Components/UI/UIEffectStackComponent.h"
 #include "../../Components/Rendering/ModelEffectStackComponent.h"
 #include "../../Components/Rendering/ScreenEffectStackComponent.h"
+#include "../../UI/Effects/EffectKindLabels.h"
 
 #include "imgui/imgui.h"
 #include "imgui/imgui_internal.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <cmath>
 #include <cstring>
 #include <string>
@@ -135,7 +139,9 @@ namespace ReplayEngine::Editor
             u8"保存し直しても、この内容は元の型として書き戻されます。");
     }
 
-    void InspectorPanel::DrawComponent(EditorContext& context, Core::Component& component)
+    void InspectorPanel::DrawComponent(EditorContext& context, Core::Component& component,
+        std::size_t component_index, std::size_t component_count,
+        const void* component_list_identity)
     {
         const ComponentTypeInfo* info = ComponentRegistry::Find(component.TypeID());
         const auto* missing = dynamic_cast<const Core::MissingComponent*>(&component);
@@ -149,7 +155,24 @@ namespace ReplayEngine::Editor
         const bool editable = context.CanEdit();
         const bool removable = ComponentRegistry::IsRemovable(component.TypeID());
 
-        // 有効チェックボックスをヘッダーの左へ置く。
+        const ImVec4 category_color = EditorStyle::ComponentCategoryColor(
+            info != nullptr ? info->category : std::string("未分類"));
+        const bool selected = selected_component_owner_ == (component.Owner() != nullptr ?
+            component.Owner()->ID().Value() : 0ull) &&
+            selected_component_stable_ == component.StableID();
+        const std::string component_id = "component_" +
+            std::to_string(component.Owner() != nullptr
+                ? component.Owner()->ID().Value() : 0ull) + "_" +
+            std::to_string(component.StableID());
+        ImGui::PushID(component_id.c_str());
+        const auto draw_separator = [&]()
+        {
+            ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(category_color.x,
+                category_color.y, category_color.z, selected ? 0.98f : 0.68f));
+            ImGui::Separator();
+            ImGui::PopStyleColor();
+        };
+
         bool component_enabled = component.Enabled();
         if (ImGui::Checkbox("##ComponentEnabled", &component_enabled) && editable)
         {
@@ -157,19 +180,63 @@ namespace ReplayEngine::Editor
             component.SetEnabled(component_enabled);
             context.CommitEdit();
         }
+        ImGui::PopID();
         ImGui::SameLine();
 
-        const bool opened = ImGui::CollapsingHeader(title.c_str(),
-            ImGuiTreeNodeFlags_DefaultOpen);
+        ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(category_color.x,
+            category_color.y, category_color.z, 0.18f));
+        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(category_color.x,
+            category_color.y, category_color.z, 0.30f));
+        ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(category_color.x,
+            category_color.y, category_color.z, 0.40f));
+        const ReorderableItemResult reorder = DrawReorderableItem(
+            component_list_identity, component_id.c_str(), component_index,
+            component_count, title.c_str(), selected, false, editable,
+            [&]()
+            {
+                if (removable && editable && ImGui::MenuItem(
+                    "コンポーネントを削除", "Backspace"))
+                {
+                    const auto dependents = component.Owner() != nullptr
+                        ? Core::ComponentDependencyRules::FindDirectDependents(
+                            *component.Owner(), component)
+                        : std::vector<Core::Component*>{};
+                    if (dependents.empty())
+                    {
+                        selected_component_owner_ = component.Owner() != nullptr
+                            ? component.Owner()->ID().Value() : 0ull;
+                        selected_component_stable_ = component.StableID();
+                        pending_removal_ = &component;
+                        pending_removal_label_ = title;
+                    }
+                }
+            });
+        ImGui::PopStyleColor(3);
+        if (reorder.clicked)
+        {
+            selected_component_owner_ = component.Owner() != nullptr
+                ? component.Owner()->ID().Value() : 0ull;
+            selected_component_stable_ = component.StableID();
+        }
+        if (reorder.request.Valid() &&
+            pending_component_move_source_ == static_cast<std::size_t>(-1))
+        {
+            pending_component_move_source_ = reorder.request.source;
+            pending_component_move_destination_ = reorder.request.destination;
+        }
 
-        if (info != nullptr && !info->tooltip.empty() && ImGui::IsItemHovered())
+        if (info != nullptr && !info->tooltip.empty() && reorder.hovered)
         {
             ImGui::BeginTooltip();
             ImGui::TextUnformatted(info->tooltip.c_str());
             ImGui::EndTooltip();
         }
 
-        if (!opened) return;
+        if (!reorder.opened)
+        {
+            draw_separator();
+            return;
+        }
 
         ImGui::Indent();
 
@@ -195,6 +262,7 @@ namespace ReplayEngine::Editor
                 u8"削除すると、預かっている内容も一緒に失われます。");
 
             ImGui::Unindent();
+            draw_separator();
             return;
         }
 
@@ -439,46 +507,106 @@ namespace ReplayEngine::Editor
             ImGui::TextDisabled("編集できる設定はありません");
         }
 
-        // Effect Stack は Property の編集だけでなく「並び順」自体が意味を持つ。
-        // reorder も Scene snapshot の 1 操作として Undo/Redo へ載せる。
         const auto draw_effect_reorder = [&](auto* stack)
         {
-            if (stack == nullptr || stack->effects.size() < 2) return;
-            ImGui::Separator();
-            ImGui::TextDisabled("Effect 順序");
+            if (stack == nullptr) return;
+            std::string summary;
+            for (std::size_t effect_index = 0; effect_index < stack->effects.size();
+                ++effect_index)
+            {
+                if (!summary.empty()) summary += " / ";
+                summary += UI::EffectKindLabel(static_cast<UI::UIEffectKind>(
+                    stack->effects[effect_index].kind));
+                if (effect_index >= 3 && stack->effects.size() > effect_index + 1)
+                {
+                    summary += " / ...";
+                    break;
+                }
+            }
+            if (summary.empty()) summary = "Effect はありません";
+            const std::string order_label = "Effect Stack  (" +
+                std::to_string(stack->effects.size()) + ")  " + summary +
+                "##EffectStackOrder_" + component_id;
+            ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(category_color.x,
+                category_color.y, category_color.z, 0.18f));
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(category_color.x,
+                category_color.y, category_color.z, 0.30f));
+            ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(category_color.x,
+                category_color.y, category_color.z, 0.40f));
+            const bool order_open = ImGui::CollapsingHeader(order_label.c_str());
+            ImGui::PopStyleColor(3);
+            if (!order_open) return;
+
+            ImGui::Indent();
+            ImGui::TextDisabled("Surface の後へ上から順に合成。◆ を長押しして移動できます");
+            ImGui::TextDisabled("並べ替えボタンと右クリックメニューも使えます");
+            if (const char* dragging = ActiveReorderLabel(&stack->effects))
+            {
+                ImGui::TextColored(ImGui::GetStyle().Colors[ImGuiCol_DragDropTarget],
+                    "移動中: %s", dragging);
+            }
+            ReorderRequest move_request{};
             for (std::size_t effect_index = 0; effect_index < stack->effects.size(); ++effect_index)
             {
-                ImGui::PushID(static_cast<int>(effect_index) + 41000);
-                ImGui::Text("%zu", effect_index + 1);
-                ImGui::SameLine();
-                bool moved = false;
-                if (editable && effect_index > 0 && ImGui::SmallButton("↑"))
+                const UI::UIEffectKind kind = static_cast<UI::UIEffectKind>(
+                    stack->effects[effect_index].kind);
+                std::string effect_title = "Effect " + std::to_string(effect_index + 1) +
+                    " / " + UI::EffectKindLabel(kind);
+                if (UI::IsTimeDrivenEffect(kind)) effect_title += " [M]";
+                const std::string effect_id = "effect_" + std::to_string(effect_index);
+                const ReorderableItemResult item = DrawReorderableItem(
+                    &stack->effects, effect_id.c_str(), effect_index,
+                    stack->effects.size(), effect_title.c_str(), false, false, editable,
+                    []() {});
+                if (item.request.Valid() && !move_request.Valid())
+                    move_request = item.request;
+                if (item.opened)
                 {
-                    context.BeginEdit(title + " の Effect を並び替え");
-                    std::swap(stack->effects[effect_index - 1], stack->effects[effect_index]);
+                    ImGui::Indent();
+                    ImGui::TextDisabled("設定はこの Component 内の同名の折りたたみ欄にあります");
+                    ImGui::Unindent();
+                }
+            }
+            ImGui::Unindent();
+            if (move_request.Valid())
+            {
+                context.BeginEdit(title + " の Effect を並び替え");
+                if (move_request.source < stack->effects.size() &&
+                    move_request.destination < stack->effects.size())
+                {
+                    if (move_request.source < move_request.destination)
+                    {
+                        std::rotate(stack->effects.begin() +
+                            static_cast<std::ptrdiff_t>(move_request.source),
+                            stack->effects.begin() +
+                            static_cast<std::ptrdiff_t>(move_request.source + 1),
+                            stack->effects.begin() +
+                            static_cast<std::ptrdiff_t>(move_request.destination + 1));
+                    }
+                    else
+                    {
+                        std::rotate(stack->effects.begin() +
+                            static_cast<std::ptrdiff_t>(move_request.destination),
+                            stack->effects.begin() +
+                            static_cast<std::ptrdiff_t>(move_request.source),
+                            stack->effects.begin() +
+                            static_cast<std::ptrdiff_t>(move_request.source + 1));
+                    }
                     stack->effect_count = static_cast<int>(stack->effects.size());
                     stack->OnPropertyChanged("effect_count");
                     context.CommitEdit();
-                    moved = true;
                 }
-                ImGui::SameLine();
-                if (!moved && editable && effect_index + 1 < stack->effects.size() &&
-                    ImGui::SmallButton("↓"))
+                else
                 {
-                    context.BeginEdit(title + " の Effect を並び替え");
-                    std::swap(stack->effects[effect_index], stack->effects[effect_index + 1]);
-                    stack->effect_count = static_cast<int>(stack->effects.size());
-                    stack->OnPropertyChanged("effect_count");
-                    context.CommitEdit();
-                    moved = true;
+                    context.CancelEdit();
                 }
-                ImGui::PopID();
-                if (moved) break;
             }
         };
         draw_effect_reorder(dynamic_cast<Components::UIEffectStackComponent*>(&component));
         draw_effect_reorder(dynamic_cast<Components::ModelEffectStackComponent*>(&component));
         draw_effect_reorder(dynamic_cast<Components::ScreenEffectStackComponent*>(&component));
+
+        draw_separator();
 
         ImGui::Spacing();
         std::vector<Core::Component*> dependents;

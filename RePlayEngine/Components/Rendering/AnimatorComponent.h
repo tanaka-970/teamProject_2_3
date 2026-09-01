@@ -5,6 +5,8 @@
 
 #include <cstddef>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace ReplayEngine::Components
@@ -40,6 +42,11 @@ namespace ReplayEngine::Components
             PlanarSpeedLessEqual,
             VerticalSpeedGreater,
             VerticalSpeedLessEqual,
+            BoolTrue,
+            BoolFalse,
+            FloatGreater,
+            FloatLessEqual,
+            Trigger,
         };
 
         struct AnimationState
@@ -56,6 +63,7 @@ namespace ReplayEngine::Components
             std::string from;
             std::string to;
             TransitionCondition condition = TransitionCondition::Always;
+            std::string parameter;
             float threshold = 0.0f;
             float blend_time = 0.15f;
         };
@@ -95,6 +103,24 @@ namespace ReplayEngine::Components
         void SetStateCount(int count);
         int TransitionCount() const noexcept { return static_cast<int>(transitions.size()); }
         void SetTransitionCount(int count);
+
+        // ---- 実行時制御 API -------------------------------------------------
+
+        bool PlayState(const std::string& state_name, float blend_time = 0.0f,
+            float start_time = 0.0f);
+        void Pause() noexcept { playing = false; }
+        void Resume() noexcept { playing = true; }
+        void Stop() noexcept;
+        bool HasState(const std::string& state_name) const noexcept
+        {
+            return FindStateIndex(state_name) >= 0;
+        }
+        void SetBool(const std::string& name, bool value);
+        bool GetBool(const std::string& name) const noexcept;
+        void SetFloat(const std::string& name, float value);
+        float GetFloat(const std::string& name) const noexcept;
+        void SetTrigger(const std::string& name);
+        void ResetTrigger(const std::string& name) noexcept;
 
         // ---- 新しい data-driven 設定 ----------------------------------------
 
@@ -143,5 +169,8 @@ namespace ReplayEngine::Components
         float transition_duration_ = 0.0f;
 
         mutable std::vector<Reflection::PropertyDesc> dynamic_properties_;
+        std::unordered_map<std::string, bool> bool_parameters_;
+        std::unordered_map<std::string, float> float_parameters_;
+        std::unordered_set<std::string> trigger_parameters_;
     };
 }

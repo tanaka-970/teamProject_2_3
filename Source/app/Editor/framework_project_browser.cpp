@@ -1,5 +1,4 @@
 ﻿#include "framework.h"
-#include "texture.h"
 #include "../../RePlayEngine/Assets/AssetCache.h"
 #include "../../RePlayEngine/Editor/Style/EditorStyle.h"
 #include "../../RePlayEngine/Motion/CompositionAsset.h"
@@ -21,9 +20,10 @@
 // =============================================================================
 //  Project ブラウザ
 //
-//  Unity の Project ビューと同じ 2 ペイン構成。
-//    左  : フォルダツリー
-//    右  : そのフォルダの中身（アイコン / サムネイル付き）
+//  Unity / Explorer 型の 2 ペイン構成。
+//    左  : フォルダ + ファイルを展開できる完全 Project Tree
+//    右  : 現在フォルダの中身（アイコン / サムネイル付き）
+//  Rename/Delete/Duplicate/Move/Open は左右どちらからでも同一処理を使う。
 //
 //  ここに集約した理由:
 //    以前は framework_editor.cpp の draw_project_panel が

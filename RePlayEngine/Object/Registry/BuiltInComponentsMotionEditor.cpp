@@ -101,6 +101,60 @@ namespace ReplayEngine::Core::Detail
                     .RuntimeOnly()
                     .NotSerializable());
 
+            ComponentRegistry::Register<CompositionPlayerComponent>(
+                ComponentTypeInfo::Describe("Composition Player", "Motion")
+                    .WithTooltip("複数 Motion / Precomp を1本の .replaycomp として再生します。")
+                    .InModule("RePlayEngine.BuiltIn"));
+            PropertyRegistry::Register<CompositionPlayerComponent>(
+                MakeProperty("composition", &CompositionPlayerComponent::composition)
+                    .Display("Composition").OfAssetType("Composition")
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<CompositionPlayerComponent>(
+                MakeProperty("key", &CompositionPlayerComponent::key)
+                    .Display("キー").Animation(Animatable::Step));
+            PropertyRegistry::Register<CompositionPlayerComponent>(
+                MakeProperty("play_on_start", &CompositionPlayerComponent::play_on_start)
+                    .Display("開始時に再生").Animation(Animatable::Step));
+            PropertyRegistry::Register<CompositionPlayerComponent>(
+                MakeProperty("play_on_state_change", &CompositionPlayerComponent::play_on_state_change)
+                    .Display("State変更で再生").Animation(Animatable::Step)
+                    .Tooltip("既存 StateComponent の StateChanged を受けて Composition を先頭から再生します。"));
+            PropertyRegistry::Register<CompositionPlayerComponent>(
+                MakeProperty("state_source", &CompositionPlayerComponent::state_source)
+                    .Display("State 対象")
+                    .Tooltip("未指定なら同じ GameObject の StateComponent。"));
+            PropertyRegistry::Register<CompositionPlayerComponent>(
+                MakeProperty("state_name", &CompositionPlayerComponent::state_name)
+                    .Display("State 名")
+                    .Tooltip("空欄なら全 StateChanged、指定時はその状態になった時だけ再生。"));
+            PropertyRegistry::Register<CompositionPlayerComponent>(
+                MakeProperty("loop", &CompositionPlayerComponent::loop)
+                    .Display("ループ").Animation(Animatable::Step));
+            PropertyRegistry::Register<CompositionPlayerComponent>(
+                MakeProperty("ignore_time_scale", &CompositionPlayerComponent::ignore_time_scale)
+                    .Display("Time Scaleを無視"));
+            PropertyRegistry::Register<CompositionPlayerComponent>(
+                MakeProperty("hold_on_end", &CompositionPlayerComponent::hold_on_end)
+                    .Display("終了位置を保持")
+                    .Tooltip("OFFなら終端到達時に停止し、ONなら終端値を保持します。"));
+            PropertyRegistry::Register<CompositionPlayerComponent>(
+                MakeProperty("speed", &CompositionPlayerComponent::speed)
+                    .Display("再生速度").Range(-8.0, 8.0).Step(0.05));
+            PropertyRegistry::Register<CompositionPlayerComponent>(
+                MakeProperty("weight", &CompositionPlayerComponent::weight)
+                    .Display("重み").Range(0.0, 1.0).Step(0.01));
+            PropertyRegistry::Register<CompositionPlayerComponent>(
+                MakeProperty("state", &CompositionPlayerComponent::state)
+                    .Display("再生状態").AsEnum({ "停止", "再生", "一時停止" })
+                    .RuntimeOnly().ReadOnly().NotSerializable());
+            PropertyRegistry::Register<CompositionPlayerComponent>(
+                MakeAccessorProperty<CompositionPlayerComponent>("time", PropertyType::Float,
+                    [](const CompositionPlayerComponent& component)
+                    { return PropertyValue::MakeFloat(component.time); },
+                    [](CompositionPlayerComponent& component, const PropertyValue& value)
+                    { component.SetTime(value.AsFloat()); })
+                    .Display("現在時刻").Unit("秒").RuntimeOnly().NotSerializable());
+
             // ---- 拡張点: Motion Runtime -------------------------------------
             //
             // ・同じ property への setter 呼び出しは MotionMixer::Apply の 1 回だけに保つ。
@@ -142,5 +196,14 @@ namespace ReplayEngine::Core::Detail
             PropertyRegistry::Register<EditorNoteComponent>(
                 MakeProperty("offset", &EditorNoteComponent::offset)
                     .Display("表示オフセット").Step(0.05));
+            PropertyRegistry::Register<EditorNoteComponent>(
+                MakeProperty("mode", &EditorNoteComponent::mode)
+                    .Display("表示モード").AsEnum({ "Overlay", "World" }));
+            PropertyRegistry::Register<EditorNoteComponent>(
+                MakeProperty("horizontal_align", &EditorNoteComponent::horizontal_align)
+                    .Display("水平揃え").AsEnum({ "Left", "Center", "Right" }));
+            PropertyRegistry::Register<EditorNoteComponent>(
+                MakeProperty("vertical_align", &EditorNoteComponent::vertical_align)
+                    .Display("垂直揃え").AsEnum({ "Top", "Middle", "Bottom" }));
         }
 }

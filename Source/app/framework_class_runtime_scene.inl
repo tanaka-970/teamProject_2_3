@@ -44,6 +44,74 @@
     std::unique_ptr<ReplayEngine::Runtime::SceneFlowService> object_scene_flow;
     ReplayEngine::Runtime::CollisionEventDispatcher object_collision_events;
 
+    class loading_progress_provider final
+        : public ReplayEngine::Scene::ILoadingProgressProvider
+    {
+    public:
+        void Bind(const ReplayEngine::Scene::SceneManager* manager) noexcept
+        {
+            scene_manager_ = manager;
+        }
+
+        void BindRuntime(const ReplayEngine::Runtime::RuntimeSceneService* service) noexcept
+        {
+            runtime_scene_ = service;
+        }
+
+        void SetEditorPlayLoading(bool loading) noexcept
+        {
+            editor_play_loading_ = loading;
+        }
+
+        float Progress() const noexcept override;
+        bool IsLoading() const noexcept override;
+
+    private:
+        const ReplayEngine::Scene::SceneManager* scene_manager_ = nullptr;
+        const ReplayEngine::Runtime::RuntimeSceneService* runtime_scene_ = nullptr;
+        bool editor_play_loading_ = false;
+    };
+    loading_progress_provider object_loading_progress_provider;
+    std::unique_ptr<ReplayEngine::Scene::Scene> object_loading_scene;
+    std::unique_ptr<ReplayEngine::Runtime::RuntimeContext> object_loading_runtime_context;
+    std::uint64_t object_loading_frame_index{ 0 };
+    // Editor の F5 も Loading Screen Scene を通すための一時状態。
+    // SceneData と進行値はメモリ上だけに置き、Project/Scene は保存しない。
+    struct editor_play_loading_gate final
+    {
+        void AdvanceTo(int target)
+        {
+            {
+                std::lock_guard<std::mutex> lock(mutex);
+                if (stage < 0 || target <= stage) return;
+                stage = target;
+            }
+            changed.notify_all();
+        }
+
+        void Cancel()
+        {
+            {
+                std::lock_guard<std::mutex> lock(mutex);
+                stage = -1;
+            }
+            changed.notify_all();
+        }
+
+        bool WaitFor(int target)
+        {
+            std::unique_lock<std::mutex> lock(mutex);
+            changed.wait(lock, [this, target]() { return stage < 0 || stage >= target; });
+            return stage >= target;
+        }
+
+        std::mutex mutex;
+        std::condition_variable changed;
+        int stage{ 0 };
+    };
+    bool object_editor_play_loading{ false };
+    std::shared_ptr<editor_play_loading_gate> object_editor_play_loading_gate;
+
     // AssetGUID -> Scene ファイルのパス。Runtime 層が AssetDatabase を
     // 直接 include しないための実装側。framework が所有する。
     // 結線は initialize_runtime_services() で行う。
@@ -120,15 +188,6 @@
     ReplayEngine::Editor::ValidationPanel   object_validation_panel;
     ReplayEngine::Rendering::RenderItemList object_render_items;
     ReplayEngine::UI::FontAtlas             ui_font_atlas;
-    ReplayEngine::UI::UIRenderer            ui_renderer;
-    // UI Effect と同じ EffectChain を 3D/Screen から使うための描画ホスト。
-    // Texture の恒久キャッシュは持たず、load_texture_from_file の共有キャッシュから
-    // Apply 中だけ ComPtr を保持する。UIRenderer の texture_cache_ は移動しない。
-    ReplayEngine::Rendering::Effects::EffectChain scene_effect_chain;
-    ReplayEngine::UI::UIRenderTargetPool scene_effect_targets;
-    std::vector<Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>>
-        scene_effect_texture_refs;
-    ReplayEngine::Rendering::LineStrokeRenderer line_stroke_renderer;
     bool ui_pointer_down_last{ false };
     float ui_mouse_wheel_delta{ 0.0f };
 
@@ -252,6 +311,7 @@
     bool             show_collider_debug_draw{ false };
     bool             show_collider_debug_bounds{ true };
     bool             show_collider_debug_wireframe{ false };
+    bool             show_light_range_debug_draw{ false };
     bool             show_collision_diagnostics{ false };
 
     // Cook に失敗した Asset。同じ警告をログへ出し続けないための記録。
@@ -314,9 +374,6 @@
     bool             enable_particles{ false };
     bool             enable_trail    { false };
 
-    // ダミー法線テクスチャ (法線マップが無いマテリアル用フォールバック)
-    Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> dummy_normal_srv;
-
     int toon_preset_index{ 0 };
 
     framework(HWND hwnd);
@@ -366,19 +423,25 @@
     // Scene に保存された Runtime Camera と Motion/Script を固定 1/60 秒で進める。
     // 入力は完全抑制し、warmup 中と GPU query drain 中は履歴へ積まない。
     void configure_profile_benchmark(std::uint32_t frames,
-        std::uint32_t warmup_frames, std::string output_name)
+        std::uint32_t warmup_frames, std::string output_name,
+        std::uint32_t render_output)
     {
         profile_benchmark_mode = true;
         profile_benchmark_frames = (std::max)(1u, frames);
         profile_benchmark_warmup_frames = warmup_frames;
         profile_benchmark_output_name = std::move(output_name);
+        profile_benchmark_render_output = (std::min)(render_output, 10u);
         profile_benchmark_frame_index = 0;
         profile_benchmark_drain_frames = 0;
+        profile_model_screen_bounds_diagnostic_emitted = false;
         profile_benchmark_export_attempted = false;
         profile_benchmark_export_ok = false;
         profile_benchmark_gpu_drain_timeout = false;
         profile_benchmark_scene_ready = false;
         profile_benchmark_startup_failed = false;
+        profile_benchmark_startup_profile_ok = false;
+        profile_benchmark_initialize_stage_ms.fill(0.0);
+        profile_benchmark_initialize_total_ms = 0.0;
         profile_benchmark_max_draw_calls = 0;
         profile_benchmark_max_objects = 0;
         profile_benchmark_max_components = 0;
@@ -399,4 +462,5 @@
         ReplayEngine::Rendering::Stats().SetHistoryLimit(
             static_cast<std::size_t>(profile_benchmark_frames));
     }
+    void configure_screen_space_overrides(const std::vector<std::string>& overrides);
     void configure_content_root(std::filesystem::path content_root);

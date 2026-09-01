@@ -5,8 +5,10 @@
 #include "../../Reflection/Property/PropertyBag.h"
 #include "../../Reflection/Property/PropertyValue.h"
 #include "../../Rendering/Materials/MaterialSchema.h"
-#include "../../Rendering/Effects/EffectChain.h"
+#include "../../UI/Effects/UIEffect.h"
+#include "../../UI/Effects/EffectKindLabels.h"
 #include "../../Rendering/Effects/EffectPresetAsset.h"
+#include "../../Rendering/Effects/EffectChain.h"
 
 #include <algorithm>
 #include <array>
@@ -14,6 +16,7 @@
 #include <cstdio>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace ReplayEngine::Components
 {
@@ -85,6 +88,8 @@ namespace ReplayEngine::Components
             const std::string& property)
         {
             if (property == "enabled") return Reflection::PropertyValue::MakeBool(effect.enabled);
+            if (property == "region_enabled")
+                return Reflection::PropertyValue::MakeBool(effect.region_enabled);
             if (property == "type") return Reflection::PropertyValue::MakeEnum(effect.kind);
             if (property == "radius") return Reflection::PropertyValue::MakeFloat(effect.radius);
             if (property == "intensity") return Reflection::PropertyValue::MakeFloat(effect.intensity);
@@ -131,6 +136,8 @@ namespace ReplayEngine::Components
             const Reflection::PropertyValue& value)
         {
             if (property == "enabled") effect.enabled = value.AsBool(effect.enabled);
+            else if (property == "region_enabled")
+                effect.region_enabled = value.AsBool(effect.region_enabled);
             else if (property == "type") effect.kind = value.AsInt(effect.kind);
             else if (property == "radius") effect.radius = value.AsFloat(effect.radius);
             else if (property == "intensity") effect.intensity = value.AsFloat(effect.intensity);
@@ -221,9 +228,15 @@ namespace ReplayEngine::Components
                         property.kind == Rendering::ShaderPropertyKind::Enum
                         ? Reflection::Animatable::Step
                         : Reflection::Animatable::Interpolatable));
-            desc.display_name = property.DisplayName();
+            desc.display_name = property.DisplayName() +
+                (property.kind == Rendering::ShaderPropertyKind::Texture
+                    ? std::string(u8" [DX12 未対応]") : std::string());
             desc.category = property.category.empty() ? "Custom Shader" : property.category;
-            desc.tooltip = property.tooltip;
+            desc.tooltip = property.kind == Rendering::ShaderPropertyKind::Texture
+                ? std::string(u8"Texture プロパティは DX12 Effect Stack では未対応です。")
+                : property.tooltip.empty()
+                ? std::string(u8"カスタムシェーダーへ渡すプロパティ値。")
+                : property.tooltip;
             if (property.kind == Rendering::ShaderPropertyKind::Range)
             {
                 desc.has_range = true;

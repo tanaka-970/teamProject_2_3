@@ -1,3 +1,4 @@
+// 現行DX12 Scene3D経路では未使用。TAA本体はShader/dx12_postprocess_ps.hlslへ統合している。
 // テンポラルアンチエイリアシング(TAA)の解決パス。
 //
 // やっていること:

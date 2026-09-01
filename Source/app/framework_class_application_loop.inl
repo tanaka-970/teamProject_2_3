@@ -6,6 +6,8 @@
     void set_startup_scene_path(std::filesystem::path scene_path);
     void set_startup_window_size(UINT width, UINT height) noexcept;
     void request_startup_fullscreen() noexcept { startup_fullscreen_requested = true; }
+    void request_dx12_framework() noexcept { dx12_framework_requested = true; }
+    bool dx12_framework_enabled() const noexcept { return dx12_framework_active; }
     bool standalone_game() const noexcept { return standalone_game_mode; }
     const std::filesystem::path& content_root_path() const noexcept
     {
@@ -18,8 +20,18 @@
     std::filesystem::path content_path(const std::filesystem::path& relative) const;
     std::filesystem::path saved_path(const std::filesystem::path& relative = {}) const;
     std::filesystem::path collision_cache_path(const std::string& identity) const;
-    Microsoft::WRL::ComPtr<ID3D11Debug> acquire_d3d11_debug() const noexcept;
-    Microsoft::WRL::ComPtr<ID3D11InfoQueue> acquire_d3d11_info_queue() const noexcept;
+    std::uint32_t dx12_shutdown_live_object_lines() const noexcept
+    {
+        return dx12_device_context.LastShutdownLiveObjectLines();
+    }
+    std::uint32_t dx12_shutdown_live_object_detail_lines() const noexcept
+    {
+        return dx12_device_context.LastShutdownLiveObjectDetailLines();
+    }
+    bool dx12_shutdown_live_object_report_ok() const noexcept
+    {
+        return dx12_device_context.LastShutdownLiveObjectReportOk();
+    }
 
     // 終了理由と主要な進行状況を Saved/engine_log.txt へ追記する。
     // 「なぜ落ちたか」が分からないと原因の切り分けができないため、
@@ -51,6 +63,116 @@
         log << "[" << stamp << "] " << reason << '\n';
     }
 
+    bool export_dx12_startup_profile(double startup_total_ms)
+    {
+        const std::filesystem::path profile_folder = saved_path("Profile");
+        std::error_code error;
+        std::filesystem::create_directories(profile_folder, error);
+        if (error) return false;
+
+        const std::filesystem::path csv_path =
+            profile_folder / (profile_benchmark_output_name + ".startup.csv");
+        const std::filesystem::path trace_path =
+            profile_folder / (profile_benchmark_output_name + ".startup.trace.json");
+        std::ofstream csv(csv_path, std::ios::binary | std::ios::trunc);
+        std::ofstream trace(trace_path, std::ios::binary | std::ios::trunc);
+        if (!csv || !trace) return false;
+
+        static constexpr const char* initialize_stage_names[] =
+        {
+            "AssetDatabase",
+            "ProjectAssets",
+            "CpuUiSceneSetup",
+            "ObjectScene",
+            "DX12Initialize"
+        };
+        static_assert(std::size(initialize_stage_names) == 5,
+            "Startup profile stage table must match initialize stage storage.");
+
+        const double scene_ready_wait_ms = (std::max)(0.0,
+            startup_total_ms - profile_benchmark_initialize_total_ms);
+        const auto& gpu = dx12_device_context.GpuTiming();
+        const auto& stats = dx12_device_context.RuntimeStats();
+
+        csv << "category,name,milliseconds,value\r\n";
+        for (std::size_t index = 0; index < profile_benchmark_initialize_stage_ms.size(); ++index)
+        {
+            csv << "startup," << initialize_stage_names[index] << ','
+                << profile_benchmark_initialize_stage_ms[index] << ",\r\n";
+        }
+        csv << "startup,FrameworkInitializeTotal,"
+            << profile_benchmark_initialize_total_ms << ",\r\n";
+        csv << "startup,SceneReadyWait," << scene_ready_wait_ms << ",\r\n";
+        csv << "startup,StartupTotal," << startup_total_ms << ",\r\n";
+        for (std::size_t index = 0; index < ReplayEngine::Rendering::DX12::D3D12GpuPassCount; ++index)
+        {
+            if (!gpu.valid[index]) continue;
+            csv << "gpu,"
+                << ReplayEngine::Rendering::DX12::D3D12GpuPassName(
+                    static_cast<ReplayEngine::Rendering::DX12::D3D12GpuPass>(index))
+                << ',' << gpu.milliseconds[index] << ",\r\n";
+        }
+        csv << "dx12,ResourceDescriptorsUsed,," << stats.resource_descriptor_used << "\r\n";
+        csv << "dx12,ResourceDescriptorsPeak,," << stats.resource_descriptor_peak << "\r\n";
+        csv << "dx12,SamplerDescriptorsUsed,," << stats.sampler_descriptor_used << "\r\n";
+        csv << "dx12,FrameUploadUsedBytes,," << stats.frame_upload_used << "\r\n";
+        csv << "dx12,FrameUploadPeakBytes,," << stats.frame_upload_peak << "\r\n";
+        csv << "dx12,FenceWaitCount,," << stats.fence_wait_count << "\r\n";
+        csv << "dx12,FenceWaitNanoseconds,," << stats.fence_wait_nanoseconds << "\r\n";
+        csv << "dx12,MeshResident,," << stats.mesh_resident << "\r\n";
+        csv << "dx12,TextureResident,," << stats.texture_resident << "\r\n";
+        csv << "dx12,PsoCount,," << stats.pso_count << "\r\n";
+        csv << "dx12,PsoHits,," << stats.pso_hits << "\r\n";
+        csv << "dx12,PsoMisses,," << stats.pso_misses << "\r\n";
+        csv << "dx12,DxcCompileCount,," << stats.dxc_compile_count << "\r\n";
+        csv << "dx12,DxcFailureCount,," << stats.dxc_failure_count << "\r\n";
+        csv << "dx12,DxcTotalMilliseconds," << stats.dxc_total_milliseconds << ",\r\n";
+
+        trace << "{\"traceEvents\":[";
+        bool first_event = true;
+        double timeline_us = 0.0;
+        const auto write_duration = [&trace, &first_event, &timeline_us](
+            const char* category, const char* name, double milliseconds)
+        {
+            if (!first_event) trace << ',';
+            first_event = false;
+            trace << "{\"name\":\"" << name << "\",\"cat\":\"" << category
+                << "\",\"ph\":\"X\",\"pid\":1,\"tid\":1,\"ts\":"
+                << timeline_us << ",\"dur\":" << milliseconds * 1000.0 << '}';
+            timeline_us += milliseconds * 1000.0;
+        };
+        for (std::size_t index = 0; index < profile_benchmark_initialize_stage_ms.size(); ++index)
+        {
+            write_duration("startup", initialize_stage_names[index],
+                profile_benchmark_initialize_stage_ms[index]);
+        }
+        write_duration("startup", "SceneReadyWait", scene_ready_wait_ms);
+        for (std::size_t index = 0; index < ReplayEngine::Rendering::DX12::D3D12GpuPassCount; ++index)
+        {
+            if (!gpu.valid[index]) continue;
+            if (!first_event) trace << ',';
+            first_event = false;
+            trace << "{\"name\":\""
+                << ReplayEngine::Rendering::DX12::D3D12GpuPassName(
+                    static_cast<ReplayEngine::Rendering::DX12::D3D12GpuPass>(index))
+                << "\",\"cat\":\"gpu\",\"ph\":\"X\",\"pid\":1,\"tid\":2,\"ts\":0,\"dur\":"
+                << gpu.milliseconds[index] * 1000.0 << '}';
+        }
+        if (!first_event) trace << ',';
+        trace << "{\"name\":\"DX12StartupStats\",\"cat\":\"dx12\",\"ph\":\"C\","
+            "\"pid\":1,\"tid\":3,\"ts\":" << startup_total_ms * 1000.0
+            << ",\"args\":{\"descriptor_used\":" << stats.resource_descriptor_used
+            << ",\"upload_used\":" << stats.frame_upload_used
+            << ",\"mesh_resident\":" << stats.mesh_resident
+            << ",\"texture_resident\":" << stats.texture_resident
+            << ",\"pso_count\":" << stats.pso_count
+            << ",\"dxc_compile_count\":" << stats.dxc_compile_count << "}}]}";
+
+        csv.flush();
+        trace.flush();
+        return csv.good() && trace.good();
+    }
+
     int run(int show_command = SW_SHOWDEFAULT)
     {
         MSG msg{};
@@ -63,20 +185,31 @@
         log_shutdown_reason("initialize() 完了");
 
 #ifdef USE_IMGUI
-        IMGUI_CHECKVERSION();
-        ImGui::CreateContext();
-        ImGuiIO& io = ImGui::GetIO();
-        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-        io.ConfigWindowsMoveFromTitleBarOnly = true;
-        if (!io.Fonts->AddFontFromFileTTF(
-            "C:\\Windows\\Fonts\\meiryo.ttc", 15.0f, nullptr, glyphRangesJapanese))
         {
-            io.Fonts->AddFontDefault();
+            // Editorの入力はDX11/DX12で同じWin32 Platform Backendを使う。
+            // Renderer Backendだけを選択的に切り替えることで、UI編集の状態を
+            // Scene3D backendの違いで失わない。
+            IMGUI_CHECKVERSION();
+            ImGui::CreateContext();
+            ImGuiIO& io = ImGui::GetIO();
+            io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+            io.ConfigWindowsMoveFromTitleBarOnly = true;
+            if (!io.Fonts->AddFontFromFileTTF(
+                "C:\\Windows\\Fonts\\meiryo.ttc", 15.0f, nullptr, glyphRangesJapanese))
+            {
+                io.Fonts->AddFontDefault();
+                }
+                ImGui_ImplWin32_Init(hwnd);
+            if (dx12_framework_active)
+            {
+                if (!dx12_device_context.InitializeImGui())
+                {
+                    push_editor_log("Error", "DX12 ImGui Renderer の初期化に失敗しました");
+                }
+            }
+            ImGui::StyleColorsDark();
+            configure_editor_style();
         }
-        ImGui_ImplWin32_Init(hwnd);
-        ImGui_ImplDX11_Init(device.Get(), immediate_context.Get());
-        ImGui::StyleColorsDark();
-        configure_editor_style();
 #endif
 
         // Device / Shader / Script / Editor の初期化が終わるまで Window は隠す。
@@ -90,8 +223,8 @@
 
         while (WM_QUIT != msg.message)
         {
-            // Drain a bounded batch, then advance one frame. Waiting for the queue to
-            // become completely empty allowed WM_PAINT/input traffic to starve render.
+            // メッセージを上限付きで処理してから1フレーム進める。
+            // Queueが空になるまで待つと、WM_PAINT/Inputが描画を飢えさせる。
             for (int message_count = 0; message_count < 64 &&
                 PeekMessage(&msg, NULL, 0, 0, PM_REMOVE); ++message_count)
             {
@@ -135,7 +268,18 @@
             try
             {
                 update(frame_delta_time);
+                const bool exclusive_frame_capture_started =
+                    begin_automated_exclusive_frame_capture();
                 render(frame_delta_time);
+
+                if (exclusive_frame_capture_started)
+                {
+                    if (golden_capture_pending())
+                        cancel_automated_exclusive_frame_capture();
+                    automated_smoke_test_frames = 0;
+                    object_exit_confirmed = true;
+                    PostMessage(hwnd, WM_CLOSE, 0, 0);
+                }
 
                 if (profile_benchmark_mode && !profile_benchmark_export_attempted)
                 {
@@ -171,9 +315,29 @@
                             profile_benchmark_scene_ready = true;
                             profile_benchmark_frame_index = 0;
                             profile_benchmark_drain_frames = 0;
+                            const double startup_total_ms =
+                                std::chrono::duration<double, std::milli>(
+                                    std::chrono::steady_clock::now() -
+                                    profile_benchmark_startup_begin).count();
+                            profile_benchmark_startup_profile_ok =
+                                export_dx12_startup_profile(startup_total_ms);
+                            if (!profile_benchmark_startup_profile_ok)
+                            {
+                                log_shutdown_reason(
+                                    "Profiler benchmark: DX12 startup profile export failed");
+                            }
                             ReplayEngine::Rendering::Stats().SetPaused(true);
                             log_shutdown_reason(
                                 "Profiler benchmark: Startup Scene ready; warmup begins next frame");
+
+                            // プロファイルと同時に撮影する場合は、Runtime World が確定した
+                            // 直後に要求する。通常の Smoke Test の終了間際へ任せると、
+                            // プロファイル終了後の空シーンを撮影してしまう。
+                            if (automated_frame_capture_pending)
+                            {
+                                automated_frame_capture_pending = false;
+                                request_golden(golden_request_kind::capture);
+                            }
                         }
                         else
                         {
@@ -239,6 +403,14 @@
                         if (static_cast<std::uint64_t>(profile_benchmark_frame_index) >=
                             capture_end)
                         {
+                            // 撮影対象を Runtime World に固定するため、撮影完了まで
+                            // プロファイルの終了通知を送らない。
+                            if (automated_frame_capture_pending || golden_capture_pending())
+                            {
+                                ++profile_benchmark_drain_frames;
+                                continue;
+                            }
+
                             // paused frame でも BeginFrame/EndFrame は DONOTFLUSH の
                             // Query 回収だけを進める。GPU を待って CPU をブロックしない。
                             const std::size_t pending =
@@ -251,7 +423,8 @@
                                 profile_benchmark_export_attempted = true;
                                 profile_benchmark_export_ok =
                                     ReplayEngine::Rendering::Stats().ExportCsvAndTrace(
-                                        profile_benchmark_output_name);
+                                        profile_benchmark_output_name) &&
+                                    profile_benchmark_startup_profile_ok;
 
                                 // 起動 Scene を測ったつもりで空 World の CSV を成功扱いにしない。
                                 // Export 自体は残すので、失敗時も外部から中身を診断できる。
@@ -316,6 +489,9 @@
                     }
                     if (rendered_frames >= automated_smoke_test_frames)
                     {
+                        // 非表示の自動検証では未保存確認へ応答する人がいない。
+                        // WM_CLOSE を通常経路へ渡しつつ、モーダル確認で止めない。
+                        object_exit_confirmed = true;
                         automated_smoke_test_frames = 0;
                         PostMessage(hwnd, WM_CLOSE, 0, 0);
                     }
@@ -360,9 +536,11 @@
         // ImGui/Scene の破棄より前に Stroke と Collider interactive-edit を必ず閉じる。
         reset_landscape_editor_state(true);
         if (!standalone_game_mode) save_editor_session();
-        ImGui_ImplDX11_Shutdown();
-        ImGui_ImplWin32_Shutdown();
-        ImGui::DestroyContext();
+        if (ImGui::GetCurrentContext())
+        {
+            ImGui_ImplWin32_Shutdown();
+            ImGui::DestroyContext();
+        }
 #endif
 
         if (is_fullscreen()) toggle_fullscreen();

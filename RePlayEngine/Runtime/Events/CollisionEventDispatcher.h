@@ -11,17 +11,13 @@ namespace ReplayEngine::Scene { class Scene; }
 
 namespace ReplayEngine::Runtime
 {
-    // CharacterMotor の接触を Behaviour の OnCollisionEnter / Stay / Exit へ配送する。
+    // CharacterMotor と Rigidbody Solver の接触を OnCollisionEnter / Stay / Exit へ配送する。
     //
     // ---------------------------------------------------------------------
     // 【配れる接触の範囲】
     //
-    //   RePlayEngine に剛体物理エンジンは無い。
-    //   Collider どうしの衝突を解く処理そのものが存在しないため、
-    //   一般的な RigidBody 衝突は「取得手段が無い」。ここでも配らない。
-    //
-    //   実際に取れるのは、CharacterMotor が自分の移動を解決するために
-    //   毎 FixedUpdate で撃っている 2 種類の問い合わせの結果だけ。
+    //   CharacterMotor の問い合わせ結果と、PhysicsDynamicsWorld が実際に解いた
+    //   Rigidbody 接触を同じ状態機械へ入れ、接触組ごとに Enter/Stay/Exit を作る。
     //
     //     CharacterGround … QueryGroundFiltered が返した床
     //                       接地点と面法線が取れる
@@ -31,11 +27,8 @@ namespace ReplayEngine::Runtime
     //   どちらも CollisionHitKind で必ず区別して配る。
     //   「Motor 専用の Hit を汎用 Collision として配る」ことはしない。
     //
-    //   次は配れない（実装したふりをしない）:
-    //     - Collider 対 Collider の一般衝突
-    //     - Dynamic どうし / Static どうしの接触
-    //     - めり込み量 (penetration depth)
-    //     - 相対速度
+    //     Rigidbody        … Dynamic/Static/Kinematic の Solver 接触
+    //                        めり込み量と接触点相対速度も含む
     //
     // ---------------------------------------------------------------------
     // 【Trigger との二重配送を起こさない理由】
@@ -95,12 +88,15 @@ namespace ReplayEngine::Runtime
         {
             ObjectHandle self;
             CollisionHitKind kind = CollisionHitKind::Unknown;
+            Scene::ColliderID self_collider = Scene::invalid_collider_id;
 
             Core::ObjectID other;
             Scene::ColliderID other_collider = Scene::invalid_collider_id;
 
             DirectX::XMFLOAT3 point{ 0.0f, 0.0f, 0.0f };
             DirectX::XMFLOAT3 normal{ 0.0f, 1.0f, 0.0f };
+            DirectX::XMFLOAT3 relative_velocity{ 0.0f, 0.0f, 0.0f };
+            float penetration = 0.0f;
 
             // このフレームでも接触が続いていたか。走査後に false のものが Exit。
             bool seen_this_frame = false;
@@ -112,8 +108,10 @@ namespace ReplayEngine::Runtime
 
         // 今フレームの接触を記録する。既存と相手が違えば Exit -> Enter になる。
         void Observe(Scene::Scene& world, const ObjectHandle& self, CollisionHitKind kind,
-            Core::ObjectID other, Scene::ColliderID other_collider,
+            Scene::ColliderID self_collider, Core::ObjectID other,
+            Scene::ColliderID other_collider,
             const DirectX::XMFLOAT3& point, const DirectX::XMFLOAT3& normal,
+            const DirectX::XMFLOAT3& relative_velocity, float penetration,
             std::uint64_t frame_index);
 
         std::vector<Contact> contacts_;

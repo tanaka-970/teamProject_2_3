@@ -1,0 +1,2054 @@
+REPLAY_SCENE 11
+SCENE "Persona Battle"
+SCENE_STATE 1
+COLLISION_STATE 2 0
+OBJECT_COUNT 31
+OBJECT
+  ID 1
+  NAME "BattleEffects"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 3.4 -11.5 -6 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 8
+  COMPONENT "CameraComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "projection_mode" enum 0
+    PROPERTY "field_of_view_degrees" float 50
+    PROPERTY "near_clip" float 0.1
+    PROPERTY "far_clip" float 1000
+    PROPERTY "priority" int 200
+  END_COMPONENT
+  COMPONENT "ScreenEffectStackComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 56
+    PROPERTY "enabled" bool 1
+    PROPERTY "use_preset" bool 0
+    PROPERTY "effect_preset" assetref ""
+    PROPERTY "effect_count" int 11
+    PROPERTY "apply_stage" enum 0
+    PROPERTY "target_mode" enum 0
+    PROPERTY "target_rendering_layer" int 0
+    PROPERTY "effects[0].enabled" bool 1
+    PROPERTY "effects[0].type" enum 11
+    PROPERTY "effects[0].intensity" float 0.18
+    PROPERTY "effects[0].amount" float 1.0
+    PROPERTY "effects[1].enabled" bool 1
+    PROPERTY "effects[1].type" enum 26
+    PROPERTY "effects[1].intensity" float 0.10
+    PROPERTY "effects[1].amount" float 1.0
+    PROPERTY "effects[2].enabled" bool 1
+    PROPERTY "effects[2].type" enum 18
+    PROPERTY "effects[2].amount" float 6.0
+    PROPERTY "effects[2].intensity" float 0.55
+    PROPERTY "effects[3].enabled" bool 1
+    PROPERTY "effects[3].type" enum 9
+    PROPERTY "effects[3].intensity" float 0.0
+    PROPERTY "effects[3].amount" float 0.0
+    PROPERTY "effects[4].enabled" bool 1
+    PROPERTY "effects[4].type" enum 37
+    PROPERTY "effects[4].intensity" float 0.0
+    PROPERTY "effects[4].amount" float 0.0
+    PROPERTY "effects[4].speed" float 10.0
+    PROPERTY "effects[5].enabled" bool 1
+    PROPERTY "effects[5].type" enum 13
+    PROPERTY "effects[5].intensity" float 0.0
+    PROPERTY "effects[5].radius" float 180.0
+    PROPERTY "effects[6].enabled" bool 1
+    PROPERTY "effects[6].type" enum 4
+    PROPERTY "effects[6].intensity" float 0.0
+    PROPERTY "effects[6].amount" float 0.0
+    PROPERTY "effects[7].enabled" bool 1
+    PROPERTY "effects[7].type" enum 40
+    PROPERTY "effects[7].intensity" float 0
+    PROPERTY "effects[7].color" color 0.02 0.02 0.03 1
+    PROPERTY "effects[7].radius" float 1.78
+    PROPERTY "effects[7].softness" float 0.004
+    PROPERTY "effects[7].progress" float 0.0
+    PROPERTY "effects[8].enabled" bool 1
+    PROPERTY "effects[8].type" enum 6
+    PROPERTY "effects[8].intensity" float 1.0
+    PROPERTY "effects[8].progress" float 0.0
+    PROPERTY "effects[9].enabled" bool 1
+    PROPERTY "effects[9].type" enum 7
+    PROPERTY "effects[9].intensity" float 1.0
+    PROPERTY "effects[9].progress" float 0.0
+    PROPERTY "effects[10].enabled" bool 1
+    PROPERTY "effects[10].type" enum 15
+    PROPERTY "effects[10].intensity" float 0.0
+    PROPERTY "effects[10].radius" float 560.0
+    PROPERTY "effects[10].softness" float 0.35
+  END_COMPONENT
+  COMPONENT "MotionPlayerComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "motion" assetref "109ae48d5de9fea5c044b15fb329169b"
+    PROPERTY "key" string "WeaknessHit"
+    PROPERTY "play_on_start" bool 0
+    PROPERTY "trigger" enum 10
+    PROPERTY "loop" bool 0
+    PROPERTY "wrap_mode" enum 0
+    PROPERTY "auto_stop_on_end" bool 1
+    PROPERTY "ignore_time_scale" bool 0
+    PROPERTY "speed" float 1
+    PROPERTY "weight" float 1
+  END_COMPONENT
+  COMPONENT "MotionPlayerComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "motion" assetref "c9881f55bc55cf1a122b38c316af1c09"
+    PROPERTY "key" string "HitShake"
+    PROPERTY "play_on_start" bool 0
+    PROPERTY "trigger" enum 10
+    PROPERTY "loop" bool 0
+    PROPERTY "wrap_mode" enum 0
+    PROPERTY "auto_stop_on_end" bool 1
+    PROPERTY "ignore_time_scale" bool 0
+    PROPERTY "speed" float 1
+    PROPERTY "weight" float 1
+  END_COMPONENT
+  COMPONENT "MotionPlayerComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "motion" assetref "b3c3d45cbe474dcd43e656f3a2bb4231"
+    PROPERTY "key" string "OneMore"
+    PROPERTY "play_on_start" bool 0
+    PROPERTY "trigger" enum 10
+    PROPERTY "loop" bool 0
+    PROPERTY "wrap_mode" enum 0
+    PROPERTY "auto_stop_on_end" bool 1
+    PROPERTY "ignore_time_scale" bool 0
+    PROPERTY "speed" float 1
+    PROPERTY "weight" float 1
+  END_COMPONENT
+  COMPONENT "MotionPlayerComponent" 1
+    STABLE_ID 6
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "motion" assetref "bf621ff119f618497b534535153b1af3"
+    PROPERTY "key" string "AllOutAttack"
+    PROPERTY "play_on_start" bool 0
+    PROPERTY "trigger" enum 10
+    PROPERTY "loop" bool 0
+    PROPERTY "wrap_mode" enum 0
+    PROPERTY "auto_stop_on_end" bool 1
+    PROPERTY "ignore_time_scale" bool 0
+    PROPERTY "speed" float 1
+    PROPERTY "weight" float 1
+  END_COMPONENT
+  COMPONENT "MotionPlayerComponent" 1
+    STABLE_ID 7
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "motion" assetref "5a98d725bf802ab58528c8357cde5077"
+    PROPERTY "key" string "TargetVignette"
+    PROPERTY "play_on_start" bool 0
+    PROPERTY "trigger" enum 10
+    PROPERTY "loop" bool 1
+    PROPERTY "wrap_mode" enum 1
+    PROPERTY "auto_stop_on_end" bool 1
+    PROPERTY "ignore_time_scale" bool 0
+    PROPERTY "speed" float 1
+    PROPERTY "weight" float 1
+  END_COMPONENT
+  COMPONENT "MotionPlayerComponent" 1
+    STABLE_ID 8
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "motion" assetref "7435df77396ebc0cb53d06dcd7344f7d"
+    PROPERTY "key" string "ResultScreen"
+    PROPERTY "play_on_start" bool 0
+    PROPERTY "trigger" enum 10
+    PROPERTY "loop" bool 0
+    PROPERTY "wrap_mode" enum 0
+    PROPERTY "auto_stop_on_end" bool 1
+    PROPERTY "ignore_time_scale" bool 0
+    PROPERTY "speed" float 1
+    PROPERTY "weight" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 2
+  NAME "Sun"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 5 -2 45 -35 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "DirectionalLightComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "color" color 0.82 0.92 1 1
+    PROPERTY "intensity" float 1.35
+    PROPERTY "cast_shadows" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 3
+  NAME "Ground"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 -0.3 6 0 0 0 60 0.35 44
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.03 0.055 0.1 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 4
+  NAME "Player"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -3.2 0.9 1.2 0 18 0 1 1.7 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 7
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "primitive_type" enum 3
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.08 0.68 0.96 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+  COMPONENT "ScriptComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "7a3e1c94b06d4f28ae5137c0d9b28e41"
+    TYPE_MODULE "RePlayEngine.Scripting"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "__script.language" enum 1
+    PROPERTY "__script.asset" assetref ""
+    PROPERTY "__script.class" string "Game.PersonaCombatant"
+    PROPERTY "__script.execution_order" int 0
+    PROPERTY "__script.type_id" string "9e1eaad6bf664bcb9adb2ff4ab02cb97"
+  END_COMPONENT
+  COMPONENT "MotionPlayerComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "motion" assetref "0946f86f299fb82c57a086b41029431a"
+    PROPERTY "key" string "Attack"
+    PROPERTY "play_on_start" bool 0
+    PROPERTY "trigger" enum 10
+    PROPERTY "loop" bool 0
+    PROPERTY "wrap_mode" enum 0
+    PROPERTY "auto_stop_on_end" bool 1
+    PROPERTY "ignore_time_scale" bool 0
+    PROPERTY "speed" float 1
+    PROPERTY "weight" float 1
+  END_COMPONENT
+  COMPONENT "MotionPlayerComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "motion" assetref "c884d4e84b188c16a2769f841b3e0a4c"
+    PROPERTY "key" string "Skill"
+    PROPERTY "play_on_start" bool 0
+    PROPERTY "trigger" enum 10
+    PROPERTY "loop" bool 0
+    PROPERTY "wrap_mode" enum 0
+    PROPERTY "auto_stop_on_end" bool 1
+    PROPERTY "ignore_time_scale" bool 0
+    PROPERTY "speed" float 1
+    PROPERTY "weight" float 1
+  END_COMPONENT
+  COMPONENT "MotionPlayerComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "motion" assetref "db7a95675312f30b5fd64be29e98523c"
+    PROPERTY "key" string "Guard"
+    PROPERTY "play_on_start" bool 0
+    PROPERTY "trigger" enum 10
+    PROPERTY "loop" bool 0
+    PROPERTY "wrap_mode" enum 0
+    PROPERTY "auto_stop_on_end" bool 1
+    PROPERTY "ignore_time_scale" bool 0
+    PROPERTY "speed" float 1
+    PROPERTY "weight" float 1
+  END_COMPONENT
+  COMPONENT "MotionPlayerComponent" 1
+    STABLE_ID 6
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "motion" assetref "38ca8fc57ca250a9b6a4b54c3ba75fbd"
+    PROPERTY "key" string "Down"
+    PROPERTY "play_on_start" bool 0
+    PROPERTY "trigger" enum 10
+    PROPERTY "loop" bool 0
+    PROPERTY "wrap_mode" enum 0
+    PROPERTY "auto_stop_on_end" bool 1
+    PROPERTY "ignore_time_scale" bool 0
+    PROPERTY "speed" float 1
+    PROPERTY "weight" float 1
+  END_COMPONENT
+  COMPONENT "MotionPlayerComponent" 1
+    STABLE_ID 7
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "motion" assetref "960bd69db9b7f9d8e6ae9c2cb9fb0a7b"
+    PROPERTY "key" string "Rise"
+    PROPERTY "play_on_start" bool 0
+    PROPERTY "trigger" enum 10
+    PROPERTY "loop" bool 0
+    PROPERTY "wrap_mode" enum 0
+    PROPERTY "auto_stop_on_end" bool 1
+    PROPERTY "ignore_time_scale" bool 0
+    PROPERTY "speed" float 1
+    PROPERTY "weight" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 5
+  NAME "EnemyFireWeak"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 1.8 0.85 2 0 -18 0 1.1 1.35 1.1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 6
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.98 0.2 0.15 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+  COMPONENT "ScriptComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "7a3e1c94b06d4f28ae5137c0d9b28e41"
+    TYPE_MODULE "RePlayEngine.Scripting"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "__script.language" enum 1
+    PROPERTY "__script.asset" assetref ""
+    PROPERTY "__script.class" string "Game.PersonaCombatant"
+    PROPERTY "__script.execution_order" int 0
+    PROPERTY "__script.type_id" string "9e1eaad6bf664bcb9adb2ff4ab02cb97"
+  END_COMPONENT
+  COMPONENT "MotionPlayerComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "motion" assetref "324b18a8fee7f0cbdeda0a939e32ff15"
+    PROPERTY "key" string "Attack"
+    PROPERTY "play_on_start" bool 0
+    PROPERTY "trigger" enum 10
+    PROPERTY "loop" bool 0
+    PROPERTY "wrap_mode" enum 0
+    PROPERTY "auto_stop_on_end" bool 1
+    PROPERTY "ignore_time_scale" bool 0
+    PROPERTY "speed" float 1
+    PROPERTY "weight" float 1
+  END_COMPONENT
+  COMPONENT "MotionPlayerComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "motion" assetref "8bc59f0e3dd487644527962d765d0402"
+    PROPERTY "key" string "Skill"
+    PROPERTY "play_on_start" bool 0
+    PROPERTY "trigger" enum 10
+    PROPERTY "loop" bool 0
+    PROPERTY "wrap_mode" enum 0
+    PROPERTY "auto_stop_on_end" bool 1
+    PROPERTY "ignore_time_scale" bool 0
+    PROPERTY "speed" float 1
+    PROPERTY "weight" float 1
+  END_COMPONENT
+  COMPONENT "MotionPlayerComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "motion" assetref "6495245a3c5c25e68ecccdc97120c465"
+    PROPERTY "key" string "Down"
+    PROPERTY "play_on_start" bool 0
+    PROPERTY "trigger" enum 10
+    PROPERTY "loop" bool 0
+    PROPERTY "wrap_mode" enum 0
+    PROPERTY "auto_stop_on_end" bool 1
+    PROPERTY "ignore_time_scale" bool 0
+    PROPERTY "speed" float 1
+    PROPERTY "weight" float 1
+  END_COMPONENT
+  COMPONENT "MotionPlayerComponent" 1
+    STABLE_ID 6
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "motion" assetref "92eae6f03d20c8b7049621822487fbcb"
+    PROPERTY "key" string "Rise"
+    PROPERTY "play_on_start" bool 0
+    PROPERTY "trigger" enum 10
+    PROPERTY "loop" bool 0
+    PROPERTY "wrap_mode" enum 0
+    PROPERTY "auto_stop_on_end" bool 1
+    PROPERTY "ignore_time_scale" bool 0
+    PROPERTY "speed" float 1
+    PROPERTY "weight" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 6
+  NAME "EnemyIceWeak"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 4.3 0.85 3 0 -24 0 1.1 1.35 1.1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 6
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.2 0.62 1.0 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+  COMPONENT "ScriptComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "7a3e1c94b06d4f28ae5137c0d9b28e41"
+    TYPE_MODULE "RePlayEngine.Scripting"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "__script.language" enum 1
+    PROPERTY "__script.asset" assetref ""
+    PROPERTY "__script.class" string "Game.PersonaCombatant"
+    PROPERTY "__script.execution_order" int 0
+    PROPERTY "__script.type_id" string "9e1eaad6bf664bcb9adb2ff4ab02cb97"
+  END_COMPONENT
+  COMPONENT "MotionPlayerComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "motion" assetref "d2ccb521b9dd7c6184240040f84ebaf4"
+    PROPERTY "key" string "Attack"
+    PROPERTY "play_on_start" bool 0
+    PROPERTY "trigger" enum 10
+    PROPERTY "loop" bool 0
+    PROPERTY "wrap_mode" enum 0
+    PROPERTY "auto_stop_on_end" bool 1
+    PROPERTY "ignore_time_scale" bool 0
+    PROPERTY "speed" float 1
+    PROPERTY "weight" float 1
+  END_COMPONENT
+  COMPONENT "MotionPlayerComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "motion" assetref "599aa9ac2554b5e05b9b42ad4dc66d40"
+    PROPERTY "key" string "Skill"
+    PROPERTY "play_on_start" bool 0
+    PROPERTY "trigger" enum 10
+    PROPERTY "loop" bool 0
+    PROPERTY "wrap_mode" enum 0
+    PROPERTY "auto_stop_on_end" bool 1
+    PROPERTY "ignore_time_scale" bool 0
+    PROPERTY "speed" float 1
+    PROPERTY "weight" float 1
+  END_COMPONENT
+  COMPONENT "MotionPlayerComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "motion" assetref "2b7f4cd04ab225be0560c49d900c405a"
+    PROPERTY "key" string "Down"
+    PROPERTY "play_on_start" bool 0
+    PROPERTY "trigger" enum 10
+    PROPERTY "loop" bool 0
+    PROPERTY "wrap_mode" enum 0
+    PROPERTY "auto_stop_on_end" bool 1
+    PROPERTY "ignore_time_scale" bool 0
+    PROPERTY "speed" float 1
+    PROPERTY "weight" float 1
+  END_COMPONENT
+  COMPONENT "MotionPlayerComponent" 1
+    STABLE_ID 6
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "motion" assetref "1087d388421dd34acb95d2d3e5a60d6e"
+    PROPERTY "key" string "Rise"
+    PROPERTY "play_on_start" bool 0
+    PROPERTY "trigger" enum 10
+    PROPERTY "loop" bool 0
+    PROPERTY "wrap_mode" enum 0
+    PROPERTY "auto_stop_on_end" bool 1
+    PROPERTY "ignore_time_scale" bool 0
+    PROPERTY "speed" float 1
+    PROPERTY "weight" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 7
+  NAME "PersonaBattleDirector"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "ScriptComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "7a3e1c94b06d4f28ae5137c0d9b28e41"
+    TYPE_MODULE "RePlayEngine.Scripting"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "__script.language" enum 1
+    PROPERTY "__script.asset" assetref ""
+    PROPERTY "__script.class" string "Game.PersonaBattleDirector"
+    PROPERTY "__script.execution_order" int 0
+    PROPERTY "__script.type_id" string "6f6c3e8da1db4fd2bff42917901b6b77"
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 100
+  NAME "BattleCanvas"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 1920 1080
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "CanvasComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 6
+    PROPERTY "reference_resolution" vec2 1920 1080
+    PROPERTY "render_mode" enum 0
+    PROPERTY "scale_mode" enum 1
+    PROPERTY "match_width_or_height" float 0.5
+    PROPERTY "sort_order" int 200
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 101
+  NAME "BattleHeader"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0 1
+    PROPERTY "anchor_max" vec2 0 1
+    PROPERTY "anchored_position" vec2 44 -40
+    PROPERTY "size_delta" vec2 700 64
+    PROPERTY "pivot" vec2 0 1
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 1
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.0 0.7 0.95 0.88
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "PERSONA BATTLE // VERTICAL SLICE"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 32
+    PROPERTY "color" color 0.01 0.03 0.07 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 0
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 102
+  NAME "PlayerStatusText"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0 0
+    PROPERTY "anchor_max" vec2 0 0
+    PROPERTY "anchored_position" vec2 44 150
+    PROPERTY "size_delta" vec2 660 50
+    PROPERTY "pivot" vec2 0 0
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 3
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "PLAYER  HP --/--   SP --/--"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 30
+    PROPERTY "color" color 0.97 0.98 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 0
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 103
+  NAME "PlayerHpBack"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0 0
+    PROPERTY "anchor_max" vec2 0 0
+    PROPERTY "anchored_position" vec2 44 118
+    PROPERTY "size_delta" vec2 560 26
+    PROPERTY "pivot" vec2 0 0
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 2
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.04 0.08 0.12 0.95
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 104
+  NAME "PlayerHpBar"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0 0
+    PROPERTY "anchor_max" vec2 0 0
+    PROPERTY "anchored_position" vec2 44 118
+    PROPERTY "size_delta" vec2 560 26
+    PROPERTY "pivot" vec2 0 0
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 3
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.0 0.82 0.96 1
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "MotionPlayerComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "motion" assetref "38ab5b458632e3e667dbad2ad06a4a1f"
+    PROPERTY "key" string "HpBarChange"
+    PROPERTY "play_on_start" bool 0
+    PROPERTY "trigger" enum 10
+    PROPERTY "loop" bool 0
+    PROPERTY "wrap_mode" enum 0
+    PROPERTY "auto_stop_on_end" bool 1
+    PROPERTY "ignore_time_scale" bool 0
+    PROPERTY "speed" float 1
+    PROPERTY "weight" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 105
+  NAME "EnemyFireStatusText"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 1 1
+    PROPERTY "anchor_max" vec2 1 1
+    PROPERTY "anchored_position" vec2 -44 -44
+    PROPERTY "size_delta" vec2 620 52
+    PROPERTY "pivot" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 3
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "FIRE-WEAK  HP --/--"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 30
+    PROPERTY "color" color 1 0.55 0.45 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 2
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 106
+  NAME "EnemyIceStatusText"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 1 1
+    PROPERTY "anchor_max" vec2 1 1
+    PROPERTY "anchored_position" vec2 -44 -104
+    PROPERTY "size_delta" vec2 620 52
+    PROPERTY "pivot" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 3
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "ICE-WEAK  HP --/--"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 30
+    PROPERTY "color" color 0.55 0.82 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 2
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 107
+  NAME "BattleMessage"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0
+    PROPERTY "anchor_max" vec2 0.5 0
+    PROPERTY "anchored_position" vec2 0 34
+    PROPERTY "size_delta" vec2 1240 76
+    PROPERTY "pivot" vec2 0.5 0
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 5
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.03 0.04 0.09 1
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "戦闘開始"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 30
+    PROPERTY "color" color 0.96 0.97 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 108
+  NAME "DamageText"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 110
+    PROPERTY "size_delta" vec2 760 110
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 8
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "84  WEAK  DOWN"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 64
+    PROPERTY "color" color 1 0.88 0.15 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+  COMPONENT "MotionPlayerComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "motion" assetref "2111a3465be0ecaa58826cffeb1e544d"
+    PROPERTY "key" string "DamagePopup"
+    PROPERTY "play_on_start" bool 0
+    PROPERTY "trigger" enum 10
+    PROPERTY "loop" bool 0
+    PROPERTY "wrap_mode" enum 0
+    PROPERTY "auto_stop_on_end" bool 1
+    PROPERTY "ignore_time_scale" bool 0
+    PROPERTY "speed" float 1
+    PROPERTY "weight" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 109
+  NAME "OneMoreText"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 270
+    PROPERTY "size_delta" vec2 960 130
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 9
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "1 MORE!"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 72
+    PROPERTY "color" color 1 0.92 0.2 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 110
+  NAME "ResultText"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 4
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 40
+    PROPERTY "size_delta" vec2 1240 210
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 10
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "VICTORY"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 120
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+  COMPONENT "MotionPlayerComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "motion" assetref "06276832679e033d4ecb96f14c23a328"
+    PROPERTY "key" string "Victory"
+    PROPERTY "play_on_start" bool 0
+    PROPERTY "trigger" enum 10
+    PROPERTY "loop" bool 0
+    PROPERTY "wrap_mode" enum 0
+    PROPERTY "auto_stop_on_end" bool 1
+    PROPERTY "ignore_time_scale" bool 0
+    PROPERTY "speed" float 1
+    PROPERTY "weight" float 1
+  END_COMPONENT
+  COMPONENT "MotionPlayerComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "motion" assetref "bd8a2d9e04966945905110dff289d457"
+    PROPERTY "key" string "Defeat"
+    PROPERTY "play_on_start" bool 0
+    PROPERTY "trigger" enum 10
+    PROPERTY "loop" bool 0
+    PROPERTY "wrap_mode" enum 0
+    PROPERTY "auto_stop_on_end" bool 1
+    PROPERTY "ignore_time_scale" bool 0
+    PROPERTY "speed" float 1
+    PROPERTY "weight" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 120
+  NAME "CommandMenu"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 4
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 1 0
+    PROPERTY "anchor_max" vec2 1 0
+    PROPERTY "anchored_position" vec2 -44 132
+    PROPERTY "size_delta" vec2 420 250
+    PROPERTY "pivot" vec2 1 0
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 6
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.03 0.05 0.11 1
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UIVerticalLayoutGroupComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "padding" vec4 12 12 12 12
+    PROPERTY "spacing" float 10
+    PROPERTY "alignment" enum 1
+    PROPERTY "control_child_width" bool 1
+    PROPERTY "control_child_height" bool 0
+  END_COMPONENT
+  COMPONENT "MotionPlayerComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "motion" assetref "860ec2d231d5a103a3ca2ec29401a6ca"
+    PROPERTY "key" string "CommandMenuOpen"
+    PROPERTY "play_on_start" bool 0
+    PROPERTY "trigger" enum 10
+    PROPERTY "loop" bool 0
+    PROPERTY "wrap_mode" enum 0
+    PROPERTY "auto_stop_on_end" bool 1
+    PROPERTY "ignore_time_scale" bool 0
+    PROPERTY "speed" float 1
+    PROPERTY "weight" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 121
+  NAME "CommandAttack"
+  ENABLED 1
+  PARENT 120
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 380 68
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 4
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.06 0.09 0.17 1
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 10
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 121 2
+    PROPERTY "normal_color" color 0.05 0.08 0.15 0.94
+    PROPERTY "hover_color" color 0.0 0.72 0.98 1
+    PROPERTY "pressed_color" color 1 1 1 1
+    PROPERTY "disabled_color" color 0.1 0.12 0.15 0.55
+    PROPERTY "state_blend_seconds" float 0.06
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 10
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "たたかう"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 30
+    PROPERTY "color" color 0.95 0.96 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 122
+  NAME "CommandSkill"
+  ENABLED 1
+  PARENT 120
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 380 68
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 4
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.06 0.09 0.17 1
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 11
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 122 2
+    PROPERTY "normal_color" color 0.05 0.08 0.15 0.94
+    PROPERTY "hover_color" color 0.0 0.72 0.98 1
+    PROPERTY "pressed_color" color 1 1 1 1
+    PROPERTY "disabled_color" color 0.1 0.12 0.15 0.55
+    PROPERTY "state_blend_seconds" float 0.06
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 11
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "スキル"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 30
+    PROPERTY "color" color 0.95 0.96 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 123
+  NAME "CommandGuard"
+  ENABLED 1
+  PARENT 120
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 380 68
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 4
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.06 0.09 0.17 1
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 12
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 123 2
+    PROPERTY "normal_color" color 0.05 0.08 0.15 0.94
+    PROPERTY "hover_color" color 0.0 0.72 0.98 1
+    PROPERTY "pressed_color" color 1 1 1 1
+    PROPERTY "disabled_color" color 0.1 0.12 0.15 0.55
+    PROPERTY "state_blend_seconds" float 0.06
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 12
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "ぼうぎょ"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 30
+    PROPERTY "color" color 0.95 0.96 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 130
+  NAME "SkillMenu"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 4
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 1 0
+    PROPERTY "anchor_max" vec2 1 0
+    PROPERTY "anchored_position" vec2 -44 132
+    PROPERTY "size_delta" vec2 460 190
+    PROPERTY "pivot" vec2 1 0
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 6
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.03 0.05 0.11 1
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UIVerticalLayoutGroupComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "padding" vec4 12 12 12 12
+    PROPERTY "spacing" float 12
+    PROPERTY "alignment" enum 1
+    PROPERTY "control_child_width" bool 1
+    PROPERTY "control_child_height" bool 0
+  END_COMPONENT
+  COMPONENT "MotionPlayerComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "motion" assetref "c4ee1082bc67ba23c4ad68321849f90c"
+    PROPERTY "key" string "SkillMenuOpen"
+    PROPERTY "play_on_start" bool 0
+    PROPERTY "trigger" enum 10
+    PROPERTY "loop" bool 0
+    PROPERTY "wrap_mode" enum 0
+    PROPERTY "auto_stop_on_end" bool 1
+    PROPERTY "ignore_time_scale" bool 0
+    PROPERTY "speed" float 1
+    PROPERTY "weight" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 131
+  NAME "SkillAgi"
+  ENABLED 1
+  PARENT 130
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 420 72
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 4
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.20 0.05 0.06 1
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 20
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 131 2
+    PROPERTY "normal_color" color 0.12 0.035 0.04 0.96
+    PROPERTY "hover_color" color 0.98 0.2 0.13 1
+    PROPERTY "pressed_color" color 1 1 1 1
+    PROPERTY "disabled_color" color 0.1 0.12 0.15 0.55
+    PROPERTY "state_blend_seconds" float 0.06
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 20
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "アギ    SP 4"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 30
+    PROPERTY "color" color 1 0.86 0.8 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 132
+  NAME "SkillBufu"
+  ENABLED 1
+  PARENT 130
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 420 72
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 4
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.04 0.10 0.20 1
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 21
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 132 2
+    PROPERTY "normal_color" color 0.02 0.07 0.14 0.96
+    PROPERTY "hover_color" color 0.16 0.62 1 1
+    PROPERTY "pressed_color" color 1 1 1 1
+    PROPERTY "disabled_color" color 0.1 0.12 0.15 0.55
+    PROPERTY "state_blend_seconds" float 0.06
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 21
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "ブフ    SP 4"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 30
+    PROPERTY "color" color 0.82 0.92 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 140
+  NAME "TargetMenu"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0
+    PROPERTY "anchor_max" vec2 0.5 0
+    PROPERTY "anchored_position" vec2 0 132
+    PROPERTY "size_delta" vec2 940 110
+    PROPERTY "pivot" vec2 0.5 0
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 7
+  END_COMPONENT
+  COMPONENT "UIHorizontalLayoutGroupComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "padding" vec4 12 12 12 12
+    PROPERTY "spacing" float 20
+    PROPERTY "alignment" enum 1
+    PROPERTY "control_child_width" bool 0
+    PROPERTY "control_child_height" bool 1
+  END_COMPONENT
+  COMPONENT "MotionPlayerComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "motion" assetref "7338cbe89296d5240c2c3f3d791edb5c"
+    PROPERTY "key" string "TargetSelect"
+    PROPERTY "play_on_start" bool 0
+    PROPERTY "trigger" enum 10
+    PROPERTY "loop" bool 0
+    PROPERTY "wrap_mode" enum 0
+    PROPERTY "auto_stop_on_end" bool 1
+    PROPERTY "ignore_time_scale" bool 0
+    PROPERTY "speed" float 1
+    PROPERTY "weight" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 141
+  NAME "TargetEnemyFireWeak"
+  ENABLED 1
+  PARENT 140
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 440 90
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 4
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.24 0.07 0.09 1
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 30
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 141 2
+    PROPERTY "normal_color" color 0.18 0.06 0.08 0.88
+    PROPERTY "hover_color" color 1.0 0.26 0.18 0.98
+    PROPERTY "pressed_color" color 1 1 1 1
+    PROPERTY "disabled_color" color 0.1 0.12 0.15 0.55
+    PROPERTY "state_blend_seconds" float 0.06
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 30
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "ENEMY // FIRE WEAK"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 30
+    PROPERTY "color" color 1 0.8 0.75 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 142
+  NAME "TargetEnemyIceWeak"
+  ENABLED 1
+  PARENT 140
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 440 90
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 4
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.06 0.13 0.24 1
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 31
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 142 2
+    PROPERTY "normal_color" color 0.05 0.1 0.18 0.88
+    PROPERTY "hover_color" color 0.2 0.62 1.0 0.98
+    PROPERTY "pressed_color" color 1 1 1 1
+    PROPERTY "disabled_color" color 0.1 0.12 0.15 0.55
+    PROPERTY "state_blend_seconds" float 0.06
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 31
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "ENEMY // ICE WEAK"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 30
+    PROPERTY "color" color 0.8 0.9 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 150
+  NAME "AllOutMenu"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 -210
+    PROPERTY "size_delta" vec2 920 150
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 8
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.02 0.02 0.04 1
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UIHorizontalLayoutGroupComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "padding" vec4 12 12 12 12
+    PROPERTY "spacing" float 18
+    PROPERTY "alignment" enum 1
+    PROPERTY "control_child_width" bool 0
+    PROPERTY "control_child_height" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 151
+  NAME "AllOutAttack"
+  ENABLED 1
+  PARENT 150
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 420 100
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 4
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.42 0.03 0.06 1
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 40
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 151 2
+    PROPERTY "normal_color" color 0.3 0.02 0.04 0.98
+    PROPERTY "hover_color" color 1 0.12 0.1 1
+    PROPERTY "pressed_color" color 1 1 1 1
+    PROPERTY "disabled_color" color 0.1 0.12 0.15 0.55
+    PROPERTY "state_blend_seconds" float 0.06
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 40
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "総攻撃"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 34
+    PROPERTY "color" color 1 0.93 0.35 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 152
+  NAME "AllOutCancel"
+  ENABLED 1
+  PARENT 150
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 420 100
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 4
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.06 0.08 0.13 1
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 41
+    PROPERTY "navigation_bias" float 2
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 152 2
+    PROPERTY "normal_color" color 0.04 0.06 0.09 0.98
+    PROPERTY "hover_color" color 0.25 0.42 0.6 1
+    PROPERTY "pressed_color" color 1 1 1 1
+    PROPERTY "disabled_color" color 0.1 0.12 0.15 0.55
+    PROPERTY "state_blend_seconds" float 0.06
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 41
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "text" string "やめる"
+    PROPERTY "font" assetref ""
+    PROPERTY "font_size" float 34
+    PROPERTY "color" color 0.9 0.92 0.96 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 0
+    PROPERTY "localization_key" string ""
+  END_COMPONENT
+END_OBJECT

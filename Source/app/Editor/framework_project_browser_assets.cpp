@@ -1,10 +1,12 @@
 ﻿#include "framework.h"
-#include "texture.h"
 #include "../../RePlayEngine/Assets/AssetCache.h"
+#include "../../RePlayEngine/Assets/SpriteAtlasAsset.h"
+#include "../../RePlayEngine/Assets/TextureCompressor.h"
 #include "../../RePlayEngine/Localization/LocalizationTable.h"
 #include "../../RePlayEngine/Rendering/Effects/EffectPresetAsset.h"
 #include "../../RePlayEngine/Editor/Style/EditorStyle.h"
 #include "../../RePlayEngine/Motion/CompositionAsset.h"
+#include "../../RePlayEngine/Motion/EasingCurveAsset.h"
 #include "../../RePlayEngine/Motion/MotionAsset.h"
 #include "../../RePlayEngine/Rendering/Materials/MaterialAsset.h"
 #include "../../RePlayEngine/Rendering/Shaders/ShaderAssetFactory.h"
@@ -15,12 +17,78 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <regex>
+#include <set>
 #include <string>
 #include <system_error>
+#include <utility>
 #include <vector>
 #include "framework_project_browserInternal.h"
 using namespace framework_project_browser::Detail;
+
+namespace
+{
+    std::string ResourcePathKey(const std::filesystem::path& path)
+    {
+        std::error_code error;
+        std::filesystem::path absolute = std::filesystem::absolute(path, error);
+        if (error) absolute = path;
+        std::string key = absolute.lexically_normal().generic_u8string();
+        std::transform(key.begin(), key.end(), key.begin(),
+            [](unsigned char character)
+            { return static_cast<char>(std::tolower(character)); });
+        return key;
+    }
+
+    bool IsIgnoredResourceDirectory(const std::filesystem::path& path)
+    {
+        const std::string name = ToLowerCopy(path.filename().u8string());
+        return name == ".replay_cache" || name == "imported" ||
+            (!name.empty() && name.front() == '.') ||
+            ToLowerCopy(path.extension().u8string()) == ".fbm";
+    }
+
+    void CollectGltfDependencies(const std::filesystem::path& model,
+        const std::filesystem::path& resources_root, std::set<std::string>& dependencies)
+    {
+        const std::string extension = ToLowerCopy(model.extension().u8string());
+        if (extension != ".gltf") return;
+
+        std::ifstream stream(model, std::ios::binary);
+        if (!stream) return;
+        const std::string contents((std::istreambuf_iterator<char>(stream)),
+            std::istreambuf_iterator<char>());
+        const std::regex uri_expression(R"re("uri"\s*:\s*"([^"]+)")re");
+        for (std::sregex_iterator current(contents.begin(), contents.end(), uri_expression),
+            end; current != end; ++current)
+        {
+            const std::string uri = (*current)[1].str();
+            if (uri.rfind("data:", 0) == 0 || uri.find("://") != std::string::npos)
+                continue;
+            const std::filesystem::path relative =
+                std::filesystem::u8path(uri).lexically_normal();
+            const std::filesystem::path dependency =
+                (model.parent_path() / relative).lexically_normal();
+            if (relative.empty() || relative.is_absolute() ||
+                !IsProjectPathInsideOrEqual(dependency, resources_root))
+                continue;
+            std::error_code error;
+            if (std::filesystem::is_regular_file(dependency, error) && !error)
+                dependencies.insert(ResourcePathKey(dependency));
+        }
+    }
+
+    void AppendResourceScanError(std::string& target, const std::string& message)
+    {
+        if (message.empty()) return;
+        if (!target.empty()) target += " / ";
+        target += message;
+    }
+}
 
 // 種別判定・基本操作・通常アセット作成の関数本体
 
@@ -36,17 +104,24 @@ ReplayEngine::Assets::AssetKind framework::project_kind_for(
     if (extension == ".replaymaterial") return AssetKind::Material;
     if (extension == ReplayEngine::Runtime::SceneFlowAsset::file_extension)
         return AssetKind::SceneFlow;
-    if (extension == ReplayEngine::Motion::MotionAsset::file_extension ||
-        extension == ReplayEngine::Motion::CompositionAsset::file_extension)
+    if (extension == ReplayEngine::Motion::MotionAsset::file_extension)
         return AssetKind::Motion;
+    if (extension == ReplayEngine::Motion::CompositionAsset::file_extension)
+        return AssetKind::Composition;
+    if (extension == ReplayEngine::Motion::EasingCurveAsset::file_extension)
+        return AssetKind::EasingCurve;
     if (extension == ReplayEngine::Localization::LocalizationTable::file_extension)
         return AssetKind::Localization;
     if (extension == ReplayEngine::Rendering::Effects::EffectPresetAsset::file_extension)
         return AssetKind::EffectPreset;
     if (extension == GameInput::InputState::action_asset_extension)
         return AssetKind::InputAction;
-    if (extension == ".fbx" || extension == ".glb" || extension == ".gltf" ||
-        extension == ".obj") return AssetKind::Model;
+    if (extension == ReplayEngine::Assets::SpriteAtlasAsset::file_extension)
+        return AssetKind::SpriteAtlas;
+    // .obj は外す。MSVC のオブジェクトファイルと拡張子が同じで、
+    // しかも resolve_model_source() は FBX/cereal/GLB/glTF しか読めない。
+    if (extension == ".fbx" || extension == ".glb" ||
+        extension == ".gltf") return AssetKind::Model;
     if (IsImageExtension(extension)) return AssetKind::Image;
     if (extension == ".wav" || extension == ".mp3" || extension == ".ogg")
         return AssetKind::Audio;
@@ -58,32 +133,74 @@ ReplayEngine::Assets::AssetKind framework::project_kind_for(
     return AssetKind::Unknown;
 }
 
-// -----------------------------------------------------------------------------
-//  サムネイル
-//
-//  load_texture_from_file はパスをキーに内部キャッシュを持ち、
-//  失敗も記録するので毎フレーム呼んでも再読込は起きない。
-//  ここで独自キャッシュは持たない。
-// -----------------------------------------------------------------------------
-ID3D11ShaderResourceView* framework::project_thumbnail_for(
-    const std::filesystem::path& path)
+std::size_t framework::register_resource_assets(std::string& error)
 {
-    if (!device) return nullptr;
+    using ReplayEngine::Assets::AssetKind;
 
-    const std::string extension = ToLowerCopy(path.extension().u8string());
-    if (!IsImageExtension(extension)) return nullptr;
+    error.clear();
+    const std::filesystem::path resources_root = content_path("resources");
+    std::error_code scan_error;
+    if (!std::filesystem::is_directory(resources_root, scan_error) || scan_error)
+    {
+        error = "resources を読み取れません: " + scan_error.message();
+        return 0;
+    }
 
-    ID3D11ShaderResourceView* view = nullptr;
-    D3D11_TEXTURE2D_DESC description{};
-    const HRESULT result = load_texture_from_file(device.Get(),
-        path.wstring().c_str(), &view, &description);
-    if (FAILED(result)) return nullptr;
+    std::vector<std::pair<std::filesystem::path, AssetKind>> candidates;
+    std::vector<std::filesystem::path> models;
+    std::filesystem::recursive_directory_iterator iterator(resources_root,
+        std::filesystem::directory_options::skip_permission_denied, scan_error);
+    const std::filesystem::recursive_directory_iterator end;
+    for (; iterator != end && !scan_error; iterator.increment(scan_error))
+    {
+        const std::filesystem::directory_entry entry = *iterator;
+        std::error_code entry_error;
+        if (entry.is_directory(entry_error))
+        {
+            if (!entry_error && IsIgnoredResourceDirectory(entry.path()))
+                iterator.disable_recursion_pending();
+            continue;
+        }
+        if (entry_error || !entry.is_regular_file(entry_error) || entry_error) continue;
 
-    // load_texture_from_file は cache 所有 SRV を CopyTo(AddRef) する。Browser は毎 frame
-    // 呼ぶため、呼び出し分を Release しないと RefCount が frame ごとに増え続ける。
-    ID3D11ShaderResourceView* borrowed = view;
-    if (view != nullptr) view->Release();
-    return borrowed;
+        const std::string name = entry.path().filename().u8string();
+        if (name.empty() || name.front() == '.') continue;
+        const AssetKind kind = project_kind_for(entry.path());
+        if (kind == AssetKind::Unknown) continue;
+        candidates.emplace_back(entry.path(), kind);
+        if (kind == AssetKind::Model) models.push_back(entry.path());
+    }
+    if (scan_error) AppendResourceScanError(error,
+        "resources の走査を途中で終了しました: " + scan_error.message());
+
+    std::sort(candidates.begin(), candidates.end(),
+        [](const auto& left, const auto& right)
+        { return ResourcePathKey(left.first) < ResourcePathKey(right.first); });
+
+    std::set<std::string> dependency_paths;
+    for (const std::filesystem::path& model : models)
+        CollectGltfDependencies(model, resources_root, dependency_paths);
+
+    std::size_t registered_count = 0;
+    for (const auto& candidate : candidates)
+    {
+        if (candidate.second == AssetKind::Image &&
+            dependency_paths.find(ResourcePathKey(candidate.first)) != dependency_paths.end())
+            continue;
+        if (asset_database.FindByPath(candidate.first) != nullptr) continue;
+        if (asset_database.HasPathGuidReservation(candidate.first)) continue;
+        asset_database.Register(candidate.first, candidate.second);
+        ++registered_count;
+    }
+
+    if (registered_count > 0)
+    {
+        std::string save_error;
+        if (!asset_database.Save(save_error))
+            AppendResourceScanError(error, "AssetDatabase 保存失敗: " + save_error);
+    }
+    asset_database.RefreshMissingFiles(resources_root);
+    return registered_count;
 }
 
 // -----------------------------------------------------------------------------
@@ -123,7 +240,7 @@ bool framework::project_create_folder(const std::string& name)
     const std::filesystem::path root = std::filesystem::current_path(error);
     if (error) return false;
 
-    std::filesystem::path path = UniqueProjectPath(root / project_current_folder, safe);
+    std::filesystem::path path = UniqueProjectPath(root / project_current_folder, safe, {}, &asset_database);
 
     std::filesystem::create_directories(path, error);
     if (error)
@@ -131,6 +248,11 @@ bool framework::project_create_folder(const std::string& name)
         project_browser_status = "フォルダ作成失敗: " + path.generic_u8string();
         return false;
     }
+    project_selected_entry_path = path;
+    selected_editor_object = editor_selection::asset;
+    selected_asset_guid.clear();
+    project_tree_reveal_selection_pending = true;
+    project_record_created_path(path, "フォルダを作成");
     project_browser_status = "フォルダを作成しました: " + path.filename().u8string();
     return true;
 }
@@ -172,6 +294,9 @@ bool framework::project_create_csharp_behaviour(const std::string& class_name)
     const ReplayEngine::Assets::AssetRecord& record =
         asset_database.Register(info.source_path, ReplayEngine::Assets::AssetKind::Script);
     selected_asset_guid = record.guid;
+    project_selected_entry_path = info.source_path;
+    selected_editor_object = editor_selection::asset;
+    project_tree_reveal_selection_pending = true;
 
     std::string save_error;
     if (!asset_database.Save(save_error))
@@ -193,6 +318,7 @@ bool framework::project_create_csharp_behaviour(const std::string& class_name)
     project_browser_status =
         "C# Behaviour を作成しました。Add Component の Scripts/C# から載せられます: " +
         info.source_path.filename().u8string();
+    project_record_created_path(info.source_path, "C# Behaviour を作成");
     push_editor_log("Info", project_browser_status, info.source_path, 1);
     return true;
 }
@@ -214,7 +340,7 @@ bool framework::project_create_material(const std::string& name)
     if (error) return false;
 
     const std::filesystem::path folder = root / project_current_folder;
-    std::filesystem::path path = UniqueProjectPath(folder, safe, MaterialAsset::file_extension);
+    std::filesystem::path path = UniqueProjectPath(folder, safe, MaterialAsset::file_extension, &asset_database);
 
     MaterialAsset material;
     std::string save_error;
@@ -232,6 +358,10 @@ bool framework::project_create_material(const std::string& name)
         return false;
     }
     selected_asset_guid = record.guid;
+    project_selected_entry_path = path;
+    selected_editor_object = editor_selection::asset;
+    project_tree_reveal_selection_pending = true;
+    project_record_created_path(path, "Material を作成");
     project_browser_status = "Material を作成しました: " + path.filename().u8string();
     return true;
 }
@@ -261,7 +391,7 @@ bool framework::project_create_motion(const std::string& name)
         return false;
     }
 
-    std::filesystem::path path = UniqueProjectPath(folder, safe, MotionAsset::file_extension);
+    std::filesystem::path path = UniqueProjectPath(folder, safe, MotionAsset::file_extension, &asset_database);
 
     MotionAsset motion;
     motion.name = safe;
@@ -283,6 +413,9 @@ bool framework::project_create_motion(const std::string& name)
     }
 
     selected_asset_guid = record.guid;
+    project_selected_entry_path = path;
+    selected_editor_object = editor_selection::asset;
+    project_tree_reveal_selection_pending = true;
     set_project_folder(path.parent_path());
     if (!open_motion_asset(record))
     {
@@ -291,11 +424,267 @@ bool framework::project_create_motion(const std::string& name)
         return false;
     }
 
+    project_record_created_path(path, "Motion を作成");
     project_browser_status = "Motion を作成しました: " + path.filename().u8string();
     push_editor_log("Info", project_browser_status, path, 1);
     return true;
 }
 
+
+bool framework::project_create_composition(const std::string& name)
+{
+    using ReplayEngine::Assets::AssetKind;
+    using ReplayEngine::Motion::CompositionAsset;
+
+    const std::string safe = SafeProjectFileName(
+        name.empty() ? std::string("NewComposition") : name);
+    if (safe.empty())
+    {
+        project_browser_status = "Composition 名が空です";
+        return false;
+    }
+
+    std::error_code error;
+    const std::filesystem::path root = std::filesystem::current_path(error);
+    if (error) return false;
+    const std::filesystem::path folder = root / project_current_folder;
+    std::filesystem::create_directories(folder, error);
+    if (error)
+    {
+        project_browser_status = "Composition folder を作成できません";
+        return false;
+    }
+
+    const std::filesystem::path path = UniqueProjectPath(
+        folder, safe, CompositionAsset::file_extension, &asset_database);
+    CompositionAsset composition;
+    composition.name = safe;
+    composition.duration = 1.0f;
+
+    std::string save_error;
+    if (!CompositionAsset::SaveToFile(path, composition, save_error))
+    {
+        project_browser_status = "Composition 作成失敗: " + save_error;
+        return false;
+    }
+    const auto& record = asset_database.Register(path, AssetKind::Composition);
+    if (!asset_database.Save(save_error))
+    {
+        project_browser_status = "Composition は作成しましたが DB 保存失敗: " + save_error;
+        return false;
+    }
+    selected_asset_guid = record.guid;
+    project_selected_entry_path = path;
+    selected_editor_object = editor_selection::asset;
+    project_tree_reveal_selection_pending = true;
+    set_project_folder(path.parent_path());
+    if (!open_motion_asset(record))
+    {
+        project_browser_status = "Composition は作成しましたが Editor で開けません: " +
+            path.filename().u8string();
+        return false;
+    }
+    project_record_created_path(path, "Composition を作成");
+    project_browser_status = "Composition を作成しました: " + path.filename().u8string();
+    push_editor_log("Info", project_browser_status, path, 1);
+    return true;
+}
+
+
+
+bool framework::project_create_sprite_atlas(const std::string& name)
+{
+    using ReplayEngine::Assets::AssetKind;
+    using ReplayEngine::Assets::SpriteAtlasAsset;
+    const std::string safe = SafeProjectFileName(name.empty() ? "NewSpriteAtlas" : name);
+    if (safe.empty()) return false;
+    std::error_code error;
+    const std::filesystem::path root = std::filesystem::current_path(error);
+    if (error) return false;
+    const std::filesystem::path folder = root / project_current_folder;
+    std::filesystem::create_directories(folder, error);
+    if (error) return false;
+    const std::filesystem::path path = UniqueProjectPath(folder, safe,
+        SpriteAtlasAsset::file_extension, &asset_database);
+    SpriteAtlasAsset atlas;
+    atlas.name = safe;
+    std::string save_error;
+    if (!SpriteAtlasAsset::SaveToFile(path, atlas, save_error))
+    {
+        project_browser_status = "Sprite Atlas 作成失敗: " + save_error;
+        return false;
+    }
+    const auto& record = asset_database.Register(path, AssetKind::SpriteAtlas);
+    if (!asset_database.Save(save_error))
+    {
+        project_browser_status = "Sprite Atlas は作成しましたが DB 保存失敗: " + save_error;
+        return false;
+    }
+    selected_asset_guid = record.guid;
+    project_selected_entry_path = path;
+    selected_editor_object = editor_selection::asset;
+    project_tree_reveal_selection_pending = true;
+    set_project_folder(path.parent_path());
+    open_sprite_atlas_asset(record);
+    project_record_created_path(path, "Sprite Atlas を作成");
+    project_browser_status = "Sprite Atlas を作成しました: " + path.filename().u8string();
+    return true;
+}
+
+bool framework::open_sprite_atlas_asset(const ReplayEngine::Assets::AssetRecord& asset)
+{
+    if (asset.kind != ReplayEngine::Assets::AssetKind::SpriteAtlas) return false;
+    ReplayEngine::Assets::SpriteAtlasAsset atlas;
+    std::string error;
+    if (!ReplayEngine::Assets::SpriteAtlasAsset::LoadFromFile(asset.source_path, atlas, error))
+    {
+        sprite_atlas_editor_status = error;
+        return false;
+    }
+    sprite_atlas_editor_asset = std::move(atlas);
+    sprite_atlas_editor_path = asset.source_path;
+    sprite_atlas_editor_guid = asset.guid;
+    sprite_atlas_editor_loaded = true;
+    sprite_atlas_editor_dirty = false;
+    sprite_atlas_selected_region = sprite_atlas_editor_asset.regions.empty() ? -1 : 0;
+    sprite_atlas_draw_region_mode = false;
+    sprite_atlas_region_dragging = false;
+    sprite_atlas_region_transform_dragging = false;
+    sprite_atlas_active_handle = -1;
+    sprite_atlas_history.clear();
+    sprite_atlas_history_cursor = 0;
+    sprite_atlas_history_transaction = false;
+    sprite_atlas_history_label.clear();
+    show_sprite_atlas_editor_panel = true;
+    sprite_atlas_editor_status = "Sprite Atlasを開きました: " + asset.display_name;
+    return true;
+}
+
+bool framework::save_current_sprite_atlas()
+{
+    if (!sprite_atlas_editor_loaded || sprite_atlas_editor_path.empty()) return false;
+
+    // Atlas は元画像に依存しないよう、保存時に同じフォルダへ BC 圧縮 DDS を作る。
+    // 画像が既に削除されていても、過去に作った DDS があればそのまま使える。
+    if (!sprite_atlas_editor_asset.image_guid.empty())
+    {
+        const ReplayEngine::Assets::AssetRecord* image_record =
+            asset_database.FindByGuid(sprite_atlas_editor_asset.image_guid);
+        const std::filesystem::path dds_path =
+            sprite_atlas_editor_path.parent_path() /
+            (sprite_atlas_editor_path.filename().u8string() + ".dds");
+        const bool atlas_already_references_cache =
+            sprite_atlas_editor_asset.embedded_texture_path == dds_path.filename().u8string();
+        std::error_code file_error;
+        const bool dds_exists = std::filesystem::exists(dds_path, file_error) && !file_error;
+        bool cache_ready = dds_exists;
+        if (image_record != nullptr)
+        {
+            std::filesystem::path source_path = image_record->source_path;
+            bool source_exists = std::filesystem::exists(source_path, file_error) && !file_error;
+            if (!source_exists)
+            {
+                // 元PNGが消えていても、既存の foo.dds キャッシュを入力にできる。
+                std::filesystem::path dds_source = source_path;
+                dds_source.replace_extension(".dds");
+                source_exists = std::filesystem::exists(dds_source, file_error) && !file_error;
+                if (source_exists) source_path = dds_source;
+            }
+            if (source_exists)
+            {
+                bool source_is_newer = !dds_exists || !atlas_already_references_cache;
+                if (dds_exists)
+                {
+                    const auto source_time = std::filesystem::last_write_time(source_path, file_error);
+                    const auto dds_time = std::filesystem::last_write_time(dds_path, file_error);
+                    source_is_newer = !file_error && source_time > dds_time;
+                }
+                if (source_is_newer)
+                {
+                    std::string extension = source_path.extension().u8string();
+                    std::transform(extension.begin(), extension.end(), extension.begin(),
+                        [](unsigned char character)
+                        {
+                            return static_cast<char>(std::tolower(character));
+                        });
+                    if (extension == ".dds")
+                    {
+                        std::filesystem::copy_file(source_path, dds_path,
+                            std::filesystem::copy_options::overwrite_existing, file_error);
+                        cache_ready = !file_error;
+                    }
+                    else
+                    {
+                        const auto result = ReplayEngine::Assets::TextureCompressor::Compress(
+                            source_path, dds_path,
+                            ReplayEngine::Assets::TextureCompressor::Format::Auto);
+                        cache_ready = result.succeeded;
+                        if (!cache_ready)
+                        {
+                            sprite_atlas_editor_status = "DDSキャッシュ作成失敗: " + result.error;
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+        if (!cache_ready)
+        {
+            sprite_atlas_editor_status = "Atlas画像またはDDSキャッシュが見つかりません";
+            return false;
+        }
+        sprite_atlas_editor_asset.embedded_texture_path =
+            dds_path.filename().u8string();
+    }
+    else
+    {
+        sprite_atlas_editor_asset.embedded_texture_path.clear();
+    }
+
+    // Atlas はScene外Assetなので、保存前bytesを既存FileEditHistoryへ積む。
+    // 新しいUndo基盤は作らない。
+    std::vector<std::uint8_t> undo_before;
+    {
+        std::ifstream before_stream(sprite_atlas_editor_path, std::ios::binary);
+        if (before_stream)
+        {
+            undo_before.assign(std::istreambuf_iterator<char>(before_stream),
+                std::istreambuf_iterator<char>());
+        }
+    }
+
+    std::string error;
+    if (!ReplayEngine::Assets::SpriteAtlasAsset::SaveToFile(sprite_atlas_editor_path,
+        sprite_atlas_editor_asset, error))
+    {
+        sprite_atlas_editor_status = error;
+        return false;
+    }
+
+    if (!undo_before.empty())
+    {
+        std::string undo_error;
+        if (!external_file_history.RecordSavedChange(sprite_atlas_editor_path,
+            "Sprite Atlasを保存", undo_before, undo_error) && !undo_error.empty())
+        {
+            sprite_atlas_editor_status = "Atlasは保存しましたがUndo記録失敗: " + undo_error;
+        }
+    }
+
+    const auto& record = asset_database.Register(sprite_atlas_editor_path,
+        ReplayEngine::Assets::AssetKind::SpriteAtlas);
+    sprite_atlas_editor_guid = record.guid;
+    std::string db_error;
+    if (!asset_database.Save(db_error))
+    {
+        sprite_atlas_editor_status = "Atlasは保存しましたがDB保存失敗: " + db_error;
+        return false;
+    }
+    sprite_atlas_editor_dirty = false;
+    sprite_atlas_editor_status = "保存しました: " +
+        sprite_atlas_editor_path.filename().u8string();
+    return true;
+}
 
 bool framework::project_create_localization(const std::string& name)
 {
@@ -309,7 +698,7 @@ bool framework::project_create_localization(const std::string& name)
     const std::filesystem::path folder = root / project_current_folder;
     std::filesystem::create_directories(folder, error);
     if (error) return false;
-    std::filesystem::path path = UniqueProjectPath(folder, safe, LocalizationTable::file_extension);
+    std::filesystem::path path = UniqueProjectPath(folder, safe, LocalizationTable::file_extension, &asset_database);
     LocalizationTable table;
     table.SetLanguages({ "ja", "en" });
     table.Set("sample.hello", "ja", u8"こんにちは");
@@ -327,6 +716,10 @@ bool framework::project_create_localization(const std::string& name)
         return false;
     }
     selected_asset_guid = record.guid;
+    project_selected_entry_path = path;
+    selected_editor_object = editor_selection::asset;
+    project_tree_reveal_selection_pending = true;
+    project_record_created_path(path, "Localization を作成");
     project_browser_status = "Localization を作成しました: " + path.filename().u8string();
     return true;
 }
@@ -343,7 +736,7 @@ bool framework::project_create_effect_preset(const std::string& name)
     const std::filesystem::path folder = root / project_current_folder;
     std::filesystem::create_directories(folder, error);
     if (error) return false;
-    std::filesystem::path path = UniqueProjectPath(folder, safe, EffectPresetAsset::file_extension);
+    std::filesystem::path path = UniqueProjectPath(folder, safe, EffectPresetAsset::file_extension, &asset_database);
     EffectPresetAsset preset;
     ReplayEngine::UI::UIEffect glow;
     glow.kind = static_cast<int>(ReplayEngine::UI::UIEffectKind::Glow);
@@ -364,7 +757,116 @@ bool framework::project_create_effect_preset(const std::string& name)
         return false;
     }
     selected_asset_guid = record.guid;
+    project_selected_entry_path = path;
+    selected_editor_object = editor_selection::asset;
+    project_tree_reveal_selection_pending = true;
+    project_record_created_path(path, "Effect Preset を作成");
     project_browser_status = "Effect Preset を作成しました: " + path.filename().u8string();
+    return true;
+}
+
+
+bool framework::project_create_easing_curve(const std::string& name)
+{
+    using ReplayEngine::Assets::AssetKind;
+    using ReplayEngine::Motion::EasingCurveAsset;
+    const std::string safe = SafeProjectFileName(name.empty() ? "NewEasingCurve" : name);
+    if (safe.empty()) return false;
+    std::error_code error;
+    const std::filesystem::path root = std::filesystem::current_path(error);
+    if (error) return false;
+    const std::filesystem::path folder = root / project_current_folder;
+    std::filesystem::create_directories(folder, error);
+    if (error) return false;
+    const std::filesystem::path path = UniqueProjectPath(folder, safe,
+        EasingCurveAsset::file_extension, &asset_database);
+
+    EasingCurveAsset curve;
+    curve.name = safe;
+    curve.sample_count = 64;
+    curve.samples.resize(static_cast<std::size_t>(curve.sample_count));
+    const float denominator = static_cast<float>(curve.sample_count - 1);
+    for (int index = 0; index < curve.sample_count; ++index)
+        curve.samples[static_cast<std::size_t>(index)] = static_cast<float>(index) / denominator;
+    curve.control_points = { { 0.0f, 0.0f }, { 1.0f, 1.0f } };
+    curve.Normalize();
+
+    std::string save_error;
+    if (!curve.SaveToFile(path, save_error))
+    {
+        project_browser_status = std::string(u8"イージングカーブ作成失敗: ") + save_error;
+        return false;
+    }
+    const auto& record = asset_database.Register(path, AssetKind::EasingCurve);
+    if (!asset_database.Save(save_error))
+    {
+        project_browser_status = std::string(u8"イージングカーブは作成しましたが DB 保存失敗: ") + save_error;
+        return false;
+    }
+    selected_asset_guid = record.guid;
+    project_selected_entry_path = path;
+    selected_editor_object = editor_selection::asset;
+    project_tree_reveal_selection_pending = true;
+    set_project_folder(path.parent_path());
+    open_easing_curve_asset(record);
+    easing_editor_formula_preset_index = 0;
+    project_record_created_path(path, u8"イージングカーブを作成");
+    project_browser_status = std::string(u8"イージングカーブを作成しました: ") + path.filename().u8string();
+    return true;
+}
+
+bool framework::open_easing_curve_asset(const ReplayEngine::Assets::AssetRecord& asset)
+{
+    if (asset.kind != ReplayEngine::Assets::AssetKind::EasingCurve) return false;
+    ReplayEngine::Motion::EasingCurveAsset curve;
+    std::string error;
+    if (!curve.LoadFromFile(asset.source_path, error))
+    {
+        easing_editor_status = error;
+        return false;
+    }
+    easing_editor_asset = std::move(curve);
+    easing_editor_path = asset.source_path;
+    easing_editor_guid = asset.guid;
+    easing_editor_loaded = true;
+    easing_editor_dirty = false;
+    easing_editor_drawing = false;
+    easing_editor_freehand_points.clear();
+    easing_editor_active_control_point = -1;
+    easing_editor_active_sample = -1;
+    easing_editor_context_control_point = -1;
+    easing_editor_formula_preset_index = -1;
+    std::snprintf(easing_editor_name_buffer, IM_ARRAYSIZE(easing_editor_name_buffer), "%s",
+        easing_editor_asset.name.c_str());
+    show_easing_editor_panel = true;
+    easing_editor_status = std::string(u8"イージングカーブを開きました: ") + asset.display_name;
+    return true;
+}
+
+bool framework::save_current_easing_curve()
+{
+    if (!easing_editor_loaded || easing_editor_path.empty()) return false;
+    easing_editor_asset.name = easing_editor_name_buffer;
+    easing_editor_asset.Normalize();
+    std::string error;
+    if (!easing_editor_asset.SaveToFile(easing_editor_path, error))
+    {
+        easing_editor_status = error;
+        return false;
+    }
+    const auto& record = asset_database.Register(easing_editor_path,
+        ReplayEngine::Assets::AssetKind::EasingCurve);
+    easing_editor_guid = record.guid;
+    ReplayEngine::Motion::EasingCurveAsset::Invalidate(record.guid);
+    motion_easing_curve_warning_guids.erase(record.guid);
+    std::string db_error;
+    if (!asset_database.Save(db_error))
+    {
+        easing_editor_status = std::string(u8"イージングカーブは保存しましたがDB保存失敗: ") + db_error;
+        return false;
+    }
+    easing_editor_dirty = false;
+    easing_editor_status = std::string(u8"保存しました: ") + easing_editor_path.filename().u8string();
     return true;
 }
 
@@ -385,7 +887,7 @@ bool framework::project_create_scene_flow(const std::string& name)
     const std::filesystem::path root = std::filesystem::current_path(error);
     if (error) return false;
     const std::filesystem::path folder = root / project_current_folder;
-    std::filesystem::path path = UniqueProjectPath(folder, safe, SceneFlowAsset::file_extension);
+    std::filesystem::path path = UniqueProjectPath(folder, safe, SceneFlowAsset::file_extension, &asset_database);
 
     SceneFlowAsset flow;
     flow.name = safe;
@@ -407,7 +909,11 @@ bool framework::project_create_scene_flow(const std::string& name)
         return false;
     }
     selected_asset_guid = record.guid;
+    project_selected_entry_path = path;
+    selected_editor_object = editor_selection::asset;
+    project_tree_reveal_selection_pending = true;
     load_scene_flow_editor(record);
+    project_record_created_path(path, "Scene Flow を作成");
     project_browser_status = "Scene Flow を作成しました: " + path.filename().u8string();
     push_editor_log("Info", project_browser_status, path, 1);
     return true;
@@ -448,7 +954,7 @@ bool framework::project_create_surface_shader(const std::string& name)
         return false;
     }
 
-    std::filesystem::path path = UniqueProjectPath(folder, safe, ".hlsl");
+    std::filesystem::path path = UniqueProjectPath(folder, safe, ".hlsl", &asset_database);
 
     // Picker のカテゴリもフォルダ構造から自動で作る。
     // Shader/Materials/Characters/Skin.hlsl -> Project/Characters/Skin
@@ -488,12 +994,16 @@ bool framework::project_create_surface_shader(const std::string& name)
     // 作った瞬間に Picker へ出す。次回起動待ちにしない。
     const auto report = shader_library.ScanAll(root);
     selected_asset_guid = record.guid;
+    project_selected_entry_path = path;
+    selected_editor_object = editor_selection::asset;
+    project_tree_reveal_selection_pending = true;
     set_project_folder(path.parent_path());
 
     project_browser_status = "Surface Shader を作成しました: " +
         path.filename().u8string() + " / ShaderGUID=" + shader_id.ToString();
     if (report.compile_failed != 0)
         project_browser_status += " (compile error は Shader Catalog で確認)";
+    project_record_created_path(path, "Surface Shader を作成");
     push_editor_log("Info", project_browser_status, path, 1);
     return true;
 }
@@ -513,7 +1023,7 @@ bool framework::project_create_input_action_asset(const std::string& name)
     if (error) return false;
 
     const std::filesystem::path path = UniqueProjectPath(folder, safe,
-        GameInput::InputState::action_asset_extension);
+        GameInput::InputState::action_asset_extension, &asset_database);
     GameInput::InputState defaults;
     std::string save_error;
     if (!defaults.SaveActionAsset(path, save_error))
@@ -531,9 +1041,12 @@ bool framework::project_create_input_action_asset(const std::string& name)
 
     selected_asset_guid = record.guid;
     project_selected_entry_path = path;
+    selected_editor_object = editor_selection::asset;
+    project_tree_reveal_selection_pending = true;
     project_settings.SetInputActionAssetGuid(record.guid);
     save_project_settings();
     load_active_input_action_asset();
+    project_record_created_path(path, "Input Action Asset を作成");
     project_browser_status = "Input Action Asset を作成しました: " + path.filename().u8string();
     return true;
 }

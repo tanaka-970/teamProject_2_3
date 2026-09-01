@@ -5,7 +5,10 @@
 #include <DirectXMath.h>
 
 #include <array>
+#include <algorithm>
+#include <cstddef>
 #include <string>
+#include <vector>
 
 namespace ReplayEngine::UI
 {
@@ -53,16 +56,237 @@ namespace ReplayEngine::UI
         VHS = 39,
         Letterbox = 40,
         Waveform = 41,
+        DisplacementMap = 42,
+        TurbulentDisplace = 43,
+        FractalNoise = 44,
+        MotionBlur = 45,
+        Echo = 46,
+        DropShadow = 47,
+        InnerShadow = 48,
+        LUT = 49,
+        ToneCurve = 50,
+        MatteComposite = 51,
+        MatteMorphology = 52,
+        BevelEmboss = 53,
+        Kaleidoscope = 54,
+        PageCurl = 55,
+        AsciiLedMatrix = 56,
+        FeedbackZoom = 57,
+        LiquidGlass = 58,
+        LightSweep = 59,
+        Shockwave = 60,
+        PixelSort = 61,
 
-        // 拡張点: 残像は履歴 RT、LUT は入力テクスチャの設計が先に必要。
-        // トーンカーブは Motion と共有する曲線型、レンズフレアは光源位置が必要。
-        // クロマキーは UI Effect ではなく 3D 合成側で扱う。
+        // 動的な演出系。既存 Scene の値を変えないため、必ず末尾へ追加する。
+        Hologram = 62,
+        IridescentFoil = 63,
+        RadarSweep = 64,
+        EnergyPulse = 65,
+        CircuitFlow = 66,
+        HeatHaze = 67,
+        WaterCaustics = 68,
+        VoronoiShatter = 69,
+        InkBleed = 70,
+        BurnReveal = 71,
+        PortalVortex = 72,
+        FrostCrack = 73,
+        Count = 74,
+
+        // 新規 kind は Count の直前へ追加する。既存 Scene の enum 値を変えない。
     };
+
+    inline const char* UIEffectKindName(UIEffectKind kind) noexcept
+    {
+        static constexpr std::array<const char*,
+            static_cast<std::size_t>(UIEffectKind::Count)> names{
+            "Blur", "Glow", "ColorAdjust", "Noise", "Shake", "Mask", "Wipe",
+            "Dissolve", "Distortion", "ChromaticAberration", "Kuwahara", "Halftone",
+            "DirectionalBlur", "RadialBlur", "RotationalBlur", "Vignette",
+            "LightStreaks", "LensDistortion", "Posterize", "Threshold", "ColorRamp",
+            "Levels", "Temperature", "EdgeDetect", "Outline", "LongShadow",
+            "CrossHatch", "BrushStroke", "Mosaic", "Crystallize", "StainedGlass",
+            "Twirl", "Spherize", "Ripple", "PolarCoordinates", "Scanlines", "CRT",
+            "Glitch", "Dither", "VHS", "Letterbox", "Waveform", "DisplacementMap",
+            "TurbulentDisplace", "FractalNoise", "MotionBlur", "Echo", "DropShadow",
+            "InnerShadow", "LUT", "ToneCurve", "MatteComposite", "MatteMorphology",
+            "BevelEmboss", "Kaleidoscope", "PageCurl", "AsciiLedMatrix", "FeedbackZoom",
+            "LiquidGlass", "LightSweep", "Shockwave", "PixelSort", "Hologram",
+            "IridescentFoil", "RadarSweep", "EnergyPulse", "CircuitFlow", "HeatHaze",
+            "WaterCaustics", "VoronoiShatter", "InkBleed", "BurnReveal", "PortalVortex",
+            "FrostCrack"
+        };
+        const int index = static_cast<int>(kind);
+        if (index < 0 || index >= static_cast<int>(names.size())) return "";
+        return names[static_cast<std::size_t>(index)];
+    }
+
+    // Effect Stack 全体へ掛ける共通の適用範囲。
+    // TextureMask は白黒画像を指定することで、矩形/円形では表せない
+    // 投げ縄・ロゴ形状・手描き領域にも対応する。
+    enum class UIEffectRegionShape : int
+    {
+        Rectangle = 0,
+        Ellipse = 1,
+        TextureMask = 2,
+        Freeform = 3,
+    };
+
+    enum class UIEffectRegionScope : int
+    {
+        AllEffects = 0,
+        SelectedEffects = 1,
+    };
+
+    struct UIEffectRegionData
+    {
+        bool enabled = false;
+        int shape = static_cast<int>(UIEffectRegionShape::Rectangle);
+        int scope = static_cast<int>(UIEffectRegionScope::AllEffects);
+        bool invert = false;
+        DirectX::XMFLOAT2 center{ 0.5f, 0.5f };
+        DirectX::XMFLOAT2 size{ 0.5f, 0.5f };
+        float rotation = 0.0f;
+        float feather = 0.0f;
+        float strength = 1.0f;
+        std::string mask;
+        std::vector<DirectX::XMFLOAT2> path_points;
+        bool path_closed = true;
+    };
+
+    struct UIEffectRegion final : UIEffectRegionData
+    {
+        static constexpr int MaxAdditionalCount = 7;
+        // 先頭の範囲は既存 Scene の effect_region として保持し、ここへ
+        // 追加範囲を積む。描画時は全範囲の union として合成する。
+        std::vector<UIEffectRegionData> additional;
+    };
+
+    inline void EnsureUIEffectRegionPath(UIEffectRegionData& region)
+    {
+        if (region.path_points.size() >= 3) return;
+        const float half_x = (std::max)(0.001f, region.size.x);
+        const float half_y = (std::max)(0.001f, region.size.y);
+        region.path_points = {
+            { region.center.x - half_x, region.center.y - half_y },
+            { region.center.x + half_x, region.center.y - half_y },
+            { region.center.x + half_x, region.center.y + half_y },
+            { region.center.x - half_x, region.center.y + half_y } };
+    }
+
+    // Inspector で M マークを出す対象。値をキーフレームで動かせるだけの
+    // Effect ではなく、現在時刻を参照して自律的に変化するものを示す。
+    inline bool IsTimeDrivenEffect(UIEffectKind kind) noexcept
+    {
+        switch (kind)
+        {
+        case UIEffectKind::Noise:
+        case UIEffectKind::Shake:
+        case UIEffectKind::Distortion:
+        case UIEffectKind::Ripple:
+        case UIEffectKind::Scanlines:
+        case UIEffectKind::CRT:
+        case UIEffectKind::Glitch:
+        case UIEffectKind::VHS:
+        case UIEffectKind::Waveform:
+        case UIEffectKind::TurbulentDisplace:
+        case UIEffectKind::FractalNoise:
+        case UIEffectKind::MotionBlur:
+        case UIEffectKind::Echo:
+        case UIEffectKind::FeedbackZoom:
+        case UIEffectKind::LightSweep:
+        case UIEffectKind::Shockwave:
+        case UIEffectKind::PixelSort:
+        case UIEffectKind::Hologram:
+        case UIEffectKind::IridescentFoil:
+        case UIEffectKind::RadarSweep:
+        case UIEffectKind::EnergyPulse:
+        case UIEffectKind::CircuitFlow:
+        case UIEffectKind::HeatHaze:
+        case UIEffectKind::WaterCaustics:
+        case UIEffectKind::VoronoiShatter:
+        case UIEffectKind::InkBleed:
+        case UIEffectKind::BurnReveal:
+        case UIEffectKind::PortalVortex:
+        case UIEffectKind::FrostCrack:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    inline bool EffectSpreadsPixels(UIEffectKind kind) noexcept
+    {
+        switch (kind)
+        {
+        case UIEffectKind::Blur:
+        case UIEffectKind::Glow:
+        case UIEffectKind::Shake:
+        case UIEffectKind::Mask:
+        case UIEffectKind::Wipe:
+        case UIEffectKind::Dissolve:
+        case UIEffectKind::Distortion:
+        case UIEffectKind::ChromaticAberration:
+        case UIEffectKind::Kuwahara:
+        case UIEffectKind::Halftone:
+        case UIEffectKind::DirectionalBlur:
+        case UIEffectKind::RadialBlur:
+        case UIEffectKind::RotationalBlur:
+        case UIEffectKind::LightStreaks:
+        case UIEffectKind::LensDistortion:
+        case UIEffectKind::EdgeDetect:
+        case UIEffectKind::Outline:
+        case UIEffectKind::LongShadow:
+        case UIEffectKind::BrushStroke:
+        case UIEffectKind::Mosaic:
+        case UIEffectKind::Crystallize:
+        case UIEffectKind::StainedGlass:
+        case UIEffectKind::Twirl:
+        case UIEffectKind::Spherize:
+        case UIEffectKind::Ripple:
+        case UIEffectKind::PolarCoordinates:
+        case UIEffectKind::CRT:
+        case UIEffectKind::Glitch:
+        case UIEffectKind::VHS:
+        case UIEffectKind::Waveform:
+        case UIEffectKind::DisplacementMap:
+        case UIEffectKind::TurbulentDisplace:
+        case UIEffectKind::MotionBlur:
+        case UIEffectKind::Echo:
+        case UIEffectKind::DropShadow:
+        case UIEffectKind::InnerShadow:
+        case UIEffectKind::MatteComposite:
+        case UIEffectKind::MatteMorphology:
+        case UIEffectKind::BevelEmboss:
+        case UIEffectKind::Kaleidoscope:
+        case UIEffectKind::PageCurl:
+        case UIEffectKind::AsciiLedMatrix:
+        case UIEffectKind::FeedbackZoom:
+        case UIEffectKind::LiquidGlass:
+        case UIEffectKind::Shockwave:
+        case UIEffectKind::PixelSort:
+        case UIEffectKind::Hologram:
+        case UIEffectKind::IridescentFoil:
+        case UIEffectKind::EnergyPulse:
+        case UIEffectKind::HeatHaze:
+        case UIEffectKind::WaterCaustics:
+        case UIEffectKind::VoronoiShatter:
+        case UIEffectKind::InkBleed:
+        case UIEffectKind::BurnReveal:
+        case UIEffectKind::PortalVortex:
+        case UIEffectKind::FrostCrack:
+            return true;
+        default:
+            return false;
+        }
+    }
 
     class UIEffect final
     {
     public:
         bool enabled = true;
+        // 範囲制限が SelectedEffects のとき、この Effect を対象にするか。
+        // AllEffects では無視されるため、既存 Scene の挙動は変わらない。
+        bool region_enabled = true;
         int kind = static_cast<int>(UIEffectKind::Blur);
         float radius = 8.0f;
         float intensity = 1.0f;

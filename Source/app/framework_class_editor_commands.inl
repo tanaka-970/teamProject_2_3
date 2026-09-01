@@ -45,38 +45,68 @@
             if (msg == WM_KEYDOWN && control_down && !ImGui::GetIO().WantTextInput &&
                 !runtime_ui_text_owner && (wparam == 'Z' || wparam == 'Y'))
             {
-                if (active_editor_workspace == editor_workspace::motion)
+                bool handled = false;
+                if (sprite_atlas_editor_loaded && sprite_atlas_editor_keyboard_focus)
+                    handled = (wparam == 'Z') ? undo_sprite_atlas_edit() : redo_sprite_atlas_edit();
+                else if (active_editor_workspace == editor_workspace::motion)
                 {
                     if (wparam == 'Z') undo_motion_edit();
                     else redo_motion_edit();
+                    handled = true;
+                }
+                else if (show_scene_flow_panel && scene_flow_editor_loaded &&
+                    !project_browser_focused)
+                {
+                    handled = (wparam == 'Z') ? undo_scene_flow_edit() : redo_scene_flow_edit();
+                }
+                else if (!project_browser_focused && material_editor_loaded &&
+                    selected_editor_object == editor_selection::asset)
+                {
+                    handled = (wparam == 'Z') ? undo_material_editor() : redo_material_editor();
                 }
                 else
                 {
-                    const bool external_context =
-                        selected_editor_object == editor_selection::asset ||
-                        selected_editor_object == editor_selection::world;
-                    bool handled = false;
+                    const bool external_context = project_browser_focused;
                     if (external_context)
                     {
-                        handled = (wparam == 'Z')
-                            ? undo_external_file_edit()
-                            : redo_external_file_edit();
+                        handled = (wparam == 'Z') ? undo_external_file_edit() : redo_external_file_edit();
+                        if (!handled)
+                            project_browser_status = wparam == 'Z'
+                                ? "Projectで取り消せるファイル操作はありません"
+                                : "Projectでやり直せるファイル操作はありません";
                     }
-                    if (!handled)
+                    else
                     {
                         if (wparam == 'Z') object_editor_context.Undo();
                         else object_editor_context.Redo();
+                        handled = true;
                     }
                 }
                 return 0;
             }
             if (shortcut_pressed && wparam == 'D')
             {
-                object_hierarchy_panel.DuplicateSelection(object_editor_context);
+                // Motion Workspace の Ctrl+D は Key 複製が持つ。GameObject を巻き添えにしない。
+                if (active_editor_workspace == editor_workspace::motion) return 0;
+                if (project_browser_focused && !project_selected_entry_path.empty())
+                    project_duplicate_entry(project_selected_entry_path);
+                else
+                    object_hierarchy_panel.DuplicateSelection(object_editor_context);
+                return 0;
+            }
+            if (shortcut_pressed && wparam == 'N' &&
+                (GetKeyState(VK_SHIFT) & 0x8000) != 0 && project_browser_focused)
+            {
+                if (project_create_folder("New Folder")) project_begin_rename_selected();
                 return 0;
             }
             if (shortcut_pressed && (wparam == 'C' || wparam == 'V'))
             {
+                // Project WindowにFocusがある時、SceneのGameObject Copy/Pasteへ
+                // 誤爆させない。Project AssetはCtrl+D/Drag Moveを使う。
+                if (project_browser_focused) return 0;
+                // Motion Workspace の Ctrl+C / Ctrl+V は Key の複写が持つ。
+                if (active_editor_workspace == editor_workspace::motion) return 0;
                 std::string clipboard_error;
                 if (wparam == 'C')
                 {
@@ -100,13 +130,27 @@
                 }
                 return 0;
             }
-            if (msg == WM_KEYDOWN && wparam == VK_DELETE &&
+            if (msg == WM_KEYDOWN && (wparam == VK_DELETE || wparam == VK_BACK) &&
                 !ImGui::GetIO().WantTextInput && !runtime_ui_text_owner)
             {
-                if (selected_editor_object == editor_selection::asset &&
+                // Atlas Editor 内の Delete/Backspace は Region 削除へ渡す。
+                if (sprite_atlas_editor_loaded && sprite_atlas_editor_keyboard_focus) return 0;
+                // Motion Workspace の Delete は Key 削除が持つ。GameObject を消さない。
+                if (active_editor_workspace == editor_workspace::motion) return 0;
+                if (project_browser_focused &&
+                    selected_editor_object == editor_selection::asset &&
                     !project_selected_entry_path.empty())
                 {
                     project_request_delete(project_selected_entry_path);
+                    return 0;
+                }
+                if (active_editor_workspace == editor_workspace::ui &&
+                    scene_view_focused &&
+                    ui_effect_region_selected_point >= 0 &&
+                    object_editor_context.Selection().Primary() ==
+                        ui_effect_region_selected_object)
+                {
+                    // Scene View の自由形状頂点を先に処理させる。
                     return 0;
                 }
                 if (selected_editor_object == editor_selection::game_object)
@@ -114,6 +158,13 @@
                     object_hierarchy_panel.DestroySelection(object_editor_context);
                     return 0;
                 }
+            }
+            if (msg == WM_KEYDOWN && wparam == VK_RETURN && project_browser_focused &&
+                !ImGui::GetIO().WantTextInput && !runtime_ui_text_owner &&
+                !project_selected_entry_path.empty())
+            {
+                project_open_entry(project_selected_entry_path);
+                return 0;
             }
             if (msg == WM_KEYDOWN && wparam == 'F' && !runtime_ui_text_owner &&
                 (GetKeyState(VK_CONTROL) & 0x8000))
@@ -174,10 +225,12 @@
             const bool shift_down = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
             if (shift_down)
             {
-                if (object_scene_play_mode) exit_object_play_mode();
+                if (object_scene_play_mode || object_editor_play_loading)
+                    exit_object_play_mode();
                 else object_editor_context.SetStatus("停止する Play Session はありません");
             }
-            else if (!object_scene_play_mode) enter_object_play_mode();
+            else if (!object_scene_play_mode && !object_editor_play_loading)
+                enter_object_play_mode();
             return 0;
         }
 #endif
@@ -222,10 +275,11 @@
             const bool control_down = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
             if (editor_mode && !control_down)
             {
-                if (selected_editor_object == editor_selection::asset &&
+                if (project_browser_focused &&
+                    selected_editor_object == editor_selection::asset &&
                     !project_selected_entry_path.empty())
                     project_begin_rename_selected();
-                else
+                else if (selected_editor_object == editor_selection::game_object)
                     object_hierarchy_panel.BeginRenameSelection(object_editor_context);
                 return 0;
             }
@@ -275,9 +329,15 @@
             }
             break;
         case WM_MOUSEWHEEL:
-            ui_mouse_wheel_delta += static_cast<float>(GET_WHEEL_DELTA_WPARAM(wparam)) /
+        {
+            const float wheel_notches =
+                static_cast<float>(GET_WHEEL_DELTA_WPARAM(wparam)) /
                 static_cast<float>(WHEEL_DELTA);
+            ui_mouse_wheel_delta += wheel_notches;
+            // Script から読めるよう InputState 側にも積む。次の BeginFrame で確定する。
+            game_input.AccumulateWheel(wheel_notches);
             break;
+        }
         case WM_KEYDOWN:
             if (scene_manager.OnKeyDown(wparam))
             {
@@ -325,11 +385,6 @@ private:
     void store_debug_mesh_world(DirectX::XMFLOAT4X4& world) const;
 
     // SSAO/SSR/TAAが共有するフレーム定数を作ってb9へ載せる。
-    void update_frame_constants(const DirectX::XMMATRIX& view,
-        const DirectX::XMMATRIX& projection, float elapsed_time,
-        bool advance_effect_time = true);
-    ID3D11PixelShader* skinned_forward_shader(int shading) const;
-    ID3D11PixelShader* static_forward_shader(int shading) const;
     ReplayEngine::Rendering::ShaderLightingModel deferred_lighting_model(
         int shading) const;
     void bind_gbuffer_material(
@@ -340,7 +395,9 @@ private:
         float ambient_occlusion = 1.0f, float emissive_strength = 0.0f,
         const DirectX::XMFLOAT4& base_color_factor = DirectX::XMFLOAT4{ 1,1,1,1 },
         const DirectX::XMFLOAT3& emissive_color = DirectX::XMFLOAT3{ 0,0,0 },
-        std::uint32_t texture_mask = 0);
+        std::uint32_t texture_mask = 0,
+        // Mesh Renderer の Receive Shadow。GBuffer の normal.a の符号で運ぶ。
+        bool receive_shadow = true);
     void apply_toon_preset(int preset);
     void reset_editor_values();
     void draw_editor();
@@ -366,6 +423,8 @@ private:
 
     bool load_scene_flow_editor(const ReplayEngine::Assets::AssetRecord& record);
     bool save_scene_flow_editor();
+    bool undo_scene_flow_edit();
+    bool redo_scene_flow_edit();
     void draw_scene_flow_panel();
     void sync_runtime_scene_flow_asset();
 
@@ -378,6 +437,7 @@ private:
     void draw_search_results();
     void draw_scene_hierarchy();
     void draw_inspector();
+    void draw_material_slot_inspector();
     void draw_shader_adjustment_workspace();
     // シェーダ編集の唯一の入口（Source/app/Editor/framework_shader_stack.cpp）。
     //
@@ -395,6 +455,7 @@ private:
     void draw_screen_space_settings();
     // ポリゴン数・ドローコール数などの描画統計オーバーレイ。
     void draw_render_stats_overlay();
+    void draw_dx12_debug_panel();
     // draw_character_material_controls は draw_shader_inspector へ統合された。
     bool browse_model_asset();
     bool load_model_asset_async(const std::wstring& filename);

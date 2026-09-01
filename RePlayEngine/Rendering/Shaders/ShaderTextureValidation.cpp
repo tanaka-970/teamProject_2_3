@@ -1,14 +1,19 @@
-#include "ShaderTextureValidation.h"
+﻿#include "ShaderTextureValidation.h"
 #include "BuiltInShaders.h"
 #include "ShaderConstantPacker.h"
 #include "ShaderLibrary.h"
 #include "../Materials/MaterialBinding.h"
-#include "../Materials/MaterialGpuBinder.h"
 #include "../../Assets/AssetDatabase.h"
 
-#include <d3d11.h>
+#include "../DX12/D3D12ShaderCompiler.h"
+
+#include <d3d12.h>
+#include <dxgi1_6.h>
+#include <d3d12shader.h>
+#include <dxcapi.h>
 #include <wrl.h>
 
+#include <array>
 #include <cstdio>
 #include <filesystem>
 #include <set>
@@ -108,9 +113,9 @@ namespace ReplayEngine::Rendering::Validation
         check.Expect(ResolvedMaterialBinding::TryGetGBufferBridgeSlot(
             "OcclusionMap", bridge_slot) && bridge_slot == 45,
             "OcclusionMapはGBuffer t45へ再配置される");
-        check.Expect(!ResolvedMaterialBinding::TryGetGBufferBridgeSlot(
-            "RampMap", bridge_slot),
-            "RampMapはGBuffer semantic bridgeへ入らない");
+        check.Expect(ResolvedMaterialBinding::TryGetGBufferBridgeSlot(
+            "RampMap", bridge_slot) && bridge_slot == 46,
+            "RampMapはGBuffer t46へ再配置される");
 
         MaterialAsset toon;
         toon.shader_guid = BuiltInShaders::Toon.ToString();
@@ -133,70 +138,129 @@ namespace ReplayEngine::Rendering::Validation
         check.Expect(alias && alias->asset_guid == "old-ao-guid",
             "AmbientOcclusionMap aliasを値ごと救済する");
 
-        // Phase 12 はCPU上のslot解決だけでなく、Windows実機で4種の1x1 SRVを
-        // 本当に作れるところまで検査する。Debug Layerは要求せず、Hardwareが
-        // 利用できない環境ではWARPへフォールバックする。
-        Microsoft::WRL::ComPtr<ID3D11Device> device;
-        Microsoft::WRL::ComPtr<ID3D11DeviceContext> context;
-        HRESULT device_result = D3D11CreateDevice(nullptr,
-            D3D_DRIVER_TYPE_HARDWARE, nullptr, 0, nullptr, 0,
-            D3D11_SDK_VERSION, device.GetAddressOf(), nullptr,
-            context.GetAddressOf());
-        if (FAILED(device_result))
+        // GPU 側は DX12 の 1x1 fallback resource と DXC reflection を検査する。
+        Microsoft::WRL::ComPtr<IDXGIFactory6> factory;
+        Microsoft::WRL::ComPtr<ID3D12Device> device;
+        HRESULT device_result = CreateDXGIFactory2(0, IID_PPV_ARGS(&factory));
+        if (SUCCEEDED(device_result) && factory)
         {
-            device.Reset();
-            context.Reset();
-            device_result = D3D11CreateDevice(nullptr,
-                D3D_DRIVER_TYPE_WARP, nullptr, 0, nullptr, 0,
-                D3D11_SDK_VERSION, device.GetAddressOf(), nullptr,
-                context.GetAddressOf());
+            for (UINT index = 0; ; ++index)
+            {
+                Microsoft::WRL::ComPtr<IDXGIAdapter1> adapter;
+                if (factory->EnumAdapters1(index, &adapter) == DXGI_ERROR_NOT_FOUND) break;
+                DXGI_ADAPTER_DESC1 desc{};
+                adapter->GetDesc1(&desc);
+                if ((desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) != 0) continue;
+                if (SUCCEEDED(D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_11_0,
+                    IID_PPV_ARGS(&device)))) break;
+            }
+            if (!device)
+            {
+                Microsoft::WRL::ComPtr<IDXGIAdapter> warp;
+                if (SUCCEEDED(factory->EnumWarpAdapter(IID_PPV_ARGS(&warp))))
+                    device_result = D3D12CreateDevice(warp.Get(), D3D_FEATURE_LEVEL_11_0,
+                        IID_PPV_ARGS(&device));
+            }
         }
-        check.Expect(SUCCEEDED(device_result) && device && context,
-            "D3D11 HardwareまたはWARP deviceを作れる");
+        check.Expect(SUCCEEDED(device_result) && device != nullptr,
+            "DX12 HardwareまたはWARP deviceを作れる");
 
-        if (device && context)
+        Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> heap;
+        if (device)
         {
-            int gpu_log_count = 0;
-            MaterialGpuBinder gpu;
-            check.Expect(gpu.Initialize(device.Get(),
-                [&gpu_log_count](const std::string&, const std::string&)
+            D3D12_DESCRIPTOR_HEAP_DESC heap_desc{};
+            heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+            heap_desc.NumDescriptors = 4;
+            device->CreateDescriptorHeap(&heap_desc, IID_PPV_ARGS(&heap));
+        }
+        check.Expect(heap != nullptr, "fallback texture用SRV heapを作れる");
+
+        std::array<Microsoft::WRL::ComPtr<ID3D12Resource>, 4> fallback_resources{};
+        bool fallback_ok = device != nullptr && heap != nullptr;
+        if (fallback_ok)
+        {
+            const D3D12_HEAP_PROPERTIES properties{ D3D12_HEAP_TYPE_DEFAULT };
+            D3D12_RESOURCE_DESC desc{};
+            desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+            desc.Width = 1;
+            desc.Height = 1;
+            desc.DepthOrArraySize = 1;
+            desc.MipLevels = 1;
+            desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            desc.SampleDesc.Count = 1;
+            desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+            const UINT stride = device->GetDescriptorHandleIncrementSize(
+                D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+            D3D12_CPU_DESCRIPTOR_HANDLE handle = heap->GetCPUDescriptorHandleForHeapStart();
+            for (std::size_t index = 0; index < fallback_resources.size(); ++index)
+            {
+                if (FAILED(device->CreateCommittedResource(&properties, D3D12_HEAP_FLAG_NONE,
+                    &desc, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, nullptr,
+                    IID_PPV_ARGS(&fallback_resources[index]))))
                 {
-                    ++gpu_log_count;
-                }), "MaterialGpuBinderを初期化できる");
-            check.Expect(gpu.DefaultTexturesReady(),
-                "white/black/gray/bumpの4種の既定SRVを作れる");
-
-            Assets::AssetDatabase empty_assets(
-                std::filesystem::path("Saved/Validation/ShaderTexture/empty.replaydb"));
-            ResolvedMaterialBinding defaults;
-            defaults.textures = {
-                { "BaseMap", 40, "", "white" },
-                { "EmissiveMap", 41, "", "black" },
-                { "MaskMap", 42, "", "gray" },
-                { "NormalMap", 43, "", "bump" },
-            };
-            check.Expect(gpu.BindTextures(device.Get(), context.Get(),
-                empty_assets, defaults),
-                "未設定textureを4種の既定SRVへbindできる");
-            gpu.UnbindTextures(context.Get());
-
-            ResolvedMaterialBinding missing_asset;
-            missing_asset.textures = {
-                { "BaseMap", 40, "ffffffffffffffffffffffffffffffff", "white" },
-            };
-            const int logs_before_missing = gpu_log_count;
-            check.Expect(gpu.BindTextures(device.Get(), context.Get(),
-                empty_assets, missing_asset),
-                "存在しないAssetGUIDでも既定SRVで描画を継続できる");
-            check.Expect(gpu_log_count > logs_before_missing,
-                "存在しないAssetGUIDを黙って落とさず診断する");
-            check.Expect(gpu.CachedTextureCount() == 0,
-                "失敗textureを成功cacheへ入れない");
-            gpu.Unbind(context.Get());
-            gpu.Clear();
-            context->ClearState();
-            context->Flush();
+                    fallback_ok = false;
+                    break;
+                }
+                D3D12_SHADER_RESOURCE_VIEW_DESC srv{};
+                srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+                srv.Format = desc.Format;
+                srv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+                srv.Texture2D.MipLevels = 1;
+                device->CreateShaderResourceView(fallback_resources[index].Get(), &srv, handle);
+                handle.ptr += stride;
+            }
         }
+        check.Expect(fallback_ok, "white/black/gray/bump用の4つのDX12 fallback resourceを作れる");
+
+        DX12::D3D12ShaderCompiler compiler;
+        const std::filesystem::path dxc_path = DX12::D3D12ShaderCompiler::FindDefaultLibraryPath();
+        check.Expect(compiler.Initialize(dxc_path), "DXCを初期化できる");
+        const std::string reflection_source =
+            "Texture2D BaseMap : register(t40);\n"
+            "Texture2D NormalMap : register(t43);\n"
+            "SamplerState LinearSampler : register(s0);\n"
+            // 参照しない Texture は DXC が落とすため、両方を式へ入れて reflection に残す。
+            "float4 main(float4 p:SV_POSITION):SV_TARGET{"
+            "return BaseMap.Load(int3(0,0,0)) + NormalMap.Load(int3(0,0,0));}\n";
+        const auto reflected_bytecode = compiler.CompileSource(reflection_source,
+            "ShaderTextureReflection.hlsl", L"main", L"ps_6_0", false);
+        check.Expect(reflected_bytecode.succeeded && !reflected_bytecode.bytecode.empty(),
+            "DXCでtexture binding検証shaderをコンパイルできる");
+
+        Microsoft::WRL::ComPtr<ID3D12ShaderReflection> reflection;
+        HMODULE dxc_module = dxc_path.empty() ? nullptr : LoadLibraryW(dxc_path.wstring().c_str());
+        if (dxc_module && reflected_bytecode.succeeded)
+        {
+            using CreateProc = HRESULT(WINAPI*)(REFCLSID, REFIID, LPVOID*);
+            const auto create = reinterpret_cast<CreateProc>(GetProcAddress(dxc_module,
+                "DxcCreateInstance"));
+            Microsoft::WRL::ComPtr<IDxcUtils> utils;
+            Microsoft::WRL::ComPtr<IDxcContainerReflection> container;
+            Microsoft::WRL::ComPtr<IDxcBlobEncoding> blob;
+            if (create && SUCCEEDED(create(CLSID_DxcUtils, IID_PPV_ARGS(&utils))) &&
+                SUCCEEDED(create(CLSID_DxcContainerReflection, IID_PPV_ARGS(&container))) &&
+                SUCCEEDED(utils->CreateBlob(reflected_bytecode.bytecode.data(),
+                    static_cast<UINT32>(reflected_bytecode.bytecode.size()), DXC_CP_ACP, &blob)) &&
+                SUCCEEDED(container->Load(blob.Get())))
+            {
+                UINT32 part = 0;
+                if (SUCCEEDED(container->FindFirstPartKind(DXC_PART_REFLECTION_DATA, &part)))
+                    container->GetPartReflection(part, IID_PPV_ARGS(&reflection));
+            }
+        }
+        check.Expect(reflection != nullptr, "DXC containerからD3D12 shader reflectionを取得できる");
+
+        D3D12_SHADER_INPUT_BIND_DESC base_desc{};
+        D3D12_SHADER_INPUT_BIND_DESC normal_desc{};
+        const bool base_reflected = reflection && SUCCEEDED(reflection->GetResourceBindingDescByName(
+            "BaseMap", &base_desc));
+        const bool normal_reflected = reflection && SUCCEEDED(reflection->GetResourceBindingDescByName(
+            "NormalMap", &normal_desc));
+        check.Expect(base_reflected && base_desc.BindPoint == 40,
+            "BaseMapがDX12 reflectionでもt40にある");
+        check.Expect(normal_reflected && normal_desc.BindPoint == 43,
+            "NormalMapがDX12 reflectionでもt43にある");
+        if (dxc_module) FreeLibrary(dxc_module);
 
         return check.Report();
     }
