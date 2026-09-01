@@ -199,6 +199,7 @@ std::size_t framework::register_resource_assets(std::string& error)
         if (!asset_database.Save(save_error))
             AppendResourceScanError(error, "AssetDatabase 保存失敗: " + save_error);
     }
+    asset_database.RefreshMissingFiles(resources_root);
     return registered_count;
 }
 

@@ -1,5 +1,6 @@
 ﻿#include "framework.h"
 
+#include "../../RePlayEngine/Editor/Style/EditorStyle.h"
 #include "../../RePlayEngine/Components/UI/UIImageComponent.h"
 #include "../../RePlayEngine/Motion/MotionBindingResolver.h"
 #include "../../RePlayEngine/Motion/MotionEvaluator.h"
@@ -28,6 +29,7 @@ using namespace framework_motion_workspace::Detail;
 void framework::draw_motion_inspector()
 {
     if (!show_motion_inspector_panel) return;
+    ReplayEngine::Editor::PanelTabColorScope panel_tab_color("Motion");
     if (!ImGui::Begin(u8"Motion インスペクター", &show_motion_inspector_panel))
     {
         ImGui::End();
@@ -79,7 +81,8 @@ void framework::draw_motion_inspector()
         if (unset) ImGui::SetItemDefaultFocus();
         for (const ReplayEngine::Assets::AssetRecord& record : asset_database.Records())
         {
-            if (record.kind != ReplayEngine::Assets::AssetKind::EasingCurve) continue;
+            if (record.kind != ReplayEngine::Assets::AssetKind::EasingCurve ||
+                asset_database.IsMissing(record.guid)) continue;
             ImGui::PushID(record.guid.c_str());
             const bool selected = time_remap.guid == record.guid;
             if (ImGui::Selectable(record.display_name.c_str(), selected))

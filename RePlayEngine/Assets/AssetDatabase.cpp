@@ -1,9 +1,13 @@
 ﻿#include "AssetDatabase.h"
 
 #include <algorithm>
+#include <cctype>
+#include <cstdint>
 #include <fstream>
 #include <iomanip>
 #include <sstream>
+#include <string_view>
+#include <utility>
 
 namespace ReplayEngine::Assets
 {
@@ -53,6 +57,12 @@ namespace ReplayEngine::Assets
         : database_path_(std::move(database_path))
     {
     }
+    //
+
+    void AssetDatabase::InvalidateMissingFiles() noexcept
+    {
+        missing_files_cached_ = false;
+    }
 
     std::filesystem::path AssetDatabase::NormalizeProjectPath(const std::filesystem::path& path)
     {
@@ -86,6 +96,8 @@ namespace ReplayEngine::Assets
     bool AssetDatabase::Load(std::string& error)
     {
         records_.clear();
+        missing_guids_.clear();
+        InvalidateMissingFiles();
         if (!std::filesystem::exists(database_path_)) return true;
         std::ifstream stream(database_path_, std::ios::binary);
         if (!stream)
@@ -172,6 +184,8 @@ namespace ReplayEngine::Assets
             if (mutable_record->display_name.empty())
                 mutable_record->display_name = normalized.stem().u8string();
             if (!cache.empty()) mutable_record->cache_path = NormalizeProjectPath(cache);
+            missing_guids_.erase(mutable_record->guid);
+            InvalidateMissingFiles();
             return *mutable_record;
         }
         AssetRecord record{};
@@ -194,7 +208,9 @@ namespace ReplayEngine::Assets
         record.source_path = normalized;
         record.cache_path = cache.empty() ? std::filesystem::path{} : NormalizeProjectPath(cache);
         record.kind = kind;
+        missing_guids_.erase(record.guid);
         records_.push_back(std::move(record));
+        InvalidateMissingFiles();
         return records_.back();
     }
 
@@ -204,6 +220,8 @@ namespace ReplayEngine::Assets
             [&guid](const AssetRecord& record) { return record.guid == guid; });
         if (found == records_.end()) return false;
         records_.erase(found, records_.end());
+        missing_guids_.erase(guid);
+        InvalidateMissingFiles();
         return true;
     }
 
@@ -227,6 +245,8 @@ namespace ReplayEngine::Assets
 
         found->source_path = new_normalized;
         if (update_display_name) found->display_name = new_normalized.stem().u8string();
+        missing_guids_.erase(found->guid);
+        InvalidateMissingFiles();
         return true;
     }
 
@@ -266,9 +286,11 @@ namespace ReplayEngine::Assets
 
             record.source_path = destination;
             record.display_name = record.source_path.stem().u8string();
+            missing_guids_.erase(record.guid);
             destination_keys.push_back(destination_key);
             ++changed;
         }
+        if (changed > 0) InvalidateMissingFiles();
         return changed;
     }
 
@@ -305,5 +327,38 @@ namespace ReplayEngine::Assets
         const std::filesystem::path normalized = NormalizeProjectPath(path);
         if (FindByPath(normalized) != nullptr) return false;
         return FindByGuid(MakeGuid(normalized)) != nullptr;
+    }
+    //指定されたパスにGUIDの予約がされているかどうかを確認する
+    void AssetDatabase::RefreshMissingFiles(const std::filesystem::path& project_root)
+    {
+        missing_guids_.clear();
+
+        std::error_code root_error;
+        const std::filesystem::path root = std::filesystem::absolute(
+            project_root, root_error).lexically_normal();
+        if (root_error)
+        {
+            missing_files_cached_ = true;
+            return;
+        }
+
+        const std::filesystem::path project = root.parent_path();
+        for (const AssetRecord& record : records_)
+        {
+            const std::filesystem::path source = record.source_path.is_absolute()
+                ? record.source_path : project / record.source_path;
+            std::filesystem::path relative;
+            if (!PathInsideOrEqual(source.lexically_normal(), root, relative)) continue;
+
+            std::error_code file_error;
+            if (!std::filesystem::is_regular_file(source, file_error) || file_error)
+                missing_guids_.insert(record.guid);
+        }
+        missing_files_cached_ = true;
+    }
+
+    bool AssetDatabase::IsMissing(const std::string& guid) const noexcept
+    {
+        return missing_guids_.find(guid) != missing_guids_.end();
     }
 }

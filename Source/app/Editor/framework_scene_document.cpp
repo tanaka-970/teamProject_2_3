@@ -261,7 +261,10 @@ void framework::restore_editor_session()
         return;
     }
 
-    ReplayEngine::Editor::EditorStyle::ResetComponentCategoryColors();
+    ensure_editor_style_presets_loaded();
+    const bool restore_legacy_style = !editor_style_active_selection_loaded;
+    if (restore_legacy_style)
+        ReplayEngine::Editor::EditorStyle::ResetComponentCategoryColors();
     editor_style_history.Clear();
 
     std::string scene_path;
@@ -323,7 +326,7 @@ void framework::restore_editor_session()
             float green = 0.0f;
             float blue = 0.0f;
             if (state >> std::quoted(category) >> red >> green >> blue &&
-                !category.empty())
+                !category.empty() && restore_legacy_style)
             {
                 ReplayEngine::Editor::EditorStyle::SetComponentCategoryColor(
                     category, ImVec4(red, green, blue, 1.0f));
@@ -337,7 +340,8 @@ void framework::restore_editor_session()
             float red = 1.0f;
             float green = 1.0f;
             float blue = 1.0f;
-            if (state >> overridden >> button_scale >> font_scale >> red >> green >> blue)
+            if (state >> overridden >> button_scale >> font_scale >> red >> green >> blue &&
+                restore_legacy_style)
             {
                 ui_style_overridden = overridden != 0;
                 ui_button_scale = std::clamp(button_scale, 0.6f, 3.0f);
@@ -353,6 +357,8 @@ void framework::restore_editor_session()
             std::getline(state, ignored);
         }
     }
+
+    if (restore_legacy_style) configure_editor_style();
 
     recent_scene_paths.clear();
     for (auto iterator = restored_recent_scenes.rbegin();
