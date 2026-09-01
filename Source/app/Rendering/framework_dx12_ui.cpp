@@ -20,6 +20,8 @@
 #include "../../../RePlayEngine/UI/FontAtlas.h"
 #include "../../../RePlayEngine/UI/Effects/UIEffect.h"
 #include "../../../RePlayEngine/UI/UILayout.h"
+#include "../../../RePlayEngine/Rendering/Shaders/ShaderCatalog.h"
+#include "../../../RePlayEngine/Rendering/Shaders/ShaderConstantPacker.h"
 
 #include <algorithm>
 #include <cmath>
@@ -252,6 +254,145 @@ bool framework::build_dx12_ui(
         dx12_device_context.Width(), dx12_device_context.Height(), viewport);
 }
 
+bool framework::prepare_dx12_custom_effect(
+    ReplayEngine::Rendering::DX12::D3D12UIEffectCommand& command)
+{
+    using namespace ReplayEngine;
+    using ReplayEngine::Rendering::DX12::D3D12UICustomEffectShaderSource;
+    command.custom_constants.clear();
+    if (command.custom_shader.empty()) return true;
+
+    const auto report = [&](const std::string& message,
+        const std::filesystem::path& path = {})
+    {
+        const std::string key = command.custom_shader + "\n" + message;
+        if (custom_ui_effect_diagnostics_reported.insert(key).second)
+            push_editor_log("Error", u8"Effect Stack カスタムシェーダー [" +
+                command.custom_shader + "]: " + message, path);
+    };
+    const Assets::AssetRecord* record = asset_database.FindByGuid(command.custom_shader);
+    if (record == nullptr)
+    {
+        report(u8"GUID を AssetDatabase で解決できません");
+        return false;
+    }
+    if (record->kind != Assets::AssetKind::Shader)
+    {
+        report(u8"Shader 以外の Asset が指定されています", record->source_path);
+        return false;
+    }
+    const std::filesystem::path source_path = content_path(record->source_path).lexically_normal();
+    const auto normalize = [](std::filesystem::path path)
+    {
+        std::error_code error;
+        const std::filesystem::path absolute = path.is_absolute()
+            ? path : std::filesystem::absolute(path, error);
+        if (error) return path.lexically_normal();
+        const std::filesystem::path canonical = std::filesystem::weakly_canonical(absolute, error);
+        return error ? absolute.lexically_normal() : canonical.lexically_normal();
+    };
+    const Rendering::ShaderCatalog::Entry* shader = nullptr;
+    const std::filesystem::path normalized_source = normalize(source_path);
+    for (const Rendering::ShaderCatalog::Entry& entry : shader_library.Catalog().All())
+    {
+        if (entry.info.domain != Rendering::ShaderDomain::PostProcess) continue;
+        if (normalize(entry.info.source_path) == normalized_source)
+        {
+            shader = &entry;
+            break;
+        }
+    }
+    if (shader == nullptr || !shader->schema)
+    {
+        report(u8"PostProcess Shader として Shader Catalog に登録されていません", source_path);
+        return false;
+    }
+    for (const Rendering::ShaderProperty& property : shader->schema->Properties())
+    {
+        if (property.kind == Rendering::ShaderPropertyKind::Texture)
+        {
+            report(u8"Texture プロパティは DX12 Effect Stack では未対応です", source_path);
+            return false;
+        }
+    }
+    const auto lookup = [](const std::string& name, DirectX::XMFLOAT4& value,
+        void* user) -> bool
+    {
+        const auto* parameters = static_cast<const Reflection::PropertyBag*>(user);
+        const Reflection::PropertyValue* property = parameters != nullptr
+            ? parameters->Find(name) : nullptr;
+        if (property == nullptr) return false;
+        switch (property->Type())
+        {
+        case Reflection::PropertyType::Bool:
+            value = { property->AsBool() ? 1.0f : 0.0f, 0, 0, 0 };
+            return true;
+        case Reflection::PropertyType::Int:
+        case Reflection::PropertyType::Enum:
+            value = { static_cast<float>(property->AsInt()), 0, 0, 0 };
+            return true;
+        case Reflection::PropertyType::Float:
+            value = { property->AsFloat(), 0, 0, 0 };
+            return true;
+        case Reflection::PropertyType::Vector2:
+        {
+            const DirectX::XMFLOAT2 vector = property->AsVector2();
+            value = { vector.x, vector.y, 0, 0 };
+            return true;
+        }
+        case Reflection::PropertyType::Vector3:
+        {
+            const DirectX::XMFLOAT3 vector = property->AsVector3();
+            value = { vector.x, vector.y, vector.z, 0 };
+            return true;
+        }
+        case Reflection::PropertyType::Vector4:
+        case Reflection::PropertyType::Color:
+            value = property->AsVector4();
+            return true;
+        default:
+            return false;
+        }
+    };
+    Rendering::ShaderConstantPacker::Pack(*shader->schema, lookup,
+        &command.custom_parameters, command.custom_constants);
+    D3D12UICustomEffectShaderSource source;
+    source.guid = command.custom_shader;
+    source.source_path = source_path;
+    source.generated_declaration = Rendering::ShaderConstantPacker::GenerateHlslDeclaration(
+        *shader->schema);
+    const std::string material_register = "register(b" + std::to_string(
+        Rendering::ShaderConstantPacker::material_constant_register) + ')';
+    const std::size_t register_position = source.generated_declaration.find(material_register);
+    if (register_position == std::string::npos)
+    {
+        report(u8"自動生成したプロパティ定数バッファを b1 へ割り当てられません", source_path);
+        return false;
+    }
+    source.generated_declaration.replace(register_position, material_register.size(), "register(b1)");
+    pending_custom_ui_effect_shaders.insert_or_assign(source.guid, std::move(source));
+    return true;
+}
+
+void framework::compile_pending_dx12_custom_effects()
+{
+    if (!dx12_framework_active || !dx12_device_context.IsInitialized() ||
+        dx12_device_context.IsFrameOpen()) return;
+    for (const auto& entry : pending_custom_ui_effect_shaders)
+    {
+        if (dx12_device_context.PrepareCustomUIEffectShader(entry.second)) continue;
+        const std::string* diagnostics = dx12_device_context.CustomUIEffectShaderDiagnostic(
+            entry.first);
+        const std::string message = diagnostics != nullptr && !diagnostics->empty()
+            ? *diagnostics : u8"DX12 のカスタム Effect PSO を作成できません";
+        const std::string key = entry.first + "\n" + message;
+        if (custom_ui_effect_diagnostics_reported.insert(key).second)
+            push_editor_log("Error", u8"Effect Stack カスタムシェーダー [" + entry.first +
+                "]: " + message, entry.second.source_path);
+    }
+    pending_custom_ui_effect_shaders.clear();
+}
+
 bool framework::build_dx12_ui_for_scene(
     ReplayEngine::Rendering::DX12::D3D12UIFrame& frame,
     ReplayEngine::Scene::Scene& scene,
@@ -474,6 +615,7 @@ bool framework::build_dx12_ui_for_scene(
             command.waveform = effect.waveform;
             command.custom_shader = effect.custom_shader;
             command.custom_parameters = effect.custom_parameters;
+            (void)prepare_dx12_custom_effect(command);
             command.direction = effect.direction;
             command.color = effect.color;
             command.color_2 = effect.color_2;
@@ -2374,6 +2516,7 @@ bool framework::build_dx12_scene_effects(
             command.waveform = effect.waveform;
             command.custom_shader = effect.custom_shader;
             command.custom_parameters = effect.custom_parameters;
+            (void)prepare_dx12_custom_effect(command);
             command.direction = effect.direction;
             command.color = effect.color;
             command.color_2 = effect.color_2;

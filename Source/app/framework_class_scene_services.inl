@@ -94,6 +94,9 @@ private:
         ReplayEngine::Scene::Scene& scene,
         std::uint32_t target_width, std::uint32_t target_height,
         const object_ui_viewport& viewport);
+    bool prepare_dx12_custom_effect(
+        ReplayEngine::Rendering::DX12::D3D12UIEffectCommand& command);
+    void compile_pending_dx12_custom_effects();
     void clear_object_mesh_cache() noexcept;
     void clear_object_material_cache() noexcept;
     bool object_runtime_active() const noexcept;

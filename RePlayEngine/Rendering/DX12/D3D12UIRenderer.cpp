@@ -7,6 +7,7 @@
 #include <cstring>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <iterator>
 
 namespace ReplayEngine::Rendering::DX12
@@ -384,6 +385,7 @@ namespace ReplayEngine::Rendering::DX12
             ReleaseUIEffectResources();
             return false;
         }
+        ui_effect_vertex_shader_ = effect_vertex.bytecode;
         std::array<std::vector<std::uint8_t>, UIEffectKindCount> pixel_bytecodes;
         for (std::size_t index = 0; index < std::size(shader_files); ++index)
         {
@@ -428,18 +430,21 @@ namespace ReplayEngine::Rendering::DX12
             texture_ranges[index].NumDescriptors = 1;
             texture_ranges[index].BaseShaderRegister = static_cast<UINT>(index);
         }
-        D3D12_ROOT_PARAMETER parameters[4]{};
+        D3D12_ROOT_PARAMETER parameters[5]{};
         parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
         parameters[0].Descriptor.ShaderRegister = 0;
         parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+        parameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+        parameters[1].Descriptor.ShaderRegister = 1;
+        parameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
         for (std::size_t index = 0; index < std::size(texture_ranges); ++index)
         {
-            parameters[index + 1].ParameterType =
+            parameters[index + 2].ParameterType =
                 D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-            parameters[index + 1].DescriptorTable.NumDescriptorRanges = 1;
-            parameters[index + 1].DescriptorTable.pDescriptorRanges =
+            parameters[index + 2].DescriptorTable.NumDescriptorRanges = 1;
+            parameters[index + 2].DescriptorTable.pDescriptorRanges =
                 &texture_ranges[index];
-            parameters[index + 1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+            parameters[index + 2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
         }
 
         D3D12_STATIC_SAMPLER_DESC sampler{};
@@ -592,13 +597,147 @@ namespace ReplayEngine::Rendering::DX12
         ui_pixel_shader_.clear();
     }
 
+    bool D3D12DeviceContext::CreateCustomUIEffectPipelines(
+        const D3D12UICustomEffectShaderSource& source,
+        Microsoft::WRL::ComPtr<ID3D12PipelineState>& ldr,
+        Microsoft::WRL::ComPtr<ID3D12PipelineState>& hdr,
+        std::string& diagnostics) noexcept
+    {
+        if (device_ == nullptr || ui_effect_root_signature_ == nullptr ||
+            ui_effect_vertex_shader_.empty() || source.source_path.empty())
+        {
+            diagnostics = "UI Effect renderer is not ready";
+            return false;
+        }
+        std::ifstream file(source.source_path, std::ios::binary);
+        if (!file)
+        {
+            diagnostics = "Shader source file could not be opened: " +
+                source.source_path.generic_u8string();
+            return false;
+        }
+        std::string shader_source((std::istreambuf_iterator<char>(file)),
+            std::istreambuf_iterator<char>());
+        if (shader_source.size() >= 3 &&
+            static_cast<unsigned char>(shader_source[0]) == 0xEF &&
+            static_cast<unsigned char>(shader_source[1]) == 0xBB &&
+            static_cast<unsigned char>(shader_source[2]) == 0xBF)
+            shader_source.erase(0, 3);
+        if (shader_source.empty())
+        {
+            diagnostics = "Shader source file is empty: " + source.source_path.generic_u8string();
+            return false;
+        }
+
+        D3D12ShaderCompiler compiler;
+        if (!compiler.Initialize(D3D12ShaderCompiler::FindDefaultLibraryPath()))
+        {
+            diagnostics = "DXC compiler initialization failed";
+            return false;
+        }
+        const std::string combined = "#line 1 \"REPLAY_GENERATED\"\n" +
+            source.generated_declaration + "#line 1 \"" +
+            source.source_path.generic_u8string() + "\"\n" + shader_source;
+        const auto pixel = compiler.CompileSource(combined, source.source_path,
+            L"main", L"ps_6_0", debug_layer_enabled_);
+        compiler.Shutdown();
+        diagnostics = pixel.diagnostics;
+        if (!pixel.succeeded || pixel.bytecode.empty())
+        {
+            if (diagnostics.empty()) diagnostics = "DXC compilation failed";
+            return false;
+        }
+
+        const D3D12_INPUT_ELEMENT_DESC input_layout[]
+        {
+            { "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0,
+                static_cast<UINT>(offsetof(D3D12UIVertex, position)),
+                D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0,
+                static_cast<UINT>(offsetof(D3D12UIVertex, uv)),
+                D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0,
+                static_cast<UINT>(offsetof(D3D12UIVertex, color)),
+                D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "TEXCOORD", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 0,
+                static_cast<UINT>(offsetof(D3D12UIVertex, uv_bounds)),
+                D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+        };
+        D3D12_GRAPHICS_PIPELINE_STATE_DESC pipeline{};
+        pipeline.pRootSignature = ui_effect_root_signature_.Get();
+        pipeline.VS = { ui_effect_vertex_shader_.data(), ui_effect_vertex_shader_.size() };
+        pipeline.PS = { pixel.bytecode.data(), pixel.bytecode.size() };
+        pipeline.InputLayout = { input_layout, static_cast<UINT>(std::size(input_layout)) };
+        pipeline.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
+        pipeline.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+        pipeline.RasterizerState.DepthClipEnable = TRUE;
+        pipeline.DepthStencilState.DepthEnable = FALSE;
+        pipeline.DepthStencilState.StencilEnable = FALSE;
+        pipeline.BlendState.RenderTarget[0].BlendEnable = FALSE;
+        pipeline.BlendState.RenderTarget[0].RenderTargetWriteMask =
+            D3D12_COLOR_WRITE_ENABLE_ALL;
+        pipeline.SampleMask = UINT_MAX;
+        pipeline.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        pipeline.NumRenderTargets = 1;
+        pipeline.RTVFormats[0] = kUiRenderTargetFormat;
+        pipeline.SampleDesc.Count = 1;
+        HRESULT result = device_->CreateGraphicsPipelineState(&pipeline, IID_PPV_ARGS(&ldr));
+        if (FAILED(result))
+        {
+            diagnostics = "Custom UI Effect LDR PSO creation failed: 0x" +
+                std::to_string(static_cast<unsigned long>(result));
+            return false;
+        }
+        pipeline.RTVFormats[0] = kSceneEffectRenderTargetFormat;
+        result = device_->CreateGraphicsPipelineState(&pipeline, IID_PPV_ARGS(&hdr));
+        if (FAILED(result))
+        {
+            ldr.Reset();
+            diagnostics = "Custom UI Effect HDR PSO creation failed: 0x" +
+                std::to_string(static_cast<unsigned long>(result));
+            return false;
+        }
+        return true;
+    }
+
+    bool D3D12DeviceContext::PrepareCustomUIEffectShader(
+        const D3D12UICustomEffectShaderSource& source) noexcept
+    {
+        if (source.guid.empty()) return true;
+        if (custom_ui_effect_pipelines_.find(source.guid) != custom_ui_effect_pipelines_.end())
+            return true;
+        if (custom_ui_effect_shader_diagnostics_.find(source.guid) !=
+            custom_ui_effect_shader_diagnostics_.end()) return false;
+        CustomUIEffectPipelines pipelines;
+        std::string diagnostics;
+        if (!CreateCustomUIEffectPipelines(source, pipelines.ldr, pipelines.hdr, diagnostics))
+        {
+            try { custom_ui_effect_shader_diagnostics_.emplace(source.guid, std::move(diagnostics)); }
+            catch (...) {}
+            return false;
+        }
+        try { custom_ui_effect_pipelines_.emplace(source.guid, std::move(pipelines)); }
+        catch (...) { return false; }
+        return true;
+    }
+
+    const std::string* D3D12DeviceContext::CustomUIEffectShaderDiagnostic(
+        const std::string& guid) const noexcept
+    {
+        const auto found = custom_ui_effect_shader_diagnostics_.find(guid);
+        return found == custom_ui_effect_shader_diagnostics_.end() ? nullptr : &found->second;
+    }
+
     void D3D12DeviceContext::ReleaseUIEffectResources() noexcept
     {
         for (auto& pipeline : ui_effect_pipelines_) pipeline.Reset();
         for (auto& pipeline : ui_effect_hdr_pipelines_) pipeline.Reset();
         ui_effect_region_pipeline_.Reset();
         ui_effect_region_hdr_pipeline_.Reset();
+        custom_ui_effect_pipelines_.clear();
+        custom_ui_effect_shader_diagnostics_.clear();
         ui_effect_root_signature_.Reset();
+        ui_effect_vertex_shader_.clear();
     }
 
     bool D3D12DeviceContext::EnsureUIFontTexture(
@@ -952,10 +1091,19 @@ namespace ReplayEngine::Rendering::DX12
                 command_list_->RSSetViewports(1, &viewport);
                 command_list_->RSSetScissorRects(1, &full_scissor);
                 command_list_->SetGraphicsRootSignature(ui_effect_root_signature_.Get());
-                if (effect.kind >= ui_effect_pipelines_.size()) return false;
-                ID3D12PipelineState* effect_pipeline = hdr_effect
-                    ? ui_effect_hdr_pipelines_[effect.kind].Get()
-                    : ui_effect_pipelines_[effect.kind].Get();
+                ID3D12PipelineState* effect_pipeline = nullptr;
+                if (!effect.custom_shader.empty())
+                {
+                    const auto custom = custom_ui_effect_pipelines_.find(effect.custom_shader);
+                    if (custom == custom_ui_effect_pipelines_.end()) continue;
+                    effect_pipeline = hdr_effect ? custom->second.hdr.Get() : custom->second.ldr.Get();
+                }
+                else
+                {
+                    if (effect.kind >= ui_effect_pipelines_.size()) return false;
+                    effect_pipeline = hdr_effect ? ui_effect_hdr_pipelines_[effect.kind].Get()
+                        : ui_effect_pipelines_[effect.kind].Get();
+                }
                 if (effect_pipeline == nullptr) return false;
                 command_list_->SetPipelineState(effect_pipeline);
 
@@ -1026,18 +1174,30 @@ namespace ReplayEngine::Rendering::DX12
                 const auto vertices = make_fullscreen_vertices();
                 D3D12UploadAllocation vertex_upload{};
                 D3D12UploadAllocation constants_upload{};
+                D3D12UploadAllocation custom_constants_upload{};
+                const DirectX::XMFLOAT4 empty_custom_constants{};
+                const void* custom_constants = effect.custom_constants.empty()
+                    ? static_cast<const void*>(&empty_custom_constants)
+                    : static_cast<const void*>(effect.custom_constants.data());
+                const std::uint64_t custom_constants_size = effect.custom_constants.empty()
+                    ? sizeof(empty_custom_constants) : effect.custom_constants.size();
                 if (!allocator.Allocate(sizeof(vertices), 16, vertex_upload) ||
                     !allocator.Allocate(sizeof(constants),
-                        D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT, constants_upload))
+                        D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT, constants_upload) ||
+                    !allocator.Allocate(custom_constants_size,
+                        D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT, custom_constants_upload))
                     return false;
                 std::memcpy(vertex_upload.cpu, vertices.data(), sizeof(vertices));
                 std::memcpy(constants_upload.cpu, &constants, sizeof(constants));
+                std::memcpy(custom_constants_upload.cpu, custom_constants,
+                    static_cast<std::size_t>(custom_constants_size));
                 command_list_->SetGraphicsRootConstantBufferView(0, constants_upload.gpu);
-                command_list_->SetGraphicsRootDescriptorTable(1, source_target->srv.gpu);
-                command_list_->SetGraphicsRootDescriptorTable(2, auxiliary);
+                command_list_->SetGraphicsRootConstantBufferView(1, custom_constants_upload.gpu);
+                command_list_->SetGraphicsRootDescriptorTable(2, source_target->srv.gpu);
+                command_list_->SetGraphicsRootDescriptorTable(3, auxiliary);
                 // 通常Effectでは未使用。Region passとRoot Signatureを共通化するため
                 // 常に有効な元画像をt2へ結ぶ。
-                command_list_->SetGraphicsRootDescriptorTable(3, source_target->srv.gpu);
+                command_list_->SetGraphicsRootDescriptorTable(4, source_target->srv.gpu);
                 D3D12_VERTEX_BUFFER_VIEW view{};
                 view.BufferLocation = vertex_upload.gpu;
                 view.SizeInBytes = sizeof(vertices);
@@ -1074,7 +1234,7 @@ namespace ReplayEngine::Rendering::DX12
                     command_list_->SetPipelineState(region_pipeline);
                     command_list_->SetGraphicsRootConstantBufferView(0,
                         constants_upload.gpu);
-                    command_list_->SetGraphicsRootDescriptorTable(1,
+                    command_list_->SetGraphicsRootDescriptorTable(2,
                         destination->srv.gpu);
                     D3D12_GPU_DESCRIPTOR_HANDLE region_mask = source_target->srv.gpu;
                     if (!effect.region_mask_texture_key.empty())
@@ -1084,8 +1244,8 @@ namespace ReplayEngine::Rendering::DX12
                         if (found != texture_cache_.end())
                             region_mask = found->second.srv.gpu;
                     }
-                    command_list_->SetGraphicsRootDescriptorTable(2, region_mask);
-                    command_list_->SetGraphicsRootDescriptorTable(3,
+                    command_list_->SetGraphicsRootDescriptorTable(3, region_mask);
+                    command_list_->SetGraphicsRootDescriptorTable(4,
                         source_target->srv.gpu);
                     command_list_->IASetPrimitiveTopology(
                         D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);

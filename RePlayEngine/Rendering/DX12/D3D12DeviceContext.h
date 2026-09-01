@@ -464,6 +464,7 @@ namespace ReplayEngine::Rendering::DX12
         std::int32_t waveform = 0;
         std::string custom_shader;
         Reflection::PropertyBag custom_parameters;
+        std::vector<std::uint8_t> custom_constants;
         DirectX::XMFLOAT2 direction{ 0.0f, 0.0f };
         DirectX::XMFLOAT4 color{ 1, 1, 1, 1 };
         DirectX::XMFLOAT4 color_2{ 1, 1, 1, 1 };
@@ -486,6 +487,13 @@ namespace ReplayEngine::Rendering::DX12
         std::array<DirectX::XMFLOAT4, 8> effect_region_path_counts{};
         std::array<std::array<DirectX::XMFLOAT4, 32>, 8>
             effect_region_path_points{};
+    };
+
+    struct D3D12UICustomEffectShaderSource final
+    {
+        std::string guid;
+        std::filesystem::path source_path;
+        std::string generated_declaration;
     };
 
     struct D3D12UIEffectConstants final
@@ -675,6 +683,8 @@ namespace ReplayEngine::Rendering::DX12
         // Scene/Asset Reload の境界。Cache 済み Static Mesh/Texture を解放する前に
         // GPU Idle を待ち、古い Asset を保持し続けないようにする。
         bool ClearStaticAssetCaches() noexcept;
+        bool PrepareCustomUIEffectShader(const D3D12UICustomEffectShaderSource& source) noexcept;
+        const std::string* CustomUIEffectShaderDiagnostic(const std::string& guid) const noexcept;
 
         bool IsInitialized() const noexcept { return device_ != nullptr; }
         bool IsFrameOpen() const noexcept { return frame_open_; }
@@ -913,6 +923,10 @@ namespace ReplayEngine::Rendering::DX12
         void ReleaseUIRendererResources() noexcept;
         bool CreateUIEffectResources() noexcept;
         void ReleaseUIEffectResources() noexcept;
+        bool CreateCustomUIEffectPipelines(const D3D12UICustomEffectShaderSource& source,
+            Microsoft::WRL::ComPtr<ID3D12PipelineState>& ldr,
+            Microsoft::WRL::ComPtr<ID3D12PipelineState>& hdr,
+            std::string& diagnostics) noexcept;
 #ifdef USE_IMGUI
         bool CreateImGuiRendererResources() noexcept;
         void ReleaseImGuiRendererResources() noexcept;
@@ -1185,6 +1199,7 @@ namespace ReplayEngine::Rendering::DX12
         Microsoft::WRL::ComPtr<ID3D12PipelineState> ui_screen_layer_extract_pipeline_;
         std::vector<std::uint8_t> ui_vertex_shader_;
         std::vector<std::uint8_t> ui_pixel_shader_;
+        std::vector<std::uint8_t> ui_effect_vertex_shader_;
         Microsoft::WRL::ComPtr<ID3D12RootSignature> ui_effect_root_signature_;
         static constexpr std::size_t UIEffectKindCount =
             static_cast<std::size_t>(ReplayEngine::UI::UIEffectKind::Count);
@@ -1194,6 +1209,13 @@ namespace ReplayEngine::Rendering::DX12
             ui_effect_pipelines_{};
         std::array<Microsoft::WRL::ComPtr<ID3D12PipelineState>, UIEffectKindCount>
             ui_effect_hdr_pipelines_{};
+        struct CustomUIEffectPipelines final
+        {
+            Microsoft::WRL::ComPtr<ID3D12PipelineState> ldr;
+            Microsoft::WRL::ComPtr<ID3D12PipelineState> hdr;
+        };
+        std::unordered_map<std::string, CustomUIEffectPipelines> custom_ui_effect_pipelines_;
+        std::unordered_map<std::string, std::string> custom_ui_effect_shader_diagnostics_;
         Microsoft::WRL::ComPtr<ID3D12PipelineState> ui_effect_region_pipeline_;
         Microsoft::WRL::ComPtr<ID3D12PipelineState> ui_effect_region_hdr_pipeline_;
 #ifdef USE_IMGUI

@@ -418,8 +418,8 @@
             push(MakeEffectProperty(i, "custom_shader",
                 Reflection::PropertyType::AssetReference,
                 Reflection::Animatable::Step)
-                .Display(u8"カスタムシェーダー [保存のみ]")
-                .Tooltip(u8"DX12 の Effect Stack 描画では実行されません。設定値は保存されます。")
+                .Display(u8"カスタムシェーダー")
+                .Tooltip(u8"DX12 Effect Stack で main を実行し、プロパティを渡します。")
                 .OfAssetType("Shader"));
 
             if (index < custom_schemas_.size() && custom_schemas_[index])
