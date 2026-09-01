@@ -2494,6 +2494,8 @@ namespace ReplayEngine::Rendering::DX12
             for (const auto& pipeline : entry.second.pipelines) if (pipeline) ++pso_count;
         for (const auto& pipeline : scene3d_static_gbuffer_pipelines_) if (pipeline) ++pso_count;
         for (const auto& pipeline : scene3d_skinned_gbuffer_pipelines_) if (pipeline) ++pso_count;
+        for (const auto& pipeline : scene3d_static_layer_pipelines_) if (pipeline) ++pso_count;
+        for (const auto& pipeline : scene3d_skinned_layer_pipelines_) if (pipeline) ++pso_count;
         for (const auto& pipeline : scene3d_static_depth_pipelines_) if (pipeline) ++pso_count;
         for (const auto& pipeline : scene3d_skinned_depth_pipelines_) if (pipeline) ++pso_count;
         for (const auto& pipeline : scene3d_static_forward_blend_pipelines_) if (pipeline) ++pso_count;

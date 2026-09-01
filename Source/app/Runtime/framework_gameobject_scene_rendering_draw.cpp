@@ -127,8 +127,7 @@ ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
         ? source.override_material_emissive_strength : material->emissive_strength;
     item.double_sided = source.double_sided || material->double_sided ||
         (source.material_override && source.override_material_double_sided);
-    item.outline = has_material_asset
-        ? material->layers.Contains(BuiltInShaderLayers::Outline) : source.outline;
+    item.outline = has_material_asset ? false : source.outline;
     item.pixelate_size = material->pixelate_grid;
     item.pixelate_strength = material->pixelate_strength;
     // 不透明度は legacy 欄が無いので Property から直接読む。
@@ -294,18 +293,63 @@ ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
     item.pixelate_enabled = item.material_binding.shader == BuiltInShaders::Pixelate;
     if (!has_material_asset) return item;
 
+    const auto read_layer_float = [](const ShaderLayer& layer, const char* name,
+        float fallback) noexcept
+    {
+        const auto* value = layer.properties.Find(name);
+        return value != nullptr ? value->AsFloat(fallback) : fallback;
+    };
+    const auto read_layer_color = [](const ShaderLayer& layer, const char* name,
+        const DirectX::XMFLOAT4& fallback) noexcept
+    {
+        const auto* value = layer.properties.Find(name);
+        if (value == nullptr) return fallback;
+        if (value->Type() != ReplayEngine::Reflection::PropertyType::Color &&
+            value->Type() != ReplayEngine::Reflection::PropertyType::Vector4)
+            return fallback;
+        return value->AsVector4();
+    };
+    const DirectX::XMFLOAT4 layer_base_color = item.material_base_color;
     for (const ShaderLayer& layer : material->layers.Layers())
     {
         if (!layer.enabled) continue;
         if (layer.Is(BuiltInShaderLayers::Pixelate))
         {
             item.pixelate_enabled = true;
-            item.pixelate_size = layer.parameter;
-            item.pixelate_strength = layer.strength;
+            item.pixelate_size = read_layer_float(layer, "prop.PixelSize", layer.parameter);
+            item.pixelate_strength = read_layer_float(layer, "prop.Strength", layer.strength);
+            item.pixelate_opacity = read_layer_float(layer, "prop.Opacity", layer.opacity);
         }
         else if (layer.Is(BuiltInShaderLayers::Outline))
         {
             item.outline = true;
+        }
+        else
+        {
+            ShaderLightingModel layer_model = item.lighting_model;
+            bool replaces_lighting_model = true;
+            if (layer.Is(BuiltInShaderLayers::Pbr))
+                layer_model = ShaderLightingModel::Pbr;
+            else if (layer.Is(BuiltInShaderLayers::Toon))
+                layer_model = ShaderLightingModel::Toon;
+            else if (layer.Is(BuiltInShaderLayers::Unlit))
+                layer_model = ShaderLightingModel::Unlit;
+            else if (layer.Is(BuiltInShaderLayers::StylizedCharacter))
+                layer_model = ShaderLightingModel::Toon;
+            else
+                replaces_lighting_model = false;
+            if (replaces_lighting_model)
+            {
+                const DirectX::XMFLOAT4 tint = read_layer_color(layer, "prop.Tint", layer.tint);
+                const float opacity = std::clamp(read_layer_float(layer, "prop.Opacity",
+                    layer.opacity), 0.0f, 1.0f);
+                item.lighting_model = layer_model;
+                item.material_base_color = {
+                    layer_base_color.x * (1.0f + (tint.x - 1.0f) * opacity),
+                    layer_base_color.y * (1.0f + (tint.y - 1.0f) * opacity),
+                    layer_base_color.z * (1.0f + (tint.z - 1.0f) * opacity),
+                    layer_base_color.w };
+            }
         }
     }
     return item;
@@ -512,10 +556,31 @@ bool framework::build_dx12_static_scene(
         }
         return {};
     };
+    const auto read_layer_float = [](const ShaderLayer& layer, const char* name,
+        float fallback) noexcept
+    {
+        const auto* value = layer.properties.Find(name);
+        return value != nullptr ? value->AsFloat(fallback) : fallback;
+    };
+    const auto read_layer_color = [](const ShaderLayer& layer, const char* name,
+        const DirectX::XMFLOAT4& fallback) noexcept
+    {
+        const auto* value = layer.properties.Find(name);
+        if (value == nullptr) return fallback;
+        if (value->Type() != ReplayEngine::Reflection::PropertyType::Color &&
+            value->Type() != ReplayEngine::Reflection::PropertyType::Vector4)
+            return fallback;
+        return value->AsVector4();
+    };
+    const auto finite_layer_value = [](float value, float fallback) noexcept
+    {
+        return std::isfinite(value) ? value : fallback;
+    };
 
     const auto fill_external_material = [this, &submission, &shader_source_keys,
         &material_alpha_mode, &multiply_color, &add_asset_texture,
-        &base_texture_binding, &fallback_texture_key](
+        &base_texture_binding, &fallback_texture_key, &read_layer_float,
+        &read_layer_color, &finite_layer_value](
         const RenderItem& source_item, const RenderItem& item,
         D3D12StaticDrawItem& draw, const MaterialAsset* resolved_material = nullptr) -> bool
     {
@@ -535,14 +600,62 @@ bool framework::build_dx12_static_scene(
         draw.receive_shadow = item.receive_shadow;
         if (!external) return false;
 
+        bool uses_deferred_layer = false;
+        for (const ShaderLayer& layer : material->layers.Layers())
+        {
+            if (!layer.enabled) continue;
+            const ShaderID layer_shader = layer.EffectiveShader();
+            D3D12ShaderLayerPass pass;
+            if (layer_shader == BuiltInShaderLayers::Pixelate ||
+                layer_shader == BuiltInShaderLayers::Pbr ||
+                layer_shader == BuiltInShaderLayers::Toon ||
+                layer_shader == BuiltInShaderLayers::Unlit ||
+                layer_shader == BuiltInShaderLayers::StylizedCharacter)
+                uses_deferred_layer = true;
+            if (layer_shader == BuiltInShaderLayers::Outline)
+            {
+                const DirectX::XMFLOAT4 color = read_layer_color(layer, "prop.Color", layer.tint);
+                pass.kind = D3D12ShaderLayerPassKind::Outline;
+                pass.color = {
+                    std::clamp(finite_layer_value(color.x, 0.0f), 0.0f, 1.0f),
+                    std::clamp(finite_layer_value(color.y, 0.0f), 0.0f, 1.0f),
+                    std::clamp(finite_layer_value(color.z, 0.0f), 0.0f, 1.0f),
+                    std::clamp(finite_layer_value(color.w, 1.0f), 0.0f, 1.0f) };
+                pass.width = std::clamp((std::max)(0.0f, finite_layer_value(
+                    read_layer_float(layer, "prop.Width", layer.parameter), 0.0f)),
+                    0.0f, 0.2f);
+                pass.opacity = std::clamp(finite_layer_value(
+                    read_layer_float(layer, "prop.Opacity", layer.opacity), 1.0f), 0.0f, 1.0f);
+            }
+            else if (layer_shader == BuiltInShaderLayers::Wireframe)
+            {
+                const DirectX::XMFLOAT4 color = read_layer_color(layer, "prop.Tint", layer.tint);
+                pass.kind = D3D12ShaderLayerPassKind::Wireframe;
+                pass.color = {
+                    std::clamp(finite_layer_value(color.x, 1.0f), 0.0f, 1.0f),
+                    std::clamp(finite_layer_value(color.y, 1.0f), 0.0f, 1.0f),
+                    std::clamp(finite_layer_value(color.z, 1.0f), 0.0f, 1.0f),
+                    std::clamp(finite_layer_value(color.w, 1.0f), 0.0f, 1.0f) };
+                pass.opacity = std::clamp(finite_layer_value(
+                    read_layer_float(layer, "prop.Opacity", layer.opacity), 1.0f), 0.0f, 1.0f);
+            }
+            else
+            {
+                continue;
+            }
+            pass.blend = layer.blend;
+            draw.layer_passes.push_back(std::move(pass));
+        }
+
         draw.alpha_mode = material_alpha_mode(material->alpha_mode);
         draw.alpha_cutoff = material->alpha_cutoff;
         const BaseTextureBinding binding = base_texture_binding(item);
         const bool flat_fill = item.material_binding.shader == BuiltInShaders::FlatFill;
         // BuiltIn は自前 PSO を持てないので、固有表現は builtin_params で運ぶ。
         // x=効果ID（1=Pixelate）、y/z/w=その効果の引数。増やすときは ID を足す。
-        const bool is_toon = item.material_binding.shader == BuiltInShaders::Toon;
-        if (is_toon)
+        const bool is_toon = item.material_binding.shader == BuiltInShaders::Toon ||
+            (uses_deferred_layer && item.lighting_model == ShaderLightingModel::Toon);
+        if (is_toon && !item.pixelate_enabled)
         {
             const auto property_float = [material](const char* name, float fallback)
             {
@@ -577,15 +690,15 @@ bool framework::build_dx12_static_scene(
                 std::clamp(specular_tint.y, 0.0f, 1.0f),
                 std::clamp(specular_tint.z, 0.0f, 1.0f), 0.0f };
         }
-        else if (item.material_binding.shader == BuiltInShaders::Pixelate)
+        else if (item.pixelate_enabled)
         {
             draw.builtin_params = { 1.0f,
                 (std::max)(1.0f, item.pixelate_size),
                 std::clamp(item.pixelate_strength, 0.0f, 1.0f),
                 std::clamp(item.pixelate_opacity, 0.0f, 1.0f) };
             const auto* use_gbuffer = material->properties.Find("prop.UseGBufferColor");
-            draw.builtin_params1.x = use_gbuffer != nullptr && use_gbuffer->AsBool(false)
-                ? 1.0f : 0.0f;
+            draw.builtin_params1.x = item.material_binding.shader != BuiltInShaders::Pixelate ||
+                (use_gbuffer != nullptr && use_gbuffer->AsBool(false)) ? 1.0f : 0.0f;
         }
 
         if (flat_fill)
@@ -594,7 +707,7 @@ bool framework::build_dx12_static_scene(
             draw.base_color_texture_key = "__dx12_white";
             // BuiltIn は自前 PSO を持たず必ず Bridge を通るため、cbuffer の BaseColor が
             // 効かない。Bridge が使う base_color へ Material の色を入れる。
-            draw.base_color = multiply_color(material->base_color, item.tint);
+            draw.base_color = multiply_color(item.material_base_color, item.tint);
         }
         else
         {
@@ -637,7 +750,7 @@ bool framework::build_dx12_static_scene(
             const std::string generic = shader_entry->info.source_path.generic_string();
             const bool built_in = generic.find("/BuiltIn/") != std::string::npos ||
                 generic.find("\\BuiltIn\\") != std::string::npos;
-            if (!built_in)
+            if (!built_in && !uses_deferred_layer)
             {
                 draw.shader_key = item.material_binding.shader.ToString();
                 if (!draw.shader_key.empty() &&

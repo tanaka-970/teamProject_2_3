@@ -261,6 +261,12 @@ bool framework::prepare_dx12_custom_effect(
     using ReplayEngine::Rendering::DX12::D3D12UICustomEffectShaderSource;
     command.custom_constants.clear();
     if (command.custom_shader.empty()) return true;
+    const std::uint64_t catalog_generation = shader_library.Generation();
+    if (custom_ui_effect_shader_catalog_cache_generation != catalog_generation)
+    {
+        custom_ui_effect_shader_catalog_cache.clear();
+        custom_ui_effect_shader_catalog_cache_generation = catalog_generation;
+    }
 
     const auto report = [&](const std::string& message,
         const std::filesystem::path& path = {})
@@ -282,25 +288,36 @@ bool framework::prepare_dx12_custom_effect(
         return false;
     }
     const std::filesystem::path source_path = content_path(record->source_path).lexically_normal();
-    const auto normalize = [](std::filesystem::path path)
-    {
-        std::error_code error;
-        const std::filesystem::path absolute = path.is_absolute()
-            ? path : std::filesystem::absolute(path, error);
-        if (error) return path.lexically_normal();
-        const std::filesystem::path canonical = std::filesystem::weakly_canonical(absolute, error);
-        return error ? absolute.lexically_normal() : canonical.lexically_normal();
-    };
     const Rendering::ShaderCatalog::Entry* shader = nullptr;
-    const std::filesystem::path normalized_source = normalize(source_path);
-    for (const Rendering::ShaderCatalog::Entry& entry : shader_library.Catalog().All())
+    const auto cached_shader = custom_ui_effect_shader_catalog_cache.find(
+        command.custom_shader);
+    if (cached_shader != custom_ui_effect_shader_catalog_cache.end())
     {
-        if (entry.info.domain != Rendering::ShaderDomain::PostProcess) continue;
-        if (normalize(entry.info.source_path) == normalized_source)
+        shader = cached_shader->second;
+    }
+    else
+    {
+        const auto normalize = [](std::filesystem::path path)
         {
-            shader = &entry;
-            break;
+            std::error_code error;
+            const std::filesystem::path absolute = path.is_absolute()
+                ? path : std::filesystem::absolute(path, error);
+            if (error) return path.lexically_normal();
+            const std::filesystem::path canonical =
+                std::filesystem::weakly_canonical(absolute, error);
+            return error ? absolute.lexically_normal() : canonical.lexically_normal();
+        };
+        const std::filesystem::path normalized_source = normalize(source_path);
+        for (const Rendering::ShaderCatalog::Entry& entry : shader_library.Catalog().All())
+        {
+            if (entry.info.domain != Rendering::ShaderDomain::PostProcess) continue;
+            if (normalize(entry.info.source_path) == normalized_source)
+            {
+                shader = &entry;
+                break;
+            }
         }
+        custom_ui_effect_shader_catalog_cache.emplace(command.custom_shader, shader);
     }
     if (shader == nullptr || !shader->schema)
     {
