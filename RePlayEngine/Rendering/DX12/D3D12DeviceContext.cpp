@@ -1695,6 +1695,7 @@ namespace ReplayEngine::Rendering::DX12
             static_mesh_bounds_cache_.empty() && skinned_mesh_bounds_cache_.empty() &&
             texture_cache_.size() <= persistent_textures && static_texture_failures_.empty() &&
             custom_static_pipelines_.empty() && custom_static_shader_failures_.empty() &&
+            custom_ui_effect_pipelines_.empty() && custom_ui_effect_shader_diagnostics_.empty() &&
             scene3d_motion_history_.empty())
             return true;
         if (!WaitForGpu()) return false;
@@ -1707,6 +1708,8 @@ namespace ReplayEngine::Rendering::DX12
         static_texture_failures_.clear();
         custom_static_pipelines_.clear();
         custom_static_shader_failures_.clear();
+        custom_ui_effect_pipelines_.clear();
+        custom_ui_effect_shader_diagnostics_.clear();
         for (auto it = texture_cache_.begin(); it != texture_cache_.end();)
         {
             if (it->first.rfind("__dx12_", 0) == 0)
