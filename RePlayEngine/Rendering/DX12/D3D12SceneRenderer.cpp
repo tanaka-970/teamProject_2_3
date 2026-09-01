@@ -36,7 +36,7 @@ namespace ReplayEngine::Rendering::DX12
         {
             1, 2, 3, 4, 5, 9,
         };
-        constexpr UINT kScene3DLightingSrvRangeCount = 9;
+        constexpr UINT kScene3DLightingSrvRangeCount = 12;
         constexpr DXGI_FORMAT kScene3DDepthResourceFormat = DXGI_FORMAT_R32_TYPELESS;
         constexpr DXGI_FORMAT kScene3DDepthDsvFormat = DXGI_FORMAT_D32_FLOAT;
         constexpr DXGI_FORMAT kScene3DDepthSrvFormat = DXGI_FORMAT_R32_FLOAT;
@@ -146,6 +146,10 @@ namespace ReplayEngine::Rendering::DX12
             Scene3DLocalShadowSliceGpu local_shadow_slices[16]{};
             DirectX::XMUINT4 shadow_flags{}; // x=CSM有効、y=Local有効、z/w=予約
             DirectX::XMUINT4 debug_flags{}; // x=DeferredDebugMode、y/z/w=予約
+            DirectX::XMFLOAT4X4 previous_view_projection{};
+            DirectX::XMFLOAT4X4 sky_rotation{};
+            DirectX::XMFLOAT4 sky_jitter{};
+            DirectX::XMFLOAT4 ibl_params{};
         };
 
         struct Scene3DShadowObjectConstants final
@@ -360,6 +364,10 @@ namespace ReplayEngine::Rendering::DX12
             L"main", L"vs_6_0", debug_layer_enabled_);
         const auto lighting_ps = compiler.CompileFile(shader_directory / "dx12_lighting_ps.hlsl",
             L"main", L"ps_6_0", debug_layer_enabled_);
+        const auto skybox_vs = compiler.CompileFile(shader_directory / "dx12_skybox_vs.hlsl",
+            L"main", L"vs_6_0", debug_layer_enabled_);
+        const auto skybox_ps = compiler.CompileFile(shader_directory / "dx12_skybox_ps.hlsl",
+            L"main", L"ps_6_0", debug_layer_enabled_);
         const auto temporal_input_ps = compiler.CompileFile(
             shader_directory / "dx12_postprocess_ps.hlsl",
             L"temporal_input_main", L"ps_6_0", debug_layer_enabled_);
@@ -383,7 +391,8 @@ namespace ReplayEngine::Rendering::DX12
             !skinned_layer_vs.succeeded || !layer_ps.succeeded || !gbuffer_ps.succeeded ||
             !depth_alpha_ps.succeeded || !forward_ps.succeeded ||
             !model_effect_extract_ps.succeeded || !fullscreen_vs.succeeded ||
-            !lighting_ps.succeeded || !temporal_input_ps.succeeded ||
+            !lighting_ps.succeeded || !skybox_vs.succeeded || !skybox_ps.succeeded ||
+            !temporal_input_ps.succeeded ||
             !taa_resolve_ps.succeeded || !postprocess_ps.succeeded ||
             !shadow_static_vs.succeeded || !shadow_skinned_vs.succeeded ||
             !shadow_alpha_ps.succeeded)
@@ -402,6 +411,8 @@ namespace ReplayEngine::Rendering::DX12
                 SceneDebugMessage(model_effect_extract_ps.diagnostics.c_str());
             if (!fullscreen_vs.diagnostics.empty()) SceneDebugMessage(fullscreen_vs.diagnostics.c_str());
             if (!lighting_ps.diagnostics.empty()) SceneDebugMessage(lighting_ps.diagnostics.c_str());
+            if (!skybox_vs.diagnostics.empty()) SceneDebugMessage(skybox_vs.diagnostics.c_str());
+            if (!skybox_ps.diagnostics.empty()) SceneDebugMessage(skybox_ps.diagnostics.c_str());
             if (!temporal_input_ps.diagnostics.empty())
                 SceneDebugMessage(temporal_input_ps.diagnostics.c_str());
             if (!taa_resolve_ps.diagnostics.empty()) SceneDebugMessage(taa_resolve_ps.diagnostics.c_str());
@@ -423,6 +434,8 @@ namespace ReplayEngine::Rendering::DX12
         scene3d_model_effect_extract_ps_ = model_effect_extract_ps.bytecode;
         scene3d_fullscreen_vs_ = fullscreen_vs.bytecode;
         scene3d_lighting_ps_ = lighting_ps.bytecode;
+        scene3d_skybox_vs_ = skybox_vs.bytecode;
+        scene3d_skybox_ps_ = skybox_ps.bytecode;
         scene3d_temporal_input_ps_ = temporal_input_ps.bytecode;
         scene3d_taa_resolve_ps_ = taa_resolve_ps.bytecode;
         scene3d_postprocess_ps_ = postprocess_ps.bytecode;
@@ -431,8 +444,10 @@ namespace ReplayEngine::Rendering::DX12
         scene3d_shadow_alpha_ps_ = shadow_alpha_ps.bytecode;
 
         if (!resource_descriptor_allocator_.Allocate(1, scene3d_null_directional_shadow_srv_) ||
-            !resource_descriptor_allocator_.Allocate(1, scene3d_null_local_shadow_srv_))
-            return fail("Scene3D.NullShadowDescriptor");
+            !resource_descriptor_allocator_.Allocate(1, scene3d_null_local_shadow_srv_) ||
+            !resource_descriptor_allocator_.Allocate(1, scene3d_null_ibl_diffuse_srv_) ||
+            !resource_descriptor_allocator_.Allocate(1, scene3d_null_ibl_specular_srv_))
+            return fail("Scene3D.NullEnvironmentDescriptor");
         D3D12_SHADER_RESOURCE_VIEW_DESC null_shadow_srv{};
         null_shadow_srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         null_shadow_srv.Format = kScene3DDepthSrvFormat;
@@ -446,18 +461,34 @@ namespace ReplayEngine::Rendering::DX12
         null_shadow_srv.Texture2DArray.ArraySize = D3D12LocalShadowSubmission::SliceCount;
         device_->CreateShaderResourceView(nullptr, &null_shadow_srv,
             scene3d_null_local_shadow_srv_.cpu);
+        D3D12_SHADER_RESOURCE_VIEW_DESC null_ibl_srv{};
+        null_ibl_srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+        null_ibl_srv.Format = kScene3DSceneTargetFormat;
+        null_ibl_srv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
+        null_ibl_srv.TextureCube.MostDetailedMip = 0;
+        null_ibl_srv.TextureCube.MipLevels = 1;
+        null_ibl_srv.TextureCube.ResourceMinLODClamp = 0.0f;
+        device_->CreateShaderResourceView(nullptr, &null_ibl_srv,
+            scene3d_null_ibl_diffuse_srv_.cpu);
+        device_->CreateShaderResourceView(nullptr, &null_ibl_srv,
+            scene3d_null_ibl_specular_srv_.cpu);
 
         // t0..t5はMaterial Map、t6はCSM、t7はLocal Shadow Atlas、t10はToon RampMap、t11はScene Color。
         // Slot番号ではなく draw.material_texture_semantic_mask で意味を判定する。
         // t8/t9 は Bone Palette の root SRV が使うので RampMap は t10 へ置く。
-        D3D12_DESCRIPTOR_RANGE geometry_ranges[10]{};
+        constexpr UINT kScene3DGeometrySrvRangeCount = 12;
+        const UINT geometry_registers[kScene3DGeometrySrvRangeCount] =
+            { 0, 1, 2, 3, 4, 5, 6, 7, 10, 11, 33, 34 };
+        const UINT geometry_table_slots[kScene3DGeometrySrvRangeCount] =
+            { 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17, 18 };
+        D3D12_DESCRIPTOR_RANGE geometry_ranges[kScene3DGeometrySrvRangeCount]{};
         for (UINT i = 0; i < static_cast<UINT>(std::size(geometry_ranges)); ++i)
         {
             geometry_ranges[i].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
             geometry_ranges[i].NumDescriptors = 1;
-            geometry_ranges[i].BaseShaderRegister = i < 8u ? i : i + 2u;
+            geometry_ranges[i].BaseShaderRegister = geometry_registers[i];
         }
-        D3D12_ROOT_PARAMETER geometry_parameters[17]{};
+        D3D12_ROOT_PARAMETER geometry_parameters[19]{};
         for (UINT i = 0; i < 4; ++i)
         {
             geometry_parameters[i].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
@@ -472,16 +503,18 @@ namespace ReplayEngine::Rendering::DX12
         geometry_parameters[5].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
         for (UINT i = 0; i < static_cast<UINT>(std::size(geometry_ranges)); ++i)
         {
-            geometry_parameters[6 + i].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-            geometry_parameters[6 + i].DescriptorTable.NumDescriptorRanges = 1;
-            geometry_parameters[6 + i].DescriptorTable.pDescriptorRanges = &geometry_ranges[i];
-            geometry_parameters[6 + i].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+            const UINT root_slot = geometry_table_slots[i];
+            geometry_parameters[root_slot].ParameterType =
+                D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+            geometry_parameters[root_slot].DescriptorTable.NumDescriptorRanges = 1;
+            geometry_parameters[root_slot].DescriptorTable.pDescriptorRanges = &geometry_ranges[i];
+            geometry_parameters[root_slot].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
         }
         geometry_parameters[16].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
         geometry_parameters[16].Descriptor.ShaderRegister = 7;
         geometry_parameters[16].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 
-        D3D12_STATIC_SAMPLER_DESC samplers[3]{};
+        D3D12_STATIC_SAMPLER_DESC samplers[4]{};
         samplers[0].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
         samplers[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
         samplers[0].AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
@@ -513,6 +546,11 @@ namespace ReplayEngine::Rendering::DX12
         samplers[2].ShaderRegister = 2;
         samplers[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
         samplers[2].MaxLOD = D3D12_FLOAT32_MAX;
+        samplers[3] = samplers[0];
+        samplers[3].AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+        samplers[3].AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+        samplers[3].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+        samplers[3].ShaderRegister = 3;
 
         D3D12_ROOT_SIGNATURE_DESC geometry_root{};
         geometry_root.NumParameters = static_cast<UINT>(std::size(geometry_parameters));
@@ -523,6 +561,8 @@ namespace ReplayEngine::Rendering::DX12
         if (!SerializeRoot(device_.Get(), geometry_root, scene3d_geometry_root_signature_, L"Scene3D.Geometry.RootSignature"))
             return fail("Scene3D.GeometryRootSignature");
 
+        const UINT lighting_registers[kScene3DLightingSrvRangeCount] =
+            { 0, 1, 2, 3, 4, 5, 6, 7, 8, 33, 34, 35 };
         D3D12_DESCRIPTOR_RANGE lighting_ranges[kScene3DLightingSrvRangeCount]{};
         D3D12_ROOT_PARAMETER lighting_parameters[kScene3DLightingSrvRangeCount + 1]{};
         lighting_parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
@@ -532,13 +572,14 @@ namespace ReplayEngine::Rendering::DX12
         {
             lighting_ranges[i].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
             lighting_ranges[i].NumDescriptors = 1;
-            lighting_ranges[i].BaseShaderRegister = i;
+            lighting_ranges[i].BaseShaderRegister = lighting_registers[i];
             lighting_parameters[1 + i].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
             lighting_parameters[1 + i].DescriptorTable.NumDescriptorRanges = 1;
             lighting_parameters[1 + i].DescriptorTable.pDescriptorRanges = &lighting_ranges[i];
             lighting_parameters[1 + i].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
         }
-        D3D12_STATIC_SAMPLER_DESC lighting_samplers[3] = { samplers[0], samplers[1], samplers[2] };
+        D3D12_STATIC_SAMPLER_DESC lighting_samplers[4] =
+            { samplers[0], samplers[1], samplers[2], samplers[3] };
         lighting_samplers[0].Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
         lighting_samplers[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
         lighting_samplers[0].AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
@@ -940,6 +981,19 @@ namespace ReplayEngine::Rendering::DX12
             IID_PPV_ARGS(&scene3d_lighting_pipeline_))))
             return fail("Scene3D.PSO.Lighting");
         SetD3D12ObjectName(scene3d_lighting_pipeline_.Get(), L"Scene3D.PSO", L"Lighting");
+
+        D3D12_GRAPHICS_PIPELINE_STATE_DESC skybox = lighting;
+        skybox.VS = { scene3d_skybox_vs_.data(), scene3d_skybox_vs_.size() };
+        skybox.PS = { scene3d_skybox_ps_.data(), scene3d_skybox_ps_.size() };
+        skybox.DepthStencilState = MakeDepth(false);
+        skybox.NumRenderTargets = 2;
+        skybox.RTVFormats[0] = kScene3DSceneTargetFormat;
+        skybox.RTVFormats[1] = kScene3DGBufferFormats[4];
+        skybox.DSVFormat = kScene3DDepthDsvFormat;
+        if (FAILED(device_->CreateGraphicsPipelineState(&skybox,
+            IID_PPV_ARGS(&scene3d_skybox_pipeline_))))
+            return fail("Scene3D.PSO.Skybox");
+        SetD3D12ObjectName(scene3d_skybox_pipeline_.Get(), L"Scene3D.PSO", L"Skybox");
 
         D3D12_DESCRIPTOR_RANGE postprocess_ranges[10]{};
         for (UINT index = 0; index < 10; ++index)
@@ -1581,6 +1635,7 @@ namespace ReplayEngine::Rendering::DX12
         for (auto& pso : scene3d_static_shadow_pipelines_) pso.Reset();
         for (auto& pso : scene3d_skinned_shadow_pipelines_) pso.Reset();
         scene3d_lighting_pipeline_.Reset();
+        scene3d_skybox_pipeline_.Reset();
         scene3d_temporal_input_pipeline_.Reset();
         scene3d_taa_resolve_pipeline_.Reset();
         scene3d_postprocess_pipeline_.Reset();
@@ -1599,6 +1654,8 @@ namespace ReplayEngine::Rendering::DX12
         scene3d_model_effect_extract_ps_.clear();
         scene3d_fullscreen_vs_.clear();
         scene3d_lighting_ps_.clear();
+        scene3d_skybox_vs_.clear();
+        scene3d_skybox_ps_.clear();
         scene3d_temporal_input_ps_.clear();
         scene3d_taa_resolve_ps_.clear();
         scene3d_postprocess_ps_.clear();
@@ -1609,8 +1666,14 @@ namespace ReplayEngine::Rendering::DX12
             resource_descriptor_allocator_.Free(scene3d_null_directional_shadow_srv_);
         if (scene3d_null_local_shadow_srv_.IsValid())
             resource_descriptor_allocator_.Free(scene3d_null_local_shadow_srv_);
+        if (scene3d_null_ibl_diffuse_srv_.IsValid())
+            resource_descriptor_allocator_.Free(scene3d_null_ibl_diffuse_srv_);
+        if (scene3d_null_ibl_specular_srv_.IsValid())
+            resource_descriptor_allocator_.Free(scene3d_null_ibl_specular_srv_);
         scene3d_null_directional_shadow_srv_ = {};
         scene3d_null_local_shadow_srv_ = {};
+        scene3d_null_ibl_diffuse_srv_ = {};
+        scene3d_null_ibl_specular_srv_ = {};
     }
 
     bool D3D12DeviceContext::EnsureScene3DRenderTargets() noexcept
@@ -1876,6 +1939,8 @@ namespace ReplayEngine::Rendering::DX12
                 static_texture_failures_.find(source.key) == static_texture_failures_.end())
                 upload_ok = false;
         }
+        if (upload_ok && submission.sky.enabled && !EnsureSkyEnvironment(submission.sky))
+            upload_ok = false;
         const bool batch_ok = upload_context_.EndBatch();
         return upload_ok && batch_ok;
     }
@@ -1940,13 +2005,16 @@ namespace ReplayEngine::Rendering::DX12
         if (scene3d_geometry_root_signature_ == nullptr ||
             scene3d_lighting_root_signature_ == nullptr ||
             scene3d_shadow_root_signature_ == nullptr || scene3d_lighting_pipeline_ == nullptr ||
+            scene3d_skybox_pipeline_ == nullptr ||
             scene3d_postprocess_root_signature_ == nullptr ||
             scene3d_temporal_input_pipeline_ == nullptr || scene3d_taa_resolve_pipeline_ == nullptr ||
             scene3d_postprocess_pipeline_ == nullptr)
             return scene3d_fail("root-signature-or-pipeline");
         if (!scene3d_null_directional_shadow_srv_.IsValid() ||
-            !scene3d_null_local_shadow_srv_.IsValid())
-            return scene3d_fail("null-shadow-srv");
+            !scene3d_null_local_shadow_srv_.IsValid() ||
+            !scene3d_null_ibl_diffuse_srv_.IsValid() ||
+            !scene3d_null_ibl_specular_srv_.IsValid())
+            return scene3d_fail("null-environment-srv");
         if (!CacheMeshLocalBounds(submission, options.allow_static_mesh_cache_replacement))
             return scene3d_fail("mesh-local-bounds");
         if (!EnsureScene3DRenderTargets()) return scene3d_fail("EnsureScene3DRenderTargets");
@@ -2052,10 +2120,47 @@ namespace ReplayEngine::Rendering::DX12
             submission.local_shadows.used_slice_mask != 0 &&
             scene3d_local_shadow_.resource != nullptr && scene3d_local_shadow_.srv.IsValid();
 
+        const StaticTextureResource* sky_source_texture = nullptr;
+        const StaticTextureResource* ibl_diffuse_texture = nullptr;
+        const StaticTextureResource* ibl_specular_texture = nullptr;
+        if (submission.sky.enabled && !submission.sky.texture_key.empty())
+        {
+            const auto sky_source = texture_cache_.find(submission.sky.texture_key);
+            if (sky_source != texture_cache_.end() && sky_source->second.is_cube &&
+                sky_source->second.srv.IsValid())
+            {
+                sky_source_texture = &sky_source->second;
+                const auto diffuse = texture_cache_.find(
+                    submission.sky.texture_key + ":ibl_diffuse");
+                const auto specular = texture_cache_.find(
+                    submission.sky.texture_key + ":ibl_specular");
+                ibl_diffuse_texture = diffuse != texture_cache_.end() &&
+                    diffuse->second.is_cube ? &diffuse->second : sky_source_texture;
+                ibl_specular_texture = specular != texture_cache_.end() &&
+                    specular->second.is_cube ? &specular->second : sky_source_texture;
+            }
+        }
+        const bool sky_available = sky_source_texture != nullptr;
+        const D3D12_GPU_DESCRIPTOR_HANDLE ibl_diffuse_srv = sky_available &&
+            ibl_diffuse_texture != nullptr ? ibl_diffuse_texture->srv.gpu :
+            scene3d_null_ibl_diffuse_srv_.gpu;
+        const D3D12_GPU_DESCRIPTOR_HANDLE ibl_specular_srv = sky_available &&
+            ibl_specular_texture != nullptr ? ibl_specular_texture->srv.gpu :
+            scene3d_null_ibl_specular_srv_.gpu;
+        const D3D12_GPU_DESCRIPTOR_HANDLE sky_source_srv = sky_available
+            ? sky_source_texture->srv.gpu : scene3d_null_ibl_diffuse_srv_.gpu;
+
         Scene3DLightingConstants light{};
         light.inverse_view_projection = current_frame_constants_.inv_view_projection;
         light.view = current_frame_constants_.view;
         light.camera_position = current_frame_constants_.camera_position;
+        light.previous_view_projection = current_frame_constants_.prev_view_projection;
+        light.sky_rotation = submission.sky.rotation;
+        light.sky_jitter = current_frame_constants_.jitter;
+        light.ibl_params = { sky_available ? 1.0f : 0.0f,
+            sky_available ? 1.0f : 0.0f,
+            sky_available ? 1.0f : 0.0f, sky_available ?
+            (std::max)(0.0f, (std::min)(submission.sky.intensity, 16.0f)) : 0.0f };
         light.directional_direction_intensity = {
             submission.directional_light.direction.x,
             submission.directional_light.direction.y,
@@ -2221,7 +2326,8 @@ namespace ReplayEngine::Rendering::DX12
                 command_list_->DrawIndexedInstanced(count, 1, start, 0, 0);
         };
         const auto bind_surface = [this, &allocate_cb, scene_gpu, light_gpu, identity_bone_gpu,
-            directional_shadow_srv, local_shadow_srv, &texture_for, &material_texture_for](
+            directional_shadow_srv, local_shadow_srv, ibl_diffuse_srv, ibl_specular_srv,
+            &texture_for, &material_texture_for](
             const D3D12StaticDrawItem& draw, const DirectX::XMFLOAT4X4& previous_world,
             D3D12_GPU_VIRTUAL_ADDRESS current_bones,
             D3D12_GPU_VIRTUAL_ADDRESS previous_bones, float morph_weight,
@@ -2279,6 +2385,8 @@ namespace ReplayEngine::Rendering::DX12
             command_list_->SetGraphicsRootDescriptorTable(12, directional_shadow_srv);      // t6
             command_list_->SetGraphicsRootDescriptorTable(13, local_shadow_srv);            // t7
             command_list_->SetGraphicsRootDescriptorTable(14, ramp->srv.gpu);               // t10
+            command_list_->SetGraphicsRootDescriptorTable(17, ibl_diffuse_srv);             // t33
+            command_list_->SetGraphicsRootDescriptorTable(18, ibl_specular_srv);            // t34
             return true;
         };
         const auto bind_layer = [this, &allocate_cb, scene_gpu, identity_bone_gpu](
@@ -2826,6 +2934,9 @@ namespace ReplayEngine::Rendering::DX12
         command_list_->SetGraphicsRootDescriptorTable(6, scene3d_depth_.srv.gpu);
         command_list_->SetGraphicsRootDescriptorTable(7, directional_shadow_srv);
         command_list_->SetGraphicsRootDescriptorTable(8, local_shadow_srv);
+        command_list_->SetGraphicsRootDescriptorTable(10, ibl_diffuse_srv);
+        command_list_->SetGraphicsRootDescriptorTable(11, ibl_specular_srv);
+        command_list_->SetGraphicsRootDescriptorTable(12, sky_source_srv);
         command_list_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         command_list_->DrawInstanced(3, 1, 0, 0);
 
@@ -2843,6 +2954,29 @@ namespace ReplayEngine::Rendering::DX12
             if (!resource_state_tracker_.Transition(command_list_.Get(), scene_view_target_.color.Get(),
                 D3D12_RESOURCE_STATE_RENDER_TARGET) ||
                 !resource_state_tracker_.Transition(command_list_.Get(), scene3d_deferred_target_.color.Get(),
+                    D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE))
+                return false;
+        }
+
+        if (sky_available)
+        {
+            if (!resource_state_tracker_.Transition(command_list_.Get(),
+                scene3d_gbuffer_[4].resource.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET) ||
+                !resource_state_tracker_.Transition(command_list_.Get(), scene3d_depth_.resource.Get(),
+                    D3D12_RESOURCE_STATE_DEPTH_READ))
+                return false;
+            D3D12_CPU_DESCRIPTOR_HANDLE sky_targets[2] =
+                { scene_view_target_.rtv.cpu, scene3d_gbuffer_[4].rtv.cpu };
+            command_list_->OMSetRenderTargets(2, sky_targets, FALSE, &scene3d_depth_.dsv.cpu);
+            command_list_->SetGraphicsRootSignature(scene3d_lighting_root_signature_.Get());
+            command_list_->SetPipelineState(scene3d_skybox_pipeline_.Get());
+            command_list_->SetGraphicsRootConstantBufferView(0, light_gpu);
+            command_list_->SetGraphicsRootDescriptorTable(12, sky_source_srv);
+            command_list_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+            command_list_->DrawInstanced(3, 1, 0, 0);
+            if (!resource_state_tracker_.Transition(command_list_.Get(),
+                scene3d_gbuffer_[4].resource.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE) ||
+                !resource_state_tracker_.Transition(command_list_.Get(), scene3d_depth_.resource.Get(),
                     D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE))
                 return false;
         }

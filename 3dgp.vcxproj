@@ -767,6 +767,7 @@
     <ClInclude Include="RePlayEngine\Components\Rendering\LineRendererComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Rendering\TrailComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Rendering\LightComponents.h" />
+    <ClInclude Include="RePlayEngine\Components\Rendering\SkyboxComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\RotatorComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\HealthComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\StageGameplayCommon.h" />
@@ -967,6 +968,8 @@
     <None Include="Shader\dx12_ui_vs.hlsl" />
     <None Include="Shader\dx12_lighting_common.hlsli" />
     <None Include="Shader\dx12_lighting_ps.hlsl" />
+    <None Include="Shader\dx12_skybox_ps.hlsl" />
+    <None Include="Shader\dx12_skybox_vs.hlsl" />
     <None Include="Shader\dx12_postprocess_ps.hlsl" />
     <None Include="Shader\dx12_screen_layer_extract_ps.hlsl" />
     <None Include="Shader\dx12_shadow_alpha_ps.hlsl" />

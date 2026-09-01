@@ -20,6 +20,7 @@
 #include "../../RePlayEngine/Components/Rendering/MaterialOverrideDynamicProperties.h"
 #include "../../RePlayEngine/Components/Rendering/PrimitiveMeshRendererComponent.h"
 #include "../../RePlayEngine/Components/Rendering/SkinnedMeshRendererComponent.h"
+#include "../../RePlayEngine/Components/Rendering/SkyboxComponent.h"
 #include "../../RePlayEngine/Components/Rendering/LineRendererComponent.h"
 #include "../../RePlayEngine/Components/Rendering/TrailComponent.h"
 #include "../../RePlayEngine/Components/Rendering/ParticleEmitterComponent.h"
@@ -429,6 +430,32 @@ bool framework::build_dx12_static_scene(
             D3D12StaticTextureSource source;
             source.key = key;
             source.source_path = resolved;
+            submission.texture_sources.push_back(std::move(source));
+        }
+        return key;
+    };
+
+    const auto add_sky_texture = [this, &submission, &texture_source_keys](
+        const std::filesystem::path& input_path) -> std::string
+    {
+        if (input_path.empty()) return {};
+        std::filesystem::path resolved = input_path;
+        if (resolved.is_relative())
+        {
+            std::error_code ec;
+            if (!std::filesystem::exists(resolved, ec) || ec)
+                resolved = content_path(resolved);
+        }
+        resolved = resolved.lexically_normal();
+        const std::string key = "sky:" + resolved.generic_string();
+        if (key == "sky:") return {};
+        if (!dx12_device_context.HasStaticTexture(key) &&
+            texture_source_keys.insert(key).second)
+        {
+            D3D12StaticTextureSource source;
+            source.key = key;
+            source.source_path = resolved;
+            source.is_cube = true;
             submission.texture_sources.push_back(std::move(source));
         }
         return key;
@@ -1932,6 +1959,40 @@ bool framework::build_dx12_static_scene(
             draw.receive_shadow = renderer->receive_shadow;
             draw.lighting_model = static_cast<std::int32_t>(ShaderLightingModel::Pbr);
             submission.draws.push_back(std::move(draw));
+        }
+    }
+
+    const ReplayEngine::Components::SkyboxComponent* selected_sky = nullptr;
+    const ReplayEngine::Assets::AssetRecord* selected_sky_asset = nullptr;
+    for (std::size_t object_index = 0; object_index < scene.GameObjectCount(); ++object_index)
+    {
+        const ReplayEngine::Core::GameObject* object = scene.GameObjectAt(object_index);
+        if (object == nullptr || object->PendingDestroy() || !object->ActiveInHierarchy()) continue;
+        const auto* candidate = object->GetComponent<ReplayEngine::Components::SkyboxComponent>();
+        if (candidate == nullptr || !candidate->ActiveInHierarchy() ||
+            !candidate->sky_enabled || candidate->cubemap.guid.empty())
+            continue;
+        const ReplayEngine::Assets::AssetRecord* asset =
+            asset_database.FindByGuid(candidate->cubemap.guid);
+        if (asset == nullptr || asset->source_path.empty()) continue;
+        if (selected_sky != nullptr && candidate->priority <= selected_sky->priority) continue;
+        selected_sky = candidate;
+        selected_sky_asset = asset;
+    }
+    if (selected_sky != nullptr && selected_sky_asset != nullptr)
+    {
+        const std::string sky_key = add_sky_texture(content_path(selected_sky_asset->source_path));
+        if (!sky_key.empty())
+        {
+            submission.sky.enabled = true;
+            submission.sky.texture_key = sky_key;
+            const float degrees = std::isfinite(selected_sky->rotation_degrees)
+                ? selected_sky->rotation_degrees : 0.0f;
+            DirectX::XMStoreFloat4x4(&submission.sky.rotation,
+                DirectX::XMMatrixRotationY(DirectX::XMConvertToRadians(degrees)));
+            submission.sky.intensity = std::clamp(
+                std::isfinite(selected_sky->intensity) ? selected_sky->intensity : 1.0f,
+                0.0f, 16.0f);
         }
     }
 

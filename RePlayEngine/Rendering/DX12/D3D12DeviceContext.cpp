@@ -6,8 +6,10 @@
 #include <wincodec.h>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -109,6 +111,8 @@ namespace ReplayEngine::Rendering::DX12
             std::uint32_t height = 0;
             std::uint16_t mip_levels = 0;
             DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
+            bool is_cube = false;
+            std::uint32_t array_size = 1;
         };
 
         constexpr std::uint32_t MakeFourCc(char a, char b, char c, char d) noexcept
@@ -253,6 +257,7 @@ namespace ReplayEngine::Rendering::DX12
             if (IsBlockCompressed(format, block_bytes)) return true;
             switch (format)
             {
+            case DXGI_FORMAT_R16G16B16A16_FLOAT:
             case DXGI_FORMAT_R8G8B8A8_UNORM:
             case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
             case DXGI_FORMAT_B8G8R8A8_UNORM:
@@ -263,8 +268,89 @@ namespace ReplayEngine::Rendering::DX12
             }
         }
 
-        bool DecodeDds2D(const std::filesystem::path& path,
-            DecodedDdsImage& image) noexcept
+        std::uint32_t DdsBytesPerPixel(DXGI_FORMAT format) noexcept
+        {
+            switch (format)
+            {
+            case DXGI_FORMAT_R8G8B8A8_UNORM:
+            case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
+            case DXGI_FORMAT_B8G8R8A8_UNORM:
+            case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
+                return 4;
+            case DXGI_FORMAT_R16G16B16A16_FLOAT:
+                return 8;
+            default:
+                return 0;
+            }
+        }
+
+        bool BuildDdsSubresources(DecodedDdsImage& image) noexcept
+        {
+            if (image.width == 0 || image.height == 0 || image.mip_levels == 0 ||
+                image.array_size == 0)
+                return false;
+            std::uint32_t block_bytes = 0;
+            const bool block_compressed = IsBlockCompressed(image.format, block_bytes);
+            const std::uint32_t bytes_per_pixel = DdsBytesPerPixel(image.format);
+            if (!block_compressed && bytes_per_pixel == 0) return false;
+            try
+            {
+                image.subresources.clear();
+                image.subresources.reserve(static_cast<std::size_t>(image.mip_levels) *
+                    image.array_size);
+                std::size_t offset = 0;
+                for (std::uint32_t array_slice = 0; array_slice < image.array_size;
+                    ++array_slice)
+                {
+                    std::uint32_t width = image.width;
+                    std::uint32_t height = image.height;
+                    for (std::uint32_t mip = 0; mip < image.mip_levels; ++mip)
+                    {
+                        std::uint64_t row_pitch = 0;
+                        std::uint64_t row_count = 0;
+                        if (block_compressed)
+                        {
+                            const std::uint64_t blocks_wide =
+                                (std::max)(1u, (width + 3u) / 4u);
+                            const std::uint64_t blocks_high =
+                                (std::max)(1u, (height + 3u) / 4u);
+                            row_pitch = blocks_wide * block_bytes;
+                            row_count = blocks_high;
+                        }
+                        else
+                        {
+                            row_pitch = static_cast<std::uint64_t>(width) *
+                                bytes_per_pixel;
+                            row_count = height;
+                        }
+                        const std::uint64_t slice_pitch = row_pitch * row_count;
+                        if (slice_pitch == 0 || offset > image.bytes.size() ||
+                            slice_pitch > image.bytes.size() - offset)
+                        {
+                            image.subresources.clear();
+                            return false;
+                        }
+                        D3D12TextureSubresourceSource source;
+                        source.data = image.bytes.data() + offset;
+                        source.row_pitch = row_pitch;
+                        source.slice_pitch = slice_pitch;
+                        image.subresources.push_back(source);
+                        offset += static_cast<std::size_t>(slice_pitch);
+                        width = (std::max)(1u, width >> 1);
+                        height = (std::max)(1u, height >> 1);
+                    }
+                }
+            }
+            catch (...)
+            {
+                image.subresources.clear();
+                return false;
+            }
+            return true;
+        }
+
+        bool DecodeDdsFile(const std::filesystem::path& path,
+            DecodedDdsImage& image, bool require_cube) noexcept
         {
             image = {};
             if (path.empty()) return false;
@@ -283,27 +369,45 @@ namespace ReplayEngine::Rendering::DX12
                 return false;
 
             DXGI_FORMAT dxgi_format = DXGI_FORMAT_UNKNOWN;
+            bool is_cube = false;
+            std::uint32_t array_size = 1;
             if (header.pixel_format.four_cc == kDx10FourCc)
             {
                 DdsHeaderDx10 dx10{};
                 stream.read(reinterpret_cast<char*>(&dx10), sizeof(dx10));
-                // Phase 2 の Material 経路が扱うのは通常の Texture2D Asset だけ。
-                // Array/Cubemap/3D Resource は後続の Environment/Shadow 実装で扱う。
-                constexpr std::uint32_t kTexture2D = 3u; // D3D10_RESOURCE_DIMENSION_TEXTURE2D
+                constexpr std::uint32_t kTexture2D = 3u;
                 constexpr std::uint32_t kTextureCube = 0x4u;
-                if (!stream || dx10.resource_dimension != kTexture2D || dx10.array_size != 1 ||
-                    (dx10.misc_flag & kTextureCube) != 0)
+                if (!stream || dx10.resource_dimension != kTexture2D ||
+                    dx10.array_size == 0)
                     return false;
                 dxgi_format = dx10.format;
+                is_cube = (dx10.misc_flag & kTextureCube) != 0;
+                if (is_cube)
+                {
+                    if (dx10.array_size != 1) return false;
+                    array_size = 6;
+                }
+                else
+                {
+                    if (dx10.array_size != 1) return false;
+                    array_size = 1;
+                }
             }
             else
             {
-                // この Static Material Loader では旧形式の Cubemap/Volume Texture を拒否する。
                 constexpr std::uint32_t kCaps2Cubemap = 0x00000200u;
                 constexpr std::uint32_t kCaps2Volume = 0x00200000u;
-                if ((header.caps2 & (kCaps2Cubemap | kCaps2Volume)) != 0) return false;
+                constexpr std::uint32_t kCaps2CubeFaces = 0x0000fc00u;
+                if ((header.caps2 & kCaps2Volume) != 0) return false;
+                is_cube = (header.caps2 & kCaps2Cubemap) != 0;
+                if (is_cube && (header.caps2 & kCaps2CubeFaces) != kCaps2CubeFaces)
+                    return false;
+                if (is_cube) array_size = 6;
                 dxgi_format = LegacyDdsFormat(header.pixel_format);
             }
+            if (array_size == 0 || (require_cube != is_cube))
+                return false;
+            if (require_cube && !is_cube) return false;
             if (!IsSupportedStaticDdsFormat(dxgi_format)) return false;
 
             const std::uint32_t mip_count = (std::max)(1u, header.mip_map_count);
@@ -324,44 +428,6 @@ namespace ReplayEngine::Rendering::DX12
                 stream.read(reinterpret_cast<char*>(image.bytes.data()),
                     static_cast<std::streamsize>(image.bytes.size()));
                 if (!stream) { image = {}; return false; }
-                image.subresources.reserve(mip_count);
-
-                std::size_t offset = 0;
-                std::uint32_t width = header.width;
-                std::uint32_t height = header.height;
-                std::uint32_t block_bytes = 0;
-                const bool block_compressed = IsBlockCompressed(dxgi_format, block_bytes);
-                for (std::uint32_t mip = 0; mip < mip_count; ++mip)
-                {
-                    std::uint64_t row_pitch = 0;
-                    std::uint64_t row_count = 0;
-                    if (block_compressed)
-                    {
-                        const std::uint64_t blocks_wide = (std::max)(1u, (width + 3u) / 4u);
-                        const std::uint64_t blocks_high = (std::max)(1u, (height + 3u) / 4u);
-                        row_pitch = blocks_wide * block_bytes;
-                        row_count = blocks_high;
-                    }
-                    else
-                    {
-                        row_pitch = static_cast<std::uint64_t>(width) * 4ull;
-                        row_count = height;
-                    }
-                    const std::uint64_t slice_pitch = row_pitch * row_count;
-                    if (slice_pitch == 0 || slice_pitch > image.bytes.size() - offset)
-                    {
-                        image = {};
-                        return false;
-                    }
-                    D3D12TextureSubresourceSource source;
-                    source.data = image.bytes.data() + offset;
-                    source.row_pitch = row_pitch;
-                    source.slice_pitch = slice_pitch;
-                    image.subresources.push_back(source);
-                    offset += static_cast<std::size_t>(slice_pitch);
-                    width = (std::max)(1u, width >> 1);
-                    height = (std::max)(1u, height >> 1);
-                }
             }
             catch (...)
             {
@@ -372,6 +438,893 @@ namespace ReplayEngine::Rendering::DX12
             image.height = header.height;
             image.mip_levels = static_cast<std::uint16_t>(mip_count);
             image.format = dxgi_format;
+            image.is_cube = is_cube;
+            image.array_size = array_size;
+            if (!BuildDdsSubresources(image))
+            {
+                image = {};
+                return false;
+            }
+            return true;
+        }
+
+        bool DecodeDds2D(const std::filesystem::path& path,
+            DecodedDdsImage& image) noexcept
+        {
+            return DecodeDdsFile(path, image, false);
+        }
+
+        bool DecodeDdsCube(const std::filesystem::path& path,
+            DecodedDdsImage& image) noexcept
+        {
+            return DecodeDdsFile(path, image, true);
+        }
+
+        struct DecodedHdrPanorama final
+        {
+            std::vector<float> rgb;
+            std::uint32_t width = 0;
+            std::uint32_t height = 0;
+        };
+
+        struct SkyCpuFloat3 final
+        {
+            float x = 0.0f;
+            float y = 0.0f;
+            float z = 0.0f;
+        };
+
+        SkyCpuFloat3 SkyAdd(SkyCpuFloat3 a, SkyCpuFloat3 b) noexcept
+        {
+            return { a.x + b.x, a.y + b.y, a.z + b.z };
+        }
+
+        SkyCpuFloat3 SkyMultiply(SkyCpuFloat3 value, float scalar) noexcept
+        {
+            return { value.x * scalar, value.y * scalar, value.z * scalar };
+        }
+
+        float SkyDot(SkyCpuFloat3 a, SkyCpuFloat3 b) noexcept
+        {
+            return a.x * b.x + a.y * b.y + a.z * b.z;
+        }
+
+        SkyCpuFloat3 SkyCross(SkyCpuFloat3 a, SkyCpuFloat3 b) noexcept
+        {
+            return { a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z,
+                a.x * b.y - a.y * b.x };
+        }
+
+        SkyCpuFloat3 SkyNormalize(SkyCpuFloat3 value) noexcept
+        {
+            const float length_squared = SkyDot(value, value);
+            if (length_squared <= 1.0e-12f) return { 0.0f, 1.0f, 0.0f };
+            const float inverse_length = 1.0f / std::sqrt(length_squared);
+            return SkyMultiply(value, inverse_length);
+        }
+
+        float SkyClamp(float value, float minimum, float maximum) noexcept
+        {
+            return (std::max)(minimum, (std::min)(maximum, value));
+        }
+
+        std::uint16_t FloatToSkyHalf(float value) noexcept
+        {
+            std::uint32_t bits = 0;
+            std::memcpy(&bits, &value, sizeof(bits));
+            const std::uint32_t sign = (bits >> 16) & 0x8000u;
+            const std::uint32_t exponent = (bits >> 23) & 0xffu;
+            std::uint32_t mantissa = bits & 0x007fffffu;
+            if (exponent == 0xffu)
+            {
+                if (mantissa != 0) return static_cast<std::uint16_t>(sign | 0x7e00u);
+                return static_cast<std::uint16_t>(sign | 0x7c00u);
+            }
+            const int half_exponent = static_cast<int>(exponent) - 127 + 15;
+            if (half_exponent >= 31) return static_cast<std::uint16_t>(sign | 0x7c00u);
+            if (half_exponent <= 0)
+            {
+                if (half_exponent < -10) return static_cast<std::uint16_t>(sign);
+                mantissa |= 0x00800000u;
+                const int shift = 14 - half_exponent;
+                std::uint32_t rounded = mantissa >> shift;
+                const std::uint32_t remainder = mantissa & ((1u << shift) - 1u);
+                const std::uint32_t halfway = 1u << (shift - 1);
+                if (remainder > halfway ||
+                    (remainder == halfway && (rounded & 1u) != 0))
+                    ++rounded;
+                return static_cast<std::uint16_t>(sign | rounded);
+            }
+            mantissa += 0x00001000u;
+            if ((mantissa & 0x00800000u) != 0)
+            {
+                mantissa = 0;
+                if (half_exponent + 1 >= 31)
+                    return static_cast<std::uint16_t>(sign | 0x7c00u);
+                return static_cast<std::uint16_t>(sign |
+                    (static_cast<std::uint32_t>(half_exponent + 1) << 10));
+            }
+            return static_cast<std::uint16_t>(sign |
+                (static_cast<std::uint32_t>(half_exponent) << 10) |
+                (mantissa >> 13));
+        }
+
+        float SkyHalfToFloat(std::uint16_t value) noexcept
+        {
+            const std::uint32_t sign = (static_cast<std::uint32_t>(value & 0x8000u)) << 16;
+            const std::uint32_t exponent = (value >> 10) & 0x1fu;
+            const std::uint32_t mantissa = value & 0x03ffu;
+            std::uint32_t bits = sign;
+            if (exponent == 0)
+            {
+                if (mantissa == 0)
+                {
+                    float result = 0.0f;
+                    std::memcpy(&result, &bits, sizeof(result));
+                    return result;
+                }
+                const float result = std::ldexp(static_cast<float>(mantissa), -24);
+                return (sign != 0) ? -result : result;
+            }
+            if (exponent == 31)
+            {
+                bits |= 0x7f800000u | (mantissa << 13);
+                float result = 0.0f;
+                std::memcpy(&result, &bits, sizeof(result));
+                return result;
+            }
+            bits |= ((exponent + 112u) << 23) | (mantissa << 13);
+            float result = 0.0f;
+            std::memcpy(&result, &bits, sizeof(result));
+            return result;
+        }
+
+        float SkySrgbToLinear(float value) noexcept
+        {
+            const float clamped = SkyClamp(value, 0.0f, 1.0f);
+            return clamped <= 0.04045f ? clamped / 12.92f :
+                std::pow((clamped + 0.055f) / 1.055f, 2.4f);
+        }
+
+        SkyCpuFloat3 SkyFaceDirection(std::uint32_t face, float u, float v) noexcept
+        {
+            switch (face)
+            {
+            case 0: return SkyNormalize({ 1.0f, -v, -u });
+            case 1: return SkyNormalize({ -1.0f, -v, u });
+            case 2: return SkyNormalize({ u, 1.0f, v });
+            case 3: return SkyNormalize({ u, -1.0f, -v });
+            case 4: return SkyNormalize({ u, -v, 1.0f });
+            default: return SkyNormalize({ -u, -v, -1.0f });
+            }
+        }
+
+        SkyCpuFloat3 DecodeHdrPixel(const std::uint8_t* pixel) noexcept
+        {
+            if (pixel == nullptr || pixel[3] == 0) return {};
+            const float scale = std::ldexp(1.0f, static_cast<int>(pixel[3]) - 128 - 8);
+            return { (static_cast<float>(pixel[0]) + 0.5f) * scale,
+                (static_cast<float>(pixel[1]) + 0.5f) * scale,
+                (static_cast<float>(pixel[2]) + 0.5f) * scale };
+        }
+
+        bool ReadHdrLine(const std::vector<std::uint8_t>& bytes, std::size_t& offset,
+            std::string& line) noexcept
+        {
+            try
+            {
+                if (offset >= bytes.size()) return false;
+                const std::size_t start = offset;
+                while (offset < bytes.size() && bytes[offset] != '\n') ++offset;
+                line.assign(reinterpret_cast<const char*>(bytes.data() + start), offset - start);
+                if (offset < bytes.size()) ++offset;
+                if (!line.empty() && line.back() == '\r') line.pop_back();
+                return true;
+            }
+            catch (...)
+            {
+                line.clear();
+                return false;
+            }
+        }
+
+        bool DecodeHdrPanorama(const std::filesystem::path& path,
+            DecodedHdrPanorama& image) noexcept
+        {
+            image = {};
+            if (path.empty()) return false;
+            try
+            {
+                std::ifstream stream(path, std::ios::binary);
+                if (!stream) return false;
+                std::vector<std::uint8_t> bytes((std::istreambuf_iterator<char>(stream)),
+                    std::istreambuf_iterator<char>());
+                std::size_t offset = 0;
+                std::string line;
+                if (!ReadHdrLine(bytes, offset, line) ||
+                    (line.rfind("#?RADIANCE", 0) != 0 && line.rfind("#?RGBE", 0) != 0))
+                    return false;
+
+                std::int32_t x_sign = 1;
+                std::int32_t y_sign = -1;
+                std::uint32_t width = 0;
+                std::uint32_t height = 0;
+                bool resolution_found = false;
+                while (ReadHdrLine(bytes, offset, line))
+                {
+                    std::istringstream resolution(line);
+                    std::string axis;
+                    std::int32_t size = 0;
+                    while (resolution >> axis >> size)
+                    {
+                        if (axis.size() != 2 || size <= 0) continue;
+                        if (axis[1] == 'X')
+                        {
+                            x_sign = axis[0] == '-' ? -1 : 1;
+                            width = static_cast<std::uint32_t>(size);
+                        }
+                        else if (axis[1] == 'Y')
+                        {
+                            y_sign = axis[0] == '-' ? -1 : 1;
+                            height = static_cast<std::uint32_t>(size);
+                        }
+                    }
+                    if (width != 0 && height != 0)
+                    {
+                        resolution_found = true;
+                        break;
+                    }
+                }
+                const std::uint64_t pixel_count = static_cast<std::uint64_t>(width) * height;
+                if (!resolution_found || width > 16384 || height > 16384 ||
+                    pixel_count == 0 || pixel_count > (1ull << 27))
+                    return false;
+                image.rgb.assign(static_cast<std::size_t>(pixel_count) * 3u, 0.0f);
+
+                const auto store_pixel = [&](std::uint32_t file_x, std::uint32_t file_y,
+                    const std::uint8_t* rgbe) noexcept
+                {
+                    const std::uint32_t x = x_sign > 0 ? file_x : width - file_x - 1;
+                    const std::uint32_t y = y_sign < 0 ? file_y : height - file_y - 1;
+                    const SkyCpuFloat3 color = DecodeHdrPixel(rgbe);
+                    const std::size_t index =
+                        (static_cast<std::size_t>(y) * width + x) * 3u;
+                    image.rgb[index + 0] = color.x;
+                    image.rgb[index + 1] = color.y;
+                    image.rgb[index + 2] = color.z;
+                };
+
+                for (std::uint32_t file_y = 0; file_y < height; ++file_y)
+                {
+                    if (offset + 4 > bytes.size()) return false;
+                    const std::uint8_t first[4] =
+                        { bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3] };
+                    offset += 4;
+                    const bool rle = width >= 8 && width <= 32767 && first[0] == 2 &&
+                        first[1] == 2 && (first[2] & 0x80u) == 0 &&
+                        ((static_cast<std::uint32_t>(first[2]) << 8) | first[3]) == width;
+                    if (!rle)
+                    {
+                        store_pixel(0, file_y, first);
+                        for (std::uint32_t file_x = 1; file_x < width; ++file_x)
+                        {
+                            if (offset + 4 > bytes.size()) return false;
+                            store_pixel(file_x, file_y, bytes.data() + offset);
+                            offset += 4;
+                        }
+                        continue;
+                    }
+
+                    std::array<std::vector<std::uint8_t>, 4> channels;
+                    for (auto& channel : channels) channel.resize(width);
+                    for (std::uint32_t channel_index = 0; channel_index < 4; ++channel_index)
+                    {
+                        std::uint32_t file_x = 0;
+                        while (file_x < width)
+                        {
+                            if (offset >= bytes.size()) return false;
+                            const std::uint8_t count = bytes[offset++];
+                            if (count > 128)
+                            {
+                                const std::uint32_t run = count - 128u;
+                                if (run == 0 || file_x + run > width || offset >= bytes.size())
+                                    return false;
+                                std::fill_n(channels[channel_index].begin() + file_x, run,
+                                    bytes[offset++]);
+                                file_x += run;
+                            }
+                            else
+                            {
+                                const std::uint32_t literal = count;
+                                if (literal == 0 || file_x + literal > width ||
+                                    offset + literal > bytes.size())
+                                    return false;
+                                std::copy_n(bytes.begin() + offset, literal,
+                                    channels[channel_index].begin() + file_x);
+                                offset += literal;
+                                file_x += literal;
+                            }
+                        }
+                    }
+                    std::uint8_t pixel[4]{};
+                    for (std::uint32_t file_x = 0; file_x < width; ++file_x)
+                    {
+                        for (std::uint32_t channel_index = 0; channel_index < 4; ++channel_index)
+                            pixel[channel_index] = channels[channel_index][file_x];
+                        store_pixel(file_x, file_y, pixel);
+                    }
+                }
+                image.width = width;
+                image.height = height;
+            }
+            catch (...)
+            {
+                image = {};
+            }
+            return image.width != 0 && image.height != 0 && !image.rgb.empty();
+        }
+
+        SkyCpuFloat3 SampleHdrPanorama(const DecodedHdrPanorama& image,
+            SkyCpuFloat3 direction) noexcept
+        {
+            constexpr float kPi = 3.14159265358979323846f;
+            direction = SkyNormalize(direction);
+            float u = std::atan2(direction.z, direction.x) / (2.0f * kPi) + 0.5f;
+            u -= std::floor(u);
+            const float v = 0.5f - std::asin(SkyClamp(direction.y, -1.0f, 1.0f)) / kPi;
+            const float x = u * image.width - 0.5f;
+            const float y = v * image.height - 0.5f;
+            const int x0 = static_cast<int>(std::floor(x));
+            const int y0 = static_cast<int>(std::floor(y));
+            const int x1 = x0 + 1;
+            const int y1 = y0 + 1;
+            const float fx = x - std::floor(x);
+            const float fy = y - std::floor(y);
+            const auto read = [&image](int px, int py) noexcept
+            {
+                const int wrapped_x = ((px % static_cast<int>(image.width)) +
+                    static_cast<int>(image.width)) % static_cast<int>(image.width);
+                const int clamped_y = (std::max)(0, (std::min)(static_cast<int>(image.height) - 1,
+                    py));
+                const std::size_t index =
+                    (static_cast<std::size_t>(clamped_y) * image.width + wrapped_x) * 3u;
+                return SkyCpuFloat3{ image.rgb[index], image.rgb[index + 1],
+                    image.rgb[index + 2] };
+            };
+            const SkyCpuFloat3 top = SkyAdd(SkyMultiply(read(x0, y0), 1.0f - fx),
+                SkyMultiply(read(x1, y0), fx));
+            const SkyCpuFloat3 bottom = SkyAdd(SkyMultiply(read(x0, y1), 1.0f - fx),
+                SkyMultiply(read(x1, y1), fx));
+            return SkyAdd(SkyMultiply(top, 1.0f - fy), SkyMultiply(bottom, fy));
+        }
+
+        bool AppendSkyHalfRgba(std::vector<std::uint8_t>& bytes,
+            SkyCpuFloat3 color) noexcept
+        {
+            try
+            {
+                const std::uint16_t channels[4] =
+                    { FloatToSkyHalf(color.x), FloatToSkyHalf(color.y),
+                        FloatToSkyHalf(color.z), FloatToSkyHalf(1.0f) };
+                const std::size_t offset = bytes.size();
+                bytes.resize(offset + sizeof(channels));
+                std::memcpy(bytes.data() + offset, channels, sizeof(channels));
+                return true;
+            }
+            catch (...)
+            {
+                return false;
+            }
+        }
+
+        bool BuildCubeFromPanorama(const DecodedHdrPanorama& panorama,
+            DecodedDdsImage& cube) noexcept
+        {
+            cube = {};
+            if (panorama.width == 0 || panorama.height == 0 || panorama.rgb.empty())
+                return false;
+            try
+            {
+                const std::uint32_t face_size = (std::max)(1u,
+                    (std::min)(1024u, (std::min)(panorama.width / 4u,
+                        panorama.height / 2u)));
+                std::uint16_t mip_levels = 1;
+                std::uint32_t mip_size = face_size;
+                while (mip_size > 1 && mip_levels < 15)
+                {
+                    mip_size = (std::max)(1u, mip_size >> 1);
+                    ++mip_levels;
+                }
+                for (std::uint32_t face = 0; face < 6; ++face)
+                {
+                    for (std::uint32_t mip = 0; mip < mip_levels; ++mip)
+                    {
+                        const std::uint32_t size = (std::max)(1u, face_size >> mip);
+                        for (std::uint32_t y = 0; y < size; ++y)
+                        {
+                            const float v = ((static_cast<float>(y) + 0.5f) / size) *
+                                2.0f - 1.0f;
+                            for (std::uint32_t x = 0; x < size; ++x)
+                            {
+                                const float u = ((static_cast<float>(x) + 0.5f) / size) *
+                                    2.0f - 1.0f;
+                                if (!AppendSkyHalfRgba(cube.bytes,
+                                    SampleHdrPanorama(panorama, SkyFaceDirection(face, u, v))))
+                                {
+                                    cube = {};
+                                    return false;
+                                }
+                            }
+                        }
+                    }
+                }
+                cube.width = face_size;
+                cube.height = face_size;
+                cube.mip_levels = mip_levels;
+                cube.format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+                cube.is_cube = true;
+                cube.array_size = 6;
+                if (!BuildDdsSubresources(cube)) cube = {};
+            }
+            catch (...)
+            {
+                cube = {};
+            }
+            return cube.width != 0 && cube.height != 0 && !cube.subresources.empty();
+        }
+
+        bool CopyCubeMip0ToFloat(const DecodedDdsImage& cube,
+            std::vector<float>& rgba) noexcept
+        {
+            rgba.clear();
+            if (!cube.is_cube || cube.array_size != 6 || cube.width == 0 ||
+                cube.width != cube.height || cube.subresources.size() < 6)
+                return false;
+            const bool half = cube.format == DXGI_FORMAT_R16G16B16A16_FLOAT;
+            const bool rgba8 = cube.format == DXGI_FORMAT_R8G8B8A8_UNORM ||
+                cube.format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+            const bool bgra8 = cube.format == DXGI_FORMAT_B8G8R8A8_UNORM ||
+                cube.format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
+            if (!half && !rgba8 && !bgra8) return false;
+            try
+            {
+                const std::size_t face_texel_count =
+                    static_cast<std::size_t>(cube.width) * cube.height;
+                rgba.resize(face_texel_count * 6u * 4u, 0.0f);
+                for (std::uint32_t face = 0; face < 6; ++face)
+                {
+                    const D3D12TextureSubresourceSource& source = cube.subresources[face];
+                    const std::uint32_t bytes_per_pixel = half ? 8u : 4u;
+                    if (source.data == nullptr || source.row_pitch <
+                        static_cast<std::uint64_t>(cube.width) * bytes_per_pixel)
+                        return false;
+                    for (std::uint32_t y = 0; y < cube.height; ++y)
+                    {
+                        const auto* row = static_cast<const std::uint8_t*>(source.data) +
+                            static_cast<std::size_t>(source.row_pitch) * y;
+                        for (std::uint32_t x = 0; x < cube.width; ++x)
+                        {
+                            const auto* pixel = row + static_cast<std::size_t>(x) * bytes_per_pixel;
+                            SkyCpuFloat3 color{};
+                            if (half)
+                            {
+                                std::uint16_t channels[4]{};
+                                std::memcpy(channels, pixel, sizeof(channels));
+                                color = { SkyHalfToFloat(channels[0]), SkyHalfToFloat(channels[1]),
+                                    SkyHalfToFloat(channels[2]) };
+                            }
+                            else if (rgba8)
+                            {
+                                color = { pixel[0] / 255.0f, pixel[1] / 255.0f,
+                                    pixel[2] / 255.0f };
+                                if (cube.format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB)
+                                    color = { SkySrgbToLinear(color.x), SkySrgbToLinear(color.y),
+                                        SkySrgbToLinear(color.z) };
+                            }
+                            else
+                            {
+                                color = { pixel[2] / 255.0f, pixel[1] / 255.0f,
+                                    pixel[0] / 255.0f };
+                                if (cube.format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB)
+                                    color = { SkySrgbToLinear(color.x), SkySrgbToLinear(color.y),
+                                        SkySrgbToLinear(color.z) };
+                            }
+                            const std::size_t index =
+                                (static_cast<std::size_t>(face) * face_texel_count +
+                                    static_cast<std::size_t>(y) * cube.width + x) * 4u;
+                            rgba[index + 0] = color.x;
+                            rgba[index + 1] = color.y;
+                            rgba[index + 2] = color.z;
+                            rgba[index + 3] = 1.0f;
+                        }
+                    }
+                }
+            }
+            catch (...)
+            {
+                rgba.clear();
+                return false;
+            }
+            return true;
+        }
+
+        SkyCpuFloat3 SampleCpuCube(const std::vector<float>& rgba,
+            std::uint32_t width, SkyCpuFloat3 direction) noexcept
+        {
+            if (width == 0 || rgba.size() < static_cast<std::size_t>(width) * width * 24u)
+                return {};
+            direction = SkyNormalize(direction);
+            const SkyCpuFloat3 absolute =
+                { std::abs(direction.x), std::abs(direction.y), std::abs(direction.z) };
+            std::uint32_t face = 0;
+            float u = 0.0f;
+            float v = 0.0f;
+            float major = absolute.x;
+            if (absolute.x >= absolute.y && absolute.x >= absolute.z)
+            {
+                if (direction.x >= 0.0f)
+                {
+                    face = 0;
+                    u = -direction.z / major;
+                }
+                else
+                {
+                    face = 1;
+                    u = direction.z / major;
+                }
+                v = -direction.y / major;
+            }
+            else if (absolute.y >= absolute.z)
+            {
+                major = absolute.y;
+                if (direction.y >= 0.0f)
+                {
+                    face = 2;
+                    u = direction.x / major;
+                    v = direction.z / major;
+                }
+                else
+                {
+                    face = 3;
+                    u = direction.x / major;
+                    v = -direction.z / major;
+                }
+            }
+            else
+            {
+                major = absolute.z;
+                if (direction.z >= 0.0f)
+                {
+                    face = 4;
+                    u = direction.x / major;
+                }
+                else
+                {
+                    face = 5;
+                    u = -direction.x / major;
+                }
+                v = -direction.y / major;
+            }
+            const float x = SkyClamp((u * 0.5f + 0.5f) * width - 0.5f, 0.0f,
+                static_cast<float>(width - 1));
+            const float y = SkyClamp((v * 0.5f + 0.5f) * width - 0.5f, 0.0f,
+                static_cast<float>(width - 1));
+            const std::uint32_t x0 = static_cast<std::uint32_t>(std::floor(x));
+            const std::uint32_t y0 = static_cast<std::uint32_t>(std::floor(y));
+            const std::uint32_t x1 = (std::min)(width - 1, x0 + 1);
+            const std::uint32_t y1 = (std::min)(width - 1, y0 + 1);
+            const float fx = x - x0;
+            const float fy = y - y0;
+            const std::size_t face_offset = static_cast<std::size_t>(face) * width * width * 4u;
+            const auto read = [&](std::uint32_t px, std::uint32_t py) noexcept
+            {
+                const std::size_t index = face_offset +
+                    (static_cast<std::size_t>(py) * width + px) * 4u;
+                return SkyCpuFloat3{ rgba[index], rgba[index + 1], rgba[index + 2] };
+            };
+            const SkyCpuFloat3 top = SkyAdd(SkyMultiply(read(x0, y0), 1.0f - fx),
+                SkyMultiply(read(x1, y0), fx));
+            const SkyCpuFloat3 bottom = SkyAdd(SkyMultiply(read(x0, y1), 1.0f - fx),
+                SkyMultiply(read(x1, y1), fx));
+            return SkyAdd(SkyMultiply(top, 1.0f - fy), SkyMultiply(bottom, fy));
+        }
+
+        struct SkyCacheHeader final
+        {
+            std::uint32_t magic = 0;
+            std::uint32_t version = 0;
+            std::uint32_t width = 0;
+            std::uint32_t height = 0;
+            std::uint32_t mip_levels = 0;
+            std::uint32_t format = 0;
+            std::uint32_t flags = 0;
+            std::uint64_t payload_size = 0;
+        };
+
+        constexpr std::uint32_t kSkyCacheMagic = 0x31425953u;
+        constexpr std::uint32_t kSkyCacheVersion = 1u;
+
+        std::filesystem::path SkyCachePath(const std::filesystem::path& source,
+            const char* suffix) noexcept
+        {
+            try
+            {
+                std::error_code error;
+                const std::filesystem::path absolute =
+                    std::filesystem::absolute(source, error);
+                const std::filesystem::path fingerprint_path = error ? source : absolute;
+                std::string fingerprint = fingerprint_path.generic_string();
+                const std::uintmax_t file_size = std::filesystem::file_size(source, error);
+                if (!error) fingerprint += ":" + std::to_string(file_size);
+                error.clear();
+                const auto write_time = std::filesystem::last_write_time(source, error);
+                if (!error) fingerprint += ":" +
+                    std::to_string(write_time.time_since_epoch().count());
+                std::uint64_t hash = 1469598103934665603ull;
+                for (const unsigned char value : fingerprint)
+                {
+                    hash ^= value;
+                    hash *= 1099511628211ull;
+                }
+                std::ostringstream name;
+                name << std::hex << std::setw(16) << std::setfill('0') << hash << suffix;
+                const std::filesystem::path directory =
+                    std::filesystem::current_path(error) / "Saved" / "SkyCache";
+                return directory / name.str();
+            }
+            catch (...)
+            {
+                return {};
+            }
+        }
+
+        bool WriteSkyCubeCache(const std::filesystem::path& path,
+            const DecodedDdsImage& cube) noexcept
+        {
+            if (path.empty() || !cube.is_cube || cube.array_size != 6 || cube.width == 0 ||
+                cube.height != cube.width || cube.mip_levels == 0 || cube.bytes.empty())
+                return false;
+            try
+            {
+                std::error_code error;
+                std::filesystem::create_directories(path.parent_path(), error);
+                if (error) return false;
+                std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+                if (!stream) return false;
+                const SkyCacheHeader header{ kSkyCacheMagic, kSkyCacheVersion, cube.width,
+                    cube.height, cube.mip_levels, static_cast<std::uint32_t>(cube.format), 1u,
+                    static_cast<std::uint64_t>(cube.bytes.size()) };
+                stream.write(reinterpret_cast<const char*>(&header), sizeof(header));
+                stream.write(reinterpret_cast<const char*>(cube.bytes.data()),
+                    static_cast<std::streamsize>(cube.bytes.size()));
+                return static_cast<bool>(stream);
+            }
+            catch (...)
+            {
+                return false;
+            }
+        }
+
+        bool ReadSkyCubeCache(const std::filesystem::path& path,
+            DecodedDdsImage& cube) noexcept
+        {
+            cube = {};
+            if (path.empty()) return false;
+            try
+            {
+                std::ifstream stream(path, std::ios::binary);
+                if (!stream) return false;
+                SkyCacheHeader header{};
+                stream.read(reinterpret_cast<char*>(&header), sizeof(header));
+                if (!stream || header.magic != kSkyCacheMagic ||
+                    header.version != kSkyCacheVersion || (header.flags & 1u) == 0 ||
+                    header.width == 0 || header.height != header.width ||
+                    header.width > 16384 || header.mip_levels == 0 || header.mip_levels > 15 ||
+                    header.payload_size == 0 || header.payload_size > (1ull << 34) ||
+                    !IsSupportedStaticDdsFormat(static_cast<DXGI_FORMAT>(header.format)))
+                    return false;
+                cube.bytes.resize(static_cast<std::size_t>(header.payload_size));
+                stream.read(reinterpret_cast<char*>(cube.bytes.data()),
+                    static_cast<std::streamsize>(cube.bytes.size()));
+                if (!stream) { cube = {}; return false; }
+                cube.width = header.width;
+                cube.height = header.height;
+                cube.mip_levels = static_cast<std::uint16_t>(header.mip_levels);
+                cube.format = static_cast<DXGI_FORMAT>(header.format);
+                cube.is_cube = true;
+                cube.array_size = 6;
+                if (!BuildDdsSubresources(cube)) cube = {};
+            }
+            catch (...)
+            {
+                cube = {};
+            }
+            return cube.width != 0 && !cube.subresources.empty();
+        }
+
+        bool DecodeHdrPanoramaToCube(const std::filesystem::path& path,
+            DecodedDdsImage& cube) noexcept
+        {
+            cube = {};
+            if (ReadSkyCubeCache(SkyCachePath(path, ".cube"), cube)) return true;
+            DecodedHdrPanorama panorama;
+            if (!DecodeHdrPanorama(path, panorama) || !BuildCubeFromPanorama(panorama, cube))
+                return false;
+            WriteSkyCubeCache(SkyCachePath(path, ".cube"), cube);
+            return true;
+        }
+
+        bool InitializeGeneratedCube(DecodedDdsImage& cube, std::uint32_t size,
+            std::uint16_t mip_levels) noexcept
+        {
+            cube = {};
+            if (size == 0 || mip_levels == 0 || mip_levels > 15) return false;
+            cube.width = size;
+            cube.height = size;
+            cube.mip_levels = mip_levels;
+            cube.format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+            cube.is_cube = true;
+            cube.array_size = 6;
+            return true;
+        }
+
+        bool BuildIblCubes(const std::vector<float>& source, std::uint32_t source_width,
+            DecodedDdsImage& diffuse, DecodedDdsImage& specular) noexcept
+        {
+            diffuse = {};
+            specular = {};
+            if (source_width == 0 || source.size() <
+                static_cast<std::size_t>(source_width) * source_width * 24u)
+                return false;
+            try
+            {
+                constexpr float kPi = 3.14159265358979323846f;
+                constexpr std::uint32_t kDiffuseSize = 32;
+                constexpr std::uint32_t kDiffuseSamples = 64;
+                constexpr std::uint32_t kSpecularSamples = 32;
+                const std::uint32_t specular_size = (std::min)(128u, source_width);
+                std::uint16_t specular_mips = 1;
+                std::uint32_t size = specular_size;
+                while (size > 1 && specular_mips < 15)
+                {
+                    size = (std::max)(1u, size >> 1);
+                    ++specular_mips;
+                }
+                if (!InitializeGeneratedCube(diffuse, kDiffuseSize, 1) ||
+                    !InitializeGeneratedCube(specular, specular_size, specular_mips))
+                    return false;
+
+                for (std::uint32_t face = 0; face < 6; ++face)
+                {
+                    for (std::uint32_t y = 0; y < kDiffuseSize; ++y)
+                    {
+                        const float v = ((static_cast<float>(y) + 0.5f) / kDiffuseSize) *
+                            2.0f - 1.0f;
+                        for (std::uint32_t x = 0; x < kDiffuseSize; ++x)
+                        {
+                            const float u = ((static_cast<float>(x) + 0.5f) / kDiffuseSize) *
+                                2.0f - 1.0f;
+                            const SkyCpuFloat3 normal = SkyFaceDirection(face, u, v);
+                            const SkyCpuFloat3 up = std::abs(normal.y) < 0.999f ?
+                                SkyCpuFloat3{ 0.0f, 1.0f, 0.0f } :
+                                SkyCpuFloat3{ 1.0f, 0.0f, 0.0f };
+                            const SkyCpuFloat3 tangent = SkyNormalize(SkyCross(up, normal));
+                            const SkyCpuFloat3 bitangent = SkyCross(normal, tangent);
+                            SkyCpuFloat3 irradiance{};
+                            for (std::uint32_t sample_index = 0;
+                                sample_index < kDiffuseSamples; ++sample_index)
+                            {
+                                const float xi1 = (static_cast<float>(sample_index) + 0.5f) /
+                                    kDiffuseSamples;
+                                const float xi2 = std::fmod(
+                                    static_cast<float>(sample_index) * 0.61803398875f + 0.5f,
+                                    1.0f);
+                                const float phi = 2.0f * kPi * xi2;
+                                const float cos_theta = std::sqrt(1.0f - xi1);
+                                const float sin_theta = std::sqrt(xi1);
+                                const SkyCpuFloat3 local =
+                                    { std::cos(phi) * sin_theta,
+                                        std::sin(phi) * sin_theta, cos_theta };
+                                const SkyCpuFloat3 sample_direction = SkyNormalize(SkyAdd(
+                                    SkyAdd(SkyMultiply(tangent, local.x),
+                                        SkyMultiply(bitangent, local.y)),
+                                    SkyMultiply(normal, local.z)));
+                                irradiance = SkyAdd(irradiance,
+                                    SampleCpuCube(source, source_width, sample_direction));
+                            }
+                            irradiance = SkyMultiply(irradiance, kPi / kDiffuseSamples);
+                            if (!AppendSkyHalfRgba(diffuse.bytes, irradiance)) return false;
+                        }
+                    }
+                }
+
+                for (std::uint32_t face = 0; face < 6; ++face)
+                {
+                    for (std::uint32_t mip = 0; mip < specular_mips; ++mip)
+                    {
+                        const std::uint32_t mip_size = (std::max)(1u, specular_size >> mip);
+                        const float roughness = specular_mips > 1 ?
+                            static_cast<float>(mip) / (specular_mips - 1u) : 0.0f;
+                        for (std::uint32_t y = 0; y < mip_size; ++y)
+                        {
+                            const float v = ((static_cast<float>(y) + 0.5f) / mip_size) *
+                                2.0f - 1.0f;
+                            for (std::uint32_t x = 0; x < mip_size; ++x)
+                            {
+                                const float u = ((static_cast<float>(x) + 0.5f) / mip_size) *
+                                    2.0f - 1.0f;
+                                const SkyCpuFloat3 normal = SkyFaceDirection(face, u, v);
+                                SkyCpuFloat3 filtered{};
+                                float total_weight = 0.0f;
+                                if (roughness < 0.001f)
+                                {
+                                    filtered = SampleCpuCube(source, source_width, normal);
+                                    total_weight = 1.0f;
+                                }
+                                else
+                                {
+                                    const SkyCpuFloat3 view = normal;
+                                    const SkyCpuFloat3 up = std::abs(normal.y) < 0.999f ?
+                                        SkyCpuFloat3{ 0.0f, 1.0f, 0.0f } :
+                                        SkyCpuFloat3{ 1.0f, 0.0f, 0.0f };
+                                    const SkyCpuFloat3 tangent =
+                                        SkyNormalize(SkyCross(up, normal));
+                                    const SkyCpuFloat3 bitangent = SkyCross(normal, tangent);
+                                    const float alpha = (std::max)(roughness * roughness,
+                                        0.0025f);
+                                    const float alpha_squared = alpha * alpha;
+                                    for (std::uint32_t sample_index = 0;
+                                        sample_index < kSpecularSamples; ++sample_index)
+                                    {
+                                        const float xi1 = (static_cast<float>(sample_index) +
+                                            0.5f) / kSpecularSamples;
+                                        const float xi2 = std::fmod(
+                                            static_cast<float>(sample_index) * 0.7548776662f +
+                                            0.5f, 1.0f);
+                                        const float phi = 2.0f * kPi * xi2;
+                                        const float cos_theta = std::sqrt((1.0f - xi1) /
+                                            (1.0f + (alpha_squared - 1.0f) * xi1));
+                                        const float sin_theta = std::sqrt(
+                                            (std::max)(0.0f, 1.0f - cos_theta * cos_theta));
+                                        const SkyCpuFloat3 local =
+                                            { std::cos(phi) * sin_theta,
+                                                std::sin(phi) * sin_theta, cos_theta };
+                                        const SkyCpuFloat3 half_vector = SkyNormalize(SkyAdd(
+                                            SkyAdd(SkyMultiply(tangent, local.x),
+                                                SkyMultiply(bitangent, local.y)),
+                                            SkyMultiply(normal, local.z)));
+                                        const SkyCpuFloat3 light = SkyNormalize(SkyAdd(
+                                            SkyMultiply(half_vector, 2.0f *
+                                                SkyDot(view, half_vector)),
+                                            SkyMultiply(view, -1.0f)));
+                                        const float no_light = (std::max)(0.0f,
+                                            SkyDot(normal, light));
+                                        if (no_light <= 0.0f) continue;
+                                        filtered = SkyAdd(filtered, SkyMultiply(
+                                            SampleCpuCube(source, source_width, light), no_light));
+                                        total_weight += no_light;
+                                    }
+                                }
+                                if (total_weight > 0.0f)
+                                    filtered = SkyMultiply(filtered, 1.0f / total_weight);
+                                if (!AppendSkyHalfRgba(specular.bytes, filtered)) return false;
+                            }
+                        }
+                    }
+                }
+                if (!BuildDdsSubresources(diffuse) || !BuildDdsSubresources(specular))
+                {
+                    diffuse = {};
+                    specular = {};
+                    return false;
+                }
+            }
+            catch (...)
+            {
+                diffuse = {};
+                specular = {};
+                return false;
+            }
             return true;
         }
 
@@ -1283,6 +2236,8 @@ namespace ReplayEngine::Rendering::DX12
                 resource_descriptor_allocator_.Free(entry.second.srgb_srv);
         }
         texture_cache_.clear();
+        sky_cpu_cubes_.clear();
+        sky_source_paths_.clear();
         static_texture_failures_.clear();
         static_mesh_cache_.clear();
         static_mesh_bounds_cache_.clear();
@@ -1354,6 +2309,78 @@ namespace ReplayEngine::Rendering::DX12
                 resource_descriptor_allocator_.Free(texture.srv);
             if (texture.srgb_srv.IsValid())
                 resource_descriptor_allocator_.Free(texture.srgb_srv);
+            return false;
+        }
+        return true;
+    }
+
+    bool D3D12DeviceContext::CreateStaticCubeTexture(const std::string& key,
+        std::uint32_t width, std::uint32_t height, std::uint16_t mip_levels,
+        DXGI_FORMAT format, const std::vector<D3D12TextureSubresourceSource>& subresources,
+        const std::vector<float>* cpu_rgba) noexcept
+    {
+        if (key.empty() || width == 0 || height != width || mip_levels == 0 ||
+            format == DXGI_FORMAT_UNKNOWN || subresources.size() !=
+            static_cast<std::size_t>(mip_levels) * 6u)
+            return false;
+        if (texture_cache_.find(key) != texture_cache_.end()) return true;
+        if (cpu_rgba != nullptr && cpu_rgba->size() <
+            static_cast<std::size_t>(width) * height * 24u)
+            return false;
+
+        StaticTextureResource texture;
+        texture.is_cube = true;
+        const DXGI_FORMAT resource_format = ToLinearTextureFormat(format);
+        if (!D3D12ResourceFactory::CreateTextureCube(device_.Get(), upload_context_,
+            width, height, mip_levels, resource_format, subresources, texture.resource))
+            return false;
+        SetD3D12ObjectNameUtf8(texture.resource.Get(), L"Texture.SkyCube", key.c_str());
+        if (!resource_descriptor_allocator_.Allocate(1, texture.srv)) return false;
+        D3D12_SHADER_RESOURCE_VIEW_DESC srv{};
+        srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+        const DXGI_FORMAT srgb_format = ToSrgbTextureFormat(format);
+        srv.Format = srgb_format != DXGI_FORMAT_UNKNOWN ? srgb_format : resource_format;
+        srv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
+        srv.TextureCube.MostDetailedMip = 0;
+        srv.TextureCube.MipLevels = mip_levels;
+        srv.TextureCube.ResourceMinLODClamp = 0.0f;
+        device_->CreateShaderResourceView(texture.resource.Get(), &srv, texture.srv.cpu);
+        texture.width = width;
+        texture.height = height;
+        texture.mip_levels = mip_levels;
+        texture.format = resource_format;
+
+        bool cpu_inserted = false;
+        try
+        {
+            if (cpu_rgba != nullptr)
+            {
+                SkyCubeCpuData cpu_data;
+                cpu_data.width = width;
+                cpu_data.rgba = *cpu_rgba;
+                sky_cpu_cubes_.insert_or_assign(key, std::move(cpu_data));
+                cpu_inserted = true;
+            }
+            auto result = texture_cache_.try_emplace(key);
+            if (!result.second)
+            {
+                if (cpu_inserted) sky_cpu_cubes_.erase(key);
+                resource_descriptor_allocator_.Free(texture.srv);
+                return true;
+            }
+            result.first->second.resource = std::move(texture.resource);
+            result.first->second.srv = texture.srv;
+            result.first->second.width = texture.width;
+            result.first->second.height = texture.height;
+            result.first->second.mip_levels = texture.mip_levels;
+            result.first->second.format = texture.format;
+            result.first->second.is_cube = true;
+            texture.srv = {};
+        }
+        catch (...)
+        {
+            if (cpu_inserted) sky_cpu_cubes_.erase(key);
+            if (texture.srv.IsValid()) resource_descriptor_allocator_.Free(texture.srv);
             return false;
         }
         return true;
@@ -1487,6 +2514,49 @@ namespace ReplayEngine::Rendering::DX12
             try { static_texture_failures_.insert(source.key); }
             catch (...) {}
         };
+        if (source.is_cube)
+        {
+            std::string extension = source.source_path.extension().string();
+            std::transform(extension.begin(), extension.end(), extension.begin(),
+                [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
+            DecodedDdsImage decoded;
+            if (extension == ".dds")
+            {
+                if (!DecodeDdsCube(source.source_path, decoded))
+                {
+                    DebugMessage("[DX12] 空のDDS読み込みに失敗しました。\n");
+                    remember_decode_failure();
+                    return false;
+                }
+            }
+            else if (extension == ".hdr")
+            {
+                if (!DecodeHdrPanoramaToCube(source.source_path, decoded))
+                {
+                    DebugMessage("[DX12] 空のHDR読み込みに失敗しました。\n");
+                    remember_decode_failure();
+                    return false;
+                }
+            }
+            else
+            {
+                remember_decode_failure();
+                return false;
+            }
+            std::vector<float> cpu_rgba;
+            const std::vector<float>* cpu_source =
+                CopyCubeMip0ToFloat(decoded, cpu_rgba) ? &cpu_rgba : nullptr;
+            try
+            {
+                sky_source_paths_.insert_or_assign(source.key, source.source_path);
+            }
+            catch (...)
+            {
+                return false;
+            }
+            return CreateStaticCubeTexture(source.key, decoded.width, decoded.height,
+                decoded.mip_levels, decoded.format, decoded.subresources, cpu_source);
+        }
         StaticTextureResource texture;
         if (!source.rgba.empty())
         {
@@ -1597,6 +2667,61 @@ namespace ReplayEngine::Rendering::DX12
         return true;
     }
 
+    bool D3D12DeviceContext::EnsureSkyEnvironment(
+        const D3D12SkySubmission& sky) noexcept
+    {
+        if (!sky.enabled || sky.texture_key.empty()) return true;
+        const auto source_texture = texture_cache_.find(sky.texture_key);
+        if (source_texture == texture_cache_.end() || !source_texture->second.is_cube)
+            return true;
+
+        const std::string diffuse_key = sky.texture_key + ":ibl_diffuse";
+        const std::string specular_key = sky.texture_key + ":ibl_specular";
+        const bool diffuse_cached = texture_cache_.find(diffuse_key) != texture_cache_.end();
+        const bool specular_cached = texture_cache_.find(specular_key) != texture_cache_.end();
+        if (diffuse_cached && specular_cached) return true;
+
+        const auto source_path = sky_source_paths_.find(sky.texture_key);
+        if (source_path == sky_source_paths_.end()) return true;
+        DecodedDdsImage diffuse;
+        DecodedDdsImage specular;
+        bool diffuse_ready = ReadSkyCubeCache(SkyCachePath(source_path->second, ".iem"),
+            diffuse);
+        bool specular_ready = ReadSkyCubeCache(SkyCachePath(source_path->second, ".pmrem"),
+            specular);
+        if (!diffuse_ready || !specular_ready)
+        {
+            const auto cpu_source = sky_cpu_cubes_.find(sky.texture_key);
+            if (cpu_source == sky_cpu_cubes_.end()) return true;
+            DecodedDdsImage generated_diffuse;
+            DecodedDdsImage generated_specular;
+            if (!BuildIblCubes(cpu_source->second.rgba, cpu_source->second.width,
+                generated_diffuse, generated_specular))
+                return true;
+            if (!diffuse_ready)
+            {
+                diffuse = std::move(generated_diffuse);
+                diffuse_ready = true;
+                WriteSkyCubeCache(SkyCachePath(source_path->second, ".iem"), diffuse);
+            }
+            if (!specular_ready)
+            {
+                specular = std::move(generated_specular);
+                specular_ready = true;
+                WriteSkyCubeCache(SkyCachePath(source_path->second, ".pmrem"), specular);
+            }
+        }
+        if (!diffuse_cached && diffuse_ready &&
+            !CreateStaticCubeTexture(diffuse_key, diffuse.width, diffuse.height,
+                diffuse.mip_levels, diffuse.format, diffuse.subresources))
+            return false;
+        if (!specular_cached && specular_ready &&
+            !CreateStaticCubeTexture(specular_key, specular.width, specular.height,
+                specular.mip_levels, specular.format, specular.subresources))
+            return false;
+        return true;
+    }
+
     bool D3D12DeviceContext::EnsureStaticShader(
         const D3D12StaticShaderSource& source) noexcept
     {
@@ -1696,7 +2821,8 @@ namespace ReplayEngine::Rendering::DX12
             texture_cache_.size() <= persistent_textures && static_texture_failures_.empty() &&
             custom_static_pipelines_.empty() && custom_static_shader_failures_.empty() &&
             custom_ui_effect_pipelines_.empty() && custom_ui_effect_shader_diagnostics_.empty() &&
-            scene3d_motion_history_.empty())
+            scene3d_motion_history_.empty() && sky_cpu_cubes_.empty() &&
+            sky_source_paths_.empty())
             return true;
         if (!WaitForGpu()) return false;
 
@@ -1719,8 +2845,12 @@ namespace ReplayEngine::Rendering::DX12
             }
             if (it->second.srv.IsValid())
                 resource_descriptor_allocator_.Free(it->second.srv);
+            if (it->second.srgb_srv.IsValid())
+                resource_descriptor_allocator_.Free(it->second.srgb_srv);
             it = texture_cache_.erase(it);
         }
+        sky_cpu_cubes_.clear();
+        sky_source_paths_.clear();
         return true;
     }
 
@@ -2503,6 +3633,7 @@ namespace ReplayEngine::Rendering::DX12
         for (const auto& pipeline : scene3d_static_shadow_pipelines_) if (pipeline) ++pso_count;
         for (const auto& pipeline : scene3d_skinned_shadow_pipelines_) if (pipeline) ++pso_count;
         if (scene3d_lighting_pipeline_) ++pso_count;
+        if (scene3d_skybox_pipeline_) ++pso_count;
         if (scene3d_postprocess_pipeline_) ++pso_count;
         for (const auto& pipeline : ui_pipelines_) if (pipeline) ++pso_count;
         if (ui_hdr_composite_pipeline_) ++pso_count;

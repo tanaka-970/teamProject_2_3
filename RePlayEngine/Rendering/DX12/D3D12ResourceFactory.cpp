@@ -128,6 +128,44 @@ namespace ReplayEngine::Rendering::DX12::D3D12ResourceFactory
         return true;
     }
 
+    bool CreateTextureCube(ID3D12Device* device, D3D12UploadContext& uploader,
+        std::uint32_t width, std::uint32_t height, std::uint16_t mip_levels,
+        DXGI_FORMAT format, const std::vector<D3D12TextureSubresourceSource>& subresources,
+        Microsoft::WRL::ComPtr<ID3D12Resource>& resource) noexcept
+    {
+        resource.Reset();
+        const std::size_t expected_subresources = static_cast<std::size_t>(mip_levels) * 6u;
+        if (device == nullptr || !uploader.IsInitialized() || width == 0 || height == 0 ||
+            mip_levels == 0 || format == DXGI_FORMAT_UNKNOWN ||
+            subresources.size() != expected_subresources)
+            return false;
+
+        D3D12_HEAP_PROPERTIES heap_properties{};
+        heap_properties.Type = D3D12_HEAP_TYPE_DEFAULT;
+        D3D12_RESOURCE_DESC description{};
+        description.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        description.Width = width;
+        description.Height = height;
+        description.DepthOrArraySize = 6;
+        description.MipLevels = mip_levels;
+        description.Format = format;
+        description.SampleDesc.Count = 1;
+        description.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        // DX12 に MiscFlags は無い。キューブであることは SRV の Dimension で表す。
+        if (FAILED(device->CreateCommittedResource(&heap_properties,
+            D3D12_HEAP_FLAG_NONE, &description, D3D12_RESOURCE_STATE_COPY_DEST,
+            nullptr, IID_PPV_ARGS(&resource))))
+            return false;
+        SetD3D12ObjectName(resource.Get(), L"Resource.TextureCube", L"Asset");
+        if (!uploader.UploadTextureSubresources(resource.Get(), subresources,
+            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE))
+        {
+            resource.Reset();
+            return false;
+        }
+        return true;
+    }
+
     bool CreateTexture2DRgba8(ID3D12Device* device, D3D12UploadContext& uploader,
         const void* rgba_data, std::uint32_t width, std::uint32_t height,
         std::uint32_t row_pitch, Microsoft::WRL::ComPtr<ID3D12Resource>& resource) noexcept
