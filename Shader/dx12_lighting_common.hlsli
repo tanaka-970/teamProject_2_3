@@ -54,6 +54,18 @@ cbuffer Dx12LightCB : register(DX12_LIGHT_CB_REGISTER)
     row_major float4x4 skyRotation;
     float4 skyJitter;
     float4 iblParams;
+    float4 skyBlend;
+    float4 skyMotion;
+    float4 cloudLayer1Params;
+    float4 cloudLayer2Params;
+    float4 cloudLayer1Color;
+    float4 cloudLayer2Color;
+    float4 starParams;
+    float4 starColor;
+    float4 moonParams;
+    float4 moonDirection;
+    float4 moonColor;
+    row_major float4x4 previousSkyRotation;
 };
 
 Texture2DArray<float> dx12CsmShadowArray : register(t6);
@@ -61,6 +73,9 @@ Texture2DArray<float> dx12LocalShadowArray : register(t7);
 TextureCube<float4> dx12IblDiffuse : register(t33);
 TextureCube<float4> dx12IblSpecular : register(t34);
 TextureCube<float4> dx12SkySource : register(t35);
+TextureCube<float4> dx12IblDiffuseSecondary : register(t36);
+TextureCube<float4> dx12IblSpecularSecondary : register(t37);
+TextureCube<float4> dx12SkySourceSecondary : register(t38);
 SamplerComparisonState dx12ShadowSampler : register(s1);
 SamplerState dx12ShadowPointSampler : register(s2);
 SamplerState dx12IblSampler : register(s3);
@@ -475,8 +490,23 @@ float3 Dx12EvaluateIbl(float3 albedo, float metallic, float roughness,
     uint mipCount = 1;
     dx12IblSpecular.GetDimensions(0, width, height, mipCount);
     const float lod = roughness * float(max(mipCount - 1u, 1u));
-    const float3 irradiance = dx12IblDiffuse.SampleLevel(dx12IblSampler, N, 0).rgb;
-    const float3 radiance = dx12IblSpecular.SampleLevel(dx12IblSampler, R, lod).rgb;
+    float3 irradiance = dx12IblDiffuse.SampleLevel(dx12IblSampler, N, 0).rgb;
+    float3 radiance = dx12IblSpecular.SampleLevel(dx12IblSampler, R, lod).rgb;
+    if (skyBlend.y > 0.5f && skyBlend.x > 0.0f)
+    {
+        uint secondaryWidth = 1;
+        uint secondaryHeight = 1;
+        uint secondaryMipCount = 1;
+        dx12IblSpecularSecondary.GetDimensions(0, secondaryWidth,
+            secondaryHeight, secondaryMipCount);
+        irradiance = lerp(irradiance,
+            dx12IblDiffuseSecondary.SampleLevel(dx12IblSampler, N, 0).rgb,
+            saturate(skyBlend.x));
+        radiance = lerp(radiance,
+            dx12IblSpecularSecondary.SampleLevel(dx12IblSampler, R,
+                roughness * float(max(secondaryMipCount - 1u, 1u))).rgb,
+            saturate(skyBlend.x));
+    }
     const float3 Fr = max(1.0f - roughness, f0) - f0;
     const float3 kS = f0 + Fr * pow(1.0f - noV, 5.0f);
     const float3 FssEss = kS * f_ab.x + f_ab.y;

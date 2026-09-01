@@ -545,14 +545,20 @@ void framework::render(float elapsed_time)
                     build_dx12_lighting_for_scene(loading_scene, *exclusive_render_scene);
                 std::vector<ReplayEngine::Rendering::DX12::D3D12StaticTextureSource>
                     loading_sky_textures;
+                std::unordered_set<std::string> loading_sky_keys;
                 if (!loading_scene.sky.texture_key.empty())
+                    loading_sky_keys.insert(loading_scene.sky.texture_key);
+                if (!loading_scene.sky.secondary_texture_key.empty())
+                    loading_sky_keys.insert(loading_scene.sky.secondary_texture_key);
+                for (const std::string& key : loading_scene.sky.keyframe_texture_keys)
+                    if (!key.empty()) loading_sky_keys.insert(key);
+                if (!loading_sky_keys.empty())
                 {
                     for (auto& source : loading_scene.texture_sources)
                     {
-                        if (source.key == loading_scene.sky.texture_key)
+                        if (loading_sky_keys.find(source.key) != loading_sky_keys.end())
                         {
                             loading_sky_textures.push_back(std::move(source));
-                            break;
                         }
                     }
                 }
