@@ -394,9 +394,12 @@ namespace ReplayEngine::UI
                 });
         }
 
-        bool HitTest(const RectTransformComponent& rect, float x, float y) noexcept
+        bool HitTest(const Core::GameObject& object, const RectTransformComponent& rect,
+            float x, float y) noexcept
         {
-            const DirectX::XMFLOAT4 resolved = rect.ResolvedRect();
+            DirectX::XMFLOAT4 resolved = rect.ResolvedRect();
+            if (const UIImageComponent* image = object.GetComponent<UIImageComponent>())
+                image->TryGetAspectHitRect(resolved);
             const DirectX::XMMATRIX matrix = DirectX::XMLoadFloat4x4(&rect.ResolvedMatrix());
             DirectX::XMVECTOR determinant{};
             const DirectX::XMMATRIX inverse = DirectX::XMMatrixInverse(&determinant, matrix);
@@ -416,7 +419,8 @@ namespace ReplayEngine::UI
                 const UIMaskComponent* mask = current->GetComponent<UIMaskComponent>();
                 const RectTransformComponent* rect = current->GetComponent<RectTransformComponent>();
                 if (mask != nullptr && rect != nullptr && mask->enabled_mask &&
-                    mask->mask_mode == UIMaskComponent::Rectangle && !HitTest(*rect, x, y))
+                    mask->mask_mode == UIMaskComponent::Rectangle &&
+                    !HitTest(*current, *rect, x, y))
                     return false;
             }
             return true;
@@ -432,7 +436,7 @@ namespace ReplayEngine::UI
                 const UIScrollViewComponent* scroll = child->GetComponent<UIScrollViewComponent>();
                 const RectTransformComponent* rect = child->GetComponent<RectTransformComponent>();
                 if (scroll != nullptr && rect != nullptr && scroll->ActiveInHierarchy() &&
-                    HitTest(*rect, x, y) && VisibleThroughAncestorMasks(*child, x, y))
+                    HitTest(*child, *rect, x, y) && VisibleThroughAncestorMasks(*child, x, y))
                 {
                     return true;
                 }
@@ -536,7 +540,7 @@ namespace ReplayEngine::UI
             UIScrollViewComponent* scroll = object.GetComponent<UIScrollViewComponent>();
             RectTransformComponent* rect = object.GetComponent<RectTransformComponent>();
             if (scroll == nullptr || rect == nullptr || !scroll->ActiveInHierarchy()) return;
-            const bool hovered = HitTest(*rect, mouse_x, mouse_y) &&
+            const bool hovered = HitTest(object, *rect, mouse_x, mouse_y) &&
                 VisibleThroughAncestorMasks(object, mouse_x, mouse_y);
             // Nested ScrollView は最も内側の View が pointer 操作を所有する。
             // 親子が同時に drag/wheel すると両方の offset が動くため、親は開始しない。
@@ -687,7 +691,7 @@ namespace ReplayEngine::UI
             UISelectableComponent* selectable = object.GetComponent<UISelectableComponent>();
             if (selectable != nullptr) selectable->interactable = slider->interactable;
             const bool active = slider->interactable && slider->ActiveInHierarchy();
-            const bool hovered = active && HitTest(*rect, mouse_x, mouse_y) &&
+            const bool hovered = active && HitTest(object, *rect, mouse_x, mouse_y) &&
                 VisibleThroughAncestorMasks(object, mouse_x, mouse_y);
             if (!input_captured && hovered && mouse_pressed)
             {
@@ -762,7 +766,7 @@ namespace ReplayEngine::UI
                 {
                     if (RectTransformComponent* rect = object.GetComponent<RectTransformComponent>())
                     {
-                        if (HitTest(*rect, mouse_x, mouse_y) &&
+                        if (HitTest(object, *rect, mouse_x, mouse_y) &&
                             VisibleThroughAncestorMasks(object, mouse_x, mouse_y))
                         {
                             if (UISelectableComponent* selectable = object.GetComponent<UISelectableComponent>())
@@ -793,7 +797,7 @@ namespace ReplayEngine::UI
                 {
                     if (const auto* rect = object.GetComponent<RectTransformComponent>())
                     {
-                        const bool hovered = HitTest(*rect, mouse_x, mouse_y) &&
+                        const bool hovered = HitTest(object, *rect, mouse_x, mouse_y) &&
                             VisibleThroughAncestorMasks(object, mouse_x, mouse_y);
                         Scene::Scene* scene = button->GetScene();
                         const Scene::IInputService* input = scene != nullptr ? scene->Services().Input() : nullptr;

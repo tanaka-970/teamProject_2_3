@@ -2107,6 +2107,40 @@ bool framework::build_dx12_ui_for_scene(
                 const std::string texture_key = add_image_texture(*image, uv, rotated,
                     &atlas_path_points);
                 DirectX::XMFLOAT4 draw_rect = rect->ResolvedRect();
+                const bool nine_slice_enabled = image->nine_slice.x > 0.0f ||
+                    image->nine_slice.y > 0.0f || image->nine_slice.z > 0.0f ||
+                    image->nine_slice.w > 0.0f;
+                image->ClearAspectHitRect();
+                if (image->preserve_aspect && !nine_slice_enabled)
+                {
+                    std::uint32_t texture_width = 0;
+                    std::uint32_t texture_height = 0;
+                    if (dx12_device_context.TryGetStaticTextureSize(texture_key,
+                        texture_width, texture_height))
+                    {
+                        float source_width = static_cast<float>(texture_width) * std::fabs(uv.z);
+                        float source_height = static_cast<float>(texture_height) * std::fabs(uv.w);
+                        if (rotated) std::swap(source_width, source_height);
+                        if (source_width > 0.0f && source_height > 0.0f &&
+                            draw_rect.z > 0.0f && draw_rect.w > 0.0f)
+                        {
+                            const float image_aspect = source_width / source_height;
+                            const float bounds_aspect = draw_rect.z / draw_rect.w;
+                            if (image_aspect > bounds_aspect)
+                            {
+                                const float height = draw_rect.z / image_aspect;
+                                draw_rect.y += (draw_rect.w - height) * 0.5f;
+                                draw_rect.w = height;
+                            }
+                            else
+                            {
+                                const float width = draw_rect.w * image_aspect;
+                                draw_rect.x += (draw_rect.z - width) * 0.5f;
+                                draw_rect.z = width;
+                            }
+                        }
+                    }
+                }
                 const float fill = Clamp01(image->fill_amount);
                 if (image->fill_method == UIImageComponent::Horizontal)
                 {
@@ -2130,6 +2164,8 @@ bool framework::build_dx12_ui_for_scene(
                 }
                 if (fill > 0.0f)
                 {
+                    if (image->preserve_aspect && !nine_slice_enabled)
+                        image->SetAspectHitRect(draw_rect);
                     D3D12UIBlendMode blend = D3D12UIBlendMode::Alpha;
                     if (image->blend_mode == UIImageComponent::Additive) blend = D3D12UIBlendMode::Additive;
                     else if (image->blend_mode == UIImageComponent::Multiply) blend = D3D12UIBlendMode::Multiply;
@@ -2154,12 +2190,11 @@ bool framework::build_dx12_ui_for_scene(
                             local_opacity * Clamp01(image->opacity));
                     if (image->fill_method == UIImageComponent::Radial360)
                     {
-                        append_radial_fill(batch, rect->ResolvedRect(),
+                        append_radial_fill(batch, draw_rect,
                             rect->ResolvedMatrix(), uv, image_color, canvas_scale,
                             rotated, fill, image->fill_reverse);
                     }
-                    else if (image->nine_slice.x > 0.0f || image->nine_slice.y > 0.0f ||
-                        image->nine_slice.z > 0.0f || image->nine_slice.w > 0.0f)
+                    else if (nine_slice_enabled)
                     {
                         append_nine_slice(batch, draw_rect, rect->ResolvedMatrix(),
                             uv, image->nine_slice, image_color, canvas_scale, rotated);

@@ -925,6 +925,8 @@ namespace ReplayEngine::Rendering::DX12
             return key.empty() || texture_cache_.find(key) != texture_cache_.end() ||
                 static_texture_failures_.find(key) != static_texture_failures_.end();
         }
+        bool TryGetStaticTextureSize(const std::string& key, std::uint32_t& width,
+            std::uint32_t& height) const noexcept;
         bool HasStaticShader(const std::string& key) const noexcept
         {
             return key.empty() || custom_static_pipelines_.find(key) !=
