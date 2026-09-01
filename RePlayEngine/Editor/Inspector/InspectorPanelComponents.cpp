@@ -538,8 +538,13 @@ namespace ReplayEngine::Editor
             if (!order_open) return;
 
             ImGui::Indent();
-            ImGui::TextDisabled("Surface の後へ上から順に合成。☷ を長押しして移動できます");
+            ImGui::TextDisabled("Surface の後へ上から順に合成。◆ を長押しして移動できます");
             ImGui::TextDisabled("並べ替えボタンと右クリックメニューも使えます");
+            if (const char* dragging = ActiveReorderLabel(&stack->effects))
+            {
+                ImGui::TextColored(ImGui::GetStyle().Colors[ImGuiCol_DragDropTarget],
+                    "移動中: %s", dragging);
+            }
             ReorderRequest move_request{};
             for (std::size_t effect_index = 0; effect_index < stack->effects.size(); ++effect_index)
             {

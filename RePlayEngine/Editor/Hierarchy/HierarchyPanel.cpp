@@ -16,11 +16,14 @@
 #include "../../Components/Landscape/LandscapeColliderComponent.h"
 #include "../../Scene/Runtime/Scene.h"
 #include "../../Scene/Serialization/SceneData.h"
+#include "../ReorderableList.h"
+#include "../Style/EditorStyle.h"
 
 #include "imgui/imgui.h"
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -32,8 +35,9 @@ namespace ReplayEngine::Editor
 
     namespace
     {
-        constexpr const char* drag_drop_type = "REPLAY_GAMEOBJECT";
         constexpr int maximum_depth = 64;
+        struct HierarchyReorderScope final {};
+        HierarchyReorderScope hierarchy_reorder_scope;
 
         void CopyToBuffer(char* buffer, int size, const std::string& text)
         {
@@ -65,6 +69,7 @@ namespace ReplayEngine::Editor
 
     void HierarchyPanel::Draw(EditorContext& context)
     {
+        PanelTabColorScope panel_tab_color("Scene");
         ImGui::Begin("階層");
         DrawContents(context);
         ImGui::End();
@@ -117,10 +122,17 @@ namespace ReplayEngine::Editor
         ImGui::Separator();
 
         // 親を持たないものから再帰的に描く。
-        for (GameObject* root : scene->RootGameObjects())
+        const std::vector<GameObject*> roots = scene->RootGameObjects();
+        for (GameObject* root : roots)
         {
             if (root == nullptr || root->PendingDestroy()) continue;
-            DrawNode(context, *root, 0);
+            DrawNode(context, *root, 0, roots);
+        }
+
+        if (const char* active_label = ActiveReorderLabel(); active_label != nullptr)
+        {
+            ImGui::TextColored(ImGui::GetStyle().Colors[ImGuiCol_DragDropTarget],
+                "移動中: %s", active_label);
         }
 
         // 何も無いところで右クリックしたときのメニュー。
@@ -134,15 +146,22 @@ namespace ReplayEngine::Editor
         // 空白部分へのドロップで Scene 直下へ移す。
         if (ImGui::BeginDragDropTarget())
         {
-            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(drag_drop_type))
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(
+                "REPLAY_REORDERABLE_ITEM"))
             {
-                if (payload->DataSize == sizeof(ObjectID::ValueType))
+                if (payload->Data != nullptr &&
+                    payload->DataSize == static_cast<int>(sizeof(ReorderPayload)) &&
+                    payload->IsDelivery())
                 {
-                    ObjectID::ValueType raw = 0;
-                    std::memcpy(&raw, payload->Data, sizeof(raw));
-                    pending_reparent_child_ = ObjectID(raw);
-                    pending_reparent_parent_ = ObjectID::Invalid();
-                    pending_drop_placement_ = DropPlacement::Root;
+                    ReorderPayload dragged{};
+                    std::memcpy(&dragged, payload->Data, sizeof(dragged));
+                    if (dragged.scope == reinterpret_cast<std::uintptr_t>(&hierarchy_reorder_scope) &&
+                        dragged.item != 0)
+                    {
+                        pending_reparent_child_ = ObjectID(dragged.item);
+                        pending_reparent_parent_ = ObjectID::Invalid();
+                        pending_drop_placement_ = DropPlacement::Root;
+                    }
                 }
             }
             ImGui::EndDragDropTarget();
@@ -218,30 +237,33 @@ namespace ReplayEngine::Editor
         }
     }
 
-    void HierarchyPanel::DrawNode(EditorContext& context, GameObject& object, int depth)
+    void HierarchyPanel::DrawNode(EditorContext& context, GameObject& object, int depth,
+        const std::vector<GameObject*>& siblings)
     {
         if (depth > maximum_depth) return;
         if (!NodeMatchesFilter(object)) return;
 
-        ImGui::PushID(static_cast<int>(object.ID().Value()));
-
         const bool editable = context.CanEdit();
         const bool selected = context.Selection().IsSelected(object.ID());
         const bool has_children = !object.Children().empty();
-
-        // 有効チェックボックス。
-        bool enabled = object.Enabled();
-        if (ImGui::Checkbox("##Enabled", &enabled) && editable)
-        {
-            context.BeginEdit("GameObject の有効状態を変更");
-            object.SetEnabled(enabled);
-            context.CommitEdit();
-        }
-        ImGui::SameLine();
+        const std::size_t sibling_index = object.SiblingIndex();
+        const std::size_t sibling_count = siblings.size();
+        const void* list_identity = object.Parent() != nullptr
+            ? static_cast<const void*>(object.Parent()) : static_cast<const void*>(context.GetScene());
+        const std::string item_id = "GameObject" + object.ID().ToString();
 
         // 名前変更中はテキスト入力へ差し替える。
         if (renaming_ == object.ID())
         {
+            ImGui::PushID(item_id.c_str());
+            bool enabled = object.Enabled();
+            if (ImGui::Checkbox("##Enabled", &enabled) && editable)
+            {
+                context.BeginEdit("GameObject の有効状態を変更");
+                object.SetEnabled(enabled);
+                context.CommitEdit();
+            }
+            ImGui::SameLine();
             ImGui::SetNextItemWidth(-1.0f);
             ImGui::SetKeyboardFocusHere();
             if (ImGui::InputText("##Rename", rename_buffer_, rename_buffer_size,
@@ -268,21 +290,12 @@ namespace ReplayEngine::Editor
             return;
         }
 
-        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow |
-            ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_DefaultOpen;
-        if (search_buffer_[0] != '\0') flags |= ImGuiTreeNodeFlags_DefaultOpen;
-        if (selected) flags |= ImGuiTreeNodeFlags_Selected;
-        if (!has_children) flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
-
         // 無効な GameObject は薄く表示する。
         const bool dimmed = !object.ActiveInHierarchy();
         const Assets::AssetDatabase* database = context.GetAssetDatabase();
         const bool missing_prefab = object.IsPrefabInstance() &&
             (database == nullptr || database->FindByGuid(object.PrefabSourceGUID()) == nullptr);
         const bool prefab = object.IsPrefabInstance();
-        if (dimmed) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.55f, 0.55f, 1.0f));
-        else if (missing_prefab) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.30f, 0.25f, 1.0f));
-        else if (prefab) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.35f, 0.65f, 1.0f, 1.0f));
 
         std::string node_label;
         if (object.IsPrefabRoot()) node_label += "[Prefab] ";
@@ -292,82 +305,146 @@ namespace ReplayEngine::Editor
         node_label += object.Name();
         if (missing_prefab) node_label += " [Missing]";
 
-        const bool opened = ImGui::TreeNodeEx("##Node", flags, "%s", node_label.c_str());
-
-        if (dimmed || missing_prefab || prefab) ImGui::PopStyleColor();
-
-        if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
+        const bool dragging_this = IsReorderDragging(list_identity, sibling_index);
+        const std::string visible_node_label = dragging_this
+            ? (std::string("▲ ") + node_label + "  … 移動中") : node_label;
+        const auto draw_header = [&](const char* header_title,
+            ImGuiTreeNodeFlags header_flags)
         {
-            const ImGuiIO& io = ImGui::GetIO();
-            if (io.KeyCtrl)
+            (void)header_title;
+            header_flags |= ImGuiTreeNodeFlags_OpenOnArrow |
+                ImGuiTreeNodeFlags_SpanAvailWidth;
+            if (!has_children)
+                header_flags |= ImGuiTreeNodeFlags_Leaf |
+                    ImGuiTreeNodeFlags_NoTreePushOnOpen;
+            bool enabled = object.Enabled();
+            if (ImGui::Checkbox("##Enabled", &enabled) && editable)
             {
-                context.Selection().Toggle(object.ID());
-                selection_anchor_ = object.ID();
+                context.BeginEdit("GameObject の有効状態を変更");
+                object.SetEnabled(enabled);
+                context.CommitEdit();
             }
-            else if (io.KeyShift && selection_anchor_.Valid())
-            {
-                Scene::Scene* scene = context.GetScene();
-                std::vector<GameObject*> ordered;
-                if (scene != nullptr)
-                {
-                    for (GameObject* root : scene->RootGameObjects())
-                    {
-                        if (root != nullptr) CollectPreorder(*root, ordered);
-                    }
-                }
+            ImGui::SameLine();
+            if (dimmed || missing_prefab || prefab)
+                ImGui::PushStyleColor(ImGuiCol_Text,
+                    dimmed ? ImVec4(0.55f, 0.55f, 0.55f, 1.0f)
+                        : (missing_prefab ? ImVec4(1.0f, 0.30f, 0.25f, 1.0f)
+                            : ImVec4(0.35f, 0.65f, 1.0f, 1.0f)));
+            const bool open = ImGui::TreeNodeEx("##Node", header_flags,
+                "%s", visible_node_label.c_str());
+            if (dimmed || missing_prefab || prefab) ImGui::PopStyleColor();
 
-                auto anchor = std::find_if(ordered.begin(), ordered.end(), [this](const GameObject* item)
+            if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
+            {
+                const ImGuiIO& io = ImGui::GetIO();
+                if (io.KeyCtrl)
                 {
-                    return item != nullptr && item->ID() == selection_anchor_;
-                });
-                auto current = std::find(ordered.begin(), ordered.end(), &object);
-                if (anchor != ordered.end() && current != ordered.end())
+                    context.Selection().Toggle(object.ID());
+                    selection_anchor_ = object.ID();
+                }
+                else if (io.KeyShift && selection_anchor_.Valid())
                 {
-                    if (anchor > current) std::swap(anchor, current);
-                    context.Selection().Clear();
-                    for (auto it = anchor; it <= current; ++it)
+                    Scene::Scene* scene = context.GetScene();
+                    std::vector<GameObject*> ordered;
+                    if (scene != nullptr)
                     {
-                        if (*it != nullptr) context.Selection().Select((*it)->ID(), true);
+                        for (GameObject* root : scene->RootGameObjects())
+                        {
+                            if (root != nullptr) CollectPreorder(*root, ordered);
+                        }
+                    }
+
+                    auto anchor = std::find_if(ordered.begin(), ordered.end(), [this](const GameObject* item)
+                    {
+                        return item != nullptr && item->ID() == selection_anchor_;
+                    });
+                    auto current = std::find(ordered.begin(), ordered.end(), &object);
+                    if (anchor != ordered.end() && current != ordered.end())
+                    {
+                        if (anchor > current) std::swap(anchor, current);
+                        context.Selection().Clear();
+                        for (auto it = anchor; it <= current; ++it)
+                        {
+                            if (*it != nullptr) context.Selection().Select((*it)->ID(), true);
+                        }
+                    }
+                    else
+                    {
+                        context.Selection().Select(object.ID(), true);
                     }
                 }
                 else
                 {
-                    context.Selection().Select(object.ID(), true);
+                    context.Selection().Select(object.ID(), false);
+                    selection_anchor_ = object.ID();
                 }
             }
-            else
-            {
-                context.Selection().Select(object.ID(), false);
-                selection_anchor_ = object.ID();
-            }
-        }
+            return open;
+        };
 
-        HandleDragAndDrop(context, object);
-
-        if (ImGui::BeginPopupContextItem("NodeContext"))
+        const auto draw_drop = [&](ReorderDropInfo& drop,
+            const ImVec2& item_min, const ImVec2& item_max)
         {
-            // メニューを開いた対象を選択しておく。誤操作を防ぐため。
-            if (!context.Selection().IsSelected(object.ID()))
+            if (!editable || !drop.same_scope || drop.payload.item == 0 ||
+                drop.payload.item == object.ID().Value()) return;
+            const float height = (std::max)(1.0f, item_max.y - item_min.y);
+            const float local_y = ImGui::GetIO().MousePos.y - item_min.y;
+            constexpr float reorder_band = 0.35f;
+            DropPlacement placement = DropPlacement::Child;
+            if (local_y < height * reorder_band) placement = DropPlacement::Before;
+            else if (local_y > height * (1.0f - reorder_band))
+                placement = DropPlacement::After;
+            drop.handled = true;
+            if (placement != DropPlacement::Child)
             {
-                context.Selection().Select(object.ID(), false);
+                const float line_y = placement == DropPlacement::Before
+                    ? item_min.y : item_max.y;
+                ImGui::GetWindowDrawList()->AddLine(
+                    ImVec2(item_min.x, line_y), ImVec2(item_max.x, line_y),
+                    ImGui::GetColorU32(ImGuiCol_DragDropTarget), 4.0f);
             }
-            DrawContextMenu(context, &object);
-            ImGui::EndPopup();
+            if (drop.delivery && !pending_reparent_child_.Valid())
+            {
+                pending_reparent_child_ = ObjectID(drop.payload.item);
+                pending_reparent_parent_ = object.ID();
+                pending_drop_placement_ = placement;
+            }
+        };
+
+        const ReorderableItemResult item = DrawReorderableItemEx(
+            list_identity, item_id.c_str(), sibling_index, sibling_count,
+            object.Name().c_str(), selected,
+            true, editable, object.ID().Value(),
+            &hierarchy_reorder_scope,
+            draw_header,
+            [&context, &object, this]
+            {
+                if (!context.Selection().IsSelected(object.ID()))
+                    context.Selection().Select(object.ID(), false);
+                DrawContextMenu(context, &object);
+            }, draw_drop);
+
+        if (item.request.Valid() && !pending_reparent_child_.Valid() &&
+            item.request.destination < siblings.size())
+        {
+            pending_reparent_child_ = object.ID();
+            pending_reparent_parent_ = siblings[item.request.destination] != nullptr
+                ? siblings[item.request.destination]->ID() : ObjectID::Invalid();
+            pending_drop_placement_ = item.request.source < item.request.destination
+                ? DropPlacement::After : DropPlacement::Before;
         }
 
-        if (opened && has_children)
+        if (item.opened && has_children)
         {
             // 走査中に子リストが変わらないよう控えを取る。
             const std::vector<GameObject*> children = object.Children();
             for (GameObject* child : children)
             {
                 if (child == nullptr || child->PendingDestroy()) continue;
-                DrawNode(context, *child, depth + 1);
+                DrawNode(context, *child, depth + 1, children);
             }
             ImGui::TreePop();
         }
-
-        ImGui::PopID();
     }
 
     bool HierarchyPanel::NodeMatchesFilter(const GameObject& object) const
@@ -391,62 +468,6 @@ namespace ReplayEngine::Editor
             if (child != nullptr && !child->PendingDestroy() && NodeMatchesFilter(*child)) return true;
         }
         return false;
-    }
-
-    void HierarchyPanel::HandleDragAndDrop(EditorContext& context, GameObject& object)
-    {
-        if (!context.CanEdit()) return;
-
-        if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None))
-        {
-            const ObjectID::ValueType raw = object.ID().Value();
-            ImGui::SetDragDropPayload(drag_drop_type, &raw, sizeof(raw));
-            ImGui::TextUnformatted(object.Name().c_str());
-            ImGui::EndDragDropSource();
-        }
-
-        const ImVec2 item_min = ImGui::GetItemRectMin();
-        const ImVec2 item_max = ImGui::GetItemRectMax();
-        if (ImGui::BeginDragDropTarget())
-        {
-            const float height = (std::max)(1.0f, item_max.y - item_min.y);
-            const float local_y = ImGui::GetIO().MousePos.y - item_min.y;
-
-            // 並べ替えの帯を広く、子にする帯を狭く取る。
-            //
-            // 以前は上 25% / 中央 50% / 下 25% だった。行の高さは 20px 前後なので
-            // 上下の帯が 5px しかなく、並べ替えたいだけでもほぼ中央に当たって
-            // 子にされていた。並べ替えの方が日常的な操作なのでそちらを広くする。
-            //
-            // 中央（子にする）は 30% 残す。ここを 0 にすると親子付けができない。
-            constexpr float reorder_band = 0.35f;
-            DropPlacement placement = DropPlacement::Child;
-            if (local_y < height * reorder_band) placement = DropPlacement::Before;
-            else if (local_y > height * (1.0f - reorder_band))
-                placement = DropPlacement::After;
-
-            // before / after は挿入位置を線で明示する。中央は通常の child drop。
-            if (placement != DropPlacement::Child)
-            {
-                const float y = placement == DropPlacement::Before ? item_min.y : item_max.y;
-                ImGui::GetWindowDrawList()->AddLine(
-                    ImVec2(item_min.x, y), ImVec2(item_max.x, y),
-                    IM_COL32(255, 205, 70, 255), 2.0f);
-            }
-
-            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(drag_drop_type))
-            {
-                if (payload->DataSize == sizeof(ObjectID::ValueType))
-                {
-                    ObjectID::ValueType raw = 0;
-                    std::memcpy(&raw, payload->Data, sizeof(raw));
-                    pending_reparent_child_ = ObjectID(raw);
-                    pending_reparent_parent_ = object.ID();
-                    pending_drop_placement_ = placement;
-                }
-            }
-            ImGui::EndDragDropTarget();
-        }
     }
 
     void HierarchyPanel::DrawContextMenu(EditorContext& context, GameObject* object)

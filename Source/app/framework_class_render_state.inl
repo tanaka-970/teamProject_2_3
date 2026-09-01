@@ -228,6 +228,7 @@ public:
 
     // Scene Flow Editor。ProjectSettings の GUID が Runtime で使う正本。
     ReplayEngine::Runtime::SceneFlowAsset scene_flow_editor_asset;
+    ReplayEngine::Editor::SceneFlowEditHistory scene_flow_edit_history;
     std::filesystem::path scene_flow_editor_path;
     std::string scene_flow_editor_guid;
     std::string scene_flow_editor_status{ "Scene Flow 未選択" };

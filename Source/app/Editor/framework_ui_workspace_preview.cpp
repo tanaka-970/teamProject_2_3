@@ -4,6 +4,7 @@
 
 #include "framework.h"
 
+#include "../../RePlayEngine/Editor/Style/EditorStyle.h"
 #include "../../RePlayEngine/Components/UI/CanvasComponent.h"
 #include "../../RePlayEngine/Components/UI/RectTransformComponent.h"
 #include "../../RePlayEngine/Components/UI/UIImageComponent.h"
@@ -254,6 +255,7 @@
 void framework::draw_ui_preview()
 {
     if (!show_ui_preview_panel) return;
+    ReplayEngine::Editor::PanelTabColorScope panel_tab_color("UI");
     if (!ImGui::Begin("Canvas プレビュー", &show_ui_preview_panel))
     {
         ImGui::End();

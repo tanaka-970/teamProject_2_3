@@ -6,6 +6,8 @@
 #include <cstddef>
 #include <string>
 #include <cstdint>
+#include <cstring>
+#include <utility>
 
 namespace ReplayEngine::Editor
 {
@@ -36,6 +38,19 @@ namespace ReplayEngine::Editor
     {
         std::uintptr_t list = 0;
         std::size_t index = 0;
+        std::uint64_t item = 0;
+        std::uintptr_t scope = 0;
+    };
+
+    struct ReorderDropInfo final
+    {
+        ReorderPayload payload{};
+        std::size_t target_index = invalid_reorder_index;
+        bool after = false;
+        bool same_scope = false;
+        bool same_list = false;
+        bool delivery = false;
+        bool handled = false;
     };
 
     inline std::size_t ReorderDestination(std::size_t source, std::size_t target,
@@ -55,6 +70,11 @@ namespace ReplayEngine::Editor
     {
         return g_active_reorder_list == list_identity && !g_active_reorder_label.empty()
             ? g_active_reorder_label.c_str() : nullptr;
+    }
+
+    inline const char* ActiveReorderLabel()
+    {
+        return g_active_reorder_label.empty() ? nullptr : g_active_reorder_label.c_str();
     }
 
     inline bool IsReorderDragging(const void* list_identity, std::size_t index)
@@ -82,11 +102,13 @@ namespace ReplayEngine::Editor
         }
     }
 
-    template<class ContextMenuFn>
-    ReorderableItemResult DrawReorderableItem(const void* list_identity,
+    template<class HeaderFn, class ContextMenuFn, class DropFn>
+    ReorderableItemResult DrawReorderableItemEx(const void* list_identity,
         const char* item_id, std::size_t index, std::size_t count,
         const char* title, bool selected, bool default_open, bool editable,
-        ContextMenuFn&& draw_context_menu)
+        std::uint64_t item_payload, const void* payload_scope,
+        HeaderFn&& draw_header,
+        ContextMenuFn&& draw_context_menu, DropFn&& draw_drop)
     {
         ReorderableItemResult result{};
         if (list_identity == nullptr || item_id == nullptr || title == nullptr)
@@ -114,7 +136,8 @@ namespace ReplayEngine::Editor
             ImGuiDragDropFlags_SourceAllowNullID))
         {
             const ReorderPayload payload{
-                reinterpret_cast<std::uintptr_t>(list_identity), index };
+                reinterpret_cast<std::uintptr_t>(list_identity), index, item_payload,
+                reinterpret_cast<std::uintptr_t>(payload_scope) };
             ImGui::SetDragDropPayload("REPLAY_REORDERABLE_ITEM", &payload,
                 sizeof(payload));
             ImGui::Text("移動: %s", title);
@@ -142,15 +165,16 @@ namespace ReplayEngine::Editor
         if (selected) header_flags |= ImGuiTreeNodeFlags_Selected;
         if (default_open) header_flags |= ImGuiTreeNodeFlags_DefaultOpen;
         const std::string header_title = dragging_this
-            ? (std::string("▶ ") + title + "  … 移動中") : std::string(title);
-        result.opened = ImGui::CollapsingHeader(header_title.c_str(), header_flags);
+            ? (std::string("▲ ") + title + "  … 移動中") : std::string(title);
+        result.opened = draw_header(header_title.c_str(), header_flags);
         if (dragging_this) ImGui::PopStyleColor();
         // 見出しそのものを掴めるようにする。小さな印だけを掴ませない。
         if (editable && ImGui::BeginDragDropSource(
             ImGuiDragDropFlags_SourceAllowNullID))
         {
             const ReorderPayload payload{
-                reinterpret_cast<std::uintptr_t>(list_identity), index };
+                reinterpret_cast<std::uintptr_t>(list_identity), index, item_payload,
+                reinterpret_cast<std::uintptr_t>(payload_scope) };
             ImGui::SetDragDropPayload("REPLAY_REORDERABLE_ITEM", &payload,
                 sizeof(payload));
             ImGui::Text("移動: %s", title);
@@ -230,23 +254,38 @@ namespace ReplayEngine::Editor
             if (payload != nullptr && payload->Data != nullptr &&
                 payload->DataSize == static_cast<int>(sizeof(ReorderPayload)))
             {
-                const ReorderPayload dragged =
-                    *static_cast<const ReorderPayload*>(payload->Data);
-                if (dragged.list == reinterpret_cast<std::uintptr_t>(list_identity) &&
-                    dragged.index < count)
+                ReorderPayload dragged{};
+                std::memcpy(&dragged, payload->Data, sizeof(dragged));
+                const bool same_scope =
+                    dragged.scope == reinterpret_cast<std::uintptr_t>(payload_scope);
+                const bool same_list = same_scope &&
+                    dragged.list == reinterpret_cast<std::uintptr_t>(list_identity);
+                ReorderDropInfo drop{};
+                drop.payload = dragged;
+                drop.same_scope = same_scope;
+                drop.same_list = same_list;
+                drop.delivery = payload->IsDelivery();
+                if (same_list && dragged.index < count)
                 {
                     const bool after = ImGui::GetMousePos().y >
                         (item_min.y + item_max.y) * 0.5f;
+                    drop.after = after;
+                    drop.target_index = index;
+                }
+                draw_drop(drop, item_min, item_max);
+                if (!drop.handled && drop.same_list &&
+                    drop.target_index != invalid_reorder_index)
+                {
                     const std::size_t destination = ReorderDestination(
-                        dragged.index, index, after, count);
+                        dragged.index, drop.target_index, drop.after, count);
                     if (destination != dragged.index)
                     {
                         result.dragging = true;
-                        const float line_y = after ? item_max.y : item_min.y;
+                        const float line_y = drop.after ? item_max.y : item_min.y;
                         ImGui::GetWindowDrawList()->AddLine(
                             ImVec2(item_min.x, line_y), ImVec2(item_max.x, line_y),
                             ImGui::GetColorU32(ImGuiCol_DragDropTarget), 4.0f);
-                        if (payload->IsDelivery())
+                        if (drop.delivery)
                         {
                             result.request.source = dragged.index;
                             result.request.destination = destination;
@@ -258,5 +297,20 @@ namespace ReplayEngine::Editor
         }
         ImGui::PopID();
         return result;
+    }
+
+    template<class ContextMenuFn>
+    ReorderableItemResult DrawReorderableItem(const void* list_identity,
+        const char* item_id, std::size_t index, std::size_t count,
+        const char* title, bool selected, bool default_open, bool editable,
+        ContextMenuFn&& draw_context_menu)
+    {
+        return DrawReorderableItemEx(list_identity, item_id, index, count, title,
+            selected, default_open, editable, 0, nullptr,
+            [](const char* header_title, ImGuiTreeNodeFlags flags)
+            {
+                return ImGui::CollapsingHeader(header_title, flags);
+            }, std::forward<ContextMenuFn>(draw_context_menu),
+            [](ReorderDropInfo&, const ImVec2&, const ImVec2&) {});
     }
 }

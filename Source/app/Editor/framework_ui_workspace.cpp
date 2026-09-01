@@ -7,6 +7,7 @@
 // BeginDisabledCompat / EndDisabledCompat は従来どおりこのファイルに残す。
 #include "framework.h"
 
+#include "../../RePlayEngine/Editor/Style/EditorStyle.h"
 #include "../../RePlayEngine/Components/UI/CanvasComponent.h"
 #include "../../RePlayEngine/Components/UI/RectTransformComponent.h"
 #include "../../RePlayEngine/Components/UI/UIImageComponent.h"
@@ -20,6 +21,7 @@
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
 #include "../../RePlayEngine/Scene/Runtime/Scene.h"
 #include "../../RePlayEngine/UI/UILayout.h"
+#include "../../RePlayEngine/Editor/ReorderableList.h"
 
 // PushItemFlag / ImGuiItemFlags_Disabled を使うため。
 // 同梱の ImGui は 1.80 WIP で BeginDisabled / EndDisabled がまだ無い。
@@ -32,8 +34,10 @@
 #include <cmath>
 #include <cstdint>
 #include <cstddef>
+#include <cstring>
 #include <filesystem>
 #include <functional>
+#include <iterator>
 #include <limits>
 #include <string>
 #include <vector>
@@ -127,7 +131,6 @@
         return preset;
     }
 
-    constexpr const char* ui_hierarchy_drag_type = "REPLAY_GAMEOBJECT";
     enum class UIHierarchyDropPlacement : int { Child = 0, Before = 1, After = 2, Root = 3 };
     struct UIHierarchyDropRequest final
     {
@@ -136,6 +139,8 @@
         UIHierarchyDropPlacement placement = UIHierarchyDropPlacement::Child;
     };
     UIHierarchyDropRequest ui_hierarchy_drop_request;
+    struct UIHierarchyReorderScope final {};
+    UIHierarchyReorderScope ui_hierarchy_reorder_scope;
 
     enum class UIOrderAction : int
     {
@@ -1665,7 +1670,7 @@
     // framework 側で選択種別を切り替える。
     void DrawUINode(ReplayEngine::Editor::EditorContext& context,
         Core::GameObject& object, const UIHierarchyFilterState& filter,
-        bool& selection_changed)
+        const std::vector<Core::GameObject*>& siblings, bool& selection_changed)
     {
         if (!UIHierarchyNodeMatchesFilter(object, filter)) return;
 
@@ -1685,99 +1690,127 @@
         if (selected) flags |= ImGuiTreeNodeFlags_Selected;
         if (!has_ui_child) flags |= ImGuiTreeNodeFlags_Leaf;
 
-        if (UIHierarchyFilterActive(filter) && has_ui_child)
-            ImGui::SetNextItemOpen(true, ImGuiCond_Always);
-
+        const auto sibling_position = std::find(siblings.begin(), siblings.end(), &object);
+        if (sibling_position == siblings.end()) return;
+        const std::size_t sibling_index = static_cast<std::size_t>(
+            std::distance(siblings.begin(), sibling_position));
         const std::string label = UIHierarchyLabel(object);
-        const bool open = ImGui::TreeNodeEx(label.c_str(), flags);
-        if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
-        {
-            context.Selection().Select(object.ID(), false);
-            selection_changed = true;
-        }
+        const std::size_t separator = label.find("##");
+        const std::size_t name_start = label.find(object.Name());
+        const std::string label_prefix = name_start == std::string::npos
+            ? std::string() : label.substr(0, name_start);
+        const std::string label_id = separator == std::string::npos
+            ? std::string() : label.substr(separator);
+        const std::string item_id = "UI" + object.ID().ToString();
+        const void* list_identity = object.Parent() != nullptr
+            ? static_cast<const void*>(object.Parent())
+            : static_cast<const void*>(context.GetScene());
 
-        if (context.CanEdit() && ImGui::BeginDragDropSource(ImGuiDragDropFlags_None))
+        const auto draw_header = [&](const char* header_title,
+            ImGuiTreeNodeFlags header_flags)
         {
-            const Core::ObjectID::ValueType raw = object.ID().Value();
-            ImGui::SetDragDropPayload(ui_hierarchy_drag_type, &raw, sizeof(raw));
-            ImGui::TextUnformatted(object.Name().c_str());
-            ImGui::EndDragDropSource();
-        }
-        if (context.CanEdit())
-        {
-            const ImVec2 item_min = ImGui::GetItemRectMin();
-            const ImVec2 item_max = ImGui::GetItemRectMax();
-            if (ImGui::BeginDragDropTarget())
+            header_flags |= ImGuiTreeNodeFlags_OpenOnArrow |
+                ImGuiTreeNodeFlags_SpanAvailWidth;
+            if (!has_ui_child)
+                header_flags |= ImGuiTreeNodeFlags_Leaf |
+                    ImGuiTreeNodeFlags_NoTreePushOnOpen;
+            if (UIHierarchyFilterActive(filter) && has_ui_child)
+                ImGui::SetNextItemOpen(true, ImGuiCond_Always);
+            const std::string visible_label = label_prefix + header_title + label_id;
+            const bool open = ImGui::TreeNodeEx(visible_label.c_str(), header_flags);
+            if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
             {
-                const float height = (std::max)(1.0f, item_max.y - item_min.y);
-                const float local_y = ImGui::GetIO().MousePos.y - item_min.y;
-                // 通常のドラッグは必ず兄弟順の入れ替えにする。
-                // 行の中央へ落としただけで意図せず子になると、UI配置の並べ替えが
-                // できないように見えてしまうため。親子付けは Ctrl + ドロップで行う。
-                UIHierarchyDropPlacement placement = ImGui::GetIO().KeyCtrl
-                    ? UIHierarchyDropPlacement::Child
-                    : (local_y < height * 0.5f
-                        ? UIHierarchyDropPlacement::Before
-                        : UIHierarchyDropPlacement::After);
-                if (placement != UIHierarchyDropPlacement::Child)
-                {
-                    const float y = placement == UIHierarchyDropPlacement::Before
-                        ? item_min.y : item_max.y;
-                    ImGui::GetWindowDrawList()->AddLine(ImVec2(item_min.x, y),
-                        ImVec2(item_max.x, y), IM_COL32(255, 205, 70, 255), 2.0f);
-                }
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(ui_hierarchy_drag_type))
-                {
-                    if (payload->DataSize == sizeof(Core::ObjectID::ValueType))
-                    {
-                        Core::ObjectID::ValueType raw = 0;
-                        std::memcpy(&raw, payload->Data, sizeof(raw));
-                        ui_hierarchy_drop_request.child = Core::ObjectID(raw);
-                        ui_hierarchy_drop_request.target = object.ID();
-                        ui_hierarchy_drop_request.placement = placement;
-                    }
-                }
-                ImGui::EndDragDropTarget();
-            }
-        }
-
-        if (ImGui::BeginPopupContextItem())
-        {
-            if (!context.Selection().IsSelected(object.ID()))
                 context.Selection().Select(object.ID(), false);
-            selection_changed = true;
-            if (ImGui::BeginMenu("Image を追加"))
-            {
-                DrawUIImageCreationMenu(context, false);
-                ImGui::EndMenu();
+                selection_changed = true;
             }
-            if (ImGui::MenuItem("Text を追加")) CreateUIElement(context, UIElementKind::Text);
-            if (ImGui::MenuItem("Button を追加")) CreateUIElement(context, UIElementKind::Button);
-            if (ImGui::MenuItem("Mask を追加")) CreateUIElement(context, UIElementKind::Mask);
-            if (ImGui::BeginMenu("図形を追加"))
+            return open;
+        };
+
+        const auto draw_drop = [&](ReplayEngine::Editor::ReorderDropInfo& drop,
+            const ImVec2& item_min, const ImVec2& item_max)
+        {
+            if (!context.CanEdit() || !drop.same_scope || drop.payload.item == 0 ||
+                drop.payload.item == object.ID().Value()) return;
+            const float height = (std::max)(1.0f, item_max.y - item_min.y);
+            const float local_y = ImGui::GetIO().MousePos.y - item_min.y;
+            const UIHierarchyDropPlacement placement = ImGui::GetIO().KeyCtrl
+                ? UIHierarchyDropPlacement::Child
+                : (local_y < height * 0.5f
+                    ? UIHierarchyDropPlacement::Before : UIHierarchyDropPlacement::After);
+            drop.handled = true;
+            if (placement != UIHierarchyDropPlacement::Child)
             {
-                DrawUIPrimitiveMenu(context, false);
-                ImGui::EndMenu();
+                const float line_y = placement == UIHierarchyDropPlacement::Before
+                    ? item_min.y : item_max.y;
+                ImGui::GetWindowDrawList()->AddLine(
+                    ImVec2(item_min.x, line_y), ImVec2(item_max.x, line_y),
+                    ImGui::GetColorU32(ImGuiCol_DragDropTarget), 4.0f);
             }
-            DrawUIOrderMenu(context, object);
-            ImGui::Separator();
-            if (ImGui::MenuItem("シーン直下へ移動", nullptr, false,
-                context.CanEdit() && object.Parent() != nullptr))
+            if (drop.delivery && !ui_hierarchy_drop_request.child.Valid())
             {
-                ui_hierarchy_drop_request.child = object.ID();
-                ui_hierarchy_drop_request.target = Core::ObjectID::Invalid();
-                ui_hierarchy_drop_request.placement = UIHierarchyDropPlacement::Root;
+                ui_hierarchy_drop_request.child = Core::ObjectID(drop.payload.item);
+                ui_hierarchy_drop_request.target = object.ID();
+                ui_hierarchy_drop_request.placement = placement;
             }
-            ImGui::EndPopup();
+        };
+
+        const ReplayEngine::Editor::ReorderableItemResult item =
+            ReplayEngine::Editor::DrawReorderableItemEx(
+            list_identity, item_id.c_str(), sibling_index, siblings.size(),
+            object.Name().c_str(), selected, UIHierarchyFilterActive(filter),
+            context.CanEdit(), object.ID().Value(), &ui_hierarchy_reorder_scope,
+            draw_header,
+            [&context, &object, &selection_changed]
+            {
+                if (!context.Selection().IsSelected(object.ID()))
+                    context.Selection().Select(object.ID(), false);
+                selection_changed = true;
+                if (ImGui::BeginMenu("Image を追加"))
+                {
+                    DrawUIImageCreationMenu(context, false);
+                    ImGui::EndMenu();
+                }
+                if (ImGui::MenuItem("Text を追加")) CreateUIElement(context, UIElementKind::Text);
+                if (ImGui::MenuItem("Button を追加")) CreateUIElement(context, UIElementKind::Button);
+                if (ImGui::MenuItem("Mask を追加")) CreateUIElement(context, UIElementKind::Mask);
+                if (ImGui::BeginMenu("図形を追加"))
+                {
+                    DrawUIPrimitiveMenu(context, false);
+                    ImGui::EndMenu();
+                }
+                DrawUIOrderMenu(context, object);
+                ImGui::Separator();
+                if (ImGui::MenuItem("シーン直下へ移動", nullptr, false,
+                    context.CanEdit() && object.Parent() != nullptr))
+                {
+                    ui_hierarchy_drop_request.child = object.ID();
+                    ui_hierarchy_drop_request.target = Core::ObjectID::Invalid();
+                    ui_hierarchy_drop_request.placement = UIHierarchyDropPlacement::Root;
+                }
+            }, draw_drop);
+
+        if (item.request.Valid() && !ui_hierarchy_drop_request.child.Valid() &&
+            item.request.destination < siblings.size())
+        {
+            ui_hierarchy_drop_request.child = object.ID();
+            ui_hierarchy_drop_request.target = siblings[item.request.destination] != nullptr
+                ? siblings[item.request.destination]->ID() : Core::ObjectID::Invalid();
+            ui_hierarchy_drop_request.placement = item.request.source < item.request.destination
+                ? UIHierarchyDropPlacement::After : UIHierarchyDropPlacement::Before;
         }
 
-        if (open)
+        if (item.opened && has_ui_child)
         {
-            const std::vector<Core::GameObject*> children = object.Children();
+            std::vector<Core::GameObject*> children;
+            for (Core::GameObject* child : object.Children())
+            {
+                if (child != nullptr && UIHierarchyNodeMatchesFilter(*child, filter))
+                    children.push_back(child);
+            }
             for (Core::GameObject* child : children)
             {
                 if (child != nullptr)
-                    DrawUINode(context, *child, filter, selection_changed);
+                    DrawUINode(context, *child, filter, children, selection_changed);
             }
             ImGui::TreePop();
         }
@@ -1788,6 +1821,7 @@
 void framework::draw_ui_hierarchy()
 {
     if (!show_ui_hierarchy_panel) return;
+    ReplayEngine::Editor::PanelTabColorScope panel_tab_color("UI");
     if (!ImGui::Begin("UI 階層", &show_ui_hierarchy_panel))
     {
         ImGui::End();
@@ -1802,6 +1836,12 @@ void framework::draw_ui_hierarchy()
 
     ImGui::Separator();
     ImGui::TextDisabled("ドラッグで上下に入れ替え / Ctrl + ドロップで子にする");
+    if (const char* active_label = ReplayEngine::Editor::ActiveReorderLabel();
+        active_label != nullptr)
+    {
+        ImGui::TextColored(ImGui::GetStyle().Colors[ImGuiCol_DragDropTarget],
+            "移動中: %s", active_label);
+    }
     DrawUIHierarchyFilterControls();
     if (scene == nullptr)
     {
@@ -1824,14 +1864,18 @@ void framework::draw_ui_hierarchy()
     bool any_ui_root = false;
     bool any_visible_root = false;
     bool ui_selection_changed = false;
-    for (Core::GameObject* root : scene->RootGameObjects())
+    const std::vector<Core::GameObject*> roots = scene->RootGameObjects();
+    std::vector<Core::GameObject*> visible_roots;
+    for (Core::GameObject* root : roots)
     {
         if (root == nullptr || !ContainsUI(*root)) continue;
         any_ui_root = true;
         if (!UIHierarchyNodeMatchesFilter(*root, filter)) continue;
         any_visible_root = true;
-        DrawUINode(object_editor_context, *root, filter, ui_selection_changed);
+        visible_roots.push_back(root);
     }
+    for (Core::GameObject* root : visible_roots)
+        DrawUINode(object_editor_context, *root, filter, visible_roots, ui_selection_changed);
     // UI 階層で選んだものも Delete の対象にする。
     // framework_class.h の Delete 処理が selected_editor_object を見ているため。
     if (ui_selection_changed) selected_editor_object = editor_selection::game_object;
@@ -1844,15 +1888,22 @@ void framework::draw_ui_hierarchy()
     ImGui::TextDisabled("ここへドロップ: シーン直下へ移動");
     if (can_edit && ImGui::BeginDragDropTarget())
     {
-        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(ui_hierarchy_drag_type))
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(
+            "REPLAY_REORDERABLE_ITEM"))
         {
-            if (payload->DataSize == sizeof(Core::ObjectID::ValueType))
+            if (payload->Data != nullptr && payload->DataSize ==
+                static_cast<int>(sizeof(ReplayEngine::Editor::ReorderPayload)) &&
+                payload->IsDelivery())
             {
-                Core::ObjectID::ValueType raw = 0;
-                std::memcpy(&raw, payload->Data, sizeof(raw));
-                ui_hierarchy_drop_request.child = Core::ObjectID(raw);
-                ui_hierarchy_drop_request.target = Core::ObjectID::Invalid();
-                ui_hierarchy_drop_request.placement = UIHierarchyDropPlacement::Root;
+                ReplayEngine::Editor::ReorderPayload dragged{};
+                std::memcpy(&dragged, payload->Data, sizeof(dragged));
+                if (dragged.scope == reinterpret_cast<std::uintptr_t>(&ui_hierarchy_reorder_scope) &&
+                    dragged.item != 0)
+                {
+                    ui_hierarchy_drop_request.child = Core::ObjectID(dragged.item);
+                    ui_hierarchy_drop_request.target = Core::ObjectID::Invalid();
+                    ui_hierarchy_drop_request.placement = UIHierarchyDropPlacement::Root;
+                }
             }
         }
         ImGui::EndDragDropTarget();
@@ -1919,6 +1970,7 @@ void framework::ui_preview_resolution_size(int& width, int& height) const noexce
 void framework::draw_ui_inspector()
 {
     if (!show_ui_inspector_panel) return;
+    ReplayEngine::Editor::PanelTabColorScope panel_tab_color("UI");
     if (!ImGui::Begin("UI インスペクター", &show_ui_inspector_panel))
     {
         ImGui::End();

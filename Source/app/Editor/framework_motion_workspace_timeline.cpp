@@ -1,5 +1,6 @@
 ﻿#include "framework.h"
 
+#include "../../RePlayEngine/Editor/Style/EditorStyle.h"
 #include "../../RePlayEngine/Components/UI/UIImageComponent.h"
 #include "../../RePlayEngine/Motion/MotionBindingResolver.h"
 #include "../../RePlayEngine/Motion/MotionEvaluator.h"
@@ -7,12 +8,14 @@
 #include "../../RePlayEngine/Object/Registry/ComponentRegistry.h"
 #include "../../RePlayEngine/Reflection/Registry/PropertyRegistry.h"
 #include "../../RePlayEngine/Scene/Runtime/Scene.h"
+#include "../../RePlayEngine/Editor/ReorderableList.h"
 
 #include "imgui/imgui_internal.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstddef>
 #include <cstring>
 #include <filesystem>
 #include <limits>
@@ -167,6 +170,7 @@ namespace
 void framework::draw_motion_timeline()
 {
     if (!show_motion_timeline_panel) return;
+    ReplayEngine::Editor::PanelTabColorScope panel_tab_color("Motion");
     if (!ImGui::Begin(u8"タイムライン", &show_motion_timeline_panel))
     {
         ImGui::End();
@@ -202,17 +206,56 @@ void framework::draw_motion_timeline()
         ImGui::SliderFloat(u8"拡大", &motion_timeline_zoom, 1.0f, 12.0f, "%.1fx");
 
         const float frame_step = FrameStep(motion_editor_fps);
-        if (ImGui::Button(u8"◀ 1F")) step_motion_preview_frames(-1);
+        if (ImGui::Button(u8"← 1F")) step_motion_preview_frames(-1);
         ReplayEngine::Editor::EditorHelp::Item("button.timeline.step_previous_composition",
             u8"コンポジションの再生位置を 1 フレーム戻します。");
         ImGui::SameLine();
-        if (ImGui::Button(u8"1F ▶")) step_motion_preview_frames(1);
+        if (ImGui::Button(u8"1F →")) step_motion_preview_frames(1);
         ReplayEngine::Editor::EditorHelp::Item("button.timeline.step_next_composition",
             u8"コンポジションの再生位置を 1 フレーム進めます。");
         ImGui::SameLine();
         if (motion_editor_display_frames)
             ImGui::Text(u8"再生位置: %dF", MotionFrameAt(motion_preview_time, motion_editor_fps));
         else ImGui::Text(u8"再生位置: %.4fs", motion_preview_time);
+
+        ImGui::TextUnformatted(u8"レイヤー順");
+        ReplayEngine::Editor::ReorderRequest composition_layer_move{};
+        const bool can_edit_composition = object_editor_context.CanEdit();
+        for (std::size_t i = 0; i < motion_editor_composition.layers.size(); ++i)
+        {
+            const auto& layer = motion_editor_composition.layers[i];
+            const std::string item_id = "CompositionTimelineLayer" + std::to_string(i);
+            const ReplayEngine::Editor::ReorderableItemResult item =
+                ReplayEngine::Editor::DrawReorderableItem(
+                    &motion_editor_composition.layers, item_id.c_str(), i,
+                    motion_editor_composition.layers.size(), layer.name.c_str(),
+                    false, false, can_edit_composition, [] {});
+            if (item.request.Valid() && !composition_layer_move.Valid())
+                composition_layer_move = item.request;
+        }
+        if (composition_layer_move.Valid() &&
+            composition_layer_move.source < motion_editor_composition.layers.size() &&
+            composition_layer_move.destination < motion_editor_composition.layers.size())
+        {
+            composition_edit_history.Begin(motion_editor_composition,
+                u8"コンポジションレイヤーの順序を変更");
+            auto moved = std::move(
+                motion_editor_composition.layers[composition_layer_move.source]);
+            motion_editor_composition.layers.erase(
+                motion_editor_composition.layers.begin() +
+                static_cast<std::ptrdiff_t>(composition_layer_move.source));
+            motion_editor_composition.layers.insert(
+                motion_editor_composition.layers.begin() +
+                static_cast<std::ptrdiff_t>(composition_layer_move.destination), std::move(moved));
+            composition_edit_history.Commit(motion_editor_composition);
+            motion_editor_dirty = true;
+        }
+        if (const char* active_label = ReplayEngine::Editor::ActiveReorderLabel();
+            active_label != nullptr)
+        {
+            ImGui::TextColored(ImGui::GetStyle().Colors[ImGuiCol_DragDropTarget],
+                u8"移動中: %s", active_label);
+        }
 
         const float width = (std::max)(480.0f,
             (std::max)(1.0f, motion_editor_composition.duration) * 100.0f * motion_timeline_zoom);
@@ -309,11 +352,11 @@ void framework::draw_motion_timeline()
         u8"有効中はトラック上をドラッグして範囲内のキーをまとめて選択します。");
 
     const float frame_step = FrameStep(motion_editor_fps);
-    if (ImGui::Button(u8"◀ 1F")) step_motion_preview_frames(-1);
+    if (ImGui::Button(u8"← 1F")) step_motion_preview_frames(-1);
     ReplayEngine::Editor::EditorHelp::Item("button.timeline.step_previous",
         u8"再生位置を 1 フレーム戻します。");
     ImGui::SameLine();
-    if (ImGui::Button(u8"1F ▶")) step_motion_preview_frames(1);
+    if (ImGui::Button(u8"1F →")) step_motion_preview_frames(1);
     ReplayEngine::Editor::EditorHelp::Item("button.timeline.step_next",
         u8"再生位置を 1 フレーム進めます。");
     ImGui::SameLine();
@@ -389,6 +432,73 @@ void framework::draw_motion_timeline()
             scale_motion_key_times(motion_key_time_scale, motion_key_time_scale_pivot);
         ReplayEngine::Editor::EditorHelp::Item("button.timeline.scale_key_times",
             u8"選択中のキーの時間間隔を倍率で伸縮します。");
+    }
+
+    ImGui::Separator();
+    ImGui::TextUnformatted(u8"トラック順");
+    ReplayEngine::Editor::ReorderRequest track_move{};
+    const bool can_edit_motion = object_editor_context.CanEdit();
+    for (std::size_t i = 0; i < motion_editor_asset.tracks.size(); ++i)
+    {
+        MotionTrack& track = motion_editor_asset.tracks[i];
+        const std::string item_id = "MotionTimelineTrack" + std::to_string(i);
+        const ReplayEngine::Editor::ReorderableItemResult item =
+            ReplayEngine::Editor::DrawReorderableItemEx(
+                &motion_editor_asset.tracks, item_id.c_str(), i,
+                motion_editor_asset.tracks.size(), track.name.c_str(),
+                motion_selected_track == static_cast<int>(i), false,
+                can_edit_motion, 0, nullptr,
+                [&track, this, i](const char* header_title, ImGuiTreeNodeFlags)
+                {
+                    ImGui::TextDisabled("%s", PropertyTypeLabel(track.value_type));
+                    ImGui::SameLine();
+                    const bool clicked = ImGui::Selectable(header_title,
+                        motion_selected_track == static_cast<int>(i),
+                        ImGuiSelectableFlags_SpanAllColumns);
+                    if (clicked)
+                    {
+                        motion_selected_track = static_cast<int>(i);
+                        motion_selected_key = -1;
+                        motion_selected_keys.clear();
+                        motion_selected_event_track = -1;
+                        motion_selected_event = -1;
+                    }
+                    return false;
+                },
+                [] {},
+                [](ReplayEngine::Editor::ReorderDropInfo&,
+                    const ImVec2&, const ImVec2&) {});
+        if (item.request.Valid() && !track_move.Valid()) track_move = item.request;
+    }
+    if (track_move.Valid() && track_move.source < motion_editor_asset.tracks.size() &&
+        track_move.destination < motion_editor_asset.tracks.size())
+    {
+        motion_edit_history.Begin(motion_editor_asset, u8"Motion Track の順序を変更");
+        MotionTrack moved = std::move(motion_editor_asset.tracks[track_move.source]);
+        motion_editor_asset.tracks.erase(
+            motion_editor_asset.tracks.begin() +
+            static_cast<std::ptrdiff_t>(track_move.source));
+        motion_editor_asset.tracks.insert(
+            motion_editor_asset.tracks.begin() +
+            static_cast<std::ptrdiff_t>(track_move.destination), std::move(moved));
+        if (motion_selected_track == static_cast<int>(track_move.source))
+            motion_selected_track = static_cast<int>(track_move.destination);
+        else if (track_move.source < track_move.destination &&
+            motion_selected_track > static_cast<int>(track_move.source) &&
+            motion_selected_track <= static_cast<int>(track_move.destination))
+            --motion_selected_track;
+        else if (track_move.destination < track_move.source &&
+            motion_selected_track >= static_cast<int>(track_move.destination) &&
+            motion_selected_track < static_cast<int>(track_move.source))
+            ++motion_selected_track;
+        motion_edit_history.Commit(motion_editor_asset);
+        motion_editor_dirty = true;
+    }
+    if (const char* active_label = ReplayEngine::Editor::ActiveReorderLabel();
+        active_label != nullptr)
+    {
+        ImGui::TextColored(ImGui::GetStyle().Colors[ImGuiCol_DragDropTarget],
+            u8"移動中: %s", active_label);
     }
 
     ImGui::Separator();
@@ -573,22 +683,43 @@ void framework::draw_motion_timeline()
         ImGui::PopID();
     }
 
-    for (int event_track_index = 0;
-        event_track_index < static_cast<int>(motion_editor_asset.event_tracks.size()); ++event_track_index)
+    ReplayEngine::Editor::ReorderRequest event_track_move{};
+    const bool can_edit_event_tracks = object_editor_context.CanEdit();
+    for (std::size_t event_track_index = 0;
+        event_track_index < motion_editor_asset.event_tracks.size(); ++event_track_index)
     {
         MotionEventTrack& track = motion_editor_asset.event_tracks[event_track_index];
-        ImGui::PushID(100000 + event_track_index);
         const std::string label = track.object.Valid()
             ? std::string(u8"イベント: ") + track.object.ToString() : std::string(u8"イベント: ブロードキャスト");
-        if (ImGui::Selectable(label.c_str(), motion_selected_event_track == event_track_index,
-            ImGuiSelectableFlags_SpanAllColumns, ImVec2(110.0f, 0.0f)))
-        {
-            motion_selected_event_track = event_track_index;
-            motion_selected_event = -1;
-            motion_selected_track = -1;
-            motion_selected_key = -1;
-            motion_selected_keys.clear();
-        }
+        const std::string item_id = "MotionEventTrack" + std::to_string(event_track_index);
+        const ReplayEngine::Editor::ReorderableItemResult reorder =
+            ReplayEngine::Editor::DrawReorderableItemEx(
+                &motion_editor_asset.event_tracks, item_id.c_str(), event_track_index,
+                motion_editor_asset.event_tracks.size(), label.c_str(),
+                motion_selected_event_track == static_cast<int>(event_track_index), false,
+                can_edit_event_tracks, 0, nullptr,
+                [this, event_track_index](const char* header_title, ImGuiTreeNodeFlags)
+                {
+                    const bool clicked = ImGui::Selectable(header_title,
+                        motion_selected_event_track == static_cast<int>(event_track_index),
+                        ImGuiSelectableFlags_SpanAllColumns, ImVec2(110.0f, 0.0f));
+                    if (clicked)
+                    {
+                        motion_selected_event_track = static_cast<int>(event_track_index);
+                        motion_selected_event = -1;
+                        motion_selected_track = -1;
+                        motion_selected_key = -1;
+                        motion_selected_keys.clear();
+                    }
+                    return false;
+                },
+                [] {},
+                [](ReplayEngine::Editor::ReorderDropInfo&,
+                    const ImVec2&, const ImVec2&) {});
+        if (reorder.request.Valid() && !event_track_move.Valid())
+            event_track_move = reorder.request;
+
+        ImGui::PushID(100000 + static_cast<int>(event_track_index));
         ImGui::SameLine();
         const ImVec2 origin = ImGui::GetCursorScreenPos();
         draw_list->AddLine(origin, ImVec2(origin.x + width, origin.y),
@@ -600,13 +731,13 @@ void framework::draw_motion_timeline()
                 ? event.time / motion_editor_asset.duration : 0.0f;
             ImGui::SetCursorScreenPos(ImVec2(origin.x + marker_span * t, origin.y - 6.0f));
             ImGui::PushID(event_index);
-            ImGui::SmallButton(motion_selected_event_track == event_track_index &&
+            ImGui::SmallButton(motion_selected_event_track == static_cast<int>(event_track_index) &&
                 motion_selected_event == event_index ? "●" : "○");
             ReplayEngine::Editor::EditorHelp::Item("button.timeline.event_marker",
                 u8"タイムラインのイベントを選択します。ドラッグすると発火時刻を移動できます。");
             if (ImGui::IsItemClicked())
             {
-                motion_selected_event_track = event_track_index;
+                motion_selected_event_track = static_cast<int>(event_track_index);
                 motion_selected_event = event_index;
                 motion_selected_track = -1;
                 motion_selected_key = -1;
@@ -634,6 +765,39 @@ void framework::draw_motion_timeline()
         ImGui::PopID();
     }
 
+    if (event_track_move.Valid() &&
+        event_track_move.source < motion_editor_asset.event_tracks.size() &&
+        event_track_move.destination < motion_editor_asset.event_tracks.size())
+    {
+        motion_edit_history.Begin(motion_editor_asset, u8"イベントトラックの順序を変更");
+        MotionEventTrack moved = std::move(
+            motion_editor_asset.event_tracks[event_track_move.source]);
+        motion_editor_asset.event_tracks.erase(
+            motion_editor_asset.event_tracks.begin() +
+            static_cast<std::ptrdiff_t>(event_track_move.source));
+        motion_editor_asset.event_tracks.insert(
+            motion_editor_asset.event_tracks.begin() +
+            static_cast<std::ptrdiff_t>(event_track_move.destination), std::move(moved));
+        if (motion_selected_event_track == static_cast<int>(event_track_move.source))
+            motion_selected_event_track = static_cast<int>(event_track_move.destination);
+        else if (event_track_move.source < event_track_move.destination &&
+            motion_selected_event_track > static_cast<int>(event_track_move.source) &&
+            motion_selected_event_track <= static_cast<int>(event_track_move.destination))
+            --motion_selected_event_track;
+        else if (event_track_move.destination < event_track_move.source &&
+            motion_selected_event_track >= static_cast<int>(event_track_move.destination) &&
+            motion_selected_event_track < static_cast<int>(event_track_move.source))
+            ++motion_selected_event_track;
+        motion_edit_history.Commit(motion_editor_asset);
+        motion_editor_dirty = true;
+    }
+    if (const char* active_label = ReplayEngine::Editor::ActiveReorderLabel(
+        &motion_editor_asset.event_tracks); active_label != nullptr)
+    {
+        ImGui::TextColored(ImGui::GetStyle().Colors[ImGuiCol_DragDropTarget],
+            u8"移動中: %s", active_label);
+    }
+
     // playhead vertical line across visible tracks
     if (motion_editor_asset.duration > 0.0f)
     {
@@ -651,6 +815,7 @@ void framework::draw_motion_timeline()
 void framework::draw_motion_graph_editor()
 {
     if (!show_motion_graph_panel) return;
+    ReplayEngine::Editor::PanelTabColorScope panel_tab_color("Motion");
     if (!ImGui::Begin(u8"グラフエディター", &show_motion_graph_panel))
     {
         ImGui::End();

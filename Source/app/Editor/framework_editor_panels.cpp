@@ -4,8 +4,10 @@
 #include "../../RePlayEngine/Components/Core/PivotComponent.h"
 #include "../../RePlayEngine/Components/UI/UIEffectStackComponent.h"
 #include "../../RePlayEngine/Editor/Inspector/PropertyDrawer.h"
+#include "../../RePlayEngine/Editor/ReorderableList.h"
 #include "../../RePlayEngine/Reflection/Registry/PropertyRegistry.h"
 #include "../../RePlayEngine/Rendering/Effects/EffectPresetAsset.h"
+#include "../../RePlayEngine/UI/Effects/EffectKindLabels.h"
 #include "../../RePlayEngine/Localization/LocalizationTable.h"
 #include "../../RePlayEngine/Localization/LocalizationService.h"
 #include "../../RePlayEngine/Rendering/Shaders/ShaderCatalog.h"
@@ -27,12 +29,14 @@
 #include <algorithm>
 #include <filesystem>
 #include <cctype>
+#include <cstddef>
 #include <string>
 #include <sstream>
 #include <vector>
 #include <utility>
 void framework::draw_project_panel()
 {
+    ReplayEngine::Editor::PanelTabColorScope panel_tab_color("Core");
     ImGui::Begin("プロジェクト");
     // GameObject Scene (.replayscene) is the only authoring format.
     if (ImGui::CollapsingHeader("GameObject シーン", ImGuiTreeNodeFlags_DefaultOpen))
@@ -608,31 +612,84 @@ void framework::draw_project_panel()
                 if (effect_limit_reached)
                     ImGui::PopStyleVar();
 
+                ReplayEngine::Editor::ReorderRequest effect_move{};
+                std::size_t remove_effect_index =
+                    ReplayEngine::Editor::invalid_reorder_index;
                 for (std::size_t effect_index = 0;
                     effect_index < editing_effect_stack.effects.size(); ++effect_index)
                 {
-                    ImGui::PushID("EffectPresetDeleteEffect");
-                    ImGui::PushID(static_cast<int>(effect_index));
-                    ImGui::Text(u8"エフェクト %zu", effect_index + 1);
-                    ImGui::SameLine();
-                    if (ImGui::SmallButton(u8"削除"))
+                    const auto kind = static_cast<ReplayEngine::UI::UIEffectKind>(
+                        editing_effect_stack.effects[effect_index].kind);
+                    std::string effect_title = "Effect " +
+                        std::to_string(effect_index + 1) + " / " +
+                        ReplayEngine::UI::EffectKindLabel(kind);
+                    if (ReplayEngine::UI::IsTimeDrivenEffect(kind)) effect_title += " [M]";
+                    const std::string item_id = "EffectPresetEffect" +
+                        std::to_string(effect_index);
+                    const ReplayEngine::Editor::ReorderableItemResult item =
+                        ReplayEngine::Editor::DrawReorderableItemEx(
+                        &editing_effect_stack.effects, item_id.c_str(), effect_index,
+                        editing_effect_stack.effects.size(), effect_title.c_str(), false,
+                        false, object_editor_context.CanEdit(), 0, &editing_effect_stack,
+                        [&remove_effect_index, effect_index](const char* header_title,
+                            ImGuiTreeNodeFlags)
+                        {
+                            if (ImGui::SmallButton(u8"削除"))
+                                remove_effect_index = effect_index;
+                            ReplayEngine::Editor::EditorHelp::Item(
+                                "button.effect_preset.remove",
+                                u8"この Effect Preset から対象のエフェクトを削除します。");
+                            ImGui::SameLine();
+                            return ImGui::Selectable(header_title, false,
+                                ImGuiSelectableFlags_SpanAllColumns);
+                        },
+                        [] {},
+                        [](ReplayEngine::Editor::ReorderDropInfo&, const ImVec2&,
+                            const ImVec2&) {});
+                    if (item.request.Valid() && !effect_move.Valid())
+                        effect_move = item.request;
+                }
+                if (const char* active_label = ReplayEngine::Editor::ActiveReorderLabel(
+                    &editing_effect_stack.effects); active_label != nullptr)
+                {
+                    ImGui::TextColored(ImGui::GetStyle().Colors[ImGuiCol_DragDropTarget],
+                        u8"移動中: %s", active_label);
+                }
+                if (remove_effect_index < editing_effect_stack.effects.size())
+                {
+                    editing_effect_stack.effects.erase(editing_effect_stack.effects.begin() +
+                        static_cast<std::ptrdiff_t>(remove_effect_index));
+                    editing_effect_stack.effect_count =
+                        static_cast<int>(editing_effect_stack.effects.size());
+                    editing_effect_stack.OnPropertyChanged("effect_count");
+                    refresh_effect_preset_schemas();
+                    changed = true;
+                    structure_changed = true;
+                }
+                else if (effect_move.Valid() && effect_move.source <
+                    editing_effect_stack.effects.size() && effect_move.destination <
+                    editing_effect_stack.effects.size())
+                {
+                    if (effect_move.source < effect_move.destination)
                     {
-                        editing_effect_stack.effects.erase(
-                            editing_effect_stack.effects.begin() + effect_index);
-                        editing_effect_stack.effect_count =
-                            static_cast<int>(editing_effect_stack.effects.size());
-                        editing_effect_stack.OnPropertyChanged("effect_count");
-                        refresh_effect_preset_schemas();
-                        changed = true;
-                        structure_changed = true;
-                        ImGui::PopID();
-                        ImGui::PopID();
-                        break;
+                        std::rotate(editing_effect_stack.effects.begin() +
+                            static_cast<std::ptrdiff_t>(effect_move.source),
+                            editing_effect_stack.effects.begin() +
+                            static_cast<std::ptrdiff_t>(effect_move.source + 1),
+                            editing_effect_stack.effects.begin() +
+                            static_cast<std::ptrdiff_t>(effect_move.destination + 1));
                     }
-                    ReplayEngine::Editor::EditorHelp::Item("button.effect_preset.remove",
-                        u8"この Effect Preset から対象のエフェクトを削除します。");
-                    ImGui::PopID();
-                    ImGui::PopID();
+                    else
+                    {
+                        std::rotate(editing_effect_stack.effects.begin() +
+                            static_cast<std::ptrdiff_t>(effect_move.destination),
+                            editing_effect_stack.effects.begin() +
+                            static_cast<std::ptrdiff_t>(effect_move.source),
+                            editing_effect_stack.effects.begin() +
+                            static_cast<std::ptrdiff_t>(effect_move.source + 1));
+                    }
+                    editing_effect_stack.OnPropertyChanged("effect_count");
+                    changed = true;
                 }
 
                 // effect_count / type の変更で DynamicProperties が再構築され得るため、
@@ -666,44 +723,6 @@ void framework::draw_project_panel()
                                 break;
                             }
                         }
-                    }
-                }
-
-                if (editing_effect_stack.effects.size() > 1)
-                {
-                    ImGui::Separator();
-                    ImGui::TextDisabled("Effect 順序");
-                    for (std::size_t effect_index = 0;
-                        effect_index < editing_effect_stack.effects.size(); ++effect_index)
-                    {
-                        ImGui::PushID(static_cast<int>(effect_index));
-                        ImGui::Text("%zu", effect_index + 1);
-                        ImGui::SameLine();
-                        if (effect_index > 0 && ImGui::SmallButton("↑"))
-                        {
-                            std::swap(editing_effect_stack.effects[effect_index - 1],
-                                editing_effect_stack.effects[effect_index]);
-                            editing_effect_stack.OnPropertyChanged("effect_count");
-                            changed = true;
-                            ImGui::PopID();
-                            break;
-                        }
-                        ReplayEngine::Editor::EditorHelp::Item("button.effect_preset.move_up",
-                            u8"対象のエフェクトを 1 つ上へ移動します。後段のエフェクトほど後に適用されます。");
-                        ImGui::SameLine();
-                        if (effect_index + 1 < editing_effect_stack.effects.size() &&
-                            ImGui::SmallButton("↓"))
-                        {
-                            std::swap(editing_effect_stack.effects[effect_index],
-                                editing_effect_stack.effects[effect_index + 1]);
-                            editing_effect_stack.OnPropertyChanged("effect_count");
-                            changed = true;
-                            ImGui::PopID();
-                            break;
-                        }
-                        ReplayEngine::Editor::EditorHelp::Item("button.effect_preset.move_down",
-                            u8"対象のエフェクトを 1 つ下へ移動します。後段のエフェクトほど後に適用されます。");
-                        ImGui::PopID();
                     }
                 }
 
@@ -770,6 +789,7 @@ void framework::draw_project_panel()
 }
 void framework::draw_console_panel()
 {
+    ReplayEngine::Editor::PanelTabColorScope panel_tab_color("Core");
     ImGui::Begin("コンソール");
     ImGui::SetNextItemWidth(-1.0f);
     if (ImGui::InputTextWithHint("##EditorCommand", "> コマンドを入力...",
@@ -841,6 +861,7 @@ void framework::draw_console_panel()
 
 void framework::draw_workspace_panel()
 {
+    ReplayEngine::Editor::PanelTabColorScope panel_tab_color("Editor");
     ImGui::Begin("ワークスペース");
     switch (active_editor_workspace)
     {

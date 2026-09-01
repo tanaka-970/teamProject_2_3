@@ -134,6 +134,7 @@
     ReplayEngine::Motion::MotionAsset motion_editor_asset;
     ReplayEngine::Motion::CompositionAsset motion_editor_composition;
     ReplayEngine::Editor::MotionEditHistory motion_edit_history;
+    ReplayEngine::Editor::CompositionEditHistory composition_edit_history;
     ReplayEngine::Editor::FileEditHistory external_file_history;
     std::uint64_t external_file_reload_generation{ 0 };
     bool project_settings_file_undo_enabled{ false };
@@ -342,11 +343,17 @@ private:
     void draw_golden_panel();
 
     // --- UI の見た目設定（Window メニュー →「UI の見た目」で変更）----------
-    // 起動ごとの一時設定。保存はしない。
+    // 個人の見た目プリセットから読み込む表示設定。Scene/Projectへは保存しない。
     float ui_button_scale{ 1.0f };      // ボタンとメニューの余白倍率
     float ui_font_scale{ 1.0f };        // 文字の大きさ倍率
     float ui_text_color[3]{ 1.0f, 1.0f, 1.0f };   // 文字色（既定は白）
     bool  ui_style_overridden{ false };  // 一度でも触ったか
+    std::vector<ReplayEngine::Editor::EditorStylePreset> editor_style_presets;
+    int active_editor_style_preset_index{ -1 };
+    bool editor_style_presets_loaded{ false };
+    bool editor_style_active_selection_loaded{ false };
+    std::array<char, 128> editor_style_name_buffer{};
+    std::string editor_style_name_buffer_id;
 
     char asset_search_text[192]{};
     int asset_type_filter{ 0 };
@@ -413,6 +420,14 @@ private:
     bool redo_material_editor();
     bool undo_editor_style();
     bool redo_editor_style();
+    void ensure_editor_style_presets_loaded();
+    bool switch_editor_style_preset(const std::string& id);
+    bool save_active_editor_style_preset();
+    bool make_active_editor_style_preset_personal_copy();
+    ReplayEngine::Editor::EditorStylePreset capture_editor_style_preset() const;
+    ReplayEngine::Editor::EditorStyleEditHistory::Snapshot capture_editor_style_snapshot() const;
+    void apply_editor_style_snapshot(
+        const ReplayEngine::Editor::EditorStyleEditHistory::Snapshot& snapshot);
     void draw_material_asset_editor();
     bool gizmo_local_space{ false };
     bool show_scene_grid{ true };

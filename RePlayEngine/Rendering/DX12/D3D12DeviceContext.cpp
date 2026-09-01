@@ -73,7 +73,7 @@ namespace ReplayEngine::Rendering::DX12
 
         template <typename Vertex>
         D3D12MeshLocalBounds MakeMeshLocalBounds(const std::vector<Vertex>& vertices) noexcept
-        {
+        {//
             D3D12MeshLocalBounds result;
             if (vertices.empty()) return result;
             result.minimum = vertices.front().position;

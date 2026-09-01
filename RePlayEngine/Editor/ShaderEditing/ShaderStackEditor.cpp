@@ -179,6 +179,11 @@ namespace ReplayEngine::Editor
 
         std::size_t remove_index = static_cast<std::size_t>(-1);
         ReorderRequest move_request{};
+        if (const char* dragging = ActiveReorderLabel(&layers))
+        {
+            ImGui::TextColored(ImGui::GetStyle().Colors[ImGuiCol_DragDropTarget],
+                "移動中: %s", dragging);
+        }
         for (std::size_t index = 0; index < layers.Layers().size(); ++index)
         {
             ShaderLayer& layer = layers.Layers()[index];
@@ -188,11 +193,11 @@ namespace ReplayEngine::Editor
             const std::string layer_name = layer_entry != nullptr
                 ? layer_entry->info.DisplayName()
                 : (layer.type != ShaderLayerType::Custom ? std::string(LayerName(layer.type))
-                    : std::string("Missing Layer Shader"));
+                    : std::string(u8"レイヤーシェーダーが見つかりません"));
             const bool unsupported_builtin = BuiltInShaderLayers::IsBuiltIn(layer_shader);
             const std::string title = "Layer " + std::to_string(index + 1) + "  " +
                 layer_name + (unsupported_builtin
-                    ? " [未対応: DX12 Layer 描画経路へ未接続]" : "");
+                    ? u8" [保存されますが、DX12 描画には反映されません]" : "");
             const std::string layer_id = "layer_" + std::to_string(layer.id);
             ImGui::PushID(layer_id.c_str());
             if (ImGui::Checkbox("有効", &layer.enabled)) changed = true;

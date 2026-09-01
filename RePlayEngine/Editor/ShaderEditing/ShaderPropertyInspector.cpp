@@ -1,4 +1,4 @@
-#include "ShaderPropertyInspector.h"
+﻿#include "ShaderPropertyInspector.h"
 
 #include "../../Rendering/Materials/MaterialSchema.h"
 #include "imgui/imgui.h"
@@ -82,7 +82,8 @@ namespace ReplayEngine::Editor
                 ImGui::Separator();
                 std::vector<const Assets::AssetRecord*> images;
                 for (const Assets::AssetRecord& record : assets.Records())
-                    if (record.kind == Assets::AssetKind::Image) images.push_back(&record);
+                    if (record.kind == Assets::AssetKind::Image &&
+                        !assets.IsMissing(record.guid)) images.push_back(&record);
                 std::sort(images.begin(), images.end(),
                     [](const Assets::AssetRecord* a, const Assets::AssetRecord* b)
                     {

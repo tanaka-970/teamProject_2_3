@@ -8,8 +8,11 @@
 #include "../../RePlayEngine/Components/Rendering/PrimitiveMeshRendererComponent.h"
 #include "../../RePlayEngine/Components/Rendering/SkinnedMeshRendererComponent.h"
 #include "../../RePlayEngine/Assets/AssetDatabase.h"
+#include "../../RePlayEngine/Editor/ReorderableList.h"
+#include "../../RePlayEngine/Editor/Style/EditorStyle.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstring>
 #include <string>
 #include <utility>
@@ -71,7 +74,8 @@ namespace
         const ReplayEngine::Assets::AssetRecord* record = database != nullptr && !current.empty()
             ? database->FindByGuid(current) : nullptr;
         const char* preview = current.empty() ? empty_preview :
-            (record != nullptr ? record->display_name.c_str() : u8"Missing Asset");
+            (record != nullptr && (database == nullptr || !database->IsMissing(current))
+                ? record->display_name.c_str() : u8"Missing Asset");
         if (!editable)
         {
             ImGui::TextUnformatted(preview);
@@ -90,6 +94,7 @@ namespace
                 for (const ReplayEngine::Assets::AssetRecord& candidate : database->Records())
                 {
                     if (candidate.kind != ReplayEngine::Assets::AssetKind::Material) continue;
+                    if (database->IsMissing(candidate.guid)) continue;
                     const bool is_selected = candidate.guid == current;
                     ImGui::PushID(candidate.guid.c_str());
                     if (ImGui::Selectable(candidate.display_name.c_str(), is_selected))
@@ -119,23 +124,31 @@ namespace
         ImGui::TextUnformatted(title);
         ImGui::TextDisabled(u8"空スロットは既存の「マテリアル」へフォールバックします");
         ImGui::PushID(&renderer);
-        ImGui::Columns(2, "##MaterialSlotColumns", false);
-        ImGui::TextDisabled(u8"名前");
-        ImGui::NextColumn();
-        ImGui::TextDisabled(u8"マテリアル");
-        ImGui::NextColumn();
-
         const std::size_t row_count = (std::min)(default_names.size(),
             static_cast<std::size_t>(max_mesh_material_slots));
+        ReplayEngine::Editor::ReorderRequest move_request{};
         for (std::size_t index = 0; index < row_count; ++index)
         {
-            ImGui::PushID(static_cast<int>(index));
             const bool stored = index < static_cast<std::size_t>(stored_count) &&
                 index < renderer.material_slots.size();
             const std::string current_name = stored
                 ? renderer.material_slots[index].name : default_names[index];
             const std::string current_asset = stored
                 ? renderer.material_slots[index].asset : std::string{};
+            const std::string item_id = "MaterialSlot" + std::to_string(index);
+            const std::string item_title = "Slot " + std::to_string(index + 1) +
+                (current_name.empty() ? std::string() : "  " + current_name);
+            const ReplayEngine::Editor::ReorderableItemResult reorder =
+                ReplayEngine::Editor::DrawReorderableItem(
+                    &renderer, item_id.c_str(), index, row_count, item_title.c_str(),
+                    false, true, editable, [] {});
+            if (reorder.request.Valid() && !move_request.Valid())
+                move_request = reorder.request;
+            if (!reorder.opened) continue;
+
+            ImGui::PushID(item_id.c_str());
+            ImGui::Indent();
+            ImGui::TextDisabled(u8"名前");
             const std::string hint = std::to_string(index) + u8" 番";
 
             std::vector<char> name_buffer((std::max)(static_cast<std::size_t>(4096),
@@ -157,7 +170,7 @@ namespace
                 context.CommitEdit();
             }
 
-            ImGui::NextColumn();
+            ImGui::TextDisabled(u8"マテリアル");
             std::string selected_asset;
             if (draw_material_asset_slot("##SlotMaterial", context.GetAssetDatabase(),
                 current_asset, selected_asset, editable, u8"(material_asset を使用)"))
@@ -170,10 +183,45 @@ namespace
             }
             if (current_asset.empty() && renderer.material_asset.empty() && has_fbx_fallback)
                 ImGui::TextDisabled(u8"共通も未設定なら FBX 材質");
-            ImGui::NextColumn();
+            ImGui::Unindent();
             ImGui::PopID();
         }
-        ImGui::Columns(1);
+        if (const char* dragging = ReplayEngine::Editor::ActiveReorderLabel(&renderer))
+        {
+            ImGui::TextColored(ImGui::GetStyle().Colors[ImGuiCol_DragDropTarget],
+                u8"移動中: %s", dragging);
+        }
+        if (move_request.Valid() && editable)
+        {
+            context.BeginEdit(u8"マテリアルスロットを並べ替え");
+            initialize_material_slots(renderer, default_names);
+            if (move_request.source < renderer.material_slots.size() &&
+                move_request.destination < renderer.material_slots.size())
+            {
+                if (move_request.source < move_request.destination)
+                {
+                    std::rotate(renderer.material_slots.begin() +
+                        static_cast<std::ptrdiff_t>(move_request.source),
+                        renderer.material_slots.begin() +
+                        static_cast<std::ptrdiff_t>(move_request.source + 1),
+                        renderer.material_slots.begin() +
+                        static_cast<std::ptrdiff_t>(move_request.destination + 1));
+                }
+                else
+                {
+                    std::rotate(renderer.material_slots.begin() +
+                        static_cast<std::ptrdiff_t>(move_request.destination),
+                        renderer.material_slots.begin() +
+                        static_cast<std::ptrdiff_t>(move_request.source),
+                        renderer.material_slots.begin() +
+                        static_cast<std::ptrdiff_t>(move_request.source + 1));
+                }
+                renderer.OnPropertyChanged(nullptr);
+                context.CommitEdit();
+                context.SetStatus("マテリアルスロットの順序を変更しました");
+            }
+            else context.CancelEdit();
+        }
         ImGui::PopID();
     }
 }
@@ -278,6 +326,7 @@ void framework::draw_shader_adjustment_workspace()
 
 void framework::draw_inspector()
 {
+    ReplayEngine::Editor::PanelTabColorScope panel_tab_color("Editor");
     ImGui::Begin("インスペクター");
     project_settings_file_undo_enabled = false;
 

@@ -94,6 +94,7 @@ void framework::update(float elapsed_time)
         }
         if (ImGui::GetCurrentContext())
         {
+            configure_editor_style();
             ImGui_ImplWin32_NewFrame();
             ImGui::NewFrame();
             imgui_frame_active = true;

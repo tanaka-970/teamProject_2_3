@@ -7,6 +7,7 @@
 // 選択状態と Component の入口だけを担当する。
 
 #include "../ReorderableList.h"
+#include "../Style/EditorStyle.h"
 #include "InspectorPanel.h"
 
 #include "PropertyDrawer.h"
@@ -79,6 +80,7 @@ namespace ReplayEngine::Editor
 
     void InspectorPanel::Draw(EditorContext& context)
     {
+        PanelTabColorScope panel_tab_color("Editor");
         ImGui::Begin("インスペクター");
         DrawContents(context);
         ImGui::End();
@@ -285,7 +287,7 @@ namespace ReplayEngine::Editor
                 ImGui::TextDisabled("この分類にはコンポーネントがありません");
         };
 
-        ImGui::TextDisabled("分類を開くと設定を表示します。順序は ☷ / ボタン / ドラッグで変更できます");
+        ImGui::TextDisabled("分類を開くと設定を表示します。順序は ◆ / ボタン / ドラッグで変更できます");
         if (ImGui::BeginTabBar("InspectorComponentGroups"))
         {
             if (ImGui::BeginTabItem("すべて"))
