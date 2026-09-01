@@ -1078,6 +1078,83 @@ namespace ReplayEngine::Rendering::DX12
             }
         }
 
+        void PruneSkyCache(const std::filesystem::path& directory,
+            const std::unordered_set<std::string>& protected_stems) noexcept
+        {
+            constexpr std::size_t kMaxSkyCacheGroups = 128;
+            struct CacheGroup final
+            {
+                std::string stem;
+                std::filesystem::file_time_type newest{};
+                bool has_time = false;
+            };
+            try
+            {
+                if (directory.empty()) return;
+                std::error_code error;
+                if (!std::filesystem::is_directory(directory, error) || error) return;
+                std::vector<CacheGroup> groups;
+                std::unordered_map<std::string, std::size_t> group_indices;
+                std::filesystem::directory_iterator iterator(directory, error);
+                if (error) return;
+                const std::filesystem::directory_iterator end;
+                for (; iterator != end && !error; iterator.increment(error))
+                {
+                    std::error_code file_error;
+                    if (!iterator->is_regular_file(file_error) || file_error) continue;
+                    const std::string extension = iterator->path().extension().string();
+                    if (extension != ".cube" && extension != ".iem" && extension != ".pmrem")
+                        continue;
+                    const std::string stem = iterator->path().stem().string();
+                    const auto found = group_indices.find(stem);
+                    std::size_t group_index = 0;
+                    if (found == group_indices.end())
+                    {
+                        group_index = groups.size();
+                        group_indices.emplace(stem, group_index);
+                        groups.push_back({ stem, {}, false });
+                    }
+                    else
+                    {
+                        group_index = found->second;
+                    }
+                    std::error_code time_error;
+                    const auto write_time = std::filesystem::last_write_time(
+                        iterator->path(), time_error);
+                    if (!time_error && (!groups[group_index].has_time ||
+                        write_time > groups[group_index].newest))
+                    {
+                        groups[group_index].newest = write_time;
+                        groups[group_index].has_time = true;
+                    }
+                }
+                if (groups.size() <= kMaxSkyCacheGroups) return;
+                std::sort(groups.begin(), groups.end(),
+                    [](const CacheGroup& left, const CacheGroup& right) noexcept
+                    {
+                        if (left.has_time != right.has_time) return !left.has_time;
+                        if (left.has_time && left.newest != right.newest)
+                            return left.newest < right.newest;
+                        return left.stem < right.stem;
+                    });
+                std::size_t remove_groups = groups.size() - kMaxSkyCacheGroups;
+                for (const CacheGroup& group : groups)
+                {
+                    if (remove_groups == 0) break;
+                    if (protected_stems.find(group.stem) != protected_stems.end()) continue;
+                    for (const char* suffix : { ".cube", ".iem", ".pmrem" })
+                    {
+                        std::error_code remove_error;
+                        std::filesystem::remove(directory / (group.stem + suffix), remove_error);
+                    }
+                    --remove_groups;
+                }
+            }
+            catch (...)
+            {
+            }
+        }
+
         bool WriteSkyCubeCache(const std::filesystem::path& path,
             const DecodedDdsImage& cube) noexcept
         {
@@ -2238,6 +2315,7 @@ namespace ReplayEngine::Rendering::DX12
         texture_cache_.clear();
         sky_cpu_cubes_.clear();
         sky_source_paths_.clear();
+        sky_cache_prune_initialized_ = false;
         static_texture_failures_.clear();
         static_mesh_cache_.clear();
         static_mesh_bounds_cache_.clear();
@@ -2671,54 +2749,90 @@ namespace ReplayEngine::Rendering::DX12
         const D3D12SkySubmission& sky) noexcept
     {
         if (!sky.enabled || sky.texture_key.empty()) return true;
-        const auto source_texture = texture_cache_.find(sky.texture_key);
-        if (source_texture == texture_cache_.end() || !source_texture->second.is_cube)
-            return true;
-
-        const std::string diffuse_key = sky.texture_key + ":ibl_diffuse";
-        const std::string specular_key = sky.texture_key + ":ibl_specular";
-        const bool diffuse_cached = texture_cache_.find(diffuse_key) != texture_cache_.end();
-        const bool specular_cached = texture_cache_.find(specular_key) != texture_cache_.end();
-        if (diffuse_cached && specular_cached) return true;
-
-        const auto source_path = sky_source_paths_.find(sky.texture_key);
-        if (source_path == sky_source_paths_.end()) return true;
-        DecodedDdsImage diffuse;
-        DecodedDdsImage specular;
-        bool diffuse_ready = ReadSkyCubeCache(SkyCachePath(source_path->second, ".iem"),
-            diffuse);
-        bool specular_ready = ReadSkyCubeCache(SkyCachePath(source_path->second, ".pmrem"),
-            specular);
-        if (!diffuse_ready || !specular_ready)
+        bool cache_changed = false;
+        const auto ensure_one = [this, &cache_changed](
+            const std::string& texture_key) -> bool
         {
-            const auto cpu_source = sky_cpu_cubes_.find(sky.texture_key);
-            if (cpu_source == sky_cpu_cubes_.end()) return true;
-            DecodedDdsImage generated_diffuse;
-            DecodedDdsImage generated_specular;
-            if (!BuildIblCubes(cpu_source->second.rgba, cpu_source->second.width,
-                generated_diffuse, generated_specular))
+            if (texture_key.empty()) return true;
+            const auto source_texture = texture_cache_.find(texture_key);
+            if (source_texture == texture_cache_.end() || !source_texture->second.is_cube)
                 return true;
-            if (!diffuse_ready)
+
+            const std::string diffuse_key = texture_key + ":ibl_diffuse";
+            const std::string specular_key = texture_key + ":ibl_specular";
+            const bool diffuse_cached = texture_cache_.find(diffuse_key) != texture_cache_.end();
+            const bool specular_cached = texture_cache_.find(specular_key) != texture_cache_.end();
+            if (diffuse_cached && specular_cached) return true;
+
+            const auto source_path = sky_source_paths_.find(texture_key);
+            if (source_path == sky_source_paths_.end()) return true;
+            DecodedDdsImage diffuse;
+            DecodedDdsImage specular;
+            bool diffuse_ready = ReadSkyCubeCache(SkyCachePath(source_path->second, ".iem"),
+                diffuse);
+            bool specular_ready = ReadSkyCubeCache(SkyCachePath(source_path->second, ".pmrem"),
+                specular);
+            if (!diffuse_ready || !specular_ready)
             {
-                diffuse = std::move(generated_diffuse);
-                diffuse_ready = true;
-                WriteSkyCubeCache(SkyCachePath(source_path->second, ".iem"), diffuse);
+                const auto cpu_source = sky_cpu_cubes_.find(texture_key);
+                if (cpu_source == sky_cpu_cubes_.end()) return true;
+                DecodedDdsImage generated_diffuse;
+                DecodedDdsImage generated_specular;
+                if (!BuildIblCubes(cpu_source->second.rgba, cpu_source->second.width,
+                    generated_diffuse, generated_specular))
+                    return true;
+                if (!diffuse_ready)
+                {
+                    diffuse = std::move(generated_diffuse);
+                    diffuse_ready = true;
+                    cache_changed = WriteSkyCubeCache(
+                        SkyCachePath(source_path->second, ".iem"), diffuse) || cache_changed;
+                }
+                if (!specular_ready)
+                {
+                    specular = std::move(generated_specular);
+                    specular_ready = true;
+                    cache_changed = WriteSkyCubeCache(
+                        SkyCachePath(source_path->second, ".pmrem"), specular) || cache_changed;
+                }
             }
-            if (!specular_ready)
-            {
-                specular = std::move(generated_specular);
-                specular_ready = true;
-                WriteSkyCubeCache(SkyCachePath(source_path->second, ".pmrem"), specular);
-            }
+            if (!diffuse_cached && diffuse_ready &&
+                !CreateStaticCubeTexture(diffuse_key, diffuse.width, diffuse.height,
+                    diffuse.mip_levels, diffuse.format, diffuse.subresources))
+                return false;
+            if (!specular_cached && specular_ready &&
+                !CreateStaticCubeTexture(specular_key, specular.width, specular.height,
+                    specular.mip_levels, specular.format, specular.subresources))
+                return false;
+            return true;
+        };
+        if (!ensure_one(sky.texture_key)) return false;
+        if (!ensure_one(sky.secondary_texture_key)) return false;
+        for (const std::string& texture_key : sky.keyframe_texture_keys)
+            if (!ensure_one(texture_key)) return false;
+        std::unordered_set<std::string> protected_stems;
+        std::filesystem::path cache_directory;
+        const auto protect_cache_for = [this, &protected_stems, &cache_directory](
+            const std::string& texture_key) noexcept
+        {
+            if (texture_key.empty()) return;
+            const auto source_path = sky_source_paths_.find(texture_key);
+            if (source_path == sky_source_paths_.end()) return;
+            const std::filesystem::path cache_path = SkyCachePath(source_path->second, ".iem");
+            if (cache_path.empty()) return;
+            if (cache_directory.empty()) cache_directory = cache_path.parent_path();
+            try { protected_stems.insert(cache_path.stem().string()); }
+            catch (...) {}
+        };
+        protect_cache_for(sky.texture_key);
+        protect_cache_for(sky.secondary_texture_key);
+        for (const std::string& texture_key : sky.keyframe_texture_keys)
+            protect_cache_for(texture_key);
+        if (!sky_cache_prune_initialized_ || cache_changed)
+        {
+            PruneSkyCache(cache_directory, protected_stems);
+            sky_cache_prune_initialized_ = true;
         }
-        if (!diffuse_cached && diffuse_ready &&
-            !CreateStaticCubeTexture(diffuse_key, diffuse.width, diffuse.height,
-                diffuse.mip_levels, diffuse.format, diffuse.subresources))
-            return false;
-        if (!specular_cached && specular_ready &&
-            !CreateStaticCubeTexture(specular_key, specular.width, specular.height,
-                specular.mip_levels, specular.format, specular.subresources))
-            return false;
         return true;
     }
 
@@ -2851,6 +2965,7 @@ namespace ReplayEngine::Rendering::DX12
         }
         sky_cpu_cubes_.clear();
         sky_source_paths_.clear();
+        sky_cache_prune_initialized_ = false;
         return true;
     }
 
@@ -3082,6 +3197,7 @@ namespace ReplayEngine::Rendering::DX12
             ReleaseOffscreenTarget(target);
         for (auto& target : ui_effect_targets_) ReleaseOffscreenTarget(target);
         for (auto& target : scene_effect_targets_) ReleaseOffscreenTarget(target);
+        ReleaseOffscreenTarget(scene_sky_effect_target_);
         for (auto& entry : ui_effect_history_targets_)
             ReleaseOffscreenTarget(entry.second.target);
         ui_effect_history_targets_.clear();

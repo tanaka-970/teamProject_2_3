@@ -77,10 +77,37 @@ namespace ReplayEngine::Rendering::DX12
     struct D3D12SkySubmission final
     {
         bool enabled = false;
+        std::uint64_t owner_id = 0;
         std::string texture_key;
+        std::vector<std::string> keyframe_texture_keys;
+        std::string secondary_texture_key;
         DirectX::XMFLOAT4X4 rotation{
             1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
+        DirectX::XMFLOAT4X4 previous_rotation{
+            1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
         float intensity = 1.0f;
+        float blend = 0.0f;
+        float time = 0.0f;
+        float cloud_time = 0.0f;
+        float previous_cloud_time = 0.0f;
+        bool clouds_enabled = false;
+        DirectX::XMFLOAT2 cloud_layer1_speed{};
+        float cloud_layer1_scale = 1.0f;
+        float cloud_layer1_density = 0.0f;
+        DirectX::XMFLOAT4 cloud_layer1_color{ 1, 1, 1, 1 };
+        DirectX::XMFLOAT2 cloud_layer2_speed{};
+        float cloud_layer2_scale = 1.0f;
+        float cloud_layer2_density = 0.0f;
+        DirectX::XMFLOAT4 cloud_layer2_color{ 1, 1, 1, 1 };
+        bool stars_enabled = false;
+        float star_density = 0.0f;
+        float star_intensity = 0.0f;
+        DirectX::XMFLOAT4 star_color{ 1, 1, 1, 1 };
+        bool moon_enabled = false;
+        DirectX::XMFLOAT3 moon_direction{ 0, 0, 1 };
+        float moon_size = 0.04f;
+        float moon_intensity = 0.0f;
+        DirectX::XMFLOAT4 moon_color{ 1, 1, 1, 1 };
     };
 
     // Custom Surface Shader の正本は既存の ShaderCatalog/PropertySchema とする。
@@ -1185,6 +1212,7 @@ namespace ReplayEngine::Rendering::DX12
         std::unordered_map<std::string, StaticTextureResource> texture_cache_;
         std::unordered_map<std::string, SkyCubeCpuData> sky_cpu_cubes_;
         std::unordered_map<std::string, std::filesystem::path> sky_source_paths_;
+        bool sky_cache_prune_initialized_ = false;
         std::unordered_map<std::string, StaticTextureResource> ui_font_texture_cache_;
         std::unordered_map<std::string, std::uint64_t> ui_font_texture_revisions_;
         std::unordered_set<std::string> static_texture_failures_;
@@ -1226,6 +1254,7 @@ namespace ReplayEngine::Rendering::DX12
         // [0]/[1]/[2]はEffectとRegion合成の循環先、[3]はBackdropの退避先。
         D3D12OffscreenTarget ui_effect_targets_[4]{};
         D3D12OffscreenTarget scene_effect_targets_[4]{};
+        D3D12OffscreenTarget scene_sky_effect_target_{};
         D3D12SceneEffectSubmission scene_effect_submission_{};
         std::string scene3d_lighting_trace_signature_;
         std::uint32_t last_model_effect_stack_count_ = 0;

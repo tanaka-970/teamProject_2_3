@@ -36,7 +36,7 @@ namespace ReplayEngine::Rendering::DX12
         {
             1, 2, 3, 4, 5, 9,
         };
-        constexpr UINT kScene3DLightingSrvRangeCount = 12;
+        constexpr UINT kScene3DLightingSrvRangeCount = 15;
         constexpr DXGI_FORMAT kScene3DDepthResourceFormat = DXGI_FORMAT_R32_TYPELESS;
         constexpr DXGI_FORMAT kScene3DDepthDsvFormat = DXGI_FORMAT_D32_FLOAT;
         constexpr DXGI_FORMAT kScene3DDepthSrvFormat = DXGI_FORMAT_R32_FLOAT;
@@ -150,6 +150,18 @@ namespace ReplayEngine::Rendering::DX12
             DirectX::XMFLOAT4X4 sky_rotation{};
             DirectX::XMFLOAT4 sky_jitter{};
             DirectX::XMFLOAT4 ibl_params{};
+            DirectX::XMFLOAT4 sky_blend{};
+            DirectX::XMFLOAT4 sky_motion{};
+            DirectX::XMFLOAT4 cloud_layer1_params{};
+            DirectX::XMFLOAT4 cloud_layer2_params{};
+            DirectX::XMFLOAT4 cloud_layer1_color{};
+            DirectX::XMFLOAT4 cloud_layer2_color{};
+            DirectX::XMFLOAT4 star_params{};
+            DirectX::XMFLOAT4 star_color{};
+            DirectX::XMFLOAT4 moon_params{};
+            DirectX::XMFLOAT4 moon_direction{};
+            DirectX::XMFLOAT4 moon_color{};
+            DirectX::XMFLOAT4X4 previous_sky_rotation{};
         };
 
         struct Scene3DShadowObjectConstants final
@@ -476,11 +488,11 @@ namespace ReplayEngine::Rendering::DX12
         // t0..t5はMaterial Map、t6はCSM、t7はLocal Shadow Atlas、t10はToon RampMap、t11はScene Color。
         // Slot番号ではなく draw.material_texture_semantic_mask で意味を判定する。
         // t8/t9 は Bone Palette の root SRV が使うので RampMap は t10 へ置く。
-        constexpr UINT kScene3DGeometrySrvRangeCount = 12;
+        constexpr UINT kScene3DGeometrySrvRangeCount = 14;
         const UINT geometry_registers[kScene3DGeometrySrvRangeCount] =
-            { 0, 1, 2, 3, 4, 5, 6, 7, 10, 11, 33, 34 };
+            { 0, 1, 2, 3, 4, 5, 6, 7, 10, 11, 33, 34, 36, 37 };
         const UINT geometry_table_slots[kScene3DGeometrySrvRangeCount] =
-            { 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17, 18 };
+            { 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17, 18, 19, 20 };
         D3D12_DESCRIPTOR_RANGE geometry_ranges[kScene3DGeometrySrvRangeCount]{};
         for (UINT i = 0; i < static_cast<UINT>(std::size(geometry_ranges)); ++i)
         {
@@ -488,7 +500,7 @@ namespace ReplayEngine::Rendering::DX12
             geometry_ranges[i].NumDescriptors = 1;
             geometry_ranges[i].BaseShaderRegister = geometry_registers[i];
         }
-        D3D12_ROOT_PARAMETER geometry_parameters[19]{};
+        D3D12_ROOT_PARAMETER geometry_parameters[21]{};
         for (UINT i = 0; i < 4; ++i)
         {
             geometry_parameters[i].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
@@ -562,7 +574,7 @@ namespace ReplayEngine::Rendering::DX12
             return fail("Scene3D.GeometryRootSignature");
 
         const UINT lighting_registers[kScene3DLightingSrvRangeCount] =
-            { 0, 1, 2, 3, 4, 5, 6, 7, 8, 33, 34, 35 };
+            { 0, 1, 2, 3, 4, 5, 6, 7, 8, 33, 34, 35, 36, 37, 38 };
         D3D12_DESCRIPTOR_RANGE lighting_ranges[kScene3DLightingSrvRangeCount]{};
         D3D12_ROOT_PARAMETER lighting_parameters[kScene3DLightingSrvRangeCount + 1]{};
         lighting_parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
@@ -2123,6 +2135,9 @@ namespace ReplayEngine::Rendering::DX12
         const StaticTextureResource* sky_source_texture = nullptr;
         const StaticTextureResource* ibl_diffuse_texture = nullptr;
         const StaticTextureResource* ibl_specular_texture = nullptr;
+        const StaticTextureResource* sky_source_texture2 = nullptr;
+        const StaticTextureResource* ibl_diffuse_texture2 = nullptr;
+        const StaticTextureResource* ibl_specular_texture2 = nullptr;
         if (submission.sky.enabled && !submission.sky.texture_key.empty())
         {
             const auto sky_source = texture_cache_.find(submission.sky.texture_key);
@@ -2139,8 +2154,27 @@ namespace ReplayEngine::Rendering::DX12
                 ibl_specular_texture = specular != texture_cache_.end() &&
                     specular->second.is_cube ? &specular->second : sky_source_texture;
             }
+            if (!submission.sky.secondary_texture_key.empty())
+            {
+                const auto sky_source2 = texture_cache_.find(
+                    submission.sky.secondary_texture_key);
+                if (sky_source2 != texture_cache_.end() && sky_source2->second.is_cube &&
+                    sky_source2->second.srv.IsValid())
+                {
+                    sky_source_texture2 = &sky_source2->second;
+                    const auto diffuse2 = texture_cache_.find(
+                        submission.sky.secondary_texture_key + ":ibl_diffuse");
+                    const auto specular2 = texture_cache_.find(
+                        submission.sky.secondary_texture_key + ":ibl_specular");
+                    ibl_diffuse_texture2 = diffuse2 != texture_cache_.end() &&
+                        diffuse2->second.is_cube ? &diffuse2->second : sky_source_texture2;
+                    ibl_specular_texture2 = specular2 != texture_cache_.end() &&
+                        specular2->second.is_cube ? &specular2->second : sky_source_texture2;
+                }
+            }
         }
         const bool sky_available = sky_source_texture != nullptr;
+        const bool sky_secondary_available = sky_source_texture2 != nullptr;
         const D3D12_GPU_DESCRIPTOR_HANDLE ibl_diffuse_srv = sky_available &&
             ibl_diffuse_texture != nullptr ? ibl_diffuse_texture->srv.gpu :
             scene3d_null_ibl_diffuse_srv_.gpu;
@@ -2149,6 +2183,12 @@ namespace ReplayEngine::Rendering::DX12
             scene3d_null_ibl_specular_srv_.gpu;
         const D3D12_GPU_DESCRIPTOR_HANDLE sky_source_srv = sky_available
             ? sky_source_texture->srv.gpu : scene3d_null_ibl_diffuse_srv_.gpu;
+        const D3D12_GPU_DESCRIPTOR_HANDLE ibl_diffuse_srv2 = sky_secondary_available &&
+            ibl_diffuse_texture2 != nullptr ? ibl_diffuse_texture2->srv.gpu : ibl_diffuse_srv;
+        const D3D12_GPU_DESCRIPTOR_HANDLE ibl_specular_srv2 = sky_secondary_available &&
+            ibl_specular_texture2 != nullptr ? ibl_specular_texture2->srv.gpu : ibl_specular_srv;
+        const D3D12_GPU_DESCRIPTOR_HANDLE sky_source_srv2 = sky_secondary_available
+            ? sky_source_texture2->srv.gpu : sky_source_srv;
 
         Scene3DLightingConstants light{};
         light.inverse_view_projection = current_frame_constants_.inv_view_projection;
@@ -2161,6 +2201,55 @@ namespace ReplayEngine::Rendering::DX12
             sky_available ? 1.0f : 0.0f,
             sky_available ? 1.0f : 0.0f, sky_available ?
             (std::max)(0.0f, (std::min)(submission.sky.intensity, 16.0f)) : 0.0f };
+        light.previous_sky_rotation = submission.sky.previous_rotation;
+        light.sky_blend = { sky_available ? (std::max)(0.0f,
+            (std::min)(submission.sky.blend, 1.0f)) : 0.0f,
+            sky_secondary_available ? 1.0f : 0.0f,
+            sky_available ? (std::max)(0.0f, (std::min)(submission.sky.time, 1.0f)) : 0.0f,
+            0.0f };
+        light.sky_motion = { sky_available && std::isfinite(submission.sky.cloud_time)
+            ? submission.sky.cloud_time : 0.0f,
+            sky_available && std::isfinite(submission.sky.previous_cloud_time)
+                ? submission.sky.previous_cloud_time : 0.0f, 0.0f, 0.0f };
+        const bool clouds_enabled = sky_available && submission.sky.clouds_enabled;
+        light.cloud_layer1_params = {
+            clouds_enabled && std::isfinite(submission.sky.cloud_layer1_speed.x)
+                ? submission.sky.cloud_layer1_speed.x : 0.0f,
+            clouds_enabled && std::isfinite(submission.sky.cloud_layer1_speed.y)
+                ? submission.sky.cloud_layer1_speed.y : 0.0f,
+            clouds_enabled && std::isfinite(submission.sky.cloud_layer1_scale)
+                ? (std::max)(0.1f, submission.sky.cloud_layer1_scale) : 1.0f,
+            clouds_enabled && std::isfinite(submission.sky.cloud_layer1_density)
+                ? (std::max)(0.0f, (std::min)(1.0f, submission.sky.cloud_layer1_density)) : 0.0f };
+        light.cloud_layer2_params = {
+            clouds_enabled && std::isfinite(submission.sky.cloud_layer2_speed.x)
+                ? submission.sky.cloud_layer2_speed.x : 0.0f,
+            clouds_enabled && std::isfinite(submission.sky.cloud_layer2_speed.y)
+                ? submission.sky.cloud_layer2_speed.y : 0.0f,
+            clouds_enabled && std::isfinite(submission.sky.cloud_layer2_scale)
+                ? (std::max)(0.1f, submission.sky.cloud_layer2_scale) : 1.0f,
+            clouds_enabled && std::isfinite(submission.sky.cloud_layer2_density)
+                ? (std::max)(0.0f, (std::min)(1.0f, submission.sky.cloud_layer2_density)) : 0.0f };
+        light.cloud_layer1_color = submission.sky.cloud_layer1_color;
+        light.cloud_layer2_color = submission.sky.cloud_layer2_color;
+        light.star_params = { sky_available && submission.sky.stars_enabled &&
+            std::isfinite(submission.sky.star_density)
+                ? (std::max)(0.0f, (std::min)(1.0f, submission.sky.star_density)) : 0.0f,
+            sky_available && submission.sky.stars_enabled &&
+            std::isfinite(submission.sky.star_intensity)
+                ? (std::max)(0.0f, submission.sky.star_intensity) : 0.0f,
+            sky_available && submission.sky.stars_enabled ? 1.0f : 0.0f, 0.0f };
+        light.star_color = submission.sky.star_color;
+        light.moon_params = { sky_available && submission.sky.moon_enabled &&
+            std::isfinite(submission.sky.moon_size)
+                ? (std::max)(0.001f, (std::min)(0.5f, submission.sky.moon_size)) : 0.04f,
+            sky_available && submission.sky.moon_enabled &&
+            std::isfinite(submission.sky.moon_intensity)
+                ? (std::max)(0.0f, submission.sky.moon_intensity) : 0.0f,
+            sky_available && submission.sky.moon_enabled ? 1.0f : 0.0f, 0.0f };
+        light.moon_direction = { submission.sky.moon_direction.x,
+            submission.sky.moon_direction.y, submission.sky.moon_direction.z, 0.0f };
+        light.moon_color = submission.sky.moon_color;
         light.directional_direction_intensity = {
             submission.directional_light.direction.x,
             submission.directional_light.direction.y,
@@ -2327,6 +2416,7 @@ namespace ReplayEngine::Rendering::DX12
         };
         const auto bind_surface = [this, &allocate_cb, scene_gpu, light_gpu, identity_bone_gpu,
             directional_shadow_srv, local_shadow_srv, ibl_diffuse_srv, ibl_specular_srv,
+            ibl_diffuse_srv2, ibl_specular_srv2,
             &texture_for, &material_texture_for](
             const D3D12StaticDrawItem& draw, const DirectX::XMFLOAT4X4& previous_world,
             D3D12_GPU_VIRTUAL_ADDRESS current_bones,
@@ -2387,6 +2477,8 @@ namespace ReplayEngine::Rendering::DX12
             command_list_->SetGraphicsRootDescriptorTable(14, ramp->srv.gpu);               // t10
             command_list_->SetGraphicsRootDescriptorTable(17, ibl_diffuse_srv);             // t33
             command_list_->SetGraphicsRootDescriptorTable(18, ibl_specular_srv);            // t34
+            command_list_->SetGraphicsRootDescriptorTable(19, ibl_diffuse_srv2);            // t36
+            command_list_->SetGraphicsRootDescriptorTable(20, ibl_specular_srv2);           // t37
             return true;
         };
         const auto bind_layer = [this, &allocate_cb, scene_gpu, identity_bone_gpu](
@@ -2937,6 +3029,9 @@ namespace ReplayEngine::Rendering::DX12
         command_list_->SetGraphicsRootDescriptorTable(10, ibl_diffuse_srv);
         command_list_->SetGraphicsRootDescriptorTable(11, ibl_specular_srv);
         command_list_->SetGraphicsRootDescriptorTable(12, sky_source_srv);
+        command_list_->SetGraphicsRootDescriptorTable(13, ibl_diffuse_srv2);
+        command_list_->SetGraphicsRootDescriptorTable(14, ibl_specular_srv2);
+        command_list_->SetGraphicsRootDescriptorTable(15, sky_source_srv2);
         command_list_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         command_list_->DrawInstanced(3, 1, 0, 0);
 
@@ -2958,28 +3053,48 @@ namespace ReplayEngine::Rendering::DX12
                 return false;
         }
 
-        if (sky_available)
+        const auto draw_sky_to_target = [this, light_gpu, sky_source_srv,
+            ibl_diffuse_srv2, ibl_specular_srv2, sky_source_srv2,
+            sky_available](D3D12OffscreenTarget& target) noexcept
         {
+            if (!sky_available) return true;
+            const bool target_is_scene = &target == &scene_view_target_;
+            if (!target_is_scene && !resource_state_tracker_.Transition(command_list_.Get(),
+                target.color.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET))
+                return false;
             if (!resource_state_tracker_.Transition(command_list_.Get(),
                 scene3d_gbuffer_[4].resource.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET) ||
                 !resource_state_tracker_.Transition(command_list_.Get(), scene3d_depth_.resource.Get(),
                     D3D12_RESOURCE_STATE_DEPTH_READ))
                 return false;
+            if (!target_is_scene)
+            {
+                const float transparent[4]{ 0, 0, 0, 0 };
+                command_list_->ClearRenderTargetView(target.rtv.cpu, transparent, 0, nullptr);
+            }
             D3D12_CPU_DESCRIPTOR_HANDLE sky_targets[2] =
-                { scene_view_target_.rtv.cpu, scene3d_gbuffer_[4].rtv.cpu };
+                { target.rtv.cpu, scene3d_gbuffer_[4].rtv.cpu };
             command_list_->OMSetRenderTargets(2, sky_targets, FALSE, &scene3d_depth_.dsv.cpu);
             command_list_->SetGraphicsRootSignature(scene3d_lighting_root_signature_.Get());
             command_list_->SetPipelineState(scene3d_skybox_pipeline_.Get());
             command_list_->SetGraphicsRootConstantBufferView(0, light_gpu);
             command_list_->SetGraphicsRootDescriptorTable(12, sky_source_srv);
+            command_list_->SetGraphicsRootDescriptorTable(13, ibl_diffuse_srv2);
+            command_list_->SetGraphicsRootDescriptorTable(14, ibl_specular_srv2);
+            command_list_->SetGraphicsRootDescriptorTable(15, sky_source_srv2);
             command_list_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
             command_list_->DrawInstanced(3, 1, 0, 0);
+            if (!target_is_scene && !resource_state_tracker_.Transition(command_list_.Get(),
+                target.color.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE))
+                return false;
             if (!resource_state_tracker_.Transition(command_list_.Get(),
                 scene3d_gbuffer_[4].resource.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE) ||
                 !resource_state_tracker_.Transition(command_list_.Get(), scene3d_depth_.resource.Get(),
                     D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE))
                 return false;
-        }
+            return true;
+        };
+        if (sky_available && !draw_sky_to_target(scene_view_target_)) return false;
 
         EndGpuPass(D3D12GpuPass::Lighting);
         BeginGpuPass(D3D12GpuPass::Forward);
@@ -3361,7 +3476,8 @@ namespace ReplayEngine::Rendering::DX12
             EndGpuPass(D3D12GpuPass::ModelEffect);
         }
 
-        const auto apply_screen_effects = [this, &draw_scene_effect_extracted](
+        const auto apply_screen_effects = [this, &draw_scene_effect_extracted,
+            &draw_sky_to_target](
             std::int32_t stage) noexcept
         {
             for (const D3D12ScreenEffectStackSubmission& stack : scene_effect_submission_.screen_effects)
@@ -3369,7 +3485,33 @@ namespace ReplayEngine::Rendering::DX12
                 if (stack.apply_stage != stage || stack.effects.empty()) continue;
                 ++last_screen_effect_stack_count_;
                 BeginGpuPass(D3D12GpuPass::ScreenEffect);
-                if (stack.target_mode == 2)
+                if (stack.target_mode == 3)
+                {
+                    if (!scene_sky_effect_target_.IsValid() ||
+                        scene_sky_effect_target_.width != width_ ||
+                        scene_sky_effect_target_.height != height_)
+                    {
+                        if (!CreateOffscreenTarget(scene_sky_effect_target_, width_, height_,
+                            DXGI_FORMAT_R16G16B16A16_FLOAT, L"SceneEffect.SkyRT"))
+                            return false;
+                    }
+                    if (!draw_sky_to_target(scene_sky_effect_target_)) return false;
+                    D3D12UIFrame sky_frame{};
+                    sky_frame.target_width = width_;
+                    sky_frame.target_height = height_;
+                    sky_frame.effects = stack.effects;
+                    sky_frame.requires_offscreen = true;
+                    sky_frame.capture_backdrop = true;
+                    sky_frame.preserve_output = true;
+                    sky_frame.scene_effect_history = true;
+                    if (!DrawRuntimeUIToTarget(sky_frame, &scene_sky_effect_target_,
+                        scene_effect_targets_))
+                        return false;
+                    if (!CompositeSceneEffectTarget(scene_sky_effect_target_,
+                        scene_view_target_, nullptr))
+                        return false;
+                }
+                else if (stack.target_mode == 2)
                 {
                     if (!draw_scene_effect_extracted(scene_effect_targets_[2], 0,
                         stack.target_rendering_layer_mask, 0xFFFFFFFFu, false))

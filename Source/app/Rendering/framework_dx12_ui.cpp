@@ -2888,12 +2888,19 @@ bool framework::build_dx12_scene_effects(
         }
         if (auto* screen = object->GetComponent<Components::ScreenEffectStackComponent>())
         {
+            const bool sky_only = screen->target_mode ==
+                Components::ScreenEffectStackComponent::SkyOnly;
+            if (sky_only && (!static_scene.sky.enabled ||
+                static_scene.sky.owner_id != object->ID().Value()))
+                continue;
             if (screen->ActiveInHierarchy() && screen->enabled &&
                 screen->HasActiveEffects(&asset_database))
             {
                 D3D12ScreenEffectStackSubmission stack{};
                 stack.owner_id = object->ID().Value();
-                stack.apply_stage = screen->apply_stage;
+                stack.apply_stage = sky_only
+                    ? Components::ScreenEffectStackComponent::BeforePostProcess
+                    : screen->apply_stage;
                 stack.target_mode = screen->target_mode;
                 const int layer = (std::max)(0, (std::min)(31,
                     screen->target_rendering_layer));

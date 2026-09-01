@@ -1969,30 +1969,116 @@ bool framework::build_dx12_static_scene(
         const ReplayEngine::Core::GameObject* object = scene.GameObjectAt(object_index);
         if (object == nullptr || object->PendingDestroy() || !object->ActiveInHierarchy()) continue;
         const auto* candidate = object->GetComponent<ReplayEngine::Components::SkyboxComponent>();
-        if (candidate == nullptr || !candidate->ActiveInHierarchy() ||
-            !candidate->sky_enabled || candidate->cubemap.guid.empty())
+        if (candidate == nullptr || !candidate->ActiveInHierarchy() || !candidate->sky_enabled)
             continue;
-        const ReplayEngine::Assets::AssetRecord* asset =
-            asset_database.FindByGuid(candidate->cubemap.guid);
-        if (asset == nullptr || asset->source_path.empty()) continue;
+        const ReplayEngine::Assets::AssetRecord* asset = nullptr;
+        for (const ReplayEngine::Reflection::AssetReference& keyframe : candidate->keyframes)
+        {
+            const auto* keyframe_asset = asset_database.FindByGuid(keyframe.guid);
+            if (keyframe_asset != nullptr && !keyframe_asset->source_path.empty())
+            {
+                asset = keyframe_asset;
+                break;
+            }
+        }
+        if (asset == nullptr && !candidate->cubemap.guid.empty())
+        {
+            const auto* legacy_asset = asset_database.FindByGuid(candidate->cubemap.guid);
+            if (legacy_asset != nullptr && !legacy_asset->source_path.empty())
+                asset = legacy_asset;
+        }
+        if (asset == nullptr) continue;
         if (selected_sky != nullptr && candidate->priority <= selected_sky->priority) continue;
         selected_sky = candidate;
         selected_sky_asset = asset;
     }
     if (selected_sky != nullptr && selected_sky_asset != nullptr)
     {
-        const std::string sky_key = add_sky_texture(content_path(selected_sky_asset->source_path));
-        if (!sky_key.empty())
+        std::vector<std::string> sky_keys;
+        if (!selected_sky->keyframes.empty())
+        {
+            for (const ReplayEngine::Reflection::AssetReference& keyframe :
+                selected_sky->keyframes)
+            {
+                const auto* asset = asset_database.FindByGuid(keyframe.guid);
+                if (asset == nullptr || asset->source_path.empty()) continue;
+                const std::string key = add_sky_texture(content_path(asset->source_path));
+                if (!key.empty()) sky_keys.push_back(key);
+            }
+        }
+        if (sky_keys.empty())
+        {
+            const std::string key = add_sky_texture(content_path(selected_sky_asset->source_path));
+            if (!key.empty()) sky_keys.push_back(key);
+        }
+        if (!sky_keys.empty())
         {
             submission.sky.enabled = true;
-            submission.sky.texture_key = sky_key;
+            submission.sky.owner_id = selected_sky->Owner() != nullptr
+                ? selected_sky->Owner()->ID().Value() : 0;
+            submission.sky.keyframe_texture_keys = sky_keys;
+            submission.sky.texture_key = sky_keys.front();
+            const float time = std::isfinite(selected_sky->time)
+                ? std::clamp(selected_sky->time, 0.0f, 1.0f) : 0.0f;
+            submission.sky.time = time;
+            if (sky_keys.size() > 1)
+            {
+                const float keyframe_position = time *
+                    static_cast<float>(sky_keys.size() - 1);
+                const std::size_t keyframe_index = (std::min)(sky_keys.size() - 1,
+                    static_cast<std::size_t>(std::floor(keyframe_position)));
+                submission.sky.texture_key = sky_keys[keyframe_index];
+                if (keyframe_index + 1 < sky_keys.size())
+                {
+                    submission.sky.secondary_texture_key = sky_keys[keyframe_index + 1];
+                    submission.sky.blend = keyframe_position -
+                        static_cast<float>(keyframe_index);
+                }
+            }
             const float degrees = std::isfinite(selected_sky->rotation_degrees)
                 ? selected_sky->rotation_degrees : 0.0f;
             DirectX::XMStoreFloat4x4(&submission.sky.rotation,
                 DirectX::XMMatrixRotationY(DirectX::XMConvertToRadians(degrees)));
+            const float previous_degrees = std::isfinite(
+                selected_sky->PreviousRotationDegrees())
+                ? selected_sky->PreviousRotationDegrees() : degrees;
+            DirectX::XMStoreFloat4x4(&submission.sky.previous_rotation,
+                DirectX::XMMatrixRotationY(DirectX::XMConvertToRadians(previous_degrees)));
             submission.sky.intensity = std::clamp(
                 std::isfinite(selected_sky->intensity) ? selected_sky->intensity : 1.0f,
                 0.0f, 16.0f);
+            submission.sky.clouds_enabled = selected_sky->clouds_enabled;
+            submission.sky.cloud_layer1_speed = selected_sky->cloud_layer1_speed;
+            submission.sky.cloud_layer1_scale = selected_sky->cloud_layer1_scale;
+            submission.sky.cloud_layer1_density = selected_sky->cloud_layer1_density;
+            submission.sky.cloud_layer1_color = selected_sky->cloud_layer1_color;
+            submission.sky.cloud_layer2_speed = selected_sky->cloud_layer2_speed;
+            submission.sky.cloud_layer2_scale = selected_sky->cloud_layer2_scale;
+            submission.sky.cloud_layer2_density = selected_sky->cloud_layer2_density;
+            submission.sky.cloud_layer2_color = selected_sky->cloud_layer2_color;
+            submission.sky.cloud_time = selected_sky->CloudTime();
+            submission.sky.previous_cloud_time = selected_sky->PreviousCloudTime();
+            submission.sky.stars_enabled = selected_sky->stars_enabled;
+            submission.sky.star_density = selected_sky->star_density;
+            submission.sky.star_intensity = selected_sky->star_intensity;
+            submission.sky.star_color = selected_sky->star_color;
+            submission.sky.moon_enabled = selected_sky->moon_enabled;
+            const float moon_x = std::isfinite(selected_sky->moon_direction.x)
+                ? selected_sky->moon_direction.x : 0.0f;
+            const float moon_y = std::isfinite(selected_sky->moon_direction.y)
+                ? selected_sky->moon_direction.y : 0.0f;
+            const float moon_z = std::isfinite(selected_sky->moon_direction.z)
+                ? selected_sky->moon_direction.z : 1.0f;
+            const float moon_length = std::sqrt(moon_x * moon_x + moon_y * moon_y +
+                moon_z * moon_z);
+            if (moon_length > 1.0e-6f)
+                submission.sky.moon_direction = { moon_x / moon_length,
+                    moon_y / moon_length, moon_z / moon_length };
+            else
+                submission.sky.moon_direction = { 0.0f, 0.0f, 1.0f };
+            submission.sky.moon_size = selected_sky->moon_size;
+            submission.sky.moon_intensity = selected_sky->moon_intensity;
+            submission.sky.moon_color = selected_sky->moon_color;
         }
     }
 
