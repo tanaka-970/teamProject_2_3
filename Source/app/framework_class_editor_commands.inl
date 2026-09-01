@@ -468,6 +468,7 @@ private:
         ReplayEngine::Core::ObjectID drop_target = ReplayEngine::Core::ObjectID::Invalid());
     void handle_viewport_selection();
     bool handle_ai_navigation_debug_edit();
+    bool handle_normal_adjust_gizmo();
     // 選択中の Landscape GameObject にだけ有効な Scene View 編集。
     // Runtime Component へ ImGui 依存を持ち込まず、Editor Tool が data を編集する。
     bool handle_landscape_viewport_edit();

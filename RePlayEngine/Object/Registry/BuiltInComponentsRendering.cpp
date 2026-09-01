@@ -817,4 +817,36 @@ namespace ReplayEngine::Core::Detail
                     .Animation(Animatable::Interpolatable));
         }
 
+        void RegisterNormalAdjust()
+        {
+            ComponentRegistry::Register<NormalAdjustComponent>(
+                ComponentTypeInfo::Describe("Normal Adjust", "Rendering")
+                    .WithTooltip("陰影に使う法線を球面へ寄せます。")
+                    .AllowMultipleInstances());
+            PropertyRegistry::Register<NormalAdjustComponent>(
+                MakeProperty("blend", &NormalAdjustComponent::blend)
+                    .Display("Blend").Range(0.0, 1.0).Step(0.01));
+            PropertyRegistry::Register<NormalAdjustComponent>(
+                MakeProperty("center", &NormalAdjustComponent::center)
+                    .Display("Center").Step(0.01));
+            PropertyRegistry::Register<NormalAdjustComponent>(
+                MakeProperty("radius", &NormalAdjustComponent::radius)
+                    .Display("Radius").Range(0.0, 10000.0).Step(0.01));
+            PropertyRegistry::Register<NormalAdjustComponent>(
+                MakeProperty("falloff", &NormalAdjustComponent::falloff)
+                    .Display("Falloff").Range(0.0, 1.0).Step(0.01));
+            PropertyRegistry::Register<NormalAdjustComponent>(
+                MakeProperty("bone", &NormalAdjustComponent::bone)
+                    .Display("Bone"));
+            PropertyRegistry::Register<NormalAdjustComponent>(
+                MakeProperty("target_slot_mode", &NormalAdjustComponent::target_slot_mode)
+                    .Display(u8"対象")
+                    .AsEnum({ u8"モデル全体", u8"マテリアルスロット" })
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<NormalAdjustComponent>(
+                MakeProperty("target_slot_index", &NormalAdjustComponent::target_slot_index)
+                    .Display(u8"マテリアルスロット").Range(0.0, 31.0).Step(1.0)
+                    .Animation(Animatable::Step));
+        }
+
 }
