@@ -2745,6 +2745,17 @@ namespace ReplayEngine::Rendering::DX12
         return true;
     }
 
+    bool D3D12DeviceContext::TryGetStaticTextureSize(const std::string& key,
+        std::uint32_t& width, std::uint32_t& height) const noexcept
+    {
+        const auto found = texture_cache_.find(key);
+        if (found == texture_cache_.end() || found->second.width == 0 ||
+            found->second.height == 0) return false;
+        width = found->second.width;
+        height = found->second.height;
+        return true;
+    }
+
     bool D3D12DeviceContext::EnsureSkyEnvironment(
         const D3D12SkySubmission& sky) noexcept
     {

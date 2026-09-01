@@ -67,5 +67,22 @@ namespace ReplayEngine::Components
         int blend_mode = Normal;
         DirectX::XMFLOAT4 nine_slice{ 0.0f, 0.0f, 0.0f, 0.0f };
         bool preserve_aspect = false;
+
+        void SetAspectHitRect(const DirectX::XMFLOAT4& rect) noexcept
+        {
+            aspect_hit_rect_ = rect;
+            aspect_hit_rect_valid_ = true;
+        }
+        void ClearAspectHitRect() noexcept { aspect_hit_rect_valid_ = false; }
+        bool TryGetAspectHitRect(DirectX::XMFLOAT4& rect) const noexcept
+        {
+            if (!aspect_hit_rect_valid_) return false;
+            rect = aspect_hit_rect_;
+            return true;
+        }
+
+    private:
+        DirectX::XMFLOAT4 aspect_hit_rect_{};
+        bool aspect_hit_rect_valid_ = false;
     };
 }

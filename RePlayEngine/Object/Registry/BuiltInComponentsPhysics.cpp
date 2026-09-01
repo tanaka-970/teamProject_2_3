@@ -94,7 +94,8 @@ namespace ReplayEngine::Core::Detail
                     .Display("停止状態で開始"));
             PropertyRegistry::Register<RigidbodyComponent>(
                 MakeProperty("use_ccd", &RigidbodyComponent::use_ccd)
-                    .Display("高速移動の貫通対策（未対応）"));
+                    .Display("高速移動の貫通対策")
+                    .Tooltip("有効時は球掃引で最初の Collider へ停止します。"));
 
             PropertyRegistry::Register<RigidbodyComponent>(
                 MakeProperty("linear_velocity", &RigidbodyComponent::linear_velocity)
