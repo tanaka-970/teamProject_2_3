@@ -2,6 +2,8 @@
 
 #include <DirectXMath.h>
 
+#include <functional>
+
 namespace ReplayEngine::Core { class GameObject; }
 namespace ReplayEngine::Scene { class Scene; }
 namespace ReplayEngine::Components { class CanvasComponent; }
@@ -11,6 +13,8 @@ namespace ReplayEngine::UI
     class UILayout final
     {
     public:
+        using CanvasPointerMapper = std::function<bool(const Core::GameObject&,
+            float, float, DirectX::XMFLOAT2&)>;
         UILayout() = delete;
 
         static float CanvasScale(const Components::CanvasComponent& canvas,
@@ -24,7 +28,8 @@ namespace ReplayEngine::UI
             float screen_width, float screen_height,
             float mouse_x, float mouse_y,
             bool mouse_down, bool mouse_pressed, bool mouse_released,
-            float mouse_wheel, bool input_captured, bool play_state_motions = false);
+            float mouse_wheel, bool input_captured, bool play_state_motions = false,
+            const CanvasPointerMapper& canvas_pointer_mapper = {});
 
         // ---- 拡張点: Layout Component -------------------------------------
         //

@@ -970,7 +970,8 @@ namespace ReplayEngine::UI
     void UILayout::UpdateButtons(Scene::Scene& scene,
         float screen_width, float screen_height, float mouse_x, float mouse_y,
         bool mouse_down, bool mouse_pressed, bool mouse_released, float mouse_wheel,
-        bool input_captured, bool play_state_motions)
+        bool input_captured, bool play_state_motions,
+        const CanvasPointerMapper& canvas_pointer_mapper)
     {
         if (!input_captured)
         {
@@ -989,7 +990,12 @@ namespace ReplayEngine::UI
             if (canvas == nullptr) continue;
             const float scale = CanvasScale(*canvas, screen_width, screen_height);
             const float safe_scale = scale > 0.0001f ? scale : 1.0f;
-            UpdateInteractiveTree(*canvas_object, mouse_x / safe_scale, mouse_y / safe_scale,
+            DirectX::XMFLOAT2 canvas_pointer{ mouse_x, mouse_y };
+            if (canvas->render_mode == CanvasComponent::WorldSpace &&
+                (!canvas_pointer_mapper || !canvas_pointer_mapper(*canvas_object,
+                    mouse_x, mouse_y, canvas_pointer))) continue;
+            UpdateInteractiveTree(*canvas_object, canvas_pointer.x / safe_scale,
+                canvas_pointer.y / safe_scale,
                 mouse_down, mouse_pressed, mouse_released, mouse_wheel,
                 input_captured, play_state_motions, 0);
         }

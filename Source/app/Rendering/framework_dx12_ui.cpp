@@ -1,5 +1,6 @@
 ﻿#include "../framework_class.h"
 
+#include "../../../RePlayEngine/Components/Camera/CameraComponent.h"
 #include "../../../RePlayEngine/Components/UI/CanvasComponent.h"
 #include "../../../RePlayEngine/Components/UI/RectTransformComponent.h"
 #include "../../../RePlayEngine/Components/UI/UIImageComponent.h"
@@ -250,8 +251,14 @@ bool framework::build_dx12_ui(
     ReplayEngine::Rendering::DX12::D3D12UIFrame& frame)
 {
     const object_ui_viewport viewport = object_ui_viewport_target();
+    const ReplayEngine::Components::CameraSelection camera_selection =
+        ReplayEngine::Components::ResolveActiveCameraSelection(active_object_scene());
+    const bool world_canvas_camera_available = using_editor_camera() ||
+        render_matrix_override_active || render_camera_override != nullptr ||
+        camera_selection.Valid();
     return build_dx12_ui_for_scene(frame, active_object_scene(),
-        dx12_device_context.Width(), dx12_device_context.Height(), viewport);
+        dx12_device_context.Width(), dx12_device_context.Height(), viewport,
+        frame_constants, world_canvas_camera_available);
 }
 
 bool framework::prepare_dx12_custom_effect(
@@ -414,7 +421,9 @@ bool framework::build_dx12_ui_for_scene(
     ReplayEngine::Rendering::DX12::D3D12UIFrame& frame,
     ReplayEngine::Scene::Scene& scene,
     std::uint32_t target_width, std::uint32_t target_height,
-    const object_ui_viewport& requested_viewport)
+    const object_ui_viewport& requested_viewport,
+    const ReplayEngine::Rendering::DX12::D3D12FrameConstants& view_constants,
+    bool world_canvas_camera_available)
 {
     using namespace ReplayEngine;
     using namespace ReplayEngine::Rendering::DX12;
@@ -742,10 +751,27 @@ bool framework::build_dx12_ui_for_scene(
     bool world_space_canvas = false;
     DirectX::XMFLOAT4X4 world_canvas_matrix{};
     DirectX::XMStoreFloat4x4(&world_canvas_matrix, DirectX::XMMatrixIdentity());
-    DirectX::XMFLOAT4X4 world_view_projection = frame_constants.view_projection;
+    DirectX::XMFLOAT4X4 world_view_projection = view_constants.view_projection;
     DirectX::XMFLOAT4 world_canvas_parameters{ 0, 0, 0, 0 };
     const DirectX::XMFLOAT4 world_viewport{
         viewport.left, viewport.top, viewport.width, viewport.height };
+    const auto world_view_projection_valid = [](const DirectX::XMFLOAT4X4& matrix)
+    {
+        const float* values = &matrix._11;
+        bool has_non_zero_value = false;
+        for (std::size_t index = 0; index < 16; ++index)
+        {
+            if (!std::isfinite(values[index])) return false;
+            has_non_zero_value = has_non_zero_value || values[index] != 0.0f;
+        }
+        const float determinant = DirectX::XMVectorGetX(DirectX::XMMatrixDeterminant(
+            DirectX::XMLoadFloat4x4(&matrix)));
+        return has_non_zero_value && std::isfinite(determinant) &&
+            std::fabs(determinant) > 0.000001f;
+    };
+    const bool world_canvas_projection_available = world_canvas_camera_available &&
+        world_view_projection_valid(world_view_projection);
+    bool world_canvas_projection_failed = false;
 
     const auto project_world_canvas_pixel = [&](const DirectX::XMFLOAT2& input)
     {
@@ -764,7 +790,11 @@ bool framework::build_dx12_ui_for_scene(
         const DirectX::XMVECTOR projected = DirectX::XMVector4Transform(
             DirectX::XMVector4Transform(canvas_position, world), view_projection);
         const float w = DirectX::XMVectorGetW(projected);
-        if (std::fabs(w) <= 0.000001f) return input;
+        if (std::fabs(w) <= 0.000001f)
+        {
+            world_canvas_projection_failed = true;
+            return DirectX::XMFLOAT2{ viewport.left, viewport.top };
+        }
         const float ndc_x = DirectX::XMVectorGetX(projected) / w;
         const float ndc_y = DirectX::XMVectorGetY(projected) / w;
         return DirectX::XMFLOAT2{
@@ -2441,6 +2471,13 @@ bool framework::build_dx12_ui_for_scene(
             ReplayEngine::UI::UILayout::CanvasScale(*canvas,
                 viewport.logical_width, viewport.logical_height));
         world_space_canvas = canvas->render_mode == CanvasComponent::WorldSpace;
+        if (world_space_canvas && !world_canvas_projection_available)
+        {
+            if (world_canvas_camera_diagnostics_reported.insert(canvas_object->ID()).second)
+                push_editor_log("Warning", u8"カメラが無いためワールド空間 Canvas を配置できません");
+            world_space_canvas = false;
+            continue;
+        }
         if (world_space_canvas)
         {
             const float reference_width = canvas->reference_resolution.x > 0.0f
@@ -2458,8 +2495,14 @@ bool framework::build_dx12_ui_for_scene(
             DirectX::XMStoreFloat4x4(&world_canvas_matrix,
                 DirectX::XMMatrixIdentity());
         }
+        world_canvas_projection_failed = false;
         render_object(*canvas_object, scale, Clamp01(canvas->opacity),
             nullptr, nullptr, nullptr, 0);
+        if (world_canvas_projection_failed &&
+            world_canvas_camera_diagnostics_reported.insert(canvas_object->ID()).second)
+        {
+            push_editor_log("Warning", u8"カメラ行列が無効なためワールド空間 Canvas を配置できません");
+        }
     }
     world_space_canvas = false;
     frame.draw_commands = static_cast<std::uint32_t>(frame.batches.size());

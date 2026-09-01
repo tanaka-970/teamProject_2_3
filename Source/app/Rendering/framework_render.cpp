@@ -334,6 +334,23 @@ void framework::render(float elapsed_time)
             {
                 static_cast<float>(frame_index), elapsed_time, shader_composer_time, 0.0f
             };
+            if (using_editor_camera() || render_matrix_override_active ||
+                render_camera_override != nullptr)
+            {
+                frame_constants = constants;
+            }
+            else
+            {
+                ReplayEngine::Rendering::DX12::D3D12FrameConstants scene_ui_constants{};
+                DirectX::XMFLOAT4X4 scene_ui_view_projection{};
+                bool used_fallback_camera = false;
+                const dx12_scene_frame_history empty_history{};
+                build_dx12_frame_constants_for_scene(active_object_scene(),
+                    dx12_device_context.Width(), dx12_device_context.Height(), empty_history,
+                    scene_ui_constants, scene_ui_view_projection, used_fallback_camera);
+                scene_ui_constants.time_parameters = constants.time_parameters;
+                frame_constants = scene_ui_constants;
+            }
 
             // DX11 render_setup.inl を通らない DX12 path でも、既存 CSM の CPU cascade
             // calculation を同じ値で更新する。GPU buffer/resource は DX12 backend が持つ。
@@ -511,20 +528,22 @@ void framework::render(float elapsed_time)
                 dx12_device_context.DrawScene3D(static_scene);
 
             bool loading_scene_3d_ok = true;
+            ReplayEngine::Rendering::DX12::D3D12FrameConstants loading_ui_constants{};
+            bool loading_world_canvas_camera_available = false;
             if (static_scene_ok && exclusive_render_scene != nullptr)
             {
                 ReplayEngine::Rendering::RenderItemList loading_render_items;
                 ReplayEngine::Rendering::SceneRenderCollector::Collect(
                     *exclusive_render_scene, loading_render_items);
 
-                ReplayEngine::Rendering::DX12::D3D12FrameConstants loading_constants{};
                 DirectX::XMFLOAT4X4 loading_view_projection{};
                 bool used_fallback_camera = false;
                 build_dx12_frame_constants_for_scene(*exclusive_render_scene,
                     dx12_device_context.Width(), dx12_device_context.Height(),
-                    object_loading_scene_frame_history, loading_constants,
+                    object_loading_scene_frame_history, loading_ui_constants,
                     loading_view_projection, used_fallback_camera);
-                loading_constants.time_parameters = constants.time_parameters;
+                loading_ui_constants.time_parameters = constants.time_parameters;
+                loading_world_canvas_camera_available = !used_fallback_camera;
 
                 ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission loading_scene;
                 loading_scene.background_color = static_scene.background_color;
@@ -601,7 +620,7 @@ void framework::render(float elapsed_time)
                     dx12_device_context.SetSceneEffects({});
                     loading_scene_3d_ok =
                         dx12_device_context.PreloadScene3DResources(loading_scene, false) &&
-                        dx12_device_context.SubmitFrameConstants(loading_constants) &&
+                        dx12_device_context.SubmitFrameConstants(loading_ui_constants) &&
                         dx12_device_context.DrawScene3D(loading_scene, loading_draw_options);
                     if (loading_scene_3d_ok)
                     {
@@ -641,7 +660,8 @@ void framework::render(float elapsed_time)
                         const object_ui_viewport ui_viewport = object_ui_viewport_target();
                         ui_ok = build_dx12_ui_for_scene(ui_frame, *exclusive_scene,
                             dx12_device_context.Width(), dx12_device_context.Height(),
-                            ui_viewport);
+                            ui_viewport, loading_ui_constants,
+                            loading_world_canvas_camera_available);
                     }
                     else
                     {
@@ -680,11 +700,22 @@ void framework::render(float elapsed_time)
                                 ui_preview_runtime_height);
                             preview_viewport.logical_width = preview_viewport.width;
                             preview_viewport.logical_height = preview_viewport.height;
+                            ReplayEngine::Rendering::DX12::D3D12FrameConstants preview_constants{};
+                            DirectX::XMFLOAT4X4 preview_view_projection{};
+                            bool preview_used_fallback_camera = false;
+                            const dx12_scene_frame_history empty_history{};
+                            build_dx12_frame_constants_for_scene(*preview_scene,
+                                static_cast<std::uint32_t>(ui_preview_runtime_width),
+                                static_cast<std::uint32_t>(ui_preview_runtime_height), empty_history,
+                                preview_constants, preview_view_projection,
+                                preview_used_fallback_camera);
+                            preview_constants.time_parameters = constants.time_parameters;
                             const bool preview_built = build_dx12_ui_for_scene(
                                 preview_frame, *preview_scene,
                                 static_cast<std::uint32_t>(ui_preview_runtime_width),
                                 static_cast<std::uint32_t>(ui_preview_runtime_height),
-                                preview_viewport);
+                                preview_viewport, preview_constants,
+                                !preview_used_fallback_camera);
                             if (preview_built)
                                 ui_ok = dx12_device_context.DrawRuntimeUIPreview(preview_frame) && ui_ok;
                         }
