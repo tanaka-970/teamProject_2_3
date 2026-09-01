@@ -286,8 +286,12 @@
     //
     // Shader/Materials, Shader/Layers, Shader/PostProcess を走査して
     // #pragma から宣言を読み、目録を作る。
-    // まだ描画には使わない。接続はフェーズ 4 以降。
+    // DX12 の固定描画経路は RenderItem へ解決済み Layer を渡す。
     ReplayEngine::Rendering::ShaderLibrary shader_library;
+    std::unordered_map<std::string,
+        const ReplayEngine::Rendering::ShaderCatalog::Entry*>
+        custom_ui_effect_shader_catalog_cache;
+    std::uint64_t custom_ui_effect_shader_catalog_cache_generation = 0;
     ReplayEngine::Editor::ShaderComposerEditor shader_composer_editor;
     bool show_shader_catalog_panel{ false };
 

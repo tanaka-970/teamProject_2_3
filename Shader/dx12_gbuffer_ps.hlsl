@@ -157,8 +157,10 @@ PSOut main(PSIn input)
     }
 
     const bool isPixelate = (uint)(builtinParams.x + 0.5f) == BUILTIN_EFFECT_PIXELATE &&
-        builtinParams.z > 0.0f;
-    output.base = float4(albedo.rgb, saturate(renderParams.y / 255.0f));
+        builtinParams.z > 0.0f && builtinParams.w > 0.0f;
+    const uint lightingModelCode = (uint)round(saturate(renderParams.y / 255.0f) * 255.0f);
+    const uint encodedLightingModel = lightingModelCode + (isPixelate ? 128u : 0u);
+    output.base = float4(albedo.rgb, (float)encodedLightingModel / 255.0f);
     output.emissive = float4(emissive, 1.0f);
     output.normalDepth = float4(N * 0.5f + 0.5f,
         renderParams.z >= 0.5f ? 1.0f : -1.0f);

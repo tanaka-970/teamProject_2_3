@@ -70,7 +70,7 @@ namespace ReplayEngine::Rendering::Validation
                 "}\n";
         }
 
-        // 未宣言の識別子を使う。X3004 になる。
+        // 未宣言の識別子を使い、DXCのエラー本文を検証する。
         std::string BrokenPixelShader()
         {
             return
@@ -80,7 +80,7 @@ namespace ReplayEngine::Rendering::Validation
                 "}\n";
         }
 
-        // 暗黙の切り捨て警告（X3206）を出すが、コンパイルは通る。
+        // 暗黙の型変換警告を使い、clang診断フラグを検証する。
         std::string WarningPixelShader()
         {
             return
@@ -167,8 +167,8 @@ namespace ReplayEngine::Rendering::Validation
             "エラーに行番号が付く");
         check.Expect(first_error != nullptr && !first_error->message.empty(),
             "エラーに本文が付く");
-        check.Expect(first_error != nullptr && !first_error->code.empty(),
-            "エラーにコードが付く");
+        check.Expect(first_error != nullptr && first_error->code.empty(),
+            "DXCのエラーコードは空でも正常である");
         check.Expect(first_error != nullptr && !first_error->file.empty(),
             "エラーにファイル名が付く");
 
@@ -197,7 +197,17 @@ namespace ReplayEngine::Rendering::Validation
         const ShaderCompileResult warning = ShaderCompiler::CompileFile(
             warning_path, "main", "ps_6_0", options, warning_bytecode);
         check.Expect(warning.succeeded, "警告だけなら成功する");
-        check.Expect(warning_bytecode != nullptr, "警告時もバイトコードが得られる");
+        const ShaderDiagnostic* first_warning = nullptr;
+        for (const ShaderDiagnostic& diagnostic : warning.diagnostics)
+        {
+            if (diagnostic.severity == ShaderDiagnostic::Severity::Warning)
+            {
+                first_warning = &diagnostic;
+                break;
+            }
+        }
+        check.Expect(warning_bytecode != nullptr && first_warning != nullptr &&
+            !first_warning->code.empty(), "警告の診断フラグが得られる");
 
         // ---- 4. #include を解決できる ------------------------------------
         check.Expect(WriteText(folder / "ValidationInclude.hlsli", IncludedHeader()),

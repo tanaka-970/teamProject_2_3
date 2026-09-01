@@ -15,6 +15,7 @@
 #include "D3D12ScreenBounds.h"
 #include "D3D12ShaderCompiler.h"
 #include "D3D12UploadContext.h"
+#include "../ShaderStack/ShaderLayerStack.h"
 #include "../../UI/Effects/UIEffect.h"
 
 #include <DirectXMath.h>
@@ -39,6 +40,7 @@ namespace ReplayEngine::Rendering::DX12
 {
     // Deferred GBuffer の枚数はここだけで決める。RT を足すときはこの値を増やす。
     inline constexpr std::uint32_t kScene3DGBufferCount = 6;
+    inline constexpr std::size_t kScene3DLayerPipelineCount = 12;
 
     struct D3D12StaticVertex final
     {
@@ -94,6 +96,21 @@ namespace ReplayEngine::Rendering::DX12
         Blend = 2,
     };
 
+    enum class D3D12ShaderLayerPassKind : std::uint32_t
+    {
+        Outline = 0,
+        Wireframe = 1,
+    };
+
+    struct D3D12ShaderLayerPass final
+    {
+        D3D12ShaderLayerPassKind kind = D3D12ShaderLayerPassKind::Outline;
+        ShaderLayerBlend blend = ShaderLayerBlend::Alpha;
+        DirectX::XMFLOAT4 color{ 1, 1, 1, 1 };
+        float width = 0.0f;
+        float opacity = 1.0f;
+    };
+
     struct D3D12StaticDrawItem final
     {
         std::string mesh_key;
@@ -108,6 +125,7 @@ namespace ReplayEngine::Rendering::DX12
         // Static Phase 2 Root Signature に適合する場合に DXC Compile 済みの
         // ShaderCatalog Surface Shader を使い、Custom PSO の失敗時は安全に戻す。
         std::string shader_key;
+        std::vector<D3D12ShaderLayerPass> layer_passes;
         std::vector<std::uint8_t> material_constants;
         std::vector<D3D12StaticMaterialTexture> material_textures;
         // ResolvedMaterialBinding::TextureSemantic の bit mask。
@@ -1080,6 +1098,8 @@ namespace ReplayEngine::Rendering::DX12
         Microsoft::WRL::ComPtr<ID3D12RootSignature> scene3d_shadow_root_signature_;
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_static_gbuffer_pipelines_[6];
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_skinned_gbuffer_pipelines_[6];
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_static_layer_pipelines_[kScene3DLayerPipelineCount];
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_skinned_layer_pipelines_[kScene3DLayerPipelineCount];
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_lighting_pipeline_;
         Microsoft::WRL::ComPtr<ID3D12RootSignature> scene3d_postprocess_root_signature_;
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_temporal_input_pipeline_;
@@ -1097,6 +1117,9 @@ namespace ReplayEngine::Rendering::DX12
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_skinned_shadow_pipelines_[4];
         std::vector<std::uint8_t> scene3d_static_vs_;
         std::vector<std::uint8_t> scene3d_skinned_vs_;
+        std::vector<std::uint8_t> scene3d_static_layer_vs_;
+        std::vector<std::uint8_t> scene3d_skinned_layer_vs_;
+        std::vector<std::uint8_t> scene3d_layer_ps_;
         std::vector<std::uint8_t> scene3d_gbuffer_ps_;
         std::vector<std::uint8_t> scene3d_depth_alpha_ps_;
         std::vector<std::uint8_t> scene3d_forward_ps_;
