@@ -504,7 +504,10 @@ void framework::render(float elapsed_time)
                 dx12_device_context.SetSceneEffects(scene_effects);
             else
                 dx12_device_context.SetSceneEffects(std::move(scene_effects));
-            const bool static_scene_ok = static_scene_built && scene_effects_ok &&
+            const bool scene_resources_preloaded = static_scene_built &&
+                dx12_device_context.PreloadScene3DResources(static_scene, false);
+            const bool static_scene_ok = static_scene_built && scene_resources_preloaded &&
+                scene_effects_ok &&
                 dx12_device_context.DrawScene3D(static_scene);
 
             bool loading_scene_3d_ok = true;
@@ -540,7 +543,21 @@ void framework::render(float elapsed_time)
                     loading_build_options);
                 const bool loading_lighting_built = loading_built &&
                     build_dx12_lighting_for_scene(loading_scene, *exclusive_render_scene);
+                std::vector<ReplayEngine::Rendering::DX12::D3D12StaticTextureSource>
+                    loading_sky_textures;
+                if (!loading_scene.sky.texture_key.empty())
+                {
+                    for (auto& source : loading_scene.texture_sources)
+                    {
+                        if (source.key == loading_scene.sky.texture_key)
+                        {
+                            loading_sky_textures.push_back(std::move(source));
+                            break;
+                        }
+                    }
+                }
                 loading_scene.texture_sources.clear();
+                loading_scene.texture_sources = std::move(loading_sky_textures);
                 loading_scene.shader_sources.clear();
                 for (auto& draw : loading_scene.draws)
                 {
@@ -577,6 +594,7 @@ void framework::render(float elapsed_time)
                     loading_draw_options.write_scene_history = false;
                     dx12_device_context.SetSceneEffects({});
                     loading_scene_3d_ok =
+                        dx12_device_context.PreloadScene3DResources(loading_scene, false) &&
                         dx12_device_context.SubmitFrameConstants(loading_constants) &&
                         dx12_device_context.DrawScene3D(loading_scene, loading_draw_options);
                     if (loading_scene_3d_ok)

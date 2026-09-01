@@ -373,6 +373,28 @@ namespace ReplayEngine::Core::Detail
                     .Display("色フィルタ").AsColor());
         }
 
+        void RegisterSkybox()
+        {
+            ComponentRegistry::Register<SkyboxComponent>(
+                ComponentTypeInfo::Describe("空", "Rendering")
+                    .WithTooltip("キューブマップまたはHDRパノラマを空として表示する。"));
+            PropertyRegistry::Register<SkyboxComponent>(
+                MakeProperty("cubemap", &SkyboxComponent::cubemap)
+                    .Display("空マップ").OfAssetType("Image"));
+            PropertyRegistry::Register<SkyboxComponent>(
+                MakeProperty("priority", &SkyboxComponent::priority)
+                    .Display("優先度").Range(-100.0, 100.0).Step(1.0));
+            PropertyRegistry::Register<SkyboxComponent>(
+                MakeProperty("sky_enabled", &SkyboxComponent::sky_enabled)
+                    .Display("空を表示"));
+            PropertyRegistry::Register<SkyboxComponent>(
+                MakeProperty("rotation_degrees", &SkyboxComponent::rotation_degrees)
+                    .Display("空の回転 (度)").Step(0.5));
+            PropertyRegistry::Register<SkyboxComponent>(
+                MakeProperty("intensity", &SkyboxComponent::intensity)
+                    .Display("空の強さ").Range(0.0, 16.0).Step(0.01));
+        }
+
         void RegisterParticleEmitter()
         {
             ComponentRegistry::Register<ParticleEmitterComponent>(

@@ -71,6 +71,16 @@ namespace ReplayEngine::Rendering::DX12
         std::vector<std::uint8_t> rgba;
         std::uint32_t width = 0;
         std::uint32_t height = 0;
+        bool is_cube = false;
+    };
+
+    struct D3D12SkySubmission final
+    {
+        bool enabled = false;
+        std::string texture_key;
+        DirectX::XMFLOAT4X4 rotation{
+            1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
+        float intensity = 1.0f;
     };
 
     // Custom Surface Shader の正本は既存の ShaderCatalog/PropertySchema とする。
@@ -301,6 +311,7 @@ namespace ReplayEngine::Rendering::DX12
         D3D12DirectionalShadowSubmission directional_shadow{};
         D3D12LocalShadowSubmission local_shadows{};
         D3D12PostProcessSubmission post_process{};
+        D3D12SkySubmission sky{};
         DirectX::XMFLOAT4 background_color{ 0, 0, 0, 1 };
     };
 
@@ -957,6 +968,11 @@ namespace ReplayEngine::Rendering::DX12
         bool EnsureStaticMesh(const D3D12StaticMeshSource& source) noexcept;
         bool EnsureSkinnedMesh(const D3D12SkinnedMeshSource& source) noexcept;
         bool EnsureStaticTexture(const D3D12StaticTextureSource& source) noexcept;
+        bool EnsureSkyEnvironment(const D3D12SkySubmission& sky) noexcept;
+        bool CreateStaticCubeTexture(const std::string& key, std::uint32_t width,
+            std::uint32_t height, std::uint16_t mip_levels, DXGI_FORMAT format,
+            const std::vector<D3D12TextureSubresourceSource>& subresources,
+            const std::vector<float>* cpu_rgba = nullptr) noexcept;
         bool EnsureUIFontTexture(const D3D12UIFontAtlasSource& source) noexcept;
         bool EnsureStaticShader(const D3D12StaticShaderSource& source) noexcept;
         bool CreateSolidStaticTexture(const char* key, std::uint32_t rgba) noexcept;
@@ -997,6 +1013,13 @@ namespace ReplayEngine::Rendering::DX12
             std::uint32_t height = 0;
             std::uint16_t mip_levels = 1;
             DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            bool is_cube = false;
+        };
+
+        struct SkyCubeCpuData final
+        {
+            std::uint32_t width = 0;
+            std::vector<float> rgba;
         };
 
         struct StaticObjectConstants final
@@ -1101,6 +1124,7 @@ namespace ReplayEngine::Rendering::DX12
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_static_layer_pipelines_[kScene3DLayerPipelineCount];
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_skinned_layer_pipelines_[kScene3DLayerPipelineCount];
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_lighting_pipeline_;
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_skybox_pipeline_;
         Microsoft::WRL::ComPtr<ID3D12RootSignature> scene3d_postprocess_root_signature_;
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_temporal_input_pipeline_;
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_taa_resolve_pipeline_;
@@ -1126,6 +1150,8 @@ namespace ReplayEngine::Rendering::DX12
         std::vector<std::uint8_t> scene3d_model_effect_extract_ps_;
         std::vector<std::uint8_t> scene3d_fullscreen_vs_;
         std::vector<std::uint8_t> scene3d_lighting_ps_;
+        std::vector<std::uint8_t> scene3d_skybox_vs_;
+        std::vector<std::uint8_t> scene3d_skybox_ps_;
         std::vector<std::uint8_t> scene3d_temporal_input_ps_;
         std::vector<std::uint8_t> scene3d_taa_resolve_ps_;
         std::vector<std::uint8_t> scene3d_postprocess_ps_;
@@ -1144,6 +1170,8 @@ namespace ReplayEngine::Rendering::DX12
         Scene3DShadowTarget scene3d_local_shadow_{};
         D3D12DescriptorAllocation scene3d_null_directional_shadow_srv_{};
         D3D12DescriptorAllocation scene3d_null_local_shadow_srv_{};
+        D3D12DescriptorAllocation scene3d_null_ibl_diffuse_srv_{};
+        D3D12DescriptorAllocation scene3d_null_ibl_specular_srv_{};
         std::uint32_t scene3d_width_ = 0;
         std::uint32_t scene3d_height_ = 0;
         std::unordered_map<std::string, std::unique_ptr<D3D12MeshBuffer>> skinned_mesh_cache_;
@@ -1155,6 +1183,8 @@ namespace ReplayEngine::Rendering::DX12
         std::unordered_map<std::string, std::unique_ptr<D3D12MeshBuffer>> static_mesh_cache_;
         std::unordered_map<std::string, D3D12MeshLocalBounds> static_mesh_bounds_cache_;
         std::unordered_map<std::string, StaticTextureResource> texture_cache_;
+        std::unordered_map<std::string, SkyCubeCpuData> sky_cpu_cubes_;
+        std::unordered_map<std::string, std::filesystem::path> sky_source_paths_;
         std::unordered_map<std::string, StaticTextureResource> ui_font_texture_cache_;
         std::unordered_map<std::string, std::uint64_t> ui_font_texture_revisions_;
         std::unordered_set<std::string> static_texture_failures_;

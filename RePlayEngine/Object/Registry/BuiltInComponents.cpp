@@ -37,6 +37,7 @@ namespace ReplayEngine::Core
         RegisterMeshRenderer();
         RegisterPrimitiveMeshRenderer();
         RegisterPostProcessVolume();
+        RegisterSkybox();
         RegisterEffectStacks();
         RegisterParticleEmitter();
         RegisterLineRenderers();
