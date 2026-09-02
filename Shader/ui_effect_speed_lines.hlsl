@@ -57,8 +57,12 @@ float4 main(VSOutput input) : SV_TARGET
     // 中心がずれても角までの実距離を採る。定数だと横長画面で角に線が残る。
     const float corner = 2.0 * length(float2(max(center.x, 1.0 - center.x) * aspect,
         max(center.y, 1.0 - center.y)));
+    // 進入と掃引を分ける。1 本の lerp だと線が入るのが progress 0.85 付近になり、
+    // 全覆いの項と重なって線の見える区間が消える。
+    const float entry = saturate(progress / 0.12);
+    const float sweep = saturate((progress - 0.12) / 0.88);
     // progress 0 では最も長い線でも角の外、1 で中心の空きまで届く。
-    const float reach = lerp(corner * 1.4, inner_hole, progress);
+    const float reach = lerp(lerp(corner * 1.4, corner, entry), inner_hole, sweep);
     const float line_start = reach * (0.85 + length_variation * 0.3)
         * (0.92 + 0.16 * flicker);
     const float radial = smoothstep(line_start, line_start + softness, radius);
