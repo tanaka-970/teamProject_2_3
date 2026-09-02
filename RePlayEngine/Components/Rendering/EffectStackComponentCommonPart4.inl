@@ -411,6 +411,29 @@
                 add_color("霜色", "霜とひびへ使う色。");
                 add_seed();
                 break;
+            case UI::UIEffectKind::SpeedLines:
+                add_float("progress", "進行", "0 から 1 で線が中心へ寄り画面を覆う。",
+                    0.0, 1.0, 0.001);
+                add_float("radius", "線の本数", "放射状に並べる線の数。", 8.0, 512.0, 1.0);
+                add_float("amount", "線の太さ", "1 本あたりの角度方向の太さ。",
+                    0.0, 1.0, 0.001);
+                add_float("threshold", "中心の空き", "線を出さない中心の半径。",
+                    0.0, 1.0, 0.001);
+                add_float("softness", "縁の柔らかさ", "線の内側の端をぼかす量。",
+                    0.0001, 1.0, 0.001);
+                add_float("angle", "回転", "放射全体の回転角度（度）。",
+                    -360.0, 360.0, 0.1);
+                add_float("speed", "ちらつき速度", "線の長さが時間で揺れる速さ。0 で静止。",
+                    -32.0, 32.0, 0.01);
+                add_float("intensity", "適用量", "線を元画像へ混ぜる割合。",
+                    0.0, 1.0, 0.01);
+                push(MakeEffectProperty(i, "direction", Reflection::PropertyType::Vector2,
+                    Reflection::Animatable::Interpolatable)
+                    .Display("中心").Tooltip("正規化座標で指定する放射の中心。0.5, 0.5 が中央。")
+                    .Step(0.01));
+                add_color("線の色", "集中線へ使う色。");
+                add_seed();
+                break;
             default:
                 break;
             }

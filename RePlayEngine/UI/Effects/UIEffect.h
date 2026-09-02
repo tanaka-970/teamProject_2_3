@@ -91,7 +91,8 @@ namespace ReplayEngine::UI
         PortalVortex = 72,
         FrostCrack = 73,
         Bubble = 74,
-        Count = 75,
+        SpeedLines = 75,
+        Count = 76,
 
         // 新規 kind は Count の直前へ追加する。既存 Scene の enum 値を変えない。
     };
@@ -114,7 +115,7 @@ namespace ReplayEngine::UI
             "LiquidGlass", "LightSweep", "Shockwave", "PixelSort", "Hologram",
             "IridescentFoil", "RadarSweep", "EnergyPulse", "CircuitFlow", "HeatHaze",
             "WaterCaustics", "VoronoiShatter", "InkBleed", "BurnReveal", "PortalVortex",
-            "FrostCrack", "Bubble"
+            "FrostCrack", "Bubble", "SpeedLines"
         };
         const int index = static_cast<int>(kind);
         if (index < 0 || index >= static_cast<int>(names.size())) return "";
@@ -209,6 +210,7 @@ namespace ReplayEngine::UI
         case UIEffectKind::BurnReveal:
         case UIEffectKind::PortalVortex:
         case UIEffectKind::FrostCrack:
+        case UIEffectKind::SpeedLines:
             return true;
         default:
             return false;
@@ -276,6 +278,7 @@ namespace ReplayEngine::UI
         case UIEffectKind::BurnReveal:
         case UIEffectKind::PortalVortex:
         case UIEffectKind::FrostCrack:
+        case UIEffectKind::SpeedLines:
             return true;
         default:
             return false;
