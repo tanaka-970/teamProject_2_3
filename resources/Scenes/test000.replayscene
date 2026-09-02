@@ -324,39 +324,6 @@ OBJECT
   TRANSFORM 1.3873599767684937 -0.20518913865089417 0 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 3
-  COMPONENT "SkyboxComponent" 1
-    STABLE_ID 2
-    TYPE_GUID "00000000000000000000000000000000"
-    TYPE_MODULE ""
-    TYPE_VERSION 1
-    PROPERTY_COUNT 26
-    PROPERTY "cubemap" assetref "649ebac27e889a3a66d83cf9b4901a2d"
-    PROPERTY "keyframes" array assetref 0
-    PROPERTY "priority" int 67
-    PROPERTY "sky_enabled" bool 1
-    PROPERTY "rotation_degrees" float 6.5
-    PROPERTY "intensity" float 0.64999997615814209
-    PROPERTY "time" float 0.42980000376701355
-    PROPERTY "time_speed" float 10
-    PROPERTY "clouds_enabled" bool 1
-    PROPERTY "cloud_layer1_speed" vec2 -0.017000000923871994 0
-    PROPERTY "cloud_layer1_scale" float 6.3000001907348633
-    PROPERTY "cloud_layer1_density" float 0.64999997615814209
-    PROPERTY "cloud_layer1_color" color 0.69295704364776611 0.44692122936248779 0.97839504480361938 0.75
-    PROPERTY "cloud_layer2_speed" vec2 -0.001500000013038516 0.0010000000474974513
-    PROPERTY "cloud_layer2_scale" float 4.5
-    PROPERTY "cloud_layer2_density" float 0.97000002861022949
-    PROPERTY "cloud_layer2_color" color 0.071683056652545929 0.09203251451253891 0.13271605968475342 0.55000001192092896
-    PROPERTY "stars_enabled" bool 1
-    PROPERTY "star_density" float 1
-    PROPERTY "star_intensity" float 0.4699999988079071
-    PROPERTY "star_color" color 1 0.8399999737739563 0.68000000715255737 1
-    PROPERTY "moon_enabled" bool 1
-    PROPERTY "moon_direction" vec3 0.6600000262260437 0.79000002145767212 0.89999997615814209
-    PROPERTY "moon_size" float 0.0010000000474974513
-    PROPERTY "moon_intensity" float 4.3499999046325684
-    PROPERTY "moon_color" color 1 0.87999999523162842 0.69999998807907104 1
-  END_COMPONENT
   COMPONENT "ScreenEffectStackComponent" 1
     STABLE_ID 4
     TYPE_GUID "00000000000000000000000000000000"
@@ -367,7 +334,7 @@ OBJECT
     PROPERTY "use_preset" bool 0
     PROPERTY "effect_preset" assetref ""
     PROPERTY "effect_count" int 2
-    PROPERTY "apply_stage" enum 0
+    PROPERTY "apply_stage" enum 1
     PROPERTY "target_mode" enum 1
     PROPERTY "target_rendering_layer" int 0
     PROPERTY "effect_region_enabled" bool 0
@@ -384,10 +351,10 @@ OBJECT
     PROPERTY "effects[0].enabled" bool 1
     PROPERTY "effects[0].region_enabled" bool 1
     PROPERTY "effects[0].type" enum 2
-    PROPERTY "effects[0].radius" float 7.059999942779541
-    PROPERTY "effects[0].intensity" float 1.1499999761581421
-    PROPERTY "effects[0].amount" float -0.14000000059604645
-    PROPERTY "effects[0].angle" float 0
+    PROPERTY "effects[0].radius" float 3.5299999713897705
+    PROPERTY "effects[0].intensity" float 0.51999998092651367
+    PROPERTY "effects[0].amount" float -0.74000000953674316
+    PROPERTY "effects[0].angle" float 4.6999998092651367
     PROPERTY "effects[0].color" color 1 1 1 1
     PROPERTY "effects[0].custom_shader" assetref ""
     PROPERTY "effects[1].enabled" bool 1
@@ -469,7 +436,40 @@ OBJECT
     PROPERTY "effects[1].brush_pattern_weight_15" float 1
     PROPERTY "effects[1].waveform" enum 0
   END_COMPONENT
-  COMPONENT "DirectionalLightComponent" 1
+  COMPONENT "SkyboxComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 26
+    PROPERTY "cubemap" assetref "649ebac27e889a3a66d83cf9b4901a2d"
+    PROPERTY "keyframes" array assetref 0
+    PROPERTY "priority" int 67
+    PROPERTY "sky_enabled" bool 1
+    PROPERTY "rotation_degrees" float 6.5
+    PROPERTY "intensity" float 0.64999997615814209
+    PROPERTY "time" float 0.20631572604179382
+    PROPERTY "time_speed" float 10
+    PROPERTY "clouds_enabled" bool 1
+    PROPERTY "cloud_layer1_speed" vec2 -0.017000000923871994 0
+    PROPERTY "cloud_layer1_scale" float 6.3000001907348633
+    PROPERTY "cloud_layer1_density" float 0.64999997615814209
+    PROPERTY "cloud_layer1_color" color 0.69295704364776611 0.44692122936248779 0.97839504480361938 0.75
+    PROPERTY "cloud_layer2_speed" vec2 -0.001500000013038516 0.0010000000474974513
+    PROPERTY "cloud_layer2_scale" float 4.5
+    PROPERTY "cloud_layer2_density" float 0.97000002861022949
+    PROPERTY "cloud_layer2_color" color 0.071683056652545929 0.09203251451253891 0.13271605968475342 0.55000001192092896
+    PROPERTY "stars_enabled" bool 1
+    PROPERTY "star_density" float 1
+    PROPERTY "star_intensity" float 0.4699999988079071
+    PROPERTY "star_color" color 1 0.8399999737739563 0.68000000715255737 1
+    PROPERTY "moon_enabled" bool 1
+    PROPERTY "moon_direction" vec3 0.6600000262260437 0.79000002145767212 0.89999997615814209
+    PROPERTY "moon_size" float 0.0010000000474974513
+    PROPERTY "moon_intensity" float 4.3499999046325684
+    PROPERTY "moon_color" color 1 0.87999999523162842 0.69999998807907104 1
+  END_COMPONENT
+  COMPONENT "DirectionalLightComponent" 0
     STABLE_ID 5
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
@@ -542,6 +542,6 @@ OBJECT
     PROPERTY "material.emissive_strength" float 0
     PROPERTY "material.double_sided" bool 0
     PROPERTY "material_slots[0].name" string ""
-    PROPERTY "material_slots[0].asset" asset "7793d161d0f3240d4879e94ba7ee1a9c"
+    PROPERTY "material_slots[0].asset" asset "8c79019a77ccdf4e86ee19f2337f683f"
   END_COMPONENT
 END_OBJECT

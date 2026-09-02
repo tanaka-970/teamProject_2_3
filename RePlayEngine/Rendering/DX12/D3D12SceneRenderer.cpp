@@ -3733,6 +3733,15 @@ namespace ReplayEngine::Rendering::DX12
         if (!resource_state_tracker_.Transition(command_list_.Get(),
             scene3d_ssao_.resource.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE))
             return false;
+        // SSAO パスで半分にしたビューポートを必ず戻す。戻さないと後段が縮んで描かれる。
+        {
+            const D3D12_VIEWPORT full_viewport{ 0.0f, 0.0f,
+                static_cast<float>(width_), static_cast<float>(height_), 0.0f, 1.0f };
+            const D3D12_RECT full_scissor{ 0, 0,
+                static_cast<LONG>(width_), static_cast<LONG>(height_) };
+            command_list_->RSSetViewports(1, &full_viewport);
+            command_list_->RSSetScissorRects(1, &full_scissor);
+        }
 
         const auto bind_postprocess_inputs = [this, scene_history_available](
             D3D12_GPU_DESCRIPTOR_HANDLE scene_color) noexcept
