@@ -35,44 +35,66 @@ namespace ReplayEngine::Rendering::DX12
         float minimum_y = 0.0f;
         float maximum_x = 0.0f;
         float maximum_y = 0.0f;
-        for (int z = 0; z < 2; ++z)
+
+        DirectX::XMVECTOR clip_corners[8]{};
+        for (int index = 0; index < 8; ++index)
         {
-            for (int y = 0; y < 2; ++y)
+            const DirectX::XMVECTOR local = DirectX::XMVectorSet(
+                (index & 1) == 0 ? bounds.minimum.x : bounds.maximum.x,
+                (index & 2) == 0 ? bounds.minimum.y : bounds.maximum.y,
+                (index & 4) == 0 ? bounds.minimum.z : bounds.maximum.z, 1.0f);
+            clip_corners[index] = DirectX::XMVector4Transform(
+                DirectX::XMVector4Transform(local, world_matrix), view_projection_matrix);
+        }
+
+        const auto accumulate_clip = [&](DirectX::FXMVECTOR clip) noexcept
+        {
+            const float w = DirectX::XMVectorGetW(clip);
+            if (!(w > 0.0f) || !std::isfinite(w)) return;
+            const float normalized_x = DirectX::XMVectorGetX(clip) / w;
+            const float normalized_y = DirectX::XMVectorGetY(clip) / w;
+            if (!std::isfinite(normalized_x) || !std::isfinite(normalized_y)) return;
+            const float screen_x = viewport.TopLeftX +
+                (normalized_x * 0.5f + 0.5f) * viewport.Width;
+            const float screen_y = viewport.TopLeftY +
+                (0.5f - normalized_y * 0.5f) * viewport.Height;
+            if (!std::isfinite(screen_x) || !std::isfinite(screen_y)) return;
+            if (!has_projected_corner)
             {
-                for (int x = 0; x < 2; ++x)
-                {
-                    const DirectX::XMVECTOR local = DirectX::XMVectorSet(
-                        x == 0 ? bounds.minimum.x : bounds.maximum.x,
-                        y == 0 ? bounds.minimum.y : bounds.maximum.y,
-                        z == 0 ? bounds.minimum.z : bounds.maximum.z, 1.0f);
-                    const DirectX::XMVECTOR clip = DirectX::XMVector4Transform(
-                        DirectX::XMVector4Transform(local, world_matrix),
-                        view_projection_matrix);
-                    const float w = DirectX::XMVectorGetW(clip);
-                    if (!(w > 0.0f) || !std::isfinite(w)) continue;
-                    const float normalized_x = DirectX::XMVectorGetX(clip) / w;
-                    const float normalized_y = DirectX::XMVectorGetY(clip) / w;
-                    if (!std::isfinite(normalized_x) || !std::isfinite(normalized_y)) continue;
-                    const float screen_x = viewport.TopLeftX +
-                        (normalized_x * 0.5f + 0.5f) * viewport.Width;
-                    const float screen_y = viewport.TopLeftY +
-                        (0.5f - normalized_y * 0.5f) * viewport.Height;
-                    if (!std::isfinite(screen_x) || !std::isfinite(screen_y)) continue;
-                    if (!has_projected_corner)
-                    {
-                        minimum_x = maximum_x = screen_x;
-                        minimum_y = maximum_y = screen_y;
-                        has_projected_corner = true;
-                    }
-                    else
-                    {
-                        minimum_x = (std::min)(minimum_x, screen_x);
-                        minimum_y = (std::min)(minimum_y, screen_y);
-                        maximum_x = (std::max)(maximum_x, screen_x);
-                        maximum_y = (std::max)(maximum_y, screen_y);
-                    }
-                }
+                minimum_x = maximum_x = screen_x;
+                minimum_y = maximum_y = screen_y;
+                has_projected_corner = true;
+                return;
             }
+            minimum_x = (std::min)(minimum_x, screen_x);
+            minimum_y = (std::min)(minimum_y, screen_y);
+            maximum_x = (std::max)(maximum_x, screen_x);
+            maximum_y = (std::max)(maximum_y, screen_y);
+        };
+
+        for (int index = 0; index < 8; ++index) accumulate_clip(clip_corners[index]);
+
+        // 角を捨てるだけだと、箱がニアプレーンをまたいだとき矩形が画面全体へ広がる。
+        // カメラに寄るほど範囲が効かなくなるので、またいだ辺は交点を作って拾う。
+        constexpr int edges[12][2] = {
+            {0,1},{2,3},{4,5},{6,7},
+            {0,2},{1,3},{4,6},{5,7},
+            {0,4},{1,5},{2,6},{3,7} };
+        constexpr float near_epsilon = 1.0e-4f;
+        for (const auto& edge : edges)
+        {
+            const float w0 = DirectX::XMVectorGetW(clip_corners[edge[0]]);
+            const float w1 = DirectX::XMVectorGetW(clip_corners[edge[1]]);
+            if (!std::isfinite(w0) || !std::isfinite(w1)) continue;
+            const bool front0 = w0 > near_epsilon;
+            const bool front1 = w1 > near_epsilon;
+            if (front0 == front1) continue;
+            const float denominator = w0 - w1;
+            if (!std::isfinite(denominator) || std::abs(denominator) < 1.0e-12f) continue;
+            const float t = (w0 - near_epsilon) / denominator;
+            if (!std::isfinite(t) || t < 0.0f || t > 1.0f) continue;
+            accumulate_clip(DirectX::XMVectorLerp(
+                clip_corners[edge[0]], clip_corners[edge[1]], t));
         }
         if (!has_projected_corner) return false;
 
