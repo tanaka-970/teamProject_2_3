@@ -11,6 +11,7 @@
 #include "../../RePlayEngine/Components/Camera/FollowTargetComponent.h"
 #include "../../RePlayEngine/Components/Motion/MotionPlayerComponent.h"
 #include "../../RePlayEngine/Components/Core/PropertyLinkComponent.h"
+#include "../../RePlayEngine/Components/Editor/EditorNoteComponent.h"
 #include "../../RePlayEngine/Components/UI/UIEffectStackComponent.h"
 #include "../../RePlayEngine/Components/UI/UISpriteAnimatorComponent.h"
 #include "../../RePlayEngine/Components/UI/UITextComponent.h"
@@ -49,10 +50,14 @@
 #include <algorithm>
 #include <cctype>
 #include <cfloat>
+#include <chrono>
+#include <cstdio>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <string>
 #include <utility>
@@ -61,15 +66,30 @@
 
 
 ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
-    const ReplayEngine::Rendering::RenderItem& source)
+    const ReplayEngine::Rendering::RenderItem& source,
+    const std::string* material_asset_override, bool apply_material_motion)
 {
     using namespace ReplayEngine::Rendering;
 
-    RenderItem item = source;
+    RenderItem item;
+    if (material_asset_override == nullptr)
+    {
+        item = source;
+    }
+    else
+    {
+        item.cast_shadow = source.cast_shadow;
+        item.receive_shadow = source.receive_shadow;
+        // Slot 経路は source 全体をコピーしないので、Object の tint だけ引き継ぐ。
+        item.tint = source.tint;
+    }
     item.legacy_tint = source.tint;
     item.lighting_model = deferred_lighting_model(source.shading_model);
 
-    const MaterialAsset* material = resolve_object_material(source.material_asset);
+    const std::string& material_asset = material_asset_override != nullptr
+        ? *material_asset_override : source.material_asset;
+    item.material_asset = material_asset;
+    const MaterialAsset* material = resolve_object_material(material_asset);
     const bool has_material_asset = material != nullptr;
     MaterialAsset fallback_material;
     if (!has_material_asset)
@@ -111,6 +131,9 @@ ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
         ? material->layers.Contains(BuiltInShaderLayers::Outline) : source.outline;
     item.pixelate_size = material->pixelate_grid;
     item.pixelate_strength = material->pixelate_strength;
+    // 不透明度は legacy 欄が無いので Property から直接読む。
+    if (const auto* opacity = material->properties.Find("prop.PixelateOpacity"))
+        item.pixelate_opacity = opacity->AsFloat(item.pixelate_opacity);
 
     // 現在の GameObject mesh は静的提出も skinned_mesh renderer を通る。
     // Vertex Shader の VS_OUT と一致させるため Catalog 側も Skinned 変種を使う。
@@ -152,68 +175,72 @@ ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
     // Motion の material.* は Renderer の永続 material_override とは別物。
     // Asset を直接変更せず、この draw 用コピーにだけ重ねる。停止した次フレームには
     // PrepareMaterialMotionProperties が active mask / bag を消すため完全に元へ戻る。
-    using namespace ReplayEngine::Components;
-    const std::uint32_t motion_mask = source.material_motion_fixed_mask;
-    if ((motion_mask & MaterialMotionBaseColor) != 0)
+    if (apply_material_motion)
     {
-        item.material_base_color = source.override_material_base_color;
-        binding_material.base_color = source.override_material_base_color;
-        binding_material.properties.Set("prop.BaseColor",
-            ReplayEngine::Reflection::PropertyValue::MakeColor(
-                source.override_material_base_color));
-    }
-    if ((motion_mask & MaterialMotionMetallic) != 0)
-    {
-        item.metallic = source.override_material_metallic;
-        binding_material.metallic = source.override_material_metallic;
-        binding_material.properties.Set("prop.Metallic",
-            ReplayEngine::Reflection::PropertyValue::MakeFloat(
-                source.override_material_metallic));
-    }
-    if ((motion_mask & MaterialMotionRoughness) != 0)
-    {
-        item.roughness = source.override_material_roughness;
-        binding_material.roughness = source.override_material_roughness;
-        binding_material.properties.Set("prop.Roughness",
-            ReplayEngine::Reflection::PropertyValue::MakeFloat(
-                source.override_material_roughness));
-    }
-    if ((motion_mask & MaterialMotionAmbientOcclusion) != 0)
-    {
-        item.ambient_occlusion = source.override_material_ambient_occlusion;
-        binding_material.ambient_occlusion = source.override_material_ambient_occlusion;
-        binding_material.properties.Set("prop.AmbientOcclusion",
-            ReplayEngine::Reflection::PropertyValue::MakeFloat(
-                source.override_material_ambient_occlusion));
-    }
-    if ((motion_mask & MaterialMotionEmissiveColor) != 0)
-    {
-        item.emissive_color = source.override_material_emissive_color;
-        binding_material.emissive = source.override_material_emissive_color;
-        binding_material.properties.Set("prop.Emissive",
-            ReplayEngine::Reflection::PropertyValue::MakeVector3(
-                source.override_material_emissive_color));
-    }
-    if ((motion_mask & MaterialMotionEmissiveStrength) != 0)
-    {
-        item.emissive_strength = source.override_material_emissive_strength;
-        binding_material.emissive_strength = source.override_material_emissive_strength;
-        binding_material.properties.Set("prop.EmissiveStrength",
-            ReplayEngine::Reflection::PropertyValue::MakeFloat(
-                source.override_material_emissive_strength));
-    }
-    if ((motion_mask & MaterialMotionDoubleSided) != 0)
-    {
-        item.double_sided = source.double_sided || source.override_material_double_sided;
-        binding_material.double_sided = source.override_material_double_sided;
-        binding_material.properties.Set("prop.DoubleSided",
-            ReplayEngine::Reflection::PropertyValue::MakeBool(
-                source.override_material_double_sided));
-    }
-    for (const ReplayEngine::Reflection::PropertyBag::Entry& entry :
-        source.material_motion_properties.Entries())
-    {
-        binding_material.properties.Set(entry.name, entry.value);
+        using namespace ReplayEngine::Components;
+        const std::uint32_t motion_mask = source.material_motion_fixed_mask;
+        if ((motion_mask & MaterialMotionBaseColor) != 0)
+        {
+            item.material_base_color = source.override_material_base_color;
+            binding_material.base_color = source.override_material_base_color;
+            binding_material.properties.Set("prop.BaseColor",
+                ReplayEngine::Reflection::PropertyValue::MakeColor(
+                    source.override_material_base_color));
+        }
+        if ((motion_mask & MaterialMotionMetallic) != 0)
+        {
+            item.metallic = source.override_material_metallic;
+            binding_material.metallic = source.override_material_metallic;
+            binding_material.properties.Set("prop.Metallic",
+                ReplayEngine::Reflection::PropertyValue::MakeFloat(
+                    source.override_material_metallic));
+        }
+        if ((motion_mask & MaterialMotionRoughness) != 0)
+        {
+            item.roughness = source.override_material_roughness;
+            binding_material.roughness = source.override_material_roughness;
+            binding_material.properties.Set("prop.Roughness",
+                ReplayEngine::Reflection::PropertyValue::MakeFloat(
+                    source.override_material_roughness));
+        }
+        if ((motion_mask & MaterialMotionAmbientOcclusion) != 0)
+        {
+            item.ambient_occlusion = source.override_material_ambient_occlusion;
+            binding_material.ambient_occlusion = source.override_material_ambient_occlusion;
+            binding_material.properties.Set("prop.AmbientOcclusion",
+                ReplayEngine::Reflection::PropertyValue::MakeFloat(
+                    source.override_material_ambient_occlusion));
+        }
+        if ((motion_mask & MaterialMotionEmissiveColor) != 0)
+        {
+            item.emissive_color = source.override_material_emissive_color;
+            binding_material.emissive = source.override_material_emissive_color;
+            binding_material.properties.Set("prop.Emissive",
+                ReplayEngine::Reflection::PropertyValue::MakeVector3(
+                    source.override_material_emissive_color));
+        }
+        if ((motion_mask & MaterialMotionEmissiveStrength) != 0)
+        {
+            item.emissive_strength = source.override_material_emissive_strength;
+            binding_material.emissive_strength = source.override_material_emissive_strength;
+            binding_material.properties.Set("prop.EmissiveStrength",
+                ReplayEngine::Reflection::PropertyValue::MakeFloat(
+                    source.override_material_emissive_strength));
+        }
+        if ((motion_mask & MaterialMotionDoubleSided) != 0)
+        {
+            item.double_sided = source.double_sided || source.override_material_double_sided;
+            binding_material.double_sided = source.override_material_double_sided;
+            binding_material.properties.Set("prop.DoubleSided",
+                ReplayEngine::Reflection::PropertyValue::MakeBool(
+                    source.override_material_double_sided));
+        }
+        for (const ReplayEngine::Reflection::PropertyBag::Entry& entry :
+            source.material_motion_properties.Entries())
+        {
+            binding_material.properties.Set(entry.name, entry.value);
+        }
+
     }
 
     // Material Asset が無い場合は、Builtin Primitive の旧 shading_model を
@@ -285,7 +312,9 @@ ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
 }
 bool framework::build_dx12_static_scene(
     ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission& submission,
-    float elapsed_time)
+    const ReplayEngine::Scene::Scene& scene,
+    const ReplayEngine::Rendering::RenderItemList& render_items,
+    float elapsed_time, dx12_scene_build_options options)
 {
     using namespace ReplayEngine::Rendering;
     using namespace ReplayEngine::Rendering::DX12;
@@ -396,6 +425,81 @@ bool framework::build_dx12_static_scene(
         if (fallback == "bump") return "__dx12_bump";
         return "__dx12_white";
     };
+    const auto has_material_texture = [](const RenderItem& item,
+        const MaterialAsset& material, const char* property_name,
+        const std::string& legacy_texture) noexcept
+    {
+        if (!legacy_texture.empty()) return true;
+        for (const ResolvedMaterialTexture& texture : item.material_binding.textures)
+            if (texture.property_name == property_name && !texture.asset_guid.empty())
+                return true;
+        return false;
+    };
+    const auto set_material_texture = [&add_texture](D3D12StaticDrawItem& draw,
+        std::uint32_t slot, const std::filesystem::path& path,
+        std::uint32_t semantic_bit) -> std::string
+    {
+        const std::string key = add_texture(path);
+        if (key.empty()) return {};
+        for (D3D12StaticMaterialTexture& mapped : draw.material_textures)
+        {
+            if (mapped.slot != slot) continue;
+            mapped.texture_key = key;
+            draw.material_texture_semantic_mask |= semantic_bit;
+            return key;
+        }
+        D3D12StaticMaterialTexture mapped;
+        mapped.slot = slot;
+        mapped.texture_key = key;
+        draw.material_textures.push_back(std::move(mapped));
+        draw.material_texture_semantic_mask |= semantic_bit;
+        return key;
+    };
+    const auto preserve_embedded_material_textures = [
+        &has_material_texture, &set_material_texture, &kPackedOrmMapSemantic](D3D12StaticDrawItem& draw,
+        const RenderItem& material_item, const MaterialAsset& material,
+        const std::filesystem::path& base_path,
+        const std::filesystem::path& normal_path,
+        const std::filesystem::path& orm_path,
+        const std::filesystem::path& emissive_path)
+    {
+        if (!has_material_texture(material_item, material, "BaseMap",
+            material.base_color_texture) && !base_path.empty())
+        {
+            const std::string key = set_material_texture(draw, 40u, base_path,
+                ResolvedMaterialBinding::BaseMapSemantic);
+            if (!key.empty()) draw.base_color_texture_key = key;
+        }
+
+        if (!has_material_texture(material_item, material, "NormalMap",
+            material.normal_texture) && !normal_path.empty())
+            set_material_texture(draw, 41u, normal_path,
+                ResolvedMaterialBinding::NormalMapSemantic);
+
+        const bool has_metallic = has_material_texture(material_item, material,
+            "MetallicMap", material.metallic_texture);
+        const bool has_roughness = has_material_texture(material_item, material,
+            "RoughnessMap", material.roughness_texture);
+        const bool has_occlusion = has_material_texture(material_item, material,
+            "OcclusionMap", material.ambient_occlusion_texture) ||
+            has_material_texture(material_item, material, "AmbientOcclusionMap",
+                material.ambient_occlusion_texture);
+        if (!has_metallic && !has_roughness && !has_occlusion && !orm_path.empty())
+        {
+            set_material_texture(draw, 42u, orm_path,
+                ResolvedMaterialBinding::MetallicMapSemantic);
+            draw.material_texture_semantic_mask &=
+                ~(ResolvedMaterialBinding::MetallicMapSemantic |
+                    ResolvedMaterialBinding::RoughnessMapSemantic |
+                    ResolvedMaterialBinding::OcclusionMapSemantic);
+            draw.material_texture_semantic_mask |= kPackedOrmMapSemantic;
+        }
+
+        if (!has_material_texture(material_item, material, "EmissiveMap",
+            material.emissive_texture) && !emissive_path.empty())
+            set_material_texture(draw, 44u, emissive_path,
+                ResolvedMaterialBinding::EmissiveMapSemantic);
+    };
     const auto base_texture_binding = [&fallback_texture_key](const RenderItem& item) -> BaseTextureBinding
     {
         for (const ResolvedMaterialTexture& texture : item.material_binding.textures)
@@ -413,9 +517,10 @@ bool framework::build_dx12_static_scene(
         &material_alpha_mode, &multiply_color, &add_asset_texture,
         &base_texture_binding, &fallback_texture_key](
         const RenderItem& source_item, const RenderItem& item,
-        D3D12StaticDrawItem& draw) -> bool
+        D3D12StaticDrawItem& draw, const MaterialAsset* resolved_material = nullptr) -> bool
     {
-        const MaterialAsset* material = resolve_object_material(source_item.material_asset);
+        const MaterialAsset* material = resolved_material != nullptr
+            ? resolved_material : resolve_object_material(source_item.material_asset);
         const bool external = material != nullptr;
         draw.base_color = multiply_color(item.material_base_color, item.tint);
         draw.vertex_tint = item.tint;
@@ -433,11 +538,72 @@ bool framework::build_dx12_static_scene(
         draw.alpha_mode = material_alpha_mode(material->alpha_mode);
         draw.alpha_cutoff = material->alpha_cutoff;
         const BaseTextureBinding binding = base_texture_binding(item);
-        std::string texture_guid = binding.asset_guid;
-        if (texture_guid.empty()) texture_guid = material->base_color_texture;
-        draw.base_color_texture_key = add_asset_texture(texture_guid);
-        if (draw.base_color_texture_key.empty())
-            draw.base_color_texture_key = binding.fallback_key;
+        const bool flat_fill = item.material_binding.shader == BuiltInShaders::FlatFill;
+        // BuiltIn は自前 PSO を持てないので、固有表現は builtin_params で運ぶ。
+        // x=効果ID（1=Pixelate）、y/z/w=その効果の引数。増やすときは ID を足す。
+        const bool is_toon = item.material_binding.shader == BuiltInShaders::Toon;
+        if (is_toon)
+        {
+            const auto property_float = [material](const char* name, float fallback)
+            {
+                const auto* value = material->properties.Find(name);
+                return value != nullptr ? value->AsFloat(fallback) : fallback;
+            };
+            const auto property_color = [material](const char* name,
+                const DirectX::XMFLOAT4& fallback)
+            {
+                const auto* value = material->properties.Find(name);
+                return value != nullptr ? value->AsVector4() : fallback;
+            };
+            const float steps = property_float("prop.StepCount", 3.0f);
+            const auto* normalized_ramp = material->properties.Find("prop.NormalizedRamp");
+            const bool use_normalized_ramp = normalized_ramp != nullptr &&
+                normalized_ramp->AsBool(false);
+            draw.builtin_params = { 2.0f, std::clamp(steps, 1.0f, 31.0f), 0.0f,
+                use_normalized_ramp ? 1.0f : 0.0f };
+            const DirectX::XMFLOAT4 shadow_tint =
+                property_color("prop.ShadowTint", { 0.0f, 0.0f, 0.0f, 1.0f });
+            const DirectX::XMFLOAT4 rim_color =
+                property_color("prop.RimColor", { 0.0f, 0.0f, 0.0f, 1.0f });
+            const DirectX::XMFLOAT4 specular_tint =
+                property_color("prop.SpecularTint", { 0.0f, 0.0f, 0.0f, 1.0f });
+            draw.builtin_params1 = { std::clamp(shadow_tint.x, 0.0f, 1.0f),
+                std::clamp(shadow_tint.y, 0.0f, 1.0f), std::clamp(shadow_tint.z, 0.0f, 1.0f),
+                std::clamp(property_float("prop.RimPower", 2.0f), 0.0f, 8.0f) };
+            draw.builtin_params2 = { std::clamp(rim_color.x, 0.0f, 1.0f),
+                std::clamp(rim_color.y, 0.0f, 1.0f), std::clamp(rim_color.z, 0.0f, 1.0f),
+                std::clamp(property_float("prop.SpecularPower", 32.0f), 1.0f, 128.0f) };
+            draw.builtin_params3 = { std::clamp(specular_tint.x, 0.0f, 1.0f),
+                std::clamp(specular_tint.y, 0.0f, 1.0f),
+                std::clamp(specular_tint.z, 0.0f, 1.0f), 0.0f };
+        }
+        else if (item.material_binding.shader == BuiltInShaders::Pixelate)
+        {
+            draw.builtin_params = { 1.0f,
+                (std::max)(1.0f, item.pixelate_size),
+                std::clamp(item.pixelate_strength, 0.0f, 1.0f),
+                std::clamp(item.pixelate_opacity, 0.0f, 1.0f) };
+            const auto* use_gbuffer = material->properties.Find("prop.UseGBufferColor");
+            draw.builtin_params1.x = use_gbuffer != nullptr && use_gbuffer->AsBool(false)
+                ? 1.0f : 0.0f;
+        }
+
+        if (flat_fill)
+        {
+            // FlatFill だけ既存の 1x1 白テクスチャを使い、共用 Bridge は変更しない。
+            draw.base_color_texture_key = "__dx12_white";
+            // BuiltIn は自前 PSO を持たず必ず Bridge を通るため、cbuffer の BaseColor が
+            // 効かない。Bridge が使う base_color へ Material の色を入れる。
+            draw.base_color = multiply_color(material->base_color, item.tint);
+        }
+        else
+        {
+            std::string texture_guid = binding.asset_guid;
+            if (texture_guid.empty()) texture_guid = material->base_color_texture;
+            draw.base_color_texture_key = add_asset_texture(texture_guid);
+            if (draw.base_color_texture_key.empty())
+                draw.base_color_texture_key = binding.fallback_key;
+        }
 
         // 既存の MaterialBindingResolver を b9 の Byte と t40 以降の Slot の正本として使う。
         // DX12 Backend はこの解決済み Packet だけを利用する。
@@ -447,6 +613,12 @@ bool framework::build_dx12_static_scene(
         {
             D3D12StaticMaterialTexture mapped;
             mapped.slot = texture.slot;
+            // BuiltIn Toon の RampMap だけ宣言順(t41)ではなく Bridge の固定 slot へ載せ替える。
+            std::uint32_t bridge_slot = 0;
+            if (is_toon && texture.property_name == "RampMap" &&
+                ResolvedMaterialBinding::TryGetGBufferBridgeSlot(
+                    texture.property_name, bridge_slot))
+                mapped.slot = bridge_slot;
             mapped.texture_key = add_asset_texture(texture.asset_guid);
             if (mapped.texture_key.empty())
                 mapped.texture_key = fallback_texture_key(texture.default_texture);
@@ -486,6 +658,21 @@ bool framework::build_dx12_static_scene(
             }
         }
         return true;
+    };
+
+    const auto resolve_material_slot = [this](const RenderItem& source_item,
+        std::size_t subset_index, const std::string*& out_asset) -> const MaterialAsset*
+    {
+        out_asset = nullptr;
+        if (source_item.material_slot_assets == nullptr ||
+            subset_index >= static_cast<std::size_t>(source_item.material_slot_count))
+            return nullptr;
+        const std::string* candidate = source_item.material_slot_assets[subset_index];
+        if (candidate == nullptr || candidate->empty()) return nullptr;
+        const MaterialAsset* material = resolve_object_material(*candidate);
+        if (material == nullptr) return nullptr;
+        out_asset = candidate;
+        return material;
     };
 
     const auto make_mesh_source = [&submission, &mesh_source_keys](
@@ -550,6 +737,8 @@ bool framework::build_dx12_static_scene(
         }
     };
 
+    if (options.include_auxiliary_geometry)
+    {
     const auto normalize_or_fallback = [](const DirectX::XMVECTOR& value,
         const DirectX::XMVECTOR& fallback) noexcept
     {
@@ -654,7 +843,6 @@ bool framework::build_dx12_static_scene(
     // LineRenderer/TrailもCPU側の点列を正本にし、DX12では一時Ribbon Meshへ変換する。
     // Frame slotごとに置換するので、毎フレームの軌跡更新で古いGPU Resourceを蓄積しない。
     {
-        ReplayEngine::Scene::Scene& scene = active_object_scene();
         std::vector<DirectX::XMFLOAT3> path;
         std::vector<float> alpha;
         for (std::size_t object_index = 0; object_index < scene.GameObjectCount(); ++object_index)
@@ -714,7 +902,6 @@ bool framework::build_dx12_static_scene(
     {
         using ReplayEngine::Components::ParticleEmitterComponent;
         using Particle = framework::dx12_particle_instance;
-        ReplayEngine::Scene::Scene& scene = active_object_scene();
         const float delta = (std::max)(0.0f, (std::min)(elapsed_time, 0.1f));
         const DirectX::XMVECTOR world_up = DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
         const DirectX::XMVECTOR camera_forward_world =
@@ -938,7 +1125,44 @@ bool framework::build_dx12_static_scene(
         }
     }
 
-    for (const RenderItem& source_item : object_render_items.Items())
+    }
+
+    const auto material_subset_bounds = [](const skinned_mesh::mesh& mesh,
+        std::uint32_t start, std::uint32_t count) noexcept
+    {
+        D3D12MeshLocalBounds bounds;
+        const std::size_t begin = (std::min)(static_cast<std::size_t>(start),
+            mesh.indices.size());
+        const std::size_t available = mesh.indices.size() - begin;
+        const std::size_t end = begin + (std::min)(static_cast<std::size_t>(count), available);
+        bool initialized = false;
+        for (std::size_t index = begin; index < end; ++index)
+        {
+            const std::uint32_t vertex_index = mesh.indices[index];
+            if (vertex_index >= mesh.vertices.size()) continue;
+            const DirectX::XMFLOAT3& position = mesh.vertices[vertex_index].position;
+            if (!std::isfinite(position.x) || !std::isfinite(position.y) ||
+                !std::isfinite(position.z))
+                continue;
+            if (!initialized)
+            {
+                bounds.minimum = position;
+                bounds.maximum = position;
+                initialized = true;
+                continue;
+            }
+            bounds.minimum.x = (std::min)(bounds.minimum.x, position.x);
+            bounds.minimum.y = (std::min)(bounds.minimum.y, position.y);
+            bounds.minimum.z = (std::min)(bounds.minimum.z, position.z);
+            bounds.maximum.x = (std::max)(bounds.maximum.x, position.x);
+            bounds.maximum.y = (std::max)(bounds.maximum.y, position.y);
+            bounds.maximum.z = (std::max)(bounds.maximum.z, position.z);
+        }
+        bounds.valid = initialized;
+        return bounds;
+    };
+
+    for (const RenderItem& source_item : render_items.Items())
     {
         if (source_item.mesh_asset.empty()) continue;
 
@@ -955,13 +1179,18 @@ bool framework::build_dx12_static_scene(
             const skinned_mesh::animation::keyframe* keyframe =
                 resolve_render_item_keyframe(*mesh_asset, item, blended_keyframe);
 
+            // Slot 番号は Object 全体を通した番号にする。glTF は 1 primitive が
+            // 1 mesh + subset 1 個で入るため、mesh 内の subset 番号だと常に 0 になる。
+            std::size_t material_slot_cursor = 0;
             for (std::size_t mesh_index = 0; mesh_index < mesh_asset->meshes.size(); ++mesh_index)
             {
                 const skinned_mesh::mesh& mesh = mesh_asset->meshes[mesh_index];
                 if (mesh.vertices.empty() || mesh.indices.empty()) continue;
                 const std::string mesh_key = item.mesh_asset + "#skinned:" +
                     std::to_string(mesh_index);
-                if (!dx12_device_context.HasSkinnedMesh(mesh_key))
+                D3D12MeshLocalBounds cached_bounds;
+                if (!dx12_device_context.HasSkinnedMesh(mesh_key) ||
+                    !dx12_device_context.GetSkinnedMeshLocalBounds(mesh_key, cached_bounds))
                     make_skinned_mesh_source(mesh_key, mesh);
 
                 DirectX::XMFLOAT4X4 mesh_world =
@@ -1003,18 +1232,53 @@ bool framework::build_dx12_static_scene(
                 }
 
                 const auto append_skinned_draw = [&](std::uint32_t start, std::uint32_t count,
-                    std::uint64_t material_id)
+                    std::uint64_t material_id, std::size_t subset_index)
                 {
+                    const std::string* slot_asset = nullptr;
+                    const MaterialAsset* slot_material =
+                        resolve_material_slot(source_item, subset_index, slot_asset);
+                    RenderItem slot_item;
+                    const RenderItem* material_item = &item;
+                    if (slot_material != nullptr && slot_asset != nullptr)
+                    {
+                        slot_item = resolve_render_item_material(source_item, slot_asset, false);
+                        material_item = &slot_item;
+                    }
                     D3D12SkinnedDrawItem skinned_draw;
                     D3D12StaticDrawItem& draw = skinned_draw.surface;
                     draw.mesh_key = mesh_key;
                     draw.owner_id = source_item.owner.Value();
+                    draw.material_slot = static_cast<std::uint32_t>(subset_index);
+                    draw.material_bounds = material_subset_bounds(mesh, start, count);
                     draw.rendering_layer = static_cast<std::uint32_t>((std::max)(0,
                         (std::min)(31, item.rendering_layer)));
                     draw.start_index = start;
                     draw.index_count = count;
                     draw.world = mesh_world;
-                    const bool external = fill_external_material(source_item, item, draw);
+                    const bool external = fill_external_material(
+                        source_item, *material_item, draw, slot_material);
+                    if (external)
+                    {
+                        const MaterialAsset* material = slot_material != nullptr
+                            ? slot_material : resolve_object_material(source_item.material_asset);
+                        if (material != nullptr)
+                        {
+                            const auto embedded_texture_path =
+                                [&mesh_asset, material_id, &model_source](std::size_t slot)
+                            {
+                                const auto embedded_material = mesh_asset->materials.find(material_id);
+                                if (embedded_material == mesh_asset->materials.end()) return std::filesystem::path{};
+                                std::filesystem::path path(embedded_material->second.texture_filenames[slot]);
+                                if (!path.empty() && path.is_relative() &&
+                                    !model_source.empty())
+                                    path = model_source.parent_path() / path;
+                                return path;
+                            };
+                            preserve_embedded_material_textures(draw, *material_item, *material,
+                                embedded_texture_path(0), embedded_texture_path(1),
+                                embedded_texture_path(2), embedded_texture_path(3));
+                        }
+                    }
                     if (!external)
                     {
                         const auto material_it = mesh_asset->materials.find(material_id);
@@ -1070,16 +1334,32 @@ bool framework::build_dx12_static_scene(
                 };
 
                 if (mesh.subsets.empty())
-                    append_skinned_draw(0, static_cast<std::uint32_t>(mesh.indices.size()), 0);
+                    append_skinned_draw(0, static_cast<std::uint32_t>(mesh.indices.size()), 0,
+                        material_slot_cursor++);
                 else
-                    for (const skinned_mesh::mesh::subset& subset : mesh.subsets)
+                {
+                    for (std::size_t subset_index = 0; subset_index < mesh.subsets.size();
+                        ++subset_index)
+                    {
+                        const skinned_mesh::mesh::subset& subset = mesh.subsets[subset_index];
                         append_skinned_draw(subset.start_index_location, subset.index_count,
-                            subset.material_unique_id);
+                            subset.material_unique_id, material_slot_cursor++);
+                    }
+                }
             }
             continue;
         }
         if (item.mesh_asset.rfind("builtin:", 0) == 0)
         {
+            const std::string* slot_asset = nullptr;
+            const MaterialAsset* slot_material = resolve_material_slot(source_item, 0, slot_asset);
+            RenderItem slot_item;
+            const RenderItem* material_item = &item;
+            if (slot_material != nullptr && slot_asset != nullptr)
+            {
+                slot_item = resolve_render_item_material(source_item, slot_asset, false);
+                material_item = &slot_item;
+            }
             if (dx12_framework_active)
             {
                 std::vector<static_mesh::vertex> cpu_vertices;
@@ -1110,7 +1390,7 @@ bool framework::build_dx12_static_scene(
                     (std::min)(31, item.rendering_layer)));
                 draw.motion_key = std::to_string(source_item.owner.Value()) + ":" + draw.mesh_key;
                 draw.world = item.world;
-                (void)fill_external_material(source_item, item, draw);
+                (void)fill_external_material(source_item, *material_item, draw, slot_material);
                 submission.draws.push_back(std::move(draw));
                 continue;
             }
@@ -1129,7 +1409,7 @@ bool framework::build_dx12_static_scene(
                 (std::min)(31, item.rendering_layer)));
             draw.motion_key = std::to_string(source_item.owner.Value()) + ":" + draw.mesh_key;
             draw.world = item.world;
-            (void)fill_external_material(source_item, item, draw);
+            (void)fill_external_material(source_item, *material_item, draw, slot_material);
             submission.draws.push_back(std::move(draw));
             continue;
         }
@@ -1179,6 +1459,16 @@ bool framework::build_dx12_static_scene(
                 draw.motion_key = std::to_string(source_item.owner.Value()) + ":" + draw.mesh_key;
                 draw.world = multiply_world(info.node_transform, item.world);
                 const bool external = fill_external_material(source_item, item, draw);
+                if (external)
+                {
+                    const MaterialAsset* material = resolve_object_material(
+                        source_item.material_asset);
+                    if (material != nullptr)
+                        preserve_embedded_material_textures(draw, item, *material,
+                            info.embedded_base_color_texture,
+                            info.embedded_normal_texture,
+                            info.embedded_orm_texture, {});
+                }
                 if (!external)
                 {
                     draw.base_color = multiply_color(info.embedded_base_color,
@@ -1212,6 +1502,8 @@ bool framework::build_dx12_static_scene(
         std::string model_reason;
         (void)resolve_model_source(item.mesh_asset, model_source, model_reason);
 
+        // Slot 番号は Object 全体を通した番号にする（skinned 側と同じ理由）。
+        std::size_t material_slot_cursor = 0;
         for (std::size_t mesh_index = 0; mesh_index < mesh_asset->meshes.size(); ++mesh_index)
         {
             const skinned_mesh::mesh& mesh = mesh_asset->meshes[mesh_index];
@@ -1225,11 +1517,23 @@ bool framework::build_dx12_static_scene(
             const DirectX::XMFLOAT4X4 mesh_world =
                 multiply_world(mesh.default_global_transform, item.world);
             const auto append_draw = [&](std::uint32_t start, std::uint32_t count,
-                std::uint64_t material_id)
+                std::uint64_t material_id, std::size_t subset_index)
             {
+                const std::string* slot_asset = nullptr;
+                const MaterialAsset* slot_material =
+                    resolve_material_slot(source_item, subset_index, slot_asset);
+                RenderItem slot_item;
+                const RenderItem* material_item = &item;
+                if (slot_material != nullptr && slot_asset != nullptr)
+                {
+                    slot_item = resolve_render_item_material(source_item, slot_asset, false);
+                    material_item = &slot_item;
+                }
                 D3D12StaticDrawItem draw;
                 draw.mesh_key = mesh_key;
                 draw.owner_id = source_item.owner.Value();
+                draw.material_slot = static_cast<std::uint32_t>(subset_index);
+                draw.material_bounds = material_subset_bounds(mesh, start, count);
                 draw.rendering_layer = static_cast<std::uint32_t>((std::max)(0,
                     (std::min)(31, item.rendering_layer)));
                 draw.motion_key = std::to_string(source_item.owner.Value()) + ":" + mesh_key +
@@ -1237,7 +1541,30 @@ bool framework::build_dx12_static_scene(
                 draw.start_index = start;
                 draw.index_count = count;
                 draw.world = mesh_world;
-                const bool external = fill_external_material(source_item, item, draw);
+                const bool external = fill_external_material(
+                    source_item, *material_item, draw, slot_material);
+                if (external)
+                {
+                    const MaterialAsset* material = slot_material != nullptr
+                        ? slot_material : resolve_object_material(source_item.material_asset);
+                    if (material != nullptr)
+                    {
+                        const auto embedded_texture_path =
+                            [&mesh_asset, material_id, &model_source](std::size_t slot)
+                        {
+                            const auto embedded_material = mesh_asset->materials.find(material_id);
+                            if (embedded_material == mesh_asset->materials.end()) return std::filesystem::path{};
+                            std::filesystem::path path(embedded_material->second.texture_filenames[slot]);
+                            if (!path.empty() && path.is_relative() &&
+                                !model_source.empty())
+                                path = model_source.parent_path() / path;
+                            return path;
+                        };
+                        preserve_embedded_material_textures(draw, *material_item, *material,
+                            embedded_texture_path(0), embedded_texture_path(1),
+                            embedded_texture_path(2), embedded_texture_path(3));
+                    }
+                }
                 if (!external)
                 {
                     const auto material_it = mesh_asset->materials.find(material_id);
@@ -1290,21 +1617,167 @@ bool framework::build_dx12_static_scene(
 
             if (mesh.subsets.empty())
             {
-                append_draw(0, static_cast<std::uint32_t>(mesh.indices.size()), 0);
+                append_draw(0, static_cast<std::uint32_t>(mesh.indices.size()), 0,
+                    material_slot_cursor++);
             }
             else
             {
-                for (const skinned_mesh::mesh::subset& subset : mesh.subsets)
+                for (std::size_t subset_index = 0; subset_index < mesh.subsets.size();
+                    ++subset_index)
+                {
+                    const skinned_mesh::mesh::subset& subset = mesh.subsets[subset_index];
                     append_draw(subset.start_index_location, subset.index_count,
-                        subset.material_unique_id);
+                        subset.material_unique_id, material_slot_cursor++);
+                }
+            }
+        }
+    }
+
+    if (options.include_auxiliary_geometry && editor_mode && !object_scene_play_mode)
+    {
+        using ReplayEngine::Components::EditorNoteComponent;
+        using ReplayEngine::Components::UITextComponent;
+        constexpr float world_units_per_pixel = 0.01f;
+        for (std::size_t object_index = 0; object_index < scene.GameObjectCount(); ++object_index)
+        {
+            const ReplayEngine::Core::GameObject* object = scene.GameObjectAt(object_index);
+            if (object == nullptr || object->PendingDestroy() || !object->ActiveInHierarchy())
+                continue;
+            for (const EditorNoteComponent* note : object->GetComponents<EditorNoteComponent>())
+            {
+                if (note == nullptr || !note->ActiveInHierarchy() || !note->show_in_viewport ||
+                    note->mode != EditorNoteComponent::World || note->text.empty() ||
+                    (note->completed && note->hide_when_completed))
+                    continue;
+
+                UITextComponent layout;
+                layout.text = note->text;
+                layout.font_size = 64.0f;
+                layout.horizontal_align = UITextComponent::Left;
+                layout.vertical_align = UITextComponent::Top;
+                layout.word_wrap = false;
+                ui_font_atlas.BuildGlyphs(layout, 16384.0f, 4096.0f, &asset_database);
+                if (layout.Glyphs().empty()) continue;
+
+                std::string atlas_face_key;
+                std::uint64_t atlas_revision = 0;
+                if (!ui_font_atlas.ActiveAtlasRevision(atlas_face_key, atlas_revision)) continue;
+                const std::string texture_key = "editor-note-font:" + atlas_face_key + ":" +
+                    std::to_string(atlas_revision);
+                if (!dx12_device_context.HasStaticTexture(texture_key) &&
+                    texture_source_keys.insert(texture_key).second)
+                {
+                    D3D12StaticTextureSource texture;
+                    texture.key = texture_key;
+                    std::string copied_face_key;
+                    std::uint64_t copied_revision = 0;
+                    if (!ui_font_atlas.CopyActiveAtlas(copied_face_key, texture.rgba,
+                        texture.width, texture.height, copied_revision) ||
+                        copied_face_key != atlas_face_key || copied_revision != atlas_revision)
+                        continue;
+                    submission.texture_sources.push_back(std::move(texture));
+                }
+
+                float minimum_x = (std::numeric_limits<float>::max)();
+                float minimum_y = (std::numeric_limits<float>::max)();
+                float maximum_x = (std::numeric_limits<float>::lowest)();
+                float maximum_y = (std::numeric_limits<float>::lowest)();
+                for (const UITextComponent::GlyphQuad& glyph : layout.Glyphs())
+                {
+                    minimum_x = (std::min)(minimum_x, glyph.position.x);
+                    maximum_x = (std::max)(maximum_x, glyph.position.x + glyph.size.x);
+                    minimum_y = (std::min)(minimum_y, -glyph.position.y - glyph.size.y);
+                    maximum_y = (std::max)(maximum_y, -glyph.position.y);
+                }
+                float align_x = -minimum_x;
+                if (note->horizontal_align == EditorNoteComponent::Center)
+                    align_x = -(minimum_x + maximum_x) * 0.5f;
+                else if (note->horizontal_align == EditorNoteComponent::Right)
+                    align_x = -maximum_x;
+                float align_y = -maximum_y;
+                if (note->vertical_align == EditorNoteComponent::Middle)
+                    align_y = -(minimum_y + maximum_y) * 0.5f;
+                else if (note->vertical_align == EditorNoteComponent::Bottom)
+                    align_y = -minimum_y;
+
+                std::size_t mesh_signature = std::hash<std::string>{}(note->text);
+                mesh_signature ^= static_cast<std::size_t>(note->horizontal_align + 17) +
+                    (mesh_signature << 6) + (mesh_signature >> 2);
+                mesh_signature ^= static_cast<std::size_t>(note->vertical_align + 31) +
+                    (mesh_signature << 6) + (mesh_signature >> 2);
+                mesh_signature ^= static_cast<std::size_t>(atlas_revision) +
+                    (mesh_signature << 6) + (mesh_signature >> 2);
+                const std::string mesh_key = "editor-note:" +
+                    std::to_string(object->ID().Value()) + ":" +
+                    std::to_string(note->StableID()) + ":" + std::to_string(mesh_signature);
+                if (!dx12_device_context.HasStaticMesh(mesh_key) &&
+                    mesh_source_keys.insert(mesh_key).second)
+                {
+                    D3D12StaticMeshSource mesh;
+                    mesh.key = mesh_key;
+                    mesh.vertices.reserve(layout.Glyphs().size() * 4);
+                    mesh.indices.reserve(layout.Glyphs().size() * 6);
+                    for (const UITextComponent::GlyphQuad& glyph : layout.Glyphs())
+                    {
+                        const float left = (glyph.position.x + align_x) * world_units_per_pixel;
+                        const float right = (glyph.position.x + glyph.size.x + align_x) *
+                            world_units_per_pixel;
+                        const float top = (-glyph.position.y + align_y) * world_units_per_pixel;
+                        const float bottom = (-glyph.position.y - glyph.size.y + align_y) *
+                            world_units_per_pixel;
+                        const float uv_left = glyph.uv.x;
+                        const float uv_top = glyph.uv.y;
+                        const float uv_right = glyph.uv.x + glyph.uv.z;
+                        const float uv_bottom = glyph.uv.y + glyph.uv.w;
+                        const std::uint32_t base = static_cast<std::uint32_t>(
+                            mesh.vertices.size());
+                        D3D12StaticVertex vertices[4]{};
+                        vertices[0].position = { left, top, 0.0f };
+                        vertices[1].position = { right, top, 0.0f };
+                        vertices[2].position = { right, bottom, 0.0f };
+                        vertices[3].position = { left, bottom, 0.0f };
+                        vertices[0].texcoord = { uv_left, uv_top };
+                        vertices[1].texcoord = { uv_right, uv_top };
+                        vertices[2].texcoord = { uv_right, uv_bottom };
+                        vertices[3].texcoord = { uv_left, uv_bottom };
+                        for (D3D12StaticVertex& vertex : vertices)
+                            vertex.normal = { 0.0f, 0.0f, 1.0f };
+                        mesh.vertices.insert(mesh.vertices.end(), std::begin(vertices),
+                            std::end(vertices));
+                        mesh.indices.insert(mesh.indices.end(),
+                            { base, base + 1, base + 2, base, base + 2, base + 3 });
+                    }
+                    submission.mesh_sources.push_back(std::move(mesh));
+                }
+
+                D3D12StaticDrawItem draw;
+                draw.mesh_key = mesh_key;
+                draw.owner_id = object->ID().Value();
+                draw.motion_key = mesh_key;
+                const DirectX::XMFLOAT4X4 owner_world =
+                    object->GetTransform().WorldMatrixFloat4x4();
+                const float note_scale = (std::max)(0.01f, note->text_scale);
+                DirectX::XMStoreFloat4x4(&draw.world,
+                    DirectX::XMMatrixScaling(note_scale, note_scale, note_scale) *
+                    DirectX::XMMatrixTranslation(note->offset.x, note->offset.y, note->offset.z) *
+                    DirectX::XMLoadFloat4x4(&owner_world));
+                draw.base_color = note->color;
+                if (note->completed) draw.base_color.w *= 0.45f;
+                draw.base_color_texture_key = texture_key;
+                draw.alpha_mode = D3D12StaticAlphaMode::Blend;
+                draw.lighting_model = static_cast<std::int32_t>(ShaderLightingModel::Unlit);
+                draw.double_sided = true;
+                draw.cast_shadow = false;
+                draw.receive_shadow = false;
+                submission.draws.push_back(std::move(draw));
             }
         }
     }
 
     // Landscapeは既存LandscapeDataの頂点/Indexを正本として、そのままStatic Mesh提出へ変換する。
     // D3D11専用のstatic_meshキャッシュをDX12から参照しないため、編集後のRevisionもキーへ含める。
+    if (options.include_auxiliary_geometry)
     {
-        ReplayEngine::Scene::Scene& scene = active_object_scene();
         for (std::size_t object_index = 0; object_index < scene.GameObjectCount(); ++object_index)
         {
             const ReplayEngine::Core::GameObject* object = scene.GameObjectAt(object_index);
@@ -1349,76 +1822,252 @@ bool framework::build_dx12_static_scene(
         }
     }
 
-    submission.directional_light.enabled = directional_light_present;
-    submission.directional_light.direction = { light_direction.x, light_direction.y, light_direction.z };
-    submission.directional_light.color = { pbr.light.directional_color.x,
-        pbr.light.directional_color.y, pbr.light.directional_color.z };
-    submission.directional_light.intensity = pbr.light.directional_color.w;
-    submission.directional_light.cast_shadows = directional_shadow_enabled;
-    submission.directional_light.shadow_strength = pbr.light.shadow_params.x;
-
-    const int point_count = (std::max)(0, (std::min)(lights_manager::POINT_LIGHT_MAX,
-        lights.data.light_counts.x));
-    submission.point_lights.reserve(static_cast<std::size_t>(point_count));
-    for (int index = 0; index < point_count; ++index)
+    if (options.include_active_lighting)
     {
-        const lights_manager::point_light& source = lights.data.point_lights[index];
-        D3D12PointLightSubmission light;
-        light.position = { source.position.x, source.position.y, source.position.z };
-        light.range = source.position.w;
-        light.color = { source.color.x, source.color.y, source.color.z };
-        light.intensity = source.color.w;
-        light.cast_shadows = source.shadow.x >= 0.0f;
-        light.shadow_strength = source.shadow.y;
-        light.shadow_slice = static_cast<std::int32_t>(source.shadow.x);
-        submission.point_lights.push_back(light);
-    }
+        submission.directional_light.enabled = directional_light_present;
+        submission.directional_light.direction = { light_direction.x, light_direction.y, light_direction.z };
+        submission.directional_light.color = { pbr.light.directional_color.x,
+            pbr.light.directional_color.y, pbr.light.directional_color.z };
+        submission.directional_light.intensity = pbr.light.directional_color.w;
+        submission.directional_light.cast_shadows = directional_shadow_enabled;
+        submission.directional_light.shadow_strength = pbr.light.shadow_params.x;
 
-    const int spot_count = (std::max)(0, (std::min)(lights_manager::SPOT_LIGHT_MAX,
-        lights.data.light_counts.y));
-    submission.spot_lights.reserve(static_cast<std::size_t>(spot_count));
-    for (int index = 0; index < spot_count; ++index)
-    {
-        const lights_manager::spot_light& source = lights.data.spot_lights[index];
-        D3D12SpotLightSubmission light;
-        light.position = { source.position.x, source.position.y, source.position.z };
-        light.range = source.position.w;
-        light.direction = { source.direction.x, source.direction.y, source.direction.z };
-        light.inner_cos = source.direction.w;
-        light.color = { source.color.x, source.color.y, source.color.z };
-        light.outer_cos = source.color.w;
-        light.intensity = source.params.x;
-        light.cast_shadows = source.params.y >= 0.0f;
-        light.shadow_strength = source.params.z;
-        light.shadow_slice = static_cast<std::int32_t>(source.params.y);
-        submission.spot_lights.push_back(light);
-    }
+        const int point_count = (std::max)(0, (std::min)(lights_manager::POINT_LIGHT_MAX,
+            lights.data.light_counts.x));
+        submission.point_lights.reserve(static_cast<std::size_t>(point_count));
+        for (int index = 0; index < point_count; ++index)
+        {
+            const lights_manager::point_light& source = lights.data.point_lights[index];
+            D3D12PointLightSubmission light;
+            light.position = { source.position.x, source.position.y, source.position.z };
+            light.range = source.position.w;
+            light.color = { source.color.x, source.color.y, source.color.z };
+            light.intensity = source.color.w;
+            light.cast_shadows = source.shadow.x >= 0.0f;
+            light.shadow_strength = source.shadow.y;
+            light.shadow_slice = static_cast<std::int32_t>(source.shadow.x);
+            submission.point_lights.push_back(light);
+        }
 
-    // ShadowのProjection/AllocationにおけるCPU正本は既存CSM/LocalShadowAtlas。
-    // DX12側で別のCascade分割やPoint Face選択を作らず、確定済み値だけを提出する。
-    submission.directional_shadow.enabled =
-        csm.constants.params.w > 0.5f && submission.directional_light.cast_shadows;
-    submission.directional_shadow.resolution = csm_renderer::SHADOW_MAP_SIZE;
-    for (std::uint32_t cascade = 0;
-        cascade < D3D12DirectionalShadowSubmission::CascadeCount; ++cascade)
-        submission.directional_shadow.view_projection[cascade] =
-            csm.constants.view_projection[cascade];
-    submission.directional_shadow.split_distances = csm.constants.split_distances;
-    submission.directional_shadow.params = csm.constants.params;
-    submission.directional_shadow.params2 = csm.constants.params2;
-    submission.directional_shadow.params3 = csm.constants.params3;
-    submission.directional_shadow.texel_world = csm.constants.texel_world;
+        const int spot_count = (std::max)(0, (std::min)(lights_manager::SPOT_LIGHT_MAX,
+            lights.data.light_counts.y));
+        submission.spot_lights.reserve(static_cast<std::size_t>(spot_count));
+        for (int index = 0; index < spot_count; ++index)
+        {
+            const lights_manager::spot_light& source = lights.data.spot_lights[index];
+            D3D12SpotLightSubmission light;
+            light.position = { source.position.x, source.position.y, source.position.z };
+            light.range = source.position.w;
+            light.direction = { source.direction.x, source.direction.y, source.direction.z };
+            light.inner_cos = source.direction.w;
+            light.color = { source.color.x, source.color.y, source.color.z };
+            light.outer_cos = source.color.w;
+            light.intensity = source.params.x;
+            light.cast_shadows = source.params.y >= 0.0f;
+            light.shadow_strength = source.params.z;
+            light.shadow_slice = static_cast<std::int32_t>(source.params.y);
+            submission.spot_lights.push_back(light);
+        }
 
-    submission.local_shadows.enabled = enable_dynamic_shadows && local_shadows.enabled;
-    submission.local_shadows.resolution = local_shadows.resolution_setting;
-    for (std::uint32_t slice = 0;
-        slice < D3D12LocalShadowSubmission::SliceCount; ++slice)
-    {
-        ReplayEngine::Rendering::LocalShadowAtlas::Slice source{};
-        if (!local_shadows.TryGetSlice(slice, source)) continue;
-        submission.local_shadows.slices[slice].view_projection = source.view_projection;
-        submission.local_shadows.slices[slice].params = source.params;
-        submission.local_shadows.used_slice_mask |= (1u << slice);
+        // ShadowのProjection/AllocationにおけるCPU正本は既存CSM/LocalShadowAtlas。
+        // DX12側で別のCascade分割やPoint Face選択を作らず、確定済み値だけを提出する。
+        submission.directional_shadow.enabled =
+            csm.constants.params.w > 0.5f && submission.directional_light.cast_shadows;
+        submission.directional_shadow.resolution = csm_renderer::SHADOW_MAP_SIZE;
+        for (std::uint32_t cascade = 0;
+            cascade < D3D12DirectionalShadowSubmission::CascadeCount; ++cascade)
+            submission.directional_shadow.view_projection[cascade] =
+                csm.constants.view_projection[cascade];
+        submission.directional_shadow.split_distances = csm.constants.split_distances;
+        submission.directional_shadow.params = csm.constants.params;
+        submission.directional_shadow.params2 = csm.constants.params2;
+        submission.directional_shadow.params3 = csm.constants.params3;
+        submission.directional_shadow.texel_world = csm.constants.texel_world;
+
+        submission.local_shadows.enabled = enable_dynamic_shadows && local_shadows.enabled;
+        submission.local_shadows.resolution = local_shadows.resolution_setting;
+        for (std::uint32_t slice = 0;
+            slice < D3D12LocalShadowSubmission::SliceCount; ++slice)
+        {
+            ReplayEngine::Rendering::LocalShadowAtlas::Slice source{};
+            if (!local_shadows.TryGetSlice(slice, source)) continue;
+            submission.local_shadows.slices[slice].view_projection = source.view_projection;
+            submission.local_shadows.slices[slice].params = source.params;
+            submission.local_shadows.used_slice_mask |= (1u << slice);
+        }
     }
     return true;
+}
+
+bool framework::build_dx12_lighting_for_scene(
+    ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission& submission,
+    const ReplayEngine::Scene::Scene& scene) const
+{
+    using ReplayEngine::Components::DirectionalLightComponent;
+    using ReplayEngine::Components::PointLightComponent;
+    using ReplayEngine::Components::SpotLightComponent;
+    using namespace ReplayEngine::Rendering::DX12;
+    using namespace DirectX;
+
+    submission.directional_light = {};
+    submission.point_lights.clear();
+    submission.spot_lights.clear();
+    submission.directional_shadow = {};
+    submission.local_shadows = {};
+    bool directional_found = false;
+    submission.point_lights.reserve(lights_manager::POINT_LIGHT_MAX);
+    submission.spot_lights.reserve(lights_manager::SPOT_LIGHT_MAX);
+
+    for (std::size_t index = 0; index < scene.GameObjectCount(); ++index)
+    {
+        const ReplayEngine::Core::GameObject* object = scene.GameObjectAt(index);
+        if (object == nullptr || object->PendingDestroy() || !object->ActiveInHierarchy()) continue;
+
+        if (!directional_found)
+        {
+            const DirectionalLightComponent* light = object->GetComponent<DirectionalLightComponent>();
+            if (light != nullptr && light->ActiveInHierarchy())
+            {
+                const XMFLOAT4 rotation = object->GetTransform().WorldRotationQuaternion();
+                XMVECTOR direction = XMVector3Rotate(XMVectorSet(0.0f, -1.0f, 0.0f, 0.0f),
+                    XMLoadFloat4(&rotation));
+                direction = XMVector3Normalize(direction);
+                XMStoreFloat3(&submission.directional_light.direction, direction);
+                submission.directional_light.enabled = true;
+                submission.directional_light.color = {
+                    light->color.x, light->color.y, light->color.z };
+                submission.directional_light.intensity = (std::max)(0.0f, light->intensity);
+                submission.directional_light.cast_shadows = false;
+                submission.directional_light.shadow_strength =
+                    (std::max)(0.0f, (std::min)(1.0f, light->shadow_strength));
+                directional_found = true;
+            }
+        }
+
+        if (submission.point_lights.size() <
+            static_cast<std::size_t>(lights_manager::POINT_LIGHT_MAX))
+        {
+            const PointLightComponent* light = object->GetComponent<PointLightComponent>();
+            if (light != nullptr && light->ActiveInHierarchy())
+            {
+                D3D12PointLightSubmission output{};
+                output.position = object->GetTransform().WorldPosition();
+                output.range = (std::max)(0.01f, light->range);
+                output.color = { light->color.x, light->color.y, light->color.z };
+                output.intensity = (std::max)(0.0f, light->intensity);
+                output.cast_shadows = false;
+                output.shadow_strength =
+                    (std::max)(0.0f, (std::min)(1.0f, light->shadow_strength));
+                output.shadow_slice = -1;
+                submission.point_lights.push_back(output);
+            }
+        }
+
+        if (submission.spot_lights.size() <
+            static_cast<std::size_t>(lights_manager::SPOT_LIGHT_MAX))
+        {
+            const SpotLightComponent* light = object->GetComponent<SpotLightComponent>();
+            if (light != nullptr && light->ActiveInHierarchy())
+            {
+                const XMFLOAT4 rotation = object->GetTransform().WorldRotationQuaternion();
+                XMVECTOR direction = XMVector3Rotate(XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f),
+                    XMLoadFloat4(&rotation));
+                direction = XMVector3Normalize(direction);
+                D3D12SpotLightSubmission output{};
+                output.position = object->GetTransform().WorldPosition();
+                output.range = (std::max)(0.01f, light->range);
+                XMStoreFloat3(&output.direction, direction);
+                const float outer = (std::max)(0.1f,
+                    (std::min)(179.0f, light->outer_angle_degrees));
+                const float inner = (std::max)(0.1f,
+                    (std::min)(outer, light->inner_angle_degrees));
+                output.inner_cos = std::cos(XMConvertToRadians(inner));
+                output.outer_cos = std::cos(XMConvertToRadians(outer));
+                output.color = { light->color.x, light->color.y, light->color.z };
+                output.intensity = (std::max)(0.0f, light->intensity);
+                output.cast_shadows = false;
+                output.shadow_strength =
+                    (std::max)(0.0f, (std::min)(1.0f, light->shadow_strength));
+                output.shadow_slice = -1;
+                submission.spot_lights.push_back(output);
+            }
+        }
+    }
+    return true;
+}
+
+bool framework::prewarm_loading_scene_gpu_resources()
+{
+    if (!dx12_device_context.IsInitialized() || object_loading_scene == nullptr) return true;
+
+    ReplayEngine::Rendering::RenderItemList render_items;
+    ReplayEngine::Rendering::SceneRenderCollector::Collect(*object_loading_scene, render_items);
+    ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission submission;
+    dx12_scene_build_options options;
+    options.include_auxiliary_geometry = false;
+    options.include_active_lighting = false;
+    if (!build_dx12_static_scene(submission, *object_loading_scene, render_items, 0.0f, options))
+        return false;
+
+    const std::size_t skinned_render_item_count = static_cast<std::size_t>(std::count_if(
+        render_items.Items().begin(), render_items.Items().end(),
+        [](const ReplayEngine::Rendering::RenderItem& item) noexcept { return item.skinned; }));
+    const std::size_t static_source_count = submission.mesh_sources.size();
+    const std::size_t skinned_source_count = submission.skinned_mesh_sources.size();
+    const std::size_t static_draw_count = submission.draws.size();
+    const std::size_t skinned_draw_count = submission.skinned_draws.size();
+    const std::size_t texture_candidate_count = submission.texture_sources.size();
+    std::size_t skinned_component_count = 0;
+    for (std::size_t object_index = 0; object_index < object_loading_scene->GameObjectCount();
+        ++object_index)
+    {
+        const ReplayEngine::Core::GameObject* object =
+            object_loading_scene->GameObjectAt(object_index);
+        if (object == nullptr) continue;
+        for (std::size_t component_index = 0; component_index < object->ComponentCount();
+            ++component_index)
+        {
+            const ReplayEngine::Core::Component* component = object->ComponentAt(component_index);
+            if (component == nullptr) continue;
+            const bool is_skinned = dynamic_cast<const
+                ReplayEngine::Components::SkinnedMeshRendererComponent*>(component) != nullptr;
+            if (is_skinned) ++skinned_component_count;
+            std::fprintf(stderr,
+                "[Loading3D] component: object=%llu component=%zu type=\"%s\" "
+                "is_skinned_renderer=%d active=%d\n",
+                static_cast<unsigned long long>(object->ID().Value()), component_index,
+                component->TypeName(), is_skinned ? 1 : 0,
+                component->ActiveInHierarchy() ? 1 : 0);
+        }
+    }
+    for (std::size_t index = 0; index < render_items.Items().size(); ++index)
+    {
+        const ReplayEngine::Rendering::RenderItem& item = render_items.Items()[index];
+        std::fprintf(stderr,
+            "[Loading3D] item[%zu]: owner=%llu skinned=%d mesh=\"%s\"\n",
+            index, static_cast<unsigned long long>(item.owner.Value()),
+            item.skinned ? 1 : 0, item.mesh_asset.c_str());
+    }
+    submission.texture_sources.clear();
+    submission.shader_sources.clear();
+    const auto before = dx12_device_context.CaptureScene3DState();
+    const auto begin = std::chrono::steady_clock::now();
+    const bool ok = dx12_device_context.PreloadScene3DResources(submission, false);
+    const double elapsed_ms = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - begin).count();
+    const auto after = dx12_device_context.CaptureScene3DState();
+    std::fprintf(stderr,
+        "[Loading3D] GPU preload %s: %.3f ms, static +%zu, skinned +%zu, texture +%zu\n",
+        ok ? "OK" : "FAILED", elapsed_ms,
+        after.static_mesh_cache_size - before.static_mesh_cache_size,
+        after.skinned_mesh_cache_size - before.skinned_mesh_cache_size,
+        after.texture_cache_size - before.texture_cache_size);
+    std::fprintf(stderr,
+        "[Loading3D] preload inputs: items %zu (skinned %zu), components skinned %zu, "
+        "sources static %zu skinned %zu, "
+        "draws static %zu skinned %zu, texture candidates %zu (disabled)\n",
+        render_items.Size(), skinned_render_item_count, skinned_component_count, static_source_count,
+        skinned_source_count, static_draw_count, skinned_draw_count,
+        texture_candidate_count);
+    return ok;
 }

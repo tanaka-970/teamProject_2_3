@@ -96,6 +96,69 @@ namespace ReplayEngine::Runtime::Detail
             return false;
         }
 
+        bool RunModelScreenBoundsValidation(
+            Rendering::DX12::D3D12DeviceContext& context, int& checks)
+        {
+            constexpr std::uint64_t owner_id = 0xB1E00001ull;
+            Rendering::DX12::D3D12StaticSceneSubmission submission;
+            Rendering::DX12::D3D12StaticMeshSource source;
+            source.key = "validation:model-screen-bounds";
+            source.vertices =
+            {
+                { { -0.5f, -0.25f, 0.2f }, { 0, 0, -1 }, { 0, 1 } },
+                { { -0.5f,  0.5f, 0.2f }, { 0, 0, -1 }, { 0, 0 } },
+                { {  0.5f, -0.25f, 0.2f }, { 0, 0, -1 }, { 1, 1 } }
+            };
+            submission.mesh_sources.push_back(std::move(source));
+            if (!Check(context.CacheMeshLocalBounds(submission),
+                "model local bounds cache", checks))
+                return false;
+
+            Rendering::DX12::D3D12MeshLocalBounds bounds;
+            if (!Check(context.GetStaticMeshLocalBounds(
+                "validation:model-screen-bounds", bounds) && bounds.valid &&
+                bounds.minimum.x == -0.5f && bounds.minimum.y == -0.25f &&
+                bounds.maximum.x == 0.5f && bounds.maximum.y == 0.5f,
+                "model local bounds values", checks))
+                return false;
+
+            const DirectX::XMFLOAT4X4 identity{
+                1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
+            DirectX::XMFLOAT4X4 world = identity;
+            world._41 = 0.25f;
+            const D3D12_VIEWPORT viewport{ 0, 0, 64, 64, 0, 1 };
+            D3D12_RECT rect{};
+            const bool projected = Rendering::DX12::CalculateD3D12ScreenRect(
+                bounds, world, identity, viewport, rect);
+            if (projected)
+            {
+                std::fprintf(stderr,
+                    "DX12 model screen rect owner=%llu left=%ld top=%ld right=%ld bottom=%ld\n",
+                    static_cast<unsigned long long>(owner_id),
+                    static_cast<long>(rect.left), static_cast<long>(rect.top),
+                    static_cast<long>(rect.right), static_cast<long>(rect.bottom));
+            }
+            if (!Check(projected && rect.left == 24 && rect.top == 16 &&
+                rect.right == 56 && rect.bottom == 40,
+                "model screen rect projection", checks))
+                return false;
+
+            world._41 = 2.0f;
+            if (!Check(!Rendering::DX12::CalculateD3D12ScreenRect(
+                bounds, world, identity, viewport, rect),
+                "model screen rect offscreen is empty", checks))
+                return false;
+
+            DirectX::XMFLOAT4X4 behind_view_projection = identity;
+            behind_view_projection._34 = 1.0f;
+            behind_view_projection._44 = 0.0f;
+            world = identity;
+            world._43 = -1.0f;
+            return Check(!Rendering::DX12::CalculateD3D12ScreenRect(
+                bounds, world, behind_view_projection, viewport, rect),
+                "model screen rect behind camera is empty", checks);
+        }
+
         // 失敗したときだけ Debug Layer の蓄積メッセージを stderr へ流す。
         void DumpDebugMessages(Rendering::DX12::D3D12DeviceContext& context)
         {
@@ -437,7 +500,7 @@ namespace ReplayEngine::Runtime::Detail
             {
                 static_scene.local_shadows.slices[slice].view_projection = DirectX::XMFLOAT4X4{
                     1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
-                static_scene.local_shadows.slices[slice].params = { 0.05f, 10.0f, 0.002f, 0.0f };
+                static_scene.local_shadows.slices[slice].params = { 0.05f, 10.0f, 0.002f, 1.5f };
             }
 
             if (!Check(context.DrawStaticScene(static_scene),
@@ -470,6 +533,156 @@ namespace ReplayEngine::Runtime::Detail
                 DumpDebugMessages(context);
                 return false;
             }
+
+            const Rendering::DX12::D3D12Scene3DStateSnapshot active_scene_state =
+                context.CaptureScene3DState();
+            Rendering::DX12::D3D12FrameConstants isolated_constants = frame_constants;
+            isolated_constants.camera_position = { 7.0f, 3.0f, -5.0f, 1.0f };
+            Rendering::DX12::D3D12StaticSceneSubmission isolated_scene = static_scene;
+            isolated_scene.mesh_sources.clear();
+            isolated_scene.skinned_mesh_sources.clear();
+            isolated_scene.texture_sources.clear();
+            isolated_scene.shader_sources.clear();
+            isolated_scene.directional_light = {};
+            isolated_scene.point_lights.clear();
+            isolated_scene.spot_lights.clear();
+            isolated_scene.directional_shadow = {};
+            isolated_scene.local_shadows = {};
+            isolated_scene.post_process.bloom_enabled = false;
+            isolated_scene.post_process.vignette_enabled = false;
+            isolated_scene.post_process.fxaa_enabled = false;
+            isolated_scene.post_process.taa_enabled = false;
+            isolated_scene.post_process.ssao_enabled = false;
+            isolated_scene.post_process.ssr_enabled = false;
+            Rendering::DX12::D3D12Scene3DDrawOptions isolated_options;
+            isolated_options.manage_shadow_targets = false;
+            isolated_options.allow_static_mesh_cache_replacement = false;
+            isolated_options.read_motion_history = false;
+            isolated_options.write_motion_history = false;
+            isolated_options.read_scene_history = false;
+            isolated_options.write_scene_history = false;
+            if (!Check(context.SubmitFrameConstants(isolated_constants) &&
+                context.DrawScene3D(isolated_scene, isolated_options) &&
+                context.SubmitFrameConstants(frame_constants),
+                "isolated Loading Scene 3D draw", checks))
+            {
+                DumpDebugMessages(context);
+                return false;
+            }
+            const Rendering::DX12::D3D12Scene3DStateSnapshot isolated_scene_state =
+                context.CaptureScene3DState();
+            bool same_gbuffer_resources = true;
+            bool same_gbuffer_states = true;
+            for (std::uint32_t index = 0; index < Rendering::DX12::kScene3DGBufferCount; ++index)
+            {
+                same_gbuffer_resources = same_gbuffer_resources &&
+                    active_scene_state.gbuffer_resources[index] ==
+                    isolated_scene_state.gbuffer_resources[index];
+                same_gbuffer_states = same_gbuffer_states &&
+                    active_scene_state.gbuffer_states[index] ==
+                    isolated_scene_state.gbuffer_states[index];
+            }
+            Check(active_scene_state.motion_history_size == isolated_scene_state.motion_history_size &&
+                active_scene_state.motion_frame_serial == isolated_scene_state.motion_frame_serial,
+                "isolated draw keeps active motion history/frame serial", checks);
+            Check(active_scene_state.scene_history_valid == isolated_scene_state.scene_history_valid &&
+                active_scene_state.scene_history_write_serial ==
+                    isolated_scene_state.scene_history_write_serial &&
+                active_scene_state.history_resource == isolated_scene_state.history_resource &&
+                active_scene_state.history_state == isolated_scene_state.history_state,
+                "isolated draw keeps active TAA/SSR scene history", checks);
+            Check(active_scene_state.scene_effect_history_write_serial ==
+                    isolated_scene_state.scene_effect_history_write_serial &&
+                active_scene_state.scene_effect_history_size ==
+                    isolated_scene_state.scene_effect_history_size,
+                "isolated draw keeps active scene effect temporal history", checks);
+            Check(active_scene_state.directional_shadow_resource ==
+                    isolated_scene_state.directional_shadow_resource &&
+                active_scene_state.local_shadow_resource == isolated_scene_state.local_shadow_resource &&
+                active_scene_state.directional_shadow_resolution ==
+                    isolated_scene_state.directional_shadow_resolution &&
+                active_scene_state.local_shadow_resolution ==
+                    isolated_scene_state.local_shadow_resolution &&
+                active_scene_state.directional_shadow_state ==
+                    isolated_scene_state.directional_shadow_state &&
+                active_scene_state.local_shadow_state == isolated_scene_state.local_shadow_state,
+                "isolated draw keeps active shadow targets", checks);
+            Check(same_gbuffer_resources && same_gbuffer_states &&
+                active_scene_state.depth_resource == isolated_scene_state.depth_resource &&
+                active_scene_state.depth_state == isolated_scene_state.depth_state,
+                "isolated draw keeps active GBuffer/depth resources and states", checks);
+            Check(active_scene_state.static_mesh_cache_size ==
+                    isolated_scene_state.static_mesh_cache_size &&
+                active_scene_state.skinned_mesh_cache_size ==
+                    isolated_scene_state.skinned_mesh_cache_size &&
+                active_scene_state.texture_cache_size == isolated_scene_state.texture_cache_size &&
+                active_scene_state.static_mesh_bounds_cache_size ==
+                    isolated_scene_state.static_mesh_bounds_cache_size &&
+                active_scene_state.skinned_mesh_bounds_cache_size ==
+                    isolated_scene_state.skinned_mesh_bounds_cache_size,
+                "isolated draw with pre-cached assets keeps mesh/texture cache state", checks);
+            const auto same_bytes = [](const auto& left, const auto& right) noexcept
+            {
+                return std::memcmp(&left, &right, sizeof(left)) == 0;
+            };
+            const auto& active_frame = active_scene_state.frame_constants;
+            const auto& restored_frame = isolated_scene_state.frame_constants;
+            Check(same_bytes(active_frame.view_projection, restored_frame.view_projection) &&
+                same_bytes(active_frame.camera_position, restored_frame.camera_position) &&
+                same_bytes(active_frame.time_parameters, restored_frame.time_parameters) &&
+                same_bytes(active_frame.view, restored_frame.view) &&
+                same_bytes(active_frame.projection, restored_frame.projection) &&
+                same_bytes(active_frame.inv_view, restored_frame.inv_view) &&
+                same_bytes(active_frame.inv_projection, restored_frame.inv_projection) &&
+                same_bytes(active_frame.inv_view_projection, restored_frame.inv_view_projection) &&
+                same_bytes(active_frame.prev_view_projection, restored_frame.prev_view_projection) &&
+                same_bytes(active_frame.screen_size, restored_frame.screen_size) &&
+                same_bytes(active_frame.camera_planes, restored_frame.camera_planes) &&
+                same_bytes(active_frame.jitter, restored_frame.jitter),
+                "isolated draw restores active Frame Constants", checks);
+
+            Rendering::DX12::D3D12StaticSceneSubmission preload_scene;
+            Rendering::DX12::D3D12StaticMeshSource preload_mesh;
+            preload_mesh.key = "validation:loading-preload-static";
+            preload_mesh.vertices =
+            {
+                { { -0.2f, -0.2f, 0.0f }, { 0.0f, 0.0f, -1.0f }, { 0.0f, 1.0f } },
+                { {  0.0f,  0.2f, 0.0f }, { 0.0f, 0.0f, -1.0f }, { 0.5f, 0.0f } },
+                { {  0.2f, -0.2f, 0.0f }, { 0.0f, 0.0f, -1.0f }, { 1.0f, 1.0f } },
+            };
+            preload_mesh.indices = { 0, 1, 2 };
+            preload_scene.mesh_sources.push_back(std::move(preload_mesh));
+            const auto preload_before = context.CaptureScene3DState();
+            const bool preload_ok = context.PreloadScene3DResources(preload_scene, false);
+            const auto preload_after = context.CaptureScene3DState();
+            bool preload_gbuffer_unchanged = true;
+            for (std::uint32_t index = 0; index < Rendering::DX12::kScene3DGBufferCount; ++index)
+            {
+                preload_gbuffer_unchanged = preload_gbuffer_unchanged &&
+                    preload_after.gbuffer_resources[index] == preload_before.gbuffer_resources[index] &&
+                    preload_after.gbuffer_states[index] == preload_before.gbuffer_states[index];
+            }
+            Check(preload_ok && context.HasStaticMesh("validation:loading-preload-static") &&
+                preload_after.static_mesh_cache_size == preload_before.static_mesh_cache_size + 1 &&
+                preload_after.motion_frame_serial == preload_before.motion_frame_serial &&
+                preload_after.scene_history_write_serial == preload_before.scene_history_write_serial &&
+                preload_after.scene_effect_history_write_serial ==
+                    preload_before.scene_effect_history_write_serial &&
+                preload_after.directional_shadow_resource == preload_before.directional_shadow_resource &&
+                preload_after.local_shadow_resource == preload_before.local_shadow_resource &&
+                preload_after.depth_resource == preload_before.depth_resource &&
+                preload_after.depth_state == preload_before.depth_state &&
+                preload_gbuffer_unchanged,
+                "Loading Scene GPU preload uploads mesh without touching histories/render targets", checks);
+            const auto preload_second_before = context.CaptureScene3DState();
+            const bool preload_second_ok = context.PreloadScene3DResources(preload_scene, false);
+            const auto preload_second_after = context.CaptureScene3DState();
+            Check(preload_second_ok &&
+                preload_second_after.static_mesh_cache_size ==
+                    preload_second_before.static_mesh_cache_size &&
+                preload_second_after.static_mesh_bounds_cache_size ==
+                    preload_second_before.static_mesh_bounds_cache_size,
+                "Loading Scene GPU preload is idempotent for resident mesh", checks);
             // Runtime UI の実提出も同じ Command List / Frame Upload / Descriptor Heap で
             // 検証する。固定色を製品描画へ出す診断UIではなく、通常のUI DrawCommand ABIを使う。
             Rendering::DX12::D3D12UIFrame ui_frame;
@@ -1566,6 +1779,8 @@ namespace ReplayEngine::Runtime::Detail
                 context.GpuValidationEnabled() ? 1 : 0,
                 context.DredEnabled() ? 1 : 0);
         }
+        if (ok)
+            ok = RunModelScreenBoundsValidation(context, checks);
 
         const std::uint32_t persistent_resource_descriptors =
             context.ResourceDescriptorAllocator().Used();

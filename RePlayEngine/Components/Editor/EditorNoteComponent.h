@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../../Object/Component/Component.h"
 
@@ -16,6 +16,26 @@ namespace ReplayEngine::Components
         REPLAY_COMPONENT_BODY(EditorNoteComponent)
 
     public:
+        enum DisplayMode : int
+        {
+            Overlay = 0,
+            World = 1,
+        };
+
+        enum HorizontalAlign : int
+        {
+            Left = 0,
+            Center = 1,
+            Right = 2,
+        };
+
+        enum VerticalAlign : int
+        {
+            Top = 0,
+            Middle = 1,
+            Bottom = 2,
+        };
+
         std::string text{ "ここを修正" };
 
         // 0=TODO 1=BUG 2=ART 3=PROGRAM 4=LEVEL 5=IDEA
@@ -30,5 +50,8 @@ namespace ReplayEngine::Components
         DirectX::XMFLOAT4 color{ 1.0f, 0.82f, 0.25f, 1.0f };
         float text_scale = 1.0f;
         DirectX::XMFLOAT3 offset{ 0.0f, 0.25f, 0.0f };
+        int mode = Overlay;
+        int horizontal_align = Left;
+        int vertical_align = Top;
     };
 }

@@ -17,7 +17,8 @@ namespace ReplayEngine::Runtime
     //   その OnRuntimeAwake より「前」に用意されていなければならない。
     //
     //   これを framework::enter_object_play_mode() へ書くと駄目な理由:
-    //     enter_object_play_mode は Tick() を 2 回呼んだ「あと」に続きを実行する。
+    //     enter_object_play_mode の Play 有効化は、同期／Loading Screen 経由の
+    //     どちらでも RuntimeSceneService の入れ替えが終わった「あと」に実行される。
     //     その時点で Scene::Start() は走り終わっている。
     //     さらに SwapWorlds は SceneFlowService 経由のゲーム中 Scene 遷移でも通るため、
     //     Play Mode の開始処理だけへ書くと、遷移のたびに準備が漏れる。

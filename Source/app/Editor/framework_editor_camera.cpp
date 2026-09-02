@@ -439,10 +439,12 @@ void framework::draw_editor_camera_settings()
     ImGui::SameLine();
     ImGui::TextDisabled(preset.Editable() ? "[Personal]" : "[Shared]");
     if (ImGui::Button(u8"プリセット管理を開く")) show_camera_preset_manager = true;
+    ReplayEngine::Editor::EditorHelp::Item("button.camera.open_preset_manager");
     if (!preset.Editable())
     {
         ImGui::SameLine();
         if (ImGui::Button(u8"自分用に複製")) make_active_editor_camera_preset_personal_copy();
+        ReplayEngine::Editor::EditorHelp::Item("button.camera.duplicate_preset");
     }
 
     bool changed = false;
@@ -467,6 +469,7 @@ void framework::draw_editor_camera_settings()
 
     ImGui::Spacing();
     if (ImGui::Button(u8"選択対象へフォーカス")) focus_editor_camera_on_selection();
+    ReplayEngine::Editor::EditorHelp::Item("button.camera.focus_selection");
 
     const auto& position = editor_camera.Position();
     ImGui::TextDisabled(u8"位置   %.2f  %.2f  %.2f", position.x, position.y, position.z);

@@ -37,5 +37,6 @@ float4 main(VSOutput input) : SV_TARGET
     const float gray = dot(color.rgb, float3(0.299, 0.587, 0.114));
     color.rgb = lerp(float3(gray, gray, gray), color.rgb, max(saturation, 0.0));
     color.rgb = HueShift(color.rgb, hue) * effect_color.rgb;
-    return saturate(color);
+    // Scene Effect の RT は HDR なので 1.0 で丸めず、負値だけ止める。
+    return float4(max(color.rgb, 0.0f), saturate(color.a));
 }

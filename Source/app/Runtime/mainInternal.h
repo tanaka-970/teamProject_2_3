@@ -17,6 +17,7 @@ namespace ReplayEngine::Runtime::Detail
     bool ParseShutdownRegression(const char* command_line);
     bool ParseStartupSceneBoot(const char* command_line);
     bool ParseCaptureFrame(const char* command_line, std::string& capture_name);
+    bool ParseCaptureExclusiveFrame(const char* command_line, std::string& capture_name);
     std::string TrimCopy(std::string text);
     void StripUtf8Bom(std::string& text);
     std::string LowerCopy(std::string text);
@@ -51,7 +52,10 @@ namespace ReplayEngine::Runtime::Detail
         std::filesystem::path scene;
         std::uint32_t frames = 300;
         std::uint32_t warmup_frames = 30;
+        std::uint32_t render_output = 0;
         std::string output_name{ "benchmark" };
+        std::vector<std::string> screen_space_overrides;
+        std::vector<std::string> screen_space_warnings;
         std::string error;
     };
     ProfileBenchmarkConfig ParseProfileBenchmark(const char* command_line);
@@ -92,4 +96,6 @@ namespace ReplayEngine::Runtime::Detail
     int RunHeadlessPropertyLinkValidation(const char* command_line);
     int RunHeadlessScenePersistenceValidation(const char* command_line);
     int RunHeadlessSerializationValidation(const char* command_line);
+    int RunHeadlessLoadingBridgeValidation(const char* command_line);
+    int RunHeadlessEditorHelpValidation(const char* command_line);
 }

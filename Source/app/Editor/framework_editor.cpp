@@ -234,8 +234,8 @@ void framework::draw_editor_main_menu()
                 label += "##RecentScene" + std::to_string(index);
                 if (ImGui::MenuItem(label.c_str(), nullptr, false, exists))
                     request_object_scene_action(object_scene_action::open_path, path);
-                if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("%s", path.generic_u8string().c_str());
+                ReplayEngine::Editor::EditorHelp::Item(
+                    "button.scene.recent_scene", path.generic_u8string().c_str());
             }
             ImGui::EndMenu();
         }
@@ -258,7 +258,8 @@ void framework::draw_editor_main_menu()
         const bool motion_workspace = active_editor_workspace == editor_workspace::motion;
         const bool external_context = !atlas_context && !motion_workspace &&
             (project_browser_focused || selected_editor_object == editor_selection::asset ||
-                selected_editor_object == editor_selection::world);
+                selected_editor_object == editor_selection::world ||
+                selected_editor_object == editor_selection::rendering);
         const bool scene_context = !atlas_context && !motion_workspace && !external_context;
         const bool scene_edit_blocked = scene_context && !object_editor_context.CanEdit();
         const bool can_undo = atlas_context ? sprite_atlas_history_cursor > 0
@@ -276,7 +277,8 @@ void framework::draw_editor_main_menu()
         }
         if (scene_edit_blocked)
         {
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("実行中は元に戻せません。Shift+F5 で停止してください。");
+            ReplayEngine::Editor::EditorHelp::Item("button.edit.undo_blocked",
+                u8"実行中は元に戻せません。Shift+F5 で停止してください。");
             ImGui::PopStyleVar();
         }
         const bool can_redo = atlas_context ? sprite_atlas_history_cursor < sprite_atlas_history.size()
@@ -461,11 +463,13 @@ void framework::draw_editor_main_menu()
     // 実際にそれで迷子になった。
     if (ImGui::BeginMenu(u8"実行"))
     {
-        if (ImGui::MenuItem(u8"▶ 実行", "F5", false, !object_scene_play_mode))
+        if (ImGui::MenuItem(u8"▶ 実行", "F5", false,
+            !object_scene_play_mode && !object_editor_play_loading))
             enter_object_play_mode();
         if (ImGui::MenuItem(object_scene_paused ? u8"▶ 再開" : u8"❚❚ 一時停止", nullptr,
             false, object_scene_play_mode)) object_scene_paused = !object_scene_paused;
-        if (ImGui::MenuItem(u8"■ 停止", "Shift+F5", false, object_scene_play_mode))
+        if (ImGui::MenuItem(u8"■ 停止", "Shift+F5", false,
+            object_scene_play_mode || object_editor_play_loading))
             exit_object_play_mode();
         ImGui::EndMenu();
     }

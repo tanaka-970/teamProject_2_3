@@ -6,7 +6,7 @@ OBJECT_COUNT 4
 OBJECT
   ID 6
   NAME "Canvas"
-  ENABLED 1
+  ENABLED 0
   PARENT 0
   TRANSFORM 0 0 0 0 0 0 1 1 1
   PREFAB "" 0 0
@@ -25,7 +25,7 @@ OBJECT
     PROPERTY "opacity" float 1
   END_COMPONENT
   COMPONENT "RectTransformComponent" 1
-    STABLE_ID 15
+    STABLE_ID 16
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
@@ -68,8 +68,10 @@ OBJECT
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
-    PROPERTY_COUNT 16
+    PROPERTY_COUNT 19
     PROPERTY "sprite" assetref ""
+    PROPERTY "atlas" assetref ""
+    PROPERTY "atlas_region" string ""
     PROPERTY "color" color 1 1 1 0
     PROPERTY "fill_color_2" color 1 1 1 1
     PROPERTY "fill_mode" enum 0
@@ -80,6 +82,7 @@ OBJECT
     PROPERTY "opacity" float 1
     PROPERTY "fill_amount" float 1
     PROPERTY "fill_method" enum 0
+    PROPERTY "fill_reverse" bool 0
     PROPERTY "blend_mode" enum 0
     PROPERTY "uv_offset" vec2 0 0
     PROPERTY "uv_scale" vec2 1 1
@@ -89,15 +92,28 @@ OBJECT
   COMPONENT "UIEffectStackComponent" 1
     STABLE_ID 4
     TYPE_GUID "00000000000000000000000000000000"
-    TYPE_MODULE ""
+    TYPE_MODULE "RePlayEngine.Optional.Effects"
     TYPE_VERSION 1
-    PROPERTY_COUNT 131
+    PROPERTY_COUNT 147
     PROPERTY "enabled" bool 1
+    PROPERTY "target_scope" enum 0
     PROPERTY "capture_backdrop" bool 1
     PROPERTY "use_preset" bool 0
     PROPERTY "effect_preset" assetref ""
     PROPERTY "effect_count" int 3
+    PROPERTY "effect_region_enabled" bool 0
+    PROPERTY "effect_region_shape" enum 0
+    PROPERTY "effect_region_scope" enum 0
+    PROPERTY "effect_region_invert" bool 0
+    PROPERTY "effect_region_center" vec2 0.5 0.5
+    PROPERTY "effect_region_size" vec2 0.5 0.5
+    PROPERTY "effect_region_rotation" float 0
+    PROPERTY "effect_region_feather" float 0
+    PROPERTY "effect_region_strength" float 1
+    PROPERTY "effect_region_mask" assetref ""
+    PROPERTY "effect_region_additional_count" int 0
     PROPERTY "effects[0].enabled" bool 1
+    PROPERTY "effects[0].region_enabled" bool 1
     PROPERTY "effects[0].type" enum 39
     PROPERTY "effects[0].radius" float 3
     PROPERTY "effects[0].amount" float 4
@@ -107,11 +123,13 @@ OBJECT
     PROPERTY "effects[0].seed" float 0.082000002264976501
     PROPERTY "effects[0].custom_shader" assetref ""
     PROPERTY "effects[1].enabled" bool 0
+    PROPERTY "effects[1].region_enabled" bool 1
     PROPERTY "effects[1].type" enum 0
     PROPERTY "effects[1].radius" float 8
     PROPERTY "effects[1].intensity" float 1
     PROPERTY "effects[1].custom_shader" assetref ""
     PROPERTY "effects[2].enabled" bool 1
+    PROPERTY "effects[2].region_enabled" bool 1
     PROPERTY "effects[2].type" enum 7
     PROPERTY "effects[2].mask" assetref "4895d90a3b03c22cfcbbc684c56f9431"
     PROPERTY "effects[2].radius" float 700
@@ -121,6 +139,7 @@ OBJECT
     PROPERTY "effects[2].seed" float 0
     PROPERTY "effects[2].color" color 1 0.34999999403953552 0.05000000074505806 1
     PROPERTY "effects[2].custom_shader" assetref ""
+    PROPERTY "effect_region_path_count" int 0
     PROPERTY "effects[0].intensity" float 0.15000000596046448
     PROPERTY "effects[0].angle" float 0.75
     PROPERTY "effects[0].progress" float 0.2630000114440918
@@ -239,7 +258,7 @@ OBJECT
   NAME "GameObject"
   ENABLED 1
   PARENT 0
-  TRANSFORM 0 0.05817413330078125 0 0 0 0 1 -1.5700000524520874 1
+  TRANSFORM -0.31950438022613525 0.05817413330078125 0 0.093249104917049408 0 0 1 -1.5700000524520874 1
   PREFAB "" 0 0
   COMPONENT_COUNT 1
   COMPONENT "SkinnedMeshRendererComponent" 1
@@ -247,7 +266,7 @@ OBJECT
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
-    PROPERTY_COUNT 20
+    PROPERTY_COUNT 23
     PROPERTY "mesh_asset" asset "76abb1ee55c90de38180cdb98643c6ee"
     PROPERTY "material_asset" asset ""
     PROPERTY "material_override" bool 0
@@ -256,6 +275,9 @@ OBJECT
     PROPERTY "outline" bool 0
     PROPERTY "cast_shadow" bool 1
     PROPERTY "receive_shadow" bool 1
+    PROPERTY "shadow_alpha_clip" bool 0
+    PROPERTY "shadow_alpha_cutoff" float 0.5
+    PROPERTY "rendering_layer" int 0
     PROPERTY "visible" bool 1
     PROPERTY "visual_rotation_offset" vec3 90 188.5 180
     PROPERTY "local_position_offset" vec3 0 0 0

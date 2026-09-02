@@ -48,5 +48,6 @@ float4 main(VSOutput input) : SV_TARGET
         base_uv - float2(channel_offset, 0.0)).b;
     const float noise = Hash(input.uv * target_size.xy + time) * 2.0 - 1.0;
     bled.rgb += noise * saturate(effect_params1.z);
-    return saturate(bled);
+    // Scene Effect の RT は HDR なので 1.0 で丸めず、負値だけ止める。
+    return float4(max(bled.rgb, 0.0f), saturate(bled.a));
 }

@@ -299,4 +299,11 @@ namespace ReplayEngine::Assets
             [&key](const AssetRecord& record) { return PathKey(record.source_path) == key; });
         return found == records_.end() ? nullptr : &*found;
     }
+
+    bool AssetDatabase::HasPathGuidReservation(const std::filesystem::path& path) const
+    {
+        const std::filesystem::path normalized = NormalizeProjectPath(path);
+        if (FindByPath(normalized) != nullptr) return false;
+        return FindByGuid(MakeGuid(normalized)) != nullptr;
+    }
 }

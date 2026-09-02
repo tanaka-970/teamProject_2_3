@@ -112,7 +112,12 @@ namespace
         }
 
         Reflection::PropertyValue value;
-        if (!Motion::MotionEvaluator::EvaluateTrack(loaded.tracks.front(), 0.5f, value))
+        Motion::MotionTrackEvaluationContext evaluation_context;
+        evaluation_context.time = 0.5f;
+        evaluation_context.raw_time = 0.5f;
+        evaluation_context.duration = loaded.duration;
+        if (!Motion::MotionEvaluator::EvaluateTrackWithContext(loaded.tracks.front(),
+            evaluation_context, value))
         {
             error = "MotionEvaluator が opacity Track を評価できません。";
             return false;
@@ -212,7 +217,9 @@ void framework::run_shutdown_regression_scenario()
     //
     // Play 中は Runtime World が本番になり、衝突世界と EditorContext も
     // そちらへ張り替わる。停止でそれらが編集 Scene へ戻ることを通しておく。
-    enter_object_play_mode();
+    // ここはメッセージループ終了後なので Loading Screen を描画するフレームが無い。
+    // Play の所有権切り替え自体を同期経路で検証する。
+    enter_object_play_mode(false);
     const bool entered = object_scene_play_mode;
     if (entered) exit_object_play_mode();
     OutputDebugStringA(entered

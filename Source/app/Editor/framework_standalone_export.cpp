@@ -355,10 +355,35 @@ bool framework::export_standalone_game(const std::filesystem::path& export_root,
         },
         export_errors);
 
+    // Standalone は起動時に DX12 の組み込みシェーダを Shader/*.hlsl から
+    // コンパイルし、ShaderLibrary も Materials/Layers を走査する。
+    // compiled だけを配ると、編集環境では動くのに書き出し先で
+    // 「シェーダ 0 枚」「CreateStaticRendererResources 失敗」になる。
+    // ソース一式を配り、生成済み bytecode は従来どおり compiled へ分けて置く。
+    CopyDirectoryFiltered(
+        content_path("Shader"), destination / "Shader",
+        [](const std::filesystem::path& relative)
+        {
+            for (const std::filesystem::path& part : relative)
+            {
+                if (LowerCopy(part.generic_u8string()) == "compiled") return true;
+            }
+            return false;
+        },
+        export_errors);
+
     CopyDirectoryFiltered(
         content_path(std::filesystem::path("Shader") / "compiled"),
         destination / "Shader" / "compiled",
         [](const std::filesystem::path&) { return false; },
+        export_errors);
+
+    // DX12 の組み込みシェーダと ShaderLibrary は配布先でも DXC を使う。
+    // 開発環境の ThirdParty/DXC をそのまま同じ相対パスへ置き、
+    // FindDefaultLibraryPath() が standalone から解決できるようにする。
+    CopyDirectoryIfExists(
+        content_path(std::filesystem::path("ThirdParty") / "DXC" / "bin" / "x64"),
+        destination / "ThirdParty" / "DXC" / "bin" / "x64",
         export_errors);
 
     namespace CSharp = ReplayEngine::Scripting::CSharp;
@@ -445,6 +470,7 @@ void framework::draw_export_game_dialog()
             const std::filesystem::path selected = BrowseFolder(hwnd);
             if (!selected.empty()) CopyToBuffer(export_folder, selected.u8string());
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.standalone_export.select_folder");
 
         ImGui::InputText(u8"最初の Scene", export_startup_scene,
             sizeof(export_startup_scene));
@@ -455,6 +481,7 @@ void framework::draw_export_game_dialog()
                 hwnd, std::filesystem::u8path(export_startup_scene));
             if (!selected.empty()) CopyToBuffer(export_startup_scene, selected.u8string());
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.standalone_export.select_scene");
 
         if (!export_status.empty()) ImGui::TextWrapped("%s", export_status.c_str());
         for (const std::string& item : export_errors)
@@ -485,8 +512,10 @@ void framework::draw_export_game_dialog()
                 export_exporting = false;
             }
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.standalone_export.export");
         ImGui::SameLine();
         if (ImGui::Button(u8"閉じる")) export_game_dialog_open = false;
+        ReplayEngine::Editor::EditorHelp::Item("button.standalone_export.close");
 
         ImGui::EndPopup();
     }
@@ -510,12 +539,14 @@ void framework::draw_export_game_dialog()
             export_overwrite_prompt_open = false;
             ImGui::CloseCurrentPopup();
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.standalone_export.overwrite");
         ImGui::SameLine();
         if (ImGui::Button(u8"キャンセル"))
         {
             export_overwrite_prompt_open = false;
             ImGui::CloseCurrentPopup();
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.standalone_export.cancel_overwrite");
         ImGui::EndPopup();
     }
 }

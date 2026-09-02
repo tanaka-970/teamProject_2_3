@@ -202,6 +202,7 @@ void framework::draw_controlled_character_diagnostics()
         sweep_source.object.ToString().c_str(), sweep_source.collider);
 
     if (ImGui::Button("衝突の診断ウィンドウを開く")) show_collision_diagnostics = true;
+    ReplayEngine::Editor::EditorHelp::Item("button.diagnostics.open_collision");
     ImGui::SameLine();
     ImGui::Checkbox(u8"コライダーを描画", &show_collider_debug_draw);
 #endif

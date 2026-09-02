@@ -7,6 +7,7 @@
 
 #include "../../RePlayEngine/Components/Gameplay/CharacterMotorComponent.h"
 #include "../../RePlayEngine/Components/Gameplay/EnemyBehaviourComponent.h"
+#include "../../RePlayEngine/Components/Gameplay/StageGameplayComponents.h"
 #include "../../RePlayEngine/Components/Navigation/NavAgentComponent.h"
 #include "../../RePlayEngine/Components/Physics/ColliderComponent.h"
 #include "../../RePlayEngine/Editor/Debug/AINavigationDebugDraw.h"
@@ -14,6 +15,7 @@
 #include "../../RePlayEngine/Physics/CollisionLayers.h"
 
 #include <cmath>
+#include <string>
 
 #ifdef USE_IMGUI
 
@@ -88,14 +90,29 @@ void framework::draw_collider_debug_overlay()
     }
 
     ReplayEngine::Editor::AINavigationDebugFrame ai_frame;
+    bool has_stage_markers = false;
     if (active_editor_view == editor_view::scene)
     {
         const ReplayEngine::Core::ObjectID selected = object_editor_context.Selection().Primary();
         ReplayEngine::Editor::AINavigationDebugDraw::Build(active_object_scene(), selected, ai_frame);
+        for (std::size_t index = 0; index < active_object_scene().GameObjectCount(); ++index)
+        {
+            const ReplayEngine::Core::GameObject* object =
+                active_object_scene().GameObjectAt(index);
+            if (object == nullptr || object->PendingDestroy() || !object->ActiveInHierarchy())
+                continue;
+            const auto* spawn = object->GetComponent<
+                ReplayEngine::Components::SpawnPointComponent>();
+            const auto* jump = object->GetComponent<
+                ReplayEngine::Components::JumpPadComponent>();
+            has_stage_markers |= (spawn != nullptr && spawn->ActiveInHierarchy() &&
+                spawn->debug_draw) || (jump != nullptr && jump->ActiveInHierarchy() &&
+                jump->debug_draw);
+        }
     }
 
     if (object_collider_debug_lines.empty() && ai_frame.lines.empty() &&
-        ai_frame.fills.empty() && ai_frame.labels.empty()) return;
+        ai_frame.fills.empty() && ai_frame.labels.empty() && !has_stage_markers) return;
 
     const DirectX::XMMATRIX view_projection =
         viewport_view_matrix() * viewport_projection_matrix();
@@ -161,6 +178,57 @@ void framework::draw_collider_debug_overlay()
         if (!ProjectToScreen(view_projection, label.position, main_origin, main_size, position))
             continue;
         draw_list->AddText(position, label.color, label.text.c_str());
+    }
+
+    if (has_stage_markers)
+    {
+        for (std::size_t index = 0; index < active_object_scene().GameObjectCount(); ++index)
+        {
+            const ReplayEngine::Core::GameObject* object =
+                active_object_scene().GameObjectAt(index);
+            if (object == nullptr || object->PendingDestroy() || !object->ActiveInHierarchy())
+                continue;
+            const DirectX::XMFLOAT3 center = object->GetTransform().WorldPosition();
+            ImVec2 center_screen{};
+            if (!ProjectToScreen(view_projection, center, main_origin, main_size, center_screen))
+                continue;
+            if (const auto* spawn = object->GetComponent<
+                ReplayEngine::Components::SpawnPointComponent>();
+                spawn != nullptr && spawn->ActiveInHierarchy() && spawn->debug_draw)
+            {
+                constexpr ImU32 color = IM_COL32(70, 220, 255, 240);
+                draw_list->AddCircle(center_screen, 10.0f, color, 12, 2.0f);
+                draw_list->AddLine({ center_screen.x - 14.0f, center_screen.y },
+                    { center_screen.x + 14.0f, center_screen.y }, color, 2.0f);
+                draw_list->AddLine({ center_screen.x, center_screen.y - 14.0f },
+                    { center_screen.x, center_screen.y + 14.0f }, color, 2.0f);
+                const std::string label = "Spawn " + std::to_string(spawn->spawn_id) +
+                    " / Team " + std::to_string(spawn->team);
+                draw_list->AddText({ center_screen.x + 12.0f, center_screen.y + 8.0f },
+                    color, label.c_str());
+            }
+            if (const auto* jump = object->GetComponent<
+                ReplayEngine::Components::JumpPadComponent>();
+                jump != nullptr && jump->ActiveInHierarchy() && jump->debug_draw)
+            {
+                DirectX::XMVECTOR direction = DirectX::XMLoadFloat3(&jump->direction);
+                const float length = DirectX::XMVectorGetX(DirectX::XMVector3Length(direction));
+                if (!std::isfinite(length) || length <= 1.0e-4f) continue;
+                direction = DirectX::XMVectorScale(direction, 1.5f / length);
+                DirectX::XMFLOAT3 end{};
+                DirectX::XMStoreFloat3(&end, DirectX::XMVectorAdd(
+                    DirectX::XMLoadFloat3(&center), direction));
+                ImVec2 end_screen{};
+                if (!ProjectToScreen(view_projection, end, main_origin, main_size, end_screen))
+                    continue;
+                constexpr ImU32 color = IM_COL32(255, 185, 65, 240);
+                draw_list->AddCircleFilled(center_screen, 5.0f, color, 12);
+                draw_list->AddLine(center_screen, end_screen, color, 3.0f);
+                draw_list->AddCircleFilled(end_screen, 4.0f, color, 12);
+                draw_list->AddText({ center_screen.x + 8.0f, center_screen.y + 8.0f },
+                    color, "Jump Pad");
+            }
+        }
     }
 
     // 選択中 Enemy の編集ハンドル。Phase 1 では価値が高く衝突しにくい

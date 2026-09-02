@@ -1,4 +1,4 @@
-#include "framework.h"
+﻿#include "framework.h"
 
 #include <algorithm>
 #include <array>
@@ -233,6 +233,7 @@ void framework::draw_editor_camera_preset_manager()
 
     if (ImGui::Button(u8"複製して自分用にする"))
         make_active_editor_camera_preset_personal_copy();
+    ReplayEngine::Editor::EditorHelp::Item("button.camera_preset.duplicate_personal");
     ImGui::SameLine();
     if (ImGui::Button(u8"新規プリセット"))
     {
@@ -245,6 +246,7 @@ void framework::draw_editor_camera_preset_manager()
             switch_editor_camera_preset(created.id);
         }
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.camera_preset.create");
 
     // switch / duplicate で vector が増える可能性があるので、reference を push 後へ持ち越さない。
     const bool current_editable = active_editor_camera_preset().Editable();
@@ -260,6 +262,7 @@ void framework::draw_editor_camera_preset_manager()
             editor_camera_presets.push_back(shared);
         }
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.camera_preset.publish_shared");
     ImGui::SameLine();
     if (active_editor_camera_preset().Editable() && ImGui::Button(u8"削除"))
     {
@@ -278,6 +281,7 @@ void framework::draw_editor_camera_preset_manager()
                 switch_editor_camera_preset(editor_camera_presets.front().id);
         }
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.camera_preset.delete");
 
     auto& edit = active_editor_camera_preset();
     ImGui::Separator();

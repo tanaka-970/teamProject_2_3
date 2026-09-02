@@ -20,8 +20,9 @@
     void add_recent_object_scene(const std::filesystem::path& path);
     void register_object_scene_asset();
     void discard_object_scene_autosave();
-    void enter_object_play_mode();
+    void enter_object_play_mode(bool show_loading_screen = true);
     void exit_object_play_mode();
+    bool complete_object_play_mode_start();
     ReplayEngine::Scene::Scene& active_object_scene() noexcept;
     const ReplayEngine::Scene::Scene& active_object_scene() const noexcept;
 
@@ -32,6 +33,16 @@
     void initialize_runtime_services();
     void tick_runtime_scene_flow();
     void rebind_runtime_world_if_changed();
+    void update_editor_play_loading();
+    void finish_editor_play_loading();
+    void cancel_editor_play_loading();
+
+public:
+    bool load_exclusive_scene_from_path(const std::filesystem::path& path);
+    ReplayEngine::Scene::Scene* exclusive_scene_for_render() noexcept;
+    void update_exclusive_scene(float elapsed_time);
+
+private:
 
     // Startup Scene からの起動。空・無効・失敗はすべて診断状態にする。
     void begin_startup_scene();
@@ -56,17 +67,28 @@
     const ReplayEngine::Rendering::MaterialAsset* resolve_object_material(
         const std::string& asset_guid);
     ReplayEngine::Rendering::RenderItem resolve_render_item_material(
-        const ReplayEngine::Rendering::RenderItem& item);
+        const ReplayEngine::Rendering::RenderItem& item,
+        const std::string* material_asset_override = nullptr,
+        bool apply_material_motion = true);
         // DX12 Phase 2 Bridge。Engine 所有の RenderItem List を Cache 可能な Static
         // Geometry/Material Submission へ変換する。実際の Skinned Animation は Phase 3 に残す。
+    struct dx12_scene_build_options final
+    {
+        bool include_auxiliary_geometry = true;
+        bool include_active_lighting = true;
+    };
     bool build_dx12_static_scene(
         ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission& submission,
-        float elapsed_time);
+        const ReplayEngine::Scene::Scene& scene,
+        const ReplayEngine::Rendering::RenderItemList& render_items,
+        float elapsed_time, dx12_scene_build_options options = {});
     // Canvas/RectTransform の解決結果を、GPU APIを呼ばないDX12 UIコマンドへ変換する。
     bool build_dx12_ui(
         ReplayEngine::Rendering::DX12::D3D12UIFrame& frame);
     bool build_dx12_scene_effects(
-        ReplayEngine::Rendering::DX12::D3D12SceneEffectSubmission& submission);
+        ReplayEngine::Rendering::DX12::D3D12SceneEffectSubmission& submission,
+        const ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission& static_scene,
+        const DirectX::XMFLOAT4X4& view_projection);
     bool build_dx12_ui_for_scene(
         ReplayEngine::Rendering::DX12::D3D12UIFrame& frame,
         ReplayEngine::Scene::Scene& scene,
@@ -85,8 +107,12 @@
     void prepare_material_motion_bindings(ReplayEngine::Scene::Scene& scene);
     void prepare_ui_effect_shader_schemas(ReplayEngine::Scene::Scene& scene);
     void evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
-        float scaled_delta_time, float unscaled_delta_time);
-    void update_ui_sprite_animators(ReplayEngine::Scene::Scene& scene, float elapsed_time);
+        float scaled_delta_time, float unscaled_delta_time,
+        ReplayEngine::Motion::MotionMixer& mixer,
+        ReplayEngine::Runtime::RuntimeContext* runtime_context,
+        std::uint64_t frame_index);
+    void update_ui_sprite_animators(ReplayEngine::Scene::Scene& scene, float elapsed_time,
+        const ReplayEngine::Motion::MotionMixer* mixer);
     void update_ui_number_displays(ReplayEngine::Scene::Scene& scene);
     void sync_object_lights();
 
@@ -211,6 +237,7 @@
     // 左にフォルダツリー、右にそのフォルダの中身。
     // 実装は Source/app/Editor/framework_project_browser.cpp。
     void draw_project_browser();
+    std::size_t register_resource_assets(std::string& error);
     void draw_project_folder_tree(const std::filesystem::path& folder, int depth);
     void draw_project_folder_contents();
     void draw_project_create_submenu(const std::filesystem::path& target_folder);
@@ -281,7 +308,10 @@
     bool paste_motion_keys();
     bool duplicate_motion_keys();
     bool delete_motion_keys();
-    bool apply_motion_easing_to_selection(ReplayEngine::Motion::MotionEasing easing);
+    bool scale_motion_key_times(float scale, int pivot_mode);
+    bool apply_motion_easing_to_selection(ReplayEngine::Motion::MotionEasing easing,
+        const ReplayEngine::Reflection::AssetReference* curve = nullptr);
+    void push_motion_curve_warning_once(const std::string& curve_error);
     void toggle_motion_preview_playback();
     void step_motion_preview_frames(int frames);
     void seek_motion_preview_time(float time);
@@ -313,13 +343,17 @@ private:
     std::uint32_t automated_smoke_test_frames{ 0 };
     std::uint32_t automated_smoke_test_frames_rendered{ 0 };
     bool automated_frame_capture_pending{ false };
+    bool automated_exclusive_frame_capture_pending{ false };
+    bool automated_exclusive_frame_capture_attempted_{ false };
 
     bool profile_benchmark_mode{ false };
     std::uint32_t profile_benchmark_frames{ 300 };
     std::uint32_t profile_benchmark_warmup_frames{ 30 };
+    std::uint32_t profile_benchmark_render_output{ 0 };
     std::uint32_t profile_benchmark_frame_index{ 0 };
     std::uint32_t profile_benchmark_drain_frames{ 0 };
     std::string profile_benchmark_output_name{ "benchmark" };
+    bool profile_model_screen_bounds_diagnostic_emitted{ false };
     bool profile_benchmark_export_attempted{ false };
     bool profile_benchmark_export_ok{ false };
     bool profile_benchmark_gpu_drain_timeout{ false };
@@ -332,6 +366,7 @@ private:
     std::uint64_t profile_benchmark_max_objects{ 0 };
     std::uint64_t profile_benchmark_max_components{ 0 };
     std::chrono::steady_clock::time_point profile_benchmark_startup_begin{};
+    std::vector<std::string> screen_space_overrides;
     float shader_composer_time{ 0.0f }; // elapsed_time が 0 の Golden Capture 中は進めない
     uint32_t frames{ 0 };
     float elapsed_time{ 0.0f };

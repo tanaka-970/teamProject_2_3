@@ -28,6 +28,34 @@ namespace ReplayEngine::Rendering::DX12
         constexpr DXGI_FORMAT kBackBufferFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
         constexpr DXGI_FORMAT kDepthFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
 
+        DXGI_FORMAT ToLinearTextureFormat(DXGI_FORMAT format) noexcept
+        {
+            switch (format)
+            {
+            case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB: return DXGI_FORMAT_R8G8B8A8_UNORM;
+            case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB: return DXGI_FORMAT_B8G8R8A8_UNORM;
+            case DXGI_FORMAT_BC1_UNORM_SRGB: return DXGI_FORMAT_BC1_UNORM;
+            case DXGI_FORMAT_BC2_UNORM_SRGB: return DXGI_FORMAT_BC2_UNORM;
+            case DXGI_FORMAT_BC3_UNORM_SRGB: return DXGI_FORMAT_BC3_UNORM;
+            case DXGI_FORMAT_BC7_UNORM_SRGB: return DXGI_FORMAT_BC7_UNORM;
+            default: return format;
+            }
+        }
+
+        DXGI_FORMAT ToSrgbTextureFormat(DXGI_FORMAT format) noexcept
+        {
+            switch (ToLinearTextureFormat(format))
+            {
+            case DXGI_FORMAT_R8G8B8A8_UNORM: return DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+            case DXGI_FORMAT_B8G8R8A8_UNORM: return DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
+            case DXGI_FORMAT_BC1_UNORM: return DXGI_FORMAT_BC1_UNORM_SRGB;
+            case DXGI_FORMAT_BC2_UNORM: return DXGI_FORMAT_BC2_UNORM_SRGB;
+            case DXGI_FORMAT_BC3_UNORM: return DXGI_FORMAT_BC3_UNORM_SRGB;
+            case DXGI_FORMAT_BC7_UNORM: return DXGI_FORMAT_BC7_UNORM_SRGB;
+            default: return DXGI_FORMAT_UNKNOWN;
+            }
+        }
+
         struct ValidationVertex
         {
             float position[3];
@@ -42,6 +70,29 @@ namespace ReplayEngine::Rendering::DX12
         };
 
         constexpr std::uint16_t kValidationIndices[] = { 0, 1, 2 };
+
+        template <typename Vertex>
+        D3D12MeshLocalBounds MakeMeshLocalBounds(const std::vector<Vertex>& vertices) noexcept
+        {
+            D3D12MeshLocalBounds result;
+            if (vertices.empty()) return result;
+            result.minimum = vertices.front().position;
+            result.maximum = vertices.front().position;
+            for (const Vertex& vertex : vertices)
+            {
+                result.minimum.x = (std::min)(result.minimum.x, vertex.position.x);
+                result.minimum.y = (std::min)(result.minimum.y, vertex.position.y);
+                result.minimum.z = (std::min)(result.minimum.z, vertex.position.z);
+                result.maximum.x = (std::max)(result.maximum.x, vertex.position.x);
+                result.maximum.y = (std::max)(result.maximum.y, vertex.position.y);
+                result.maximum.z = (std::max)(result.maximum.z, vertex.position.z);
+            }
+            result.valid = std::isfinite(result.minimum.x) &&
+                std::isfinite(result.minimum.y) && std::isfinite(result.minimum.z) &&
+                std::isfinite(result.maximum.x) &&
+                std::isfinite(result.maximum.y) && std::isfinite(result.maximum.z);
+            return result;
+        }
 
         struct DecodedRgbaImage final
         {
@@ -733,7 +784,7 @@ namespace ReplayEngine::Rendering::DX12
 
     bool D3D12DeviceContext::CreateRenderTargets() noexcept
     {
-        // Scene/Game View、UI Effect、Scene Effect、UI Preview、GBuffer、Temporal 履歴が
+        // Scene/Game View、Deferred Lit、UI Effect、Scene Effect、UI Preview、GBuffer、Temporal 履歴が
         // それぞれ RTV と DSV を 1 枚ずつ取るので、内訳ぶんの余裕を持たせる。
         if (!rtv_allocator_.Initialize(device_.Get(),
             D3D12_DESCRIPTOR_HEAP_TYPE_RTV, FrameCount + 64u, false) ||
@@ -785,6 +836,8 @@ namespace ReplayEngine::Rendering::DX12
 
         if (!CreateOffscreenTarget(scene_view_target_, width_, height_,
                 DXGI_FORMAT_R16G16B16A16_FLOAT, L"SceneView") ||
+            !CreateOffscreenTarget(scene3d_deferred_target_, width_, height_,
+                DXGI_FORMAT_R16G16B16A16_FLOAT, L"SceneDeferredLit") ||
             !CreateOffscreenTarget(game_view_target_, width_, height_,
                 DXGI_FORMAT_R16G16B16A16_FLOAT, L"GameView") ||
             !CreateOffscreenTarget(ui_effect_targets_[0], width_, height_,
@@ -1226,10 +1279,13 @@ namespace ReplayEngine::Rendering::DX12
         {
             if (entry.second.srv.IsValid())
                 resource_descriptor_allocator_.Free(entry.second.srv);
+            if (entry.second.srgb_srv.IsValid())
+                resource_descriptor_allocator_.Free(entry.second.srgb_srv);
         }
         texture_cache_.clear();
         static_texture_failures_.clear();
         static_mesh_cache_.clear();
+        static_mesh_bounds_cache_.clear();
         for (D3D12DescriptorAllocation& sampler : static_samplers_)
         {
             if (sampler.IsValid()) sampler_descriptor_allocator_.Free(sampler);
@@ -1255,10 +1311,21 @@ namespace ReplayEngine::Rendering::DX12
         if (!resource_descriptor_allocator_.Allocate(1, texture.srv)) return false;
         D3D12_SHADER_RESOURCE_VIEW_DESC srv{};
         srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        srv.Format = texture.format;
+        srv.Format = ToLinearTextureFormat(texture.format);
         srv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
         srv.Texture2D.MipLevels = texture.mip_levels;
         device_->CreateShaderResourceView(texture.resource.Get(), &srv, texture.srv.cpu);
+        const DXGI_FORMAT srgb_format = ToSrgbTextureFormat(texture.format);
+        if (srgb_format != DXGI_FORMAT_UNKNOWN)
+        {
+            if (!resource_descriptor_allocator_.Allocate(1, texture.srgb_srv))
+            {
+                resource_descriptor_allocator_.Free(texture.srv);
+                return false;
+            }
+            srv.Format = srgb_format;
+            device_->CreateShaderResourceView(texture.resource.Get(), &srv, texture.srgb_srv.cpu);
+        }
         texture.width = 1;
         texture.height = 1;
         try
@@ -1267,20 +1334,97 @@ namespace ReplayEngine::Rendering::DX12
             if (!result.second)
             {
                 resource_descriptor_allocator_.Free(texture.srv);
+                if (texture.srgb_srv.IsValid())
+                    resource_descriptor_allocator_.Free(texture.srgb_srv);
                 return true;
             }
             result.first->second.resource = std::move(texture.resource);
             result.first->second.srv = texture.srv;
+            result.first->second.srgb_srv = texture.srgb_srv;
             result.first->second.width = texture.width;
             result.first->second.height = texture.height;
             result.first->second.mip_levels = texture.mip_levels;
             result.first->second.format = texture.format;
             texture.srv = {};
+            texture.srgb_srv = {};
         }
         catch (...)
         {
             if (texture.srv.IsValid())
                 resource_descriptor_allocator_.Free(texture.srv);
+            if (texture.srgb_srv.IsValid())
+                resource_descriptor_allocator_.Free(texture.srgb_srv);
+            return false;
+        }
+        return true;
+    }
+
+    bool D3D12DeviceContext::CacheMeshLocalBounds(
+        const D3D12StaticSceneSubmission& submission,
+        bool allow_static_mesh_cache_replacement) noexcept
+    {
+        try
+        {
+            for (const D3D12StaticMeshSource& source : submission.mesh_sources)
+            {
+                if (source.key.empty()) continue;
+                if (source.replace_existing && allow_static_mesh_cache_replacement)
+                    static_mesh_bounds_cache_.erase(source.key);
+                if (static_mesh_bounds_cache_.find(source.key) == static_mesh_bounds_cache_.end())
+                {
+                    const D3D12MeshLocalBounds bounds = MakeMeshLocalBounds(source.vertices);
+                    if (bounds.valid) static_mesh_bounds_cache_.emplace(source.key, bounds);
+                }
+            }
+            for (const D3D12SkinnedMeshSource& source : submission.skinned_mesh_sources)
+            {
+                if (source.key.empty()) continue;
+                if (skinned_mesh_bounds_cache_.find(source.key) == skinned_mesh_bounds_cache_.end())
+                {
+                    const D3D12MeshLocalBounds bounds = MakeMeshLocalBounds(source.vertices);
+                    if (bounds.valid) skinned_mesh_bounds_cache_.emplace(source.key, bounds);
+                }
+            }
+        }
+        catch (...)
+        {
+            return false;
+        }
+        return true;
+    }
+
+    bool D3D12DeviceContext::GetStaticMeshLocalBounds(
+        const std::string& key, D3D12MeshLocalBounds& bounds) const noexcept
+    {
+        const auto found = static_mesh_bounds_cache_.find(key);
+        if (found == static_mesh_bounds_cache_.end()) return false;
+        bounds = found->second;
+        return bounds.valid;
+    }
+
+    bool D3D12DeviceContext::GetSkinnedMeshLocalBounds(
+        const std::string& key, D3D12MeshLocalBounds& bounds) const noexcept
+    {
+        const auto found = skinned_mesh_bounds_cache_.find(key);
+        if (found == skinned_mesh_bounds_cache_.end()) return false;
+        bounds = found->second;
+        return bounds.valid;
+    }
+
+    bool D3D12DeviceContext::CacheSkinnedMeshLocalBounds(
+        const D3D12SkinnedMeshSource& source) noexcept
+    {
+        if (source.key.empty()) return false;
+        if (skinned_mesh_bounds_cache_.find(source.key) != skinned_mesh_bounds_cache_.end())
+            return true;
+        const D3D12MeshLocalBounds bounds = MakeMeshLocalBounds(source.vertices);
+        if (!bounds.valid) return false;
+        try
+        {
+            skinned_mesh_bounds_cache_.emplace(source.key, bounds);
+        }
+        catch (...)
+        {
             return false;
         }
         return true;
@@ -1292,6 +1436,19 @@ namespace ReplayEngine::Rendering::DX12
         if (source.key.empty()) return false;
         if (static_mesh_cache_.find(source.key) != static_mesh_cache_.end()) return true;
         if (source.vertices.empty() || source.indices.empty()) return false;
+        if (static_mesh_bounds_cache_.find(source.key) == static_mesh_bounds_cache_.end())
+        {
+            const D3D12MeshLocalBounds bounds = MakeMeshLocalBounds(source.vertices);
+            if (!bounds.valid) return false;
+            try
+            {
+                static_mesh_bounds_cache_.emplace(source.key, bounds);
+            }
+            catch (...)
+            {
+                return false;
+            }
+        }
         const std::uint64_t vertex_bytes = static_cast<std::uint64_t>(source.vertices.size()) *
             sizeof(D3D12StaticVertex);
         const std::uint64_t index_bytes = static_cast<std::uint64_t>(source.indices.size()) *
@@ -1331,75 +1488,110 @@ namespace ReplayEngine::Rendering::DX12
             catch (...) {}
         };
         StaticTextureResource texture;
-        std::string extension = source.source_path.extension().string();
-        std::transform(extension.begin(), extension.end(), extension.begin(),
-            [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
-
-        if (extension == ".dds")
+        if (!source.rgba.empty())
         {
-            DecodedDdsImage decoded;
-            if (!DecodeDds2D(source.source_path, decoded))
-            {
-                DebugMessage("[DX12] DDS texture decode failed; using white fallback.\n");
-                remember_decode_failure();
+            const std::uint64_t expected = static_cast<std::uint64_t>(source.width) *
+                static_cast<std::uint64_t>(source.height) * 4ull;
+            if (source.width == 0 || source.height == 0 || expected != source.rgba.size() ||
+                !D3D12ResourceFactory::CreateTexture2DRgba8(device_.Get(), upload_context_,
+                    source.rgba.data(), source.width, source.height, source.width * 4u,
+                    texture.resource))
                 return false;
-            }
-            if (!D3D12ResourceFactory::CreateTexture2D(device_.Get(), upload_context_,
-                decoded.width, decoded.height, decoded.mip_levels, decoded.format,
-                decoded.subresources, texture.resource))
-                return false;
-            texture.width = decoded.width;
-            texture.height = decoded.height;
-            texture.mip_levels = decoded.mip_levels;
-            texture.format = decoded.format;
+            texture.width = source.width;
+            texture.height = source.height;
+            texture.mip_levels = 1;
+            texture.format = DXGI_FORMAT_R8G8B8A8_UNORM;
         }
         else
         {
-            DecodedRgbaImage decoded;
-            if (!DecodeWicRgba8(source.source_path, decoded))
+            std::string extension = source.source_path.extension().string();
+            std::transform(extension.begin(), extension.end(), extension.begin(),
+                [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
+
+            if (extension == ".dds")
             {
-                DebugMessage("[DX12] WIC texture decode failed; using white fallback.\n");
-                remember_decode_failure();
-                return false;
+                DecodedDdsImage decoded;
+                if (!DecodeDds2D(source.source_path, decoded))
+                {
+                    DebugMessage("[DX12] DDS texture decode failed; using white fallback.\n");
+                    remember_decode_failure();
+                    return false;
+                }
+                const DXGI_FORMAT resource_format = ToLinearTextureFormat(decoded.format);
+                if (!D3D12ResourceFactory::CreateTexture2D(device_.Get(), upload_context_,
+                    decoded.width, decoded.height, decoded.mip_levels, resource_format,
+                    decoded.subresources, texture.resource))
+                    return false;
+                texture.width = decoded.width;
+                texture.height = decoded.height;
+                texture.mip_levels = decoded.mip_levels;
+                texture.format = resource_format;
             }
-            const std::uint32_t row_pitch = decoded.width * 4u;
-            if (!D3D12ResourceFactory::CreateTexture2DRgba8(device_.Get(), upload_context_,
-                decoded.pixels.data(), decoded.width, decoded.height, row_pitch,
-                texture.resource))
-                return false;
-            texture.width = decoded.width;
-            texture.height = decoded.height;
-            texture.mip_levels = 1;
-            texture.format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            else
+            {
+                DecodedRgbaImage decoded;
+                if (!DecodeWicRgba8(source.source_path, decoded))
+                {
+                    DebugMessage("[DX12] WIC texture decode failed; using white fallback.\n");
+                    remember_decode_failure();
+                    return false;
+                }
+                const std::uint32_t row_pitch = decoded.width * 4u;
+                if (!D3D12ResourceFactory::CreateTexture2DRgba8(device_.Get(), upload_context_,
+                    decoded.pixels.data(), decoded.width, decoded.height, row_pitch,
+                    texture.resource))
+                    return false;
+                texture.width = decoded.width;
+                texture.height = decoded.height;
+                texture.mip_levels = 1;
+                texture.format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            }
         }
 
         if (!resource_descriptor_allocator_.Allocate(1, texture.srv)) return false;
         D3D12_SHADER_RESOURCE_VIEW_DESC srv{};
         srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        srv.Format = texture.format;
+        srv.Format = ToLinearTextureFormat(texture.format);
         srv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
         srv.Texture2D.MipLevels = texture.mip_levels;
         device_->CreateShaderResourceView(texture.resource.Get(), &srv, texture.srv.cpu);
+        const DXGI_FORMAT srgb_format = ToSrgbTextureFormat(texture.format);
+        if (srgb_format != DXGI_FORMAT_UNKNOWN)
+        {
+            if (!resource_descriptor_allocator_.Allocate(1, texture.srgb_srv))
+            {
+                resource_descriptor_allocator_.Free(texture.srv);
+                return false;
+            }
+            srv.Format = srgb_format;
+            device_->CreateShaderResourceView(texture.resource.Get(), &srv, texture.srgb_srv.cpu);
+        }
         try
         {
             auto result = texture_cache_.try_emplace(source.key);
             if (!result.second)
             {
                 resource_descriptor_allocator_.Free(texture.srv);
+                if (texture.srgb_srv.IsValid())
+                    resource_descriptor_allocator_.Free(texture.srgb_srv);
                 return true;
             }
             result.first->second.resource = std::move(texture.resource);
             result.first->second.srv = texture.srv;
+            result.first->second.srgb_srv = texture.srgb_srv;
             result.first->second.width = texture.width;
             result.first->second.height = texture.height;
             result.first->second.mip_levels = texture.mip_levels;
             result.first->second.format = texture.format;
             texture.srv = {};
+            texture.srgb_srv = {};
         }
         catch (...)
         {
             if (texture.srv.IsValid())
                 resource_descriptor_allocator_.Free(texture.srv);
+            if (texture.srgb_srv.IsValid())
+                resource_descriptor_allocator_.Free(texture.srgb_srv);
             return false;
         }
         return true;
@@ -1500,6 +1692,7 @@ namespace ReplayEngine::Rendering::DX12
         for (const auto& entry : texture_cache_)
             if (entry.first.rfind("__dx12_", 0) == 0) ++persistent_textures;
         if (static_mesh_cache_.empty() && skinned_mesh_cache_.empty() &&
+            static_mesh_bounds_cache_.empty() && skinned_mesh_bounds_cache_.empty() &&
             texture_cache_.size() <= persistent_textures && static_texture_failures_.empty() &&
             custom_static_pipelines_.empty() && custom_static_shader_failures_.empty() &&
             scene3d_motion_history_.empty())
@@ -1508,6 +1701,8 @@ namespace ReplayEngine::Rendering::DX12
 
         static_mesh_cache_.clear();
         skinned_mesh_cache_.clear();
+        static_mesh_bounds_cache_.clear();
+        skinned_mesh_bounds_cache_.clear();
         scene3d_motion_history_.clear();
         static_texture_failures_.clear();
         custom_static_pipelines_.clear();
@@ -1549,6 +1744,7 @@ namespace ReplayEngine::Rendering::DX12
             !static_samplers_[0].IsValid() || !static_samplers_[1].IsValid() ||
             !static_samplers_[2].IsValid())
             return false;
+        if (!CacheMeshLocalBounds(submission)) return false;
 
         // Custom ShaderAsset の PSO は遅延コンパイルし、Shader GUID 単位で Cache する。
         // Phase 2 Static ABI に合わずコンパイルできない Shader は失敗として記録し、
@@ -1699,10 +1895,17 @@ namespace ReplayEngine::Rendering::DX12
             command_list_->SetGraphicsRootConstantBufferView(1, scene_gpu);              // b1
             command_list_->SetGraphicsRootConstantBufferView(2, frame_compatibility_gpu);// b4
             command_list_->SetGraphicsRootConstantBufferView(3, material_gpu);           // b9
-            command_list_->SetGraphicsRootDescriptorTable(4, base_texture->srv.gpu);      // t0
+            command_list_->SetGraphicsRootDescriptorTable(4, base_texture->srgb_srv.IsValid()
+                ? base_texture->srgb_srv.gpu : base_texture->srv.gpu);                    // t0
             for (std::uint32_t i = 0; i < 8; ++i)
+            {
+                const StaticTextureResource* texture = material_textures[i];
+                const bool color_texture = i == 0u || i == 4u;
+                const D3D12_GPU_DESCRIPTOR_HANDLE texture_srv = color_texture &&
+                    texture->srgb_srv.IsValid() ? texture->srgb_srv.gpu : texture->srv.gpu;
                 command_list_->SetGraphicsRootDescriptorTable(5 + i,
-                    material_textures[i]->srv.gpu);                                       // t40..t47
+                    texture_srv);                                                        // t40..t47
+            }
             command_list_->SetGraphicsRootDescriptorTable(13, static_samplers_[0].gpu);   // s0
             command_list_->SetGraphicsRootDescriptorTable(14, static_samplers_[1].gpu);   // s1
             command_list_->SetGraphicsRootDescriptorTable(15, static_samplers_[2].gpu);   // s2
@@ -1739,6 +1942,7 @@ namespace ReplayEngine::Rendering::DX12
     void D3D12DeviceContext::ReleaseRenderTargets() noexcept
     {
         ReleaseOffscreenTarget(scene_view_target_);
+        ReleaseOffscreenTarget(scene3d_deferred_target_);
         ReleaseOffscreenTarget(game_view_target_);
         ReleaseOffscreenTarget(ui_preview_target_);
         for (auto& target : ui_preview_effect_targets_)
@@ -1754,6 +1958,7 @@ namespace ReplayEngine::Rendering::DX12
         for (auto& entry : scene_effect_history_targets_)
             ReleaseOffscreenTarget(entry.second.target);
         scene_effect_history_targets_.clear();
+        scene_effect_history_write_serial_ = 0;
         scene_effect_submission_.Clear();
         for (auto& target : render_targets_)
         {
@@ -2021,10 +2226,20 @@ namespace ReplayEngine::Rendering::DX12
             back_buffer_capture_footprint_.Offset;
         const std::size_t source_row_pitch =
             back_buffer_capture_footprint_.Footprint.RowPitch;
+        // 実測: Editor 画面が青のとき撮影 PNG が黄色になる。読み戻しは BGRA 並びで届く。
         for (std::uint32_t row = 0; row < back_buffer_capture_height_; ++row)
         {
-            std::memcpy(rgba.data() + static_cast<std::size_t>(row) * tight_row,
-                source + static_cast<std::size_t>(row) * source_row_pitch, tight_row);
+            std::uint8_t* destination = rgba.data() +
+                static_cast<std::size_t>(row) * tight_row;
+            const std::uint8_t* source_row =
+                source + static_cast<std::size_t>(row) * source_row_pitch;
+            for (std::size_t offset = 0; offset + 3 < tight_row; offset += 4)
+            {
+                destination[offset + 0] = source_row[offset + 2];
+                destination[offset + 1] = source_row[offset + 1];
+                destination[offset + 2] = source_row[offset + 0];
+                destination[offset + 3] = source_row[offset + 3];
+            }
         }
         back_buffer_capture_readback_->Unmap(0, nullptr);
         width = back_buffer_capture_width_;

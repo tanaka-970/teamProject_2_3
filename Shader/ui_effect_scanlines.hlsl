@@ -21,7 +21,10 @@ float4 main(VSOutput input) : SV_TARGET
 {
     float4 source = source_texture.Sample(source_sampler, input.uv);
     const float spacing = max(effect_params0.x, 1.0);
-    const float row = input.uv.y * target_size.y + effect_params2.w * effect_params1.w;
+    const float angle = radians(effect_params1.x);
+    const float2 axis = float2(-sin(angle), cos(angle));
+    const float2 pixel = input.uv * target_size.xy;
+    const float row = dot(pixel, axis) + effect_params2.w * effect_params1.w;
     const float wave = 0.5 + 0.5 * cos(row / spacing * two_pi);
     // line は HLSL の予約語（ジオメトリシェーダーのプリミティブ型）なので使えない。
     const float scanline_mask = smoothstep(0.45, 0.75, wave) * saturate(effect_params0.y);

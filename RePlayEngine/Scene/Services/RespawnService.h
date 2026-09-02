@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../../Core/ObjectID/ObjectID.h"
 
@@ -38,6 +38,9 @@ namespace ReplayEngine::Scene
 
             // ラジアンのオイラー角。Transform の内部表現と揃える。
             DirectX::XMFLOAT3 rotation{ 0.0f, 0.0f, 0.0f };
+
+            int identifier = 0;
+            int team = 0;
 
             bool valid = false;
         };

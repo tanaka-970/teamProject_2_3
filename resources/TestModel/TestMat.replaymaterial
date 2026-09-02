@@ -1,0 +1,48 @@
+REPLAY_MATERIAL 5
+BASE_COLOR 0.850202441 0.850193918 0.850193918 1
+BASE_COLOR_TEXTURE ""
+NORMAL_TEXTURE ""
+METALLIC 0
+METALLIC_TEXTURE ""
+ROUGHNESS 0.550000012
+ROUGHNESS_TEXTURE ""
+EMISSIVE 0 0 0 0
+EMISSIVE_TEXTURE ""
+AMBIENT_OCCLUSION 1
+AMBIENT_OCCLUSION_TEXTURE ""
+ALPHA 0 0.917999983
+DOUBLE_SIDED 0
+SHADING_MODEL 2
+SHADER_GUID "00000000000000000000000000000003"
+PROPERTY_COUNT 27
+PROPERTY "prop.BaseColor" color 0.850202441 0.850193918 0.850193918 1
+PROPERTY "prop.BaseMap" assetref ""
+PROPERTY "prop.NormalMap" assetref ""
+PROPERTY "prop.Metallic" float 0
+PROPERTY "prop.MetallicMap" assetref ""
+PROPERTY "prop.Roughness" float 0.550000012
+PROPERTY "prop.RoughnessMap" assetref ""
+PROPERTY "prop.Emissive" vec3 0 0 0
+PROPERTY "prop.EmissiveStrength" float 0
+PROPERTY "prop.EmissiveMap" assetref ""
+PROPERTY "prop.AmbientOcclusion" float 1
+PROPERTY "prop.OcclusionMap" assetref ""
+PROPERTY "prop.AlphaMode" enum 0
+PROPERTY "prop.AlphaCutoff" float 0.917999983
+PROPERTY "prop.DoubleSided" bool 0
+PROPERTY "prop.PixelSize" float 45.3079987
+PROPERTY "prop.PixelateStrength" float 0.280000001
+PROPERTY "prop.PixelateOpacity" float 1
+PROPERTY "prop.UseGBufferColor" bool 0
+PROPERTY "prop.RampMap" assetref ""
+PROPERTY "prop.ShadowTint" color 0.255880296 0.258956254 0.271255076 1
+PROPERTY "prop.RimColor" color 0 0 0 1
+PROPERTY "prop.RimPower" float 5.71400023
+PROPERTY "prop.SpecularTint" color 0 0 0 1
+PROPERTY "prop.SpecularPower" float 106.717003
+PROPERTY "prop.StepCount" float 17.2360001
+PROPERTY "prop.NormalizedRamp" bool 1
+PIXELATE 45.3079987 0.280000001
+OUTLINE_PASS 0
+LAYER_COUNT 0
+END_MATERIAL

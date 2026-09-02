@@ -303,6 +303,8 @@
             ImGui::SameLine();
             if (ImGui::Button("×##ClearUIHierarchySearch"))
                 ui_hierarchy_search_buffer[0] = '\0';
+            ReplayEngine::Editor::EditorHelp::Item("button.ui.clear_search",
+                u8"UI 階層の検索文字列を消去して、全項目を表示します。");
         }
 
         ImGui::SetNextItemWidth(-1.0f);
@@ -498,9 +500,13 @@
         ImGui::TextDisabled("選択中の順番");
         if (ImGui::Button("↑ 階層"))
             MoveUIHierarchySibling(context, *selected, UIHierarchyMoveDirection::Up);
+        ReplayEngine::Editor::EditorHelp::Item("button.ui.hierarchy_up",
+            u8"選択中の UI 要素を同じ親の中で 1 つ上へ移動します。");
         ImGui::SameLine();
         if (ImGui::Button("↓ 階層"))
             MoveUIHierarchySibling(context, *selected, UIHierarchyMoveDirection::Down);
+        ReplayEngine::Editor::EditorHelp::Item("button.ui.hierarchy_down",
+            u8"選択中の UI 要素を同じ親の中で 1 つ下へ移動します。");
         ImGui::SameLine();
         ImGui::TextDisabled("描画順");
         ImGui::SetNextItemWidth(80.0f);
@@ -516,6 +522,9 @@
             ImGui::SameLine();
             if (ImGui::Button(action.button_name))
                 ApplyUIOrder(context, *selected, action.action);
+            const std::string help_key = std::string("button.ui.order.") + action.button_name;
+            ReplayEngine::Editor::EditorHelp::Item(help_key.c_str(),
+                u8"選択中の UI 要素の描画順を変更します。描画順の値が大きいほど手前です。");
         }
         ImGui::TextDisabled("階層の順番と描画順は別々に保存されます。描画順は値が大きいほど手前です。");
         ImGui::Separator();
@@ -726,8 +735,8 @@
                 SetUIResolvedSize(*edit_mask_object, mask_size);
                 mask_changed = true;
             }
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("切り抜く枠だけを変更します。中の画像サイズは変わりません。");
+            ReplayEngine::Editor::EditorHelp::Item("control.ui.mask_size",
+                u8"切り抜く枠だけを変更します。中の画像サイズは変わりません。");
 
             DirectX::XMFLOAT2 mask_scale = edit_mask->group_scale;
             ImGui::SetNextItemWidth(-1.0f);
@@ -737,8 +746,8 @@
                 ApplyUIShapeImageScale(*edit_mask, *edit_mask_object, mask_scale);
                 mask_changed = true;
             }
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("マスク枠と中の画像をまとめて拡大・縮小します。");
+            ReplayEngine::Editor::EditorHelp::Item("control.ui.mask_scale",
+                u8"マスク枠と中の画像をまとめて拡大・縮小します。");
 
             if (ImGui::Button("子Imageをマスク枠に合わせる", ImVec2(-1.0f, 0.0f)))
             {
@@ -762,8 +771,8 @@
                 if (mask_changed)
                     context.SetStatus("子Imageをマスク枠の中央・同サイズへ合わせました");
             }
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("白い図形が枠より小さい時に、中央・同サイズへ揃えます。");
+            ReplayEngine::Editor::EditorHelp::Item("button.ui.fit_mask_image",
+                u8"白い図形が枠より小さい時に、中央・同サイズへ揃えます。");
         }
 
         if (has_shape_mask)
@@ -1533,6 +1542,8 @@
             // 極端に狭いときはボタンを隠さず、全機能を一つのメニューへまとめる。
             if (ImGui::Button("＋ UIを追加", ImVec2(-1.0f, 0.0f)))
                 ImGui::OpenPopup("UIHierarchyCreatePopup");
+            ReplayEngine::Editor::EditorHelp::Item("button.ui.add_menu",
+                u8"追加する UI 要素を選ぶメニューを開きます。");
             if (ImGui::BeginPopup("UIHierarchyCreatePopup"))
             {
                 DrawUIHierarchyCreateMenu(context);
@@ -1542,6 +1553,8 @@
             if (!show_selected_shape_image) BeginDisabledCompat();
             if (ImGui::Button("図形イメージ", ImVec2(-1.0f, 0.0f)))
                 ImGui::OpenPopup("UIShapeImageCreatePopup");
+            ReplayEngine::Editor::EditorHelp::Item("button.ui.add_shape_image",
+                u8"選択中の Image を図形マスクの子として追加するメニューを開きます。");
             if (!show_selected_shape_image) EndDisabledCompat();
             if (show_selected_shape_image && ImGui::BeginPopup("UIShapeImageCreatePopup"))
             {
@@ -1550,6 +1563,8 @@
             }
             if (ImGui::Button("自由図形イメージ", ImVec2(-1.0f, 0.0f)))
                 CreateUICustomShapeImage(context);
+            ReplayEngine::Editor::EditorHelp::Item("button.ui.add_custom_shape_image",
+                u8"自由な Bezier 形状で切り抜く Image を追加します。");
             return;
         }
 
@@ -1573,6 +1588,9 @@
             }
 
             if (ImGui::Button(label, ImVec2(width, 0.0f))) on_click();
+            const std::string help_key = std::string("button.ui.create.") + label;
+            ReplayEngine::Editor::EditorHelp::Item(help_key.c_str(),
+                u8"選択した種類の UI 要素を現在の UI 階層へ追加します。");
         };
 
         draw_button("Canvas", [&context]
@@ -1915,6 +1933,8 @@ void framework::draw_ui_inspector()
         ImGui::TextDisabled("UI 要素を選択してください");
         if (ImGui::Button("Canvas を作成"))
             CreateUIElement(object_editor_context, UIElementKind::Canvas);
+        ReplayEngine::Editor::EditorHelp::Item("button.ui.create_canvas",
+            u8"新しい Canvas を Scene に作成します。UI 要素の親として使えます。");
         ImGui::End();
         return;
     }
@@ -1978,6 +1998,9 @@ void framework::draw_ui_inspector()
                 rect->pivot = pivot;
                 object_editor_context.CommitEdit();
             }
+            const std::string help_key = std::string("button.ui.anchor.") + label;
+            ReplayEngine::Editor::EditorHelp::Item(help_key.c_str(),
+                u8"選択中の UI 要素のアンカーと Pivot をプリセット値へ変更します。");
         };
         preset("左上", { 0.0f, 1.0f }, { 0.0f, 1.0f }, { 0.0f, 1.0f });
         ImGui::SameLine();
@@ -2006,6 +2029,8 @@ void framework::draw_ui_inspector()
             }
             object_editor_context.CommitEdit();
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.ui.add_pin",
+            u8"Puppet Deform の編集用 Pin を 1 つ追加します。");
         ImGui::SameLine();
         const bool can_remove_pin = puppet->PinCount() > 0 && object_editor_context.CanEdit();
         if (!can_remove_pin) BeginDisabledCompat();
@@ -2025,6 +2050,8 @@ void framework::draw_ui_inspector()
                 ? (std::min)(index, puppet->PinCount() - 1) : -1;
             object_editor_context.CommitEdit();
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.ui.remove_pin",
+            u8"選択中の Puppet Pin を削除します。");
         if (!can_remove_pin) EndDisabledCompat();
 
         if (puppet->PinCount() > 0)
@@ -2067,6 +2094,8 @@ void framework::draw_ui_inspector()
             puppet->OnPropertyChanged("pin_bind_positions");
             object_editor_context.CommitEdit();
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.ui.capture_bind_pose",
+            u8"現在の Puppet Pin 配置を Bind Pose として保存します。");
         ImGui::SameLine();
         if (ImGui::Button("Bind Pose に戻す") && object_editor_context.CanEdit())
         {
@@ -2075,6 +2104,8 @@ void framework::draw_ui_inspector()
             puppet->OnPropertyChanged("pin_positions");
             object_editor_context.CommitEdit();
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.ui.restore_bind_pose",
+            u8"Puppet Pin の配置を保存済みの Bind Pose へ戻します。");
         ImGui::Separator();
     }
 
@@ -2102,6 +2133,8 @@ void framework::draw_ui_inspector()
             }
             object_editor_context.CommitEdit();
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.ui.add_path_point",
+            u8"自由形状の Path に頂点を 1 つ追加します。");
         ImGui::SameLine();
         const bool can_insert_point = !shape->path_points.empty() && object_editor_context.CanEdit();
         if (!can_insert_point) BeginDisabledCompat();
@@ -2130,6 +2163,8 @@ void framework::draw_ui_inspector()
             ui_shape_selected_point = static_cast<int>(insert_at);
             object_editor_context.CommitEdit();
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.ui.insert_path_point",
+            u8"選択中の Path 頂点の後ろへ新しい頂点を挿入します。");
         if (!can_insert_point) EndDisabledCompat();
         ImGui::SameLine();
         const bool can_remove_point = !shape->path_points.empty() && object_editor_context.CanEdit();
@@ -2151,6 +2186,8 @@ void framework::draw_ui_inspector()
                 (std::min)(index, static_cast<int>(shape->path_points.size()) - 1);
             object_editor_context.CommitEdit();
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.ui.remove_path_point",
+            u8"選択中の自由形状 Path 頂点を削除します。");
         if (!can_remove_point) EndDisabledCompat();
         if (!shape->path_points.empty())
         {
@@ -2191,6 +2228,8 @@ void framework::draw_ui_inspector()
             ui_mask_selected_matte = static_cast<int>(mask->matte_objects.size()) - 1;
             object_editor_context.CommitEdit();
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.ui.add_matte",
+            u8"Track Matte の追加領域を 1 つ追加します。");
         ImGui::SameLine();
         const bool can_remove_matte = !mask->matte_objects.empty() &&
             object_editor_context.CanEdit();
@@ -2212,6 +2251,8 @@ void framework::draw_ui_inspector()
                 (std::min)(index, static_cast<int>(mask->matte_objects.size()) - 1);
             object_editor_context.CommitEdit();
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.ui.remove_matte",
+            u8"選択中の追加 Track Matte を削除します。");
         if (!can_remove_matte) EndDisabledCompat();
         if (!mask->matte_objects.empty())
         {
@@ -2244,8 +2285,8 @@ void framework::draw_ui_inspector()
             project_create_motion("UIMotion");
         set_editor_workspace(editor_workspace::motion);
     }
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("選択中の UI 要素を Motion Workspace で編集します。");
+    ReplayEngine::Editor::EditorHelp::Item("button.ui.create_motion",
+        u8"選択中の UI 要素を編集する Motion Asset を作成し、Motion Workspace を開きます。");
 
     ImGui::End();
 }

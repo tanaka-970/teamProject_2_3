@@ -1,4 +1,4 @@
-// Motion Asset のうち、キーの整列と replaymotion への保存だけを持つ。
+﻿// Motion Asset のうち、キーの整列と replaymotion への保存だけを持つ。
 //
 //   MotionAsset.cpp      ... キーの整列と保存（このファイル）
 //   MotionAssetLoad.cpp  ... replaymotion の読み込み
@@ -12,6 +12,7 @@
 #include <fstream>
 #include <iomanip>
 #include <limits>
+#include <locale>
 #include <sstream>
 #include <system_error>
 #include <utility>
@@ -61,6 +62,33 @@ namespace ReplayEngine::Motion
             case MotionBlendMode::Blend: return "Blend";
             }
             return "Override";
+        }
+
+        const char* ToTrackLoopString(MotionTrackLoop loop) noexcept
+        {
+            switch (loop)
+            {
+            case MotionTrackLoop::None: return "None";
+            case MotionTrackLoop::Repeat: return "Repeat";
+            case MotionTrackLoop::PingPong: return "PingPong";
+            case MotionTrackLoop::Offset: return "Offset";
+            }
+            return "None";
+        }
+
+
+        std::string EncodeExpressionSource(const std::string& source)
+        {
+            std::string encoded;
+            encoded.reserve(source.size());
+            for (const char c : source)
+            {
+                if (c == '\\') encoded += "\\\\";
+                else if (c == '\n') encoded += "\\n";
+                else if (c == '\r') encoded += "\\r";
+                else encoded.push_back(c);
+            }
+            return encoded;
         }
 
         void WriteValue(std::ostream& out, const Reflection::PropertyValue& value)
@@ -167,6 +195,7 @@ namespace ReplayEngine::Motion
         }
 
         std::ofstream file(path);
+        file.imbue(std::locale::classic());
         if (!file)
         {
             error = "Motion Assetを書き込めません: " + path.string();
@@ -177,6 +206,8 @@ namespace ReplayEngine::Motion
         file << "MOTION " << std::quoted(asset.name) << '\n';
         file << "MOTION_VERSION " << MotionAsset::current_version << '\n';
         file << "DURATION " << asset.duration << '\n';
+        if (asset.time_remap.IsAssigned())
+            file << "TIME_REMAP " << std::quoted(asset.time_remap.guid) << '\n';
         file << '\n';
 
         for (const MotionTrack& track : asset.tracks)
@@ -199,6 +230,24 @@ namespace ReplayEngine::Motion
             file << "VALUE_TYPE " << ToMotionTypeString(track.value_type) << '\n';
             file << "ENABLED " << (track.enabled ? 1 : 0) << '\n';
             file << "BLEND_MODE " << ToBlendModeString(track.blend_mode) << '\n';
+            const MotionWiggle default_wiggle{};
+            if (track.wiggle.enabled != default_wiggle.enabled ||
+                track.wiggle.amplitude != default_wiggle.amplitude ||
+                track.wiggle.frequency != default_wiggle.frequency ||
+                track.wiggle.seed != default_wiggle.seed ||
+                track.wiggle.octaves != default_wiggle.octaves)
+            {
+                file << "WIGGLE " << (track.wiggle.enabled ? 1 : 0) << ' '
+                    << track.wiggle.amplitude << ' ' << track.wiggle.frequency << ' '
+                    << track.wiggle.seed << ' ' << track.wiggle.octaves << '\n';
+            }
+            if (track.loop != MotionTrackLoop::None)
+                file << "LOOP " << ToTrackLoopString(track.loop) << '\n';
+            if (track.expression.enabled || !track.expression.source.empty())
+            {
+                file << "EXPRESSION " << (track.expression.enabled ? 1 : 0) << ' '
+                    << std::quoted(EncodeExpressionSource(track.expression.source)) << '\n';
+            }
 
             for (const MotionKeyframe& key : track.keys)
             {
@@ -211,6 +260,10 @@ namespace ReplayEngine::Motion
                         key.bezier.out_handle.y;
                     file << " IN " << key.bezier.in_handle.x << ' ' <<
                         key.bezier.in_handle.y;
+                }
+                else if (key.easing == MotionEasing::PresetCurve)
+                {
+                    file << " CURVE " << std::quoted(key.easing_curve.guid);
                 }
                 file << '\n';
             }

@@ -1,9 +1,10 @@
-#pragma once
+﻿#pragma once
 
 #include "MotionEasing.h"
 #include "../Core/ObjectID/ObjectID.h"
 #include "../Object/Component/ComponentTypeID.h"
 #include "../Reflection/Property/PropertyValue.h"
+#include "../Reflection/Property/References.h"
 
 #include <filesystem>
 #include <string>
@@ -67,6 +68,30 @@ namespace ReplayEngine::Motion
         Reflection::PropertyValue value;
         MotionEasing easing = MotionEasing::Linear;
         MotionBezierHandles bezier;
+        Reflection::AssetReference easing_curve;
+    };
+
+    struct MotionWiggle
+    {
+        bool enabled = false;
+        float amplitude = 0.0f;
+        float frequency = 2.0f;
+        int seed = 0;
+        int octaves = 1;
+    };
+
+    struct MotionExpression
+    {
+        bool enabled = false;
+        std::string source;
+    };
+
+    enum class MotionTrackLoop : int
+    {
+        None = 0,
+        Repeat = 1,
+        PingPong = 2,
+        Offset = 3,
     };
 
     struct MotionTrack
@@ -77,6 +102,9 @@ namespace ReplayEngine::Motion
         bool enabled = true;
         MotionBlendMode blend_mode = MotionBlendMode::Override;
         std::vector<MotionKeyframe> keys;
+        MotionWiggle wiggle;
+        MotionTrackLoop loop = MotionTrackLoop::None;
+        MotionExpression expression;
     };
 
     struct MotionEvent
@@ -96,10 +124,11 @@ namespace ReplayEngine::Motion
     {
     public:
         static constexpr const char* file_extension = ".replaymotion";
-        static constexpr int current_version = 4;
+        static constexpr int current_version = 7;
 
         std::string name{ "Motion" };
         float duration = 1.0f;
+        Reflection::AssetReference time_remap;
         std::vector<MotionTrack> tracks;
         std::vector<MotionEventTrack> event_tracks;
 

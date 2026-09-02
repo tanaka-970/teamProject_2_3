@@ -483,6 +483,7 @@
     <ClCompile Include="RePlayEngine\Editor\Selection\EditorSelection.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Commands\SceneEditHistory.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Commands\FileEditHistory.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Help\EditorHelp.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Commands\MotionEditHistory.cpp" />
     <ClCompile Include="RePlayEngine\Motion\EasingCurveAsset.cpp" />
     <ClCompile Include="RePlayEngine\Motion\MotionEasing.cpp" />
@@ -490,6 +491,7 @@
     <ClCompile Include="RePlayEngine\Motion\MotionAssetLoad.cpp" />
     <ClCompile Include="RePlayEngine\Motion\CompositionAsset.cpp" />
     <ClCompile Include="RePlayEngine\Motion\MotionEvaluator.cpp" />
+    <ClCompile Include="RePlayEngine\Motion\MotionExpression.cpp" />
     <ClCompile Include="RePlayEngine\Motion\MotionBindingResolver.cpp" />
     <ClCompile Include="RePlayEngine\Motion\MotionMixer.cpp" />
     <ClCompile Include="RePlayEngine\Components\Motion\MotionPlayerComponent.cpp" />
@@ -707,6 +709,7 @@
     <ClInclude Include="RePlayEngine\Motion\MotionAsset.h" />
     <ClInclude Include="RePlayEngine\Motion\CompositionAsset.h" />
     <ClInclude Include="RePlayEngine\Motion\MotionEvaluator.h" />
+    <ClInclude Include="RePlayEngine\Motion\MotionExpression.h" />
     <ClInclude Include="RePlayEngine\Motion\MotionBindingResolver.h" />
     <ClInclude Include="RePlayEngine\Motion\MotionMixer.h" />
     <ClInclude Include="RePlayEngine\Components\Motion\MotionPlayerComponent.h" />
@@ -759,6 +762,7 @@
     <ClInclude Include="RePlayEngine\Components\Core\TransformComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Core\PivotComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Rendering\MeshRendererComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Rendering\MeshMaterialSlot.h" />
     <ClInclude Include="RePlayEngine\Components\Rendering\PrimitiveMeshRendererComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Rendering\LineRendererComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Rendering\TrailComponent.h" />
@@ -780,6 +784,7 @@
     <ClInclude Include="RePlayEngine\Editor\Selection\EditorSelection.h" />
     <ClInclude Include="RePlayEngine\Editor\Commands\SceneEditHistory.h" />
     <ClInclude Include="RePlayEngine\Editor\Commands\FileEditHistory.h" />
+    <ClInclude Include="RePlayEngine\Editor\Help\EditorHelp.h" />
     <ClInclude Include="RePlayEngine\Editor\Commands\MotionEditHistory.h" />
     <ClInclude Include="RePlayEngine\Editor\Hierarchy\HierarchyPanel.h" />
     <ClInclude Include="RePlayEngine\Editor\Inspector\InspectorPanel.h" />
@@ -954,6 +959,7 @@
     <None Include="Shader\dx12_forward_ps.hlsl" />
     <None Include="Shader\dx12_fullscreen_vs.hlsl" />
     <None Include="Shader\dx12_gbuffer_ps.hlsl" />
+    <None Include="Shader\dx12_model_effect_extract_ps.hlsl" />
     <None Include="Shader\dx12_imgui_ps.hlsl" />
     <None Include="Shader\dx12_imgui_vs.hlsl" />
     <None Include="Shader\dx12_ui_ps.hlsl" />

@@ -34,11 +34,22 @@ float4 main(PS_IN pin) : SV_TARGET
 #endif
     float strength = saturate(replay_strength);
     float cell_size = max(replay_pixel_size, 1.0f);
-    float2 cell_center = (floor(pin.position.xy / cell_size) + 0.5f) * cell_size;
+    uint texture_width;
+    uint texture_height;
 #ifdef REPLAY_MATERIAL_PROPERTIES
-    float4 color = BaseMap.Sample(sampler_linear, pin.texcoord) * pin.color;
+    BaseMap.GetDimensions(texture_width, texture_height);
 #else
-    float4 color = diffuse_map.Sample(sampler_linear, pin.texcoord) * pin.color;
+    diffuse_map.GetDimensions(texture_width, texture_height);
+#endif
+    float2 uv_cell_size = cell_size / max(float2(texture_width, texture_height), 1.0f);
+    float2 pixelated_uv = (floor(pin.texcoord / uv_cell_size) + 0.5f) * uv_cell_size;
+    pixelated_uv = saturate(pixelated_uv);
+#ifdef REPLAY_MATERIAL_PROPERTIES
+    float4 color = BaseMap.Sample(sampler_linear,
+        lerp(pin.texcoord, pixelated_uv, strength)) * pin.color;
+#else
+    float4 color = diffuse_map.Sample(sampler_linear,
+        lerp(pin.texcoord, pixelated_uv, strength)) * pin.color;
 #endif
 
     if (replay_use_gbuffer > 0.5f)
@@ -46,17 +57,12 @@ float4 main(PS_IN pin) : SV_TARGET
         uint gbuffer_width;
         uint gbuffer_height;
         gbuffer_base_color.GetDimensions(gbuffer_width, gbuffer_height);
-        int2 gbuffer_position = clamp(int2(pin.position.xy), int2(0, 0),
-            int2(gbuffer_width - 1, gbuffer_height - 1));
+        float2 screen_cell_center = (floor(pin.position.xy / cell_size) + 0.5f) * cell_size;
+        int2 gbuffer_position = clamp(int2(lerp(pin.position.xy, screen_cell_center, strength)),
+            int2(0, 0), int2(gbuffer_width - 1, gbuffer_height - 1));
         color.rgb = gbuffer_base_color.Load(int3(gbuffer_position, 0)).rgb;
     }
 
-    float2 local = (pin.position.xy - cell_center) / cell_size;
-    float distance_from_center = length(local);
-    float edge_softness = max(fwidth(distance_from_center), 0.015f);
-    float dot_mask = 1.0f - smoothstep(0.42f - edge_softness,
-        0.42f + edge_softness, distance_from_center);
-    color.rgb *= lerp(1.0f, dot_mask, strength);
     color.a = saturate(replay_opacity);
     return color;
 }

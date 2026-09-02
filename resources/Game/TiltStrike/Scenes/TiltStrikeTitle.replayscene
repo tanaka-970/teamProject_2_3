@@ -1,0 +1,462 @@
+REPLAY_SCENE 11
+SCENE "TILT STRIKE - TITLE"
+SCENE_STATE 5
+COLLISION_STATE 2 0
+OBJECT_COUNT 14
+OBJECT
+  ID 1
+  NAME "TitleCamera"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0.2 -8.0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "CameraComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "projection_mode" enum 0
+    PROPERTY "field_of_view_degrees" float 44
+    PROPERTY "near_clip" float 0.1
+    PROPERTY "far_clip" float 500
+    PROPERTY "priority" int 200
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 2
+  NAME "TitleSun"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 5 -4 0.7 -0.55 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "DirectionalLightComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "color" color 1.0 0.91 0.78 1.0
+    PROPERTY "intensity" float 2.1
+    PROPERTY "cast_shadows" bool 1
+    PROPERTY "shadow_strength" float 0.82
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 3
+  NAME "TitleBall"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0.4 2.2 0 0 0 1.35 1.35 1.35
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.95 0.98 1.0 1.0
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0.05
+    PROPERTY "material.roughness" float 0.48
+    PROPERTY "material.emissive_color" vec3 0.25 0.75 1.0
+    PROPERTY "material.emissive_strength" float 1.6
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 4
+  NAME "TitleDeck"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 -1.5 3.5 0 0 0 11 0.25 8
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.035 0.18 0.12 1.0
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0.05
+    PROPERTY "material.roughness" float 0.48
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 5
+  NAME "TitleController"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "ScriptComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "7a3e1c94b06d4f28ae5137c0d9b28e41"
+    TYPE_MODULE "RePlayEngine.Scripting"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "__script.language" enum 1
+    PROPERTY "__script.asset" assetref "1c831293a8d84429afc87f4acaa50c2d"
+    PROPERTY "__script.class" string "Game.TiltStrike.TiltStrikeTitleController"
+    PROPERTY "__script.execution_order" int 0
+    PROPERTY "__script.type_id" string "9d8fe0fb1f5a4f70a89bdce831a2b4e1"
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 100
+  NAME "TitleCanvas"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "CanvasComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 6
+    PROPERTY "reference_resolution" vec2 1920 1080
+    PROPERTY "render_mode" enum 0
+    PROPERTY "scale_mode" enum 1
+    PROPERTY "match_width_or_height" float 0.5
+    PROPERTY "sort_order" int 0
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0 0
+    PROPERTY "anchor_max" vec2 1 1
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 0 0
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 101
+  NAME "TitleBackdrop"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0 0
+    PROPERTY "anchor_max" vec2 1 1
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 0 0
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int -20
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "color" color 0.008 0.018 0.024 0.82
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 102
+  NAME "TitleTopLine"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 360
+    PROPERTY "size_delta" vec2 1040 5
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 10
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "color" color 0.16 0.96 0.62 1.0
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 103
+  NAME "TitleKicker"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 284
+    PROPERTY "size_delta" vec2 900 54
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 11
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "text" string "MOUSE-DRIVEN PHYSICS TABLE"
+    PROPERTY "font_size" float 27
+    PROPERTY "color" color 0.2 1.0 0.68 1.0
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "outline_width" float 1.5
+    PROPERTY "outline_color" color 0.01 0.02 0.025 0.95
+    PROPERTY "shadow_offset" vec2 2 3
+    PROPERTY "shadow_color" color 0 0 0 0.75
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 104
+  NAME "TitleText"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 170
+    PROPERTY "size_delta" vec2 1500 150
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 12
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "text" string "TILT STRIKE"
+    PROPERTY "font_size" float 106
+    PROPERTY "color" color 0.95 1.0 0.98 1.0
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "outline_width" float 1.5
+    PROPERTY "outline_color" color 0.01 0.02 0.025 0.95
+    PROPERTY "shadow_offset" vec2 2 3
+    PROPERTY "shadow_color" color 0 0 0 0.75
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 105
+  NAME "TitleRule"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 42
+    PROPERTY "size_delta" vec2 1240 120
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 12
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "text" string "DRAG THE MOUSE TO TILT THE TABLE / KNOCK DOWN ALL 6 PINS BEFORE TIME RUNS OUT"
+    PROPERTY "font_size" float 34
+    PROPERTY "color" color 0.72 0.82 0.8 1.0
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "outline_width" float 1.5
+    PROPERTY "outline_color" color 0.01 0.02 0.025 0.95
+    PROPERTY "shadow_offset" vec2 2 3
+    PROPERTY "shadow_color" color 0 0 0 0.75
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 106
+  NAME "StartPanel"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 -174
+    PROPERTY "size_delta" vec2 760 94
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 12
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "color" color 0.025 0.18 0.12 0.94
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 107
+  NAME "StartPrompt"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 -174
+    PROPERTY "size_delta" vec2 760 94
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 13
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "text" string "LEFT CLICK TO START"
+    PROPERTY "font_size" float 36
+    PROPERTY "color" color 0.78 1.0 0.88 1.0
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "outline_width" float 1.5
+    PROPERTY "outline_color" color 0.01 0.02 0.025 0.95
+    PROPERTY "shadow_offset" vec2 2 3
+    PROPERTY "shadow_color" color 0 0 0 0.75
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 108
+  NAME "TitleFooter"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 -405
+    PROPERTY "size_delta" vec2 1200 50
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 12
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "text" string "THE BALL IS NOT DIRECTLY CONTROLLED — ONLY THE TABLE MOVES"
+    PROPERTY "font_size" float 23
+    PROPERTY "color" color 0.44 0.58 0.56 1.0
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "outline_width" float 1.5
+    PROPERTY "outline_color" color 0.01 0.02 0.025 0.95
+    PROPERTY "shadow_offset" vec2 2 3
+    PROPERTY "shadow_color" color 0 0 0 0.75
+  END_COMPONENT
+END_OBJECT

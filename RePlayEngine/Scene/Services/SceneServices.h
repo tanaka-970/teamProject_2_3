@@ -19,6 +19,14 @@ namespace ReplayEngine::Motion { class MotionMixer; }
 
 namespace ReplayEngine::Scene
 {
+    class ILoadingProgressProvider
+    {
+    public:
+        virtual ~ILoadingProgressProvider() = default;
+        virtual float Progress() const noexcept = 0;
+        virtual bool IsLoading() const noexcept = 0;
+    };
+
     // Scene が Component へ提供する外部サービスの束。
     //
     // Singleton ではない。Scene が値メンバとして 1 つ持ち、
@@ -91,6 +99,15 @@ namespace ReplayEngine::Scene
             scene_flow_ = service;
         }
 
+        const ILoadingProgressProvider* LoadingProgress() const noexcept
+        {
+            return loading_progress_;
+        }
+        void SetLoadingProgress(const ILoadingProgressProvider* provider) noexcept
+        {
+            loading_progress_ = provider;
+        }
+
         // スクリプト機構への入口。Runtime と同じ扱いで、非所有参照だけを持つ。
         //
         // 未接続 (nullptr) がありうるのも同じ理由:
@@ -137,6 +154,7 @@ namespace ReplayEngine::Scene
             runtime_ = nullptr;
             runtime_scene_ = nullptr;
             scene_flow_ = nullptr;
+            loading_progress_ = nullptr;
             scripts_ = nullptr;
             controlled_object_ = Core::ObjectID::Invalid();
             playing_ = false;
@@ -152,6 +170,7 @@ namespace ReplayEngine::Scene
         Runtime::RuntimeContext* runtime_ = nullptr;
         Runtime::RuntimeSceneService* runtime_scene_ = nullptr;
         Runtime::SceneFlowService* scene_flow_ = nullptr;
+        const ILoadingProgressProvider* loading_progress_ = nullptr;
         Scripting::IScriptServices* scripts_ = nullptr;
         Core::ObjectID controlled_object_;
         RespawnService respawn_;

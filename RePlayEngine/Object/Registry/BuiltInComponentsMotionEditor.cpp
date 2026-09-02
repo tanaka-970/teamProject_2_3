@@ -196,5 +196,14 @@ namespace ReplayEngine::Core::Detail
             PropertyRegistry::Register<EditorNoteComponent>(
                 MakeProperty("offset", &EditorNoteComponent::offset)
                     .Display("表示オフセット").Step(0.05));
+            PropertyRegistry::Register<EditorNoteComponent>(
+                MakeProperty("mode", &EditorNoteComponent::mode)
+                    .Display("表示モード").AsEnum({ "Overlay", "World" }));
+            PropertyRegistry::Register<EditorNoteComponent>(
+                MakeProperty("horizontal_align", &EditorNoteComponent::horizontal_align)
+                    .Display("水平揃え").AsEnum({ "Left", "Center", "Right" }));
+            PropertyRegistry::Register<EditorNoteComponent>(
+                MakeProperty("vertical_align", &EditorNoteComponent::vertical_align)
+                    .Display("垂直揃え").AsEnum({ "Top", "Middle", "Bottom" }));
         }
 }

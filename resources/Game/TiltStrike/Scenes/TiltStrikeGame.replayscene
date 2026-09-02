@@ -1,0 +1,1497 @@
+REPLAY_SCENE 11
+SCENE "TILT STRIKE - GAME"
+SCENE_STATE 20
+COLLISION_STATE 2 0
+OBJECT_COUNT 43
+OBJECT
+  ID 1
+  NAME "MainCamera"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 13.0 -16.0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "CameraComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "projection_mode" enum 0
+    PROPERTY "field_of_view_degrees" float 46
+    PROPERTY "near_clip" float 0.1
+    PROPERTY "far_clip" float 500
+    PROPERTY "priority" int 250
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 2
+  NAME "Sun"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 12 -8 0.8 -0.65 0.2 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "DirectionalLightComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "color" color 1.0 0.91 0.78 1.0
+    PROPERTY "intensity" float 2.1
+    PROPERTY "cast_shadows" bool 1
+    PROPERTY "shadow_strength" float 0.82
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 3
+  NAME "WorldBackdrop"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 -3.0 1.0 0 0 0 44 0.5 44
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.012 0.026 0.038 1.0
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0.05
+    PROPERTY "material.roughness" float 0.48
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 4
+  NAME "Pedestal"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 -1.35 0 0 0 0 3.0 2.2 3.0
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.09 0.11 0.12 1.0
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0.05
+    PROPERTY "material.roughness" float 0.48
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 5
+  NAME "TiltCollision"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "MeshColliderComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 11
+    PROPERTY "collider_key" int 1
+    PROPERTY "center_offset" vec3 0 0 0
+    PROPERTY "collision_layer" layer 0
+    PROPERTY "collision_mask" layermask -1
+    PROPERTY "is_trigger" bool 0
+    PROPERTY "debug_draw" bool 0
+    PROPERTY "mesh_source" enum 1
+    PROPERTY "mesh_asset" asset "6c2a9f3ab5bc4e03ab12865d17de4087"
+    PROPERTY "cook_cell_size" float 2.0
+    PROPERTY "double_sided" bool 1
+    PROPERTY "debug_draw_wireframe" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 6
+  NAME "BoardController"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "ScriptComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "7a3e1c94b06d4f28ae5137c0d9b28e41"
+    TYPE_MODULE "RePlayEngine.Scripting"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "__script.language" enum 1
+    PROPERTY "__script.asset" assetref "fb533c4782f8413b83998bf72e28c8cf"
+    PROPERTY "__script.class" string "Game.TiltStrike.TiltBoardController"
+    PROPERTY "__script.execution_order" int -100
+    PROPERTY "__script.type_id" string "2d7b511b56ac4eaaa3e75e8e0152211e"
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 7
+  NAME "GameDirector"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "ScriptComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "7a3e1c94b06d4f28ae5137c0d9b28e41"
+    TYPE_MODULE "RePlayEngine.Scripting"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "__script.language" enum 1
+    PROPERTY "__script.asset" assetref "3ae743b427d14e87a071e8a2486ce925"
+    PROPERTY "__script.class" string "Game.TiltStrike.TiltStrikeGameDirector"
+    PROPERTY "__script.execution_order" int 0
+    PROPERTY "__script.type_id" string "7f3bb2c80b8e4b03b8b40d42c4cc1f18"
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 9
+  NAME "VisualBoardRoot"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 0
+END_OBJECT
+OBJECT
+  ID 10
+  NAME "BoardFloor"
+  ENABLED 1
+  PARENT 9
+  TRANSFORM 0 -0.3 0 0 0 0 12 0.4 16
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.035 0.31 0.17 1.0
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0.05
+    PROPERTY "material.roughness" float 0.48
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 11
+  NAME "RailNorth"
+  ENABLED 1
+  PARENT 9
+  TRANSFORM 0 0.48 8.2 0 0 0 12.8 1.6 0.4
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.57 0.035 0.025 1.0
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0.05
+    PROPERTY "material.roughness" float 0.48
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 12
+  NAME "RailSouth"
+  ENABLED 1
+  PARENT 9
+  TRANSFORM 0 0.48 -8.2 0 0 0 12.8 1.6 0.4
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.57 0.035 0.025 1.0
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0.05
+    PROPERTY "material.roughness" float 0.48
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 13
+  NAME "RailWest"
+  ENABLED 1
+  PARENT 9
+  TRANSFORM -6.2 0.48 0 0 0 0 0.4 1.6 16.8
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.57 0.035 0.025 1.0
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0.05
+    PROPERTY "material.roughness" float 0.48
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 14
+  NAME "RailEast"
+  ENABLED 1
+  PARENT 9
+  TRANSFORM 6.2 0.48 0 0 0 0 0.4 1.6 16.8
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.57 0.035 0.025 1.0
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0.05
+    PROPERTY "material.roughness" float 0.48
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 15
+  NAME "ArrowStem"
+  ENABLED 1
+  PARENT 9
+  TRANSFORM 0 -0.075 0.15 0 0 0 0.36 0.05 3.15
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.15 0.72 0.38 1.0
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0.05
+    PROPERTY "material.roughness" float 0.48
+    PROPERTY "material.emissive_color" vec3 0.1 0.8 0.35
+    PROPERTY "material.emissive_strength" float 0.55
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 16
+  NAME "ArrowDot"
+  ENABLED 1
+  PARENT 9
+  TRANSFORM 0 -0.045 2.05 0 0 0 1.2 0.07 1.2
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.15 0.72 0.38 1.0
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0.05
+    PROPERTY "material.roughness" float 0.48
+    PROPERTY "material.emissive_color" vec3 0.1 0.8 0.35
+    PROPERTY "material.emissive_strength" float 0.7
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 20
+  NAME "Ball"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0.75 -5.5 0 0 0 1.1 1.1 1.1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.96 0.99 1.0 1.0
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0.05
+    PROPERTY "material.roughness" float 0.48
+    PROPERTY "material.emissive_color" vec3 0.18 0.62 1.0
+    PROPERTY "material.emissive_strength" float 1.3
+  END_COMPONENT
+  COMPONENT "SphereColliderComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "collider_key" int 1
+    PROPERTY "center_offset" vec3 0 0 0
+    PROPERTY "collision_layer" layer 0
+    PROPERTY "collision_mask" layermask -1
+    PROPERTY "is_trigger" bool 0
+    PROPERTY "debug_draw" bool 0
+    PROPERTY "radius" float 0.5
+    PROPERTY "skin_width" float 0.01
+    PROPERTY "walkable_normal_y" float -1
+  END_COMPONENT
+  COMPONENT "RigidbodyComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 11
+    PROPERTY "body_type" enum 2
+    PROPERTY "mass" float 1.4
+    PROPERTY "linear_damping" float 0.1
+    PROPERTY "angular_damping" float 0.08
+    PROPERTY "gravity_scale" float 1
+    PROPERTY "restitution" float 0.34
+    PROPERTY "friction" float 0.26
+    PROPERTY "freeze_position" vec3 0 0 0
+    PROPERTY "freeze_rotation" vec3 0 0 0
+    PROPERTY "start_asleep" bool 0
+    PROPERTY "use_ccd" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 30
+  NAME "Pin01"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0.0 0.86 4.75 0 0 0 0.62 0.9 0.62
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "primitive_type" enum 3
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.96 0.9 0.72 1.0
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0.05
+    PROPERTY "material.roughness" float 0.48
+  END_COMPONENT
+  COMPONENT "CapsuleColliderComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "collider_key" int 1
+    PROPERTY "center_offset" vec3 0 0 0
+    PROPERTY "collision_layer" layer 0
+    PROPERTY "collision_mask" layermask -1
+    PROPERTY "is_trigger" bool 0
+    PROPERTY "debug_draw" bool 0
+    PROPERTY "radius" float 0.5
+    PROPERTY "height" float 2.0
+    PROPERTY "axis" enum 1
+  END_COMPONENT
+  COMPONENT "RigidbodyComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 11
+    PROPERTY "body_type" enum 2
+    PROPERTY "mass" float 0.72
+    PROPERTY "linear_damping" float 0.18
+    PROPERTY "angular_damping" float 0.14
+    PROPERTY "gravity_scale" float 1
+    PROPERTY "restitution" float 0.16
+    PROPERTY "friction" float 0.56
+    PROPERTY "freeze_position" vec3 0 0 0
+    PROPERTY "freeze_rotation" vec3 0 0 0
+    PROPERTY "start_asleep" bool 0
+    PROPERTY "use_ccd" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 40
+  NAME "Pin01Band"
+  ENABLED 1
+  PARENT 30
+  TRANSFORM 0 0.27 0 0 0 0 1.08 0.17 1.08
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.84 0.045 0.028 1.0
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0.05
+    PROPERTY "material.roughness" float 0.48
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 31
+  NAME "Pin02"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -0.68 0.86 5.8 0 0 0 0.62 0.9 0.62
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "primitive_type" enum 3
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.96 0.9 0.72 1.0
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0.05
+    PROPERTY "material.roughness" float 0.48
+  END_COMPONENT
+  COMPONENT "CapsuleColliderComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "collider_key" int 1
+    PROPERTY "center_offset" vec3 0 0 0
+    PROPERTY "collision_layer" layer 0
+    PROPERTY "collision_mask" layermask -1
+    PROPERTY "is_trigger" bool 0
+    PROPERTY "debug_draw" bool 0
+    PROPERTY "radius" float 0.5
+    PROPERTY "height" float 2.0
+    PROPERTY "axis" enum 1
+  END_COMPONENT
+  COMPONENT "RigidbodyComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 11
+    PROPERTY "body_type" enum 2
+    PROPERTY "mass" float 0.72
+    PROPERTY "linear_damping" float 0.18
+    PROPERTY "angular_damping" float 0.14
+    PROPERTY "gravity_scale" float 1
+    PROPERTY "restitution" float 0.16
+    PROPERTY "friction" float 0.56
+    PROPERTY "freeze_position" vec3 0 0 0
+    PROPERTY "freeze_rotation" vec3 0 0 0
+    PROPERTY "start_asleep" bool 0
+    PROPERTY "use_ccd" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 41
+  NAME "Pin02Band"
+  ENABLED 1
+  PARENT 31
+  TRANSFORM 0 0.27 0 0 0 0 1.08 0.17 1.08
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.84 0.045 0.028 1.0
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0.05
+    PROPERTY "material.roughness" float 0.48
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 32
+  NAME "Pin03"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0.68 0.86 5.8 0 0 0 0.62 0.9 0.62
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "primitive_type" enum 3
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.96 0.9 0.72 1.0
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0.05
+    PROPERTY "material.roughness" float 0.48
+  END_COMPONENT
+  COMPONENT "CapsuleColliderComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "collider_key" int 1
+    PROPERTY "center_offset" vec3 0 0 0
+    PROPERTY "collision_layer" layer 0
+    PROPERTY "collision_mask" layermask -1
+    PROPERTY "is_trigger" bool 0
+    PROPERTY "debug_draw" bool 0
+    PROPERTY "radius" float 0.5
+    PROPERTY "height" float 2.0
+    PROPERTY "axis" enum 1
+  END_COMPONENT
+  COMPONENT "RigidbodyComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 11
+    PROPERTY "body_type" enum 2
+    PROPERTY "mass" float 0.72
+    PROPERTY "linear_damping" float 0.18
+    PROPERTY "angular_damping" float 0.14
+    PROPERTY "gravity_scale" float 1
+    PROPERTY "restitution" float 0.16
+    PROPERTY "friction" float 0.56
+    PROPERTY "freeze_position" vec3 0 0 0
+    PROPERTY "freeze_rotation" vec3 0 0 0
+    PROPERTY "start_asleep" bool 0
+    PROPERTY "use_ccd" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 42
+  NAME "Pin03Band"
+  ENABLED 1
+  PARENT 32
+  TRANSFORM 0 0.27 0 0 0 0 1.08 0.17 1.08
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.84 0.045 0.028 1.0
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0.05
+    PROPERTY "material.roughness" float 0.48
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 33
+  NAME "Pin04"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -1.36 0.86 6.85 0 0 0 0.62 0.9 0.62
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "primitive_type" enum 3
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.96 0.9 0.72 1.0
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0.05
+    PROPERTY "material.roughness" float 0.48
+  END_COMPONENT
+  COMPONENT "CapsuleColliderComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "collider_key" int 1
+    PROPERTY "center_offset" vec3 0 0 0
+    PROPERTY "collision_layer" layer 0
+    PROPERTY "collision_mask" layermask -1
+    PROPERTY "is_trigger" bool 0
+    PROPERTY "debug_draw" bool 0
+    PROPERTY "radius" float 0.5
+    PROPERTY "height" float 2.0
+    PROPERTY "axis" enum 1
+  END_COMPONENT
+  COMPONENT "RigidbodyComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 11
+    PROPERTY "body_type" enum 2
+    PROPERTY "mass" float 0.72
+    PROPERTY "linear_damping" float 0.18
+    PROPERTY "angular_damping" float 0.14
+    PROPERTY "gravity_scale" float 1
+    PROPERTY "restitution" float 0.16
+    PROPERTY "friction" float 0.56
+    PROPERTY "freeze_position" vec3 0 0 0
+    PROPERTY "freeze_rotation" vec3 0 0 0
+    PROPERTY "start_asleep" bool 0
+    PROPERTY "use_ccd" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 43
+  NAME "Pin04Band"
+  ENABLED 1
+  PARENT 33
+  TRANSFORM 0 0.27 0 0 0 0 1.08 0.17 1.08
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.84 0.045 0.028 1.0
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0.05
+    PROPERTY "material.roughness" float 0.48
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 34
+  NAME "Pin05"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0.0 0.86 6.85 0 0 0 0.62 0.9 0.62
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "primitive_type" enum 3
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.96 0.9 0.72 1.0
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0.05
+    PROPERTY "material.roughness" float 0.48
+  END_COMPONENT
+  COMPONENT "CapsuleColliderComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "collider_key" int 1
+    PROPERTY "center_offset" vec3 0 0 0
+    PROPERTY "collision_layer" layer 0
+    PROPERTY "collision_mask" layermask -1
+    PROPERTY "is_trigger" bool 0
+    PROPERTY "debug_draw" bool 0
+    PROPERTY "radius" float 0.5
+    PROPERTY "height" float 2.0
+    PROPERTY "axis" enum 1
+  END_COMPONENT
+  COMPONENT "RigidbodyComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 11
+    PROPERTY "body_type" enum 2
+    PROPERTY "mass" float 0.72
+    PROPERTY "linear_damping" float 0.18
+    PROPERTY "angular_damping" float 0.14
+    PROPERTY "gravity_scale" float 1
+    PROPERTY "restitution" float 0.16
+    PROPERTY "friction" float 0.56
+    PROPERTY "freeze_position" vec3 0 0 0
+    PROPERTY "freeze_rotation" vec3 0 0 0
+    PROPERTY "start_asleep" bool 0
+    PROPERTY "use_ccd" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 44
+  NAME "Pin05Band"
+  ENABLED 1
+  PARENT 34
+  TRANSFORM 0 0.27 0 0 0 0 1.08 0.17 1.08
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.84 0.045 0.028 1.0
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0.05
+    PROPERTY "material.roughness" float 0.48
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 35
+  NAME "Pin06"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 1.36 0.86 6.85 0 0 0 0.62 0.9 0.62
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "primitive_type" enum 3
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.96 0.9 0.72 1.0
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0.05
+    PROPERTY "material.roughness" float 0.48
+  END_COMPONENT
+  COMPONENT "CapsuleColliderComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "collider_key" int 1
+    PROPERTY "center_offset" vec3 0 0 0
+    PROPERTY "collision_layer" layer 0
+    PROPERTY "collision_mask" layermask -1
+    PROPERTY "is_trigger" bool 0
+    PROPERTY "debug_draw" bool 0
+    PROPERTY "radius" float 0.5
+    PROPERTY "height" float 2.0
+    PROPERTY "axis" enum 1
+  END_COMPONENT
+  COMPONENT "RigidbodyComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 11
+    PROPERTY "body_type" enum 2
+    PROPERTY "mass" float 0.72
+    PROPERTY "linear_damping" float 0.18
+    PROPERTY "angular_damping" float 0.14
+    PROPERTY "gravity_scale" float 1
+    PROPERTY "restitution" float 0.16
+    PROPERTY "friction" float 0.56
+    PROPERTY "freeze_position" vec3 0 0 0
+    PROPERTY "freeze_rotation" vec3 0 0 0
+    PROPERTY "start_asleep" bool 0
+    PROPERTY "use_ccd" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 45
+  NAME "Pin06Band"
+  ENABLED 1
+  PARENT 35
+  TRANSFORM 0 0.27 0 0 0 0 1.08 0.17 1.08
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.84 0.045 0.028 1.0
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0.05
+    PROPERTY "material.roughness" float 0.48
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 100
+  NAME "GameCanvas"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "CanvasComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 6
+    PROPERTY "reference_resolution" vec2 1920 1080
+    PROPERTY "render_mode" enum 0
+    PROPERTY "scale_mode" enum 1
+    PROPERTY "match_width_or_height" float 0.5
+    PROPERTY "sort_order" int 0
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0 0
+    PROPERTY "anchor_max" vec2 1 1
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 0 0
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 101
+  NAME "HudTopPanel"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0 1
+    PROPERTY "anchor_max" vec2 1 1
+    PROPERTY "anchored_position" vec2 0 465
+    PROPERTY "size_delta" vec2 0 150
+    PROPERTY "pivot" vec2 0.5 1
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 100
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "color" color 0.008 0.02 0.026 0.86
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 102
+  NAME "TimerText"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -690 420
+    PROPERTY "size_delta" vec2 420 80
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 102
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "text" string "TIME  45.0"
+    PROPERTY "font_size" float 42
+    PROPERTY "color" color 0.82 1.0 0.91 1.0
+    PROPERTY "horizontal_align" enum 0
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "outline_width" float 1.5
+    PROPERTY "outline_color" color 0.01 0.02 0.025 0.95
+    PROPERTY "shadow_offset" vec2 2 3
+    PROPERTY "shadow_color" color 0 0 0 0.75
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 103
+  NAME "PinsText"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 690 420
+    PROPERTY "size_delta" vec2 420 80
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 102
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "text" string "PINS  0 / 6"
+    PROPERTY "font_size" float 42
+    PROPERTY "color" color 1.0 0.82 0.56 1.0
+    PROPERTY "horizontal_align" enum 2
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "outline_width" float 1.5
+    PROPERTY "outline_color" color 0.01 0.02 0.025 0.95
+    PROPERTY "shadow_offset" vec2 2 3
+    PROPERTY "shadow_color" color 0 0 0 0.75
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 104
+  NAME "MessageText"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 420
+    PROPERTY "size_delta" vec2 780 80
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 103
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "text" string "GET READY"
+    PROPERTY "font_size" float 38
+    PROPERTY "color" color 0.92 1.0 0.96 1.0
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "outline_width" float 1.5
+    PROPERTY "outline_color" color 0.01 0.02 0.025 0.95
+    PROPERTY "shadow_offset" vec2 2 3
+    PROPERTY "shadow_color" color 0 0 0 0.75
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 105
+  NAME "TimeTrack"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 360
+    PROPERTY "size_delta" vec2 1080 18
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 102
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "color" color 0.07 0.11 0.12 0.95
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 106
+  NAME "TimeFill"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 360
+    PROPERTY "size_delta" vec2 1080 18
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 103
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "color" color 0.19 0.95 0.55 1.0
+    PROPERTY "opacity" float 1
+    PROPERTY "fill_amount" float 1.0
+    PROPERTY "fill_method" enum 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 107
+  NAME "TiltWidget"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -790 -375
+    PROPERTY "size_delta" vec2 150 150
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 102
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "color" color 0.025 0.055 0.062 0.88
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 108
+  NAME "TiltCursor"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -790 -375
+    PROPERTY "size_delta" vec2 28 28
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 104
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "color" color 0.2 1.0 0.62 1.0
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 109
+  NAME "TiltLabel"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -790 -470
+    PROPERTY "size_delta" vec2 260 44
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 104
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "text" string "TABLE TILT"
+    PROPERTY "font_size" float 22
+    PROPERTY "color" color 0.48 0.72 0.64 1.0
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "outline_width" float 1.5
+    PROPERTY "outline_color" color 0.01 0.02 0.025 0.95
+    PROPERTY "shadow_offset" vec2 2 3
+    PROPERTY "shadow_color" color 0 0 0 0.75
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 110
+  NAME "MouseHint"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 -490
+    PROPERTY "size_delta" vec2 850 46
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 104
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "text" string "HOLD LEFT MOUSE + DRAG  /  RELEASE TO CENTER"
+    PROPERTY "font_size" float 24
+    PROPERTY "color" color 0.55 0.68 0.65 1.0
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "outline_width" float 1.5
+    PROPERTY "outline_color" color 0.01 0.02 0.025 0.95
+    PROPERTY "shadow_offset" vec2 2 3
+    PROPERTY "shadow_color" color 0 0 0 0.75
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 120
+  NAME "ResultOverlay"
+  ENABLED 0
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0 0
+    PROPERTY "anchor_max" vec2 1 1
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 0 0
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 500
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "color" color 0.004 0.012 0.016 0.9
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 121
+  NAME "ResultTitle"
+  ENABLED 1
+  PARENT 120
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 95
+    PROPERTY "size_delta" vec2 1400 150
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 502
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "text" string "TABLE CLEARED"
+    PROPERTY "font_size" float 82
+    PROPERTY "color" color 0.25 1.0 0.62 1.0
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "outline_width" float 1.5
+    PROPERTY "outline_color" color 0.01 0.02 0.025 0.95
+    PROPERTY "shadow_offset" vec2 2 3
+    PROPERTY "shadow_color" color 0 0 0 0.75
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 122
+  NAME "ResultDetail"
+  ENABLED 1
+  PARENT 120
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 -50
+    PROPERTY "size_delta" vec2 1200 150
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 502
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "text" string "ALL PINS DOWN"
+    PROPERTY "font_size" float 34
+    PROPERTY "color" color 0.82 0.9 0.88 1.0
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "outline_width" float 1.5
+    PROPERTY "outline_color" color 0.01 0.02 0.025 0.95
+    PROPERTY "shadow_offset" vec2 2 3
+    PROPERTY "shadow_color" color 0 0 0 0.75
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 123
+  NAME "ResultLine"
+  ENABLED 1
+  PARENT 120
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 205
+    PROPERTY "size_delta" vec2 820 5
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 502
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "color" color 0.18 1.0 0.6 1.0
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+END_OBJECT

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "ShaderAsset.h"
 
@@ -22,7 +22,7 @@ namespace ReplayEngine::Rendering
     namespace BuiltInShaders
     {
         // shading_model の番号と 1 対 1 で対応する。
-        //   0 fbx_default / 1 pbr / 2 toon / 3 unlit / 4 pixelate
+        //   0 fbx_default / 1 pbr / 2 toon / 3 unlit / 4 pixelate / 5 flat_fill
         inline constexpr ShaderID FbxDefault =
             Reflection::MakeTypeGUID("00000000000000000000000000000001");
         inline constexpr ShaderID Pbr =
@@ -33,6 +33,8 @@ namespace ReplayEngine::Rendering
             Reflection::MakeTypeGUID("00000000000000000000000000000004");
         inline constexpr ShaderID Pixelate =
             Reflection::MakeTypeGUID("00000000000000000000000000000005");
+        inline constexpr ShaderID FlatFill =
+            Reflection::MakeTypeGUID("00000000000000000000000000000006");
 
         struct Definition final
         {

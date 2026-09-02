@@ -1,12 +1,14 @@
 ﻿#pragma once
 
 #include "MaterialOverrideDynamicProperties.h"
+#include "MeshMaterialSlot.h"
 #include "../../Object/Component/Component.h"
 #include "../../Reflection/Property/PropertyDesc.h"
 #include "../../Rendering/Adapter/IRenderSubmitter.h"
 
 #include <DirectXMath.h>
 
+#include <array>
 #include <string>
 #include <vector>
 
@@ -47,6 +49,8 @@ namespace ReplayEngine::Components
         void OnMotionPropertyApplied(const char* property_name) override;
         void PrepareMaterialMotion(const Rendering::MaterialAsset* material,
             const Rendering::ShaderPropertySchema* schema);
+        void OnSerialize(Reflection::PropertyBag& output) const override;
+        void OnDeserialize(const Reflection::PropertyBag& input) override;
 
         bool ShouldRender() const noexcept
         {
@@ -60,6 +64,9 @@ namespace ReplayEngine::Components
         int primitive_type = static_cast<int>(Plane);
 
         std::string material_asset;
+        int material_slot_count = 0;
+        std::vector<MeshMaterialSlot> material_slots;
+        mutable std::array<const std::string*, max_mesh_material_slots> material_slot_asset_view{};
         bool material_override = false;
 
         // Motion の Material Track 用一時値。Scene/Prefab の正本にはしない。

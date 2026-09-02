@@ -8,6 +8,7 @@
 #include "../../../RePlayEngine/Components/Rendering/ScreenEffectStackComponent.h"
 #include "../../../RePlayEngine/Components/Rendering/ModelEffectStackComponent.h"
 #include "../../../RePlayEngine/Rendering/Shaders/BuiltInShaders.h"
+#include "../../../RePlayEngine/Rendering/Adapter/SceneRenderCollector.h"
 #include "../../../RePlayEngine/Rendering/ShaderStack/BuiltInShaderLayers.h"
 #include "../../../RePlayEngine/Rendering/Materials/ShaderLayerBinding.h"
 #include "../../../RePlayEngine/UI/UILayout.h"
@@ -185,6 +186,70 @@ ReplayEngine::Rendering::ShaderLightingModel framework::deferred_lighting_model(
 }
 
 
+void framework::build_dx12_frame_constants_for_scene(
+    const ReplayEngine::Scene::Scene& scene,
+    std::uint32_t viewport_width, std::uint32_t viewport_height,
+    const dx12_scene_frame_history& history,
+    ReplayEngine::Rendering::DX12::D3D12FrameConstants& constants,
+    DirectX::XMFLOAT4X4& current_view_projection,
+    bool& used_fallback_camera) const
+{
+    const float safe_width = static_cast<float>((std::max)(viewport_width, 1u));
+    const float safe_height = static_cast<float>((std::max)(viewport_height, 1u));
+    const float aspect = safe_width / safe_height;
+
+    const ReplayEngine::Components::CameraSelection selection =
+        ReplayEngine::Components::ResolveActiveCameraSelection(scene);
+    ReplayEngine::Components::CameraComponent fallback_camera;
+    const ReplayEngine::Components::CameraComponent* camera = selection.Valid()
+        ? selection.component : &fallback_camera;
+    used_fallback_camera = !selection.Valid();
+
+    const DirectX::XMMATRIX view = camera->ViewMatrix();
+    const DirectX::XMMATRIX projection = camera->ProjectionMatrix(aspect);
+    const DirectX::XMMATRIX view_projection = view * projection;
+
+    constants = {};
+    DirectX::XMStoreFloat4x4(&constants.view, view);
+    DirectX::XMStoreFloat4x4(&constants.projection, projection);
+    DirectX::XMStoreFloat4x4(&constants.view_projection, view_projection);
+    DirectX::XMStoreFloat4x4(&constants.inv_view,
+        DirectX::XMMatrixInverse(nullptr, view));
+    DirectX::XMStoreFloat4x4(&constants.inv_projection,
+        DirectX::XMMatrixInverse(nullptr, projection));
+    DirectX::XMStoreFloat4x4(&constants.inv_view_projection,
+        DirectX::XMMatrixInverse(nullptr, view_projection));
+    DirectX::XMStoreFloat4x4(&current_view_projection, view_projection);
+
+    constants.prev_view_projection = history.valid &&
+        history.world_instance_id == scene.WorldInstanceID()
+        ? history.previous_view_projection : current_view_projection;
+    const DirectX::XMFLOAT3 eye = camera->EyePosition();
+    constants.camera_position = { eye.x, eye.y, eye.z, 1.0f };
+    constants.screen_size = { safe_width, safe_height,
+        1.0f / safe_width, 1.0f / safe_height };
+
+    const DirectX::XMFLOAT4X4& projection_values = constants.projection;
+    const float tan_half_fov_y = projection_values._22 != 0.0f
+        ? 1.0f / projection_values._22 : 1.0f;
+    const float camera_aspect = projection_values._11 != 0.0f
+        ? projection_values._22 / projection_values._11 : 1.0f;
+    const float near_plane = camera->near_clip;
+    const float far_plane = camera->far_clip;
+    constants.camera_planes = { near_plane, far_plane, tan_half_fov_y, camera_aspect };
+    constants.jitter = {};
+}
+
+void framework::commit_dx12_scene_frame_history(
+    dx12_scene_frame_history& history,
+    const ReplayEngine::Scene::Scene& scene,
+    const DirectX::XMFLOAT4X4& current_view_projection) noexcept
+{
+    history.world_instance_id = scene.WorldInstanceID();
+    history.previous_view_projection = current_view_projection;
+    history.valid = true;
+}
+
 void framework::render(float elapsed_time)
 {
     if (dx12_framework_active)
@@ -239,10 +304,27 @@ void framework::render(float elapsed_time)
                 ? 1.0f / projection_values._22 : 1.0f;
             const float aspect = projection_values._11 != 0.0f
                 ? projection_values._22 / projection_values._11 : 1.0f;
-            const float near_plane = projection_values._33 != 0.0f
+            float near_plane = projection_values._33 != 0.0f
                 ? -projection_values._43 / projection_values._33 : 0.1f;
-            const float far_plane = (projection_values._33 - 1.0f) != 0.0f
-                ? projection_values._43 / (projection_values._33 - 1.0f) : 10000.0f;
+            float far_plane = (projection_values._33 - 1.0f) != 0.0f
+                ? -projection_values._43 / (projection_values._33 - 1.0f) : 10000.0f;
+            if (!render_matrix_override_active)
+            {
+                const ReplayEngine::Components::CameraComponent* direct_camera =
+                    render_camera_override;
+                if (direct_camera == nullptr && !using_editor_camera())
+                {
+                    const ReplayEngine::Components::CameraSelection selection =
+                        ReplayEngine::Components::ResolveActiveCameraSelection(
+                            active_object_scene());
+                    if (selection.Valid()) direct_camera = selection.component;
+                }
+                if (direct_camera != nullptr)
+                {
+                    near_plane = direct_camera->near_clip;
+                    far_plane = direct_camera->far_clip;
+                }
+            }
             constants.camera_planes = { near_plane, far_plane, tan_half_fov_y, aspect };
             constants.jitter = { taa_jitter_ndc.x, taa_jitter_ndc.y,
                 previous_taa_jitter_ndc.x, previous_taa_jitter_ndc.y };
@@ -270,6 +352,10 @@ void framework::render(float elapsed_time)
                 0.619f, 0.01f, 8.0f);
             static_scene.post_process.bloom_intensity = clamp_finite(post_settings.bloom_intensity,
                 0.25f, 0.0f, 8.0f);
+            static_scene.post_process.bloom_threshold = clamp_finite(luminance_threshold,
+                1.0f, 0.0f, 8.0f);
+            static_scene.post_process.luminance_enabled = enable_luminance_shader;
+            static_scene.post_process.final_pass_enabled = enable_final_pass_shader;
             static_scene.post_process.vignette_strength = clamp_finite(post_settings.vignette_strength,
                 0.138f, 0.0f, 1.0f);
             static_scene.post_process.fxaa_enable = clamp_finite(post_settings.fxaa_enable,
@@ -277,7 +363,51 @@ void framework::render(float elapsed_time)
             static_scene.post_process.taa_blend = clamp_finite(taa_pass.blend, 0.88f, 0.0f, 0.99f);
             static_scene.post_process.ssao_strength = clamp_finite(ssao_pass.intensity, 1.0f, 0.0f, 4.0f);
             static_scene.post_process.ssr_strength = clamp_finite(ssr_pass.intensity, 1.0f, 0.0f, 4.0f);
+            const float ssao_fade_start = clamp_finite(ssao_pass.fade_start,
+                60.0f, 1.0f, 400.0f);
+            const float ssao_fade_end = (std::max)(ssao_fade_start + 0.001f,
+                clamp_finite(ssao_pass.fade_end, 140.0f, 2.0f, 800.0f));
+            static_scene.post_process.ssao_params0 = {
+                clamp_finite(ssao_pass.radius, 0.75f, 0.05f, 4.0f),
+                clamp_finite(ssao_pass.power, 1.6f, 0.5f, 4.0f),
+                clamp_finite(ssao_pass.thin_occluder, 1.0f, 0.0f, 1.0f),
+                clamp_finite(ssao_pass.normal_bias, 0.35f, 0.0f, 2.0f) };
+            static_scene.post_process.ssao_params1 = {
+                static_cast<float>((std::max)(1, (std::min)(8, ssao_pass.slice_count))),
+                static_cast<float>((std::max)(2, (std::min)(12, ssao_pass.step_count))),
+                ssao_fade_start, ssao_fade_end };
+            static_scene.post_process.ssao_params2 = {
+                ssao_pass.blur_enabled ? 1.0f : 0.0f,
+                clamp_finite(ssao_pass.blur_sharpness, 1.0f, 0.0f, 1.0f), 0.0f, 0.0f };
+            static_scene.post_process.ssr_params0 = {
+                clamp_finite(ssr_pass.max_distance, 40.0f, 1.0f, 200.0f),
+                clamp_finite(ssr_pass.thickness, 0.55f, 0.01f, 2.0f),
+                clamp_finite(ssr_pass.stride, 3.0f, 1.0f, 16.0f),
+                static_cast<float>((std::max)(4, (std::min)(64, ssr_pass.max_step))) };
+            static_scene.post_process.ssr_params1 = {
+                static_cast<float>((std::max)(0, (std::min)(8, ssr_pass.refine_step))),
+                clamp_finite(ssr_pass.max_roughness, 0.6f, 0.05f, 1.0f),
+                clamp_finite(ssr_pass.edge_fade, 0.08f, 0.01f, 0.4f),
+                clamp_finite(ssr_pass.ray_bias, 0.001f, 0.0f, 4.0f) };
+            static_scene.post_process.ssr_params2 = {
+                clamp_finite(ssr_pass.resolve_radius, 0.0f, 0.0f, 40.0f),
+                static_cast<float>((std::max)(1, (std::min)(16, ssr_pass.resolve_tap_count))),
+                0.0f, 0.0f };
+            static_scene.post_process.taa_params0 = {
+                clamp_finite(taa_pass.variance_gamma, 1.0f, 0.25f, 3.0f),
+                clamp_finite(taa_pass.sharpness, 0.0f, 0.0f, 1.0f),
+                clamp_finite(taa_pass.max_velocity, 48.0f, 4.0f, 200.0f),
+                0.0f };
             static_scene.post_process.color_filter = clamp_color(post_settings.color_filter);
+            const std::uint32_t effective_render_output = profile_benchmark_mode
+                ? profile_benchmark_render_output
+                : static_cast<std::uint32_t>(render_graph.OutputIndex());
+            // ベンチマークの --render-output でも Deferred の debug mode を合わせる。
+            ReplayEngine::Rendering::RenderGraph effective_render_graph;
+            effective_render_graph.SetOutput(static_cast<int>(effective_render_output));
+            static_scene.post_process.render_output = effective_render_output;
+            static_scene.post_process.deferred_debug_mode = static_cast<std::uint32_t>(
+                effective_render_graph.DeferredDebugMode());
             static_scene.post_process.bloom_enabled = enable_bloom_shader;
             static_scene.post_process.vignette_enabled = enable_vignette_shader;
             static_scene.post_process.fxaa_enabled = enable_fxaa_shader;
@@ -291,6 +421,10 @@ void framework::render(float elapsed_time)
                 const PostProcessVolumeComponent& volume = *volume_selection.component;
                 static_scene.post_process.exposure = clamp_finite(volume.exposure,
                     static_scene.post_process.exposure, 0.01f, 8.0f);
+                static_scene.post_process.bloom_threshold = clamp_finite(volume.bloom_threshold,
+                    static_scene.post_process.bloom_threshold, 0.0f, 8.0f);
+                static_scene.post_process.luminance_enabled = volume.luminance_enabled;
+                static_scene.post_process.final_pass_enabled = volume.final_pass_enabled;
                 static_scene.post_process.bloom_intensity = clamp_finite(volume.bloom_intensity,
                     static_scene.post_process.bloom_intensity, 0.0f, 8.0f);
                 static_scene.post_process.vignette_strength = clamp_finite(volume.vignette_intensity,
@@ -298,19 +432,168 @@ void framework::render(float elapsed_time)
                 static_scene.post_process.color_filter = clamp_color(volume.color_filter);
                 static_scene.post_process.bloom_enabled = volume.bloom_enabled;
                 static_scene.post_process.vignette_enabled = volume.vignette_enabled;
+                static_scene.post_process.ssao_params0.x = clamp_finite(volume.ssao_radius,
+                    static_scene.post_process.ssao_params0.x, 0.05f, 4.0f);
+                static_scene.post_process.ssao_strength = clamp_finite(volume.ssao_intensity,
+                    static_scene.post_process.ssao_strength, 0.0f, 4.0f);
+                static_scene.post_process.ssr_strength = clamp_finite(volume.ssr_intensity,
+                    static_scene.post_process.ssr_strength, 0.0f, 4.0f);
+                static_scene.post_process.taa_enabled = volume.taa_enabled;
+                static_scene.post_process.ssao_enabled = volume.ssao_enabled;
+                static_scene.post_process.ssr_enabled = volume.ssr_enabled;
                 static_scene.post_process.fxaa_enabled = enable_fxaa_shader;
+            }
+            for (const std::string& item : screen_space_overrides)
+            {
+                const std::size_t separator = item.find('=');
+                if (separator == std::string::npos) continue;
+                const std::string key = item.substr(0, separator);
+                const std::string value = item.substr(separator + 1);
+                try
+                {
+                    if (key == "ssao.enabled") static_scene.post_process.ssao_enabled = std::stoi(value) != 0;
+                    else if (key == "ssao.radius") static_scene.post_process.ssao_params0.x = std::stof(value);
+                    else if (key == "ssao.intensity") static_scene.post_process.ssao_strength = std::stof(value);
+                    else if (key == "ssao.power") static_scene.post_process.ssao_params0.y = std::stof(value);
+                    else if (key == "ssao.thin_occluder") static_scene.post_process.ssao_params0.z = std::stof(value);
+                    else if (key == "ssao.slice_count") static_scene.post_process.ssao_params1.x = std::stof(value);
+                    else if (key == "ssao.step_count") static_scene.post_process.ssao_params1.y = std::stof(value);
+                    else if (key == "ssao.fade_start") static_scene.post_process.ssao_params1.z = std::stof(value);
+                    else if (key == "ssao.fade_end") static_scene.post_process.ssao_params1.w = (std::max)(
+                        static_scene.post_process.ssao_params1.z + 0.001f, std::stof(value));
+                    else if (key == "ssao.normal_bias") static_scene.post_process.ssao_params0.w = std::stof(value);
+                    else if (key == "ssao.blur_sharpness") static_scene.post_process.ssao_params2.y = std::stof(value);
+                    else if (key == "ssao.blur_enabled") static_scene.post_process.ssao_params2.x =
+                        std::stoi(value) != 0 ? 1.0f : 0.0f;
+                    else if (key == "ssr.enabled") static_scene.post_process.ssr_enabled = std::stoi(value) != 0;
+                    else if (key == "ssr.max_distance") static_scene.post_process.ssr_params0.x = std::stof(value);
+                    else if (key == "ssr.thickness") static_scene.post_process.ssr_params0.y = std::stof(value);
+                    else if (key == "ssr.stride") static_scene.post_process.ssr_params0.z = std::stof(value);
+                    else if (key == "ssr.max_step") static_scene.post_process.ssr_params0.w = std::stof(value);
+                    else if (key == "ssr.refine_step") static_scene.post_process.ssr_params1.x = std::stof(value);
+                    else if (key == "ssr.max_roughness") static_scene.post_process.ssr_params1.y = std::stof(value);
+                    else if (key == "ssr.edge_fade") static_scene.post_process.ssr_params1.z = std::stof(value);
+                    else if (key == "ssr.ray_bias") static_scene.post_process.ssr_params1.w = std::stof(value);
+                    else if (key == "ssr.resolve_radius") static_scene.post_process.ssr_params2.x = std::stof(value);
+                    else if (key == "ssr.resolve_tap_count") static_scene.post_process.ssr_params2.y = std::stof(value);
+                    else if (key == "taa.enabled") static_scene.post_process.taa_enabled = std::stoi(value) != 0;
+                    else if (key == "taa.blend") static_scene.post_process.taa_blend = std::stof(value);
+                    else if (key == "taa.variance_gamma") static_scene.post_process.taa_params0.x = std::stof(value);
+                    else if (key == "taa.sharpness") static_scene.post_process.taa_params0.y = std::stof(value);
+                    else if (key == "taa.max_velocity") static_scene.post_process.taa_params0.z = std::stof(value);
+                }
+                catch (...)
+                {
+                }
             }
             static_scene.background_color = {
                 clear_color[0], clear_color[1], clear_color[2], clear_color[3] };
             const bool upload_ok =
                 dx12_device_context.SubmitFrameConstants(constants) &&
                 dx12_device_context.SubmitRenderItems(object_render_items);
+            const bool static_scene_built = upload_ok &&
+                build_dx12_static_scene(static_scene, active_object_scene(),
+                    object_render_items, elapsed_time);
             ReplayEngine::Rendering::DX12::D3D12SceneEffectSubmission scene_effects;
-            const bool scene_effects_ok = build_dx12_scene_effects(scene_effects);
-            dx12_device_context.SetSceneEffects(std::move(scene_effects));
-            const bool static_scene_ok = upload_ok && scene_effects_ok &&
-                build_dx12_static_scene(static_scene, elapsed_time) &&
+            const bool scene_effects_ok = static_scene_built &&
+                build_dx12_scene_effects(scene_effects, static_scene,
+                    constants.view_projection);
+            ReplayEngine::Scene::Scene* exclusive_render_scene =
+                scene_manager.IsExclusive() ? exclusive_scene_for_render() : nullptr;
+            if (exclusive_render_scene != nullptr)
+                dx12_device_context.SetSceneEffects(scene_effects);
+            else
+                dx12_device_context.SetSceneEffects(std::move(scene_effects));
+            const bool static_scene_ok = static_scene_built && scene_effects_ok &&
                 dx12_device_context.DrawScene3D(static_scene);
+
+            bool loading_scene_3d_ok = true;
+            if (static_scene_ok && exclusive_render_scene != nullptr)
+            {
+                ReplayEngine::Rendering::RenderItemList loading_render_items;
+                ReplayEngine::Rendering::SceneRenderCollector::Collect(
+                    *exclusive_render_scene, loading_render_items);
+
+                ReplayEngine::Rendering::DX12::D3D12FrameConstants loading_constants{};
+                DirectX::XMFLOAT4X4 loading_view_projection{};
+                bool used_fallback_camera = false;
+                build_dx12_frame_constants_for_scene(*exclusive_render_scene,
+                    dx12_device_context.Width(), dx12_device_context.Height(),
+                    object_loading_scene_frame_history, loading_constants,
+                    loading_view_projection, used_fallback_camera);
+                loading_constants.time_parameters = constants.time_parameters;
+
+                ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission loading_scene;
+                loading_scene.background_color = static_scene.background_color;
+                loading_scene.post_process.bloom_enabled = false;
+                loading_scene.post_process.vignette_enabled = false;
+                loading_scene.post_process.fxaa_enabled = false;
+                loading_scene.post_process.taa_enabled = false;
+                loading_scene.post_process.ssao_enabled = false;
+                loading_scene.post_process.ssr_enabled = false;
+                dx12_scene_build_options loading_build_options;
+                loading_build_options.include_auxiliary_geometry = false;
+                loading_build_options.include_active_lighting = false;
+
+                const bool loading_built = build_dx12_static_scene(loading_scene,
+                    *exclusive_render_scene, loading_render_items, elapsed_time,
+                    loading_build_options);
+                const bool loading_lighting_built = loading_built &&
+                    build_dx12_lighting_for_scene(loading_scene, *exclusive_render_scene);
+                loading_scene.texture_sources.clear();
+                loading_scene.shader_sources.clear();
+                for (auto& draw : loading_scene.draws)
+                {
+                    draw.cast_shadow = false;
+                    draw.base_color_texture_key.clear();
+                    draw.shader_key.clear();
+                    draw.material_constants.clear();
+                    draw.material_textures.clear();
+                    draw.material_texture_semantic_mask = 0;
+                }
+                for (auto& draw : loading_scene.skinned_draws)
+                {
+                    draw.surface.cast_shadow = false;
+                    draw.surface.base_color_texture_key.clear();
+                    draw.surface.shader_key.clear();
+                    draw.surface.material_constants.clear();
+                    draw.surface.material_textures.clear();
+                    draw.surface.material_texture_semantic_mask = 0;
+                }
+                loading_scene.directional_shadow.enabled = false;
+                loading_scene.local_shadows.enabled = false;
+                loading_scene.local_shadows.used_slice_mask = 0;
+
+                const bool loading_has_3d = !loading_scene.draws.empty() ||
+                    !loading_scene.skinned_draws.empty();
+                if (loading_lighting_built && loading_has_3d)
+                {
+                    ReplayEngine::Rendering::DX12::D3D12Scene3DDrawOptions loading_draw_options;
+                    loading_draw_options.manage_shadow_targets = false;
+                    loading_draw_options.allow_static_mesh_cache_replacement = false;
+                    loading_draw_options.read_motion_history = false;
+                    loading_draw_options.write_motion_history = false;
+                    loading_draw_options.read_scene_history = false;
+                    loading_draw_options.write_scene_history = false;
+                    dx12_device_context.SetSceneEffects({});
+                    loading_scene_3d_ok =
+                        dx12_device_context.SubmitFrameConstants(loading_constants) &&
+                        dx12_device_context.DrawScene3D(loading_scene, loading_draw_options);
+                    if (loading_scene_3d_ok)
+                    {
+                        commit_dx12_scene_frame_history(object_loading_scene_frame_history,
+                            *exclusive_render_scene, loading_view_projection);
+                    }
+                    dx12_device_context.SetSceneEffects(scene_effects);
+                    loading_scene_3d_ok =
+                        dx12_device_context.SubmitFrameConstants(constants) && loading_scene_3d_ok;
+                }
+                else
+                {
+                    loading_scene_3d_ok = loading_lighting_built;
+                }
+            }
+
             ReplayEngine::Rendering::DX12::D3D12UIFrame ui_frame;
             bool ui_ok = false;
             if (upload_ok)
@@ -327,7 +610,19 @@ void framework::render(float elapsed_time)
                 {
                     ui_frame = {};
                     REPLAY_PROFILE_SCOPE("UI/BuildRuntimeFrame");
-                    ui_ok = scene_manager.BuildRuntimeUI(ui_frame, viewport_width, viewport_height);
+                    ReplayEngine::Scene::Scene* exclusive_scene =
+                        exclusive_scene_for_render();
+                    if (exclusive_scene != nullptr)
+                    {
+                        const object_ui_viewport ui_viewport = object_ui_viewport_target();
+                        ui_ok = build_dx12_ui_for_scene(ui_frame, *exclusive_scene,
+                            dx12_device_context.Width(), dx12_device_context.Height(),
+                            ui_viewport);
+                    }
+                    else
+                    {
+                        ui_ok = scene_manager.BuildRuntimeUI(ui_frame, viewport_width, viewport_height);
+                    }
                 }
                 if (ui_ok)
                 {
@@ -518,7 +813,8 @@ void framework::render(float elapsed_time)
                     text += " (x" + std::to_string(message.repeat_count) + ")";
                 push_editor_log(editor_log_level_for_dx12_message(message.severity), text);
             }
-            ok = upload_ok && static_scene_ok && ui_ok && imgui_ok && end_ok;
+            ok = upload_ok && static_scene_ok && loading_scene_3d_ok &&
+                ui_ok && imgui_ok && end_ok;
         }
 
         if (!ok && !dx12_framework_render_error_reported)

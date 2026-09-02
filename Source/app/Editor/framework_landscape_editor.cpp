@@ -1,4 +1,4 @@
-// Landscape editor の責務を 3 つのファイルへ分けている:
+﻿// Landscape editor の責務を 3 つのファイルへ分けている:
 //   framework_landscape_editor.cpp           … Toolbar と編集状態のリセット（このファイル）
 //   framework_landscape_editor_viewport.cpp … Scene View の Raycast・Hover・編集操作
 //   framework_landscape_editorInternal.h     … 分割後の Landscape helper 共通部
@@ -59,6 +59,7 @@ void framework::draw_landscape_editor_toolbar()
                 }
                 else object_editor_context.CancelEdit();
             }
+            ReplayEngine::Editor::EditorHelp::Item("button.landscape.add_renderer");
         }
     }
     if (landscape_collider == nullptr)
@@ -78,6 +79,7 @@ void framework::draw_landscape_editor_toolbar()
                 }
                 else object_editor_context.CancelEdit();
             }
+            ReplayEngine::Editor::EditorHelp::Item("button.landscape.add_collider");
         }
     }
     if (primitive_renderer != nullptr && primitive_renderer->visible)
@@ -95,6 +97,7 @@ void framework::draw_landscape_editor_toolbar()
                 object_editor_context.CommitEdit();
                 object_editor_context.SetStatus("Primitive 表示をOFFにしました。Landscape Component はそのままです");
             }
+            ReplayEngine::Editor::EditorHelp::Item("button.landscape.disable_primitive");
         }
     }
 
@@ -187,6 +190,9 @@ void framework::draw_landscape_editor_toolbar()
                 const bool enabled = face_selected && object_editor_context.CanEdit();
                 DisabledScope disabled(!enabled);
                 const bool clicked = ImGui::Button(label);
+                const std::string help_key = std::string("button.landscape.operation.") +
+                    history_label;
+                ReplayEngine::Editor::EditorHelp::Item(help_key.c_str());
                 if (!clicked || !enabled) return;
 
                 object_editor_context.BeginEdit(history_label);
@@ -256,10 +262,12 @@ void framework::draw_landscape_editor_toolbar()
                 landscape_bridge_a0 = landscape_bridge_a1 = no_vertex;
                 landscape_bridge_b0 = landscape_bridge_b1 = no_vertex;
             }
+            ReplayEngine::Editor::EditorHelp::Item("button.landscape.clear_edges");
             ImGui::SameLine();
             const bool can_bridge = first && second && object_editor_context.CanEdit();
             DisabledScope disabled(!can_bridge);
             const bool bridge_clicked = ImGui::Button("Bridge");
+            ReplayEngine::Editor::EditorHelp::Item("button.landscape.bridge_edges");
             if (bridge_clicked && can_bridge)
             {
                 object_editor_context.BeginEdit("Landscape Edge をBridge");

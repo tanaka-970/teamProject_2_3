@@ -1,4 +1,4 @@
-#include "ShaderStackEditor.h"
+﻿#include "ShaderStackEditor.h"
 #include "ShaderPropertyInspector.h"
 #include "../../Rendering/Materials/MaterialSchema.h"
 #include "../../Rendering/Shaders/ShaderCatalog.h"
@@ -193,7 +193,9 @@ namespace ReplayEngine::Editor
                 ? layer_entry->info.DisplayName()
                 : (layer.type != ShaderLayerType::Custom ? std::string(LayerName(layer.type))
                     : std::string("Missing Layer Shader"));
-            const std::string title = "Layer " + std::to_string(index + 1) + "  " + layer_name;
+            const bool unsupported_builtin = BuiltInShaderLayers::IsBuiltIn(layer_shader);
+            const std::string title = "Layer " + std::to_string(index + 1) + "  " +
+                layer_name + (unsupported_builtin ? " [未対応]" : "");
             ImGui::Selectable(title.c_str(), false, ImGuiSelectableFlags_AllowItemOverlap);
             if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
             {

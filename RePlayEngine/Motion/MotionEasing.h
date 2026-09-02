@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <DirectXMath.h>
 
@@ -21,6 +21,7 @@ namespace ReplayEngine::Motion
         EaseOutElastic,
         EaseInOutElastic,
         CustomBezier,
+        PresetCurve,
     };
 
     struct MotionBezierHandles

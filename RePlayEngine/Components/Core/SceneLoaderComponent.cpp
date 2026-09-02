@@ -18,6 +18,17 @@ namespace ReplayEngine::Components
             return;
         }
 
+        const Scene::ILoadingProgressProvider* loading_progress =
+            scene->Services().LoadingProgress();
+        if (loading_progress != nullptr)
+        {
+            progress = loading_progress->Progress();
+            is_loading = loading_progress->IsLoading();
+            state = is_loading ? static_cast<int>(Runtime::SceneLoadState::Loading)
+                               : static_cast<int>(Runtime::SceneLoadState::Idle);
+            return;
+        }
+
         Runtime::RuntimeSceneService* runtime_scene = scene->Services().RuntimeScene();
         Runtime::SceneFlowService* scene_flow = scene->Services().SceneFlow();
 

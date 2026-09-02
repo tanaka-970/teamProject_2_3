@@ -227,9 +227,11 @@ namespace ReplayEngine::Components
                         property.kind == Rendering::ShaderPropertyKind::Enum
                         ? Reflection::Animatable::Step
                         : Reflection::Animatable::Interpolatable));
-            desc.display_name = property.DisplayName();
+            desc.display_name = property.DisplayName() + std::string(u8" [未対応]");
             desc.category = property.category.empty() ? "Custom Shader" : property.category;
-            desc.tooltip = property.tooltip;
+            desc.tooltip = property.tooltip.empty()
+                ? std::string(u8"DX12 の UI Effect 描画では未対応です。設定値は保存されます。")
+                : property.tooltip + std::string(u8" DX12 の UI Effect 描画では未対応です。設定値は保存されます。");
             if (property.kind == Rendering::ShaderPropertyKind::Range)
             {
                 desc.has_range = true;

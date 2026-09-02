@@ -1,0 +1,381 @@
+REPLAY_SCENE 11
+SCENE "LOADING 3D DEMO"
+SCENE_STATE 500
+COLLISION_STATE 2 0
+OBJECT_COUNT 10
+OBJECT
+  ID 500
+  NAME "LoadingCanvas"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 4
+  COMPONENT "CanvasComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 6
+    PROPERTY "reference_resolution" vec2 1920 1080
+    PROPERTY "render_mode" enum 0
+    PROPERTY "scale_mode" enum 1
+    PROPERTY "match_width_or_height" float 0.5
+    PROPERTY "sort_order" int 0
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0 0
+    PROPERTY "anchor_max" vec2 1 1
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 0 0
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "SceneLoaderComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 0
+  END_COMPONENT
+  COMPONENT "PropertyLinkComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "source_object" compref 500 3
+    PROPERTY "source_property" string "progress"
+    PROPERTY "target_object" compref 505 3
+    PROPERTY "target_property" string "value"
+    PROPERTY "source_min" float 0
+    PROPERTY "source_max" float 1
+    PROPERTY "target_min" float 0
+    PROPERTY "target_max" float 1
+    PROPERTY "invert" bool 0
+    PROPERTY "clamp" bool 1
+    PROPERTY "easing" enum 5
+    PROPERTY "smoothing" float 0.1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 501
+  NAME "LoadingBackground"
+  ENABLED 1
+  PARENT 500
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0 0
+    PROPERTY "anchor_max" vec2 1 1
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 0 0
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "color" color 0.006 0.016 0.022 0.35
+    PROPERTY "opacity" float 0.35
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 502
+  NAME "LoadingTitle"
+  ENABLED 1
+  PARENT 500
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 118
+    PROPERTY "size_delta" vec2 1400 160
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 10
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "text" string "TILT STRIKE"
+    PROPERTY "font_size" float 88
+    PROPERTY "color" color 0.88 1.0 0.94 1.0
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "outline_width" float 1.5
+    PROPERTY "outline_color" color 0.01 0.02 0.025 0.95
+    PROPERTY "shadow_offset" vec2 2 3
+    PROPERTY "shadow_color" color 0 0 0 0.75
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 503
+  NAME "LoadingSubtitle"
+  ENABLED 1
+  PARENT 500
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 14
+    PROPERTY "size_delta" vec2 1100 70
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 10
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "text" string "BUILDING THE PHYSICS TABLE"
+    PROPERTY "font_size" float 28
+    PROPERTY "color" color 0.31 0.82 0.59 1.0
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "outline_width" float 1.5
+    PROPERTY "outline_color" color 0.01 0.02 0.025 0.95
+    PROPERTY "shadow_offset" vec2 2 3
+    PROPERTY "shadow_color" color 0 0 0 0.75
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 504
+  NAME "LoadingTrack"
+  ENABLED 1
+  PARENT 500
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 -126
+    PROPERTY "size_delta" vec2 980 28
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 10
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "color" color 0.055 0.09 0.1 1.0
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 505
+  NAME "LoadingFill"
+  ENABLED 1
+  PARENT 500
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 -126
+    PROPERTY "size_delta" vec2 980 28
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 11
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "color" color 0.16 1.0 0.58 1.0
+    PROPERTY "opacity" float 1
+    PROPERTY "fill_amount" float 0.0
+    PROPERTY "fill_method" enum 0
+  END_COMPONENT
+  COMPONENT "UISliderComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "minimum" float 0
+    PROPERTY "maximum" float 1
+    PROPERTY "value" float 0
+    PROPERTY "whole_numbers" bool 0
+    PROPERTY "direction" enum 0
+    PROPERTY "interactable" bool 0
+    PROPERTY "fill_image" compref 505 2
+    PROPERTY "handle_rect" compref 0 0
+    PROPERTY "keyboard_step" float 0.1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 506
+  NAME "LoadingHint"
+  ENABLED 1
+  PARENT 500
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 -225
+    PROPERTY "size_delta" vec2 1200 52
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 10
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "text" string "ONLY THE TABLE MOVES. THE BALL OBEYS PHYSICS."
+    PROPERTY "font_size" float 23
+    PROPERTY "color" color 0.4 0.57 0.53 1.0
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "outline_width" float 1.5
+    PROPERTY "outline_color" color 0.01 0.02 0.025 0.95
+    PROPERTY "shadow_offset" vec2 2 3
+    PROPERTY "shadow_color" color 0 0 0 0.75
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 600
+  NAME "LoadingCube"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 1 0 0 0.6 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.35 0.62 0.95 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 601
+  NAME "LoadingLight"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 6 0 -0.9 0.7 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "DirectionalLightComponent" 2
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 2
+    PROPERTY_COUNT 7
+    PROPERTY "color" color 1 0.97 0.93 1
+    PROPERTY "intensity" float 6
+    PROPERTY "cast_shadows" bool 0
+    PROPERTY "shadow_strength" float 1
+    PROPERTY "shadow_depth_bias" float 0.02
+    PROPERTY "shadow_normal_bias" float 1.4
+    PROPERTY "shadow_distance" float 30
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 602
+  NAME "LoadingCamera"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 1.6 -4 0.15 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "CameraComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "projection_mode" enum 0
+    PROPERTY "field_of_view_degrees" float 55
+    PROPERTY "orthographic_size" float 5
+    PROPERTY "near_clip" float 0.1
+    PROPERTY "far_clip" float 1000
+    PROPERTY "priority" int 0
+    PROPERTY "viewport_enabled" bool 0
+    PROPERTY "viewport_rect" vec4 0 0 1 1
+  END_COMPONENT
+END_OBJECT

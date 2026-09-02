@@ -13,6 +13,8 @@
                     0.0, 1.0, 0.01);
                 add_float("speed", "流れる速度", "走査線が縦へ動く速度。",
                     -512.0, 512.0, 0.1);
+                add_float("angle", "方向", "",
+                    -360.0, 360.0, 0.1);
                 add_color("線の色", "走査線へ重ねる色。");
                 break;
             case UI::UIEffectKind::CRT:
@@ -416,8 +418,8 @@
             push(MakeEffectProperty(i, "custom_shader",
                 Reflection::PropertyType::AssetReference,
                 Reflection::Animatable::Step)
-                .Display("カスタムシェーダー")
-                .Tooltip("Shader Composer の PostProcess 出力を UI Effect として使う。")
+                .Display(u8"カスタムシェーダー [未対応]")
+                .Tooltip(u8"DX12 の UI Effect 描画では未対応です。設定値は保存されます。")
                 .OfAssetType("Shader"));
 
             if (index < custom_schemas_.size() && custom_schemas_[index])

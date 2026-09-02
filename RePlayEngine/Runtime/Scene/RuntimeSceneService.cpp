@@ -64,6 +64,40 @@ namespace ReplayEngine::Runtime
         scene_flow_ = nullptr;
     }
 
+    std::unique_ptr<Scene::Scene> RuntimeSceneService::LoadStandaloneScene(
+        const std::filesystem::path& path, Serialization::SceneLoadReport& report,
+        std::string& error, std::unique_ptr<RuntimeContext>* standalone_runtime)
+    {
+        report.Clear();
+        error.clear();
+
+        Serialization::SceneData data;
+        if (!Serialization::SceneSerializer::LoadFromFile(data, path, error)) return nullptr;
+
+        auto scene = std::make_unique<Scene::Scene>(data.scene_name);
+        std::unique_ptr<RuntimeContext> standalone_context;
+        RuntimeContext* scene_runtime = runtime_;
+        if (standalone_runtime != nullptr)
+        {
+            standalone_context = std::make_unique<RuntimeContext>(*scene);
+            scene_runtime = standalone_context.get();
+        }
+        if (scene_runtime != nullptr) scene->Services().SetRuntime(scene_runtime);
+        scene->Services().SetRuntimeScene(this);
+        scene->Services().SetSceneFlow(scene_flow_);
+
+        if (!Serialization::ApplySceneData(data, *scene, report))
+        {
+            error = "独立 Scene の構築に失敗しました。";
+            return nullptr;
+        }
+
+        if (standalone_runtime != nullptr)
+            *standalone_runtime = std::move(standalone_context);
+        scene->Start();
+        return scene;
+    }
+
     Core::WorldInstanceID RuntimeSceneService::ActiveWorldID() const noexcept
     {
         return active_->WorldInstanceID();
