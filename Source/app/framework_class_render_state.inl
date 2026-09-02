@@ -227,6 +227,22 @@ public:
     std::unordered_set<std::string> composition_asset_load_failures;
     ReplayEngine::Assets::AsyncAssetManager async_asset_manager;
 
+    // スキンメッシュのボーンパレット長。メッシュごとに不変なので毎フレーム求め直さない。
+    std::unordered_map<std::string, std::size_t> skinned_palette_size_cache;
+
+    // テクスチャパスの解決結果。描画中に exists() を呼ばないための表。
+    std::unordered_map<std::string, std::string> texture_path_resolve_cache;
+
+    // 材質スロットのローカル境界。バインドポーズの座標から作るので不変。
+    struct material_subset_bounds_entry
+    {
+        std::uint32_t start = 0;
+        std::uint32_t count = 0;
+        ReplayEngine::Rendering::DX12::D3D12MeshLocalBounds bounds;
+    };
+    std::unordered_map<std::string, std::vector<material_subset_bounds_entry>>
+        material_subset_bounds_cache;
+
     // プロジェクト設定。Default Controlled Character Prefab を持つ。
     // 参照は AssetGUID なので、Prefab の名前やパスを変えても壊れない。
     ReplayEngine::Project::ProjectSettings project_settings;

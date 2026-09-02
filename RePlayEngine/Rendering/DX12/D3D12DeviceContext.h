@@ -760,6 +760,13 @@ namespace ReplayEngine::Rendering::DX12
         std::uint32_t Width() const noexcept { return width_; }
         std::uint32_t Height() const noexcept { return height_; }
         std::uint32_t FrameIndex() const noexcept { return frame_index_; }
+
+        // 0 で VSync を切る。計測時に素の CPU 時間を出すため。
+        void SetPresentSyncInterval(std::uint32_t interval) noexcept
+        {
+            present_sync_interval_ = interval > 1u ? 1u : interval;
+        }
+        std::uint32_t PresentSyncInterval() const noexcept { return present_sync_interval_; }
         std::uint64_t LastSignaledFenceValue() const noexcept
         {
             return last_signaled_fence_value_;
@@ -1350,6 +1357,7 @@ namespace ReplayEngine::Rendering::DX12
         std::uint64_t pso_cache_hits_ = 0;
         std::uint64_t pso_cache_misses_ = 0;
         std::uint32_t frame_index_ = 0;
+        std::uint32_t present_sync_interval_ = 1;
         std::uint32_t width_ = 0;
         std::uint32_t height_ = 0;
         bool frame_open_ = false;
