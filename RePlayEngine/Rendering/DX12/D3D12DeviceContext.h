@@ -74,6 +74,13 @@ namespace ReplayEngine::Rendering::DX12
         bool is_cube = false;
     };
 
+    enum class D3D12SkyIblStatus : std::uint32_t
+    {
+        Ready = 0,
+        FallbackMissingCpuSource,
+        FallbackBakeFailed,
+    };
+
     struct D3D12SkySubmission final
     {
         bool enabled = false;
@@ -820,6 +827,10 @@ namespace ReplayEngine::Rendering::DX12
         {
             return diagnostics_.PassSequence(pass);
         }
+        D3D12SkyIblStatus LastSkyIblStatus() const noexcept
+        {
+            return last_sky_ibl_status_;
+        }
         void ConsumeDebugMessages(std::vector<D3D12DebugMessage>& out)
         {
             diagnostics_.ConsumeMessages(out);
@@ -1007,7 +1018,8 @@ namespace ReplayEngine::Rendering::DX12
         bool CreateStaticCubeTexture(const std::string& key, std::uint32_t width,
             std::uint32_t height, std::uint16_t mip_levels, DXGI_FORMAT format,
             const std::vector<D3D12TextureSubresourceSource>& subresources,
-            const std::vector<float>* cpu_rgba = nullptr) noexcept;
+            const std::vector<float>* cpu_rgba = nullptr,
+            std::uint32_t cpu_width = 0) noexcept;
         bool EnsureUIFontTexture(const D3D12UIFontAtlasSource& source) noexcept;
         bool EnsureStaticShader(const D3D12StaticShaderSource& source) noexcept;
         bool CreateSolidStaticTexture(const char* key, std::uint32_t rgba) noexcept;
@@ -1220,6 +1232,8 @@ namespace ReplayEngine::Rendering::DX12
         std::unordered_map<std::string, StaticTextureResource> texture_cache_;
         std::unordered_map<std::string, SkyCubeCpuData> sky_cpu_cubes_;
         std::unordered_map<std::string, std::filesystem::path> sky_source_paths_;
+        std::unordered_map<std::string, D3D12SkyIblStatus> sky_ibl_failures_;
+        D3D12SkyIblStatus last_sky_ibl_status_ = D3D12SkyIblStatus::Ready;
         bool sky_cache_prune_initialized_ = false;
         std::unordered_map<std::string, StaticTextureResource> ui_font_texture_cache_;
         std::unordered_map<std::string, std::uint64_t> ui_font_texture_revisions_;
