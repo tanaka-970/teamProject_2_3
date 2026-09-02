@@ -1102,8 +1102,8 @@ namespace ReplayEngine::Runtime::Detail
 
             constexpr std::uint32_t effect_count = static_cast<std::uint32_t>(
                 ReplayEngine::UI::UIEffectKind::Count);
-            if (!Check(effect_count == 74u,
-                "DX12 UIEffectKind Count sentinel is 74", checks))
+            if (!Check(effect_count == 75u,
+                "DX12 UIEffectKind Count sentinel is 75", checks))
                 return false;
             for (std::uint32_t kind = 0; kind < effect_count; ++kind)
             {
