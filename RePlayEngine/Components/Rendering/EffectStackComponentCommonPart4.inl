@@ -434,6 +434,24 @@
                 add_color("線の色", "集中線へ使う色。");
                 add_seed();
                 break;
+            case UI::UIEffectKind::ClockWipe:
+                add_float("progress", "進行", "0 から 1 で時計回りに開閉する。",
+                    0.0, 1.0, 0.001);
+                add_float("angle", "開始角度", "掃き始める角度（度）。",
+                    -360.0, 360.0, 0.1);
+                add_float("amount", "掃引量", "1 で全周。負の値で逆回りにする。",
+                    -1.0, 1.0, 0.001);
+                add_float("threshold", "中心の空き", "最後まで残す中心の半径。",
+                    0.0, 1.0, 0.001);
+                add_float("softness", "境界の柔らかさ", "掃引の境界をぼかす量。",
+                    0.0001, 1.0, 0.001);
+                add_float("intensity", "適用量", "アルファを抜く割合。",
+                    0.0, 1.0, 0.01);
+                push(MakeEffectProperty(i, "direction", Reflection::PropertyType::Vector2,
+                    Reflection::Animatable::Interpolatable)
+                    .Display("中心").Tooltip("正規化座標で指定する回転中心。0.5, 0.5 が中央。")
+                    .Step(0.01));
+                break;
             default:
                 break;
             }
