@@ -132,10 +132,26 @@ float3 screenSpaceReflection(float2 uv, float3 color)
     const float f0 = lerp(0.04f, 1.0f, metallic);
     const float grazing = saturate(1.0f + dot(V, N));
     confidence *= saturate(f0 + (1.0f - f0) * pow(grazing, 5.0f));
+    // カメラへ向かって戻るレイは、画面に映っていない情報を拾おうとして破綻する。
+    // 輪郭際の細い筋はこれが原因なので、その割合ぶん弱める。
+    confidence *= saturate(1.0f - saturate(-dot(R, V)));
     confidence = saturate(confidence * saturate(ssrStrength));
     if (confidence <= 0.0f) return color;
 
-    float3 reflection = ssrHistoryTexture.SampleLevel(sceneSampler, hitUv, 0).rgb;
+    // 反射元は前フレームの絵。今フレームの座標のまま読むと、カメラが動いた分だけ
+    // 別の場所の色を拾う。速度で戻してから読む。
+    const float2 hitVelocity = sceneVelocity.SampleLevel(pointSampler, hitUv, 0).xy;
+    const float2 historyUv = hitUv - hitVelocity;
+    if (any(historyUv < 0.0f) || any(historyUv > 1.0f)) return color;
+    // 当たった点が前フレームにも同じ距離で存在したかを見る。無ければ拾った色は別物。
+    const float hitSceneZ = sceneDepth.SampleLevel(pointSampler, hitUv, 0).r;
+    const float hitDepth = linearViewDepth(hitUv, hitSceneZ);
+    const float historySceneZ = previousSceneDepth.SampleLevel(pointSampler, historyUv, 0).r;
+    if (historySceneZ >= 0.999999f) return color;
+    const float historyDepth = linearViewDepth(historyUv, historySceneZ);
+    if (abs(historyDepth - hitDepth) > max(hitDepth * 0.1f, 0.05f)) return color;
+
+    float3 reflection = ssrHistoryTexture.SampleLevel(sceneSampler, historyUv, 0).rgb;
     const int requestedTapCount = clamp((int)round(ssrParams2.y), 1, 16);
     const int tapCount = min(16, max(requestedTapCount,
         ssrParams2.x > 0.0f ? 2 : 1));
@@ -149,11 +165,13 @@ float3 screenSpaceReflection(float2 uv, float3 color)
         if (tap >= tapCount) break;
         const float angle = 2.39996323f * (float)tap;
         const float2 offset = float2(cos(angle), sin(angle)) * resolvePixel;
-        resolveSum += ssrHistoryTexture.SampleLevel(sceneSampler, hitUv + offset, 0).rgb;
+        resolveSum += ssrHistoryTexture.SampleLevel(sceneSampler, historyUv + offset, 0).rgb;
         resolveSamples += 1.0f;
     }
     reflection = resolveSum / resolveSamples;
-    return lerp(color, reflection, confidence);
+    // 置き換えではなく加算にする。反射が誤っていても面の色そのものは消えない。
+    // 誘電体は confidence が 4% 前後なので、加算でも過剰にはならない。
+    return color + max(reflection, 0.0f.xxx) * confidence;
 }
 
 float3 rgbToYCoCg(float3 color)
