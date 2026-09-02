@@ -126,8 +126,12 @@ float3 screenSpaceReflection(float2 uv, float3 color)
     // 粗い面ほど反射を弱める。
     const float maxRoughness = max(ssrParams1.y, 0.001f);
     confidence *= saturate(1.0f - roughness / maxRoughness);
-    // 斜め入射ほど強く映る Fresnel 近似。
-    confidence *= saturate(0.25f + 0.75f * pow(saturate(1.0f + dot(V, N)), 2.0f));
+    // 金属でない面は正面でおよそ 4% しか映らない。ここを見ずに 25% 下駄を履かせると、
+    // 肌や布に周りの暗い部分が映り込んで、硬い縁のゴミになる。
+    const float metallic = saturate(sceneMaterial.SampleLevel(pointSampler, uv, 0).b);
+    const float f0 = lerp(0.04f, 1.0f, metallic);
+    const float grazing = saturate(1.0f + dot(V, N));
+    confidence *= saturate(f0 + (1.0f - f0) * pow(grazing, 5.0f));
     confidence = saturate(confidence * saturate(ssrStrength));
     if (confidence <= 0.0f) return color;
 
