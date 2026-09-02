@@ -164,6 +164,8 @@ namespace ReplayEngine::Rendering::DX12
             DirectX::XMFLOAT4 moon_direction{};
             DirectX::XMFLOAT4 moon_color{};
             DirectX::XMFLOAT4X4 previous_sky_rotation{};
+            // x=トゥーンへの環境光の強さ、y/z/w=予約
+            DirectX::XMFLOAT4 toon_environment{};
         };
 
         struct Scene3DShadowObjectConstants final
@@ -2261,6 +2263,8 @@ namespace ReplayEngine::Rendering::DX12
             sky_available ? 1.0f : 0.0f, sky_available ?
             (std::max)(0.0f, (std::min)(submission.sky.intensity, 16.0f)) : 0.0f };
         light.previous_sky_rotation = submission.sky.previous_rotation;
+        light.toon_environment = { sky_available ?
+            (std::max)(0.0f, submission.sky.toon_environment) : 0.0f, 0.0f, 0.0f, 0.0f };
         light.sky_blend = { sky_available ? (std::max)(0.0f,
             (std::min)(submission.sky.blend, 1.0f)) : 0.0f,
             sky_secondary_available ? 1.0f : 0.0f,

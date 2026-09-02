@@ -1,20 +1,35 @@
 #include "dx12_postprocess_common.hlsli"
 
 
-// SSAO は専用パスで焼いてある。ここでは読むだけにして、同じ計算を 2 度しない。
+// SSAO は半解像度で焼いてある。線形補間だけで引き伸ばすと、深度の段差をまたいで
+// 混ざり、輪郭の周りに滲みが出る。深度が近い画素だけを重みづけして拾う。
 float ssao(float2 uv)
 {
-    const float center = ssaoTexture.SampleLevel(sceneSampler, uv, 0).r;
-    if (ssaoParams2.x < 0.5f) return center;
-    const float sharpness = saturate(ssaoParams2.y);
-    if (sharpness >= 0.9999f) return center;
-    const float2 pixel = 1.0f / max(screenSize, float2(1.0f, 1.0f));
-    const float blurred = (center +
-        ssaoTexture.SampleLevel(sceneSampler, uv + float2(pixel.x, 0.0f), 0).r +
-        ssaoTexture.SampleLevel(sceneSampler, uv - float2(pixel.x, 0.0f), 0).r +
-        ssaoTexture.SampleLevel(sceneSampler, uv + float2(0.0f, pixel.y), 0).r +
-        ssaoTexture.SampleLevel(sceneSampler, uv - float2(0.0f, pixel.y), 0).r) * 0.2f;
-    return lerp(blurred, center, sharpness);
+    const float centerDepth = linearViewDepth(uv,
+        sceneDepth.SampleLevel(pointSampler, uv, 0).r);
+    const float2 halfPixel = 2.0f / max(screenSize, float2(1.0f, 1.0f));
+    // 深度の許容幅。近景は厳しく、遠景は緩く。段差だけを弾きたい。
+    const float depthTolerance = max(0.02f, centerDepth * 0.02f);
+
+    float total = 0.0f;
+    float weightSum = 0.0f;
+    [unroll] for (int y = -1; y <= 1; ++y)
+    {
+        [unroll] for (int x = -1; x <= 1; ++x)
+        {
+            const float2 tapUv = uv + float2(x, y) * halfPixel;
+            const float tapDepth = linearViewDepth(tapUv,
+                sceneDepth.SampleLevel(pointSampler, tapUv, 0).r);
+            const float depthWeight =
+                saturate(1.0f - abs(tapDepth - centerDepth) / depthTolerance);
+            if (depthWeight <= 0.0f) continue;
+            total += ssaoTexture.SampleLevel(sceneSampler, tapUv, 0).r * depthWeight;
+            weightSum += depthWeight;
+        }
+    }
+    if (weightSum <= 0.0f)
+        return ssaoTexture.SampleLevel(pointSampler, uv, 0).r;
+    return total / weightSum;
 }
 
 float3 screenSpaceReflection(float2 uv, float3 color)

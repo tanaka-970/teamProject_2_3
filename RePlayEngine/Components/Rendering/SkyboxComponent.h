@@ -23,6 +23,8 @@ namespace ReplayEngine::Components
         bool sky_enabled = true;
         float rotation_degrees = 0.0f;
         float intensity = 1.0f;
+        // トゥーンの影側へ空の色をどれだけ乗せるか。0 で従来どおり。
+        float toon_environment = 0.0f;
         float time = 0.0f;
         float time_speed = 0.0f;
         bool clouds_enabled = false;

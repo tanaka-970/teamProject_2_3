@@ -66,6 +66,7 @@ cbuffer Dx12LightCB : register(DX12_LIGHT_CB_REGISTER)
     float4 moonDirection;
     float4 moonColor;
     row_major float4x4 previousSkyRotation;
+    float4 toonEnvironment; // x=トゥーンへの環境光の強さ
 };
 
 Texture2DArray<float> dx12CsmShadowArray : register(t6);
@@ -489,6 +490,23 @@ float2 Dx12EnvironmentDfg(float noV, float roughness)
     return float2(-1.04f, 1.04f) * a004 + r.zw;
 }
 
+
+// トゥーン用の環境光。空の拡散成分だけを引き、階調は触らない。
+// 鏡面を混ぜると平面的な見え方が壊れるので、ここでは足さない。
+float3 Dx12ToonEnvironmentIrradiance(float3 normal)
+{
+    if (iblParams.z < 0.5f || toonEnvironment.x <= 0.0f) return 0.0f.xxx;
+    const float3 N = normalize(mul(normalize(normal), (float3x3)skyRotation));
+    float3 irradiance = dx12IblDiffuse.SampleLevel(dx12IblSampler, N, 0).rgb;
+    if (skyBlend.y >= 0.5f)
+    {
+        irradiance = lerp(irradiance,
+            dx12IblDiffuseSecondary.SampleLevel(dx12IblSampler, N, 0).rgb,
+            saturate(skyBlend.x));
+    }
+    return irradiance * iblParams.x * max(iblParams.w, 0.0f) * toonEnvironment.x;
+}
+
 float3 Dx12EvaluateIbl(float3 albedo, float metallic, float roughness,
     float3 normal, float3 viewDirection)
 {
@@ -722,8 +740,11 @@ float3 Dx12EvaluateLighting(float3 worldPosition, float3 normal, float3 albedo,
     if (isToon)
     {
         // 影側の色。tint が黒なら 1 項も足されず従来の絵と一致する。
-        result += albedo * toon.shadowTint * saturate(1.0f - toonLit) *
-            saturate(ambientOcclusion);
+        const float shadowMask = saturate(1.0f - toonLit) * saturate(ambientOcclusion);
+        result += albedo * toon.shadowTint * shadowMask;
+        // 空の色を影側へ乗せる。境界は動かさないので階調は保たれる。
+        // 既定は 0 なので、設定しない限り従来の絵と一致する。
+        result += albedo * Dx12ToonEnvironmentIrradiance(N) * shadowMask;
         result += Dx12ToonRim(toon, N, V);
     }
     return result;

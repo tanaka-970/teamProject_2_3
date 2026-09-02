@@ -2172,6 +2172,9 @@ bool framework::build_dx12_static_scene(
             submission.sky.intensity = std::clamp(
                 std::isfinite(selected_sky->intensity) ? selected_sky->intensity : 1.0f,
                 0.0f, 16.0f);
+            submission.sky.toon_environment = std::clamp(
+                std::isfinite(selected_sky->toon_environment)
+                    ? selected_sky->toon_environment : 0.0f, 0.0f, 4.0f);
             submission.sky.clouds_enabled = selected_sky->clouds_enabled;
             submission.sky.cloud_layer1_speed = selected_sky->cloud_layer1_speed;
             submission.sky.cloud_layer1_scale = selected_sky->cloud_layer1_scale;
