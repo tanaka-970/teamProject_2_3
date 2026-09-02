@@ -397,6 +397,10 @@ namespace ReplayEngine::Core::Detail
                 MakeProperty("intensity", &SkyboxComponent::intensity)
                     .Display("空の強さ").Range(0.0, 16.0).Step(0.01));
             PropertyRegistry::Register<SkyboxComponent>(
+                MakeProperty("toon_environment", &SkyboxComponent::toon_environment)
+                    .Display("トゥーンへの環境光").Range(0.0, 4.0).Step(0.01)
+                    .Tooltip("トゥーンの影側へ空の色を乗せる強さ。0 で従来どおり。"));
+            PropertyRegistry::Register<SkyboxComponent>(
                 MakeProperty("time", &SkyboxComponent::time)
                     .Display("時間帯").Range(0.0, 1.0).Step(0.001));
             PropertyRegistry::Register<SkyboxComponent>(

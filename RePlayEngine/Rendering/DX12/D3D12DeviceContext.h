@@ -93,6 +93,7 @@ namespace ReplayEngine::Rendering::DX12
         DirectX::XMFLOAT4X4 previous_rotation{
             1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
         float intensity = 1.0f;
+        float toon_environment = 0.0f;
         float blend = 0.0f;
         float time = 0.0f;
         float cloud_time = 0.0f;

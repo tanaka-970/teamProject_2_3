@@ -298,7 +298,9 @@ namespace
         const auto* bytes = static_cast<const std::uint8_t*>(object->GetBufferPointer());
         result.bytecode.assign(bytes, bytes + object->GetBufferSize());
         result.succeeded = true;
-        WriteShaderCache(cache_path, result.bytecode);
+        // 診断が出たシェーダはキャッシュしない。読み出しでは診断文を再現できず、
+        // 2 回目以降に警告が黙って消えるため。綺麗に通ったものだけ保存する。
+        if (result.diagnostics.empty()) WriteShaderCache(cache_path, result.bytecode);
         return result;
     }
 
