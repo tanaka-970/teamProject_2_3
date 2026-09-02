@@ -91,7 +91,7 @@ namespace ReplayEngine::Runtime::Validation
         // ---- Resolver 未接続 -------------------------------------------------
 
         service.RequestLoad(guid_scene_a);
-        service.Tick();
+        service.TickBlocking();
         check.Expect(service.State() == SceneLoadState::Failed &&
             service.LastStatus() == RuntimeStatus::ServiceUnavailable,
             "Scene Asset Resolver 未接続の読み込みは ServiceUnavailable で失敗する");
@@ -118,13 +118,13 @@ namespace ReplayEngine::Runtime::Validation
         check.Expect(service.RequestLoad(guid_scene_a) == SceneRequestResult::Accepted,
             "Scene A の読み込み要求が受理される");
 
-        service.Tick();
+        service.TickBlocking();
         check.Expect(service.State() == SceneLoadState::ReadyToSwap,
             "1 回目の Tick で Staging World が完成し ReadyToSwap になる");
         check.Expect(service.IsBusy() && service.ActiveWorldID() == initial_world,
             "ReadyToSwap の間はまだ入れ替わっておらず IsBusy");
 
-        service.Tick();
+        service.TickBlocking();
         check.Expect(service.State() == SceneLoadState::Completed && !service.IsBusy(),
             "2 回目の Tick で入れ替えが済み Completed になる");
         check.Expect(service.CurrentSceneGUID() == guid_scene_a &&
@@ -187,8 +187,8 @@ namespace ReplayEngine::Runtime::Validation
 
         check.Expect(service.RequestLoad(guid_scene_b) == SceneRequestResult::Accepted,
             "削除予約中でも Scene B への切替要求が受理される");
-        service.Tick();
-        service.Tick();
+        service.TickBlocking();
+        service.TickBlocking();
 
         const Core::WorldInstanceID world_b = service.ActiveWorldID();
         check.Expect(service.State() == SceneLoadState::Completed &&
@@ -219,8 +219,8 @@ namespace ReplayEngine::Runtime::Validation
         const std::uint64_t swaps_before_reload = service.SwapCount();
         check.Expect(service.RequestReload() == SceneRequestResult::Accepted,
             "同一 Scene の Reload 要求が受理される");
-        service.Tick();
-        service.Tick();
+        service.TickBlocking();
+        service.TickBlocking();
         const Core::WorldInstanceID world_reload = service.ActiveWorldID();
         check.Expect(service.State() == SceneLoadState::Completed &&
             service.CurrentSceneGUID() == guid_scene_b,
@@ -241,25 +241,25 @@ namespace ReplayEngine::Runtime::Validation
         const std::uint64_t failures_before = service.FailureCount();
 
         service.RequestLoad(guid_not_registered);
-        service.Tick();
+        service.TickBlocking();
         check.Expect(service.State() == SceneLoadState::Failed &&
             service.LastStatus() == RuntimeStatus::AssetMissing,
             "存在しない AssetGUID は AssetMissing で失敗する");
 
         service.RequestLoad(guid_wrong_asset_type);
-        service.Tick();
+        service.TickBlocking();
         check.Expect(service.State() == SceneLoadState::Failed &&
             service.LastStatus() == RuntimeStatus::InvalidAssetType,
             "Scene Asset ではない GUID は InvalidAssetType で失敗する");
 
         service.RequestLoad(guid_corrupt);
-        service.Tick();
+        service.TickBlocking();
         check.Expect(service.State() == SceneLoadState::Failed &&
             service.LastStatus() == RuntimeStatus::SceneLoadFailed,
             "壊れた Scene は SceneLoadFailed で失敗する");
 
         service.RequestLoad(guid_future_version);
-        service.Tick();
+        service.TickBlocking();
         check.Expect(service.State() == SceneLoadState::Failed &&
             service.LastStatus() == RuntimeStatus::SceneLoadFailed,
             "未対応 Version の Scene は SceneLoadFailed で失敗する");
@@ -283,8 +283,8 @@ namespace ReplayEngine::Runtime::Validation
         // ---- Missing Component を含む Scene ---------------------------------------
 
         service.RequestLoad(guid_missing_component);
-        service.Tick();
-        service.Tick();
+        service.TickBlocking();
+        service.TickBlocking();
         check.Expect(service.State() == SceneLoadState::Completed &&
             service.LastLoadReport().missing_components >= 1 &&
             service.LastLoadReport().skipped_components == 0,
@@ -303,8 +303,8 @@ namespace ReplayEngine::Runtime::Validation
         // ---- Unknown Property を含む Scene ------------------------------------------
 
         service.RequestLoad(guid_unknown_property);
-        service.Tick();
-        service.Tick();
+        service.TickBlocking();
+        service.TickBlocking();
         check.Expect(service.State() == SceneLoadState::Completed &&
             service.LastLoadReport().unknown_properties >= 1,
             "未知のプロパティを含む Scene は読み込みが成功し件数が記録される");
@@ -316,8 +316,8 @@ namespace ReplayEngine::Runtime::Validation
         // ---- 参照の解決 ----------------------------------------------------------------
 
         service.RequestLoad(guid_reference);
-        service.Tick();
-        service.Tick();
+        service.TickBlocking();
+        service.TickBlocking();
         SceneProbeBehaviour* source_probe = FindProbe(service, "Source");
         const ObjectHandle referenced = source_probe != nullptr
             ? runtime.Resolver().FindByObjectID(source_probe->target_object.object)
@@ -341,13 +341,13 @@ namespace ReplayEngine::Runtime::Validation
             service.RequestLoad(guid_scene_b) == SceneRequestResult::Busy,
             "進行中の読み込み要求は Busy で拒否され、先の要求を壊さない");
 
-        service.Tick();
+        service.TickBlocking();
         check.Expect(service.State() == SceneLoadState::ReadyToSwap &&
             service.RequestLoad(guid_scene_b) == SceneRequestResult::Busy &&
             service.RequestReload() == SceneRequestResult::Busy,
             "ReadyToSwap の間の要求も Busy で拒否される");
 
-        service.Tick();
+        service.TickBlocking();
         check.Expect(service.CurrentSceneGUID() == guid_scene_a &&
             service.ActiveWorld().GameObjectCount() == 3,
             "連続要求のあとも最初に受理した Scene だけが読み込まれる");
@@ -357,8 +357,8 @@ namespace ReplayEngine::Runtime::Validation
         const Core::WorldInstanceID world_before_cancel = service.ActiveWorldID();
         service.RequestLoad(guid_scene_b);
         service.CancelPending();
-        service.Tick();
-        service.Tick();
+        service.TickBlocking();
+        service.TickBlocking();
         check.Expect(service.State() == SceneLoadState::Idle &&
             service.ActiveWorldID() == world_before_cancel &&
             service.CurrentSceneGUID() == guid_scene_a &&

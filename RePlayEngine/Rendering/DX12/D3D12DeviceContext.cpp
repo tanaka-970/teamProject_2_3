@@ -874,11 +874,13 @@ namespace ReplayEngine::Rendering::DX12
         }
 
         bool CopyCubeMip0ToFloat(const DecodedDdsImage& cube,
-            std::vector<float>& rgba) noexcept
+            std::vector<float>& rgba, std::uint32_t& copied_width) noexcept
         {
             rgba.clear();
+            copied_width = 0;
             if (!cube.is_cube || cube.array_size != 6 || cube.width == 0 ||
-                cube.width != cube.height || cube.subresources.size() < 6)
+                cube.width != cube.height || cube.mip_levels == 0 ||
+                cube.subresources.size() < static_cast<std::size_t>(cube.mip_levels) * 6u)
                 return false;
             const bool half = cube.format == DXGI_FORMAT_R16G16B16A16_FLOAT;
             const bool rgba8 = cube.format == DXGI_FORMAT_R8G8B8A8_UNORM ||
@@ -888,21 +890,35 @@ namespace ReplayEngine::Rendering::DX12
             if (!half && !rgba8 && !bgra8) return false;
             try
             {
+                constexpr std::uint32_t kIblSourceMaxSize = 128;
+                std::uint32_t source_mip = 0;
+                std::uint32_t source_width = cube.width;
+                while (source_width > kIblSourceMaxSize && source_mip + 1u < cube.mip_levels)
+                {
+                    ++source_mip;
+                    source_width = (std::max)(1u, cube.width >> source_mip);
+                }
                 const std::size_t face_texel_count =
-                    static_cast<std::size_t>(cube.width) * cube.height;
+                    static_cast<std::size_t>(source_width) * source_width;
                 rgba.resize(face_texel_count * 6u * 4u, 0.0f);
+                const std::uint32_t bytes_per_pixel = half ? 8u : 4u;
                 for (std::uint32_t face = 0; face < 6; ++face)
                 {
-                    const D3D12TextureSubresourceSource& source = cube.subresources[face];
-                    const std::uint32_t bytes_per_pixel = half ? 8u : 4u;
+                    const std::size_t subresource_index =
+                        static_cast<std::size_t>(face) * cube.mip_levels + source_mip;
+                    const D3D12TextureSubresourceSource& source =
+                        cube.subresources[subresource_index];
                     if (source.data == nullptr || source.row_pitch <
-                        static_cast<std::uint64_t>(cube.width) * bytes_per_pixel)
+                        static_cast<std::uint64_t>(source_width) * bytes_per_pixel)
+                    {
+                        rgba.clear();
                         return false;
-                    for (std::uint32_t y = 0; y < cube.height; ++y)
+                    }
+                    for (std::uint32_t y = 0; y < source_width; ++y)
                     {
                         const auto* row = static_cast<const std::uint8_t*>(source.data) +
                             static_cast<std::size_t>(source.row_pitch) * y;
-                        for (std::uint32_t x = 0; x < cube.width; ++x)
+                        for (std::uint32_t x = 0; x < source_width; ++x)
                         {
                             const auto* pixel = row + static_cast<std::size_t>(x) * bytes_per_pixel;
                             SkyCpuFloat3 color{};
@@ -931,7 +947,7 @@ namespace ReplayEngine::Rendering::DX12
                             }
                             const std::size_t index =
                                 (static_cast<std::size_t>(face) * face_texel_count +
-                                    static_cast<std::size_t>(y) * cube.width + x) * 4u;
+                                    static_cast<std::size_t>(y) * source_width + x) * 4u;
                             rgba[index + 0] = color.x;
                             rgba[index + 1] = color.y;
                             rgba[index + 2] = color.z;
@@ -939,10 +955,12 @@ namespace ReplayEngine::Rendering::DX12
                         }
                     }
                 }
+                copied_width = source_width;
             }
             catch (...)
             {
                 rgba.clear();
+                copied_width = 0;
                 return false;
             }
             return true;
@@ -1258,7 +1276,7 @@ namespace ReplayEngine::Rendering::DX12
                 constexpr float kPi = 3.14159265358979323846f;
                 constexpr std::uint32_t kDiffuseSize = 32;
                 constexpr std::uint32_t kDiffuseSamples = 64;
-                constexpr std::uint32_t kSpecularSamples = 32;
+                constexpr std::uint32_t kSpecularSamples = 128;
                 const std::uint32_t specular_size = (std::min)(128u, source_width);
                 std::uint16_t specular_mips = 1;
                 std::uint32_t size = specular_size;
@@ -2315,6 +2333,8 @@ namespace ReplayEngine::Rendering::DX12
         texture_cache_.clear();
         sky_cpu_cubes_.clear();
         sky_source_paths_.clear();
+        sky_ibl_failures_.clear();
+        last_sky_ibl_status_ = D3D12SkyIblStatus::Ready;
         sky_cache_prune_initialized_ = false;
         static_texture_failures_.clear();
         static_mesh_cache_.clear();
@@ -2395,15 +2415,16 @@ namespace ReplayEngine::Rendering::DX12
     bool D3D12DeviceContext::CreateStaticCubeTexture(const std::string& key,
         std::uint32_t width, std::uint32_t height, std::uint16_t mip_levels,
         DXGI_FORMAT format, const std::vector<D3D12TextureSubresourceSource>& subresources,
-        const std::vector<float>* cpu_rgba) noexcept
+        const std::vector<float>* cpu_rgba, std::uint32_t cpu_width) noexcept
     {
         if (key.empty() || width == 0 || height != width || mip_levels == 0 ||
             format == DXGI_FORMAT_UNKNOWN || subresources.size() !=
             static_cast<std::size_t>(mip_levels) * 6u)
             return false;
         if (texture_cache_.find(key) != texture_cache_.end()) return true;
-        if (cpu_rgba != nullptr && cpu_rgba->size() <
-            static_cast<std::size_t>(width) * height * 24u)
+        const std::uint32_t actual_cpu_width = cpu_width != 0 ? cpu_width : width;
+        if (cpu_rgba != nullptr && (actual_cpu_width == 0 || cpu_rgba->size() <
+            static_cast<std::size_t>(actual_cpu_width) * actual_cpu_width * 24u))
             return false;
 
         StaticTextureResource texture;
@@ -2434,7 +2455,7 @@ namespace ReplayEngine::Rendering::DX12
             if (cpu_rgba != nullptr)
             {
                 SkyCubeCpuData cpu_data;
-                cpu_data.width = width;
+                cpu_data.width = actual_cpu_width;
                 cpu_data.rgba = *cpu_rgba;
                 sky_cpu_cubes_.insert_or_assign(key, std::move(cpu_data));
                 cpu_inserted = true;
@@ -2622,8 +2643,9 @@ namespace ReplayEngine::Rendering::DX12
                 return false;
             }
             std::vector<float> cpu_rgba;
+            std::uint32_t cpu_width = 0;
             const std::vector<float>* cpu_source =
-                CopyCubeMip0ToFloat(decoded, cpu_rgba) ? &cpu_rgba : nullptr;
+                CopyCubeMip0ToFloat(decoded, cpu_rgba, cpu_width) ? &cpu_rgba : nullptr;
             try
             {
                 sky_source_paths_.insert_or_assign(source.key, source.source_path);
@@ -2633,7 +2655,7 @@ namespace ReplayEngine::Rendering::DX12
                 return false;
             }
             return CreateStaticCubeTexture(source.key, decoded.width, decoded.height,
-                decoded.mip_levels, decoded.format, decoded.subresources, cpu_source);
+                decoded.mip_levels, decoded.format, decoded.subresources, cpu_source, cpu_width);
         }
         StaticTextureResource texture;
         if (!source.rgba.empty())
@@ -2759,12 +2781,35 @@ namespace ReplayEngine::Rendering::DX12
     bool D3D12DeviceContext::EnsureSkyEnvironment(
         const D3D12SkySubmission& sky) noexcept
     {
+        last_sky_ibl_status_ = D3D12SkyIblStatus::Ready;
         if (!sky.enabled || sky.texture_key.empty()) return true;
         bool cache_changed = false;
-        const auto ensure_one = [this, &cache_changed](
+        const auto report_fallback = [this](const std::string& texture_key,
+            D3D12SkyIblStatus status, const char* message) noexcept
+        {
+            last_sky_ibl_status_ = status;
+            bool first_report = false;
+            try
+            {
+                first_report = sky_ibl_failures_.emplace(texture_key, status).second;
+            }
+            catch (...)
+            {
+            }
+            if (!first_report) return;
+            DebugMessage(message);
+            diagnostics_.PushMessage(D3D12_MESSAGE_SEVERITY_WARNING, message);
+        };
+        const auto ensure_one = [this, &cache_changed, &report_fallback](
             const std::string& texture_key) -> bool
         {
             if (texture_key.empty()) return true;
+            const auto previous_failure = sky_ibl_failures_.find(texture_key);
+            if (previous_failure != sky_ibl_failures_.end())
+            {
+                last_sky_ibl_status_ = previous_failure->second;
+                return true;
+            }
             const auto source_texture = texture_cache_.find(texture_key);
             if (source_texture == texture_cache_.end() || !source_texture->second.is_cube)
                 return true;
@@ -2773,7 +2818,11 @@ namespace ReplayEngine::Rendering::DX12
             const std::string specular_key = texture_key + ":ibl_specular";
             const bool diffuse_cached = texture_cache_.find(diffuse_key) != texture_cache_.end();
             const bool specular_cached = texture_cache_.find(specular_key) != texture_cache_.end();
-            if (diffuse_cached && specular_cached) return true;
+            if (diffuse_cached && specular_cached)
+            {
+                sky_cpu_cubes_.erase(texture_key);
+                return true;
+            }
 
             const auto source_path = sky_source_paths_.find(texture_key);
             if (source_path == sky_source_paths_.end()) return true;
@@ -2786,12 +2835,21 @@ namespace ReplayEngine::Rendering::DX12
             if (!diffuse_ready || !specular_ready)
             {
                 const auto cpu_source = sky_cpu_cubes_.find(texture_key);
-                if (cpu_source == sky_cpu_cubes_.end()) return true;
+                if (cpu_source == sky_cpu_cubes_.end())
+                {
+                    report_fallback(texture_key, D3D12SkyIblStatus::FallbackMissingCpuSource,
+                        "[DX12] IBL を焼けなかったので簡易版で描いています（CPU側の空データがありません）。\n");
+                    return true;
+                }
                 DecodedDdsImage generated_diffuse;
                 DecodedDdsImage generated_specular;
                 if (!BuildIblCubes(cpu_source->second.rgba, cpu_source->second.width,
                     generated_diffuse, generated_specular))
+                {
+                    report_fallback(texture_key, D3D12SkyIblStatus::FallbackBakeFailed,
+                        "[DX12] IBL を焼けなかったので簡易版で描いています（畳み込み処理に失敗しました）。\n");
                     return true;
+                }
                 if (!diffuse_ready)
                 {
                     diffuse = std::move(generated_diffuse);
@@ -2815,6 +2873,7 @@ namespace ReplayEngine::Rendering::DX12
                 !CreateStaticCubeTexture(specular_key, specular.width, specular.height,
                     specular.mip_levels, specular.format, specular.subresources))
                 return false;
+            sky_cpu_cubes_.erase(texture_key);
             return true;
         };
         if (!ensure_one(sky.texture_key)) return false;
@@ -2947,7 +3006,7 @@ namespace ReplayEngine::Rendering::DX12
             custom_static_pipelines_.empty() && custom_static_shader_failures_.empty() &&
             custom_ui_effect_pipelines_.empty() && custom_ui_effect_shader_diagnostics_.empty() &&
             scene3d_motion_history_.empty() && sky_cpu_cubes_.empty() &&
-            sky_source_paths_.empty())
+            sky_source_paths_.empty() && sky_ibl_failures_.empty())
             return true;
         if (!WaitForGpu()) return false;
 
@@ -2976,6 +3035,8 @@ namespace ReplayEngine::Rendering::DX12
         }
         sky_cpu_cubes_.clear();
         sky_source_paths_.clear();
+        sky_ibl_failures_.clear();
+        last_sky_ibl_status_ = D3D12SkyIblStatus::Ready;
         sky_cache_prune_initialized_ = false;
         return true;
     }

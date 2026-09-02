@@ -1,4 +1,4 @@
-REPLAY_ASSET_DB 2 270
+REPLAY_ASSET_DB 2 273
 "60412424bb1443240b2bf2160eee6923" 1 "ExampleStage" "resources/Stage/ExampleStage.cereal" "resources/.replay_cache/models/f9fffac39252a621_v0.replaycache"
 "1bd1358040255f5bd18f3be0d79fbe3c" 1 "AllAnimation1" "resources/AnimationModel/AllAnimation1.cereal" "resources/.replay_cache/models/6a20e727f78fb359_v0.replaycache"
 "e5c4168feb92f8fd7357f6cbc1f66e22" 1 "scene" "resources/Stage/city_3d_model_gltf/scene.gltf" "resources/.replay_cache/models/98fd72a862da8c8f_v0.replaycache"
@@ -269,3 +269,6 @@ REPLAY_ASSET_DB 2 270
 "48eabb248bf38ed39f4d3dd4d060c1c8" 2 "PersonaMenu_DisplacementNoise" "resources/UI/PersonaMenu/FX/PersonaMenu_DisplacementNoise.png" ""
 "c5309e158f21b7fb9dba8f1074e5a7dc" 2 "PersonaMenu_OrganicAccent" "resources/UI/PersonaMenu/FX/PersonaMenu_OrganicAccent.png" ""
 "c8e395b312df7c84d7941ba4b85ffeb9" 6 "TestMat" "resources/TestModel/TestMat.replaymaterial" ""
+"649ebac27e889a3a66d83cf9b4901a2d" 2 "citrus_orchard_road_puresky_8k" "resources/testSkyMap/citrus_orchard_road_puresky_8k.hdr" ""
+"a94c1380f7ed19c03b18cc2dccc4a291" 12 "NewItem" "resources/TestModel/NewItem.replayeffect" ""
+"7793d161d0f3240d4879e94ba7ee1a9c" 6 "NewItem" "resources/model/Persona/NewItem.replaymaterial" ""
