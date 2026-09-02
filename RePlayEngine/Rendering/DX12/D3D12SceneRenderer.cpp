@@ -3689,11 +3689,21 @@ namespace ReplayEngine::Rendering::DX12
 
         if (!TransitionCurrentRenderTarget(D3D12_RESOURCE_STATE_RENDER_TARGET)) return false;
         D3D12_CPU_DESCRIPTOR_HANDLE back_buffer_rtv = CurrentRenderTargetView();
+        const bool use_present_viewport = options.present_viewport_enabled &&
+            options.present_viewport.Width > 0.0f && options.present_viewport.Height > 0.0f &&
+            options.present_scissor.right > options.present_scissor.left &&
+            options.present_scissor.bottom > options.present_scissor.top;
+        const D3D12_VIEWPORT& present_viewport = use_present_viewport
+            ? options.present_viewport : viewport;
+        const D3D12_RECT& present_scissor = use_present_viewport
+            ? options.present_scissor : scissor;
         command_list_->OMSetRenderTargets(1, &back_buffer_rtv, FALSE, nullptr);
         command_list_->SetPipelineState(scene3d_postprocess_pipeline_.Get());
         command_list_->SetGraphicsRootConstantBufferView(0, post_gpu);
         bind_postprocess_inputs(submission.post_process.render_output == 0u
             ? scene3d_taa_resolved_.srv.gpu : scene_view_target_.srv.gpu);
+        command_list_->RSSetViewports(1, &present_viewport);
+        command_list_->RSSetScissorRects(1, &present_scissor);
         command_list_->DrawInstanced(3, 1, 0, 0);
 
         if (options.write_scene_history)
@@ -3724,7 +3734,9 @@ namespace ReplayEngine::Rendering::DX12
             ++scene3d_history_write_serial_;
         }
         EndGpuPass(D3D12GpuPass::PostProcess);
-        if (!apply_screen_effects(0)) return false;
+        if (options.apply_final_screen_effects && !apply_screen_effects(0)) return false;
+        command_list_->RSSetViewports(1, &viewport);
+        command_list_->RSSetScissorRects(1, &scissor);
 
         if (options.write_motion_history)
         {

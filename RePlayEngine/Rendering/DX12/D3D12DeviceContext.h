@@ -352,6 +352,10 @@ namespace ReplayEngine::Rendering::DX12
         bool write_motion_history = true;
         bool read_scene_history = true;
         bool write_scene_history = true;
+        D3D12_VIEWPORT present_viewport{};
+        D3D12_RECT present_scissor{};
+        bool present_viewport_enabled = false;
+        bool apply_final_screen_effects = true;
     };
 
     struct D3D12Scene3DStateSnapshot final
