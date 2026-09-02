@@ -38,6 +38,54 @@ namespace
         return (std::min)((std::max)(value, low), high);
     }
 
+    struct CameraViewportPass final
+    {
+        const ReplayEngine::Components::CameraComponent* camera = nullptr;
+        D3D12_VIEWPORT viewport{};
+        D3D12_RECT scissor{};
+    };
+
+    std::vector<CameraViewportPass> collect_camera_viewport_passes(
+        const ReplayEngine::Scene::Scene& scene, std::uint32_t width,
+        std::uint32_t height)
+    {
+        std::vector<CameraViewportPass> passes;
+        const float target_width = static_cast<float>((std::max)(width, 1u));
+        const float target_height = static_cast<float>((std::max)(height, 1u));
+        for (std::size_t index = 0; index < scene.GameObjectCount(); ++index)
+        {
+            const ReplayEngine::Core::GameObject* object = scene.GameObjectAt(index);
+            if (object == nullptr || object->PendingDestroy()) continue;
+            const ReplayEngine::Components::CameraComponent* camera =
+                object->GetComponent<ReplayEngine::Components::CameraComponent>();
+            if (camera == nullptr || !camera->ActiveInHierarchy() || !camera->viewport_enabled)
+                continue;
+            const float x = clamp_finite(camera->viewport_rect.x, 0.0f, 0.0f, 1.0f);
+            const float y = clamp_finite(camera->viewport_rect.y, 0.0f, 0.0f, 1.0f);
+            const float width_ratio = clamp_finite(camera->viewport_rect.z, 1.0f, 0.0f,
+                1.0f - x);
+            const float height_ratio = clamp_finite(camera->viewport_rect.w, 1.0f, 0.0f,
+                1.0f - y);
+            const LONG left = static_cast<LONG>(std::floor(x * target_width));
+            const LONG top = static_cast<LONG>(std::floor(y * target_height));
+            const LONG right = static_cast<LONG>(std::ceil((x + width_ratio) * target_width));
+            const LONG bottom = static_cast<LONG>(std::ceil((y + height_ratio) * target_height));
+            if (right <= left || bottom <= top) continue;
+            CameraViewportPass pass{};
+            pass.camera = camera;
+            pass.viewport = { static_cast<float>(left), static_cast<float>(top),
+                static_cast<float>(right - left), static_cast<float>(bottom - top), 0.0f, 1.0f };
+            pass.scissor = { left, top, right, bottom };
+            passes.push_back(pass);
+        }
+        std::stable_sort(passes.begin(), passes.end(),
+            [](const CameraViewportPass& left, const CameraViewportPass& right) noexcept
+            {
+                return left.camera->priority < right.camera->priority;
+            });
+        return passes;
+    }
+
 
     DirectX::XMFLOAT4 clamp_color(const DirectX::XMFLOAT4& value) noexcept
     {
@@ -192,7 +240,8 @@ void framework::build_dx12_frame_constants_for_scene(
     const dx12_scene_frame_history& history,
     ReplayEngine::Rendering::DX12::D3D12FrameConstants& constants,
     DirectX::XMFLOAT4X4& current_view_projection,
-    bool& used_fallback_camera) const
+    bool& used_fallback_camera,
+    const ReplayEngine::Components::CameraComponent* camera_override) const
 {
     const float safe_width = static_cast<float>((std::max)(viewport_width, 1u));
     const float safe_height = static_cast<float>((std::max)(viewport_height, 1u));
@@ -201,9 +250,9 @@ void framework::build_dx12_frame_constants_for_scene(
     const ReplayEngine::Components::CameraSelection selection =
         ReplayEngine::Components::ResolveActiveCameraSelection(scene);
     ReplayEngine::Components::CameraComponent fallback_camera;
-    const ReplayEngine::Components::CameraComponent* camera = selection.Valid()
-        ? selection.component : &fallback_camera;
-    used_fallback_camera = !selection.Valid();
+    const ReplayEngine::Components::CameraComponent* camera = camera_override != nullptr
+        ? camera_override : (selection.Valid() ? selection.component : &fallback_camera);
+    used_fallback_camera = camera_override == nullptr && !selection.Valid();
 
     const DirectX::XMMATRIX view = camera->ViewMatrix();
     const DirectX::XMMATRIX projection = camera->ProjectionMatrix(aspect);
@@ -523,9 +572,47 @@ void framework::render(float elapsed_time)
                 dx12_device_context.SetSceneEffects(std::move(scene_effects));
             const bool scene_resources_preloaded = static_scene_built &&
                 dx12_device_context.PreloadScene3DResources(static_scene, false);
-            const bool static_scene_ok = static_scene_built && scene_resources_preloaded &&
-                scene_effects_ok &&
-                dx12_device_context.DrawScene3D(static_scene);
+            bool static_scene_ok = static_scene_built && scene_resources_preloaded && scene_effects_ok;
+            const std::vector<CameraViewportPass> viewport_passes =
+                !using_editor_camera() && !render_matrix_override_active &&
+                render_camera_override == nullptr
+                ? collect_camera_viewport_passes(active_object_scene(), dx12_device_context.Width(),
+                    dx12_device_context.Height())
+                : std::vector<CameraViewportPass>{};
+            if (static_scene_ok && viewport_passes.empty())
+            {
+                static_scene_ok = dx12_device_context.DrawScene3D(static_scene);
+            }
+            else if (static_scene_ok)
+            {
+                const dx12_scene_frame_history empty_history{};
+                for (std::size_t index = 0; index < viewport_passes.size(); ++index)
+                {
+                    const CameraViewportPass& pass = viewport_passes[index];
+                    ReplayEngine::Rendering::DX12::D3D12FrameConstants camera_constants{};
+                    DirectX::XMFLOAT4X4 camera_view_projection{};
+                    bool used_fallback_camera = false;
+                    build_dx12_frame_constants_for_scene(active_object_scene(),
+                        static_cast<std::uint32_t>(pass.scissor.right - pass.scissor.left),
+                        static_cast<std::uint32_t>(pass.scissor.bottom - pass.scissor.top),
+                        empty_history, camera_constants, camera_view_projection,
+                        used_fallback_camera, pass.camera);
+                    camera_constants.screen_size = constants.screen_size;
+                    camera_constants.time_parameters = constants.time_parameters;
+                    ReplayEngine::Rendering::DX12::D3D12Scene3DDrawOptions view_options{};
+                    view_options.read_motion_history = false;
+                    view_options.write_motion_history = false;
+                    view_options.read_scene_history = false;
+                    view_options.write_scene_history = false;
+                    view_options.present_viewport = pass.viewport;
+                    view_options.present_scissor = pass.scissor;
+                    view_options.present_viewport_enabled = true;
+                    view_options.apply_final_screen_effects = index + 1 == viewport_passes.size();
+                    static_scene_ok = dx12_device_context.SubmitFrameConstants(camera_constants) &&
+                        dx12_device_context.DrawScene3D(static_scene, view_options);
+                    if (!static_scene_ok) break;
+                }
+            }
 
             bool loading_scene_3d_ok = true;
             ReplayEngine::Rendering::DX12::D3D12FrameConstants loading_ui_constants{};

@@ -58,12 +58,14 @@ namespace ReplayEngine::Core::Detail
 
             PropertyRegistry::Register<CameraComponent>(
                 MakeProperty("viewport_enabled", &CameraComponent::viewport_enabled)
-                    .Display("分割 Viewport を使う（未対応）")
+                    .Display("分割表示を使う")
+                    .Tooltip("有効なカメラを優先度順に矩形へ合成する。")
                     .Animation(Animatable::Step));
 
             PropertyRegistry::Register<CameraComponent>(
                 MakeProperty("viewport_rect", &CameraComponent::viewport_rect)
-                    .Display("Viewport (x y w h)（未対応）").Range(0.0, 1.0).Step(0.01));
+                    .Display("表示領域 (x y w h)").Range(0.0, 1.0).Step(0.01)
+                    .Tooltip("x, y, width, height を 0..1 の画面比率で指定する。"));
         }
 
         void RegisterFollowTarget()

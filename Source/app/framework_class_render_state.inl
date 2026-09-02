@@ -171,7 +171,8 @@ public:
         const dx12_scene_frame_history& history,
         ReplayEngine::Rendering::DX12::D3D12FrameConstants& constants,
         DirectX::XMFLOAT4X4& current_view_projection,
-        bool& used_fallback_camera) const;
+        bool& used_fallback_camera,
+        const ReplayEngine::Components::CameraComponent* camera_override = nullptr) const;
     static void commit_dx12_scene_frame_history(
         dx12_scene_frame_history& history,
         const ReplayEngine::Scene::Scene& scene,
