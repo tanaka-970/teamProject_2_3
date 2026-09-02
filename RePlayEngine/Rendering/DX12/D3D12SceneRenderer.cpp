@@ -392,6 +392,9 @@ namespace ReplayEngine::Rendering::DX12
         const auto postprocess_ps = compiler.CompileFile(
             shader_directory / "dx12_postprocess_ps.hlsl",
             L"main", L"ps_6_0", debug_layer_enabled_);
+        const auto ssao_ps = compiler.CompileFile(
+            shader_directory / "dx12_ssao_ps.hlsl",
+            L"main", L"ps_6_0", debug_layer_enabled_);
         const auto shadow_static_vs = compiler.CompileFile(
             shader_directory / "dx12_shadow_static_vs.hlsl",
             L"main", L"vs_6_0", debug_layer_enabled_);
@@ -454,6 +457,7 @@ namespace ReplayEngine::Rendering::DX12
         scene3d_temporal_input_ps_ = temporal_input_ps.bytecode;
         scene3d_taa_resolve_ps_ = taa_resolve_ps.bytecode;
         scene3d_postprocess_ps_ = postprocess_ps.bytecode;
+        scene3d_ssao_ps_ = ssao_ps.bytecode;
         scene3d_shadow_static_vs_ = shadow_static_vs.bytecode;
         scene3d_shadow_skinned_vs_ = shadow_skinned_vs.bytecode;
         scene3d_shadow_alpha_ps_ = shadow_alpha_ps.bytecode;
@@ -1010,18 +1014,18 @@ namespace ReplayEngine::Rendering::DX12
             return fail("Scene3D.PSO.Skybox");
         SetD3D12ObjectName(scene3d_skybox_pipeline_.Get(), L"Scene3D.PSO", L"Skybox");
 
-        D3D12_DESCRIPTOR_RANGE postprocess_ranges[10]{};
-        for (UINT index = 0; index < 10; ++index)
+        D3D12_DESCRIPTOR_RANGE postprocess_ranges[11]{};
+        for (UINT index = 0; index < 11; ++index)
         {
             postprocess_ranges[index].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
             postprocess_ranges[index].NumDescriptors = 1;
             postprocess_ranges[index].BaseShaderRegister = index;
         }
-        D3D12_ROOT_PARAMETER postprocess_parameters[11]{};
+        D3D12_ROOT_PARAMETER postprocess_parameters[12]{};
         postprocess_parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
         postprocess_parameters[0].Descriptor.ShaderRegister = 0;
         postprocess_parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-        for (UINT index = 0; index < 10; ++index)
+        for (UINT index = 0; index < 11; ++index)
         {
             postprocess_parameters[index + 1].ParameterType =
                 D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
@@ -1087,6 +1091,15 @@ namespace ReplayEngine::Rendering::DX12
             IID_PPV_ARGS(&scene3d_postprocess_pipeline_))))
             return fail("Scene3D.PSO.PostProcess");
         SetD3D12ObjectName(scene3d_postprocess_pipeline_.Get(), L"Scene3D.PSO", L"PostProcess");
+
+        // SSAO を半解像度の 1 チャンネルへ焼く。ポスト処理はこれを読むだけになる。
+        D3D12_GRAPHICS_PIPELINE_STATE_DESC ssao = taa_resolve;
+        ssao.PS = { scene3d_ssao_ps_.data(), scene3d_ssao_ps_.size() };
+        ssao.RTVFormats[0] = DXGI_FORMAT_R8_UNORM;
+        if (FAILED(device_->CreateGraphicsPipelineState(&ssao,
+            IID_PPV_ARGS(&scene3d_ssao_pipeline_))))
+            return fail("Scene3D.PSO.Ssao");
+        SetD3D12ObjectName(scene3d_ssao_pipeline_.Get(), L"Scene3D.PSO", L"Ssao");
         return true;
     }
 
@@ -1481,6 +1494,13 @@ namespace ReplayEngine::Rendering::DX12
         if (scene3d_temporal_input_.srv.IsValid())
             resource_descriptor_allocator_.Free(scene3d_temporal_input_.srv);
         scene3d_temporal_input_ = {};
+        if (scene3d_ssao_.resource)
+            resource_state_tracker_.Forget(scene3d_ssao_.resource.Get());
+        scene3d_ssao_.resource.Reset();
+        if (scene3d_ssao_.rtv.IsValid()) rtv_allocator_.Free(scene3d_ssao_.rtv);
+        if (scene3d_ssao_.srv.IsValid())
+            resource_descriptor_allocator_.Free(scene3d_ssao_.srv);
+        scene3d_ssao_ = {};
         if (scene3d_taa_resolved_.resource)
             resource_state_tracker_.Forget(scene3d_taa_resolved_.resource.Get());
         scene3d_taa_resolved_.resource.Reset();
@@ -1674,6 +1694,7 @@ namespace ReplayEngine::Rendering::DX12
         scene3d_temporal_input_ps_.clear();
         scene3d_taa_resolve_ps_.clear();
         scene3d_postprocess_ps_.clear();
+        scene3d_ssao_ps_.clear();
         scene3d_shadow_static_vs_.clear();
         scene3d_shadow_skinned_vs_.clear();
         scene3d_shadow_alpha_ps_.clear();
@@ -1823,6 +1844,41 @@ namespace ReplayEngine::Rendering::DX12
             ReleaseScene3DRenderTargets();
             return false;
         }
+        // SSAO は半解像度で焼く。AO は低周波なので、フル解像度で計算する必要がない。
+        {
+            Scene3DTarget& ssao = scene3d_ssao_;
+            ssao.format = DXGI_FORMAT_R8_UNORM;
+            D3D12_RESOURCE_DESC ssao_desc = texture;
+            ssao_desc.Width = (std::max)(1u, width_ / 2u);
+            ssao_desc.Height = (std::max)(1u, height_ / 2u);
+            ssao_desc.Format = ssao.format;
+            D3D12_CLEAR_VALUE ssao_clear{};
+            ssao_clear.Format = ssao.format;
+            ssao_clear.Color[0] = 1.0f;
+            if (FAILED(device_->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE,
+                &ssao_desc, D3D12_RESOURCE_STATE_RENDER_TARGET, &ssao_clear,
+                IID_PPV_ARGS(&ssao.resource))) ||
+                !rtv_allocator_.Allocate(1, ssao.rtv) ||
+                !resource_descriptor_allocator_.Allocate(1, ssao.srv))
+            {
+                ReleaseScene3DRenderTargets();
+                return false;
+            }
+            SetD3D12ObjectName(ssao.resource.Get(), L"Scene3D.Ssao", L"HalfRes");
+            D3D12_RENDER_TARGET_VIEW_DESC ssao_rtv{};
+            ssao_rtv.Format = ssao.format;
+            ssao_rtv.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+            device_->CreateRenderTargetView(ssao.resource.Get(), &ssao_rtv, ssao.rtv.cpu);
+            D3D12_SHADER_RESOURCE_VIEW_DESC ssao_srv{};
+            ssao_srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+            ssao_srv.Format = ssao.format;
+            ssao_srv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+            ssao_srv.Texture2D.MipLevels = 1;
+            device_->CreateShaderResourceView(ssao.resource.Get(), &ssao_srv, ssao.srv.cpu);
+            resource_state_tracker_.Track(ssao.resource.Get(),
+                D3D12_RESOURCE_STATE_RENDER_TARGET);
+        }
+
         SetD3D12ObjectName(scene3d_history_.resource.Get(), L"Scene3D.History", L"HDR");
         D3D12_SHADER_RESOURCE_VIEW_DESC history_srv{};
         history_srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
@@ -3643,6 +3699,41 @@ namespace ReplayEngine::Rendering::DX12
         D3D12_GPU_VIRTUAL_ADDRESS post_gpu = 0;
         if (!allocate_cb(&post, sizeof(post), post_gpu)) return false;
 
+        // SSAO は半解像度で 1 回だけ焼く。ポスト処理は結果を読むだけにする。
+        if (post.feature_flags.y > 0.5f)
+        {
+            if (!resource_state_tracker_.Transition(command_list_.Get(),
+                scene3d_ssao_.resource.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET))
+                return false;
+            const std::uint32_t ssao_width = (std::max)(1u, width_ / 2u);
+            const std::uint32_t ssao_height = (std::max)(1u, height_ / 2u);
+            const D3D12_VIEWPORT ssao_viewport{ 0.0f, 0.0f,
+                static_cast<float>(ssao_width), static_cast<float>(ssao_height), 0.0f, 1.0f };
+            const D3D12_RECT ssao_scissor{ 0, 0,
+                static_cast<LONG>(ssao_width), static_cast<LONG>(ssao_height) };
+            command_list_->RSSetViewports(1, &ssao_viewport);
+            command_list_->RSSetScissorRects(1, &ssao_scissor);
+            command_list_->OMSetRenderTargets(1, &scene3d_ssao_.rtv.cpu, FALSE, nullptr);
+            command_list_->SetGraphicsRootSignature(scene3d_postprocess_root_signature_.Get());
+            command_list_->SetGraphicsRootConstantBufferView(0, post_gpu);
+            command_list_->SetGraphicsRootDescriptorTable(1, scene_view_target_.srv.gpu);
+            command_list_->SetGraphicsRootDescriptorTable(2, scene_view_target_.srv.gpu);
+            command_list_->SetGraphicsRootDescriptorTable(3, scene3d_depth_.srv.gpu);
+            command_list_->SetGraphicsRootDescriptorTable(4, scene3d_gbuffer_[4].srv.gpu);
+            command_list_->SetGraphicsRootDescriptorTable(5, scene3d_gbuffer_[2].srv.gpu);
+            command_list_->SetGraphicsRootDescriptorTable(6, scene3d_gbuffer_[3].srv.gpu);
+            command_list_->SetGraphicsRootDescriptorTable(7, scene3d_gbuffer_[0].srv.gpu);
+            command_list_->SetGraphicsRootDescriptorTable(8, scene3d_deferred_target_.srv.gpu);
+            command_list_->SetGraphicsRootDescriptorTable(9, scene3d_depth_.srv.gpu);
+            command_list_->SetGraphicsRootDescriptorTable(10, scene_view_target_.srv.gpu);
+            command_list_->SetPipelineState(scene3d_ssao_pipeline_.Get());
+            command_list_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+            command_list_->DrawInstanced(3, 1, 0, 0);
+        }
+        if (!resource_state_tracker_.Transition(command_list_.Get(),
+            scene3d_ssao_.resource.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE))
+            return false;
+
         const auto bind_postprocess_inputs = [this, scene_history_available](
             D3D12_GPU_DESCRIPTOR_HANDLE scene_color) noexcept
         {
@@ -3659,6 +3750,7 @@ namespace ReplayEngine::Rendering::DX12
                 ? scene3d_depth_history_.srv.gpu : scene3d_depth_.srv.gpu);
             command_list_->SetGraphicsRootDescriptorTable(10, scene_history_available
                 ? scene3d_ssr_history_.srv.gpu : scene_view_target_.srv.gpu);
+            command_list_->SetGraphicsRootDescriptorTable(11, scene3d_ssao_.srv.gpu);
         };
 
         if (!resource_state_tracker_.Transition(command_list_.Get(), scene3d_temporal_input_.resource.Get(),
