@@ -1,6 +1,8 @@
 ﻿#include "ShaderCompiler.h"
 #include "../DX12/D3D12ShaderCompiler.h"
 
+#include <mutex>
+
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
@@ -173,9 +175,14 @@ namespace ReplayEngine::Rendering
             return result;
         }
 
-        DX12::D3D12ShaderCompiler compiler;
+        // dxcompiler.dll の読み込みは数十 ms かかる。1 本ごとに読み直すと起動が数秒延びる。
+        static std::mutex compiler_mutex;
+        static DX12::D3D12ShaderCompiler compiler;
+        static bool compiler_ready = false;
+        const std::lock_guard<std::mutex> compiler_lock(compiler_mutex);
         const std::filesystem::path library = DX12::D3D12ShaderCompiler::FindDefaultLibraryPath();
-        if (!compiler.Initialize(library))
+        if (!compiler_ready) compiler_ready = compiler.Initialize(library);
+        if (!compiler_ready)
         {
             result.raw_output = "DXC を初期化できません: " + library.generic_u8string();
             result.diagnostics = ParseDiagnostics(result.raw_output, source_name);

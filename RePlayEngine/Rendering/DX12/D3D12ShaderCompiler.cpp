@@ -1,4 +1,7 @@
 ﻿#include "D3D12ShaderCompiler.h"
+#include <vector>
+#include <cstdio>
+#include <algorithm>
 
 #include <windows.h>
 
@@ -76,6 +79,84 @@ namespace ReplayEngine::Rendering::DX12
         }
     }
 
+
+namespace
+{
+    // 起動のたびに 40 本以上コンパイルすると数秒かかる。内容が同じなら焼き直さない。
+    std::uint64_t FnvHash(std::uint64_t seed, const void* data, std::size_t size) noexcept
+    {
+        const auto* bytes = static_cast<const std::uint8_t*>(data);
+        std::uint64_t hash = seed;
+        for (std::size_t i = 0; i < size; ++i)
+        {
+            hash ^= bytes[i];
+            hash *= 1099511628211ull;
+        }
+        return hash;
+    }
+
+    // include されるヘッダが変わってもソース本体は変わらない。まとめて指紋に混ぜる。
+    std::uint64_t ShaderIncludeTreeHash() noexcept
+    {
+        static const std::uint64_t cached = []() noexcept -> std::uint64_t
+        {
+            std::uint64_t hash = 14695981039346656037ull;
+            std::error_code error;
+            const std::filesystem::path root{ "Shader" };
+            if (!std::filesystem::exists(root, error) || error) return hash;
+            std::vector<std::filesystem::path> headers;
+            for (std::filesystem::recursive_directory_iterator it(root, error), end;
+                it != end && !error; it.increment(error))
+            {
+                if (!it->is_regular_file(error) || error) continue;
+                if (it->path().extension() != ".hlsli") continue;
+                headers.push_back(it->path());
+            }
+            std::sort(headers.begin(), headers.end());
+            for (const std::filesystem::path& header : headers)
+            {
+                std::ifstream stream(header, std::ios::binary);
+                if (!stream) continue;
+                const std::string text{ std::istreambuf_iterator<char>(stream),
+                    std::istreambuf_iterator<char>() };
+                const std::string name = header.generic_string();
+                hash = FnvHash(hash, name.data(), name.size());
+                hash = FnvHash(hash, text.data(), text.size());
+            }
+            return hash;
+        }();
+        return cached;
+    }
+
+    std::filesystem::path ShaderCachePath(std::uint64_t key)
+    {
+        char name[32]{};
+        std::snprintf(name, sizeof(name), "%016llx.dxil",
+            static_cast<unsigned long long>(key));
+        return std::filesystem::path("Saved") / "ShaderCache" / name;
+    }
+
+    bool ReadShaderCache(const std::filesystem::path& path, std::vector<std::uint8_t>& out)
+    {
+        std::ifstream stream(path, std::ios::binary);
+        if (!stream) return false;
+        out.assign(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
+        return !out.empty();
+    }
+
+    void WriteShaderCache(const std::filesystem::path& path,
+        const std::vector<std::uint8_t>& bytes) noexcept
+    {
+        std::error_code error;
+        std::filesystem::create_directories(path.parent_path(), error);
+        if (error) return;
+        std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+        if (!stream) return;
+        stream.write(reinterpret_cast<const char*>(bytes.data()),
+            static_cast<std::streamsize>(bytes.size()));
+    }
+}
+
     D3D12ShaderCompileResult D3D12ShaderCompiler::CompileSource(
         std::string_view source, const std::filesystem::path& source_name,
         std::wstring_view entry_point, std::wstring_view target_profile,
@@ -97,6 +178,33 @@ namespace ReplayEngine::Rendering::DX12
             target_profile.empty())
         {
             result.diagnostics = "DXC compiler is not initialized or input is empty";
+            return result;
+        }
+
+        // 内容が同じなら焼き直さない。指紋にはソース・入口・profile・オプションと
+        // include ツリー全体を混ぜる。1 つでも変われば別のキーになる。
+        std::uint64_t cache_key = ShaderIncludeTreeHash();
+        cache_key = FnvHash(cache_key, source.data(), source.size());
+        cache_key = FnvHash(cache_key, entry_point.data(),
+            entry_point.size() * sizeof(wchar_t));
+        cache_key = FnvHash(cache_key, target_profile.data(),
+            target_profile.size() * sizeof(wchar_t));
+        const std::uint8_t option_bits = static_cast<std::uint8_t>(
+            (options.debug ? 1u : 0u) | (options.optimize ? 2u : 0u) |
+            (options.warnings_as_errors ? 4u : 0u));
+        cache_key = FnvHash(cache_key, &option_bits, sizeof(option_bits));
+        for (const D3D12ShaderDefine& define : options.defines)
+        {
+            cache_key = FnvHash(cache_key, define.name.data(),
+                define.name.size() * sizeof(wchar_t));
+            cache_key = FnvHash(cache_key, define.value.data(),
+                define.value.size() * sizeof(wchar_t));
+        }
+        const std::filesystem::path cache_path = ShaderCachePath(cache_key);
+        if (ReadShaderCache(cache_path, result.bytecode))
+        {
+            result.succeeded = true;
+            result.status = S_OK;
             return result;
         }
 
@@ -190,6 +298,7 @@ namespace ReplayEngine::Rendering::DX12
         const auto* bytes = static_cast<const std::uint8_t*>(object->GetBufferPointer());
         result.bytecode.assign(bytes, bytes + object->GetBufferSize());
         result.succeeded = true;
+        WriteShaderCache(cache_path, result.bytecode);
         return result;
     }
 
