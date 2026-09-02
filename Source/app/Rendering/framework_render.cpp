@@ -318,7 +318,13 @@ void framework::render(float elapsed_time)
         {
             background_color.x, background_color.y, background_color.z, background_color.w
         };
-        bool ok = dx12_device_context.BeginFrame(clear_color);
+        const std::uint64_t render_scope_token =
+            ReplayEngine::Rendering::Stats().BeginScope("Render");
+        bool ok = false;
+        {
+            REPLAY_PROFILE_SCOPE("Render/BeginFrame");
+            ok = dx12_device_context.BeginFrame(clear_color);
+        }
         if (ok)
         {
             ReplayEngine::Rendering::DX12::D3D12FrameConstants constants{};
@@ -554,24 +560,39 @@ void framework::render(float elapsed_time)
             }
             static_scene.background_color = {
                 clear_color[0], clear_color[1], clear_color[2], clear_color[3] };
-            const bool upload_ok =
-                dx12_device_context.SubmitFrameConstants(constants) &&
-                dx12_device_context.SubmitRenderItems(object_render_items);
-            const bool static_scene_built = upload_ok &&
-                build_dx12_static_scene(static_scene, active_object_scene(),
-                    object_render_items, elapsed_time);
+            bool upload_ok = false;
+            {
+                REPLAY_PROFILE_SCOPE("Render/SubmitFrameData");
+                upload_ok = dx12_device_context.SubmitFrameConstants(constants) &&
+                    dx12_device_context.SubmitRenderItems(object_render_items);
+            }
+            bool static_scene_built = false;
+            {
+                REPLAY_PROFILE_SCOPE("Render/BuildSceneSubmission");
+                static_scene_built = upload_ok &&
+                    build_dx12_static_scene(static_scene, active_object_scene(),
+                        object_render_items, elapsed_time);
+            }
             ReplayEngine::Rendering::DX12::D3D12SceneEffectSubmission scene_effects;
-            const bool scene_effects_ok = static_scene_built &&
-                build_dx12_scene_effects(scene_effects, static_scene,
-                    constants.view_projection);
+            bool scene_effects_ok = false;
+            {
+                REPLAY_PROFILE_SCOPE("Render/BuildSceneEffects");
+                scene_effects_ok = static_scene_built &&
+                    build_dx12_scene_effects(scene_effects, static_scene,
+                        constants.view_projection);
+            }
             ReplayEngine::Scene::Scene* exclusive_render_scene =
                 scene_manager.IsExclusive() ? exclusive_scene_for_render() : nullptr;
             if (exclusive_render_scene != nullptr)
                 dx12_device_context.SetSceneEffects(scene_effects);
             else
                 dx12_device_context.SetSceneEffects(std::move(scene_effects));
-            const bool scene_resources_preloaded = static_scene_built &&
-                dx12_device_context.PreloadScene3DResources(static_scene, false);
+            bool scene_resources_preloaded = false;
+            {
+                REPLAY_PROFILE_SCOPE("Render/PreloadSceneResources");
+                scene_resources_preloaded = static_scene_built &&
+                    dx12_device_context.PreloadScene3DResources(static_scene, false);
+            }
             bool static_scene_ok = static_scene_built && scene_resources_preloaded && scene_effects_ok;
             const std::vector<CameraViewportPass> viewport_passes =
                 !using_editor_camera() && !render_matrix_override_active &&
@@ -579,38 +600,41 @@ void framework::render(float elapsed_time)
                 ? collect_camera_viewport_passes(active_object_scene(), dx12_device_context.Width(),
                     dx12_device_context.Height())
                 : std::vector<CameraViewportPass>{};
-            if (static_scene_ok && viewport_passes.empty())
             {
-                static_scene_ok = dx12_device_context.DrawScene3D(static_scene);
-            }
-            else if (static_scene_ok)
-            {
-                const dx12_scene_frame_history empty_history{};
-                for (std::size_t index = 0; index < viewport_passes.size(); ++index)
+                REPLAY_PROFILE_SCOPE("Render/RecordScene3D");
+                if (static_scene_ok && viewport_passes.empty())
                 {
-                    const CameraViewportPass& pass = viewport_passes[index];
-                    ReplayEngine::Rendering::DX12::D3D12FrameConstants camera_constants{};
-                    DirectX::XMFLOAT4X4 camera_view_projection{};
-                    bool used_fallback_camera = false;
-                    build_dx12_frame_constants_for_scene(active_object_scene(),
-                        static_cast<std::uint32_t>(pass.scissor.right - pass.scissor.left),
-                        static_cast<std::uint32_t>(pass.scissor.bottom - pass.scissor.top),
-                        empty_history, camera_constants, camera_view_projection,
-                        used_fallback_camera, pass.camera);
-                    camera_constants.screen_size = constants.screen_size;
-                    camera_constants.time_parameters = constants.time_parameters;
-                    ReplayEngine::Rendering::DX12::D3D12Scene3DDrawOptions view_options{};
-                    view_options.read_motion_history = false;
-                    view_options.write_motion_history = false;
-                    view_options.read_scene_history = false;
-                    view_options.write_scene_history = false;
-                    view_options.present_viewport = pass.viewport;
-                    view_options.present_scissor = pass.scissor;
-                    view_options.present_viewport_enabled = true;
-                    view_options.apply_final_screen_effects = index + 1 == viewport_passes.size();
-                    static_scene_ok = dx12_device_context.SubmitFrameConstants(camera_constants) &&
-                        dx12_device_context.DrawScene3D(static_scene, view_options);
-                    if (!static_scene_ok) break;
+                    static_scene_ok = dx12_device_context.DrawScene3D(static_scene);
+                }
+                else if (static_scene_ok)
+                {
+                    const dx12_scene_frame_history empty_history{};
+                    for (std::size_t index = 0; index < viewport_passes.size(); ++index)
+                    {
+                        const CameraViewportPass& pass = viewport_passes[index];
+                        ReplayEngine::Rendering::DX12::D3D12FrameConstants camera_constants{};
+                        DirectX::XMFLOAT4X4 camera_view_projection{};
+                        bool used_fallback_camera = false;
+                        build_dx12_frame_constants_for_scene(active_object_scene(),
+                            static_cast<std::uint32_t>(pass.scissor.right - pass.scissor.left),
+                            static_cast<std::uint32_t>(pass.scissor.bottom - pass.scissor.top),
+                            empty_history, camera_constants, camera_view_projection,
+                            used_fallback_camera, pass.camera);
+                        camera_constants.screen_size = constants.screen_size;
+                        camera_constants.time_parameters = constants.time_parameters;
+                        ReplayEngine::Rendering::DX12::D3D12Scene3DDrawOptions view_options{};
+                        view_options.read_motion_history = false;
+                        view_options.write_motion_history = false;
+                        view_options.read_scene_history = false;
+                        view_options.write_scene_history = false;
+                        view_options.present_viewport = pass.viewport;
+                        view_options.present_scissor = pass.scissor;
+                        view_options.present_viewport_enabled = true;
+                        view_options.apply_final_screen_effects = index + 1 == viewport_passes.size();
+                        static_scene_ok = dx12_device_context.SubmitFrameConstants(camera_constants) &&
+                            dx12_device_context.DrawScene3D(static_scene, view_options);
+                        if (!static_scene_ok) break;
+                    }
                 }
             }
 
@@ -619,6 +643,7 @@ void framework::render(float elapsed_time)
             bool loading_world_canvas_camera_available = false;
             if (static_scene_ok && exclusive_render_scene != nullptr)
             {
+                REPLAY_PROFILE_SCOPE("Render/RecordLoadingScene3D");
                 ReplayEngine::Rendering::RenderItemList loading_render_items;
                 ReplayEngine::Rendering::SceneRenderCollector::Collect(
                     *exclusive_render_scene, loading_render_items);
@@ -775,6 +800,7 @@ void framework::render(float elapsed_time)
                         ui_preview_runtime_requested &&
                         ui_preview_runtime_width > 0 && ui_preview_runtime_height > 0)
                     {
+                        REPLAY_PROFILE_SCOPE("Render/UI/Preview");
                         ReplayEngine::Scene::Scene* preview_scene =
                             object_editor_context.GetScene();
                         if (preview_scene != nullptr)
@@ -815,6 +841,7 @@ void framework::render(float elapsed_time)
             bool imgui_ok = true;
             if (imgui_frame_active)
             {
+                REPLAY_PROFILE_SCOPE("Render/EditorUI");
                 imgui_frame_active = false;
                 ImGui::Render();
                 imgui_ok = dx12_device_context.DrawImGui(ImGui::GetDrawData());
@@ -822,114 +849,122 @@ void framework::render(float elapsed_time)
 #else
             const bool imgui_ok = true;
 #endif
-            if (upload_ok)
             {
-                // DX12はD3D11の影提出関数を通らないため、実際に提出したSceneから診断値を作る。
-                shadow_stats.directional_light_present =
-                    static_scene.directional_light.enabled;
-                shadow_stats.directional_shadow_rendered =
-                    static_scene.directional_shadow.enabled;
+                REPLAY_PROFILE_SCOPE("Render/BuildStats");
+                if (upload_ok)
+                {
+                    // DX12はD3D11の影提出関数を通らないため、実際に提出したSceneから診断値を作る。
+                    shadow_stats.directional_light_present =
+                        static_scene.directional_light.enabled;
+                    shadow_stats.directional_shadow_rendered =
+                        static_scene.directional_shadow.enabled;
+                    for (const auto& draw : static_scene.draws)
+                    {
+                        if (!draw.cast_shadow)
+                        {
+                            ++shadow_stats.skipped_cast_shadow;
+                            continue;
+                        }
+                        if (draw.mesh_key.rfind("builtin:", 0) == 0)
+                            ++shadow_stats.primitive_casters;
+                        else
+                            ++shadow_stats.static_casters;
+                    }
+                    for (const auto& draw : static_scene.skinned_draws)
+                    {
+                        if (draw.surface.cast_shadow)
+                            ++shadow_stats.skinned_casters;
+                        else
+                            ++shadow_stats.skipped_cast_shadow;
+                    }
+                    if (static_scene.local_shadows.enabled)
+                    {
+                        int used_local_slices = 0;
+                        for (std::uint32_t slice = 0;
+                            slice < ReplayEngine::Rendering::DX12::D3D12LocalShadowSubmission::SliceCount;
+                            ++slice)
+                        {
+                            if ((static_scene.local_shadows.used_slice_mask &
+                                (1u << slice)) != 0)
+                                ++used_local_slices;
+                        }
+                        for (const auto& light : static_scene.point_lights)
+                        {
+                            const bool valid_range = light.cast_shadows &&
+                                light.shadow_slice >= 0 && light.shadow_slice + 5 <
+                                static_cast<std::int32_t>(
+                                    ReplayEngine::Rendering::DX12::D3D12LocalShadowSubmission::SliceCount);
+                            bool all_faces_present = valid_range;
+                            if (valid_range)
+                            {
+                                for (std::int32_t face = 0; face < 6; ++face)
+                                {
+                                    const std::uint32_t bit = 1u << static_cast<std::uint32_t>(
+                                        light.shadow_slice + face);
+                                    all_faces_present = all_faces_present &&
+                                        (static_scene.local_shadows.used_slice_mask & bit) != 0;
+                                }
+                            }
+                            if (all_faces_present) ++shadow_stats.point_shadow_lights;
+                        }
+                        for (const auto& light : static_scene.spot_lights)
+                        {
+                            if (light.cast_shadows && light.shadow_slice >= 0 &&
+                                light.shadow_slice < static_cast<std::int32_t>(
+                                    ReplayEngine::Rendering::DX12::D3D12LocalShadowSubmission::SliceCount) &&
+                                (static_scene.local_shadows.used_slice_mask &
+                                    (1u << static_cast<std::uint32_t>(light.shadow_slice))) != 0)
+                                ++shadow_stats.spot_shadow_lights;
+                        }
+                        const int casters = shadow_stats.primitive_casters +
+                            shadow_stats.static_casters + shadow_stats.skinned_casters;
+                            const int passes = used_local_slices +
+                            (shadow_stats.directional_shadow_rendered ?
+                                static_cast<int>(ReplayEngine::Rendering::DX12::
+                                    D3D12DirectionalShadowSubmission::CascadeCount) : 0);
+                        shadow_stats.shadow_draw_calls = casters * passes;
+                    }
+                    else if (shadow_stats.directional_shadow_rendered)
+                    {
+                        const int casters = shadow_stats.primitive_casters +
+                            shadow_stats.static_casters + shadow_stats.skinned_casters;
+                        shadow_stats.shadow_draw_calls = casters * static_cast<int>(
+                            ReplayEngine::Rendering::DX12::D3D12DirectionalShadowSubmission::CascadeCount);
+                    }
+                }
+                std::uint64_t component_count = 0;
+                const auto& runtime_scene = active_object_scene();
+                for (std::size_t object_index = 0;
+                    object_index < runtime_scene.GameObjectCount(); ++object_index)
+                {
+                    const auto* object = runtime_scene.GameObjectAt(object_index);
+                    if (object != nullptr) component_count += object->ComponentCount();
+                }
+                ReplayEngine::Rendering::Stats().SetSceneCounters(
+                    runtime_scene.GameObjectCount(), component_count,
+                    static_scene.draws.size() + static_scene.skinned_draws.size(),
+                    static_scene.draws.size() + static_scene.skinned_draws.size());
                 for (const auto& draw : static_scene.draws)
                 {
-                    if (!draw.cast_shadow)
-                    {
-                        ++shadow_stats.skipped_cast_shadow;
-                        continue;
-                    }
-                    if (draw.mesh_key.rfind("builtin:", 0) == 0)
-                        ++shadow_stats.primitive_casters;
-                    else
-                        ++shadow_stats.static_casters;
+                    ReplayEngine::Rendering::Stats().CountDrawIndexed(
+                        draw.index_count != 0 ? draw.index_count : 3u);
                 }
                 for (const auto& draw : static_scene.skinned_draws)
                 {
-                    if (draw.surface.cast_shadow)
-                        ++shadow_stats.skinned_casters;
-                    else
-                        ++shadow_stats.skipped_cast_shadow;
-                }
-                if (static_scene.local_shadows.enabled)
-                {
-                    int used_local_slices = 0;
-                    for (std::uint32_t slice = 0;
-                        slice < ReplayEngine::Rendering::DX12::D3D12LocalShadowSubmission::SliceCount;
-                        ++slice)
-                    {
-                        if ((static_scene.local_shadows.used_slice_mask &
-                            (1u << slice)) != 0)
-                            ++used_local_slices;
-                    }
-                    for (const auto& light : static_scene.point_lights)
-                    {
-                        const bool valid_range = light.cast_shadows &&
-                            light.shadow_slice >= 0 && light.shadow_slice + 5 <
-                            static_cast<std::int32_t>(
-                                ReplayEngine::Rendering::DX12::D3D12LocalShadowSubmission::SliceCount);
-                        bool all_faces_present = valid_range;
-                        if (valid_range)
-                        {
-                            for (std::int32_t face = 0; face < 6; ++face)
-                            {
-                                const std::uint32_t bit = 1u << static_cast<std::uint32_t>(
-                                    light.shadow_slice + face);
-                                all_faces_present = all_faces_present &&
-                                    (static_scene.local_shadows.used_slice_mask & bit) != 0;
-                            }
-                        }
-                        if (all_faces_present) ++shadow_stats.point_shadow_lights;
-                    }
-                    for (const auto& light : static_scene.spot_lights)
-                    {
-                        if (light.cast_shadows && light.shadow_slice >= 0 &&
-                            light.shadow_slice < static_cast<std::int32_t>(
-                                ReplayEngine::Rendering::DX12::D3D12LocalShadowSubmission::SliceCount) &&
-                            (static_scene.local_shadows.used_slice_mask &
-                                (1u << static_cast<std::uint32_t>(light.shadow_slice))) != 0)
-                            ++shadow_stats.spot_shadow_lights;
-                    }
-                    const int casters = shadow_stats.primitive_casters +
-                        shadow_stats.static_casters + shadow_stats.skinned_casters;
-                        const int passes = used_local_slices +
-                        (shadow_stats.directional_shadow_rendered ?
-                            static_cast<int>(ReplayEngine::Rendering::DX12::
-                                D3D12DirectionalShadowSubmission::CascadeCount) : 0);
-                    shadow_stats.shadow_draw_calls = casters * passes;
-                }
-                else if (shadow_stats.directional_shadow_rendered)
-                {
-                    const int casters = shadow_stats.primitive_casters +
-                        shadow_stats.static_casters + shadow_stats.skinned_casters;
-                    shadow_stats.shadow_draw_calls = casters * static_cast<int>(
-                        ReplayEngine::Rendering::DX12::D3D12DirectionalShadowSubmission::CascadeCount);
+                    ReplayEngine::Rendering::Stats().CountDrawIndexed(
+                        draw.surface.index_count != 0 ? draw.surface.index_count : 3u);
                 }
             }
-            std::uint64_t component_count = 0;
-            const auto& runtime_scene = active_object_scene();
-            for (std::size_t object_index = 0;
-                object_index < runtime_scene.GameObjectCount(); ++object_index)
+            bool end_ok = false;
             {
-                const auto* object = runtime_scene.GameObjectAt(object_index);
-                if (object != nullptr) component_count += object->ComponentCount();
+                REPLAY_PROFILE_SCOPE("Render/Present");
+                dx12_capture_requested = prepare_dx12_golden_capture();
+                // 一時的な Upload 領域不足や Asset 提出失敗が起きても、フレームを完了して
+                // Fence を打つ。次の BeginFrame に開いた Command List を持ち越さない。
+                end_ok = dx12_device_context.EndFrame();
+                if (end_ok && dx12_capture_requested) tick_golden_capture();
             }
-            ReplayEngine::Rendering::Stats().SetSceneCounters(
-                runtime_scene.GameObjectCount(), component_count,
-                static_scene.draws.size() + static_scene.skinned_draws.size(),
-                static_scene.draws.size() + static_scene.skinned_draws.size());
-            for (const auto& draw : static_scene.draws)
-            {
-                ReplayEngine::Rendering::Stats().CountDrawIndexed(
-                    draw.index_count != 0 ? draw.index_count : 3u);
-            }
-            for (const auto& draw : static_scene.skinned_draws)
-            {
-                ReplayEngine::Rendering::Stats().CountDrawIndexed(
-                    draw.surface.index_count != 0 ? draw.surface.index_count : 3u);
-            }
-            dx12_capture_requested = prepare_dx12_golden_capture();
-            // 一時的な Upload 領域不足や Asset 提出失敗が起きても、フレームを完了して
-            // Fence を打つ。次の BeginFrame に開いた Command List を持ち越さない。
-            const bool end_ok = dx12_device_context.EndFrame();
-            if (end_ok && dx12_capture_requested) tick_golden_capture();
+            ReplayEngine::Rendering::Stats().EndScope(render_scope_token);
             ReplayEngine::Rendering::Stats().EndFrame();
             const auto& gpu_timing = dx12_device_context.GpuTiming();
             std::vector<ReplayEngine::Rendering::RenderStats::ExternalGpuPassTiming> profiler_gpu_timings;
@@ -957,6 +992,10 @@ void framework::render(float elapsed_time)
             }
             ok = upload_ok && static_scene_ok && loading_scene_3d_ok &&
                 ui_ok && imgui_ok && end_ok;
+        }
+        else
+        {
+            ReplayEngine::Rendering::Stats().EndScope(render_scope_token);
         }
 
         if (!ok && !dx12_framework_render_error_reported)

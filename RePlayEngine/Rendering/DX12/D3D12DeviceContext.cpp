@@ -3692,7 +3692,7 @@ namespace ReplayEngine::Rendering::DX12
         ID3D12CommandList* lists[] = { command_list_.Get() };
         command_queue_->ExecuteCommandLists(1, lists);
 
-        const HRESULT present = swap_chain_->Present(1, 0);
+        const HRESULT present = swap_chain_->Present(present_sync_interval_, 0);
         if (FAILED(present))
         {
             frame_open_ = false;

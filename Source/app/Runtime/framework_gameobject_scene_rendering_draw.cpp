@@ -492,22 +492,34 @@ bool framework::build_dx12_static_scene(
         const std::filesystem::path& input_path) -> std::string
     {
         if (input_path.empty()) return {};
-        std::filesystem::path resolved = input_path;
-        if (resolved.is_relative())
+        // 解決結果はパスごとに不変。描画中に exists() を呼ぶと毎フレーム効いてくる。
+        const std::string input_key = input_path.generic_string();
+        std::string key;
+        const auto cached_key = texture_path_resolve_cache.find(input_key);
+        if (cached_key != texture_path_resolve_cache.end())
         {
-            std::error_code ec;
-            if (!std::filesystem::exists(resolved, ec) || ec)
-                resolved = content_path(resolved);
+            key = cached_key->second;
         }
-        resolved = resolved.lexically_normal();
-        const std::string key = resolved.generic_string();
+        else
+        {
+            std::filesystem::path resolved = input_path;
+            if (resolved.is_relative())
+            {
+                std::error_code ec;
+                if (!std::filesystem::exists(resolved, ec) || ec)
+                    resolved = content_path(resolved);
+            }
+            resolved = resolved.lexically_normal();
+            key = resolved.generic_string();
+            texture_path_resolve_cache.insert_or_assign(input_key, key);
+        }
         if (key.empty()) return {};
         if (!dx12_device_context.HasStaticTexture(key) &&
             texture_source_keys.insert(key).second)
         {
             D3D12StaticTextureSource source;
             source.key = key;
-            source.source_path = resolved;
+            source.source_path = std::filesystem::path(key);
             submission.texture_sources.push_back(std::move(source));
         }
         return key;
@@ -926,6 +938,7 @@ bool framework::build_dx12_static_scene(
         const std::string& key, const skinned_mesh::mesh& mesh)
     {
         if (!skinned_mesh_source_keys.insert(key).second) return;
+        REPLAY_PROFILE_SCOPE("Item/MakeSkinnedSource");
         D3D12SkinnedMeshSource source;
         source.key = key;
         try
@@ -1414,13 +1427,23 @@ bool framework::build_dx12_static_scene(
                 DirectX::XMFLOAT4X4 mesh_world =
                     multiply_world(mesh.default_global_transform, item.world);
                 float morph_weight = mesh.default_morph_weight;
+                // ボーン番号の最大値はメッシュごとに不変。毎フレーム全頂点を舐めない。
                 std::size_t palette_size = (std::max)(static_cast<std::size_t>(1),
                     mesh.bind_pose.bones.size());
-                for (const skinned_mesh::vertex& vertex : mesh.vertices)
+                const auto cached_palette_size = skinned_palette_size_cache.find(mesh_key);
+                if (cached_palette_size != skinned_palette_size_cache.end())
                 {
-                    for (std::uint32_t influence = 0; influence < 4; ++influence)
-                        palette_size = (std::max)(palette_size,
-                            static_cast<std::size_t>(vertex.bone_indices[influence]) + 1u);
+                    palette_size = cached_palette_size->second;
+                }
+                else
+                {
+                    for (const skinned_mesh::vertex& vertex : mesh.vertices)
+                    {
+                        for (std::uint32_t influence = 0; influence < 4; ++influence)
+                            palette_size = (std::max)(palette_size,
+                                static_cast<std::size_t>(vertex.bone_indices[influence]) + 1u);
+                    }
+                    skinned_palette_size_cache.insert_or_assign(mesh_key, palette_size);
                 }
                 std::vector<DirectX::XMFLOAT4X4> palette(palette_size,
                     DirectX::XMFLOAT4X4{ 1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 });
@@ -1428,6 +1451,7 @@ bool framework::build_dx12_static_scene(
                 if (keyframe != nullptr && mesh.node_index >= 0 &&
                     static_cast<std::size_t>(mesh.node_index) < keyframe->nodes.size())
                 {
+                    REPLAY_PROFILE_SCOPE("Item/BonePalette");
                     const skinned_mesh::animation::keyframe::node& mesh_node =
                         keyframe->nodes[static_cast<std::size_t>(mesh.node_index)];
                     mesh_world = multiply_world(mesh_node.global_transform, item.world);
@@ -1452,6 +1476,7 @@ bool framework::build_dx12_static_scene(
                 const auto append_skinned_draw = [&](std::uint32_t start, std::uint32_t count,
                     std::uint64_t material_id, std::size_t subset_index)
                 {
+                    REPLAY_PROFILE_SCOPE("Item/AppendDraw");
                     const std::string* slot_asset = nullptr;
                     const MaterialAsset* slot_material =
                         resolve_material_slot(source_item, subset_index, slot_asset);
@@ -1467,7 +1492,24 @@ bool framework::build_dx12_static_scene(
                     draw.mesh_key = mesh_key;
                     draw.owner_id = source_item.owner.Value();
                     draw.material_slot = static_cast<std::uint32_t>(subset_index);
-                    draw.material_bounds = material_subset_bounds(mesh, start, count);
+                    // 境界はバインドポーズ由来で不変。毎フレーム全インデックスを舐めない。
+                    {
+                        auto& entries = material_subset_bounds_cache[mesh_key];
+                        const auto found = std::find_if(entries.begin(), entries.end(),
+                            [start, count](const material_subset_bounds_entry& entry) noexcept
+                            {
+                                return entry.start == start && entry.count == count;
+                            });
+                        if (found != entries.end())
+                        {
+                            draw.material_bounds = found->bounds;
+                        }
+                        else
+                        {
+                            draw.material_bounds = material_subset_bounds(mesh, start, count);
+                            entries.push_back({ start, count, draw.material_bounds });
+                        }
+                    }
                     draw.rendering_layer = static_cast<std::uint32_t>((std::max)(0,
                         (std::min)(31, item.rendering_layer)));
                     draw.start_index = start;
