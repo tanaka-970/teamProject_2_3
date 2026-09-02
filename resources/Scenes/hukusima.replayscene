@@ -1,0 +1,220 @@
+REPLAY_SCENE 11
+SCENE "新しいシーン"
+SCENE_STATE 0
+COLLISION_STATE 2 0
+OBJECT_COUNT 5
+OBJECT
+  ID 19
+  NAME "GameObject"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 0
+END_OBJECT
+OBJECT
+  ID 20
+  NAME "Cube"
+  ENABLED 1
+  PARENT 19
+  TRANSFORM 0 0.85659152269363403 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 6
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 20
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_slot_count" int 0
+    PROPERTY "material_override" bool 0
+    PROPERTY "tint" color 1 1 1 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "shadow_alpha_clip" bool 0
+    PROPERTY "shadow_alpha_cutoff" float 0.5
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0
+    PROPERTY "material.roughness" float 0.55000001192092896
+    PROPERTY "material.ambient_occlusion" float 1
+    PROPERTY "material.emissive_color" vec3 0 0 0
+    PROPERTY "material.emissive_strength" float 0
+    PROPERTY "material.double_sided" bool 0
+  END_COMPONENT
+  COMPONENT "PlayerInputComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE "RePlayEngine.Template.ActionPlatformer"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "input_enabled" bool 1
+    PROPERTY "local_player_slot" int 1
+  END_COMPONENT
+  COMPONENT "CharacterMotorComponent" 1
+    STABLE_ID 6
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE "RePlayEngine.Template.ActionPlatformer"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 11
+    PROPERTY "primary_collider_key" colliderref 0
+    PROPERTY "move_speed" float 6
+    PROPERTY "acceleration" float 30
+    PROPERTY "deceleration" float 20
+    PROPERTY "air_control" float 0.34999999403953552
+    PROPERTY "gravity" float 18
+    PROPERTY "jump_power" float 8
+    PROPERTY "maximum_fall_speed" float 55
+    PROPERTY "fallback_ground_y" float 0
+    PROPERTY "max_step_height" float 0.40000000596046448
+    PROPERTY "vertical_physics" bool 0
+  END_COMPONENT
+  COMPONENT "CameraTargetComponent" 1
+    STABLE_ID 7
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "target_offset" vec3 0 0 0
+    PROPERTY "look_at_offset" vec3 0 1 0
+    PROPERTY "priority" int 0
+  END_COMPONENT
+  COMPONENT "PlayerControllerComponent" 1
+    STABLE_ID 9
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE "RePlayEngine.Template.ActionPlatformer"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "turn_speed_degrees" float 720
+    PROPERTY "dash_multiplier" float 1
+    PROPERTY "camera_relative" bool 1
+    PROPERTY "rotate_towards_movement" bool 1
+  END_COMPONENT
+  COMPONENT "MeshColliderComponent" 1
+    STABLE_ID 10
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 11
+    PROPERTY "collider_key" int 1
+    PROPERTY "center_offset" vec3 0 0 0
+    PROPERTY "collision_layer" layer 0
+    PROPERTY "collision_mask" layermask 255
+    PROPERTY "is_trigger" bool 0
+    PROPERTY "debug_draw" bool 1
+    PROPERTY "mesh_source" enum 0
+    PROPERTY "mesh_asset" asset ""
+    PROPERTY "cook_cell_size" float 4
+    PROPERTY "double_sided" bool 1
+    PROPERTY "debug_draw_wireframe" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 21
+  NAME "GameObject (1)"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "MeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 23
+    PROPERTY "mesh_asset" asset "60412424bb1443240b2bf2160eee6923"
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_slot_count" int 0
+    PROPERTY "material_override" bool 0
+    PROPERTY "tint" color 1 1 1 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "shadow_alpha_clip" bool 0
+    PROPERTY "shadow_alpha_cutoff" float 0.5
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+    PROPERTY "local_position_offset" vec3 0 0 0
+    PROPERTY "local_rotation_offset" vec3 0 0 0
+    PROPERTY "local_scale_multiplier" vec3 1 1 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0
+    PROPERTY "material.roughness" float 0.55000001192092896
+    PROPERTY "material.ambient_occlusion" float 1
+    PROPERTY "material.emissive_color" vec3 0 0 0
+    PROPERTY "material.emissive_strength" float 0
+    PROPERTY "material.double_sided" bool 0
+  END_COMPONENT
+  COMPONENT "MeshColliderComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 11
+    PROPERTY "collider_key" int 1
+    PROPERTY "center_offset" vec3 0 0 0
+    PROPERTY "collision_layer" layer 1
+    PROPERTY "collision_mask" layermask 255
+    PROPERTY "is_trigger" bool 0
+    PROPERTY "debug_draw" bool 1
+    PROPERTY "mesh_source" enum 0
+    PROPERTY "mesh_asset" asset ""
+    PROPERTY "cook_cell_size" float 4
+    PROPERTY "double_sided" bool 1
+    PROPERTY "debug_draw_wireframe" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 22
+  NAME "GameObject (2)"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0.15000000596046448 3.6500000953674316 -8.1999998092651367 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "CameraComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "projection_mode" enum 0
+    PROPERTY "field_of_view_degrees" float 50
+    PROPERTY "orthographic_size" float 10
+    PROPERTY "near_clip" float 0.10000000149011612
+    PROPERTY "far_clip" float 10000
+    PROPERTY "priority" int 0
+    PROPERTY "viewport_enabled" bool 0
+    PROPERTY "viewport_rect" vec4 0 0 1 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 23
+  NAME "GameObject (3)"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "DirectionalLightComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 2
+    PROPERTY_COUNT 7
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "intensity" float 0.40000000596046448
+    PROPERTY "cast_shadows" bool 1
+    PROPERTY "shadow_strength" float 1
+    PROPERTY "shadow_depth_bias" float 0.019999999552965164
+    PROPERTY "shadow_normal_bias" float 1.3999999761581421
+    PROPERTY "shadow_distance" float 120
+  END_COMPONENT
+END_OBJECT

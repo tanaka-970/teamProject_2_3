@@ -1,0 +1,451 @@
+REPLAY_SCENE 11
+SCENE "新しいシーン"
+SCENE_STATE 0
+COLLISION_STATE 2 0
+OBJECT_COUNT 7
+OBJECT
+  ID 3
+  NAME "GameObject"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0.44505870342254639 -1.0122874975204468 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 0
+END_OBJECT
+OBJECT
+  ID 4
+  NAME "Cube"
+  ENABLED 1
+  PARENT 3
+  TRANSFORM -5.1234049797058105 3.5298008918762207 7.4003872871398926 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "PrimitiveMeshRendererComponent" 0
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 20
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_slot_count" int 0
+    PROPERTY "material_override" bool 0
+    PROPERTY "tint" color 1 1 1 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "shadow_alpha_clip" bool 0
+    PROPERTY "shadow_alpha_cutoff" float 0.5
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0
+    PROPERTY "material.roughness" float 0.55000001192092896
+    PROPERTY "material.ambient_occlusion" float 1
+    PROPERTY "material.emissive_color" vec3 0 0 0
+    PROPERTY "material.emissive_strength" float 0
+    PROPERTY "material.double_sided" bool 0
+  END_COMPONENT
+  COMPONENT "MeshRendererComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 23
+    PROPERTY "mesh_asset" asset "1bd1358040255f5bd18f3be0d79fbe3c"
+    PROPERTY "material_asset" asset "1bd1358040255f5bd18f3be0d79fbe3c"
+    PROPERTY "material_slot_count" int 0
+    PROPERTY "material_override" bool 0
+    PROPERTY "tint" color 1 1 1 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "shadow_alpha_clip" bool 0
+    PROPERTY "shadow_alpha_cutoff" float 0.5
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+    PROPERTY "local_position_offset" vec3 0 0 0
+    PROPERTY "local_rotation_offset" vec3 0 0 0
+    PROPERTY "local_scale_multiplier" vec3 1 1 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0
+    PROPERTY "material.roughness" float 0.55000001192092896
+    PROPERTY "material.ambient_occlusion" float 1
+    PROPERTY "material.emissive_color" vec3 0 0 0
+    PROPERTY "material.emissive_strength" float 0
+    PROPERTY "material.double_sided" bool 0
+  END_COMPONENT
+  COMPONENT "ModelEffectStackComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE "RePlayEngine.Optional.Effects"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 64
+    PROPERTY "enabled" bool 1
+    PROPERTY "use_preset" bool 0
+    PROPERTY "effect_preset" assetref ""
+    PROPERTY "effect_count" int 1
+    PROPERTY "target_slot_mode" enum 0
+    PROPERTY "depth_mode" enum 0
+    PROPERTY "extract_mode" enum 0
+    PROPERTY "max_bleed_pixels" float 128
+    PROPERTY "target_slot_index" enum 0
+    PROPERTY "effect_region_enabled" bool 0
+    PROPERTY "effect_region_shape" enum 0
+    PROPERTY "effect_region_scope" enum 0
+    PROPERTY "effect_region_invert" bool 0
+    PROPERTY "effect_region_center" vec2 0.5 0.5
+    PROPERTY "effect_region_size" vec2 0.5 0.5
+    PROPERTY "effect_region_rotation" float 0
+    PROPERTY "effect_region_feather" float 0
+    PROPERTY "effect_region_strength" float 1
+    PROPERTY "effect_region_mask" assetref ""
+    PROPERTY "effect_region_additional_count" int 0
+    PROPERTY "effects[0].enabled" bool 1
+    PROPERTY "effects[0].region_enabled" bool 1
+    PROPERTY "effects[0].type" enum 41
+    PROPERTY "effects[0].waveform" enum 0
+    PROPERTY "effects[0].amount" float 9
+    PROPERTY "effects[0].radius" float 420
+    PROPERTY "effects[0].speed" float 2
+    PROPERTY "effects[0].softness" float 0
+    PROPERTY "effects[0].progress" float 0.25
+    PROPERTY "effects[0].intensity" float 0.60000002384185791
+    PROPERTY "effects[0].angle" float 0
+    PROPERTY "effects[0].direction" vec2 0 1
+    PROPERTY "effects[0].threshold" float 0.15000000596046448
+    PROPERTY "effects[0].seed" float 0
+    PROPERTY "effects[0].custom_shader" assetref ""
+    PROPERTY "effect_region_path_count" int 0
+    PROPERTY "effects[0].color" color 0 0 0 1
+    PROPERTY "effects[0].color_2" color 1 1 1 1
+    PROPERTY "effects[0].color_3" color 1 1 1 1
+    PROPERTY "effects[0].color_4" color 1 1 1 1
+    PROPERTY "effects[0].color_stop_2" float 0.33333298563957214
+    PROPERTY "effects[0].color_stop_3" float 0.66666698455810547
+    PROPERTY "effects[0].color_stop_4" float 1
+    PROPERTY "effects[0].mask" assetref ""
+    PROPERTY "effects[0].brush_atlas_enabled" bool 0
+    PROPERTY "effects[0].brush_instanced_renderer_enabled" bool 0
+    PROPERTY "effects[0].brush_pattern_mode" enum 0
+    PROPERTY "effects[0].brush_pattern_index" enum 0
+    PROPERTY "effects[0].brush_pattern_weight_0" float 0
+    PROPERTY "effects[0].brush_pattern_weight_1" float 0
+    PROPERTY "effects[0].brush_pattern_weight_2" float 0
+    PROPERTY "effects[0].brush_pattern_weight_3" float 0
+    PROPERTY "effects[0].brush_pattern_weight_4" float 0
+    PROPERTY "effects[0].brush_pattern_weight_5" float 0
+    PROPERTY "effects[0].brush_pattern_weight_6" float 0
+    PROPERTY "effects[0].brush_pattern_weight_7" float 0
+    PROPERTY "effects[0].brush_pattern_weight_8" float 0
+    PROPERTY "effects[0].brush_pattern_weight_9" float 0
+    PROPERTY "effects[0].brush_pattern_weight_10" float 0
+    PROPERTY "effects[0].brush_pattern_weight_11" float 0
+    PROPERTY "effects[0].brush_pattern_weight_12" float 0
+    PROPERTY "effects[0].brush_pattern_weight_13" float 0
+    PROPERTY "effects[0].brush_pattern_weight_14" float 0
+    PROPERTY "effects[0].brush_pattern_weight_15" float 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 5
+  NAME "GameObject (1)"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "DirectionalLightComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 2
+    PROPERTY_COUNT 7
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "intensity" float 2.7000000476837158
+    PROPERTY "cast_shadows" bool 1
+    PROPERTY "shadow_strength" float 1
+    PROPERTY "shadow_depth_bias" float 0.019999999552965164
+    PROPERTY "shadow_normal_bias" float 1.3999999761581421
+    PROPERTY "shadow_distance" float 120
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 6
+  NAME "MIKU-V6"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 10.587759017944336 0 132.2164306640625 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 8
+  COMPONENT "SkinnedMeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 24
+    PROPERTY "mesh_asset" asset "8e547552c509008115944a791d38b886"
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_slot_count" int 0
+    PROPERTY "material_override" bool 0
+    PROPERTY "tint" color 1 1 1 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "shadow_alpha_clip" bool 0
+    PROPERTY "shadow_alpha_cutoff" float 0.5
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+    PROPERTY "visual_rotation_offset" vec3 0 0 0
+    PROPERTY "local_position_offset" vec3 0 0 0
+    PROPERTY "local_scale_multiplier" vec3 1 1 1
+    PROPERTY "apply_fbx_coordinate_transform" bool 0
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0
+    PROPERTY "material.roughness" float 0.55000001192092896
+    PROPERTY "material.ambient_occlusion" float 1
+    PROPERTY "material.emissive_color" vec3 0 0 0
+    PROPERTY "material.emissive_strength" float 0
+    PROPERTY "material.double_sided" bool 0
+  END_COMPONENT
+  COMPONENT "SphereColliderComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 9
+    PROPERTY "collider_key" int 1
+    PROPERTY "center_offset" vec3 0 0 0
+    PROPERTY "collision_layer" layer 0
+    PROPERTY "collision_mask" layermask 255
+    PROPERTY "is_trigger" bool 0
+    PROPERTY "debug_draw" bool 1
+    PROPERTY "radius" float 0.37999999523162842
+    PROPERTY "skin_width" float 0.014999999664723873
+    PROPERTY "walkable_normal_y" float 0.25
+  END_COMPONENT
+  COMPONENT "CharacterMotorComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE "RePlayEngine.Template.ActionPlatformer"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 11
+    PROPERTY "primary_collider_key" colliderref 1
+    PROPERTY "move_speed" float 6
+    PROPERTY "acceleration" float 30
+    PROPERTY "deceleration" float 20
+    PROPERTY "air_control" float 0.34999999403953552
+    PROPERTY "gravity" float 18
+    PROPERTY "jump_power" float 8
+    PROPERTY "maximum_fall_speed" float 55
+    PROPERTY "fallback_ground_y" float 0
+    PROPERTY "max_step_height" float 0.40000000596046448
+    PROPERTY "vertical_physics" bool 0
+  END_COMPONENT
+  COMPONENT "MotionPlayerComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 17
+    PROPERTY "motion" assetref ""
+    PROPERTY "key" string ""
+    PROPERTY "play_on_start" bool 1
+    PROPERTY "trigger" enum 0
+    PROPERTY "trigger_delay" float 0
+    PROPERTY "trigger_source" compref 0 0
+    PROPERTY "trigger_state" string ""
+    PROPERTY "loop" bool 0
+    PROPERTY "wrap_mode" enum 0
+    PROPERTY "auto_stop_on_end" bool 0
+    PROPERTY "ignore_time_scale" bool 0
+    PROPERTY "blend_in_seconds" float 0
+    PROPERTY "speed" float 1
+    PROPERTY "random_seed" int 0
+    PROPERTY "time_offset_random" float 0
+    PROPERTY "speed_random" float 0
+    PROPERTY "weight" float 1
+  END_COMPONENT
+  COMPONENT "PlayerControllerComponent" 1
+    STABLE_ID 6
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE "RePlayEngine.Template.ActionPlatformer"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "turn_speed_degrees" float 535
+    PROPERTY "dash_multiplier" float 1
+    PROPERTY "camera_relative" bool 1
+    PROPERTY "rotate_towards_movement" bool 1
+  END_COMPONENT
+  COMPONENT "CameraTargetComponent" 1
+    STABLE_ID 7
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "target_offset" vec3 0 0 0
+    PROPERTY "look_at_offset" vec3 0 1 0
+    PROPERTY "priority" int 0
+  END_COMPONENT
+  COMPONENT "PlayerInputComponent" 1
+    STABLE_ID 8
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE "RePlayEngine.Template.ActionPlatformer"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "input_enabled" bool 1
+    PROPERTY "local_player_slot" int 1
+  END_COMPONENT
+  COMPONENT "ScriptComponent" 1
+    STABLE_ID 10
+    TYPE_GUID "7a3e1c94b06d4f28ae5137c0d9b28e41"
+    TYPE_MODULE "RePlayEngine.Scripting"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "__script.language" enum 1
+    PROPERTY "__script.asset" assetref "66d1ba1d943164391cbce051013b0706"
+    PROPERTY "__script.class" string "Game.MoveTest"
+    PROPERTY "__script.execution_order" int 0
+    PROPERTY "__script.type_id" string "9c41d7a25b8e4f13a6d0e28c74f5b301"
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 7
+  NAME "GameObject (2)"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0.69999998807907104 3.5499999523162842 -2.4500000476837158 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "CameraComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "projection_mode" enum 0
+    PROPERTY "field_of_view_degrees" float 50
+    PROPERTY "orthographic_size" float 10
+    PROPERTY "near_clip" float 0.10000000149011612
+    PROPERTY "far_clip" float 10000
+    PROPERTY "priority" int 0
+    PROPERTY "viewport_enabled" bool 0
+    PROPERTY "viewport_rect" vec4 0 0 1 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 8
+  NAME "Canvas"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "CanvasComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 6
+    PROPERTY "reference_resolution" vec2 1920 1080
+    PROPERTY "render_mode" enum 0
+    PROPERTY "scale_mode" enum 1
+    PROPERTY "match_width_or_height" float 0.5
+    PROPERTY "sort_order" int 0
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 9
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0 0
+    PROPERTY "anchor_max" vec2 1 1
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 0 0
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 18
+  NAME "Text"
+  ENABLED 1
+  PARENT 8
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -89.34918212890625 122.36532592773438
+    PROPERTY "size_delta" vec2 1106.6666259765625 531.11114501953125
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 20
+    PROPERTY "text" string "Text"
+    PROPERTY "font" assetref "89d5bc58929ed41e5554e87ea8e3dd65"
+    PROPERTY "font_size" float 436
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "character_spacing" float 0
+    PROPERTY "line_spacing" float 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+    PROPERTY "rich_text" bool 1
+    PROPERTY "localization_key" string ""
+    PROPERTY "number_source" compref 0 0
+    PROPERTY "number_source_property" string ""
+    PROPERTY "number_format" string ""
+    PROPERTY "number_digits" int 0
+    PROPERTY "outline_width" float 32
+    PROPERTY "outline_color" color 0.59607845544815063 0 0 1
+    PROPERTY "shadow_offset" vec2 240.5 133
+    PROPERTY "shadow_color" color 0.22352941334247589 0.50980395078659058 0 0
+  END_COMPONENT
+  COMPONENT "UIEffectStackComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE "RePlayEngine.Optional.Effects"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 18
+    PROPERTY "enabled" bool 1
+    PROPERTY "target_scope" enum 0
+    PROPERTY "capture_backdrop" bool 0
+    PROPERTY "use_preset" bool 0
+    PROPERTY "effect_preset" assetref ""
+    PROPERTY "effect_count" int 0
+    PROPERTY "effect_region_enabled" bool 0
+    PROPERTY "effect_region_shape" enum 0
+    PROPERTY "effect_region_scope" enum 0
+    PROPERTY "effect_region_invert" bool 0
+    PROPERTY "effect_region_center" vec2 0.5 0.5
+    PROPERTY "effect_region_size" vec2 0.5 0.5
+    PROPERTY "effect_region_rotation" float 0
+    PROPERTY "effect_region_feather" float 0
+    PROPERTY "effect_region_strength" float 1
+    PROPERTY "effect_region_mask" assetref ""
+    PROPERTY "effect_region_additional_count" int 0
+    PROPERTY "effect_region_path_count" int 0
+  END_COMPONENT
+END_OBJECT
