@@ -379,6 +379,16 @@
                 effect.intensity = 1.0f;
                 effect.direction = { 0.5f, 0.5f };
                 break;
+            case UI::UIEffectKind::ShapeWipe:
+                effect.progress = 0.45f;
+                effect.waveform = 1;
+                effect.radius = 5.0f;
+                effect.threshold = 0.45f;
+                effect.angle = 0.0f;
+                effect.softness = 0.01f;
+                effect.intensity = 1.0f;
+                effect.direction = { 0.5f, 0.5f };
+                break;
             default:
                 break;
             }

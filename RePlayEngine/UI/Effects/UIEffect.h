@@ -93,7 +93,8 @@ namespace ReplayEngine::UI
         Bubble = 74,
         SpeedLines = 75,
         ClockWipe = 76,
-        Count = 77,
+        ShapeWipe = 77,
+        Count = 78,
 
         // 新規 kind は Count の直前へ追加する。既存 Scene の enum 値を変えない。
     };
@@ -116,7 +117,7 @@ namespace ReplayEngine::UI
             "LiquidGlass", "LightSweep", "Shockwave", "PixelSort", "Hologram",
             "IridescentFoil", "RadarSweep", "EnergyPulse", "CircuitFlow", "HeatHaze",
             "WaterCaustics", "VoronoiShatter", "InkBleed", "BurnReveal", "PortalVortex",
-            "FrostCrack", "Bubble", "SpeedLines", "ClockWipe"
+            "FrostCrack", "Bubble", "SpeedLines", "ClockWipe", "ShapeWipe"
         };
         const int index = static_cast<int>(kind);
         if (index < 0 || index >= static_cast<int>(names.size())) return "";
@@ -229,6 +230,7 @@ namespace ReplayEngine::UI
         case UIEffectKind::Wipe:
         case UIEffectKind::Bubble:
         case UIEffectKind::ClockWipe:
+        case UIEffectKind::ShapeWipe:
         case UIEffectKind::Dissolve:
         case UIEffectKind::Distortion:
         case UIEffectKind::ChromaticAberration:
