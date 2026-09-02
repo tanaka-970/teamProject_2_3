@@ -159,6 +159,7 @@ namespace ReplayEngine::UI
         case UIEffectKind::Bubble:
         case UIEffectKind::SpeedLines:
         case UIEffectKind::ClockWipe:
+        case UIEffectKind::ShapeWipe:
         case UIEffectKind::Dissolve:
         case UIEffectKind::Halftone:
         case UIEffectKind::Vignette:

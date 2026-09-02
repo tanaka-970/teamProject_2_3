@@ -452,6 +452,32 @@
                     .Display("中心").Tooltip("正規化座標で指定する回転中心。0.5, 0.5 が中央。")
                     .Step(0.01));
                 break;
+            case UI::UIEffectKind::ShapeWipe:
+                add_float("progress", "進行", "0 から 1 で形状が広がり画面を覆う。",
+                    0.0, 1.0, 0.001);
+                push(MakeEffectProperty(i, "waveform", Reflection::PropertyType::Enum,
+                    Reflection::Animatable::Step)
+                    .Display("形状")
+                    .Tooltip("広がる形。形状画像を指定した場合はそちらを使う。")
+                    .AsEnum({ "円", "星", "ハート", "菱形" }));
+                add_float("radius", "頂点の数", "星の頂点の数。", 2.0, 24.0, 1.0);
+                add_float("threshold", "星の凹み", "星の内側の半径の割合。",
+                    0.0, 1.0, 0.001);
+                add_float("angle", "回転", "形状の回転角度（度）。",
+                    -360.0, 360.0, 0.1);
+                add_float("softness", "縁の柔らかさ", "形状の輪郭をぼかす量。",
+                    0.0001, 1.0, 0.001);
+                add_float("intensity", "適用量", "アルファを抜く割合。",
+                    0.0, 1.0, 0.01);
+                push(MakeEffectProperty(i, "direction", Reflection::PropertyType::Vector2,
+                    Reflection::Animatable::Interpolatable)
+                    .Display("中心").Tooltip("正規化座標で指定する形状の中心。0.5, 0.5 が中央。")
+                    .Step(0.01));
+                push(MakeEffectProperty(i, "mask", Reflection::PropertyType::AssetReference,
+                    Reflection::Animatable::Step).Display("形状画像")
+                    .Tooltip("設定した場合は画像の明るい所から開く。")
+                    .OfAssetType("Image"));
+                break;
             default:
                 break;
             }
