@@ -224,6 +224,7 @@ namespace ReplayEngine::UI
         case UIEffectKind::Shake:
         case UIEffectKind::Mask:
         case UIEffectKind::Wipe:
+        case UIEffectKind::Bubble:
         case UIEffectKind::Dissolve:
         case UIEffectKind::Distortion:
         case UIEffectKind::ChromaticAberration:
