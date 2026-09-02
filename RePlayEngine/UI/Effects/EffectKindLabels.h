@@ -33,7 +33,7 @@ namespace ReplayEngine::UI
         "エネルギーパルス", "サーキットフロー", "ヒートヘイズ",
         "ウォーターコースティクス", "ボロノイシャッター",
         "インクブリード", "バーンリビール", "ポータルヴォルテックス",
-        "フロストクラック"
+        "フロストクラック", "泡マスク"
     };
 
     inline const char* EffectKindLabel(UIEffectKind kind) noexcept

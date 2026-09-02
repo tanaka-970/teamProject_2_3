@@ -625,7 +625,7 @@ bool framework::build_dx12_ui_for_scene(
             D3D12UIEffectCommand command{};
             const int kind = effect.kind;
             if (kind < static_cast<int>(UIEffectKind::Blur) ||
-                kind > static_cast<int>(UIEffectKind::FrostCrack))
+                kind >= static_cast<int>(UIEffectKind::Count))
                 continue;
             command.kind = static_cast<std::uint32_t>(kind);
             command.radius = (std::max)(0.0f, effect.radius);

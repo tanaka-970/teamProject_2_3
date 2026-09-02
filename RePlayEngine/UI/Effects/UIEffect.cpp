@@ -156,6 +156,7 @@ namespace ReplayEngine::UI
         case UIEffectKind::Noise:
         case UIEffectKind::Mask:
         case UIEffectKind::Wipe:
+        case UIEffectKind::Bubble:
         case UIEffectKind::Dissolve:
         case UIEffectKind::Halftone:
         case UIEffectKind::Vignette:
