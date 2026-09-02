@@ -1319,7 +1319,7 @@ namespace ReplayEngine::Rendering::DX12
         Microsoft::WRL::ComPtr<ID3D12RootSignature> ui_effect_root_signature_;
         static constexpr std::size_t UIEffectKindCount =
             static_cast<std::size_t>(ReplayEngine::UI::UIEffectKind::Count);
-        static_assert(UIEffectKindCount == 76,
+        static_assert(UIEffectKindCount == 77,
             "UIEffectKind の永続化値とDX12 Effect Shader表の対応が変わりました。");
         std::array<Microsoft::WRL::ComPtr<ID3D12PipelineState>, UIEffectKindCount>
             ui_effect_pipelines_{};

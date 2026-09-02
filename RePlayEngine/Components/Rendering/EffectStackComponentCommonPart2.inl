@@ -370,6 +370,15 @@
                 effect.direction = { 0.5f, 0.5f };
                 effect.color = { 0.05f, 0.05f, 0.06f, 1.0f };
                 break;
+            case UI::UIEffectKind::ClockWipe:
+                effect.progress = 0.35f;
+                effect.angle = -90.0f;
+                effect.amount = 1.0f;
+                effect.threshold = 0.0f;
+                effect.softness = 0.02f;
+                effect.intensity = 1.0f;
+                effect.direction = { 0.5f, 0.5f };
+                break;
             default:
                 break;
             }
