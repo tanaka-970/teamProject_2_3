@@ -230,13 +230,20 @@ void framework::prepare_ui_effect_shader_schemas(ReplayEngine::Scene::Scene& sce
         if (object == nullptr || object->PendingDestroy()) continue;
         prepare_stack(object->GetComponent<UIEffectStackComponent>());
         prepare_stack(object->GetComponent<ScreenEffectStackComponent>());
-        prepare_stack(object->GetComponent<ModelEffectStackComponent>());
+        for (ModelEffectStackComponent* stack : object->GetComponents<ModelEffectStackComponent>())
+            prepare_stack(stack);
     }
 }
 
 void framework::evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
-    float scaled_delta_time, float unscaled_delta_time)
+    float scaled_delta_time, float unscaled_delta_time,
+    ReplayEngine::Motion::MotionMixer& mixer,
+    ReplayEngine::Runtime::RuntimeContext* runtime_context,
+    std::uint64_t frame_index)
 {
+    ReplayEngine::Motion::MotionMixer& motion_mixer = mixer;
+    ReplayEngine::Runtime::RuntimeContext* object_runtime_context = runtime_context;
+    const std::uint64_t object_runtime_frame_index = frame_index;
     using ReplayEngine::Components::MotionPlayerComponent;
     using ReplayEngine::Components::CompositionPlayerComponent;
     using ReplayEngine::Motion::MotionBindingResolver;
@@ -456,6 +463,46 @@ void framework::evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
             }
         };
 
+        std::vector<std::pair<double, double>> root_intervals;
+        std::vector<std::pair<double, double>> root_boundary_transitions;
+        if (!player.loop)
+        {
+            const double to = (std::max)(0.0, (std::min)(duration, unwrapped_to));
+            root_intervals.emplace_back(from, to);
+        }
+        else if (travel > 0.0)
+        {
+            double cursor = from;
+            while (cursor < unwrapped_to - epsilon)
+            {
+                const double cycle = std::floor(cursor / duration);
+                const double local_from = cursor - cycle * duration;
+                const double boundary = (cycle + 1.0) * duration;
+                const double segment_end = (std::min)(unwrapped_to, boundary);
+                root_intervals.emplace_back(local_from, segment_end - cycle * duration);
+                if (segment_end >= boundary - epsilon)
+                    root_boundary_transitions.emplace_back(duration, 0.0);
+                if (segment_end <= cursor + epsilon) break;
+                cursor = segment_end;
+            }
+        }
+        else if (travel < 0.0)
+        {
+            double cursor = from;
+            while (cursor > unwrapped_to + epsilon)
+            {
+                const double cycle = std::ceil(cursor / duration) - 1.0;
+                const double local_from = cursor - cycle * duration;
+                const double boundary = cycle * duration;
+                const double segment_end = (std::max)(unwrapped_to, boundary);
+                root_intervals.emplace_back(local_from, segment_end - cycle * duration);
+                if (segment_end <= boundary + epsilon)
+                    root_boundary_transitions.emplace_back(0.0, duration);
+                if (segment_end >= cursor - epsilon) break;
+                cursor = segment_end;
+            }
+        }
+
         std::unordered_set<std::string> recursion;
         if (!player.composition.guid.empty()) recursion.insert(player.composition.guid);
         std::function<void(const ReplayEngine::Motion::CompositionAsset&, double, double,
@@ -488,20 +535,91 @@ void framework::evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
                     const ReplayEngine::Motion::MotionAsset* motion =
                         resolve_motion_asset(layer.motion_guid);
                     if (motion == nullptr) continue;
+                    bool remap_active = false;
+                    if (motion->time_remap.IsAssigned() && motion->duration > 0.0f)
+                    {
+                        std::string remap_error;
+                        (void)MotionEvaluator::RemapMotionTime(*motion, 0.0f,
+                            &asset_database, &remap_error);
+                        remap_active = remap_error.empty();
+                    }
                     for (const ReplayEngine::Motion::MotionEventTrack& track : motion->event_tracks)
                     {
                         for (const ReplayEngine::Motion::MotionEvent& event : track.events)
                         {
                             if (event.name.empty() || event.time < 0.0f ||
                                 event.time > motion->duration) continue;
-                            const double root_time = source_root_offset +
-                                static_cast<double>(event.time) * source_root_scale;
-                            if (root_time + epsilon < layer_valid_min ||
-                                root_time - epsilon > layer_valid_max) continue;
-                            crossed_root_time(root_time, [&]()
+                            const double event_time = static_cast<double>(event.time);
+                            if (!remap_active)
                             {
-                                publish_composition_motion_event(track, event, player);
-                            });
+                                const double root_time = source_root_offset +
+                                    event_time * source_root_scale;
+                                if (root_time + epsilon < layer_valid_min ||
+                                    root_time - epsilon > layer_valid_max) continue;
+                                crossed_root_time(root_time, [&]()
+                                {
+                                    publish_composition_motion_event(track, event, player);
+                                });
+                                continue;
+                            }
+                            for (const auto& root_interval : root_intervals)
+                            {
+                                double root_from = root_interval.first;
+                                double root_to = root_interval.second;
+                                if (root_to >= root_from)
+                                {
+                                    root_from = (std::max)(root_from, layer_valid_min);
+                                    root_to = (std::min)(root_to, layer_valid_max);
+                                    if (root_to + epsilon < root_from) continue;
+                                }
+                                else
+                                {
+                                    root_from = (std::min)(root_from, layer_valid_max);
+                                    root_to = (std::max)(root_to, layer_valid_min);
+                                    if (root_from + epsilon < root_to) continue;
+                                }
+                                double source_from = (root_from - source_root_offset) /
+                                    source_root_scale;
+                                double source_to = (root_to - source_root_offset) /
+                                    source_root_scale;
+                                source_from = (std::max)(0.0,
+                                    (std::min)(static_cast<double>(motion->duration), source_from));
+                                source_to = (std::max)(0.0,
+                                    (std::min)(static_cast<double>(motion->duration), source_to));
+                                const double evaluated_from = static_cast<double>(
+                                    MotionEvaluator::RemapMotionTime(*motion,
+                                        static_cast<float>(source_from), &asset_database));
+                                const double evaluated_to = static_cast<double>(
+                                    MotionEvaluator::RemapMotionTime(*motion,
+                                        static_cast<float>(source_to), &asset_database));
+                                if (crossed_once(evaluated_from, evaluated_to, event_time))
+                                    publish_composition_motion_event(track, event, player);
+                            }
+                            for (const auto& root_transition : root_boundary_transitions)
+                            {
+                                const double root_after = root_transition.second;
+                                if (root_after + epsilon < layer_valid_min ||
+                                    root_after - epsilon > layer_valid_max) continue;
+                                double source_before = (root_transition.first - source_root_offset) /
+                                    source_root_scale;
+                                double source_after = (root_after - source_root_offset) /
+                                    source_root_scale;
+                                source_before = (std::max)(0.0,
+                                    (std::min)(static_cast<double>(motion->duration), source_before));
+                                source_after = (std::max)(0.0,
+                                    (std::min)(static_cast<double>(motion->duration), source_after));
+                                const double evaluated_before = static_cast<double>(
+                                    MotionEvaluator::RemapMotionTime(*motion,
+                                        static_cast<float>(source_before), &asset_database));
+                                const double evaluated_after = static_cast<double>(
+                                    MotionEvaluator::RemapMotionTime(*motion,
+                                        static_cast<float>(source_after), &asset_database));
+                                if (std::fabs(evaluated_before - evaluated_after) > epsilon &&
+                                    std::fabs(event_time - evaluated_after) <= epsilon)
+                                {
+                                    publish_composition_motion_event(track, event, player);
+                                }
+                            }
                         }
                     }
                     continue;
@@ -537,6 +655,212 @@ void framework::evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
         const double duration = static_cast<double>(asset.duration);
         const int wrap_mode = player.RuntimeWrapMode();
         const double epsilon = 1.0e-9;
+        bool remap_active = false;
+        if (asset.time_remap.IsAssigned())
+        {
+            std::string remap_error;
+            (void)MotionEvaluator::RemapMotionTime(asset, 0.0f,
+                &asset_database, &remap_error);
+            remap_active = remap_error.empty();
+        }
+        if (!remap_active)
+        {
+            for (const ReplayEngine::Motion::MotionEventTrack& track : asset.event_tracks)
+            {
+                for (const ReplayEngine::Motion::MotionEvent& event : track.events)
+                {
+                    if (event.name.empty() || event.time < 0.0f ||
+                        event.time > asset.duration)
+                    {
+                        continue;
+                    }
+
+                    const double event_time = static_cast<double>(event.time);
+                    auto emit = [&](long long) { publish_motion_event(track, event, player); };
+
+                    if (wrap_mode == MotionPlayerComponent::Loop)
+                    {
+                        const double travel = static_cast<double>(delta_time) *
+                            static_cast<double>(player.speed);
+                        const double from = static_cast<double>(before);
+                        const double to = from + travel;
+                        if (travel > 0.0)
+                        {
+                            const long long first = static_cast<long long>(std::floor(
+                                (from - event_time) / duration)) + 1;
+                            const long long last = static_cast<long long>(std::floor(
+                                (to - event_time + epsilon) / duration));
+                            publish_repeated(first, last, emit);
+                        }
+                        else if (travel < 0.0)
+                        {
+                            const long long first = static_cast<long long>(std::ceil(
+                                (to - event_time - epsilon) / duration));
+                            const long long last = static_cast<long long>(std::ceil(
+                                (from - event_time) / duration)) - 1;
+                            publish_repeated(first, last, emit);
+                        }
+                        continue;
+                    }
+
+                    if (wrap_mode == MotionPlayerComponent::PingPong)
+                    {
+                        if (direction_before == 0) continue;
+                        const double period = duration * 2.0;
+                        const double phase_from = direction_before > 0
+                            ? static_cast<double>(before)
+                            : period - static_cast<double>(before);
+                        const double phase_to = phase_from +
+                            static_cast<double>(delta_time) * std::fabs(
+                                static_cast<double>(player.speed));
+
+                        auto emit_phase_series = [&](double base)
+                        {
+                            const long long first = static_cast<long long>(std::floor(
+                                (phase_from - base) / period)) + 1;
+                            const long long last = static_cast<long long>(std::floor(
+                                (phase_to - base + epsilon) / period));
+                            publish_repeated(first, last, emit);
+                        };
+
+                        emit_phase_series(event_time);
+                        // 端点は往路/復路が同じ位相になる。二重発火させない。
+                        if (event_time > 0.0 && event_time < duration)
+                            emit_phase_series(period - event_time);
+                        continue;
+                    }
+
+                    // Once / ClampForever は端をまたがないので単一区間。
+                    const double travel = static_cast<double>(delta_time) *
+                        static_cast<double>(player.speed);
+                    double after = static_cast<double>(before) + travel;
+                    after = (std::max)(0.0, (std::min)(duration, after));
+                    if (travel > 0.0)
+                    {
+                        if (event_time > static_cast<double>(before) &&
+                            event_time <= after + epsilon)
+                        {
+                            emit(0);
+                        }
+                    }
+                    else if (travel < 0.0)
+                    {
+                        if (event_time < static_cast<double>(before) &&
+                            event_time + epsilon >= after)
+                        {
+                            emit(0);
+                        }
+                    }
+                }
+            }
+            return;
+        }
+
+        std::vector<std::pair<double, double>> intervals;
+        std::vector<double> boundary_points;
+        const auto remap_time = [&](double raw_time)
+        {
+            return static_cast<double>(MotionEvaluator::RemapMotionTime(asset,
+                static_cast<float>(raw_time), &asset_database));
+        };
+        const auto append_interval = [&](double raw_from, double raw_to)
+        {
+            intervals.emplace_back(remap_time(raw_from), remap_time(raw_to));
+        };
+
+        if (wrap_mode == MotionPlayerComponent::Loop)
+        {
+            const double travel = static_cast<double>(delta_time) *
+                static_cast<double>(player.speed);
+            const double from = static_cast<double>(before);
+            const double to = from + travel;
+            double cursor = from;
+            if (travel > 0.0)
+            {
+                while (cursor < to - epsilon)
+                {
+                    const double cycle = std::floor(cursor / duration);
+                    const double local_from = cursor - cycle * duration;
+                    const double boundary = (cycle + 1.0) * duration;
+                    const double segment_end = (std::min)(to, boundary);
+                    const double local_to = segment_end - cycle * duration;
+                    append_interval(local_from, local_to);
+                    if (segment_end >= boundary - epsilon)
+                    {
+                        const double restart = remap_time(0.0);
+                        if (std::fabs(restart - remap_time(duration)) > epsilon)
+                            boundary_points.push_back(restart);
+                    }
+                    if (segment_end <= cursor + epsilon) break;
+                    cursor = segment_end;
+                }
+            }
+            else if (travel < 0.0)
+            {
+                while (cursor > to + epsilon)
+                {
+                    const double cycle = std::ceil(cursor / duration) - 1.0;
+                    const double local_from = cursor - cycle * duration;
+                    const double boundary = cycle * duration;
+                    const double segment_end = (std::max)(to, boundary);
+                    const double local_to = segment_end - cycle * duration;
+                    append_interval(local_from, local_to);
+                    if (segment_end <= boundary + epsilon)
+                    {
+                        const double restart = remap_time(duration);
+                        if (std::fabs(restart - remap_time(0.0)) > epsilon)
+                            boundary_points.push_back(restart);
+                    }
+                    if (segment_end >= cursor - epsilon) break;
+                    cursor = segment_end;
+                }
+            }
+        }
+        else if (wrap_mode == MotionPlayerComponent::PingPong)
+        {
+            if (direction_before != 0)
+            {
+                const double period = duration * 2.0;
+                const double phase_from = direction_before > 0
+                    ? static_cast<double>(before)
+                    : period - static_cast<double>(before);
+                const double phase_to = phase_from + static_cast<double>(delta_time) *
+                    std::fabs(static_cast<double>(player.speed));
+                const auto phase_to_local = [&](double phase)
+                {
+                    double wrapped = std::fmod(phase, period);
+                    if (wrapped < 0.0) wrapped += period;
+                    return wrapped <= duration ? wrapped : period - wrapped;
+                };
+                double cursor = phase_from;
+                while (cursor < phase_to - epsilon)
+                {
+                    const double boundary =
+                        (std::floor(cursor / duration) + 1.0) * duration;
+                    const double segment_end = (std::min)(phase_to, boundary);
+                    append_interval(phase_to_local(cursor), phase_to_local(segment_end));
+                    if (segment_end <= cursor + epsilon) break;
+                    cursor = segment_end;
+                }
+            }
+        }
+        else
+        {
+            const double travel = static_cast<double>(delta_time) *
+                static_cast<double>(player.speed);
+            double after = static_cast<double>(before) + travel;
+            after = (std::max)(0.0, (std::min)(duration, after));
+            append_interval(static_cast<double>(before), after);
+        }
+
+        const auto crossed_interval = [&](double event_time, const std::pair<double, double>& interval)
+        {
+            if (interval.second > interval.first)
+                return event_time > interval.first && event_time <= interval.second + epsilon;
+            if (interval.second < interval.first)
+                return event_time < interval.first && event_time + epsilon >= interval.second;
+            return false;
+        };
 
         for (const ReplayEngine::Motion::MotionEventTrack& track : asset.event_tracks)
         {
@@ -549,80 +873,15 @@ void framework::evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
                 }
 
                 const double event_time = static_cast<double>(event.time);
-                auto emit = [&](long long) { publish_motion_event(track, event, player); };
-
-                if (wrap_mode == MotionPlayerComponent::Loop)
+                for (const auto& interval : intervals)
                 {
-                    const double travel = static_cast<double>(delta_time) *
-                        static_cast<double>(player.speed);
-                    const double from = static_cast<double>(before);
-                    const double to = from + travel;
-                    if (travel > 0.0)
-                    {
-                        const long long first = static_cast<long long>(std::floor(
-                            (from - event_time) / duration)) + 1;
-                        const long long last = static_cast<long long>(std::floor(
-                            (to - event_time + epsilon) / duration));
-                        publish_repeated(first, last, emit);
-                    }
-                    else if (travel < 0.0)
-                    {
-                        const long long first = static_cast<long long>(std::ceil(
-                            (to - event_time - epsilon) / duration));
-                        const long long last = static_cast<long long>(std::ceil(
-                            (from - event_time) / duration)) - 1;
-                        publish_repeated(first, last, emit);
-                    }
-                    continue;
+                    if (crossed_interval(event_time, interval))
+                        publish_motion_event(track, event, player);
                 }
-
-                if (wrap_mode == MotionPlayerComponent::PingPong)
+                for (const double point : boundary_points)
                 {
-                    if (direction_before == 0) continue;
-                    const double period = duration * 2.0;
-                    const double phase_from = direction_before > 0
-                        ? static_cast<double>(before)
-                        : period - static_cast<double>(before);
-                    const double phase_to = phase_from +
-                        static_cast<double>(delta_time) * std::fabs(
-                            static_cast<double>(player.speed));
-
-                    auto emit_phase_series = [&](double base)
-                    {
-                        const long long first = static_cast<long long>(std::floor(
-                            (phase_from - base) / period)) + 1;
-                        const long long last = static_cast<long long>(std::floor(
-                            (phase_to - base + epsilon) / period));
-                        publish_repeated(first, last, emit);
-                    };
-
-                    emit_phase_series(event_time);
-                    // 端点は往路/復路が同じ位相になる。二重発火させない。
-                    if (event_time > 0.0 && event_time < duration)
-                        emit_phase_series(period - event_time);
-                    continue;
-                }
-
-                // Once / ClampForever は端をまたがないので単一区間。
-                const double travel = static_cast<double>(delta_time) *
-                    static_cast<double>(player.speed);
-                double after = static_cast<double>(before) + travel;
-                after = (std::max)(0.0, (std::min)(duration, after));
-                if (travel > 0.0)
-                {
-                    if (event_time > static_cast<double>(before) &&
-                        event_time <= after + epsilon)
-                    {
-                        emit(0);
-                    }
-                }
-                else if (travel < 0.0)
-                {
-                    if (event_time < static_cast<double>(before) &&
-                        event_time + epsilon >= after)
-                    {
-                        emit(0);
-                    }
+                    if (std::fabs(event_time - point) <= epsilon)
+                        publish_motion_event(track, event, player);
                 }
             }
         }
@@ -652,10 +911,18 @@ void framework::evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
                 if (motion == nullptr) continue;
                 const float t = (std::max)(0.0f,
                     (std::min)(motion->duration, source_time));
+                const float evaluated_time = MotionEvaluator::RemapMotionTime(*motion, t,
+                    &asset_database);
                 for (const MotionTrack& track : motion->tracks)
                 {
                     PropertyValue value;
-                    if (!MotionEvaluator::EvaluateTrack(track, t, value)) continue;
+                    ReplayEngine::Motion::MotionTrackEvaluationContext evaluation_context;
+                    evaluation_context.time = evaluated_time;
+                    evaluation_context.raw_time = t;
+                    evaluation_context.duration = motion->duration;
+                    evaluation_context.database = &asset_database;
+                    if (!MotionEvaluator::EvaluateTrackWithContext(track, evaluation_context, value))
+                        continue;
                     const ReplayEngine::Motion::ResolvedMotionBinding binding =
                         MotionBindingResolver::Resolve(scene, track.binding, owner);
                     if (!binding.Valid()) continue;
@@ -767,10 +1034,17 @@ void framework::evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
             }
 
             const float blend_alpha = player.BlendInAlpha();
+            const float evaluated_time = MotionEvaluator::RemapMotionTime(*asset, player.time,
+                &asset_database);
             for (const MotionTrack& track : asset->tracks)
             {
                 PropertyValue value;
-                if (!MotionEvaluator::EvaluateTrack(track, player.time, value))
+                ReplayEngine::Motion::MotionTrackEvaluationContext evaluation_context;
+                evaluation_context.time = evaluated_time;
+                evaluation_context.raw_time = player.time;
+                evaluation_context.duration = asset->duration;
+                evaluation_context.database = &asset_database;
+                if (!MotionEvaluator::EvaluateTrackWithContext(track, evaluation_context, value))
                     continue;
 
                 const ReplayEngine::Motion::ResolvedMotionBinding binding =

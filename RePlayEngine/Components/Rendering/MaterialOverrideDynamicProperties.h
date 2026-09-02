@@ -1,5 +1,6 @@
 ﻿#pragma once
 
+#include "MeshMaterialSlot.h"
 #include "../../Reflection/Property/PropertyBag.h"
 #include "../../Reflection/Property/PropertyDesc.h"
 #include "../../Reflection/Property/PropertyValue.h"
@@ -51,6 +52,133 @@ namespace ReplayEngine::Components
             active_values.Clear();
         }
     };
+
+
+    template<class T>
+    int ClampedMaterialSlotCount(const T& component) noexcept
+    {
+        return (std::max)(0, (std::min)(max_mesh_material_slots, component.material_slot_count));
+    }
+
+    template<class T>
+    void SetMaterialSlotCount(T& component, int count)
+    {
+        component.material_slot_count =
+            (std::max)(0, (std::min)(max_mesh_material_slots, count));
+        component.material_slots.resize(
+            static_cast<std::size_t>(component.material_slot_count));
+    }
+
+    template<class T>
+    void EnsureMaterialSlotStorage(T& component, int required_count)
+    {
+        const int required = (std::max)(0, (std::min)(max_mesh_material_slots, required_count));
+        if (required <= component.material_slot_count &&
+            component.material_slots.size() ==
+                static_cast<std::size_t>(component.material_slot_count))
+        {
+            return;
+        }
+        SetMaterialSlotCount(component, (std::max)(component.material_slot_count, required));
+    }
+
+    template<class T>
+    void SerializeMaterialSlots(const T& component, Reflection::PropertyBag& output)
+    {
+        const int count = ClampedMaterialSlotCount(component);
+        for (int index = 0; index < count; ++index)
+        {
+            const MeshMaterialSlot* slot = static_cast<std::size_t>(index) < component.material_slots.size()
+                ? &component.material_slots[static_cast<std::size_t>(index)] : nullptr;
+            const std::string prefix = "material_slots[" + std::to_string(index) + "].";
+            output.Set(prefix + "name", Reflection::PropertyValue::MakeString(
+                slot != nullptr ? slot->name : std::string{}));
+            output.Set(prefix + "asset", Reflection::PropertyValue::MakeAssetPath(
+                slot != nullptr ? slot->asset : std::string{}));
+        }
+    }
+
+    template<class T>
+    void DeserializeMaterialSlots(T& component, const Reflection::PropertyBag& input)
+    {
+        int count = component.material_slot_count;
+        if (const Reflection::PropertyValue* saved_count = input.Find("material_slot_count"))
+            count = saved_count->AsInt(count);
+        SetMaterialSlotCount(component, count);
+        count = ClampedMaterialSlotCount(component);
+        if (count <= 0) return;
+        EnsureMaterialSlotStorage(component, count);
+        for (int index = 0; index < count; ++index)
+        {
+            MeshMaterialSlot& slot = component.material_slots[static_cast<std::size_t>(index)];
+            const std::string prefix = "material_slots[" + std::to_string(index) + "].";
+            if (const Reflection::PropertyValue* name = input.Find(prefix + "name"))
+                slot.name = name->AsString();
+            if (const Reflection::PropertyValue* asset = input.Find(prefix + "asset"))
+                slot.asset = asset->AsString();
+        }
+    }
+
+    template<class T>
+    void AppendMaterialSlotDynamicProperties(const T& component,
+        std::vector<Reflection::PropertyDesc>& output)
+    {
+        const int count = ClampedMaterialSlotCount(component);
+        for (int index = 0; index < count; ++index)
+        {
+            const std::string prefix = "material_slots[" + std::to_string(index) + "].";
+            Reflection::PropertyDesc name;
+            name.name = prefix + "name";
+            name.display_name = "スロット名";
+            name.type = Reflection::PropertyType::String;
+            name.serializable = false;
+            name.editor_visible = false;
+            name.animatable = Reflection::Animatable::None;
+            name.getter = [index](const Core::Component& base)
+            {
+                if (base.TypeID() != T::StaticTypeID()) return Reflection::PropertyValue{};
+                const T& typed = static_cast<const T&>(base);
+                if (static_cast<std::size_t>(index) >= typed.material_slots.size())
+                    return Reflection::PropertyValue::MakeString({});
+                return Reflection::PropertyValue::MakeString(
+                    typed.material_slots[static_cast<std::size_t>(index)].name);
+            };
+            name.setter = [index](Core::Component& base, const Reflection::PropertyValue& value)
+            {
+                if (base.TypeID() != T::StaticTypeID()) return;
+                T& typed = static_cast<T&>(base);
+                EnsureMaterialSlotStorage(typed, index + 1);
+                typed.material_slots[static_cast<std::size_t>(index)].name = value.AsString();
+            };
+            output.push_back(std::move(name));
+
+            Reflection::PropertyDesc asset;
+            asset.name = prefix + "asset";
+            asset.display_name = "スロットマテリアル";
+            asset.type = Reflection::PropertyType::AssetPath;
+            asset.asset_type = "Material";
+            asset.serializable = false;
+            asset.editor_visible = false;
+            asset.animatable = Reflection::Animatable::None;
+            asset.getter = [index](const Core::Component& base)
+            {
+                if (base.TypeID() != T::StaticTypeID()) return Reflection::PropertyValue{};
+                const T& typed = static_cast<const T&>(base);
+                if (static_cast<std::size_t>(index) >= typed.material_slots.size())
+                    return Reflection::PropertyValue::MakeAssetPath({});
+                return Reflection::PropertyValue::MakeAssetPath(
+                    typed.material_slots[static_cast<std::size_t>(index)].asset);
+            };
+            asset.setter = [index](Core::Component& base, const Reflection::PropertyValue& value)
+            {
+                if (base.TypeID() != T::StaticTypeID()) return;
+                T& typed = static_cast<T&>(base);
+                EnsureMaterialSlotStorage(typed, index + 1);
+                typed.material_slots[static_cast<std::size_t>(index)].asset = value.AsString();
+            };
+            output.push_back(std::move(asset));
+        }
+    }
 
     enum MaterialMotionFixedMask : std::uint32_t
     {
@@ -343,21 +471,31 @@ namespace ReplayEngine::Components
     const std::vector<Reflection::PropertyDesc>*
         MaterialOverrideDynamicProperties(const T& component)
     {
-        // PropertyRegistry は 1 本の配列しか受け取れないため、固定 7 項目と
-        // Shader Schema 項目を Component ごとのキャッシュへ合流する。
-        // Schema が無い間も固定項目は従来どおり必ず見える。
+        // 既存 Material Motion の順序を維持し、その後ろに非 Motion のスロットを足す。
         auto& combined = component.material_dynamic_properties_cache;
         const auto* fixed = FixedMaterialOverrideDynamicProperties<T>();
-        const std::size_t required = fixed->size() +
-            component.material_motion_state.schema_properties.size();
-        if (combined.size() != required ||
-            (required > fixed->size() &&
-                combined.back().name != component.material_motion_state.schema_properties.back().name))
+        const std::size_t schema_count = component.material_motion_state.schema_properties.size();
+        const std::size_t slot_count = static_cast<std::size_t>(ClampedMaterialSlotCount(component));
+        const std::size_t required = fixed->size() + schema_count + slot_count * 2u;
+        bool rebuild = combined.size() != required;
+        if (!rebuild && schema_count > 0)
+        {
+            const std::size_t last_schema = fixed->size() + schema_count - 1u;
+            rebuild = combined[last_schema].name !=
+                component.material_motion_state.schema_properties.back().name;
+        }
+        if (!rebuild && slot_count > 0)
+        {
+            rebuild = combined.back().name !=
+                "material_slots[" + std::to_string(slot_count - 1u) + "].asset";
+        }
+        if (rebuild)
         {
             combined.assign(fixed->begin(), fixed->end());
             combined.insert(combined.end(),
                 component.material_motion_state.schema_properties.begin(),
                 component.material_motion_state.schema_properties.end());
+            AppendMaterialSlotDynamicProperties(component, combined);
         }
         return &combined;
     }

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../../Object/Component/Component.h"
 
@@ -8,7 +8,8 @@ namespace ReplayEngine::Components
 {
     // Light data lives on ordinary GameObjects. Transform supplies position and
     // orientation; these serializable properties supply photometric settings.
-    // 影を落とすかと濃さは光源側の設定にする。Mesh 側は Cast / Receive Shadow だけ。
+    // 影を落とすかと濃さは光源側の設定にする。Mesh 側は Cast / Receive Shadow だけni
+
     class DirectionalLightComponent final : public Core::Component
     {
         REPLAY_COMPONENT_BODY(DirectionalLightComponent)
@@ -40,6 +41,8 @@ namespace ReplayEngine::Components
         bool cast_shadows = false;
         float shadow_strength = 1.0f;
         float shadow_depth_bias = 0.02f; // ワールドメートル
+        // 法線方向へずらす量 (影マップのテクセル単位)。
+        float shadow_normal_bias = 1.5f;
         // 近すぎる面を切る距離。小さすぎると深度の精度が落ちてアクネが出る。
         float shadow_near_plane = 0.15f;
     };
@@ -58,6 +61,8 @@ namespace ReplayEngine::Components
         bool cast_shadows = false;
         float shadow_strength = 1.0f;
         float shadow_depth_bias = 0.02f; // ワールドメートル
+        // 法線方向へずらす量 (影マップのテクセル単位)。
+        float shadow_normal_bias = 1.5f;
         float shadow_near_plane = 0.15f;
     };
 }

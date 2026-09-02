@@ -43,6 +43,7 @@ namespace ReplayEngine::Assets
 
         const AssetRecord* FindByGuid(const std::string& guid) const noexcept;
         const AssetRecord* FindByPath(const std::filesystem::path& path) const noexcept;
+        bool HasPathGuidReservation(const std::filesystem::path& path) const;
         const std::vector<AssetRecord>& Records() const noexcept { return records_; }
 
         static std::filesystem::path NormalizeProjectPath(const std::filesystem::path& path);

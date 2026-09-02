@@ -12,7 +12,8 @@
 
 void framework::scan_shader_library()
 {
-    if (standalone_game_mode) return;
+    // standalone でも走査する。Catalog は Material Asset のシェーダ解決に使われるため、
+    // 飛ばすと書き出したゲームで Material が Unlit/Magenta へ落ちる。
 
     // ログをエディタの Console と Saved/Diagnostics へ流す。
     //
@@ -103,6 +104,7 @@ void framework::draw_shader_catalog_panel()
     {
         scan_shader_library();
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.shader_catalog.rescan");
     ImGui::SameLine();
     if (ImGui::Button(u8"全部コンパイル", ImVec2(140.0f, 0.0f)))
     {
@@ -114,6 +116,7 @@ void framework::draw_shader_catalog_panel()
             u8"コンパイル成功 " + std::to_string(compiled.compiled) +
             u8" 枚 / 失敗 " + std::to_string(compiled.compile_failed) + u8" 枚");
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.shader_catalog.compile_all");
     ImGui::SameLine();
     ImGui::Checkbox(u8"保存で自動コンパイル", &shader_auto_recompile);
 
@@ -186,11 +189,13 @@ void framework::draw_shader_catalog_panel()
                     push_editor_log("Warning", error, entry.info.source_path);
                 }
             }
+            ReplayEngine::Editor::EditorHelp::Item("button.shader_catalog.open_visual_studio");
             ImGui::SameLine();
             if (ImGui::SmallButton(u8"このシェーダを再コンパイル"))
             {
                 shader_library.CompileOne(entry.info.id, false);
             }
+            ReplayEngine::Editor::EditorHelp::Item("button.shader_catalog.compile_one");
 
             // 変種ごとの状態と診断。
             //
@@ -345,6 +350,7 @@ void framework::draw_shader_catalog_panel()
                 {
                     ImGui::SetClipboardText(hlsl.c_str());
                 }
+                ReplayEngine::Editor::EditorHelp::Item("button.shader_catalog.copy_source");
                 ImGui::TreePop();
             }
         }

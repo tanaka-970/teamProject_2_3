@@ -254,8 +254,10 @@ void framework::draw_render_stats_overlay()
                     if (ImGui::Button(u8"Budget適用"))
                         stats.SetBudget(selected_path, (std::max)(0.0f, cpu_budget),
                             (std::max)(0.0f, gpu_budget));
+                    ReplayEngine::Editor::EditorHelp::Item("button.render_stats.budget_apply");
                     ImGui::SameLine();
                     if (ImGui::Button(u8"解除")) stats.ClearBudget(selected_path);
+                    ReplayEngine::Editor::EditorHelp::Item("button.render_stats.budget_clear");
                 }
             }
         }
@@ -267,6 +269,7 @@ void framework::draw_render_stats_overlay()
             ImGui::InputText(u8"名前", output_name, sizeof(output_name));
             if (ImGui::Button(u8"計測ログを保存 (CSV + Trace)"))
                 stats.ExportCsvAndTrace(output_name);
+            ReplayEngine::Editor::EditorHelp::Item("button.render_stats.export");
             ImGui::SameLine();
             ImGui::TextDisabled("Saved/Profile/");
             if (!stats.LastOutputStatus().empty())

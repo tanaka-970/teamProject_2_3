@@ -129,6 +129,7 @@ namespace ReplayEngine::Rendering
         else if (property_name == "EmissiveMap") out_slot = 44;
         else if (property_name == "OcclusionMap" ||
             property_name == "AmbientOcclusionMap") out_slot = 45;
+        else if (property_name == "RampMap") out_slot = 46;
         else return false;
         return true;
     }
@@ -151,6 +152,8 @@ namespace ReplayEngine::Rendering
             else if (texture.property_name == "OcclusionMap" ||
                 texture.property_name == "AmbientOcclusionMap")
                 mask |= OcclusionMapSemantic;
+            else if (texture.property_name == "RampMap")
+                mask |= RampMapSemantic;
         }
         return mask;
     }

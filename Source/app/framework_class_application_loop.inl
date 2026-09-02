@@ -81,7 +81,7 @@
         static constexpr const char* initialize_stage_names[] =
         {
             "AssetDatabase",
-            "ProjectFonts",
+            "ProjectAssets",
             "CpuUiSceneSetup",
             "ObjectScene",
             "DX12Initialize"
@@ -268,7 +268,18 @@
             try
             {
                 update(frame_delta_time);
+                const bool exclusive_frame_capture_started =
+                    begin_automated_exclusive_frame_capture();
                 render(frame_delta_time);
+
+                if (exclusive_frame_capture_started)
+                {
+                    if (golden_capture_pending())
+                        cancel_automated_exclusive_frame_capture();
+                    automated_smoke_test_frames = 0;
+                    object_exit_confirmed = true;
+                    PostMessage(hwnd, WM_CLOSE, 0, 0);
+                }
 
                 if (profile_benchmark_mode && !profile_benchmark_export_attempted)
                 {

@@ -161,6 +161,10 @@
     int motion_graph_channel{ 0 };
     std::vector<int> motion_selected_keys;
     std::vector<ReplayEngine::Motion::MotionKeyframe> motion_key_clipboard;
+    float motion_key_time_scale{ 1.0f };
+    int motion_key_time_scale_pivot{ 0 };
+    ReplayEngine::Reflection::AssetReference motion_selected_easing_curve;
+    std::unordered_set<std::string> motion_easing_curve_warning_guids;
     bool motion_box_select_mode{ false };
     bool motion_box_selecting{ false };
     int motion_box_select_track{ -1 };
@@ -317,10 +321,14 @@
 
 public:
     void request_automated_frame_capture(const std::string& name);
+    void request_automated_exclusive_frame_capture(const std::string& name);
+    bool automated_exclusive_frame_capture_attempted() const noexcept;
     bool golden_last_capture_ok() const noexcept;
     const std::string& golden_last_capture_summary() const noexcept;
 
 private:
+    bool begin_automated_exclusive_frame_capture();
+    void cancel_automated_exclusive_frame_capture();
     // 撮影待ちの間はワールドを止める。update / render から見る。
     bool golden_capture_pending() const noexcept;
 
@@ -381,6 +389,9 @@ private:
     float project_tree_width{ 210.0f };
     bool project_grid_view{ true };
     std::string project_browser_status;
+    // 欠損アセットの判定はファイルシステムへ問い合わせるので毎フレームやらない。
+    std::vector<std::array<std::string, 3>> project_missing_assets;
+    std::size_t project_missing_assets_source_count = static_cast<std::size_t>(-1);
 
     ReplayEngine::Rendering::MaterialAsset material_editor_asset;
     std::string material_editor_guid;

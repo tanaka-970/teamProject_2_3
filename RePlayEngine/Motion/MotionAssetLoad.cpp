@@ -1,4 +1,5 @@
-#include "MotionAsset.h"
+﻿#include "MotionAsset.h"
+#include "MotionExpression.h"
 
 #include "../Object/Registry/ComponentRegistry.h"
 
@@ -7,6 +8,7 @@
 #include <fstream>
 #include <iomanip>
 #include <limits>
+#include <locale>
 #include <sstream>
 #include <system_error>
 #include <utility>
@@ -22,6 +24,31 @@ namespace ReplayEngine::Motion
                 c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
             }
             return value;
+        }
+
+
+        std::string DecodeExpressionSource(const std::string& encoded)
+        {
+            std::string source;
+            source.reserve(encoded.size());
+            for (std::size_t i = 0; i < encoded.size(); ++i)
+            {
+                if (encoded[i] != '\\' || i + 1 >= encoded.size())
+                {
+                    source.push_back(encoded[i]);
+                    continue;
+                }
+                const char next = encoded[++i];
+                if (next == 'n') source.push_back('\n');
+                else if (next == 'r') source.push_back('\r');
+                else if (next == '\\') source.push_back('\\');
+                else
+                {
+                    source.push_back('\\');
+                    source.push_back(next);
+                }
+            }
+            return source;
         }
 
         bool ParseMotionType(std::string token, Reflection::PropertyType& out)
@@ -77,6 +104,17 @@ namespace ReplayEngine::Motion
                 return true;
             }
             return false;
+        }
+
+        bool ParseTrackLoop(std::string token, MotionTrackLoop& out)
+        {
+            token = Upper(std::move(token));
+            if (token == "NONE") out = MotionTrackLoop::None;
+            else if (token == "REPEAT") out = MotionTrackLoop::Repeat;
+            else if (token == "PINGPONG") out = MotionTrackLoop::PingPong;
+            else if (token == "OFFSET") out = MotionTrackLoop::Offset;
+            else return false;
+            return true;
         }
 
         bool ReadValue(std::istream& in, Reflection::PropertyType type,
@@ -226,6 +264,7 @@ namespace ReplayEngine::Motion
         {
             ++line_number;
             std::istringstream input(line);
+            input.imbue(std::locale::classic());
             std::string head;
             if (!(input >> head) || head.empty() || head[0] == '#') continue;
 
@@ -240,6 +279,10 @@ namespace ReplayEngine::Motion
             else if (head == "MOTION_VERSION" || head == "VERSION")
             {
                 input >> file_version;
+            }
+            else if (head == "TIME_REMAP")
+            {
+                input >> std::quoted(asset.time_remap.guid);
             }
             else if (head == "TRACK")
             {
@@ -347,6 +390,52 @@ namespace ReplayEngine::Motion
                     return false;
                 }
             }
+            else if (head == "WIGGLE" && current_track != nullptr)
+            {
+                int enabled = 0;
+                MotionWiggle wiggle;
+                if (!(input >> enabled >> wiggle.amplitude >> wiggle.frequency >>
+                    wiggle.seed >> wiggle.octaves))
+                {
+                    error = std::string(u8"Motion AssetのWIGGLEが不正です: line ") +
+                        std::to_string(line_number);
+                    return false;
+                }
+                wiggle.enabled = enabled != 0;
+                wiggle.frequency = (std::max)(0.0f, wiggle.frequency);
+                wiggle.octaves = (std::max)(1, (std::min)(4, wiggle.octaves));
+                current_track->wiggle = wiggle;
+            }
+            else if (head == "LOOP" && current_track != nullptr)
+            {
+                std::string token;
+                input >> token;
+                if (!ParseTrackLoop(token, current_track->loop))
+                {
+                    error = std::string(u8"Motion AssetのLOOPが不正です: line ") +
+                        std::to_string(line_number);
+                    return false;
+                }
+            }
+            else if (head == "EXPRESSION" && current_track != nullptr)
+            {
+                int enabled = 0;
+                std::string encoded;
+                if (!(input >> enabled >> std::quoted(encoded)))
+                {
+                    error = std::string(u8"Motion AssetのEXPRESSIONが不正です: line ") +
+                        std::to_string(line_number);
+                    return false;
+                }
+                current_track->expression.enabled = enabled != 0;
+                current_track->expression.source = DecodeExpressionSource(encoded);
+                if (!current_track->expression.source.empty())
+                {
+                    std::string compile_error;
+                    MotionExpressionEvaluator::Validate(current_track->expression.source,
+                        compile_error);
+                }
+            }
             else if (head == "KEY" && current_track != nullptr)
             {
                 MotionKeyframe key;
@@ -386,6 +475,10 @@ namespace ReplayEngine::Motion
                     else if (token == "IN")
                     {
                         input >> key.bezier.in_handle.x >> key.bezier.in_handle.y;
+                    }
+                    else if (token == "CURVE")
+                    {
+                        input >> std::quoted(key.easing_curve.guid);
                     }
                 }
 

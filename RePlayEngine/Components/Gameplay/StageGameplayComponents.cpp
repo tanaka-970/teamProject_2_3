@@ -1,9 +1,10 @@
-#include "StageGameplayComponents.h"
+﻿#include "StageGameplayComponents.h"
 
 #include "CharacterMotorComponent.h"
 #include "HealthComponent.h"
 #include "StageGameplayCommon.h"
 #include "../../Object/GameObject/GameObject.h"
+#include "../../Runtime/API/RuntimeContext.h"
 #include "../../Scene/Runtime/Scene.h"
 
 #include <algorithm>
@@ -40,9 +41,11 @@ namespace ReplayEngine::Components
         Core::GameObject* owner = Owner();
         Scene::Scene* scene = GetScene();
         if (owner == nullptr || scene == nullptr || !ActiveInHierarchy()) return;
-        scene->Services().Respawn().OfferSpawnPoint(
-            MakePoint(*owner, { 0.0f, 0.0f, 0.0f }, owner->GetTransform().LocalRotationEuler()),
-            priority);
+        Scene::RespawnService::Point point = MakePoint(*owner,
+            { 0.0f, 0.0f, 0.0f }, owner->GetTransform().LocalRotationEuler());
+        point.identifier = spawn_id;
+        point.team = team;
+        scene->Services().Respawn().OfferSpawnPoint(point, priority);
     }
 
     void SpawnPointComponent::OnStart() { RegisterPoint(); }
@@ -86,6 +89,11 @@ namespace ReplayEngine::Components
         event.subject = other->ID();
         event.identifier = goal_id;
         scene->Services().GameplayEvents().Push(event);
+        if (!completion_event.empty())
+        {
+            if (Runtime::RuntimeContext* runtime = scene->Services().Runtime())
+                runtime->TriggerSceneFlow(completion_event);
+        }
         activated_ = true;
     }
 

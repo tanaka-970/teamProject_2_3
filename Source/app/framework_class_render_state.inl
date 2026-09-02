@@ -150,7 +150,32 @@ public:
     // TAAの再投影に使う前フレームのビュー射影行列。初回は今フレームで埋める。
     DirectX::XMFLOAT4X4 previous_view_projection{};
     bool previous_view_projection_valid{ false };
-    // 射影行列へ加算したTAAジッター(NDC)。モーションベクターで打ち消すのに使う。
+
+    struct dx12_scene_frame_history final
+    {
+        ReplayEngine::Core::WorldInstanceID world_instance_id{
+            ReplayEngine::Core::invalid_world_instance_id };
+        DirectX::XMFLOAT4X4 previous_view_projection{};
+        bool valid{ false };
+    };
+    dx12_scene_frame_history object_loading_scene_frame_history{};
+
+    void build_dx12_frame_constants_for_scene(
+        const ReplayEngine::Scene::Scene& scene,
+        std::uint32_t viewport_width, std::uint32_t viewport_height,
+        const dx12_scene_frame_history& history,
+        ReplayEngine::Rendering::DX12::D3D12FrameConstants& constants,
+        DirectX::XMFLOAT4X4& current_view_projection,
+        bool& used_fallback_camera) const;
+    static void commit_dx12_scene_frame_history(
+        dx12_scene_frame_history& history,
+        const ReplayEngine::Scene::Scene& scene,
+        const DirectX::XMFLOAT4X4& current_view_projection) noexcept;
+    bool build_dx12_lighting_for_scene(
+        ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission& submission,
+        const ReplayEngine::Scene::Scene& scene) const;
+    bool prewarm_loading_scene_gpu_resources();
+    // TAAジッターは現行DX12では未接続で、投影行列へはまだ適用していない。
     DirectX::XMFLOAT2 taa_jitter_ndc{ 0.0f, 0.0f };
     DirectX::XMFLOAT2 previous_taa_jitter_ndc{ 0.0f, 0.0f };
     unsigned int frame_index{ 0 };

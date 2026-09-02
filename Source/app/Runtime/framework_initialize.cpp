@@ -15,18 +15,6 @@
 
 namespace
 {
-    bool IsFontFile(const std::filesystem::path& path)
-    {
-        std::string extension = path.extension().u8string();
-        for (char& character : extension)
-        {
-            character = static_cast<char>(std::tolower(
-                static_cast<unsigned char>(character)));
-        }
-        return extension == ".ttf" || extension == ".otf" || extension == ".ttc";
-    }
-
-
     struct DX12RuntimeOptions final
     {
         bool debug_layer = false;
@@ -111,36 +99,6 @@ namespace
         return options;
     }
 
-    std::size_t RegisterProjectFonts(const std::filesystem::path& fonts_root,
-        ReplayEngine::Assets::AssetDatabase& asset_database)
-    {
-        std::error_code error;
-        if (!std::filesystem::is_directory(fonts_root, error) || error)
-            return 0;
-
-        std::size_t registered_count = 0;
-        std::filesystem::recursive_directory_iterator iterator(fonts_root, error);
-        const std::filesystem::recursive_directory_iterator end;
-        while (iterator != end && !error)
-        {
-            const std::filesystem::directory_entry entry = *iterator;
-            std::error_code entry_error;
-            if (entry.is_regular_file(entry_error) && !entry_error &&
-                IsFontFile(entry.path()))
-            {
-                const auto* record = asset_database.FindByPath(entry.path());
-                if (record == nullptr || record->kind != ReplayEngine::Assets::AssetKind::Font)
-                {
-                    asset_database.Register(entry.path(),
-                        ReplayEngine::Assets::AssetKind::Font);
-                    ++registered_count;
-                }
-            }
-            iterator.increment(error);
-        }
-        return registered_count;
-    }
-
 }
 
 // 【削除済み】lower_copy / find_animation_clip
@@ -174,26 +132,21 @@ bool framework::initialize()
         object_editor_context.SetStatus("AssetDatabase: " + asset_database_error);
     record_initialize_stage(0);
 
-    // resources/fonts へ TTF/OTF/TTC を置くだけで、Project Browser を開かなくても
-    // UIText の Font picker へ出せるように起動時登録する。
-    if (!standalone_game_mode)
+    if (!standalone_game_mode && !profile_benchmark_mode &&
+        automated_smoke_test_frames == 0 && !shutdown_regression_requested &&
+        !automated_frame_capture_pending && !automated_exclusive_frame_capture_pending)
     {
-        const std::size_t registered_fonts = RegisterProjectFonts(
-            content_path(std::filesystem::path("resources") / "fonts"), asset_database);
-        if (registered_fonts > 0)
+        std::string scan_error;
+        const std::size_t registered_assets = register_resource_assets(scan_error);
+        if (registered_assets > 0)
         {
-            std::string save_error;
-            if (!asset_database.Save(save_error))
-            {
-                object_editor_context.SetStatus(
-                    "フォントAssetDatabase保存失敗: " + save_error);
-            }
-            else
-            {
-                push_editor_log("Info",
-                    "resources/fonts からフォントを自動登録しました: " +
-                    std::to_string(registered_fonts) + "件");
-            }
+            push_editor_log("Info", "resources からアセットを自動登録しました: " +
+                std::to_string(registered_assets) + "件");
+        }
+        if (!scan_error.empty())
+        {
+            object_editor_context.SetStatus("resources 自動登録: " + scan_error);
+            push_editor_log("Warning", scan_error);
         }
     }
     record_initialize_stage(1);
@@ -298,6 +251,8 @@ bool framework::initialize()
     }
     dx12_framework_active = true;
     dx12_framework_render_error_reported = false;
+    if (!prewarm_loading_scene_gpu_resources())
+        push_editor_log("Warning", "Loading Screen Scene のGPU先読みに失敗しました。通常の遅延Uploadで続行します");
     std::fprintf(stderr,
         "[DX12] runtime options: debug=%d gpu_validation=%d warp=%d break_on_error=%d dred=%d force_device_removed=%d frame_dump=%u\n",
         dx12_options.debug_layer ? 1 : 0, dx12_options.gpu_validation ? 1 : 0,

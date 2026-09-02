@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../Common/PriorityComponentSelection.h"
 #include "../../Object/Component/Component.h"
@@ -19,6 +19,8 @@ namespace ReplayEngine::Components
         bool bloom_enabled = true;
         float bloom_threshold = 1.0f;
         float bloom_intensity = 1.0f;
+        bool luminance_enabled = true;
+        bool final_pass_enabled = true;
         bool vignette_enabled = false;
         float vignette_intensity = 0.0f;
         bool ssao_enabled = true;

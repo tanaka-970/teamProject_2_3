@@ -53,11 +53,11 @@ namespace ReplayEngine::Rendering
     }
 
     void LocalShadowAtlas::SetSlice(int slice, const XMFLOAT4X4& view_projection,
-        float near_plane, float far_plane, float depth_bias) noexcept
+        float near_plane, float far_plane, float depth_bias, float normal_bias) noexcept
     {
         if (slice < 0 || slice >= static_cast<int>(kSliceCount)) return;
         slices_[slice].view_projection = view_projection;
-        slices_[slice].params = { near_plane, far_plane, depth_bias, 0.0f };
+        slices_[slice].params = { near_plane, far_plane, depth_bias, normal_bias };
     }
 
     XMFLOAT4X4 LocalShadowAtlas::MakeSpotViewProjection(

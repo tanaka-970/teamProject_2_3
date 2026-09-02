@@ -42,6 +42,8 @@ void framework::draw_project_panel()
         draw_new_object_scene_controls();
         ImGui::SameLine();
         if (ImGui::Button("Prefabとして保存...")) save_selected_prefab(true);
+        ReplayEngine::Editor::EditorHelp::Item("button.project.save_prefab",
+            u8"選択中の Scene を Prefab Asset として保存します。");
         ImGui::TextDisabled("%s", object_editor_context.Status().c_str());
         ImGui::Separator();
     }
@@ -59,23 +61,20 @@ void framework::draw_project_panel()
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.26f, 0.60f, 0.86f, 1.0f));
         if (ImGui::Button(u8"C# をすべて更新", ImVec2(150.0f, 0.0f))) rebuild_all_csharp();
         ImGui::PopStyleColor(2);
-        if (ImGui::IsItemHovered())
-        {
-            ImGui::SetTooltip(u8"Catalog の更新と Assembly の再コンパイルを"
-                u8"まとめて行います。\n迷ったらこれを押してください。");
-        }
+        ReplayEngine::Editor::EditorHelp::Item("button.csharp.rebuild_all",
+            u8"Catalog の更新と Assembly の再コンパイルをまとめて行います。\n迷ったらこれを押してください。");
 
         ImGui::SameLine();
         ImGui::Checkbox(u8"自動更新", &csharp_auto_reload);
-        if (ImGui::IsItemHovered())
-        {
-            ImGui::SetTooltip(u8".cs を保存すると自動で再コンパイルします。\n"
-                u8"失敗しても直前に成功した Assembly を使い続けるので、\n"
-                u8"編集中の状態は壊れません。");
-        }
+        ReplayEngine::Editor::EditorHelp::Item("control.csharp.auto_reload",
+            u8".cs を保存すると自動で再コンパイルします。\n"
+            u8"失敗しても直前に成功した Assembly を使い続けるので、\n"
+            u8"編集中の状態は壊れません。");
 
         ImGui::SameLine();
         if (ImGui::Button("Open Selected .cs")) open_selected_csharp_asset();
+        ReplayEngine::Editor::EditorHelp::Item("button.csharp.open_selected",
+            u8"Project Browser で選択中の C# Script を Visual Studio で開きます。");
 
         if (csharp_scripts_dirty)
         {
@@ -89,8 +88,12 @@ void framework::draw_project_panel()
         if (ImGui::TreeNode(u8"個別に実行"))
         {
             if (ImGui::Button("Refresh C# Catalog")) refresh_csharp_scripts();
+            ReplayEngine::Editor::EditorHelp::Item("button.csharp.refresh_catalog",
+                u8"C# Script の一覧を走査して Catalog を更新します。");
             ImGui::SameLine();
             if (ImGui::Button("Build && Reload C#")) build_and_reload_csharp_scripts();
+            ReplayEngine::Editor::EditorHelp::Item("button.csharp.build_reload",
+                u8"C# Script をビルドし、成功した Assembly をエディタへ読み込みます。");
             ImGui::TreePop();
         }
         ImGui::TextDisabled("%s",
@@ -103,8 +106,12 @@ void framework::draw_project_panel()
     }
 
     if (ImGui::Button("モデルファイルを取り込む...")) browse_model_asset();
+    ReplayEngine::Editor::EditorHelp::Item("button.asset.import_model",
+        u8"モデルファイルを選び、Project の Asset として取り込みます。");
     ImGui::SameLine();
     if (ImGui::Button("Prefabを配置...")) load_prefab();
+    ReplayEngine::Editor::EditorHelp::Item("button.asset.place_prefab",
+        u8"Prefab Asset を選んで現在の Scene へ配置します。");
     ImGui::SameLine();
     ImGui::TextDisabled("FBXキャッシュ / GLB / glTF");
     if (async_stage_load_active)
@@ -131,16 +138,21 @@ void framework::draw_project_panel()
     ImGui::SameLine();
     const auto* selected_asset = selected_asset_guid.empty()
         ? nullptr : asset_database.FindByGuid(selected_asset_guid);
-    if (selected_asset != nullptr && ImGui::Button("選択AssetをSceneへ配置"))
-        place_asset_in_object_scene(*selected_asset, asset_drop_add_collider);
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Colliderは左の設定が有効な場合だけ明示的に追加します");
+    if (selected_asset != nullptr)
+    {
+        if (ImGui::Button("選択AssetをSceneへ配置"))
+            place_asset_in_object_scene(*selected_asset, asset_drop_add_collider);
+        ReplayEngine::Editor::EditorHelp::Item("button.asset.place_selected",
+            u8"Colliderは左の設定が有効な場合だけ明示的に追加します");
+    }
     if (selected_asset != nullptr &&
         (selected_asset->kind == ReplayEngine::Assets::AssetKind::Script ||
             selected_asset->source_path.extension() == ".cs"))
     {
         ImGui::SameLine();
         if (ImGui::Button("Visual Studioで開く")) open_selected_csharp_asset();
+        ReplayEngine::Editor::EditorHelp::Item("button.asset.open_script",
+            u8"選択中の Script Asset を Visual Studio で開きます。");
     }
     if (selected_asset != nullptr &&
         selected_asset->kind == ReplayEngine::Assets::AssetKind::Shader)
@@ -155,6 +167,8 @@ void framework::draw_project_panel()
                 push_editor_log("Warning", open_error, selected_asset->source_path);
             }
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.asset.open_shader",
+            u8"選択中の Shader Asset を Visual Studio で開きます。");
     }
     draw_material_asset_editor();
 
@@ -196,6 +210,8 @@ void framework::draw_project_panel()
         if (ImGui::CollapsingHeader("Localization Table Asset", ImGuiTreeNodeFlags_DefaultOpen))
         {
             if (ImGui::Button("再読み込み##LocalizationAsset")) reload();
+            ReplayEngine::Editor::EditorHelp::Item("button.localization.reload",
+                u8"保存済みの Localization Table を読み直します。");
             if (loaded && object_editor_context.CanEdit())
             {
                 bool changed = false;
@@ -233,6 +249,8 @@ void framework::draw_project_panel()
                     new_key[0] = '\0';
                     changed = true;
                 }
+                ReplayEngine::Editor::EditorHelp::Item("button.localization.add_key",
+                    u8"入力した名前の Localization Key を追加します。空の翻訳欄から始まります。");
 
                 ImGui::BeginChild("LocalizationKeys", ImVec2(180.0f, 220.0f), true);
                 for (const std::string& key : table.Keys())
@@ -264,6 +282,8 @@ void framework::draw_project_panel()
                         selected_key.clear();
                         changed = true;
                     }
+                    ReplayEngine::Editor::EditorHelp::Item("button.localization.remove_key",
+                        u8"選択中の Localization Key と翻訳を削除します。");
                 }
                 else ImGui::TextDisabled("左からKeyを選択してください");
                 ImGui::EndGroup();
@@ -342,6 +362,8 @@ void framework::draw_project_panel()
         {
             ImGui::TextDisabled("Action名は既存互換のため固定。Binding / Action Mapだけを編集します。");
             if (ImGui::Button("再読み込み##InputActionAsset")) reload();
+            ReplayEngine::Editor::EditorHelp::Item("button.input_action.reload",
+                u8"保存済みの Input Action Asset を読み直します。");
             if (loaded && object_editor_context.CanEdit())
             {
                 bool changed = false;
@@ -546,11 +568,14 @@ void framework::draw_project_panel()
         {
             ImGui::TextDisabled("%s", selected_asset->source_path.generic_u8string().c_str());
             if (ImGui::Button(u8"再読み込み")) reload_effect_preset();
+            ReplayEngine::Editor::EditorHelp::Item("button.effect_preset.reload",
+                u8"保存済みの Effect Preset を読み直し、編集中の内容をファイルの状態へ戻します。");
 
             if (effect_preset_loaded && object_editor_context.CanEdit())
             {
                 bool changed = false;
                 bool shader_schema_dirty = false;
+                bool structure_changed = false;
                 if (const auto* effect_count = PropertyRegistry::Find(
                     editing_effect_stack.TypeID(), "effect_count"))
                 {
@@ -560,33 +585,86 @@ void framework::draw_project_panel()
                     ImGui::PopID();
                 }
 
+                const bool effect_limit_reached = editing_effect_stack.effects.size() >= 16;
+                if (effect_limit_reached)
+                    ImGui::PushStyleVar(ImGuiStyleVar_Alpha,
+                        ImGui::GetStyle().Alpha * 0.5f);
+                if (effect_limit_reached)
+                    ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+                if (ImGui::Button(u8"エフェクトを追加##EffectPresetAddEffect"))
+                {
+                    editing_effect_stack.effects.emplace_back();
+                    editing_effect_stack.effect_count =
+                        static_cast<int>(editing_effect_stack.effects.size());
+                    editing_effect_stack.OnPropertyChanged("effect_count");
+                    refresh_effect_preset_schemas();
+                    changed = true;
+                    structure_changed = true;
+                }
+                ReplayEngine::Editor::EditorHelp::Item("button.effect_preset.add",
+                    u8"エフェクトは最大16件です。");
+                if (effect_limit_reached)
+                    ImGui::PopItemFlag();
+                if (effect_limit_reached)
+                    ImGui::PopStyleVar();
+
+                for (std::size_t effect_index = 0;
+                    effect_index < editing_effect_stack.effects.size(); ++effect_index)
+                {
+                    ImGui::PushID("EffectPresetDeleteEffect");
+                    ImGui::PushID(static_cast<int>(effect_index));
+                    ImGui::Text(u8"エフェクト %zu", effect_index + 1);
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton(u8"削除"))
+                    {
+                        editing_effect_stack.effects.erase(
+                            editing_effect_stack.effects.begin() + effect_index);
+                        editing_effect_stack.effect_count =
+                            static_cast<int>(editing_effect_stack.effects.size());
+                        editing_effect_stack.OnPropertyChanged("effect_count");
+                        refresh_effect_preset_schemas();
+                        changed = true;
+                        structure_changed = true;
+                        ImGui::PopID();
+                        ImGui::PopID();
+                        break;
+                    }
+                    ReplayEngine::Editor::EditorHelp::Item("button.effect_preset.remove",
+                        u8"この Effect Preset から対象のエフェクトを削除します。");
+                    ImGui::PopID();
+                    ImGui::PopID();
+                }
+
                 // effect_count / type の変更で DynamicProperties が再構築され得るため、
                 // count の描画後にポインタを取り直す。PropertyDrawer 自体が変更通知を
                 // Component::OnPropertyChanged へ集約するので、通常 Inspector と同じ経路になる。
-                if (const auto* dynamic = editing_effect_stack.DynamicProperties())
+                if (!structure_changed)
                 {
-                    for (std::size_t index = 0; index < dynamic->size(); ++index)
+                    if (const auto* dynamic = editing_effect_stack.DynamicProperties())
                     {
-                        // type の変更時には vector が再構築されるため、変更が起きたら
-                        // そのフレームの残りを描かず次フレームへ送る。古い参照を踏まない。
-                        const auto& desc = (*dynamic)[index];
-                        // Draw(type) は OnPropertyChanged 内で dynamic_properties_ を
-                        // 再構築するため、呼ぶ前に名前をコピーして参照寿命を切る。
-                        const std::string property_name = desc.name;
-                        ImGui::PushID(property_name.c_str());
-                        const bool property_changed = PropertyDrawer::Draw(desc,
-                            editing_effect_stack, &asset_database, &active_object_scene());
-                        ImGui::PopID();
-                        changed = property_changed || changed;
-                        if (property_changed && property_name.size() >= 14 &&
-                            property_name.compare(property_name.size() - 14, 14, ".custom_shader") == 0)
+                        for (std::size_t index = 0; index < dynamic->size(); ++index)
                         {
-                            shader_schema_dirty = true;
-                        }
-                        if (property_changed && property_name.size() >= 5 &&
-                            property_name.compare(property_name.size() - 5, 5, ".type") == 0)
-                        {
-                            break;
+                            // type の変更時には vector が再構築されるため、変更が起きたら
+                            // そのフレームの残りを描かず次フレームへ送る。古い参照を踏まない。
+                            const auto& desc = (*dynamic)[index];
+                            // Draw(type) は OnPropertyChanged 内で dynamic_properties_ を
+                            // 再構築するため、呼ぶ前に名前をコピーして参照寿命を切る。
+                            const std::string property_name = desc.name;
+                            ImGui::PushID(property_name.c_str());
+                            const bool property_changed = PropertyDrawer::Draw(desc,
+                                editing_effect_stack, &asset_database, &active_object_scene());
+                            ImGui::PopID();
+                            changed = property_changed || changed;
+                            if (property_changed && property_name.size() >= 14 &&
+                                property_name.compare(property_name.size() - 14, 14, ".custom_shader") == 0)
+                            {
+                                shader_schema_dirty = true;
+                            }
+                            if (property_changed && property_name.size() >= 5 &&
+                                property_name.compare(property_name.size() - 5, 5, ".type") == 0)
+                            {
+                                break;
+                            }
                         }
                     }
                 }
@@ -610,6 +688,8 @@ void framework::draw_project_panel()
                             ImGui::PopID();
                             break;
                         }
+                        ReplayEngine::Editor::EditorHelp::Item("button.effect_preset.move_up",
+                            u8"対象のエフェクトを 1 つ上へ移動します。後段のエフェクトほど後に適用されます。");
                         ImGui::SameLine();
                         if (effect_index + 1 < editing_effect_stack.effects.size() &&
                             ImGui::SmallButton("↓"))
@@ -621,6 +701,8 @@ void framework::draw_project_panel()
                             ImGui::PopID();
                             break;
                         }
+                        ReplayEngine::Editor::EditorHelp::Item("button.effect_preset.move_down",
+                            u8"対象のエフェクトを 1 つ下へ移動します。後段のエフェクトほど後に適用されます。");
                         ImGui::PopID();
                     }
                 }
@@ -704,6 +786,8 @@ void framework::draw_console_panel()
         editor_log_entries.clear();
         selected_editor_log_index = -1;
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.console.clear_log",
+        u8"エディタログの表示内容をすべて消去します。Asset や Scene は変更しません。");
     ImGui::SameLine();
     ImGui::Text(u8"エディタログ: %zu", editor_log_entries.size());
     if (ImGui::BeginChild("EditorLogEntries", ImVec2(0.0f, 150.0f), true))
@@ -738,10 +822,9 @@ void framework::draw_console_panel()
                 }
             }
             ImGui::PopStyleColor();
-            if (ImGui::IsItemHovered() && !entry.file.empty())
-            {
-                ImGui::SetTooltip("%s", entry.file.generic_u8string().c_str());
-            }
+            if (!entry.file.empty())
+                ReplayEngine::Editor::EditorHelp::Item(
+                    "control.console.entry_file", entry.file.generic_u8string().c_str());
         }
     }
     ImGui::EndChild();
@@ -750,9 +833,7 @@ void framework::draw_console_panel()
     ImGui::Text("Editor入力: %s", edit_mode_active ? "編集操作" : "Game View入力キャプチャ");
     ImGui::Text("画面サイズ: %u x %u", client_width, client_height);
     ImGui::TextUnformatted("描画方式: Deferred（固定）");
-    const char* outputs[] = { "Final", "HDR Scene", "Bloom", "Deferred Lit",
-        "GBuffer Base Color", "GBuffer Normal", "GBuffer Material", "Depth" };
-    ImGui::Text("出力: %s", outputs[render_graph.OutputIndex()]);
+    ImGui::Text(u8"出力: %s", ReplayEngine::Rendering::RenderGraph::Name(render_graph.OutputIndex()));
     ImGui::TextDisabled("Ctrl+S: 保存  Ctrl+Z/Y: 元に戻す/やり直す  Ctrl+C/V: コピー/貼り付け  Ctrl+D: 複製");
     ImGui::TextDisabled("F1: エディタ表示  F2: 名前変更  Ctrl+F2: 出力  F3: 入力キャプチャ  F5: 実行  F11: 全画面");
     ImGui::End();
@@ -771,8 +852,12 @@ void framework::draw_workspace_panel()
         ImGui::TextUnformatted("モデリングWorkspace");
         ImGui::TextDisabled("形状編集用のテーブルです。配置操作は配置Workspaceへ分離しています。");
         if (ImGui::Button("選択GameObjectを編集")) selected_editor_object = editor_selection::game_object;
+        ReplayEngine::Editor::EditorHelp::Item("button.workspace.edit_game_object",
+            u8"選択中の GameObject を編集対象にして Inspector を開きます。");
         ImGui::SameLine();
         if (ImGui::Button("配置Workspaceへ")) set_editor_workspace(editor_workspace::placement);
+        ReplayEngine::Editor::EditorHelp::Item("button.workspace.placement",
+            u8"Asset を Scene View へ配置する Workspace に切り替えます。");
         break;
     case editor_workspace::animation:
         ImGui::TextUnformatted("アニメーションWorkspace");
@@ -784,6 +869,8 @@ void framework::draw_workspace_panel()
         ImGui::TextUnformatted("レンダリングWorkspace");
         ImGui::TextDisabled("今後、RenderGraph・シェーダー・Profilerをここへ登録します。");
         if (ImGui::Button("描画設定を開く")) selected_editor_object = editor_selection::rendering;
+        ReplayEngine::Editor::EditorHelp::Item("button.workspace.rendering",
+            u8"描画設定を編集対象にして Inspector を開きます。");
         ImGui::SameLine();
         ImGui::TextUnformatted("Renderer: Deferred（固定）");
         break;
@@ -797,20 +884,30 @@ void framework::draw_workspace_panel()
         ImGui::TextUnformatted("UI Workspace");
         ImGui::TextDisabled("Canvas、RectTransform、UI Component を編集します。");
         if (ImGui::Button("UI 階層を開く")) show_ui_hierarchy_panel = true;
+        ReplayEngine::Editor::EditorHelp::Item("button.workspace.ui_hierarchy",
+            u8"UI Component の階層を表示するパネルを開きます。");
         ImGui::SameLine();
         if (ImGui::Button("Canvas プレビューを開く")) show_ui_preview_panel = true;
+        ReplayEngine::Editor::EditorHelp::Item("button.workspace.ui_preview",
+            u8"Canvas を実際の画面比率で確認するプレビューを開きます。");
         break;
     case editor_workspace::motion:
         ImGui::TextUnformatted("Motion Workspace");
         ImGui::TextDisabled("Motion Asset、キー、プレビューを編集します。");
         if (ImGui::Button("Motion レイヤーを開く")) show_motion_layers_panel = true;
+        ReplayEngine::Editor::EditorHelp::Item("button.workspace.motion_layers",
+            u8"Motion のレイヤーとトラックを編集するパネルを開きます。");
         ImGui::SameLine();
         if (ImGui::Button("タイムラインを開く")) show_motion_timeline_panel = true;
+        ReplayEngine::Editor::EditorHelp::Item("button.workspace.motion_timeline",
+            u8"Motion の時間軸とキーを編集するタイムラインを開きます。");
         break;
     default:
         ImGui::TextUnformatted("基本Workspace");
         ImGui::TextDisabled("シーン編集と実行状態の確認を行います。");
         if (ImGui::Button("ワールドを選択")) selected_editor_object = editor_selection::world;
+        ReplayEngine::Editor::EditorHelp::Item("button.workspace.world",
+            u8"Scene 全体の World 設定を編集対象にします。");
         break;
     }
     ImGui::End();

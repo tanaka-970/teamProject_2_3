@@ -316,6 +316,7 @@ namespace
             preview_state.playing = !preview_state.playing;
             if (preview_state.playing) preview_state.trail.clear();
         }
+        ReplayEngine::Editor::EditorHelp::Item("button.easing.preview_play");
         ImGui::SameLine();
         ImGui::SetNextItemWidth(180.0f);
         ImGui::SliderFloat(u8"再生時間", &preview_state.duration, 0.2f, 5.0f, u8"%.2f 秒");
@@ -424,11 +425,13 @@ void framework::draw_easing_editor()
         ImGui::TextWrapped(u8"Project Browser の 作成 → イージングカーブ で新規作成するか、既存の .replayeasing をダブルクリックしてください。");
         if (ImGui::Button(u8"新規作成##EasingCreateFromEditor"))
             project_create_easing_curve("NewEasingCurve");
+        ReplayEngine::Editor::EditorHelp::Item("button.easing.create");
         ImGui::End();
         return;
     }
 
     if (ImGui::Button(u8"保存")) save_current_easing_curve();
+    ReplayEngine::Editor::EditorHelp::Item("button.easing.save");
     ImGui::SameLine();
     if (ImGui::Button(u8"制御点を再近似"))
     {
@@ -436,6 +439,7 @@ void framework::draw_easing_editor()
         easing_editor_dirty = true;
         easing_editor_status = u8"サンプルから制御点を再近似しました";
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.easing.fit_control_points");
     ImGui::SameLine();
     if (ImGui::Button(u8"制御点をクリア"))
     {
@@ -443,6 +447,7 @@ void framework::draw_easing_editor()
         easing_editor_dirty = true;
         easing_editor_status = u8"制御点をクリアしました。サンプルを直接編集できます";
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.easing.clear_control_points");
 
     if (ImGui::InputText(u8"名前", easing_editor_name_buffer,
         IM_ARRAYSIZE(easing_editor_name_buffer)))
@@ -495,6 +500,7 @@ void framework::draw_easing_editor()
         easing_editor_status = std::string(u8"プリセットを焼きました: ") +
             preset_infos[easing_editor_preset_index].name;
     }
+    ReplayEngine::Editor::EditorHelp::Item("button.easing.bake_samples");
 
     ImGui::TextDisabled(u8"左ドラッグ: フリーハンド / 丸をドラッグ: 編集 / 右クリック: 制御点追加・削除");
     const float available = ImGui::GetContentRegionAvail().x;

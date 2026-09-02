@@ -1,4 +1,4 @@
-#include "BuiltInShaders.h"
+﻿#include "BuiltInShaders.h"
 
 namespace ReplayEngine::Rendering::BuiltInShaders
 {
@@ -10,6 +10,7 @@ namespace ReplayEngine::Rendering::BuiltInShaders
             { Toon,       2, ShaderLightingModel::Toon,  "Toon",     "Materials/BuiltIn/Toon.hlsl" },
             { Unlit,      3, ShaderLightingModel::Unlit, "Unlit",    "Materials/BuiltIn/Unlit.hlsl" },
             { Pixelate,   4, ShaderLightingModel::Pbr,   "Pixelate", "Materials/BuiltIn/Pixelate.hlsl" },
+            { FlatFill,   5, ShaderLightingModel::Unlit, "Flat Fill", "Materials/BuiltIn/FlatFill.hlsl" },
         };
         return definitions;
     }

@@ -34,6 +34,10 @@ namespace ReplayEngine::Rendering
         // MaterialAssetのAssetGUID。空ならRendererのプロパティだけを使う。
         std::string material_asset;
 
+        // サブセット別 Material は Component 内の文字列を借用し、名前は描画へ運ばない。
+        const std::string* const* material_slot_assets = nullptr;
+        std::uint8_t material_slot_count = 0;
+
         // 旧 Scene 互換。Material が割り当てられているときは Shader と値を
         // MaterialAsset から解決し、この値は追加 tint の有無だけに使う。
         bool material_override = false;
@@ -102,6 +106,7 @@ namespace ReplayEngine::Rendering
         bool pixelate_enabled = false;
         float pixelate_size = 6.0f;
         float pixelate_strength = 1.0f;
+        float pixelate_opacity = 1.0f;
 
         // ---- スキンメッシュ用 ----------------------------------------------
         //

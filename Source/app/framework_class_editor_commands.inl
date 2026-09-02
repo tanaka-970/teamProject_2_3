@@ -215,10 +215,12 @@
             const bool shift_down = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
             if (shift_down)
             {
-                if (object_scene_play_mode) exit_object_play_mode();
+                if (object_scene_play_mode || object_editor_play_loading)
+                    exit_object_play_mode();
                 else object_editor_context.SetStatus("停止する Play Session はありません");
             }
-            else if (!object_scene_play_mode) enter_object_play_mode();
+            else if (!object_scene_play_mode && !object_editor_play_loading)
+                enter_object_play_mode();
             return 0;
         }
 #endif
@@ -423,6 +425,7 @@ private:
     void draw_search_results();
     void draw_scene_hierarchy();
     void draw_inspector();
+    void draw_material_slot_inspector();
     void draw_shader_adjustment_workspace();
     // シェーダ編集の唯一の入口（Source/app/Editor/framework_shader_stack.cpp）。
     //

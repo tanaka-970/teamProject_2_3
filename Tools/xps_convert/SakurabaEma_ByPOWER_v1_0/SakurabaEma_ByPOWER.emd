@@ -1,0 +1,18 @@
+[Info]
+Version = 3
+
+[Effect]
+Obj = none
+Obj[0] = textures\AlternativeFull\SakurabaEma_Face.fx
+Obj[1] = textures\AlternativeFull\SakurabaEma_Face.fx
+Obj[2] = textures\AlternativeFull\SakurabaEma_Body.fx
+Obj[3] = textures\AlternativeFull\SakurabaEma_Face.fx
+Obj[4] = textures\AlternativeFull\SakurabaEma_Hair.fx
+Obj[5] = textures\AlternativeFull\SakurabaEma_Clothes01.fx
+Obj[6] = textures\AlternativeFull\SakurabaEma_Clothes01.fx
+Obj[7] = textures\AlternativeFull\SakurabaEma_Clothes02.fx
+Obj[8] = textures\AlternativeFull\SakurabaEma_Shoes.fx
+Obj[9] = textures\AlternativeFull\SakurabaEma_Shoes.fx
+Obj[10] = textures\AlternativeFull\SakurabaEma_Face_Ex.fx
+Obj[11] = textures\AlternativeFull\SakurabaEma_Face_Ex.fx
+Obj[12] = textures\AlternativeFull\SakurabaEma_Face_Ex.fx

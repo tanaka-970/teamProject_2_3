@@ -4,6 +4,10 @@ cbuffer MaterialCB : register(b2)
     float4 emissiveStrength;
     float4 surfaceParams; // metallic、roughness、AO、alpha cutoff
     float4 renderParams;  // alpha mode、lighting model、receive shadow、texture semantic mask
+    float4 builtinParams;
+    float4 builtinParams1;
+    float4 builtinParams2;
+    float4 builtinParams3;
 };
 
 #define DX12_LIGHT_CB_REGISTER b3
@@ -15,6 +19,7 @@ Texture2D metallicTexture : register(t2);
 Texture2D roughnessTexture : register(t3);
 Texture2D emissiveTexture : register(t4);
 Texture2D occlusionTexture : register(t5);
+Texture2D rampTexture : register(t10);
 SamplerState materialSampler : register(s0);
 
 struct PSIn
@@ -34,6 +39,40 @@ static const uint MATERIAL_ROUGHNESS_MAP = 1u << 3;
 static const uint MATERIAL_EMISSIVE_MAP = 1u << 4;
 static const uint MATERIAL_OCCLUSION_MAP = 1u << 5;
 static const uint MATERIAL_PACKED_ORM_MAP = 1u << 6;
+static const uint MATERIAL_RAMP_MAP = 1u << 7;
+static const uint BUILTIN_EFFECT_TOON = 2u;
+
+float3 QuantizeColor565(float3 color)
+{
+    const float3 levels = float3(31.0f, 63.0f, 31.0f);
+    return floor(saturate(color) * levels + 0.5f) / levels;
+}
+
+float QuantizeUnorm8(float value)
+{
+    return floor(saturate(value) * 255.0f + 0.5f) / 255.0f;
+}
+
+Dx12ToonSurface ResolveDeferredToonSurface()
+{
+    Dx12ToonSurface toon = Dx12DefaultToonSurface();
+    const bool hasToonParams = (uint)(builtinParams.x + 0.5f) == BUILTIN_EFFECT_TOON;
+    const float stepCount = hasToonParams ? builtinParams.y : 3.0f;
+    const uint toonCode = (hasToonParams && builtinParams.w >= 0.5f ? 128u : 0u) +
+        (uint)clamp(round(stepCount), 1.0f, 31.0f) * 4u;
+    const bool normalized = toonCode >= 128u;
+    toon.steps = (float)((toonCode - (normalized ? 128u : 0u)) / 4u);
+    if (!hasToonParams) return toon;
+
+    toon.normalizedRamp = normalized ? 1.0f : 0.0f;
+    toon.shadowTint = QuantizeColor565(builtinParams1.rgb);
+    toon.rimColor = QuantizeColor565(builtinParams2.rgb);
+    toon.specularTint = QuantizeColor565(builtinParams3.rgb);
+    toon.rimPower = QuantizeUnorm8(builtinParams1.w / 8.0f) * 8.0f;
+    toon.specularPower = 1.0f + QuantizeUnorm8(
+        (builtinParams2.w - 1.0f) / 127.0f) * 127.0f;
+    return toon;
+}
 
 float3 ResolveNormal(PSIn input, uint semanticMask)
 {
@@ -63,7 +102,7 @@ float3 ResolveNormal(PSIn input, uint semanticMask)
 float4 main(PSIn input) : SV_Target0
 {
     const uint semanticMask = (uint)round(max(renderParams.w, 0.0f));
-    const float4 albedo = baseTexture.Sample(materialSampler, input.uv) * baseColor;
+    float4 albedo = baseTexture.Sample(materialSampler, input.uv) * baseColor;
     if (renderParams.x > 0.5f && renderParams.x < 1.5f)
         clip(albedo.a - surfaceParams.w);
 
@@ -92,13 +131,33 @@ float4 main(PSIn input) : SV_Target0
     const float3 worldNormal = ResolveNormal(input, semanticMask);
     const uint lightingModel = (uint)round(max(renderParams.y, 0.0f));
     const bool receiveShadow = renderParams.z >= 0.5f;
+    const bool matchDeferredToon = builtinParams3.w >= 0.5f && lightingModel == 1u;
+    if (matchDeferredToon && (semanticMask & MATERIAL_RAMP_MAP) != 0u)
+    {
+        const bool hasToonParams = (uint)(builtinParams.x + 0.5f) == BUILTIN_EFFECT_TOON;
+        const float stepCount = hasToonParams ? builtinParams.y : 3.0f;
+        const float3 lightDirection = normalize(-directionalDirectionIntensity.xyz);
+        const float noL = directionalColorFlags.w > 0.5f ?
+            saturate(dot(worldNormal, lightDirection)) : 1.0f;
+        const float levels = max(floor(stepCount + 0.5f), 1.0f);
+        const float aa = fwidth(saturate(noL) * levels);
+        const bool normalizedRamp = builtinParams.w >= 0.5f;
+        const float band = normalizedRamp ? Dx12ToonBand(noL, stepCount, aa) :
+            Dx12ToonNoL(noL, stepCount);
+        albedo.rgb *= rampTexture.Sample(materialSampler, float2(band, 0.5f)).rgb;
+    }
+    Dx12ToonSurface toon = Dx12DefaultToonSurface();
+    if (matchDeferredToon) toon = ResolveDeferredToonSurface();
     const float3 lit = Dx12EvaluateLighting(input.worldPosition, worldNormal, albedo.rgb,
-        metallic, roughness, ambientOcclusion, lightingModel, receiveShadow, input.position.xy);
+        metallic, roughness, ambientOcclusion, lightingModel, receiveShadow,
+        input.position.xy, toon);
 
     float3 emissive = emissiveStrength.rgb * emissiveStrength.a;
     if ((semanticMask & MATERIAL_EMISSIVE_MAP) != 0u)
         emissive = emissiveTexture.Sample(materialSampler, input.uv).rgb *
             emissiveStrength.rgb * emissiveStrength.a;
     // Scene TargetはHDRリニア値を保持し、最終表示パスで一度だけ変換する。
-    return float4(lit + emissive, albedo.a);
+    const float outputAlpha = builtinParams3.w >= 0.5f && renderParams.x < 1.5f ?
+        1.0f : albedo.a;
+    return float4(lit + emissive, outputAlpha);
 }

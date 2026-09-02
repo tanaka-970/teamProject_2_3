@@ -10,13 +10,21 @@ namespace ReplayEngine::Core::Detail
 
             PropertyRegistry::Register<MeshRendererComponent>(
                 MakeProperty("mesh_asset", &MeshRendererComponent::mesh_asset)
-                    .Display("メッシュ").AsAssetPath()
+                    .Display("メッシュ").AsAssetPath().OfAssetType("Model")
                     .Tooltip("AssetDatabase の GUID。プロジェクトパネルから指定する。"));
 
             PropertyRegistry::Register<MeshRendererComponent>(
                 MakeProperty("material_asset", &MeshRendererComponent::material_asset)
-                    .Display("マテリアル").AsAssetPath()
+                    .Display("マテリアル").AsAssetPath().OfAssetType("Material")
                     .Tooltip("Material AssetのGUID。Projectパネルから割り当てる。"));
+
+            PropertyRegistry::Register<MeshRendererComponent>(
+                MakeAccessorProperty<MeshRendererComponent>("material_slot_count", PropertyType::Int,
+                    [](const MeshRendererComponent& component)
+                    { return PropertyValue::MakeInt(ClampedMaterialSlotCount(component)); },
+                    [](MeshRendererComponent& component, const PropertyValue& value)
+                    { SetMaterialSlotCount(component, value.AsInt()); })
+                    .HiddenInEditor().NotAnimatable());
 
             PropertyRegistry::Register<MeshRendererComponent>(
                 MakeProperty("material_override", &MeshRendererComponent::material_override)
@@ -80,8 +88,16 @@ namespace ReplayEngine::Core::Detail
 
             PropertyRegistry::Register<PrimitiveMeshRendererComponent>(
                 MakeProperty("material_asset", &PrimitiveMeshRendererComponent::material_asset)
-                    .Display("マテリアル").AsAssetPath()
+                    .Display("マテリアル").AsAssetPath().OfAssetType("Material")
                     .Tooltip("Material AssetのGUID。Projectパネルから割り当てる。"));
+
+            PropertyRegistry::Register<PrimitiveMeshRendererComponent>(
+                MakeAccessorProperty<PrimitiveMeshRendererComponent>("material_slot_count", PropertyType::Int,
+                    [](const PrimitiveMeshRendererComponent& component)
+                    { return PropertyValue::MakeInt(ClampedMaterialSlotCount(component)); },
+                    [](PrimitiveMeshRendererComponent& component, const PropertyValue& value)
+                    { SetMaterialSlotCount(component, value.AsInt()); })
+                    .HiddenInEditor().NotAnimatable());
 
             PropertyRegistry::Register<PrimitiveMeshRendererComponent>(
                 MakeProperty("material_override", &PrimitiveMeshRendererComponent::material_override)
@@ -125,13 +141,21 @@ namespace ReplayEngine::Core::Detail
 
             PropertyRegistry::Register<SkinnedMeshRendererComponent>(
                 MakeProperty("mesh_asset", &SkinnedMeshRendererComponent::mesh_asset)
-                    .Display("メッシュ").AsAssetPath()
+                    .Display("メッシュ").AsAssetPath().OfAssetType("Model")
                     .Tooltip("AssetDatabase の GUID。空なら描画しない。"));
 
             PropertyRegistry::Register<SkinnedMeshRendererComponent>(
                 MakeProperty("material_asset", &SkinnedMeshRendererComponent::material_asset)
-                    .Display("マテリアル").AsAssetPath()
+                    .Display("マテリアル").AsAssetPath().OfAssetType("Material")
                     .Tooltip("Material AssetのGUID。Projectパネルから割り当てる。"));
+
+            PropertyRegistry::Register<SkinnedMeshRendererComponent>(
+                MakeAccessorProperty<SkinnedMeshRendererComponent>("material_slot_count", PropertyType::Int,
+                    [](const SkinnedMeshRendererComponent& component)
+                    { return PropertyValue::MakeInt(ClampedMaterialSlotCount(component)); },
+                    [](SkinnedMeshRendererComponent& component, const PropertyValue& value)
+                    { SetMaterialSlotCount(component, value.AsInt()); })
+                    .HiddenInEditor().NotAnimatable());
 
             PropertyRegistry::Register<SkinnedMeshRendererComponent>(
                 MakeProperty("material_override", &SkinnedMeshRendererComponent::material_override)
@@ -311,6 +335,12 @@ namespace ReplayEngine::Core::Detail
             PropertyRegistry::Register<PostProcessVolumeComponent>(
                 MakeProperty("bloom_intensity", &PostProcessVolumeComponent::bloom_intensity)
                     .Display("Bloom 強度").Range(0.0, 8.0).Step(0.01));
+            PropertyRegistry::Register<PostProcessVolumeComponent>(
+                MakeProperty("luminance_enabled", &PostProcessVolumeComponent::luminance_enabled)
+                    .Display(u8"輝度抽出を使う").Animation(Animatable::Step));
+            PropertyRegistry::Register<PostProcessVolumeComponent>(
+                MakeProperty("final_pass_enabled", &PostProcessVolumeComponent::final_pass_enabled)
+                    .Display(u8"最終合成を使う").Animation(Animatable::Step));
             PropertyRegistry::Register<PostProcessVolumeComponent>(
                 MakeProperty("vignette_enabled", &PostProcessVolumeComponent::vignette_enabled)
                     .Display("ビネットを使う").Animation(Animatable::Step));
@@ -579,6 +609,9 @@ namespace ReplayEngine::Core::Detail
                 MakeProperty("shadow_depth_bias", &PointLightComponent::shadow_depth_bias)
                     .Display("深度バイアス (m)").Range(0.0, 0.5).Step(0.001));
             PropertyRegistry::Register<PointLightComponent>(
+                MakeProperty("shadow_normal_bias", &PointLightComponent::shadow_normal_bias)
+                    .Display("法線バイアス").Range(0.0, 6.0).Step(0.05));
+            PropertyRegistry::Register<PointLightComponent>(
                 MakeProperty("shadow_near_plane", &PointLightComponent::shadow_near_plane)
                     .Display("影のニア").Range(0.01, 10.0).Step(0.01));
 
@@ -611,6 +644,9 @@ namespace ReplayEngine::Core::Detail
                 MakeProperty("shadow_depth_bias", &SpotLightComponent::shadow_depth_bias)
                     .Display("深度バイアス (m)").Range(0.0, 0.5).Step(0.001));
             PropertyRegistry::Register<SpotLightComponent>(
+                MakeProperty("shadow_normal_bias", &SpotLightComponent::shadow_normal_bias)
+                    .Display("法線バイアス").Range(0.0, 6.0).Step(0.05));
+            PropertyRegistry::Register<SpotLightComponent>(
                 MakeProperty("shadow_near_plane", &SpotLightComponent::shadow_near_plane)
                     .Display("影のニア").Range(0.01, 10.0).Step(0.01));
         }
@@ -622,7 +658,9 @@ namespace ReplayEngine::Core::Detail
                     .InModule("RePlayEngine.Optional.Effects"));
             PropertyRegistry::Register<ScreenEffectStackComponent>(
                 MakeProperty("enabled", &ScreenEffectStackComponent::enabled)
-                    .Display("有効").Animation(Animatable::Step));
+                    .Display(u8"効果を適用")
+                    .Tooltip(u8"ヘッダー左のチェックとは別。両方が入っていないと効果は出ません。")
+                    .Animation(Animatable::Step));
             PropertyRegistry::Register<ScreenEffectStackComponent>(
                 MakeProperty("use_preset", &ScreenEffectStackComponent::use_preset)
                     .Display("Preset を使用").Animation(Animatable::Step));
@@ -653,10 +691,13 @@ namespace ReplayEngine::Core::Detail
             ComponentRegistry::Register<ModelEffectStackComponent>(
                 ComponentTypeInfo::Describe("Model Effect Stack", "Rendering")
                     .WithTooltip("この GameObject のモデルだけへ Effect Chain を適用します。")
-                    .InModule("RePlayEngine.Optional.Effects"));
+                    .InModule("RePlayEngine.Optional.Effects")
+                    .AllowMultipleInstances());
             PropertyRegistry::Register<ModelEffectStackComponent>(
                 MakeProperty("enabled", &ModelEffectStackComponent::enabled)
-                    .Display("有効").Animation(Animatable::Step));
+                    .Display(u8"効果を適用")
+                    .Tooltip(u8"ヘッダー左のチェックとは別。両方が入っていないと効果は出ません。")
+                    .Animation(Animatable::Step));
             PropertyRegistry::Register<ModelEffectStackComponent>(
                 MakeProperty("use_preset", &ModelEffectStackComponent::use_preset)
                     .Display("Preset を使用").Animation(Animatable::Step));
@@ -669,13 +710,25 @@ namespace ReplayEngine::Core::Detail
                     .Display("Effect 数").Range(0.0, 16.0).Step(1.0)
                     .Animation(Animatable::Step));
             PropertyRegistry::Register<ModelEffectStackComponent>(
+                MakeProperty("target_slot_mode", &ModelEffectStackComponent::target_slot_mode)
+                    .Display(u8"対象")
+                    .AsEnum({ u8"モデル全体", u8"マテリアルスロット" })
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<ModelEffectStackComponent>(
                 MakeProperty("depth_mode", &ModelEffectStackComponent::depth_mode)
                     .Display("深度モード")
                     .AsEnum({ "Preserve Depth", "Overlay" })
                     .Animation(Animatable::Step));
             PropertyRegistry::Register<ModelEffectStackComponent>(
+                MakeProperty("extract_mode", &ModelEffectStackComponent::extract_mode)
+                    .Display(u8"合成方法")
+                    .AsEnum({ u8"自動", u8"その場", u8"切り抜き" })
+                    .Tooltip(u8"切り抜きは GBuffer から除外するため SSAO・SSR などの照明結果が変わります。")
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<ModelEffectStackComponent>(
                 MakeProperty("max_bleed_pixels", &ModelEffectStackComponent::max_bleed_pixels)
-                    .Display("最大はみ出し (px)").Range(0.0, 1024.0).Step(1.0)
+                    .Display(u8"最大はみ出し (px)").Range(0.0, 1024.0).Step(1.0)
+                    .Tooltip(u8"エフェクトがモデルの画面矩形から各辺へはみ出せる上限 (px)。")
                     .Animation(Animatable::Interpolatable));
         }
 

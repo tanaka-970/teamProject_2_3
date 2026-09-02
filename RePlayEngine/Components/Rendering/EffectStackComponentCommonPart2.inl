@@ -381,6 +381,10 @@
         output.Set("capture_backdrop",
             Reflection::PropertyValue::MakeBool(capture_backdrop));
 #endif
+#if defined(REPLAY_EFFECT_STACK_HAS_TARGET_SLOT) && REPLAY_EFFECT_STACK_HAS_TARGET_SLOT
+        output.Set("target_slot_index",
+            Reflection::PropertyValue::MakeEnum(target_slot_index));
+#endif
         output.Set("effect_region_enabled",
             Reflection::PropertyValue::MakeBool(effect_region.enabled));
         output.Set("effect_region_shape",
@@ -523,6 +527,16 @@
             capture_backdrop = backdrop->AsBool(false);
         }
 #endif
+        // 旧 Scene はヘッダーの有効チェックが外れたまま保存されていることがある。
+        if (const Reflection::PropertyValue* value = input.Find("enabled"))
+        {
+            if (value->AsBool(enabled)) SetEnabled(true);
+        }
+#if defined(REPLAY_EFFECT_STACK_HAS_TARGET_SLOT) && REPLAY_EFFECT_STACK_HAS_TARGET_SLOT
+        if (const Reflection::PropertyValue* value = input.Find("target_slot_index"))
+            target_slot_index = (std::max)(0, (std::min)(
+                max_mesh_material_slots - 1, value->AsInt(target_slot_index)));
+#endif
         if (const Reflection::PropertyValue* value = input.Find("effect_region_enabled"))
             effect_region.enabled = value->AsBool(effect_region.enabled);
         if (const Reflection::PropertyValue* value = input.Find("effect_region_shape"))
@@ -660,6 +674,8 @@
         }
 
         const std::string changed_property(property_name);
+        // 「効果を適用」とヘッダーの有効チェックの二重管理をやめる。
+        if (changed_property == "enabled" && enabled) SetEnabled(true);
         if (changed_property == "effect_count")
         {
             ResizeEffects();
@@ -761,6 +777,58 @@
     {
         dynamic_properties_.clear();
         dynamic_properties_.reserve(effects.size() * 24 + 10);
+
+#if defined(REPLAY_EFFECT_STACK_HAS_TARGET_SLOT) && REPLAY_EFFECT_STACK_HAS_TARGET_SLOT
+        {
+            // スロットは番号ではなく Mesh Renderer に登録された名前で選ばせる。
+            std::vector<std::string> slot_labels;
+            const std::vector<MeshMaterialSlot>* slots = nullptr;
+            if (const Core::GameObject* owner = Owner())
+            {
+                if (const auto* skinned = owner->GetComponent<SkinnedMeshRendererComponent>())
+                    slots = &skinned->material_slots;
+                else if (const auto* mesh = owner->GetComponent<MeshRendererComponent>())
+                    slots = &mesh->material_slots;
+                else if (const auto* primitive = owner->GetComponent<PrimitiveMeshRendererComponent>())
+                    slots = &primitive->material_slots;
+            }
+            const std::size_t slot_count = slots != nullptr
+                ? (std::min)(slots->size(), static_cast<std::size_t>(max_mesh_material_slots))
+                : static_cast<std::size_t>(max_mesh_material_slots);
+            for (std::size_t index = 0; index < slot_count; ++index)
+            {
+                const std::string number = std::to_string(index) + " 番";
+                const bool named = slots != nullptr && !(*slots)[index].name.empty();
+                slot_labels.push_back(named ? (*slots)[index].name : number);
+            }
+            Reflection::PropertyDesc desc;
+            desc.name = "target_slot_index";
+            desc.type = Reflection::PropertyType::Enum;
+            desc.animatable = Reflection::Animatable::Step;
+            desc.serializable = true;
+            desc.display_name = "マテリアルスロット";
+            desc.tooltip = "対象が「マテリアルスロット」のときに効果を掛けるスロット。";
+            desc.enum_labels = std::move(slot_labels);
+            desc.getter = [](const Core::Component& component)
+            {
+                if (component.TypeID() != REPLAY_EFFECT_STACK_COMPONENT_TYPE::StaticTypeID())
+                    return Reflection::PropertyValue{};
+                const auto& stack =
+                    static_cast<const REPLAY_EFFECT_STACK_COMPONENT_TYPE&>(component);
+                return Reflection::PropertyValue::MakeEnum(stack.target_slot_index);
+            };
+            desc.setter = [](Core::Component& component,
+                const Reflection::PropertyValue& value)
+            {
+                if (component.TypeID() != REPLAY_EFFECT_STACK_COMPONENT_TYPE::StaticTypeID())
+                    return;
+                auto& stack = static_cast<REPLAY_EFFECT_STACK_COMPONENT_TYPE&>(component);
+                stack.target_slot_index = (std::max)(0, (std::min)(
+                    max_mesh_material_slots - 1, value.AsInt(stack.target_slot_index)));
+            };
+            dynamic_properties_.push_back(std::move(desc));
+        }
+#endif
 
         const auto add_region_property = [&](const char* name,
             Reflection::PropertyType type, Reflection::Animatable animatable,

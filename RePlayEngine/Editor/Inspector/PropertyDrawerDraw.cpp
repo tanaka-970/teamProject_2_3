@@ -7,13 +7,16 @@
 #include "../../Assets/AssetDatabase.h"
 #include "../../Localization/LocalizationService.h"
 #include "../../Components/Physics/ColliderComponent.h"
+#include "../../Components/UI/UIImageComponent.h"
 #include "../../Object/Component/Component.h"
 #include "../../Object/GameObject/GameObject.h"
 #include "../../Object/Registry/ComponentRegistry.h"
+#include "../Help/EditorHelp.h"
 #include "../../Physics/CollisionLayers.h"
 #include "../../Reflection/Property/PropertyDesc.h"
 #include "../../Reflection/Registry/PropertyRegistry.h"
 #include "../../Scene/Runtime/Scene.h"
+#include "../../UI/Effects/UIEffect.h"
 
 #include "imgui/imgui.h"
 #include "imgui/imgui_internal.h"
@@ -41,12 +44,18 @@ namespace ReplayEngine::Editor
     {
         if (!desc.editor_visible || !desc.getter) return false;
 
-        const DisabledScope disabled(desc.read_only);
+        const bool ui_image_fill_direction_disabled =
+            component.TypeID() == Components::UIImageComponent::StaticTypeID() &&
+            (desc.name == "fill_method" || desc.name == "fill_reverse") &&
+            static_cast<const Components::UIImageComponent&>(component).fill_amount >= 1.0f;
+        const DisabledScope disabled(desc.read_only || ui_image_fill_direction_disabled);
         const std::string label = "##" + desc.name;
 
         const std::string display_label = desc.DisplayName() + (mixed ? " [Mixed]" : "");
         ImGui::TextUnformatted(display_label.c_str());
-        DrawTooltip(desc);
+        const std::string help_key = "property." + std::string(component.TypeName()) +
+            "." + desc.name;
+        EditorHelp::Item(help_key.c_str(), desc.tooltip.c_str());
         ImGui::SetNextItemWidth(-1.0f);
 
         const PropertyValue current = desc.Capture(component);
@@ -141,8 +150,11 @@ namespace ReplayEngine::Editor
         }
         case PropertyType::AssetPath:
         {
+            // AssetReference と同じく asset_type で候補を絞る。メッシュ欄に
+            // テクスチャが並んでいたのは、ここへ渡し忘れていたため。
             std::string value = current.AsString();
-            if (DrawAssetReference(label.c_str(), assets, value, desc.read_only))
+            if (DrawAssetReference(label.c_str(), assets, value, desc.read_only,
+                AssetKindFromTypeName(desc.asset_type)))
             {
                 desc.Apply(component, PropertyValue::MakeAssetPath(std::move(value)));
                 changed = true;
@@ -198,10 +210,22 @@ namespace ReplayEngine::Editor
         case PropertyType::Enum:
         {
             int value = current.AsInt();
+            const bool is_effect_kind = desc.enum_labels.size() ==
+                static_cast<std::size_t>(UI::UIEffectKind::Count);
             const char* preview = "(不明)";
+            std::string preview_storage;
             if (value >= 0 && value < static_cast<int>(desc.enum_labels.size()))
             {
-                preview = desc.enum_labels[static_cast<std::size_t>(value)].c_str();
+                const std::string& enum_label =
+                    desc.enum_labels[static_cast<std::size_t>(value)];
+                const std::size_t description_separator = enum_label.find(u8" — ");
+                if (description_separator == std::string::npos)
+                    preview = enum_label.c_str();
+                else
+                {
+                    preview_storage = enum_label.substr(0, description_separator);
+                    preview = preview_storage.c_str();
+                }
             }
             if (ImGui::BeginCombo(label.c_str(), preview))
             {
@@ -214,6 +238,14 @@ namespace ReplayEngine::Editor
                         changed = true;
                     }
                     if (selected) ImGui::SetItemDefaultFocus();
+                    if (is_effect_kind)
+                    {
+                        const UI::UIEffectKind effect_kind =
+                            static_cast<UI::UIEffectKind>(i);
+                        const std::string help_key = std::string("effect.kind.") +
+                            UI::UIEffectKindName(effect_kind);
+                        EditorHelp::Item(help_key.c_str());
+                    }
                 }
                 ImGui::EndCombo();
             }

@@ -66,6 +66,7 @@
 #include "../../RePlayEngine/Editor/Core/EditorContext.h"
 #include "../../RePlayEngine/Editor/Commands/MotionEditHistory.h"
 #include "../../RePlayEngine/Editor/Commands/FileEditHistory.h"
+#include "../../RePlayEngine/Editor/Help/EditorHelp.h"
 #include "../../RePlayEngine/Editor/Hierarchy/HierarchyPanel.h"
 #include "../../RePlayEngine/Editor/Inspector/InspectorPanel.h"
 #include "../../RePlayEngine/Rendering/Adapter/RenderItem.h"
@@ -88,7 +89,9 @@
 // 推移的な include に頼ると、上流のヘッダーを整理した瞬間に壊れる。
 #include <chrono>
 #include <cstdint>
+#include <condition_variable>
 #include <memory>
+#include <mutex>
 #include <string>
 
 

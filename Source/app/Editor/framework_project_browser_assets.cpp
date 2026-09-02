@@ -19,11 +19,76 @@
 #include <cctype>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <regex>
+#include <set>
 #include <string>
 #include <system_error>
+#include <utility>
 #include <vector>
 #include "framework_project_browserInternal.h"
 using namespace framework_project_browser::Detail;
+
+namespace
+{
+    std::string ResourcePathKey(const std::filesystem::path& path)
+    {
+        std::error_code error;
+        std::filesystem::path absolute = std::filesystem::absolute(path, error);
+        if (error) absolute = path;
+        std::string key = absolute.lexically_normal().generic_u8string();
+        std::transform(key.begin(), key.end(), key.begin(),
+            [](unsigned char character)
+            { return static_cast<char>(std::tolower(character)); });
+        return key;
+    }
+
+    bool IsIgnoredResourceDirectory(const std::filesystem::path& path)
+    {
+        const std::string name = ToLowerCopy(path.filename().u8string());
+        return name == ".replay_cache" || name == "imported" ||
+            (!name.empty() && name.front() == '.') ||
+            ToLowerCopy(path.extension().u8string()) == ".fbm";
+    }
+
+    void CollectGltfDependencies(const std::filesystem::path& model,
+        const std::filesystem::path& resources_root, std::set<std::string>& dependencies)
+    {
+        const std::string extension = ToLowerCopy(model.extension().u8string());
+        if (extension != ".gltf") return;
+
+        std::ifstream stream(model, std::ios::binary);
+        if (!stream) return;
+        const std::string contents((std::istreambuf_iterator<char>(stream)),
+            std::istreambuf_iterator<char>());
+        const std::regex uri_expression(R"re("uri"\s*:\s*"([^"]+)")re");
+        for (std::sregex_iterator current(contents.begin(), contents.end(), uri_expression),
+            end; current != end; ++current)
+        {
+            const std::string uri = (*current)[1].str();
+            if (uri.rfind("data:", 0) == 0 || uri.find("://") != std::string::npos)
+                continue;
+            const std::filesystem::path relative =
+                std::filesystem::u8path(uri).lexically_normal();
+            const std::filesystem::path dependency =
+                (model.parent_path() / relative).lexically_normal();
+            if (relative.empty() || relative.is_absolute() ||
+                !IsProjectPathInsideOrEqual(dependency, resources_root))
+                continue;
+            std::error_code error;
+            if (std::filesystem::is_regular_file(dependency, error) && !error)
+                dependencies.insert(ResourcePathKey(dependency));
+        }
+    }
+
+    void AppendResourceScanError(std::string& target, const std::string& message)
+    {
+        if (message.empty()) return;
+        if (!target.empty()) target += " / ";
+        target += message;
+    }
+}
 
 // 種別判定・基本操作・通常アセット作成の関数本体
 
@@ -53,7 +118,8 @@ ReplayEngine::Assets::AssetKind framework::project_kind_for(
         return AssetKind::InputAction;
     if (extension == ReplayEngine::Assets::SpriteAtlasAsset::file_extension)
         return AssetKind::SpriteAtlas;
-    if (extension == ".fbx" || extension == ".glb" || extension == ".gltf" ||
+    if (extension == ".fbx" || extension == ".glb" ||
+        extension == ".gltf" ||
         extension == ".obj") return AssetKind::Model;
     if (IsImageExtension(extension)) return AssetKind::Image;
     if (extension == ".wav" || extension == ".mp3" || extension == ".ogg")
@@ -64,6 +130,75 @@ ReplayEngine::Assets::AssetKind framework::project_kind_for(
         extension == ReplayEngine::Rendering::ShaderComposerAsset::file_extension)
         return AssetKind::Shader;
     return AssetKind::Unknown;
+}
+
+std::size_t framework::register_resource_assets(std::string& error)
+{
+    using ReplayEngine::Assets::AssetKind;
+
+    error.clear();
+    const std::filesystem::path resources_root = content_path("resources");
+    std::error_code scan_error;
+    if (!std::filesystem::is_directory(resources_root, scan_error) || scan_error)
+    {
+        error = "resources を読み取れません: " + scan_error.message();
+        return 0;
+    }
+
+    std::vector<std::pair<std::filesystem::path, AssetKind>> candidates;
+    std::vector<std::filesystem::path> models;
+    std::filesystem::recursive_directory_iterator iterator(resources_root,
+        std::filesystem::directory_options::skip_permission_denied, scan_error);
+    const std::filesystem::recursive_directory_iterator end;
+    for (; iterator != end && !scan_error; iterator.increment(scan_error))
+    {
+        const std::filesystem::directory_entry entry = *iterator;
+        std::error_code entry_error;
+        if (entry.is_directory(entry_error))
+        {
+            if (!entry_error && IsIgnoredResourceDirectory(entry.path()))
+                iterator.disable_recursion_pending();
+            continue;
+        }
+        if (entry_error || !entry.is_regular_file(entry_error) || entry_error) continue;
+
+        const std::string name = entry.path().filename().u8string();
+        if (name.empty() || name.front() == '.') continue;
+        const AssetKind kind = project_kind_for(entry.path());
+        if (kind == AssetKind::Unknown) continue;
+        candidates.emplace_back(entry.path(), kind);
+        if (kind == AssetKind::Model) models.push_back(entry.path());
+    }
+    if (scan_error) AppendResourceScanError(error,
+        "resources の走査を途中で終了しました: " + scan_error.message());
+
+    std::sort(candidates.begin(), candidates.end(),
+        [](const auto& left, const auto& right)
+        { return ResourcePathKey(left.first) < ResourcePathKey(right.first); });
+
+    std::set<std::string> dependency_paths;
+    for (const std::filesystem::path& model : models)
+        CollectGltfDependencies(model, resources_root, dependency_paths);
+
+    std::size_t registered_count = 0;
+    for (const auto& candidate : candidates)
+    {
+        if (candidate.second == AssetKind::Image &&
+            dependency_paths.find(ResourcePathKey(candidate.first)) != dependency_paths.end())
+            continue;
+        if (asset_database.FindByPath(candidate.first) != nullptr) continue;
+        if (asset_database.HasPathGuidReservation(candidate.first)) continue;
+        asset_database.Register(candidate.first, candidate.second);
+        ++registered_count;
+    }
+
+    if (registered_count > 0)
+    {
+        std::string save_error;
+        if (!asset_database.Save(save_error))
+            AppendResourceScanError(error, "AssetDatabase 保存失敗: " + save_error);
+    }
+    return registered_count;
 }
 
 // -----------------------------------------------------------------------------
@@ -721,6 +856,7 @@ bool framework::save_current_easing_curve()
         ReplayEngine::Assets::AssetKind::EasingCurve);
     easing_editor_guid = record.guid;
     ReplayEngine::Motion::EasingCurveAsset::Invalidate(record.guid);
+    motion_easing_curve_warning_guids.erase(record.guid);
     std::string db_error;
     if (!asset_database.Save(db_error))
     {

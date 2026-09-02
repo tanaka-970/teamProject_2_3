@@ -48,6 +48,16 @@ void framework::update(float elapsed_time)
             REPLAY_PROFILE_SCOPE("SceneManagerExclusive");
             scene_manager.Update(elapsed_time);
         }
+        if (scene_manager.IsExclusive())
+        {
+            if (object_editor_play_loading)
+                update_editor_play_loading();
+            update_exclusive_scene(elapsed_time);
+        }
+        else if (object_editor_play_loading)
+        {
+            finish_editor_play_loading();
+        }
         return;
     }
 
