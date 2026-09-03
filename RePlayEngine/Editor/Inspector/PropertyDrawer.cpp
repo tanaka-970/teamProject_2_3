@@ -141,9 +141,11 @@ namespace ReplayEngine::Editor
                     active_category = desc.category;
                     if (!active_category.empty())
                     {
-                        ImGui::PushID(active_category.c_str());
+                        // 表示名には種類名が入る。ID にすると種類変更で別の見出しになる。
+                        ImGui::PushID(desc.name.c_str());
                         category_pushed = true;
-                        category_open = ImGui::TreeNodeEx(active_category.c_str(), 0);
+                        category_open = ImGui::TreeNodeEx(
+                            (active_category + "###" + desc.name).c_str(), 0);
                     }
                 }
                 if (!active_category.empty() && !category_open) continue;
