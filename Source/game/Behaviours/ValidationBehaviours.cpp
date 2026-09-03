@@ -354,8 +354,8 @@ namespace Game
 
         runtime.SetSceneFlow(&flow);
         flow.BeginStartupScene(transition_guid_title);
-        flow.Tick();
-        flow.Tick();
+        flow.TickBlocking();
+        flow.TickBlocking();
         check.Expect(flow.StartupState() == RRuntime::StartupSceneState::Ready,
             "Behaviour 検証用の起動 Scene を読み込める");
 
@@ -416,7 +416,7 @@ namespace Game
         // ---- 再発火の抑止 ---------------------------------------------------------
 
         scenes.CancelPending();
-        flow.Tick();
+        flow.TickBlocking();
         DeliverTriggerEnter(*behaviour, door->ID(), visitor->ID());
         check.Expect(behaviour->request_count == 1 && behaviour->rejected_count == 2,
             "一度だけの設定なら、遷移が取り消されても再発火しない");
@@ -440,7 +440,7 @@ namespace Game
         behaviour->destination_scene = REngine::Reflection::SceneReference(
             std::string(transition_guid_corrupt));
         DeliverTriggerEnter(*behaviour, door->ID(), visitor->ID());
-        flow.Tick();
+        flow.TickBlocking();
         check.Expect(
             flow.CurrentTransitionState() == RRuntime::SceneTransitionState::Failed &&
             behaviour->request_count == 2 &&
@@ -462,8 +462,8 @@ namespace Game
         behaviour->destination_scene = REngine::Reflection::SceneReference(
             std::string(transition_guid_game));
         DeliverTriggerEnter(*behaviour, door->ID(), visitor->ID());
-        flow.Tick();
-        flow.Tick();
+        flow.TickBlocking();
+        flow.TickBlocking();
         check.Expect(flow.CurrentSceneGUID() == transition_guid_game &&
             scenes.ActiveWorld().Name() == "FlowGame",
             "Trigger から要求した遷移が安全点で完了する");

@@ -362,7 +362,13 @@ namespace ReplayEngine::Rendering::DX12
             L"ui_effect_ink_bleed.hlsl",
             L"ui_effect_burn_reveal.hlsl",
             L"ui_effect_portal_vortex.hlsl",
-            L"ui_effect_frost_crack.hlsl"
+            L"ui_effect_frost_crack.hlsl",
+            L"ui_effect_bubble.hlsl",
+            L"ui_effect_speed_lines.hlsl",
+            L"ui_effect_clock_wipe.hlsl",
+            L"ui_effect_shape_wipe.hlsl",
+            L"ui_effect_blinds.hlsl",
+            L"ui_effect_checkerboard.hlsl"
         };
         static_assert(std::size(shader_files) == UIEffectKindCount,
             "UIEffectKind and DX12 UI Effect shader table must remain one-to-one.");

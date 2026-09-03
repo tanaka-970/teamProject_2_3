@@ -15,6 +15,7 @@
 #include "D3D12ScreenBounds.h"
 #include "D3D12ShaderCompiler.h"
 #include "D3D12UploadContext.h"
+#include "../ShaderStack/ShaderLayerStack.h"
 #include "../../UI/Effects/UIEffect.h"
 
 #include <DirectXMath.h>
@@ -39,6 +40,7 @@ namespace ReplayEngine::Rendering::DX12
 {
     // Deferred GBuffer の枚数はここだけで決める。RT を足すときはこの値を増やす。
     inline constexpr std::uint32_t kScene3DGBufferCount = 6;
+    inline constexpr std::size_t kScene3DLayerPipelineCount = 12;
 
     struct D3D12StaticVertex final
     {
@@ -69,6 +71,51 @@ namespace ReplayEngine::Rendering::DX12
         std::vector<std::uint8_t> rgba;
         std::uint32_t width = 0;
         std::uint32_t height = 0;
+        bool is_cube = false;
+    };
+
+    enum class D3D12SkyIblStatus : std::uint32_t
+    {
+        Ready = 0,
+        FallbackMissingCpuSource,
+        FallbackBakeFailed,
+    };
+
+    struct D3D12SkySubmission final
+    {
+        bool enabled = false;
+        std::uint64_t owner_id = 0;
+        std::string texture_key;
+        std::vector<std::string> keyframe_texture_keys;
+        std::string secondary_texture_key;
+        DirectX::XMFLOAT4X4 rotation{
+            1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
+        DirectX::XMFLOAT4X4 previous_rotation{
+            1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
+        float intensity = 1.0f;
+        float toon_environment = 0.0f;
+        float blend = 0.0f;
+        float time = 0.0f;
+        float cloud_time = 0.0f;
+        float previous_cloud_time = 0.0f;
+        bool clouds_enabled = false;
+        DirectX::XMFLOAT2 cloud_layer1_speed{};
+        float cloud_layer1_scale = 1.0f;
+        float cloud_layer1_density = 0.0f;
+        DirectX::XMFLOAT4 cloud_layer1_color{ 1, 1, 1, 1 };
+        DirectX::XMFLOAT2 cloud_layer2_speed{};
+        float cloud_layer2_scale = 1.0f;
+        float cloud_layer2_density = 0.0f;
+        DirectX::XMFLOAT4 cloud_layer2_color{ 1, 1, 1, 1 };
+        bool stars_enabled = false;
+        float star_density = 0.0f;
+        float star_intensity = 0.0f;
+        DirectX::XMFLOAT4 star_color{ 1, 1, 1, 1 };
+        bool moon_enabled = false;
+        DirectX::XMFLOAT3 moon_direction{ 0, 0, 1 };
+        float moon_size = 0.04f;
+        float moon_intensity = 0.0f;
+        DirectX::XMFLOAT4 moon_color{ 1, 1, 1, 1 };
     };
 
     // Custom Surface Shader の正本は既存の ShaderCatalog/PropertySchema とする。
@@ -94,6 +141,21 @@ namespace ReplayEngine::Rendering::DX12
         Blend = 2,
     };
 
+    enum class D3D12ShaderLayerPassKind : std::uint32_t
+    {
+        Outline = 0,
+        Wireframe = 1,
+    };
+
+    struct D3D12ShaderLayerPass final
+    {
+        D3D12ShaderLayerPassKind kind = D3D12ShaderLayerPassKind::Outline;
+        ShaderLayerBlend blend = ShaderLayerBlend::Alpha;
+        DirectX::XMFLOAT4 color{ 1, 1, 1, 1 };
+        float width = 0.0f;
+        float opacity = 1.0f;
+    };
+
     struct D3D12StaticDrawItem final
     {
         std::string mesh_key;
@@ -108,6 +170,7 @@ namespace ReplayEngine::Rendering::DX12
         // Static Phase 2 Root Signature に適合する場合に DXC Compile 済みの
         // ShaderCatalog Surface Shader を使い、Custom PSO の失敗時は安全に戻す。
         std::string shader_key;
+        std::vector<D3D12ShaderLayerPass> layer_passes;
         std::vector<std::uint8_t> material_constants;
         std::vector<D3D12StaticMaterialTexture> material_textures;
         // ResolvedMaterialBinding::TextureSemantic の bit mask。
@@ -121,6 +184,8 @@ namespace ReplayEngine::Rendering::DX12
         DirectX::XMFLOAT4 builtin_params2{ 0.0f, 0.0f, 0.0f, 1.0f };
         // Toon の追加枠。rgb=SpecularTint、w=予約。
         DirectX::XMFLOAT4 builtin_params3{ 0.0f, 0.0f, 0.0f, 0.0f };
+        DirectX::XMFLOAT4 normal_adjust_center{ 0.0f, 0.0f, 0.0f, 0.0f };
+        DirectX::XMFLOAT4 normal_adjust_params{ 0.0f, 0.0f, 0.0f, 0.0f };
         std::uint32_t start_index = 0;
         std::uint32_t index_count = 0; // 0 は Cache 済み Index Buffer 全体を描画する。
         DirectX::XMFLOAT4X4 world{
@@ -283,6 +348,7 @@ namespace ReplayEngine::Rendering::DX12
         D3D12DirectionalShadowSubmission directional_shadow{};
         D3D12LocalShadowSubmission local_shadows{};
         D3D12PostProcessSubmission post_process{};
+        D3D12SkySubmission sky{};
         DirectX::XMFLOAT4 background_color{ 0, 0, 0, 1 };
     };
 
@@ -294,6 +360,10 @@ namespace ReplayEngine::Rendering::DX12
         bool write_motion_history = true;
         bool read_scene_history = true;
         bool write_scene_history = true;
+        D3D12_VIEWPORT present_viewport{};
+        D3D12_RECT present_scissor{};
+        bool present_viewport_enabled = false;
+        bool apply_final_screen_effects = true;
     };
 
     struct D3D12Scene3DStateSnapshot final
@@ -691,6 +761,13 @@ namespace ReplayEngine::Rendering::DX12
         std::uint32_t Width() const noexcept { return width_; }
         std::uint32_t Height() const noexcept { return height_; }
         std::uint32_t FrameIndex() const noexcept { return frame_index_; }
+
+        // 0 で VSync を切る。計測時に素の CPU 時間を出すため。
+        void SetPresentSyncInterval(std::uint32_t interval) noexcept
+        {
+            present_sync_interval_ = interval > 1u ? 1u : interval;
+        }
+        std::uint32_t PresentSyncInterval() const noexcept { return present_sync_interval_; }
         std::uint64_t LastSignaledFenceValue() const noexcept
         {
             return last_signaled_fence_value_;
@@ -757,6 +834,10 @@ namespace ReplayEngine::Rendering::DX12
         std::uint32_t GpuPassSequence(D3D12GpuPass pass) const noexcept
         {
             return diagnostics_.PassSequence(pass);
+        }
+        D3D12SkyIblStatus LastSkyIblStatus() const noexcept
+        {
+            return last_sky_ibl_status_;
         }
         void ConsumeDebugMessages(std::vector<D3D12DebugMessage>& out)
         {
@@ -867,6 +948,8 @@ namespace ReplayEngine::Rendering::DX12
             return key.empty() || texture_cache_.find(key) != texture_cache_.end() ||
                 static_texture_failures_.find(key) != static_texture_failures_.end();
         }
+        bool TryGetStaticTextureSize(const std::string& key, std::uint32_t& width,
+            std::uint32_t& height) const noexcept;
         bool HasStaticShader(const std::string& key) const noexcept
         {
             return key.empty() || custom_static_pipelines_.find(key) !=
@@ -939,6 +1022,12 @@ namespace ReplayEngine::Rendering::DX12
         bool EnsureStaticMesh(const D3D12StaticMeshSource& source) noexcept;
         bool EnsureSkinnedMesh(const D3D12SkinnedMeshSource& source) noexcept;
         bool EnsureStaticTexture(const D3D12StaticTextureSource& source) noexcept;
+        bool EnsureSkyEnvironment(const D3D12SkySubmission& sky) noexcept;
+        bool CreateStaticCubeTexture(const std::string& key, std::uint32_t width,
+            std::uint32_t height, std::uint16_t mip_levels, DXGI_FORMAT format,
+            const std::vector<D3D12TextureSubresourceSource>& subresources,
+            const std::vector<float>* cpu_rgba = nullptr,
+            std::uint32_t cpu_width = 0) noexcept;
         bool EnsureUIFontTexture(const D3D12UIFontAtlasSource& source) noexcept;
         bool EnsureStaticShader(const D3D12StaticShaderSource& source) noexcept;
         bool CreateSolidStaticTexture(const char* key, std::uint32_t rgba) noexcept;
@@ -979,6 +1068,13 @@ namespace ReplayEngine::Rendering::DX12
             std::uint32_t height = 0;
             std::uint16_t mip_levels = 1;
             DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            bool is_cube = false;
+        };
+
+        struct SkyCubeCpuData final
+        {
+            std::uint32_t width = 0;
+            std::vector<float> rgba;
         };
 
         struct StaticObjectConstants final
@@ -1080,7 +1176,11 @@ namespace ReplayEngine::Rendering::DX12
         Microsoft::WRL::ComPtr<ID3D12RootSignature> scene3d_shadow_root_signature_;
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_static_gbuffer_pipelines_[6];
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_skinned_gbuffer_pipelines_[6];
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_static_layer_pipelines_[kScene3DLayerPipelineCount];
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_skinned_layer_pipelines_[kScene3DLayerPipelineCount];
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_lighting_pipeline_;
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_skybox_pipeline_;
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_ssao_pipeline_;
         Microsoft::WRL::ComPtr<ID3D12RootSignature> scene3d_postprocess_root_signature_;
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_temporal_input_pipeline_;
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_taa_resolve_pipeline_;
@@ -1097,15 +1197,21 @@ namespace ReplayEngine::Rendering::DX12
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_skinned_shadow_pipelines_[4];
         std::vector<std::uint8_t> scene3d_static_vs_;
         std::vector<std::uint8_t> scene3d_skinned_vs_;
+        std::vector<std::uint8_t> scene3d_static_layer_vs_;
+        std::vector<std::uint8_t> scene3d_skinned_layer_vs_;
+        std::vector<std::uint8_t> scene3d_layer_ps_;
         std::vector<std::uint8_t> scene3d_gbuffer_ps_;
         std::vector<std::uint8_t> scene3d_depth_alpha_ps_;
         std::vector<std::uint8_t> scene3d_forward_ps_;
         std::vector<std::uint8_t> scene3d_model_effect_extract_ps_;
         std::vector<std::uint8_t> scene3d_fullscreen_vs_;
         std::vector<std::uint8_t> scene3d_lighting_ps_;
+        std::vector<std::uint8_t> scene3d_skybox_vs_;
+        std::vector<std::uint8_t> scene3d_skybox_ps_;
         std::vector<std::uint8_t> scene3d_temporal_input_ps_;
         std::vector<std::uint8_t> scene3d_taa_resolve_ps_;
         std::vector<std::uint8_t> scene3d_postprocess_ps_;
+        std::vector<std::uint8_t> scene3d_ssao_ps_;
         std::vector<std::uint8_t> scene3d_shadow_static_vs_;
         std::vector<std::uint8_t> scene3d_shadow_skinned_vs_;
         std::vector<std::uint8_t> scene3d_shadow_alpha_ps_;
@@ -1113,6 +1219,8 @@ namespace ReplayEngine::Rendering::DX12
         Scene3DDepthTarget scene3d_depth_{};
         Scene3DTarget scene3d_temporal_input_{};
         Scene3DTarget scene3d_taa_resolved_{};
+        // SSAO を焼く半解像度ターゲット。毎ピクセル 72 サンプルを 1 回で済ませる。
+        Scene3DTarget scene3d_ssao_{};
         Scene3DHistoryTarget scene3d_history_{};
         Scene3DHistoryTarget scene3d_ssr_history_{};
         Scene3DHistoryTarget scene3d_depth_history_{};
@@ -1121,6 +1229,8 @@ namespace ReplayEngine::Rendering::DX12
         Scene3DShadowTarget scene3d_local_shadow_{};
         D3D12DescriptorAllocation scene3d_null_directional_shadow_srv_{};
         D3D12DescriptorAllocation scene3d_null_local_shadow_srv_{};
+        D3D12DescriptorAllocation scene3d_null_ibl_diffuse_srv_{};
+        D3D12DescriptorAllocation scene3d_null_ibl_specular_srv_{};
         std::uint32_t scene3d_width_ = 0;
         std::uint32_t scene3d_height_ = 0;
         std::unordered_map<std::string, std::unique_ptr<D3D12MeshBuffer>> skinned_mesh_cache_;
@@ -1132,6 +1242,11 @@ namespace ReplayEngine::Rendering::DX12
         std::unordered_map<std::string, std::unique_ptr<D3D12MeshBuffer>> static_mesh_cache_;
         std::unordered_map<std::string, D3D12MeshLocalBounds> static_mesh_bounds_cache_;
         std::unordered_map<std::string, StaticTextureResource> texture_cache_;
+        std::unordered_map<std::string, SkyCubeCpuData> sky_cpu_cubes_;
+        std::unordered_map<std::string, std::filesystem::path> sky_source_paths_;
+        std::unordered_map<std::string, D3D12SkyIblStatus> sky_ibl_failures_;
+        D3D12SkyIblStatus last_sky_ibl_status_ = D3D12SkyIblStatus::Ready;
+        bool sky_cache_prune_initialized_ = false;
         std::unordered_map<std::string, StaticTextureResource> ui_font_texture_cache_;
         std::unordered_map<std::string, std::uint64_t> ui_font_texture_revisions_;
         std::unordered_set<std::string> static_texture_failures_;
@@ -1173,6 +1288,7 @@ namespace ReplayEngine::Rendering::DX12
         // [0]/[1]/[2]はEffectとRegion合成の循環先、[3]はBackdropの退避先。
         D3D12OffscreenTarget ui_effect_targets_[4]{};
         D3D12OffscreenTarget scene_effect_targets_[4]{};
+        D3D12OffscreenTarget scene_sky_effect_target_{};
         D3D12SceneEffectSubmission scene_effect_submission_{};
         std::string scene3d_lighting_trace_signature_;
         std::uint32_t last_model_effect_stack_count_ = 0;
@@ -1203,7 +1319,7 @@ namespace ReplayEngine::Rendering::DX12
         Microsoft::WRL::ComPtr<ID3D12RootSignature> ui_effect_root_signature_;
         static constexpr std::size_t UIEffectKindCount =
             static_cast<std::size_t>(ReplayEngine::UI::UIEffectKind::Count);
-        static_assert(UIEffectKindCount == 74,
+        static_assert(UIEffectKindCount == 80,
             "UIEffectKind の永続化値とDX12 Effect Shader表の対応が変わりました。");
         std::array<Microsoft::WRL::ComPtr<ID3D12PipelineState>, UIEffectKindCount>
             ui_effect_pipelines_{};
@@ -1246,6 +1362,7 @@ namespace ReplayEngine::Rendering::DX12
         std::uint64_t pso_cache_hits_ = 0;
         std::uint64_t pso_cache_misses_ = 0;
         std::uint32_t frame_index_ = 0;
+        std::uint32_t present_sync_interval_ = 1;
         std::uint32_t width_ = 0;
         std::uint32_t height_ = 0;
         bool frame_open_ = false;

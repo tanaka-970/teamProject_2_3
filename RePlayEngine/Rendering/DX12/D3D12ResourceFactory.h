@@ -37,6 +37,11 @@ namespace ReplayEngine::Rendering::DX12::D3D12ResourceFactory
         DXGI_FORMAT format, const std::vector<D3D12TextureSubresourceSource>& subresources,
         Microsoft::WRL::ComPtr<ID3D12Resource>& resource) noexcept;
 
+    bool CreateTextureCube(ID3D12Device* device, D3D12UploadContext& uploader,
+        std::uint32_t width, std::uint32_t height, std::uint16_t mip_levels,
+        DXGI_FORMAT format, const std::vector<D3D12TextureSubresourceSource>& subresources,
+        Microsoft::WRL::ComPtr<ID3D12Resource>& resource) noexcept;
+
     constexpr std::uint32_t AlignConstantBufferSize(std::uint32_t size) noexcept
     {
         return (size + 255u) & ~255u;

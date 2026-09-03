@@ -61,10 +61,12 @@
 #include "../../Components/Rendering/MeshRendererComponent.h"
 #include "../../Components/Rendering/ScreenEffectStackComponent.h"
 #include "../../Components/Rendering/ModelEffectStackComponent.h"
+#include "../../Components/Rendering/NormalAdjustComponent.h"
 #include "../../Components/Rendering/ParticleEmitterComponent.h"
 #include "../../Components/Rendering/PostProcessVolumeComponent.h"
 #include "../../Components/Rendering/PrimitiveMeshRendererComponent.h"
 #include "../../Components/Rendering/SkinnedMeshRendererComponent.h"
+#include "../../Components/Rendering/SkyboxComponent.h"
 #include "../../Components/Rendering/TrailComponent.h"
 #include "../../Scripting/Core/ScriptComponent.h"
 
@@ -94,6 +96,7 @@ namespace ReplayEngine::Core::Detail
         using Components::CompositionPlayerComponent;
         using Components::MeshRendererComponent;
         using Components::ModelEffectStackComponent;
+        using Components::NormalAdjustComponent;
         using Components::ScreenEffectStackComponent;
         using Components::ParticleEmitterComponent;
         using Components::PostProcessVolumeComponent;
@@ -112,6 +115,7 @@ namespace ReplayEngine::Core::Detail
         using Components::RotatorComponent;
         using Components::RectTransformComponent;
         using Components::SkinnedMeshRendererComponent;
+        using Components::SkyboxComponent;
         using Components::SphereColliderComponent;
         using Components::SpawnPointComponent;
         using Components::CheckpointComponent;
@@ -157,6 +161,7 @@ namespace ReplayEngine::Core::Detail
     void RegisterScript();
     void RegisterHealth();
     void RegisterSkinnedMeshRenderer();
+    void RegisterSkybox();
     void RegisterAnimator();
     void RegisterRigidbody();
     void RegisterSphereCollider();
@@ -171,6 +176,7 @@ namespace ReplayEngine::Core::Detail
     void RegisterCamera();
     void RegisterPostProcessVolume();
     void RegisterEffectStacks();
+    void RegisterNormalAdjust();
     void RegisterParticleEmitter();
     void RegisterLineRenderers();
     void RegisterFollowTarget();

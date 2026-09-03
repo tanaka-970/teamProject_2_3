@@ -329,38 +329,12 @@ void framework::begin_startup_scene()
             return;
         }
 
-        ReplayEngine::Scene::Serialization::SceneData data;
-        std::string load_error;
-        if (!ReplayEngine::Scene::Serialization::SceneSerializer::LoadFromFile(
-            data, startup_path, load_error))
-        {
-            set_runtime_blocked("Startup Scene ファイルを読み込めません: " + load_error);
-            return;
-        }
-
         const RRuntime::SceneRequestResult request =
-            object_runtime_scenes.RequestAdopt(data, startup_path.generic_u8string());
+            object_runtime_scenes.RequestLoadPath(startup_path,
+                startup_path.generic_u8string());
         if (request != RRuntime::SceneRequestResult::Accepted)
         {
             set_runtime_blocked("Startup Scene の読み込み要求を受理できませんでした");
-            return;
-        }
-
-        // .replaygame だけで指定された Scene は GUID が無いことがある。
-        // その場合も配布フォルダ内のファイルを正本として直接 Runtime World へ渡す。
-        for (int step = 0; step < 4 && object_runtime_scenes.IsBusy(); ++step)
-            object_runtime_scenes.Tick();
-        rebind_runtime_world_if_changed();
-
-        if (object_runtime_scenes.State() == RRuntime::SceneLoadState::Failed)
-        {
-            set_runtime_blocked("Startup Scene の構築に失敗しました: " +
-                object_runtime_scenes.LastError());
-            return;
-        }
-        if (object_runtime_scenes.State() != RRuntime::SceneLoadState::Completed)
-        {
-            set_runtime_blocked("Startup Scene の読み込みが完了しませんでした");
             return;
         }
         return;

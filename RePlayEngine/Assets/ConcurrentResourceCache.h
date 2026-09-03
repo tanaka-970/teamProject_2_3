@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <algorithm>
 #include <condition_variable>
@@ -21,7 +21,7 @@ namespace ReplayEngine::Assets
         {
             const std::wstring key = MakeKey(path);
             std::shared_ptr<PendingLoad> pending;
-            bool should_load = false;
+            bool should_load = false;//hiisuudhj
             {
                 std::unique_lock<std::mutex> lock(mutex_);
                 if (const auto cached = resources_.find(key); cached != resources_.end())

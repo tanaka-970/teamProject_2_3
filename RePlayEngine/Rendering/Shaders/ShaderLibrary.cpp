@@ -50,6 +50,7 @@ namespace ReplayEngine::Rendering
     ShaderLibrary::ScanReport ShaderLibrary::ScanAll(
         const std::filesystem::path& project_root)
     {
+        ++generation_;
         catalog_.Clear();
         ScanReport report;
 

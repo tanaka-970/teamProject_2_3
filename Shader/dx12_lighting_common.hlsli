@@ -50,12 +50,36 @@ cbuffer Dx12LightCB : register(DX12_LIGHT_CB_REGISTER)
     Dx12LocalShadowSlice localShadowSlices[DX12_LOCAL_SHADOW_SLICE_COUNT];
     uint4 shadowFlags; // x=CSM利用可能、y=Local Shadow利用可能
     uint4 debugFlags; // x=DeferredDebugMode、y/z/w=予約
+    row_major float4x4 previousViewProjection;
+    row_major float4x4 skyRotation;
+    float4 skyJitter;
+    float4 iblParams;
+    float4 skyBlend;
+    float4 skyMotion;
+    float4 cloudLayer1Params;
+    float4 cloudLayer2Params;
+    float4 cloudLayer1Color;
+    float4 cloudLayer2Color;
+    float4 starParams;
+    float4 starColor;
+    float4 moonParams;
+    float4 moonDirection;
+    float4 moonColor;
+    row_major float4x4 previousSkyRotation;
+    float4 toonEnvironment; // x=トゥーンへの環境光の強さ
 };
 
 Texture2DArray<float> dx12CsmShadowArray : register(t6);
 Texture2DArray<float> dx12LocalShadowArray : register(t7);
+TextureCube<float4> dx12IblDiffuse : register(t33);
+TextureCube<float4> dx12IblSpecular : register(t34);
+TextureCube<float4> dx12SkySource : register(t35);
+TextureCube<float4> dx12IblDiffuseSecondary : register(t36);
+TextureCube<float4> dx12IblSpecularSecondary : register(t37);
+TextureCube<float4> dx12SkySourceSecondary : register(t38);
 SamplerComparisonState dx12ShadowSampler : register(s1);
 SamplerState dx12ShadowPointSampler : register(s2);
+SamplerState dx12IblSampler : register(s3);
 
 static const float2 DX12_CSM_POISSON_DISK[DX12_CSM_POISSON_TAP_COUNT] =
 {
@@ -73,6 +97,23 @@ float Dx12InterleavedGradientNoise(float2 pixelPosition)
 {
     const float3 magic = float3(0.06711056f, 0.00583715f, 52.9829189f);
     return frac(magic.z * frac(dot(pixelPosition, magic.xy)));
+}
+
+float3 Dx12ApplyNormalAdjust(float3 normal, float3 worldPosition,
+    float4 normalAdjustCenter, float4 normalAdjustParams)
+{
+    if (normalAdjustCenter.w <= 0.0f) return normal;
+    const float radius = normalAdjustParams.x;
+    if (radius <= 0.0f) return normal;
+    const float3 offset = worldPosition - normalAdjustCenter.xyz;
+    const float distanceToCenter = length(offset);
+    if (distanceToCenter >= radius) return normal;
+    const float falloff = saturate(normalAdjustParams.y);
+    const float innerRadius = radius * (1.0f - falloff);
+    const float blend = normalAdjustCenter.w *
+        (1.0f - smoothstep(innerRadius, radius, distanceToCenter));
+    if (blend <= 0.0f || distanceToCenter <= 1.0e-6f) return normal;
+    return normalize(lerp(normal, offset / distanceToCenter, saturate(blend)));
 }
 
 float3 Dx12FresnelSchlick(float cosTheta, float3 f0)
@@ -440,6 +481,79 @@ float3 Dx12EvaluatePbrSpecular(float3 albedo, float metallic, float roughness,
     return specular * radiance * noL;
 }
 
+float2 Dx12EnvironmentDfg(float noV, float roughness)
+{
+    const float4 c0 = float4(-1.0f, -0.0275f, -0.572f, 0.022f);
+    const float4 c1 = float4(1.0f, 0.0425f, 1.04f, -0.04f);
+    const float4 r = roughness * c0 + c1;
+    const float a004 = min(r.x * r.x, exp2(-9.28f * noV)) * r.x + r.y;
+    return float2(-1.04f, 1.04f) * a004 + r.zw;
+}
+
+
+// トゥーン用の環境光。空の拡散成分だけを引き、階調は触らない。
+// 鏡面を混ぜると平面的な見え方が壊れるので、ここでは足さない。
+float3 Dx12ToonEnvironmentIrradiance(float3 normal)
+{
+    if (iblParams.z < 0.5f || toonEnvironment.x <= 0.0f) return 0.0f.xxx;
+    const float3 N = normalize(mul(normalize(normal), (float3x3)skyRotation));
+    float3 irradiance = dx12IblDiffuse.SampleLevel(dx12IblSampler, N, 0).rgb;
+    if (skyBlend.y >= 0.5f)
+    {
+        irradiance = lerp(irradiance,
+            dx12IblDiffuseSecondary.SampleLevel(dx12IblSampler, N, 0).rgb,
+            saturate(skyBlend.x));
+    }
+    return irradiance * iblParams.x * max(iblParams.w, 0.0f) * toonEnvironment.x;
+}
+
+float3 Dx12EvaluateIbl(float3 albedo, float metallic, float roughness,
+    float3 normal, float3 viewDirection)
+{
+    if (iblParams.z < 0.5f) return 0.0f.xxx;
+    const float3 physicalN = normalize(normal);
+    const float3 V = normalize(viewDirection);
+    const float noV = max(saturate(dot(physicalN, V)), 1.0e-4f);
+    const float3 N = normalize(mul(physicalN, (float3x3)skyRotation));
+    const float3 R = normalize(mul(reflect(-V, physicalN), (float3x3)skyRotation));
+    const float3 f0 = lerp(0.04f.xxx, albedo, saturate(metallic));
+    const float3 diffuseColor = albedo * (1.0f - 0.04f) *
+        (1.0f - saturate(metallic));
+    const float2 f_ab = Dx12EnvironmentDfg(noV, roughness);
+    uint width = 1;
+    uint height = 1;
+    uint mipCount = 1;
+    dx12IblSpecular.GetDimensions(0, width, height, mipCount);
+    const float lod = roughness * float(max(mipCount - 1u, 1u));
+    float3 irradiance = dx12IblDiffuse.SampleLevel(dx12IblSampler, N, 0).rgb;
+    float3 radiance = dx12IblSpecular.SampleLevel(dx12IblSampler, R, lod).rgb;
+    if (skyBlend.y > 0.5f && skyBlend.x > 0.0f)
+    {
+        uint secondaryWidth = 1;
+        uint secondaryHeight = 1;
+        uint secondaryMipCount = 1;
+        dx12IblSpecularSecondary.GetDimensions(0, secondaryWidth,
+            secondaryHeight, secondaryMipCount);
+        irradiance = lerp(irradiance,
+            dx12IblDiffuseSecondary.SampleLevel(dx12IblSampler, N, 0).rgb,
+            saturate(skyBlend.x));
+        radiance = lerp(radiance,
+            dx12IblSpecularSecondary.SampleLevel(dx12IblSampler, R,
+                roughness * float(max(secondaryMipCount - 1u, 1u))).rgb,
+            saturate(skyBlend.x));
+    }
+    const float3 Fr = max(1.0f - roughness, f0) - f0;
+    const float3 kS = f0 + Fr * pow(1.0f - noV, 5.0f);
+    const float3 FssEss = kS * f_ab.x + f_ab.y;
+    const float Ems = 1.0f - (f_ab.x + f_ab.y);
+    const float3 Favg = f0 + (1.0f - f0) / 21.0f;
+    const float3 Fms = FssEss * Favg / max(1.0f - Ems * Favg, 1.0e-4f);
+    const float3 kD = diffuseColor * (1.0f - FssEss - Fms * Ems);
+    const float3 diffuse = (Fms * Ems + kD) * irradiance * iblParams.x;
+    const float3 specular = FssEss * radiance * iblParams.y;
+    return (diffuse + specular) * max(iblParams.w, 0.0f);
+}
+
 float3 Dx12EvaluateLightingToonNormalized(float3 worldPosition, float3 normal,
     float3 albedo, float metallic, float roughness, float ambientOcclusion,
     bool receiveShadow, float2 noiseCoord, Dx12ToonSurface toon)
@@ -620,11 +734,17 @@ float3 Dx12EvaluateLighting(float3 worldPosition, float3 normal, float3 albedo,
         }
     }
 
+    if (!isToon && iblParams.z >= 0.5f)
+        result += Dx12EvaluateIbl(albedo, metallic, roughness, N, V);
+
     if (isToon)
     {
         // 影側の色。tint が黒なら 1 項も足されず従来の絵と一致する。
-        result += albedo * toon.shadowTint * saturate(1.0f - toonLit) *
-            saturate(ambientOcclusion);
+        const float shadowMask = saturate(1.0f - toonLit) * saturate(ambientOcclusion);
+        result += albedo * toon.shadowTint * shadowMask;
+        // 空の色を影側へ乗せる。境界は動かさないので階調は保たれる。
+        // 既定は 0 なので、設定しない限り従来の絵と一致する。
+        result += albedo * Dx12ToonEnvironmentIrradiance(N) * shadowMask;
         result += Dx12ToonRim(toon, N, V);
     }
     return result;
