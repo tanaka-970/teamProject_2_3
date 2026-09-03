@@ -2901,8 +2901,13 @@ bool framework::build_dx12_scene_effects(
                         stack.scissor.top == 0 &&
                         stack.scissor.right == static_cast<LONG>(dx12_device_context.Width()) &&
                         stack.scissor.bottom == static_cast<LONG>(dx12_device_context.Height());
+                    // ポーズ中はメッシュが元の境界を超える。矩形で切ると
+                    // はみ出した部分だけ合成されず白く残る。
+                    const auto rig_pose_entry = object_rig_pose.find(stack.owner_id);
+                    const bool rig_posing = rig_pose_entry != object_rig_pose.end() &&
+                        !rig_pose_entry->second.empty();
                     stack.scissor_enabled = model_rect_found &&
-                        !RectIsEmpty(stack.scissor) && !full_screen;
+                        !RectIsEmpty(stack.scissor) && !full_screen && !rig_posing;
                     const std::uint64_t profile_capture_end =
                         static_cast<std::uint64_t>(profile_benchmark_warmup_frames) +
                         static_cast<std::uint64_t>(profile_benchmark_frames);
