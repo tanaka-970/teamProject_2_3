@@ -1,4 +1,4 @@
-REPLAY_ASSET_DB 2 594
+REPLAY_ASSET_DB 2 595
 "60412424bb1443240b2bf2160eee6923" 1 "ExampleStage" "resources/Stage/ExampleStage.cereal" "resources/.replay_cache/models/f9fffac39252a621_v0.replaycache"
 "1bd1358040255f5bd18f3be0d79fbe3c" 1 "AllAnimation1" "resources/AnimationModel/AllAnimation1.cereal" "resources/.replay_cache/models/6a20e727f78fb359_v0.replaycache"
 "e5c4168feb92f8fd7357f6cbc1f66e22" 1 "scene" "resources/Stage/city_3d_model_gltf/scene.gltf" "resources/.replay_cache/models/98fd72a862da8c8f_v0.replaycache"
@@ -593,3 +593,4 @@ REPLAY_ASSET_DB 2 594
 "be1bddcf95998f6610f655f2a69d4c51" 1 "bronze_shark_statue_4k" "resources/TestModel/bronze_shark_statue_4k.gltf/bronze_shark_statue_4k.gltf" ""
 "ffdd47b66ea6d976cd4d963475e3c889" 1 "street_lamp_01_4k" "resources/TestModel/street_lamp_01_4k.gltf/street_lamp_01_4k.gltf" ""
 "64a1099007e29770c00dfd16fe1c40a3" 2 "grasslands_sunset_4k" "resources/testSkyMap/grasslands_sunset_4k.hdr" ""
+"6229153d8fb830eb4c06ed0fcef30af8" 5 "hukusima" "resources/Scenes/hukusima.replayscene" ""
