@@ -452,6 +452,35 @@
                     .Display("中心").Tooltip("正規化座標で指定する回転中心。0.5, 0.5 が中央。")
                     .Step(0.01));
                 break;
+            case UI::UIEffectKind::Blinds:
+                add_float("progress", "進行", "0 から 1 でブラインドが閉じる。",
+                    0.0, 1.0, 0.001);
+                add_float("radius", "枚数", "短冊の枚数。", 1.0, 128.0, 1.0);
+                add_float("angle", "向き", "短冊の向き（度）。0 で横。",
+                    -360.0, 360.0, 0.1);
+                add_float("amount", "開きかた",
+                    "0 で片側から、1 で各短冊の中央から開く。", 0.0, 1.0, 0.001);
+                add_float("softness", "縁の柔らかさ", "短冊の境界をぼかす量。",
+                    0.0001, 1.0, 0.001);
+                add_float("intensity", "適用量", "アルファを抜く割合。",
+                    0.0, 1.0, 0.01);
+                break;
+            case UI::UIEffectKind::Checkerboard:
+                add_float("progress", "進行", "0 から 1 でマスが広がり画面を覆う。",
+                    0.0, 1.0, 0.001);
+                add_float("radius", "マス数", "画面を割るマスの数。", 1.0, 64.0, 1.0);
+                add_float("amount", "市松の遅れ",
+                    "市松のもう一方が遅れて開く量。", 0.0, 1.0, 0.001);
+                add_float("threshold", "ばらつき",
+                    "マスごとに開く時刻を散らす量。", 0.0, 1.0, 0.001);
+                add_float("angle", "回転", "市松全体の回転角度（度）。",
+                    -360.0, 360.0, 0.1);
+                add_float("softness", "縁の柔らかさ", "マスの境界をぼかす量。",
+                    0.0001, 1.0, 0.001);
+                add_float("intensity", "適用量", "アルファを抜く割合。",
+                    0.0, 1.0, 0.01);
+                add_seed();
+                break;
             case UI::UIEffectKind::ShapeWipe:
                 add_float("progress", "進行", "0 から 1 で形状が広がり画面を覆う。",
                     0.0, 1.0, 0.001);

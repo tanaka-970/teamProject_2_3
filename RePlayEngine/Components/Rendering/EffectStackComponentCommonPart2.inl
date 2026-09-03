@@ -379,6 +379,24 @@
                 effect.intensity = 1.0f;
                 effect.direction = { 0.5f, 0.5f };
                 break;
+            case UI::UIEffectKind::Blinds:
+                effect.progress = 0.35f;
+                effect.radius = 12.0f;
+                effect.angle = 0.0f;
+                effect.amount = 0.0f;
+                effect.softness = 0.02f;
+                effect.intensity = 1.0f;
+                break;
+            case UI::UIEffectKind::Checkerboard:
+                effect.progress = 0.45f;
+                effect.radius = 10.0f;
+                effect.amount = 0.45f;
+                effect.threshold = 0.15f;
+                effect.angle = 0.0f;
+                effect.softness = 0.02f;
+                effect.intensity = 1.0f;
+                effect.seed = 1.0f;
+                break;
             case UI::UIEffectKind::ShapeWipe:
                 effect.progress = 0.45f;
                 effect.waveform = 1;

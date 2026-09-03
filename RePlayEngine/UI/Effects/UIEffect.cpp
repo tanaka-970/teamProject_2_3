@@ -160,6 +160,8 @@ namespace ReplayEngine::UI
         case UIEffectKind::SpeedLines:
         case UIEffectKind::ClockWipe:
         case UIEffectKind::ShapeWipe:
+        case UIEffectKind::Blinds:
+        case UIEffectKind::Checkerboard:
         case UIEffectKind::Dissolve:
         case UIEffectKind::Halftone:
         case UIEffectKind::Vignette:
