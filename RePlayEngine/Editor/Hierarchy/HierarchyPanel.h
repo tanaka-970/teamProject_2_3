@@ -2,7 +2,9 @@
 
 #include "../../Core/ObjectID/ObjectID.h"
 
+#include <cstddef>
 #include <string>
+#include <vector>
 
 namespace ReplayEngine::Core { class GameObject; }
 namespace ReplayEngine::Scene::Serialization { struct SceneData; }
@@ -42,10 +44,10 @@ namespace ReplayEngine::Editor
             const Scene::Serialization::SceneData& data, std::string& error);
 
     private:
-        void DrawNode(EditorContext& context, Core::GameObject& object, int depth);
+        void DrawNode(EditorContext& context, Core::GameObject& object, int depth,
+            const std::vector<Core::GameObject*>& siblings);
         bool NodeMatchesFilter(const Core::GameObject& object) const;
         void DrawContextMenu(EditorContext& context, Core::GameObject* object);
-        void HandleDragAndDrop(EditorContext& context, Core::GameObject& object);
 
         void CreateEmptyGameObject(EditorContext& context, Core::GameObject* parent);
         void DrawCreateMenu(EditorContext& context, Core::GameObject* parent);

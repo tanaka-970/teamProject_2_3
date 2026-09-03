@@ -11,12 +11,17 @@
 // 関数本体は分割前のまま移動し、Workspace の既存分岐と呼び出し順は変更しない。
 #include "framework.h"
 #include "../../RePlayEngine/Editor/Style/EditorStyle.h"
+#include "../../RePlayEngine/Object/Registry/ComponentRegistry.h"
 
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdio>
 #include <filesystem>
+#include <iterator>
 #include <string>
+#include <utility>
+#include <vector>
 
 void framework::apply_toon_preset(int preset)
 {
@@ -113,19 +118,258 @@ void framework::reset_editor_values()
     apply_toon_preset(0);
 }
 
+namespace
+{
+    constexpr const char* builtin_editor_style_id = "builtin-replay-default";
+
+    ReplayEngine::Editor::EditorStylePreset MakeDefaultEditorStylePreset()
+    {
+        ReplayEngine::Editor::EditorStylePreset preset;
+        preset.id = builtin_editor_style_id;
+        preset.name = "RePlay Default";
+        preset.scope = ReplayEngine::Editor::EditorStylePresetScope::Personal;
+        preset.source_path.clear();
+        return preset;
+    }
+}
+
+ReplayEngine::Editor::EditorStylePreset framework::capture_editor_style_preset() const
+{
+    ReplayEngine::Editor::EditorStylePreset preset;
+    preset.button_scale = ui_button_scale;
+    preset.font_scale = ui_font_scale;
+    preset.text_color = ImVec4(ui_text_color[0], ui_text_color[1], ui_text_color[2], 1.0f);
+    preset.tokens = ReplayEngine::Editor::EditorStyle::Tokens();
+    for (const std::string& category : ReplayEngine::Core::ComponentRegistry::Categories())
+        preset.category_colors[category] =
+            ReplayEngine::Editor::EditorStyle::ComponentCategoryColor(category);
+    return preset;
+}
+
+ReplayEngine::Editor::EditorStyleEditHistory::Snapshot
+    framework::capture_editor_style_snapshot() const
+{
+    const auto preset = capture_editor_style_preset();
+    ReplayEngine::Editor::EditorStyleEditHistory::Snapshot snapshot;
+    snapshot.button_scale = preset.button_scale;
+    snapshot.font_scale = preset.font_scale;
+    snapshot.text_color = preset.text_color;
+    snapshot.tokens = preset.tokens;
+    snapshot.style_overridden = ui_style_overridden;
+    if (active_editor_style_preset_index >= 0 &&
+        active_editor_style_preset_index < static_cast<int>(editor_style_presets.size()))
+    {
+        snapshot.active_preset_id = editor_style_presets[
+            static_cast<std::size_t>(active_editor_style_preset_index)].id;
+    }
+    snapshot.category_colors = preset.category_colors;
+    return snapshot;
+}
+
+void framework::apply_editor_style_snapshot(
+    const ReplayEngine::Editor::EditorStyleEditHistory::Snapshot& snapshot)
+{
+    if (snapshot.category_colors.empty())
+        ReplayEngine::Editor::EditorStyle::ResetComponentCategoryColors();
+    else
+        ReplayEngine::Editor::EditorStyle::ReplaceComponentCategoryColors(
+            snapshot.category_colors);
+    ui_button_scale = snapshot.button_scale;
+    ui_font_scale = snapshot.font_scale;
+    ui_text_color[0] = snapshot.text_color.x;
+    ui_text_color[1] = snapshot.text_color.y;
+    ui_text_color[2] = snapshot.text_color.z;
+    ReplayEngine::Editor::EditorStyle::SetTokens(snapshot.tokens);
+    ui_style_overridden = snapshot.style_overridden;
+    if (!snapshot.active_preset_id.empty())
+    {
+        const auto found = std::find_if(editor_style_presets.begin(), editor_style_presets.end(),
+            [&snapshot](const auto& preset) { return preset.id == snapshot.active_preset_id; });
+        if (found != editor_style_presets.end())
+            active_editor_style_preset_index = static_cast<int>(
+                std::distance(editor_style_presets.begin(), found));
+    }
+}
+
+void framework::ensure_editor_style_presets_loaded()
+{
+    if (editor_style_presets_loaded) return;
+    editor_style_presets_loaded = true;
+
+    std::string load_error;
+    const std::vector<ReplayEngine::Editor::EditorStylePreset> loaded =
+        ReplayEngine::Editor::EditorStylePresetStore::LoadAll(load_error);
+    editor_style_presets.clear();
+    editor_style_presets.push_back(MakeDefaultEditorStylePreset());
+    for (const auto& preset : loaded)
+    {
+        if (preset.id == builtin_editor_style_id) continue;
+        editor_style_presets.push_back(preset);
+    }
+
+    std::string active_id;
+    std::string active_error;
+    const bool active_loaded =
+        ReplayEngine::Editor::EditorStylePresetStore::LoadActivePresetId(
+            active_id, active_error);
+    active_editor_style_preset_index = 0;
+    editor_style_active_selection_loaded = false;
+    if (active_loaded)
+    {
+        for (std::size_t index = 0; index < editor_style_presets.size(); ++index)
+        {
+            if (editor_style_presets[index].id == active_id)
+            {
+                active_editor_style_preset_index = static_cast<int>(index);
+                editor_style_active_selection_loaded = true;
+                break;
+            }
+        }
+    }
+
+    const auto& preset = editor_style_presets[
+        static_cast<std::size_t>(active_editor_style_preset_index)];
+    if (preset.category_colors.empty())
+        ReplayEngine::Editor::EditorStyle::ResetComponentCategoryColors();
+    else
+        ReplayEngine::Editor::EditorStyle::ReplaceComponentCategoryColors(
+            preset.category_colors);
+    ReplayEngine::Editor::EditorStyle::SetTokens(preset.tokens);
+    ui_button_scale = preset.button_scale;
+    ui_font_scale = preset.font_scale;
+    ui_text_color[0] = preset.text_color.x;
+    ui_text_color[1] = preset.text_color.y;
+    ui_text_color[2] = preset.text_color.z;
+    ui_style_overridden = preset.id != builtin_editor_style_id;
+    (void)load_error;
+    (void)active_error;
+}
+
+bool framework::switch_editor_style_preset(const std::string& id)
+{
+    ensure_editor_style_presets_loaded();
+    const auto found = std::find_if(editor_style_presets.begin(), editor_style_presets.end(),
+        [&id](const auto& preset) { return preset.id == id; });
+    if (found == editor_style_presets.end()) return false;
+
+    const auto before = capture_editor_style_snapshot();
+    editor_style_history.Begin(before, "見た目プリセットを切り替え");
+    if (found->category_colors.empty())
+        ReplayEngine::Editor::EditorStyle::ResetComponentCategoryColors();
+    else
+        ReplayEngine::Editor::EditorStyle::ReplaceComponentCategoryColors(
+            found->category_colors);
+    ReplayEngine::Editor::EditorStyle::SetTokens(found->tokens);
+    ui_button_scale = found->button_scale;
+    ui_font_scale = found->font_scale;
+    ui_text_color[0] = found->text_color.x;
+    ui_text_color[1] = found->text_color.y;
+    ui_text_color[2] = found->text_color.z;
+    ui_style_overridden = found->id != builtin_editor_style_id;
+    active_editor_style_preset_index = static_cast<int>(
+        std::distance(editor_style_presets.begin(), found));
+    editor_style_history.Commit(capture_editor_style_snapshot());
+    std::string error;
+    ReplayEngine::Editor::EditorStylePresetStore::SaveActivePresetId(
+        found->id, error);
+    configure_editor_style();
+    return true;
+}
+
+bool framework::make_active_editor_style_preset_personal_copy()
+{
+    ensure_editor_style_presets_loaded();
+    if (active_editor_style_preset_index < 0 ||
+        active_editor_style_preset_index >= static_cast<int>(editor_style_presets.size()))
+        return false;
+    const auto source = editor_style_presets[
+        static_cast<std::size_t>(active_editor_style_preset_index)];
+    if (source.Editable() && source.id != builtin_editor_style_id) return true;
+
+    auto copy = ReplayEngine::Editor::EditorStylePresetStore::DuplicateAsPersonal(
+        source, source.name + " - Personal");
+    const auto current = capture_editor_style_preset();
+    copy.button_scale = current.button_scale;
+    copy.font_scale = current.font_scale;
+    copy.text_color = current.text_color;
+    copy.tokens = current.tokens;
+    copy.category_colors = current.category_colors;
+    std::string error;
+    if (!ReplayEngine::Editor::EditorStylePresetStore::Save(copy, error)) return false;
+    editor_style_presets.push_back(std::move(copy));
+    active_editor_style_preset_index = static_cast<int>(editor_style_presets.size()) - 1;
+    ReplayEngine::Editor::EditorStylePresetStore::SaveActivePresetId(
+        editor_style_presets.back().id, error);
+    return true;
+}
+
+bool framework::save_active_editor_style_preset()
+{
+    ensure_editor_style_presets_loaded();
+    if (active_editor_style_preset_index < 0 ||
+        active_editor_style_preset_index >= static_cast<int>(editor_style_presets.size()))
+        return false;
+    const auto& active_preset = editor_style_presets[static_cast<std::size_t>(
+        active_editor_style_preset_index)];
+    if (!active_preset.Editable() || active_preset.id == builtin_editor_style_id)
+    {
+        if (!make_active_editor_style_preset_personal_copy()) return false;
+    }
+
+    ReplayEngine::Editor::EditorStylePreset& active = editor_style_presets[static_cast<std::size_t>(
+        active_editor_style_preset_index)];
+    const auto current = capture_editor_style_preset();
+    active.button_scale = current.button_scale;
+    active.font_scale = current.font_scale;
+    active.text_color = current.text_color;
+    active.tokens = current.tokens;
+    active.category_colors = current.category_colors;
+    std::string error;
+    if (!ReplayEngine::Editor::EditorStylePresetStore::Save(active, error)) return false;
+    ReplayEngine::Editor::EditorStylePresetStore::SaveActivePresetId(active.id, error);
+    return true;
+}
+
+bool framework::undo_editor_style()
+{
+    auto snapshot = capture_editor_style_snapshot();
+    std::string label;
+    if (!editor_style_history.Undo(snapshot, label)) return false;
+    apply_editor_style_snapshot(snapshot);
+    std::string error;
+    if (active_editor_style_preset_index >= 0 &&
+        active_editor_style_preset_index < static_cast<int>(editor_style_presets.size()))
+        ReplayEngine::Editor::EditorStylePresetStore::SaveActivePresetId(
+            editor_style_presets[static_cast<std::size_t>(active_editor_style_preset_index)].id,
+            error);
+    configure_editor_style();
+    return true;
+}
+
+bool framework::redo_editor_style()
+{
+    auto snapshot = capture_editor_style_snapshot();
+    std::string label;
+    if (!editor_style_history.Redo(snapshot, label)) return false;
+    apply_editor_style_snapshot(snapshot);
+    std::string error;
+    if (active_editor_style_preset_index >= 0 &&
+        active_editor_style_preset_index < static_cast<int>(editor_style_presets.size()))
+        ReplayEngine::Editor::EditorStylePresetStore::SaveActivePresetId(
+            editor_style_presets[static_cast<std::size_t>(active_editor_style_preset_index)].id,
+            error);
+    configure_editor_style();
+    return true;
+}
+
 void framework::configure_editor_style()
 {
+    ensure_editor_style_presets_loaded();
     const float dpi = hwnd != nullptr
         ? static_cast<float>(GetDpiForWindow(hwnd)) / 96.0f : 1.0f;
     ReplayEngine::Editor::EditorStyle::Apply(dpi);
-    ImGui::GetIO().FontGlobalScale = dpi;
-
-    // Window メニュー →「UI の見た目」で変えた分を上から重ねる。
-    //
-    // EditorStyle::Apply の中で決め打ちせずここへ置くのは、
-    // Apply が「配色と余白の基準」を作る役で、
-    // 個人の見やすさの調整はその上に乗る別物だから。
-    if (!ui_style_overridden) return;
+    ImGui::GetIO().FontGlobalScale = dpi * ui_font_scale *
+        (ReplayEngine::Editor::EditorStyle::Tokens().font_size / 15.0f);
 
     ImGuiStyle& style = ImGui::GetStyle();
     style.FramePadding.x *= ui_button_scale;
@@ -135,7 +379,6 @@ void framework::configure_editor_style()
     style.Colors[ImGuiCol_Text] =
         ImVec4(ui_text_color[0], ui_text_color[1], ui_text_color[2], 1.0f);
 
-    ImGui::GetIO().FontGlobalScale = dpi * ui_font_scale;
 }
 
 void framework::remember_active_editor_view()
@@ -216,6 +459,11 @@ void framework::set_edit_mode(bool enabled)
 
 void framework::draw_editor_main_menu()
 {
+    if (editor_style_history.InTransaction() && !ImGui::IsAnyItemActive())
+    {
+        editor_style_history.Commit(capture_editor_style_snapshot());
+        save_active_editor_style_preset();
+    }
     if (ImGui::BeginMenu("File"))
     {
         if (ImGui::MenuItem("New Empty Scene")) create_object_scene(u8"新しいシーン", false);
@@ -256,14 +504,25 @@ void framework::draw_editor_main_menu()
     {
         const bool atlas_context = sprite_atlas_editor_loaded && sprite_atlas_editor_keyboard_focus;
         const bool motion_workspace = active_editor_workspace == editor_workspace::motion;
+        const bool material_context = !project_browser_focused && !atlas_context &&
+            !motion_workspace && material_editor_loaded &&
+            selected_editor_object == editor_selection::asset;
+        const bool scene_flow_context = !project_browser_focused &&
+            scene_flow_editor_loaded && show_scene_flow_panel;
         const bool external_context = !atlas_context && !motion_workspace &&
+            !scene_flow_context &&
+            !material_context &&
             (project_browser_focused || selected_editor_object == editor_selection::asset ||
                 selected_editor_object == editor_selection::world ||
                 selected_editor_object == editor_selection::rendering);
-        const bool scene_context = !atlas_context && !motion_workspace && !external_context;
+        const bool scene_context = !atlas_context && !motion_workspace &&
+            !material_context && !external_context;
         const bool scene_edit_blocked = scene_context && !object_editor_context.CanEdit();
         const bool can_undo = atlas_context ? sprite_atlas_history_cursor > 0
-            : motion_workspace ? motion_edit_history.CanUndo()
+            : motion_workspace ? (motion_composition_loaded
+                ? composition_edit_history.CanUndo() : motion_edit_history.CanUndo())
+            : scene_flow_context ? scene_flow_edit_history.CanUndo()
+            : material_context ? material_editor_history.CanUndo()
             : external_context ? external_file_history.CanUndo()
             : object_editor_context.History().CanUndo();
         if (scene_edit_blocked) ImGui::PushStyleVar(ImGuiStyleVar_Alpha,
@@ -272,6 +531,8 @@ void framework::draw_editor_main_menu()
         {
             if (atlas_context) undo_sprite_atlas_edit();
             else if (motion_workspace) undo_motion_edit();
+            else if (scene_flow_context) undo_scene_flow_edit();
+            else if (material_context) undo_material_editor();
             else if (external_context) undo_external_file_edit();
             else object_editor_context.Undo();
         }
@@ -282,7 +543,10 @@ void framework::draw_editor_main_menu()
             ImGui::PopStyleVar();
         }
         const bool can_redo = atlas_context ? sprite_atlas_history_cursor < sprite_atlas_history.size()
-            : motion_workspace ? motion_edit_history.CanRedo()
+            : motion_workspace ? (motion_composition_loaded
+                ? composition_edit_history.CanRedo() : motion_edit_history.CanRedo())
+            : scene_flow_context ? scene_flow_edit_history.CanRedo()
+            : material_context ? material_editor_history.CanRedo()
             : external_context ? external_file_history.CanRedo()
             : object_editor_context.History().CanRedo();
         if (scene_edit_blocked) ImGui::PushStyleVar(ImGuiStyleVar_Alpha,
@@ -291,6 +555,8 @@ void framework::draw_editor_main_menu()
         {
             if (atlas_context) redo_sprite_atlas_edit();
             else if (motion_workspace) redo_motion_edit();
+            else if (scene_flow_context) redo_scene_flow_edit();
+            else if (material_context) redo_material_editor();
             else if (external_context) redo_external_file_edit();
             else object_editor_context.Redo();
         }
@@ -415,35 +681,325 @@ void framework::draw_editor_main_menu()
         if (ImGui::BeginMenu(u8"UI の見た目"))
         {
             bool style_changed = false;
+            bool style_save_requested = false;
+            ensure_editor_style_presets_loaded();
+
+            ImGui::TextDisabled(u8"見た目プリセット");
+            const int preset_count = static_cast<int>(editor_style_presets.size());
+            if (active_editor_style_preset_index < 0 ||
+                active_editor_style_preset_index >= preset_count)
+                active_editor_style_preset_index = 0;
+            const std::string active_style_id = editor_style_presets[
+                static_cast<std::size_t>(active_editor_style_preset_index)].id;
+            const auto& initial_style_preset = editor_style_presets[
+                static_cast<std::size_t>(active_editor_style_preset_index)];
+            const std::string active_style_label = initial_style_preset.name +
+                (initial_style_preset.Editable() ? u8"  [個人]" : u8"  [共有]");
+            ImGui::SetNextItemWidth(260.0f);
+            if (ImGui::BeginCombo("##EditorStylePreset", active_style_label.c_str()))
+            {
+                for (const auto& preset : editor_style_presets)
+                {
+                    const std::string label = preset.name +
+                        (preset.Editable() ? u8"  [個人]" : u8"  [共有]");
+                    const bool selected = preset.id == active_style_id;
+                    if (ImGui::Selectable(label.c_str(), selected))
+                        switch_editor_style_preset(preset.id);
+                    if (selected) ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+            const auto& current_style_preset = editor_style_presets[
+                static_cast<std::size_t>(active_editor_style_preset_index)];
+            if (editor_style_name_buffer_id != current_style_preset.id)
+            {
+                std::snprintf(editor_style_name_buffer.data(),
+                    editor_style_name_buffer.size(), "%s", current_style_preset.name.c_str());
+                editor_style_name_buffer_id = current_style_preset.id;
+            }
+            ImGui::SetNextItemWidth(260.0f);
+            ImGui::InputText("##EditorStylePresetName", editor_style_name_buffer.data(),
+                editor_style_name_buffer.size());
+            ImGui::SameLine();
+            if (ImGui::Button(u8"名前を付けて保存") &&
+                editor_style_name_buffer[0] != '\0')
+            {
+                auto created = capture_editor_style_preset();
+                created.id = ReplayEngine::Editor::EditorStylePresetStore::MakeUniqueId();
+                created.name = editor_style_name_buffer.data();
+                created.scope = ReplayEngine::Editor::EditorStylePresetScope::Personal;
+                std::string error;
+                if (ReplayEngine::Editor::EditorStylePresetStore::Save(created, error))
+                {
+                    editor_style_presets.push_back(std::move(created));
+                    active_editor_style_preset_index =
+                        static_cast<int>(editor_style_presets.size()) - 1;
+                    ReplayEngine::Editor::EditorStylePresetStore::SaveActivePresetId(
+                        editor_style_presets.back().id, error);
+                    editor_style_name_buffer_id = editor_style_presets.back().id;
+                }
+                else object_editor_context.SetStatus(error);
+            }
+            ImGui::SameLine();
+            if (ImGui::Button(u8"個人コピー"))
+            {
+                if (make_active_editor_style_preset_personal_copy())
+                {
+                    editor_style_name_buffer_id.clear();
+                    style_changed = true;
+                    style_save_requested = true;
+                }
+            }
+
+            const bool active_style_editable = editor_style_presets[
+                static_cast<std::size_t>(active_editor_style_preset_index)].Editable();
+            ImGui::SameLine();
+            if (active_style_editable && ImGui::Button(u8"チーム共有コピー"))
+            {
+                const auto source = editor_style_presets[
+                    static_cast<std::size_t>(active_editor_style_preset_index)];
+                ReplayEngine::Editor::EditorStylePreset published;
+                std::string error;
+                if (ReplayEngine::Editor::EditorStylePresetStore::PublishSharedCopy(
+                    source, source.name + " Shared", published, error))
+                    editor_style_presets.push_back(std::move(published));
+                else object_editor_context.SetStatus(error);
+            }
+            ImGui::SameLine();
+            if (active_style_editable && active_editor_style_preset_index != 0 &&
+                ImGui::Button(u8"削除"))
+            {
+                const auto deleting = editor_style_presets[
+                    static_cast<std::size_t>(active_editor_style_preset_index)];
+                std::string error;
+                if (ReplayEngine::Editor::EditorStylePresetStore::DeletePersonal(
+                    deleting, error))
+                {
+                    editor_style_presets.erase(editor_style_presets.begin() +
+                        active_editor_style_preset_index);
+                    active_editor_style_preset_index = 0;
+                    switch_editor_style_preset(builtin_editor_style_id);
+                    editor_style_name_buffer_id.clear();
+                }
+                else object_editor_context.SetStatus(error);
+            }
 
             ImGui::TextDisabled(u8"大きさ");
             ImGui::SetNextItemWidth(180.0f);
-            style_changed |= ImGui::SliderFloat(
+            const auto button_scale_before = capture_editor_style_snapshot();
+            const bool button_scale_changed = ImGui::SliderFloat(
                 u8"ボタンの余白", &ui_button_scale, 0.6f, 3.0f, "x%.2f");
+            if (button_scale_changed && !editor_style_history.InTransaction())
+                editor_style_history.Begin(button_scale_before, "ボタンの余白を変更");
+            style_changed |= button_scale_changed;
+            if (ImGui::IsItemDeactivatedAfterEdit() &&
+                editor_style_history.InTransaction())
+            {
+                editor_style_history.Commit(capture_editor_style_snapshot());
+                style_save_requested = true;
+            }
             ImGui::SetNextItemWidth(180.0f);
-            style_changed |= ImGui::SliderFloat(
+            const auto font_scale_before = capture_editor_style_snapshot();
+            const bool font_scale_changed = ImGui::SliderFloat(
                 u8"文字の大きさ", &ui_font_scale, 0.7f, 2.5f, "x%.2f");
+            if (font_scale_changed && !editor_style_history.InTransaction())
+                editor_style_history.Begin(font_scale_before, "文字の大きさを変更");
+            style_changed |= font_scale_changed;
+            if (ImGui::IsItemDeactivatedAfterEdit() &&
+                editor_style_history.InTransaction())
+            {
+                editor_style_history.Commit(capture_editor_style_snapshot());
+                style_save_requested = true;
+            }
 
             ImGui::Separator();
             ImGui::TextDisabled(u8"文字色");
             ImGui::SetNextItemWidth(200.0f);
-            style_changed |= ImGui::ColorEdit3(u8"##UITextColor", ui_text_color);
+            const auto text_color_before = capture_editor_style_snapshot();
+            const bool text_color_changed = ImGui::ColorEdit3(u8"##UITextColor", ui_text_color);
+            if (text_color_changed && !editor_style_history.InTransaction())
+                editor_style_history.Begin(text_color_before, "文字色を変更");
+            style_changed |= text_color_changed;
+            if (text_color_changed)
+            {
+                auto tokens = ReplayEngine::Editor::EditorStyle::Tokens();
+                tokens.text = ImVec4(ui_text_color[0], ui_text_color[1], ui_text_color[2], 1.0f);
+                ReplayEngine::Editor::EditorStyle::SetTokens(tokens);
+            }
+            if (ImGui::IsItemDeactivatedAfterEdit() &&
+                editor_style_history.InTransaction())
+            {
+                editor_style_history.Commit(capture_editor_style_snapshot());
+                style_save_requested = true;
+            }
 
             ImGui::Separator();
+            ImGui::TextDisabled(u8"Component カテゴリ色");
+            ImGui::TextDisabled(u8"見出しと仕切りのアクセント色を設定できます");
+            if (ImGui::TreeNodeEx(u8"カテゴリごとの色", 0))
+            {
+                for (const std::string& category :
+                    ReplayEngine::Core::ComponentRegistry::Categories())
+                {
+                    ImGui::PushID(category.c_str());
+                    ImVec4 color = ReplayEngine::Editor::EditorStyle::ComponentCategoryColor(category);
+                    ImGui::SetNextItemWidth(200.0f);
+                    const auto category_color_before = capture_editor_style_snapshot();
+                    const bool color_changed = ImGui::ColorEdit3(category.c_str(), &color.x,
+                        ImGuiColorEditFlags_NoAlpha);
+                    if (color_changed && !editor_style_history.InTransaction())
+                        editor_style_history.Begin(category_color_before,
+                            "Component カテゴリ色を変更");
+                    if (color_changed)
+                    {
+                        ReplayEngine::Editor::EditorStyle::SetComponentCategoryColor(
+                            category, color);
+                        style_changed = true;
+                    }
+                    if (ImGui::IsItemDeactivatedAfterEdit() &&
+                        editor_style_history.InTransaction())
+                    {
+                        editor_style_history.Commit(capture_editor_style_snapshot());
+                        style_save_requested = true;
+                    }
+                    ImGui::PopID();
+                }
+                if (ImGui::SmallButton(u8"カテゴリ色を既定へ戻す"))
+                {
+                    editor_style_history.Begin(capture_editor_style_snapshot(),
+                        "Component カテゴリ色を既定へ戻す");
+                    ReplayEngine::Editor::EditorStyle::ResetComponentCategoryColors();
+                    editor_style_history.Commit(capture_editor_style_snapshot());
+                    style_changed = true;
+                    style_save_requested = true;
+                }
+                ImGui::TreePop();
+            }
+
+            if (ImGui::TreeNodeEx(u8"詳細", 0))
+            {
+                ImGui::TextDisabled(u8"変更は個人プリセットへ保存されます");
+                auto tokens = ReplayEngine::Editor::EditorStyle::Tokens();
+                auto draw_token_color = [&](const char* label, ImVec4& value)
+                {
+                    const auto before = capture_editor_style_snapshot();
+                    const bool changed = ImGui::ColorEdit3(label, &value.x,
+                        ImGuiColorEditFlags_NoAlpha);
+                    if (changed && !editor_style_history.InTransaction())
+                        editor_style_history.Begin(before, "見た目の色を変更");
+                    if (changed)
+                    {
+                        ReplayEngine::Editor::EditorStyle::SetTokens(tokens);
+                        style_changed = true;
+                    }
+                    if (ImGui::IsItemDeactivatedAfterEdit() && editor_style_history.InTransaction())
+                    {
+                        editor_style_history.Commit(capture_editor_style_snapshot());
+                        style_save_requested = true;
+                    }
+                };
+                auto draw_token_value = [&](const char* label, float& value,
+                    float minimum, float maximum, const char* format)
+                {
+                    const auto before = capture_editor_style_snapshot();
+                    const bool changed = ImGui::SliderFloat(label, &value, minimum, maximum, format);
+                    if (changed && !editor_style_history.InTransaction())
+                        editor_style_history.Begin(before, "見た目の大きさを変更");
+                    if (changed)
+                    {
+                        ReplayEngine::Editor::EditorStyle::SetTokens(tokens);
+                        style_changed = true;
+                    }
+                    if (ImGui::IsItemDeactivatedAfterEdit() && editor_style_history.InTransaction())
+                    {
+                        editor_style_history.Commit(capture_editor_style_snapshot());
+                        style_save_requested = true;
+                    }
+                };
+                if (ImGui::TreeNodeEx(u8"色", ImGuiTreeNodeFlags_DefaultOpen))
+                {
+                    draw_token_color(u8"全体の背景", tokens.main_background);
+                    draw_token_color(u8"パネルの背景", tokens.panel_background);
+                    draw_token_color(u8"見出しの背景", tokens.header_background);
+                    draw_token_color(u8"ツールバーの背景", tokens.toolbar_background);
+                    draw_token_color(u8"枠線", tokens.border);
+                    draw_token_color(u8"補助文字", tokens.secondary_text);
+                    draw_token_color(u8"無効な文字", tokens.disabled_text);
+                    draw_token_color(u8"強調", tokens.accent);
+                    draw_token_color(u8"選択中", tokens.selection);
+                    draw_token_color(u8"ホバー", tokens.hover);
+                    draw_token_color(u8"操作中", tokens.active);
+                    draw_token_color(u8"成功", tokens.success);
+                    draw_token_color(u8"警告", tokens.warning);
+                    draw_token_color(u8"エラー", tokens.error);
+                    draw_token_color(u8"見つからない項目", tokens.missing);
+                    draw_token_color(u8"Prefab", tokens.prefab);
+                    draw_token_color(u8"通常の当たり判定", tokens.normal_collider);
+                    draw_token_color(u8"トリガーの当たり判定", tokens.trigger_collider);
+                    draw_token_color(u8"主な当たり判定", tokens.primary_collider);
+                    ImGui::TreePop();
+                }
+                if (ImGui::TreeNodeEx(u8"余白と大きさ", 0))
+                {
+                    draw_token_value(u8"ウィンドウの余白", tokens.padding, 0.0f, 40.0f, "%.0f");
+                    draw_token_value(u8"項目の間隔", tokens.item_spacing, 0.0f, 30.0f, "%.0f");
+                    draw_token_value(u8"パネルの間隔", tokens.panel_spacing, 0.0f, 40.0f, "%.0f");
+                    draw_token_value(u8"見出しの高さ", tokens.header_height, 12.0f, 80.0f, "%.0f");
+                    draw_token_value(u8"ツールバーの高さ", tokens.toolbar_height, 12.0f, 80.0f, "%.0f");
+                    draw_token_value(u8"入力欄の高さ", tokens.input_height, 12.0f, 80.0f, "%.0f");
+                    draw_token_value(u8"基準の文字サイズ", tokens.font_size, 8.0f, 40.0f, "%.0f");
+                    ImGui::TreePop();
+                }
+                if (ImGui::TreeNodeEx(u8"枠", 0))
+                {
+                    draw_token_value(u8"枠線の太さ", tokens.border_thickness, 0.0f, 4.0f, "%.1f");
+                    draw_token_value(u8"角の丸み", tokens.corner_radius, 0.0f, 20.0f, "%.0f");
+                    ImGui::TreePop();
+                }
+                if (ImGui::SmallButton(u8"詳細を既定へ戻す"))
+                {
+                    editor_style_history.Begin(capture_editor_style_snapshot(), "詳細を既定へ戻す");
+                    ReplayEngine::Editor::EditorStyle::ResetTokens();
+                    const auto& defaults = ReplayEngine::Editor::EditorStyle::Tokens();
+                    ui_text_color[0] = defaults.text.x;
+                    ui_text_color[1] = defaults.text.y;
+                    ui_text_color[2] = defaults.text.z;
+                    editor_style_history.Commit(capture_editor_style_snapshot());
+                    style_changed = true;
+                    style_save_requested = true;
+                }
+                ImGui::TreePop();
+            }
+
+            ImGui::Separator();
+            if (ImGui::MenuItem(u8"カテゴリ色を元に戻す", nullptr, false,
+                editor_style_history.CanUndo()))
+            {
+                undo_editor_style();
+                style_changed = true;
+                style_save_requested = true;
+            }
+            if (ImGui::MenuItem(u8"カテゴリ色をやり直す", nullptr, false,
+                editor_style_history.CanRedo()))
+            {
+                redo_editor_style();
+                style_changed = true;
+                style_save_requested = true;
+            }
             if (ImGui::MenuItem(u8"大きめにする"))
             {
+                editor_style_history.Begin(capture_editor_style_snapshot(),
+                    "見た目を大きめにする");
                 ui_button_scale = 1.8f;
                 ui_font_scale = 1.3f;
+                editor_style_history.Commit(capture_editor_style_snapshot());
                 style_changed = true;
+                style_save_requested = true;
             }
             if (ImGui::MenuItem(u8"既定へ戻す"))
             {
-                ui_button_scale = 1.0f;
-                ui_font_scale = 1.0f;
-                ui_text_color[0] = 1.0f;
-                ui_text_color[1] = 1.0f;
-                ui_text_color[2] = 1.0f;
-                style_changed = true;
+                switch_editor_style_preset(builtin_editor_style_id);
+                editor_style_name_buffer_id.clear();
             }
 
             // 変えた瞬間に反映する。
@@ -454,6 +1010,7 @@ void framework::draw_editor_main_menu()
                 ui_style_overridden = true;
                 configure_editor_style();
             }
+            if (style_save_requested) save_active_editor_style_preset();
             ImGui::EndMenu();
         }
         ImGui::EndMenu();
@@ -463,10 +1020,10 @@ void framework::draw_editor_main_menu()
     // 実際にそれで迷子になった。
     if (ImGui::BeginMenu(u8"実行"))
     {
-        if (ImGui::MenuItem(u8"▶ 実行", "F5", false,
+        if (ImGui::MenuItem(u8"▲ 実行", "F5", false,
             !object_scene_play_mode && !object_editor_play_loading))
             enter_object_play_mode();
-        if (ImGui::MenuItem(object_scene_paused ? u8"▶ 再開" : u8"❚❚ 一時停止", nullptr,
+        if (ImGui::MenuItem(object_scene_paused ? u8"▲ 再開" : u8"││ 一時停止", nullptr,
             false, object_scene_play_mode)) object_scene_paused = !object_scene_paused;
         if (ImGui::MenuItem(u8"■ 停止", "Shift+F5", false,
             object_scene_play_mode || object_editor_play_loading))

@@ -74,7 +74,7 @@ void framework::draw_project_settings_panel()
 
         for (const auto& record : asset_database.Records())
         {
-            if (!IsPrefabAsset(record)) continue;
+            if (!IsPrefabAsset(record) || asset_database.IsMissing(record.guid)) continue;
 
             const bool selected = record.guid == project_settings.DefaultCharacterPrefabGuid();
             const std::string label = record.display_name.empty()
@@ -165,6 +165,7 @@ void framework::draw_project_settings_panel()
             // .replayscene として登録された Asset だけを候補に出す。
             // 種類で絞らないと、Texture を起動先に指定できてしまう。
             if (record.kind != ReplayEngine::Assets::AssetKind::Scene) continue;
+            if (asset_database.IsMissing(record.guid)) continue;
 
             const bool selected = record.guid == project_settings.StartupSceneGuid();
             const std::string label = record.display_name.empty()
@@ -242,6 +243,7 @@ void framework::draw_project_settings_panel()
         for (const auto& record : asset_database.Records())
         {
             if (record.kind != ReplayEngine::Assets::AssetKind::Scene) continue;
+            if (asset_database.IsMissing(record.guid)) continue;
 
             const bool selected = record.guid == project_settings.LoadingSceneGuid();
             const std::string label = record.display_name.empty()
@@ -318,6 +320,7 @@ void framework::draw_project_settings_panel()
         for (const auto& record : asset_database.Records())
         {
             if (record.kind != ReplayEngine::Assets::AssetKind::SceneFlow) continue;
+            if (asset_database.IsMissing(record.guid)) continue;
             const bool selected = record.guid == project_settings.SceneFlowGuid();
             const std::string label = record.display_name.empty()
                 ? record.source_path.filename().u8string() : record.display_name;
@@ -393,6 +396,7 @@ void framework::draw_project_settings_panel()
         for (const auto& record : asset_database.Records())
         {
             if (record.kind != ReplayEngine::Assets::AssetKind::InputAction) continue;
+            if (asset_database.IsMissing(record.guid)) continue;
             const bool selected = record.guid == project_settings.InputActionAssetGuid();
             const std::string label = record.display_name.empty()
                 ? record.source_path.filename().u8string() : record.display_name;
@@ -438,6 +442,7 @@ void framework::draw_project_settings_panel()
         for (const auto& record : asset_database.Records())
         {
             if (record.kind != ReplayEngine::Assets::AssetKind::Localization) continue;
+            if (asset_database.IsMissing(record.guid)) continue;
             const bool selected = record.guid == project_settings.LocalizationTableGuid();
             const std::string label = record.display_name.empty()
                 ? record.source_path.filename().u8string() : record.display_name;

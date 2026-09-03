@@ -311,6 +311,7 @@
     bool             show_collider_debug_draw{ false };
     bool             show_collider_debug_bounds{ true };
     bool             show_collider_debug_wireframe{ false };
+    bool             show_light_range_debug_draw{ false };
     bool             show_collision_diagnostics{ false };
 
     // Cook に失敗した Asset。同じ警告をログへ出し続けないための記録。

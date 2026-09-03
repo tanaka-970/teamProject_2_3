@@ -65,6 +65,8 @@
 #include "../../RePlayEngine/Runtime/Scene/SceneFlowService.h"
 #include "../../RePlayEngine/Editor/Core/EditorContext.h"
 #include "../../RePlayEngine/Editor/Commands/MotionEditHistory.h"
+#include "../../RePlayEngine/Editor/Commands/MaterialEditHistory.h"
+#include "../../RePlayEngine/Editor/Commands/EditorStyleEditHistory.h"
 #include "../../RePlayEngine/Editor/Commands/FileEditHistory.h"
 #include "../../RePlayEngine/Editor/Help/EditorHelp.h"
 #include "../../RePlayEngine/Editor/Hierarchy/HierarchyPanel.h"
