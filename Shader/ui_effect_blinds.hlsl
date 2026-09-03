@@ -27,7 +27,8 @@ float4 main(VSOutput input) : SV_TARGET
     // 0 で片側から、1 で各スリットの中央から開く。
     const float from_center = saturate(effect_params0.w);
 
-    const float2 axis = float2(cos(angle), sin(angle));
+    // 角度 0 を横羽根にする。(cos, sin) だと 0 で縦になり名前と合わない。
+    const float2 axis = float2(-sin(angle), cos(angle));
     const float projected = dot(input.uv - 0.5, axis) + 0.5;
     // 1 枚ぶんの中での位置。
     const float cell = frac(projected * slats);
