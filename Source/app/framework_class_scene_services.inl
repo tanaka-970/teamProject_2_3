@@ -328,6 +328,9 @@ private:
     void draw_motion_timeline();
     void draw_motion_graph_editor();
     void draw_motion_rig();
+    bool project_world_to_screen(const DirectX::XMMATRIX& view_projection,
+        const DirectX::XMFLOAT3& world, const ImVec2& origin, const ImVec2& size,
+        ImVec2& out) const noexcept;
     void stop_motion_preview();
     void capture_motion_preview_targets();
     void apply_motion_preview_time();

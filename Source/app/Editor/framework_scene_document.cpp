@@ -103,6 +103,48 @@ void framework::handle_viewport_selection()
     // GizmoハンドルがHover/Drag中ならPickingへ入力を渡さない。
     if (draw_object_transform_gizmo()) return;
 
+    // リグを出しているときは、骨のクリックを GameObject の選択より先に見る。
+    // 骨を掴めたらそこで消費し、選択が入れ替わらないようにする。
+    if ((show_rig_debug_draw || show_motion_rig_panel) &&
+        ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !object_rig_debug_bones.empty())
+    {
+        const DirectX::XMMATRIX rig_view_projection =
+            viewport_view_matrix() * viewport_projection_matrix();
+        const ImVec2 rig_origin = ImGui::GetMainViewport()->Pos;
+        const ImVec2 rig_size = ImGui::GetMainViewport()->Size;
+        const ImVec2 mouse = ImGui::GetIO().MousePos;
+        // 掴める距離。関節の見た目より少し広くしないと当てにくい。
+        const float pick_radius = (std::max)(6.0f, rig_joint_radius * 3.0f);
+        float best_distance = pick_radius;
+        const std::string* best_name = nullptr;
+        std::uint64_t best_owner = 0;
+        for (const auto& rig : object_rig_debug_bones)
+        {
+            for (const rig_debug_bone& bone : rig.second)
+            {
+                ImVec2 screen{};
+                if (!project_world_to_screen(rig_view_projection, bone.world,
+                    rig_origin, rig_size, screen))
+                    continue;
+                const float dx = screen.x - mouse.x;
+                const float dy = screen.y - mouse.y;
+                const float distance = std::sqrt(dx * dx + dy * dy);
+                if (distance >= best_distance) continue;
+                best_distance = distance;
+                best_name = &bone.name;
+                best_owner = rig.first;
+            }
+        }
+        if (best_name != nullptr)
+        {
+            rig_selected_bone = *best_name;
+            object_editor_context.Selection().Select(
+                ReplayEngine::Core::ObjectID{ best_owner });
+            viewport_drag_selecting = false;
+            return;
+        }
+    }
+
     using namespace DirectX;
     const XMMATRIX view = viewport_view_matrix();
     const XMMATRIX projection = viewport_projection_matrix();

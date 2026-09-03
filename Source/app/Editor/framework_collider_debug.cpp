@@ -25,22 +25,6 @@
 
 namespace
 {
-    bool ProjectToScreen(const DirectX::XMMATRIX& view_projection,
-        const DirectX::XMFLOAT3& world, const ImVec2& origin, const ImVec2& size,
-        ImVec2& out)
-    {
-        using namespace DirectX;
-        const XMVECTOR position = XMVectorSet(world.x, world.y, world.z, 1.0f);
-        const XMVECTOR clip = XMVector4Transform(position, view_projection);
-        const float w = XMVectorGetW(clip);
-        if (w <= 1.0e-4f) return false;
-        const float x = XMVectorGetX(clip) / w;
-        const float y = XMVectorGetY(clip) / w;
-        out.x = origin.x + (x * 0.5f + 0.5f) * size.x;
-        out.y = origin.y + (0.5f - y * 0.5f) * size.y;
-        return true;
-    }
-
     const char* SourceText(const ReplayEngine::Scene::CollisionSourceInfo& source)
     {
         return ReplayEngine::Scene::ToString(source.backend);
@@ -74,12 +58,6 @@ namespace
         return dx * dx + dy * dy;
     }
 
-    bool ProjectLightPoint(const DirectX::XMMATRIX& view_projection,
-        const DirectX::XMFLOAT3& world, const ImVec2& origin, const ImVec2& size,
-        ImVec2& out)
-    {
-        return ProjectToScreen(view_projection, world, origin, size, out);
-    }
 }
 
 void framework::draw_collider_debug_overlay()
@@ -167,8 +145,8 @@ void framework::draw_collider_debug_overlay()
     {
         ImVec2 start{};
         ImVec2 end{};
-        if (!ProjectToScreen(view_projection, line.start, main_origin, main_size, start)) continue;
-        if (!ProjectToScreen(view_projection, line.end, main_origin, main_size, end)) continue;
+        if (!project_world_to_screen(view_projection, line.start, main_origin, main_size, start)) continue;
+        if (!project_world_to_screen(view_projection, line.end, main_origin, main_size, end)) continue;
         draw_list->AddLine(start, end, line.color, 1.0f);
     }
 
@@ -194,8 +172,8 @@ void framework::draw_collider_debug_overlay()
         {
             ImVec2 screen_start{};
             ImVec2 screen_end{};
-            if (ProjectLightPoint(view_projection, start, main_origin, main_size, screen_start) &&
-                ProjectLightPoint(view_projection, end, main_origin, main_size, screen_end))
+            if (project_world_to_screen(view_projection, start, main_origin, main_size, screen_start) &&
+                project_world_to_screen(view_projection, end, main_origin, main_size, screen_end))
                 draw_list->AddLine(screen_start, screen_end, color, 1.5f);
         };
         const ReplayEngine::Core::GameObject* object = light_range_object;
@@ -265,8 +243,8 @@ void framework::draw_collider_debug_overlay()
         {
             ImVec2 screen_start{};
             ImVec2 screen_end{};
-            if (ProjectToScreen(view_projection, start, main_origin, main_size, screen_start) &&
-                ProjectToScreen(view_projection, end, main_origin, main_size, screen_end))
+            if (project_world_to_screen(view_projection, start, main_origin, main_size, screen_start) &&
+                project_world_to_screen(view_projection, end, main_origin, main_size, screen_end))
                 draw_list->AddLine(screen_start, screen_end, IM_COL32(80, 225, 240, 220), 1.5f);
         };
         for (const ReplayEngine::Components::NormalAdjustComponent* adjust :
@@ -305,7 +283,7 @@ void framework::draw_collider_debug_overlay()
         bool valid = true;
         for (std::size_t index = 0; index < polygon.points.size(); ++index)
         {
-            if (!ProjectToScreen(view_projection, polygon.points[index], main_origin,
+            if (!project_world_to_screen(view_projection, polygon.points[index], main_origin,
                 main_size, projected[index]))
             {
                 valid = false;
@@ -320,8 +298,8 @@ void framework::draw_collider_debug_overlay()
     {
         ImVec2 start{};
         ImVec2 end{};
-        if (!ProjectToScreen(view_projection, line.start, main_origin, main_size, start)) continue;
-        if (!ProjectToScreen(view_projection, line.end, main_origin, main_size, end)) continue;
+        if (!project_world_to_screen(view_projection, line.start, main_origin, main_size, start)) continue;
+        if (!project_world_to_screen(view_projection, line.end, main_origin, main_size, end)) continue;
         draw_list->AddLine(start, end, line.color, 1.5f);
     }
 
@@ -357,14 +335,14 @@ void framework::draw_collider_debug_overlay()
                 const bool picked = !rig_selected_bone.empty() &&
                     bone.name == rig_selected_bone;
                 ImVec2 joint{};
-                if (!ProjectToScreen(view_projection, bone.world,
+                if (!project_world_to_screen(view_projection, bone.world,
                     main_origin, main_size, joint))
                     continue;
                 if (bone.parent >= 0 &&
                     static_cast<std::size_t>(bone.parent) < bones.size())
                 {
                     ImVec2 parent{};
-                    if (ProjectToScreen(view_projection,
+                    if (project_world_to_screen(view_projection,
                         bones[static_cast<std::size_t>(bone.parent)].world,
                         main_origin, main_size, parent))
                         draw_list->AddLine(parent, joint,
@@ -392,7 +370,7 @@ void framework::draw_collider_debug_overlay()
     for (const ReplayEngine::Editor::DebugWorldLabel& label : ai_frame.labels)
     {
         ImVec2 position{};
-        if (!ProjectToScreen(view_projection, label.position, main_origin, main_size, position))
+        if (!project_world_to_screen(view_projection, label.position, main_origin, main_size, position))
             continue;
         draw_list->AddText(position, label.color, label.text.c_str());
     }
@@ -407,7 +385,7 @@ void framework::draw_collider_debug_overlay()
                 continue;
             const DirectX::XMFLOAT3 center = object->GetTransform().WorldPosition();
             ImVec2 center_screen{};
-            if (!ProjectToScreen(view_projection, center, main_origin, main_size, center_screen))
+            if (!project_world_to_screen(view_projection, center, main_origin, main_size, center_screen))
                 continue;
             if (const auto* spawn = object->GetComponent<
                 ReplayEngine::Components::SpawnPointComponent>();
@@ -436,7 +414,7 @@ void framework::draw_collider_debug_overlay()
                 DirectX::XMStoreFloat3(&end, DirectX::XMVectorAdd(
                     DirectX::XMLoadFloat3(&center), direction));
                 ImVec2 end_screen{};
-                if (!ProjectToScreen(view_projection, end, main_origin, main_size, end_screen))
+                if (!project_world_to_screen(view_projection, end, main_origin, main_size, end_screen))
                     continue;
                 constexpr ImU32 color = IM_COL32(255, 185, 65, 240);
                 draw_list->AddCircleFilled(center_screen, 5.0f, color, 12);
@@ -467,14 +445,14 @@ void framework::draw_collider_debug_overlay()
                     center.x - (std::max)(0.05f, enemy->attack_range), center.y, center.z };
                 ImVec2 detection_screen{};
                 ImVec2 attack_screen{};
-                if (ProjectToScreen(view_projection, detection_world, main_origin, main_size,
+                if (project_world_to_screen(view_projection, detection_world, main_origin, main_size,
                     detection_screen))
                 {
                     draw_list->AddCircleFilled(detection_screen, 6.0f,
                         ReplayEngine::Editor::AINavigationDebugColors::detection);
                     draw_list->AddCircle(detection_screen, 8.0f, IM_COL32(255, 255, 255, 220));
                 }
-                if (ProjectToScreen(view_projection, attack_world, main_origin, main_size,
+                if (project_world_to_screen(view_projection, attack_world, main_origin, main_size,
                     attack_screen))
                 {
                     draw_list->AddCircleFilled(attack_screen, 6.0f,
@@ -530,9 +508,9 @@ bool framework::handle_ai_navigation_debug_edit()
         center.x - (std::max)(0.05f, enemy->attack_range), center.y, center.z };
     ImVec2 detection_screen{};
     ImVec2 attack_screen{};
-    const bool detection_visible = ProjectToScreen(view_projection, detection_world,
+    const bool detection_visible = project_world_to_screen(view_projection, detection_world,
         main_origin, main_size, detection_screen);
-    const bool attack_visible = ProjectToScreen(view_projection, attack_world,
+    const bool attack_visible = project_world_to_screen(view_projection, attack_world,
         main_origin, main_size, attack_screen);
 
     const ImVec2 mouse = ImGui::GetMousePos();
@@ -714,3 +692,20 @@ void framework::draw_collision_diagnostics_panel() {}
 bool framework::handle_ai_navigation_debug_edit() { return false; }
 
 #endif
+
+// 世界座標を画面へ落とす。リグの描画と当たり判定で同じ式を使う。
+bool framework::project_world_to_screen(const DirectX::XMMATRIX& view_projection,
+    const DirectX::XMFLOAT3& world, const ImVec2& origin, const ImVec2& size,
+    ImVec2& out) const noexcept
+{
+    using namespace DirectX;
+    const XMVECTOR position = XMVectorSet(world.x, world.y, world.z, 1.0f);
+    const XMVECTOR clip = XMVector4Transform(position, view_projection);
+    const float w = XMVectorGetW(clip);
+    if (w <= 1.0e-4f) return false;
+    const float x = XMVectorGetX(clip) / w;
+    const float y = XMVectorGetY(clip) / w;
+    out.x = origin.x + (x * 0.5f + 0.5f) * size.x;
+    out.y = origin.y + (0.5f - y * 0.5f) * size.y;
+    return true;
+}
