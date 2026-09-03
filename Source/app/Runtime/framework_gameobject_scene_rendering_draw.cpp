@@ -1448,6 +1448,76 @@ bool framework::build_dx12_static_scene(
                 std::vector<DirectX::XMFLOAT4X4> palette(palette_size,
                     DirectX::XMFLOAT4X4{ 1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 });
 
+                const auto pose_for_object = object_rig_pose.find(source_item.owner.Value());
+                const bool has_pose = pose_for_object != object_rig_pose.end() &&
+                    !pose_for_object->second.empty();
+                std::vector<DirectX::XMFLOAT4X4> bone_globals;
+                bool bone_globals_ready = false;
+
+                if ((show_rig_debug_draw || show_motion_rig_panel || has_pose) &&
+                    !mesh.bind_pose.bones.empty())
+                {
+                    REPLAY_PROFILE_SCOPE("Item/RigPose");
+                    // 骨のグローバル行列をまず作る。アニメーションが無ければバインドポーズ。
+                    const std::size_t bone_count = mesh.bind_pose.bones.size();
+                    bone_globals.resize(bone_count);
+                    for (std::size_t index = 0; index < bone_count; ++index)
+                    {
+                        const skeleton::bone& bone = mesh.bind_pose.bones[index];
+                        DirectX::XMMATRIX global;
+                        if (keyframe != nullptr && bone.node_index >= 0 &&
+                            static_cast<std::size_t>(bone.node_index) < keyframe->nodes.size())
+                            global = DirectX::XMLoadFloat4x4(&keyframe->nodes[
+                                static_cast<std::size_t>(bone.node_index)].global_transform);
+                        else
+                            global = DirectX::XMMatrixInverse(nullptr,
+                                DirectX::XMLoadFloat4x4(&bone.offset_transform));
+                        DirectX::XMStoreFloat4x4(&bone_globals[index], global);
+                    }
+                    if (has_pose)
+                    {
+                        // 親から順に組み直す。子は親の結果を受けて一緒に動く。
+                        std::vector<DirectX::XMFLOAT4X4> posed = bone_globals;
+                        for (std::size_t index = 0; index < bone_count; ++index)
+                        {
+                            const skeleton::bone& bone = mesh.bind_pose.bones[index];
+                            const std::int64_t parent = bone.parent_index;
+                            const bool has_parent = parent >= 0 &&
+                                static_cast<std::size_t>(parent) < bone_count &&
+                                static_cast<std::size_t>(parent) < index;
+                            DirectX::XMMATRIX local =
+                                DirectX::XMLoadFloat4x4(&bone_globals[index]);
+                            if (has_parent)
+                                local = local * DirectX::XMMatrixInverse(nullptr,
+                                    DirectX::XMLoadFloat4x4(
+                                        &bone_globals[static_cast<std::size_t>(parent)]));
+                            const auto override_entry =
+                                pose_for_object->second.find(bone.name);
+                            if (override_entry != pose_for_object->second.end())
+                            {
+                                const rig_pose_override& o = override_entry->second;
+                                // 骨の原点で回す。行ベクトルなので local の前へ掛ける。
+                                const DirectX::XMMATRIX adjust =
+                                    DirectX::XMMatrixScaling(o.scale.x, o.scale.y, o.scale.z) *
+                                    DirectX::XMMatrixRotationRollPitchYaw(
+                                        DirectX::XMConvertToRadians(o.rotation.x),
+                                        DirectX::XMConvertToRadians(o.rotation.y),
+                                        DirectX::XMConvertToRadians(o.rotation.z)) *
+                                    DirectX::XMMatrixTranslation(
+                                        o.translation.x, o.translation.y, o.translation.z);
+                                local = adjust * local;
+                            }
+                            DirectX::XMMATRIX global = local;
+                            if (has_parent)
+                                global = global * DirectX::XMLoadFloat4x4(
+                                    &posed[static_cast<std::size_t>(parent)]);
+                            DirectX::XMStoreFloat4x4(&posed[index], global);
+                        }
+                        bone_globals.swap(posed);
+                    }
+                    bone_globals_ready = true;
+                }
+
                 if (keyframe != nullptr && mesh.node_index >= 0 &&
                     static_cast<std::size_t>(mesh.node_index) < keyframe->nodes.size())
                 {
@@ -1465,11 +1535,49 @@ bool framework::build_dx12_static_scene(
                         if (bone.node_index < 0 ||
                             static_cast<std::size_t>(bone.node_index) >= keyframe->nodes.size())
                             continue;
-                        const auto& bone_node =
-                            keyframe->nodes[static_cast<std::size_t>(bone.node_index)];
+                        const DirectX::XMMATRIX global = bone_globals_ready
+                            ? DirectX::XMLoadFloat4x4(&bone_globals[bone_index])
+                            : DirectX::XMLoadFloat4x4(&keyframe->nodes[
+                                static_cast<std::size_t>(bone.node_index)].global_transform);
                         DirectX::XMStoreFloat4x4(&palette[bone_index],
                             DirectX::XMLoadFloat4x4(&bone.offset_transform) *
-                            DirectX::XMLoadFloat4x4(&bone_node.global_transform) * inverse_mesh);
+                            global * inverse_mesh);
+                    }
+                }
+                else if (has_pose && bone_globals_ready)
+                {
+                    // アニメーション未設定でもポーズは効かせる。基準はバインドの mesh。
+                    const DirectX::XMMATRIX inverse_mesh = DirectX::XMMatrixInverse(nullptr,
+                        DirectX::XMLoadFloat4x4(&mesh.default_global_transform));
+                    for (std::size_t bone_index = 0; bone_index < mesh.bind_pose.bones.size();
+                        ++bone_index)
+                    {
+                        DirectX::XMStoreFloat4x4(&palette[bone_index],
+                            DirectX::XMLoadFloat4x4(
+                                &mesh.bind_pose.bones[bone_index].offset_transform) *
+                            DirectX::XMLoadFloat4x4(&bone_globals[bone_index]) * inverse_mesh);
+                    }
+                }
+
+                if ((show_rig_debug_draw || show_motion_rig_panel) && bone_globals_ready)
+                {
+                    // 上で組んだ行列をそのまま使う。ポーズも表示へ反映される。
+                    const DirectX::XMMATRIX object_world =
+                        DirectX::XMLoadFloat4x4(&item.world);
+                    std::vector<rig_debug_bone>& bones =
+                        object_rig_debug_bones[source_item.owner.Value()];
+                    bones.clear();
+                    bones.reserve(mesh.bind_pose.bones.size());
+                    for (std::size_t index = 0; index < mesh.bind_pose.bones.size(); ++index)
+                    {
+                        const skeleton::bone& bone = mesh.bind_pose.bones[index];
+                        rig_debug_bone entry{};
+                        entry.name = bone.name;
+                        entry.parent = static_cast<int>(bone.parent_index);
+                        const DirectX::XMMATRIX global =
+                            DirectX::XMLoadFloat4x4(&bone_globals[index]);
+                        DirectX::XMStoreFloat3(&entry.world, (global * object_world).r[3]);
+                        bones.push_back(std::move(entry));
                     }
                 }
 

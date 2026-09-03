@@ -5,6 +5,8 @@
 
 #include "framework.h"
 
+#include <cstdio>
+
 #include "../../RePlayEngine/Components/Gameplay/CharacterMotorComponent.h"
 #include "../../RePlayEngine/Components/Gameplay/EnemyBehaviourComponent.h"
 #include "../../RePlayEngine/Components/Gameplay/StageGameplayComponents.h"
@@ -151,7 +153,8 @@ void framework::draw_collider_debug_overlay()
 
     if (object_collider_debug_lines.empty() && ai_frame.lines.empty() &&
         ai_frame.fills.empty() && ai_frame.labels.empty() && !has_stage_markers &&
-        light_range_object == nullptr && normal_adjust_object == nullptr) return;
+        light_range_object == nullptr && normal_adjust_object == nullptr &&
+        !show_rig_debug_draw) return;
 
     const DirectX::XMMATRIX view_projection =
         viewport_view_matrix() * viewport_projection_matrix();
@@ -320,6 +323,70 @@ void framework::draw_collider_debug_overlay()
         if (!ProjectToScreen(view_projection, line.start, main_origin, main_size, start)) continue;
         if (!ProjectToScreen(view_projection, line.end, main_origin, main_size, end)) continue;
         draw_list->AddLine(start, end, line.color, 1.5f);
+    }
+
+    if (show_rig_debug_draw && active_editor_view == editor_view::scene)
+    {
+        // 選択に関係なく、骨を持つモデルはすべて出す。選ばれた骨だけ強調する。
+        const ImU32 bone_color = ImGui::ColorConvertFloat4ToU32(
+            ImVec4(rig_bone_tint.x, rig_bone_tint.y, rig_bone_tint.z, rig_bone_tint.w));
+        const ImU32 picked_color = ImGui::ColorConvertFloat4ToU32(
+            ImVec4(rig_picked_tint.x, rig_picked_tint.y,
+                rig_picked_tint.z, rig_picked_tint.w));
+        const float picked_scale = (std::max)(1.0f, rig_picked_scale);
+        std::size_t rig_bone_total = 0;
+        for (const auto& entry : object_rig_debug_bones)
+        {
+            const std::vector<rig_debug_bone>& bones = entry.second;
+            rig_bone_total += bones.size();
+            for (const rig_debug_bone& bone : bones)
+            {
+                if (rig_max_depth > 0)
+                {
+                    // 根から数えた深さで間引く。指や髪まで出ると密になるため。
+                    int depth = 0;
+                    int walk = bone.parent;
+                    while (walk >= 0 && static_cast<std::size_t>(walk) < bones.size() &&
+                        depth <= rig_max_depth)
+                    {
+                        ++depth;
+                        walk = bones[static_cast<std::size_t>(walk)].parent;
+                    }
+                    if (depth > rig_max_depth) continue;
+                }
+                const bool picked = !rig_selected_bone.empty() &&
+                    bone.name == rig_selected_bone;
+                ImVec2 joint{};
+                if (!ProjectToScreen(view_projection, bone.world,
+                    main_origin, main_size, joint))
+                    continue;
+                if (bone.parent >= 0 &&
+                    static_cast<std::size_t>(bone.parent) < bones.size())
+                {
+                    ImVec2 parent{};
+                    if (ProjectToScreen(view_projection,
+                        bones[static_cast<std::size_t>(bone.parent)].world,
+                        main_origin, main_size, parent))
+                        draw_list->AddLine(parent, joint,
+                            picked ? picked_color : bone_color,
+                            picked ? rig_bone_thickness * picked_scale : rig_bone_thickness);
+                }
+                draw_list->AddCircleFilled(joint,
+                    picked ? rig_joint_radius * picked_scale : rig_joint_radius,
+                    picked ? picked_color : bone_color, 8);
+                if (rig_show_names)
+                    draw_list->AddText({ joint.x + 4.0f, joint.y - 2.0f },
+                        picked ? picked_color : bone_color, bone.name.c_str());
+            }
+        }
+        // 骨が 1 本も来ていないのか、来ていて画面外なのかを切り分ける。
+        static std::size_t last_reported_total = static_cast<std::size_t>(-1);
+        if (rig_bone_total != last_reported_total)
+        {
+            last_reported_total = rig_bone_total;
+            std::fprintf(stderr, "[Rig] objects=%zu bones=%zu\n",
+                object_rig_debug_bones.size(), rig_bone_total);
+        }
     }
 
     for (const ReplayEngine::Editor::DebugWorldLabel& label : ai_frame.labels)

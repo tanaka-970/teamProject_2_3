@@ -327,6 +327,7 @@ private:
     void draw_motion_inspector();
     void draw_motion_timeline();
     void draw_motion_graph_editor();
+    void draw_motion_rig();
     void stop_motion_preview();
     void capture_motion_preview_targets();
     void apply_motion_preview_time();

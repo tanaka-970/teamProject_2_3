@@ -111,6 +111,8 @@ void framework::draw_scene_view_panel()
             ImGui::SameLine();
             ImGui::Checkbox(u8"ライト範囲", &show_light_range_debug_draw);
             ImGui::SameLine();
+            ImGui::Checkbox(u8"リグ", &show_rig_debug_draw);
+            ImGui::SameLine();
             ImGui::Checkbox(u8"グリッド", &show_scene_grid);
             ImGui::SameLine();
             ImGui::TextDisabled("Perspective | %s | %s | %s",

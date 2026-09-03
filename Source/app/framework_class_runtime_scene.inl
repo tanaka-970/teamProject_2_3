@@ -313,6 +313,36 @@
     bool             show_collider_debug_wireframe{ false };
     bool             show_light_range_debug_draw{ false };
     bool             show_normal_adjust_debug_draw{ false };
+    bool             show_rig_debug_draw{ false };
+
+    // リグ表示用。描画提出のときに出来ている骨の行列をそのまま残す。
+    struct rig_debug_bone
+    {
+        std::string name;
+        int parent{ -1 };
+        DirectX::XMFLOAT3 world{ 0.0f, 0.0f, 0.0f };
+    };
+    std::unordered_map<std::uint64_t, std::vector<rig_debug_bone>> object_rig_debug_bones;
+    std::string      rig_selected_bone;
+
+    // リグ表示の見た目。エディタから触れるようにする。
+    float            rig_bone_thickness{ 1.5f };
+    float            rig_joint_radius{ 2.5f };
+    float            rig_picked_scale{ 1.8f };
+    int              rig_max_depth{ 0 };            // 0 は制限なし
+    bool             rig_show_names{ false };
+    DirectX::XMFLOAT4 rig_bone_tint{ 0.31f, 0.88f, 0.94f, 0.86f };
+    DirectX::XMFLOAT4 rig_picked_tint{ 1.0f, 0.73f, 0.25f, 0.94f };
+
+    // ポーズ。保存しないので実行中だけ持つ。骨の名前で引く。
+    struct rig_pose_override
+    {
+        DirectX::XMFLOAT3 translation{ 0.0f, 0.0f, 0.0f };
+        DirectX::XMFLOAT3 rotation{ 0.0f, 0.0f, 0.0f };   // 度
+        DirectX::XMFLOAT3 scale{ 1.0f, 1.0f, 1.0f };
+    };
+    std::unordered_map<std::uint64_t,
+        std::unordered_map<std::string, rig_pose_override>> object_rig_pose;
     bool             show_collision_diagnostics{ false };
 
     // Cook に失敗した Asset。同じ警告をログへ出し続けないための記録。

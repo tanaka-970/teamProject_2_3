@@ -32,7 +32,7 @@
     };
     // DockBuilder の構成を変えたら上げる。
     // imgui.ini に残った古い split を再利用させず、次回起動時に再構築するための版。
-    static constexpr int editor_layout_version{ 3 };
+    static constexpr int editor_layout_version{ 4 };
     editor_selection selected_editor_object{ editor_selection::world };
     editor_workspace active_editor_workspace{ editor_workspace::general };
     editor_view active_editor_view{ editor_view::scene };
@@ -79,6 +79,7 @@
     bool show_motion_inspector_panel{ true };
     bool show_motion_timeline_panel{ true };
     bool show_motion_graph_panel{ true };
+    bool show_motion_rig_panel{ true };
     bool show_sprite_atlas_editor_panel{ false };
     bool show_easing_editor_panel{ false };
     ReplayEngine::Motion::EasingCurveAsset easing_editor_asset;
