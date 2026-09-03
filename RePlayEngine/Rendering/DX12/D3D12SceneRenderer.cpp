@@ -2063,6 +2063,9 @@ namespace ReplayEngine::Rendering::DX12
         D3D12Scene3DDrawOptions options) noexcept
     {
         last_model_effect_stack_count_ = 0;
+        last_scene_draw_call_count_ = 0;
+        last_scene_triangle_count_ = 0;
+        last_scene_vertex_count_ = 0;
         last_screen_effect_stack_count_ = 0;
         last_shadow_coverage_draw_count_ = 0;
         // どの前提で落ちたかを stderr から特定できるようにする。
@@ -2475,7 +2478,13 @@ namespace ReplayEngine::Rendering::DX12
             const std::uint32_t count = draw.index_count == 0
                 ? remaining : (std::min)(draw.index_count, remaining);
             if (count != 0)
+            {
                 command_list_->DrawIndexedInstanced(count, 1, start, 0, 0);
+                ++last_scene_draw_call_count_;
+                last_scene_triangle_count_ += count / 3u;
+                last_scene_vertex_count_ += vb.StrideInBytes != 0
+                    ? vb.SizeInBytes / vb.StrideInBytes : 0u;
+            }
         };
         const auto bind_surface = [this, &allocate_cb, scene_gpu, light_gpu, identity_bone_gpu,
             directional_shadow_srv, local_shadow_srv, ibl_diffuse_srv, ibl_specular_srv,

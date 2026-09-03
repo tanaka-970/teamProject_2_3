@@ -64,6 +64,14 @@ void framework::draw_render_stats_overlay()
             gpu.frame_ms > frame_budget_ms;
         ImGui::Text(u8"FPS %.1f / UI dt %.2f ms", ImGui::GetIO().Framerate, frame_time);
 
+        // 画面に出ているジオメトリの量。重い場面を数で掴むための表示。
+        ImGui::Text(u8"三角形 %s / 頂点 %s / 描画 %s 回",
+            separated(dx12_device_context.LastSceneTriangleCount()).c_str(),
+            separated(dx12_device_context.LastSceneVertexCount()).c_str(),
+            separated(dx12_device_context.LastSceneDrawCallCount()).c_str());
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip(u8"同じメッシュを複数スロットで描くと頂点は重複して数えます。");
+
         // VSync 待ちを除いた実力値。BeginFrame は前フレームの GPU 完了待ちで、仕事ではない。
         double gpu_wait_ms = 0.0;
         for (const auto& scope : stats.Scopes())

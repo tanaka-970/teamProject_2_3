@@ -933,6 +933,18 @@ namespace ReplayEngine::Rendering::DX12
         {
             return last_shadow_coverage_draw_count_;
         }
+        std::uint32_t LastSceneDrawCallCount() const noexcept
+        {
+            return last_scene_draw_call_count_;
+        }
+        std::uint64_t LastSceneTriangleCount() const noexcept
+        {
+            return last_scene_triangle_count_;
+        }
+        std::uint64_t LastSceneVertexCount() const noexcept
+        {
+            return last_scene_vertex_count_;
+        }
         bool HasStaticMesh(const std::string& key) const noexcept
         {
             return static_mesh_cache_.find(key) != static_mesh_cache_.end();
@@ -1294,6 +1306,9 @@ namespace ReplayEngine::Rendering::DX12
         std::uint32_t last_model_effect_stack_count_ = 0;
         std::uint32_t last_screen_effect_stack_count_ = 0;
         std::uint32_t last_shadow_coverage_draw_count_ = 0;
+        std::uint32_t last_scene_draw_call_count_ = 0;
+        std::uint64_t last_scene_triangle_count_ = 0;
+        std::uint64_t last_scene_vertex_count_ = 0;
         struct UIEffectHistoryEntry final
         {
             D3D12OffscreenTarget target{};
