@@ -623,8 +623,12 @@ bool framework::draw_bone_transform_gizmo()
     // 骨の行列は前フレームの描画提出で作ったもので、いまのポーズと対になっている。
     XMFLOAT4X4 world = bone->world_matrix;
 
+    // ImGuizmo は描画リストの持ち主の窓が Hover されている間だけ操作を通す。
+    // 背景リストを渡すと持ち主が引けず、Scene View の上で一切反応しなくなる。
+    ImGuiWindow* scene_window = ImGui::FindWindowByName("Scene View");
+    if (scene_window == nullptr) return false;
     const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
-    ImGuizmo::SetDrawlist(ImGui::GetBackgroundDrawList());
+    ImGuizmo::SetDrawlist(scene_window->DrawList);
     ImGuizmo::SetRect(main_viewport->Pos.x, main_viewport->Pos.y,
         main_viewport->Size.x, main_viewport->Size.y);
 
@@ -633,11 +637,9 @@ bool framework::draw_bone_transform_gizmo()
         current == ReplayEngine::Editor::GizmoOperation::Translate ? ImGuizmo::TRANSLATE
         : current == ReplayEngine::Editor::GizmoOperation::Rotate ? ImGuizmo::ROTATE
         : ImGuizmo::SCALE;
-    // 拡縮の WORLD は ImGuizmo が骨の回転を捨てた行列を返すので、必ず LOCAL で回す。
-    const bool local = operation == ImGuizmo::SCALE ||
-        (rig_gizmo_use_local && gizmo_local_space);
     ImGuizmo::Manipulate(&view._11, &projection._11, operation,
-        local ? ImGuizmo::LOCAL : ImGuizmo::WORLD, &world._11);
+        rig_gizmo_use_local && gizmo_local_space ? ImGuizmo::LOCAL : ImGuizmo::WORLD,
+        &world._11);
     if (!ImGuizmo::IsUsing()) return false;
 
     rig_pose_override& entry = object_rig_pose[owner][rig_selected_bone];
