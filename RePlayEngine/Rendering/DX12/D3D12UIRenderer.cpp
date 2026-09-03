@@ -366,7 +366,9 @@ namespace ReplayEngine::Rendering::DX12
             L"ui_effect_bubble.hlsl",
             L"ui_effect_speed_lines.hlsl",
             L"ui_effect_clock_wipe.hlsl",
-            L"ui_effect_shape_wipe.hlsl"
+            L"ui_effect_shape_wipe.hlsl",
+            L"ui_effect_blinds.hlsl",
+            L"ui_effect_checkerboard.hlsl"
         };
         static_assert(std::size(shader_files) == UIEffectKindCount,
             "UIEffectKind and DX12 UI Effect shader table must remain one-to-one.");
