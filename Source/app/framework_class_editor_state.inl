@@ -464,7 +464,6 @@ private:
     DirectX::XMFLOAT3 normal_adjust_gizmo_start_center{};
     DirectX::XMFLOAT3 normal_adjust_gizmo_start_world{};
     DirectX::XMFLOAT4X4 normal_adjust_gizmo_start_matrix{};
-    DirectX::XMFLOAT3 normal_adjust_gizmo_plane_normal{ 0.0f, 0.0f, 1.0f };
     // このフレームでImGui::NewFrame()を通したか。
     // ロード完了フレームのようにupdate()が早期returnした直後にeditor_modeが
     // 立つ場合があり、NewFrame無しでRender()するとImGuiがassertするため、
