@@ -7,6 +7,8 @@
 #include "../../Scene/Runtime/Scene.h"
 #include "../../Scene/Serialization/SceneSerializer.h"
 
+#include <chrono>
+#include <exception>
 #include <filesystem>
 #include <utility>
 
@@ -49,6 +51,8 @@ namespace ReplayEngine::Runtime
 
     RuntimeSceneService::~RuntimeSceneService()
     {
+        WaitForAsyncRead();
+
         // World を壊す前に Runtime への参照を外す。
         //
         // このサービスと RuntimeContext のどちらが先に消えるかは
@@ -129,6 +133,8 @@ namespace ReplayEngine::Runtime
         staging_.reset();
         staging_object_count_ = 0;
         pending_data_.Clear();
+        pending_scene_path_.clear();
+        load_started_published_ = false;
 
         state_ = SceneLoadState::Failed;
         last_status_ = status;
@@ -148,6 +154,7 @@ namespace ReplayEngine::Runtime
             pending_scene_guid_, status);
 
         pending_scene_guid_.clear();
+        current_load_stage_ = stage;
     }
 
     SceneRequestResult RuntimeSceneService::RequestLoad(const std::string& asset_guid)
@@ -162,12 +169,42 @@ namespace ReplayEngine::Runtime
         if (IsBusy()) return SceneRequestResult::Busy;
 
         pending_scene_guid_ = asset_guid;
+        pending_scene_path_.clear();
         pending_source_ = PendingSource::AssetGuid;
         pending_data_.Clear();
         state_ = SceneLoadState::Loading;
         last_status_ = RuntimeStatus::Ok;
         last_error_.clear();
         last_failed_stage_.clear();
+        load_started_published_ = false;
+        progress_completed_units_ = 0;
+        progress_total_units_ = 4;
+        current_load_stage_ = "ResolveAsset";
+
+        PublishSceneNotification(EngineEvents::SceneLoadRequested, "SceneLoadRequested",
+            pending_scene_guid_, RuntimeStatus::Ok);
+        return SceneRequestResult::Accepted;
+    }
+
+    SceneRequestResult RuntimeSceneService::RequestLoadPath(
+        const std::filesystem::path& path, const std::string& source_label)
+    {
+        if (path.empty()) return SceneRequestResult::InvalidRequest;
+        if (IsBusy()) return SceneRequestResult::Busy;
+
+        pending_scene_path_ = path.lexically_normal();
+        pending_scene_guid_ = source_label.empty()
+            ? pending_scene_path_.generic_u8string() : source_label;
+        pending_source_ = PendingSource::FilePath;
+        pending_data_.Clear();
+        state_ = SceneLoadState::Loading;
+        last_status_ = RuntimeStatus::Ok;
+        last_error_.clear();
+        last_failed_stage_.clear();
+        load_started_published_ = false;
+        progress_completed_units_ = 0;
+        progress_total_units_ = 3;
+        current_load_stage_ = "ParseScene";
 
         PublishSceneNotification(EngineEvents::SceneLoadRequested, "SceneLoadRequested",
             pending_scene_guid_, RuntimeStatus::Ok);
@@ -177,6 +214,8 @@ namespace ReplayEngine::Runtime
     SceneRequestResult RuntimeSceneService::RequestReload()
     {
         if (current_scene_guid_.empty()) return SceneRequestResult::InvalidRequest;
+        if (current_source_ == PendingSource::FilePath)
+            return RequestLoadPath(current_scene_path_, current_scene_guid_);
         return RequestLoad(current_scene_guid_);
     }
 
@@ -190,11 +229,16 @@ namespace ReplayEngine::Runtime
         pending_data_ = data;
         pending_source_ = PendingSource::InMemory;
         pending_scene_guid_ = source_guid;
+        pending_scene_path_.clear();
 
         state_ = SceneLoadState::Loading;
         last_status_ = RuntimeStatus::Ok;
         last_error_.clear();
         last_failed_stage_.clear();
+        load_started_published_ = false;
+        progress_completed_units_ = 0;
+        progress_total_units_ = 2;
+        current_load_stage_ = "BuildWorld";
 
         PublishSceneNotification(EngineEvents::SceneLoadRequested, "SceneLoadRequested",
             pending_scene_guid_, RuntimeStatus::Ok);
@@ -237,7 +281,9 @@ namespace ReplayEngine::Runtime
         if (world_lifecycle_ != nullptr) world_lifecycle_->OnWorldActivating(*active_);
 
         current_scene_guid_.clear();
+        current_scene_path_.clear();
         pending_scene_guid_.clear();
+        pending_scene_path_.clear();
         pending_data_.Clear();
         pending_source_ = PendingSource::AssetGuid;
         last_report_ = Serialization::SceneLoadReport();
@@ -246,6 +292,10 @@ namespace ReplayEngine::Runtime
         last_status_ = RuntimeStatus::Ok;
         last_error_.clear();
         last_failed_stage_.clear();
+        load_started_published_ = false;
+        progress_completed_units_ = 0;
+        progress_total_units_ = 0;
+        current_load_stage_.clear();
 
         PublishSceneNotification(EngineEvents::WorldChanged, "WorldChanged",
             std::string(), RuntimeStatus::Ok);
@@ -256,58 +306,154 @@ namespace ReplayEngine::Runtime
     {
         if (!IsBusy()) return;
 
+        WaitForAsyncRead();
         staging_.reset();
         staging_object_count_ = 0;
         pending_scene_guid_.clear();
+        pending_scene_path_.clear();
         pending_data_.Clear();
         pending_source_ = PendingSource::AssetGuid;
         state_ = SceneLoadState::Idle;
+        load_started_published_ = false;
+        progress_completed_units_ = 0;
+        progress_total_units_ = 0;
+        current_load_stage_.clear();
     }
 
     void RuntimeSceneService::BuildStagingWorld()
     {
-        PublishSceneNotification(EngineEvents::SceneLoadStarted, "SceneLoadStarted",
-            pending_scene_guid_, RuntimeStatus::Ok);
+        if (!load_started_published_)
+        {
+            PublishSceneNotification(EngineEvents::SceneLoadStarted, "SceneLoadStarted",
+                pending_scene_guid_, RuntimeStatus::Ok);
+            load_started_published_ = true;
+        }
 
         // 手元の SceneData から作る要求は、Asset 解決とファイル読み込みを飛ばす。
         // それ以降（Staging 構築・診断・入れ替え）は同じ経路を通る。
         if (pending_source_ == PendingSource::InMemory)
         {
-            BuildStagingFromData(pending_data_);
+            current_load_stage_ = "BuildWorld";
+            if (BuildStagingFromData(pending_data_)) ++progress_completed_units_;
             return;
         }
 
-        // ---- 1) Asset 解決 -------------------------------------------------
-        if (asset_resolver_ == nullptr)
+        if (!async_read_.valid())
         {
-            Fail(RuntimeStatus::ServiceUnavailable, "ResolveAsset",
-                "Scene Asset Resolver が接続されていません。");
+            std::filesystem::path path = pending_scene_path_;
+            if (pending_source_ == PendingSource::AssetGuid)
+            {
+                current_load_stage_ = "ResolveAsset";
+                if (asset_resolver_ == nullptr)
+                {
+                    Fail(RuntimeStatus::ServiceUnavailable, "ResolveAsset",
+                        "Scene Asset Resolver が接続されていません。");
+                    return;
+                }
+
+                std::string resolved_path;
+                const RuntimeStatus resolve_status =
+                    asset_resolver_->ResolveScenePath(pending_scene_guid_, resolved_path);
+                if (Failed(resolve_status))
+                {
+                    Fail(resolve_status, "ResolveAsset",
+                        "AssetGUID から Scene を解決できません。");
+                    return;
+                }
+                path = std::filesystem::path(resolved_path);
+                pending_scene_path_ = path;
+                ++progress_completed_units_;
+            }
+
+            current_load_stage_ = "ParseScene";
+            StartAsyncRead(path);
             return;
         }
 
-        std::string path;
-        const RuntimeStatus resolve_status =
-            asset_resolver_->ResolveScenePath(pending_scene_guid_, path);
-        if (Failed(resolve_status))
+        if (!PollAsyncRead()) return;
+
+        current_load_stage_ = "BuildWorld";
+        if (BuildStagingFromData(pending_data_)) ++progress_completed_units_;
+    }
+
+    void RuntimeSceneService::TickBlocking()
+    {
+        Tick();
+        // Tick は読み込みを開始しただけで戻ることがある。ここで終わるまで待って続きを進める。
+        if (state_ != SceneLoadState::Loading || !async_read_.valid()) return;
+        try { async_read_.wait(); }
+        catch (...) {}
+        Tick();
+    }
+
+    bool RuntimeSceneService::StartAsyncRead(const std::filesystem::path& path)
+    {
+        try
         {
-            Fail(resolve_status, "ResolveAsset",
-                "AssetGUID から Scene を解決できません。");
-            return;
+            async_read_ = std::async(std::launch::async, [path]()
+            {
+                AsyncSceneReadResult result;
+                result.loaded = Serialization::SceneSerializer::LoadFromFile(
+                    result.data, path, result.error);
+                return result;
+            });
+            return true;
         }
-
-        // ---- 2) ファイル読み込み・Parse・Version Migration -------------------
-        //
-        // SceneSerializer が v7〜現行までの読み込みと、
-        // 新しすぎる形式の拒否をまとめて担当する。
-        Serialization::SceneData data;
-        std::string error;
-        if (!Serialization::SceneSerializer::LoadFromFile(data, path, error))
+        catch (const std::exception& exception)
         {
-            Fail(RuntimeStatus::SceneLoadFailed, "ParseScene", error);
-            return;
+            Fail(RuntimeStatus::SceneLoadFailed, "StartWorker", exception.what());
+            return false;
         }
+        catch (...)
+        {
+            Fail(RuntimeStatus::SceneLoadFailed, "StartWorker",
+                "Scene 読み込みワーカーを開始できませんでした。");
+            return false;
+        }
+    }
 
-        BuildStagingFromData(data);
+    bool RuntimeSceneService::PollAsyncRead()
+    {
+        if (!async_read_.valid()) return false;
+        if (async_read_.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+            return false;
+
+        try
+        {
+            AsyncSceneReadResult result = async_read_.get();
+            if (!result.loaded)
+            {
+                Fail(RuntimeStatus::SceneLoadFailed, "ParseScene", std::move(result.error));
+                return false;
+            }
+            pending_data_ = std::move(result.data);
+            ++progress_completed_units_;
+            return true;
+        }
+        catch (const std::exception& exception)
+        {
+            Fail(RuntimeStatus::SceneLoadFailed, "ParseScene", exception.what());
+            return false;
+        }
+        catch (...)
+        {
+            Fail(RuntimeStatus::SceneLoadFailed, "ParseScene",
+                "Scene 読み込みワーカーで不明な例外が発生しました。");
+            return false;
+        }
+    }
+
+    void RuntimeSceneService::WaitForAsyncRead() noexcept
+    {
+        if (!async_read_.valid()) return;
+        try
+        {
+            async_read_.wait();
+            async_read_.get();
+        }
+        catch (...)
+        {
+        }
     }
 
     bool RuntimeSceneService::BuildStagingFromData(const Serialization::SceneData& data)
@@ -449,8 +595,6 @@ namespace ReplayEngine::Runtime
         // 実体はまだ生きているので、診断に World の情報を使える。
         if (world_lifecycle_ != nullptr) world_lifecycle_->OnWorldUnloaded(*active_);
 
-        // ---- 入れ替え ---------------------------------------------------------
-        //
         // unique_ptr の差し替え。旧 World の実体はここで解放される。
         // 新しい World は別の実体なので WorldInstanceID も別。
         // 旧 World の ObjectHandle / ComponentHandle はすべて WrongWorld になる。
@@ -484,12 +628,18 @@ namespace ReplayEngine::Runtime
         active_->Start();
 
         current_scene_guid_ = pending_scene_guid_;
+        current_scene_path_ = pending_scene_path_;
+        current_source_ = pending_source_ == PendingSource::FilePath
+            ? PendingSource::FilePath : PendingSource::AssetGuid;
         pending_scene_guid_.clear();
+        pending_scene_path_.clear();
         pending_data_.Clear();
         pending_source_ = PendingSource::AssetGuid;
 
         state_ = SceneLoadState::Completed;
         last_status_ = RuntimeStatus::Ok;
+        progress_completed_units_ = progress_total_units_;
+        current_load_stage_ = "Completed";
         ++swap_count_;
         ++load_count_;
 

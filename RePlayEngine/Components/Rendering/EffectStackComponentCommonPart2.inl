@@ -357,6 +357,56 @@
                 effect.intensity = 1.0f;
                 effect.color = { 0.70f, 0.92f, 1.0f, 1.0f };
                 break;
+            case UI::UIEffectKind::SpeedLines:
+                effect.radius = 90.0f;
+                effect.intensity = 1.0f;
+                effect.threshold = 0.30f;
+                effect.amount = 0.45f;
+                effect.angle = 0.0f;
+                effect.progress = 0.55f;
+                effect.softness = 0.20f;
+                effect.speed = 6.0f;
+                effect.seed = 1.0f;
+                effect.direction = { 0.5f, 0.5f };
+                effect.color = { 0.05f, 0.05f, 0.06f, 1.0f };
+                break;
+            case UI::UIEffectKind::ClockWipe:
+                effect.progress = 0.35f;
+                effect.angle = -90.0f;
+                effect.amount = 1.0f;
+                effect.threshold = 0.0f;
+                effect.softness = 0.02f;
+                effect.intensity = 1.0f;
+                effect.direction = { 0.5f, 0.5f };
+                break;
+            case UI::UIEffectKind::Blinds:
+                effect.progress = 0.35f;
+                effect.radius = 12.0f;
+                effect.angle = 0.0f;
+                effect.amount = 0.0f;
+                effect.softness = 0.02f;
+                effect.intensity = 1.0f;
+                break;
+            case UI::UIEffectKind::Checkerboard:
+                effect.progress = 0.45f;
+                effect.radius = 10.0f;
+                effect.amount = 0.45f;
+                effect.threshold = 0.15f;
+                effect.angle = 0.0f;
+                effect.softness = 0.02f;
+                effect.intensity = 1.0f;
+                effect.seed = 1.0f;
+                break;
+            case UI::UIEffectKind::ShapeWipe:
+                effect.progress = 0.45f;
+                effect.waveform = 1;
+                effect.radius = 5.0f;
+                effect.threshold = 0.45f;
+                effect.angle = 0.0f;
+                effect.softness = 0.01f;
+                effect.intensity = 1.0f;
+                effect.direction = { 0.5f, 0.5f };
+                break;
             default:
                 break;
             }

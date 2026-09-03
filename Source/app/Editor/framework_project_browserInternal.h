@@ -55,7 +55,7 @@ namespace framework_project_browser::Detail
             lower_extension == ".jpeg" || lower_extension == ".bmp" ||
             lower_extension == ".dds" || lower_extension == ".tga" ||
             lower_extension == ".tif" || lower_extension == ".tiff" ||
-            lower_extension == ".gif";
+            lower_extension == ".gif" || lower_extension == ".hdr";
     }
 
     inline std::filesystem::path NormalizeProjectPath(const std::filesystem::path& value)

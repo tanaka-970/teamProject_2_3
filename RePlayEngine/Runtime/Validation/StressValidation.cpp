@@ -273,8 +273,8 @@ namespace ReplayEngine::Runtime::Validation
                 StressProbeBehaviour::StaticTypeGUID(), [](const EventRecord&) {});
             (void)token;
 
-            scenes.Tick();
-            scenes.Tick();
+            scenes.TickBlocking();
+            scenes.TickBlocking();
 
             if (scenes.State() != SceneLoadState::Completed) { cycle_ok = false; break; }
             seen_worlds.push_back(scenes.ActiveWorldID());
@@ -333,7 +333,7 @@ namespace ReplayEngine::Runtime::Validation
                 failures_ok = false;
                 break;
             }
-            scenes.Tick();
+            scenes.TickBlocking();
             if (scenes.State() != SceneLoadState::Failed) { failures_ok = false; break; }
 
             // 失敗のたびに現在の World が無傷であることを確かめる。
@@ -359,8 +359,8 @@ namespace ReplayEngine::Runtime::Validation
 
         check.Expect(scenes.RequestLoad(guid_large) == SceneRequestResult::Accepted,
             "大量 GameObject の Scene 読み込み要求が受理される");
-        scenes.Tick();
-        scenes.Tick();
+        scenes.TickBlocking();
+        scenes.TickBlocking();
         check.Expect(scenes.State() == SceneLoadState::Completed &&
             scenes.ActiveWorld().GameObjectCount() ==
                 static_cast<std::size_t>(large_object_count),
@@ -368,8 +368,8 @@ namespace ReplayEngine::Runtime::Validation
 
         // 大量 World をそのまま切り替えて、破棄側も耐えることを確かめる。
         scenes.RequestLoad(guid_a);
-        scenes.Tick();
-        scenes.Tick();
+        scenes.TickBlocking();
+        scenes.TickBlocking();
         check.Expect(scenes.State() == SceneLoadState::Completed &&
             scenes.ActiveWorld().GameObjectCount() == 4,
             "大量 GameObject の World から切り替えられる");
@@ -397,8 +397,8 @@ namespace ReplayEngine::Runtime::Validation
                 play_ok = false;
                 break;
             }
-            scenes.Tick();
-            scenes.Tick();
+            scenes.TickBlocking();
+            scenes.TickBlocking();
             if (scenes.State() != SceneLoadState::Completed) { play_ok = false; break; }
             if (scenes.ActiveWorld().GameObjectCount() != editor_count)
             {
@@ -430,8 +430,8 @@ namespace ReplayEngine::Runtime::Validation
         {
             const char* target = (cycle % 2 == 0) ? guid_a : guid_b;
             if (Failed(flow.LoadScene(std::string(target)))) { flow_ok = false; break; }
-            flow.Tick();
-            flow.Tick();
+            flow.TickBlocking();
+            flow.TickBlocking();
             if (flow.CurrentTransitionState() != SceneTransitionState::Completed)
             {
                 flow_ok = false;
@@ -454,8 +454,8 @@ namespace ReplayEngine::Runtime::Validation
         {
             if (!flow.CanReturn()) { return_ok = false; break; }
             if (Failed(flow.ReturnToPreviousScene())) { return_ok = false; break; }
-            flow.Tick();
-            flow.Tick();
+            flow.TickBlocking();
+            flow.TickBlocking();
             if (flow.History().size() != history_before_returns - 1)
             {
                 return_ok = false;

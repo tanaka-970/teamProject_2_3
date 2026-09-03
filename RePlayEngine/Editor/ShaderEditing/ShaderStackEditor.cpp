@@ -24,15 +24,32 @@ namespace ReplayEngine::Editor
             using Rendering::ShaderLayerType;
             switch (type)
             {
-            case ShaderLayerType::Pbr:       return "PBR補助";
-            case ShaderLayerType::Toon:      return "Toon補助";
-            case ShaderLayerType::Unlit:     return "Unlit発光";
+            case ShaderLayerType::Pbr:       return "PBR陰影モデル";
+            case ShaderLayerType::Toon:      return "Toon陰影モデル";
+            case ShaderLayerType::Unlit:     return "Unlit陰影モデル";
             case ShaderLayerType::Pixelate:  return "ピクセレーション";
-            case ShaderLayerType::Wireframe: return "ワイヤーフレーム";
-            case ShaderLayerType::Outline:   return "輪郭線";
-            case ShaderLayerType::StylizedCharacter: return "キャラクター材質";
+            case ShaderLayerType::Wireframe: return "ワイヤーフレーム追加パス";
+            case ShaderLayerType::Outline:   return "輪郭線追加パス";
+            case ShaderLayerType::StylizedCharacter: return "キャラクター陰影モデル";
             default:                         return "不明";
             }
+        }
+
+        bool IsDx12LayerSupported(Rendering::ShaderID id) noexcept
+        {
+            using namespace Rendering::BuiltInShaderLayers;
+            return id == Pbr || id == Toon || id == Unlit || id == Pixelate ||
+                id == Wireframe || id == Outline || id == StylizedCharacter;
+        }
+
+        const char* Dx12LayerStatus(Rendering::ShaderID id) noexcept
+        {
+            using namespace Rendering::BuiltInShaderLayers;
+            if (id == Outline) return "DX12描画: Forward後の輪郭追加パス";
+            if (id == Wireframe) return "DX12描画: Forward後のワイヤー追加パス";
+            if (id == Pixelate) return "DX12描画: GBuffer/Lightingのピクセル化";
+            if (id == StylizedCharacter) return "DX12描画: Toon陰影モデルへ対応付け";
+            return "DX12描画: 陰影モデル本体";
         }
 
     }
@@ -54,7 +71,7 @@ namespace ReplayEngine::Editor
         bool changed = false;
         ImGui::PushID(id);
         ImGui::TextUnformatted("シェーダースタック");
-        ImGui::TextDisabled("Surfaceの後へ上から順に合成。長押しドラッグで順番を変更できます");
+        ImGui::TextDisabled("陰影モデルは最後の有効な1枚、追加パスは上から順に描画します。ドラッグで順番を変更できます");
         ImGui::Checkbox("詳細表示", &advanced_mode);
         ImGui::SameLine();
         ImGui::TextDisabled(advanced_mode
@@ -129,11 +146,11 @@ namespace ReplayEngine::Editor
 
         if (layers.CanAdd())
         {
-            if (ImGui::Button("追加パスを選ぶ...")) ImGui::OpenPopup("AddShaderLayer");
+            if (ImGui::Button("Layerを追加...")) ImGui::OpenPopup("AddShaderLayer");
         }
         else
         {
-            ImGui::TextDisabled("追加パスは上限です");
+            ImGui::TextDisabled("Layerは上限です");
         }
         ImGui::SameLine();
         ImGui::TextDisabled("%zu / %zu", layers.Layers().size(), ShaderLayerStack::MaxLayers);
@@ -166,13 +183,13 @@ namespace ReplayEngine::Editor
                 // 旧 debug inspector の fallback。Material Editor は Catalog 経路を使う。
                 const auto add_layer = [&layers, &changed](const char* label, ShaderLayerType type)
                 { if (ImGui::MenuItem(label)) { layers.Add(type); changed = true; } };
-                add_layer("PBR補助", ShaderLayerType::Pbr);
-                add_layer("Toon補助", ShaderLayerType::Toon);
-                add_layer("Unlit発光", ShaderLayerType::Unlit);
+                add_layer("PBR陰影モデル", ShaderLayerType::Pbr);
+                add_layer("Toon陰影モデル", ShaderLayerType::Toon);
+                add_layer("Unlit陰影モデル", ShaderLayerType::Unlit);
                 add_layer("ピクセレーション", ShaderLayerType::Pixelate);
-                add_layer("ワイヤーフレーム", ShaderLayerType::Wireframe);
-                add_layer("キャラクター材質", ShaderLayerType::StylizedCharacter);
-                add_layer("輪郭線", ShaderLayerType::Outline);
+                add_layer("ワイヤーフレーム追加パス", ShaderLayerType::Wireframe);
+                add_layer("キャラクター陰影モデル", ShaderLayerType::StylizedCharacter);
+                add_layer("輪郭線追加パス", ShaderLayerType::Outline);
             }
             ImGui::EndPopup();
         }
@@ -190,14 +207,21 @@ namespace ReplayEngine::Editor
             const ShaderID layer_shader = layer.EffectiveShader();
             const ShaderCatalog::Entry* layer_entry =
                 catalog != nullptr && layer_shader.IsValid() ? catalog->Find(layer_shader) : nullptr;
-            const std::string layer_name = layer_entry != nullptr
-                ? layer_entry->info.DisplayName()
-                : (layer.type != ShaderLayerType::Custom ? std::string(LayerName(layer.type))
-                    : std::string(u8"レイヤーシェーダーが見つかりません"));
-            const bool unsupported_builtin = BuiltInShaderLayers::IsBuiltIn(layer_shader);
+            std::uint32_t legacy_type = 0;
+            const bool is_builtin_layer = layer_shader.IsValid() &&
+                BuiltInShaderLayers::TryGetLegacyType(layer_shader, legacy_type);
+            const std::string layer_name = is_builtin_layer
+                ? std::string(LayerName(static_cast<ShaderLayerType>(legacy_type)))
+                : (layer_entry != nullptr ? layer_entry->info.DisplayName()
+                    : (layer.type != ShaderLayerType::Custom ? std::string(LayerName(layer.type))
+                        : std::string(u8"レイヤーシェーダーが見つかりません")));
+            const bool unsupported_layer = layer_shader.IsValid() &&
+                !IsDx12LayerSupported(layer_shader);
+            const bool supported_dx12_layer = layer_shader.IsValid() &&
+                IsDx12LayerSupported(layer_shader);
             const std::string title = "Layer " + std::to_string(index + 1) + "  " +
-                layer_name + (unsupported_builtin
-                    ? u8" [保存されますが、DX12 描画には反映されません]" : "");
+                layer_name + (unsupported_layer
+                    ? u8" [保存済み: カスタム Layer は DX12 描画へ未接続]" : "");
             const std::string layer_id = "layer_" + std::to_string(layer.id);
             ImGui::PushID(layer_id.c_str());
             if (ImGui::Checkbox("有効", &layer.enabled)) changed = true;
@@ -222,12 +246,19 @@ namespace ReplayEngine::Editor
             if (item.opened && layer.enabled)
             {
                 ImGui::Indent();
+                const bool has_pass_blend = layer.Is(BuiltInShaderLayers::Outline) ||
+                    layer.Is(BuiltInShaderLayers::Wireframe);
                 int blend = static_cast<int>(layer.blend);
-                if (ImGui::Combo("合成方式", &blend, blend_names, IM_ARRAYSIZE(blend_names)))
+                if (has_pass_blend && ImGui::Combo("合成方式", &blend,
+                    blend_names, IM_ARRAYSIZE(blend_names)))
                 {
                     layer.blend = static_cast<ShaderLayerBlend>(blend);
                     changed = true;
                 }
+                if (!has_pass_blend)
+                    ImGui::TextDisabled(supported_dx12_layer
+                        ? "合成方式: 陰影モデルと画面修飾では使用しません"
+                        : "合成方式: 未接続の Custom Layer では使用しません");
 
                 if (layer_entry != nullptr && layer_entry->schema && assets != nullptr)
                 {
@@ -238,11 +269,18 @@ namespace ReplayEngine::Editor
                         layer.SyncPropertiesToLegacyFields();
                         changed = true;
                     }
+                    if (supported_dx12_layer)
+                        ImGui::TextDisabled("%s", Dx12LayerStatus(layer_shader));
+                    else if (unsupported_layer && layer_entry->AllCompiled())
+                        ImGui::TextColored(ImVec4(1.0f, 0.72f, 0.30f, 1.0f),
+                            "保存済み: カスタム Layer は DX12 では描画されません");
                     if (!layer_entry->AllCompiled())
                         ImGui::TextColored(ImVec4(1.0f, 0.72f, 0.30f, 1.0f),
-                            layer_entry->EverCompiled()
-                                ? "コンパイル失敗: 前回成功した bytecode を使用中"
-                                : "未対応: 成功した bytecode がなく、この Layer は描画されません");
+                            supported_dx12_layer
+                                ? "Catalogコンパイル失敗: DX12固定描画経路を使用中"
+                                : (layer_entry->EverCompiled()
+                                    ? "コンパイル失敗: 前回成功した bytecode を使用中（DX12 Layer 描画は未接続）"
+                                    : "コンパイル失敗: 成功した bytecode がなく、設定値は保存されるがDX12では描画されません"));
 
                     if (advanced_mode)
                     {
@@ -264,8 +302,11 @@ namespace ReplayEngine::Editor
                 else if (catalog != nullptr)
                 {
                     // Missing Shader でも保存済み PropertyBag は捨てない。
-                    ImGui::TextColored(ImVec4(1.0f, 0.38f, 0.38f, 1.0f),
-                        "未対応: この Layer Shader は現行 DX12 では描画されません。設定値は保存されます");
+                    if (supported_dx12_layer)
+                        ImGui::TextDisabled("保存済み: Catalog未登録だがDX12固定描画経路を使用中");
+                    else
+                        ImGui::TextColored(ImVec4(1.0f, 0.38f, 0.38f, 1.0f),
+                            "保存済み: Catalog に無い Layer のため DX12 では描画されません");
                     if (layer_shader.IsValid())
                         ImGui::TextDisabled("GUID  %s", layer_shader.ToString().c_str());
                 }
@@ -326,16 +367,23 @@ namespace ReplayEngine::Editor
             reordered = true;
         }
         if (remove_index != static_cast<std::size_t>(-1)) layers.Remove(remove_index);
-        outline_pass = layers.Contains(BuiltInShaderLayers::Outline);
+        const auto has_enabled_layer = [&layers](ShaderID id) noexcept
+        {
+            for (const ShaderLayer& layer : layers.Layers())
+                if (layer.enabled && layer.Is(id)) return true;
+            return false;
+        };
+        outline_pass = has_enabled_layer(BuiltInShaderLayers::Outline);
         ImGui::PopID();
 
         ShaderStackEditorResult result{};
         result.changed = changed;
         result.reordered = reordered;
-        result.requires_pbr = base_shader == 1 || layers.Contains(ShaderLayerType::Pbr);
-        result.requires_toon = base_shader == 2 || layers.Contains(ShaderLayerType::Toon);
+        result.requires_pbr = base_shader == 1 || has_enabled_layer(BuiltInShaderLayers::Pbr);
+        result.requires_toon = base_shader == 2 || has_enabled_layer(BuiltInShaderLayers::Toon) ||
+            has_enabled_layer(BuiltInShaderLayers::StylizedCharacter);
         result.requires_unlit = base_shader == 3 || base_shader == 4 ||
-            layers.Contains(ShaderLayerType::Unlit);
+            has_enabled_layer(BuiltInShaderLayers::Unlit);
         result.requires_outline = outline_pass;
         return result;
     }

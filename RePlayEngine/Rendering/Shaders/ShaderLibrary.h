@@ -3,6 +3,7 @@
 #include "ShaderCatalog.h"
 #include "ShaderCompiler.h"
 
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <string>
@@ -77,6 +78,8 @@ namespace ReplayEngine::Rendering
         ShaderCatalog& Catalog() noexcept { return catalog_; }
         const ShaderCatalog& Catalog() const noexcept { return catalog_; }
 
+        std::uint64_t Generation() const noexcept { return generation_; }
+
         const ScanReport& LastReport() const noexcept { return last_report_; }
 
         // 走査対象のフォルダ。project_root からの相対。
@@ -110,6 +113,7 @@ namespace ReplayEngine::Rendering
             bool debug_build);
 
         ShaderCatalog catalog_;
+        std::uint64_t generation_ = 0;
         ScanReport last_report_;
         LogSink log_;
     };

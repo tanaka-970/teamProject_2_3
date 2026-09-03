@@ -80,14 +80,16 @@ float4 main(float4 position : SV_POSITION, float2 uv : TEXCOORD0) : SV_Target0
             normalValue.w >= 0.0f, position.xy);
         return float4(visibility.xxx, 1.0f);
     }
-    const uint lightingModel = (uint)round(saturate(base.a) * 255.0f);
+    const uint encodedLightingModel = (uint)round(saturate(base.a) * 255.0f);
+    const bool pixelatePayload = (encodedLightingModel & 128u) != 0u;
+    const uint lightingModel = encodedLightingModel & 127u;
 
     const float ambientOcclusion = saturate(material.r);
     const float roughness = clamp(material.g, 0.045f, 1.0f);
     const float metallic = saturate(material.b);
     // Toon のときだけ material.a に階調数が入っている（GBuffer 側で符号化）。
     Dx12ToonSurface toon = Dx12DefaultToonSurface();
-    if (lightingModel == 1u)
+    if (lightingModel == 1u && !pixelatePayload)
     {
         const float4 packed = gToon.SampleLevel(pointSampler, uv, 0);
         const float2 powers = Dx12UnpackTwoBytes(packed.w);

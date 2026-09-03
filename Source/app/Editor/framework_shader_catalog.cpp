@@ -27,6 +27,7 @@ void framework::scan_shader_library()
             push_editor_log(severity, message, file, line);
         });
 
+    custom_ui_effect_shader_catalog_cache.clear();
     shader_library.ScanAll(content_root_path());
     // DX12 は ShaderID 単位で Production Surface PSO を Cache する。手動再走査では
     // 同じ GUID のまま Source/Schema が変わるため、この安全な Editor 境界で Backend
@@ -55,6 +56,8 @@ void framework::poll_shader_source_changes(float elapsed_time)
     // ShaderLibrary は Hot Reload 前後で ShaderID を意図的に維持する。実際に再構築が
     // 起きた場合だけ DX12 Static Cache を消す。これにより DXC Compile に失敗した Shader も
     // ユーザーが修正した直後に再試行できる。
+    if (recompiled != 0)
+        custom_ui_effect_shader_catalog_cache.clear();
     if (recompiled != 0 && dx12_framework_active && dx12_device_context.IsInitialized())
         (void)dx12_device_context.ClearStaticAssetCaches();
     if (recompiled != 0) compile_pending_dx12_custom_effects();

@@ -238,6 +238,7 @@
     <ClCompile Include="RePlayEngine\Assets\AssetCache.cpp" />
     <ClCompile Include="RePlayEngine\Assets\AssetDatabase.cpp" />
     <ClCompile Include="RePlayEngine\Assets\AsyncAssetManager.cpp" />
+    <ClCompile Include="RePlayEngine\Core\Threading\JobSystem.cpp" />
     <ClCompile Include="RePlayEngine\Assets\TextureCompressor.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Gizmo\TransformGizmo.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Gizmo\ViewportPicker.cpp" />
@@ -690,6 +691,7 @@
     <ClInclude Include="Source\game\game_scene.h" />
       <ClInclude Include="RePlayEngine\Core\ObjectID\ObjectID.h" />
     <ClInclude Include="RePlayEngine\Core\ObjectID\RuntimeIdentity.h" />
+    <ClInclude Include="RePlayEngine\Core\Threading\JobSystem.h" />
     <ClInclude Include="RePlayEngine\Core\Threading\ThreadPolicy.h" />
     <ClInclude Include="RePlayEngine\Core\Math\Transform.h" />
     <ClInclude Include="RePlayEngine\Object\Component\ComponentTypeID.h" />
@@ -767,6 +769,7 @@
     <ClInclude Include="RePlayEngine\Components\Rendering\LineRendererComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Rendering\TrailComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Rendering\LightComponents.h" />
+    <ClInclude Include="RePlayEngine\Components\Rendering\SkyboxComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\RotatorComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\HealthComponent.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\StageGameplayCommon.h" />
@@ -967,6 +970,8 @@
     <None Include="Shader\dx12_ui_vs.hlsl" />
     <None Include="Shader\dx12_lighting_common.hlsli" />
     <None Include="Shader\dx12_lighting_ps.hlsl" />
+    <None Include="Shader\dx12_skybox_ps.hlsl" />
+    <None Include="Shader\dx12_skybox_vs.hlsl" />
     <None Include="Shader\dx12_postprocess_ps.hlsl" />
     <None Include="Shader\dx12_screen_layer_extract_ps.hlsl" />
     <None Include="Shader\dx12_shadow_alpha_ps.hlsl" />

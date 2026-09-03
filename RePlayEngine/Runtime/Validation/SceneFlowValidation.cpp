@@ -337,14 +337,14 @@ namespace ReplayEngine::Runtime::Validation
             flow.StartupState() == StartupSceneState::NotConfigured,
             "Startup Scene 未設定は NotConfigured という診断状態になる");
 
-        flow.Tick();
+        flow.TickBlocking();
         check.Expect(scenes.ActiveWorld().GameObjectCount() == 0 &&
             scenes.CurrentSceneGUID().empty() && flow.StartupBlocked(),
             "Startup Scene 未設定のとき、別の Scene を勝手に読み込まない");
 
         check.Expect(Succeeded(flow.BeginStartupScene(guid_unknown)),
             "存在しない Startup Scene でも要求そのものは受理される");
-        flow.Tick();
+        flow.TickBlocking();
         check.Expect(flow.StartupState() == StartupSceneState::Failed &&
             flow.LastResult() == RuntimeStatus::AssetMissing && flow.StartupBlocked(),
             "無効な Startup Scene は Failed という診断状態になる");
@@ -353,13 +353,14 @@ namespace ReplayEngine::Runtime::Validation
 
         check.Expect(Succeeded(flow.BeginStartupScene(guid_title)),
             "正常な Startup Scene の起動要求が受理される");
+        // 要求直後は 0% が正しい。固定値を返していた頃の名残で > 0 を求めていた。
         check.Expect(runtime.SceneTransitionInProgress() &&
-            runtime.SceneTransitionProgress() > 0.0f &&
+            runtime.SceneTransitionProgress() >= 0.0f &&
             runtime.SceneTransitionProgress() < 1.0f &&
             runtime.SceneTransitionStatus() == RuntimeStatus::TransitionInProgress,
             "Scene 読み込み中は進捗と実行中状態をRuntime APIへ公開する");
-        flow.Tick();
-        flow.Tick();
+        flow.TickBlocking();
+        flow.TickBlocking();
         check.Expect(flow.StartupState() == StartupSceneState::Ready &&
             !flow.StartupBlocked() && CurrentSceneName(scenes) == "FlowTitle",
             "Startup Scene の読み込みが完了し Ready になる");
@@ -403,16 +404,16 @@ namespace ReplayEngine::Runtime::Validation
         check.Expect(Succeeded(runtime.SetSceneFlowInt("Keys", 3)) &&
             Succeeded(runtime.TriggerSceneFlow("StartGame")),
             "条件成立時はイベント名だけで Scene 遷移要求を作れる");
-        flow.Tick();
-        flow.Tick();
+        flow.TickBlocking();
+        flow.TickBlocking();
         check.Expect(flow.CurrentSceneGUID() == guid_game && CurrentSceneName(scenes) == "FlowGame",
             "Scene Flow Trigger が指定先 Scene へ遷移する");
 
         // 後続の既存 Load 検証は Title から始めるため戻して履歴を消す。
         check.Expect(Succeeded(flow.ReturnToPreviousScene()),
             "Scene Flow 遷移も通常履歴へ統合され Return できる");
-        flow.Tick();
-        flow.Tick();
+        flow.TickBlocking();
+        flow.TickBlocking();
         flow.ClearHistory();
 
         // -----------------------------------------------------------------
@@ -424,8 +425,8 @@ namespace ReplayEngine::Runtime::Validation
             flow.CurrentTransitionState() == SceneTransitionState::Requested,
             "SceneReference からの遷移要求が受理される");
 
-        flow.Tick();
-        flow.Tick();
+        flow.TickBlocking();
+        flow.TickBlocking();
         check.Expect(flow.CurrentTransitionState() == SceneTransitionState::Completed &&
             flow.CurrentSceneGUID() == guid_game && CurrentSceneName(scenes) == "FlowGame",
             "遷移が完了し現在の Scene が切り替わる");
@@ -435,16 +436,16 @@ namespace ReplayEngine::Runtime::Validation
 
         check.Expect(Succeeded(flow.LoadScene(std::string(guid_result))),
             "2 回目の遷移要求が受理される");
-        flow.Tick();
-        flow.Tick();
+        flow.TickBlocking();
+        flow.TickBlocking();
         check.Expect(flow.History().size() == 2 && flow.History().back() == guid_game &&
             flow.CurrentSceneGUID() == guid_result,
             "履歴が積み上がり、末尾が 1 つ前の Scene になる");
 
         const std::size_t history_before_reload = flow.History().size();
         check.Expect(Succeeded(flow.ReloadCurrentScene()), "再読み込み要求が受理される");
-        flow.Tick();
-        flow.Tick();
+        flow.TickBlocking();
+        flow.TickBlocking();
         check.Expect(flow.History().size() == history_before_reload &&
             flow.CurrentSceneGUID() == guid_result,
             "Reload は履歴を増やさず、現在の Scene も変えない");
@@ -456,7 +457,7 @@ namespace ReplayEngine::Runtime::Validation
         const std::vector<std::string> history_before_failure = flow.History();
         check.Expect(Succeeded(flow.LoadScene(std::string(guid_corrupt))),
             "壊れた Scene への遷移要求も受理はされる");
-        flow.Tick();
+        flow.TickBlocking();
         check.Expect(flow.CurrentTransitionState() == SceneTransitionState::Failed &&
             Failed(flow.LastResult()) && !flow.LastError().empty(),
             "壊れた Scene への遷移は Failed になり理由が残る");
@@ -471,15 +472,15 @@ namespace ReplayEngine::Runtime::Validation
         // -----------------------------------------------------------------
 
         check.Expect(Succeeded(flow.ReturnToPreviousScene()), "戻る要求が受理される");
-        flow.Tick();
-        flow.Tick();
+        flow.TickBlocking();
+        flow.TickBlocking();
         check.Expect(flow.CurrentSceneGUID() == guid_game &&
             flow.History().size() == 1 && flow.History().back() == guid_title,
             "1 つ前の Scene へ戻り、履歴が 1 件減る");
 
         check.Expect(Succeeded(flow.ReturnToPreviousScene()), "続けて戻れる");
-        flow.Tick();
-        flow.Tick();
+        flow.TickBlocking();
+        flow.TickBlocking();
         check.Expect(flow.CurrentSceneGUID() == guid_title && flow.History().empty() &&
             !flow.CanReturn(),
             "履歴を使い切ると戻れなくなる（往復で履歴が増えない）");
@@ -497,8 +498,8 @@ namespace ReplayEngine::Runtime::Validation
             "遷移中の追加要求は TransitionInProgress で拒否される");
         check.Expect(flow.TransitionInProgress() && !flow.CanReturn(),
             "遷移中は戻る操作も受け付けない");
-        flow.Tick();
-        flow.Tick();
+        flow.TickBlocking();
+        flow.TickBlocking();
         check.Expect(flow.CurrentSceneGUID() == guid_game,
             "連続要求のあとも最初に受理した遷移先になる");
 
@@ -514,8 +515,8 @@ namespace ReplayEngine::Runtime::Validation
         {
             const char* target = (index % 2 == 0) ? guid_result : guid_game;
             if (Failed(flow.LoadScene(std::string(target)))) { overflow_ok = false; break; }
-            flow.Tick();
-            flow.Tick();
+            flow.TickBlocking();
+            flow.TickBlocking();
             if (flow.History().size() > SceneFlowService::maximum_history)
             {
                 overflow_ok = false;
@@ -554,7 +555,7 @@ namespace ReplayEngine::Runtime::Validation
             flow.QuitRequested() && flow.QuitReason() == "validation" &&
             flow.QuitRequestCount() == 1,
             "終了要求が記録される（プロセスは終了しない）");
-        flow.Tick();
+        flow.TickBlocking();
         check.Expect(flow.QuitRequested(),
             "終了要求は受け取られるまで保持される");
         flow.ClearQuitRequest();

@@ -336,6 +336,9 @@
     <ClCompile Include="RePlayEngine\Assets\AsyncAssetManager.cpp">
       <Filter>RePlayEngine\Assets</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Core\Threading\JobSystem.cpp">
+      <Filter>RePlayEngine\Core\Threading</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Editor\Gizmo\TransformGizmo.cpp">
       <Filter>RePlayEngine\Editor\Gizmo</Filter>
     </ClCompile>
@@ -1662,6 +1665,9 @@
       <Filter>RePlayEngine\Object\Component</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Core\Threading\ThreadPolicy.h">
+      <Filter>RePlayEngine\Core\Threading</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Core\Threading\JobSystem.h">
       <Filter>RePlayEngine\Core\Threading</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Core\Math\Transform.h">

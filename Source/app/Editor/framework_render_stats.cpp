@@ -63,6 +63,27 @@ void framework::draw_render_stats_overlay()
         const bool gpu_over_budget = frame_budget_ms > 0.0f && gpu.timing_valid &&
             gpu.frame_ms > frame_budget_ms;
         ImGui::Text(u8"FPS %.1f / UI dt %.2f ms", ImGui::GetIO().Framerate, frame_time);
+
+        // VSync 待ちを除いた実力値。BeginFrame は前フレームの GPU 完了待ちで、仕事ではない。
+        double gpu_wait_ms = 0.0;
+        for (const auto& scope : stats.Scopes())
+        {
+            if (scope.name.size() >= 10 &&
+                scope.name.compare(scope.name.size() - 10, 10, "BeginFrame") == 0)
+            {
+                gpu_wait_ms = scope.cpu_ms;
+                break;
+            }
+        }
+        const double cpu_work_ms = (std::max)(0.0, cpu.frame_ms - gpu_wait_ms);
+        const double limiting_ms = (std::max)(cpu_work_ms,
+            gpu.timing_valid ? gpu.frame_ms : 0.0);
+        if (limiting_ms > 0.0)
+        {
+            ImGui::TextColored(ImVec4(0.55f, 0.85f, 1.0f, 1.0f),
+                u8"上限なし %.1f FPS（CPU実仕事 %.2f ms / GPU待ち %.2f ms）",
+                1000.0 / limiting_ms, cpu_work_ms, gpu_wait_ms);
+        }
         ImGui::TextColored(cpu_over_budget ? ImVec4(1.0f, 0.35f, 0.25f, 1.0f)
             : ImVec4(0.75f, 1.0f, 0.75f, 1.0f), u8"CPU %.2f ms", cpu.frame_ms);
         if (gpu.timing_valid)

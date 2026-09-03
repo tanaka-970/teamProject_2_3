@@ -93,7 +93,9 @@ private:
         ReplayEngine::Rendering::DX12::D3D12UIFrame& frame,
         ReplayEngine::Scene::Scene& scene,
         std::uint32_t target_width, std::uint32_t target_height,
-        const object_ui_viewport& viewport);
+        const object_ui_viewport& viewport,
+        const ReplayEngine::Rendering::DX12::D3D12FrameConstants& view_constants,
+        bool world_canvas_camera_available);
     bool prepare_dx12_custom_effect(
         ReplayEngine::Rendering::DX12::D3D12UIEffectCommand& command);
     void compile_pending_dx12_custom_effects();

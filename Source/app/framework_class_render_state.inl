@@ -150,7 +150,8 @@ public:
     ReplayEngine::Rendering::TiledDeferredPass tiled_deferred;
 
     // SSAO/SSR/TAAが共有するフレーム定数。b9へ載せる。
-    ReplayEngine::Rendering::FrameConstants frame_constants{};
+    ReplayEngine::Rendering::DX12::D3D12FrameConstants frame_constants{};
+    std::unordered_set<ReplayEngine::Core::ObjectID> world_canvas_camera_diagnostics_reported;
     // TAAの再投影に使う前フレームのビュー射影行列。初回は今フレームで埋める。
     DirectX::XMFLOAT4X4 previous_view_projection{};
     bool previous_view_projection_valid{ false };
@@ -170,7 +171,8 @@ public:
         const dx12_scene_frame_history& history,
         ReplayEngine::Rendering::DX12::D3D12FrameConstants& constants,
         DirectX::XMFLOAT4X4& current_view_projection,
-        bool& used_fallback_camera) const;
+        bool& used_fallback_camera,
+        const ReplayEngine::Components::CameraComponent* camera_override = nullptr) const;
     static void commit_dx12_scene_frame_history(
         dx12_scene_frame_history& history,
         const ReplayEngine::Scene::Scene& scene,
@@ -224,6 +226,22 @@ public:
     std::unordered_map<std::string, ReplayEngine::Motion::CompositionAsset> composition_asset_cache;
     std::unordered_set<std::string> composition_asset_load_failures;
     ReplayEngine::Assets::AsyncAssetManager async_asset_manager;
+
+    // スキンメッシュのボーンパレット長。メッシュごとに不変なので毎フレーム求め直さない。
+    std::unordered_map<std::string, std::size_t> skinned_palette_size_cache;
+
+    // テクスチャパスの解決結果。描画中に exists() を呼ばないための表。
+    std::unordered_map<std::string, std::string> texture_path_resolve_cache;
+
+    // 材質スロットのローカル境界。バインドポーズの座標から作るので不変。
+    struct material_subset_bounds_entry
+    {
+        std::uint32_t start = 0;
+        std::uint32_t count = 0;
+        ReplayEngine::Rendering::DX12::D3D12MeshLocalBounds bounds;
+    };
+    std::unordered_map<std::string, std::vector<material_subset_bounds_entry>>
+        material_subset_bounds_cache;
 
     // プロジェクト設定。Default Controlled Character Prefab を持つ。
     // 参照は AssetGUID なので、Prefab の名前やパスを変えても壊れない。

@@ -83,6 +83,11 @@ void framework::handle_viewport_selection()
         viewport_drag_selecting = false;
         return;
     }
+    if (handle_normal_adjust_gizmo())
+    {
+        viewport_drag_selecting = false;
+        return;
+    }
     if (!scene_view_hovered) return;
 
     const bool suppress_drag_selection =

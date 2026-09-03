@@ -153,7 +153,8 @@ namespace ReplayEngine::Core::Detail
                     .Display("9 スライス").Step(1.0).Advanced());
             PropertyRegistry::Register<UIImageComponent>(
                 MakeProperty("preserve_aspect", &UIImageComponent::preserve_aspect)
-                    .Display("比率を維持（未対応）"));
+                    .Display("比率を維持")
+                    .Tooltip("9 スライスが有効な場合は 9 スライスを優先します。"));
 
             ComponentRegistry::Register<UIShapeImageComponent>(
                 ComponentTypeInfo::Describe("Shape Image", "UI")

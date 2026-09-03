@@ -2,6 +2,8 @@ cbuffer MaterialCB : register(b2)
 {
     float4 baseColor;
     float4 emissiveStrength;
+    float4 normalAdjustCenter;
+    float4 normalAdjustParams;
     float4 surfaceParams; // metallic、roughness、AO、alpha cutoff
     float4 renderParams;  // alpha mode、lighting model、receive shadow、texture semantic mask
     float4 builtinParams;  // BuiltIn固有表現。x=効果ID、y/z/w=引数
@@ -81,7 +83,8 @@ float3 ResolveNormal(PSIn input, uint semanticMask)
 {
     float3 N = normalize(input.normal);
     if ((semanticMask & MATERIAL_NORMAL_MAP) == 0u)
-        return N;
+        return Dx12ApplyNormalAdjust(N, input.worldPosition,
+            normalAdjustCenter, normalAdjustParams);
 
     float3 T;
     float3 B;
@@ -99,7 +102,9 @@ float3 ResolveNormal(PSIn input, uint semanticMask)
         B = normalize(cross(N, T));
     }
     const float3 mapNormal = normalTexture.Sample(materialSampler, input.uv).xyz * 2.0f - 1.0f;
-    return normalize(mapNormal.x * T + mapNormal.y * B + mapNormal.z * N);
+    N = normalize(mapNormal.x * T + mapNormal.y * B + mapNormal.z * N);
+    return Dx12ApplyNormalAdjust(N, input.worldPosition,
+        normalAdjustCenter, normalAdjustParams);
 }
 
 PSOut main(PSIn input)
@@ -157,8 +162,10 @@ PSOut main(PSIn input)
     }
 
     const bool isPixelate = (uint)(builtinParams.x + 0.5f) == BUILTIN_EFFECT_PIXELATE &&
-        builtinParams.z > 0.0f;
-    output.base = float4(albedo.rgb, saturate(renderParams.y / 255.0f));
+        builtinParams.z > 0.0f && builtinParams.w > 0.0f;
+    const uint lightingModelCode = (uint)round(saturate(renderParams.y / 255.0f) * 255.0f);
+    const uint encodedLightingModel = lightingModelCode + (isPixelate ? 128u : 0u);
+    output.base = float4(albedo.rgb, (float)encodedLightingModel / 255.0f);
     output.emissive = float4(emissive, 1.0f);
     output.normalDepth = float4(N * 0.5f + 0.5f,
         renderParams.z >= 0.5f ? 1.0f : -1.0f);

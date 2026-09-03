@@ -423,8 +423,8 @@ namespace ReplayEngine::Editor::Validation
             RRuntime::SceneRequestResult::Accepted,
             "編集 Scene の内容を Runtime World として受理できる");
 
-        scenes.Tick();
-        scenes.Tick();
+        scenes.TickBlocking();
+        scenes.TickBlocking();
         check.Expect(scenes.State() == RRuntime::SceneLoadState::Completed &&
             scenes.ActiveWorldID() != empty_world &&
             scenes.ActiveWorld().GameObjectCount() == editor_scene.GameObjectCount(),
@@ -489,8 +489,8 @@ namespace ReplayEngine::Editor::Validation
 
         const Core::WorldInstanceID before_switch = scenes.ActiveWorldID();
         scenes.RequestLoad(guid_second);
-        scenes.Tick();
-        scenes.Tick();
+        scenes.TickBlocking();
+        scenes.TickBlocking();
         check.Expect(scenes.State() == RRuntime::SceneLoadState::Completed &&
             scenes.ActiveWorldID() != before_switch &&
             scenes.ActiveSceneGuid() == guid_second,
@@ -559,8 +559,8 @@ namespace ReplayEngine::Editor::Validation
 
         check.Expect(RRuntime::Succeeded(flow.BeginStartupScene(guid_startup)),
             "Startup Scene の起動要求が受理される");
-        flow.Tick();
-        flow.Tick();
+        flow.TickBlocking();
+        flow.TickBlocking();
         check.Expect(flow.StartupState() == RRuntime::StartupSceneState::Ready &&
             scenes.ActiveSceneGuid() == guid_startup,
             "Startup Scene から Runtime World が起動する");

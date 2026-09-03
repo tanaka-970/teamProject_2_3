@@ -241,6 +241,8 @@
             if (profile_benchmark_mode)
             {
                 frame_delta_time = 1.0f / 60.0f;
+                // 計測中は VSync を切る。待ち時間が混ざると素の CPU 時間が測れない。
+                dx12_device_context.SetPresentSyncInterval(0);
 
                 // Startup Scene が Runtime World へ入れ替わる前は、warmup / capture の
                 // フレーム数へ絶対に数えない。BootLogo / LoadingScene は排他 Scene なので、

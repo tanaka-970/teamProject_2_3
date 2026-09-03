@@ -373,6 +373,95 @@ namespace ReplayEngine::Core::Detail
                     .Display("色フィルタ").AsColor());
         }
 
+        void RegisterSkybox()
+        {
+            ComponentRegistry::Register<SkyboxComponent>(
+                ComponentTypeInfo::Describe("空", "Rendering")
+                    .WithTooltip("キューブマップまたはHDRパノラマを空として表示する。"));
+            PropertyRegistry::Register<SkyboxComponent>(
+                MakeProperty("cubemap", &SkyboxComponent::cubemap)
+                    .Display("空マップ").OfAssetType("Image"));
+            PropertyRegistry::Register<SkyboxComponent>(
+                MakeProperty("keyframes", &SkyboxComponent::keyframes)
+                    .Display("時間帯キーフレーム").OfAssetType("Image"));
+            PropertyRegistry::Register<SkyboxComponent>(
+                MakeProperty("priority", &SkyboxComponent::priority)
+                    .Display("優先度").Range(-100.0, 100.0).Step(1.0));
+            PropertyRegistry::Register<SkyboxComponent>(
+                MakeProperty("sky_enabled", &SkyboxComponent::sky_enabled)
+                    .Display("空を表示"));
+            PropertyRegistry::Register<SkyboxComponent>(
+                MakeProperty("rotation_degrees", &SkyboxComponent::rotation_degrees)
+                    .Display("空の回転 (度)").Step(0.5));
+            PropertyRegistry::Register<SkyboxComponent>(
+                MakeProperty("intensity", &SkyboxComponent::intensity)
+                    .Display("空の強さ").Range(0.0, 16.0).Step(0.01));
+            PropertyRegistry::Register<SkyboxComponent>(
+                MakeProperty("toon_environment", &SkyboxComponent::toon_environment)
+                    .Display("トゥーンへの環境光").Range(0.0, 4.0).Step(0.01)
+                    .Tooltip("トゥーンの影側へ空の色を乗せる強さ。0 で従来どおり。"));
+            PropertyRegistry::Register<SkyboxComponent>(
+                MakeProperty("time", &SkyboxComponent::time)
+                    .Display("時間帯").Range(0.0, 1.0).Step(0.001));
+            PropertyRegistry::Register<SkyboxComponent>(
+                MakeProperty("time_speed", &SkyboxComponent::time_speed)
+                    .Display("時間の進行速度").Range(-10.0, 10.0).Step(0.01));
+            PropertyRegistry::Register<SkyboxComponent>(
+                MakeProperty("clouds_enabled", &SkyboxComponent::clouds_enabled)
+                    .Display("雲を表示"));
+            PropertyRegistry::Register<SkyboxComponent>(
+                MakeProperty("cloud_layer1_speed", &SkyboxComponent::cloud_layer1_speed)
+                    .Display("雲1の速度").Range(-1.0, 1.0).Step(0.001));
+            PropertyRegistry::Register<SkyboxComponent>(
+                MakeProperty("cloud_layer1_scale", &SkyboxComponent::cloud_layer1_scale)
+                    .Display("雲1の細かさ").Range(0.1, 32.0).Step(0.1));
+            PropertyRegistry::Register<SkyboxComponent>(
+                MakeProperty("cloud_layer1_density", &SkyboxComponent::cloud_layer1_density)
+                    .Display("雲1の濃さ").Range(0.0, 1.0).Step(0.01));
+            PropertyRegistry::Register<SkyboxComponent>(
+                MakeProperty("cloud_layer1_color", &SkyboxComponent::cloud_layer1_color)
+                    .Display("雲1の色").AsColor());
+            PropertyRegistry::Register<SkyboxComponent>(
+                MakeProperty("cloud_layer2_speed", &SkyboxComponent::cloud_layer2_speed)
+                    .Display("雲2の速度").Range(-1.0, 1.0).Step(0.001));
+            PropertyRegistry::Register<SkyboxComponent>(
+                MakeProperty("cloud_layer2_scale", &SkyboxComponent::cloud_layer2_scale)
+                    .Display("雲2の細かさ").Range(0.1, 32.0).Step(0.1));
+            PropertyRegistry::Register<SkyboxComponent>(
+                MakeProperty("cloud_layer2_density", &SkyboxComponent::cloud_layer2_density)
+                    .Display("雲2の濃さ").Range(0.0, 1.0).Step(0.01));
+            PropertyRegistry::Register<SkyboxComponent>(
+                MakeProperty("cloud_layer2_color", &SkyboxComponent::cloud_layer2_color)
+                    .Display("雲2の色").AsColor());
+            PropertyRegistry::Register<SkyboxComponent>(
+                MakeProperty("stars_enabled", &SkyboxComponent::stars_enabled)
+                    .Display("星を表示"));
+            PropertyRegistry::Register<SkyboxComponent>(
+                MakeProperty("star_density", &SkyboxComponent::star_density)
+                    .Display("星の密度").Range(0.0, 1.0).Step(0.01));
+            PropertyRegistry::Register<SkyboxComponent>(
+                MakeProperty("star_intensity", &SkyboxComponent::star_intensity)
+                    .Display("星の強さ").Range(0.0, 32.0).Step(0.01));
+            PropertyRegistry::Register<SkyboxComponent>(
+                MakeProperty("star_color", &SkyboxComponent::star_color)
+                    .Display("星の色").AsColor());
+            PropertyRegistry::Register<SkyboxComponent>(
+                MakeProperty("moon_enabled", &SkyboxComponent::moon_enabled)
+                    .Display("月を表示"));
+            PropertyRegistry::Register<SkyboxComponent>(
+                MakeProperty("moon_direction", &SkyboxComponent::moon_direction)
+                    .Display("月の方向").Range(-1.0, 1.0).Step(0.01));
+            PropertyRegistry::Register<SkyboxComponent>(
+                MakeProperty("moon_size", &SkyboxComponent::moon_size)
+                    .Display("月の大きさ").Range(0.001, 0.5).Step(0.001));
+            PropertyRegistry::Register<SkyboxComponent>(
+                MakeProperty("moon_intensity", &SkyboxComponent::moon_intensity)
+                    .Display("月の強さ").Range(0.0, 32.0).Step(0.01));
+            PropertyRegistry::Register<SkyboxComponent>(
+                MakeProperty("moon_color", &SkyboxComponent::moon_color)
+                    .Display("月の色").AsColor());
+        }
+
         void RegisterParticleEmitter()
         {
             ComponentRegistry::Register<ParticleEmitterComponent>(
@@ -680,7 +769,7 @@ namespace ReplayEngine::Core::Detail
             PropertyRegistry::Register<ScreenEffectStackComponent>(
                 MakeProperty("target_mode", &ScreenEffectStackComponent::target_mode)
                     .Display("適用対象")
-                    .AsEnum({ "画面全体", "背景だけ", "Rendering Layer" })
+                    .AsEnum({ "画面全体", "背景だけ", "Rendering Layer", "空だけ" })
                     .Animation(Animatable::Step));
             PropertyRegistry::Register<ScreenEffectStackComponent>(
                 MakeProperty("target_rendering_layer", &ScreenEffectStackComponent::target_rendering_layer)
@@ -730,6 +819,38 @@ namespace ReplayEngine::Core::Detail
                     .Display(u8"最大はみ出し (px)").Range(0.0, 1024.0).Step(1.0)
                     .Tooltip(u8"エフェクトがモデルの画面矩形から各辺へはみ出せる上限 (px)。")
                     .Animation(Animatable::Interpolatable));
+        }
+
+        void RegisterNormalAdjust()
+        {
+            ComponentRegistry::Register<NormalAdjustComponent>(
+                ComponentTypeInfo::Describe("Normal Adjust", "Rendering")
+                    .WithTooltip("陰影に使う法線を球面へ寄せます。")
+                    .AllowMultipleInstances());
+            PropertyRegistry::Register<NormalAdjustComponent>(
+                MakeProperty("blend", &NormalAdjustComponent::blend)
+                    .Display("Blend").Range(0.0, 1.0).Step(0.01));
+            PropertyRegistry::Register<NormalAdjustComponent>(
+                MakeProperty("center", &NormalAdjustComponent::center)
+                    .Display("Center").Step(0.01));
+            PropertyRegistry::Register<NormalAdjustComponent>(
+                MakeProperty("radius", &NormalAdjustComponent::radius)
+                    .Display("Radius").Range(0.0, 10000.0).Step(0.01));
+            PropertyRegistry::Register<NormalAdjustComponent>(
+                MakeProperty("falloff", &NormalAdjustComponent::falloff)
+                    .Display("Falloff").Range(0.0, 1.0).Step(0.01));
+            PropertyRegistry::Register<NormalAdjustComponent>(
+                MakeProperty("bone", &NormalAdjustComponent::bone)
+                    .Display("Bone"));
+            PropertyRegistry::Register<NormalAdjustComponent>(
+                MakeProperty("target_slot_mode", &NormalAdjustComponent::target_slot_mode)
+                    .Display(u8"対象")
+                    .AsEnum({ u8"モデル全体", u8"マテリアルスロット" })
+                    .Animation(Animatable::Step));
+            PropertyRegistry::Register<NormalAdjustComponent>(
+                MakeProperty("target_slot_index", &NormalAdjustComponent::target_slot_index)
+                    .Display(u8"マテリアルスロット").Range(0.0, 31.0).Step(1.0)
+                    .Animation(Animatable::Step));
         }
 
 }

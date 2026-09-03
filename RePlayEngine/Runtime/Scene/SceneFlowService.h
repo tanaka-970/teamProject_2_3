@@ -186,6 +186,9 @@ namespace ReplayEngine::Runtime
         // 入口を 1 つにしておけば、その食い違いが起きない。
         void Tick();
 
+        // 下位の非同期読み込みを待ってから 1 段進める。1 呼び出し 1 段を前提にする側で使う。
+        void TickBlocking();
+
         // ---- ISceneFlow ------------------------------------------------------------
         //
         // Behaviour から見える口。RuntimeContext 経由で呼ばれる。
@@ -206,6 +209,9 @@ namespace ReplayEngine::Runtime
     private:
         // 要求を受け付けてよいかを判定し、受け付けられない理由を返す。
         RuntimeStatus BeginTransition(SceneTransitionKind kind, const std::string& target);
+
+        // Tick / TickBlocking の共通部分。下位を進めた後の状態遷移だけを扱う。
+        void UpdateTransitionState();
 
         void OnTransitionSucceeded();
         void OnTransitionFailed();

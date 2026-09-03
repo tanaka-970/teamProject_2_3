@@ -434,11 +434,10 @@ namespace ReplayEngine::Scene
             return;
         }
 
-        // Primitive Collider / Rigidbody 同士は下の接触 Solver が正本なので、
-        // Query が返した同じ面を二重に解かない。Mesh / Landscape だけここで扱う。
+        // 通常は Primitive を下の接触 Solver に任せ、CCD 時だけ最初の掃引面として採用する。
         for (const Core::ObjectID excluded : excluded_objects)
         {
-            if (excluded == hit.source.object) return;
+            if (!body.rigidbody->use_ccd && excluded == hit.source.object) return;
         }
 
         RecordQueryContact(body, hit);

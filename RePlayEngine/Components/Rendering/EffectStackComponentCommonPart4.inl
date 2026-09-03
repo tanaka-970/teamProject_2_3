@@ -411,6 +411,102 @@
                 add_color("霜色", "霜とひびへ使う色。");
                 add_seed();
                 break;
+            case UI::UIEffectKind::SpeedLines:
+                add_float("progress", "進行", "0 から 1 で線が中心へ寄り画面を覆う。",
+                    0.0, 1.0, 0.001);
+                add_float("radius", "線の本数", "放射状に並べる線の数。", 8.0, 512.0, 1.0);
+                add_float("amount", "線の太さ", "1 本あたりの角度方向の太さ。",
+                    0.0, 1.0, 0.001);
+                add_float("threshold", "中心の空き", "線を出さない中心の半径。",
+                    0.0, 1.0, 0.001);
+                add_float("softness", "縁の柔らかさ", "線の内側の端をぼかす量。",
+                    0.0001, 1.0, 0.001);
+                add_float("angle", "回転", "放射全体の回転角度（度）。",
+                    -360.0, 360.0, 0.1);
+                add_float("speed", "ちらつき速度", "線の長さが時間で揺れる速さ。0 で静止。",
+                    -32.0, 32.0, 0.01);
+                add_float("intensity", "適用量", "線を元画像へ混ぜる割合。",
+                    0.0, 1.0, 0.01);
+                push(MakeEffectProperty(i, "direction", Reflection::PropertyType::Vector2,
+                    Reflection::Animatable::Interpolatable)
+                    .Display("中心").Tooltip("正規化座標で指定する放射の中心。0.5, 0.5 が中央。")
+                    .Step(0.01));
+                add_color("線の色", "集中線へ使う色。");
+                add_seed();
+                break;
+            case UI::UIEffectKind::ClockWipe:
+                add_float("progress", "進行", "0 から 1 で時計回りに開閉する。",
+                    0.0, 1.0, 0.001);
+                add_float("angle", "開始角度", "掃き始める角度（度）。",
+                    -360.0, 360.0, 0.1);
+                add_float("amount", "掃引量", "1 で全周。負の値で逆回りにする。",
+                    -1.0, 1.0, 0.001);
+                add_float("threshold", "中心の空き", "最後まで残す中心の半径。",
+                    0.0, 1.0, 0.001);
+                add_float("softness", "境界の柔らかさ", "掃引の境界をぼかす量。",
+                    0.0001, 1.0, 0.001);
+                add_float("intensity", "適用量", "アルファを抜く割合。",
+                    0.0, 1.0, 0.01);
+                push(MakeEffectProperty(i, "direction", Reflection::PropertyType::Vector2,
+                    Reflection::Animatable::Interpolatable)
+                    .Display("中心").Tooltip("正規化座標で指定する回転中心。0.5, 0.5 が中央。")
+                    .Step(0.01));
+                break;
+            case UI::UIEffectKind::Blinds:
+                add_float("progress", "進行", "0 から 1 でブラインドが閉じる。",
+                    0.0, 1.0, 0.001);
+                add_float("radius", "枚数", "短冊の枚数。", 1.0, 128.0, 1.0);
+                add_float("angle", "向き", "短冊の向き（度）。0 で横。",
+                    -360.0, 360.0, 0.1);
+                add_float("amount", "開きかた",
+                    "0 で片側から、1 で各短冊の中央から開く。", 0.0, 1.0, 0.001);
+                add_float("softness", "縁の柔らかさ", "短冊の境界をぼかす量。",
+                    0.0001, 1.0, 0.001);
+                add_float("intensity", "適用量", "アルファを抜く割合。",
+                    0.0, 1.0, 0.01);
+                break;
+            case UI::UIEffectKind::Checkerboard:
+                add_float("progress", "進行", "0 から 1 でマスが広がり画面を覆う。",
+                    0.0, 1.0, 0.001);
+                add_float("radius", "マス数", "画面を割るマスの数。", 1.0, 64.0, 1.0);
+                add_float("amount", "市松の遅れ",
+                    "市松のもう一方が遅れて開く量。", 0.0, 1.0, 0.001);
+                add_float("threshold", "ばらつき",
+                    "マスごとに開く時刻を散らす量。", 0.0, 1.0, 0.001);
+                add_float("angle", "回転", "市松全体の回転角度（度）。",
+                    -360.0, 360.0, 0.1);
+                add_float("softness", "縁の柔らかさ", "マスの境界をぼかす量。",
+                    0.0001, 1.0, 0.001);
+                add_float("intensity", "適用量", "アルファを抜く割合。",
+                    0.0, 1.0, 0.01);
+                add_seed();
+                break;
+            case UI::UIEffectKind::ShapeWipe:
+                add_float("progress", "進行", "0 から 1 で形状が広がり画面を覆う。",
+                    0.0, 1.0, 0.001);
+                push(MakeEffectProperty(i, "waveform", Reflection::PropertyType::Enum,
+                    Reflection::Animatable::Step)
+                    .Display("形状")
+                    .Tooltip("広がる形。形状画像を指定した場合はそちらを使う。")
+                    .AsEnum({ "円", "星", "ハート", "菱形" }));
+                add_float("radius", "頂点の数", "星の頂点の数。", 2.0, 24.0, 1.0);
+                add_float("threshold", "星の凹み", "星の内側の半径の割合。",
+                    0.0, 1.0, 0.001);
+                add_float("angle", "回転", "形状の回転角度（度）。",
+                    -360.0, 360.0, 0.1);
+                add_float("softness", "縁の柔らかさ", "形状の輪郭をぼかす量。",
+                    0.0001, 1.0, 0.001);
+                add_float("intensity", "適用量", "アルファを抜く割合。",
+                    0.0, 1.0, 0.01);
+                push(MakeEffectProperty(i, "direction", Reflection::PropertyType::Vector2,
+                    Reflection::Animatable::Interpolatable)
+                    .Display("中心").Tooltip("正規化座標で指定する形状の中心。0.5, 0.5 が中央。")
+                    .Step(0.01));
+                push(MakeEffectProperty(i, "mask", Reflection::PropertyType::AssetReference,
+                    Reflection::Animatable::Step).Display("形状画像")
+                    .Tooltip("設定した場合は画像の明るい所から開く。")
+                    .OfAssetType("Image"));
+                break;
             default:
                 break;
             }

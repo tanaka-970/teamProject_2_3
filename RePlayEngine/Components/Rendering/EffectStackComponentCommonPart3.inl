@@ -82,6 +82,16 @@
                     .Tooltip("設定した場合は画像のアルファで切り抜く。")
                     .OfAssetType("Image"));
                 break;
+            case UI::UIEffectKind::Bubble:
+                add_float("progress", "進行", "0 から 1 で泡が広がり画面を覆う。",
+                    0.0, 1.0, 0.001);
+                add_float("radius", "泡の細かさ", "大きいほど泡が小さく密になる。",
+                    1.0, 64.0, 0.1);
+                add_float("softness", "縁の柔らかさ", "泡の輪郭をぼかす量。",
+                    0.0001, 1.0, 0.001);
+                add_float("seed", "種", "泡の湧く位置と時刻を変える。",
+                    0.0, 1000.0, 1.0);
+                break;
             case UI::UIEffectKind::Wipe:
                 add_float("progress", "進行", "0 から 1 でワイプを進める。",
                     0.0, 1.0, 0.001);

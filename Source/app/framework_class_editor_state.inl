@@ -286,8 +286,12 @@
     //
     // Shader/Materials, Shader/Layers, Shader/PostProcess を走査して
     // #pragma から宣言を読み、目録を作る。
-    // まだ描画には使わない。接続はフェーズ 4 以降。
+    // DX12 の固定描画経路は RenderItem へ解決済み Layer を渡す。
     ReplayEngine::Rendering::ShaderLibrary shader_library;
+    std::unordered_map<std::string,
+        const ReplayEngine::Rendering::ShaderCatalog::Entry*>
+        custom_ui_effect_shader_catalog_cache;
+    std::uint64_t custom_ui_effect_shader_catalog_cache_generation = 0;
     ReplayEngine::Editor::ShaderComposerEditor shader_composer_editor;
     bool show_shader_catalog_panel{ false };
 
@@ -456,6 +460,13 @@ private:
     float object_gizmo_screen_axis_y{ 0.0f };
     float object_gizmo_world_per_pixel{ 0.01f };
     DirectX::XMFLOAT3 object_gizmo_world_axis{ 1.0f, 0.0f, 0.0f };
+    bool normal_adjust_gizmo_dragging{ false };
+    ReplayEngine::Core::ObjectID normal_adjust_gizmo_object;
+    ReplayEngine::Core::ComponentStableID normal_adjust_gizmo_component{ 0 };
+    DirectX::XMFLOAT3 normal_adjust_gizmo_start_center{};
+    DirectX::XMFLOAT3 normal_adjust_gizmo_start_world{};
+    DirectX::XMFLOAT4X4 normal_adjust_gizmo_start_matrix{};
+    DirectX::XMFLOAT3 normal_adjust_gizmo_plane_normal{ 0.0f, 0.0f, 1.0f };
     // このフレームでImGui::NewFrame()を通したか。
     // ロード完了フレームのようにupdate()が早期returnした直後にeditor_modeが
     // 立つ場合があり、NewFrame無しでRender()するとImGuiがassertするため、

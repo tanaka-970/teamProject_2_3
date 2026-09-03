@@ -2,6 +2,8 @@ cbuffer MaterialCB : register(b2)
 {
     float4 baseColor;
     float4 emissiveStrength;
+    float4 normalAdjustCenter;
+    float4 normalAdjustParams;
     float4 surfaceParams; // metallic、roughness、AO、alpha cutoff
     float4 renderParams;  // alpha mode、lighting model、receive shadow、texture semantic mask
     float4 builtinParams;
@@ -77,7 +79,9 @@ Dx12ToonSurface ResolveDeferredToonSurface()
 float3 ResolveNormal(PSIn input, uint semanticMask)
 {
     float3 normal = normalize(input.normal);
-    if ((semanticMask & MATERIAL_NORMAL_MAP) == 0u) return normal;
+    if ((semanticMask & MATERIAL_NORMAL_MAP) == 0u)
+        return Dx12ApplyNormalAdjust(normal, input.worldPosition,
+            normalAdjustCenter, normalAdjustParams);
 
     float3 tangent;
     float3 bitangent;
@@ -96,7 +100,9 @@ float3 ResolveNormal(PSIn input, uint semanticMask)
     }
 
     const float3 mapNormal = normalTexture.Sample(materialSampler, input.uv).xyz * 2.0f - 1.0f;
-    return normalize(mapNormal.x * tangent + mapNormal.y * bitangent + mapNormal.z * normal);
+    normal = normalize(mapNormal.x * tangent + mapNormal.y * bitangent + mapNormal.z * normal);
+    return Dx12ApplyNormalAdjust(normal, input.worldPosition,
+        normalAdjustCenter, normalAdjustParams);
 }
 
 float4 main(PSIn input) : SV_Target0

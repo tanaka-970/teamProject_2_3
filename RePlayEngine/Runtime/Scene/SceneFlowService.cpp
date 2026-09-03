@@ -458,7 +458,20 @@ namespace ReplayEngine::Runtime
 
         // 実読込は下位サービスが行う。ここは進行を追うだけ。
         scenes_->Tick();
+        UpdateTransitionState();
+    }
 
+    void SceneFlowService::TickBlocking()
+    {
+        if (scenes_ == nullptr) return;
+
+        // 1 呼び出し 1 段を前提にする側のため、下位の非同期読み込みを待ってから進める。
+        scenes_->TickBlocking();
+        UpdateTransitionState();
+    }
+
+    void SceneFlowService::UpdateTransitionState()
+    {
         if (kind_ == SceneTransitionKind::None) return;
 
         switch (scenes_->State())

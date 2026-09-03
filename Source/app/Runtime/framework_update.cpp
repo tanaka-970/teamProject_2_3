@@ -52,6 +52,18 @@ void framework::update(float elapsed_time)
         {
             if (object_editor_play_loading)
                 update_editor_play_loading();
+            else if (object_boot_from_startup_scene && object_runtime_scenes.IsBusy())
+            {
+                // 配布用 Startup Scene も Loading Screen を維持したまま進める。
+                object_runtime_scenes.Tick();
+                rebind_runtime_world_if_changed();
+                if (object_runtime_scenes.State() ==
+                    ReplayEngine::Runtime::SceneLoadState::Failed)
+                {
+                    set_runtime_blocked("Startup Scene の読み込みに失敗しました: " +
+                        object_runtime_scenes.LastError());
+                }
+            }
             update_exclusive_scene(elapsed_time);
         }
         else if (object_editor_play_loading)

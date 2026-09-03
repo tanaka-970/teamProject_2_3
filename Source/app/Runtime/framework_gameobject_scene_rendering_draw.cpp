@@ -2,6 +2,7 @@
 // 描画パス、Material binding、Depth/GBuffer 分岐は関数本体のまま移動している。
 #include "framework.h"
 #include "../../../RePlayEngine/Components/Rendering/ModelEffectStackComponent.h"
+#include "../../../RePlayEngine/Components/Rendering/NormalAdjustComponent.h"
 
 #include "gltf_model.h"
 #include "skinned_mesh.h"
@@ -20,6 +21,7 @@
 #include "../../RePlayEngine/Components/Rendering/MaterialOverrideDynamicProperties.h"
 #include "../../RePlayEngine/Components/Rendering/PrimitiveMeshRendererComponent.h"
 #include "../../RePlayEngine/Components/Rendering/SkinnedMeshRendererComponent.h"
+#include "../../RePlayEngine/Components/Rendering/SkyboxComponent.h"
 #include "../../RePlayEngine/Components/Rendering/LineRendererComponent.h"
 #include "../../RePlayEngine/Components/Rendering/TrailComponent.h"
 #include "../../RePlayEngine/Components/Rendering/ParticleEmitterComponent.h"
@@ -127,8 +129,7 @@ ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
         ? source.override_material_emissive_strength : material->emissive_strength;
     item.double_sided = source.double_sided || material->double_sided ||
         (source.material_override && source.override_material_double_sided);
-    item.outline = has_material_asset
-        ? material->layers.Contains(BuiltInShaderLayers::Outline) : source.outline;
+    item.outline = has_material_asset ? false : source.outline;
     item.pixelate_size = material->pixelate_grid;
     item.pixelate_strength = material->pixelate_strength;
     // 不透明度は legacy 欄が無いので Property から直接読む。
@@ -294,18 +295,63 @@ ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
     item.pixelate_enabled = item.material_binding.shader == BuiltInShaders::Pixelate;
     if (!has_material_asset) return item;
 
+    const auto read_layer_float = [](const ShaderLayer& layer, const char* name,
+        float fallback) noexcept
+    {
+        const auto* value = layer.properties.Find(name);
+        return value != nullptr ? value->AsFloat(fallback) : fallback;
+    };
+    const auto read_layer_color = [](const ShaderLayer& layer, const char* name,
+        const DirectX::XMFLOAT4& fallback) noexcept
+    {
+        const auto* value = layer.properties.Find(name);
+        if (value == nullptr) return fallback;
+        if (value->Type() != ReplayEngine::Reflection::PropertyType::Color &&
+            value->Type() != ReplayEngine::Reflection::PropertyType::Vector4)
+            return fallback;
+        return value->AsVector4();
+    };
+    const DirectX::XMFLOAT4 layer_base_color = item.material_base_color;
     for (const ShaderLayer& layer : material->layers.Layers())
     {
         if (!layer.enabled) continue;
         if (layer.Is(BuiltInShaderLayers::Pixelate))
         {
             item.pixelate_enabled = true;
-            item.pixelate_size = layer.parameter;
-            item.pixelate_strength = layer.strength;
+            item.pixelate_size = read_layer_float(layer, "prop.PixelSize", layer.parameter);
+            item.pixelate_strength = read_layer_float(layer, "prop.Strength", layer.strength);
+            item.pixelate_opacity = read_layer_float(layer, "prop.Opacity", layer.opacity);
         }
         else if (layer.Is(BuiltInShaderLayers::Outline))
         {
             item.outline = true;
+        }
+        else
+        {
+            ShaderLightingModel layer_model = item.lighting_model;
+            bool replaces_lighting_model = true;
+            if (layer.Is(BuiltInShaderLayers::Pbr))
+                layer_model = ShaderLightingModel::Pbr;
+            else if (layer.Is(BuiltInShaderLayers::Toon))
+                layer_model = ShaderLightingModel::Toon;
+            else if (layer.Is(BuiltInShaderLayers::Unlit))
+                layer_model = ShaderLightingModel::Unlit;
+            else if (layer.Is(BuiltInShaderLayers::StylizedCharacter))
+                layer_model = ShaderLightingModel::Toon;
+            else
+                replaces_lighting_model = false;
+            if (replaces_lighting_model)
+            {
+                const DirectX::XMFLOAT4 tint = read_layer_color(layer, "prop.Tint", layer.tint);
+                const float opacity = std::clamp(read_layer_float(layer, "prop.Opacity",
+                    layer.opacity), 0.0f, 1.0f);
+                item.lighting_model = layer_model;
+                item.material_base_color = {
+                    layer_base_color.x * (1.0f + (tint.x - 1.0f) * opacity),
+                    layer_base_color.y * (1.0f + (tint.y - 1.0f) * opacity),
+                    layer_base_color.z * (1.0f + (tint.z - 1.0f) * opacity),
+                    layer_base_color.w };
+            }
         }
     }
     return item;
@@ -349,6 +395,83 @@ bool framework::build_dx12_static_scene(
             DirectX::XMLoadFloat4x4(&local) * DirectX::XMLoadFloat4x4(&world));
         return result;
     };
+    const auto maximum_world_scale = [](const DirectX::XMFLOAT4X4& world) noexcept
+    {
+        const DirectX::XMVECTOR axes[] = {
+            DirectX::XMVectorSet(world._11, world._12, world._13, 0.0f),
+            DirectX::XMVectorSet(world._21, world._22, world._23, 0.0f),
+            DirectX::XMVectorSet(world._31, world._32, world._33, 0.0f) };
+        float scale = 0.0f;
+        for (const DirectX::XMVECTOR axis : axes)
+            scale = (std::max)(scale, DirectX::XMVectorGetX(DirectX::XMVector3Length(axis)));
+        return std::isfinite(scale) ? scale : 0.0f;
+    };
+    const auto resolve_normal_adjust = [&scene, &maximum_world_scale](
+        const RenderItem& source_item, D3D12StaticDrawItem& draw,
+        const skinned_mesh::mesh* mesh,
+        const skinned_mesh::animation::keyframe* keyframe)
+    {
+        using ReplayEngine::Components::NormalAdjustComponent;
+        ReplayEngine::Core::GameObject* object = scene.FindGameObjectByID(source_item.owner);
+        if (object == nullptr) return;
+        const DirectX::XMFLOAT4X4 object_world = object->GetTransform().WorldMatrixFloat4x4();
+        for (NormalAdjustComponent* adjust : object->GetComponents<NormalAdjustComponent>())
+        {
+            if (!adjust->ActiveInHierarchy()) continue;
+            if (adjust->target_slot_mode == NormalAdjustComponent::MaterialSlot &&
+                (adjust->target_slot_index < 0 ||
+                    draw.material_slot != static_cast<std::uint32_t>(adjust->target_slot_index)))
+                continue;
+            DirectX::XMFLOAT4X4 center_world = object_world;
+            bool center_valid = true;
+            if (!adjust->bone.empty())
+            {
+                center_valid = false;
+                if (mesh != nullptr && keyframe != nullptr)
+                {
+                    for (const skeleton::bone& bone : mesh->bind_pose.bones)
+                    {
+                        if (bone.name != adjust->bone || bone.node_index < 0 ||
+                            static_cast<std::size_t>(bone.node_index) >= keyframe->nodes.size())
+                            continue;
+                        DirectX::XMStoreFloat4x4(&center_world,
+                            DirectX::XMLoadFloat4x4(&keyframe->nodes[
+                                static_cast<std::size_t>(bone.node_index)].global_transform) *
+                            DirectX::XMLoadFloat4x4(&object_world));
+                        center_valid = true;
+                        break;
+                    }
+                }
+            }
+            if (!center_valid) continue;
+            adjust->resolved_center_matrix = center_world;
+            DirectX::XMStoreFloat3(&adjust->resolved_center_world,
+                DirectX::XMVector3TransformCoord(DirectX::XMLoadFloat3(&adjust->center),
+                    DirectX::XMLoadFloat4x4(&center_world)));
+            adjust->resolved_radius_world = (std::max)(0.0f, adjust->radius) *
+                maximum_world_scale(center_world);
+            adjust->resolved_center_valid = true;
+            const float blend = std::clamp(adjust->blend, 0.0f, 1.0f);
+            if (blend <= 0.0f || adjust->resolved_radius_world <= 0.0f) continue;
+            draw.normal_adjust_center = { adjust->resolved_center_world.x,
+                adjust->resolved_center_world.y, adjust->resolved_center_world.z, blend };
+            draw.normal_adjust_params = { adjust->resolved_radius_world,
+                std::clamp(adjust->falloff, 0.0f, 1.0f), 0.0f, 0.0f };
+            break;
+        }
+    };
+    for (std::size_t object_index = 0; object_index < scene.GameObjectCount(); ++object_index)
+    {
+        ReplayEngine::Core::GameObject* object = scene.GameObjectAt(object_index);
+        if (object == nullptr) continue;
+        for (ReplayEngine::Components::NormalAdjustComponent* adjust :
+            object->GetComponents<ReplayEngine::Components::NormalAdjustComponent>())
+        {
+            adjust->resolved_center_valid = false;
+            adjust->resolved_radius_world = 0.0f;
+            adjust->resolved_center_matrix = {};
+        }
+    }
     const auto alpha_mode = [](int mode) noexcept
     {
         if (mode == 1) return D3D12StaticAlphaMode::Mask;
@@ -369,6 +492,43 @@ bool framework::build_dx12_static_scene(
         const std::filesystem::path& input_path) -> std::string
     {
         if (input_path.empty()) return {};
+        // 解決結果はパスごとに不変。描画中に exists() を呼ぶと毎フレーム効いてくる。
+        const std::string input_key = input_path.generic_string();
+        std::string key;
+        const auto cached_key = texture_path_resolve_cache.find(input_key);
+        if (cached_key != texture_path_resolve_cache.end())
+        {
+            key = cached_key->second;
+        }
+        else
+        {
+            std::filesystem::path resolved = input_path;
+            if (resolved.is_relative())
+            {
+                std::error_code ec;
+                if (!std::filesystem::exists(resolved, ec) || ec)
+                    resolved = content_path(resolved);
+            }
+            resolved = resolved.lexically_normal();
+            key = resolved.generic_string();
+            texture_path_resolve_cache.insert_or_assign(input_key, key);
+        }
+        if (key.empty()) return {};
+        if (!dx12_device_context.HasStaticTexture(key) &&
+            texture_source_keys.insert(key).second)
+        {
+            D3D12StaticTextureSource source;
+            source.key = key;
+            source.source_path = std::filesystem::path(key);
+            submission.texture_sources.push_back(std::move(source));
+        }
+        return key;
+    };
+
+    const auto add_sky_texture = [this, &submission, &texture_source_keys](
+        const std::filesystem::path& input_path) -> std::string
+    {
+        if (input_path.empty()) return {};
         std::filesystem::path resolved = input_path;
         if (resolved.is_relative())
         {
@@ -377,14 +537,15 @@ bool framework::build_dx12_static_scene(
                 resolved = content_path(resolved);
         }
         resolved = resolved.lexically_normal();
-        const std::string key = resolved.generic_string();
-        if (key.empty()) return {};
+        const std::string key = "sky:" + resolved.generic_string();
+        if (key == "sky:") return {};
         if (!dx12_device_context.HasStaticTexture(key) &&
             texture_source_keys.insert(key).second)
         {
             D3D12StaticTextureSource source;
             source.key = key;
             source.source_path = resolved;
+            source.is_cube = true;
             submission.texture_sources.push_back(std::move(source));
         }
         return key;
@@ -512,10 +673,31 @@ bool framework::build_dx12_static_scene(
         }
         return {};
     };
+    const auto read_layer_float = [](const ShaderLayer& layer, const char* name,
+        float fallback) noexcept
+    {
+        const auto* value = layer.properties.Find(name);
+        return value != nullptr ? value->AsFloat(fallback) : fallback;
+    };
+    const auto read_layer_color = [](const ShaderLayer& layer, const char* name,
+        const DirectX::XMFLOAT4& fallback) noexcept
+    {
+        const auto* value = layer.properties.Find(name);
+        if (value == nullptr) return fallback;
+        if (value->Type() != ReplayEngine::Reflection::PropertyType::Color &&
+            value->Type() != ReplayEngine::Reflection::PropertyType::Vector4)
+            return fallback;
+        return value->AsVector4();
+    };
+    const auto finite_layer_value = [](float value, float fallback) noexcept
+    {
+        return std::isfinite(value) ? value : fallback;
+    };
 
     const auto fill_external_material = [this, &submission, &shader_source_keys,
         &material_alpha_mode, &multiply_color, &add_asset_texture,
-        &base_texture_binding, &fallback_texture_key](
+        &base_texture_binding, &fallback_texture_key, &read_layer_float,
+        &read_layer_color, &finite_layer_value](
         const RenderItem& source_item, const RenderItem& item,
         D3D12StaticDrawItem& draw, const MaterialAsset* resolved_material = nullptr) -> bool
     {
@@ -535,14 +717,62 @@ bool framework::build_dx12_static_scene(
         draw.receive_shadow = item.receive_shadow;
         if (!external) return false;
 
+        bool uses_deferred_layer = false;
+        for (const ShaderLayer& layer : material->layers.Layers())
+        {
+            if (!layer.enabled) continue;
+            const ShaderID layer_shader = layer.EffectiveShader();
+            D3D12ShaderLayerPass pass;
+            if (layer_shader == BuiltInShaderLayers::Pixelate ||
+                layer_shader == BuiltInShaderLayers::Pbr ||
+                layer_shader == BuiltInShaderLayers::Toon ||
+                layer_shader == BuiltInShaderLayers::Unlit ||
+                layer_shader == BuiltInShaderLayers::StylizedCharacter)
+                uses_deferred_layer = true;
+            if (layer_shader == BuiltInShaderLayers::Outline)
+            {
+                const DirectX::XMFLOAT4 color = read_layer_color(layer, "prop.Color", layer.tint);
+                pass.kind = D3D12ShaderLayerPassKind::Outline;
+                pass.color = {
+                    std::clamp(finite_layer_value(color.x, 0.0f), 0.0f, 1.0f),
+                    std::clamp(finite_layer_value(color.y, 0.0f), 0.0f, 1.0f),
+                    std::clamp(finite_layer_value(color.z, 0.0f), 0.0f, 1.0f),
+                    std::clamp(finite_layer_value(color.w, 1.0f), 0.0f, 1.0f) };
+                pass.width = std::clamp((std::max)(0.0f, finite_layer_value(
+                    read_layer_float(layer, "prop.Width", layer.parameter), 0.0f)),
+                    0.0f, 0.2f);
+                pass.opacity = std::clamp(finite_layer_value(
+                    read_layer_float(layer, "prop.Opacity", layer.opacity), 1.0f), 0.0f, 1.0f);
+            }
+            else if (layer_shader == BuiltInShaderLayers::Wireframe)
+            {
+                const DirectX::XMFLOAT4 color = read_layer_color(layer, "prop.Tint", layer.tint);
+                pass.kind = D3D12ShaderLayerPassKind::Wireframe;
+                pass.color = {
+                    std::clamp(finite_layer_value(color.x, 1.0f), 0.0f, 1.0f),
+                    std::clamp(finite_layer_value(color.y, 1.0f), 0.0f, 1.0f),
+                    std::clamp(finite_layer_value(color.z, 1.0f), 0.0f, 1.0f),
+                    std::clamp(finite_layer_value(color.w, 1.0f), 0.0f, 1.0f) };
+                pass.opacity = std::clamp(finite_layer_value(
+                    read_layer_float(layer, "prop.Opacity", layer.opacity), 1.0f), 0.0f, 1.0f);
+            }
+            else
+            {
+                continue;
+            }
+            pass.blend = layer.blend;
+            draw.layer_passes.push_back(std::move(pass));
+        }
+
         draw.alpha_mode = material_alpha_mode(material->alpha_mode);
         draw.alpha_cutoff = material->alpha_cutoff;
         const BaseTextureBinding binding = base_texture_binding(item);
         const bool flat_fill = item.material_binding.shader == BuiltInShaders::FlatFill;
         // BuiltIn は自前 PSO を持てないので、固有表現は builtin_params で運ぶ。
         // x=効果ID（1=Pixelate）、y/z/w=その効果の引数。増やすときは ID を足す。
-        const bool is_toon = item.material_binding.shader == BuiltInShaders::Toon;
-        if (is_toon)
+        const bool is_toon = item.material_binding.shader == BuiltInShaders::Toon ||
+            (uses_deferred_layer && item.lighting_model == ShaderLightingModel::Toon);
+        if (is_toon && !item.pixelate_enabled)
         {
             const auto property_float = [material](const char* name, float fallback)
             {
@@ -577,15 +807,15 @@ bool framework::build_dx12_static_scene(
                 std::clamp(specular_tint.y, 0.0f, 1.0f),
                 std::clamp(specular_tint.z, 0.0f, 1.0f), 0.0f };
         }
-        else if (item.material_binding.shader == BuiltInShaders::Pixelate)
+        else if (item.pixelate_enabled)
         {
             draw.builtin_params = { 1.0f,
                 (std::max)(1.0f, item.pixelate_size),
                 std::clamp(item.pixelate_strength, 0.0f, 1.0f),
                 std::clamp(item.pixelate_opacity, 0.0f, 1.0f) };
             const auto* use_gbuffer = material->properties.Find("prop.UseGBufferColor");
-            draw.builtin_params1.x = use_gbuffer != nullptr && use_gbuffer->AsBool(false)
-                ? 1.0f : 0.0f;
+            draw.builtin_params1.x = item.material_binding.shader != BuiltInShaders::Pixelate ||
+                (use_gbuffer != nullptr && use_gbuffer->AsBool(false)) ? 1.0f : 0.0f;
         }
 
         if (flat_fill)
@@ -594,7 +824,7 @@ bool framework::build_dx12_static_scene(
             draw.base_color_texture_key = "__dx12_white";
             // BuiltIn は自前 PSO を持たず必ず Bridge を通るため、cbuffer の BaseColor が
             // 効かない。Bridge が使う base_color へ Material の色を入れる。
-            draw.base_color = multiply_color(material->base_color, item.tint);
+            draw.base_color = multiply_color(item.material_base_color, item.tint);
         }
         else
         {
@@ -637,7 +867,7 @@ bool framework::build_dx12_static_scene(
             const std::string generic = shader_entry->info.source_path.generic_string();
             const bool built_in = generic.find("/BuiltIn/") != std::string::npos ||
                 generic.find("\\BuiltIn\\") != std::string::npos;
-            if (!built_in)
+            if (!built_in && !uses_deferred_layer)
             {
                 draw.shader_key = item.material_binding.shader.ToString();
                 if (!draw.shader_key.empty() &&
@@ -708,6 +938,7 @@ bool framework::build_dx12_static_scene(
         const std::string& key, const skinned_mesh::mesh& mesh)
     {
         if (!skinned_mesh_source_keys.insert(key).second) return;
+        REPLAY_PROFILE_SCOPE("Item/MakeSkinnedSource");
         D3D12SkinnedMeshSource source;
         source.key = key;
         try
@@ -1196,13 +1427,23 @@ bool framework::build_dx12_static_scene(
                 DirectX::XMFLOAT4X4 mesh_world =
                     multiply_world(mesh.default_global_transform, item.world);
                 float morph_weight = mesh.default_morph_weight;
+                // ボーン番号の最大値はメッシュごとに不変。毎フレーム全頂点を舐めない。
                 std::size_t palette_size = (std::max)(static_cast<std::size_t>(1),
                     mesh.bind_pose.bones.size());
-                for (const skinned_mesh::vertex& vertex : mesh.vertices)
+                const auto cached_palette_size = skinned_palette_size_cache.find(mesh_key);
+                if (cached_palette_size != skinned_palette_size_cache.end())
                 {
-                    for (std::uint32_t influence = 0; influence < 4; ++influence)
-                        palette_size = (std::max)(palette_size,
-                            static_cast<std::size_t>(vertex.bone_indices[influence]) + 1u);
+                    palette_size = cached_palette_size->second;
+                }
+                else
+                {
+                    for (const skinned_mesh::vertex& vertex : mesh.vertices)
+                    {
+                        for (std::uint32_t influence = 0; influence < 4; ++influence)
+                            palette_size = (std::max)(palette_size,
+                                static_cast<std::size_t>(vertex.bone_indices[influence]) + 1u);
+                    }
+                    skinned_palette_size_cache.insert_or_assign(mesh_key, palette_size);
                 }
                 std::vector<DirectX::XMFLOAT4X4> palette(palette_size,
                     DirectX::XMFLOAT4X4{ 1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 });
@@ -1210,6 +1451,7 @@ bool framework::build_dx12_static_scene(
                 if (keyframe != nullptr && mesh.node_index >= 0 &&
                     static_cast<std::size_t>(mesh.node_index) < keyframe->nodes.size())
                 {
+                    REPLAY_PROFILE_SCOPE("Item/BonePalette");
                     const skinned_mesh::animation::keyframe::node& mesh_node =
                         keyframe->nodes[static_cast<std::size_t>(mesh.node_index)];
                     mesh_world = multiply_world(mesh_node.global_transform, item.world);
@@ -1234,6 +1476,7 @@ bool framework::build_dx12_static_scene(
                 const auto append_skinned_draw = [&](std::uint32_t start, std::uint32_t count,
                     std::uint64_t material_id, std::size_t subset_index)
                 {
+                    REPLAY_PROFILE_SCOPE("Item/AppendDraw");
                     const std::string* slot_asset = nullptr;
                     const MaterialAsset* slot_material =
                         resolve_material_slot(source_item, subset_index, slot_asset);
@@ -1249,7 +1492,24 @@ bool framework::build_dx12_static_scene(
                     draw.mesh_key = mesh_key;
                     draw.owner_id = source_item.owner.Value();
                     draw.material_slot = static_cast<std::uint32_t>(subset_index);
-                    draw.material_bounds = material_subset_bounds(mesh, start, count);
+                    // 境界はバインドポーズ由来で不変。毎フレーム全インデックスを舐めない。
+                    {
+                        auto& entries = material_subset_bounds_cache[mesh_key];
+                        const auto found = std::find_if(entries.begin(), entries.end(),
+                            [start, count](const material_subset_bounds_entry& entry) noexcept
+                            {
+                                return entry.start == start && entry.count == count;
+                            });
+                        if (found != entries.end())
+                        {
+                            draw.material_bounds = found->bounds;
+                        }
+                        else
+                        {
+                            draw.material_bounds = material_subset_bounds(mesh, start, count);
+                            entries.push_back({ start, count, draw.material_bounds });
+                        }
+                    }
                     draw.rendering_layer = static_cast<std::uint32_t>((std::max)(0,
                         (std::min)(31, item.rendering_layer)));
                     draw.start_index = start;
@@ -1328,6 +1588,7 @@ bool framework::build_dx12_static_scene(
                     }
                     skinned_draw.motion_key = std::to_string(source_item.owner.Value()) + ":" +
                         mesh_key + ":" + std::to_string(start);
+                    resolve_normal_adjust(source_item, draw, &mesh, keyframe);
                     skinned_draw.bone_palette = palette;
                     skinned_draw.morph_weight = morph_weight;
                     submission.skinned_draws.push_back(std::move(skinned_draw));
@@ -1391,6 +1652,7 @@ bool framework::build_dx12_static_scene(
                 draw.motion_key = std::to_string(source_item.owner.Value()) + ":" + draw.mesh_key;
                 draw.world = item.world;
                 (void)fill_external_material(source_item, *material_item, draw, slot_material);
+                resolve_normal_adjust(source_item, draw, nullptr, nullptr);
                 submission.draws.push_back(std::move(draw));
                 continue;
             }
@@ -1410,6 +1672,7 @@ bool framework::build_dx12_static_scene(
             draw.motion_key = std::to_string(source_item.owner.Value()) + ":" + draw.mesh_key;
             draw.world = item.world;
             (void)fill_external_material(source_item, *material_item, draw, slot_material);
+            resolve_normal_adjust(source_item, draw, nullptr, nullptr);
             submission.draws.push_back(std::move(draw));
             continue;
         }
@@ -1489,6 +1752,7 @@ bool framework::build_dx12_static_scene(
                     draw.alpha_cutoff = info.alpha_cutoff;
                     draw.double_sided = item.double_sided;
                 }
+                resolve_normal_adjust(source_item, draw, nullptr, nullptr);
                 submission.draws.push_back(std::move(draw));
             }
             continue;
@@ -1612,6 +1876,7 @@ bool framework::build_dx12_static_scene(
                         draw.double_sided = item.double_sided;
                     }
                 }
+                resolve_normal_adjust(source_item, draw, nullptr, nullptr);
                 submission.draws.push_back(std::move(draw));
             };
 
@@ -1819,6 +2084,129 @@ bool framework::build_dx12_static_scene(
             draw.receive_shadow = renderer->receive_shadow;
             draw.lighting_model = static_cast<std::int32_t>(ShaderLightingModel::Pbr);
             submission.draws.push_back(std::move(draw));
+        }
+    }
+
+    const ReplayEngine::Components::SkyboxComponent* selected_sky = nullptr;
+    const ReplayEngine::Assets::AssetRecord* selected_sky_asset = nullptr;
+    for (std::size_t object_index = 0; object_index < scene.GameObjectCount(); ++object_index)
+    {
+        const ReplayEngine::Core::GameObject* object = scene.GameObjectAt(object_index);
+        if (object == nullptr || object->PendingDestroy() || !object->ActiveInHierarchy()) continue;
+        const auto* candidate = object->GetComponent<ReplayEngine::Components::SkyboxComponent>();
+        if (candidate == nullptr || !candidate->ActiveInHierarchy() || !candidate->sky_enabled)
+            continue;
+        const ReplayEngine::Assets::AssetRecord* asset = nullptr;
+        for (const ReplayEngine::Reflection::AssetReference& keyframe : candidate->keyframes)
+        {
+            const auto* keyframe_asset = asset_database.FindByGuid(keyframe.guid);
+            if (keyframe_asset != nullptr && !keyframe_asset->source_path.empty())
+            {
+                asset = keyframe_asset;
+                break;
+            }
+        }
+        if (asset == nullptr && !candidate->cubemap.guid.empty())
+        {
+            const auto* legacy_asset = asset_database.FindByGuid(candidate->cubemap.guid);
+            if (legacy_asset != nullptr && !legacy_asset->source_path.empty())
+                asset = legacy_asset;
+        }
+        if (asset == nullptr) continue;
+        if (selected_sky != nullptr && candidate->priority <= selected_sky->priority) continue;
+        selected_sky = candidate;
+        selected_sky_asset = asset;
+    }
+    if (selected_sky != nullptr && selected_sky_asset != nullptr)
+    {
+        std::vector<std::string> sky_keys;
+        if (!selected_sky->keyframes.empty())
+        {
+            for (const ReplayEngine::Reflection::AssetReference& keyframe :
+                selected_sky->keyframes)
+            {
+                const auto* asset = asset_database.FindByGuid(keyframe.guid);
+                if (asset == nullptr || asset->source_path.empty()) continue;
+                const std::string key = add_sky_texture(content_path(asset->source_path));
+                if (!key.empty()) sky_keys.push_back(key);
+            }
+        }
+        if (sky_keys.empty())
+        {
+            const std::string key = add_sky_texture(content_path(selected_sky_asset->source_path));
+            if (!key.empty()) sky_keys.push_back(key);
+        }
+        if (!sky_keys.empty())
+        {
+            submission.sky.enabled = true;
+            submission.sky.owner_id = selected_sky->Owner() != nullptr
+                ? selected_sky->Owner()->ID().Value() : 0;
+            submission.sky.keyframe_texture_keys = sky_keys;
+            submission.sky.texture_key = sky_keys.front();
+            const float time = std::isfinite(selected_sky->time)
+                ? std::clamp(selected_sky->time, 0.0f, 1.0f) : 0.0f;
+            submission.sky.time = time;
+            if (sky_keys.size() > 1)
+            {
+                const float keyframe_position = time *
+                    static_cast<float>(sky_keys.size() - 1);
+                const std::size_t keyframe_index = (std::min)(sky_keys.size() - 1,
+                    static_cast<std::size_t>(std::floor(keyframe_position)));
+                submission.sky.texture_key = sky_keys[keyframe_index];
+                if (keyframe_index + 1 < sky_keys.size())
+                {
+                    submission.sky.secondary_texture_key = sky_keys[keyframe_index + 1];
+                    submission.sky.blend = keyframe_position -
+                        static_cast<float>(keyframe_index);
+                }
+            }
+            const float degrees = std::isfinite(selected_sky->rotation_degrees)
+                ? selected_sky->rotation_degrees : 0.0f;
+            DirectX::XMStoreFloat4x4(&submission.sky.rotation,
+                DirectX::XMMatrixRotationY(DirectX::XMConvertToRadians(degrees)));
+            const float previous_degrees = std::isfinite(
+                selected_sky->PreviousRotationDegrees())
+                ? selected_sky->PreviousRotationDegrees() : degrees;
+            DirectX::XMStoreFloat4x4(&submission.sky.previous_rotation,
+                DirectX::XMMatrixRotationY(DirectX::XMConvertToRadians(previous_degrees)));
+            submission.sky.intensity = std::clamp(
+                std::isfinite(selected_sky->intensity) ? selected_sky->intensity : 1.0f,
+                0.0f, 16.0f);
+            submission.sky.toon_environment = std::clamp(
+                std::isfinite(selected_sky->toon_environment)
+                    ? selected_sky->toon_environment : 0.0f, 0.0f, 4.0f);
+            submission.sky.clouds_enabled = selected_sky->clouds_enabled;
+            submission.sky.cloud_layer1_speed = selected_sky->cloud_layer1_speed;
+            submission.sky.cloud_layer1_scale = selected_sky->cloud_layer1_scale;
+            submission.sky.cloud_layer1_density = selected_sky->cloud_layer1_density;
+            submission.sky.cloud_layer1_color = selected_sky->cloud_layer1_color;
+            submission.sky.cloud_layer2_speed = selected_sky->cloud_layer2_speed;
+            submission.sky.cloud_layer2_scale = selected_sky->cloud_layer2_scale;
+            submission.sky.cloud_layer2_density = selected_sky->cloud_layer2_density;
+            submission.sky.cloud_layer2_color = selected_sky->cloud_layer2_color;
+            submission.sky.cloud_time = selected_sky->CloudTime();
+            submission.sky.previous_cloud_time = selected_sky->PreviousCloudTime();
+            submission.sky.stars_enabled = selected_sky->stars_enabled;
+            submission.sky.star_density = selected_sky->star_density;
+            submission.sky.star_intensity = selected_sky->star_intensity;
+            submission.sky.star_color = selected_sky->star_color;
+            submission.sky.moon_enabled = selected_sky->moon_enabled;
+            const float moon_x = std::isfinite(selected_sky->moon_direction.x)
+                ? selected_sky->moon_direction.x : 0.0f;
+            const float moon_y = std::isfinite(selected_sky->moon_direction.y)
+                ? selected_sky->moon_direction.y : 0.0f;
+            const float moon_z = std::isfinite(selected_sky->moon_direction.z)
+                ? selected_sky->moon_direction.z : 1.0f;
+            const float moon_length = std::sqrt(moon_x * moon_x + moon_y * moon_y +
+                moon_z * moon_z);
+            if (moon_length > 1.0e-6f)
+                submission.sky.moon_direction = { moon_x / moon_length,
+                    moon_y / moon_length, moon_z / moon_length };
+            else
+                submission.sky.moon_direction = { 0.0f, 0.0f, 1.0f };
+            submission.sky.moon_size = selected_sky->moon_size;
+            submission.sky.moon_intensity = selected_sky->moon_intensity;
+            submission.sky.moon_color = selected_sky->moon_color;
         }
     }
 

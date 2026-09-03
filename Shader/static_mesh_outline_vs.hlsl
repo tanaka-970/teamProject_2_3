@@ -1,36 +1,42 @@
-// 静的メッシュを法線方向へ膨らませて輪郭を作る頂点シェーダー。
-#include "static_mesh.hlsli"
-
-cbuffer OUTLINE_CONSTANT_BUFFER : register(b7)
+cbuffer ObjectCB : register(b0)
 {
-    float4 outline_color;
-    float4 outline_params;
+    row_major float4x4 world;
+    row_major float4x4 previousWorld;
+    float4 morph;
+};
+
+cbuffer SceneCB : register(b1)
+{
+    row_major float4x4 viewProjection;
+    row_major float4x4 previousViewProjection;
+};
+
+cbuffer LayerCB : register(b7)
+{
+    float4 layerColor;
+    float4 layerParams;
 };
 
 struct VS_IN
 {
     float3 position : POSITION;
-    float3 normal   : NORMAL;
-    float2 texcoord : TEXCOORD;
+    float3 normal : NORMAL;
+    float2 texcoord : TEXCOORD0;
+};
+
+struct VS_OUT
+{
+    float4 position : SV_POSITION;
+    float4 color : COLOR;
 };
 
 VS_OUT main(VS_IN vin)
 {
-    VS_OUT vout = (VS_OUT) 0;
-    float4 wp = mul(float4(vin.position, 1.0f), world);
-    float3 wn = normalize(mul(float4(vin.normal, 0.0f), world).xyz);
-
-    float dist = distance(camera_position.xyz, wp.xyz);
-    float width = outline_params.x + outline_params.y * dist * 0.01f;
-    wp.xyz += wn * width;
-
-    vout.position       = mul(wp, view_projection);
-    vout.world_position = wp;
-    vout.world_normal   = float4(wn, 0.0f);
-    vout.texcoord       = vin.texcoord;
-    vout.color          = outline_color;
-    // 輪郭パスはモーションベクターを書かないので、動きゼロとして埋める。
-    vout.current_clip   = vout.position;
-    vout.previous_clip  = vout.position;
+    VS_OUT vout;
+    float4 worldPosition = mul(float4(vin.position, 1.0f), world);
+    float3 worldNormal = normalize(mul(float4(vin.normal, 0.0f), world).xyz);
+    worldPosition.xyz += worldNormal * max(layerParams.x, 0.0f);
+    vout.position = mul(worldPosition, viewProjection);
+    vout.color = layerColor;
     return vout;
 }

@@ -64,6 +64,7 @@ namespace ReplayEngine::Components
             WholeScreen = 0,
             BackgroundOnly = 1,
             RenderingLayerMask = 2,
+            SkyOnly = 3,
         };
 
         // 既定値0は従来の画面全体。既存Sceneの見た目を変えない。

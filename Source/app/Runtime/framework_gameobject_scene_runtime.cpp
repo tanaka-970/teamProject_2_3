@@ -7,6 +7,7 @@
 #include "../../RePlayEngine/Components/Camera/FollowTargetComponent.h"
 #include "../../RePlayEngine/Components/Motion/MotionPlayerComponent.h"
 #include "../../RePlayEngine/Components/Core/PropertyLinkComponent.h"
+#include "../../RePlayEngine/Components/UI/CanvasComponent.h"
 #include "../../RePlayEngine/Components/UI/UIEffectStackComponent.h"
 #include "../../RePlayEngine/Components/UI/UISpriteAnimatorComponent.h"
 #include "../../RePlayEngine/Components/UI/UITextComponent.h"
@@ -16,6 +17,7 @@
 #include "../../RePlayEngine/Components/Rendering/SkinnedMeshRendererComponent.h"
 #include "../../RePlayEngine/Components/Landscape/LandscapeComponent.h"
 #include "../../RePlayEngine/Components/Landscape/LandscapeRendererComponent.h"
+#include "../../RePlayEngine/Object/GameObject/GameObject.h"
 #include "../../RePlayEngine/Object/Registry/BuiltInComponents.h"
 #include "../../RePlayEngine/Project/ProjectSettingsSerializer.h"
 #include "../../RePlayEngine/Rendering/Adapter/SceneRenderCollector.h"
@@ -275,12 +277,67 @@ void framework::update_object_scene(float elapsed_time)
         input_captured = input_captured ||
             (ImGui::GetIO().WantCaptureMouse && !scene_view_hovered);
 #endif
+    const auto world_canvas_pointer_mapper = [this, &scene, &ui_viewport,
+        ui_logical_width, ui_logical_height](const ReplayEngine::Core::GameObject& canvas_object,
+            float pointer_x, float pointer_y, DirectX::XMFLOAT2& canvas_pointer)
+    {
+        const bool camera_available = using_editor_camera() ||
+            render_matrix_override_active || render_camera_override != nullptr ||
+            ReplayEngine::Components::ResolveActiveCameraSelection(scene).Valid();
+        if (!camera_available) return false;
+        const auto* canvas = canvas_object.GetComponent<ReplayEngine::Components::CanvasComponent>();
+        if (canvas == nullptr || canvas->render_mode !=
+            ReplayEngine::Components::CanvasComponent::WorldSpace) return false;
+        const float client_view_width = (std::max)(1.0f, static_cast<float>(client_width));
+        const float client_view_height = (std::max)(1.0f, static_cast<float>(client_height));
+        const float pixel_x = ui_viewport.left + pointer_x *
+            (ui_viewport.width / ui_logical_width);
+        const float pixel_y = ui_viewport.top + (ui_logical_height - pointer_y) *
+            (ui_viewport.height / ui_logical_height);
+        const DirectX::XMMATRIX view_projection = viewport_view_matrix() *
+            viewport_projection_matrix();
+        const DirectX::XMMATRIX world = canvas_object.GetTransform().WorldMatrix();
+        const DirectX::XMMATRIX canvas_to_clip = world * view_projection;
+        const DirectX::XMVECTOR determinant = DirectX::XMMatrixDeterminant(canvas_to_clip);
+        const float determinant_value = DirectX::XMVectorGetX(determinant);
+        if (!std::isfinite(determinant_value) || std::fabs(determinant_value) <= 0.000001f)
+            return false;
+        const DirectX::XMMATRIX clip_to_canvas = DirectX::XMMatrixInverse(nullptr,
+            canvas_to_clip);
+        const float ndc_x = pixel_x / client_view_width * 2.0f - 1.0f;
+        const float ndc_y = 1.0f - pixel_y / client_view_height * 2.0f;
+        const DirectX::XMVECTOR near_point = DirectX::XMVector3TransformCoord(
+            DirectX::XMVectorSet(ndc_x, ndc_y, 0.0f, 1.0f), clip_to_canvas);
+        const DirectX::XMVECTOR far_point = DirectX::XMVector3TransformCoord(
+            DirectX::XMVectorSet(ndc_x, ndc_y, 1.0f, 1.0f), clip_to_canvas);
+        const float near_z = DirectX::XMVectorGetZ(near_point);
+        const float far_z = DirectX::XMVectorGetZ(far_point);
+        const float depth = near_z - far_z;
+        if (!std::isfinite(near_z) || !std::isfinite(far_z) || std::fabs(depth) <= 0.000001f)
+            return false;
+        const float ratio = near_z / depth;
+        const DirectX::XMVECTOR plane_point = DirectX::XMVectorMultiplyAdd(
+            DirectX::XMVectorReplicate(ratio), DirectX::XMVectorSubtract(far_point, near_point),
+            near_point);
+        const float plane_x = DirectX::XMVectorGetX(plane_point);
+        const float plane_y = DirectX::XMVectorGetY(plane_point);
+        const float reference_width = canvas->reference_resolution.x > 0.0f
+            ? canvas->reference_resolution.x : 1920.0f;
+        const float reference_height = canvas->reference_resolution.y > 0.0f
+            ? canvas->reference_resolution.y : 1080.0f;
+        const float normalized_x = plane_x / (reference_width / reference_height) + 0.5f;
+        const float normalized_y = 0.5f - plane_y;
+        canvas_pointer = { normalized_x * ui_logical_width,
+            (1.0f - normalized_y) * ui_logical_height };
+        return std::isfinite(canvas_pointer.x) && std::isfinite(canvas_pointer.y);
+    };
     {
         REPLAY_PROFILE_SCOPE("UI/InputNavigation");
         ReplayEngine::UI::UILayout::UpdateButtons(scene,
             ui_logical_width, ui_logical_height,
             mouse_x, mouse_y, mouse_down, mouse_pressed, mouse_released,
-            ui_mouse_wheel_delta, input_captured, object_runtime_active());
+            ui_mouse_wheel_delta, input_captured, object_runtime_active(),
+            world_canvas_pointer_mapper);
     }
     ui_mouse_wheel_delta = 0.0f;
     ui_pointer_down_last = mouse_down;

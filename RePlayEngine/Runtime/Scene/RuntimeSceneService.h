@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <future>
 #include <memory>
 #include <string>
 
@@ -173,6 +174,11 @@ namespace ReplayEngine::Runtime
         // 読み込みが進行中の場合は Busy を返し、現在の要求を壊さない。
         SceneRequestResult RequestLoad(const std::string& asset_guid);
 
+        // Asset Database に登録されていない配布用 Scene をファイルから読む。
+        // パス解決だけを省略し、Parse 以降は RequestLoad() と同じ経路を通る。
+        SceneRequestResult RequestLoadPath(const std::filesystem::path& path,
+            const std::string& source_label = {});
+
         // 現在の Scene をもう一度読み込む。現在の GUID が空なら InvalidRequest。
         SceneRequestResult RequestReload();
 
@@ -205,35 +211,28 @@ namespace ReplayEngine::Runtime
         // ---- 進行 ------------------------------------------------------------
 
         // 読み込みを 1 段進める。フレームの安全な同期点で呼ぶ。
-        //
-        // 同期読み込みなので、実際には
-        //   1 回目 … Loading -> ReadyToSwap（またはFailed）
-        //   2 回目 … ReadyToSwap -> Completed
-        // の 2 段で進む。段を分けてあるのは、
-        // 「構築」と「入れ替え」の間にフレーム境界を挟めるようにするため。
-        // 将来ファイル読み込みをワーカーへ逃がすときも、この形のまま拡張できる。
+        // ファイル読み込みと Parse の完了だけをポーリングし、Scene と Component を
+        // 触る Staging World 構築と入れ替えは必ずこの呼び出し元スレッドで行う。
         //
         // Update の最中に呼ばないこと。World の実体が入れ替わる。
         void Tick();
+
+        // 非同期の読み込みが終わるまで待ってから 1 段進める。1 呼び出し 1 段を前提にする側で使う。
+        void TickBlocking();
 
         // ---- 状態 --------------------------------------------------------------
 
         SceneLoadState State() const noexcept { return state_; }
         // SceneLoaderComponent が UI へ出すための 0..1 の進捗。
-        // 現在の実装は「Staging 構築」と「World 入れ替え」の 2 段を公開する。
+        // 分母は要求ごとの実作業段階数、分子は完了済み段階数。
         float Progress() const noexcept
         {
-            switch (state_)
-            {
-            case SceneLoadState::Loading:     return 0.5f;
-            case SceneLoadState::ReadyToSwap: return 0.75f;
-            case SceneLoadState::Swapping:    return 0.9f;
-            case SceneLoadState::Completed:   return 1.0f;
-            case SceneLoadState::Failed:      return 0.0f;
-            case SceneLoadState::Idle:        return 1.0f;
-            }
-            return 0.0f;
+            if (progress_total_units_ == 0) return state_ == SceneLoadState::Loading
+                ? 0.0f : 1.0f;
+            return static_cast<float>(progress_completed_units_) /
+                static_cast<float>(progress_total_units_);
         }
+        const std::string& CurrentLoadStage() const noexcept { return current_load_stage_; }
         bool IsBusy() const noexcept
         {
             return state_ == SceneLoadState::Loading ||
@@ -287,10 +286,23 @@ namespace ReplayEngine::Runtime
         {
             AssetGuid = 0,   // Resolver でパスを引き、ファイルから読む
             InMemory = 1,    // 既に手元にある SceneData を使う
+            FilePath = 2,    // 解決済みパスから読む
+        };
+
+        struct AsyncSceneReadResult final
+        {
+            Scene::Serialization::SceneData data;
+            std::string error;
+            bool loaded = false;
         };
 
         // Staging World を組み立てる。成功したら ReadyToSwap へ。
         void BuildStagingWorld();
+
+        // 純粋なファイル読み込みと Parse だけをワーカーへ渡す。
+        bool StartAsyncRead(const std::filesystem::path& path);
+        bool PollAsyncRead();
+        void WaitForAsyncRead() noexcept;
 
         // SceneData から Staging World を作る。読み込み経路の共通部分。
         bool BuildStagingFromData(const Scene::Serialization::SceneData& data);
@@ -314,8 +326,17 @@ namespace ReplayEngine::Runtime
 
         std::string current_scene_guid_;
         std::string pending_scene_guid_;
+        std::filesystem::path current_scene_path_;
+        std::filesystem::path pending_scene_path_;
 
         PendingSource pending_source_ = PendingSource::AssetGuid;
+        PendingSource current_source_ = PendingSource::AssetGuid;
+
+        std::future<AsyncSceneReadResult> async_read_;
+        bool load_started_published_ = false;
+        std::size_t progress_completed_units_ = 0;
+        std::size_t progress_total_units_ = 0;
+        std::string current_load_stage_;
 
         // InMemory 要求の内容。要求を受理した時点で複製しておく。
         // 参照だけ持つと、要求から Tick までの間に呼び出し側が

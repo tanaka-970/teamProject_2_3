@@ -1,47 +1,76 @@
-// スキンメッシュを法線方向へ膨らませて輪郭を作る頂点シェーダー。
-#include "skinned_mesh.hlsli"
-
-cbuffer OUTLINE_CONSTANT_BUFFER : register(b7)
+cbuffer ObjectCB : register(b0)
 {
-    float4 outline_color;  // rgb=color a=未使用
-    float4 outline_params; // x=width(world), y=screen_corrected_width, z/w=未使用
+    row_major float4x4 world;
+    row_major float4x4 previousWorld;
+    float4 morph;
 };
+
+cbuffer SceneCB : register(b1)
+{
+    row_major float4x4 viewProjection;
+    row_major float4x4 previousViewProjection;
+};
+
+cbuffer LayerCB : register(b7)
+{
+    float4 layerColor;
+    float4 layerParams;
+};
+
+struct BoneMatrix
+{
+    row_major float4x4 value;
+};
+
+StructuredBuffer<BoneMatrix> currentBones : register(t8);
+
+struct VS_IN
+{
+    float3 position : POSITION;
+    float3 normal : NORMAL;
+    float4 tangent : TANGENT;
+    float2 texcoord : TEXCOORD0;
+    float4 weights : BLENDWEIGHT;
+    uint4 indices : BLENDINDICES;
+    float3 morphPosition : MORPHPOSITION;
+    float3 morphNormal : MORPHNORMAL;
+};
+
+struct VS_OUT
+{
+    float4 position : SV_POSITION;
+    float4 color : COLOR;
+};
+
+float4 SkinPosition(float3 position, float4 weights, uint4 indices)
+{
+    const float4 local = float4(position, 1.0f);
+    return mul(local, currentBones[indices.x].value) * weights.x +
+        mul(local, currentBones[indices.y].value) * weights.y +
+        mul(local, currentBones[indices.z].value) * weights.z +
+        mul(local, currentBones[indices.w].value) * weights.w;
+}
+
+float3 SkinDirection(float3 direction, float4 weights, uint4 indices)
+{
+    const float4 local = float4(direction, 0.0f);
+    return (mul(local, currentBones[indices.x].value) * weights.x +
+        mul(local, currentBones[indices.y].value) * weights.y +
+        mul(local, currentBones[indices.z].value) * weights.z +
+        mul(local, currentBones[indices.w].value) * weights.w).xyz;
+}
 
 VS_OUT main(VS_IN vin)
 {
     VS_OUT vout;
-    vin.position.xyz += vin.morph_position * gltf_morph.x;
-    vin.normal.xyz += vin.morph_normal * gltf_morph.x;
-
-    float4 blended_pos    = (float4) 0;
-    float4 blended_normal = (float4) 0;
-    float4 blended_tangent = (float4) 0;
-    for (int i = 0; i < 4; ++i)
-    {
-        uint  bi = vin.bone_indices[i];
-        float bw = vin.bone_weights[i];
-        blended_pos     += bw * mul(vin.position, bone_transforms[bi]);
-        blended_normal  += bw * mul(float4(vin.normal.xyz,  0), bone_transforms[bi]);
-        blended_tangent += bw * mul(float4(vin.tangent.xyz, 0), bone_transforms[bi]);
-    }
-
-    float4 wp = mul(blended_pos, world);
-    float3 wn = normalize(mul(blended_normal, world).xyz);
-
-    // 距離による線幅補正
-    float dist = distance(camera_position.xyz, wp.xyz);
-    float width = outline_params.x + outline_params.y * dist * 0.01f;
-
-    wp.xyz += wn * width;
-
-    vout.position       = mul(wp, view_projection);
-    vout.world_position = wp;
-    vout.world_normal   = float4(wn, 0);
-    vout.world_tangent  = blended_tangent;
-    vout.texcoord       = vin.texcoord;
-    vout.color          = outline_color;
-    // 輪郭パスはモーションベクターを書かないので、動きゼロとして埋める。
-    vout.current_clip   = vout.position;
-    vout.previous_clip  = vout.position;
+    const float3 localPosition = vin.position + vin.morphPosition * morph.x;
+    const float3 localNormal = vin.normal + vin.morphNormal * morph.x;
+    const float4 skinnedPosition = SkinPosition(localPosition, vin.weights, vin.indices);
+    const float3 skinnedNormal = SkinDirection(localNormal, vin.weights, vin.indices);
+    float4 worldPosition = mul(skinnedPosition, world);
+    const float3 worldNormal = normalize(mul(float4(skinnedNormal, 0.0f), world).xyz);
+    worldPosition.xyz += worldNormal * max(layerParams.x, 0.0f);
+    vout.position = mul(worldPosition, viewProjection);
+    vout.color = layerColor;
     return vout;
 }

@@ -7,6 +7,7 @@
 
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
 #include "../../RePlayEngine/Components/Core/PivotComponent.h"
+#include "../../RePlayEngine/Components/Rendering/NormalAdjustComponent.h"
 #include "../../RePlayEngine/Components/Physics/MeshColliderComponent.h"
 #include "../../RePlayEngine/Components/Landscape/LandscapeColliderComponent.h"
 #include "../../RePlayEngine/Physics/CookedMeshCollision.h"
@@ -424,5 +425,140 @@ bool framework::draw_object_transform_gizmo()
         object_gizmo_axis = -1;
         object_editor_context.SetStatus("Gizmo操作を確定しました");
     }
+    return true;
+}
+
+bool framework::handle_normal_adjust_gizmo()
+{
+    using ReplayEngine::Components::NormalAdjustComponent;
+    if (active_editor_view != editor_view::scene || !show_scene_view ||
+        game_scene == nullptr || object_scene_play_mode || !object_editor_context.CanEdit())
+        return false;
+    ReplayEngine::Scene::Scene& scene = active_object_scene();
+    ReplayEngine::Core::GameObject* object =
+        object_editor_context.Selection().ResolvePrimary(scene);
+    if (object == nullptr) return false;
+    const std::vector<NormalAdjustComponent*> adjusts =
+        object->GetComponents<NormalAdjustComponent>();
+    if (adjusts.empty()) return false;
+    POINT client_origin{ 0, 0 };
+    ClientToScreen(hwnd, &client_origin);
+    const DirectX::XMMATRIX view = viewport_view_matrix();
+    const DirectX::XMMATRIX projection = viewport_projection_matrix();
+    const auto resolved_center = [object](const NormalAdjustComponent& adjust,
+        DirectX::XMFLOAT3& world, DirectX::XMFLOAT4X4& matrix)
+    {
+        matrix = adjust.resolved_center_matrix;
+        if (adjust.resolved_center_valid)
+        {
+            world = adjust.resolved_center_world;
+            return;
+        }
+        matrix = object->GetTransform().WorldMatrixFloat4x4();
+        DirectX::XMStoreFloat3(&world, DirectX::XMVector3TransformCoord(
+            DirectX::XMLoadFloat3(&adjust.center), DirectX::XMLoadFloat4x4(&matrix)));
+    };
+    const ImVec2 mouse = ImGui::GetMousePos();
+    int hovered = -1;
+    float nearest = 12.0f * 12.0f;
+    ImVec2 screens[32]{};
+    bool visible[32]{};
+    const std::size_t count = (std::min)(adjusts.size(), static_cast<std::size_t>(32));
+    ImDrawList* draw_list = ImGui::GetForegroundDrawList();
+    draw_list->PushClipRect(ImVec2(scene_view_min_x, scene_view_min_y),
+        ImVec2(scene_view_max_x, scene_view_max_y), true);
+    for (std::size_t index = 0; index < count; ++index)
+    {
+        DirectX::XMFLOAT3 center{};
+        DirectX::XMFLOAT4X4 matrix{};
+        resolved_center(*adjusts[index], center, matrix);
+        visible[index] = ProjectPoint(center, view, projection, static_cast<float>(client_width),
+            static_cast<float>(client_height), client_origin, screens[index]);
+        if (!visible[index]) continue;
+        const float dx = mouse.x - screens[index].x;
+        const float dy = mouse.y - screens[index].y;
+        const float distance = dx * dx + dy * dy;
+        if (!normal_adjust_gizmo_dragging && distance < nearest)
+        {
+            nearest = distance;
+            hovered = static_cast<int>(index);
+        }
+        const bool active = normal_adjust_gizmo_dragging &&
+            normal_adjust_gizmo_component == adjusts[index]->StableID();
+        const ImU32 color = active || static_cast<int>(index) == hovered
+            ? IM_COL32(255, 235, 100, 255) : IM_COL32(80, 225, 240, 255);
+        draw_list->AddCircleFilled(screens[index], active ? 7.0f : 5.0f, color, 12);
+        draw_list->AddCircle(screens[index], active ? 9.0f : 7.0f,
+            IM_COL32(20, 40, 45, 255), 12, 1.5f);
+        draw_list->AddText({ screens[index].x + 9.0f, screens[index].y + 6.0f }, color,
+            "Normal");
+    }
+    draw_list->PopClipRect();
+    const bool inside_scene = scene_view_hovered && mouse.x >= scene_view_min_x &&
+        mouse.x <= scene_view_max_x && mouse.y >= scene_view_min_y && mouse.y <= scene_view_max_y;
+    if (!normal_adjust_gizmo_dragging && hovered >= 0 && inside_scene &&
+        ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+    {
+        NormalAdjustComponent* adjust = adjusts[static_cast<std::size_t>(hovered)];
+        normal_adjust_gizmo_object = object->ID();
+        normal_adjust_gizmo_component = adjust->StableID();
+        normal_adjust_gizmo_start_center = adjust->center;
+        resolved_center(*adjust, normal_adjust_gizmo_start_world,
+            normal_adjust_gizmo_start_matrix);
+        DirectX::XMFLOAT3 eye = viewport_eye_position();
+        DirectX::XMVECTOR plane_normal = DirectX::XMVector3Normalize(DirectX::XMVectorSubtract(
+            DirectX::XMLoadFloat3(&normal_adjust_gizmo_start_world), DirectX::XMLoadFloat3(&eye)));
+        if (DirectX::XMVectorGetX(DirectX::XMVector3LengthSq(plane_normal)) <= 1.0e-6f)
+            plane_normal = DirectX::XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f);
+        DirectX::XMStoreFloat3(&normal_adjust_gizmo_plane_normal, plane_normal);
+        normal_adjust_gizmo_dragging = true;
+        viewport_drag_selecting = false;
+        object_editor_context.BeginEdit("Normal Adjust の中心を移動");
+        return true;
+    }
+    if (!normal_adjust_gizmo_dragging) return hovered >= 0 && inside_scene;
+    ReplayEngine::Core::GameObject* drag_object = scene.FindGameObjectByID(normal_adjust_gizmo_object);
+    auto* adjust = drag_object != nullptr ? dynamic_cast<NormalAdjustComponent*>(
+        drag_object->FindComponentByStableID(normal_adjust_gizmo_component)) : nullptr;
+    if (adjust == nullptr)
+    {
+        object_editor_context.CancelEdit();
+        normal_adjust_gizmo_dragging = false;
+        return true;
+    }
+    if (ImGui::IsKeyPressed(VK_ESCAPE))
+    {
+        adjust->center = normal_adjust_gizmo_start_center;
+        adjust->OnPropertyChanged("center");
+        object_editor_context.CancelEdit();
+        normal_adjust_gizmo_dragging = false;
+        return true;
+    }
+    if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
+    {
+        const auto ray = viewport_picking_ray(mouse.x - scene_view_min_x,
+            mouse.y - scene_view_min_y);
+        const DirectX::XMVECTOR normal = DirectX::XMLoadFloat3(&normal_adjust_gizmo_plane_normal);
+        const DirectX::XMVECTOR origin = DirectX::XMLoadFloat3(&ray.origin);
+        const DirectX::XMVECTOR direction = DirectX::XMLoadFloat3(&ray.direction);
+        const float denominator = DirectX::XMVectorGetX(DirectX::XMVector3Dot(direction, normal));
+        if (std::abs(denominator) > 1.0e-6f)
+        {
+            const float distance = DirectX::XMVectorGetX(DirectX::XMVector3Dot(
+                DirectX::XMVectorSubtract(DirectX::XMLoadFloat3(&normal_adjust_gizmo_start_world),
+                    origin), normal)) / denominator;
+            DirectX::XMVECTOR point = DirectX::XMVectorAdd(origin,
+                DirectX::XMVectorScale(direction, distance));
+            const DirectX::XMMATRIX inverse = DirectX::XMMatrixInverse(nullptr,
+                DirectX::XMLoadFloat4x4(&normal_adjust_gizmo_start_matrix));
+            DirectX::XMStoreFloat3(&adjust->center,
+                DirectX::XMVector3TransformCoord(point, inverse));
+            adjust->OnPropertyChanged("center");
+        }
+        return true;
+    }
+    object_editor_context.CommitEdit();
+    normal_adjust_gizmo_dragging = false;
+    object_editor_context.SetStatus("Normal Adjust の中心を確定しました");
     return true;
 }

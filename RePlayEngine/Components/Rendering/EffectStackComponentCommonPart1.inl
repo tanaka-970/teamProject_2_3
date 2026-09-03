@@ -297,6 +297,12 @@ namespace ReplayEngine::Components
                 effect.angle = 0.0f;
                 effect.softness = 0.05f;
                 break;
+            case UI::UIEffectKind::Bubble:
+                effect.progress = 0.5f;
+                effect.radius = 8.0f;
+                effect.softness = 0.35f;
+                effect.seed = 1.0f;
+                break;
             case UI::UIEffectKind::Dissolve:
                 effect.radius = 64.0f;
                 effect.angle = 0.0f;
