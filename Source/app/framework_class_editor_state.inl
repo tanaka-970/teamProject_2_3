@@ -451,16 +451,13 @@ private:
         DirectX::XMFLOAT3 local_rotation{};
         DirectX::XMFLOAT3 local_scale{ 1.0f, 1.0f, 1.0f };
         DirectX::XMFLOAT3 pivot_world{};
+        DirectX::XMFLOAT4X4 world_matrix{ 1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
     };
     std::vector<ObjectGizmoState> object_gizmo_states;
     bool object_gizmo_dragging{ false };
-    int object_gizmo_axis{ -1 };
-    float object_gizmo_start_mouse_x{ 0.0f };
-    float object_gizmo_start_mouse_y{ 0.0f };
-    float object_gizmo_screen_axis_x{ 1.0f };
-    float object_gizmo_screen_axis_y{ 0.0f };
-    float object_gizmo_world_per_pixel{ 0.01f };
-    DirectX::XMFLOAT3 object_gizmo_world_axis{ 1.0f, 0.0f, 0.0f };
+    // ギズモへ渡す行列。掴んでいる間は前フレームの結果と開始時の姿を持ち回る。
+    DirectX::XMFLOAT4X4 object_gizmo_matrix{ 1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
+    DirectX::XMFLOAT4X4 object_gizmo_start_matrix{ 1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
     bool normal_adjust_gizmo_dragging{ false };
     ReplayEngine::Core::ObjectID normal_adjust_gizmo_object;
     ReplayEngine::Core::ComponentStableID normal_adjust_gizmo_component{ 0 };

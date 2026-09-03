@@ -950,6 +950,12 @@ namespace IMGUIZMO_NAMESPACE
       return gContext.mbUsing || gContext.mbUsingBounds;
    }
 
+   // local addition. see the note in ImGuizmo.h
+   bool IsUsingID(int id)
+   {
+      return (gContext.mbUsing || gContext.mbUsingBounds) && gContext.mEditingID == id;
+   }
+
    bool IsOver()
    {
       return (Intersects(gContext.mOperation, TRANSLATE) && GetMoveType(gContext.mOperation, NULL) != MT_NONE) ||
