@@ -444,6 +444,12 @@ private:
     DirectX::XMFLOAT3 resolve_object_pivot_world(ReplayEngine::Core::GameObject& object,
         ReplayEngine::Scene::Scene& scene) const;
     float scene_grid_step{ 1.0f };
+    // ImGuizmo は状態を 1 つしか持たない。同じフレームに複数出すので ID で分ける。
+    enum : int
+    {
+        gizmo_id_object = 1, gizmo_id_bone = 2, gizmo_id_normal_adjust = 3,
+        gizmo_id_ai_detection = 4, gizmo_id_ai_attack = 5
+    };
     struct ObjectGizmoState
     {
         ReplayEngine::Core::ObjectID id;

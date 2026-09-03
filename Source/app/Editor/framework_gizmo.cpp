@@ -20,11 +20,6 @@
 
 namespace
 {
-    // ImGuizmo は状態を 1 つしか持たない。同じフレームに 2 つ出すので ID で分ける。
-    constexpr int kObjectGizmoID = 1;
-    constexpr int kBoneGizmoID = 2;
-    constexpr int kNormalAdjustGizmoID = 3;
-
     // ポーズ 1 本ぶんの補正行列。描画側の組み立てと同じ順序でないと差分が合わない。
     DirectX::XMMATRIX BonePoseAdjust(const DirectX::XMFLOAT3& translation,
         const DirectX::XMFLOAT3& rotation, const DirectX::XMFLOAT3& scale)
@@ -72,27 +67,6 @@ namespace
         screen = ImVec2(projected.x + static_cast<float>(client_origin.x),
             projected.y + static_cast<float>(client_origin.y));
         return true;
-    }
-
-    float DistanceToSegment(const ImVec2& point, const ImVec2& first,
-        const ImVec2& second) noexcept
-    {
-        const float dx = second.x - first.x;
-        const float dy = second.y - first.y;
-        const float length_squared = dx * dx + dy * dy;
-        if (length_squared <= 0.0001f) return 100000.0f;
-        float amount = ((point.x - first.x) * dx + (point.y - first.y) * dy) /
-            length_squared;
-        amount = (std::max)(0.0f, (std::min)(amount, 1.0f));
-        const float px = point.x - (first.x + dx * amount);
-        const float py = point.y - (first.y + dy * amount);
-        return std::sqrt(px * px + py * py);
-    }
-
-    float SnapDelta(float value, bool enabled, float step) noexcept
-    {
-        if (!enabled || step <= 0.0f) return value;
-        return std::round(value / step) * step;
     }
 
 }
@@ -199,10 +173,10 @@ bool framework::draw_object_transform_gizmo()
         snap_values = snap;
     }
     const XMFLOAT4X4 before = world;
-    ImGuizmo::SetID(kObjectGizmoID);
+    ImGuizmo::SetID(gizmo_id_object);
     ImGuizmo::Manipulate(&view._11, &projection._11, operation,
         gizmo_local_space ? ImGuizmo::LOCAL : ImGuizmo::WORLD, &world._11, nullptr, snap_values);
-    const bool using_now = ImGuizmo::IsUsingID(kObjectGizmoID);
+    const bool using_now = ImGuizmo::IsUsingID(gizmo_id_object);
 
     if (using_now && !object_gizmo_dragging)
     {
@@ -382,10 +356,10 @@ bool framework::handle_normal_adjust_gizmo()
     ImGuizmo::SetDrawlist(scene_window->DrawList);
     ImGuizmo::SetRect(main_viewport->Pos.x, main_viewport->Pos.y,
         main_viewport->Size.x, main_viewport->Size.y);
-    ImGuizmo::SetID(kNormalAdjustGizmoID);
+    ImGuizmo::SetID(gizmo_id_normal_adjust);
     ImGuizmo::Manipulate(&gizmo_view._11, &gizmo_projection._11,
         ImGuizmo::TRANSLATE, ImGuizmo::WORLD, &gizmo_world._11);
-    const bool using_now = ImGuizmo::IsUsingID(kNormalAdjustGizmoID);
+    const bool using_now = ImGuizmo::IsUsingID(gizmo_id_normal_adjust);
 
     if (using_now && !normal_adjust_gizmo_dragging)
     {
@@ -463,11 +437,11 @@ bool framework::draw_bone_transform_gizmo()
         current == ReplayEngine::Editor::GizmoOperation::Translate ? ImGuizmo::TRANSLATE
         : current == ReplayEngine::Editor::GizmoOperation::Rotate ? ImGuizmo::ROTATE
         : ImGuizmo::SCALE;
-    ImGuizmo::SetID(kBoneGizmoID);
+    ImGuizmo::SetID(gizmo_id_bone);
     ImGuizmo::Manipulate(&view._11, &projection._11, operation,
         rig_gizmo_use_local && gizmo_local_space ? ImGuizmo::LOCAL : ImGuizmo::WORLD,
         &world._11);
-    if (!ImGuizmo::IsUsingID(kBoneGizmoID)) return false;
+    if (!ImGuizmo::IsUsingID(gizmo_id_bone)) return false;
 
     rig_pose_override& entry = object_rig_pose[owner][rig_selected_bone];
     // 骨のローカルと親は動いていないので、ワールドの差分がそのままポーズの差分になる。

@@ -5,6 +5,8 @@
 
 #include "framework.h"
 
+#include "imgui/ImGuizmo.h"
+
 #include <cstdio>
 
 #include "../../RePlayEngine/Components/Gameplay/CharacterMotorComponent.h"
@@ -49,13 +51,6 @@ namespace
     void ClearAINavigationHandleState()
     {
         ai_navigation_handle_state = {};
-    }
-
-    float DistanceSquared(const ImVec2& a, const ImVec2& b) noexcept
-    {
-        const float dx = a.x - b.x;
-        const float dy = a.y - b.y;
-        return dx * dx + dy * dy;
     }
 
 }
@@ -495,99 +490,56 @@ bool framework::handle_ai_navigation_debug_edit()
         ClearAINavigationHandleState();
     }
 
-    const DirectX::XMMATRIX view_projection =
-        viewport_view_matrix() * viewport_projection_matrix();
-    // 描画と同じ投影規約を使う。ここだけ Scene View 矩形にすると、
-    // 線は正しい位置に出ているのにハンドルだけ掴めない状態になる。
-    const ImVec2 main_origin = ImGui::GetMainViewport()->Pos;
-    const ImVec2 main_size = ImGui::GetMainViewport()->Size;
+    ImGuiWindow* scene_window = ImGui::FindWindowByName("Scene View");
+    if (scene_window == nullptr) return false;
+    DirectX::XMFLOAT4X4 view{}, projection{};
+    DirectX::XMStoreFloat4x4(&view, viewport_view_matrix());
+    DirectX::XMStoreFloat4x4(&projection, viewport_projection_matrix());
+    const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
+    ImGuizmo::SetDrawlist(scene_window->DrawList);
+    ImGuizmo::SetRect(main_viewport->Pos.x, main_viewport->Pos.y,
+        main_viewport->Size.x, main_viewport->Size.y);
     const DirectX::XMFLOAT3 center = selected_object->GetTransform().WorldPosition();
-    const DirectX::XMFLOAT3 detection_world{
-        center.x + (std::max)(0.05f, enemy->detection_range), center.y, center.z };
-    const DirectX::XMFLOAT3 attack_world{
-        center.x - (std::max)(0.05f, enemy->attack_range), center.y, center.z };
-    ImVec2 detection_screen{};
-    ImVec2 attack_screen{};
-    const bool detection_visible = project_world_to_screen(view_projection, detection_world,
-        main_origin, main_size, detection_screen);
-    const bool attack_visible = project_world_to_screen(view_projection, attack_world,
-        main_origin, main_size, attack_screen);
 
-    const ImVec2 mouse = ImGui::GetMousePos();
-    const bool inside_scene = mouse.x >= scene_view_min_x && mouse.x <= scene_view_max_x &&
-        mouse.y >= scene_view_min_y && mouse.y <= scene_view_max_y;
-
-    if (ai_navigation_handle_state.kind == AINavigationHandleKind::None &&
-        inside_scene && scene_view_hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+    // 半径は中心からの距離そのものなので、X 軸だけの移動ギズモがそのまま使える。
+    // 索敵は +X、攻撃は -X に置く。描いている円の見た目と掴む場所が一致する。
+    bool consumed = false;
+    bool over = false;
+    const auto edit_range = [&](AINavigationHandleKind kind, int gizmo_id, float sign,
+        float& range, const char* property, const char* edit_label)
     {
-        constexpr float PickRadiusSquared = 12.0f * 12.0f;
-        const float detection_distance = detection_visible
-            ? DistanceSquared(mouse, detection_screen) : PickRadiusSquared + 1.0f;
-        const float attack_distance = attack_visible
-            ? DistanceSquared(mouse, attack_screen) : PickRadiusSquared + 1.0f;
-        if (detection_distance <= PickRadiusSquared || attack_distance <= PickRadiusSquared)
+        DirectX::XMFLOAT4X4 world{};
+        DirectX::XMStoreFloat4x4(&world, DirectX::XMMatrixTranslation(
+            center.x + sign * (std::max)(0.05f, range), center.y, center.z));
+        ImGuizmo::SetID(gizmo_id);
+        ImGuizmo::Manipulate(&view._11, &projection._11,
+            ImGuizmo::TRANSLATE_X, ImGuizmo::WORLD, &world._11);
+        over = over || ImGuizmo::IsOver();
+        const bool using_now = ImGuizmo::IsUsingID(gizmo_id);
+        if (using_now && !ai_navigation_handle_state.dragging)
         {
             ai_navigation_handle_state.object = selected_object->ID();
-            ai_navigation_handle_state.kind = detection_distance <= attack_distance
-                ? AINavigationHandleKind::DetectionRange : AINavigationHandleKind::AttackRange;
-            ai_navigation_handle_state.dragging = false;
-            viewport_drag_selecting = false;
-            return true;
-        }
-    }
-
-    if (ai_navigation_handle_state.kind == AINavigationHandleKind::None) return false;
-
-    if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
-    {
-        if (!ai_navigation_handle_state.dragging &&
-            ImGui::IsMouseDragging(ImGuiMouseButton_Left, 2.0f))
-        {
-            object_editor_context.BeginEdit(ai_navigation_handle_state.kind ==
-                AINavigationHandleKind::DetectionRange
-                ? "AI 索敵範囲を変更" : "AI 攻撃範囲を変更");
+            ai_navigation_handle_state.kind = kind;
             ai_navigation_handle_state.dragging = true;
+            viewport_drag_selecting = false;
+            object_editor_context.BeginEdit(edit_label);
         }
-
-        if (ai_navigation_handle_state.dragging)
+        if (!ai_navigation_handle_state.dragging ||
+            ai_navigation_handle_state.kind != kind) return;
+        range = (std::max)(0.05f, sign * (world._41 - center.x));
+        enemy->OnPropertyChanged(property);
+        consumed = true;
+        if (!using_now)
         {
-            const float local_x = mouse.x - scene_view_min_x;
-            const float local_y = mouse.y - scene_view_min_y;
-            const auto ray = viewport_picking_ray(local_x, local_y);
-
-            // 水平面そのものとの交差だとカメラ角度によって不安定になるため、
-            // XZ 平面上で中心に最も近い Ray 上の点から半径を求める。
-            const float denominator = ray.direction.x * ray.direction.x +
-                ray.direction.z * ray.direction.z;
-            if (denominator > 1.0e-6f)
-            {
-                const float ox = ray.origin.x - center.x;
-                const float oz = ray.origin.z - center.z;
-                float t = -(ox * ray.direction.x + oz * ray.direction.z) / denominator;
-                t = (std::max)(0.0f, t);
-                const float px = ray.origin.x + ray.direction.x * t;
-                const float pz = ray.origin.z + ray.direction.z * t;
-                const float dx = px - center.x;
-                const float dz = pz - center.z;
-                const float radius = (std::max)(0.05f, std::sqrt(dx * dx + dz * dz));
-                if (ai_navigation_handle_state.kind == AINavigationHandleKind::DetectionRange)
-                {
-                    enemy->detection_range = radius;
-                    enemy->OnPropertyChanged("detection_range");
-                }
-                else
-                {
-                    enemy->attack_range = radius;
-                    enemy->OnPropertyChanged("attack_range");
-                }
-            }
+            object_editor_context.CommitEdit();
+            ClearAINavigationHandleState();
         }
-        return true;
-    }
-
-    if (ai_navigation_handle_state.dragging) object_editor_context.CommitEdit();
-    ClearAINavigationHandleState();
-    return true;
+    };
+    edit_range(AINavigationHandleKind::DetectionRange, gizmo_id_ai_detection, 1.0f,
+        enemy->detection_range, "detection_range", "AI 索敵範囲を変更");
+    edit_range(AINavigationHandleKind::AttackRange, gizmo_id_ai_attack, -1.0f,
+        enemy->attack_range, "attack_range", "AI 攻撃範囲を変更");
+    return consumed || over;
 }
 
 void framework::draw_collision_diagnostics_panel()
